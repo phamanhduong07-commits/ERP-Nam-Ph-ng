@@ -8,6 +8,7 @@ import OrderCreate from './pages/sales/OrderCreate'
 import OrderDetail from './pages/sales/OrderDetail'
 import QuoteList from './pages/quotes/QuoteList'
 import QuoteForm from './pages/quotes/QuoteForm'
+import QuoteDetail from './pages/quotes/QuoteDetail'
 import CauTrucList from './pages/danhmuc/CauTrucList'
 import CustomerList from './pages/danhmuc/CustomerList'
 import SupplierList from './pages/danhmuc/SupplierList'
@@ -56,7 +57,8 @@ export default function App() {
         {/* Báo giá */}
         <Route path="quotes" element={<QuoteList />} />
         <Route path="quotes/new" element={<QuoteForm />} />
-        <Route path="quotes/:id" element={<QuoteForm />} />
+        <Route path="quotes/:id" element={<QuoteDetail />} />
+        <Route path="quotes/:id/edit" element={<QuoteForm />} />
 
         {/* Danh mục */}
         <Route path="danhmuc/cau-truc" element={<CauTrucList />} />

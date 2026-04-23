@@ -144,6 +144,12 @@ class BomLayerResult(BaseModel):
     thanh_tien: float
 
 
+class IndirectCostItem(BaseModel):
+    ten: str
+    don_gia_m2: float
+    thanh_tien: float
+
+
 class BomCalculateResponse(BaseModel):
     """Full response từ endpoint /calculate."""
     dimensions: DimensionResult
@@ -162,6 +168,7 @@ class BomCalculateResponse(BaseModel):
     chiet_khau: float
     gia_ban_cuoi: float
     bom_layers: list[BomLayerResult]
+    gian_tiep_breakdown: list[IndirectCostItem] = []
 
 
 # ---------------------------------------------------------------------------

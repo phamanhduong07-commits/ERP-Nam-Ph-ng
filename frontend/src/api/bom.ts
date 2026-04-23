@@ -2,12 +2,15 @@ import client from './client'
 
 // ─── Internal form state (per-layer, used inside BomCalculatorPanel) ──────────
 
-export interface BomLayerFormState {
+export interface BomLayerInput {
   ma_ky_hieu: string | null
   paper_material_id?: number | null
   dinh_luong: number | null
   don_gia_kg: number
 }
+
+/** @deprecated Use BomLayerInput instead */
+export type BomLayerFormState = BomLayerInput
 
 // ─── API-level layer input (what backend expects in `layers` array) ────────────
 
@@ -92,6 +95,12 @@ export interface BomLayerResult {
   thanh_tien: number
 }
 
+export interface IndirectCostItem {
+  ten: string
+  don_gia_m2: number
+  thanh_tien: number
+}
+
 export interface BomCalculateResponse {
   dimensions: BomDimensions
   chi_phi_giay: number
@@ -109,6 +118,7 @@ export interface BomCalculateResponse {
   chiet_khau: number
   gia_ban_cuoi: number
   bom_layers: BomLayerResult[]
+  gian_tiep_breakdown: IndirectCostItem[]
 }
 
 // ─── Response – saved BOM ─────────────────────────────────────────────────────
@@ -174,6 +184,8 @@ export const bomApi = {
 
   getByItem: (production_order_item_id: number) =>
     client.get<BomSaved>(`/bom/by-item/${production_order_item_id}`),
+
+  get: (bomId: number) => client.get<BomSaved>('/bom/' + bomId),
 }
 
 // ─── Display helpers ──────────────────────────────────────────────────────────

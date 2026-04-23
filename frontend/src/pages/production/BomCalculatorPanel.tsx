@@ -21,6 +21,7 @@ import {
 } from '../../api/bom'
 import type {
   BomLayerInput,
+  BomLayerApiInput,
   BomCalculateRequest,
   BomCalculateResponse,
   BomLayerResult,
@@ -294,7 +295,7 @@ export default function BomCalculatorPanel({
       bomApi.save(req),
     onSuccess: (res) => {
       message.success('Đã lưu BOM thành công!')
-      onBomSaved?.(res.data.bom_id)
+      onBomSaved?.(res.data.id)
     },
     onError: (err: any) => {
       message.error(err?.response?.data?.detail || 'Lỗi lưu BOM')
@@ -304,24 +305,30 @@ export default function BomCalculatorPanel({
   // ── Build request ──────────────────────────────────────────────────────────
   const buildRequest = useCallback((): BomCalculateRequest | null => {
     if (!dai || !rong || !cao) {
-      message.warning('Vui lòng nhập đầy đủ kích thước (Dài × Rộng × Cao)')
+      message.warning('Vui lòng nhập đầy đủ kích thước')
       return null
     }
-    if (soLuong <= 0) {
-      message.warning('Số lượng phải lớn hơn 0')
-      return null
-    }
-
     const defs = layerDefs(soLop, toHopSong)
-    const getLayer = (key: LayerKey): BomLayerInput | null => {
-      const inDefs = defs.some(d => d.key === key)
-      if (!inDefs) return null
-      const l = layers[key]
-      // layer is optional if fields are empty
-      if (!l.ma_ky_hieu && !l.dinh_luong && !l.don_gia_kg) return null
-      return l
+    const songs = toHopSong ? toHopSong.split('') : []
+    let songIdx = 0
+    const layersArr: BomLayerApiInput[] = []
+    for (const def of defs) {
+      const l = layers[def.key]
+      if (!l.dinh_luong || l.dinh_luong <= 0) {
+        message.warning(`Thiếu định lượng cho lớp "${def.label}"`)
+        return null
+      }
+      layersArr.push({
+        vi_tri_lop: def.label,
+        loai_lop: def.isSong ? 'song' : 'mat',
+        flute_type: def.isSong ? (songs[songIdx] ?? null) : null,
+        ma_ky_hieu: l.ma_ky_hieu ?? '',
+        paper_material_id: l.paper_material_id ?? null,
+        dinh_luong: l.dinh_luong,
+        don_gia_kg: l.don_gia_kg,
+      })
+      if (def.isSong) songIdx++
     }
-
     return {
       loai_thung: loaiThung,
       dai,
@@ -329,17 +336,11 @@ export default function BomCalculatorPanel({
       cao,
       so_lop: soLop,
       to_hop_song: toHopSong,
-      mat:    getLayer('mat'),
-      song_1: getLayer('song_1'),
-      mat_1:  getLayer('mat_1'),
-      song_2: getLayer('song_2'),
-      mat_2:  getLayer('mat_2'),
-      song_3: getLayer('song_3'),
-      mat_3:  getLayer('mat_3'),
+      layers: layersArr,
       so_luong: soLuong,
       chong_tham: chongTham,
       in_flexo_mau: inFlexoMau,
-      phu_nen: phuNen,
+      in_flexo_phu_nen: phuNen,
       in_ky_thuat_so: inKTS,
       chap_xa: chapXa,
       boi,
@@ -352,11 +353,9 @@ export default function BomCalculatorPanel({
       chi_phi_khac: chiPhiKhac,
       chiet_khau: chietKhau,
     }
-  }, [
-    loaiThung, dai, rong, cao, soLop, toHopSong, layers, soLuong,
-    chongTham, inFlexoMau, phuNen, inKTS, chapXa, boi, beSoCon, canMang, sanPhamKho,
-    tyLeLN, hoaHongKDPct, hoaHongKHPct, chiPhiKhac, chietKhau,
-  ])
+  }, [loaiThung, dai, rong, cao, soLop, toHopSong, layers, soLuong,
+      chongTham, inFlexoMau, phuNen, inKTS, chapXa, boi, beSoCon, canMang, sanPhamKho,
+      tyLeLN, hoaHongKDPct, hoaHongKHPct, chiPhiKhac, chietKhau])
 
   const handleCalculate = () => {
     const req = buildRequest()
@@ -419,7 +418,7 @@ export default function BomCalculatorPanel({
     },
     {
       title: 'SL cần (kg)',
-      dataIndex: 'so_luong_can_tong',
+      dataIndex: 'trong_luong_can_tong',
       width: 100,
       align: 'right',
       render: (v: number) => v ? vnd(v) : '—',
@@ -825,14 +824,14 @@ export default function BomCalculatorPanel({
           >
             <Row gutter={[16, 8]}>
               {[
-                { label: 'Khổ 1 con (cm)',    value: result.kho_1con?.toFixed(1) },
-                { label: 'Dài 1 con (cm)',    value: result.dai_1con?.toFixed(1) },
-                { label: 'Số dao',            value: result.so_dao },
-                { label: 'Khổ TT (cm)',       value: result.kho_tt?.toFixed(1) },
-                { label: 'Dài TT (cm)',       value: result.dai_tt?.toFixed(1) },
-                { label: 'Khổ KH (cm)',       value: result.kho_kh?.toFixed(1) },
-                { label: 'Dài KH (cm)',       value: result.dai_kh?.toFixed(1) },
-                { label: 'Diện tích (m²/thùng)', value: result.dien_tich?.toFixed(4) },
+                { label: 'Khổ 1 con (cm)',    value: result.dimensions.kho1?.toFixed(1) },
+                { label: 'Dài 1 con (cm)',    value: result.dimensions.dai1?.toFixed(1) },
+                { label: 'Số dao',            value: result.dimensions.so_dao },
+                { label: 'Khổ TT (cm)',       value: result.dimensions.kho_tt?.toFixed(1) },
+                { label: 'Dài TT (cm)',       value: result.dimensions.dai_tt?.toFixed(1) },
+                { label: 'Khổ KH (cm)',       value: result.dimensions.kho_kh?.toFixed(1) },
+                { label: 'Dài KH (cm)',       value: result.dimensions.dai_kh?.toFixed(1) },
+                { label: 'Diện tích (m²/thùng)', value: result.dimensions.dien_tich?.toFixed(4) },
               ].map(({ label, value }) => (
                 <Col key={label} xs={12} sm={8} md={6} lg={3}>
                   <div style={{ textAlign: 'center' }}>
@@ -853,6 +852,19 @@ export default function BomCalculatorPanel({
             <div style={{ maxWidth: 560 }}>
               <CostRow label="Chi phí giấy" value={result.chi_phi_giay} prefix="a. " />
               <CostRow label="Chi phí gián tiếp" value={result.chi_phi_gian_tiep} prefix="b. " />
+              {result.gian_tiep_breakdown && result.gian_tiep_breakdown.length > 0 && (
+                <div style={{ paddingLeft: 20, background: '#f9f0ff', borderRadius: 4, margin: '2px 0 4px' }}>
+                  <Text type="secondary" style={{ fontSize: 11, display: 'block', padding: '4px 0 2px' }}>
+                    Chi tiết chi phí gián tiếp ({soLop} lớp):
+                  </Text>
+                  {result.gian_tiep_breakdown.map((item) => (
+                    <Row key={item.ten} justify="space-between" style={{ padding: '2px 8px', fontSize: 12 }}>
+                      <Col><Text type="secondary" style={{ fontSize: 11 }}>{item.ten} ({item.don_gia_m2} đ/m²)</Text></Col>
+                      <Col><Text style={{ fontSize: 11 }}>{vnd(item.thanh_tien)} đ</Text></Col>
+                    </Row>
+                  ))}
+                </div>
+              )}
               <CostRow
                 label={`Chi phí hao hụt (${(result.ty_le_hao_hut * 100).toFixed(0)}%)`}
                 value={result.chi_phi_hao_hut}
@@ -869,12 +881,12 @@ export default function BomCalculatorPanel({
                 prefix="d. "
               />
               {/* Add-on details */}
-              {result.addon_details && Object.entries(result.addon_details).map(([k, v]) =>
-                v > 0 ? (
+              {result.addon_detail && Object.entries(result.addon_detail).map(([k, v]) =>
+                (v as number) > 0 ? (
                   <CostRow
                     key={k}
                     label={k}
-                    value={v}
+                    value={v as number}
                     indent
                   />
                 ) : null
@@ -917,7 +929,7 @@ export default function BomCalculatorPanel({
                 </Col>
                 <Col>
                   <Text strong style={{ fontSize: 15, color: '#52c41a' }}>
-                    {vnd(result.tong_tien)} đ
+                    {vnd(result.gia_ban_cuoi * soLuong)} đ
                   </Text>
                 </Col>
               </Row>
@@ -943,7 +955,7 @@ export default function BomCalculatorPanel({
               size="small"
               scroll={{ x: 700 }}
               summary={(rows) => {
-                const totalKg = rows.reduce((s, r) => s + (r.so_luong_can_tong ?? 0), 0)
+                const totalKg = rows.reduce((s, r) => s + (r.trong_luong_can_tong ?? 0), 0)
                 const totalTT = rows.reduce((s, r) => s + (r.thanh_tien ?? 0), 0)
                 return (
                   <Table.Summary.Row>

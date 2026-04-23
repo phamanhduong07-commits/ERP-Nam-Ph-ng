@@ -23,6 +23,43 @@ _INDIRECT_COST: dict[int, float] = {
     7: 1800.2,
 }
 
+_INDIRECT_BREAKDOWN: dict[int, list[dict]] = {
+    3: [
+        {"ten": "Bột",        "don_gia_m2": 137},
+        {"ten": "Điện",       "don_gia_m2": 50},
+        {"ten": "Gas",        "don_gia_m2": 194},
+        {"ten": "Kẽm",        "don_gia_m2": 33},
+        {"ten": "Lương",      "don_gia_m2": 160},
+        {"ten": "Máy",        "don_gia_m2": 100},
+        {"ten": "Nhà xưởng",  "don_gia_m2": 130},
+        {"ten": "Sut/GT",     "don_gia_m2": 14},
+        {"ten": "Vận chuyển", "don_gia_m2": 80},
+    ],
+    5: [
+        {"ten": "Bột",        "don_gia_m2": 274},
+        {"ten": "Điện",       "don_gia_m2": 49.2},
+        {"ten": "Gas",        "don_gia_m2": 194},
+        {"ten": "Kẽm",        "don_gia_m2": 33},
+        {"ten": "Lương",      "don_gia_m2": 200},
+        {"ten": "Máy",        "don_gia_m2": 150},
+        {"ten": "Nhà xưởng",  "don_gia_m2": 130},
+        {"ten": "Sut/GT",     "don_gia_m2": 28},
+        {"ten": "Vận chuyển", "don_gia_m2": 120},
+    ],
+    7: [
+        {"ten": "Bột",        "don_gia_m2": 274},
+        {"ten": "Điện",       "don_gia_m2": 49.2},
+        {"ten": "Gas",        "don_gia_m2": 194},
+        {"ten": "Gián tiếp",  "don_gia_m2": 622},
+        {"ten": "Kẽm",        "don_gia_m2": 33},
+        {"ten": "Lương",      "don_gia_m2": 200},
+        {"ten": "Máy",        "don_gia_m2": 150},
+        {"ten": "Nhà xưởng",  "don_gia_m2": 130},
+        {"ten": "Sut/GT",     "don_gia_m2": 28},
+        {"ten": "Vận chuyển", "don_gia_m2": 120},
+    ],
+}
+
 
 def get_indirect_cost(so_lop: int) -> float:
     """Return the indirect cost in đ/m² for the given number of layers."""
@@ -446,6 +483,11 @@ def calculate_price(inp: dict) -> dict:
 
     # ---- Indirect cost (b) ----
     b = get_indirect_cost(so_lop) * dien_tich
+    breakdown_src = _INDIRECT_BREAKDOWN.get(so_lop, [])
+    gian_tiep_breakdown = [
+        {"ten": item["ten"], "don_gia_m2": item["don_gia_m2"], "thanh_tien": round(item["don_gia_m2"] * dien_tich, 2)}
+        for item in breakdown_src
+    ]
 
     # ---- Spoilage (e) ----
     hao_hut_pct = get_spoilage_rate(so_luong, so_lop)
@@ -518,4 +560,5 @@ def calculate_price(inp: dict) -> dict:
         "chiet_khau": round(i, 2),
         "gia_ban_cuoi": round(gia_ban_cuoi, 2),
         "bom_layers": bom_layers,
+        "gian_tiep_breakdown": gian_tiep_breakdown,
     }

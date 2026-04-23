@@ -11,7 +11,7 @@ PATCH /api/bom/{bom_id}/confirm              — xác nhận BOM (draft → conf
 """
 
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -29,6 +29,7 @@ from app.schemas.bom import (
     DimensionResult,
     AddonDetail,
     BomLayerResult,
+    IndirectCostItem,
 )
 from app.services.price_calculator import calculate_price
 
@@ -126,6 +127,9 @@ def _result_to_response(result: dict) -> BomCalculateResponse:
         chiet_khau=result["chiet_khau"],
         gia_ban_cuoi=result["gia_ban_cuoi"],
         bom_layers=[BomLayerResult(**bl) for bl in result["bom_layers"]],
+        gian_tiep_breakdown=[
+            IndirectCostItem(**item) for item in result.get("gian_tiep_breakdown", [])
+        ],
     )
 
 
@@ -423,3 +427,18 @@ def confirm_bom(
     bom.trang_thai = "confirmed"
     db.commit()
     return _bom_to_response(_load_bom(bom_id, db))
+
+
+@router.get("", response_model=list[BomResponse])
+def list_boms(
+    production_order_item_id: int | None = None,
+    limit: int = Query(default=50, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Lấy danh sách BOM đã lưu."""
+    q = db.query(ProductionBOM).options(joinedload(ProductionBOM.items))
+    if production_order_item_id:
+        q = q.filter(ProductionBOM.production_order_item_id == production_order_item_id)
+    boms = q.order_by(ProductionBOM.created_at.desc()).limit(limit).all()
+    return [_bom_to_response(b) for b in boms]
