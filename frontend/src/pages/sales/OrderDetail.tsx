@@ -1,23 +1,34 @@
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Table, Space, Button, Typography,
-  Divider, Popconfirm, message, Skeleton, Row, Col,
+  Divider, Popconfirm, message, Skeleton, Row, Col, Modal, DatePicker, Form,
 } from 'antd'
 import {
   ArrowLeftOutlined, CheckOutlined, CloseOutlined,
-  PrinterOutlined,
+  PrinterOutlined, ThunderboltOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
 import type { SalesOrderItem } from '../../api/salesOrders'
+import { productionOrdersApi } from '../../api/productionOrders'
 
 const { Title, Text } = Typography
 
-export default function OrderDetail() {
-  const { id } = useParams<{ id: string }>()
+interface Props {
+  orderId?: number
+  embedded?: boolean
+}
+
+export default function OrderDetail({ orderId, embedded = false }: Props) {
+  const params = useParams<{ id: string }>()
+  const id = orderId ?? (params.id ? Number(params.id) : undefined)
   const navigate = useNavigate()
+  const [lenhModal, setLenhModal] = useState(false)
+  const [lenhLoading, setLenhLoading] = useState(false)
+  const [lenhForm] = Form.useForm()
 
   const { data: order, isLoading, refetch } = useQuery({
     queryKey: ['sales-order', id],
@@ -45,6 +56,30 @@ export default function OrderDetail() {
     }
   }
 
+  const handleTaoLenh = async () => {
+    try {
+      const vals = await lenhForm.validateFields()
+      setLenhLoading(true)
+      const res = await productionOrdersApi.createFromOrder(Number(id), {
+        ngay_lenh: vals.ngay_lenh?.format('YYYY-MM-DD'),
+        ngay_hoan_thanh_ke_hoach: vals.ngay_hoan_thanh_ke_hoach?.format('YYYY-MM-DD'),
+      })
+      message.success(`Đã tạo lệnh sản xuất ${res.data.so_lenh}`)
+      setLenhModal(false)
+      refetch()
+      navigate(`/production/orders/${res.data.id}`)
+    } catch (err: any) {
+      if (err?.response?.data?.detail) {
+        message.error(err.response.data.detail)
+      }
+      // validateFields lỗi thì bỏ qua (inline error hiển thị)
+    } finally {
+      setLenhLoading(false)
+    }
+  }
+
+  const fmt = (v: number) => new Intl.NumberFormat('vi-VN').format(v)
+
   const columns: ColumnsType<SalesOrderItem> = [
     {
       title: 'STT',
@@ -62,38 +97,46 @@ export default function OrderDetail() {
       ellipsis: true,
     },
     {
-      title: 'Kích thước',
-      width: 120,
-      render: (_, r) => r.product?.dai
-        ? `${r.product.dai}×${r.product.rong}×${r.product.cao} cm`
-        : '—',
+      title: 'Loại thùng',
+      width: 90,
+      render: (_, r) => r.loai_thung || '—',
+    },
+    {
+      title: 'Kích thước (D×R×C)',
+      width: 140,
+      render: (_, r) => {
+        const d = r.dai ?? r.product?.dai
+        const rr = r.rong ?? r.product?.rong
+        const c = r.cao ?? r.product?.cao
+        return d ? `${d}×${rr}×${c} cm` : '—'
+      },
     },
     {
       title: 'Lớp',
-      width: 50,
+      width: 55,
       align: 'center',
-      render: (_, r) => r.product?.so_lop,
+      render: (_, r) => r.so_lop ?? r.product?.so_lop ?? '—',
     },
     {
       title: 'Số lượng',
       dataIndex: 'so_luong',
       width: 90,
       align: 'right',
-      render: (v, r) => `${new Intl.NumberFormat('vi-VN').format(v)} ${r.dvt}`,
+      render: (v, r) => `${fmt(v)} ${r.dvt}`,
     },
     {
       title: 'Đơn giá',
       dataIndex: 'don_gia',
       width: 110,
       align: 'right',
-      render: (v) => new Intl.NumberFormat('vi-VN').format(v),
+      render: (v) => fmt(v),
     },
     {
       title: 'Thành tiền',
       dataIndex: 'thanh_tien',
       width: 120,
       align: 'right',
-      render: (v) => <Text strong>{new Intl.NumberFormat('vi-VN').format(v)}</Text>,
+      render: (v) => <Text strong>{fmt(v)}</Text>,
     },
     {
       title: 'Ngày giao',
@@ -123,8 +166,33 @@ export default function OrderDetail() {
     },
   ]
 
+  const renderKetCau = (r: SalesOrderItem) => {
+    const layers: { label: string; code: string | null; dl: number | null }[] = [
+      { label: 'Mặt ngoài', code: r.mat,    dl: r.mat_dl },
+      { label: 'Sóng 1',   code: r.song_1,  dl: r.song_1_dl },
+      { label: 'Mặt 1',    code: r.mat_1,   dl: r.mat_1_dl },
+      { label: 'Sóng 2',   code: r.song_2,  dl: r.song_2_dl },
+      { label: 'Mặt 2',    code: r.mat_2,   dl: r.mat_2_dl },
+      { label: 'Sóng 3',   code: r.song_3,  dl: r.song_3_dl },
+      { label: 'Mặt trong',code: r.mat_3,   dl: r.mat_3_dl },
+    ].filter(l => l.dl)
+
+    if (!layers.length) return null
+    return (
+      <div style={{ padding: '6px 0', fontSize: 12, color: '#595959' }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Kết cấu: {r.so_lop} lớp {r.to_hop_song ? `(${r.to_hop_song})` : ''} &nbsp;·&nbsp;
+          {layers.map(l => `${l.label}: ${l.code || '?'} ${l.dl}g/m²`).join(' / ')}
+          {r.loai_in && r.loai_in !== 'khong_in' && (
+            <>&nbsp;·&nbsp; In: {r.loai_in === 'flexo' ? `Flexo ${r.so_mau} màu` : 'Kỹ thuật số'}</>
+          )}
+        </Text>
+      </div>
+    )
+  }
+
   if (isLoading) return <Skeleton active />
-  if (!order) return <Text type="danger">Không tìm thấy đơn hàng</Text>
+  if (!order) return <Text type="secondary" style={{ padding: 24, display: 'block' }}>Không tìm thấy đơn hàng</Text>
 
   const tongTien = order.items.reduce((s, i) => s + Number(i.thanh_tien), 0)
 
@@ -133,11 +201,13 @@ export default function OrderDetail() {
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
         <Col>
           <Space>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/sales/orders')}>
-              Quay lại
-            </Button>
+            {!embedded && (
+              <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/sales/orders')}>
+                Quay lại
+              </Button>
+            )}
             <Title level={4} style={{ margin: 0 }}>
-              Đơn hàng: <Text style={{ color: '#1677ff' }}>{order.so_don}</Text>
+              {embedded ? order.so_don : <>Đơn hàng: <Text style={{ color: '#1677ff' }}>{order.so_don}</Text></>}
             </Title>
             <Tag color={TRANG_THAI_COLORS[order.trang_thai]} style={{ fontSize: 13 }}>
               {TRANG_THAI_LABELS[order.trang_thai]}
@@ -146,15 +216,35 @@ export default function OrderDetail() {
         </Col>
         <Col>
           <Space>
-            <Button icon={<PrinterOutlined />} onClick={() => window.print()}>In đơn</Button>
+            <Button
+              size={embedded ? 'small' : 'middle'}
+              icon={<PrinterOutlined />}
+              onClick={() => window.print()}
+            >
+              In đơn
+            </Button>
             {order.trang_thai === 'moi' && (
               <Popconfirm title="Duyệt đơn hàng này?" onConfirm={handleApprove} okText="Duyệt">
-                <Button type="primary" icon={<CheckOutlined />}>Duyệt đơn</Button>
+                <Button size={embedded ? 'small' : 'middle'} type="primary" icon={<CheckOutlined />}>
+                  Duyệt đơn
+                </Button>
               </Popconfirm>
+            )}
+            {['da_duyet', 'dang_sx'].includes(order.trang_thai) && (
+              <Button
+                size={embedded ? 'small' : 'middle'}
+                type="primary"
+                icon={<ThunderboltOutlined />}
+                onClick={() => { lenhForm.resetFields(); setLenhModal(true) }}
+              >
+                Lập lệnh SX
+              </Button>
             )}
             {['moi', 'da_duyet'].includes(order.trang_thai) && (
               <Popconfirm title="Huỷ đơn hàng này?" onConfirm={handleCancel} okText="Huỷ" okButtonProps={{ danger: true }}>
-                <Button danger icon={<CloseOutlined />}>Huỷ đơn</Button>
+                <Button size={embedded ? 'small' : 'middle'} danger icon={<CloseOutlined />}>
+                  Huỷ đơn
+                </Button>
               </Popconfirm>
             )}
           </Space>
@@ -162,7 +252,7 @@ export default function OrderDetail() {
       </Row>
 
       <Card style={{ marginBottom: 16 }}>
-        <Descriptions column={{ xs: 1, sm: 2, lg: 3 }} bordered size="small">
+        <Descriptions column={{ xs: 1, sm: 2, lg: embedded ? 2 : 3 }} bordered size="small">
           <Descriptions.Item label="Số đơn hàng">{order.so_don}</Descriptions.Item>
           <Descriptions.Item label="Ngày đặt hàng">
             {dayjs(order.ngay_don).format('DD/MM/YYYY')}
@@ -193,7 +283,12 @@ export default function OrderDetail() {
           rowKey="id"
           pagination={false}
           size="small"
-          scroll={{ x: 1100 }}
+          scroll={{ x: 1200 }}
+          expandable={{
+            expandedRowRender: (r) => renderKetCau(r),
+            rowExpandable: (r) => !!(r.mat_dl || r.song_1_dl),
+            showExpandColumn: true,
+          }}
           summary={() => (
             <Table.Summary fixed>
               <Table.Summary.Row>
@@ -217,6 +312,39 @@ export default function OrderDetail() {
           Cập nhật: {dayjs(order.updated_at).format('DD/MM/YYYY HH:mm')}
         </Text>
       </Card>
+
+      {/* Modal lập lệnh sản xuất */}
+      <Modal
+        title="Lập lệnh sản xuất"
+        open={lenhModal}
+        onOk={handleTaoLenh}
+        onCancel={() => setLenhModal(false)}
+        okText="Tạo lệnh SX"
+        cancelText="Huỷ"
+        confirmLoading={lenhLoading}
+      >
+        <Form form={lenhForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            name="ngay_lenh"
+            label="Ngày lệnh"
+            initialValue={dayjs()}
+            rules={[{ required: true, message: 'Chọn ngày lệnh' }]}
+          >
+            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="ngay_hoan_thanh_ke_hoach"
+            label="Ngày hoàn thành dự kiến"
+            initialValue={order.ngay_giao_hang ? dayjs(order.ngay_giao_hang) : undefined}
+          >
+            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+          </Form.Item>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Lệnh SX sẽ được tạo cho tất cả {order.items.length} dòng hàng của đơn hàng này.
+            Thông số kỹ thuật (kết cấu giấy, kích thước) được kế thừa tự động từ báo giá.
+          </Text>
+        </Form>
+      </Modal>
     </div>
   )
 }

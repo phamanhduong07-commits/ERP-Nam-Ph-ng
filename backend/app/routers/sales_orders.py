@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
-from app.database import get_db
+from app.database import get_db, _BACKFILL_QI_MYSQL, _BACKFILL_SPEC_MYSQL
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.master import Customer, Product
@@ -97,12 +98,20 @@ def get_order(
         .options(
             joinedload(SalesOrder.customer),
             joinedload(SalesOrder.items).joinedload(SalesOrderItem.product),
+            joinedload(SalesOrder.items).joinedload(SalesOrderItem.quote_item),
         )
         .filter(SalesOrder.id == order_id)
         .first()
     )
     if not order:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+
+    def _spec(item: SalesOrderItem, field: str):
+        """Return spec from SOItem; fall back to linked QuoteItem if NULL."""
+        val = getattr(item, field, None)
+        if val is None and item.quote_item is not None:
+            val = getattr(item.quote_item, field, None)
+        return val
 
     result = SalesOrderResponse(
         id=order.id,
@@ -132,6 +141,21 @@ def get_order(
                 yeu_cau_in=item.yeu_cau_in,
                 so_luong_da_xuat=item.so_luong_da_xuat,
                 trang_thai_dong=item.trang_thai_dong,
+                loai_thung=_spec(item, 'loai_thung'),
+                dai=_spec(item, 'dai'),
+                rong=_spec(item, 'rong'),
+                cao=_spec(item, 'cao'),
+                so_lop=_spec(item, 'so_lop'),
+                to_hop_song=_spec(item, 'to_hop_song'),
+                mat=_spec(item, 'mat'),         mat_dl=_spec(item, 'mat_dl'),
+                song_1=_spec(item, 'song_1'),   song_1_dl=_spec(item, 'song_1_dl'),
+                mat_1=_spec(item, 'mat_1'),     mat_1_dl=_spec(item, 'mat_1_dl'),
+                song_2=_spec(item, 'song_2'),   song_2_dl=_spec(item, 'song_2_dl'),
+                mat_2=_spec(item, 'mat_2'),     mat_2_dl=_spec(item, 'mat_2_dl'),
+                song_3=_spec(item, 'song_3'),   song_3_dl=_spec(item, 'song_3_dl'),
+                mat_3=_spec(item, 'mat_3'),     mat_3_dl=_spec(item, 'mat_3_dl'),
+                loai_in=_spec(item, 'loai_in'),
+                so_mau=_spec(item, 'so_mau'),
             )
             for item in order.items
         ],
@@ -242,3 +266,38 @@ def cancel_order(
     order.trang_thai = "huy"
     db.commit()
     return {"message": f"Đã huỷ đơn hàng {order.so_don}"}
+
+
+@router.post("/admin/backfill-spec")
+def backfill_spec(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Chạy lại backfill spec từ quote_items → sales_order_items.
+    Dùng khi đơn hàng cũ chưa có dữ liệu kỹ thuật từ báo giá.
+    """
+    from app.config import settings
+    if settings.DATABASE_URL.startswith("sqlite"):
+        return {"message": "SQLite không hỗ trợ backfill", "qi_rows": 0, "spec_rows": 0}
+
+    try:
+        r1 = db.execute(text(_BACKFILL_QI_MYSQL))
+        qi_rows = r1.rowcount
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Backfill quote_item_id thất bại: {e}")
+
+    try:
+        r2 = db.execute(text(_BACKFILL_SPEC_MYSQL))
+        spec_rows = r2.rowcount
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Backfill spec thất bại: {e}")
+
+    db.commit()
+    return {
+        "message": "Backfill hoàn tất",
+        "qi_rows": qi_rows,
+        "spec_rows": spec_rows,
+    }

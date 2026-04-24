@@ -1,16 +1,17 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, engine, ensure_schema
 from app.routers import (
     auth, customers, products, sales_orders, quotes, paper_materials, cau_truc,
     suppliers, material_groups, other_materials, warehouses, users,
     don_vi_tinh, vi_tri, xe, tai_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
-    production_orders, bom,
+    production_orders, bom, production_plans, indirect_costs,
 )
 
 # Tạo bảng tự động nếu chưa có (dùng Alembic cho production)
 Base.metadata.create_all(bind=engine)
+ensure_schema()
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -47,7 +48,9 @@ app.include_router(tinh_thanh.router)
 app.include_router(phuong_xa.router)
 app.include_router(don_gia_van_chuyen.router)
 app.include_router(production_orders.router)
+app.include_router(production_plans.router)
 app.include_router(bom.router)
+app.include_router(indirect_costs.router)
 
 
 @app.get("/api/health")

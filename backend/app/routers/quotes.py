@@ -272,12 +272,26 @@ def tao_don_hang_tu_bao_gia(
     tong_tien = Decimal("0")
     for qi in sorted(quote.items, key=lambda x: x.stt):
         item = SalesOrderItem(
-            product_id=qi.product_id,       # có thể None nếu là mặt hàng custom
+            product_id=qi.product_id,
+            quote_item_id=qi.id,
             ten_hang=qi.ten_hang,
             so_luong=qi.so_luong,
             dvt=qi.dvt,
             don_gia=qi.gia_ban,
             ghi_chu_san_pham=qi.ghi_chu,
+            # Thông số kỹ thuật kế thừa từ báo giá
+            loai_thung=qi.loai_thung,
+            dai=qi.dai, rong=qi.rong, cao=qi.cao,
+            so_lop=qi.so_lop, to_hop_song=qi.to_hop_song,
+            mat=qi.mat,       mat_dl=qi.mat_dl,
+            song_1=qi.song_1, song_1_dl=qi.song_1_dl,
+            mat_1=qi.mat_1,   mat_1_dl=qi.mat_1_dl,
+            song_2=qi.song_2, song_2_dl=qi.song_2_dl,
+            mat_2=qi.mat_2,   mat_2_dl=qi.mat_2_dl,
+            song_3=qi.song_3, song_3_dl=qi.song_3_dl,
+            mat_3=qi.mat_3,   mat_3_dl=qi.mat_3_dl,
+            loai_in=qi.loai_in, so_mau=qi.so_mau,
+            kho_tt=qi.kho_tt,   dai_tt=qi.dai_tt,   dien_tich=qi.dien_tich,
         )
         order.items.append(item)
         tong_tien += qi.so_luong * qi.gia_ban

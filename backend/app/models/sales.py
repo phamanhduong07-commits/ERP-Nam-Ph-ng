@@ -42,8 +42,8 @@ class SalesOrderItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     order_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_orders.id", ondelete="CASCADE"), nullable=False)
-    # product_id có thể null khi mặt hàng là custom (chưa có trong danh mục)
     product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+    quote_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("quote_items.id", ondelete="SET NULL"), nullable=True)
     ten_hang: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     so_luong: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
@@ -54,8 +54,33 @@ class SalesOrderItem(Base):
     so_luong_da_xuat: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0)
     trang_thai_dong: Mapped[str] = mapped_column(String(20), default="cho_sx")
 
+    # ── Thông số kỹ thuật (kế thừa từ báo giá) ──────────────────────────────
+    loai_thung: Mapped[str | None] = mapped_column(String(50))
+    dai:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    rong: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    cao:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    so_lop:     Mapped[int | None] = mapped_column(SmallInteger)
+    to_hop_song: Mapped[str | None] = mapped_column(String(20))
+    mat:     Mapped[str | None] = mapped_column(String(30))
+    mat_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_1:     Mapped[str | None] = mapped_column(String(30))
+    song_1_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_1:      Mapped[str | None] = mapped_column(String(30))
+    mat_1_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_2:     Mapped[str | None] = mapped_column(String(30))
+    song_2_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_2:      Mapped[str | None] = mapped_column(String(30))
+    mat_2_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_3:     Mapped[str | None] = mapped_column(String(30))
+    song_3_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_3:      Mapped[str | None] = mapped_column(String(30))
+    mat_3_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    loai_in: Mapped[str | None] = mapped_column(String(30))
+    so_mau:  Mapped[int | None] = mapped_column(SmallInteger)
+
     order: Mapped["SalesOrder"] = relationship("SalesOrder", back_populates="items")
     product: Mapped["Product | None"] = relationship("Product", back_populates="sales_order_items")
+    quote_item: Mapped["QuoteItem | None"] = relationship("QuoteItem", foreign_keys=[quote_item_id])
 
     @property
     def thanh_tien(self) -> Decimal:

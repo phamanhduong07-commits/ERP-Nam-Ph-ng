@@ -12,7 +12,8 @@ from app.schemas.master import ProductShort
 from app.schemas.production import (
     ProductionOrderCreate, ProductionOrderUpdate,
     ProductionOrderResponse, ProductionOrderListItem,
-    ProductionOrderItemResponse, UpdateItemProgress, PagedResponse,
+    ProductionOrderItemResponse, UpdateItemProgress, UpdateItemSxParams,
+    PagedResponse, TaoLenhBody,
 )
 
 router = APIRouter(prefix="/api/production-orders", tags=["production-orders"])
@@ -33,6 +34,9 @@ def _generate_so_lenh(db: Session) -> str:
 
 def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
     so_don = order.sales_order.so_don if order.sales_order else None
+    kh = order.sales_order.customer if order.sales_order else None
+    ten_khach_hang = kh.ten_viet_tat if kh else None
+    ma_khach_hang = kh.ma_kh if kh else None
     items = [
         ProductionOrderItemResponse(
             id=item.id,
@@ -45,6 +49,21 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
             dvt=item.dvt,
             ngay_giao_hang=item.ngay_giao_hang,
             ghi_chu=item.ghi_chu,
+            # Thông số kỹ thuật
+            loai_thung=item.loai_thung,
+            dai=item.dai, rong=item.rong, cao=item.cao,
+            so_lop=item.so_lop, to_hop_song=item.to_hop_song,
+            mat=item.mat,       mat_dl=item.mat_dl,
+            song_1=item.song_1, song_1_dl=item.song_1_dl,
+            mat_1=item.mat_1,   mat_1_dl=item.mat_1_dl,
+            song_2=item.song_2, song_2_dl=item.song_2_dl,
+            mat_2=item.mat_2,   mat_2_dl=item.mat_2_dl,
+            song_3=item.song_3, song_3_dl=item.song_3_dl,
+            mat_3=item.mat_3,   mat_3_dl=item.mat_3_dl,
+            loai_in=item.loai_in, so_mau=item.so_mau,
+            kho_tt=item.kho_tt,   dai_tt=item.dai_tt,
+            dien_tich=item.dien_tich,
+            gia_ban_muc_tieu=item.gia_ban_muc_tieu,
         )
         for item in order.items
     ]
@@ -54,6 +73,8 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
         ngay_lenh=order.ngay_lenh,
         sales_order_id=order.sales_order_id,
         so_don=so_don,
+        ten_khach_hang=ten_khach_hang,
+        ma_khach_hang=ma_khach_hang,
         trang_thai=order.trang_thai,
         ngay_bat_dau_ke_hoach=order.ngay_bat_dau_ke_hoach,
         ngay_hoan_thanh_ke_hoach=order.ngay_hoan_thanh_ke_hoach,
@@ -70,9 +91,8 @@ def _load_order(order_id: int, db: Session) -> ProductionOrder:
     order = (
         db.query(ProductionOrder)
         .options(
-            joinedload(ProductionOrder.sales_order),
+            joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.customer),
             joinedload(ProductionOrder.items).joinedload(ProductionOrderItem.product),
-            joinedload(ProductionOrder.items).joinedload(ProductionOrderItem.sales_order_item),
         )
         .filter(ProductionOrder.id == order_id)
         .first()
@@ -150,6 +170,69 @@ def get_order(
     _: User = Depends(get_current_user),
 ):
     return _build_response(_load_order(order_id, db))
+
+
+@router.post("/tu-don-hang/{order_id}", response_model=ProductionOrderResponse, status_code=201)
+def tao_lenh_tu_don_hang(
+    order_id: int,
+    data: TaoLenhBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Tạo lệnh sản xuất từ toàn bộ dòng hàng của một đơn hàng đã duyệt."""
+    so = (
+        db.query(SalesOrder)
+        .options(joinedload(SalesOrder.items))
+        .filter(SalesOrder.id == order_id)
+        .first()
+    )
+    if not so:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+    if so.trang_thai not in ("da_duyet", "dang_sx"):
+        raise HTTPException(status_code=400, detail="Chỉ lập lệnh SX từ đơn hàng đã duyệt")
+    if not so.items:
+        raise HTTPException(status_code=400, detail="Đơn hàng không có mặt hàng nào")
+
+    so_lenh = _generate_so_lenh(db)
+    order = ProductionOrder(
+        so_lenh=so_lenh,
+        ngay_lenh=data.ngay_lenh or date.today(),
+        sales_order_id=so.id,
+        trang_thai="moi",
+        ngay_hoan_thanh_ke_hoach=data.ngay_hoan_thanh_ke_hoach or so.ngay_giao_hang,
+        ghi_chu=data.ghi_chu or f"Lập từ đơn hàng {so.so_don}",
+        created_by=current_user.id,
+    )
+
+    for soi in so.items:
+        item = ProductionOrderItem(
+            product_id=soi.product_id,
+            sales_order_item_id=soi.id,
+            ten_hang=soi.ten_hang,
+            so_luong_ke_hoach=soi.so_luong,
+            dvt=soi.dvt,
+            ngay_giao_hang=soi.ngay_giao_hang,
+            gia_ban_muc_tieu=soi.don_gia,
+            # Kế thừa thông số kỹ thuật từ đơn hàng
+            loai_thung=soi.loai_thung,
+            dai=soi.dai,         rong=soi.rong,       cao=soi.cao,
+            so_lop=soi.so_lop,   to_hop_song=soi.to_hop_song,
+            mat=soi.mat,         mat_dl=soi.mat_dl,
+            song_1=soi.song_1,   song_1_dl=soi.song_1_dl,
+            mat_1=soi.mat_1,     mat_1_dl=soi.mat_1_dl,
+            song_2=soi.song_2,   song_2_dl=soi.song_2_dl,
+            mat_2=soi.mat_2,     mat_2_dl=soi.mat_2_dl,
+            song_3=soi.song_3,   song_3_dl=soi.song_3_dl,
+            mat_3=soi.mat_3,     mat_3_dl=soi.mat_3_dl,
+            loai_in=soi.loai_in, so_mau=soi.so_mau,
+        )
+        order.items.append(item)
+
+    db.add(order)
+    so.trang_thai = "dang_sx"
+    db.commit()
+    db.refresh(order)
+    return _build_response(_load_order(order.id, db))
 
 
 @router.post("", response_model=ProductionOrderResponse, status_code=201)
@@ -320,3 +403,36 @@ def update_item_progress(
         ngay_giao_hang=item.ngay_giao_hang,
         ghi_chu=item.ghi_chu,
     )
+
+
+@router.patch("/{order_id}/items/{item_id}/sx-params", response_model=ProductionOrderResponse)
+def update_item_sx_params(
+    order_id: int,
+    item_id: int,
+    data: UpdateItemSxParams,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Cập nhật thông số sản xuất (kết cấu giấy, chiều khổ).
+    Không ảnh hưởng đến giá bán."""
+    order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
+
+    item = (
+        db.query(ProductionOrderItem)
+        .filter(
+            ProductionOrderItem.id == item_id,
+            ProductionOrderItem.production_order_id == order_id,
+        )
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dòng sản phẩm")
+
+    fields = data.model_dump(exclude_none=True)
+    for field, value in fields.items():
+        setattr(item, field, value)
+
+    db.commit()
+    return _build_response(_load_order(order_id, db))

@@ -18,15 +18,22 @@ import {
 } from '../../api/productionOrders'
 import type { ProductionOrderListItem } from '../../api/productionOrders'
 
-const { Title } = Typography
+const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
-export default function ProductionOrderList() {
+interface Props {
+  selectedId?: number | null
+  onSelect?: (id: number) => void
+}
+
+export default function ProductionOrderList({ selectedId, onSelect }: Props) {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [trangThai, setTrangThai] = useState<string | undefined>()
   const [dateRange, setDateRange] = useState<[string, string] | null>(null)
   const [page, setPage] = useState(1)
+
+  const isEmbedded = !!onSelect
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['production-orders', search, trangThai, dateRange, page],
@@ -73,7 +80,33 @@ export default function ProductionOrderList() {
     }
   }
 
-  const columns: ColumnsType<ProductionOrderListItem> = [
+  const compactColumns: ColumnsType<ProductionOrderListItem> = [
+    {
+      title: 'Số lệnh',
+      dataIndex: 'so_lenh',
+      render: (v) => <Text style={{ color: '#1677ff', fontWeight: 500 }}>{v}</Text>,
+    },
+    {
+      title: 'Ngày',
+      dataIndex: 'ngay_lenh',
+      width: 76,
+      render: (v) => dayjs(v).format('DD/MM/YY'),
+    },
+    {
+      title: 'Đơn hàng',
+      dataIndex: 'so_don',
+      ellipsis: true,
+      render: (v) => v || '—',
+    },
+    {
+      title: 'TT',
+      dataIndex: 'trang_thai',
+      width: 86,
+      render: (v) => <Tag color={TRANG_THAI_COLORS[v]} style={{ fontSize: 11 }}>{TRANG_THAI_LABELS[v] || v}</Tag>,
+    },
+  ]
+
+  const fullColumns: ColumnsType<ProductionOrderListItem> = [
     {
       title: 'Số lệnh',
       dataIndex: 'so_lenh',
@@ -170,78 +203,96 @@ export default function ProductionOrderList() {
   ]
 
   return (
-    <Card>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col>
-          <Title level={4} style={{ margin: 0 }}>Lệnh sản xuất</Title>
-        </Col>
-        <Col>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => navigate('/production/orders/new')}
-          >
-            Tạo lệnh SX
-          </Button>
-        </Col>
-      </Row>
+    <div>
+      <style>{`.md-selected-row > td { background-color: #e6f4ff !important; }`}</style>
 
-      <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
-        <Col xs={24} sm={8}>
-          <Input
-            placeholder="Tìm số lệnh..."
-            prefix={<SearchOutlined />}
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-            allowClear
-          />
-        </Col>
-        <Col xs={24} sm={6}>
-          <Select
-            placeholder="Trạng thái"
-            style={{ width: '100%' }}
-            allowClear
-            value={trangThai}
-            onChange={(v) => { setTrangThai(v); setPage(1) }}
-            options={Object.entries(TRANG_THAI_LABELS).map(([v, l]) => ({ value: v, label: l }))}
-          />
-        </Col>
-        <Col xs={24} sm={10}>
-          <RangePicker
-            style={{ width: '100%' }}
-            format="DD/MM/YYYY"
-            placeholder={['Từ ngày', 'Đến ngày']}
-            onChange={(_, s) => {
-              setDateRange(
-                s[0] && s[1]
-                  ? [
-                      dayjs(s[0], 'DD/MM/YYYY').format('YYYY-MM-DD'),
-                      dayjs(s[1], 'DD/MM/YYYY').format('YYYY-MM-DD'),
-                    ]
-                  : null
-              )
-              setPage(1)
-            }}
-          />
-        </Col>
-      </Row>
+      <Card style={{ marginBottom: 8 }} styles={{ body: { padding: '12px 16px' } }}>
+        <Row justify="space-between" align="middle">
+          <Col>
+            <Title level={5} style={{ margin: 0 }}>Lệnh sản xuất</Title>
+          </Col>
+          <Col>
+            <Button
+              type="primary"
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => navigate('/production/orders/new')}
+            >
+              Tạo lệnh SX
+            </Button>
+          </Col>
+        </Row>
+
+        <Row gutter={8} style={{ marginTop: 8 }}>
+          <Col flex="auto">
+            <Input
+              placeholder="Tìm số lệnh..."
+              prefix={<SearchOutlined />}
+              size="small"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+              allowClear
+            />
+          </Col>
+          <Col>
+            <Select
+              placeholder="TT"
+              size="small"
+              style={{ width: 110 }}
+              allowClear
+              value={trangThai}
+              onChange={(v) => { setTrangThai(v); setPage(1) }}
+              options={Object.entries(TRANG_THAI_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+            />
+          </Col>
+        </Row>
+
+        {!isEmbedded && (
+          <Row style={{ marginTop: 8 }}>
+            <Col span={24}>
+              <RangePicker
+                style={{ width: '100%' }}
+                format="DD/MM/YYYY"
+                placeholder={['Từ ngày', 'Đến ngày']}
+                onChange={(_, s) => {
+                  setDateRange(
+                    s[0] && s[1]
+                      ? [
+                          dayjs(s[0], 'DD/MM/YYYY').format('YYYY-MM-DD'),
+                          dayjs(s[1], 'DD/MM/YYYY').format('YYYY-MM-DD'),
+                        ]
+                      : null
+                  )
+                  setPage(1)
+                }}
+              />
+            </Col>
+          </Row>
+        )}
+      </Card>
 
       <Table
-        columns={columns}
+        columns={isEmbedded ? compactColumns : fullColumns}
         dataSource={data?.items || []}
         rowKey="id"
         loading={isLoading}
+        rowClassName={(r) => r.id === selectedId ? 'md-selected-row' : ''}
+        onRow={(r) => ({
+          onClick: isEmbedded ? () => onSelect!(r.id) : undefined,
+          style: isEmbedded ? { cursor: 'pointer' } : undefined,
+        })}
         pagination={{
           current: page,
           pageSize: 20,
           total: data?.total || 0,
           onChange: setPage,
-          showTotal: (t) => `Tổng ${t} lệnh`,
+          showTotal: (t) => `${t} lệnh`,
           showSizeChanger: false,
+          size: 'small',
         }}
-        size="middle"
-        scroll={{ x: 950 }}
+        size="small"
+        scroll={isEmbedded ? undefined : { x: 950 }}
       />
-    </Card>
+    </div>
   )
 }

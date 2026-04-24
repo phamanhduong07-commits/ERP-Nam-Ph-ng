@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -48,6 +48,39 @@ class ProductionOrderItem(Base):
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
     ngay_giao_hang: Mapped[date | None] = mapped_column(Date)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+
+    # ── Thông số kỹ thuật (kế thừa từ SalesOrderItem / QuoteItem) ──────────────
+    loai_thung: Mapped[str | None] = mapped_column(String(50))
+    dai:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    rong: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    cao:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    so_lop:     Mapped[int | None] = mapped_column(SmallInteger)
+    to_hop_song: Mapped[str | None] = mapped_column(String(20))
+    mat:     Mapped[str | None] = mapped_column(String(30))
+    mat_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_1:     Mapped[str | None] = mapped_column(String(30))
+    song_1_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_1:      Mapped[str | None] = mapped_column(String(30))
+    mat_1_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_2:     Mapped[str | None] = mapped_column(String(30))
+    song_2_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_2:      Mapped[str | None] = mapped_column(String(30))
+    mat_2_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_3:     Mapped[str | None] = mapped_column(String(30))
+    song_3_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_3:      Mapped[str | None] = mapped_column(String(30))
+    mat_3_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    loai_in:    Mapped[str | None] = mapped_column(String(30))
+    so_mau:     Mapped[int | None] = mapped_column(SmallInteger)
+    kho_tt:     Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    dai_tt:     Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    dien_tich:  Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    gia_ban_muc_tieu: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+
+    @property
+    def gia_ban(self) -> "Decimal | None":
+        """Alias cho gia_ban_muc_tieu — để tương thích với _find_quote_item."""
+        return self.gia_ban_muc_tieu
 
     production_order: Mapped["ProductionOrder"] = relationship("ProductionOrder", back_populates="items")
     product: Mapped["Product | None"] = relationship("Product")  # type: ignore[name-defined]

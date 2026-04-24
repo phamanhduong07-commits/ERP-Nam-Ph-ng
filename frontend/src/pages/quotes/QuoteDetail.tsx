@@ -31,8 +31,14 @@ const paperSummary = (item: QuoteItem) => {
   return parts.join(' | ') || '—'
 }
 
-export default function QuoteDetail() {
-  const { id } = useParams<{ id: string }>()
+interface Props {
+  quoteId?: number
+  embedded?: boolean
+}
+
+export default function QuoteDetail({ quoteId, embedded = false }: Props) {
+  const params = useParams<{ id: string }>()
+  const id = quoteId ?? (params.id ? Number(params.id) : undefined)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -47,6 +53,7 @@ export default function QuoteDetail() {
     onSuccess: () => {
       message.success('Đã duyệt báo giá')
       queryClient.invalidateQueries({ queryKey: ['quote', id] })
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
     },
     onError: () => message.error('Duyệt thất bại'),
   })
@@ -56,6 +63,7 @@ export default function QuoteDetail() {
     onSuccess: () => {
       message.success('Đã huỷ báo giá')
       queryClient.invalidateQueries({ queryKey: ['quote', id] })
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
     },
     onError: () => message.error('Huỷ thất bại'),
   })
@@ -66,7 +74,10 @@ export default function QuoteDetail() {
       message.success(`Đã tạo đơn hàng ${res.data.so_don}`)
       navigate(`/sales/orders/${res.data.order_id}`)
     },
-    onError: () => message.error('Lập đơn hàng thất bại'),
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(detail || 'Lập đơn hàng thất bại', 6)
+    },
   })
 
   const columns: ColumnsType<QuoteItem> = [
@@ -152,7 +163,7 @@ export default function QuoteDetail() {
   ]
 
   if (isLoading) return <Skeleton active />
-  if (!quote) return <Text type="danger">Không tìm thấy báo giá</Text>
+  if (!quote) return <Text type="secondary" style={{ padding: 24, display: 'block' }}>Không tìm thấy báo giá</Text>
 
   const trangThai = quote.trang_thai
 
@@ -161,11 +172,13 @@ export default function QuoteDetail() {
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
         <Col>
           <Space>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/quotes')}>
-              Quay lại
-            </Button>
+            {!embedded && (
+              <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/quotes')}>
+                Quay lại
+              </Button>
+            )}
             <Title level={4} style={{ margin: 0 }}>
-              Báo giá: <Text style={{ color: '#1677ff' }}>{quote.so_bao_gia}</Text>
+              {embedded ? quote.so_bao_gia : <>Báo giá: <Text style={{ color: '#1677ff' }}>{quote.so_bao_gia}</Text></>}
             </Title>
             <Tag color={QUOTE_STATUS_COLORS[trangThai]} style={{ fontSize: 13 }}>
               {QUOTE_STATUS_LABELS[trangThai] ?? trangThai}
@@ -176,6 +189,7 @@ export default function QuoteDetail() {
           <Space>
             {trangThai === 'moi' && (
               <Button
+                size={embedded ? 'small' : 'middle'}
                 icon={<EditOutlined />}
                 onClick={() => navigate(`/quotes/${id}/edit`)}
               >
@@ -189,6 +203,7 @@ export default function QuoteDetail() {
                 okText="Duyệt"
               >
                 <Button
+                  size={embedded ? 'small' : 'middle'}
                   type="primary"
                   icon={<CheckCircleOutlined />}
                   loading={approveMutation.isPending}
@@ -204,6 +219,7 @@ export default function QuoteDetail() {
                 okText="Lập đơn"
               >
                 <Button
+                  size={embedded ? 'small' : 'middle'}
                   type="primary"
                   icon={<FileAddOutlined />}
                   loading={taoDonHangMutation.isPending}
@@ -220,6 +236,7 @@ export default function QuoteDetail() {
                 okButtonProps={{ danger: true }}
               >
                 <Button
+                  size={embedded ? 'small' : 'middle'}
                   danger
                   icon={<StopOutlined />}
                   loading={cancelMutation.isPending}
@@ -232,9 +249,8 @@ export default function QuoteDetail() {
         </Col>
       </Row>
 
-      {/* Header info */}
       <Card style={{ marginBottom: 16 }}>
-        <Descriptions column={{ xs: 1, sm: 2, lg: 3 }} bordered size="small">
+        <Descriptions column={{ xs: 1, sm: 2, lg: embedded ? 2 : 3 }} bordered size="small">
           <Descriptions.Item label="Số báo giá">{quote.so_bao_gia}</Descriptions.Item>
           <Descriptions.Item label="Ngày BG">
             {dayjs(quote.ngay_bao_gia).format('DD/MM/YYYY')}
@@ -266,7 +282,6 @@ export default function QuoteDetail() {
         </Descriptions>
       </Card>
 
-      {/* Items table */}
       <Card
         title={`Chi tiết sản phẩm (${quote.items.length} dòng)`}
         style={{ marginBottom: 16 }}
@@ -281,7 +296,6 @@ export default function QuoteDetail() {
         />
       </Card>
 
-      {/* Totals */}
       <Card title="Tổng hợp chi phí">
         <Row gutter={[16, 8]} style={{ maxWidth: 500 }}>
           <Col span={14}><Text>Tiền hàng</Text></Col>

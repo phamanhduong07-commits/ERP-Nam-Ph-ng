@@ -177,7 +177,7 @@ export function calcBoxDimensions(
   rong: number | null | undefined,  // cm
   cao: number | null | undefined,   // cm
   so_lop: number,
-): { kho_tt: number; dai_tt: number; dien_tich: number } | null {
+): { kho1: number; dai1: number; so_dao: number; kho_tt: number; dai_tt: number; dien_tich: number } | null {
   if (!loai_thung || !dai || !rong || !cao) return null
   const D = dai, R = rong, C = cao
   let kho1 = 0, dai1 = 0, dai_tt = 0
@@ -229,6 +229,9 @@ export function calcBoxDimensions(
     : kho1 * dai1 / 10000
 
   return {
+    kho1: Math.round(kho1 * 10) / 10,
+    dai1: Math.round(dai1 * 10) / 10,
+    so_dao,
     kho_tt: Math.round(kho_tt * 10) / 10,
     dai_tt: Math.round(dai_tt * 10) / 10,
     dien_tich: Math.round(dien_tich * 10000) / 10000,

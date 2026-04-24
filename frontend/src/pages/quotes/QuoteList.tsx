@@ -14,16 +14,23 @@ import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS } from '../../api/quotes'
 import type { QuoteListItem } from '../../api/quotes'
 
-const { Title } = Typography
+const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
-export default function QuoteList() {
+interface Props {
+  selectedId?: number | null
+  onSelect?: (id: number) => void
+}
+
+export default function QuoteList({ selectedId, onSelect }: Props) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [trangThai, setTrangThai] = useState<string | undefined>()
   const [dateRange, setDateRange] = useState<[string, string] | []>([])
   const [page, setPage] = useState(1)
+
+  const isEmbedded = !!onSelect
 
   const { data, isLoading } = useQuery({
     queryKey: ['quotes', search, trangThai, dateRange, page],
@@ -61,12 +68,37 @@ export default function QuoteList() {
     onSuccess: (res) => {
       message.success(`Đã tạo ${res.data.so_don}`)
       queryClient.invalidateQueries({ queryKey: ['sales-orders'] })
-      navigate(`/sales/orders`)
+      navigate('/sales/orders')
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo đơn'),
   })
 
-  const columns: ColumnsType<QuoteListItem> = [
+  const compactColumns: ColumnsType<QuoteListItem> = [
+    {
+      title: 'Số BG',
+      dataIndex: 'so_bao_gia',
+      render: (v) => <Text style={{ color: '#1677ff', fontWeight: 500 }}>{v}</Text>,
+    },
+    {
+      title: 'Ngày',
+      dataIndex: 'ngay_bao_gia',
+      width: 76,
+      render: (v) => dayjs(v).format('DD/MM/YY'),
+    },
+    {
+      title: 'Khách hàng',
+      dataIndex: 'ten_khach_hang',
+      ellipsis: true,
+    },
+    {
+      title: 'TT',
+      dataIndex: 'trang_thai',
+      width: 86,
+      render: (v) => <Tag color={QUOTE_STATUS_COLORS[v] || 'default'} style={{ fontSize: 11 }}>{QUOTE_STATUS_LABELS[v] || v}</Tag>,
+    },
+  ]
+
+  const fullColumns: ColumnsType<QuoteListItem> = [
     {
       title: 'Số BG',
       dataIndex: 'so_bao_gia',
@@ -154,27 +186,31 @@ export default function QuoteList() {
 
   return (
     <div>
-      <Card style={{ marginBottom: 16 }}>
+      <style>{`.md-selected-row > td { background-color: #e6f4ff !important; }`}</style>
+
+      <Card style={{ marginBottom: 8 }} styles={{ body: { padding: '12px 16px' } }}>
         <Row justify="space-between" align="middle">
           <Col>
-            <Title level={4} style={{ margin: 0 }}>📋 Báo giá</Title>
+            <Title level={5} style={{ margin: 0 }}>Báo giá</Title>
           </Col>
           <Col>
             <Button
               type="primary"
+              size="small"
               icon={<PlusOutlined />}
               onClick={() => navigate('/quotes/new')}
             >
-              Thêm báo giá mới
+              Thêm mới
             </Button>
           </Col>
         </Row>
 
-        <Row gutter={12} style={{ marginTop: 16 }}>
+        <Row gutter={8} style={{ marginTop: 8 }}>
           <Col flex="auto">
             <Input
-              placeholder="Tìm số BG, tên khách hàng..."
+              placeholder="Tìm số BG, khách hàng..."
               prefix={<SearchOutlined />}
+              size="small"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1) }}
               allowClear
@@ -182,41 +218,53 @@ export default function QuoteList() {
           </Col>
           <Col>
             <Select
-              placeholder="Trạng thái"
-              style={{ width: 140 }}
+              placeholder="TT"
+              size="small"
+              style={{ width: 110 }}
               allowClear
               value={trangThai}
               onChange={(v) => { setTrangThai(v); setPage(1) }}
               options={Object.entries(QUOTE_STATUS_LABELS).map(([k, v]) => ({ value: k, label: v }))}
             />
           </Col>
-          <Col>
-            <RangePicker
-              format="DD/MM/YYYY"
-              placeholder={['Từ ngày', 'Đến ngày']}
-              onChange={(_, s) => { setDateRange(s[0] && s[1] ? [s[0], s[1]] : []); setPage(1) }}
-            />
-          </Col>
         </Row>
+
+        {!isEmbedded && (
+          <Row style={{ marginTop: 8 }}>
+            <Col span={24}>
+              <RangePicker
+                format="DD/MM/YYYY"
+                placeholder={['Từ ngày', 'Đến ngày']}
+                onChange={(_, s) => { setDateRange(s[0] && s[1] ? [s[0], s[1]] : []); setPage(1) }}
+                style={{ width: '100%' }}
+              />
+            </Col>
+          </Row>
+        )}
       </Card>
 
-      <Card>
-        <Table
-          rowKey="id"
-          loading={isLoading}
-          columns={columns}
-          dataSource={data?.items || []}
-          pagination={{
-            current: page,
-            pageSize: 20,
-            total: data?.total || 0,
-            onChange: setPage,
-            showTotal: (t) => `Tổng ${t} báo giá`,
-            showSizeChanger: false,
-          }}
-          size="small"
-        />
-      </Card>
+      <Table
+        rowKey="id"
+        loading={isLoading}
+        columns={isEmbedded ? compactColumns : fullColumns}
+        dataSource={data?.items || []}
+        rowClassName={(r) => r.id === selectedId ? 'md-selected-row' : ''}
+        onRow={(r) => ({
+          onClick: isEmbedded ? () => onSelect!(r.id) : undefined,
+          style: isEmbedded ? { cursor: 'pointer' } : undefined,
+        })}
+        pagination={{
+          current: page,
+          pageSize: 20,
+          total: data?.total || 0,
+          onChange: setPage,
+          showTotal: (t) => `${t} báo giá`,
+          showSizeChanger: false,
+          size: 'small',
+        }}
+        size="small"
+        scroll={isEmbedded ? undefined : { x: 900 }}
+      />
     </div>
   )
 }

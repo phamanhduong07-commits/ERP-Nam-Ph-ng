@@ -22,6 +22,26 @@ export interface ProductionOrderItem {
   dvt: string
   ngay_giao_hang: string | null
   ghi_chu: string | null
+  // Thông số kỹ thuật (kế thừa từ đơn hàng / báo giá)
+  loai_thung: string | null
+  dai: number | null
+  rong: number | null
+  cao: number | null
+  so_lop: number | null
+  to_hop_song: string | null
+  mat: string | null;     mat_dl: number | null
+  song_1: string | null;  song_1_dl: number | null
+  mat_1: string | null;   mat_1_dl: number | null
+  song_2: string | null;  song_2_dl: number | null
+  mat_2: string | null;   mat_2_dl: number | null
+  song_3: string | null;  song_3_dl: number | null
+  mat_3: string | null;   mat_3_dl: number | null
+  loai_in: string | null
+  so_mau: number | null
+  kho_tt: number | null
+  dai_tt: number | null
+  dien_tich: number | null
+  gia_ban_muc_tieu: number | null
 }
 
 export interface ProductionOrder {
@@ -30,6 +50,8 @@ export interface ProductionOrder {
   ngay_lenh: string
   sales_order_id: number | null
   so_don: string | null
+  ten_khach_hang: string | null
+  ma_khach_hang: string | null
   trang_thai: string
   ngay_bat_dau_ke_hoach: string | null
   ngay_hoan_thanh_ke_hoach: string | null
@@ -51,6 +73,19 @@ export interface ProductionOrderListItem {
   ngay_hoan_thanh_ke_hoach: string | null
   so_dong: number
   tong_sl_ke_hoach: number
+}
+
+export interface UpdateItemSxParamsPayload {
+  kho_tt?: number | null
+  dai_tt?: number | null
+  to_hop_song?: string | null
+  mat?: string | null;     mat_dl?: number | null
+  song_1?: string | null;  song_1_dl?: number | null
+  mat_1?: string | null;   mat_1_dl?: number | null
+  song_2?: string | null;  song_2_dl?: number | null
+  mat_2?: string | null;   mat_2_dl?: number | null
+  song_3?: string | null;  song_3_dl?: number | null
+  mat_3?: string | null;   mat_3_dl?: number | null
 }
 
 export interface CreateProductionItemPayload {
@@ -99,6 +134,17 @@ export const productionOrdersApi = {
 
   get: (id: number) => client.get<ProductionOrder>(`/production-orders/${id}`),
   create: (data: CreateProductionOrderPayload) => client.post<ProductionOrder>('/production-orders', data),
+
+  /** Tạo lệnh SX từ toàn bộ dòng hàng của một đơn hàng đã duyệt */
+  createFromOrder: (
+    salesOrderId: number,
+    opts?: { ngay_lenh?: string; ngay_hoan_thanh_ke_hoach?: string; ghi_chu?: string },
+  ) =>
+    client.post<ProductionOrder>(
+      `/production-orders/tu-don-hang/${salesOrderId}`,
+      opts ?? {},
+    ),
+
   update: (id: number, data: Partial<CreateProductionOrderPayload>) =>
     client.put<ProductionOrder>(`/production-orders/${id}`, data),
   start: (id: number) => client.patch<ProductionOrder>(`/production-orders/${id}/start`),
@@ -108,4 +154,7 @@ export const productionOrdersApi = {
     client.patch<ProductionOrderItem>(`/production-orders/${orderId}/items/${itemId}/progress`, {
       so_luong_hoan_thanh,
     }),
+
+  updateItemSxParams: (orderId: number, itemId: number, data: UpdateItemSxParamsPayload) =>
+    client.patch<ProductionOrder>(`/production-orders/${orderId}/items/${itemId}/sx-params`, data),
 }

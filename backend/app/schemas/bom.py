@@ -75,8 +75,9 @@ class BomCalculateRequest(BaseModel):
     @field_validator("loai_thung")
     @classmethod
     def validate_loai_thung(cls, v: str) -> str:
-        if v.upper() not in ("A1", "A3", "A5", "TAM"):
-            raise ValueError("loai_thung phải là A1, A3, A5 hoặc tam")
+        valid = {"A1", "A3", "A5", "A7", "GOI_GIUA", "GOI_SUON", "TAM"}
+        if v.upper() not in valid:
+            raise ValueError(f"loai_thung phải là {', '.join(sorted(valid))}")
         return v.upper()
 
     @field_validator("be_so_con")
@@ -258,6 +259,53 @@ class BomResponse(BaseModel):
 
     # BOM lines
     items: list[BomItemResponse] = []
+
+    # Chi tiết chi phí gián tiếp (hoạch toán)
+    indirect_items: list["BomIndirectItemResponse"] = []
+
+    class Config:
+        from_attributes = True
+
+
+class BomIndirectItemResponse(BaseModel):
+    id: int
+    bom_id: int
+    ten: str
+    don_gia_m2: Decimal
+    dien_tich: Decimal
+    thanh_tien: Decimal
+
+
+class BomSummaryItem(BaseModel):
+    """Lightweight summary dùng cho trang danh sách Định mức BOM."""
+    id: int
+    production_order_item_id: int | None
+    # Context từ quan hệ
+    ten_hang: str | None
+    so_lenh: str | None
+    ten_khach_hang: str | None
+    ma_khach_hang: str | None
+    # Thông số
+    loai_thung: str
+    dai: Decimal
+    rong: Decimal
+    cao: Decimal
+    so_lop: int
+    to_hop_song: str | None
+    so_luong_sx: Decimal
+    # Chi phí tổng hợp
+    chi_phi_giay: Decimal | None
+    chi_phi_gian_tiep: Decimal | None
+    chi_phi_hao_hut: Decimal | None
+    chi_phi_addon: Decimal | None
+    gia_ban_cuoi: Decimal | None
+    # Trạng thái
+    trang_thai: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
     class Config:
         from_attributes = True

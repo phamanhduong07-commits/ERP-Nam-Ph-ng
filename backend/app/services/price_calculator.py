@@ -25,38 +25,34 @@ _INDIRECT_COST: dict[int, float] = {
 
 _INDIRECT_BREAKDOWN: dict[int, list[dict]] = {
     3: [
-        {"ten": "Bột",        "don_gia_m2": 137},
-        {"ten": "Điện",       "don_gia_m2": 50},
-        {"ten": "Gas",        "don_gia_m2": 194},
-        {"ten": "Kẽm",        "don_gia_m2": 33},
-        {"ten": "Lương",      "don_gia_m2": 160},
-        {"ten": "Máy",        "don_gia_m2": 100},
-        {"ten": "Nhà xưởng",  "don_gia_m2": 130},
-        {"ten": "Sut/GT",     "don_gia_m2": 14},
-        {"ten": "Vận chuyển", "don_gia_m2": 80},
+        {"ten": "Bột",                         "don_gia_m2": 137},
+        {"ten": "Gas / Củi",                   "don_gia_m2": 194},
+        {"ten": "Xút",                         "don_gia_m2": 14},
+        {"ten": "Điện",                        "don_gia_m2": 50},
+        {"ten": "Lương sóng",                  "don_gia_m2": 160},
+        {"ten": "Khấu hao nhà xưởng",          "don_gia_m2": 130},
+        {"ten": "Khấu hao máy móc",            "don_gia_m2": 100},
+        {"ten": "Chi phí gián tiếp (văn phòng)", "don_gia_m2": 113},
     ],
     5: [
-        {"ten": "Bột",        "don_gia_m2": 274},
-        {"ten": "Điện",       "don_gia_m2": 49.2},
-        {"ten": "Gas",        "don_gia_m2": 194},
-        {"ten": "Kẽm",        "don_gia_m2": 33},
-        {"ten": "Lương",      "don_gia_m2": 200},
-        {"ten": "Máy",        "don_gia_m2": 150},
-        {"ten": "Nhà xưởng",  "don_gia_m2": 130},
-        {"ten": "Sut/GT",     "don_gia_m2": 28},
-        {"ten": "Vận chuyển", "don_gia_m2": 120},
+        {"ten": "Bột",                         "don_gia_m2": 274},
+        {"ten": "Gas / Củi",                   "don_gia_m2": 194},
+        {"ten": "Xút",                         "don_gia_m2": 28},
+        {"ten": "Điện",                        "don_gia_m2": 49.2},
+        {"ten": "Lương sóng",                  "don_gia_m2": 200},
+        {"ten": "Khấu hao nhà xưởng",          "don_gia_m2": 130},
+        {"ten": "Khấu hao máy móc",            "don_gia_m2": 150},
+        {"ten": "Chi phí gián tiếp (văn phòng)", "don_gia_m2": 153},
     ],
     7: [
-        {"ten": "Bột",        "don_gia_m2": 274},
-        {"ten": "Điện",       "don_gia_m2": 49.2},
-        {"ten": "Gas",        "don_gia_m2": 194},
-        {"ten": "Gián tiếp",  "don_gia_m2": 622},
-        {"ten": "Kẽm",        "don_gia_m2": 33},
-        {"ten": "Lương",      "don_gia_m2": 200},
-        {"ten": "Máy",        "don_gia_m2": 150},
-        {"ten": "Nhà xưởng",  "don_gia_m2": 130},
-        {"ten": "Sut/GT",     "don_gia_m2": 28},
-        {"ten": "Vận chuyển", "don_gia_m2": 120},
+        {"ten": "Bột",                         "don_gia_m2": 274},
+        {"ten": "Gas / Củi",                   "don_gia_m2": 194},
+        {"ten": "Xút",                         "don_gia_m2": 28},
+        {"ten": "Điện",                        "don_gia_m2": 49.2},
+        {"ten": "Lương sóng",                  "don_gia_m2": 200},
+        {"ten": "Khấu hao nhà xưởng",          "don_gia_m2": 130},
+        {"ten": "Khấu hao máy móc",            "don_gia_m2": 150},
+        {"ten": "Chi phí gián tiếp (văn phòng)", "don_gia_m2": 775},
     ],
 }
 
@@ -73,41 +69,35 @@ def get_indirect_cost(so_lop: int) -> float:
 # 2. Spoilage rate (Chi phí hao hụt) — decimal fraction
 # ---------------------------------------------------------------------------
 
-# Each entry: (max_qty_inclusive, rate)  — sorted ascending
-_SPOILAGE_3: list[tuple[float, float]] = [
-    (500,   0.15),
-    (1000,  0.10),
-    (1500,  0.08),
-    (2000,  0.07),
-    (math.inf, 0.05),
-]
+# Giấy tấm (tam): tỷ lệ cố định theo số lớp
+_SPOILAGE_TAM: dict[int, float] = {3: 0.04, 5: 0.05, 7: 0.07}
 
-_SPOILAGE_5_7: list[tuple[float, float]] = [
-    (200,   0.30),
-    (400,   0.20),
-    (600,   0.15),
-    (1000,  0.10),
-    (1500,  0.08),
-    (2000,  0.07),
+# Giấy thùng (A1/A3/A5): bảng theo số lượng — chung cho mọi số lớp
+_SPOILAGE_THUNG: list[tuple[float, float]] = [
+    (200,      0.30),
+    (400,      0.20),
+    (600,      0.15),
+    (1000,     0.10),
+    (1500,     0.08),
+    (2000,     0.07),
     (math.inf, 0.06),
 ]
 
-_SPOILAGE_TABLE: dict[int, list[tuple[float, float]]] = {
-    3: _SPOILAGE_3,
-    5: _SPOILAGE_5_7,
-    7: _SPOILAGE_5_7,
-}
 
+def get_spoilage_rate(so_luong: float, so_lop: int, loai_thung: str = "") -> float:
+    """Return spoilage rate as a decimal (e.g. 0.15 for 15%).
 
-def get_spoilage_rate(so_luong: float, so_lop: int) -> float:
-    """Return spoilage rate as a decimal (e.g. 0.15 for 15%)."""
-    table = _SPOILAGE_TABLE.get(so_lop)
-    if table is None:
+    Giấy tấm: fixed rate by layer count (4/5/7%).
+    Giấy thùng: quantity-based table, same for all layer counts.
+    """
+    if so_lop not in (3, 5, 7):
         raise ValueError(f"so_lop phải là 3, 5 hoặc 7 (nhận: {so_lop})")
-    for max_qty, rate in table:
+    if loai_thung.upper().strip() == "TAM":
+        return _SPOILAGE_TAM.get(so_lop, 0.05)
+    for max_qty, rate in _SPOILAGE_THUNG:
         if so_luong <= max_qty:
             return rate
-    return table[-1][1]  # fallback — should never reach here
+    return _SPOILAGE_THUNG[-1][1]
 
 
 # ---------------------------------------------------------------------------
@@ -187,10 +177,13 @@ def calculate_dien_tich(
     Calculate all dimensions and area for the box.
 
     loai_thung:
-        "A1" — Thùng thường
-        "A3" — Nắp chồm
-        "A5" — Âm dương
-        "tam" — Tấm (flat sheet, no folding)
+        "A1"       — Thùng thường
+        "A3"       — Nắp chồm
+        "A5"       — Âm dương (Nắp/Đáy)
+        "A7"       — Thùng 1 nắp
+        "GOI_GIUA" — Gói giữa
+        "GOI_SUON" — Gói sườn
+        "TAM"      — Giấy tấm (tấm phẳng)
 
     Returns a dict with:
         kho1, dai1, so_dao, kho_tt, dai_tt,
@@ -198,67 +191,90 @@ def calculate_dien_tich(
     """
     loai = loai_thung.upper().strip()
 
-    # Offset cho Kho_kh theo số lớp
-    kho_offset = {3: 0.2, 5: 0.4, 7: 0.8}.get(so_lop, 0.2)
+    # dai_tt standard: 3/5-layer = (D+R)*2+4, 7-layer = (D+R)*2+5
+    dai_tt_std = (dai + rong) * 2 + (5 if so_lop == 7 else 4)
 
-    # Dai_tt depends on layer count
-    # 3 & 5-layer: (D+R)*2+4  ;  7-layer: (D+R)*2+5
-    dai_tt_base = (dai + rong) * 2 + (5 if so_lop == 7 else 4)
+    # kho_kh offset for A1-style boxes (replaces the raw +3 tolerance in kho1)
+    kho_offset_a1 = {3: 0.2, 5: 0.4, 7: 0.8}.get(so_lop, 0.2)
+    # A7 uses half the A1 offset (kho1 uses Rộng/2)
+    kho_offset_a7 = {3: 0.1, 5: 0.2, 7: 0.4}.get(so_lop, 0.1)
 
     if loai == "TAM":
-        # Flat sheet — no folding calculation, area = kho_tt * dai_tt / 10000
         kho1 = rong + cao + 3
         dai1 = (dai + rong) * 2 + 5
         so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
         kho_tt = kho1 * so_dao + 1.8
-        dai_tt = dai_tt_base
-        kho_kh = kho_tt  # use kho_tt directly for flat sheets
+        dai_tt = dai_tt_std
+        kho_kh = kho_tt
         dai_kh = dai_tt
         dien_tich = kho_tt * dai_tt / 10000
-        return {
-            "kho1": round(kho1, 4),
-            "dai1": round(dai1, 4),
-            "so_dao": so_dao,
-            "kho_tt": round(kho_tt, 4),
-            "dai_tt": round(dai_tt, 4),
-            "kho_kh": round(kho_kh, 4),
-            "dai_kh": round(dai_kh, 4),
-            "dien_tich": round(dien_tich, 6),
-        }
 
-    if loai == "A1":
+    elif loai == "A1":
         kho1 = rong + cao + 3
         dai1 = (dai + rong) * 2 + 5
+        so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
+        kho_tt = kho1 * so_dao + 1.8
+        dai_tt = dai_tt_std
+        kho_kh = rong + cao + kho_offset_a1
+        dai_kh = (dai + rong) * 2 + 3
+        dien_tich = kho_kh * dai_kh / 10000
 
     elif loai == "A3":
-        # Nắp chồm
         kho1 = 2 * rong + cao + 3
         dai1 = (dai + rong) * 2 + 5
+        so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
+        kho_tt = kho1 * so_dao + 1.8
+        dai_tt = dai_tt_std
+        kho_kh = 2 * rong + cao        # KH: (Rộng×2)+Cao — no layer offset
+        dai_kh = (dai + rong) * 2 + 3
+        dien_tich = kho_kh * dai_kh / 10000
 
     elif loai == "A5":
-        # Âm dương
+        kho1 = 2 * cao + rong + 2
+        dai1 = 2 * cao + dai + 2
+        so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
+        kho_tt = kho1 * so_dao + 1.8
+        dai_tt = dai1                  # same for all layers: (2×Cao)+Dài+2
+        kho_kh = 2 * cao + rong        # KH: (Cao×2)+Rộng
+        dai_kh = 2 * cao + dai         # KH: (Cao×2)+Dài
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "A7":
+        # Thùng 1 nắp
+        kho1 = rong / 2 + cao + 3
+        dai1 = (dai + rong) * 2 + 5
+        so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
+        kho_tt = kho1 * so_dao + 1.8
+        dai_tt = dai_tt_std
+        kho_kh = rong / 2 + cao + kho_offset_a7
+        dai_kh = (dai + rong) * 2 + 3
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "GOI_GIUA":
         kho1 = 2 * cao + rong + 3
-        dai1 = 2 * cao + dai + 3
+        dai1 = (dai + rong) * 2 + 5
+        so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
+        kho_tt = kho1 * so_dao + 1.8
+        dai_tt = dai_tt_std
+        kho_kh = 2 * rong + cao        # KH: (Rộng×2)+Cao
+        dai_kh = (dai + rong) * 2      # KH: (Dài+Rộng)×2
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "GOI_SUON":
+        kho1 = 2 * rong + 3 * cao + 3
+        dai1 = dai + 2 * cao + 5
+        so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
+        kho_tt = kho1 * so_dao + 1.8
+        dai_tt = dai + 2 * cao + 3     # same for all layers
+        kho_kh = 2 * rong + cao        # KH: (Rộng×2)+Cao
+        dai_kh = 2 * dai + 3 * rong   # KH: (2×Dài)+(3×Rộng)
+        dien_tich = kho_kh * dai_kh / 10000
 
     else:
         raise ValueError(
-            f"loai_thung không hợp lệ: '{loai_thung}'. Chấp nhận: A1, A3, A5, tam"
+            f"loai_thung không hợp lệ: '{loai_thung}'. "
+            "Chấp nhận: A1, A3, A5, A7, GOI_GIUA, GOI_SUON, TAM"
         )
-
-    so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
-    kho_tt = kho1 * so_dao + 1.8
-
-    # dai_tt: A1/A3 follow standard; A5 uses dai1-based
-    if loai in ("A1", "A3"):
-        dai_tt = dai_tt_base
-    else:
-        # A5: dai1 already incorporates the correct formula
-        dai_tt = dai1
-
-    kho_kh = rong + cao + kho_offset
-    dai_kh = (dai + rong) * 2 + 3
-
-    dien_tich = kho_kh * dai_kh / 10000
 
     return {
         "kho1": round(kho1, 4),
@@ -276,21 +292,16 @@ def calculate_dien_tich(
 # 6. Default profit margins
 # ---------------------------------------------------------------------------
 
-_DEFAULT_PROFIT: dict[str, dict[int, float]] = {
-    "tam": {3: 0.07, 5: 0.08, 7: 0.10},
-    "thung": {3: 0.06, 5: 0.06, 7: 0.06},
-}
-
-_THUNG_EXTRA_PROFIT = 0.10  # additional 10% on top of base for thung
+# Giấy tấm: phân biệt theo số lớp
+# Giấy thùng (A1/A3/A5): 6% đồng nhất
+_DEFAULT_PROFIT_TAM: dict[int, float] = {3: 0.07, 5: 0.08, 7: 0.10}
+_DEFAULT_PROFIT_THUNG = 0.06
 
 
 def _default_profit_rate(loai_thung: str, so_lop: int) -> float:
-    loai = loai_thung.upper().strip()
-    if loai == "TAM":
-        return _DEFAULT_PROFIT["tam"].get(so_lop, 0.07)
-    # All box types (A1, A3, A5) → "thung" category
-    base = _DEFAULT_PROFIT["thung"].get(so_lop, 0.06)
-    return base + _THUNG_EXTRA_PROFIT * base  # 6% + 10% extra = 6.6%
+    if loai_thung.upper().strip() == "TAM":
+        return _DEFAULT_PROFIT_TAM.get(so_lop, 0.07)
+    return _DEFAULT_PROFIT_THUNG  # A1/A3/A5: 6%
 
 
 # ---------------------------------------------------------------------------
@@ -345,7 +356,7 @@ def _calc_can_mang(mat: int, dien_tich: float) -> float:
 # 8. Main price + BOM calculation
 # ---------------------------------------------------------------------------
 
-def calculate_price(inp: dict) -> dict:
+def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None) -> dict:
     """
     Full price and BOM calculation.
 
@@ -482,15 +493,21 @@ def calculate_price(inp: dict) -> dict:
         })
 
     # ---- Indirect cost (b) ----
-    b = get_indirect_cost(so_lop) * dien_tich
-    breakdown_src = _INDIRECT_BREAKDOWN.get(so_lop, [])
+    # Dùng bảng từ DB nếu được truyền vào, ngược lại dùng giá trị hardcode
+    if indirect_breakdown is not None:
+        breakdown_src = indirect_breakdown
+        b = sum(float(item["don_gia_m2"]) for item in breakdown_src) * dien_tich
+    else:
+        b = get_indirect_cost(so_lop) * dien_tich
+        breakdown_src = _INDIRECT_BREAKDOWN.get(so_lop, [])
     gian_tiep_breakdown = [
-        {"ten": item["ten"], "don_gia_m2": item["don_gia_m2"], "thanh_tien": round(item["don_gia_m2"] * dien_tich, 2)}
+        {"ten": item["ten"], "don_gia_m2": float(item["don_gia_m2"]),
+         "thanh_tien": round(float(item["don_gia_m2"]) * dien_tich, 2)}
         for item in breakdown_src
     ]
 
     # ---- Spoilage (e) ----
-    hao_hut_pct = get_spoilage_rate(so_luong, so_lop)
+    hao_hut_pct = get_spoilage_rate(so_luong, so_lop, loai_thung)
     e = (a + b) * hao_hut_pct
 
     # ---- BOM material quantities (with spoilage) ----

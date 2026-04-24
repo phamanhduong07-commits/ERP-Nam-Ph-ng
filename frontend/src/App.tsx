@@ -3,12 +3,12 @@ import { useAuthStore } from './store/auth'
 import AppLayout from './components/AppLayout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import OrderList from './pages/sales/OrderList'
 import OrderCreate from './pages/sales/OrderCreate'
 import OrderDetail from './pages/sales/OrderDetail'
-import QuoteList from './pages/quotes/QuoteList'
+import SalesOrdersPage from './pages/sales/SalesOrdersPage'
 import QuoteForm from './pages/quotes/QuoteForm'
 import QuoteDetail from './pages/quotes/QuoteDetail'
+import QuotesPage from './pages/quotes/QuotesPage'
 import CauTrucList from './pages/danhmuc/CauTrucList'
 import CustomerList from './pages/danhmuc/CustomerList'
 import SupplierList from './pages/danhmuc/SupplierList'
@@ -25,9 +25,14 @@ import TaiXeList from './pages/danhmuc/TaiXeList'
 import TinhThanhList from './pages/danhmuc/TinhThanhList'
 import PhuongXaList from './pages/danhmuc/PhuongXaList'
 import DonGiaVanChuyenList from './pages/danhmuc/DonGiaVanChuyenList'
-import ProductionOrderList from './pages/production/ProductionOrderList'
 import ProductionOrderCreate from './pages/production/ProductionOrderCreate'
 import ProductionOrderDetail from './pages/production/ProductionOrderDetail'
+import ProductionOrdersPage from './pages/production/ProductionOrdersPage'
+import ProductionPlansPage from './pages/production/ProductionPlansPage'
+import ProductionPlanForm from './pages/production/ProductionPlanForm'
+import ProductionQueuePage from './pages/production/ProductionQueuePage'
+import IndirectCostList from './pages/danhmuc/IndirectCostList'
+import BomListPage from './pages/production/BomListPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -49,13 +54,13 @@ export default function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
 
-        {/* Bán hàng */}
-        <Route path="sales/orders" element={<OrderList />} />
+        {/* Bán hàng — master-detail list + standalone routes */}
+        <Route path="sales/orders" element={<SalesOrdersPage />} />
         <Route path="sales/orders/new" element={<OrderCreate />} />
         <Route path="sales/orders/:id" element={<OrderDetail />} />
 
-        {/* Báo giá */}
-        <Route path="quotes" element={<QuoteList />} />
+        {/* Báo giá — master-detail list + standalone routes */}
+        <Route path="quotes" element={<QuotesPage />} />
         <Route path="quotes/new" element={<QuoteForm />} />
         <Route path="quotes/:id" element={<QuoteDetail />} />
         <Route path="quotes/:id/edit" element={<QuoteForm />} />
@@ -78,12 +83,22 @@ export default function App() {
         <Route path="master/phuong-xa" element={<PhuongXaList />} />
         <Route path="master/don-gia-van-chuyen" element={<DonGiaVanChuyenList />} />
 
-        {/* Sản xuất */}
-        <Route path="production/orders" element={<ProductionOrderList />} />
+        {/* Sản xuất — master-detail list + standalone routes */}
+        <Route path="production/orders" element={<ProductionOrdersPage />} />
         <Route path="production/orders/new" element={<ProductionOrderCreate />} />
         <Route path="production/orders/:id" element={<ProductionOrderDetail />} />
 
-        {/* Các module khác sẽ thêm sau */}
+        {/* Kế hoạch sản xuất */}
+        <Route path="production/plans" element={<ProductionPlansPage />} />
+        <Route path="production/plans/new" element={<ProductionPlanForm />} />
+        <Route path="production/queue" element={<ProductionQueuePage />} />
+
+        {/* Định mức BOM */}
+        <Route path="production/bom" element={<BomListPage />} />
+
+        {/* BOM / Chi phí */}
+        <Route path="master/indirect-costs" element={<IndirectCostList />} />
+
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>

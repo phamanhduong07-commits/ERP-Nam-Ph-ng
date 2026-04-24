@@ -25,6 +25,22 @@ export interface SalesOrderItem {
   yeu_cau_in: string | null
   so_luong_da_xuat: number
   trang_thai_dong: string
+  // Thông số kỹ thuật (kế thừa từ báo giá)
+  loai_thung: string | null
+  dai: number | null
+  rong: number | null
+  cao: number | null
+  so_lop: number | null
+  to_hop_song: string | null
+  mat: string | null;     mat_dl: number | null
+  song_1: string | null;  song_1_dl: number | null
+  mat_1: string | null;   mat_1_dl: number | null
+  song_2: string | null;  song_2_dl: number | null
+  mat_2: string | null;   mat_2_dl: number | null
+  song_3: string | null;  song_3_dl: number | null
+  mat_3: string | null;   mat_3_dl: number | null
+  loai_in: string | null
+  so_mau: number | null
 }
 
 export interface SalesOrder {

@@ -123,6 +123,12 @@ class ProductionBOM(Base):
         cascade="all, delete-orphan",
         order_by="ProductionBOMItem.id",
     )
+    indirect_items: Mapped[list["ProductionBOMIndirectCostItem"]] = relationship(
+        "ProductionBOMIndirectCostItem",
+        back_populates="bom",
+        cascade="all, delete-orphan",
+        order_by="ProductionBOMIndirectCostItem.id",
+    )
 
 
 class ProductionBOMItem(Base):
@@ -161,4 +167,24 @@ class ProductionBOMItem(Base):
     bom: Mapped["ProductionBOM"] = relationship("ProductionBOM", back_populates="items")
     paper_material: Mapped["PaperMaterial | None"] = relationship(  # type: ignore[name-defined]
         "PaperMaterial", foreign_keys=[paper_material_id]
+    )
+
+
+class ProductionBOMIndirectCostItem(Base):
+    """Chi tiết chi phí gián tiếp theo từng khoản mục — dữ liệu hoạch toán."""
+    __tablename__ = "production_bom_indirect_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bom_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("production_boms.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    ten: Mapped[str] = mapped_column(String(50), nullable=False)       # Bột, Điện, Gas...
+    don_gia_m2: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    dien_tich: Mapped[Decimal] = mapped_column(Numeric(12, 6), nullable=False)  # m²/thùng
+    thanh_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+
+    bom: Mapped["ProductionBOM"] = relationship(
+        "ProductionBOM", back_populates="indirect_items"
     )
