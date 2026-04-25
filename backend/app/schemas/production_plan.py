@@ -163,6 +163,7 @@ class QueueLineResponse(BaseModel):
     cao: Decimal | None
     so_lop: int | None
     to_hop_song: str | None
+    loai_lan: str | None
     dai_tt: Decimal | None
     # Kết cấu giấy
     mat: str | None;     mat_dl: Decimal | None

@@ -1023,9 +1023,19 @@ export default function QuoteForm() {
                       onChange={e => setCI({ may_in: e.target.value })} />
                   </Col>
                   <Col span={8}>
-                    <Text style={{ fontSize: 11 }}>Loại lần</Text>
-                    <Input size="small" value={ci.loai_lan || ''}
-                      onChange={e => setCI({ loai_lan: e.target.value })} />
+                    <Text style={{ fontSize: 11 }}>Loại lằn</Text>
+                    <Select
+                      size="small"
+                      style={{ width: '100%' }}
+                      allowClear
+                      placeholder="Chọn..."
+                      value={ci.loai_lan || undefined}
+                      onChange={v => setCI({ loai_lan: v ?? null })}
+                      options={[
+                        { value: 'lan_bang',     label: 'Lằn bằng' },
+                        { value: 'lan_am_duong', label: 'Lằn âm dương' },
+                      ]}
+                    />
                   </Col>
                   <Col span={8}>
                     <Text style={{ fontSize: 11 }}>Bản vẽ KT</Text>

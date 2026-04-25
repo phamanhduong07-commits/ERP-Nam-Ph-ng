@@ -290,7 +290,7 @@ def tao_don_hang_tu_bao_gia(
             mat_2=qi.mat_2,   mat_2_dl=qi.mat_2_dl,
             song_3=qi.song_3, song_3_dl=qi.song_3_dl,
             mat_3=qi.mat_3,   mat_3_dl=qi.mat_3_dl,
-            loai_in=qi.loai_in, so_mau=qi.so_mau,
+            loai_in=qi.loai_in, so_mau=qi.so_mau, loai_lan=qi.loai_lan,
             kho_tt=qi.kho_tt,   dai_tt=qi.dai_tt,   dien_tich=qi.dien_tich,
         )
         order.items.append(item)

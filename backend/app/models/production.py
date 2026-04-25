@@ -72,6 +72,7 @@ class ProductionOrderItem(Base):
     mat_3_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     loai_in:    Mapped[str | None] = mapped_column(String(30))
     so_mau:     Mapped[int | None] = mapped_column(SmallInteger)
+    loai_lan:   Mapped[str | None] = mapped_column(String(50))
     kho_tt:     Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dai_tt:     Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dien_tich:  Mapped[Decimal | None] = mapped_column(Numeric(12, 4))

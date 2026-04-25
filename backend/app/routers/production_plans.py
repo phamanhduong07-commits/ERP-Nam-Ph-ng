@@ -679,6 +679,7 @@ def _build_queue_line(line: ProductionPlanLine, plan: ProductionPlan) -> QueueLi
         cao=bom.cao if bom else (item.cao if item else None),
         so_lop=bom.so_lop if bom else (item.so_lop if item else None),
         to_hop_song=bom.to_hop_song if bom else (item.to_hop_song if item else None),
+        loai_lan=item.loai_lan if item else None,
         dai_tt=item.dai_tt if item else None,
         mat=item.mat if item else None,         mat_dl=item.mat_dl if item else None,
         song_1=item.song_1 if item else None,   song_1_dl=item.song_1_dl if item else None,

@@ -48,6 +48,7 @@ class ProductionOrderItemResponse(BaseModel):
     mat_3: str | None = None;   mat_3_dl: Decimal | None = None
     loai_in: str | None = None
     so_mau: int | None = None
+    loai_lan: str | None = None
     kho_tt: Decimal | None = None
     dai_tt: Decimal | None = None
     dien_tich: Decimal | None = None

@@ -15,6 +15,7 @@ import type { TableRowSelection } from 'antd/es/table/interface'
 import dayjs from 'dayjs'
 import { productionPlansApi } from '../../api/productionPlans'
 import type { QueueLine } from '../../api/productionPlans'
+import { LOAI_LAN_LABELS } from '../../api/quotes'
 
 const { Text, Title } = Typography
 
@@ -216,6 +217,15 @@ export default function ProductionQueuePage() {
     },
     {
       title: 'Loại lằn',
+      dataIndex: 'loai_lan',
+      width: 110,
+      align: 'center',
+      render: (v) => v
+        ? <Tag color="volcano" style={{ fontSize: 11 }}>{LOAI_LAN_LABELS[v] ?? v}</Tag>
+        : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Tổ hợp sóng',
       dataIndex: 'to_hop_song',
       width: 78,
       align: 'center',

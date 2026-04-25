@@ -136,6 +136,16 @@ export const QUOTE_STATUS_COLORS: Record<string, string> = {
   huy: 'red',
 }
 
+export const LOAI_LAN_OPTIONS = [
+  { value: 'lan_bang',     label: 'Lằn bằng' },
+  { value: 'lan_am_duong', label: 'Lằn âm dương' },
+]
+
+export const LOAI_LAN_LABELS: Record<string, string> = {
+  lan_bang:     'Lằn bằng',
+  lan_am_duong: 'Lằn âm dương',
+}
+
 export const LOAI_IN_OPTIONS = [
   { value: 'khong_in', label: 'Không in' },
   { value: 'flexo', label: 'Flexo' },
