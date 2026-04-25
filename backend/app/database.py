@@ -243,6 +243,87 @@ def ensure_schema() -> None:
                 except Exception as e:
                     logger.warning("backfill POI spec failed: %s", e)
 
+    # ── sales_order_items: fix product_id NOT NULL → nullable (SQLite migration) ─
+    if is_sqlite and 'sales_order_items' in table_names:
+        soi_cols_info = inspector.get_columns('sales_order_items')
+        pid_col = next((c for c in soi_cols_info if c['name'] == 'product_id'), None)
+        if pid_col and not pid_col.get('nullable', True):
+            logger.info("ensure_schema: fixing sales_order_items.product_id NOT NULL → nullable")
+            with engine.begin() as conn:
+                conn.execute(text("PRAGMA foreign_keys=OFF"))
+                conn.execute(text("""
+                    CREATE TABLE sales_order_items_v2 (
+                        id            INTEGER      NOT NULL PRIMARY KEY,
+                        order_id      INTEGER      NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE,
+                        product_id    INTEGER      NULL     REFERENCES products(id),
+                        quote_item_id INTEGER      NULL     REFERENCES quote_items(id) ON DELETE SET NULL,
+                        ten_hang      VARCHAR(255) NOT NULL DEFAULT '',
+                        so_luong      NUMERIC(12,3) NOT NULL,
+                        dvt           VARCHAR(20)  NOT NULL DEFAULT 'Thùng',
+                        don_gia       NUMERIC(18,2) NOT NULL DEFAULT 0,
+                        ghi_chu_san_pham TEXT NULL,
+                        yeu_cau_in   TEXT NULL,
+                        ngay_giao_hang DATE NULL,
+                        so_luong_da_xuat NUMERIC(12,3) NOT NULL DEFAULT 0,
+                        trang_thai_dong VARCHAR(20) NOT NULL DEFAULT 'cho_sx',
+                        loai_thung   VARCHAR(50)  NULL,
+                        dai          DECIMAL(8,2) NULL,
+                        rong         DECIMAL(8,2) NULL,
+                        cao          DECIMAL(8,2) NULL,
+                        so_lop       SMALLINT     NULL,
+                        to_hop_song  VARCHAR(20)  NULL,
+                        mat          VARCHAR(30)  NULL, mat_dl   DECIMAL(8,2) NULL,
+                        song_1       VARCHAR(30)  NULL, song_1_dl DECIMAL(8,2) NULL,
+                        mat_1        VARCHAR(30)  NULL, mat_1_dl  DECIMAL(8,2) NULL,
+                        song_2       VARCHAR(30)  NULL, song_2_dl DECIMAL(8,2) NULL,
+                        mat_2        VARCHAR(30)  NULL, mat_2_dl  DECIMAL(8,2) NULL,
+                        song_3       VARCHAR(30)  NULL, song_3_dl DECIMAL(8,2) NULL,
+                        mat_3        VARCHAR(30)  NULL, mat_3_dl  DECIMAL(8,2) NULL,
+                        loai_in      VARCHAR(30)  NULL,
+                        so_mau       SMALLINT     NULL,
+                        kho_tt       DECIMAL(8,2) NULL,
+                        dai_tt       DECIMAL(8,2) NULL,
+                        dien_tich    DECIMAL(12,4) NULL
+                    )
+                """))
+                # Copy all existing columns, default missing ones
+                existing_names = {c['name'] for c in soi_cols_info}
+                def _col(n, default='NULL'):
+                    return n if n in existing_names else default
+                conn.execute(text(f"""
+                    INSERT INTO sales_order_items_v2
+                        (id, order_id, product_id, quote_item_id, ten_hang,
+                         so_luong, dvt, don_gia, ghi_chu_san_pham, yeu_cau_in,
+                         ngay_giao_hang, so_luong_da_xuat, trang_thai_dong,
+                         loai_thung, dai, rong, cao, so_lop, to_hop_song,
+                         mat, mat_dl, song_1, song_1_dl, mat_1, mat_1_dl,
+                         song_2, song_2_dl, mat_2, mat_2_dl,
+                         song_3, song_3_dl, mat_3, mat_3_dl,
+                         loai_in, so_mau, kho_tt, dai_tt, dien_tich)
+                    SELECT id, order_id, product_id,
+                           {_col('quote_item_id')},
+                           {_col('ten_hang', "''")},
+                           so_luong, dvt, don_gia, ghi_chu_san_pham, yeu_cau_in,
+                           ngay_giao_hang, so_luong_da_xuat, trang_thai_dong,
+                           {_col('loai_thung')},
+                           {_col('dai')}, {_col('rong')}, {_col('cao')},
+                           {_col('so_lop')}, {_col('to_hop_song')},
+                           {_col('mat')}, {_col('mat_dl')},
+                           {_col('song_1')}, {_col('song_1_dl')},
+                           {_col('mat_1')}, {_col('mat_1_dl')},
+                           {_col('song_2')}, {_col('song_2_dl')},
+                           {_col('mat_2')}, {_col('mat_2_dl')},
+                           {_col('song_3')}, {_col('song_3_dl')},
+                           {_col('mat_3')}, {_col('mat_3_dl')},
+                           {_col('loai_in')}, {_col('so_mau')},
+                           {_col('kho_tt')}, {_col('dai_tt')}, {_col('dien_tich')}
+                    FROM sales_order_items
+                """))
+                conn.execute(text("DROP TABLE sales_order_items"))
+                conn.execute(text("ALTER TABLE sales_order_items_v2 RENAME TO sales_order_items"))
+                conn.execute(text("PRAGMA foreign_keys=ON"))
+            logger.info("ensure_schema: sales_order_items.product_id made nullable")
+
     # ── sales_order_items spec columns ───────────────────────────────────────
     if 'sales_order_items' not in table_names:
         return  # bảng chưa tồn tại — create_all sẽ tạo đầy đủ
