@@ -86,6 +86,8 @@ class ProductionBOM(Base):
     chap_xa: Mapped[bool] = mapped_column(Boolean, default=False)
     boi: Mapped[bool] = mapped_column(Boolean, default=False)
     be_so_con: Mapped[int] = mapped_column(Integer, default=0)         # 0/1/2/4/6/8
+    dan: Mapped[bool] = mapped_column(Boolean, default=False)
+    ghim: Mapped[bool] = mapped_column(Boolean, default=False)
     can_mang: Mapped[int] = mapped_column(Integer, default=0)          # 0/1/2
     san_pham_kho: Mapped[bool] = mapped_column(Boolean, default=False)
 

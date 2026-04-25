@@ -43,6 +43,8 @@ export interface BomCalculateRequest {
   chap_xa: boolean
   boi: boolean
   be_so_con: 0 | 1 | 2 | 4 | 6 | 8
+  dan: boolean
+  ghim: boolean
   can_mang: 0 | 1 | 2
   san_pham_kho: boolean
   // Pricing
@@ -73,6 +75,8 @@ export interface BomAddonDetail {
   d4_chap_xa: number
   d5_boi: number
   d6_be: number
+  d7_dan: number
+  d7_ghim: number
   d8_can_mang: number
   d9_san_pham_kho: number
 }
@@ -197,6 +201,8 @@ export interface BomSaved {
   chap_xa: boolean
   boi: boolean
   be_so_con: number
+  dan: boolean
+  ghim: boolean
   can_mang: number
   san_pham_kho: boolean
   // Pricing
@@ -311,6 +317,8 @@ export interface QuoteSpec {
   chap_xa: boolean
   boi: boolean
   be_so_con: number
+  dan?: boolean
+  ghim?: boolean
   can_mang: number
   san_pham_kho: boolean
 }

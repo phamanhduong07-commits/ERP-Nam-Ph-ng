@@ -53,6 +53,8 @@ class BomCalculateRequest(BaseModel):
     chap_xa: bool = Field(False)
     boi: bool = Field(False)
     be_so_con: int = Field(0, description="0/1/2/4/6/8")
+    dan: bool = Field(False, description="Dán thùng")
+    ghim: bool = Field(False, description="Ghim thùng")
     can_mang: int = Field(0, description="0=không, 1=1 mặt, 2=2 mặt", ge=0, le=2)
     san_pham_kho: bool = Field(False)
 
@@ -122,6 +124,8 @@ class AddonDetail(BaseModel):
     d4_chap_xa: float = 0
     d5_boi: float = 0
     d6_be: float = 0
+    d7_dan: float = 0
+    d7_ghim: float = 0
     d8_can_mang: float = 0
     d9_san_pham_kho: float = 0
 
@@ -238,6 +242,8 @@ class BomResponse(BaseModel):
     chap_xa: bool
     boi: bool
     be_so_con: int
+    dan: bool = False
+    ghim: bool = False
     can_mang: int
     san_pham_kho: bool
 

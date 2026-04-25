@@ -85,6 +85,10 @@ function addonFormulaHint(
       const rate = rateMap[beSoCon]
       return rate != null ? `${vndRate(rate)} đ/cái (bế ${beSoCon} con/khuôn)` : ''
     }
+    case 'd7_dan':
+      return `${vndRate(R.d7_dan ?? 0)} đ/cái (phí cố định/thùng)`
+    case 'd7_ghim':
+      return `${vndRate(R.d7_ghim ?? 0)} đ/cái (phí cố định/thùng)`
     case 'd8_can_mang': {
       const rate = canMang === 1 ? (R.d8_1_mat ?? 1800) : (R.d8_2_mat ?? 3600)
       return `${vndRate(rate)} đ/m² × ${area} m²`
@@ -105,8 +109,10 @@ const ADDON_LABELS: Record<string, string> = {
   d4_chap_xa:       'Chạp / Xả',
   d5_boi:           'Bồi',
   d6_be:            'Bế khuôn',
+  d7_dan:           'Dán',
+  d7_ghim:          'Ghim',
   d8_can_mang:      'Cán màng',
-  d9_san_pham_kho:  'Sản phẩm khô (2%)',
+  d9_san_pham_kho:  'Sản phẩm khó (2%)',
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -348,6 +354,8 @@ export default function BomCalculatorPanel({
   const [chapXa,      setChapXa]      = useState(false)
   const [boi,         setBoi]         = useState(false)
   const [beSoCon,     setBeSoCon]     = useState<0 | 1 | 2 | 4 | 6 | 8>(0)
+  const [dan,         setDan]         = useState(false)
+  const [ghim,        setGhim]        = useState(false)
   const [canMang,     setCanMang]     = useState<0 | 1 | 2>(0)
   const [sanPhamKho,  setSanPhamKho]  = useState(false)
 
@@ -435,6 +443,8 @@ export default function BomCalculatorPanel({
     setChapXa(bom.chap_xa)
     setBoi(bom.boi)
     setBeSoCon(bom.be_so_con as 0 | 1 | 2 | 4 | 6 | 8)
+    setDan(bom.dan ?? false)
+    setGhim(bom.ghim ?? false)
     setCanMang(bom.can_mang as 0 | 1 | 2)
     setSanPhamKho(bom.san_pham_kho)
     if (bom.ty_le_loi_nhuan != null) setTyLeLN(Number(bom.ty_le_loi_nhuan) * 100)
@@ -481,6 +491,8 @@ export default function BomCalculatorPanel({
       chap_xa: bom.chap_xa,
       boi: bom.boi,
       be_so_con: bom.be_so_con as 0 | 1 | 2 | 4 | 6 | 8,
+      dan: bom.dan ?? false,
+      ghim: bom.ghim ?? false,
       can_mang: bom.can_mang as 0 | 1 | 2,
       san_pham_kho: bom.san_pham_kho,
       ty_le_loi_nhuan: bom.ty_le_loi_nhuan != null ? Number(bom.ty_le_loi_nhuan) : undefined,
@@ -551,6 +563,8 @@ export default function BomCalculatorPanel({
         chap_xa: spec.chap_xa,
         boi: spec.boi,
         be_so_con: spec.be_so_con as 0 | 1 | 2 | 4 | 6 | 8,
+        dan: spec.dan ?? false,
+        ghim: spec.ghim ?? false,
         can_mang: spec.can_mang as 0 | 1 | 2,
         san_pham_kho: spec.san_pham_kho,
         ty_le_loi_nhuan: undefined,
@@ -602,6 +616,8 @@ export default function BomCalculatorPanel({
       chap_xa: chapXa,
       boi,
       be_so_con: beSoCon,
+      dan,
+      ghim,
       can_mang: canMang,
       san_pham_kho: sanPhamKho,
       ty_le_loi_nhuan: tyLeLN !== undefined ? tyLeLN / 100 : undefined,
@@ -611,7 +627,7 @@ export default function BomCalculatorPanel({
       chiet_khau: chietKhau,
     }
   }, [loaiThung, dai, rong, cao, soLop, toHopSong, layers, soLuong,
-      chongTham, inFlexoMau, phuNen, inKTS, chapXa, boi, beSoCon, canMang, sanPhamKho,
+      chongTham, inFlexoMau, phuNen, inKTS, chapXa, boi, beSoCon, dan, ghim, canMang, sanPhamKho,
       tyLeLN, hoaHongKDPct, hoaHongKHPct, chiPhiKhac, chietKhau])
 
   const handleCalculate = () => {
@@ -815,7 +831,7 @@ export default function BomCalculatorPanel({
           header={
             <Text strong style={{ fontSize: 13 }}>
               Dịch vụ / gia công thêm
-              {(chongTham > 0 || inFlexoMau > 0 || phuNen || inKTS || chapXa || boi || beSoCon > 0 || canMang > 0 || sanPhamKho) && (
+              {(chongTham > 0 || inFlexoMau > 0 || phuNen || inKTS || chapXa || boi || beSoCon > 0 || dan || ghim || canMang > 0 || sanPhamKho) && (
                 <Tag color="orange" style={{ marginLeft: 8, fontSize: 11 }}>Có chọn</Tag>
               )}
             </Text>
@@ -855,7 +871,9 @@ export default function BomCalculatorPanel({
                   <Checkbox checked={inKTS}  onChange={e => { setInKTS(e.target.checked); setResult(null) }}>In kỹ thuật số</Checkbox>
                   <Checkbox checked={chapXa} onChange={e => { setChapXa(e.target.checked); setResult(null) }}>Chạp / Xả</Checkbox>
                   <Checkbox checked={boi}    onChange={e => { setBoi(e.target.checked); setResult(null) }}>Bồi</Checkbox>
-                  <Checkbox checked={sanPhamKho} onChange={e => { setSanPhamKho(e.target.checked); setResult(null) }}>Sản phẩm khô (+2%)</Checkbox>
+                  <Checkbox checked={dan}    onChange={e => { setDan(e.target.checked); setResult(null) }}>Dán</Checkbox>
+                  <Checkbox checked={ghim}   onChange={e => { setGhim(e.target.checked); setResult(null) }}>Ghim</Checkbox>
+                  <Checkbox checked={sanPhamKho} onChange={e => { setSanPhamKho(e.target.checked); setResult(null) }}>Sản phẩm khó (+2%)</Checkbox>
                 </Space>
               </Col>
             </Row>
@@ -1145,7 +1163,7 @@ export default function BomCalculatorPanel({
                             chongTham, inFlexoMau, phuNen,
                             beSoCon, canMang,
                             dienTich: result.dimensions.dien_tich ?? 0,
-                          })}
+                          }, liveRateMap)}
                         </Text>
                       </Col>
                       <Col span={5} style={{ textAlign: 'right' }}>

@@ -194,6 +194,11 @@ _BACKFILL_POI_SPEC_MYSQL = """
 """
 
 
+_BOM_COLUMNS = [
+    ('dan',  'BOOLEAN DEFAULT FALSE'),
+    ('ghim', 'BOOLEAN DEFAULT FALSE'),
+]
+
 _QI_DL_COLUMNS = [
     ('mat_dl',    'DECIMAL(8,2)'),
     ('song_1_dl', 'DECIMAL(8,2)'),
@@ -213,6 +218,18 @@ def ensure_schema() -> None:
     inspector = sa_inspect(engine)
     table_names = inspector.get_table_names()
     is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+
+    # ── production_boms: thêm cột dan/ghim nếu chưa có ─────────────────────────
+    if 'production_boms' in table_names:
+        existing_bom = {col['name'] for col in inspector.get_columns('production_boms')}
+        missing_bom = [(col, dtype) for col, dtype in _BOM_COLUMNS if col not in existing_bom]
+        if missing_bom:
+            with engine.begin() as conn:
+                for col, dtype in missing_bom:
+                    conn.execute(text(
+                        f"ALTER TABLE production_boms ADD COLUMN {col} {dtype}"
+                    ))
+            logger.info("ensure_schema: added %d cols to production_boms", len(missing_bom))
 
     # ── quote_items: thêm các cột *_dl còn thiếu ─────────────────────────────
     if 'quote_items' in table_names:

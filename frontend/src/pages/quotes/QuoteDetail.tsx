@@ -56,16 +56,16 @@ function ItemDetailDrawer({
   // Build layer rows
   type LayerDef = { label: string; ma: string | null; dl: number | null; isSong: boolean }
   const layers: LayerDef[] = [
-    { label: 'Mặt (ngoài)', ma: item.mat, dl: item.mat_dl, isSong: false },
-    { label: `Sóng ${getSongType(item.to_hop_song, 0)}`, ma: item.song_1, dl: item.song_1_dl, isSong: true },
-    { label: 'Mặt 1', ma: item.mat_1, dl: item.mat_1_dl, isSong: false },
+    { label: 'Mặt (ngoài)', ma: item.mat ?? null, dl: item.mat_dl ?? null, isSong: false },
+    { label: `Sóng ${getSongType(item.to_hop_song, 0)}`, ma: item.song_1 ?? null, dl: item.song_1_dl ?? null, isSong: true },
+    { label: 'Mặt 1', ma: item.mat_1 ?? null, dl: item.mat_1_dl ?? null, isSong: false },
     ...(soLop >= 5 ? [
-      { label: `Sóng ${getSongType(item.to_hop_song, 1)}`, ma: item.song_2, dl: item.song_2_dl, isSong: true },
-      { label: 'Mặt 2', ma: item.mat_2, dl: item.mat_2_dl, isSong: false },
+      { label: `Sóng ${getSongType(item.to_hop_song, 1)}`, ma: item.song_2 ?? null, dl: item.song_2_dl ?? null, isSong: true },
+      { label: 'Mặt 2', ma: item.mat_2 ?? null, dl: item.mat_2_dl ?? null, isSong: false },
     ] : []),
     ...(soLop >= 7 ? [
-      { label: `Sóng ${getSongType(item.to_hop_song, 2)}`, ma: item.song_3, dl: item.song_3_dl, isSong: true },
-      { label: 'Mặt 3', ma: item.mat_3, dl: item.mat_3_dl, isSong: false },
+      { label: `Sóng ${getSongType(item.to_hop_song, 2)}`, ma: item.song_3 ?? null, dl: item.song_3_dl ?? null, isSong: true },
+      { label: 'Mặt 3', ma: item.mat_3 ?? null, dl: item.mat_3_dl ?? null, isSong: false },
     ] : []),
   ]
 

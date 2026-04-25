@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, InputNumber, message, Popconfirm,
+  Button, Card, Col, Form, Input, InputNumber, message, Modal, Popconfirm,
   Row, Space, Table, Tag, Tooltip, Typography,
 } from 'antd'
 import {
-  EditOutlined, ReloadOutlined, SaveOutlined, CloseOutlined,
+  EditOutlined, ReloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { addonRatesApi, AddonRateItem } from '../../api/bom'
@@ -38,10 +38,16 @@ const NHOM_COLORS: Record<string, string> = {
   d9: 'green',
 }
 
+interface EditForm {
+  ten: string
+  don_gia: number
+  ghi_chu: string
+}
+
 export default function AddonRateList() {
   const qc = useQueryClient()
-  const [editId, setEditId] = useState<number | null>(null)
-  const [editVal, setEditVal] = useState<number>(0)
+  const [editItem, setEditItem] = useState<AddonRateItem | null>(null)
+  const [form] = Form.useForm<EditForm>()
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['addon-rates'],
@@ -49,15 +55,33 @@ export default function AddonRateList() {
   })
 
   const updateMut = useMutation({
-    mutationFn: ({ id, val }: { id: number; val: number }) =>
-      addonRatesApi.update(id, { don_gia: val }),
+    mutationFn: ({ id, data }: { id: number; data: { ten?: string; don_gia?: number; ghi_chu?: string } }) =>
+      addonRatesApi.update(id, data),
     onSuccess: () => {
-      message.success('Đã cập nhật đơn giá')
-      setEditId(null)
+      message.success('Đã cập nhật khoản mục')
+      setEditItem(null)
       qc.invalidateQueries({ queryKey: ['addon-rates'] })
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi cập nhật'),
   })
+
+  const handleEdit = (r: AddonRateItem) => {
+    setEditItem(r)
+    form.setFieldsValue({
+      ten: r.ten,
+      don_gia: Number(r.don_gia),
+      ghi_chu: r.ghi_chu ?? '',
+    })
+  }
+
+  const handleSave = async () => {
+    if (!editItem) return
+    const vals = await form.validateFields()
+    updateMut.mutate({
+      id: editItem.id,
+      data: { ten: vals.ten, don_gia: vals.don_gia, ghi_chu: vals.ghi_chu || undefined },
+    })
+  }
 
   const seedMut = useMutation({
     mutationFn: () => addonRatesApi.seed(),
@@ -110,24 +134,9 @@ export default function AddonRateList() {
     {
       title: 'Đơn giá',
       dataIndex: 'don_gia',
-      width: 190,
+      width: 160,
       align: 'right',
       render: (v: number, r: AddonRateItem) => {
-        if (editId === r.id) {
-          return (
-            <InputNumber
-              size="small"
-              style={{ width: 130 }}
-              value={editVal}
-              min={0}
-              step={r.don_vi === 'pct' ? 0.1 : 1}
-              precision={r.don_vi === 'pct' ? 2 : 0}
-              autoFocus
-              formatter={val => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              onChange={val => setEditVal(val ?? 0)}
-            />
-          )
-        }
         const unit = DON_VI_LABELS[r.don_vi] ?? r.don_vi
         const formatted = r.don_vi === 'pct'
           ? `${Number(v)}%`
@@ -141,42 +150,18 @@ export default function AddonRateList() {
     },
     {
       title: '',
-      width: 100,
-      render: (_: unknown, r: AddonRateItem) => {
-        if (editId === r.id) {
-          return (
-            <Space size={4}>
-              <Button
-                size="small"
-                type="primary"
-                icon={<SaveOutlined />}
-                loading={updateMut.isPending}
-                onClick={() => updateMut.mutate({ id: r.id, val: editVal })}
-              >
-                Lưu
-              </Button>
-              <Button
-                size="small"
-                icon={<CloseOutlined />}
-                onClick={() => setEditId(null)}
-              />
-            </Space>
-          )
-        }
-        return (
-          <Tooltip title="Sửa đơn giá">
-            <Button
-              size="small"
-              type="text"
-              icon={<EditOutlined />}
-              onClick={() => {
-                setEditId(r.id)
-                setEditVal(Number(r.don_gia))
-              }}
-            />
-          </Tooltip>
-        )
-      },
+      width: 60,
+      align: 'center',
+      render: (_: unknown, r: AddonRateItem) => (
+        <Tooltip title="Sửa khoản mục">
+          <Button
+            size="small"
+            type="text"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(r)}
+          />
+        </Tooltip>
+      ),
     },
   ]
 
@@ -264,8 +249,54 @@ export default function AddonRateList() {
           <strong>Lưu ý:</strong> Thay đổi đơn giá sẽ áp dụng ngay cho các tính toán BOM mới.
           Dữ liệu BOM đã lưu trước đó không bị ảnh hưởng.
           Phí d9 (Sản phẩm khó) là tỷ lệ % nhân với (Chi phí giấy + Chi phí gián tiếp + Chi phí hao hụt).
+          Phí d7 (Dán / Ghim) là đơn giá cố định theo đ/cái.
         </Text>
       </Card>
+
+      {/* Modal chỉnh sửa khoản mục */}
+      <Modal
+        open={!!editItem}
+        title={
+          <Space>
+            <Tag color={NHOM_COLORS[editItem?.nhom ?? ''] || 'default'}>
+              {editItem?.nhom?.toUpperCase()}
+            </Tag>
+            <span>Chỉnh sửa khoản mục</span>
+          </Space>
+        }
+        onCancel={() => setEditItem(null)}
+        onOk={handleSave}
+        okText="Lưu"
+        cancelText="Hủy"
+        confirmLoading={updateMut.isPending}
+        destroyOnClose
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            label="Tên khoản mục"
+            name="ten"
+            rules={[{ required: true, message: 'Nhập tên khoản mục' }]}
+          >
+            <Input />
+          </Form.Item>
+          <Form.Item
+            label={`Đơn giá (${DON_VI_LABELS[editItem?.don_vi ?? ''] ?? editItem?.don_vi})`}
+            name="don_gia"
+            rules={[{ required: true, message: 'Nhập đơn giá' }]}
+          >
+            <InputNumber
+              style={{ width: '100%' }}
+              min={0}
+              step={editItem?.don_vi === 'pct' ? 0.1 : 1}
+              precision={editItem?.don_vi === 'pct' ? 2 : 0}
+              formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            />
+          </Form.Item>
+          <Form.Item label="Ghi chú" name="ghi_chu">
+            <Input.TextArea rows={2} placeholder="Ghi chú / mô tả công thức tính (tuỳ chọn)" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }

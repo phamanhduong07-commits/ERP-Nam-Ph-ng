@@ -109,6 +109,8 @@ def _build_calc_input(req: BomCalculateRequest, resolved_layers: list[dict]) -> 
         "chap_xa": req.chap_xa,
         "boi": req.boi,
         "be_so_con": req.be_so_con,
+        "dan": req.dan,
+        "ghim": req.ghim,
         "can_mang": req.can_mang,
         "san_pham_kho": req.san_pham_kho,
         # pricing
@@ -212,6 +214,8 @@ def _bom_to_response(bom: ProductionBOM) -> BomResponse:
         chap_xa=bom.chap_xa,
         boi=bom.boi,
         be_so_con=bom.be_so_con,
+        dan=bom.dan if bom.dan is not None else False,
+        ghim=bom.ghim if bom.ghim is not None else False,
         can_mang=bom.can_mang,
         san_pham_kho=bom.san_pham_kho,
         ty_le_loi_nhuan=bom.ty_le_loi_nhuan,
@@ -363,6 +367,8 @@ def save_bom(
         chap_xa=req.chap_xa,
         boi=req.boi,
         be_so_con=req.be_so_con,
+        dan=req.dan,
+        ghim=req.ghim,
         can_mang=req.can_mang,
         san_pham_kho=req.san_pham_kho,
         # Pricing

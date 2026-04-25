@@ -364,6 +364,18 @@ def _calc_be(so_con: int, rates: dict | None = None) -> float:
     return float(be_map.get(so_con, 0))
 
 
+def _calc_dan(co_dan: bool, rates: dict | None = None) -> float:
+    """Dán thùng: đ/cái (fixed per piece)."""
+    R = rates or {}
+    return float(R.get("d7_dan", 0)) if co_dan else 0.0
+
+
+def _calc_ghim(co_ghim: bool, rates: dict | None = None) -> float:
+    """Ghim thùng: đ/cái (fixed per piece)."""
+    R = rates or {}
+    return float(R.get("d7_ghim", 0)) if co_ghim else 0.0
+
+
 def _calc_can_mang(mat: int, dien_tich: float, rates: dict | None = None) -> float:
     """mat: 0=none, 1=one side 1800đ/m², 2=two sides 3600đ/m²."""
     R = rates or {}
@@ -456,6 +468,8 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
     chap_xa: bool = bool(inp.get("chap_xa", False))
     boi: bool = bool(inp.get("boi", False))
     be_so_con: int = int(inp.get("be_so_con", 0))
+    dan: bool = bool(inp.get("dan", False))
+    ghim: bool = bool(inp.get("ghim", False))
     can_mang: int = int(inp.get("can_mang", 0))
     san_pham_kho: bool = bool(inp.get("san_pham_kho", False))
 
@@ -558,12 +572,14 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
     d4 = _calc_chap_xa(chap_xa, addon_rates)
     d5 = _calc_boi(boi, dien_tich, addon_rates)
     d6 = _calc_be(be_so_con, addon_rates)
+    d7_dan = _calc_dan(dan, addon_rates)
+    d7_ghim = _calc_ghim(ghim, addon_rates)
     d8 = _calc_can_mang(can_mang, dien_tich, addon_rates)
     R = addon_rates or {}
     d9_pct = float(R.get("d9_pct", 2)) / 100
     d9 = (a + b + e) * d9_pct if san_pham_kho else 0.0
 
-    d = d1 + d2 + d3 + d4 + d5 + d6 + d8 + d9
+    d = d1 + d2 + d3 + d4 + d5 + d6 + d7_dan + d7_ghim + d8 + d9
 
     # ---- Base price (p) ----
     p = a + b + c + d + e
@@ -591,6 +607,8 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
             "d4_chap_xa": round(d4, 2),
             "d5_boi": round(d5, 2),
             "d6_be": round(d6, 2),
+            "d7_dan": round(d7_dan, 2),
+            "d7_ghim": round(d7_ghim, 2),
             "d8_can_mang": round(d8, 2),
             "d9_san_pham_kho": round(d9, 2),
         },
