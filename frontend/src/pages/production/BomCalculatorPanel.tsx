@@ -527,6 +527,8 @@ export default function BomCalculatorPanel({
     setChapXa(spec.chap_xa)
     setBoi(spec.boi)
     setBeSoCon(spec.be_so_con as 0 | 1 | 2 | 4 | 6 | 8)
+    setDan(spec.dan ?? false)
+    setGhim(spec.ghim ?? false)
     setCanMang(spec.can_mang as 0 | 1 | 2)
     setSanPhamKho(spec.san_pham_kho)
 

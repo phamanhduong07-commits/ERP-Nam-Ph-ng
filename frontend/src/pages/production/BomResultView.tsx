@@ -70,11 +70,13 @@ export default function BomResultView({ productionOrderItemId }: Props) {
     ['d1_chong_tham',     'Chống thấm'],
     ['d2_in_flexo',       'In Flexo'],
     ['d3_in_ky_thuat_so', 'In kỹ thuật số'],
-    ['d4_chap_xa',        'Chắp xả'],
+    ['d4_chap_xa',        'Chạp / Xả'],
     ['d5_boi',            'Bồi'],
-    ['d6_be',             'Bế'],
+    ['d6_be',             'Bế khuôn'],
+    ['d7_dan',            'Dán'],
+    ['d7_ghim',           'Ghim'],
     ['d8_can_mang',       'Cán màng'],
-    ['d9_san_pham_kho',   'Sản phẩm khô (2%)'],
+    ['d9_san_pham_kho',   'Sản phẩm khó (2%)'],
   ]
   const addonRows = ADDON_LABELS
     .filter(([key]) => (data.addon_detail[key] ?? 0) > 0)

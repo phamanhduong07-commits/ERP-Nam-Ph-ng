@@ -707,15 +707,17 @@ def bom_from_production_item(
         "so_lop": so_lop, "to_hop_song": to_hop_song,
         "so_luong": qty,
         "layers": resolved,
-        # add-ons
-        "chong_tham": _parse_int_field(getattr(qi, 'c_tham', None), [0, 1, 2]) if qi else 0,
+        # add-ons — chuyển đổi từ định dạng string của báo giá sang int/bool
+        "chong_tham": _parse_mat_field(getattr(qi, 'c_tham', None)) if qi else 0,
         "in_flexo_mau": in_flexo_mau,
-        "in_flexo_phu_nen": False,
+        "in_flexo_phu_nen": bool(getattr(qi, 'do_phu', False)) if qi else False,
         "in_ky_thuat_so": in_ky_thuat_so,
         "chap_xa": bool(getattr(qi, 'chap_xa', False)) if qi else False,
         "boi": bool(getattr(qi, 'boi', False)) if qi else False,
-        "be_so_con": _parse_int_field(getattr(qi, 'so_c_be', None), [0, 1, 2, 4, 6, 8]) if qi else 0,
-        "can_mang": _parse_int_field(getattr(qi, 'can_man', None), [0, 1, 2]) if qi else 0,
+        "be_so_con": _parse_so_con(getattr(qi, 'so_c_be', None)) if qi else 0,
+        "dan": bool(getattr(qi, 'dan', False)) if qi else False,
+        "ghim": bool(getattr(qi, 'ghim', False)) if qi else False,
+        "can_mang": _parse_mat_field(getattr(qi, 'can_man', None)) if qi else 0,
         "san_pham_kho": bool(getattr(qi, 'do_kho', False)) if qi else False,
         # pricing: dùng 0 để tính thuần biến phí
         "ty_le_loi_nhuan": 0.0,
@@ -790,6 +792,44 @@ def _parse_int_field(val: str | None, allowed: list[int], default: int = 0) -> i
         return v if v in allowed else default
     except (ValueError, TypeError):
         return default
+
+
+def _parse_mat_field(val: str | None, default: int = 0) -> int:
+    """
+    Parse trường 'c_tham' / 'can_man' từ báo giá.
+    Giá trị lưu dạng string: null / 'Không' / '1 mặt' / '2 mặt'.
+    """
+    if not val:
+        return default
+    v = str(val).strip()
+    if v in ('', 'Không', 'không', '0'):
+        return 0
+    if v in ('1', '1 mặt', '1 Mặt', '1mat', '1 mat'):
+        return 1
+    if v in ('2', '2 mặt', '2 Mặt', '2mat', '2 mat'):
+        return 2
+    # fallback: thử parse số đầu tiên trong chuỗi
+    import re as _re
+    m = _re.match(r'(\d+)', v)
+    if m:
+        n = int(m.group(1))
+        return n if n in (0, 1, 2) else default
+    return default
+
+
+def _parse_so_con(val: str | None, default: int = 0) -> int:
+    """
+    Parse trường 'so_c_be' từ báo giá.
+    Giá trị nhập tự do: '1', '2', '4 con', '6 con', '8', v.v.
+    """
+    if not val:
+        return default
+    import re as _re
+    m = _re.match(r'(\d+)', str(val).strip())
+    if m:
+        n = int(m.group(1))
+        return n if n in (0, 1, 2, 4, 6, 8) else default
+    return default
 
 
 def _build_layers(so_lop: int, to_hop_song: str | None, raw_pairs: list[tuple]) -> list[dict]:
@@ -913,14 +953,16 @@ def get_quote_spec(
             "to_hop_song": qi_to_hop_song or "C",
             "so_luong": float(poi.so_luong_ke_hoach),
             "layers": _build_layers(qi_so_lop, qi_to_hop_song, _raw_pairs_from_object(qi)),
-            "chong_tham": _parse_int_field(getattr(qi, 'c_tham', None), [0, 1, 2], 0),
+            "chong_tham": _parse_mat_field(getattr(qi, 'c_tham', None)),
             "in_flexo_mau": in_flexo_mau,
-            "in_flexo_phu_nen": False,
+            "in_flexo_phu_nen": bool(getattr(qi, 'do_phu', False)),
             "in_ky_thuat_so": in_ky_thuat_so,
             "chap_xa": bool(getattr(qi, 'chap_xa', False)),
             "boi": bool(getattr(qi, 'boi', False)),
-            "be_so_con": _parse_int_field(getattr(qi, 'so_c_be', None), [0, 1, 2, 4, 6, 8], 0),
-            "can_mang": _parse_int_field(getattr(qi, 'can_man', None), [0, 1, 2], 0),
+            "be_so_con": _parse_so_con(getattr(qi, 'so_c_be', None)),
+            "dan": bool(getattr(qi, 'dan', False)),
+            "ghim": bool(getattr(qi, 'ghim', False)),
+            "can_mang": _parse_mat_field(getattr(qi, 'can_man', None)),
             "san_pham_kho": bool(getattr(qi, 'do_kho', False)),
         }
 
