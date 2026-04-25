@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Card, Row, Col, Table, InputNumber, Select, Button, Space, Typography,
-  Tag, Divider, message, Alert,
+  Card, Row, Col, Table, InputNumber, Select, Input, Button, Space, Typography,
+  Tag, Divider, message, Alert, Tooltip,
 } from 'antd'
 import { SaveOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -104,6 +104,15 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
     song_3: { ma_ky_hieu: item.song_3 ?? null, dinh_luong: item.song_3_dl ? Number(item.song_3_dl) : null },
     mat_3:  { ma_ky_hieu: item.mat_3  ?? null, dinh_luong: item.mat_3_dl  ? Number(item.mat_3_dl)  : null },
   })
+  // QCCL — mặc định tính từ công thức, cho phép chỉnh sửa
+  const computedQccl = useMemo(() => {
+    if (!cao || !rong) return ''
+    const allow = soLop <= 3 ? 0.1 : soLop <= 5 ? 0.2 : 0.3
+    const side  = Math.round((rong / 2 + allow) * 10) / 10
+    return `${side}+${cao}+${side}`
+  }, [rong, cao, soLop])
+  const [qccl, setQccl] = useState<string>(item.qccl ?? computedQccl)
+
   const [saving, setSaving] = useState(false)
 
   const layerDefs = useMemo(() => getLayerDefs(soLop, toHopSong), [soLop, toHopSong])
@@ -160,6 +169,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
       await productionOrdersApi.updateItemSxParams(orderId, item.id, {
         kho_tt: khoTt,
         dai_tt: daiTt,
+        qccl:   qccl || null,
         mat:    layers.mat.ma_ky_hieu,    mat_dl:    layers.mat.dinh_luong,
         song_1: layers.song_1.ma_ky_hieu, song_1_dl: layers.song_1.dinh_luong,
         mat_1:  layers.mat_1.ma_ky_hieu,  mat_1_dl:  layers.mat_1.dinh_luong,
@@ -341,6 +351,31 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                 </div>
               </Col>
             </Row>
+            {/* QCCL — editable */}
+            <div style={{ marginTop: 8, padding: '6px 8px', background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>QCCL:</Text>
+                <Tooltip title={computedQccl ? `Tính tự động: ${computedQccl}` : 'Nhập dạng: 16.1+22+16.1'}>
+                  <Input
+                    size="small"
+                    value={qccl}
+                    onChange={e => setQccl(e.target.value)}
+                    placeholder={computedQccl || 'vd: 16.1+22+16.1'}
+                    style={{ fontFamily: 'monospace', fontWeight: 700, color: '#d46b08', width: 140 }}
+                  />
+                </Tooltip>
+                {qccl !== computedQccl && computedQccl && (
+                  <Button
+                    size="small"
+                    type="link"
+                    style={{ padding: 0, fontSize: 11 }}
+                    onClick={() => setQccl(computedQccl)}
+                  >
+                    Reset
+                  </Button>
+                )}
+              </div>
+            </div>
           </Card>
         </Col>
 

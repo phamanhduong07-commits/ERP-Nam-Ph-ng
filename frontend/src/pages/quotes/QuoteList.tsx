@@ -8,11 +8,13 @@ import {
 import {
   PlusOutlined, SearchOutlined, EyeOutlined,
   CheckCircleOutlined, StopOutlined, FileAddOutlined,
+  FileExcelOutlined, FilePdfOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS } from '../../api/quotes'
 import type { QuoteListItem } from '../../api/quotes'
+import { exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -31,6 +33,40 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
   const [page, setPage] = useState(1)
 
   const isEmbedded = !!onSelect
+
+  const handleExportExcel = () => {
+    const items = data?.items ?? []
+    exportToExcel(`BaoGia_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Báo giá',
+      headers: ['STT', 'Số BG', 'Ngày BG', 'Khách hàng', 'Ngày HH', 'Số dòng', 'Tổng cộng (đ)', 'Trạng thái'],
+      rows: items.map((r, i) => [
+        i + 1, r.so_bao_gia, fmtDate(r.ngay_bao_gia), r.ten_khach_hang ?? '',
+        fmtDate(r.ngay_het_han ?? null), r.so_dong, Number(r.tong_cong ?? 0), QUOTE_STATUS_LABELS[r.trang_thai] ?? r.trang_thai,
+      ]),
+      colWidths: [5, 18, 12, 30, 12, 8, 16, 14],
+    }])
+  }
+
+  const handleExportPdf = () => {
+    const items = data?.items ?? []
+    const cols = [
+      { header: 'STT', align: 'center' as const },
+      { header: 'Số BG' }, { header: 'Ngày BG' }, { header: 'Khách hàng' },
+      { header: 'Ngày HH' }, { header: 'Số dòng', align: 'center' as const },
+      { header: 'Tổng cộng (đ)', align: 'right' as const }, { header: 'Trạng thái' },
+    ]
+    const rows = items.map((r, i) => [
+      i + 1, r.so_bao_gia, fmtDate(r.ngay_bao_gia), r.ten_khach_hang ?? '',
+      fmtDate(r.ngay_het_han ?? null), r.so_dong, fmtVND(r.tong_cong), QUOTE_STATUS_LABELS[r.trang_thai] ?? r.trang_thai,
+    ])
+    printToPdf(
+      'Danh sách báo giá',
+      `<h2>DANH SÁCH BÁO GIÁ</h2>
+       <p class="meta">Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')} — ${items.length} báo giá</p>
+       ${buildHtmlTable(cols, rows)}`,
+      true,
+    )
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['quotes', search, trangThai, dateRange, page],
@@ -194,14 +230,26 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
             <Title level={5} style={{ margin: 0 }}>Báo giá</Title>
           </Col>
           <Col>
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => navigate('/quotes/new')}
-            >
-              Thêm mới
-            </Button>
+            <Space size={4}>
+              {!isEmbedded && (
+                <>
+                  <Tooltip title="Xuất Excel">
+                    <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
+                  </Tooltip>
+                  <Tooltip title="Xuất PDF">
+                    <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
+                  </Tooltip>
+                </>
+              )}
+              <Button
+                type="primary"
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() => navigate('/quotes/new')}
+              >
+                Thêm mới
+              </Button>
+            </Space>
           </Col>
         </Row>
 

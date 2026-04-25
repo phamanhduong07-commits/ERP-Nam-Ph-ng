@@ -40,6 +40,7 @@ export interface ProductionOrderItem {
   so_mau: number | null
   kho_tt: number | null
   dai_tt: number | null
+  qccl: string | null
   dien_tich: number | null
   gia_ban_muc_tieu: number | null
 }
@@ -78,6 +79,7 @@ export interface ProductionOrderListItem {
 export interface UpdateItemSxParamsPayload {
   kho_tt?: number | null
   dai_tt?: number | null
+  qccl?: string | null
   to_hop_song?: string | null
   mat?: string | null;     mat_dl?: number | null
   song_1?: string | null;  song_1_dl?: number | null

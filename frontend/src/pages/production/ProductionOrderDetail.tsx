@@ -4,11 +4,12 @@ import { useQuery, useQueryClient, useQueries } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Button, Space, Table, Typography,
   Row, Col, Divider, Popconfirm, message, Progress, InputNumber,
-  Statistic, Tabs, Collapse, Drawer,
+  Statistic, Tabs, Collapse, Drawer, Tooltip,
 } from 'antd'
 import {
   ArrowLeftOutlined, PlayCircleOutlined, CheckCircleOutlined,
   CloseOutlined, SaveOutlined, CalculatorOutlined, EditOutlined,
+  FileExcelOutlined, FilePdfOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -22,6 +23,7 @@ import BomCalculatorPanel from './BomCalculatorPanel'
 import BomResultView from './BomResultView'
 import SxParamsTab from './SxParamsTab'
 import { bomApi } from '../../api/bom'
+import { exportToExcel, printToPdf, fmtVND, fmtDate, fmtNum, buildHtmlTable } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 
@@ -67,6 +69,17 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const bomStatusMap = Object.fromEntries(
     bomStatusQueries.filter(q => q.data).map(q => [q.data!.itemId, q.data!])
   )
+
+  // Fetch full BOM result for each item (for order-level summary)
+  const bomDetailQueries = useQueries({
+    queries: (order?.items ?? []).map(item => ({
+      queryKey: ['bom-from-poi', item.id] as const,
+      queryFn: () => bomApi.fromProductionItem(item.id).then(r => r.data),
+      retry: false,
+      enabled: !!order,
+      staleTime: 30_000,
+    })),
+  })
 
   const handleStart = async () => {
     try {
@@ -125,6 +138,123 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const tong_ke_hoach = order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
   const tong_hoan_thanh = order.items.reduce((s, i) => s + Number(i.so_luong_hoan_thanh), 0)
   const pct = tong_ke_hoach > 0 ? Math.round((tong_hoan_thanh / tong_ke_hoach) * 100) : 0
+
+  // BOM order-level summary
+  const bomResults = bomDetailQueries.filter(q => q.data && q.data.gia_ban_bao_gia > 0).map(q => q.data!)
+  const bomTotalRevenue = bomResults.reduce((s, d) => s + d.gia_ban_bao_gia * d.so_luong, 0)
+  const bomTotalCost    = bomResults.reduce((s, d) => s + d.bien_phi * d.so_luong, 0)
+  const bomTotalProfit  = bomTotalRevenue - bomTotalCost
+  const bomProfitRate   = bomTotalRevenue > 0 ? (bomTotalProfit / bomTotalRevenue) * 100 : 0
+  const bomAllLoaded    = bomDetailQueries.length === 0 || bomDetailQueries.every(q => !q.isLoading)
+  const fmt = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v))
+
+  const handleExportExcel = () => {
+    exportToExcel(`${order.so_lenh}_${new Date().toISOString().slice(0, 10)}`, [
+      {
+        name: 'Thông tin lệnh SX',
+        headers: ['Thông tin', 'Giá trị'],
+        rows: [
+          ['Số lệnh', order.so_lenh],
+          ['Ngày lệnh', fmtDate(order.ngay_lenh)],
+          ['Đơn hàng liên kết', order.so_don ?? ''],
+          ['Bắt đầu KH', fmtDate(order.ngay_bat_dau_ke_hoach)],
+          ['Hoàn thành KH', fmtDate(order.ngay_hoan_thanh_ke_hoach)],
+          ['Trạng thái', TRANG_THAI_LABELS[order.trang_thai] ?? order.trang_thai],
+          ['Ghi chú', order.ghi_chu ?? ''],
+        ],
+        colWidths: [22, 30],
+      },
+      {
+        name: 'Chi tiết sản phẩm',
+        headers: ['STT', 'Mã SP', 'Tên sản phẩm', 'Loại thùng', 'Kích thước (DxRxC)', 'Lớp', 'Tổ hợp sóng', 'SL kế hoạch', 'ĐVT', 'SL hoàn thành', 'Ngày giao', 'Ghi chú'],
+        rows: order.items.map((r, i) => {
+          const d = r.dai ?? r.product?.dai
+          const rw = r.rong ?? r.product?.rong
+          const c = r.cao ?? r.product?.cao
+          return [
+            i + 1,
+            r.product?.ma_amis ?? '',
+            r.ten_hang,
+            r.loai_thung ?? '',
+            d ? `${d}×${rw}×${c} cm` : '',
+            r.so_lop ?? '',
+            r.to_hop_song ?? '',
+            Number(r.so_luong_ke_hoach),
+            r.dvt,
+            Number(r.so_luong_hoan_thanh),
+            fmtDate(r.ngay_giao_hang),
+            r.ghi_chu ?? '',
+          ]
+        }),
+        colWidths: [5, 14, 30, 12, 20, 6, 10, 12, 8, 12, 12, 20],
+      },
+    ])
+  }
+
+  const handleExportPdf = () => {
+    const cols = [
+      { header: 'STT', align: 'center' as const }, { header: 'Mã SP' }, { header: 'Tên sản phẩm' },
+      { header: 'Kích thước' }, { header: 'Lớp', align: 'center' as const },
+      { header: 'SL KH', align: 'right' as const }, { header: 'ĐVT' },
+      { header: 'SL hoàn thành', align: 'right' as const }, { header: 'Ngày giao' },
+    ]
+    const rows = order.items.map((r, i) => {
+      const d = r.dai ?? r.product?.dai
+      const rw = r.rong ?? r.product?.rong
+      const c = r.cao ?? r.product?.cao
+      return [
+        i + 1, r.product?.ma_amis ?? '—', r.ten_hang,
+        d ? `${d}×${rw}×${c}` : '—',
+        r.so_lop ?? '—',
+        fmtNum(r.so_luong_ke_hoach), r.dvt,
+        fmtNum(r.so_luong_hoan_thanh),
+        fmtDate(r.ngay_giao_hang),
+      ]
+    })
+    const infoHtml = `
+      <div class="info-grid">
+        <div><div class="info-label">Số lệnh</div><div class="info-value">${order.so_lenh}</div></div>
+        <div><div class="info-label">Ngày lệnh</div><div class="info-value">${fmtDate(order.ngay_lenh)}</div></div>
+        <div><div class="info-label">Đơn hàng LK</div><div class="info-value">${order.so_don ?? '—'}</div></div>
+        <div><div class="info-label">Hoàn thành KH</div><div class="info-value">${fmtDate(order.ngay_hoan_thanh_ke_hoach)}</div></div>
+        <div><div class="info-label">Trạng thái</div><div class="info-value">${TRANG_THAI_LABELS[order.trang_thai] ?? order.trang_thai}</div></div>
+        <div><div class="info-label">Ghi chú</div><div class="info-value">${order.ghi_chu ?? '—'}</div></div>
+      </div>`
+    printToPdf(
+      `Lệnh sản xuất ${order.so_lenh}`,
+      `<h2>LỆNH SẢN XUẤT: ${order.so_lenh}</h2>
+       <p class="meta">Xuất ngày: ${new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
+       ${infoHtml}
+       ${buildHtmlTable(cols, rows)}`,
+      true,
+    )
+  }
+
+  const handleExportBomExcel = () => {
+    if (!bomResults.length) return
+    exportToExcel(`BOM_${order.so_lenh}_${new Date().toISOString().slice(0, 10)}`, [{
+      name: 'Tổng kết BOM',
+      headers: ['Tên sản phẩm', 'Số lượng', 'ĐVT', 'Giá báo (đ/thùng)', 'Biến phí (đ/thùng)', 'Doanh thu (đ)', 'Biến phí (đ)', 'Lãi gộp (đ)', 'Tỷ lệ lãi (%)'],
+      rows: [
+        ...bomResults.map(d => {
+          const revenue = d.gia_ban_bao_gia * d.so_luong
+          const cost = d.bien_phi * d.so_luong
+          return [
+            `${d.loai_thung} ${d.dai}×${d.rong}×${d.cao}`,
+            d.so_luong, 'thùng',
+            d.gia_ban_bao_gia, d.bien_phi,
+            revenue, cost, revenue - cost,
+            Number(d.ty_le_lai.toFixed(1)),
+          ]
+        }),
+        ['TỔNG CỘNG', '', '', '', '',
+          bomTotalRevenue, bomTotalCost, bomTotalProfit,
+          Number(bomProfitRate.toFixed(1)),
+        ],
+      ],
+      colWidths: [28, 10, 8, 18, 18, 18, 18, 18, 12],
+    }])
+  }
 
   const renderKetCau = (r: ProductionOrderItem) => {
     const d = r.dai ?? r.product?.dai
@@ -281,17 +411,31 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }}>
-        {!embedded && (
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/production/orders')}>
-            Quay lại
-          </Button>
-        )}
-        <Title level={4} style={{ margin: 0 }}>
-          {embedded ? order.so_lenh : `Lệnh sản xuất: ${order.so_lenh}`}
-        </Title>
-        <Tag color={TRANG_THAI_COLORS[order.trang_thai]}>{TRANG_THAI_LABELS[order.trang_thai]}</Tag>
-      </Space>
+      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+        <Col>
+          <Space>
+            {!embedded && (
+              <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/production/orders')}>
+                Quay lại
+              </Button>
+            )}
+            <Title level={4} style={{ margin: 0 }}>
+              {embedded ? order.so_lenh : `Lệnh sản xuất: ${order.so_lenh}`}
+            </Title>
+            <Tag color={TRANG_THAI_COLORS[order.trang_thai]}>{TRANG_THAI_LABELS[order.trang_thai]}</Tag>
+          </Space>
+        </Col>
+        <Col>
+          <Space size={4}>
+            <Tooltip title="Xuất Excel (lệnh SX)">
+              <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
+            </Tooltip>
+            <Tooltip title="Xuất PDF (lệnh SX)">
+              <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
+            </Tooltip>
+          </Space>
+        </Col>
+      </Row>
 
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={24} md={embedded ? 24 : 16}>
@@ -556,6 +700,81 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                     />
                   )}
                 </Drawer>
+
+                {/* ── Tổng kết lãi/lỗ toàn đơn hàng ─────────────────────── */}
+                {(bomResults.length > 0 || !bomAllLoaded) && (
+                  <Card
+                    size="small"
+                    style={{
+                      marginTop: 16,
+                      background: bomTotalProfit >= 0 ? '#f6ffed' : '#fff2f0',
+                      borderColor: bomTotalProfit >= 0 ? '#b7eb8f' : '#ffa39e',
+                    }}
+                    title={
+                      <Row align="middle" justify="space-between" wrap={false}>
+                        <Col>
+                          <Space size={6}>
+                            <CalculatorOutlined />
+                            <Text strong>
+                              Tổng kết lãi/lỗ đơn hàng
+                              {bomResults.length < order.items.length && (
+                                <Text type="secondary" style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
+                                  ({bomResults.length}/{order.items.length} mã có BOM + báo giá)
+                                </Text>
+                              )}
+                            </Text>
+                          </Space>
+                        </Col>
+                        {bomResults.length > 0 && (
+                          <Col>
+                            <Tooltip title="Xuất Excel tổng kết BOM">
+                              <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportBomExcel} />
+                            </Tooltip>
+                          </Col>
+                        )}
+                      </Row>
+                    }
+                  >
+                    <Row gutter={[24, 12]}>
+                      <Col xs={12} sm={6}>
+                        <div style={{ fontSize: 12, color: '#595959', marginBottom: 2 }}>Tổng doanh thu</div>
+                        <div style={{ fontSize: 18, fontWeight: 600, color: '#1677ff' }}>
+                          {fmt(bomTotalRevenue)} đ
+                        </div>
+                      </Col>
+                      <Col xs={12} sm={6}>
+                        <div style={{ fontSize: 12, color: '#595959', marginBottom: 2 }}>Tổng biến phí</div>
+                        <div style={{ fontSize: 18, fontWeight: 600, color: '#cf1322' }}>
+                          {fmt(bomTotalCost)} đ
+                        </div>
+                      </Col>
+                      <Col xs={12} sm={6}>
+                        <div style={{ fontSize: 12, color: '#595959', marginBottom: 2 }}>
+                          {bomTotalProfit >= 0 ? 'Lãi gộp' : 'Lỗ gộp'}
+                        </div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: bomTotalProfit >= 0 ? '#389e0d' : '#cf1322' }}>
+                          {bomTotalProfit >= 0 ? '+' : ''}{fmt(bomTotalProfit)} đ
+                        </div>
+                      </Col>
+                      <Col xs={12} sm={6}>
+                        <div style={{ fontSize: 12, color: '#595959', marginBottom: 2 }}>Tỷ lệ lãi</div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: bomTotalProfit >= 0 ? '#389e0d' : '#cf1322' }}>
+                          {bomTotalProfit >= 0 ? '+' : ''}{bomProfitRate.toFixed(1)}%
+                        </div>
+                      </Col>
+                    </Row>
+                    {!bomAllLoaded && (
+                      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+                        Đang tải dữ liệu BOM...
+                      </Text>
+                    )}
+                    {bomResults.length < order.items.length && bomAllLoaded && (
+                      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+                        * {order.items.length - bomResults.length} mã chưa có BOM hoặc chưa có giá báo giá — chưa tính vào tổng.
+                      </Text>
+                    )}
+                  </Card>
+                )}
               </>
             ),
           },

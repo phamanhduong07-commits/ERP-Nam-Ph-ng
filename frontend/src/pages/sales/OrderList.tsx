@@ -7,12 +7,13 @@ import {
 } from 'antd'
 import {
   PlusOutlined, SearchOutlined, EyeOutlined,
-  CheckOutlined, CloseOutlined,
+  CheckOutlined, CloseOutlined, FileExcelOutlined, FilePdfOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
 import type { SalesOrderListItem } from '../../api/salesOrders'
+import { exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -30,6 +31,41 @@ export default function OrderList({ selectedId, onSelect }: Props) {
   const [page, setPage] = useState(1)
 
   const isEmbedded = !!onSelect
+
+  const handleExportExcel = () => {
+    const items = data?.items ?? []
+    exportToExcel(`DonHang_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Đơn hàng',
+      headers: ['STT', 'Số đơn hàng', 'Ngày đơn', 'Khách hàng', 'Ngày giao', 'Số dòng', 'Tổng tiền (đ)', 'Trạng thái'],
+      rows: items.map((r, i) => [
+        i + 1, r.so_don, fmtDate(r.ngay_don), r.ten_khach_hang ?? '',
+        fmtDate(r.ngay_giao_hang), r.so_dong, Number(r.tong_tien), TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
+      ]),
+      colWidths: [5, 18, 12, 30, 12, 8, 16, 14],
+    }])
+  }
+
+  const handleExportPdf = () => {
+    const items = data?.items ?? []
+    const cols = [
+      { header: 'STT', align: 'center' as const },
+      { header: 'Số đơn hàng' }, { header: 'Ngày đơn' }, { header: 'Khách hàng' },
+      { header: 'Ngày giao' }, { header: 'Số dòng', align: 'center' as const },
+      { header: 'Tổng tiền (đ)', align: 'right' as const }, { header: 'Trạng thái' },
+    ]
+    const rows = items.map((r, i) => [
+      i + 1, r.so_don, fmtDate(r.ngay_don), r.ten_khach_hang ?? '',
+      fmtDate(r.ngay_giao_hang), r.so_dong, fmtVND(r.tong_tien), TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
+    ])
+    const table = buildHtmlTable(cols, rows)
+    printToPdf(
+      `Danh sách đơn hàng`,
+      `<h2>DANH SÁCH ĐƠN HÀNG</h2>
+       <p class="meta">Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')} — ${items.length} đơn hàng</p>
+       ${table}`,
+      true,
+    )
+  }
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['sales-orders', search, trangThai, dateRange, page],
@@ -184,14 +220,26 @@ export default function OrderList({ selectedId, onSelect }: Props) {
             <Title level={5} style={{ margin: 0 }}>Đơn hàng</Title>
           </Col>
           <Col>
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => navigate('/sales/orders/new')}
-            >
-              Tạo đơn hàng
-            </Button>
+            <Space size={4}>
+              {!isEmbedded && (
+                <>
+                  <Tooltip title="Xuất Excel">
+                    <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
+                  </Tooltip>
+                  <Tooltip title="Xuất PDF">
+                    <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
+                  </Tooltip>
+                </>
+              )}
+              <Button
+                type="primary"
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() => navigate('/sales/orders/new')}
+              >
+                Tạo đơn hàng
+              </Button>
+            </Space>
           </Col>
         </Row>
 

@@ -309,6 +309,22 @@ export default function ProductionQueuePage() {
         : <Text type="secondary">—</Text>,
     },
     {
+      title: 'QCCL',
+      width: 110,
+      align: 'center',
+      render: (_, r) => {
+        if (!r.cao || Number(r.cao) <= 0 || !r.rong) return <Text type="secondary">—</Text>
+        const soLop = r.so_lop ?? 3
+        const allow = soLop <= 3 ? 0.1 : soLop <= 5 ? 0.2 : 0.3
+        const side  = Math.round((Number(r.rong) / 2 + allow) * 10) / 10
+        return (
+          <Text style={{ fontFamily: 'monospace', fontSize: 12, color: '#d46b08', fontWeight: 600 }}>
+            {side}+{Number(r.cao)}+{side}
+          </Text>
+        )
+      },
+    },
+    {
       title: 'Dao',
       dataIndex: 'so_dao',
       width: 50,
@@ -430,10 +446,20 @@ export default function ProductionQueuePage() {
               </Popconfirm>
             </Tooltip>
           )}
-          {r.trang_thai === 'dang_chay' && (
+          {(r.trang_thai === 'cho' || r.trang_thai === 'dang_chay') && (
             <Tooltip title="Hoàn thành">
-              <Popconfirm title="Đánh dấu hoàn thành?" onConfirm={() => completeMut.mutate({ planId: r.plan_id, lineId: r.id })} okText="Hoàn thành">
-                <Button size="small" icon={<CheckCircleOutlined />} style={{ color: '#52c41a', borderColor: '#52c41a' }} loading={completeMut.isPending} />
+              <Popconfirm
+                title="Đánh dấu hoàn thành dòng này?"
+                onConfirm={() => completeMut.mutate({ planId: r.plan_id, lineId: r.id })}
+                okText="Hoàn thành"
+                okButtonProps={{ style: { background: '#52c41a', borderColor: '#52c41a' } }}
+              >
+                <Button
+                  size="small"
+                  icon={<CheckCircleOutlined />}
+                  style={{ color: '#52c41a', borderColor: '#52c41a' }}
+                  loading={completeMut.isPending}
+                />
               </Popconfirm>
             </Tooltip>
           )}

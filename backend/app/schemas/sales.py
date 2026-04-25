@@ -67,6 +67,8 @@ class SalesOrderItemResponse(BaseModel):
     mat_3_dl:  Decimal | None = None
     loai_in: str | None = None
     so_mau:  int | None = None
+    # Link sang lệnh SX (nếu đã lập lệnh)
+    production_order_item_id: int | None = None
 
     class Config:
         from_attributes = True

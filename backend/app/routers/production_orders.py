@@ -61,7 +61,7 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
             song_3=item.song_3, song_3_dl=item.song_3_dl,
             mat_3=item.mat_3,   mat_3_dl=item.mat_3_dl,
             loai_in=item.loai_in, so_mau=item.so_mau, loai_lan=item.loai_lan,
-            kho_tt=item.kho_tt,   dai_tt=item.dai_tt,
+            kho_tt=item.kho_tt,   dai_tt=item.dai_tt,   qccl=item.qccl,
             dien_tich=item.dien_tich,
             gia_ban_muc_tieu=item.gia_ban_muc_tieu,
         )

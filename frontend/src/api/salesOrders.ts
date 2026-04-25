@@ -41,6 +41,7 @@ export interface SalesOrderItem {
   mat_3: string | null;   mat_3_dl: number | null
   loai_in: string | null
   so_mau: number | null
+  production_order_item_id: number | null
 }
 
 export interface SalesOrder {

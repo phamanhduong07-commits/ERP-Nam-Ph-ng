@@ -51,6 +51,7 @@ class ProductionOrderItemResponse(BaseModel):
     loai_lan: str | None = None
     kho_tt: Decimal | None = None
     dai_tt: Decimal | None = None
+    qccl: str | None = None
     dien_tich: Decimal | None = None
     gia_ban_muc_tieu: Decimal | None = None
 
@@ -130,6 +131,7 @@ class UpdateItemSxParams(BaseModel):
     """Thông số sản xuất: kết cấu + chiều khổ — KHÔNG ảnh hưởng giá bán."""
     kho_tt: Decimal | None = None
     dai_tt: Decimal | None = None
+    qccl: str | None = None
     to_hop_song: str | None = None
     mat: str | None = None;     mat_dl: Decimal | None = None
     song_1: str | None = None;  song_1_dl: Decimal | None = None

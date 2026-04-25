@@ -7,6 +7,7 @@ from app.deps import get_current_user
 from app.models.auth import User
 from app.models.master import Customer, Product
 from app.models.sales import SalesOrder, SalesOrderItem
+from app.models.production import ProductionOrderItem
 from app.schemas.master import CustomerShort, ProductShort
 from app.schemas.sales import (
     SalesOrderCreate, SalesOrderUpdate,
@@ -113,20 +114,19 @@ def get_order(
             val = getattr(item.quote_item, field, None)
         return val
 
-    result = SalesOrderResponse(
-        id=order.id,
-        so_don=order.so_don,
-        ngay_don=order.ngay_don,
-        customer_id=order.customer_id,
-        customer=CustomerShort.model_validate(order.customer) if order.customer else None,
-        trang_thai=order.trang_thai,
-        ngay_giao_hang=order.ngay_giao_hang,
-        dia_chi_giao=order.dia_chi_giao,
-        ghi_chu=order.ghi_chu,
-        tong_tien=order.tong_tien,
-        created_at=order.created_at,
-        updated_at=order.updated_at,
-        items=[
+    # Map sales_order_item_id → production_order_item_id (lấy bản mới nhất)
+    soi_ids = [item.id for item in order.items]
+    poi_rows = (
+        db.query(ProductionOrderItem.id, ProductionOrderItem.sales_order_item_id)
+        .filter(ProductionOrderItem.sales_order_item_id.in_(soi_ids))
+        .all()
+    ) if soi_ids else []
+    poi_map: dict[int, int] = {}
+    for poi_id, soi_id in poi_rows:
+        poi_map[soi_id] = poi_id  # nếu nhiều lệnh → lấy cái cuối
+
+    def _build_items(items, _db):
+        return [
             SalesOrderItemResponse(
                 id=item.id,
                 product_id=item.product_id,
@@ -142,9 +142,7 @@ def get_order(
                 so_luong_da_xuat=item.so_luong_da_xuat,
                 trang_thai_dong=item.trang_thai_dong,
                 loai_thung=_spec(item, 'loai_thung'),
-                dai=_spec(item, 'dai'),
-                rong=_spec(item, 'rong'),
-                cao=_spec(item, 'cao'),
+                dai=_spec(item, 'dai'),   rong=_spec(item, 'rong'),   cao=_spec(item, 'cao'),
                 so_lop=_spec(item, 'so_lop'),
                 to_hop_song=_spec(item, 'to_hop_song'),
                 mat=_spec(item, 'mat'),         mat_dl=_spec(item, 'mat_dl'),
@@ -156,9 +154,25 @@ def get_order(
                 mat_3=_spec(item, 'mat_3'),     mat_3_dl=_spec(item, 'mat_3_dl'),
                 loai_in=_spec(item, 'loai_in'),
                 so_mau=_spec(item, 'so_mau'),
+                production_order_item_id=poi_map.get(item.id),
             )
-            for item in order.items
-        ],
+            for item in items
+        ]
+
+    result = SalesOrderResponse(
+        id=order.id,
+        so_don=order.so_don,
+        ngay_don=order.ngay_don,
+        customer_id=order.customer_id,
+        customer=CustomerShort.model_validate(order.customer) if order.customer else None,
+        trang_thai=order.trang_thai,
+        ngay_giao_hang=order.ngay_giao_hang,
+        dia_chi_giao=order.dia_chi_giao,
+        ghi_chu=order.ghi_chu,
+        tong_tien=order.tong_tien,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        items=_build_items(order.items, db),
     )
     return result
 

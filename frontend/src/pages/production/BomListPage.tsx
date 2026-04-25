@@ -4,11 +4,12 @@ import {
   Button, Card, Drawer, Input, Select, Space, Table, Tag, Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { CalculatorOutlined, SearchOutlined } from '@ant-design/icons'
+import { CalculatorOutlined, SearchOutlined, FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { bomApi, vnd } from '../../api/bom'
 import type { BomSummaryItem } from '../../api/bom'
 import BomCalculatorPanel from './BomCalculatorPanel'
+import { exportToExcel, printToPdf, fmtVND, buildHtmlTable } from '../../utils/exportUtils'
 
 const { Text } = Typography
 
@@ -50,6 +51,54 @@ export default function BomListPage() {
   const closeEditor = () => {
     setEditingId(null)
     setEditingPoiId(null)
+  }
+
+  const handleExportExcel = () => {
+    exportToExcel(`DinhMucBOM_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Định mức BOM',
+      headers: ['STT', 'Lệnh SX', 'Sản phẩm', 'Khách hàng', 'Loại thùng', 'Kích thước', 'SL (thùng)', 'CP giấy (đ)', 'CP gián tiếp (đ)', 'Hao hụt (đ)', 'Gia công (đ)', 'Giá bán cuối (đ/thùng)', 'Trạng thái'],
+      rows: rows.map((r, i) => [
+        i + 1, r.so_lenh ?? '', r.ten_hang ?? '', r.ten_khach_hang ?? '',
+        r.loai_thung, `${r.dai}×${r.rong}×${r.cao} cm / ${r.so_lop}L`,
+        Number(r.so_luong_sx),
+        r.chi_phi_giay != null ? Number(r.chi_phi_giay) : '',
+        r.chi_phi_gian_tiep != null ? Number(r.chi_phi_gian_tiep) : '',
+        r.chi_phi_hao_hut != null ? Number(r.chi_phi_hao_hut) : '',
+        r.chi_phi_addon != null ? Number(r.chi_phi_addon) : '',
+        r.gia_ban_cuoi != null ? Number(r.gia_ban_cuoi) : '',
+        r.trang_thai === 'confirmed' ? 'Đã duyệt' : 'Nháp',
+      ]),
+      colWidths: [5, 16, 28, 24, 12, 20, 10, 14, 16, 12, 14, 20, 12],
+    }])
+  }
+
+  const handleExportPdf = () => {
+    const cols = [
+      { header: 'STT', align: 'center' as const }, { header: 'Lệnh SX' },
+      { header: 'Sản phẩm' }, { header: 'Khách hàng' },
+      { header: 'Kích thước' }, { header: 'SL', align: 'right' as const },
+      { header: 'CP giấy', align: 'right' as const }, { header: 'CP GT', align: 'right' as const },
+      { header: 'Hao hụt', align: 'right' as const }, { header: 'GC thêm', align: 'right' as const },
+      { header: 'Giá bán cuối', align: 'right' as const }, { header: 'TT' },
+    ]
+    const tableRows = rows.map((r, i) => [
+      i + 1, r.so_lenh ?? '—', r.ten_hang ?? '—', r.ten_khach_hang ?? '—',
+      `${r.dai}×${r.rong}×${r.cao}/${r.so_lop}L`,
+      vnd(r.so_luong_sx),
+      r.chi_phi_giay != null ? fmtVND(r.chi_phi_giay) : '—',
+      r.chi_phi_gian_tiep != null ? fmtVND(r.chi_phi_gian_tiep) : '—',
+      r.chi_phi_hao_hut != null ? fmtVND(r.chi_phi_hao_hut) : '—',
+      r.chi_phi_addon != null ? fmtVND(r.chi_phi_addon) : '—',
+      r.gia_ban_cuoi != null ? fmtVND(r.gia_ban_cuoi) : '—',
+      r.trang_thai === 'confirmed' ? 'Đã duyệt' : 'Nháp',
+    ])
+    printToPdf(
+      'Định mức BOM',
+      `<h2>ĐỊNH MỨC BOM</h2>
+       <p class="meta">Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')} — ${rows.length} định mức</p>
+       ${buildHtmlTable(cols, tableRows)}`,
+      true,
+    )
   }
 
   const handleBomSaved = () => {
@@ -202,6 +251,10 @@ export default function BomListPage() {
                 { value: 'confirmed', label: 'Đã duyệt' },
               ]}
             />
+            <Button.Group>
+              <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>Excel</Button>
+              <Button icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf}>PDF</Button>
+            </Button.Group>
           </Space>
         }
       >

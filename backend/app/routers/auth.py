@@ -1,7 +1,7 @@
 from datetime import datetime
+import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import create_access_token, get_current_user
@@ -9,7 +9,14 @@ from app.models.auth import User
 from app.schemas.auth import TokenResponse, UserInfo, UserCreate, UserResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return _bcrypt.checkpw(plain.encode(), hashed.encode())
+
+
+def _hash_password(plain: str) -> str:
+    return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt()).decode()
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -19,7 +26,7 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
         User.trang_thai == True
     ).first()
 
-    if not user or not pwd_context.verify(form.password, user.password_hash):
+    if not user or not _verify_password(form.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Tên đăng nhập hoặc mật khẩu không đúng",
@@ -63,6 +70,6 @@ def change_password(
 ):
     if not pwd_context.verify(old_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Mật khẩu cũ không đúng")
-    current_user.password_hash = pwd_context.hash(new_password)
+    current_user.password_hash = _hash_password(new_password)
     db.commit()
     return {"message": "Đổi mật khẩu thành công"}

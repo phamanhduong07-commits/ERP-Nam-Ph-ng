@@ -75,6 +75,7 @@ class ProductionOrderItem(Base):
     loai_lan:   Mapped[str | None] = mapped_column(String(50))
     kho_tt:     Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dai_tt:     Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    qccl:       Mapped[str | None] = mapped_column(String(50))
     dien_tich:  Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     gia_ban_muc_tieu: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
 
