@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Tag, Button, Space, Typography, Row, Col,
-  Statistic, Popconfirm, message, Tooltip, Badge, Divider,
+  Statistic, Popconfirm, message, Tooltip, Badge, Divider, Alert,
 } from 'antd'
 import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import {
   PlayCircleOutlined, CheckCircleOutlined, DeleteOutlined,
   ReloadOutlined, ClockCircleOutlined, ThunderboltOutlined,
-  RocketOutlined, CalculatorOutlined,
+  FileTextOutlined, CalculatorOutlined, InfoCircleOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { TableRowSelection } from 'antd/es/table/interface'
@@ -661,31 +661,55 @@ export default function ProductionQueuePage() {
 
               <Divider style={{ margin: '10px 0 8px' }} />
 
-              <Popconfirm
-                title={
-                  <div>
-                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                      Đưa {planningRows.length} lệnh vào Kế hoạch SX?
-                    </div>
-                    <div style={{ fontSize: 12, color: '#8c8c8c' }}>
-                      Tổng vật liệu: <b>{totalKg.toFixed(1)} kg</b>
-                    </div>
-                  </div>
-                }
-                onConfirm={() => {
-                  message.success(`Đã lập kế hoạch SX cho ${planningRows.length} lệnh`)
-                  setSelectedKeys([])
-                }}
-                okText="Xác nhận"
-                cancelText="Huỷ"
-                okButtonProps={{ type: 'primary' }}
-              >
-                <Button type="primary" icon={<RocketOutlined />} block size="middle" style={{ marginBottom: 4 }}>
-                  Đưa vào Kế hoạch SX
-                </Button>
-              </Popconfirm>
+              {/* Nút xem kế hoạch — điều hướng đến Plan chứa các dòng này */}
+              {(() => {
+                // Lấy danh sách plan_id duy nhất từ planningRows
+                const planIds = [...new Set(planningRows.map(r => r.plan_id))]
+                const planLabels = [...new Set(planningRows.map(r => r.so_ke_hoach).filter(Boolean))]
 
-              <Text type="secondary" style={{ fontSize: 11, display: 'block', textAlign: 'center' }}>
+                if (planIds.length === 1) {
+                  // Tất cả cùng 1 plan → vào thẳng plan đó
+                  return (
+                    <Button
+                      type="primary"
+                      icon={<FileTextOutlined />}
+                      block
+                      size="middle"
+                      style={{ marginBottom: 8 }}
+                      onClick={() => navigate(`/production/plans/${planIds[0]}`)}
+                    >
+                      Xem Kế hoạch {planLabels[0]}
+                    </Button>
+                  )
+                }
+                // Nhiều plan → vào danh sách plans
+                return (
+                  <Button
+                    type="primary"
+                    icon={<FileTextOutlined />}
+                    block
+                    size="middle"
+                    style={{ marginBottom: 8 }}
+                    onClick={() => navigate('/production/plans')}
+                  >
+                    Xem Kế hoạch SX ({planIds.length} kế hoạch)
+                  </Button>
+                )
+              })()}
+
+              <Alert
+                type="info"
+                icon={<InfoCircleOutlined />}
+                showIcon
+                style={{ fontSize: 11, padding: '4px 8px' }}
+                message={
+                  <span style={{ fontSize: 11 }}>
+                    Dữ liệu <b>không mất</b> khỏi hàng chờ. Dòng chỉ rời hàng chờ khi được đánh dấu <b>Hoàn thành</b>.
+                  </span>
+                }
+              />
+
+              <Text type="secondary" style={{ fontSize: 11, display: 'block', textAlign: 'center', marginTop: 6 }}>
                 {selectedRows.length > 0
                   ? 'Tính theo dòng đã tích chọn'
                   : 'Tính theo tất cả dòng đang lọc'}
