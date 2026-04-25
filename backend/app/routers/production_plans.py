@@ -109,6 +109,8 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         mat_3=item.mat_3 if item else None,     mat_3_dl=item.mat_3_dl if item else None,
         loai_in=item.loai_in if item else None,
         so_mau=item.so_mau if item else None,
+        c_tham=item.c_tham if item else None,
+        can_man=item.can_man if item else None,
         qccl=item.qccl if item else None,
     )
 

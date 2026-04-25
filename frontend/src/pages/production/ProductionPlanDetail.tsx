@@ -659,9 +659,21 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
 
                   {/* Loại In */}
                   <td style={{ ...TD, textAlign: 'center' }}>
-                    {r.loai_in && r.loai_in !== 'khong_in'
-                      ? <span style={{ fontSize: 10 }}>{r.loai_in === 'flexo' ? 'Flexo' : r.loai_in === 'ky_thuat_so' ? 'KTS' : r.loai_in}{r.so_mau ? ` ${r.so_mau}M` : ''}</span>
-                      : <span style={{ color: '#d9d9d9', fontSize: 10 }}>Không</span>}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      {r.loai_in && r.loai_in !== 'khong_in'
+                        ? <span style={{ fontSize: 10 }}>{r.loai_in === 'flexo' ? 'Flexo' : r.loai_in === 'ky_thuat_so' ? 'KTS' : r.loai_in}{r.so_mau ? ` ${r.so_mau}M` : ''}</span>
+                        : <span style={{ color: '#d9d9d9', fontSize: 10 }}>Không</span>}
+                      {r.c_tham && r.c_tham !== 'Không' && (
+                        <Tag color="cyan" style={{ margin: 0, fontSize: 9, lineHeight: '14px', padding: '0 4px' }}>
+                          CT {r.c_tham.replace('mặt', 'm').replace(/\s+/g, '')}
+                        </Tag>
+                      )}
+                      {r.can_man && r.can_man !== 'Không' && (
+                        <Tag color="purple" style={{ margin: 0, fontSize: 9, lineHeight: '14px', padding: '0 4px' }}>
+                          CM {r.can_man.replace('mặt', 'm').replace(/\s+/g, '')}
+                        </Tag>
+                      )}
+                    </div>
                   </td>
 
                   {/* Ghi Chú */}

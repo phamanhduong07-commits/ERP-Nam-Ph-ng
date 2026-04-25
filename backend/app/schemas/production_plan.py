@@ -71,6 +71,8 @@ class ProductionPlanLineResponse(BaseModel):
     mat_3: str | None = None;   mat_3_dl: Decimal | None = None
     loai_in: str | None = None
     so_mau: int | None = None
+    c_tham: str | None = None
+    can_man: str | None = None
     qccl: str | None = None
 
     class Config:

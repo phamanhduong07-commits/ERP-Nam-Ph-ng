@@ -225,6 +225,7 @@ def tao_lenh_tu_don_hang(
             song_3=soi.song_3,   song_3_dl=soi.song_3_dl,
             mat_3=soi.mat_3,     mat_3_dl=soi.mat_3_dl,
             loai_in=soi.loai_in, so_mau=soi.so_mau, loai_lan=soi.loai_lan,
+            c_tham=getattr(soi, 'c_tham', None), can_man=getattr(soi, 'can_man', None),
         )
         order.items.append(item)
 

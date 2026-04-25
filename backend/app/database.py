@@ -65,6 +65,8 @@ _POI_COLUMNS = [
     ('loai_in',           'VARCHAR(30)'),
     ('so_mau',            'SMALLINT'),
     ('loai_lan',          'VARCHAR(50)'),
+    ('c_tham',            'VARCHAR(50)'),
+    ('can_man',           'VARCHAR(50)'),
     ('kho_tt',            'DECIMAL(8,2)'),
     ('dai_tt',            'DECIMAL(8,2)'),
     ('dien_tich',         'DECIMAL(12,4)'),
@@ -194,6 +196,18 @@ _BACKFILL_POI_SPEC_MYSQL = """
 """
 
 
+# Bước 3b: copy c_tham/can_man từ QuoteItem → POI (qua SOI.quote_item_id)
+_BACKFILL_CT_CM_MYSQL = """
+    UPDATE production_order_items poi
+    JOIN sales_order_items soi ON poi.sales_order_item_id = soi.id
+    JOIN quote_items qi ON soi.quote_item_id = qi.id
+    SET
+        poi.c_tham  = COALESCE(poi.c_tham,  qi.c_tham),
+        poi.can_man = COALESCE(poi.can_man, qi.can_man)
+    WHERE poi.sales_order_item_id IS NOT NULL
+      AND soi.quote_item_id IS NOT NULL
+"""
+
 _BOM_COLUMNS = [
     ('dan',  'BOOLEAN DEFAULT FALSE'),
     ('ghim', 'BOOLEAN DEFAULT FALSE'),
@@ -261,6 +275,13 @@ def ensure_schema() -> None:
                         logger.info("backfill POI spec: %d rows", r.rowcount)
                 except Exception as e:
                     logger.warning("backfill POI spec failed: %s", e)
+            with engine.begin() as conn:
+                try:
+                    r = conn.execute(text(_BACKFILL_CT_CM_MYSQL))
+                    if r.rowcount:
+                        logger.info("backfill POI c_tham/can_man: %d rows", r.rowcount)
+                except Exception as e:
+                    logger.warning("backfill POI c_tham/can_man failed: %s", e)
 
     # ── sales_order_items: fix product_id NOT NULL → nullable (SQLite migration) ─
     if is_sqlite and 'sales_order_items' in table_names:

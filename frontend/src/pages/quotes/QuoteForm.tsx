@@ -9,7 +9,7 @@ import {
 import {
   PlusOutlined, DeleteOutlined, SaveOutlined, CheckCircleOutlined,
   ArrowLeftOutlined, FileAddOutlined, AppstoreOutlined, CopyOutlined,
-  ThunderboltOutlined,
+  ThunderboltOutlined, SyncOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -20,6 +20,71 @@ import { cauTrucApi, type CauTruc } from '../../api/cauTruc'
 import { productsApi, type ProductFull } from '../../api/products'
 
 const { Title, Text } = Typography
+
+// ─── Auto-generate ghi_chu từ các chi tiết gia công (viết tắt gọn) ─────────────
+function buildGhiChu(ci: QuoteItem): string {
+  const parts: string[] = []
+
+  // In ấn: FL3m / FL3m+PN / KTS
+  if (ci.loai_in === 'flexo' && (ci.so_mau ?? 0) > 0) {
+    parts.push(`FL${ci.so_mau}m${ci.do_phu ? '+PN' : ''}`)
+  } else if (ci.loai_in === 'ky_thuat_so') {
+    parts.push(ci.do_phu ? 'KTS+PN' : 'KTS')
+  } else if (ci.do_phu) {
+    parts.push('PN')
+  }
+
+  // Máy in (giữ nguyên vì đã ngắn: "4 màu", "in dọc"…)
+  if (ci.may_in) parts.push(ci.may_in)
+
+  // Dịch vụ checkbox
+  if (ci.boi)     parts.push('Bồi')
+  if (ci.ghim)    parts.push('Ghim')
+  if (ci.dan)     parts.push('Dán')
+  if (ci.chap_xa) parts.push('CX')       // Chạp xả
+  if (ci.be_lo)   parts.push('BL')       // Bê lỗ
+  if (ci.do_kho)  parts.push('SP khó')
+
+  // Bế khuôn: Bế 4c
+  if (ci.so_c_be) {
+    const v = ci.so_c_be.trim()
+    if (v && v !== '0') {
+      // rút "4 con" → "4c"
+      const short = v.replace(/\s*con$/i, 'c')
+      parts.push(`Bế ${short}`)
+    }
+  }
+
+  // Chống thấm: CT 1m / CT 2m
+  if (ci.c_tham && ci.c_tham !== 'Không') {
+    const m = ci.c_tham.replace('mặt', 'm').replace(/\s+/, '')  // "1 mặt"→"1m"
+    parts.push(`CT ${m}`)
+  }
+
+  // Cán màng: CM 1m / CM 2m
+  if (ci.can_man && ci.can_man !== 'Không') {
+    const m = ci.can_man.replace('mặt', 'm').replace(/\s+/, '')
+    parts.push(`CM ${m}`)
+  }
+
+  // Loại lằn
+  if (ci.loai_lan === 'lan_bang')     parts.push('Lằn B')
+  else if (ci.loai_lan === 'lan_am_duong') parts.push('Lằn ÂD')
+  else if (ci.loai_lan)               parts.push(ci.loai_lan)
+
+  // Bản vẽ KT
+  if (ci.ban_ve_kt) parts.push(`BV:${ci.ban_ve_kt}`)
+
+  return parts.join(' / ')
+}
+
+// Các field kích hoạt tự sinh ghi_chu
+const ADDON_TRIGGER_KEYS: (keyof QuoteItem)[] = [
+  'loai_in', 'so_mau', 'do_phu',
+  'boi', 'ghim', 'dan', 'chap_xa', 'be_lo', 'do_kho',
+  'so_c_be', 'c_tham', 'can_man',
+  'may_in', 'loai_lan', 'ban_ve_kt',
+]
 
 // ─── Empty item template ────────────────────────────────────
 const emptyItem = (): QuoteItem => ({
@@ -349,6 +414,14 @@ export default function QuoteForm() {
             next.ten_hang = `Thùng Carton ${next.so_lop}L`
           }
         }
+      }
+
+      // Auto-generate ghi_chu khi thay đổi bất kỳ field gia công/dịch vụ
+      const hasAddonChange = Object.keys(patch).some(
+        k => ADDON_TRIGGER_KEYS.includes(k as keyof QuoteItem)
+      )
+      if (hasAddonChange) {
+        next.ghi_chu = buildGhiChu(next) || null
       }
 
       return next
@@ -1079,9 +1152,33 @@ export default function QuoteForm() {
                 </Row>
                 <Row style={{ marginTop: 4 }}>
                   <Col span={24}>
-                    <Text style={{ fontSize: 11 }}>Ghi chú dòng</Text>
-                    <Input size="small" value={ci.ghi_chu || ''}
-                      onChange={e => setCI({ ghi_chu: e.target.value })} />
+                    <Row justify="space-between" align="middle" style={{ marginBottom: 2 }}>
+                      <Col>
+                        <Text style={{ fontSize: 11 }}>Ghi chú dòng</Text>
+                        <Text type="secondary" style={{ fontSize: 10, marginLeft: 6 }}>
+                          (tự sinh từ gia công)
+                        </Text>
+                      </Col>
+                      <Col>
+                        <Tooltip title="Tự sinh lại ghi chú từ các chi tiết gia công">
+                          <Button
+                            size="small"
+                            type="text"
+                            icon={<SyncOutlined style={{ fontSize: 11 }} />}
+                            style={{ height: 18, padding: '0 4px', fontSize: 11, color: '#1677ff' }}
+                            onClick={() => setCI({ ghi_chu: buildGhiChu(ci) || null })}
+                          >
+                            Tự sinh
+                          </Button>
+                        </Tooltip>
+                      </Col>
+                    </Row>
+                    <Input
+                      size="small"
+                      value={ci.ghi_chu || ''}
+                      placeholder={buildGhiChu(ci) || 'Chưa có dịch vụ gia công'}
+                      onChange={e => setCurrentItem(prev => ({ ...prev, ghi_chu: e.target.value || null }))}
+                    />
                   </Col>
                 </Row>
               </div>
