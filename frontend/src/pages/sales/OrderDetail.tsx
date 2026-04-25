@@ -9,7 +9,7 @@ import {
 import {
   ArrowLeftOutlined, CheckOutlined, CloseOutlined,
   PrinterOutlined, ThunderboltOutlined, CalculatorOutlined,
-  FileExcelOutlined, FilePdfOutlined,
+  FileExcelOutlined, FilePdfOutlined, EyeOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -35,6 +35,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
   const [lenhLoading, setLenhLoading] = useState(false)
   const [lenhForm] = Form.useForm()
   const [bomItemId, setBomItemId] = useState<number | null>(null)
+  const [previewItem, setPreviewItem] = useState<SalesOrderItem | null>(null)
 
   const { data: order, isLoading, refetch } = useQuery({
     queryKey: ['sales-order', id],
@@ -190,7 +191,12 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     },
     {
       title: 'Tên hàng hoá',
-      render: (_, r) => r.ten_hang || r.product?.ten_hang || '—',
+      render: (_, r) => (
+        <Space size={4}>
+          <EyeOutlined style={{ color: '#1677ff', fontSize: 12 }} />
+          <span>{r.ten_hang || r.product?.ten_hang || '—'}</span>
+        </Space>
+      ),
       ellipsis: true,
     },
     {
@@ -421,6 +427,15 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           pagination={false}
           size="small"
           scroll={{ x: 1200 }}
+          onRow={(r) => ({
+            onClick: (e) => {
+              // Không mở drawer nếu click vào nút BOM
+              const target = e.target as HTMLElement
+              if (target.closest('button') || target.closest('.ant-btn')) return
+              setPreviewItem(r)
+            },
+            style: { cursor: 'pointer' },
+          })}
           expandable={{
             expandedRowRender: (r) => renderKetCau(r),
             rowExpandable: (r) => !!(r.mat_dl || r.song_1_dl),
@@ -449,6 +464,174 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           Cập nhật: {dayjs(order.updated_at).format('DD/MM/YYYY HH:mm')}
         </Text>
       </Card>
+
+      {/* Drawer chi tiết sản phẩm */}
+      <Drawer
+        open={!!previewItem}
+        onClose={() => setPreviewItem(null)}
+        width={Math.min(680, window.innerWidth - 48)}
+        title={
+          previewItem
+            ? <Space size={6}>
+                <EyeOutlined />
+                <span>{previewItem.ten_hang || previewItem.product?.ten_hang || 'Chi tiết sản phẩm'}</span>
+                {previewItem.product?.ma_amis && (
+                  <Text code style={{ fontSize: 12 }}>{previewItem.product.ma_amis}</Text>
+                )}
+              </Space>
+            : 'Chi tiết sản phẩm'
+        }
+        destroyOnClose
+        bodyStyle={{ padding: 0 }}
+      >
+        {previewItem && (() => {
+          const item = previewItem
+          const layers = [
+            { label: 'Mặt ngoài', code: item.mat,    dl: item.mat_dl    },
+            { label: 'Sóng 1',    code: item.song_1,  dl: item.song_1_dl },
+            { label: 'Mặt giữa', code: item.mat_1,   dl: item.mat_1_dl  },
+            { label: 'Sóng 2',    code: item.song_2,  dl: item.song_2_dl },
+            { label: 'Mặt 2',     code: item.mat_2,   dl: item.mat_2_dl  },
+            { label: 'Sóng 3',    code: item.song_3,  dl: item.song_3_dl },
+            { label: 'Mặt trong', code: item.mat_3,   dl: item.mat_3_dl  },
+          ].filter(l => l.dl)
+          const loaiInLabel = !item.loai_in || item.loai_in === 'khong_in'
+            ? null
+            : item.loai_in === 'flexo'
+            ? `Flexo ${item.so_mau ?? ''} màu`
+            : 'Kỹ thuật số'
+          return (
+            <div>
+              {/* Panel 1: Thông tin chung */}
+              <div style={{ background: '#f5f5f5', padding: '12px 16px', marginBottom: 12 }}>
+                <Row gutter={[16, 8]}>
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>Số lượng</Text>
+                    <div><Text strong>{fmt(Number(item.so_luong))} {item.dvt}</Text></div>
+                  </Col>
+                  {item.ghi_chu_san_pham && (
+                    <Col span={12}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>Ghi chú</Text>
+                      <div><Text>{item.ghi_chu_san_pham}</Text></div>
+                    </Col>
+                  )}
+                </Row>
+              </div>
+
+              {/* Panel 2: Loại giấy / kết cấu */}
+              {layers.length > 0 && (
+                <div style={{ background: '#f0f5ff', padding: '12px 16px', marginBottom: 12 }}>
+                  <Text strong style={{ color: '#1d3869', fontSize: 12 }}>LOẠI GIẤY</Text>
+                  <Divider style={{ margin: '8px 0' }} />
+                  <Space style={{ marginBottom: 8 }}>
+                    {item.so_lop && <Tag color="geekblue">{item.so_lop} lớp</Tag>}
+                    {item.to_hop_song && <Tag>Sóng {item.to_hop_song}</Tag>}
+                  </Space>
+                  <Row gutter={0} style={{ borderBottom: '1px solid #d6e4ff', marginBottom: 4, paddingBottom: 2 }}>
+                    <Col span={10}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Vị trí lớp</Text></Col>
+                    <Col span={8}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Mã KH</Text></Col>
+                    <Col span={6}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Định lượng</Text></Col>
+                  </Row>
+                  {layers.map((l, i) => (
+                    <Row key={i} gutter={0} style={{ padding: '3px 0', borderBottom: '1px solid #e6f0ff' }}>
+                      <Col span={10}><Text style={{ fontSize: 12 }}>{l.label}</Text></Col>
+                      <Col span={8}><Text code style={{ fontSize: 11 }}>{l.code || '—'}</Text></Col>
+                      <Col span={6}><Text style={{ fontSize: 12 }}>{l.dl} g/m²</Text></Col>
+                    </Row>
+                  ))}
+                </div>
+              )}
+
+              {/* Panel 3: Kích thước & In ấn */}
+              <div style={{ background: '#f6ffed', padding: '12px 16px', marginBottom: 12 }}>
+                <Text strong style={{ color: '#237804', fontSize: 12 }}>KÍCH THƯỚC & IN ẤN</Text>
+                <Divider style={{ margin: '8px 0' }} />
+                <Row gutter={[16, 10]}>
+                  {item.loai_thung && (
+                    <Col span={12}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>Loại thùng</Text>
+                      <div><Text strong>{item.loai_thung}</Text></div>
+                    </Col>
+                  )}
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>Kích thước (D×R×C)</Text>
+                    <div>
+                      <Text strong>
+                        {item.dai ?? item.product?.dai}×{item.rong ?? item.product?.rong}×{item.cao ?? item.product?.cao} cm
+                      </Text>
+                    </div>
+                  </Col>
+                  {item.kho_tt != null && (
+                    <Col span={12}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>Khổ thực tế</Text>
+                      <div><Text>{item.kho_tt} cm</Text></div>
+                    </Col>
+                  )}
+                  {item.dai_tt != null && (
+                    <Col span={12}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>Dài thực tế</Text>
+                      <div><Text>{item.dai_tt} cm</Text></div>
+                    </Col>
+                  )}
+                  {item.dien_tich != null && (
+                    <Col span={12}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>Diện tích</Text>
+                      <div><Text>{Number(item.dien_tich).toFixed(4)} m²</Text></div>
+                    </Col>
+                  )}
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>Loại in</Text>
+                    <div>
+                      {loaiInLabel
+                        ? <Tag color={item.loai_in === 'flexo' ? 'blue' : 'cyan'}>{loaiInLabel}</Tag>
+                        : <Text type="secondary">Không in</Text>
+                      }
+                    </div>
+                  </Col>
+                  {item.c_tham && item.c_tham !== 'Không' && (
+                    <Col span={12}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>Chống thấm</Text>
+                      <div><Tag color="orange">{item.c_tham}</Tag></div>
+                    </Col>
+                  )}
+                  {item.can_man && item.can_man !== 'Không' && (
+                    <Col span={12}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>Cán màng</Text>
+                      <div><Tag color="purple">{item.can_man}</Tag></div>
+                    </Col>
+                  )}
+                  {item.may_in && (
+                    <Col span={12}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>Máy in</Text>
+                      <div><Tag>{item.may_in}</Tag></div>
+                    </Col>
+                  )}
+                </Row>
+              </div>
+
+              {/* Panel 4: Tài chính */}
+              <div style={{ background: '#fff7e6', padding: '12px 16px', marginBottom: 12 }}>
+                <Text strong style={{ color: '#ad4e00', fontSize: 12 }}>TÀI CHÍNH</Text>
+                <Divider style={{ margin: '8px 0' }} />
+                <Row gutter={[16, 8]}>
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>Đơn giá</Text>
+                    <div><Text strong>{fmt(Number(item.don_gia))} đ</Text></div>
+                  </Col>
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>Thành tiền</Text>
+                    <div>
+                      <Text strong style={{ color: '#0050b3', fontSize: 15 }}>
+                        {fmt(Number(item.thanh_tien))} đ
+                      </Text>
+                    </div>
+                  </Col>
+                </Row>
+              </div>
+            </div>
+          )
+        })()}
+      </Drawer>
 
       {/* Drawer BOM */}
       <Drawer

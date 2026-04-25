@@ -43,6 +43,7 @@ from app.services.price_calculator import (
     get_spoilage_rate, _default_profit_rate, _INDIRECT_COST,
 )
 from app.routers.indirect_costs import get_indirect_breakdown_from_db
+from app.routers.addon_rates import get_addon_rates_from_db
 
 router = APIRouter(prefix="/api/bom", tags=["bom"])
 
@@ -258,7 +259,8 @@ def calculate_bom(
         resolved = _resolve_paper_prices(req.layers, db)
         calc_input = _build_calc_input(req, resolved)
         indirect_bd = get_indirect_breakdown_from_db(req.so_lop, db)
-        result = calculate_price(calc_input, indirect_breakdown=indirect_bd)
+        addon_rates_db = get_addon_rates_from_db(db)
+        result = calculate_price(calc_input, indirect_breakdown=indirect_bd, addon_rates=addon_rates_db)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return _result_to_response(result)
@@ -296,7 +298,8 @@ def save_bom(
         resolved = _resolve_paper_prices(req.layers, db)
         calc_input = _build_calc_input(req, resolved)
         indirect_bd = get_indirect_breakdown_from_db(req.so_lop, db)
-        result = calculate_price(calc_input, indirect_breakdown=indirect_bd)
+        addon_rates_db = get_addon_rates_from_db(db)
+        result = calculate_price(calc_input, indirect_breakdown=indirect_bd, addon_rates=addon_rates_db)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -718,7 +721,8 @@ def bom_from_production_item(
 
     try:
         indirect_bd = get_indirect_breakdown_from_db(so_lop, db)
-        result = calculate_price(calc_input, indirect_breakdown=indirect_bd)
+        addon_rates_db = get_addon_rates_from_db(db)
+        result = calculate_price(calc_input, indirect_breakdown=indirect_bd, addon_rates=addon_rates_db)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

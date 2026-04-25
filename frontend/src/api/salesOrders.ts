@@ -42,6 +42,13 @@ export interface SalesOrderItem {
   loai_in: string | null
   so_mau: number | null
   production_order_item_id: number | null
+  // Thông số gia công (tùy chọn, kế thừa từ báo giá)
+  c_tham?: string | null
+  can_man?: string | null
+  may_in?: string | null
+  kho_tt?: number | null
+  dai_tt?: number | null
+  dien_tich?: number | null
 }
 
 export interface SalesOrder {

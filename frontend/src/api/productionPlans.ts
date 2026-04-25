@@ -56,6 +56,7 @@ export interface PlanLineResponse {
   loai_lan: string | null
   loai_in: string | null
   so_mau: number | null
+  qccl: string | null
   mat: string | null;     mat_dl: number | null
   song_1: string | null;  song_1_dl: number | null
   mat_1: string | null;   mat_1_dl: number | null

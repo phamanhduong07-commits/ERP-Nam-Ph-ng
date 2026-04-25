@@ -32,6 +32,7 @@ import ProductionPlansPage from './pages/production/ProductionPlansPage'
 import ProductionPlanForm from './pages/production/ProductionPlanForm'
 import ProductionQueuePage from './pages/production/ProductionQueuePage'
 import IndirectCostList from './pages/danhmuc/IndirectCostList'
+import AddonRateList from './pages/danhmuc/AddonRateList'
 import BomListPage from './pages/production/BomListPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -98,6 +99,7 @@ export default function App() {
 
         {/* BOM / Chi phí */}
         <Route path="master/indirect-costs" element={<IndirectCostList />} />
+        <Route path="master/addon-rates" element={<AddonRateList />} />
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>

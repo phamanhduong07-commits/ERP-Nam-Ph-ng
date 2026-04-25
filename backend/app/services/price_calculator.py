@@ -308,47 +308,70 @@ def _default_profit_rate(loai_thung: str, so_lop: int) -> float:
 # 7. Add-on cost helpers
 # ---------------------------------------------------------------------------
 
-def _calc_chong_tham(mat: int, dien_tich: float) -> float:
+def _calc_chong_tham(mat: int, dien_tich: float, rates: dict | None = None) -> float:
     """mat: 0=none, 1=one side, 2=two sides."""
-    rate_map = {0: 0, 1: 500, 2: 1000}
+    R = rates or {}
+    rate_map = {
+        0: 0,
+        1: R.get("d1_1_mat", 500),
+        2: R.get("d1_2_mat", 1000),
+    }
     return rate_map.get(mat, 0) * dien_tich
 
 
-def _calc_in_flexo(so_mau: int, phu_nen: bool, dien_tich: float) -> float:
+def _calc_in_flexo(so_mau: int, phu_nen: bool, dien_tich: float, rates: dict | None = None) -> float:
     """so_mau: 0=no print, 1+=colors."""
     if so_mau <= 0:
         return 0.0
-    base_rate = 300  # 1 màu = 300 đ/m²
-    extra_per_color = 50  # mỗi màu thêm = +50 đ/m²
-    phu_nen_rate = 100  # phủ nền = +100 đ/m²
+    R = rates or {}
+    base_rate = R.get("d2_base", 300)
+    extra_per_color = R.get("d2_them_mau", 50)
+    phu_nen_rate = R.get("d2_phu_nen", 100)
     rate = base_rate + (so_mau - 1) * extra_per_color
     if phu_nen:
         rate += phu_nen_rate
     return rate * dien_tich
 
 
-def _calc_in_ky_thuat_so(co_in: bool) -> float:
-    """Digital print: 2233 đ/pcs if active."""
-    return 2233.0 if co_in else 0.0
+def _calc_in_ky_thuat_so(co_in: bool, rates: dict | None = None) -> float:
+    """Digital print: đ/pcs if active."""
+    R = rates or {}
+    unit_rate = R.get("d3_in_kts", 2233)
+    return float(unit_rate) if co_in else 0.0
 
 
-def _calc_chap_xa(co_chap: bool) -> float:
-    return 150.0 if co_chap else 0.0
+def _calc_chap_xa(co_chap: bool, rates: dict | None = None) -> float:
+    R = rates or {}
+    return float(R.get("d4_chap_xa", 150)) if co_chap else 0.0
 
 
-def _calc_boi(co_boi: bool, dien_tich: float) -> float:
-    return 187.0 * dien_tich if co_boi else 0.0
+def _calc_boi(co_boi: bool, dien_tich: float, rates: dict | None = None) -> float:
+    R = rates or {}
+    return float(R.get("d5_boi", 187)) * dien_tich if co_boi else 0.0
 
 
-def _calc_be(so_con: int) -> float:
+def _calc_be(so_con: int, rates: dict | None = None) -> float:
     """Die-cut cost per piece based on number of pieces per die."""
-    be_map = {0: 0, 1: 400, 2: 300, 4: 200, 6: 150, 8: 100}
+    R = rates or {}
+    be_map = {
+        0: 0,
+        1: R.get("d6_1_con", 400),
+        2: R.get("d6_2_con", 300),
+        4: R.get("d6_4_con", 200),
+        6: R.get("d6_6_con", 150),
+        8: R.get("d6_8_con", 100),
+    }
     return float(be_map.get(so_con, 0))
 
 
-def _calc_can_mang(mat: int, dien_tich: float) -> float:
+def _calc_can_mang(mat: int, dien_tich: float, rates: dict | None = None) -> float:
     """mat: 0=none, 1=one side 1800đ/m², 2=two sides 3600đ/m²."""
-    rate_map = {0: 0, 1: 1800, 2: 3600}
+    R = rates or {}
+    rate_map = {
+        0: 0,
+        1: R.get("d8_1_mat", 1800),
+        2: R.get("d8_2_mat", 3600),
+    }
     return rate_map.get(mat, 0) * dien_tich
 
 
@@ -356,7 +379,7 @@ def _calc_can_mang(mat: int, dien_tich: float) -> float:
 # 8. Main price + BOM calculation
 # ---------------------------------------------------------------------------
 
-def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None) -> dict:
+def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, addon_rates: dict | None = None) -> dict:
     """
     Full price and BOM calculation.
 
@@ -529,14 +552,16 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None) -> 
     c = (a + b) * ty_le_loi_nhuan
 
     # ---- Add-ons (d) ----
-    d1 = _calc_chong_tham(chong_tham, dien_tich)
-    d2 = _calc_in_flexo(in_flexo_mau, in_flexo_phu_nen, dien_tich)
-    d3 = _calc_in_ky_thuat_so(in_ky_thuat_so)
-    d4 = _calc_chap_xa(chap_xa)
-    d5 = _calc_boi(boi, dien_tich)
-    d6 = _calc_be(be_so_con)
-    d8 = _calc_can_mang(can_mang, dien_tich)
-    d9 = (a + b + e) * 0.02 if san_pham_kho else 0.0
+    d1 = _calc_chong_tham(chong_tham, dien_tich, addon_rates)
+    d2 = _calc_in_flexo(in_flexo_mau, in_flexo_phu_nen, dien_tich, addon_rates)
+    d3 = _calc_in_ky_thuat_so(in_ky_thuat_so, addon_rates)
+    d4 = _calc_chap_xa(chap_xa, addon_rates)
+    d5 = _calc_boi(boi, dien_tich, addon_rates)
+    d6 = _calc_be(be_so_con, addon_rates)
+    d8 = _calc_can_mang(can_mang, dien_tich, addon_rates)
+    R = addon_rates or {}
+    d9_pct = float(R.get("d9_pct", 2)) / 100
+    d9 = (a + b + e) * d9_pct if san_pham_kho else 0.0
 
     d = d1 + d2 + d3 + d4 + d5 + d6 + d8 + d9
 

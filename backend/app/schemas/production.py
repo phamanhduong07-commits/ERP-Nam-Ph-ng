@@ -59,11 +59,26 @@ class ProductionOrderItemResponse(BaseModel):
         from_attributes = True
 
 
+class TaoLenhItemSpec(BaseModel):
+    """Thông số sản xuất cho một dòng hàng — KHÔNG ảnh hưởng giá bán."""
+    sales_order_item_id: int
+    kho_tt: Decimal | None = None          # chiều khổ máy (tối ưu hoặc để None = tự tính)
+    to_hop_song: str | None = None
+    mat: str | None = None;     mat_dl: Decimal | None = None
+    song_1: str | None = None;  song_1_dl: Decimal | None = None
+    mat_1: str | None = None;   mat_1_dl: Decimal | None = None
+    song_2: str | None = None;  song_2_dl: Decimal | None = None
+    mat_2: str | None = None;   mat_2_dl: Decimal | None = None
+    song_3: str | None = None;  song_3_dl: Decimal | None = None
+    mat_3: str | None = None;   mat_3_dl: Decimal | None = None
+
+
 class TaoLenhBody(BaseModel):
     """Body cho POST /tu-don-hang/{order_id}."""
     ngay_lenh: date | None = None
     ngay_hoan_thanh_ke_hoach: date | None = None
     ghi_chu: str | None = None
+    items: list[TaoLenhItemSpec] = []      # thông số SX per-item (có thể rỗng)
 
 
 class ProductionOrderCreate(BaseModel):

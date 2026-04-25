@@ -315,7 +315,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         const songs  = getSongLetters(r.to_hop_song)
         const soTam  = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
         const metToi = calcMetToi(soTam, r.dai_tt)
-        const qccl   = calcQCCL(r.rong, r.cao, r.so_lop)
+        const qccl   = r.qccl || calcQCCL(r.rong, r.cao, r.so_lop)
         const soLop  = r.so_lop ?? 3
         const inner  = getMatInner(r)
         const kho1   = r.kho1 ? Number(r.kho1) : null
@@ -373,7 +373,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
           ${lineRows.map((r, i) => {
             const soTam  = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
             const metToi = calcMetToi(soTam, r.dai_tt)
-            const qccl   = calcQCCL(r.rong, r.cao, r.so_lop)
+            const qccl   = r.qccl || calcQCCL(r.rong, r.cao, r.so_lop)
             const inner  = getMatInner(r)
             return `<tr>
               <td class="center">${i + 1}</td>
@@ -543,7 +543,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
               const songs    = getSongLetters(r.to_hop_song)
               const soTam    = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
               const metToi   = calcMetToi(soTam, r.dai_tt)
-              const qccl     = calcQCCL(r.rong, r.cao, r.so_lop)
+              const qccl     = r.qccl || calcQCCL(r.rong, r.cao, r.so_lop)
               const soLop    = r.so_lop ?? 3
               const inner    = getMatInner(r)
               const kho1     = r.kho1 ? Number(r.kho1) : null

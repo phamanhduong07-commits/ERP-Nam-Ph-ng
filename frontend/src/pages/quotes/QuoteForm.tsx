@@ -1001,14 +1001,36 @@ export default function QuoteForm() {
 
                 <Row gutter={8} style={{ marginTop: 6 }}>
                   <Col span={8}>
-                    <Text style={{ fontSize: 11 }}>C Thấm</Text>
-                    <Input size="small" value={ci.c_tham || ''}
-                      onChange={e => setCI({ c_tham: e.target.value })} />
+                    <Text style={{ fontSize: 11 }}>Chống thấm</Text>
+                    <Select
+                      size="small"
+                      style={{ width: '100%' }}
+                      allowClear
+                      placeholder="Không"
+                      value={ci.c_tham || undefined}
+                      onChange={v => setCI({ c_tham: v ?? null })}
+                      options={[
+                        { value: 'Không',  label: 'Không' },
+                        { value: '1 mặt',  label: '1 mặt' },
+                        { value: '2 mặt',  label: '2 mặt' },
+                      ]}
+                    />
                   </Col>
                   <Col span={8}>
-                    <Text style={{ fontSize: 11 }}>Cán màn</Text>
-                    <Input size="small" value={ci.can_man || ''}
-                      onChange={e => setCI({ can_man: e.target.value })} />
+                    <Text style={{ fontSize: 11 }}>Cán màng</Text>
+                    <Select
+                      size="small"
+                      style={{ width: '100%' }}
+                      allowClear
+                      placeholder="Không"
+                      value={ci.can_man || undefined}
+                      onChange={v => setCI({ can_man: v ?? null })}
+                      options={[
+                        { value: 'Không',  label: 'Không' },
+                        { value: '1 mặt',  label: '1 mặt' },
+                        { value: '2 mặt',  label: '2 mặt' },
+                      ]}
+                    />
                   </Col>
                   <Col span={8}>
                     <Text style={{ fontSize: 11 }}>Số c bề</Text>
@@ -1019,8 +1041,20 @@ export default function QuoteForm() {
                 <Row gutter={8} style={{ marginTop: 4 }}>
                   <Col span={8}>
                     <Text style={{ fontSize: 11 }}>Máy In</Text>
-                    <Input size="small" value={ci.may_in || ''}
-                      onChange={e => setCI({ may_in: e.target.value })} />
+                    <Select
+                      size="small"
+                      style={{ width: '100%' }}
+                      allowClear
+                      placeholder="Chọn..."
+                      value={ci.may_in || undefined}
+                      onChange={v => setCI({ may_in: v ?? null })}
+                      options={[
+                        { value: '4 màu',   label: '4 màu' },
+                        { value: '5 màu',   label: '5 màu' },
+                        { value: '6 màu',   label: '6 màu' },
+                        { value: 'in dọc',  label: 'In dọc' },
+                      ]}
+                    />
                   </Col>
                   <Col span={8}>
                     <Text style={{ fontSize: 11 }}>Loại lằn</Text>

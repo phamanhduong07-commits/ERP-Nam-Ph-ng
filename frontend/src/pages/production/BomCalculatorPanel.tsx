@@ -12,6 +12,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import {
   bomApi,
+  addonRatesApi,
   vnd,
   LOAI_THUNG_BOM_OPTIONS,
   SO_LOP_BOM_OPTIONS,
@@ -27,6 +28,7 @@ import type {
   BomCalculateResponse,
   BomLayerResult,
   BomReverseResponse,
+  AddonRateItem,
 } from '../../api/bom'
 import { paperMaterialsApi } from '../../api/quotes'
 
@@ -34,6 +36,67 @@ const { Text, Title } = Typography
 const { Panel } = Collapse
 
 // ─── Addon labels ─────────────────────────────────────────────────────────────
+
+// Build a lookup map from AddonRateItem list: { ma_chi_phi -> don_gia }
+function buildRateMap(rates: AddonRateItem[]): Record<string, number> {
+  return Object.fromEntries(rates.map(r => [r.ma_chi_phi, Number(r.don_gia)]))
+}
+
+function addonFormulaHint(
+  key: string,
+  params: {
+    chongTham: number; inFlexoMau: number; phuNen: boolean
+    beSoCon: number; canMang: number; dienTich: number
+  },
+  rateMap: Record<string, number> = {}
+): string {
+  const { chongTham, inFlexoMau, phuNen, beSoCon, canMang, dienTich } = params
+  const area = dienTich.toFixed(4)
+  const R = rateMap
+  const vndRate = (n: number) => n.toLocaleString('vi-VN')
+  switch (key) {
+    case 'd1_chong_tham': {
+      const rate = chongTham === 1 ? (R.d1_1_mat ?? 500) : (R.d1_2_mat ?? 1000)
+      return `${vndRate(rate)} đ/m² × ${area} m²`
+    }
+    case 'd2_in_flexo': {
+      const base = R.d2_base ?? 300
+      const perMau = R.d2_them_mau ?? 50
+      const phuNenRate = R.d2_phu_nen ?? 100
+      const extra = inFlexoMau > 1 ? ` + ${inFlexoMau - 1}×${perMau}` : ''
+      const phu = phuNen ? ` + ${phuNenRate}(phủ nền)` : ''
+      const rate = base + (inFlexoMau - 1) * perMau + (phuNen ? phuNenRate : 0)
+      return `(${vndRate(base)}${extra}${phu} = ${vndRate(rate)}) đ/m² × ${area} m²`
+    }
+    case 'd3_in_ky_thuat_so':
+      return `${vndRate(R.d3_in_kts ?? 2233)} đ/cái (phí cố định/thùng)`
+    case 'd4_chap_xa':
+      return `${vndRate(R.d4_chap_xa ?? 150)} đ/cái (phí cố định/thùng)`
+    case 'd5_boi':
+      return `${vndRate(R.d5_boi ?? 187)} đ/m² × ${area} m²`
+    case 'd6_be': {
+      const rateMap: Record<number, number> = {
+        1: R.d6_1_con ?? 400,
+        2: R.d6_2_con ?? 300,
+        4: R.d6_4_con ?? 200,
+        6: R.d6_6_con ?? 150,
+        8: R.d6_8_con ?? 100,
+      }
+      const rate = rateMap[beSoCon]
+      return rate != null ? `${vndRate(rate)} đ/cái (bế ${beSoCon} con/khuôn)` : ''
+    }
+    case 'd8_can_mang': {
+      const rate = canMang === 1 ? (R.d8_1_mat ?? 1800) : (R.d8_2_mat ?? 3600)
+      return `${vndRate(rate)} đ/m² × ${area} m²`
+    }
+    case 'd9_san_pham_kho': {
+      const pct = R.d9_pct ?? 2
+      return `${pct}% × (CP giấy + CP gián tiếp + CP hao hụt)`
+    }
+    default:
+      return ''
+  }
+}
 
 const ADDON_LABELS: Record<string, string> = {
   d1_chong_tham:    'Chống thấm',
@@ -243,6 +306,14 @@ export default function BomCalculatorPanel({
   onBomSaved,
 }: BomCalculatorPanelProps) {
   const { mkList, byMk } = usePaperOptions()
+
+  // Fetch live addon rates for formula hints (falls back to defaults if not seeded)
+  const { data: addonRates = [] } = useQuery({
+    queryKey: ['addon-rates'],
+    queryFn: () => addonRatesApi.list().then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+  const liveRateMap = buildRateMap(addonRates)
 
   const [loaiThung, setLoaiThung] = useState<BomCalculateRequest['loai_thung']>(
     (initialValues?.loai_thung as BomCalculateRequest['loai_thung']) ?? 'A1'
@@ -1056,10 +1127,31 @@ export default function BomCalculatorPanel({
             {/* D. Chi phí dịch vụ */}
             <SectionHeader letter="D" label="Chi phí dịch vụ / gia công" total={result.chi_phi_addon} />
             {result.addon_detail && Object.entries(result.addon_detail).some(([, v]) => (v as number) > 0) && (
-              <div style={{ paddingLeft: 24 }}>
+              <div style={{ paddingLeft: 8, paddingBottom: 4 }}>
+                <Row gutter={0} style={{ marginBottom: 4, padding: '3px 0', borderBottom: '1px solid #e8e8e8' }}>
+                  <Col span={5}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Dịch vụ / gia công</Text></Col>
+                  <Col span={14}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Công thức tính</Text></Col>
+                  <Col span={5} style={{ textAlign: 'right' }}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Thành tiền (đ/thùng)</Text></Col>
+                </Row>
                 {Object.entries(result.addon_detail).map(([k, v]) =>
                   (v as number) > 0 ? (
-                    <AccRow key={k} label={ADDON_LABELS[k] ?? k} value={v as number} indent />
+                    <Row key={k} gutter={0} style={{ padding: '4px 0', borderBottom: '1px solid #f5f5f5' }}>
+                      <Col span={5}>
+                        <Text style={{ fontSize: 12 }}>{ADDON_LABELS[k] ?? k}</Text>
+                      </Col>
+                      <Col span={14}>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {addonFormulaHint(k, {
+                            chongTham, inFlexoMau, phuNen,
+                            beSoCon, canMang,
+                            dienTich: result.dimensions.dien_tich ?? 0,
+                          })}
+                        </Text>
+                      </Col>
+                      <Col span={5} style={{ textAlign: 'right' }}>
+                        <Text strong style={{ fontSize: 12, color: '#fa8c16' }}>{vnd(v as number)} đ</Text>
+                      </Col>
+                    </Row>
                   ) : null
                 )}
               </div>

@@ -272,6 +272,24 @@ export const indirectCostsApi = {
   seed: () => client.post('/indirect-costs/seed', {}),
 }
 
+export interface AddonRateItem {
+  id: number
+  ma_chi_phi: string
+  nhom: string
+  ten: string
+  don_vi: string  // 'm2' | 'pcs' | 'pct'
+  don_gia: number
+  ghi_chu: string | null
+  thu_tu: number
+}
+
+export const addonRatesApi = {
+  list: () => client.get<AddonRateItem[]>('/addon-rates'),
+  update: (id: number, data: { ten?: string; don_gia?: number; ghi_chu?: string }) =>
+    client.put<AddonRateItem>(`/addon-rates/${id}`, data),
+  seed: () => client.post('/addon-rates/seed', {}),
+}
+
 // ─── API Client ───────────────────────────────────────────────────────────────
 
 // Quy cách sản phẩm từ báo giá (để auto-fill BOM calculator)

@@ -91,12 +91,12 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         ten_khach_hang=customer.ten_viet_tat if customer else None,
         ten_hang=item.ten_hang if item else None,
         ngay_giao_hang=item.ngay_giao_hang if item else None,
-        loai_thung=bom.loai_thung if bom else None,
-        dai=bom.dai if bom else None,
-        rong=bom.rong if bom else None,
-        cao=bom.cao if bom else None,
-        so_lop=bom.so_lop if bom else None,
-        to_hop_song=bom.to_hop_song if bom else None,
+        loai_thung=bom.loai_thung if bom else (item.loai_thung if item else None),
+        dai=bom.dai if bom else (item.dai if item else None),
+        rong=bom.rong if bom else (item.rong if item else None),
+        cao=bom.cao if bom else (item.cao if item else None),
+        so_lop=bom.so_lop if bom else (item.so_lop if item else None),
+        to_hop_song=bom.to_hop_song if bom else (item.to_hop_song if item else None),
         # Thông số kỹ thuật từ item
         dai_tt=item.dai_tt if item else None,
         loai_lan=item.loai_lan if item else None,
@@ -109,6 +109,7 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         mat_3=item.mat_3 if item else None,     mat_3_dl=item.mat_3_dl if item else None,
         loai_in=item.loai_in if item else None,
         so_mau=item.so_mau if item else None,
+        qccl=item.qccl if item else None,
     )
 
 
