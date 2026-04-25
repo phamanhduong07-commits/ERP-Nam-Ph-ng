@@ -59,6 +59,18 @@ class ProductionPlanLineResponse(BaseModel):
     cao: Decimal | None = None
     so_lop: int | None = None
     to_hop_song: str | None = None
+    # Thông số kỹ thuật từ ProductionOrderItem
+    dai_tt: Decimal | None = None
+    loai_lan: str | None = None
+    mat: str | None = None;     mat_dl: Decimal | None = None
+    song_1: str | None = None;  song_1_dl: Decimal | None = None
+    mat_1: str | None = None;   mat_1_dl: Decimal | None = None
+    song_2: str | None = None;  song_2_dl: Decimal | None = None
+    mat_2: str | None = None;   mat_2_dl: Decimal | None = None
+    song_3: str | None = None;  song_3_dl: Decimal | None = None
+    mat_3: str | None = None;   mat_3_dl: Decimal | None = None
+    loai_in: str | None = None
+    so_mau: int | None = None
 
     class Config:
         from_attributes = True

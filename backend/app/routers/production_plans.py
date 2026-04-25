@@ -97,6 +97,18 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         cao=bom.cao if bom else None,
         so_lop=bom.so_lop if bom else None,
         to_hop_song=bom.to_hop_song if bom else None,
+        # Thông số kỹ thuật từ item
+        dai_tt=item.dai_tt if item else None,
+        loai_lan=item.loai_lan if item else None,
+        mat=item.mat if item else None,         mat_dl=item.mat_dl if item else None,
+        song_1=item.song_1 if item else None,   song_1_dl=item.song_1_dl if item else None,
+        mat_1=item.mat_1 if item else None,     mat_1_dl=item.mat_1_dl if item else None,
+        song_2=item.song_2 if item else None,   song_2_dl=item.song_2_dl if item else None,
+        mat_2=item.mat_2 if item else None,     mat_2_dl=item.mat_2_dl if item else None,
+        song_3=item.song_3 if item else None,   song_3_dl=item.song_3_dl if item else None,
+        mat_3=item.mat_3 if item else None,     mat_3_dl=item.mat_3_dl if item else None,
+        loai_in=item.loai_in if item else None,
+        so_mau=item.so_mau if item else None,
     )
 
 

@@ -51,6 +51,18 @@ export interface PlanLineResponse {
   cao: number | null
   so_lop: number | null
   to_hop_song: string | null
+  // Thông số kỹ thuật
+  dai_tt: number | null
+  loai_lan: string | null
+  loai_in: string | null
+  so_mau: number | null
+  mat: string | null;     mat_dl: number | null
+  song_1: string | null;  song_1_dl: number | null
+  mat_1: string | null;   mat_1_dl: number | null
+  song_2: string | null;  song_2_dl: number | null
+  mat_2: string | null;   mat_2_dl: number | null
+  song_3: string | null;  song_3_dl: number | null
+  mat_3: string | null;   mat_3_dl: number | null
 }
 
 export interface PlanCreate {
