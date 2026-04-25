@@ -72,6 +72,7 @@ _POI_COLUMNS = [
 
 # ── Cột spec cần thêm vào sales_order_items ──────────────────────────────────
 _SOI_COLUMNS = [
+    ('ten_hang',     'VARCHAR(255)'),
     ('quote_item_id', 'INTEGER'),
     ('loai_thung',   'VARCHAR(50)'),
     ('dai',          'DECIMAL(8,2)'),
