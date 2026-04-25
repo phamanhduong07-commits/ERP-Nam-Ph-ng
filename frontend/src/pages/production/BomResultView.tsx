@@ -105,6 +105,21 @@ export default function BomResultView({ productionOrderItemId }: Props) {
 
   const hasBaoGia = data.gia_ban_bao_gia > 0
 
+  // Kiểm tra các flag gia công thực tế đọc từ báo giá
+  const addonFlags = {
+    'Chống thấm':  (data.flag_chong_tham  ?? 0) > 0,
+    'In Flexo':    (data.flag_in_flexo_mau ?? 0) > 0,
+    'Bồi':         data.flag_boi          ?? false,
+    'Chạp / Xả':   data.flag_chap_xa      ?? false,
+    'Dán':         data.flag_dan          ?? false,
+    'Ghim':        data.flag_ghim         ?? false,
+    'Bế khuôn':    (data.flag_be_so_con   ?? 0) > 0,
+    'Cán màng':    (data.flag_can_mang    ?? 0) > 0,
+    'SP khó (2%)': data.flag_san_pham_kho ?? false,
+  }
+  const activeFlags = Object.entries(addonFlags).filter(([, v]) => v).map(([k]) => k)
+  const noAddons = data.source === 'quote' && data.chi_phi_addon === 0
+
   return (
     <div style={{ paddingBottom: 16 }}>
       {/* ── Header ─────────────────────────────────────────────────────────── */}
@@ -132,6 +147,36 @@ export default function BomResultView({ productionOrderItemId }: Props) {
           </Col>
         </Row>
       </Card>
+
+      {/* ── Chẩn đoán dịch vụ gia công ─────────────────────────────────────── */}
+      {data.source === 'quote' && (
+        <Card size="small" style={{ marginBottom: 10 }}>
+          <Row gutter={8} align="middle">
+            <Col>
+              <Text style={{ fontSize: 12, color: '#595959' }}>
+                <strong>Dịch vụ gia công từ báo giá:</strong>
+              </Text>
+            </Col>
+            <Col flex="1">
+              {activeFlags.length > 0
+                ? activeFlags.map(f => (
+                    <Tag key={f} color="blue" style={{ fontSize: 11, marginBottom: 2 }}>{f}</Tag>
+                  ))
+                : <Text type="secondary" style={{ fontSize: 11 }}>Không có dịch vụ nào được chọn trong báo giá</Text>
+              }
+            </Col>
+          </Row>
+          {noAddons && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginTop: 8, fontSize: 11 }}
+              message="D = 0: Báo giá không ghi nhận dịch vụ gia công thêm"
+              description="Nếu sản phẩm có chống thấm / bồi / bế / dán / ghim / cán màng, hãy cập nhật lại báo giá và tích chọn các dịch vụ tương ứng."
+            />
+          )}
+        </Card>
+      )}
 
       {/* ── Kết cấu giấy ──────────────────────────────────────────────────── */}
       <Card size="small" title="Kết cấu giấy & khối lượng" style={{ marginBottom: 10 }}>

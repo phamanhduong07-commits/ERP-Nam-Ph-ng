@@ -140,6 +140,16 @@ export interface BomFromProductionItemResponse extends BomCalculateResponse {
   gia_ban_bao_gia: number
   lai_gop: number
   ty_le_lai: number
+  // Flags gia công đọc từ báo giá (dùng để hiển thị chẩn đoán)
+  flag_chong_tham?: number
+  flag_boi?: boolean
+  flag_chap_xa?: boolean
+  flag_dan?: boolean
+  flag_ghim?: boolean
+  flag_be_so_con?: number
+  flag_can_mang?: number
+  flag_san_pham_kho?: boolean
+  flag_in_flexo_mau?: number
 }
 
 // ─── Response – saved BOM ─────────────────────────────────────────────────────
@@ -317,8 +327,8 @@ export interface QuoteSpec {
   chap_xa: boolean
   boi: boolean
   be_so_con: number
-  dan?: boolean
-  ghim?: boolean
+  dan: boolean
+  ghim: boolean
   can_mang: number
   san_pham_kho: boolean
 }

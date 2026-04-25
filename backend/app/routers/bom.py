@@ -438,6 +438,16 @@ class BomFromProductionItemResponse(BomCalculateResponse):
     gia_ban_bao_gia: float        # giá báo trong báo giá
     lai_gop: float                # gia_ban_bao_gia - bien_phi
     ty_le_lai: float              # %
+    # Các flag gia công đã đọc từ báo giá — dùng để hiển thị chẩn đoán
+    flag_chong_tham: int = 0
+    flag_boi: bool = False
+    flag_chap_xa: bool = False
+    flag_dan: bool = False
+    flag_ghim: bool = False
+    flag_be_so_con: int = 0
+    flag_can_mang: int = 0
+    flag_san_pham_kho: bool = False
+    flag_in_flexo_mau: int = 0
 
 
 def _spec_from_soi(soi_id: int, db: Session):
@@ -693,12 +703,17 @@ def bom_from_production_item(
     qty = so_luong or float(poi.so_luong_ke_hoach)
 
     # ── Gia công từ QuoteItem ─────────────────────────────────────────────────
+    # qi dùng cho kết cấu giấy; qi_addon dùng cho các flag dịch vụ gia công
+    qi_addon = _load_addon_qi(qi, poi, db)
+
     in_flexo_mau = 0
     in_ky_thuat_so = False
-    if qi:
-        if qi.loai_in == 'flexo':
-            in_flexo_mau = qi.so_mau or 0
-        elif qi.loai_in == 'ky_thuat_so':
+    _src = qi_addon or qi
+    if _src:
+        loai_in_src = getattr(_src, 'loai_in', None)
+        if loai_in_src == 'flexo':
+            in_flexo_mau = getattr(_src, 'so_mau', None) or 0
+        elif loai_in_src == 'ky_thuat_so':
             in_ky_thuat_so = True
 
     calc_input = {
@@ -707,18 +722,18 @@ def bom_from_production_item(
         "so_lop": so_lop, "to_hop_song": to_hop_song,
         "so_luong": qty,
         "layers": resolved,
-        # add-ons — chuyển đổi từ định dạng string của báo giá sang int/bool
-        "chong_tham": _parse_mat_field(getattr(qi, 'c_tham', None)) if qi else 0,
+        # add-ons — đọc từ QuoteItem thực (qi_addon); fallback về 0/False nếu không có
+        "chong_tham": _parse_mat_field(getattr(qi_addon, 'c_tham', None)) if qi_addon else 0,
         "in_flexo_mau": in_flexo_mau,
-        "in_flexo_phu_nen": bool(getattr(qi, 'do_phu', False)) if qi else False,
+        "in_flexo_phu_nen": bool(getattr(qi_addon, 'do_phu', False)) if qi_addon else False,
         "in_ky_thuat_so": in_ky_thuat_so,
-        "chap_xa": bool(getattr(qi, 'chap_xa', False)) if qi else False,
-        "boi": bool(getattr(qi, 'boi', False)) if qi else False,
-        "be_so_con": _parse_so_con(getattr(qi, 'so_c_be', None)) if qi else 0,
-        "dan": bool(getattr(qi, 'dan', False)) if qi else False,
-        "ghim": bool(getattr(qi, 'ghim', False)) if qi else False,
-        "can_mang": _parse_mat_field(getattr(qi, 'can_man', None)) if qi else 0,
-        "san_pham_kho": bool(getattr(qi, 'do_kho', False)) if qi else False,
+        "chap_xa": bool(getattr(qi_addon, 'chap_xa', False)) if qi_addon else False,
+        "boi": bool(getattr(qi_addon, 'boi', False)) if qi_addon else False,
+        "be_so_con": _parse_so_con(getattr(qi_addon, 'so_c_be', None)) if qi_addon else 0,
+        "dan": bool(getattr(qi_addon, 'dan', False)) if qi_addon else False,
+        "ghim": bool(getattr(qi_addon, 'ghim', False)) if qi_addon else False,
+        "can_mang": _parse_mat_field(getattr(qi_addon, 'can_man', None)) if qi_addon else 0,
+        "san_pham_kho": bool(getattr(qi_addon, 'do_kho', False)) if qi_addon else False,
         # pricing: dùng 0 để tính thuần biến phí
         "ty_le_loi_nhuan": 0.0,
         "hoa_hong_kd_pct": 0.0,
@@ -756,6 +771,16 @@ def bom_from_production_item(
         gia_ban_bao_gia=gia_ban_bao_gia,
         lai_gop=round(lai_gop, 2),
         ty_le_lai=ty_le_lai,
+        # Flags gia công thực tế được đọc từ báo giá
+        flag_chong_tham=calc_input.get("chong_tham", 0),
+        flag_boi=bool(calc_input.get("boi", False)),
+        flag_chap_xa=bool(calc_input.get("chap_xa", False)),
+        flag_dan=bool(calc_input.get("dan", False)),
+        flag_ghim=bool(calc_input.get("ghim", False)),
+        flag_be_so_con=calc_input.get("be_so_con", 0),
+        flag_can_mang=calc_input.get("can_mang", 0),
+        flag_san_pham_kho=bool(calc_input.get("san_pham_kho", False)),
+        flag_in_flexo_mau=calc_input.get("in_flexo_mau", 0),
     )
 
 
@@ -782,6 +807,42 @@ def get_bom_by_item(
             detail=f"Không tìm thấy BOM cho dòng LSX id={production_order_item_id}",
         )
     return _bom_to_response(bom)
+
+
+def _load_addon_qi(qi, poi: "ProductionOrderItem", db: Session):
+    """
+    Tìm QuoteItem thực để đọc các flag gia công (boi, chap_xa, dan, …).
+
+    qi có thể là:
+      - QuoteItem (Path 1-4) → trả về ngay
+      - SimpleNamespace từ SOItem (Path 0) → thử load QuoteItem qua quote_item_id
+      - ProductionOrderItem (Path -1)  → thử load QuoteItem qua SOI.quote_item_id
+    """
+    if isinstance(qi, QuoteItem):
+        return qi
+
+    # Path 0: SimpleNamespace có quote_item_id trong _SPEC_COLS
+    qi_id = getattr(qi, 'quote_item_id', None)
+    if qi_id:
+        qitem = db.query(QuoteItem).filter(QuoteItem.id == qi_id).first()
+        if qitem:
+            return qitem
+
+    # Path -1: qi là ProductionOrderItem — tìm qua SOI.quote_item_id
+    if poi and poi.sales_order_item_id:
+        try:
+            row = db.execute(
+                sql_text("SELECT quote_item_id FROM sales_order_items WHERE id = :id"),
+                {"id": poi.sales_order_item_id}
+            ).first()
+            if row and getattr(row, 'quote_item_id', None):
+                qitem = db.query(QuoteItem).filter(QuoteItem.id == row.quote_item_id).first()
+                if qitem:
+                    return qitem
+        except Exception:
+            pass
+
+    return None   # không tìm được QuoteItem thực → addon đều = 0
 
 
 def _parse_int_field(val: str | None, allowed: list[int], default: int = 0) -> int:
@@ -928,8 +989,12 @@ def get_quote_spec(
 
     if qi and _has_paper_data(qi):
         # Có kết cấu đầy đủ từ báo giá / POItem / SOItem
-        loai_in = getattr(qi, 'loai_in', None)
-        so_mau_qi = getattr(qi, 'so_mau', None)
+        # Tách riêng: qi dùng cho kết cấu giấy, qi_addon dùng cho flag dịch vụ
+        qi_addon = _load_addon_qi(qi, poi, db)
+        _src = qi_addon or qi   # nguồn đọc loai_in / addon flags
+
+        loai_in = getattr(_src, 'loai_in', None)
+        so_mau_qi = getattr(_src, 'so_mau', None)
         in_flexo_mau = 0
         in_ky_thuat_so = False
         if loai_in == 'flexo':
@@ -939,8 +1004,11 @@ def get_quote_spec(
 
         qi_so_lop = getattr(qi, 'so_lop', None) or so_lop
         qi_to_hop_song = getattr(qi, 'to_hop_song', None)
-        # quote_item_id chỉ hợp lệ khi qi là QuoteItem thật sự
-        qi_quote_item_id = qi.id if isinstance(qi, QuoteItem) else None
+        # quote_item_id hợp lệ khi qi hoặc qi_addon là QuoteItem thật
+        qi_quote_item_id = (
+            qi.id if isinstance(qi, QuoteItem)
+            else (qi_addon.id if isinstance(qi_addon, QuoteItem) else None)
+        )
 
         return {
             "source": "quote",
@@ -953,17 +1021,18 @@ def get_quote_spec(
             "to_hop_song": qi_to_hop_song or "C",
             "so_luong": float(poi.so_luong_ke_hoach),
             "layers": _build_layers(qi_so_lop, qi_to_hop_song, _raw_pairs_from_object(qi)),
-            "chong_tham": _parse_mat_field(getattr(qi, 'c_tham', None)),
+            # Addon flags — đọc từ QuoteItem thực (qi_addon); fallback về 0/False nếu không có
+            "chong_tham": _parse_mat_field(getattr(_src, 'c_tham', None)),
             "in_flexo_mau": in_flexo_mau,
-            "in_flexo_phu_nen": bool(getattr(qi, 'do_phu', False)),
+            "in_flexo_phu_nen": bool(getattr(_src, 'do_phu', False)),
             "in_ky_thuat_so": in_ky_thuat_so,
-            "chap_xa": bool(getattr(qi, 'chap_xa', False)),
-            "boi": bool(getattr(qi, 'boi', False)),
-            "be_so_con": _parse_so_con(getattr(qi, 'so_c_be', None)),
-            "dan": bool(getattr(qi, 'dan', False)),
-            "ghim": bool(getattr(qi, 'ghim', False)),
-            "can_mang": _parse_mat_field(getattr(qi, 'can_man', None)),
-            "san_pham_kho": bool(getattr(qi, 'do_kho', False)),
+            "chap_xa": bool(getattr(_src, 'chap_xa', False)),
+            "boi": bool(getattr(_src, 'boi', False)),
+            "be_so_con": _parse_so_con(getattr(_src, 'so_c_be', None)),
+            "dan": bool(getattr(_src, 'dan', False)),
+            "ghim": bool(getattr(_src, 'ghim', False)),
+            "can_mang": _parse_mat_field(getattr(_src, 'can_man', None)),
+            "san_pham_kho": bool(getattr(_src, 'do_kho', False)),
         }
 
     # ── Nguồn 2: CauTrucThongDung khớp so_lop ─────────────────────────────────
@@ -1002,6 +1071,8 @@ def get_quote_spec(
         "chap_xa": False,
         "boi": False,
         "be_so_con": 0,
+        "dan": False,
+        "ghim": False,
         "can_mang": 0,
         "san_pham_kho": False,
     }
