@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Tag, Button, Space, Typography, Row, Col,
-  Statistic, Popconfirm, message, Tooltip, Select, Badge, Divider,
+  Statistic, Popconfirm, message, Tooltip, Badge, Divider,
 } from 'antd'
+import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import {
   PlayCircleOutlined, CheckCircleOutlined, DeleteOutlined,
   ReloadOutlined, ClockCircleOutlined, ThunderboltOutlined,
-  FilterOutlined, RocketOutlined, CalculatorOutlined,
+  RocketOutlined, CalculatorOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { TableRowSelection } from 'antd/es/table/interface'
@@ -24,56 +25,49 @@ const TRANG_THAI_CFG: Record<string, { label: string; color: string; icon: React
   dang_chay: { label: 'Đang chạy', color: 'processing', icon: <ThunderboltOutlined /> },
 }
 
-// Hệ số sóng
 const TAKE_UP: Record<string, number> = { E: 1.22, B: 1.32, C: 1.45, A: 1.56 }
 
-// ─── Layer definition ────────────────────────────────────────────────────────
+// ─── Layer definition ─────────────────────────────────────────────────────────
 
 interface LayerDef {
-  label: string        // Mặt ngoài / Sóng B / Mặt giữa…
-  lbl: string          // MN / S-B / MG / MT…
+  posIdx: number        // vị trí lớp: 0=MN 1=S1 2=MG/MT 3=S2 4=M2 5=S3 6=MT
+  label: string         // Mặt ngoài / Sóng B / Mặt giữa …
+  lbl: string           // MN / S-B / MG / MT …
   ma: string | null
   dl: number | null
   isSong: boolean
-  songType: string | null  // E B C A
+  songType: string | null
   kg: number
 }
 
-function getSongLetters(toHopSong: string | null | undefined): string[] {
-  return (toHopSong ?? '').replace(/-/g, '').toUpperCase().split('').filter(Boolean)
+function getSongLetters(s: string | null | undefined) {
+  return (s ?? '').replace(/-/g, '').toUpperCase().split('').filter(Boolean)
 }
 
-function buildLayers(r: QueueLine): Omit<LayerDef, 'kg'>[] {
-  const songs = getSongLetters(r.to_hop_song)
-  const soLop = r.so_lop ?? 3
-
-  const layers: Omit<LayerDef, 'kg'>[] = [
-    { label: 'Mặt ngoài', lbl: 'MN',  ma: r.mat,    dl: r.mat_dl,    isSong: false, songType: null },
-    { label: `Sóng ${songs[0] ?? '?'}`, lbl: `S-${songs[0] ?? '?'}`, ma: r.song_1, dl: r.song_1_dl, isSong: true, songType: songs[0] ?? null },
-    { label: soLop <= 3 ? 'Mặt trong' : 'Mặt giữa', lbl: soLop <= 3 ? 'MT' : 'MG',
-      ma: r.mat_1, dl: r.mat_1_dl, isSong: false, songType: null },
-  ]
-  if (soLop >= 5) {
-    layers.push({ label: `Sóng ${songs[1] ?? '?'}`, lbl: `S-${songs[1] ?? '?'}`, ma: r.song_2, dl: r.song_2_dl, isSong: true, songType: songs[1] ?? null })
-    layers.push({ label: soLop === 5 ? 'Mặt trong' : 'Mặt 2', lbl: soLop === 5 ? 'MT' : 'M2',
-      ma: r.mat_2, dl: r.mat_2_dl, isSong: false, songType: null })
-  }
-  if (soLop >= 7) {
-    layers.push({ label: `Sóng ${songs[2] ?? '?'}`, lbl: `S-${songs[2] ?? '?'}`, ma: r.song_3, dl: r.song_3_dl, isSong: true, songType: songs[2] ?? null })
-    layers.push({ label: 'Mặt trong', lbl: 'MT', ma: r.mat_3, dl: r.mat_3_dl, isSong: false, songType: null })
-  }
-  return layers
-}
-
-/** Tính kg từng lớp cho 1 dòng */
 function calcLayerKgs(r: QueueLine): LayerDef[] {
   const khoGiay = Number(r.kho_giay) || 0
   const daiTt   = Number(r.dai_tt)   || 0
   const soDao   = r.so_dao || 1
   const soLuong = Number(r.so_luong_ke_hoach)
   const khoMoiCon = soDao > 0 && khoGiay > 0 ? khoGiay / soDao : 0
+  const songs = getSongLetters(r.to_hop_song)
+  const soLop = r.so_lop ?? 3
 
-  return buildLayers(r).map(l => {
+  const defs: Omit<LayerDef, 'kg'>[] = [
+    { posIdx: 0, label: 'Mặt ngoài',                          lbl: 'MN',          ma: r.mat,    dl: r.mat_dl,    isSong: false, songType: null },
+    { posIdx: 1, label: `Sóng ${songs[0] ?? '?'}`,            lbl: `S-${songs[0] ?? '?'}`, ma: r.song_1, dl: r.song_1_dl, isSong: true,  songType: songs[0] ?? null },
+    { posIdx: 2, label: soLop <= 3 ? 'Mặt trong' : 'Mặt giữa', lbl: soLop <= 3 ? 'MT' : 'MG', ma: r.mat_1, dl: r.mat_1_dl, isSong: false, songType: null },
+    ...(soLop >= 5 ? [
+      { posIdx: 3, label: `Sóng ${songs[1] ?? '?'}`, lbl: `S-${songs[1] ?? '?'}`, ma: r.song_2, dl: r.song_2_dl, isSong: true,  songType: songs[1] ?? null },
+      { posIdx: 4, label: soLop === 5 ? 'Mặt trong' : 'Mặt 2', lbl: soLop === 5 ? 'MT' : 'M2', ma: r.mat_2, dl: r.mat_2_dl, isSong: false, songType: null },
+    ] : []),
+    ...(soLop >= 7 ? [
+      { posIdx: 5, label: `Sóng ${songs[2] ?? '?'}`, lbl: `S-${songs[2] ?? '?'}`, ma: r.song_3, dl: r.song_3_dl, isSong: true,  songType: songs[2] ?? null },
+      { posIdx: 6, label: 'Mặt trong', lbl: 'MT', ma: r.mat_3, dl: r.mat_3_dl, isSong: false, songType: null },
+    ] : []),
+  ]
+
+  return defs.map(l => {
     const take = l.isSong ? (TAKE_UP[l.songType ?? ''] ?? 1.0) : 1.0
     const area = khoMoiCon > 0 && daiTt > 0 ? (khoMoiCon * daiTt * take) / 10000 : 0
     const kg = area > 0 && (l.dl ?? 0) > 0
@@ -83,82 +77,119 @@ function calcLayerKgs(r: QueueLine): LayerDef[] {
   })
 }
 
-// ─── Kg summary (tổng hợp nhiều dòng) ────────────────────────────────────────
+// ─── Kg summary — KHÔNG gộp lớp: mỗi (posIdx, ma, dl) là 1 dòng riêng ────────
 
-interface PaperKgEntry {
+interface LayerKgEntry {
+  posIdx: number
+  label: string
+  lbl: string
+  isSong: boolean
+  songType: string | null
   ma: string
   dl: number | null
-  isSong: boolean
-  songType: string | null   // wave letter, chỉ khi isSong=true
   totalKg: number
 }
 
-/** Gộp kg từng mã giấy qua nhiều lệnh SX */
-function calcKgSummary(rows: QueueLine[]): PaperKgEntry[] {
-  const map = new Map<string, PaperKgEntry>()
+function calcKgSummary(rows: QueueLine[]): LayerKgEntry[] {
+  const map = new Map<string, LayerKgEntry>()
   for (const r of rows) {
     for (const l of calcLayerKgs(r)) {
       if (!l.ma || l.kg <= 0) continue
-      // key = mã giấy + định lượng + vị trí loại (sóng X hay mặt)
-      const key = `${l.ma}||${l.dl ?? ''}||${l.isSong ? `song_${l.songType}` : 'mat'}`
+      // key = vị trí lớp + mã giấy + định lượng — không bao giờ gộp lớp khác nhau
+      const key = `${l.posIdx}||${l.ma}||${l.dl ?? ''}`
       const ex = map.get(key)
       if (ex) {
         ex.totalKg = Math.round((ex.totalKg + l.kg) * 10) / 10
       } else {
-        map.set(key, { ma: l.ma, dl: l.dl, isSong: l.isSong, songType: l.songType, totalKg: l.kg })
+        map.set(key, {
+          posIdx: l.posIdx, label: l.label, lbl: l.lbl,
+          isSong: l.isSong, songType: l.songType,
+          ma: l.ma, dl: l.dl, totalKg: l.kg,
+        })
       }
     }
   }
-  // Sort: mặt trước, sóng sau; cùng loại thì theo mã
-  return Array.from(map.values()).sort((a, b) => {
-    if (a.isSong !== b.isSong) return a.isSong ? 1 : -1
-    return (a.ma ?? '').localeCompare(b.ma ?? '')
-  })
+  // Sắp xếp theo vị trí lớp, rồi theo mã giấy
+  return Array.from(map.values()).sort((a, b) =>
+    a.posIdx !== b.posIdx ? a.posIdx - b.posIdx : a.ma.localeCompare(b.ma)
+  )
 }
 
-// ─── Component ──────────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ProductionQueuePage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
 
-  const [filterTT,      setFilterTT]      = useState<string | undefined>(undefined)
-  const [filterKho,     setFilterKho]     = useState<number | undefined>(undefined)
-  const [filterLoaiLan, setFilterLoaiLan] = useState<string | undefined>(undefined)
-  const [selectedKeys,  setSelectedKeys]  = useState<React.Key[]>([])
+  // Antd table filter state
+  const [filteredInfo, setFilteredInfo] = useState<Record<string, FilterValue | null>>({})
+  const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
+
+  const handleTableChange = (
+    _pagination: any,
+    filters: Record<string, FilterValue | null>,
+    _sorter: SorterResult<QueueLine> | SorterResult<QueueLine>[],
+  ) => {
+    setFilteredInfo(filters)
+    setSelectedKeys([])
+  }
 
   // ── data ──────────────────────────────────────────────────────────────────
   const { data: allLines = [], isLoading, refetch } = useQuery({
-    queryKey: ['production-queue', filterTT],
-    queryFn: () => productionPlansApi.getQueue(filterTT).then(r => r.data),
+    queryKey: ['production-queue'],
+    queryFn: () => productionPlansApi.getQueue().then(r => r.data),
     refetchInterval: 30_000,
   })
 
-  const lines = useMemo(() => {
-    let r = allLines
-    if (filterKho)     r = r.filter(l => Number(l.kho_giay) === filterKho)
-    if (filterLoaiLan) r = r.filter(l => l.loai_lan === filterLoaiLan)   // FIX: dùng loai_lan
-    return r
-  }, [allLines, filterKho, filterLoaiLan])
-
+  // Các giá trị unique để build bộ lọc cột
   const khoOptions = useMemo(() => {
     const s = new Set<number>()
     allLines.forEach(l => { if (l.kho_giay) s.add(Number(l.kho_giay)) })
-    return Array.from(s).sort((a, b) => a - b).map(v => ({ value: v, label: `${v} cm` }))
+    return Array.from(s).sort((a, b) => a - b).map(v => ({ text: `${v} cm`, value: v }))
   }, [allLines])
 
-  const loaiLanOptions = useMemo(() => {   // FIX: dùng loai_lan
+  const loaiLanOptions = useMemo(() => {
     const s = new Set<string>()
     allLines.forEach(l => { if (l.loai_lan) s.add(l.loai_lan) })
-    return Array.from(s).sort().map(v => ({ value: v, label: LOAI_LAN_LABELS[v] ?? v }))
+    return Array.from(s).sort().map(v => ({ text: LOAI_LAN_LABELS[v] ?? v, value: v }))
   }, [allLines])
 
+  const songOptions = useMemo(() => {
+    const s = new Set<string>()
+    allLines.forEach(l => { if (l.to_hop_song) s.add(l.to_hop_song) })
+    return Array.from(s).sort().map(v => ({ text: v, value: v }))
+  }, [allLines])
+
+  const ttOptions = [
+    { text: 'Chờ chạy',   value: 'cho' },
+    { text: 'Đang chạy',  value: 'dang_chay' },
+  ]
+
   // ── selected & planning ───────────────────────────────────────────────────
-  const selectedRows = useMemo(() => lines.filter(l => selectedKeys.includes(l.id)), [lines, selectedKeys])
-  const planningRows = selectedRows.length > 0 ? selectedRows : (filterKho || filterLoaiLan) ? lines : []
+  const selectedRows = useMemo(
+    () => allLines.filter(l => selectedKeys.includes(l.id)),
+    [allLines, selectedKeys],
+  )
+
+  // Xác định tập dòng dùng để tính vật liệu: ưu tiên tích chọn, fallback lọc tất cả khi có filter
+  const hasFilter = Object.values(filteredInfo).some(v => v && v.length > 0)
+  // Filtered lines (apply filter manually for planning panel)
+  const filteredLines = useMemo(() => {
+    return allLines.filter(l => {
+      const fKho     = filteredInfo['kho_giay']
+      const fSong    = filteredInfo['to_hop_song']
+      const fLan     = filteredInfo['loai_lan']
+      const fTT      = filteredInfo['trang_thai']
+      if (fKho     && fKho.length     && !fKho.includes(Number(l.kho_giay)))     return false
+      if (fSong    && fSong.length    && !fSong.includes(l.to_hop_song ?? ''))    return false
+      if (fLan     && fLan.length     && !fLan.includes(l.loai_lan ?? ''))        return false
+      if (fTT      && fTT.length      && !fTT.includes(l.trang_thai))             return false
+      return true
+    })
+  }, [allLines, filteredInfo])
+
+  const planningRows = selectedRows.length > 0 ? selectedRows : hasFilter ? filteredLines : []
   const kgSummary    = useMemo(() => calcKgSummary(planningRows), [planningRows])
-  const kgMat        = kgSummary.filter(p => !p.isSong)
-  const kgSong       = kgSummary.filter(p => p.isSong)
   const totalKg      = kgSummary.reduce((s, p) => s + p.totalKg, 0)
   const showPanel    = planningRows.length > 0
 
@@ -184,7 +215,6 @@ export default function ProductionQueuePage() {
   const choCnt      = allLines.filter(l => l.trang_thai === 'cho').length
   const dangChayCnt = allLines.filter(l => l.trang_thai === 'dang_chay').length
 
-  // ── row selection ─────────────────────────────────────────────────────────
   const rowSelection: TableRowSelection<QueueLine> = {
     selectedRowKeys: selectedKeys,
     onChange: keys => setSelectedKeys(keys),
@@ -213,7 +243,7 @@ export default function ProductionQueuePage() {
     },
     {
       title: 'Tên hàng / KH',
-      width: 160,
+      width: 155,
       render: (_, r) => (
         <Space direction="vertical" size={0}>
           <Text style={{ fontSize: 11 }}>{r.ten_hang || '—'}</Text>
@@ -225,7 +255,7 @@ export default function ProductionQueuePage() {
     },
     {
       title: 'Kích thước',
-      width: 120,
+      width: 110,
       render: (_, r) => r.dai ? (
         <Space direction="vertical" size={0}>
           <Text style={{ fontSize: 11 }}>{r.dai}×{r.rong}×{r.cao}</Text>
@@ -236,26 +266,35 @@ export default function ProductionQueuePage() {
     {
       title: 'Loại lằn',
       dataIndex: 'loai_lan',
-      width: 100,
+      width: 106,
       align: 'center',
-      render: (v) => v
+      filters: loaiLanOptions,
+      filteredValue: filteredInfo['loai_lan'] || null,
+      onFilter: (value, r) => r.loai_lan === value,
+      render: v => v
         ? <Tag color="volcano" style={{ fontSize: 11 }}>{LOAI_LAN_LABELS[v] ?? v}</Tag>
         : <Text type="secondary">—</Text>,
     },
     {
       title: 'Sóng',
       dataIndex: 'to_hop_song',
-      width: 62,
+      width: 70,
       align: 'center',
+      filters: songOptions,
+      filteredValue: filteredInfo['to_hop_song'] || null,
+      onFilter: (value, r) => r.to_hop_song === value,
       render: v => v
-        ? <Tag color="purple" style={{ fontSize: 13, fontWeight: 700, padding: '0 6px' }}>{v}</Tag>
+        ? <Tag color="purple" style={{ fontSize: 13, fontWeight: 700, padding: '0 5px' }}>{v}</Tag>
         : <Text type="secondary">—</Text>,
     },
     {
       title: 'Khổ (cm)',
       dataIndex: 'kho_giay',
-      width: 72,
+      width: 88,
       align: 'center',
+      filters: khoOptions,
+      filteredValue: filteredInfo['kho_giay'] || null,
+      onFilter: (value, r) => Number(r.kho_giay) === Number(value),
       render: v => v
         ? <Text strong style={{ color: '#1677ff', fontSize: 14 }}>{Number(v)}</Text>
         : <Text type="secondary">—</Text>,
@@ -263,7 +302,7 @@ export default function ProductionQueuePage() {
     {
       title: 'Cắt (cm)',
       dataIndex: 'dai_tt',
-      width: 68,
+      width: 70,
       align: 'center',
       render: v => v
         ? <Text strong style={{ fontSize: 13 }}>{Number(v)}</Text>
@@ -278,7 +317,7 @@ export default function ProductionQueuePage() {
     },
     {
       title: 'Lần chạy',
-      width: 68,
+      width: 70,
       align: 'center',
       render: (_, r) => {
         const n = r.so_dao && r.so_dao > 0 ? Math.ceil(Number(r.so_luong_ke_hoach) / r.so_dao) : null
@@ -295,11 +334,11 @@ export default function ProductionQueuePage() {
       render: v => <Text strong style={{ fontSize: 12 }}>{Number(v).toLocaleString('vi-VN')}</Text>,
     },
     {
-      // Kết cấu giấy — từng lớp riêng biệt với mã + ĐL
+      // Từng lớp riêng: [tag lớp] mã  dl g
       title: 'Kết cấu giấy',
-      width: 180,
+      width: 185,
       render: (_, r) => {
-        const layers = buildLayers(r).filter(l => l.ma)
+        const layers = calcLayerKgs(r).filter(l => l.ma)
         if (!layers.length) return <Text type="secondary">—</Text>
         return (
           <Space direction="vertical" size={2}>
@@ -322,9 +361,8 @@ export default function ProductionQueuePage() {
       },
     },
     {
-      // Kg từng lớp — hover chi tiết
       title: 'Kg',
-      width: 70,
+      width: 68,
       align: 'right',
       render: (_, r) => {
         const layers = calcLayerKgs(r)
@@ -335,7 +373,7 @@ export default function ProductionQueuePage() {
             title={
               <div style={{ fontSize: 12 }}>
                 {layers.filter(l => l.kg > 0).map((l, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                     <span style={{ color: l.isSong ? '#91caff' : '#95de64' }}>{l.lbl} {l.ma}</span>
                     <b>{l.kg.toFixed(1)} kg</b>
                   </div>
@@ -359,7 +397,7 @@ export default function ProductionQueuePage() {
       width: 78,
       align: 'center',
       render: v => {
-        if (!v) return '—'
+        if (!v) return <Text type="secondary">—</Text>
         const d = dayjs(v)
         const late = d.isBefore(dayjs(), 'day')
         return <Text style={{ fontSize: 11, color: late ? '#ff4d4f' : undefined }}>{d.format('DD/MM/YY')}</Text>
@@ -370,6 +408,9 @@ export default function ProductionQueuePage() {
       dataIndex: 'trang_thai',
       width: 90,
       align: 'center',
+      filters: ttOptions,
+      filteredValue: filteredInfo['trang_thai'] || null,
+      onFilter: (value, r) => r.trang_thai === value,
       render: v => {
         const cfg = TRANG_THAI_CFG[v] ?? { label: v, color: 'default', icon: null }
         return <Tag color={cfg.color} icon={cfg.icon}>{cfg.label}</Tag>
@@ -408,37 +449,37 @@ export default function ProductionQueuePage() {
     },
   ]
 
-  // ── expanded row: chi tiết từng lớp + kg ─────────────────────────────────
+  // ── expanded row ──────────────────────────────────────────────────────────
   const expandedRowRender = (r: QueueLine) => {
     const layers = calcLayerKgs(r)
     if (!layers.some(l => l.ma)) return <Text type="secondary">Chưa có thông tin kết cấu giấy</Text>
     const total = layers.reduce((s, l) => s + l.kg, 0)
+    const khoGiay   = Number(r.kho_giay) || 0
+    const soDao     = r.so_dao || 1
+    const daiTt     = Number(r.dai_tt) || 0
+    const khoMoiCon = soDao > 0 ? khoGiay / soDao : 0
     return (
       <div style={{ padding: '4px 0 4px 40px' }}>
         <Text strong style={{ fontSize: 12 }}>
-          Chi tiết — Khổ {Number(r.kho_giay)} cm / Cắt {Number(r.dai_tt)} cm / {r.so_dao} dao / {Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')} thùng
+          Chi tiết — Khổ {khoGiay} cm / Cắt {daiTt} cm / {soDao} dao / {Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')} thùng
         </Text>
         <table style={{ marginTop: 8, borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr style={{ background: '#fafafa' }}>
               {['Lớp', 'Loại', 'Mã giấy', 'ĐL (g/m²)', 'Hệ số sóng', 'Diện tích/c (m²)', 'Kg'].map(h => (
-                <th key={h} style={{ padding: '4px 10px', border: '1px solid #f0f0f0', textAlign: 'center', whiteSpace: 'nowrap' }}>{h}</th>
+                <th key={h} style={{ padding: '4px 10px', border: '1px solid #f0f0f0', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {layers.map((l, i) => {
-              const khoGiay = Number(r.kho_giay) || 0
-              const soDao   = r.so_dao || 1
-              const daiTt   = Number(r.dai_tt) || 0
-              const khoMoiCon = soDao > 0 ? khoGiay / soDao : 0
               const take = l.isSong ? (TAKE_UP[l.songType ?? ''] ?? 1.0) : 1.0
               const area = khoMoiCon > 0 && daiTt > 0 ? (khoMoiCon * daiTt * take) / 10000 : 0
               return (
                 <tr key={i} style={{ background: l.isSong ? '#f0f5ff' : undefined }}>
                   <td style={{ padding: '3px 10px', border: '1px solid #f0f0f0' }}>{l.label}</td>
                   <td style={{ padding: '3px 10px', border: '1px solid #f0f0f0', textAlign: 'center' }}>
-                    <Tag color={l.isSong ? 'blue' : 'green'} style={{ margin: 0, fontSize: 11 }}>
+                    <Tag color={l.isSong ? 'blue' : 'green'} style={{ margin: 0 }}>
                       {l.isSong ? `Sóng ${l.songType}` : 'Mặt'}
                     </Tag>
                   </td>
@@ -468,59 +509,6 @@ export default function ProductionQueuePage() {
     )
   }
 
-  // ─── Render bảng tổng hợp vật liệu ──────────────────────────────────────
-  const renderKgTable = (entries: PaperKgEntry[], label: string, color: 'green' | 'blue') => (
-    <>
-      <div style={{ background: color === 'green' ? '#f6ffed' : '#f0f5ff', borderRadius: 4, padding: '4px 8px', marginBottom: 4 }}>
-        <Text strong style={{ fontSize: 12, color: color === 'green' ? '#389e0d' : '#1677ff' }}>
-          {label} ({entries.length} mã)
-        </Text>
-      </div>
-      {entries.length === 0 ? (
-        <div style={{ padding: '4px 8px', color: '#bbb', fontSize: 12 }}>—</div>
-      ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 8 }}>
-          <thead>
-            <tr style={{ background: '#fafafa' }}>
-              <th style={{ padding: '3px 6px', border: '1px solid #f0f0f0' }}>Mã giấy</th>
-              <th style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'center' }}>ĐL (g/m²)</th>
-              {color === 'blue' && (
-                <th style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'center' }}>Sóng</th>
-              )}
-              <th style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'right' }}>Tổng kg</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((p, i) => (
-              <tr key={i} style={{ background: i % 2 === 1 ? '#fafafa' : undefined }}>
-                <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', fontWeight: 600 }}>{p.ma}</td>
-                <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'center', color: '#595959' }}>
-                  {p.dl != null ? p.dl : '—'}
-                </td>
-                {color === 'blue' && (
-                  <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'center' }}>
-                    <Tag color="purple" style={{ margin: 0, fontSize: 10, padding: '0 3px' }}>{p.songType}</Tag>
-                  </td>
-                )}
-                <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 700, color: '#1677ff' }}>
-                  {p.totalKg.toFixed(1)}
-                </td>
-              </tr>
-            ))}
-            <tr style={{ background: '#e6f4ff' }}>
-              <td colSpan={color === 'blue' ? 3 : 2} style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 600, fontSize: 11 }}>
-                Tổng {label.toLowerCase()}
-              </td>
-              <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 700, color: color === 'green' ? '#389e0d' : '#1677ff' }}>
-                {entries.reduce((s, p) => s + p.totalKg, 0).toFixed(1)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      )}
-    </>
-  )
-
   // ─── render ───────────────────────────────────────────────────────────────
   return (
     <div>
@@ -533,7 +521,17 @@ export default function ProductionQueuePage() {
           </Title>
         </Col>
         <Col>
-          <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
+          <Space>
+            {hasFilter && (
+              <Button size="small" onClick={() => { setFilteredInfo({}); setSelectedKeys([]) }}>
+                Xóa bộ lọc
+              </Button>
+            )}
+            {selectedKeys.length > 0 && (
+              <Tag color="blue">Đã chọn {selectedKeys.length} dòng</Tag>
+            )}
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
+          </Space>
         </Col>
       </Row>
 
@@ -558,59 +556,7 @@ export default function ProductionQueuePage() {
         </Col>
       </Row>
 
-      {/* ── Filter bar ── */}
-      <Card size="small" style={{ marginBottom: 12 }}>
-        <Space wrap>
-          <FilterOutlined style={{ color: '#8c8c8c' }} />
-          <Select
-            style={{ width: 140 }}
-            placeholder="Trạng thái"
-            allowClear
-            value={filterTT}
-            onChange={v => { setFilterTT(v); setSelectedKeys([]) }}
-            options={[
-              { value: 'cho',       label: 'Chờ chạy' },
-              { value: 'dang_chay', label: 'Đang chạy' },
-            ]}
-          />
-          <Select
-            style={{ width: 160 }}
-            placeholder="🔍 Lọc theo khổ giấy (cm)"
-            allowClear
-            value={filterKho}
-            onChange={v => { setFilterKho(v); setSelectedKeys([]) }}
-            options={khoOptions}
-          />
-          <Select
-            style={{ width: 140 }}
-            placeholder="Loại lằn"
-            allowClear
-            value={filterLoaiLan}
-            onChange={v => { setFilterLoaiLan(v); setSelectedKeys([]) }}
-            options={loaiLanOptions}
-          />
-          {(filterKho || filterLoaiLan || filterTT) && (
-            <Button size="small" onClick={() => {
-              setFilterKho(undefined); setFilterLoaiLan(undefined)
-              setFilterTT(undefined); setSelectedKeys([])
-            }}>
-              Xóa lọc
-            </Button>
-          )}
-          {selectedKeys.length > 0 && (
-            <Tag color="blue" style={{ fontSize: 12 }}>
-              Đã chọn {selectedKeys.length} dòng
-            </Tag>
-          )}
-          {filterKho && (
-            <Tag color="cyan" style={{ fontSize: 12 }}>
-              Khổ {filterKho} cm — {lines.length} lệnh
-            </Tag>
-          )}
-        </Space>
-      </Card>
-
-      {/* ── Main area: table + planning panel ── */}
+      {/* ── Main area ── */}
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
 
         {/* Table */}
@@ -618,17 +564,18 @@ export default function ProductionQueuePage() {
           <Card bodyStyle={{ padding: 0 }}>
             <Table
               columns={columns}
-              dataSource={lines}
+              dataSource={allLines}
               rowKey="id"
               loading={isLoading}
               rowSelection={rowSelection}
+              onChange={handleTableChange}
               expandable={{
                 expandedRowRender,
                 rowExpandable: r => !!(r.mat || r.song_1),
               }}
-              pagination={{ pageSize: 50, showSizeChanger: false }}
+              pagination={{ pageSize: 50, showSizeChanger: false, showTotal: (t, [s, e]) => `${s}-${e} / ${t}` }}
               size="small"
-              scroll={{ x: 1500 }}
+              scroll={{ x: 1460 }}
               rowClassName={r => r.trang_thai === 'dang_chay' ? 'ant-table-row-selected' : ''}
             />
           </Card>
@@ -636,7 +583,7 @@ export default function ProductionQueuePage() {
 
         {/* ── Planning panel ── */}
         {showPanel && (
-          <div style={{ width: 340, flexShrink: 0 }}>
+          <div style={{ width: 330, flexShrink: 0 }}>
             <Card
               size="small"
               style={{ position: 'sticky', top: 16 }}
@@ -646,91 +593,102 @@ export default function ProductionQueuePage() {
                   <span style={{ fontSize: 13, fontWeight: 600 }}>
                     {selectedRows.length > 0
                       ? `${selectedRows.length} lệnh đã chọn`
-                      : filterKho
-                        ? `Khổ ${filterKho} cm — ${lines.length} lệnh`
-                        : `${lines.length} lệnh đang lọc`}
+                      : `${planningRows.length} lệnh đang lọc`}
                   </span>
                 </Space>
               }
             >
-              {/* Tổng quan */}
-              <Row gutter={8} style={{ marginBottom: 10 }}>
+              <Row gutter={8} style={{ marginBottom: 8 }}>
                 <Col span={12}>
                   <Statistic title="Số lệnh SX" value={planningRows.length} valueStyle={{ fontSize: 20 }} />
                 </Col>
                 <Col span={12}>
-                  <Statistic
-                    title="Tổng kg"
-                    value={totalKg.toFixed(1)}
-                    suffix="kg"
-                    valueStyle={{ fontSize: 20, color: '#fa8c16' }}
-                  />
+                  <Statistic title="Tổng kg" value={totalKg.toFixed(1)} suffix="kg"
+                    valueStyle={{ fontSize: 20, color: '#fa8c16' }} />
                 </Col>
               </Row>
 
               <Divider style={{ margin: '8px 0' }} />
 
-              {/* ── Mặt giấy ── */}
-              {renderKgTable(kgMat, 'Mặt giấy', 'green')}
-
-              {/* ── Sóng ── */}
-              {renderKgTable(kgSong, 'Sóng', 'blue')}
-
-              {/* Tổng cộng */}
-              {kgSummary.length > 0 && (
-                <div style={{ background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 4, padding: '6px 10px', marginBottom: 10 }}>
-                  <Row justify="space-between" align="middle">
-                    <Col><Text strong style={{ fontSize: 13 }}>Tổng cộng tất cả</Text></Col>
-                    <Col><Text strong style={{ fontSize: 16, color: '#fa8c16' }}>{totalKg.toFixed(1)} kg</Text></Col>
-                  </Row>
-                </div>
-              )}
-
-              {kgSummary.length === 0 && (
+              {/* Bảng vật liệu — mỗi lớp là 1 dòng riêng */}
+              {kgSummary.length === 0 ? (
                 <div style={{ padding: '12px 0', textAlign: 'center', color: '#aaa', fontSize: 12 }}>
                   Chưa có dữ liệu kết cấu giấy
                 </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#f5f5f5' }}>
+                      <th style={{ padding: '4px 6px', border: '1px solid #f0f0f0', textAlign: 'center' }}>Lớp</th>
+                      <th style={{ padding: '4px 6px', border: '1px solid #f0f0f0' }}>Mã giấy</th>
+                      <th style={{ padding: '4px 6px', border: '1px solid #f0f0f0', textAlign: 'center' }}>ĐL</th>
+                      <th style={{ padding: '4px 6px', border: '1px solid #f0f0f0', textAlign: 'right' }}>Kg</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kgSummary.map((p, i) => (
+                      <tr key={i} style={{ background: p.isSong ? '#f0f5ff' : '#f6ffed' }}>
+                        <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'center' }}>
+                          <Tag
+                            color={p.isSong ? 'blue' : 'green'}
+                            style={{ fontSize: 10, padding: '0 4px', margin: 0, lineHeight: '16px' }}
+                          >
+                            {p.lbl}
+                          </Tag>
+                        </td>
+                        <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', fontWeight: 600 }}>{p.ma}</td>
+                        <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c' }}>
+                          {p.dl != null ? `${p.dl}g` : '—'}
+                        </td>
+                        <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 700, color: '#1677ff' }}>
+                          {p.totalKg.toFixed(1)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: '#fffbe6' }}>
+                      <td colSpan={3} style={{ padding: '4px 6px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 700 }}>
+                        Tổng cộng
+                      </td>
+                      <td style={{ padding: '4px 6px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 700, color: '#fa8c16' }}>
+                        {totalKg.toFixed(1)} kg
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               )}
 
-              <Divider style={{ margin: '8px 0' }} />
+              <Divider style={{ margin: '10px 0 8px' }} />
 
-              {/* Nút đưa vào KHSX */}
               <Popconfirm
                 title={
                   <div>
-                    <div style={{ fontWeight: 600, marginBottom: 6 }}>
-                      Xác nhận đưa {planningRows.length} lệnh vào Kế hoạch SX?
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                      Đưa {planningRows.length} lệnh vào Kế hoạch SX?
                     </div>
                     <div style={{ fontSize: 12, color: '#8c8c8c' }}>
-                      Tổng vật liệu cần chuẩn bị: <b>{totalKg.toFixed(1)} kg</b>
+                      Tổng vật liệu: <b>{totalKg.toFixed(1)} kg</b>
                     </div>
                   </div>
                 }
                 onConfirm={() => {
-                  message.success(
-                    `Đã lập kế hoạch SX cho ${planningRows.length} lệnh (${totalKg.toFixed(0)} kg vật liệu)`
-                  )
+                  message.success(`Đã lập kế hoạch SX cho ${planningRows.length} lệnh`)
                   setSelectedKeys([])
                 }}
-                okText="Xác nhận lập KH"
+                okText="Xác nhận"
                 cancelText="Huỷ"
                 okButtonProps={{ type: 'primary' }}
               >
-                <Button
-                  type="primary"
-                  icon={<RocketOutlined />}
-                  block
-                  size="middle"
-                  style={{ marginBottom: 4 }}
-                >
+                <Button type="primary" icon={<RocketOutlined />} block size="middle" style={{ marginBottom: 4 }}>
                   Đưa vào Kế hoạch SX
                 </Button>
               </Popconfirm>
 
               <Text type="secondary" style={{ fontSize: 11, display: 'block', textAlign: 'center' }}>
                 {selectedRows.length > 0
-                  ? 'Đang tính cho các dòng đã tích chọn'
-                  : 'Đang tính tất cả dòng đang lọc — tích chọn để lọc riêng'}
+                  ? 'Tính theo dòng đã tích chọn'
+                  : 'Tính theo tất cả dòng đang lọc'}
               </Text>
             </Card>
           </div>
