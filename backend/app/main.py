@@ -8,6 +8,7 @@ from app.routers import (
     don_vi_tinh, vi_tri, xe, tai_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
     production_orders, bom, production_plans, indirect_costs, addon_rates,
 )
+from app.routers import phieu_phoi
 
 # Tạo bảng tự động nếu chưa có (dùng Alembic cho production)
 Base.metadata.create_all(bind=engine)
@@ -52,6 +53,7 @@ app.include_router(production_plans.router)
 app.include_router(bom.router)
 app.include_router(indirect_costs.router)
 app.include_router(addon_rates.router)
+app.include_router(phieu_phoi.router)
 
 
 @app.get("/api/health")

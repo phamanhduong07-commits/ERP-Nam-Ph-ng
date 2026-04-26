@@ -447,15 +447,19 @@ class PhieuItemBody(BaseModel):
     production_order_item_id: int
     so_luong_ke_hoach: Decimal
     so_luong_thuc_te: Decimal | None = None
+    so_luong_loi: Decimal | None = None
+    chieu_kho: Decimal | None = None
+    chieu_cat: Decimal | None = None
     so_tam: int | None = None
     ghi_chu: str | None = None
 
 
 class PhieuBody(BaseModel):
-    loai: str          # bat_dau | ket_thuc
     ngay: date
     ca: str | None = None
     ghi_chu: str | None = None
+    gio_bat_dau: str | None = None   # HH:MM
+    gio_ket_thuc: str | None = None  # HH:MM
     items: list[PhieuItemBody] = []
 
 
@@ -477,10 +481,11 @@ def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
         "id": p.id,
         "so_phieu": p.so_phieu,
         "production_order_id": p.production_order_id,
-        "loai": p.loai,
         "ngay": str(p.ngay),
         "ca": p.ca,
         "ghi_chu": p.ghi_chu,
+        "gio_bat_dau": p.gio_bat_dau,
+        "gio_ket_thuc": p.gio_ket_thuc,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "items": [
             {
@@ -488,6 +493,9 @@ def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
                 "production_order_item_id": it.production_order_item_id,
                 "so_luong_ke_hoach": float(it.so_luong_ke_hoach),
                 "so_luong_thuc_te": float(it.so_luong_thuc_te) if it.so_luong_thuc_te is not None else None,
+                "so_luong_loi": float(it.so_luong_loi) if it.so_luong_loi is not None else None,
+                "chieu_kho": float(it.chieu_kho) if it.chieu_kho is not None else None,
+                "chieu_cat": float(it.chieu_cat) if it.chieu_cat is not None else None,
                 "so_tam": it.so_tam,
                 "ghi_chu": it.ghi_chu,
             }
@@ -503,21 +511,21 @@ def create_phieu_nhap_phoi_song(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Tạo phiếu nhập phôi sóng (bắt đầu hoặc kết thúc) và tự động cập nhật trạng thái lệnh SX."""
+    """Tạo phiếu nhập phôi sóng (1 phiếu/phiên, ghi nhận cả giờ bắt đầu và kết thúc)."""
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
-    if data.loai not in ("bat_dau", "ket_thuc"):
-        raise HTTPException(status_code=400, detail="loai phải là 'bat_dau' hoặc 'ket_thuc'")
 
     so_phieu = _generate_so_phieu(db)
     phieu = PhieuNhapPhoiSong(
         so_phieu=so_phieu,
         production_order_id=order_id,
-        loai=data.loai,
+        loai=None,
         ngay=data.ngay,
         ca=data.ca,
         ghi_chu=data.ghi_chu,
+        gio_bat_dau=data.gio_bat_dau,
+        gio_ket_thuc=data.gio_ket_thuc,
         created_by=current_user.id,
     )
     for it in data.items:
@@ -525,16 +533,18 @@ def create_phieu_nhap_phoi_song(
             production_order_item_id=it.production_order_item_id,
             so_luong_ke_hoach=it.so_luong_ke_hoach,
             so_luong_thuc_te=it.so_luong_thuc_te,
+            so_luong_loi=it.so_luong_loi,
+            chieu_kho=it.chieu_kho,
+            chieu_cat=it.chieu_cat,
             so_tam=it.so_tam,
             ghi_chu=it.ghi_chu,
         ))
     db.add(phieu)
 
-    # Tự động chuyển trạng thái lệnh SX
-    if data.loai == "bat_dau" and order.trang_thai == "moi":
-        order.trang_thai = "dang_chay"
-        order.ngay_bat_dau_thuc_te = data.ngay
-    elif data.loai == "ket_thuc" and order.trang_thai in ("moi", "dang_chay"):
+    # Khi tạo phiếu = kết thúc phiên sản xuất → chuyển lệnh sang hoàn thành
+    if order.trang_thai in ("moi", "dang_chay"):
+        if order.trang_thai == "moi":
+            order.ngay_bat_dau_thuc_te = data.ngay
         order.trang_thai = "hoan_thanh"
         order.ngay_hoan_thanh_thuc_te = data.ngay
 

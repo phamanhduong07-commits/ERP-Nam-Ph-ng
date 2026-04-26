@@ -34,6 +34,7 @@ import ProductionQueuePage from './pages/production/ProductionQueuePage'
 import IndirectCostList from './pages/danhmuc/IndirectCostList'
 import AddonRateList from './pages/danhmuc/AddonRateList'
 import BomListPage from './pages/production/BomListPage'
+import PhieuPhoiPage from './pages/production/PhieuPhoiPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -96,6 +97,9 @@ export default function App() {
 
         {/* Định mức BOM */}
         <Route path="production/bom" element={<BomListPage />} />
+
+        {/* Phiếu phôi sóng */}
+        <Route path="production/phieu-phoi" element={<PhieuPhoiPage />} />
 
         {/* BOM / Chi phí */}
         <Route path="master/indirect-costs" element={<IndirectCostList />} />

@@ -13,10 +13,12 @@ class PhieuNhapPhoiSong(Base):
     production_order_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("production_orders.id", ondelete="CASCADE"), nullable=False
     )
-    loai: Mapped[str] = mapped_column(String(20), nullable=False)  # bat_dau | ket_thuc
+    loai: Mapped[str | None] = mapped_column(String(20))           # deprecated – NULL for new phiếu
     ngay: Mapped[date] = mapped_column(Date, nullable=False)
     ca: Mapped[str | None] = mapped_column(String(20))             # Ca 1 | Ca 2 | Ca 3
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    gio_bat_dau: Mapped[str | None] = mapped_column(String(8))     # HH:MM
+    gio_ket_thuc: Mapped[str | None] = mapped_column(String(8))    # HH:MM
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow
@@ -41,6 +43,9 @@ class PhieuNhapPhoiSongItem(Base):
     )
     so_luong_ke_hoach: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     so_luong_thuc_te: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    so_luong_loi: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))  # phôi lỗi/hư hao
+    chieu_kho: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))      # chiều khổ (cm)
+    chieu_cat: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))      # chiều cắt (cm)
     so_tam: Mapped[int | None] = mapped_column(Integer)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
 

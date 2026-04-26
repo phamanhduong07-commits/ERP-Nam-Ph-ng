@@ -11,7 +11,7 @@ import {
   CloseOutlined, SaveOutlined, CalculatorOutlined, EditOutlined,
   FileExcelOutlined, FilePdfOutlined, FileTextOutlined,
 } from '@ant-design/icons'
-import PhieuNhapPhoiSongModal from './PhieuNhapPhoiSongModal'
+import PhieuNhapPhoiSongModal, { phoiSessionKey } from './PhieuNhapPhoiSongModal'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
@@ -32,11 +32,11 @@ const { Title, Text } = Typography
 function PhieuNhapPhoiSongTab({
   orderId,
   order,
-  onNewPhieu,
+  onOpenModal,
 }: {
   orderId: number
   order: import('../../api/productionOrders').ProductionOrder
-  onNewPhieu: (v: { loai: 'bat_dau' | 'ket_thuc' }) => void
+  onOpenModal: () => void
 }) {
   const { data: phieus = [], isLoading } = useQuery({
     queryKey: ['phieu-nhap-phoi-song', orderId],
@@ -45,37 +45,54 @@ function PhieuNhapPhoiSongTab({
 
   const handlePrint = (p: import('../../api/productionOrders').PhieuNhapPhoiSong) => {
     const ngayFmt = dayjs(p.ngay).format('DD/MM/YYYY')
-    const loaiLabel = p.loai === 'bat_dau' ? 'BẮT ĐẦU' : 'KẾT THÚC'
+    const duration = (() => {
+      if (!p.gio_bat_dau || !p.gio_ket_thuc) return null
+      const bd = dayjs(`2000-01-01 ${p.gio_bat_dau}`)
+      const kt = dayjs(`2000-01-01 ${p.gio_ket_thuc}`)
+      const diff = kt.diff(bd, 'minute')
+      if (diff <= 0) return null
+      const h = Math.floor(diff / 60); const m = diff % 60
+      return h > 0 ? `${h} giờ ${m} phút` : `${m} phút`
+    })()
     const itemRows = p.items.map((it, i) => {
       const oi = order.items.find(x => x.id === it.production_order_item_id)
       const dims = oi ? [oi.dai, oi.rong, oi.cao].filter(Boolean).join('×') : ''
+      const net = it.so_luong_thuc_te != null ? it.so_luong_thuc_te - (it.so_luong_loi ?? 0) : null
       return `<tr>
         <td style="text-align:center">${i + 1}</td>
         <td>${oi?.ten_hang ?? ''}</td>
         <td style="text-align:center">${dims || '—'}</td>
         <td style="text-align:right">${new Intl.NumberFormat('vi-VN').format(it.so_luong_ke_hoach)}</td>
         <td style="text-align:right">${it.so_luong_thuc_te != null ? new Intl.NumberFormat('vi-VN').format(it.so_luong_thuc_te) : ''}</td>
+        <td style="text-align:right">${it.so_luong_loi != null ? new Intl.NumberFormat('vi-VN').format(it.so_luong_loi) : ''}</td>
+        <td style="text-align:right;color:${net != null && net < 0 ? '#cf1322' : '#389e0d'}">${net != null ? new Intl.NumberFormat('vi-VN').format(net) : ''}</td>
         <td style="text-align:center">${it.so_tam ?? ''}</td>
         <td>${it.ghi_chu ?? ''}</td>
       </tr>`
     }).join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${p.so_phieu}</title>
       <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;padding:20px}
-      h2{font-size:16px;text-align:center;margin-bottom:6px}.info{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border:1px solid #ccc;padding:8px;margin-bottom:12px;border-radius:4px}
+      h2{font-size:16px;text-align:center;margin-bottom:6px}.info{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border:1px solid #ccc;padding:8px;margin-bottom:8px;border-radius:4px}
+      .time-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border:1px solid #ccc;padding:8px;margin-bottom:12px;border-radius:4px;background:#f9f9f9}
       .lbl{font-size:10px;color:#777}.val{font-weight:600;font-size:13px}
       table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#f0f0f0;padding:5px 6px;border:1px solid #ccc;font-size:11px}
       td{padding:4px 6px;border:1px solid #ddd;font-size:11px}.sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:24px;text-align:center}
       .sig-label{font-weight:600;font-size:11px;margin-bottom:40px}.sig-name{font-size:10px;color:#777}
       @media print{@page{margin:12mm}}</style></head><body>
       <div style="text-align:center;margin-bottom:12px"><div style="font-size:11px;color:#555">CÔNG TY CP BAO BÌ NAM PHƯƠNG</div>
-      <h2>PHIẾU ${loaiLabel} NHẬP PHÔI SÓNG</h2><div style="font-size:11px">Số phiếu: <strong>${p.so_phieu}</strong></div></div>
+      <h2>PHIẾU NHẬP PHÔI SÓNG</h2><div style="font-size:11px">Số phiếu: <strong>${p.so_phieu}</strong></div></div>
       <div class="info">
         <div><div class="lbl">Lệnh SX</div><div class="val">${order.so_lenh}</div></div>
         <div><div class="lbl">Ngày</div><div class="val">${ngayFmt}</div></div>
         <div><div class="lbl">Ca</div><div class="val">${p.ca ?? '—'}</div></div>
         <div><div class="lbl">Khách hàng</div><div class="val">${order.ten_khach_hang ?? '—'}</div></div>
       </div>
-      <table><thead><tr><th>STT</th><th>Tên hàng</th><th>Kích thước</th><th>SL kế hoạch</th><th>SL thực tế</th><th>Số tấm</th><th>Ghi chú</th></tr></thead>
+      <div class="time-row">
+        <div><div class="lbl">Giờ bắt đầu</div><div class="val">${p.gio_bat_dau ?? '—'}</div></div>
+        <div><div class="lbl">Giờ kết thúc</div><div class="val">${p.gio_ket_thuc ?? '—'}</div></div>
+        <div><div class="lbl">Thời gian thực hiện</div><div class="val">${duration ?? '—'}</div></div>
+      </div>
+      <table><thead><tr><th>STT</th><th>Tên hàng</th><th>Kích thước</th><th>SL kế hoạch</th><th>SL thực tế</th><th>Phôi lỗi</th><th>Nhập kho</th><th>Số tấm</th><th>Ghi chú</th></tr></thead>
       <tbody>${itemRows}</tbody></table>
       <div class="sig">
         <div><div class="sig-label">Người lập phiếu</div><div class="sig-name">(Ký, ghi rõ họ tên)</div></div>
@@ -95,28 +112,14 @@ function PhieuNhapPhoiSongTab({
       title="Phiếu nhập phôi sóng"
       extra={
         canCreate ? (
-          <Space size={4}>
-            {order.trang_thai === 'moi' && (
-              <Button
-                size="small"
-                type="primary"
-                icon={<PlayCircleOutlined />}
-                onClick={() => onNewPhieu({ loai: 'bat_dau' })}
-              >
-                Tạo phiếu bắt đầu
-              </Button>
-            )}
-            {['moi', 'dang_chay'].includes(order.trang_thai) && (
-              <Button
-                size="small"
-                icon={<CheckCircleOutlined />}
-                style={{ color: 'green', borderColor: 'green' }}
-                onClick={() => onNewPhieu({ loai: 'ket_thuc' })}
-              >
-                Tạo phiếu kết thúc
-              </Button>
-            )}
-          </Space>
+          <Button
+            size="small"
+            type="primary"
+            icon={<CheckCircleOutlined />}
+            onClick={onOpenModal}
+          >
+            Tạo phiếu
+          </Button>
         ) : null
       }
     >
@@ -139,14 +142,18 @@ function PhieuNhapPhoiSongTab({
               render: (v: string) => <Text code style={{ fontSize: 12 }}>{v}</Text>,
             },
             {
-              title: 'Loại',
-              dataIndex: 'loai',
-              width: 110,
-              render: (v: string) => (
-                <Tag color={v === 'bat_dau' ? 'blue' : 'green'} style={{ fontSize: 11 }}>
-                  {v === 'bat_dau' ? 'Bắt đầu' : 'Kết thúc'}
-                </Tag>
-              ),
+              title: 'Giờ BD → KT',
+              width: 130,
+              render: (_: unknown, r: import('../../api/productionOrders').PhieuNhapPhoiSong) => {
+                if (!r.gio_bat_dau && !r.gio_ket_thuc) return <Text type="secondary">—</Text>
+                return (
+                  <Space size={2}>
+                    <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>{r.gio_bat_dau ?? '?'}</Tag>
+                    <Text type="secondary" style={{ fontSize: 10 }}>→</Text>
+                    <Tag color="green" style={{ fontSize: 10, margin: 0 }}>{r.gio_ket_thuc ?? '?'}</Tag>
+                  </Space>
+                )
+              },
             },
             {
               title: 'Ngày',
@@ -207,7 +214,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const [editingBomItemId, setEditingBomItemId] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState('lap-lenh')
   const [savingProgress, setSavingProgress] = useState<number | null>(null)
-  const [phieuModal, setPhieuModal] = useState<{ loai: 'bat_dau' | 'ket_thuc' } | null>(null)
+  const [showPhieuModal, setShowPhieuModal] = useState(false)
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['production-order', id],
@@ -250,7 +257,12 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const handleStart = async () => {
     try {
       await productionOrdersApi.start(Number(id))
-      message.success('Đã bắt đầu sản xuất')
+      // Lưu giờ bắt đầu vào localStorage để modal "Kết thúc" dùng lại
+      localStorage.setItem(
+        phoiSessionKey(Number(id)),
+        JSON.stringify({ ngay: dayjs().format('YYYY-MM-DD'), gio_bat_dau: dayjs().format('HH:mm') })
+      )
+      message.success(`Đã bắt đầu sản xuất lúc ${dayjs().format('HH:mm')}`)
       invalidate()
     } catch {
       message.error('Thất bại')
@@ -680,23 +692,25 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
             <Card style={{ marginTop: 16 }}>
               <Space direction="vertical" style={{ width: '100%' }}>
                 {order.trang_thai === 'moi' && (
-                  <Button
-                    type="primary"
-                    icon={<PlayCircleOutlined />}
-                    block
-                    onClick={() => setPhieuModal({ loai: 'bat_dau' })}
+                  <Popconfirm
+                    title="Bắt đầu sản xuất?"
+                    description="Sẽ ghi nhận giờ bắt đầu và chuyển trạng thái lệnh sang Đang chạy."
+                    onConfirm={handleStart}
+                    okText="Bắt đầu"
                   >
-                    Bắt đầu sản xuất
-                  </Button>
+                    <Button type="primary" icon={<PlayCircleOutlined />} block>
+                      Bắt đầu sản xuất
+                    </Button>
+                  </Popconfirm>
                 )}
                 {['moi', 'dang_chay'].includes(order.trang_thai) && (
                   <Button
                     icon={<CheckCircleOutlined />}
                     block
                     style={{ color: 'green', borderColor: 'green' }}
-                    onClick={() => setPhieuModal({ loai: 'ket_thuc' })}
+                    onClick={() => setShowPhieuModal(true)}
                   >
-                    Kết thúc / Hoàn thành
+                    Kết thúc / Tạo phiếu
                   </Button>
                 )}
                 {['moi', 'dang_chay'].includes(order.trang_thai) && (
@@ -725,21 +739,22 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
             <Col>
               <Space size={4}>
                 {order.trang_thai === 'moi' && (
-                  <Button
-                    size="small"
-                    type="primary"
-                    icon={<PlayCircleOutlined />}
-                    onClick={() => setPhieuModal({ loai: 'bat_dau' })}
+                  <Popconfirm
+                    title="Bắt đầu sản xuất?"
+                    onConfirm={handleStart}
+                    okText="Bắt đầu"
                   >
-                    Bắt đầu
-                  </Button>
+                    <Button size="small" type="primary" icon={<PlayCircleOutlined />}>
+                      Bắt đầu
+                    </Button>
+                  </Popconfirm>
                 )}
                 {['moi', 'dang_chay'].includes(order.trang_thai) && (
                   <Button
                     size="small"
                     icon={<CheckCircleOutlined />}
                     style={{ color: 'green', borderColor: 'green' }}
-                    onClick={() => setPhieuModal({ loai: 'ket_thuc' })}
+                    onClick={() => setShowPhieuModal(true)}
                   >
                     Kết thúc
                   </Button>
@@ -966,20 +981,18 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                 Phiếu phôi sóng
               </Space>
             ),
-            children: <PhieuNhapPhoiSongTab orderId={order.id} order={order} onNewPhieu={setPhieuModal} />,
+            children: <PhieuNhapPhoiSongTab orderId={order.id} order={order} onOpenModal={() => setShowPhieuModal(true)} />,
           },
         ]}
       />
 
       {/* Phiếu nhập phôi sóng modal */}
-      {phieuModal && (
+      {showPhieuModal && (
         <PhieuNhapPhoiSongModal
-          open={!!phieuModal}
-          loai={phieuModal.loai}
+          open={showPhieuModal}
           order={order}
-          onClose={() => { setPhieuModal(null) }}
+          onClose={() => setShowPhieuModal(false)}
           onSuccess={() => {
-            // Chỉ refresh dữ liệu — modal tự quản lý việc đóng sau khi in
             invalidate()
             qc.invalidateQueries({ queryKey: ['phieu-nhap-phoi-song', order.id] })
           }}

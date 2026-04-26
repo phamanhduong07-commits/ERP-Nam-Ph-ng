@@ -54,6 +54,7 @@ function buildMenuItems(queueCount: number) {
           ),
         },
         { key: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link> },
+        { key: '/production/phieu-phoi', label: <Link to="/production/phieu-phoi">Phiếu phôi sóng</Link> },
         { key: '/master/indirect-costs', label: <Link to="/master/indirect-costs">Chi phí gián tiếp</Link> },
         { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công</Link> },
       ],

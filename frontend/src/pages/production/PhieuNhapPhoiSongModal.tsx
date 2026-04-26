@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import {
   Button, DatePicker, Form, Input, InputNumber, message,
-  Modal, Select, Space, Table, Typography,
+  Modal, Select, Space, Table, TimePicker, Tag, Typography,
 } from 'antd'
-import { PrinterOutlined, CheckOutlined } from '@ant-design/icons'
+import { PrinterOutlined, CheckOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { productionOrdersApi } from '../../api/productionOrders'
@@ -12,33 +12,56 @@ import { fmtN } from '../../utils/exportUtils'
 
 const { Text, Title } = Typography
 
+// localStorage key lưu phiên bắt đầu
+export const phoiSessionKey = (orderId: number) => `phoi-session-${orderId}`
+
 interface RowState {
   poi_id: number
   ten_hang: string
   so_luong_ke_hoach: number
   so_luong_thuc_te: number | null
+  so_luong_loi: number | null
+  chieu_kho: number | null
+  chieu_cat: number | null
   so_tam: number | null
   ghi_chu: string | null
 }
 
 interface Props {
   open: boolean
-  loai: 'bat_dau' | 'ket_thuc'
   order: ProductionOrder
   onClose: () => void
   onSuccess: () => void
 }
 
-export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onSuccess }: Props) {
-  const [ngay, setNgay] = useState(dayjs().format('YYYY-MM-DD'))
+function getStoredSession(orderId: number): { ngay: string; gio_bat_dau: string } | null {
+  try {
+    const raw = localStorage.getItem(phoiSessionKey(orderId))
+    if (raw) return JSON.parse(raw)
+  } catch { /* ignore */ }
+  return null
+}
+
+export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess }: Props) {
+  const session = getStoredSession(order.id)
+
+  const [ngay, setNgay] = useState(session?.ngay ?? dayjs().format('YYYY-MM-DD'))
   const [ca, setCa] = useState<string | null>(null)
   const [ghiChu, setGhiChu] = useState('')
+  const [gioBatDau, setGioBatDau] = useState<dayjs.Dayjs | null>(
+    session?.gio_bat_dau ? dayjs(session.gio_bat_dau, 'HH:mm') : dayjs()
+  )
+  const [gioKetThuc, setGioKetThuc] = useState<dayjs.Dayjs | null>(dayjs())
+
   const [rows, setRows] = useState<RowState[]>(() =>
     order.items.map(it => ({
       poi_id: it.id,
       ten_hang: it.ten_hang,
       so_luong_ke_hoach: Number(it.so_luong_ke_hoach),
       so_luong_thuc_te: null,
+      so_luong_loi: null,
+      chieu_kho: it.kho_tt ?? null,
+      chieu_cat: it.dai_tt ?? null,
       so_tam: null,
       ghi_chu: null,
     }))
@@ -49,25 +72,36 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
   const updateRow = (poi_id: number, patch: Partial<RowState>) =>
     setRows(prev => prev.map(r => r.poi_id === poi_id ? { ...r, ...patch } : r))
 
-  const isKetThuc = loai === 'ket_thuc'
-  const title = isKetThuc ? 'Phiếu kết thúc nhập phôi sóng' : 'Phiếu bắt đầu nhập phôi sóng'
+  // Tính thời gian thực hiện
+  const getDuration = (): string | null => {
+    if (!gioBatDau || !gioKetThuc) return null
+    const diffMin = gioKetThuc.diff(gioBatDau, 'minute')
+    if (diffMin <= 0) return null
+    const h = Math.floor(diffMin / 60)
+    const m = diffMin % 60
+    return h > 0 ? `${h} giờ ${m} phút` : `${m} phút`
+  }
 
   const handleSubmit = async () => {
     setLoading(true)
     try {
       const res = await productionOrdersApi.createPhieu(order.id, {
-        loai,
         ngay,
         ca: ca || null,
         ghi_chu: ghiChu || null,
+        gio_bat_dau: gioBatDau?.format('HH:mm') ?? null,
+        gio_ket_thuc: gioKetThuc?.format('HH:mm') ?? null,
         items: rows.map(r => ({
           production_order_item_id: r.poi_id,
           so_luong_ke_hoach: r.so_luong_ke_hoach,
           so_luong_thuc_te: r.so_luong_thuc_te,
+          so_luong_loi: r.so_luong_loi,
           so_tam: r.so_tam,
           ghi_chu: r.ghi_chu,
         })),
       })
+      // Xóa phiên khỏi localStorage sau khi tạo phiếu thành công
+      localStorage.removeItem(phoiSessionKey(order.id))
       setResult(res.data)
       message.success(`Đã tạo ${res.data.so_phieu}`)
       onSuccess()
@@ -80,13 +114,24 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
 
   const handlePrint = (phieu: PhieuNhapPhoiSong) => {
     const ngayFmt = dayjs(phieu.ngay).format('DD/MM/YYYY')
-    const loaiLabel = phieu.loai === 'bat_dau' ? 'BẮT ĐẦU' : 'KẾT THÚC'
+    const duration = (() => {
+      if (!phieu.gio_bat_dau || !phieu.gio_ket_thuc) return null
+      const bd = dayjs(`2000-01-01 ${phieu.gio_bat_dau}`)
+      const kt = dayjs(`2000-01-01 ${phieu.gio_ket_thuc}`)
+      const diff = kt.diff(bd, 'minute')
+      if (diff <= 0) return null
+      const h = Math.floor(diff / 60); const m = diff % 60
+      return h > 0 ? `${h} giờ ${m} phút` : `${m} phút`
+    })()
 
     const itemRows = phieu.items.map((it, i) => {
       const orderItem = order.items.find(oi => oi.id === it.production_order_item_id)
       const dims = orderItem
         ? [orderItem.dai, orderItem.rong, orderItem.cao].filter(Boolean).join('×')
         : ''
+      const sl_thuc = it.so_luong_thuc_te
+      const sl_loi = it.so_luong_loi
+      const sl_nhap = sl_thuc != null ? (sl_thuc - (sl_loi ?? 0)) : null
       return `
         <tr>
           <td style="text-align:center">${i + 1}</td>
@@ -94,7 +139,9 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
           <td style="text-align:center">${dims || '—'}</td>
           <td style="text-align:center">${orderItem?.so_lop ?? '—'}</td>
           <td style="text-align:right">${fmtN(it.so_luong_ke_hoach, 0)}</td>
-          <td style="text-align:right">${it.so_luong_thuc_te != null ? fmtN(it.so_luong_thuc_te, 0) : ''}</td>
+          <td style="text-align:right">${sl_thuc != null ? fmtN(sl_thuc, 0) : ''}</td>
+          <td style="text-align:right">${sl_loi != null ? fmtN(sl_loi, 0) : ''}</td>
+          <td style="text-align:right;color:${sl_nhap != null && sl_nhap < 0 ? '#cf1322' : '#389e0d'}">${sl_nhap != null ? fmtN(sl_nhap, 0) : ''}</td>
           <td style="text-align:center">${it.so_tam ?? ''}</td>
           <td>${it.ghi_chu ?? ''}</td>
         </tr>`
@@ -109,7 +156,8 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
         .header { text-align: center; margin-bottom: 16px; }
         .company { font-size: 11px; color: #555; margin-bottom: 4px; }
         h2 { font-size: 16px; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
-        .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; border: 1px solid #ccc; padding: 8px; border-radius: 4px; }
+        .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; border: 1px solid #ccc; padding: 8px; border-radius: 4px; }
+        .time-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; border: 1px solid #ccc; padding: 8px; border-radius: 4px; background: #f9f9f9; }
         .meta-item .label { font-size: 10px; color: #777; }
         .meta-item .value { font-weight: 600; font-size: 13px; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
@@ -125,7 +173,7 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
     </head><body>
       <div class="header">
         <div class="company">CÔNG TY CP BAO BÌ NAM PHƯƠNG</div>
-        <h2>PHIẾU ${loaiLabel} NHẬP PHÔI SÓNG</h2>
+        <h2>PHIẾU NHẬP PHÔI SÓNG</h2>
         <div style="font-size:11px;color:#555">Số phiếu: <strong>${phieu.so_phieu}</strong></div>
       </div>
       <div class="meta-grid">
@@ -133,6 +181,11 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
         <div class="meta-item"><div class="label">Ngày</div><div class="value">${ngayFmt}</div></div>
         <div class="meta-item"><div class="label">Ca sản xuất</div><div class="value">${phieu.ca ?? '—'}</div></div>
         <div class="meta-item"><div class="label">Khách hàng</div><div class="value">${order.ten_khach_hang ?? '—'}</div></div>
+      </div>
+      <div class="time-row">
+        <div class="meta-item"><div class="label">Giờ bắt đầu</div><div class="value">${phieu.gio_bat_dau ?? '—'}</div></div>
+        <div class="meta-item"><div class="label">Giờ kết thúc</div><div class="value">${phieu.gio_ket_thuc ?? '—'}</div></div>
+        <div class="meta-item"><div class="label">Thời gian thực hiện</div><div class="value">${duration ?? '—'}</div></div>
       </div>
       ${phieu.ghi_chu ? `<p style="margin-bottom:10px;font-size:11px"><em>Ghi chú: ${phieu.ghi_chu}</em></p>` : ''}
       <table>
@@ -144,6 +197,8 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
             <th width="40">Lớp</th>
             <th width="70">SL kế hoạch</th>
             <th width="70">SL thực tế</th>
+            <th width="65">Phôi lỗi</th>
+            <th width="70">Nhập kho</th>
             <th width="55">Số tấm</th>
             <th>Ghi chú</th>
           </tr>
@@ -161,6 +216,8 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close() }
   }
+
+  const duration = getDuration()
 
   const columns: ColumnsType<RowState> = [
     {
@@ -196,36 +253,61 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
       align: 'right' as const,
       render: (v: number) => <Text strong>{new Intl.NumberFormat('vi-VN').format(v)}</Text>,
     },
-    ...(isKetThuc ? [
-      {
-        title: 'SL thực tế',
-        width: 110,
-        render: (_: unknown, r: RowState) => (
-          <InputNumber
-            size="small"
-            style={{ width: 100 }}
-            min={0}
-            value={r.so_luong_thuc_te ?? undefined}
-            placeholder="Thực tế"
-            onChange={v => updateRow(r.poi_id, { so_luong_thuc_te: v ?? null })}
-          />
-        ),
+    {
+      title: 'SL thực tế',
+      width: 110,
+      render: (_: unknown, r: RowState) => (
+        <InputNumber
+          size="small"
+          style={{ width: 100 }}
+          min={0}
+          value={r.so_luong_thuc_te ?? undefined}
+          placeholder="Thực tế"
+          onChange={v => updateRow(r.poi_id, { so_luong_thuc_te: v ?? null })}
+        />
+      ),
+    },
+    {
+      title: 'Phôi lỗi',
+      width: 100,
+      render: (_: unknown, r: RowState) => (
+        <InputNumber
+          size="small"
+          style={{ width: 88 }}
+          min={0}
+          value={r.so_luong_loi ?? undefined}
+          placeholder="Hư hao"
+          onChange={v => updateRow(r.poi_id, { so_luong_loi: v ?? null })}
+        />
+      ),
+    },
+    {
+      title: 'Nhập kho',
+      width: 90,
+      align: 'right' as const,
+      render: (_: unknown, r: RowState) => {
+        const net = (r.so_luong_thuc_te ?? 0) - (r.so_luong_loi ?? 0)
+        return r.so_luong_thuc_te != null
+          ? <Text strong style={{ color: net < 0 ? '#cf1322' : '#389e0d' }}>
+              {new Intl.NumberFormat('vi-VN').format(net)}
+            </Text>
+          : <Text type="secondary">—</Text>
       },
-      {
-        title: 'Số tấm',
-        width: 85,
-        render: (_: unknown, r: RowState) => (
-          <InputNumber
-            size="small"
-            style={{ width: 75 }}
-            min={0}
-            value={r.so_tam ?? undefined}
-            placeholder="Tấm"
-            onChange={v => updateRow(r.poi_id, { so_tam: v ?? null })}
-          />
-        ),
-      },
-    ] as ColumnsType<RowState> : []),
+    },
+    {
+      title: 'Số tấm',
+      width: 85,
+      render: (_: unknown, r: RowState) => (
+        <InputNumber
+          size="small"
+          style={{ width: 75 }}
+          min={0}
+          value={r.so_tam ?? undefined}
+          placeholder="Tấm"
+          onChange={v => updateRow(r.poi_id, { so_tam: v ?? null })}
+        />
+      ),
+    },
     {
       title: 'Ghi chú',
       render: (_: unknown, r: RowState) => (
@@ -244,10 +326,15 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
       open={open}
       title={
         <Space>
-          <span style={{ fontSize: 15, fontWeight: 600 }}>{title}</span>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>Phiếu nhập phôi sóng</span>
+          {session && (
+            <Tag color="blue" icon={<ClockCircleOutlined />} style={{ fontSize: 11 }}>
+              Phiên đang chạy
+            </Tag>
+          )}
         </Space>
       }
-      width={860}
+      width={920}
       onCancel={() => { setResult(null); onClose() }}
       destroyOnClose
       footer={
@@ -267,7 +354,7 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
               loading={loading}
               onClick={handleSubmit}
             >
-              {isKetThuc ? 'Kết thúc & tạo phiếu' : 'Bắt đầu & tạo phiếu'}
+              Tạo phiếu
             </Button>
           </Space>
         )
@@ -287,7 +374,7 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
         </div>
       ) : (
         <>
-          <Form layout="inline" style={{ marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
+          <Form layout="inline" style={{ marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
             <Form.Item label="Ngày" style={{ marginBottom: 8 }}>
               <DatePicker
                 format="DD/MM/YYYY"
@@ -296,11 +383,11 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
                 style={{ width: 140 }}
               />
             </Form.Item>
-            <Form.Item label="Ca sản xuất" style={{ marginBottom: 8 }}>
+            <Form.Item label="Ca" style={{ marginBottom: 8 }}>
               <Select
                 placeholder="Chọn ca"
                 allowClear
-                style={{ width: 110 }}
+                style={{ width: 100 }}
                 value={ca ?? undefined}
                 onChange={v => setCa(v ?? null)}
                 options={[
@@ -310,15 +397,40 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
                 ]}
               />
             </Form.Item>
-            <Form.Item label="Ghi chú" style={{ marginBottom: 8 }}>
-              <Input
-                style={{ width: 240 }}
-                value={ghiChu}
-                onChange={e => setGhiChu(e.target.value)}
-                placeholder="Ghi chú phiếu..."
+            <Form.Item label="Giờ bắt đầu" style={{ marginBottom: 8 }}>
+              <TimePicker
+                format="HH:mm"
+                value={gioBatDau}
+                onChange={v => setGioBatDau(v)}
+                style={{ width: 100 }}
+                placeholder="HH:mm"
               />
             </Form.Item>
+            <Form.Item label="Giờ kết thúc" style={{ marginBottom: 8 }}>
+              <TimePicker
+                format="HH:mm"
+                value={gioKetThuc}
+                onChange={v => setGioKetThuc(v)}
+                style={{ width: 100 }}
+                placeholder="HH:mm"
+              />
+            </Form.Item>
+            {duration && (
+              <Form.Item style={{ marginBottom: 8 }}>
+                <Tag color="green" icon={<ClockCircleOutlined />} style={{ fontSize: 12, padding: '3px 8px' }}>
+                  {duration}
+                </Tag>
+              </Form.Item>
+            )}
           </Form>
+          <Form.Item label="Ghi chú" style={{ marginBottom: 12 }}>
+            <Input
+              style={{ width: 360 }}
+              value={ghiChu}
+              onChange={e => setGhiChu(e.target.value)}
+              placeholder="Ghi chú phiếu..."
+            />
+          </Form.Item>
 
           <Table<RowState>
             rowKey="poi_id"
@@ -326,7 +438,7 @@ export default function PhieuNhapPhoiSongModal({ open, loai, order, onClose, onS
             columns={columns}
             size="small"
             pagination={false}
-            scroll={{ x: 600 }}
+            scroll={{ x: 700 }}
           />
         </>
       )}

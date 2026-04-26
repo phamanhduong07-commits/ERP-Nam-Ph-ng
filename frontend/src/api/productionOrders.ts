@@ -127,15 +127,19 @@ export interface PhieuNhapPhoiSongItemPayload {
   production_order_item_id: number
   so_luong_ke_hoach: number
   so_luong_thuc_te?: number | null
+  so_luong_loi?: number | null
+  chieu_kho?: number | null
+  chieu_cat?: number | null
   so_tam?: number | null
   ghi_chu?: string | null
 }
 
 export interface PhieuNhapPhoiSongPayload {
-  loai: 'bat_dau' | 'ket_thuc'
   ngay: string
   ca?: string | null
   ghi_chu?: string | null
+  gio_bat_dau?: string | null  // HH:MM
+  gio_ket_thuc?: string | null // HH:MM
   items: PhieuNhapPhoiSongItemPayload[]
 }
 
@@ -144,6 +148,9 @@ export interface PhieuNhapPhoiSongItem {
   production_order_item_id: number
   so_luong_ke_hoach: number
   so_luong_thuc_te: number | null
+  so_luong_loi: number | null
+  chieu_kho: number | null
+  chieu_cat: number | null
   so_tam: number | null
   ghi_chu: string | null
 }
@@ -152,10 +159,11 @@ export interface PhieuNhapPhoiSong {
   id: number
   so_phieu: string
   production_order_id: number
-  loai: 'bat_dau' | 'ket_thuc'
   ngay: string
   ca: string | null
   ghi_chu: string | null
+  gio_bat_dau: string | null
+  gio_ket_thuc: string | null
   created_at: string | null
   items: PhieuNhapPhoiSongItem[]
 }

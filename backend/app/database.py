@@ -399,3 +399,43 @@ def ensure_schema() -> None:
                 logger.info("backfill spec: %d rows updated", r2.rowcount)
             except Exception as e:
                 logger.warning("backfill spec failed: %s", e)
+
+    # ── phieu_nhap_phoi_song_items: thêm các cột còn thiếu ─────────────────────
+    if 'phieu_nhap_phoi_song_items' in table_names:
+        existing_pnps = {col['name'] for col in inspector.get_columns('phieu_nhap_phoi_song_items')}
+        _pnps_cols = [
+            ('so_luong_loi', 'DECIMAL(12,3)'),
+            ('chieu_kho',    'DECIMAL(8,2)'),
+            ('chieu_cat',    'DECIMAL(8,2)'),
+        ]
+        missing_pnps = [(col, dtype) for col, dtype in _pnps_cols if col not in existing_pnps]
+        if missing_pnps:
+            with engine.begin() as conn:
+                for col, dtype in missing_pnps:
+                    conn.execute(text(
+                        f"ALTER TABLE phieu_nhap_phoi_song_items ADD COLUMN {col} {dtype} NULL"
+                    ))
+            logger.info("ensure_schema: added %s to phieu_nhap_phoi_song_items",
+                        [c for c, _ in missing_pnps])
+
+    # ── phieu_nhap_phoi_song: loai nullable + thêm gio_bat_dau / gio_ket_thuc ──
+    if 'phieu_nhap_phoi_song' in table_names:
+        existing_pnp = {col['name'] for col in inspector.get_columns('phieu_nhap_phoi_song')}
+        with engine.begin() as conn:
+            # make loai nullable (idempotent via try/except on older PG versions)
+            try:
+                conn.execute(text(
+                    "ALTER TABLE phieu_nhap_phoi_song ALTER COLUMN loai DROP NOT NULL"
+                ))
+            except Exception:
+                pass
+            if 'gio_bat_dau' not in existing_pnp:
+                conn.execute(text(
+                    "ALTER TABLE phieu_nhap_phoi_song ADD COLUMN gio_bat_dau VARCHAR(8) NULL"
+                ))
+                logger.info("ensure_schema: added gio_bat_dau to phieu_nhap_phoi_song")
+            if 'gio_ket_thuc' not in existing_pnp:
+                conn.execute(text(
+                    "ALTER TABLE phieu_nhap_phoi_song ADD COLUMN gio_ket_thuc VARCHAR(8) NULL"
+                ))
+                logger.info("ensure_schema: added gio_ket_thuc to phieu_nhap_phoi_song")
