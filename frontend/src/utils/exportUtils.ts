@@ -101,6 +101,27 @@ export const fmtDate = (v: string | null | undefined): string => {
 export const fmtNum = (v: number | null | undefined): string =>
   v != null ? new Intl.NumberFormat('vi-VN').format(Number(v)) : '—'
 
+/**
+ * Smart number — bỏ trailing zeros sau dấu thập phân.
+ * 140.00 → "140"   |   191.50 → "191,5"   |   0.25 → "0,25"
+ * @param v          Giá trị cần format
+ * @param maxDec     Số chữ số thập phân tối đa (mặc định 4)
+ * @param locale     Locale (mặc định vi-VN: dấu phẩy thập phân, chấm nghìn)
+ */
+export function fmtN(
+  v: number | string | null | undefined,
+  maxDec = 4,
+  locale = 'vi-VN',
+): string {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  if (isNaN(n)) return String(v)
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxDec,
+  }).format(n)
+}
+
 // ─── HTML Table Builder ───────────────────────────────────────────────────────
 
 type ColDef = { header: string; align?: 'left' | 'right' | 'center' }

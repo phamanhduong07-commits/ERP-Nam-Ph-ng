@@ -71,6 +71,13 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
     # Lấy thông tin BOM để hiển thị loai_thung, kích thước
     bom: ProductionBOM | None = getattr(item, "_bom_cache", None)
 
+    # Derive c_tham / can_man từ BOM nếu item chưa có
+    def _bom_mat_str(val: int | None) -> str | None:
+        return f"{val} mặt" if val else None
+
+    c_tham  = (item.c_tham  if item else None) or _bom_mat_str(bom.chong_tham if bom else None)
+    can_man = (item.can_man if item else None) or _bom_mat_str(bom.can_mang   if bom else None)
+
     return ProductionPlanLineResponse(
         id=line.id,
         plan_id=line.plan_id,
@@ -109,8 +116,8 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         mat_3=item.mat_3 if item else None,     mat_3_dl=item.mat_3_dl if item else None,
         loai_in=item.loai_in if item else None,
         so_mau=item.so_mau if item else None,
-        c_tham=item.c_tham if item else None,
-        can_man=item.can_man if item else None,
+        c_tham=c_tham,
+        can_man=can_man,
         qccl=item.qccl if item else None,
     )
 
@@ -668,6 +675,13 @@ def _build_queue_line(line: ProductionPlanLine, plan: ProductionPlan) -> QueueLi
         customer = order.sales_order.customer
     bom: "ProductionBOM | None" = getattr(item, "_bom_cache", None)
 
+    # Derive c_tham / can_man từ BOM nếu item chưa có
+    def _bom_mat_str(val: int | None) -> str | None:
+        return f"{val} mặt" if val else None
+
+    q_c_tham  = (item.c_tham  if item else None) or _bom_mat_str(bom.chong_tham if bom else None)
+    q_can_man = (item.can_man if item else None) or _bom_mat_str(bom.can_mang   if bom else None)
+
     return QueueLineResponse(
         id=line.id,
         plan_id=line.plan_id,
@@ -695,6 +709,10 @@ def _build_queue_line(line: ProductionPlanLine, plan: ProductionPlan) -> QueueLi
         so_lop=bom.so_lop if bom else (item.so_lop if item else None),
         to_hop_song=bom.to_hop_song if bom else (item.to_hop_song if item else None),
         loai_lan=item.loai_lan if item else None,
+        loai_in=item.loai_in if item else None,
+        so_mau=item.so_mau if item else None,
+        c_tham=q_c_tham,
+        can_man=q_can_man,
         dai_tt=item.dai_tt if item else None,
         mat=item.mat if item else None,         mat_dl=item.mat_dl if item else None,
         song_1=item.song_1 if item else None,   song_1_dl=item.song_1_dl if item else None,

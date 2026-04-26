@@ -13,7 +13,7 @@ import {
 } from '../../api/productionPlans'
 import { LOAI_LAN_LABELS } from '../../api/quotes'
 import AddLinesModal from './AddLinesModal'
-import { exportToExcel, printToPdf } from '../../utils/exportUtils'
+import { exportToExcel, printToPdf, fmtN } from '../../utils/exportUtils'
 
 const { Text } = Typography
 
@@ -54,11 +54,11 @@ function calcQuyCache(r: PlanLineResponse): string {
   const soLop = r.so_lop ?? 3
   const song = r.to_hop_song ?? ''
   if (r.cao && Number(r.cao) > 0) {
-    return `${r.dai}×${r.rong}×${r.cao}_${soLop}L ${song}`
+    return `${fmtN(r.dai, 1)}×${fmtN(r.rong, 1)}×${fmtN(r.cao, 1)}_${soLop}L ${song}`
   }
   // Tấm phẳng
-  const daiTt = r.dai_tt ? Number(r.dai_tt) : (r.dai ?? '?')
-  const kho1  = r.kho1   ? Number(r.kho1)   : (r.rong ?? '?')
+  const daiTt = r.dai_tt ? fmtN(r.dai_tt, 1) : fmtN(r.dai, 1) || '?'
+  const kho1  = r.kho1   ? fmtN(r.kho1,  1) : fmtN(r.rong, 1) || '?'
   return `${daiTt}×${kho1}_${soLop}L ${song}`
 }
 
@@ -202,12 +202,13 @@ function buildTableRows(lines: PlanLineResponse[]): { rows: TableRow[]; totalMT:
 
 // ─── Cell giấy (mã + kg) ──────────────────────────────────────────────────────
 function PaperCell({ ma, dl, kg, isSong }: { ma: string | null; dl: number | null; kg: number; isSong: boolean }) {
-  if (!ma) return <span style={{ color: '#d9d9d9' }}>===</span>
+  if (!ma) return <span style={{ color: '#d9d9d9' }}>—</span>
   return (
-    <div style={{ lineHeight: 1.3 }}>
-      <div style={{ fontWeight: 600, fontSize: 11, color: isSong ? '#1677ff' : '#389e0d' }}>{ma}</div>
-      {dl != null && <div style={{ fontSize: 10, color: '#8c8c8c' }}>{dl}g/m²</div>}
-      {kg > 0 && <div style={{ fontSize: 10, color: '#fa8c16', fontWeight: 600 }}>{kg.toFixed(0)} kg</div>}
+    <div style={{ lineHeight: 1.4 }}>
+      <div style={{ fontWeight: 600, fontSize: 11, color: isSong ? '#1677ff' : '#389e0d', whiteSpace: 'nowrap' }}>
+        {ma}{dl != null ? ` - ${fmtN(dl, 1)}` : ''}
+      </div>
+      {kg > 0 && <div style={{ fontSize: 10, color: '#fa8c16', fontWeight: 600 }}>{fmtN(kg, 1)} kg</div>}
     </div>
   )
 }
@@ -359,52 +360,128 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
   }
 
   const handleExportPdf = () => {
-    const lineRows = rows.filter(r => !isFooter(r)) as LineRow[]
+    // Helper: render ô giấy dạng "54 - 140\n191 kg"
+    const paperCell = (ma: string | null, dl: number | null, kg: number, isSong: boolean) => {
+      if (!ma) return '<span style="color:#ccc">—</span>'
+      const color = isSong ? '#1677ff' : '#237804'
+      const label = dl != null ? `${ma} - ${dl}` : ma
+      const kgLine = kg > 0 ? `<br><span style="color:#fa8c16;font-weight:600">${kg.toFixed(0)} kg</span>` : ''
+      return `<span style="color:${color};font-weight:700">${label}</span>${kgLine}`
+    }
+
+    // Helper: render ô loại in + CT/CM
+    const inCell = (r: PlanLineResponse) => {
+      const loaiIn = r.loai_in && r.loai_in !== 'khong_in'
+        ? (r.loai_in === 'flexo' ? 'Flexo' : r.loai_in === 'ky_thuat_so' ? 'KTS' : r.loai_in) + (r.so_mau ? ` ${r.so_mau}M` : '')
+        : '<span style="color:#ccc">Không in</span>'
+      const ct = r.c_tham && r.c_tham !== 'Không'
+        ? `<br><span class="tag-ct">CT ${r.c_tham.replace('mặt','m').replace(/\s+/g,'')}</span>` : ''
+      const cm = r.can_man && r.can_man !== 'Không'
+        ? `<br><span class="tag-cm">CM ${r.can_man.replace('mặt','m').replace(/\s+/g,'')}</span>` : ''
+      return loaiIn + ct + cm
+    }
+
+    const bodyRows = rows.map((row, i) => {
+      if (isFooter(row)) {
+        // Dòng tổng kết khổ (group footer)
+        const { layers } = row
+        const fmtGroup = (entries: { ma: string; dl: number | null; kg: number }[]) =>
+          entries.map(e => `<span style="color:#237804;font-weight:700">${e.ma} - ${e.dl ?? ''}</span><br><span style="color:#fa8c16">${e.kg.toFixed(0)} kg</span>`).join('<br>') || '—'
+        return `<tr class="footer-row">
+          <td colspan="2" style="font-weight:700;color:#614700">${row.id.replace('footer-','Khổ ')}</td>
+          <td></td>
+          <td>${fmtGroup(layers.matC)}</td>
+          <td>${fmtGroup(layers.songC)}</td>
+          <td>${fmtGroup(layers.matB)}</td>
+          <td>${fmtGroup(layers.songB)}</td>
+          <td>${fmtGroup(layers.inner)}</td>
+          <td colspan="13"></td>
+        </tr>`
+      }
+
+      const r = row as LineRow
+      const songs  = getSongLetters(r.to_hop_song)
+      const soTam  = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
+      const metToi = calcMetToi(soTam, r.dai_tt)
+      const qccl   = r.qccl || calcQCCL(r.rong, r.cao, r.so_lop)
+      const soLop  = r.so_lop ?? 3
+      const inner  = getMatInner(r)
+      const kho1   = r.kho1 ? Number(r.kho1) : null
+      const daiTt  = r.dai_tt ? Number(r.dai_tt) : null
+
+      const kgMatC  = calcLayerKg(soTam, kho1, daiTt, r.mat_dl,    false, null)
+      const kgSongC = calcLayerKg(soTam, kho1, daiTt, r.song_1_dl, true,  songs[0] ?? null)
+      const kgMatB  = soLop >= 5 ? calcLayerKg(soTam, kho1, daiTt, r.mat_1_dl,  false, null) : 0
+      const kgSongB = soLop >= 5 ? calcLayerKg(soTam, kho1, daiTt, r.song_2_dl, true,  songs[1] ?? null) : 0
+      const kgInner = calcLayerKg(soTam, kho1, daiTt, inner.dl, false, null)
+
+      const loaiLan = r.loai_lan ? (LOAI_LAN_LABELS[r.loai_lan] ?? r.loai_lan) : '—'
+
+      return `<tr>
+        <td class="center" style="color:#888">${r.thu_tu}</td>
+        <td style="font-weight:600;white-space:nowrap">${r.ma_kh ?? '—'}</td>
+        <td style="font-family:monospace;font-size:8px;font-weight:700">${r.so_lenh ?? '—'}</td>
+        <td>${paperCell(r.mat,    r.mat_dl,    kgMatC,  false)}</td>
+        <td>${paperCell(r.song_1, r.song_1_dl, kgSongC, true)}</td>
+        <td>${soLop >= 5 ? paperCell(r.mat_1,  r.mat_1_dl,  kgMatB,  false) : '<span style="color:#ccc">—</span>'}</td>
+        <td>${soLop >= 5 ? paperCell(r.song_2, r.song_2_dl, kgSongB, true)  : '<span style="color:#ccc">—</span>'}</td>
+        <td>${paperCell(inner.ma, inner.dl, kgInner, false)}</td>
+        <td style="white-space:nowrap">${calcQuyCache(r)}</td>
+        <td class="center" style="font-weight:700;color:#531dab">${r.to_hop_song ?? '—'}</td>
+        <td class="right" style="color:#1677ff;font-weight:700">${r.kho_giay ? fmtN(r.kho_giay, 1) : '—'}</td>
+        <td class="right">${daiTt != null ? fmtN(daiTt, 1) : '—'}</td>
+        <td class="right" style="font-weight:600">${soTam.toLocaleString('vi-VN')}</td>
+        <td class="center" style="color:#1677ff;font-weight:700">${r.so_dao ?? '—'}</td>
+        <td style="font-size:8px;font-family:monospace">${qccl || '—'}</td>
+        <td class="center" style="font-weight:600">${kho1 != null ? fmtN(kho1, 1) : '—'}</td>
+        <td class="right" style="font-weight:600">${Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')}</td>
+        <td class="center"><span class="tag-lan">${loaiLan}</span></td>
+        <td class="center">${inCell(r)}</td>
+        <td style="font-size:8px;color:#595959">${r.ghi_chu ?? ''}</td>
+        <td class="right" style="font-weight:700;color:#fa8c16">${metToi > 0 ? metToi.toLocaleString('vi-VN', { maximumFractionDigits: 1 }) : '—'}</td>
+      </tr>`
+    }).join('')
+
     const tableHtml = `
       <table>
         <thead><tr>
-          <th>#</th><th>Mã KH</th><th>Số LSX</th>
-          <th>Mặt C</th><th>Sóng C</th><th>Mặt B</th><th>Sóng B</th><th>Mặt trong</th>
-          <th>Quy cách SP</th><th>Sóng</th>
-          <th>Khổ</th><th>Dài</th><th>Số tấm</th><th>Dao</th><th>QCCL</th>
-          <th>SL thùng</th><th>Ghi chú</th><th>Mét tới</th>
+          <th class="center">#</th>
+          <th>Mã KH</th>
+          <th>Số LSX</th>
+          <th>Mặt C</th><th>Sóng C</th><th>Mặt B</th><th>Sóng B</th><th>Mặt</th>
+          <th>Quy cách SP</th>
+          <th class="center">Sóng</th>
+          <th class="right">Khổ (cm)</th>
+          <th class="right">Dài (cm)</th>
+          <th class="right">Số tấm</th>
+          <th class="center">Dao</th>
+          <th>QCCL</th>
+          <th class="center">Khổ xả</th>
+          <th class="right">SL thùng</th>
+          <th class="center">Loại lằn</th>
+          <th class="center">In / GC</th>
+          <th>Ghi chú</th>
+          <th class="right">Mét tới</th>
         </tr></thead>
         <tbody>
-          ${lineRows.map((r, i) => {
-            const soTam  = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
-            const metToi = calcMetToi(soTam, r.dai_tt)
-            const qccl   = r.qccl || calcQCCL(r.rong, r.cao, r.so_lop)
-            const inner  = getMatInner(r)
-            return `<tr>
-              <td class="center">${i + 1}</td>
-              <td>${r.ten_khach_hang ?? '—'}</td>
-              <td><strong>${r.so_lenh ?? '—'}</strong></td>
-              <td>${r.mat ?? '—'}</td><td>${r.song_1 ?? '—'}</td>
-              <td>${r.mat_1 ?? '—'}</td><td>${r.song_2 ?? '—'}</td>
-              <td>${inner.ma ?? '—'}</td>
-              <td>${calcQuyCache(r)}</td>
-              <td class="center">${r.to_hop_song ?? '—'}</td>
-              <td class="right">${r.kho_giay ?? '—'}</td>
-              <td class="right">${r.dai_tt ?? '—'}</td>
-              <td class="right">${soTam}</td>
-              <td class="center">${r.so_dao ?? '—'}</td>
-              <td>${qccl || '—'}</td>
-              <td class="right">${Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')}</td>
-              <td>${r.ghi_chu ?? ''}</td>
-              <td class="right"><strong>${metToi.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></td>
-            </tr>`
-          }).join('')}
+          ${bodyRows}
           <tr class="total-row">
-            <td colspan="17" class="right"><strong>Tổng số mét tới:</strong></td>
+            <td colspan="20" class="right"><strong>TỔNG SỐ MÉT TỚI:</strong></td>
             <td class="right"><strong>${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></td>
           </tr>
         </tbody>
       </table>`
+
     printToPdf(
       `Kế hoạch SX ${plan.so_ke_hoach}`,
-      `<h2>KẾ HOẠCH SẢN XUẤT: ${plan.so_ke_hoach}</h2>
-       <p class="meta">Ngày: ${dayjs(plan.ngay_ke_hoach).format('DD/MM/YYYY')} — ${plan.lines.length} lệnh — Tổng MT: ${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</p>
-       ${tableHtml}`,
+      `<style>
+        .tag-ct { background:#e6fffb; color:#08979c; border:1px solid #87e8de; border-radius:3px; padding:0 3px; font-size:8px; }
+        .tag-cm { background:#f9f0ff; color:#531dab; border:1px solid #d3adf7; border-radius:3px; padding:0 3px; font-size:8px; }
+        .tag-lan{ background:#fff2e8; color:#d4380d; border:1px solid #ffbb96; border-radius:3px; padding:0 3px; font-size:8px; }
+      </style>
+      <h2>KẾ HOẠCH SẢN XUẤT: ${plan.so_ke_hoach}</h2>
+      <p class="meta">Ngày: ${dayjs(plan.ngay_ke_hoach).format('DD/MM/YYYY')} &nbsp;·&nbsp; ${plan.lines.length} lệnh &nbsp;·&nbsp; Tổng MT: <strong>${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></p>
+      ${tableHtml}`,
       true,
     )
   }
@@ -615,12 +692,12 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
 
                   {/* Khổ */}
                   <td style={{ ...TD, textAlign: 'center', fontWeight: 700, color: '#1677ff', fontSize: 13 }}>
-                    {r.kho_giay ? Number(r.kho_giay) : '—'}
+                    {r.kho_giay ? fmtN(r.kho_giay, 1) : '—'}
                   </td>
 
                   {/* Dài */}
                   <td style={{ ...TD, textAlign: 'center' }}>
-                    {daiTt ?? '—'}
+                    {daiTt != null ? fmtN(daiTt, 1) : '—'}
                   </td>
 
                   {/* Số Tấm */}
@@ -640,7 +717,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
 
                   {/* Khổ Xả (kho1) */}
                   <td style={{ ...TD, textAlign: 'center', fontWeight: 600 }}>
-                    {kho1 != null ? kho1.toFixed(1) : '—'}
+                    {kho1 != null ? fmtN(kho1, 1) : '—'}
                   </td>
 
                   {/* SL Thùng */}

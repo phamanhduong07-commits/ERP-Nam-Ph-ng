@@ -246,6 +246,46 @@ def _bom_to_response(bom: ProductionBOM) -> BomResponse:
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _mat_int_to_str(val: int | None) -> str | None:
+    """Chuyển flag gia công (0/1/2) sang chuỗi hiển thị cho production_order_items."""
+    if not val:
+        return None
+    return f"{val} mặt"
+
+
+def _sync_poi_from_bom(bom: ProductionBOM, db: Session) -> None:
+    """
+    Đồng bộ các trường gia công từ BOM sang production_order_items để
+    kế hoạch sản xuất / hàng chờ có thể hiển thị đúng.
+    """
+    if not bom.production_order_item_id:
+        return
+    poi = db.query(ProductionOrderItem).filter(
+        ProductionOrderItem.id == bom.production_order_item_id
+    ).first()
+    if not poi:
+        return
+
+    # Thông số in ấn & gia công
+    if bom.in_flexo_mau and bom.in_flexo_mau > 0:
+        poi.loai_in = "flexo"
+        poi.so_mau  = bom.in_flexo_mau
+    elif bom.in_ky_thuat_so:
+        poi.loai_in = "ky_thuat_so"
+        poi.so_mau  = None
+    # Không ghi đè nếu BOM không có in (giữ nguyên giá trị cũ trên POI)
+
+    poi.c_tham  = _mat_int_to_str(bom.chong_tham)
+    poi.can_man = _mat_int_to_str(bom.can_mang)
+
+    db.add(poi)
+    # commit do caller quyết định
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -420,6 +460,8 @@ def save_bom(
         )
         db.add(indirect)
 
+    # Sync các thông số gia công sang production_order_items
+    _sync_poi_from_bom(bom, db)
     db.commit()
     db.refresh(bom)
     return _bom_to_response(_load_bom(bom.id, db))
@@ -1169,6 +1211,8 @@ def confirm_bom(
             detail=f"BOM đang ở trạng thái '{bom.trang_thai}', không thể xác nhận",
         )
     bom.trang_thai = "confirmed"
+    # Sync lại gia công sang production_order_items
+    _sync_poi_from_bom(bom, db)
     db.commit()
     return _bom_to_response(_load_bom(bom_id, db))
 
@@ -1272,6 +1316,27 @@ def reverse_calculate(
         dien_tich=round(dien_tich, 6),
         kha_thi=a_max > 0,
     )
+
+
+@router.post("/sync-poi", status_code=200)
+def sync_poi_from_all_boms(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Batch sync: cập nhật c_tham / can_man / loai_in / so_mau trên toàn bộ
+    production_order_items từ BOM tương ứng.
+    Chạy 1 lần để fix dữ liệu cũ.
+    """
+    boms = db.query(ProductionBOM).filter(
+        ProductionBOM.production_order_item_id.isnot(None)
+    ).all()
+    count = 0
+    for bom in boms:
+        _sync_poi_from_bom(bom, db)
+        count += 1
+    db.commit()
+    return {"synced": count}
 
 
 @router.get("", response_model=list[BomResponse])

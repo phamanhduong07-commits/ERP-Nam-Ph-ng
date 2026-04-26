@@ -17,6 +17,7 @@ import dayjs from 'dayjs'
 import { productionPlansApi } from '../../api/productionPlans'
 import type { QueueLine } from '../../api/productionPlans'
 import { LOAI_LAN_LABELS } from '../../api/quotes'
+import { fmtN } from '../../utils/exportUtils'
 
 const { Text, Title } = Typography
 
@@ -276,6 +277,31 @@ export default function ProductionQueuePage() {
         : <Text type="secondary">—</Text>,
     },
     {
+      title: 'In / Gia công',
+      width: 100,
+      align: 'center' as const,
+      render: (_: unknown, r: QueueLine) => (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          {r.loai_in && r.loai_in !== 'khong_in'
+            ? <span style={{ fontSize: 10 }}>
+                {r.loai_in === 'flexo' ? 'Flexo' : r.loai_in === 'ky_thuat_so' ? 'KTS' : r.loai_in}
+                {r.so_mau ? ` ${r.so_mau}M` : ''}
+              </span>
+            : <span style={{ color: '#d9d9d9', fontSize: 10 }}>Không in</span>}
+          {r.c_tham && r.c_tham !== 'Không' && (
+            <Tag color="cyan" style={{ margin: 0, fontSize: 9, lineHeight: '14px', padding: '0 4px' }}>
+              CT {r.c_tham.replace('mặt', 'm').replace(/\s+/g, '')}
+            </Tag>
+          )}
+          {r.can_man && r.can_man !== 'Không' && (
+            <Tag color="purple" style={{ margin: 0, fontSize: 9, lineHeight: '14px', padding: '0 4px' }}>
+              CM {r.can_man.replace('mặt', 'm').replace(/\s+/g, '')}
+            </Tag>
+          )}
+        </div>
+      ),
+    },
+    {
       title: 'Sóng',
       dataIndex: 'to_hop_song',
       width: 70,
@@ -296,7 +322,7 @@ export default function ProductionQueuePage() {
       filteredValue: filteredInfo['kho_giay'] || null,
       onFilter: (value, r) => Number(r.kho_giay) === Number(value),
       render: v => v
-        ? <Text strong style={{ color: '#1677ff', fontSize: 14 }}>{Number(v)}</Text>
+        ? <Text strong style={{ color: '#1677ff', fontSize: 14 }}>{fmtN(v, 1)}</Text>
         : <Text type="secondary">—</Text>,
     },
     {
@@ -305,7 +331,7 @@ export default function ProductionQueuePage() {
       width: 70,
       align: 'center',
       render: v => v
-        ? <Text strong style={{ fontSize: 13 }}>{Number(v)}</Text>
+        ? <Text strong style={{ fontSize: 13 }}>{fmtN(v, 1)}</Text>
         : <Text type="secondary">—</Text>,
     },
     {
@@ -319,7 +345,7 @@ export default function ProductionQueuePage() {
         const side  = Math.round((Number(r.rong) / 2 + allow) * 10) / 10
         return (
           <Text style={{ fontFamily: 'monospace', fontSize: 12, color: '#d46b08', fontWeight: 600 }}>
-            {side}+{Number(r.cao)}+{side}
+            {fmtN(side, 1)}+{fmtN(r.cao, 1)}+{fmtN(side, 1)}
           </Text>
         )
       },

@@ -1,0 +1,170 @@
+/* ─── ERP Nam Phương — Global Typography & Base Styles ──────────────────── */
+
+/* ── Reset & Base ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 14px;            /* base = 14px per ERP standard */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;           /* ERP standard: 1.4–1.5 */
+  color: #333333;             /* darker gray — easier on eyes than #000 */
+  background: #f0f2f5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Tabular (monospace-width) numbers — giúp cột số thẳng hàng ── */
+body,
+.ant-table,
+.ant-statistic,
+.ant-input-number,
+.ant-input-number-input {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── Typography scale ── */
+/* Label/caption: 12px */
+.text-xs  { font-size: 12px; }
+/* Body default: 14px (html base) */
+.text-sm  { font-size: 13px; }
+/* Heading sm: 16px */
+.text-lg  { font-size: 16px; }
+/* Heading md: 18px */
+.text-xl  { font-size: 18px; }
+/* Heading lg: 20px */
+.text-2xl { font-size: 20px; }
+
+/* ── Color tokens ── */
+.text-primary   { color: #333333; }
+.text-secondary { color: #666666; }
+.text-muted     { color: #999999; }
+.text-danger    { color: #cf1322; }  /* số âm / cảnh báo */
+.text-link      { color: #1677ff; }  /* số có thể click */
+
+/* ── Ant Design component overrides ── */
+
+/* Table — đây là trái tim của ERP */
+.ant-table {
+  font-size: 13px;            /* compact hơn body một chút cho bảng dữ liệu */
+}
+.ant-table-thead > tr > th {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a4a4a;
+  background: #fafafa;
+  white-space: nowrap;
+}
+.ant-table-tbody > tr > td {
+  color: #333333;
+  line-height: 1.45;
+}
+/* Cột số — luôn căn phải */
+.ant-table-tbody > tr > td.col-number,
+.ant-table-thead > tr > th.col-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* Số âm */
+.num-negative { color: #cf1322; }
+/* Số clickable */
+.num-link     { color: #1677ff; cursor: pointer; }
+.num-link:hover { text-decoration: underline; }
+
+/* Form labels */
+.ant-form-item-label > label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4a4a4a;
+}
+
+/* Input / Select */
+.ant-input,
+.ant-input-number-input,
+.ant-select-selection-item,
+.ant-picker-input > input {
+  font-size: 14px;
+  color: #333333;
+}
+
+/* Card titles */
+.ant-card-head-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333333;
+}
+
+/* Modal titles */
+.ant-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Drawer titles */
+.ant-drawer-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Page headings (Typography.Title) */
+.ant-typography h1 { font-size: 20px; font-weight: 700; color: #222; }
+.ant-typography h2 { font-size: 18px; font-weight: 700; color: #222; }
+.ant-typography h3 { font-size: 16px; font-weight: 600; color: #333; }
+.ant-typography h4 { font-size: 14px; font-weight: 600; color: #333; }
+
+/* Statistic numbers */
+.ant-statistic-content-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ant-statistic-title {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Tag — trạng thái */
+.ant-tag {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+/* Menu sidebar */
+.ant-menu-item,
+.ant-menu-submenu-title {
+  font-size: 13px;
+}
+
+/* Breadcrumb */
+.ant-breadcrumb {
+  font-size: 13px;
+}
+
+/* Pagination */
+.ant-pagination {
+  font-size: 13px;
+}
+
+/* ── Scrollbar — gọn hơn mặc định ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f0f0f0; }
+::-webkit-scrollbar-thumb { background: #c0c0c0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #999; }
+
+/* ── Print reset ── */
+@media print {
+  body { background: #fff; color: #000; font-size: 11px; }
+  .ant-layout-sider,
+  .ant-layout-header,
+  .no-print { display: none !important; }
+}

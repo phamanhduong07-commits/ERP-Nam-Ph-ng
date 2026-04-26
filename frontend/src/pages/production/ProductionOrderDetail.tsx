@@ -9,8 +9,9 @@ import {
 import {
   ArrowLeftOutlined, PlayCircleOutlined, CheckCircleOutlined,
   CloseOutlined, SaveOutlined, CalculatorOutlined, EditOutlined,
-  FileExcelOutlined, FilePdfOutlined,
+  FileExcelOutlined, FilePdfOutlined, FileTextOutlined,
 } from '@ant-design/icons'
+import PhieuNhapPhoiSongModal from './PhieuNhapPhoiSongModal'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
@@ -27,6 +28,170 @@ import { exportToExcel, printToPdf, fmtVND, fmtDate, fmtNum, buildHtmlTable } fr
 
 const { Title, Text } = Typography
 
+// ── Phiếu nhập phôi sóng tab ─────────────────────────────────────────────────
+function PhieuNhapPhoiSongTab({
+  orderId,
+  order,
+  onNewPhieu,
+}: {
+  orderId: number
+  order: import('../../api/productionOrders').ProductionOrder
+  onNewPhieu: (v: { loai: 'bat_dau' | 'ket_thuc' }) => void
+}) {
+  const { data: phieus = [], isLoading } = useQuery({
+    queryKey: ['phieu-nhap-phoi-song', orderId],
+    queryFn: () => productionOrdersApi.listPhieu(orderId).then(r => r.data),
+  })
+
+  const handlePrint = (p: import('../../api/productionOrders').PhieuNhapPhoiSong) => {
+    const ngayFmt = dayjs(p.ngay).format('DD/MM/YYYY')
+    const loaiLabel = p.loai === 'bat_dau' ? 'BẮT ĐẦU' : 'KẾT THÚC'
+    const itemRows = p.items.map((it, i) => {
+      const oi = order.items.find(x => x.id === it.production_order_item_id)
+      const dims = oi ? [oi.dai, oi.rong, oi.cao].filter(Boolean).join('×') : ''
+      return `<tr>
+        <td style="text-align:center">${i + 1}</td>
+        <td>${oi?.ten_hang ?? ''}</td>
+        <td style="text-align:center">${dims || '—'}</td>
+        <td style="text-align:right">${new Intl.NumberFormat('vi-VN').format(it.so_luong_ke_hoach)}</td>
+        <td style="text-align:right">${it.so_luong_thuc_te != null ? new Intl.NumberFormat('vi-VN').format(it.so_luong_thuc_te) : ''}</td>
+        <td style="text-align:center">${it.so_tam ?? ''}</td>
+        <td>${it.ghi_chu ?? ''}</td>
+      </tr>`
+    }).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${p.so_phieu}</title>
+      <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;padding:20px}
+      h2{font-size:16px;text-align:center;margin-bottom:6px}.info{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border:1px solid #ccc;padding:8px;margin-bottom:12px;border-radius:4px}
+      .lbl{font-size:10px;color:#777}.val{font-weight:600;font-size:13px}
+      table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#f0f0f0;padding:5px 6px;border:1px solid #ccc;font-size:11px}
+      td{padding:4px 6px;border:1px solid #ddd;font-size:11px}.sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:24px;text-align:center}
+      .sig-label{font-weight:600;font-size:11px;margin-bottom:40px}.sig-name{font-size:10px;color:#777}
+      @media print{@page{margin:12mm}}</style></head><body>
+      <div style="text-align:center;margin-bottom:12px"><div style="font-size:11px;color:#555">CÔNG TY CP BAO BÌ NAM PHƯƠNG</div>
+      <h2>PHIẾU ${loaiLabel} NHẬP PHÔI SÓNG</h2><div style="font-size:11px">Số phiếu: <strong>${p.so_phieu}</strong></div></div>
+      <div class="info">
+        <div><div class="lbl">Lệnh SX</div><div class="val">${order.so_lenh}</div></div>
+        <div><div class="lbl">Ngày</div><div class="val">${ngayFmt}</div></div>
+        <div><div class="lbl">Ca</div><div class="val">${p.ca ?? '—'}</div></div>
+        <div><div class="lbl">Khách hàng</div><div class="val">${order.ten_khach_hang ?? '—'}</div></div>
+      </div>
+      <table><thead><tr><th>STT</th><th>Tên hàng</th><th>Kích thước</th><th>SL kế hoạch</th><th>SL thực tế</th><th>Số tấm</th><th>Ghi chú</th></tr></thead>
+      <tbody>${itemRows}</tbody></table>
+      <div class="sig">
+        <div><div class="sig-label">Người lập phiếu</div><div class="sig-name">(Ký, ghi rõ họ tên)</div></div>
+        <div><div class="sig-label">Vận hành máy sóng</div><div class="sig-name">(Ký, ghi rõ họ tên)</div></div>
+        <div><div class="sig-label">Quản lý sản xuất</div><div class="sig-name">(Ký, ghi rõ họ tên)</div></div>
+      </div>
+      <script>window.onload=()=>{window.print()}</script></body></html>`
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close() }
+  }
+
+  const canCreate = ['moi', 'dang_chay'].includes(order.trang_thai)
+
+  return (
+    <Card
+      size="small"
+      title="Phiếu nhập phôi sóng"
+      extra={
+        canCreate ? (
+          <Space size={4}>
+            {order.trang_thai === 'moi' && (
+              <Button
+                size="small"
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                onClick={() => onNewPhieu({ loai: 'bat_dau' })}
+              >
+                Tạo phiếu bắt đầu
+              </Button>
+            )}
+            {['moi', 'dang_chay'].includes(order.trang_thai) && (
+              <Button
+                size="small"
+                icon={<CheckCircleOutlined />}
+                style={{ color: 'green', borderColor: 'green' }}
+                onClick={() => onNewPhieu({ loai: 'ket_thuc' })}
+              >
+                Tạo phiếu kết thúc
+              </Button>
+            )}
+          </Space>
+        ) : null
+      }
+    >
+      {isLoading ? (
+        <Card loading />
+      ) : phieus.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '32px 0', color: '#bbb' }}>
+          Chưa có phiếu nào — nhấn "Tạo phiếu" để bắt đầu
+        </div>
+      ) : (
+        <Table
+          rowKey="id"
+          size="small"
+          pagination={false}
+          dataSource={phieus}
+          columns={[
+            {
+              title: 'Số phiếu',
+              dataIndex: 'so_phieu',
+              render: (v: string) => <Text code style={{ fontSize: 12 }}>{v}</Text>,
+            },
+            {
+              title: 'Loại',
+              dataIndex: 'loai',
+              width: 110,
+              render: (v: string) => (
+                <Tag color={v === 'bat_dau' ? 'blue' : 'green'} style={{ fontSize: 11 }}>
+                  {v === 'bat_dau' ? 'Bắt đầu' : 'Kết thúc'}
+                </Tag>
+              ),
+            },
+            {
+              title: 'Ngày',
+              dataIndex: 'ngay',
+              width: 100,
+              render: (v: string) => dayjs(v).format('DD/MM/YYYY'),
+            },
+            {
+              title: 'Ca',
+              dataIndex: 'ca',
+              width: 70,
+              render: (v: string | null) => v ?? '—',
+            },
+            {
+              title: 'Số dòng',
+              width: 80,
+              align: 'center' as const,
+              render: (_: unknown, r: import('../../api/productionOrders').PhieuNhapPhoiSong) => r.items.length,
+            },
+            {
+              title: 'Ghi chú',
+              dataIndex: 'ghi_chu',
+              ellipsis: true,
+              render: (v: string | null) => v ?? '—',
+            },
+            {
+              title: '',
+              width: 80,
+              render: (_: unknown, r: import('../../api/productionOrders').PhieuNhapPhoiSong) => (
+                <Button
+                  size="small"
+                  icon={<FileTextOutlined />}
+                  onClick={() => handlePrint(r)}
+                >
+                  In
+                </Button>
+              ),
+            },
+          ]}
+        />
+      )}
+    </Card>
+  )
+}
+
 interface Props {
   orderId?: number
   embedded?: boolean
@@ -42,6 +207,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const [editingBomItemId, setEditingBomItemId] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState('lap-lenh')
   const [savingProgress, setSavingProgress] = useState<number | null>(null)
+  const [phieuModal, setPhieuModal] = useState<{ loai: 'bat_dau' | 'ket_thuc' } | null>(null)
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['production-order', id],
@@ -514,18 +680,24 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
             <Card style={{ marginTop: 16 }}>
               <Space direction="vertical" style={{ width: '100%' }}>
                 {order.trang_thai === 'moi' && (
-                  <Popconfirm title="Bắt đầu sản xuất lệnh này?" onConfirm={handleStart} okText="Bắt đầu">
-                    <Button type="primary" icon={<PlayCircleOutlined />} block>
-                      Bắt đầu sản xuất
-                    </Button>
-                  </Popconfirm>
+                  <Button
+                    type="primary"
+                    icon={<PlayCircleOutlined />}
+                    block
+                    onClick={() => setPhieuModal({ loai: 'bat_dau' })}
+                  >
+                    Bắt đầu sản xuất
+                  </Button>
                 )}
                 {['moi', 'dang_chay'].includes(order.trang_thai) && (
-                  <Popconfirm title="Hoàn thành lệnh SX?" onConfirm={handleComplete} okText="Hoàn thành">
-                    <Button icon={<CheckCircleOutlined />} block style={{ color: 'green', borderColor: 'green' }}>
-                      Hoàn thành
-                    </Button>
-                  </Popconfirm>
+                  <Button
+                    icon={<CheckCircleOutlined />}
+                    block
+                    style={{ color: 'green', borderColor: 'green' }}
+                    onClick={() => setPhieuModal({ loai: 'ket_thuc' })}
+                  >
+                    Kết thúc / Hoàn thành
+                  </Button>
                 )}
                 {['moi', 'dang_chay'].includes(order.trang_thai) && (
                   <Popconfirm title="Huỷ lệnh sản xuất?" onConfirm={handleCancel} okText="Huỷ" okButtonProps={{ danger: true }}>
@@ -553,16 +725,24 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
             <Col>
               <Space size={4}>
                 {order.trang_thai === 'moi' && (
-                  <Popconfirm title="Bắt đầu sản xuất?" onConfirm={handleStart} okText="Bắt đầu">
-                    <Button size="small" type="primary" icon={<PlayCircleOutlined />}>Bắt đầu</Button>
-                  </Popconfirm>
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<PlayCircleOutlined />}
+                    onClick={() => setPhieuModal({ loai: 'bat_dau' })}
+                  >
+                    Bắt đầu
+                  </Button>
                 )}
                 {['moi', 'dang_chay'].includes(order.trang_thai) && (
-                  <Popconfirm title="Hoàn thành lệnh SX?" onConfirm={handleComplete} okText="Hoàn thành">
-                    <Button size="small" icon={<CheckCircleOutlined />} style={{ color: 'green', borderColor: 'green' }}>
-                      Hoàn thành
-                    </Button>
-                  </Popconfirm>
+                  <Button
+                    size="small"
+                    icon={<CheckCircleOutlined />}
+                    style={{ color: 'green', borderColor: 'green' }}
+                    onClick={() => setPhieuModal({ loai: 'ket_thuc' })}
+                  >
+                    Kết thúc
+                  </Button>
                 )}
                 {['moi', 'dang_chay'].includes(order.trang_thai) && (
                   <Popconfirm title="Huỷ lệnh?" onConfirm={handleCancel} okText="Huỷ" okButtonProps={{ danger: true }}>
@@ -778,8 +958,33 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
               </>
             ),
           },
+          {
+            key: 'phieu',
+            label: (
+              <Space size={4}>
+                <FileTextOutlined />
+                Phiếu phôi sóng
+              </Space>
+            ),
+            children: <PhieuNhapPhoiSongTab orderId={order.id} order={order} onNewPhieu={setPhieuModal} />,
+          },
         ]}
       />
+
+      {/* Phiếu nhập phôi sóng modal */}
+      {phieuModal && (
+        <PhieuNhapPhoiSongModal
+          open={!!phieuModal}
+          loai={phieuModal.loai}
+          order={order}
+          onClose={() => { setPhieuModal(null) }}
+          onSuccess={() => {
+            // Chỉ refresh dữ liệu — modal tự quản lý việc đóng sau khi in
+            invalidate()
+            qc.invalidateQueries({ queryKey: ['phieu-nhap-phoi-song', order.id] })
+          }}
+        />
+      )}
     </div>
   )
 }

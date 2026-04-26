@@ -12,6 +12,7 @@ import {
   productionPlansApi, AvailableItem, PlanLineCreate,
   calcSoDao, calcKhoTT,
 } from '../../api/productionPlans'
+import { fmtN } from '../../utils/exportUtils'
 
 const { Text, Title } = Typography
 
@@ -142,7 +143,7 @@ export default function ProductionPlanForm() {
       dataIndex: 'kho1_tinh_toan',
       width: 65,
       align: 'right' as const,
-      render: (v: number | null) => v ? Number(v).toFixed(1) : <Text type="secondary">—</Text>,
+      render: (v: number | null) => v ? fmtN(v, 1) : <Text type="secondary">—</Text>,
     },
     {
       title: '',
@@ -251,7 +252,7 @@ export default function ProductionPlanForm() {
       align: 'right' as const,
       render: (_: unknown, r: SelectedLine) =>
         r.kho_tt_calc !== null
-          ? <Text>{r.kho_tt_calc.toFixed(1)}</Text>
+          ? <Text>{fmtN(r.kho_tt_calc, 1)}</Text>
           : <Text type="secondary">—</Text>,
     },
     {

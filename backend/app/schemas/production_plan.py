@@ -179,6 +179,10 @@ class QueueLineResponse(BaseModel):
     so_lop: int | None
     to_hop_song: str | None
     loai_lan: str | None
+    loai_in: str | None = None
+    so_mau: int | None = None
+    c_tham: str | None = None
+    can_man: str | None = None
     dai_tt: Decimal | None
     # Kết cấu giấy
     mat: str | None;     mat_dl: Decimal | None

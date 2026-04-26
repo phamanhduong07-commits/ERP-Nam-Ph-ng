@@ -123,6 +123,43 @@ export const TRANG_THAI_COLORS: Record<string, string> = {
   huy: 'red',
 }
 
+export interface PhieuNhapPhoiSongItemPayload {
+  production_order_item_id: number
+  so_luong_ke_hoach: number
+  so_luong_thuc_te?: number | null
+  so_tam?: number | null
+  ghi_chu?: string | null
+}
+
+export interface PhieuNhapPhoiSongPayload {
+  loai: 'bat_dau' | 'ket_thuc'
+  ngay: string
+  ca?: string | null
+  ghi_chu?: string | null
+  items: PhieuNhapPhoiSongItemPayload[]
+}
+
+export interface PhieuNhapPhoiSongItem {
+  id: number
+  production_order_item_id: number
+  so_luong_ke_hoach: number
+  so_luong_thuc_te: number | null
+  so_tam: number | null
+  ghi_chu: string | null
+}
+
+export interface PhieuNhapPhoiSong {
+  id: number
+  so_phieu: string
+  production_order_id: number
+  loai: 'bat_dau' | 'ket_thuc'
+  ngay: string
+  ca: string | null
+  ghi_chu: string | null
+  created_at: string | null
+  items: PhieuNhapPhoiSongItem[]
+}
+
 export const productionOrdersApi = {
   list: (params?: {
     search?: string
@@ -159,4 +196,10 @@ export const productionOrdersApi = {
 
   updateItemSxParams: (orderId: number, itemId: number, data: UpdateItemSxParamsPayload) =>
     client.patch<ProductionOrder>(`/production-orders/${orderId}/items/${itemId}/sx-params`, data),
+
+  createPhieu: (orderId: number, data: PhieuNhapPhoiSongPayload) =>
+    client.post<PhieuNhapPhoiSong>(`/production-orders/${orderId}/phieu-nhap-phoi-song`, data),
+
+  listPhieu: (orderId: number) =>
+    client.get<PhieuNhapPhoiSong[]>(`/production-orders/${orderId}/phieu-nhap-phoi-song`),
 }

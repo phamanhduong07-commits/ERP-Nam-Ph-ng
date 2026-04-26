@@ -143,6 +143,10 @@ export interface QueueLine {
   so_lop: number | null
   to_hop_song: string | null
   loai_lan: string | null
+  loai_in: string | null
+  so_mau: number | null
+  c_tham: string | null
+  can_man: string | null
   dai_tt: number | null
   mat: string | null;     mat_dl: number | null
   song_1: string | null;  song_1_dl: number | null

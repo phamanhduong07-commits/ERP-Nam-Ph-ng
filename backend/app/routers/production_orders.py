@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
@@ -8,6 +9,7 @@ from app.models.auth import User
 from app.models.master import Product
 from app.models.sales import SalesOrder, SalesOrderItem
 from app.models.production import ProductionOrder, ProductionOrderItem
+from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.schemas.master import ProductShort
 from app.schemas.production import (
     ProductionOrderCreate, ProductionOrderUpdate,
@@ -437,3 +439,121 @@ def update_item_sx_params(
 
     db.commit()
     return _build_response(_load_order(order_id, db))
+
+
+# ── Phiếu nhập phôi sóng ─────────────────────────────────────────────────────
+
+class PhieuItemBody(BaseModel):
+    production_order_item_id: int
+    so_luong_ke_hoach: Decimal
+    so_luong_thuc_te: Decimal | None = None
+    so_tam: int | None = None
+    ghi_chu: str | None = None
+
+
+class PhieuBody(BaseModel):
+    loai: str          # bat_dau | ket_thuc
+    ngay: date
+    ca: str | None = None
+    ghi_chu: str | None = None
+    items: list[PhieuItemBody] = []
+
+
+def _generate_so_phieu(db: Session) -> str:
+    today = date.today()
+    prefix = f"PNPS-{today.strftime('%Y%m')}-"
+    last = (
+        db.query(PhieuNhapPhoiSong)
+        .filter(PhieuNhapPhoiSong.so_phieu.like(f"{prefix}%"))
+        .order_by(PhieuNhapPhoiSong.so_phieu.desc())
+        .first()
+    )
+    seq = (int(last.so_phieu[-4:]) + 1) if last else 1
+    return f"{prefix}{seq:04d}"
+
+
+def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
+    return {
+        "id": p.id,
+        "so_phieu": p.so_phieu,
+        "production_order_id": p.production_order_id,
+        "loai": p.loai,
+        "ngay": str(p.ngay),
+        "ca": p.ca,
+        "ghi_chu": p.ghi_chu,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "items": [
+            {
+                "id": it.id,
+                "production_order_item_id": it.production_order_item_id,
+                "so_luong_ke_hoach": float(it.so_luong_ke_hoach),
+                "so_luong_thuc_te": float(it.so_luong_thuc_te) if it.so_luong_thuc_te is not None else None,
+                "so_tam": it.so_tam,
+                "ghi_chu": it.ghi_chu,
+            }
+            for it in p.items
+        ],
+    }
+
+
+@router.post("/{order_id}/phieu-nhap-phoi-song", status_code=201)
+def create_phieu_nhap_phoi_song(
+    order_id: int,
+    data: PhieuBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Tạo phiếu nhập phôi sóng (bắt đầu hoặc kết thúc) và tự động cập nhật trạng thái lệnh SX."""
+    order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
+    if data.loai not in ("bat_dau", "ket_thuc"):
+        raise HTTPException(status_code=400, detail="loai phải là 'bat_dau' hoặc 'ket_thuc'")
+
+    so_phieu = _generate_so_phieu(db)
+    phieu = PhieuNhapPhoiSong(
+        so_phieu=so_phieu,
+        production_order_id=order_id,
+        loai=data.loai,
+        ngay=data.ngay,
+        ca=data.ca,
+        ghi_chu=data.ghi_chu,
+        created_by=current_user.id,
+    )
+    for it in data.items:
+        phieu.items.append(PhieuNhapPhoiSongItem(
+            production_order_item_id=it.production_order_item_id,
+            so_luong_ke_hoach=it.so_luong_ke_hoach,
+            so_luong_thuc_te=it.so_luong_thuc_te,
+            so_tam=it.so_tam,
+            ghi_chu=it.ghi_chu,
+        ))
+    db.add(phieu)
+
+    # Tự động chuyển trạng thái lệnh SX
+    if data.loai == "bat_dau" and order.trang_thai == "moi":
+        order.trang_thai = "dang_chay"
+        order.ngay_bat_dau_thuc_te = data.ngay
+    elif data.loai == "ket_thuc" and order.trang_thai in ("moi", "dang_chay"):
+        order.trang_thai = "hoan_thanh"
+        order.ngay_hoan_thanh_thuc_te = data.ngay
+
+    db.commit()
+    db.refresh(phieu)
+    return _phieu_to_dict(phieu)
+
+
+@router.get("/{order_id}/phieu-nhap-phoi-song")
+def list_phieu_nhap_phoi_song(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Danh sách phiếu nhập phôi sóng của một lệnh SX."""
+    phieus = (
+        db.query(PhieuNhapPhoiSong)
+        .filter(PhieuNhapPhoiSong.production_order_id == order_id)
+        .order_by(PhieuNhapPhoiSong.created_at.desc())
+        .all()
+    )
+    return [_phieu_to_dict(p) for p in phieus]
