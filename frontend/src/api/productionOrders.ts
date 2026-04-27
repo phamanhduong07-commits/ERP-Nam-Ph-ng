@@ -70,6 +70,8 @@ export interface ProductionOrderListItem {
   ngay_lenh: string
   sales_order_id: number | null
   so_don: string | null
+  ten_khach_hang: string | null
+  ten_hang: string | null       // mã hàng / tên hàng (item đầu tiên)
   trang_thai: string
   ngay_hoan_thanh_ke_hoach: string | null
   so_dong: number
@@ -146,6 +148,7 @@ export interface PhieuNhapPhoiSongPayload {
 export interface PhieuNhapPhoiSongItem {
   id: number
   production_order_item_id: number
+  ten_hang: string | null
   so_luong_ke_hoach: number
   so_luong_thuc_te: number | null
   so_luong_loi: number | null

@@ -7,8 +7,39 @@ import { PrinterOutlined, CheckOutlined, ClockCircleOutlined } from '@ant-design
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { productionOrdersApi } from '../../api/productionOrders'
-import type { ProductionOrder, PhieuNhapPhoiSong } from '../../api/productionOrders'
+import type { ProductionOrder, PhieuNhapPhoiSong, ProductionOrderItem } from '../../api/productionOrders'
 import { fmtN } from '../../utils/exportUtils'
+import { calcBoxDimensions } from '../../api/quotes'
+
+// Làm tròn lên bội số 5 (giống SxParamsTab)
+const roundUpTo5 = (v: number) => Math.ceil(v / 5) * 5
+
+// Lấy chiều khổ: ưu tiên kho_tt đã lưu, fallback tính từ kích thước thùng
+function getChieuKho(oi: ProductionOrderItem): number | null {
+  if (oi.kho_tt != null) return Number(oi.kho_tt)
+  const dims = calcBoxDimensions(
+    oi.loai_thung,
+    oi.dai != null ? Number(oi.dai) : null,
+    oi.rong != null ? Number(oi.rong) : null,
+    oi.cao != null ? Number(oi.cao) : null,
+    oi.so_lop ?? (oi.product?.so_lop ?? 3),
+  )
+  if (!dims || !dims.kho_tt) return null
+  return roundUpTo5(dims.kho_tt)
+}
+
+// Lấy chiều cắt: ưu tiên dai_tt đã lưu, fallback tính từ kích thước thùng
+function getChieuCat(oi: ProductionOrderItem): number | null {
+  if (oi.dai_tt != null) return Number(oi.dai_tt)
+  const dims = calcBoxDimensions(
+    oi.loai_thung,
+    oi.dai != null ? Number(oi.dai) : null,
+    oi.rong != null ? Number(oi.rong) : null,
+    oi.cao != null ? Number(oi.cao) : null,
+    oi.so_lop ?? (oi.product?.so_lop ?? 3),
+  )
+  return dims?.dai_tt ?? null
+}
 
 const { Text, Title } = Typography
 
@@ -21,8 +52,6 @@ interface RowState {
   so_luong_ke_hoach: number
   so_luong_thuc_te: number | null
   so_luong_loi: number | null
-  chieu_kho: number | null
-  chieu_cat: number | null
   so_tam: number | null
   ghi_chu: string | null
 }
@@ -60,8 +89,6 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
       so_luong_ke_hoach: Number(it.so_luong_ke_hoach),
       so_luong_thuc_te: null,
       so_luong_loi: null,
-      chieu_kho: it.kho_tt ?? null,
-      chieu_cat: it.dai_tt ?? null,
       so_tam: null,
       ghi_chu: null,
     }))
@@ -91,14 +118,19 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
         ghi_chu: ghiChu || null,
         gio_bat_dau: gioBatDau?.format('HH:mm') ?? null,
         gio_ket_thuc: gioKetThuc?.format('HH:mm') ?? null,
-        items: rows.map(r => ({
-          production_order_item_id: r.poi_id,
-          so_luong_ke_hoach: r.so_luong_ke_hoach,
-          so_luong_thuc_te: r.so_luong_thuc_te,
-          so_luong_loi: r.so_luong_loi,
-          so_tam: r.so_tam,
-          ghi_chu: r.ghi_chu,
-        })),
+        items: rows.map(r => {
+          const oi = order.items.find(i => i.id === r.poi_id)
+          return {
+            production_order_item_id: r.poi_id,
+            so_luong_ke_hoach: r.so_luong_ke_hoach,
+            so_luong_thuc_te: r.so_luong_thuc_te,
+            so_luong_loi: r.so_luong_loi,
+            chieu_kho: oi ? getChieuKho(oi) : null,  // tự động từ lệnh SX (fallback tính từ kích thước)
+            chieu_cat: oi ? getChieuCat(oi) : null,  // tự động từ lệnh SX (fallback tính từ kích thước)
+            so_tam: r.so_tam,
+            ghi_chu: r.ghi_chu,
+          }
+        }),
       })
       // Xóa phiên khỏi localStorage sau khi tạo phiếu thành công
       localStorage.removeItem(phoiSessionKey(order.id))
@@ -132,12 +164,17 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
       const sl_thuc = it.so_luong_thuc_te
       const sl_loi = it.so_luong_loi
       const sl_nhap = sl_thuc != null ? (sl_thuc - (sl_loi ?? 0)) : null
+      // chiều khổ/cắt: ưu tiên giá trị đã lưu trong phiếu, fallback tính từ kích thước thùng
+      const chieuKho = it.chieu_kho != null ? it.chieu_kho : (orderItem ? getChieuKho(orderItem) : null)
+      const chieuCat = it.chieu_cat != null ? it.chieu_cat : (orderItem ? getChieuCat(orderItem) : null)
       return `
         <tr>
           <td style="text-align:center">${i + 1}</td>
           <td>${orderItem?.ten_hang ?? ''}</td>
           <td style="text-align:center">${dims || '—'}</td>
           <td style="text-align:center">${orderItem?.so_lop ?? '—'}</td>
+          <td style="text-align:center">${chieuKho != null ? chieuKho : ''}</td>
+          <td style="text-align:center">${chieuCat != null ? chieuCat : ''}</td>
           <td style="text-align:right">${fmtN(it.so_luong_ke_hoach, 0)}</td>
           <td style="text-align:right">${sl_thuc != null ? fmtN(sl_thuc, 0) : ''}</td>
           <td style="text-align:right">${sl_loi != null ? fmtN(sl_loi, 0) : ''}</td>
@@ -193,8 +230,10 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
           <tr>
             <th width="32">STT</th>
             <th>Tên hàng</th>
-            <th width="90">Kích thước</th>
-            <th width="40">Lớp</th>
+            <th width="80">Kích thước</th>
+            <th width="36">Lớp</th>
+            <th width="60">Chiều khổ</th>
+            <th width="60">Chiều cắt</th>
             <th width="70">SL kế hoạch</th>
             <th width="70">SL thực tế</th>
             <th width="65">Phôi lỗi</th>
@@ -282,6 +321,30 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
       ),
     },
     {
+      title: 'Chiều khổ',
+      width: 80,
+      align: 'center' as const,
+      render: (_: unknown, r: RowState) => {
+        const oi = order.items.find(i => i.id === r.poi_id)
+        const val = oi ? getChieuKho(oi) : null
+        return val != null
+          ? <Text style={{ fontSize: 12 }}>{val}</Text>
+          : <Text type="secondary">—</Text>
+      },
+    },
+    {
+      title: 'Chiều cắt',
+      width: 80,
+      align: 'center' as const,
+      render: (_: unknown, r: RowState) => {
+        const oi = order.items.find(i => i.id === r.poi_id)
+        const val = oi ? getChieuCat(oi) : null
+        return val != null
+          ? <Text style={{ fontSize: 12 }}>{val}</Text>
+          : <Text type="secondary">—</Text>
+      },
+    },
+    {
       title: 'Nhập kho',
       width: 90,
       align: 'right' as const,
@@ -334,7 +397,7 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
           )}
         </Space>
       }
-      width={920}
+      width={980}
       onCancel={() => { setResult(null); onClose() }}
       destroyOnClose
       footer={
@@ -438,7 +501,7 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
             columns={columns}
             size="small"
             pagination={false}
-            scroll={{ x: 700 }}
+            scroll={{ x: 900 }}
           />
         </>
       )}

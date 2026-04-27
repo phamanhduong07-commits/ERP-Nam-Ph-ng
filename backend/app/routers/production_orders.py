@@ -112,11 +112,13 @@ def list_orders(
     tu_ngay: date | None = Query(default=None),
     den_ngay: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=10000),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = db.query(ProductionOrder).options(joinedload(ProductionOrder.sales_order))
+    q = db.query(ProductionOrder).options(
+        joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.customer)
+    )
 
     if search:
         like = f"%{search}%"
@@ -144,12 +146,15 @@ def list_orders(
             ProductionOrderItem.production_order_id == o.id
         ).all()
         tong_sl = sum(i.so_luong_ke_hoach for i in items_q)
+        kh = o.sales_order.customer if o.sales_order else None
         items_resp.append(ProductionOrderListItem(
             id=o.id,
             so_lenh=o.so_lenh,
             ngay_lenh=o.ngay_lenh,
             sales_order_id=o.sales_order_id,
             so_don=o.sales_order.so_don if o.sales_order else None,
+            ten_khach_hang=kh.ten_viet_tat if kh else None,
+            ten_hang=items_q[0].ten_hang if items_q else None,
             trang_thai=o.trang_thai,
             ngay_hoan_thanh_ke_hoach=o.ngay_hoan_thanh_ke_hoach,
             so_dong=len(items_q),
@@ -491,6 +496,7 @@ def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
             {
                 "id": it.id,
                 "production_order_item_id": it.production_order_item_id,
+                "ten_hang": getattr(getattr(it, "production_order_item", None), "ten_hang", None),
                 "so_luong_ke_hoach": float(it.so_luong_ke_hoach),
                 "so_luong_thuc_te": float(it.so_luong_thuc_te) if it.so_luong_thuc_te is not None else None,
                 "so_luong_loi": float(it.so_luong_loi) if it.so_luong_loi is not None else None,
@@ -563,6 +569,9 @@ def list_phieu_nhap_phoi_song(
     phieus = (
         db.query(PhieuNhapPhoiSong)
         .filter(PhieuNhapPhoiSong.production_order_id == order_id)
+        .options(
+            joinedload(PhieuNhapPhoiSong.items).joinedload(PhieuNhapPhoiSongItem.production_order_item)
+        )
         .order_by(PhieuNhapPhoiSong.created_at.desc())
         .all()
     )

@@ -133,6 +133,8 @@ class ProductionOrderListItem(BaseModel):
     ngay_lenh: date
     sales_order_id: int | None
     so_don: str | None = None
+    ten_khach_hang: str | None = None
+    ten_hang: str | None = None          # tên mã hàng (item đầu tiên của lệnh SX)
     trang_thai: str
     ngay_hoan_thanh_ke_hoach: date | None
     so_dong: int = 0
