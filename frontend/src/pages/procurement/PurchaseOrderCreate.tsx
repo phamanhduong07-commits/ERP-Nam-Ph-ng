@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
@@ -58,12 +58,28 @@ export default function PurchaseOrderCreate() {
       message.success(`Tạo đơn ${res.data.so_don_mua} thành công`)
       navigate(`/procurement/purchase-orders?id=${res.data.id}`)
     },
-    onError: (e: any) => message.error(e.response?.data?.detail || 'Lỗi tạo đơn'),
+    onError: (e: any) => {
+      const detail = e.response?.data?.detail
+      if (Array.isArray(detail)) {
+        message.error(detail.map((d: any) => d.msg).join('; ') || 'Lỗi tạo đơn')
+      } else {
+        message.error(detail || 'Lỗi tạo đơn')
+      }
+    },
   })
 
   const handleSubmit = async () => {
     try {
       const vals = await form.validateFields()
+      const invalid = lines.find(l => !l.so_luong || l.so_luong <= 0)
+      if (invalid) {
+        message.error('Số lượng mỗi dòng phải lớn hơn 0')
+        return
+      }
+      if (lines.length === 0) {
+        message.error('Vui lòng thêm ít nhất một dòng hàng')
+        return
+      }
       const items = lines.map(l => ({
         paper_material_id: isGiay ? l.paper_material_id : undefined,
         other_material_id: !isGiay ? l.other_material_id : undefined,
@@ -173,7 +189,7 @@ export default function PurchaseOrderCreate() {
           min={0.001}
           step={0.001}
           value={row.so_luong}
-          onChange={v => updateLine(row._key, 'so_luong', v || 0)}
+          onChange={v => updateLine(row._key, 'so_luong', v ?? 0.001)}
         />
       ),
     },
