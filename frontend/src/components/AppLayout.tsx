@@ -7,6 +7,7 @@ import {
   DashboardOutlined, ShoppingCartOutlined, ShopOutlined,
   TeamOutlined, UserOutlined, LogoutOutlined, SettingOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, FileTextOutlined, ClockCircleOutlined,
+  InboxOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
@@ -70,11 +71,13 @@ function buildMenuItems(queueCount: number) {
       ],
     },
     {
-      key: 'mua-hang',
-      icon: <ShopOutlined />,
-      label: 'Mua hàng',
+      key: 'thu-mua',
+      icon: <InboxOutlined />,
+      label: 'Thu mua',
       children: [
-        { key: '/purchasing/orders', label: <Link to="/purchasing/orders">Đơn mua</Link> },
+        { key: '/procurement/purchase-orders', label: <Link to="/procurement/purchase-orders">Đơn mua hàng</Link> },
+        { key: '/procurement/material-receipts', label: <Link to="/procurement/material-receipts">Phiếu nhập nguyên liệu</Link> },
+        { key: '/procurement/warehouse', label: <Link to="/procurement/warehouse">Kho nguyên liệu</Link> },
       ],
     },
     {

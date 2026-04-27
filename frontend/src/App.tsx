@@ -35,6 +35,13 @@ import IndirectCostList from './pages/danhmuc/IndirectCostList'
 import AddonRateList from './pages/danhmuc/AddonRateList'
 import BomListPage from './pages/production/BomListPage'
 import PhieuPhoiPage from './pages/production/PhieuPhoiPage'
+import PurchaseOrdersPage from './pages/procurement/PurchaseOrdersPage'
+import PurchaseOrderCreate from './pages/procurement/PurchaseOrderCreate'
+import PurchaseOrderPage from './pages/procurement/PurchaseOrderPage'
+import MaterialReceiptsPage from './pages/procurement/MaterialReceiptsPage'
+import MaterialReceiptCreate from './pages/procurement/MaterialReceiptCreate'
+import MaterialReceiptPage from './pages/procurement/MaterialReceiptPage'
+import MaterialWarehousePage from './pages/procurement/MaterialWarehousePage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -100,6 +107,15 @@ export default function App() {
 
         {/* Phiếu phôi sóng */}
         <Route path="production/phieu-phoi" element={<PhieuPhoiPage />} />
+
+        {/* Thu mua */}
+        <Route path="procurement/purchase-orders" element={<PurchaseOrdersPage />} />
+        <Route path="procurement/purchase-orders/new" element={<PurchaseOrderCreate />} />
+        <Route path="procurement/purchase-orders/:id" element={<PurchaseOrderPage />} />
+        <Route path="procurement/material-receipts" element={<MaterialReceiptsPage />} />
+        <Route path="procurement/material-receipts/new" element={<MaterialReceiptCreate />} />
+        <Route path="procurement/material-receipts/:id" element={<MaterialReceiptPage />} />
+        <Route path="procurement/warehouse" element={<MaterialWarehousePage />} />
 
         {/* BOM / Chi phí */}
         <Route path="master/indirect-costs" element={<IndirectCostList />} />

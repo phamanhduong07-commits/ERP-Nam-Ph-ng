@@ -12,3 +12,4 @@ from app.models.indirect_cost import IndirectCostItem
 from app.models.addon_rate import AddonRate
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
+from app.models.procurement import PurchaseOrder, PurchaseOrderItem, MaterialReceipt, MaterialReceiptItem

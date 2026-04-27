@@ -9,6 +9,7 @@ from app.routers import (
     production_orders, bom, production_plans, indirect_costs, addon_rates,
 )
 from app.routers import phieu_phoi
+from app.routers import procurement
 
 # Tạo bảng tự động nếu chưa có (dùng Alembic cho production)
 Base.metadata.create_all(bind=engine)
@@ -54,6 +55,7 @@ app.include_router(bom.router)
 app.include_router(indirect_costs.router)
 app.include_router(addon_rates.router)
 app.include_router(phieu_phoi.router)
+app.include_router(procurement.router)
 
 
 @app.get("/api/health")
