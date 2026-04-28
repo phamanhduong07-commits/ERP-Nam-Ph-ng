@@ -1,0 +1,9 @@
+@echo off
+chcp 65001
+echo Đang kéo code mới từ GitHub...
+git pull
+echo Đang cập nhật Database...
+python -c "from app.main import ensure_schema; ensure_schema()"
+echo Đang khởi động Backend...
+python run.py
+pause

@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     APP_NAME: str = "ERP Nam Phuong"
     DEBUG: bool = False
 
+    # CD2 MES integration
+    CD2_URL: str = "http://cd2-namphuong.mypacksoft.com:38981"
+    CD2_USERNAME: str = ""
+    CD2_PASSWORD: str = ""
+
     class Config:
         env_file = ".env"
 

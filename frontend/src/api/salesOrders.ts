@@ -77,6 +77,7 @@ export interface SalesOrderListItem {
   ngay_giao_hang: string | null
   tong_tien: number
   so_dong: number
+  created_at: string
 }
 
 export interface CreateOrderItemPayload {

@@ -125,6 +125,7 @@ class SalesOrderListItem(BaseModel):
     ngay_giao_hang: date | None
     tong_tien: Decimal
     so_dong: int = 0
+    created_at: datetime
 
     class Config:
         from_attributes = True

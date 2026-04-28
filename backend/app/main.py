@@ -1,3 +1,6 @@
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
@@ -9,6 +12,7 @@ from app.routers import (
     production_orders, bom, production_plans, indirect_costs, addon_rates,
 )
 from app.routers import phieu_phoi
+from app.routers import cd2
 
 # Tạo bảng tự động nếu chưa có (dùng Alembic cho production)
 Base.metadata.create_all(bind=engine)
@@ -54,8 +58,21 @@ app.include_router(bom.router)
 app.include_router(indirect_costs.router)
 app.include_router(addon_rates.router)
 app.include_router(phieu_phoi.router)
+app.include_router(cd2.router)
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": settings.APP_NAME}
+    return {
+        "status": "ok", 
+        "app": settings.APP_NAME, 
+        "check_ngay": "DA_SUA_CODE_MOI"  # Anh thêm dòng này vào
+    }
+# Kiểm tra nếu thư mục dist tồn tại thì mới mount
+if os.path.exists("dist"):
+    app.mount("/", StaticFiles(directory="dist", html=True), name="static")
+
+    @app.exception_handler(404)
+    async def not_found_exception_handler(request, exc):
+        # Giúp React Router hoạt động khi reload trang
+        return FileResponse("dist/index.html")

@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import cast, Date
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
@@ -118,6 +119,7 @@ def list_quotes(
             ngay_het_han=qt.ngay_het_han,
             tong_cong=qt.tong_cong,
             so_dong=len(qt.items),
+            created_at=qt.created_at,
         )
         for qt in quotes
     ]
@@ -269,49 +271,41 @@ def tao_don_hang_tu_bao_gia(
         created_by=current_user.id,
     )
 
-    tong_tien = Decimal("0")
-    for qi in sorted(quote.items, key=lambda x: x.stt):
-        item = SalesOrderItem(
-            product_id=qi.product_id,
-            quote_item_id=qi.id,
-            ten_hang=qi.ten_hang,
-            so_luong=qi.so_luong,
-            dvt=qi.dvt,
-            don_gia=qi.gia_ban,
-            ghi_chu_san_pham=qi.ghi_chu,
-            # Thông số kỹ thuật kế thừa từ báo giá
-            loai_thung=qi.loai_thung,
-            dai=qi.dai, rong=qi.rong, cao=qi.cao,
-            so_lop=qi.so_lop, to_hop_song=qi.to_hop_song,
-            mat=qi.mat,       mat_dl=qi.mat_dl,
-            song_1=qi.song_1, song_1_dl=qi.song_1_dl,
-            mat_1=qi.mat_1,   mat_1_dl=qi.mat_1_dl,
-            song_2=qi.song_2, song_2_dl=qi.song_2_dl,
-            mat_2=qi.mat_2,   mat_2_dl=qi.mat_2_dl,
-            song_3=qi.song_3, song_3_dl=qi.song_3_dl,
-            mat_3=qi.mat_3,   mat_3_dl=qi.mat_3_dl,
-            loai_in=qi.loai_in, so_mau=qi.so_mau, loai_lan=qi.loai_lan,
-            c_tham=qi.c_tham,   can_man=qi.can_man,
-            kho_tt=qi.kho_tt,   dai_tt=qi.dai_tt,   dien_tich=qi.dien_tich,
-        )
-        order.items.append(item)
-        tong_tien += qi.so_luong * qi.gia_ban
-
-    order.tong_tien = tong_tien
-    db.add(order)
     try:
+        tong_tien = Decimal("0")
+        for qi in sorted(quote.items, key=lambda x: x.stt):
+            item = SalesOrderItem(
+                product_id=qi.product_id,
+                quote_item_id=qi.id,
+                ten_hang=qi.ten_hang,
+                so_luong=qi.so_luong,
+                dvt=qi.dvt,
+                don_gia=qi.gia_ban,
+                ghi_chu_san_pham=qi.ghi_chu,
+                # Thông số kỹ thuật kế thừa từ báo giá
+                loai_thung=qi.loai_thung,
+                dai=qi.dai, rong=qi.rong, cao=qi.cao,
+                so_lop=qi.so_lop, to_hop_song=qi.to_hop_song,
+                mat=qi.mat,       mat_dl=qi.mat_dl,
+                song_1=qi.song_1, song_1_dl=qi.song_1_dl,
+                mat_1=qi.mat_1,   mat_1_dl=qi.mat_1_dl,
+                song_2=qi.song_2, song_2_dl=qi.song_2_dl,
+                mat_2=qi.mat_2,   mat_2_dl=qi.mat_2_dl,
+                song_3=qi.song_3, song_3_dl=qi.song_3_dl,
+                mat_3=qi.mat_3,   mat_3_dl=qi.mat_3_dl,
+                loai_in=qi.loai_in, so_mau=qi.so_mau, loai_lan=qi.loai_lan,
+                c_tham=qi.c_tham,   can_man=qi.can_man,
+                kho_tt=qi.kho_tt,   dai_tt=qi.dai_tt,   dien_tich=qi.dien_tich,
+            )
+            order.items.append(item)
+            tong_tien += qi.so_luong * qi.gia_ban
+
+        order.tong_tien = tong_tien
+        db.add(order)
         db.commit()
     except Exception as e:
         db.rollback()
         err = str(e)
-        if "ten_hang" in err or "product_id" in err:
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "Lỗi cơ sở dữ liệu: bảng sales_order_items chưa được cập nhật. "
-                    "Vui lòng chạy migrate_001.sql trên database."
-                )
-            )
         raise HTTPException(status_code=500, detail=f"Lỗi tạo đơn hàng: {err}")
     db.refresh(order)
     return {

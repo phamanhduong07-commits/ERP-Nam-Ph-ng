@@ -81,6 +81,8 @@ class SalesOrderItem(Base):
     kho_tt:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dai_tt:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dien_tich: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    c_tham: Mapped[str | None] = mapped_column(String(50))
+    can_man: Mapped[str | None] = mapped_column(String(50))
 
     order: Mapped["SalesOrder"] = relationship("SalesOrder", back_populates="items")
     product: Mapped["Product | None"] = relationship("Product", back_populates="sales_order_items")

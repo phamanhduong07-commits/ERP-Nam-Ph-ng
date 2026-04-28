@@ -146,7 +146,13 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
       ),
     },
     {
-      title: 'Ngày',
+      title: 'Ngày lập',
+      dataIndex: 'created_at',
+      width: 130,
+      render: (v) => dayjs(v).format('DD/MM/YYYY HH:mm'),
+    },
+    {
+      title: 'Ngày BG',
       dataIndex: 'ngay_bao_gia',
       width: 100,
       render: (v) => dayjs(v).format('DD/MM/YYYY'),
@@ -277,18 +283,22 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
           </Col>
         </Row>
 
-        {!isEmbedded && (
-          <Row style={{ marginTop: 8 }}>
-            <Col span={24}>
-              <RangePicker
-                format="DD/MM/YYYY"
-                placeholder={['Từ ngày', 'Đến ngày']}
-                onChange={(_, s) => { setDateRange(s[0] && s[1] ? [s[0], s[1]] : []); setPage(1) }}
-                style={{ width: '100%' }}
-              />
-            </Col>
-          </Row>
-        )}
+        <Row style={{ marginTop: 8 }}>
+          <Col span={24}>
+            <RangePicker
+              format="DD/MM/YYYY"
+              placeholder={['Ngày BG từ', 'Đến ngày']}
+              onChange={(_, s) => {
+                setDateRange(s[0] && s[1] ? [
+                  dayjs(s[0], 'DD/MM/YYYY').format('YYYY-MM-DD'),
+                  dayjs(s[1], 'DD/MM/YYYY').format('YYYY-MM-DD'),
+                ] : [])
+                setPage(1)
+              }}
+              style={{ width: '100%' }}
+            />
+          </Col>
+        </Row>
       </Card>
 
       <Table

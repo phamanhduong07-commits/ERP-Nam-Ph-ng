@@ -1,7 +1,9 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import cast, Date
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
@@ -159,6 +161,7 @@ def list_orders(
             ngay_hoan_thanh_ke_hoach=o.ngay_hoan_thanh_ke_hoach,
             so_dong=len(items_q),
             tong_sl_ke_hoach=tong_sl,
+            created_at=o.created_at,
         ))
 
     return PagedResponse(
@@ -179,14 +182,14 @@ def get_order(
     return _build_response(_load_order(order_id, db))
 
 
-@router.post("/tu-don-hang/{order_id}", response_model=ProductionOrderResponse, status_code=201)
+@router.post("/tu-don-hang/{order_id}", response_model=List[ProductionOrderResponse], status_code=201)
 def tao_lenh_tu_don_hang(
     order_id: int,
     data: TaoLenhBody,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Tạo lệnh sản xuất từ toàn bộ dòng hàng của một đơn hàng đã duyệt."""
+    """Tạo lệnh sản xuất: mỗi mã hàng trong đơn = 1 lệnh SX riêng biệt."""
     so = (
         db.query(SalesOrder)
         .options(joinedload(SalesOrder.items))
@@ -196,22 +199,33 @@ def tao_lenh_tu_don_hang(
     if not so:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
     if so.trang_thai not in ("da_duyet", "dang_sx"):
-        raise HTTPException(status_code=400, detail="Chỉ lập lệnh SX từ đơn hàng đã duyệt")
+        raise HTTPException(status_code=400, detail="Chỉ lập lệnh SX từ đơn hàng đã duyệt hoặc đang sản xuất")
     if not so.items:
         raise HTTPException(status_code=400, detail="Đơn hàng không có mặt hàng nào")
 
-    so_lenh = _generate_so_lenh(db)
-    order = ProductionOrder(
-        so_lenh=so_lenh,
-        ngay_lenh=data.ngay_lenh or date.today(),
-        sales_order_id=so.id,
-        trang_thai="moi",
-        ngay_hoan_thanh_ke_hoach=data.ngay_hoan_thanh_ke_hoach or so.ngay_giao_hang,
-        ghi_chu=data.ghi_chu or f"Lập từ đơn hàng {so.so_don}",
-        created_by=current_user.id,
+    # Tạo tất cả so_lenh trước khi INSERT để tránh flush-trong-loop
+    today_date = data.ngay_lenh or date.today()
+    prefix = f"LSX{today_date.strftime('%Y%m%d')}"
+    last = (
+        db.query(ProductionOrder)
+        .filter(ProductionOrder.so_lenh.like(f"{prefix}%"))
+        .order_by(ProductionOrder.so_lenh.desc())
+        .first()
     )
+    start_seq = (int(last.so_lenh[-3:]) + 1) if last else 1
 
-    for soi in so.items:
+    created_orders = []
+    for idx, soi in enumerate(so.items):
+        so_lenh = f"{prefix}{(start_seq + idx):03d}"
+        order = ProductionOrder(
+            so_lenh=so_lenh,
+            ngay_lenh=today_date,
+            sales_order_id=so.id,
+            trang_thai="moi",
+            ngay_hoan_thanh_ke_hoach=data.ngay_hoan_thanh_ke_hoach or so.ngay_giao_hang,
+            ghi_chu=data.ghi_chu,
+            created_by=current_user.id,
+        )
         item = ProductionOrderItem(
             product_id=soi.product_id,
             sales_order_item_id=soi.id,
@@ -220,7 +234,6 @@ def tao_lenh_tu_don_hang(
             dvt=soi.dvt,
             ngay_giao_hang=soi.ngay_giao_hang,
             gia_ban_muc_tieu=soi.don_gia,
-            # Kế thừa thông số kỹ thuật từ đơn hàng
             loai_thung=soi.loai_thung,
             dai=soi.dai,         rong=soi.rong,       cao=soi.cao,
             so_lop=soi.so_lop,   to_hop_song=soi.to_hop_song,
@@ -231,16 +244,22 @@ def tao_lenh_tu_don_hang(
             mat_2=soi.mat_2,     mat_2_dl=soi.mat_2_dl,
             song_3=soi.song_3,   song_3_dl=soi.song_3_dl,
             mat_3=soi.mat_3,     mat_3_dl=soi.mat_3_dl,
-            loai_in=soi.loai_in, so_mau=soi.so_mau, loai_lan=soi.loai_lan,
-            c_tham=getattr(soi, 'c_tham', None), can_man=getattr(soi, 'can_man', None),
+            loai_in=soi.loai_in, so_mau=soi.so_mau,
+            loai_lan=getattr(soi, 'loai_lan', None),
+            c_tham=getattr(soi, 'c_tham', None),
+            can_man=getattr(soi, 'can_man', None),
         )
         order.items.append(item)
+        db.add(order)
+        created_orders.append(order)
 
-    db.add(order)
     so.trang_thai = "dang_sx"
+    db.flush()  # Chắc chắn tất cả INSERT chạy và DB gán ID trước khi commit
+    order_ids = [o.id for o in created_orders]  # Thu thập ID khi objects còn "tươi"
     db.commit()
-    db.refresh(order)
-    return _build_response(_load_order(order.id, db))
+
+    # Load lại từng order với đầy đủ relationships sau commit
+    return [_build_response(_load_order(oid, db)) for oid in order_ids]
 
 
 @router.post("", response_model=ProductionOrderResponse, status_code=201)
@@ -576,3 +595,69 @@ def list_phieu_nhap_phoi_song(
         .all()
     )
     return [_phieu_to_dict(p) for p in phieus]
+
+
+# ── Đẩy lệnh sang hệ thống CD2 (Công Đoạn 2) ────────────────────────────────
+
+@router.post("/{order_id}/push-to-cd2")
+def push_to_cd2(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Đẩy lệnh sản xuất sang hệ thống CD2 (hàng đợi máy in)."""
+    order = _load_order(order_id, db)
+
+    # Lấy số lượng thực tế từ phiếu nhập phôi sóng (nếu có)
+    phieus = (
+        db.query(PhieuNhapPhoiSong)
+        .filter(PhieuNhapPhoiSong.production_order_id == order_id)
+        .options(joinedload(PhieuNhapPhoiSong.items))
+        .all()
+    )
+
+    so_luong: float | None = None
+    for phieu in phieus:
+        for it in phieu.items:
+            if it.so_luong_thuc_te is not None:
+                so_luong = (so_luong or 0) + float(it.so_luong_thuc_te)
+
+    first_item = order.items[0] if order.items else None
+
+    # Fallback: dùng số lượng kế hoạch nếu chưa có phiếu
+    if so_luong is None and first_item:
+        so_luong = float(first_item.so_luong_ke_hoach)
+
+    # Tính quy cách: ưu tiên kho_tt × dai_tt, fallback rong × dai
+    quy_cach: str | None = None
+    if first_item:
+        kho = first_item.kho_tt
+        dai = first_item.dai_tt
+        if kho and dai:
+            quy_cach = f"{int(kho)}x{int(dai)}"
+        elif first_item.rong and first_item.dai:
+            quy_cach = f"{int(first_item.rong)}x{int(first_item.dai)}"
+
+    kh = order.sales_order.customer if order.sales_order else None
+
+    dhcho_payload = {
+        "so_lsx": order.so_lenh,
+        "ma_kh": kh.ma_kh if kh else None,
+        "ten_hang": first_item.ten_hang if first_item else None,
+        "quy_cach": quy_cach,
+        "ngay_lsx": str(order.ngay_lenh),
+        "loai": first_item.loai_thung if first_item else None,
+        "so_luong": so_luong,
+        "in_may": first_item.loai_in if first_item else None,
+        "so_kh": order.sales_order.so_don if order.sales_order else None,
+        "ngay_kh": str(order.ngay_hoan_thanh_ke_hoach) if order.ngay_hoan_thanh_ke_hoach else None,
+        "ghi_chu": order.ghi_chu,
+    }
+
+    try:
+        from app.services.cd2_service import cd2_login, cd2_create_dhcho
+        token = cd2_login()
+        result = cd2_create_dhcho(token, dhcho_payload)
+        return {"ok": True, "data": result, "payload_sent": dhcho_payload}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Lỗi kết nối CD2: {exc}")

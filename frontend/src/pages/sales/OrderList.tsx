@@ -136,6 +136,12 @@ export default function OrderList({ selectedId, onSelect }: Props) {
       ),
     },
     {
+      title: 'Ngày lập',
+      dataIndex: 'created_at',
+      width: 130,
+      render: (v) => dayjs(v).format('DD/MM/YYYY HH:mm'),
+    },
+    {
       title: 'Ngày đơn',
       dataIndex: 'ngay_don',
       width: 110,
@@ -267,24 +273,22 @@ export default function OrderList({ selectedId, onSelect }: Props) {
           </Col>
         </Row>
 
-        {!isEmbedded && (
-          <Row style={{ marginTop: 8 }}>
-            <Col span={24}>
-              <RangePicker
-                style={{ width: '100%' }}
-                format="DD/MM/YYYY"
-                placeholder={['Từ ngày', 'Đến ngày']}
-                onChange={(_, s) => {
-                  setDateRange(s[0] && s[1] ? [
-                    dayjs(s[0], 'DD/MM/YYYY').format('YYYY-MM-DD'),
-                    dayjs(s[1], 'DD/MM/YYYY').format('YYYY-MM-DD'),
-                  ] : null)
-                  setPage(1)
-                }}
-              />
-            </Col>
-          </Row>
-        )}
+        <Row style={{ marginTop: 8 }}>
+          <Col span={24}>
+            <RangePicker
+              style={{ width: '100%' }}
+              format="DD/MM/YYYY"
+              placeholder={['Ngày đơn từ', 'Đến ngày']}
+              onChange={(_, s) => {
+                setDateRange(s[0] && s[1] ? [
+                  dayjs(s[0], 'DD/MM/YYYY').format('YYYY-MM-DD'),
+                  dayjs(s[1], 'DD/MM/YYYY').format('YYYY-MM-DD'),
+                ] : null)
+                setPage(1)
+              }}
+            />
+          </Col>
+        </Row>
       </Card>
 
       <Table

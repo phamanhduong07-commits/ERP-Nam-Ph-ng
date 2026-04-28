@@ -71,15 +71,21 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
         ngay_lenh: vals.ngay_lenh?.format('YYYY-MM-DD'),
         ngay_hoan_thanh_ke_hoach: vals.ngay_hoan_thanh_ke_hoach?.format('YYYY-MM-DD'),
       })
-      message.success(`Đã tạo lệnh sản xuất ${res.data.so_lenh}`)
+      const orders = res.data
+      message.success(`Đã tạo ${orders.length} lệnh sản xuất (1 lệnh / mã hàng)`)
       setLenhModal(false)
       refetch()
-      navigate(`/production/orders/${res.data.id}`)
+      navigate('/production/orders')
     } catch (err: any) {
-      if (err?.response?.data?.detail) {
+      if (err?.errorFields) {
+        // Ant Design validateFields lỗi — inline error tự hiển thị, không cần message
+      } else if (err?.response?.data?.detail) {
         message.error(err.response.data.detail)
+      } else if (err?.response) {
+        message.error(`Lập lệnh thất bại (lỗi ${err.response.status})`)
+      } else {
+        message.error('Lập lệnh thất bại. Vui lòng thử lại.')
       }
-      // validateFields lỗi thì bỏ qua (inline error hiển thị)
     } finally {
       setLenhLoading(false)
     }

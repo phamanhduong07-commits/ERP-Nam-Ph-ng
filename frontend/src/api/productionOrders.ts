@@ -76,6 +76,7 @@ export interface ProductionOrderListItem {
   ngay_hoan_thanh_ke_hoach: string | null
   so_dong: number
   tong_sl_ke_hoach: number
+  created_at: string
 }
 
 export interface UpdateItemSxParamsPayload {
@@ -185,12 +186,12 @@ export const productionOrdersApi = {
   get: (id: number) => client.get<ProductionOrder>(`/production-orders/${id}`),
   create: (data: CreateProductionOrderPayload) => client.post<ProductionOrder>('/production-orders', data),
 
-  /** Tạo lệnh SX từ toàn bộ dòng hàng của một đơn hàng đã duyệt */
+  /** Tạo lệnh SX từ đơn hàng — mỗi mã hàng = 1 lệnh SX riêng */
   createFromOrder: (
     salesOrderId: number,
     opts?: { ngay_lenh?: string; ngay_hoan_thanh_ke_hoach?: string; ghi_chu?: string },
   ) =>
-    client.post<ProductionOrder>(
+    client.post<ProductionOrder[]>(
       `/production-orders/tu-don-hang/${salesOrderId}`,
       opts ?? {},
     ),
@@ -213,4 +214,9 @@ export const productionOrdersApi = {
 
   listPhieu: (orderId: number) =>
     client.get<PhieuNhapPhoiSong[]>(`/production-orders/${orderId}/phieu-nhap-phoi-song`),
+
+  pushToCD2: (orderId: number) =>
+    client.post<{ ok: boolean; data: unknown; payload_sent: unknown }>(
+      `/production-orders/${orderId}/push-to-cd2`,
+    ),
 }

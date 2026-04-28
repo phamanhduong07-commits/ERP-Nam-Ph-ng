@@ -35,6 +35,16 @@ import IndirectCostList from './pages/danhmuc/IndirectCostList'
 import AddonRateList from './pages/danhmuc/AddonRateList'
 import BomListPage from './pages/production/BomListPage'
 import PhieuPhoiPage from './pages/production/PhieuPhoiPage'
+import CD2KanbanPage from './pages/production/CD2KanbanPage'
+import ScanMayPage from './pages/production/ScanMayPage'
+import ScanHistoryPage from './pages/production/ScanHistoryPage'
+import CD2DashboardPage from './pages/production/CD2DashboardPage'
+import PhieuInHistoryPage from './pages/production/PhieuInHistoryPage'
+import MayInQueuePage from './pages/production/MayInQueuePage'
+import DinhHinhPage from './pages/production/DinhHinhPage'
+import SauInKanbanPage from './pages/production/SauInKanbanPage'
+import ShiftPage from './pages/production/ShiftPage'
+import ConfigPage from './pages/production/ConfigPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -100,6 +110,18 @@ export default function App() {
 
         {/* Phiếu phôi sóng */}
         <Route path="production/phieu-phoi" element={<PhieuPhoiPage />} />
+
+        {/* Công Đoạn 2 */}
+        <Route path="production/cd2" element={<CD2KanbanPage />} />
+        <Route path="production/cd2/dashboard" element={<CD2DashboardPage />} />
+        <Route path="production/cd2/may-in" element={<MayInQueuePage />} />
+        <Route path="production/cd2/scan" element={<ScanMayPage />} />
+        <Route path="production/cd2/scan-history" element={<ScanHistoryPage />} />
+        <Route path="production/cd2/history" element={<PhieuInHistoryPage />} />
+        <Route path="production/cd2/dhcho2" element={<DinhHinhPage />} />
+        <Route path="production/cd2/sauin-kanban" element={<SauInKanbanPage />} />
+        <Route path="production/cd2/shift" element={<ShiftPage />} />
+        <Route path="production/cd2/config" element={<ConfigPage />} />
 
         {/* BOM / Chi phí */}
         <Route path="master/indirect-costs" element={<IndirectCostList />} />

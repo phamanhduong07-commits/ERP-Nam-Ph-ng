@@ -139,6 +139,7 @@ class ProductionOrderListItem(BaseModel):
     ngay_hoan_thanh_ke_hoach: date | None
     so_dong: int = 0
     tong_sl_ke_hoach: Decimal = Decimal("0")
+    created_at: datetime
 
     class Config:
         from_attributes = True

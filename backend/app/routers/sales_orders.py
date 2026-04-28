@@ -1,8 +1,8 @@
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import text
+from sqlalchemy import cast, Date, text
 from sqlalchemy.orm import Session, joinedload
-from app.database import get_db, _BACKFILL_QI_MYSQL, _BACKFILL_SPEC_MYSQL
+from app.database import get_db, _BACKFILL_QI_PG, _BACKFILL_SPEC_PG
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.master import Customer, Product
@@ -77,6 +77,7 @@ def list_orders(
             ngay_giao_hang=o.ngay_giao_hang,
             tong_tien=o.tong_tien,
             so_dong=len(o.items),
+            created_at=o.created_at,
         ))
 
     return PagedResponse(
@@ -291,19 +292,15 @@ def backfill_spec(
     Chạy lại backfill spec từ quote_items → sales_order_items.
     Dùng khi đơn hàng cũ chưa có dữ liệu kỹ thuật từ báo giá.
     """
-    from app.config import settings
-    if settings.DATABASE_URL.startswith("sqlite"):
-        return {"message": "SQLite không hỗ trợ backfill", "qi_rows": 0, "spec_rows": 0}
-
     try:
-        r1 = db.execute(text(_BACKFILL_QI_MYSQL))
+        r1 = db.execute(text(_BACKFILL_QI_PG))
         qi_rows = r1.rowcount
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Backfill quote_item_id thất bại: {e}")
 
     try:
-        r2 = db.execute(text(_BACKFILL_SPEC_MYSQL))
+        r2 = db.execute(text(_BACKFILL_SPEC_PG))
         spec_rows = r2.rowcount
     except Exception as e:
         db.rollback()

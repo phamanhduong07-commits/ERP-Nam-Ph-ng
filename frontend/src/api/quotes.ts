@@ -94,6 +94,7 @@ export interface QuoteListItem {
   ngay_het_han?: string | null
   tong_cong: number
   so_dong: number
+  created_at: string
 }
 
 export interface CreateQuotePayload {

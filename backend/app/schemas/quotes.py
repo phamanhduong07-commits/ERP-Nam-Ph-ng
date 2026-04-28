@@ -232,6 +232,7 @@ class QuoteListItem(BaseModel):
     ngay_het_han: date | None
     tong_cong: Decimal
     so_dong: int = 0
+    created_at: datetime
 
     class Config:
         from_attributes = True

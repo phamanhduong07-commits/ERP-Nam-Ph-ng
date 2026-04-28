@@ -9,7 +9,7 @@ import {
 import {
   ArrowLeftOutlined, PlayCircleOutlined, CheckCircleOutlined,
   CloseOutlined, SaveOutlined, CalculatorOutlined, EditOutlined,
-  FileExcelOutlined, FilePdfOutlined, FileTextOutlined,
+  FileExcelOutlined, FilePdfOutlined, FileTextOutlined, SendOutlined,
 } from '@ant-design/icons'
 import PhieuNhapPhoiSongModal, { phoiSessionKey } from './PhieuNhapPhoiSongModal'
 import type { ColumnsType } from 'antd/es/table'
@@ -215,6 +215,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const [activeTab, setActiveTab] = useState('lap-lenh')
   const [savingProgress, setSavingProgress] = useState<number | null>(null)
   const [showPhieuModal, setShowPhieuModal] = useState(false)
+  const [pushingCD2, setPushingCD2] = useState(false)
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['production-order', id],
@@ -306,6 +307,19 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
       message.error('Thất bại')
     } finally {
       setSavingProgress(null)
+    }
+  }
+
+  const handlePushToCD2 = async () => {
+    setPushingCD2(true)
+    try {
+      await productionOrdersApi.pushToCD2(Number(id))
+      message.success('Đã đẩy lệnh sang hệ thống CD2 (Công Đoạn 2) thành công!')
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail ?? 'Lỗi kết nối CD2'
+      message.error(detail)
+    } finally {
+      setPushingCD2(false)
     }
   }
 
@@ -618,6 +632,44 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={24} md={embedded ? 24 : 16}>
           <Card>
+            {/* Mã hàng nổi bật — hiển thị item đầu (1 lệnh = 1 mã hàng) */}
+            {order.items.length > 0 && (
+              <div style={{
+                background: '#f0f7ff', border: '1px solid #91caff',
+                borderRadius: 6, padding: '10px 14px', marginBottom: 12,
+              }}>
+                <div style={{ fontSize: 11, color: '#1677ff', fontWeight: 500, marginBottom: 2 }}>
+                  MÃ HÀNG
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#111' }}>
+                  {order.items[0].ten_hang}
+                </div>
+                {order.items[0].product?.ma_amis && (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                    [{order.items[0].product.ma_amis}]
+                    {order.items[0].dai
+                      ? ` · ${order.items[0].dai}×${order.items[0].rong}×${order.items[0].cao} cm`
+                      : order.items[0].product?.dai
+                        ? ` · ${order.items[0].product.dai}×${order.items[0].product.rong}×${order.items[0].product.cao} cm`
+                        : ''}
+                    {order.items[0].so_lop ? ` · ${order.items[0].so_lop} lớp` : ''}
+                  </div>
+                )}
+                <div style={{ marginTop: 6, display: 'flex', gap: 16 }}>
+                  <span style={{ fontSize: 12 }}>
+                    <span style={{ color: '#888' }}>SL kế hoạch: </span>
+                    <strong>{new Intl.NumberFormat('vi-VN').format(Number(order.items[0].so_luong_ke_hoach))}</strong>
+                    {' '}{order.items[0].dvt}
+                  </span>
+                  {order.items[0].ngay_giao_hang && (
+                    <span style={{ fontSize: 12 }}>
+                      <span style={{ color: '#888' }}>Giao hàng: </span>
+                      <strong>{dayjs(order.items[0].ngay_giao_hang).format('DD/MM/YYYY')}</strong>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             <Descriptions column={embedded ? 1 : 2} size="small" bordered>
               <Descriptions.Item label="Số lệnh">{order.so_lenh}</Descriptions.Item>
               <Descriptions.Item label="Ngày lệnh">
@@ -720,6 +772,25 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                     </Button>
                   </Popconfirm>
                 )}
+                {order.trang_thai === 'hoan_thanh' && (
+                  <Tooltip title="Tạo đơn hàng chờ in trong hệ thống CD2 (Công Đoạn 2)">
+                    <Popconfirm
+                      title="Đẩy lệnh sang Công Đoạn 2?"
+                      description="Sẽ tạo đơn hàng chờ in trong hệ thống CD2."
+                      onConfirm={handlePushToCD2}
+                      okText="Đẩy sang CD2"
+                    >
+                      <Button
+                        icon={<SendOutlined />}
+                        block
+                        loading={pushingCD2}
+                        style={{ color: '#722ed1', borderColor: '#722ed1' }}
+                      >
+                        Đẩy sang Công Đoạn 2
+                      </Button>
+                    </Popconfirm>
+                  </Tooltip>
+                )}
               </Space>
             </Card>
           </Col>
@@ -763,6 +834,24 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   <Popconfirm title="Huỷ lệnh?" onConfirm={handleCancel} okText="Huỷ" okButtonProps={{ danger: true }}>
                     <Button size="small" danger icon={<CloseOutlined />}>Huỷ</Button>
                   </Popconfirm>
+                )}
+                {order.trang_thai === 'hoan_thanh' && (
+                  <Tooltip title="Đẩy sang hệ thống CD2 (Công Đoạn 2)">
+                    <Popconfirm
+                      title="Đẩy sang Công Đoạn 2?"
+                      onConfirm={handlePushToCD2}
+                      okText="Đẩy"
+                    >
+                      <Button
+                        size="small"
+                        icon={<SendOutlined />}
+                        loading={pushingCD2}
+                        style={{ color: '#722ed1', borderColor: '#722ed1' }}
+                      >
+                        CD2
+                      </Button>
+                    </Popconfirm>
+                  </Tooltip>
                 )}
               </Space>
             </Col>
