@@ -8,6 +8,20 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class PhanXuong(Base):
+    __tablename__ = "phan_xuong"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ma_xuong: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    ten_xuong: Mapped[str] = mapped_column(String(100), nullable=False)
+    dia_chi: Mapped[str | None] = mapped_column(String(255))
+    cong_doan: Mapped[str] = mapped_column(String(20), default="cd2")  # "cd1_cd2" | "cd2"
+    trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    warehouses: Mapped[list["Warehouse"]] = relationship("Warehouse", back_populates="phan_xuong_obj")
+
+
 class Warehouse(Base):
     __tablename__ = "warehouses"
 
@@ -16,8 +30,11 @@ class Warehouse(Base):
     ten_kho: Mapped[str] = mapped_column(String(150), nullable=False)
     dia_chi: Mapped[str | None] = mapped_column(Text)
     loai_kho: Mapped[str] = mapped_column(String(30), nullable=False)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    phan_xuong_obj: Mapped["PhanXuong | None"] = relationship("PhanXuong", back_populates="warehouses")
 
 
 class MaterialGroup(Base):

@@ -1,21 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
-import { Card, Col, Row, Space, Spin, Statistic, Tag, Typography, Button } from 'antd'
+import { Card, Col, Row, Space, Spin, Statistic, Typography, Button } from 'antd'
 import {
   PrinterOutlined, BarChartOutlined, HistoryOutlined,
   BarcodeOutlined, CheckCircleOutlined, ReloadOutlined,
 } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
-import { cd2Api, TRANG_THAI_LABELS } from '../../api/cd2'
+import { cd2Api } from '../../api/cd2'
 
 const { Title, Text } = Typography
 
-const STATE_CONFIG: { key: string; color: string; bg: string }[] = [
-  { key: 'cho_in',        color: '#d46b08', bg: '#fff7e6' },
-  { key: 'ke_hoach',      color: '#0958d9', bg: '#e6f4ff' },
-  { key: 'dang_in',       color: '#d4380d', bg: '#fff2e8' },
-  { key: 'cho_dinh_hinh', color: '#531dab', bg: '#f9f0ff' },
-  { key: 'sau_in',        color: '#08979c', bg: '#e6fffb' },
-  { key: 'hoan_thanh',    color: '#389e0d', bg: '#f6ffed' },
+const MAIN_STATES = [
+  { key: 'cho_in',        label: 'Chờ in',        color: '#d46b08', bg: '#fff7e6', border: '#ffd591' },
+  { key: 'ke_hoach',      label: 'Kế hoạch',      color: '#0958d9', bg: '#e6f4ff', border: '#91caff' },
+  { key: 'dang_in',       label: 'Đang in',        color: '#d4380d', bg: '#fff2e8', border: '#ffbb96' },
+  { key: 'cho_dinh_hinh', label: 'Chờ định hình', color: '#531dab', bg: '#f9f0ff', border: '#d3adf7' },
 ]
 
 export default function CD2DashboardPage() {
@@ -51,27 +49,62 @@ export default function CD2DashboardPage() {
         </Col>
       </Row>
 
-      {/* Trạng thái phiếu in */}
-      <Title level={5} style={{ marginBottom: 10, color: '#595959' }}>
-        Phiếu in — theo trạng thái
-      </Title>
-      <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
-        {STATE_CONFIG.map(({ key, color, bg }) => (
-          <Col xs={12} sm={8} md={4} key={key}>
+      {/* 4 trạng thái chính — có icon máy in */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+        {MAIN_STATES.map(({ key, label, color, bg, border }) => (
+          <Col xs={12} sm={6} key={key}>
             <Card
               size="small"
-              style={{ background: bg, border: `1px solid ${color}33`, textAlign: 'center' }}
-              styles={{ body: { padding: '14px 8px' } }}
+              style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10 }}
+              styles={{ body: { padding: '16px 16px 14px' } }}
             >
-              <div style={{ fontSize: 32, fontWeight: 700, color, lineHeight: 1 }}>
+              <PrinterOutlined style={{ fontSize: 20, color, display: 'block', marginBottom: 10 }} />
+              <div style={{ fontSize: 34, fontWeight: 700, color, lineHeight: 1 }}>
                 {counts[key] ?? 0}
               </div>
-              <div style={{ fontSize: 12, color: '#595959', marginTop: 6 }}>
-                {TRANG_THAI_LABELS[key]}
-              </div>
+              <div style={{ fontSize: 12, color: '#595959', marginTop: 8 }}>{label}</div>
             </Card>
           </Col>
         ))}
+      </Row>
+
+      {/* Hoàn thành hôm nay + Sau in + Hoàn thành tổng */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+        <Col xs={24} sm={12} md={8}>
+          <Card
+            size="small"
+            style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 10 }}
+            styles={{ body: { padding: '16px' } }}
+          >
+            <Space>
+              <CheckCircleOutlined style={{ fontSize: 32, color: '#52c41a' }} />
+              <div>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#389e0d', lineHeight: 1 }}>
+                  {data?.in_hoan_thanh_hom_nay ?? 0}
+                </div>
+                <div style={{ fontSize: 12, color: '#595959', marginTop: 6 }}>Phiếu hoàn thành hôm nay</div>
+              </div>
+            </Space>
+          </Card>
+        </Col>
+        <Col xs={12} sm={6} md={4}>
+          <Card size="small" style={{ borderRadius: 10 }} styles={{ body: { padding: '14px 16px' } }}>
+            <Statistic
+              title="Sau in"
+              value={counts['sau_in'] ?? 0}
+              valueStyle={{ color: '#08979c', fontSize: 28 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={6} md={4}>
+          <Card size="small" style={{ borderRadius: 10 }} styles={{ body: { padding: '14px 16px' } }}>
+            <Statistic
+              title="Hoàn thành"
+              value={counts['hoan_thanh'] ?? 0}
+              valueStyle={{ color: '#389e0d', fontSize: 28 }}
+            />
+          </Card>
+        </Col>
       </Row>
 
       {/* Scan 24 giờ qua */}
@@ -124,26 +157,6 @@ export default function CD2DashboardPage() {
         </Col>
       </Row>
 
-      {/* Phiếu in hoàn thành hôm nay */}
-      <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={8}>
-          <Card
-            size="small"
-            style={{ background: '#f6ffed', border: '1px solid #b7eb8f' }}
-          >
-            <Space>
-              <CheckCircleOutlined style={{ fontSize: 28, color: '#52c41a' }} />
-              <div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#389e0d', lineHeight: 1 }}>
-                  {data?.in_hoan_thanh_hom_nay ?? 0}
-                </div>
-                <div style={{ fontSize: 12, color: '#595959' }}>Phiếu hoàn thành hôm nay</div>
-              </div>
-            </Space>
-          </Card>
-        </Col>
-      </Row>
-
       {/* Thống kê theo máy scan */}
       {mayStats.length > 0 && (
         <>
@@ -155,12 +168,17 @@ export default function CD2DashboardPage() {
               <Button size="small" icon={<HistoryOutlined />}>Xem lịch sử</Button>
             </Link>
           </Row>
-          <Row gutter={[12, 12]}>
+          <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
             {mayStats.map(m => (
               <Col xs={24} sm={12} md={8} key={m.may_scan_id}>
                 <Card
                   size="small"
-                  title={<Tag color="blue" style={{ margin: 0 }}>{m.ten_may}</Tag>}
+                  title={
+                    <Space>
+                      <PrinterOutlined style={{ color: '#1677ff' }} />
+                      <Text strong style={{ fontSize: 13 }}>{m.ten_may}</Text>
+                    </Space>
+                  }
                   extra={
                     <Link to="/production/cd2/scan">
                       <Button size="small" type="link" icon={<BarcodeOutlined />} />
@@ -169,11 +187,7 @@ export default function CD2DashboardPage() {
                 >
                   <Row gutter={8}>
                     <Col span={8}>
-                      <Statistic
-                        title="Lần scan"
-                        value={m.so_lan}
-                        valueStyle={{ fontSize: 18 }}
-                      />
+                      <Statistic title="Lần scan" value={m.so_lan} valueStyle={{ fontSize: 18 }} />
                     </Col>
                     <Col span={8}>
                       <Statistic
@@ -201,23 +215,23 @@ export default function CD2DashboardPage() {
         </>
       )}
 
-      {/* Quick links */}
-      <Title level={5} style={{ marginTop: 24, marginBottom: 10, color: '#595959' }}>
+      {/* Truy cập nhanh */}
+      <Title level={5} style={{ marginTop: 8, marginBottom: 10, color: '#595959' }}>
         Truy cập nhanh
       </Title>
       <Row gutter={[12, 12]}>
         {[
-          { to: '/production/cd2', icon: <PrinterOutlined />, label: 'Kanban máy in', color: '#1677ff' },
-          { to: '/production/cd2/scan', icon: <BarcodeOutlined />, label: 'Scan sản lượng', color: '#722ed1' },
-          { to: '/production/cd2/scan-history', icon: <HistoryOutlined />, label: 'Lịch sử scan', color: '#08979c' },
-          { to: '/production/cd2/history', icon: <HistoryOutlined />, label: 'Lịch sử phiếu in', color: '#d46b08' },
+          { to: '/production/cd2',              icon: <PrinterOutlined />,  label: 'Kanban máy in',    color: '#1677ff' },
+          { to: '/production/cd2/scan',         icon: <BarcodeOutlined />,  label: 'Scan sản lượng',   color: '#722ed1' },
+          { to: '/production/cd2/scan-history', icon: <HistoryOutlined />,  label: 'Lịch sử scan',     color: '#08979c' },
+          { to: '/production/cd2/history',      icon: <HistoryOutlined />,  label: 'Lịch sử phiếu in', color: '#d46b08' },
         ].map(item => (
           <Col xs={12} sm={6} key={item.to}>
             <Link to={item.to}>
               <Card
                 size="small"
                 hoverable
-                style={{ textAlign: 'center' }}
+                style={{ textAlign: 'center', borderRadius: 10 }}
                 styles={{ body: { padding: '16px 8px' } }}
               >
                 <div style={{ fontSize: 24, color: item.color }}>{item.icon}</div>

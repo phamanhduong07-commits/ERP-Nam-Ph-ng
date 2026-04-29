@@ -92,6 +92,23 @@ def _run_backfills(eng) -> None:
     # ... giữ nguyên hàm này của anh ...
     pass
 
+def _seed_phan_xuong(eng) -> None:
+    from app.models.master import PhanXuong
+    with SessionLocal() as db:
+        if db.query(PhanXuong).count() == 0:
+            seeds = [
+                PhanXuong(ma_xuong="hoang_gia", ten_xuong="Xưởng Hoàng Gia", dia_chi="Hoàng Gia", cong_doan="cd1_cd2"),
+                PhanXuong(ma_xuong="nam_thuan", ten_xuong="Xưởng Nam Thuận", dia_chi="Nam Thuận", cong_doan="cd1_cd2"),
+                PhanXuong(ma_xuong="hoc_mon",   ten_xuong="Xưởng Hóc Môn",  dia_chi="Hóc Môn",  cong_doan="cd2"),
+                PhanXuong(ma_xuong="cu_chi",    ten_xuong="Xưởng Củ Chi",   dia_chi="Củ Chi",   cong_doan="cd2"),
+            ]
+            for s in seeds:
+                db.add(s)
+            db.commit()
+            logger.info("seed_phan_xuong: đã tạo 4 xưởng")
+
+
 def ensure_schema() -> None:
     _sync_all_tables(Base, engine)
     _run_backfills(engine)
+    _seed_phan_xuong(engine)

@@ -45,6 +45,10 @@ import DinhHinhPage from './pages/production/DinhHinhPage'
 import SauInKanbanPage from './pages/production/SauInKanbanPage'
 import ShiftPage from './pages/production/ShiftPage'
 import ConfigPage from './pages/production/ConfigPage'
+import InventoryPage from './pages/warehouse/InventoryPage'
+import ReceiptsPage from './pages/warehouse/ReceiptsPage'
+import IssuesPage from './pages/warehouse/IssuesPage'
+import TransfersPage from './pages/warehouse/TransfersPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -122,6 +126,12 @@ export default function App() {
         <Route path="production/cd2/sauin-kanban" element={<SauInKanbanPage />} />
         <Route path="production/cd2/shift" element={<ShiftPage />} />
         <Route path="production/cd2/config" element={<ConfigPage />} />
+
+        {/* Kho */}
+        <Route path="warehouse/inventory" element={<InventoryPage />} />
+        <Route path="warehouse/receipts" element={<ReceiptsPage />} />
+        <Route path="warehouse/issues" element={<IssuesPage />} />
+        <Route path="warehouse/transfers" element={<TransfersPage />} />
 
         {/* BOM / Chi phí */}
         <Route path="master/indirect-costs" element={<IndirectCostList />} />

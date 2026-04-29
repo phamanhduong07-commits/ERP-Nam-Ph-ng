@@ -1,7 +1,12 @@
 from app.models.auth import Role, User, AuditLog
 from app.models.master import (
-    Warehouse, MaterialGroup, Supplier, Customer,
+    PhanXuong, Warehouse, MaterialGroup, Supplier, Customer,
     PaperMaterial, OtherMaterial, CauTrucThongDung, Product,
+)
+from app.models.warehouse_doc import (
+    PhieuNhapKho, PhieuNhapKhoItem,
+    PhieuXuatKho, PhieuXuatKhoItem,
+    PhieuChuyenKho, PhieuChuyenKhoItem,
 )
 from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
 from app.models.inventory import InventoryBalance, InventoryTransaction, PaperRoll

@@ -6,11 +6,20 @@ export interface Warehouse {
   ten_kho: string
   loai_kho: string
   dia_chi: string | null
+  phan_xuong_id: number | null
+  ten_xuong: string | null
   trang_thai: boolean
   created_at: string
 }
 
-export type WarehouseCreate = Omit<Warehouse, 'id' | 'created_at'>
+export interface WarehouseCreate {
+  ma_kho: string
+  ten_kho: string
+  loai_kho: string
+  dia_chi: string | null
+  phan_xuong_id?: number | null
+  trang_thai: boolean
+}
 
 export const warehousesApi = {
   list: () => client.get<Warehouse[]>('/warehouses'),

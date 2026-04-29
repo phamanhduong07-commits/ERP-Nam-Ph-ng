@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import {
   PlayCircleOutlined, CheckCircleOutlined, CheckOutlined, CloseOutlined, PrinterOutlined,
-  ForwardOutlined,
+  ForwardOutlined, StopOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/cd2'
@@ -119,6 +119,17 @@ export default function PhieuInModal({ phieu, open, onClose, onSaved }: Props) {
     }
   }
 
+  const handleHuy = async () => {
+    if (!phieu) return
+    try {
+      await cd2Api.huyPhieu(phieu.id)
+      message.success('Đã huỷ phiếu in')
+      onSaved()
+    } catch {
+      message.error('Lỗi huỷ phiếu')
+    }
+  }
+
   const handleDelete = async () => {
     if (!phieu) return
     try {
@@ -164,6 +175,11 @@ export default function PhieuInModal({ phieu, open, onClose, onSaved }: Props) {
             <Button type="primary" icon={<CheckOutlined />} loading={saving}>
               Hoàn thành
             </Button>
+          </Popconfirm>
+        )}
+        {tt !== 'hoan_thanh' && tt !== 'huy' && (
+          <Popconfirm title="Huỷ phiếu in này?" onConfirm={handleHuy} okButtonProps={{ danger: true }}>
+            <Button icon={<StopOutlined />} style={{ color: '#fa541c', borderColor: '#fa541c' }}>Huỷ phiếu</Button>
           </Popconfirm>
         )}
         <Popconfirm title="Xoá phiếu in này?" onConfirm={handleDelete} okButtonProps={{ danger: true }}>

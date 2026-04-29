@@ -575,6 +575,21 @@ def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depend
     return _to_dict(_load(phieu_id, db))
 
 
+@router.patch("/phieu-in/{phieu_id}/huy")
+def huy_phieu(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Huỷ phiếu in — không thể hoàn tác nếu đã hoàn thành."""
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai == "hoan_thanh":
+        raise HTTPException(status_code=400, detail="Không thể huỷ phiếu đã hoàn thành")
+    p.trang_thai = "huy"
+    p.may_in_id = None
+    p.may_sau_in_id = None
+    db.commit()
+    return _to_dict(_load(phieu_id, db))
+
+
 # ── Máy Scan CRUD ──────────────────────────────────────────────────────────────
 
 class MayScanCreate(BaseModel):

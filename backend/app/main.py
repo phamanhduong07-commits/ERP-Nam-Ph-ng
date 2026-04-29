@@ -13,6 +13,7 @@ from app.routers import (
 )
 from app.routers import phieu_phoi
 from app.routers import cd2
+from app.routers import warehouse
 
 # Tạo bảng tự động nếu chưa có (dùng Alembic cho production)
 Base.metadata.create_all(bind=engine)
@@ -59,6 +60,7 @@ app.include_router(indirect_costs.router)
 app.include_router(addon_rates.router)
 app.include_router(phieu_phoi.router)
 app.include_router(cd2.router)
+app.include_router(warehouse.router)
 
 
 @app.get("/api/health")

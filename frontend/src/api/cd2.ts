@@ -261,6 +261,7 @@ export const cd2Api = {
     client.patch<PhieuIn>(`/cd2/phieu-in/${id}/assign-sauin`, { may_sau_in_id: maySauInId }),
   batDauSauIn: (id: number) => client.patch<PhieuIn>(`/cd2/phieu-in/${id}/bat-dau-sauin`),
   traVeSauIn: (id: number) => client.patch<PhieuIn>(`/cd2/phieu-in/${id}/tra-ve-sauin`),
+  huyPhieu: (id: number) => client.patch<PhieuIn>(`/cd2/phieu-in/${id}/huy`),
 
   // Máy sau in
   listMaySauIn: () => client.get<MaySauIn[]>('/cd2/may-sau-in'),

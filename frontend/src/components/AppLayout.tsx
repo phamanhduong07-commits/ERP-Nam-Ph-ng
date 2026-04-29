@@ -77,6 +77,7 @@ function buildMenuItems(queueCount: number) {
         { key: '/warehouse/inventory', label: <Link to="/warehouse/inventory">Tồn kho</Link> },
         { key: '/warehouse/receipts', label: <Link to="/warehouse/receipts">Nhập kho</Link> },
         { key: '/warehouse/issues', label: <Link to="/warehouse/issues">Xuất kho</Link> },
+        { key: '/warehouse/transfers', label: <Link to="/warehouse/transfers">Chuyển kho</Link> },
       ],
     },
     {
