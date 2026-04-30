@@ -96,6 +96,7 @@ export interface GiaoDich {
   warehouse_id: number
   paper_material_id: number | null
   other_material_id: number | null
+  product_id: number | null
   loai_giao_dich: string
   so_luong: number
   don_gia: number
@@ -104,6 +105,158 @@ export interface GiaoDich {
   chung_tu_loai: string | null
   chung_tu_id: number | null
   ghi_chu: string | null
+}
+
+// ── GoodsReceipt (Phiếu nhập kho từ mua hàng) ──────────────────────────────
+export interface GoodsReceiptItem {
+  id: number
+  po_item_id: number | null
+  paper_material_id: number | null
+  other_material_id: number | null
+  ten_hang: string
+  so_luong: number
+  dvt: string
+  don_gia: number
+  thanh_tien: number
+  dinh_luong_thuc_te: number | null
+  do_am: number | null
+  ket_qua_kiem_tra: string
+  ghi_chu: string | null
+}
+
+export interface GoodsReceipt {
+  id: number
+  so_phieu: string
+  ngay_nhap: string
+  po_id: number | null
+  supplier_id: number
+  ten_ncc: string
+  warehouse_id: number
+  ten_kho: string
+  loai_nhap: string
+  tong_gia_tri: number
+  trang_thai: string
+  ghi_chu: string | null
+  created_at: string | null
+  items: GoodsReceiptItem[]
+}
+
+export interface CreateGoodsReceiptPayload {
+  ngay_nhap: string
+  po_id?: number | null
+  supplier_id: number
+  warehouse_id: number
+  loai_nhap?: string
+  ghi_chu?: string | null
+  items: Omit<GoodsReceiptItem, 'id' | 'thanh_tien'>[]
+}
+
+// ── MaterialIssue (Phiếu xuất NVL) ──────────────────────────────────────────
+export interface MaterialIssueItem {
+  id: number
+  paper_material_id: number | null
+  other_material_id: number | null
+  ten_hang: string
+  so_luong_ke_hoach: number
+  so_luong_thuc_xuat: number
+  dvt: string
+  don_gia: number
+  ghi_chu: string | null
+}
+
+export interface MaterialIssue {
+  id: number
+  so_phieu: string
+  ngay_xuat: string
+  production_order_id: number
+  so_lenh: string
+  warehouse_id: number
+  ten_kho: string
+  trang_thai: string
+  ghi_chu: string | null
+  created_at: string | null
+  items: MaterialIssueItem[]
+}
+
+export interface CreateMaterialIssuePayload {
+  ngay_xuat: string
+  production_order_id: number
+  warehouse_id: number
+  ghi_chu?: string | null
+  items: Omit<MaterialIssueItem, 'id'>[]
+}
+
+// ── ProductionOutput (Nhập TP từ sản xuất) ──────────────────────────────────
+export interface ProductionOutput {
+  id: number
+  so_phieu: string
+  ngay_nhap: string
+  production_order_id: number
+  so_lenh: string
+  warehouse_id: number
+  ten_kho: string
+  product_id: number | null
+  ten_hang: string | null
+  so_luong_nhap: number
+  so_luong_loi: number
+  dvt: string
+  don_gia_xuat_xuong: number
+  ghi_chu: string | null
+  created_at: string | null
+}
+
+export interface CreateProductionOutputPayload {
+  ngay_nhap: string
+  production_order_id: number
+  warehouse_id: number
+  product_id?: number | null
+  ten_hang?: string
+  so_luong_nhap: number
+  so_luong_loi?: number
+  dvt?: string
+  don_gia_xuat_xuong?: number
+  ghi_chu?: string | null
+}
+
+// ── DeliveryOrder (Phiếu xuất giao hàng) ─────────────────────────────────────
+export interface DeliveryOrderItem {
+  id: number
+  sales_order_item_id: number | null
+  product_id: number | null
+  ten_hang: string
+  so_luong: number
+  dvt: string
+  ghi_chu: string | null
+}
+
+export interface DeliveryOrder {
+  id: number
+  so_phieu: string
+  ngay_xuat: string
+  sales_order_id: number
+  so_don: string
+  customer_id: number
+  ten_khach: string
+  warehouse_id: number
+  ten_kho: string
+  dia_chi_giao: string | null
+  nguoi_nhan: string | null
+  xe_van_chuyen: string | null
+  trang_thai: string
+  ghi_chu: string | null
+  created_at: string | null
+  items: DeliveryOrderItem[]
+}
+
+export interface CreateDeliveryPayload {
+  ngay_xuat: string
+  sales_order_id: number
+  warehouse_id: number
+  dia_chi_giao?: string | null
+  nguoi_nhan?: string | null
+  xe_van_chuyen?: string | null
+  ghi_chu?: string | null
+  items: Omit<DeliveryOrderItem, 'id'>[]
 }
 
 export interface CreatePhieuNhapPayload {
@@ -175,6 +328,34 @@ export const warehouseApi = {
   deletePhieuChuyen: (id: number) => client.delete(`/warehouse/phieu-chuyen/${id}`),
 
   // Lịch sử giao dịch
-  getGiaoDich: (params?: { warehouse_id?: number; paper_material_id?: number; other_material_id?: number; loai_giao_dich?: string; tu_ngay?: string; den_ngay?: string; limit?: number }) =>
+  getGiaoDich: (params?: { warehouse_id?: number; paper_material_id?: number; other_material_id?: number; product_id?: number; loai_giao_dich?: string; tu_ngay?: string; den_ngay?: string; limit?: number }) =>
     client.get<GiaoDich[]>('/warehouse/giao-dich', { params }),
+
+  // Phiếu nhập kho (GoodsReceipt — linked to PO)
+  listGoodsReceipts: (params?: { warehouse_id?: number; supplier_id?: number; po_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+    client.get<GoodsReceipt[]>('/warehouse/goods-receipts', { params }),
+  getGoodsReceipt: (id: number) => client.get<GoodsReceipt>(`/warehouse/goods-receipts/${id}`),
+  createGoodsReceipt: (data: CreateGoodsReceiptPayload) => client.post<GoodsReceipt>('/warehouse/goods-receipts', data),
+  deleteGoodsReceipt: (id: number) => client.delete(`/warehouse/goods-receipts/${id}`),
+
+  // Phiếu xuất NVL (MaterialIssue — linked to LSX)
+  listMaterialIssues: (params?: { warehouse_id?: number; production_order_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+    client.get<MaterialIssue[]>('/warehouse/material-issues', { params }),
+  getMaterialIssue: (id: number) => client.get<MaterialIssue>(`/warehouse/material-issues/${id}`),
+  createMaterialIssue: (data: CreateMaterialIssuePayload) => client.post<MaterialIssue>('/warehouse/material-issues', data),
+  deleteMaterialIssue: (id: number) => client.delete(`/warehouse/material-issues/${id}`),
+
+  // Nhập thành phẩm từ sản xuất (ProductionOutput)
+  listProductionOutputs: (params?: { warehouse_id?: number; production_order_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+    client.get<ProductionOutput[]>('/warehouse/production-outputs', { params }),
+  getProductionOutput: (id: number) => client.get<ProductionOutput>(`/warehouse/production-outputs/${id}`),
+  createProductionOutput: (data: CreateProductionOutputPayload) => client.post<ProductionOutput>('/warehouse/production-outputs', data),
+  deleteProductionOutput: (id: number) => client.delete(`/warehouse/production-outputs/${id}`),
+
+  // Phiếu xuất giao hàng (DeliveryOrder — linked to SalesOrder)
+  listDeliveries: (params?: { warehouse_id?: number; sales_order_id?: number; customer_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+    client.get<DeliveryOrder[]>('/warehouse/deliveries', { params }),
+  getDelivery: (id: number) => client.get<DeliveryOrder>(`/warehouse/deliveries/${id}`),
+  createDelivery: (data: CreateDeliveryPayload) => client.post<DeliveryOrder>('/warehouse/deliveries', data),
+  deleteDelivery: (id: number) => client.delete(`/warehouse/deliveries/${id}`),
 }

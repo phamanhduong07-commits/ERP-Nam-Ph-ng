@@ -1,11 +1,14 @@
 from app.models.auth import Role, User, AuditLog
 from app.models.master import (
     PhanXuong, Warehouse, MaterialGroup, Supplier, Customer,
-    PaperMaterial, OtherMaterial, CauTrucThongDung, Product,
+    PaperMaterial, OtherMaterial, CauTrucThongDung, Product, PhapNhan,
 )
+from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.warehouse_doc import (
-    PhieuNhapKho, PhieuNhapKhoItem,
-    PhieuXuatKho, PhieuXuatKhoItem,
+    GoodsReceipt, GoodsReceiptItem,
+    MaterialIssue, MaterialIssueItem,
+    ProductionOutput,
+    DeliveryOrder, DeliveryOrderItem,
     PhieuChuyenKho, PhieuChuyenKhoItem,
 )
 from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem

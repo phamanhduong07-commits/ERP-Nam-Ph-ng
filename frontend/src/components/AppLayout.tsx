@@ -75,8 +75,10 @@ function buildMenuItems(queueCount: number) {
       label: 'Kho',
       children: [
         { key: '/warehouse/inventory', label: <Link to="/warehouse/inventory">Tồn kho</Link> },
-        { key: '/warehouse/receipts', label: <Link to="/warehouse/receipts">Nhập kho</Link> },
-        { key: '/warehouse/issues', label: <Link to="/warehouse/issues">Xuất kho</Link> },
+        { key: '/warehouse/receipts', label: <Link to="/warehouse/receipts">Nhập kho (NVL)</Link> },
+        { key: '/warehouse/issues', label: <Link to="/warehouse/issues">Xuất NVL sản xuất</Link> },
+        { key: '/warehouse/production-output', label: <Link to="/warehouse/production-output">Nhập TP từ SX</Link> },
+        { key: '/warehouse/delivery', label: <Link to="/warehouse/delivery">Giao hàng (TP)</Link> },
         { key: '/warehouse/transfers', label: <Link to="/warehouse/transfers">Chuyển kho</Link> },
       ],
     },
@@ -85,7 +87,7 @@ function buildMenuItems(queueCount: number) {
       icon: <ShopOutlined />,
       label: 'Mua hàng',
       children: [
-        { key: '/purchasing/orders', label: <Link to="/purchasing/orders">Đơn mua</Link> },
+        { key: '/purchasing/orders', label: <Link to="/purchasing/orders">Đơn mua hàng (PO)</Link> },
       ],
     },
     {
@@ -95,6 +97,7 @@ function buildMenuItems(queueCount: number) {
       children: [
         { key: '/master/users', label: <Link to="/master/users">Danh mục nhân viên</Link> },
         { key: '/master/customers', label: <Link to="/master/customers">Danh mục khách hàng</Link> },
+        { key: '/danhmuc/phap-nhan', label: <Link to="/danhmuc/phap-nhan">Danh mục pháp nhân</Link> },
         { key: '/master/material-groups', label: <Link to="/master/material-groups">Danh mục nhóm nguyên liệu</Link> },
         { key: '/master/products', label: <Link to="/master/products">Danh mục hàng hóa</Link> },
         { key: '/danhmuc/cau-truc', label: <Link to="/danhmuc/cau-truc">Kết cấu thông dụng</Link> },

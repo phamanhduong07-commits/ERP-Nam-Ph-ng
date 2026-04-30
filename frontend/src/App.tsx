@@ -49,6 +49,10 @@ import InventoryPage from './pages/warehouse/InventoryPage'
 import ReceiptsPage from './pages/warehouse/ReceiptsPage'
 import IssuesPage from './pages/warehouse/IssuesPage'
 import TransfersPage from './pages/warehouse/TransfersPage'
+import ProductionOutputPage from './pages/warehouse/ProductionOutputPage'
+import DeliveryPage from './pages/warehouse/DeliveryPage'
+import POListPage from './pages/purchase/POListPage'
+import PhapNhanList from './pages/danhmuc/PhapNhanList'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -131,7 +135,15 @@ export default function App() {
         <Route path="warehouse/inventory" element={<InventoryPage />} />
         <Route path="warehouse/receipts" element={<ReceiptsPage />} />
         <Route path="warehouse/issues" element={<IssuesPage />} />
+        <Route path="warehouse/production-output" element={<ProductionOutputPage />} />
+        <Route path="warehouse/delivery" element={<DeliveryPage />} />
         <Route path="warehouse/transfers" element={<TransfersPage />} />
+
+        {/* Mua hàng */}
+        <Route path="purchasing/orders" element={<POListPage />} />
+
+        {/* Pháp nhân */}
+        <Route path="danhmuc/phap-nhan" element={<PhapNhanList />} />
 
         {/* BOM / Chi phí */}
         <Route path="master/indirect-costs" element={<IndirectCostList />} />

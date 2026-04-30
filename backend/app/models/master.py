@@ -292,3 +292,21 @@ class DonGiaVanChuyen(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class PhapNhan(Base):
+    """Pháp nhân — công ty/chi nhánh phát hành báo giá và đơn hàng"""
+    __tablename__ = "phap_nhan"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ma_phap_nhan: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    ten_phap_nhan: Mapped[str] = mapped_column(String(200), nullable=False)
+    ten_viet_tat: Mapped[str | None] = mapped_column(String(50))
+    ma_so_thue: Mapped[str | None] = mapped_column(String(20))
+    dia_chi: Mapped[str | None] = mapped_column(String(255))
+    so_dien_thoai: Mapped[str | None] = mapped_column(String(20))
+    tai_khoan: Mapped[str | None] = mapped_column(String(50))
+    ngan_hang: Mapped[str | None] = mapped_column(String(100))
+    ky_hieu_hd: Mapped[str | None] = mapped_column(String(20))  # ký hiệu hóa đơn: AA, AB...
+    trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
