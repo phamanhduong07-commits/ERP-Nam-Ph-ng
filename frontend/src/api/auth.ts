@@ -11,6 +11,7 @@ export interface UserInfo {
 
 export interface TokenResponse {
   access_token: string
+  refresh_token: string
   token_type: string
   user: UserInfo
 }
@@ -22,6 +23,8 @@ export const authApi = {
     form.append('password', password)
     return client.post<TokenResponse>('/auth/login', form)
   },
+  refresh: (refresh_token: string) =>
+    client.post<TokenResponse>('/auth/refresh', { refresh_token }),
   me: () => client.get<UserInfo>('/auth/me'),
   changePassword: (old_password: string, new_password: string) =>
     client.post('/auth/change-password', null, {

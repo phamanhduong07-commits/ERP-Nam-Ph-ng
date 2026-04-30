@@ -1,8 +1,10 @@
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+import logging
 import os
-from fastapi import FastAPI
+import time
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import Base, engine, ensure_schema
 from app.routers import (
@@ -11,14 +13,23 @@ from app.routers import (
     don_vi_tinh, vi_tri, xe, tai_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
     production_orders, bom, production_plans, indirect_costs, addon_rates,
 )
-from app.routers import phieu_phoi
-from app.routers import cd2
-from app.routers import warehouse
-from app.routers import purchase_orders
-from app.routers import phap_nhan
-from app.routers import dashboard
+from app.routers import phieu_phoi, cd2, warehouse, purchase_orders, phap_nhan, dashboard
 
-# Tạo bảng tự động nếu chưa có (dùng Alembic cho production)
+# ─── Logging setup ────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("backend.log", encoding="utf-8"),
+    ],
+)
+logger = logging.getLogger("erp")
+
+# ─── DB init ──────────────────────────────────────────────────────────────────
+# Dùng Alembic cho production (alembic upgrade head)
+# create_all giữ lại để dev không cần chạy migration thủ công
 Base.metadata.create_all(bind=engine)
 ensure_schema()
 
@@ -29,14 +40,31 @@ app = FastAPI(
     redoc_url="/api/redoc",
 )
 
+# ─── CORS ─────────────────────────────────────────────────────────────────────
+_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ─── Request logging middleware ───────────────────────────────────────────────
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    duration_ms = round((time.time() - start) * 1000)
+    # Bỏ qua static assets để log không bị nhiễu
+    if not request.url.path.startswith("/assets"):
+        logger.info(
+            "%s %s %d %dms",
+            request.method, request.url.path, response.status_code, duration_ms,
+        )
+    return response
+
+# ─── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(customers.router)
 app.include_router(products.router)
@@ -71,16 +99,13 @@ app.include_router(dashboard.router)
 
 @app.get("/api/health")
 def health():
-    return {
-        "status": "ok", 
-        "app": settings.APP_NAME, 
-        "check_ngay": "DA_SUA_CODE_MOI"  # Anh thêm dòng này vào
-    }
-# Kiểm tra nếu thư mục dist tồn tại thì mới mount
+    return {"status": "ok", "app": settings.APP_NAME}
+
+
+# ─── SPA fallback ─────────────────────────────────────────────────────────────
 if os.path.exists("dist"):
     app.mount("/", StaticFiles(directory="dist", html=True), name="static")
 
     @app.exception_handler(404)
     async def not_found_exception_handler(request, exc):
-        # Giúp React Router hoạt động khi reload trang
         return FileResponse("dist/index.html")

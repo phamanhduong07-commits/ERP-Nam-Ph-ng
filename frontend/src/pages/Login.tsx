@@ -18,7 +18,7 @@ export default function Login() {
     setError('')
     try {
       const res = await authApi.login(values.username, values.password)
-      setAuth(res.data.access_token, res.data.user)
+      setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
       navigate('/dashboard')
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail

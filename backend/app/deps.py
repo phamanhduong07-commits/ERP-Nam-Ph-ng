@@ -15,6 +15,14 @@ ALGORITHM = "HS256"
 def create_access_token(data: dict) -> str:
     payload = data.copy()
     payload["exp"] = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload["type"] = "access"
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token(data: dict) -> str:
+    payload = data.copy()
+    payload["exp"] = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    payload["type"] = "refresh"
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -29,6 +37,9 @@ def get_current_user(
     )
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        # Chỉ chấp nhận access token, không nhận refresh token
+        if payload.get("type") == "refresh":
+            raise credentials_exception
         sub = payload.get("sub")
         if sub is None:
             raise credentials_exception

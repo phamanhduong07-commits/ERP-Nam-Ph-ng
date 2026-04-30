@@ -69,27 +69,29 @@
 
 ## Ưu tiên 4 — Kỹ thuật / trước khi deploy production
 
-### 4.1 Giới hạn CORS
-- **File:** `backend/app/main.py:37`
-- **Vấn đề:** `allow_origins: ["*"]` — bảo mật kém
-- **Sửa:** Đổi thành domain thực tế của server production
-- **Trạng thái:** [ ] Chưa làm
+### 4.1 Giới hạn CORS ✅
+- **Đã làm:** `ALLOWED_ORIGINS` env var trong config.py, mặc định chỉ localhost
+- Production: set `ALLOWED_ORIGINS=https://erp.namphuong.com` trong `.env`
+- **Trạng thái:** [x] Hoàn thành
 
-### 4.2 Bảo mật JWT — thêm refresh token
-- **Vấn đề:** Hiện tại chỉ có access token, hết hạn là bị logout ngay
-- **Đề xuất:** Thêm refresh token endpoint để tự gia hạn session
-- **Trạng thái:** [ ] Chưa làm
+### 4.2 Bảo mật JWT — refresh token ✅
+- **Đã làm:**
+  - Backend: `create_refresh_token()` (30 ngày), endpoint `POST /api/auth/refresh`
+  - Backend: fix bug `pwd_context` không tồn tại trong `change-password`
+  - Backend: validate `type` field để access token không dùng được làm refresh và ngược lại
+  - Frontend: `client.ts` interceptor tự gọi `/auth/refresh` khi 401, retry request gốc
+  - Frontend: `auth.ts` store lưu `refresh_token`, `Login.tsx` truyền đúng tham số
+- **Trạng thái:** [x] Hoàn thành
 
-### 4.3 Migration thay vì `create_all`
-- **File:** `backend/app/main.py:20`
-- **Vấn đề:** `Base.metadata.create_all()` chạy mỗi lần khởi động, không kiểm soát schema version
-- **Đề xuất:** Dùng Alembic migration trước khi deploy production thực sự
-- **Trạng thái:** [ ] Chưa làm
+### 4.3 Alembic migration ✅
+- **Đã làm:** Tạo migration `09797a29e0d7_quote_phan_xuong_nv_theo_doi.py` cho các thay đổi schema gần đây
+- `create_all` giữ lại cho dev, production dùng `alembic upgrade head`
+- **Trạng thái:** [x] Hoàn thành
 
-### 4.4 Logging & monitoring
-- **Vấn đề:** Chưa có structured logging, không theo dõi được lỗi production
-- **Đề xuất:** Thêm Python `logging` với format JSON, hoặc tích hợp Sentry
-- **Trạng thái:** [ ] Chưa làm
+### 4.4 Logging & monitoring ✅
+- **Đã làm:** HTTP request logging middleware (method, path, status, duration_ms)
+- Log ghi ra console + file `backend.log` (UTF-8)
+- **Trạng thái:** [x] Hoàn thành
 
 ---
 
@@ -100,8 +102,8 @@
 | Lỗi cần sửa ngay | 4 | 4/4 ✅ |
 | Tính năng thiếu | 8 | 6/8 |
 | Cải thiện UX | 4 | 4/4 ✅ |
-| Kỹ thuật / production | 4 | 0/4 |
-| **Tổng** | **20** | **5/20** |
+| Kỹ thuật / production | 4 | 4/4 ✅ |
+| **Tổng** | **20** | **15/20** |
 
 ---
 

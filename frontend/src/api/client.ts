@@ -10,34 +10,58 @@ client.interceptors.request.use((config) => {
 
 // Track if we already showed network error to avoid spam
 let _networkErrShown = false
+// Track refresh in progress to avoid concurrent refresh calls
+let _refreshPromise: Promise<void> | null = null
+
+async function _tryRefresh(): Promise<boolean> {
+  const refreshToken = localStorage.getItem('refresh_token')
+  if (!refreshToken) return false
+
+  try {
+    const res = await axios.post('/api/auth/refresh', { refresh_token: refreshToken })
+    const { access_token, refresh_token: newRefresh, user } = res.data
+    localStorage.setItem('token', access_token)
+    localStorage.setItem('refresh_token', newRefresh)
+    localStorage.setItem('user', JSON.stringify(user))
+    return true
+  } catch {
+    return false
+  }
+}
 
 client.interceptors.response.use(
   (res) => {
-    _networkErrShown = false   // reset on success
+    _networkErrShown = false
     return res
   },
-  (err) => {
-    if (err.response) {
-      // Server responded but with error
-      if (err.response.status === 401) {
-        // Token expired or invalid → force re-login
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        // Show a brief notification before redirect
-        if (typeof window !== 'undefined') {
-          const msg = document.createElement('div')
-          msg.style.cssText = [
-            'position:fixed;top:20px;left:50%;transform:translateX(-50%)',
-            'background:#faad14;color:#000;padding:12px 24px;border-radius:8px',
-            'font-size:14px;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,.2)',
-          ].join(';')
-          msg.textContent = '⚠️ Phiên đăng nhập đã hết hạn. Đang chuyển về trang đăng nhập...'
-          document.body.appendChild(msg)
-          setTimeout(() => { window.location.href = '/login' }, 1500)
-        }
+  async (err) => {
+    if (err.response?.status === 401) {
+      const originalRequest = err.config
+      // Tránh vòng lặp vô hạn khi endpoint /auth/refresh cũng trả 401
+      if (originalRequest?.url?.includes('/auth/refresh') || originalRequest?._retry) {
+        _doLogout()
+        return Promise.reject(err)
+      }
+
+      originalRequest._retry = true
+
+      // Nếu có refresh đang chạy, chờ nó xong
+      if (_refreshPromise) {
+        await _refreshPromise
+      } else {
+        _refreshPromise = _tryRefresh().then((ok) => {
+          _refreshPromise = null
+          if (!ok) _doLogout()
+        })
+        await _refreshPromise
+      }
+
+      const newToken = localStorage.getItem('token')
+      if (newToken) {
+        originalRequest.headers.Authorization = `Bearer ${newToken}`
+        return client(originalRequest)
       }
     } else if (err.code === 'ERR_NETWORK' || err.code === 'ECONNREFUSED' || !err.response) {
-      // No response = server unreachable (wrong port, backend down, etc.)
       if (!_networkErrShown) {
         _networkErrShown = true
         if (typeof window !== 'undefined') {
@@ -60,5 +84,22 @@ client.interceptors.response.use(
     return Promise.reject(err)
   }
 )
+
+function _doLogout() {
+  localStorage.removeItem('token')
+  localStorage.removeItem('refresh_token')
+  localStorage.removeItem('user')
+  if (typeof window !== 'undefined') {
+    const msg = document.createElement('div')
+    msg.style.cssText = [
+      'position:fixed;top:20px;left:50%;transform:translateX(-50%)',
+      'background:#faad14;color:#000;padding:12px 24px;border-radius:8px',
+      'font-size:14px;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,.2)',
+    ].join(';')
+    msg.textContent = '⚠️ Phiên đăng nhập đã hết hạn. Đang chuyển về trang đăng nhập...'
+    document.body.appendChild(msg)
+    setTimeout(() => { window.location.href = '/login' }, 1500)
+  }
+}
 
 export default client
