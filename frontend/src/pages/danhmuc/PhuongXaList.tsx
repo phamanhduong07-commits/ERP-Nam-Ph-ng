@@ -34,7 +34,7 @@ export default function PhuongXaList() {
       closeModal()
       message.success('Đã thêm phường xã')
     },
-    onError: () => message.error('Lỗi khi thêm'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm'),
   })
 
   const updateMut = useMutation({
@@ -45,7 +45,7 @@ export default function PhuongXaList() {
       closeModal()
       message.success('Đã cập nhật')
     },
-    onError: () => message.error('Lỗi khi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const deleteMut = useMutation({
@@ -54,7 +54,7 @@ export default function PhuongXaList() {
       queryClient.invalidateQueries({ queryKey: ['phuong-xa'] })
       message.success('Đã xoá')
     },
-    onError: () => message.error('Lỗi khi xoá'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi xoá'),
   })
 
   const openCreate = () => {

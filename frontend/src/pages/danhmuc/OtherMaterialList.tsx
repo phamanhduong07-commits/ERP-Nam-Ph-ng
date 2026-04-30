@@ -50,7 +50,7 @@ export default function OtherMaterialList() {
       closeModal()
       message.success('Đã thêm vật tư')
     },
-    onError: () => message.error('Lỗi khi thêm vật tư'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm vật tư'),
   })
 
   const updateMut = useMutation({
@@ -61,7 +61,7 @@ export default function OtherMaterialList() {
       closeModal()
       message.success('Đã cập nhật vật tư')
     },
-    onError: () => message.error('Lỗi khi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const openCreate = () => {

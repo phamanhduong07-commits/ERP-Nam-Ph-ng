@@ -33,7 +33,7 @@ export default function MaterialGroupList() {
       closeModal()
       message.success('Đã thêm nhóm vật tư')
     },
-    onError: () => message.error('Lỗi khi thêm nhóm vật tư'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm nhóm vật tư'),
   })
 
   const updateMut = useMutation({
@@ -44,7 +44,7 @@ export default function MaterialGroupList() {
       closeModal()
       message.success('Đã cập nhật nhóm vật tư')
     },
-    onError: () => message.error('Lỗi khi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const deleteMut = useMutation({
@@ -53,7 +53,7 @@ export default function MaterialGroupList() {
       queryClient.invalidateQueries({ queryKey: ['material-groups'] })
       message.success('Đã xoá nhóm vật tư')
     },
-    onError: () => message.error('Lỗi khi xoá'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi xoá'),
   })
 
   const openCreate = () => {

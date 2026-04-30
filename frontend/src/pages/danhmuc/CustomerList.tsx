@@ -33,7 +33,7 @@ export default function CustomerList() {
       closeModal()
       message.success('Đã thêm khách hàng')
     },
-    onError: () => message.error('Lỗi khi thêm khách hàng'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm khách hàng'),
   })
 
   const updateMut = useMutation({
@@ -44,7 +44,7 @@ export default function CustomerList() {
       closeModal()
       message.success('Đã cập nhật khách hàng')
     },
-    onError: () => message.error('Lỗi khi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const openCreate = () => {

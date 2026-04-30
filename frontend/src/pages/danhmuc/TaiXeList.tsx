@@ -28,7 +28,7 @@ export default function TaiXeList() {
       closeModal()
       message.success('Đã thêm tài xế')
     },
-    onError: () => message.error('Lỗi khi thêm'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm'),
   })
 
   const updateMut = useMutation({
@@ -39,7 +39,7 @@ export default function TaiXeList() {
       closeModal()
       message.success('Đã cập nhật')
     },
-    onError: () => message.error('Lỗi khi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const deleteMut = useMutation({
@@ -48,7 +48,7 @@ export default function TaiXeList() {
       queryClient.invalidateQueries({ queryKey: ['tai-xe'] })
       message.success('Đã xoá')
     },
-    onError: () => message.error('Lỗi khi xoá'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi xoá'),
   })
 
   const openCreate = () => {

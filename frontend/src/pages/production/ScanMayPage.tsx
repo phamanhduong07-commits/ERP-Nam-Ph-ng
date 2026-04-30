@@ -63,7 +63,7 @@ export default function ScanMayPage() {
       qc.invalidateQueries({ queryKey: ['scan-history', selectedMachine] })
       setTimeout(() => lsxRef.current?.focus(), 100)
     },
-    onError: () => message.error('Lưu thất bại, vui lòng thử lại'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lưu thất bại, vui lòng thử lại'),
   })
 
   const deleteMutation = useMutation({

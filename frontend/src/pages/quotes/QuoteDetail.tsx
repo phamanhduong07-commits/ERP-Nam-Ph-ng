@@ -325,7 +325,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       queryClient.invalidateQueries({ queryKey: ['quote', id] })
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
     },
-    onError: () => message.error('Duyệt thất bại'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Duyệt thất bại'),
   })
 
   const cancelMutation = useMutation({
@@ -335,7 +335,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       queryClient.invalidateQueries({ queryKey: ['quote', id] })
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
     },
-    onError: () => message.error('Huỷ thất bại'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Huỷ thất bại'),
   })
 
   const taoDonHangMutation = useMutation({

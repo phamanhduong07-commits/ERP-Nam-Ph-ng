@@ -44,7 +44,7 @@ export default function SupplierList() {
       closeModal()
       message.success('Đã thêm nhà cung cấp')
     },
-    onError: () => message.error('Lỗi khi thêm nhà cung cấp'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm nhà cung cấp'),
   })
 
   const updateMut = useMutation({
@@ -55,7 +55,7 @@ export default function SupplierList() {
       closeModal()
       message.success('Đã cập nhật nhà cung cấp')
     },
-    onError: () => message.error('Lỗi khi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const openCreate = () => {

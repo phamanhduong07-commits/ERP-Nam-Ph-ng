@@ -186,7 +186,7 @@ function CapacityTab() {
       setEditingCapacity(prev => { const n = { ...prev }; delete n[vars.id]; return n })
       message.success('Đã lưu công suất')
     },
-    onError: () => message.error('Lỗi lưu'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi lưu'),
   })
 
   const getVal = (m: MayIn) =>
@@ -260,20 +260,20 @@ function PrinterUserTab() {
   const createMut = useMutation({
     mutationFn: (d: Parameters<typeof cd2Api.createPrinterUser>[0]) => cd2Api.createPrinterUser(d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cd2-printer-user'] }); setEditing(null); message.success('Đã thêm') },
-    onError: () => message.error('Lỗi tạo'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, d }: { id: number; d: Parameters<typeof cd2Api.updatePrinterUser>[1] }) =>
       cd2Api.updatePrinterUser(id, d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cd2-printer-user'] }); setEditing(null); message.success('Đã cập nhật') },
-    onError: () => message.error('Lỗi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi cập nhật'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => cd2Api.deletePrinterUser(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cd2-printer-user'] }); message.success('Đã xoá') },
-    onError: () => message.error('Lỗi xoá'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
   })
 
   const openEdit = (u: PrinterUser) => {

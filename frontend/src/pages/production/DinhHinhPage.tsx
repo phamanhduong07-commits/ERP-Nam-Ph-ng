@@ -295,7 +295,7 @@ export default function DinhHinhPage() {
       qc.invalidateQueries({ queryKey: ['cd2-cho-dinh-hinh'] })
       qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
     },
-    onError: () => message.error('Lỗi xoá'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
     onSettled: () => setDeletingId(null),
   })
 

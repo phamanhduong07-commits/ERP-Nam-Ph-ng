@@ -27,19 +27,19 @@ function ShiftCaTab() {
   const createMut = useMutation({
     mutationFn: (d: { name: string; leader?: string }) => cd2Api.createShiftCa(d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cd2-shift-ca'] }); setEditing(null) },
-    onError: () => message.error('Lỗi tạo ca'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo ca'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, d }: { id: number; d: Partial<ShiftCa> }) => cd2Api.updateShiftCa(id, d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cd2-shift-ca'] }); setEditing(null) },
-    onError: () => message.error('Lỗi cập nhật ca'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi cập nhật ca'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => cd2Api.deleteShiftCa(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cd2-shift-ca'] }); message.success('Đã xoá') },
-    onError: () => message.error('Lỗi xoá ca'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá ca'),
   })
 
   const openAdd = () => { form.resetFields(); setEditing('new') }
@@ -147,13 +147,13 @@ function ShiftConfigTab() {
       form.resetFields(['ngay', 'gio_lam', 'gio_bat_dau', 'gio_ket_thuc', 'nghi_1', 'nghi_2'])
       message.success('Đã thêm lịch ca')
     },
-    onError: () => message.error('Lỗi thêm lịch ca'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi thêm lịch ca'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => cd2Api.deleteShiftConfig(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cd2-shift-config'] }); message.success('Đã xoá') },
-    onError: () => message.error('Lỗi xoá'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
   })
 
   const handleAdd = async () => {

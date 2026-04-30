@@ -50,7 +50,7 @@ export default function PaperMaterialList() {
       closeModal()
       message.success('Đã thêm nguyên liệu giấy')
     },
-    onError: () => message.error('Lỗi khi thêm nguyên liệu giấy'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm nguyên liệu giấy'),
   })
 
   const updateMut = useMutation({
@@ -61,7 +61,7 @@ export default function PaperMaterialList() {
       closeModal()
       message.success('Đã cập nhật nguyên liệu giấy')
     },
-    onError: () => message.error('Lỗi khi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const openCreate = () => {

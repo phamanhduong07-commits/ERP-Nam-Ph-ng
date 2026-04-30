@@ -46,7 +46,7 @@ export default function ProductList() {
       closeModal()
       message.success('Đã thêm sản phẩm')
     },
-    onError: () => message.error('Lỗi khi thêm sản phẩm'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm sản phẩm'),
   })
 
   const updateMut = useMutation({
@@ -57,7 +57,7 @@ export default function ProductList() {
       closeModal()
       message.success('Đã cập nhật sản phẩm')
     },
-    onError: () => message.error('Lỗi khi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const openCreate = () => {

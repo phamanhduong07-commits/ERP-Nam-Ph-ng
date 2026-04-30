@@ -91,18 +91,24 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         },
         { key: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link>, roles: SAN_XUAT_FULL },
         { key: '/production/phieu-phoi', label: <Link to="/production/phieu-phoi">Phiếu phôi sóng</Link>, roles: SAN_XUAT_FULL },
-        { key: '/production/cd2/dashboard', label: <Link to="/production/cd2/dashboard">📈 Dashboard CD2</Link>, roles: SAN_XUAT_FULL },
-        { key: '/production/cd2', label: <Link to="/production/cd2">🗂 Kanban máy in</Link> },
-        { key: '/production/cd2/may-in', label: <Link to="/production/cd2/may-in">🖨 Queue máy in</Link> },
-        { key: '/production/cd2/scan', label: <Link to="/production/cd2/scan">📊 Scan sản lượng</Link> },
-        { key: '/production/cd2/scan-history', label: <Link to="/production/cd2/scan-history">📋 Lịch sử scan</Link> },
-        { key: '/production/cd2/history', label: <Link to="/production/cd2/history">📑 Lịch sử phiếu in</Link> },
-        { key: '/production/cd2/dhcho2', label: <Link to="/production/cd2/dhcho2">🔧 Chờ định hình</Link> },
-        { key: '/production/cd2/sauin-kanban', label: <Link to="/production/cd2/sauin-kanban">🏭 Kanban sau in</Link> },
-        { key: '/production/cd2/shift', label: <Link to="/production/cd2/shift">⏰ Quản lý ca</Link>, roles: SAN_XUAT_FULL },
-        { key: '/production/cd2/config', label: <Link to="/production/cd2/config">⚙ Cấu hình CD2</Link>, roles: ADMIN_GD },
         { key: '/master/indirect-costs', label: <Link to="/master/indirect-costs">Chi phí gián tiếp</Link>, roles: ADMIN_GD },
         { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công</Link>, roles: ADMIN_GD },
+        {
+          key: 'cd2-group',
+          label: '🖨 Công đoạn 2 (CD2)',
+          children: [
+            { key: '/production/cd2/dashboard', label: <Link to="/production/cd2/dashboard">📈 Dashboard</Link>, roles: SAN_XUAT_FULL },
+            { key: '/production/cd2', label: <Link to="/production/cd2">🗂 Kanban máy in</Link> },
+            { key: '/production/cd2/may-in', label: <Link to="/production/cd2/may-in">🖨 Queue máy in</Link> },
+            { key: '/production/cd2/scan', label: <Link to="/production/cd2/scan">📊 Scan sản lượng</Link> },
+            { key: '/production/cd2/scan-history', label: <Link to="/production/cd2/scan-history">📋 Lịch sử scan</Link> },
+            { key: '/production/cd2/history', label: <Link to="/production/cd2/history">📑 Lịch sử phiếu in</Link> },
+            { key: '/production/cd2/dhcho2', label: <Link to="/production/cd2/dhcho2">🔧 Chờ định hình</Link> },
+            { key: '/production/cd2/sauin-kanban', label: <Link to="/production/cd2/sauin-kanban">🏭 Kanban sau in</Link> },
+            { key: '/production/cd2/shift', label: <Link to="/production/cd2/shift">⏰ Quản lý ca</Link>, roles: SAN_XUAT_FULL },
+            { key: '/production/cd2/config', label: <Link to="/production/cd2/config">⚙ Cấu hình CD2</Link>, roles: ADMIN_GD },
+          ],
+        },
       ],
     },
     {
@@ -176,9 +182,21 @@ export default function AppLayout() {
   const menuItems = filterByRole(buildMenuItems(queueCount), role)
 
   const selectedKeys = [location.pathname]
-  const openKeys = buildMenuItems(0)
-    .filter((m) => m.children?.some((c) => c.key === location.pathname))
-    .map((m) => m.key)
+
+  function collectOpenKeys(items: RawMenuItem[], path: string): string[] {
+    const keys: string[] = []
+    for (const item of items) {
+      if (item.children) {
+        const childMatch = item.children.some(
+          c => c.key === path || (c.children && c.children.some(g => g.key === path))
+        )
+        if (childMatch) keys.push(item.key)
+        keys.push(...collectOpenKeys(item.children, path))
+      }
+    }
+    return keys
+  }
+  const openKeys = collectOpenKeys(buildMenuItems(0), location.pathname)
 
   const userMenu = [
     {

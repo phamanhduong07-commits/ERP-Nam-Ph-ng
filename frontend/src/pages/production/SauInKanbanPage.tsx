@@ -162,13 +162,13 @@ function MaySauInSettingsModal({ open, onClose }: { open: boolean; onClose: () =
   const createMut = useMutation({
     mutationFn: (d: { ten_may: string; sort_order: number }) => cd2Api.createMaySauIn(d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cd2-may-sau-in'] }); form.resetFields() },
-    onError: () => message.error('Lỗi tạo máy'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo máy'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => cd2Api.deleteMaySauIn(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['cd2-may-sau-in'] }),
-    onError: () => message.error('Lỗi xoá máy'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá máy'),
   })
 
   return (
@@ -369,25 +369,25 @@ export default function SauInKanbanPage() {
   const startMut = useMutation({
     mutationFn: (id: number) => cd2Api.batDauSauIn(id),
     onSuccess: invalidate,
-    onError: () => message.error('Lỗi bắt đầu'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi bắt đầu'),
   })
 
   const completeMut = useMutation({
     mutationFn: (id: number) => cd2Api.hoanThanh(id),
     onSuccess: () => { invalidate(); message.success('Hoàn thành!') },
-    onError: () => message.error('Lỗi hoàn thành'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi hoàn thành'),
   })
 
   const returnMut = useMutation({
     mutationFn: (id: number) => cd2Api.traVeSauIn(id),
     onSuccess: invalidate,
-    onError: () => message.error('Lỗi trả về'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi trả về'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => cd2Api.deletePhieuIn(id),
     onSuccess: () => { invalidate(); message.success('Đã xoá') },
-    onError: () => message.error('Lỗi xoá'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
     onSettled: () => setDeletingId(null),
   })
 

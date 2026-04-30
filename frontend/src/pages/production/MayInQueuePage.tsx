@@ -332,7 +332,7 @@ function MachineTab({
   const startMutation = useMutation({
     mutationFn: (id: number) => cd2Api.startPrinting(id),
     onSuccess: () => { message.success('Đã bắt đầu in'); onRefresh() },
-    onError: () => message.error('Lỗi'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
     onSettled: () => setActingId(null),
   })
 
@@ -340,7 +340,7 @@ function MachineTab({
     mutationFn: (id: number) =>
       cd2Api.movePhieuIn(id, { trang_thai: 'ke_hoach', may_in_id: null, sort_order: 0 }),
     onSuccess: () => { message.success('Đã trả về Kế hoạch in'); onRefresh() },
-    onError: () => message.error('Lỗi'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
   })
 
   const machines = kanban.may_ins

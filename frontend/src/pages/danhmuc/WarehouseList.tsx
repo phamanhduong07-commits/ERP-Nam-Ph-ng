@@ -37,19 +37,19 @@ export default function WarehouseList() {
   const createMut = useMutation({
     mutationFn: (d: WarehouseCreate) => warehousesApi.create(d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['warehouses'] }); closeModal(); message.success('Đã thêm kho') },
-    onError: () => message.error('Lỗi khi thêm kho'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm kho'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<WarehouseCreate> }) => warehousesApi.update(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['warehouses'] }); closeModal(); message.success('Đã cập nhật kho') },
-    onError: () => message.error('Lỗi khi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => warehousesApi.delete(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['warehouses'] }); message.success('Đã xoá kho') },
-    onError: () => message.error('Lỗi khi xoá'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi xoá'),
   })
 
   const openCreate = () => {

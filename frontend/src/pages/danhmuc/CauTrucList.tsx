@@ -104,13 +104,13 @@ export default function CauTrucList() {
   const createMut = useMutation({
     mutationFn: (d: CauTrucCreate) => cauTrucApi.create(d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['cau-truc'] }); closeModal(); message.success('Đã thêm kết cấu') },
-    onError: () => message.error('Lỗi khi thêm'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: CauTrucCreate }) => cauTrucApi.update(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['cau-truc'] }); closeModal(); message.success('Đã cập nhật') },
-    onError: () => message.error('Lỗi khi cập nhật'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const deleteMut = useMutation({

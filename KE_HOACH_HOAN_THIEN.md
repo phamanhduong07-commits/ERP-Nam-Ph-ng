@@ -52,21 +52,18 @@
 - **File:** `frontend/src/pages/Dashboard.tsx`
 - **Trạng thái:** [x] Hoàn thành — commit `0236583`
 
-### 3.2 Menu Sản xuất quá nhiều mục (15 items)
-- **File:** `frontend/src/components/AppLayout.tsx`
-- **Đề xuất:** Nhóm lại:
-  - "Công đoạn 2 (CD2)" → sub-menu riêng chứa: Dashboard CD2, Kanban, Queue, Scan, Lịch sử, Định hình, Kanban sau in, Ca, Cấu hình
-- **Trạng thái:** [ ] Chưa làm
+### 3.2 Menu Sản xuất quá nhiều mục ✅
+- **Đã làm:** Gom 10 mục CD2 vào sub-menu "🖨 Công đoạn 2 (CD2)"
+- **Trạng thái:** [x] Hoàn thành
 
-### 3.3 Thêm xác nhận trước khi xóa / hủy
-- **Vấn đề:** Một số trang chưa có modal xác nhận khi xóa bản ghi quan trọng
-- **Kiểm tra lại:** danh mục khách hàng, nhà cung cấp, sản phẩm
-- **Trạng thái:** [ ] Cần kiểm tra
+### 3.3 Thêm xác nhận trước khi xóa ✅ (by design)
+- **Kết luận:** CustomerList, ProductList, SupplierList, UserList không có delete là **cố ý** — dùng toggle `trang_thai` thay vì xóa cứng (tránh vi phạm FK trong orders)
+- Các trang có delete đều đã có `Popconfirm`
+- **Trạng thái:** [x] Không cần thêm
 
-### 3.4 Thông báo lỗi thân thiện hơn
-- **Vấn đề:** Khi backend trả lỗi 400/500, một số trang chỉ hiện lỗi kỹ thuật
-- **Đề xuất:** Chuẩn hóa hiển thị lỗi từ axios interceptor → `message.error(...)` của Ant Design
-- **Trạng thái:** [ ] Cần kiểm tra
+### 3.4 Thông báo lỗi thân thiện hơn ✅
+- **Đã làm:** Patch toàn bộ 60 chỗ `onError: () =>` → `onError: (e: any) =>` hiện `e?.response?.data?.detail` trên 22 file
+- **Trạng thái:** [x] Hoàn thành
 
 ---
 
@@ -102,7 +99,7 @@
 |------|---------|------------|
 | Lỗi cần sửa ngay | 4 | 4/4 ✅ |
 | Tính năng thiếu | 8 | 6/8 |
-| Cải thiện UX | 4 | 1/4 |
+| Cải thiện UX | 4 | 4/4 ✅ |
 | Kỹ thuật / production | 4 | 0/4 |
 | **Tổng** | **20** | **5/20** |
 
