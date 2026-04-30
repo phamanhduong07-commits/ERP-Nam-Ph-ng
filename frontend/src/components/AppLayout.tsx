@@ -29,7 +29,7 @@ function buildMenuItems(queueCount: number) {
       children: [
         { key: '/quotes', label: <Link to="/quotes">Báo giá</Link> },
         { key: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link> },
-        { key: '/sales/delivery', label: <Link to="/sales/delivery">Giao hàng</Link> },
+        { key: '/warehouse/delivery', label: <Link to="/warehouse/delivery">Giao hàng</Link> },
       ],
     },
     {

@@ -3,14 +3,30 @@ import {
   ShoppingCartOutlined, ClockCircleOutlined,
   CheckCircleOutlined, TeamOutlined,
 } from '@ant-design/icons'
+import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
+import client from '../api/client'
 
 const { Title, Text } = Typography
+
+interface DashboardStats {
+  don_hang_moi_hom_nay: number
+  cho_duyet: number
+  dang_san_xuat: number
+  tong_khach_hang: number
+}
 
 export default function Dashboard() {
   const { user } = useAuthStore()
   const today = new Date().toLocaleDateString('vi-VN', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  })
+
+  const { data: stats } = useQuery<DashboardStats>({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => client.get<DashboardStats>('/dashboard/stats').then(r => r.data),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   })
 
   return (
@@ -27,7 +43,7 @@ export default function Dashboard() {
           <Card hoverable>
             <Statistic
               title="Đơn hàng mới hôm nay"
-              value={0}
+              value={stats?.don_hang_moi_hom_nay ?? 0}
               prefix={<ShoppingCartOutlined style={{ color: '#1677ff' }} />}
               valueStyle={{ color: '#1677ff' }}
             />
@@ -37,7 +53,7 @@ export default function Dashboard() {
           <Card hoverable>
             <Statistic
               title="Đang chờ duyệt"
-              value={0}
+              value={stats?.cho_duyet ?? 0}
               prefix={<ClockCircleOutlined style={{ color: '#faad14' }} />}
               valueStyle={{ color: '#faad14' }}
             />
@@ -47,7 +63,7 @@ export default function Dashboard() {
           <Card hoverable>
             <Statistic
               title="Đang sản xuất"
-              value={0}
+              value={stats?.dang_san_xuat ?? 0}
               prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
               valueStyle={{ color: '#52c41a' }}
             />
@@ -57,7 +73,7 @@ export default function Dashboard() {
           <Card hoverable>
             <Statistic
               title="Khách hàng"
-              value={763}
+              value={stats?.tong_khach_hang ?? 0}
               prefix={<TeamOutlined style={{ color: '#722ed1' }} />}
               valueStyle={{ color: '#722ed1' }}
             />
@@ -73,7 +89,7 @@ export default function Dashboard() {
                 { title: '1. Nhận đơn hàng', desc: 'Bán hàng → Đơn hàng → Tạo mới', path: '/sales/orders' },
                 { title: '2. Duyệt đơn', desc: 'Chọn đơn → Duyệt → Chuyển SX', path: '/sales/orders' },
                 { title: '3. Lệnh SX', desc: 'Sản xuất → Lệnh SX → Tạo từ đơn', path: '/production/orders' },
-                { title: '4. Xuất kho', desc: 'Kho → Xuất kho → Giao hàng', path: '/warehouse/issues' },
+                { title: '4. Giao hàng', desc: 'Kho → Giao hàng → Tạo phiếu', path: '/warehouse/delivery' },
               ].map((item) => (
                 <Col xs={24} sm={12} lg={6} key={item.title}>
                   <Card size="small" type="inner" title={item.title}>

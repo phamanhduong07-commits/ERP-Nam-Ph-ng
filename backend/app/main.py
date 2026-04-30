@@ -16,6 +16,7 @@ from app.routers import cd2
 from app.routers import warehouse
 from app.routers import purchase_orders
 from app.routers import phap_nhan
+from app.routers import dashboard
 
 # Tạo bảng tự động nếu chưa có (dùng Alembic cho production)
 Base.metadata.create_all(bind=engine)
@@ -65,6 +66,7 @@ app.include_router(cd2.router)
 app.include_router(warehouse.router)
 app.include_router(purchase_orders.router)
 app.include_router(phap_nhan.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/api/health")
