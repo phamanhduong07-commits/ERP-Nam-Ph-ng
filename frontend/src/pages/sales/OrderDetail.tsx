@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Table, Space, Button, Typography,
-  Divider, Popconfirm, message, Skeleton, Row, Col, Modal, DatePicker, Form,
+  Divider, Popconfirm, message, Skeleton, Row, Col, Modal, DatePicker, Form, Select,
   Drawer, Tooltip,
 } from 'antd'
 import {
@@ -16,6 +16,8 @@ import dayjs from 'dayjs'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
 import type { SalesOrderItem } from '../../api/salesOrders'
 import { productionOrdersApi } from '../../api/productionOrders'
+import { phapNhanApi } from '../../api/phap_nhan'
+import { warehousesApi } from '../../api/warehouses'
 import BomCalculatorPanel from '../production/BomCalculatorPanel'
 import { exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
 
@@ -41,6 +43,16 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     queryKey: ['sales-order', id],
     queryFn: () => salesOrdersApi.get(Number(id)).then((r) => r.data),
     enabled: !!id,
+  })
+
+  const { data: phapNhanList } = useQuery({
+    queryKey: ['phap-nhan-all'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then((r) => r.data),
+  })
+
+  const { data: khoList } = useQuery({
+    queryKey: ['warehouses-all'],
+    queryFn: () => warehousesApi.list().then((r) => r.data),
   })
 
   const handleApprove = async () => {
@@ -70,6 +82,8 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       const res = await productionOrdersApi.createFromOrder(Number(id), {
         ngay_lenh: vals.ngay_lenh?.format('YYYY-MM-DD'),
         ngay_hoan_thanh_ke_hoach: vals.ngay_hoan_thanh_ke_hoach?.format('YYYY-MM-DD'),
+        phap_nhan_sx_id: vals.phap_nhan_sx_id ?? null,
+        kho_sx_id: vals.kho_sx_id ?? null,
       })
       const orders = res.data
       message.success(`Đã tạo ${orders.length} lệnh sản xuất (1 lệnh / mã hàng)`)
@@ -416,6 +430,14 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           <Descriptions.Item label="Điện thoại">
             {order.customer?.dien_thoai || '—'}
           </Descriptions.Item>
+          <Descriptions.Item label="Pháp nhân xuất HĐ">
+            {order.ten_phap_nhan || <Text type="secondary">—</Text>}
+          </Descriptions.Item>
+          <Descriptions.Item label="Pháp nhân sản xuất" span={2}>
+            {order.ten_phap_nhan_sx
+              ? <Tag color="blue">{order.ten_phap_nhan_sx}</Tag>
+              : <Text type="secondary">—</Text>}
+          </Descriptions.Item>
           <Descriptions.Item label="Địa chỉ giao hàng" span={3}>
             {order.dia_chi_giao || '—'}
           </Descriptions.Item>
@@ -688,6 +710,38 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
             initialValue={order.ngay_giao_hang ? dayjs(order.ngay_giao_hang) : undefined}
           >
             <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="phap_nhan_sx_id"
+            label="Pháp nhân sản xuất"
+            initialValue={order.phap_nhan_sx_id ?? undefined}
+          >
+            <Select
+              showSearch allowClear placeholder="Chọn pháp nhân sản xuất (xưởng)..."
+              filterOption={(input, option) =>
+                String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={phapNhanList?.map((p) => ({
+                value: p.id,
+                label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="kho_sx_id"
+            label="Kho sản xuất"
+            rules={[{ required: true, message: 'Chọn kho sản xuất' }]}
+          >
+            <Select
+              showSearch allowClear placeholder="Chọn kho sản xuất..."
+              filterOption={(input, option) =>
+                String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={khoList?.filter(k => k.trang_thai).map((k) => ({
+                value: k.id,
+                label: `[${k.ma_kho}] ${k.ten_kho}`,
+              }))}
+            />
           </Form.Item>
           <Text type="secondary" style={{ fontSize: 12 }}>
             Lệnh SX sẽ được tạo cho tất cả {order.items.length} dòng hàng của đơn hàng này.

@@ -11,6 +11,8 @@ import dayjs from 'dayjs'
 import { salesOrdersApi } from '../../api/salesOrders'
 import { productsApi } from '../../api/products'
 import { productionOrdersApi } from '../../api/productionOrders'
+import { phapNhanApi } from '../../api/phap_nhan'
+import { warehousesApi } from '../../api/warehouses'
 import type { Product } from '../../api/products'
 
 const { Title, Text } = Typography
@@ -48,6 +50,16 @@ export default function ProductionOrderCreate() {
         .then((r) => r.data.items),
   })
 
+  const { data: phapNhanList } = useQuery({
+    queryKey: ['phap-nhan-all'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then((r) => r.data),
+  })
+
+  const { data: khoList } = useQuery({
+    queryKey: ['warehouses-all'],
+    queryFn: () => warehousesApi.list().then((r) => r.data),
+  })
+
   const { data: selectedSO } = useQuery({
     queryKey: ['sales-order-detail', salesOrderId],
     queryFn: () => salesOrdersApi.get(salesOrderId!).then((r) => r.data),
@@ -74,6 +86,10 @@ export default function ProductionOrderCreate() {
       ghi_chu: item.ghi_chu_san_pham,
     }))
     setLines(newLines)
+    // Tự điền pháp nhân SX từ đơn hàng nếu chưa chọn
+    if (selectedSO.phap_nhan_sx_id && !form.getFieldValue('phap_nhan_sx_id')) {
+      form.setFieldValue('phap_nhan_sx_id', selectedSO.phap_nhan_sx_id)
+    }
     message.success(`Đã import ${newLines.length} dòng từ đơn hàng ${selectedSO.so_don}`)
   }
 
@@ -117,6 +133,8 @@ export default function ProductionOrderCreate() {
       const payload = {
         ngay_lenh: dayjs(values.ngay_lenh).format('YYYY-MM-DD'),
         sales_order_id: salesOrderId || undefined,
+        phap_nhan_sx_id: values.phap_nhan_sx_id ?? null,
+        kho_sx_id: values.kho_sx_id ?? null,
         ngay_bat_dau_ke_hoach: values.ngay_bat_dau_ke_hoach
           ? dayjs(values.ngay_bat_dau_ke_hoach).format('YYYY-MM-DD')
           : undefined,
@@ -253,6 +271,34 @@ export default function ProductionOrderCreate() {
                 <Col span={8}>
                   <Form.Item name="ngay_hoan_thanh_ke_hoach" label="Ngày hoàn thành (KH)">
                     <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="phap_nhan_sx_id" label="Pháp nhân sản xuất" rules={[{ required: true, message: 'Chọn pháp nhân SX' }]}>
+                    <Select
+                      showSearch allowClear placeholder="Chọn pháp nhân (xưởng)..."
+                      filterOption={(input, option) =>
+                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                      options={phapNhanList?.map((p) => ({
+                        value: p.id,
+                        label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
+                      }))}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="kho_sx_id" label="Kho sản xuất" rules={[{ required: true, message: 'Chọn kho SX' }]}>
+                    <Select
+                      showSearch allowClear placeholder="Chọn kho sản xuất..."
+                      filterOption={(input, option) =>
+                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                      options={khoList?.filter(k => k.trang_thai).map((k) => ({
+                        value: k.id,
+                        label: `[${k.ma_kho}] ${k.ten_kho}`,
+                      }))}
+                    />
                   </Form.Item>
                 </Col>
                 <Col span={24}>

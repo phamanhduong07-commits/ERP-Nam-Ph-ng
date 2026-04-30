@@ -39,6 +39,8 @@ def _build_response(quote: Quote) -> QuoteResponse:
         ngay_bao_gia=quote.ngay_bao_gia,
         customer_id=quote.customer_id,
         customer=CustomerShort.model_validate(quote.customer) if quote.customer else None,
+        phap_nhan_id=quote.phap_nhan_id,
+        ten_phap_nhan=quote.phap_nhan.ten_phap_nhan if quote.phap_nhan else None,
         nv_phu_trach_id=quote.nv_phu_trach_id,
         nguoi_duyet_id=quote.nguoi_duyet_id,
         ngay_het_han=quote.ngay_het_han,
@@ -69,7 +71,11 @@ def _build_response(quote: Quote) -> QuoteResponse:
 def _load_quote(quote_id: int, db: Session) -> Quote:
     quote = (
         db.query(Quote)
-        .options(joinedload(Quote.customer), joinedload(Quote.items))
+        .options(
+            joinedload(Quote.customer),
+            joinedload(Quote.items),
+            joinedload(Quote.phap_nhan),
+        )
         .filter(Quote.id == quote_id)
         .first()
     )
@@ -155,6 +161,7 @@ def create_quote(
         so_bg_copy=data.so_bg_copy,
         ngay_bao_gia=data.ngay_bao_gia,
         customer_id=data.customer_id,
+        phap_nhan_id=data.phap_nhan_id,
         nv_phu_trach_id=data.nv_phu_trach_id or current_user.id,
         ngay_het_han=data.ngay_het_han,
         chi_phi_bang_in=data.chi_phi_bang_in,
@@ -265,6 +272,7 @@ def tao_don_hang_tu_bao_gia(
         so_don=so_don,
         ngay_don=date.today(),
         customer_id=quote.customer_id,
+        phap_nhan_id=quote.phap_nhan_id,
         nv_kinh_doanh_id=quote.nv_phu_trach_id,
         trang_thai="moi",
         ghi_chu=f"Lập từ báo giá {quote.so_bao_gia}",

@@ -11,6 +11,7 @@ import dayjs from 'dayjs'
 import { customersApi } from '../../api/customers'
 import { productsApi } from '../../api/products'
 import { salesOrdersApi } from '../../api/salesOrders'
+import { phapNhanApi } from '../../api/phap_nhan'
 import type { Product } from '../../api/products'
 
 const { Title, Text } = Typography
@@ -37,6 +38,11 @@ export default function OrderCreate() {
   const { data: customers } = useQuery({
     queryKey: ['customers-all'],
     queryFn: () => customersApi.all().then((r) => r.data),
+  })
+
+  const { data: phapNhanList } = useQuery({
+    queryKey: ['phap-nhan-all'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then((r) => r.data),
   })
 
   const { data: products } = useQuery({
@@ -85,6 +91,8 @@ export default function OrderCreate() {
       const payload = {
         customer_id: values.customer_id,
         ngay_don: dayjs(values.ngay_don).format('YYYY-MM-DD'),
+        phap_nhan_id: values.phap_nhan_id ?? null,
+        phap_nhan_sx_id: values.phap_nhan_sx_id ?? null,
         ngay_giao_hang: values.ngay_giao_hang
           ? dayjs(values.ngay_giao_hang).format('YYYY-MM-DD')
           : undefined,
@@ -248,6 +256,34 @@ export default function OrderCreate() {
                 <Col span={6}>
                   <Form.Item name="ngay_giao_hang" label="Ngày giao hàng">
                     <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="phap_nhan_id" label="Pháp nhân xuất hoá đơn">
+                    <Select
+                      showSearch allowClear placeholder="Chọn pháp nhân nhận đơn..."
+                      filterOption={(input, option) =>
+                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                      options={phapNhanList?.map((p) => ({
+                        value: p.id,
+                        label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
+                      }))}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="phap_nhan_sx_id" label="Pháp nhân sản xuất">
+                    <Select
+                      showSearch allowClear placeholder="Chọn pháp nhân sản xuất (xưởng)..."
+                      filterOption={(input, option) =>
+                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                      options={phapNhanList?.map((p) => ({
+                        value: p.id,
+                        label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
+                      }))}
+                    />
                   </Form.Item>
                 </Col>
                 <Col span={24}>

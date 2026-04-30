@@ -99,6 +99,8 @@ def get_order(
         db.query(SalesOrder)
         .options(
             joinedload(SalesOrder.customer),
+            joinedload(SalesOrder.phap_nhan),
+            joinedload(SalesOrder.phap_nhan_sx),
             joinedload(SalesOrder.items).joinedload(SalesOrderItem.product),
             joinedload(SalesOrder.items).joinedload(SalesOrderItem.quote_item),
         )
@@ -166,6 +168,10 @@ def get_order(
         ngay_don=order.ngay_don,
         customer_id=order.customer_id,
         customer=CustomerShort.model_validate(order.customer) if order.customer else None,
+        phap_nhan_id=order.phap_nhan_id,
+        ten_phap_nhan=order.phap_nhan.ten_phap_nhan if order.phap_nhan else None,
+        phap_nhan_sx_id=order.phap_nhan_sx_id,
+        ten_phap_nhan_sx=order.phap_nhan_sx.ten_phap_nhan if order.phap_nhan_sx else None,
         trang_thai=order.trang_thai,
         ngay_giao_hang=order.ngay_giao_hang,
         dia_chi_giao=order.dia_chi_giao,
@@ -194,6 +200,8 @@ def create_order(
         so_don=so_don,
         ngay_don=data.ngay_don,
         customer_id=data.customer_id,
+        phap_nhan_id=data.phap_nhan_id,
+        phap_nhan_sx_id=data.phap_nhan_sx_id,
         ngay_giao_hang=data.ngay_giao_hang,
         dia_chi_giao=data.dia_chi_giao or customer.dia_chi_giao_hang,
         ghi_chu=data.ghi_chu,

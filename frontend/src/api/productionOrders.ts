@@ -53,6 +53,10 @@ export interface ProductionOrder {
   so_don: string | null
   ten_khach_hang: string | null
   ma_khach_hang: string | null
+  phap_nhan_sx_id: number | null
+  ten_phap_nhan_sx: string | null
+  kho_sx_id: number | null
+  ten_kho_sx: string | null
   trang_thai: string
   ngay_bat_dau_ke_hoach: string | null
   ngay_hoan_thanh_ke_hoach: string | null
@@ -72,6 +76,8 @@ export interface ProductionOrderListItem {
   so_don: string | null
   ten_khach_hang: string | null
   ten_hang: string | null       // mã hàng / tên hàng (item đầu tiên)
+  ten_phap_nhan_sx: string | null
+  ten_kho_sx: string | null
   trang_thai: string
   ngay_hoan_thanh_ke_hoach: string | null
   so_dong: number
@@ -106,6 +112,8 @@ export interface CreateProductionItemPayload {
 export interface CreateProductionOrderPayload {
   ngay_lenh: string
   sales_order_id?: number
+  phap_nhan_sx_id?: number | null
+  kho_sx_id?: number | null
   ngay_bat_dau_ke_hoach?: string
   ngay_hoan_thanh_ke_hoach?: string
   ghi_chu?: string
@@ -189,7 +197,13 @@ export const productionOrdersApi = {
   /** Tạo lệnh SX từ đơn hàng — mỗi mã hàng = 1 lệnh SX riêng */
   createFromOrder: (
     salesOrderId: number,
-    opts?: { ngay_lenh?: string; ngay_hoan_thanh_ke_hoach?: string; ghi_chu?: string },
+    opts?: {
+      ngay_lenh?: string
+      ngay_hoan_thanh_ke_hoach?: string
+      phap_nhan_sx_id?: number | null
+      kho_sx_id?: number | null
+      ghi_chu?: string
+    },
   ) =>
     client.post<ProductionOrder[]>(
       `/production-orders/tu-don-hang/${salesOrderId}`,

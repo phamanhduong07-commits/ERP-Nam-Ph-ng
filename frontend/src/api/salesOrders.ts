@@ -57,6 +57,10 @@ export interface SalesOrder {
   ngay_don: string
   customer_id: number
   customer: { id: number; ma_kh: string; ten_viet_tat: string; ten_don_vi: string | null; dien_thoai: string | null } | null
+  phap_nhan_id: number | null
+  ten_phap_nhan: string | null
+  phap_nhan_sx_id: number | null
+  ten_phap_nhan_sx: string | null
   trang_thai: string
   ngay_giao_hang: string | null
   dia_chi_giao: string | null
@@ -93,6 +97,8 @@ export interface CreateOrderItemPayload {
 export interface CreateOrderPayload {
   customer_id: number
   ngay_don: string
+  phap_nhan_id?: number | null
+  phap_nhan_sx_id?: number | null
   ngay_giao_hang?: string
   dia_chi_giao?: string
   ghi_chu?: string

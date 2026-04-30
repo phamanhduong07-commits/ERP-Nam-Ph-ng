@@ -77,6 +77,8 @@ class TaoLenhBody(BaseModel):
     """Body cho POST /tu-don-hang/{order_id}."""
     ngay_lenh: date | None = None
     ngay_hoan_thanh_ke_hoach: date | None = None
+    phap_nhan_sx_id: int | None = None
+    kho_sx_id: int | None = None
     ghi_chu: str | None = None
     items: list[TaoLenhItemSpec] = []      # thông số SX per-item (có thể rỗng)
 
@@ -84,6 +86,8 @@ class TaoLenhBody(BaseModel):
 class ProductionOrderCreate(BaseModel):
     ngay_lenh: date
     sales_order_id: int | None = None
+    phap_nhan_sx_id: int | None = None
+    kho_sx_id: int | None = None
     ngay_bat_dau_ke_hoach: date | None = None
     ngay_hoan_thanh_ke_hoach: date | None = None
     ghi_chu: str | None = None
@@ -98,6 +102,8 @@ class ProductionOrderCreate(BaseModel):
 
 
 class ProductionOrderUpdate(BaseModel):
+    phap_nhan_sx_id: int | None = None
+    kho_sx_id: int | None = None
     ngay_bat_dau_ke_hoach: date | None = None
     ngay_hoan_thanh_ke_hoach: date | None = None
     ngay_bat_dau_thuc_te: date | None = None
@@ -113,6 +119,10 @@ class ProductionOrderResponse(BaseModel):
     so_don: str | None = None
     ten_khach_hang: str | None = None
     ma_khach_hang: str | None = None
+    phap_nhan_sx_id: int | None = None
+    ten_phap_nhan_sx: str | None = None
+    kho_sx_id: int | None = None
+    ten_kho_sx: str | None = None
     trang_thai: str
     ngay_bat_dau_ke_hoach: date | None
     ngay_hoan_thanh_ke_hoach: date | None
@@ -135,6 +145,8 @@ class ProductionOrderListItem(BaseModel):
     so_don: str | None = None
     ten_khach_hang: str | None = None
     ten_hang: str | None = None          # tên mã hàng (item đầu tiên của lệnh SX)
+    ten_phap_nhan_sx: str | None = None
+    ten_kho_sx: str | None = None
     trang_thai: str
     ngay_hoan_thanh_ke_hoach: date | None
     so_dong: int = 0

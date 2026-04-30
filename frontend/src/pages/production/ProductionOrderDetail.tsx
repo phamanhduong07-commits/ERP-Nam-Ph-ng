@@ -694,6 +694,16 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   {TRANG_THAI_LABELS[order.trang_thai]}
                 </Tag>
               </Descriptions.Item>
+              <Descriptions.Item label="Pháp nhân SX">
+                {order.ten_phap_nhan_sx
+                  ? <Tag color="blue">{order.ten_phap_nhan_sx}</Tag>
+                  : <Typography.Text type="secondary">—</Typography.Text>}
+              </Descriptions.Item>
+              <Descriptions.Item label="Kho sản xuất">
+                {order.ten_kho_sx
+                  ? <Tag color="geekblue">{order.ten_kho_sx}</Tag>
+                  : <Typography.Text type="secondary">—</Typography.Text>}
+              </Descriptions.Item>
               <Descriptions.Item label="Bắt đầu (KH)">
                 {order.ngay_bat_dau_ke_hoach
                   ? dayjs(order.ngay_bat_dau_ke_hoach).format('DD/MM/YYYY')

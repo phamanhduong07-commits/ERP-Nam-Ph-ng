@@ -79,6 +79,10 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
         so_don=so_don,
         ten_khach_hang=ten_khach_hang,
         ma_khach_hang=ma_khach_hang,
+        phap_nhan_sx_id=order.phap_nhan_sx_id,
+        ten_phap_nhan_sx=order.phap_nhan_sx.ten_phap_nhan if order.phap_nhan_sx else None,
+        kho_sx_id=order.kho_sx_id,
+        ten_kho_sx=order.kho_sx.ten_kho if order.kho_sx else None,
         trang_thai=order.trang_thai,
         ngay_bat_dau_ke_hoach=order.ngay_bat_dau_ke_hoach,
         ngay_hoan_thanh_ke_hoach=order.ngay_hoan_thanh_ke_hoach,
@@ -97,6 +101,8 @@ def _load_order(order_id: int, db: Session) -> ProductionOrder:
         .options(
             joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.customer),
             joinedload(ProductionOrder.items).joinedload(ProductionOrderItem.product),
+            joinedload(ProductionOrder.phap_nhan_sx),
+            joinedload(ProductionOrder.kho_sx),
         )
         .filter(ProductionOrder.id == order_id)
         .first()
@@ -119,7 +125,9 @@ def list_orders(
     _: User = Depends(get_current_user),
 ):
     q = db.query(ProductionOrder).options(
-        joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.customer)
+        joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.customer),
+        joinedload(ProductionOrder.phap_nhan_sx),
+        joinedload(ProductionOrder.kho_sx),
     )
 
     if search:
@@ -157,6 +165,8 @@ def list_orders(
             so_don=o.sales_order.so_don if o.sales_order else None,
             ten_khach_hang=kh.ten_viet_tat if kh else None,
             ten_hang=items_q[0].ten_hang if items_q else None,
+            ten_phap_nhan_sx=o.phap_nhan_sx.ten_phap_nhan if o.phap_nhan_sx else None,
+            ten_kho_sx=o.kho_sx.ten_kho if o.kho_sx else None,
             trang_thai=o.trang_thai,
             ngay_hoan_thanh_ke_hoach=o.ngay_hoan_thanh_ke_hoach,
             so_dong=len(items_q),
@@ -223,6 +233,8 @@ def tao_lenh_tu_don_hang(
             sales_order_id=so.id,
             trang_thai="moi",
             ngay_hoan_thanh_ke_hoach=data.ngay_hoan_thanh_ke_hoach or so.ngay_giao_hang,
+            phap_nhan_sx_id=data.phap_nhan_sx_id or so.phap_nhan_sx_id,
+            kho_sx_id=data.kho_sx_id,
             ghi_chu=data.ghi_chu,
             created_by=current_user.id,
         )
@@ -281,6 +293,8 @@ def create_order(
         ngay_lenh=data.ngay_lenh,
         sales_order_id=data.sales_order_id,
         trang_thai="moi",
+        phap_nhan_sx_id=data.phap_nhan_sx_id,
+        kho_sx_id=data.kho_sx_id,
         ngay_bat_dau_ke_hoach=data.ngay_bat_dau_ke_hoach,
         ngay_hoan_thanh_ke_hoach=data.ngay_hoan_thanh_ke_hoach,
         ghi_chu=data.ghi_chu,

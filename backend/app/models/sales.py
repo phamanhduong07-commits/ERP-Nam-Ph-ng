@@ -21,6 +21,8 @@ class SalesOrder(Base):
     dia_chi_giao: Mapped[str | None] = mapped_column(Text)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     tong_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
+    phap_nhan_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -35,6 +37,8 @@ class SalesOrder(Base):
     nv_kinh_doanh: Mapped["User | None"] = relationship("User", foreign_keys=[nv_kinh_doanh_id])
     creator: Mapped["User | None"] = relationship("User", foreign_keys=[created_by])
     approver: Mapped["User | None"] = relationship("User", foreign_keys=[approved_by])
+    phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
+    phap_nhan_sx: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_sx_id])
 
 
 class SalesOrderItem(Base):
@@ -107,6 +111,7 @@ class Quote(Base):
     nv_phu_trach_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_het_han: Mapped[date | None] = mapped_column(Date)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
 
     # Tài chính
     chi_phi_bang_in: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
@@ -138,6 +143,7 @@ class Quote(Base):
 
     customer: Mapped["Customer"] = relationship("Customer", foreign_keys=[customer_id])
     nv_phu_trach: Mapped["User | None"] = relationship("User", foreign_keys=[nv_phu_trach_id])
+    phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
     items: Mapped[list["QuoteItem"]] = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
 
 
