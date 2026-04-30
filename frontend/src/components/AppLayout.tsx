@@ -15,7 +15,40 @@ import { productionPlansApi } from '../api/productionPlans'
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
 
-function buildMenuItems(queueCount: number) {
+// ─── Phân quyền menu ──────────────────────────────────────────────────────────
+// roles: undefined = tất cả đều thấy; có mảng = chỉ role trong mảng mới thấy
+
+type RawMenuItem = {
+  key: string
+  icon?: React.ReactNode
+  label: React.ReactNode
+  roles?: string[]
+  children?: RawMenuItem[]
+}
+
+function filterByRole(items: RawMenuItem[], role: string): object[] {
+  return items
+    .filter(item => !item.roles || item.roles.includes(role))
+    .map(({ roles: _roles, children, ...rest }) => ({
+      ...rest,
+      ...(children
+        ? { children: filterByRole(children, role) }
+        : {}),
+    }))
+    .filter(item => {
+      const c = (item as any).children
+      return c === undefined || c.length > 0
+    })
+}
+
+const ADMIN_GD      = ['ADMIN', 'GIAM_DOC']
+const BAN_HANG      = ['ADMIN', 'GIAM_DOC', 'KINH_DOANH', 'KE_TOAN']
+const SAN_XUAT_FULL = ['ADMIN', 'GIAM_DOC', 'SAN_XUAT', 'KINH_DOANH']
+const SAN_XUAT_ALL  = ['ADMIN', 'GIAM_DOC', 'SAN_XUAT', 'KINH_DOANH', 'CONG_NHAN']
+const KHO_ROLES     = ['ADMIN', 'GIAM_DOC', 'KHO', 'SAN_XUAT', 'KE_TOAN', 'MUA_HANG']
+const MUA_HANG      = ['ADMIN', 'GIAM_DOC', 'MUA_HANG', 'KE_TOAN']
+
+function buildMenuItems(queueCount: number): RawMenuItem[] {
   return [
     {
       key: '/dashboard',
@@ -26,6 +59,7 @@ function buildMenuItems(queueCount: number) {
       key: 'ban-hang',
       icon: <ShoppingCartOutlined />,
       label: 'Bán hàng',
+      roles: BAN_HANG,
       children: [
         { key: '/quotes', label: <Link to="/quotes">Báo giá</Link> },
         { key: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link> },
@@ -36,11 +70,13 @@ function buildMenuItems(queueCount: number) {
       key: 'san-xuat',
       icon: <ShopOutlined />,
       label: 'Sản xuất',
+      roles: SAN_XUAT_ALL,
       children: [
-        { key: '/production/orders', label: <Link to="/production/orders">Lệnh sản xuất</Link> },
-        { key: '/production/plans', label: <Link to="/production/plans">Kế hoạch sản xuất</Link> },
+        { key: '/production/orders', label: <Link to="/production/orders">Lệnh sản xuất</Link>, roles: SAN_XUAT_FULL },
+        { key: '/production/plans', label: <Link to="/production/plans">Kế hoạch sản xuất</Link>, roles: SAN_XUAT_FULL },
         {
           key: '/production/queue',
+          roles: SAN_XUAT_FULL,
           label: (
             <Link to="/production/queue">
               <Space>
@@ -53,9 +89,9 @@ function buildMenuItems(queueCount: number) {
             </Link>
           ),
         },
-        { key: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link> },
-        { key: '/production/phieu-phoi', label: <Link to="/production/phieu-phoi">Phiếu phôi sóng</Link> },
-        { key: '/production/cd2/dashboard', label: <Link to="/production/cd2/dashboard">📈 Dashboard CD2</Link> },
+        { key: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link>, roles: SAN_XUAT_FULL },
+        { key: '/production/phieu-phoi', label: <Link to="/production/phieu-phoi">Phiếu phôi sóng</Link>, roles: SAN_XUAT_FULL },
+        { key: '/production/cd2/dashboard', label: <Link to="/production/cd2/dashboard">📈 Dashboard CD2</Link>, roles: SAN_XUAT_FULL },
         { key: '/production/cd2', label: <Link to="/production/cd2">🗂 Kanban máy in</Link> },
         { key: '/production/cd2/may-in', label: <Link to="/production/cd2/may-in">🖨 Queue máy in</Link> },
         { key: '/production/cd2/scan', label: <Link to="/production/cd2/scan">📊 Scan sản lượng</Link> },
@@ -63,16 +99,17 @@ function buildMenuItems(queueCount: number) {
         { key: '/production/cd2/history', label: <Link to="/production/cd2/history">📑 Lịch sử phiếu in</Link> },
         { key: '/production/cd2/dhcho2', label: <Link to="/production/cd2/dhcho2">🔧 Chờ định hình</Link> },
         { key: '/production/cd2/sauin-kanban', label: <Link to="/production/cd2/sauin-kanban">🏭 Kanban sau in</Link> },
-        { key: '/production/cd2/shift', label: <Link to="/production/cd2/shift">⏰ Quản lý ca</Link> },
-        { key: '/production/cd2/config', label: <Link to="/production/cd2/config">⚙ Cấu hình CD2</Link> },
-        { key: '/master/indirect-costs', label: <Link to="/master/indirect-costs">Chi phí gián tiếp</Link> },
-        { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công</Link> },
+        { key: '/production/cd2/shift', label: <Link to="/production/cd2/shift">⏰ Quản lý ca</Link>, roles: SAN_XUAT_FULL },
+        { key: '/production/cd2/config', label: <Link to="/production/cd2/config">⚙ Cấu hình CD2</Link>, roles: ADMIN_GD },
+        { key: '/master/indirect-costs', label: <Link to="/master/indirect-costs">Chi phí gián tiếp</Link>, roles: ADMIN_GD },
+        { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công</Link>, roles: ADMIN_GD },
       ],
     },
     {
       key: 'kho',
       icon: <FileTextOutlined />,
       label: 'Kho',
+      roles: KHO_ROLES,
       children: [
         { key: '/warehouse/inventory', label: <Link to="/warehouse/inventory">Tồn kho</Link> },
         { key: '/warehouse/receipts', label: <Link to="/warehouse/receipts">Nhập kho (NVL)</Link> },
@@ -86,6 +123,7 @@ function buildMenuItems(queueCount: number) {
       key: 'mua-hang',
       icon: <ShopOutlined />,
       label: 'Mua hàng',
+      roles: MUA_HANG,
       children: [
         { key: '/purchasing/orders', label: <Link to="/purchasing/orders">Đơn mua hàng (PO)</Link> },
       ],
@@ -94,6 +132,7 @@ function buildMenuItems(queueCount: number) {
       key: 'danh-muc',
       icon: <TeamOutlined />,
       label: 'Danh mục',
+      roles: ADMIN_GD,
       children: [
         { key: '/master/users', label: <Link to="/master/users">Danh mục nhân viên</Link> },
         { key: '/master/customers', label: <Link to="/master/customers">Danh mục khách hàng</Link> },
@@ -132,10 +171,12 @@ export default function AppLayout() {
     staleTime: 30_000,
   })
   const queueCount = queueLines.length
-  const menuItems = buildMenuItems(queueCount)
+
+  const role = user?.role ?? 'ADMIN'
+  const menuItems = filterByRole(buildMenuItems(queueCount), role)
 
   const selectedKeys = [location.pathname]
-  const openKeys = menuItems
+  const openKeys = buildMenuItems(0)
     .filter((m) => m.children?.some((c) => c.key === location.pathname))
     .map((m) => m.key)
 
@@ -194,7 +235,7 @@ export default function AppLayout() {
           mode="inline"
           selectedKeys={selectedKeys}
           defaultOpenKeys={openKeys}
-          items={menuItems}
+          items={menuItems as any}
           style={{ border: 'none', marginTop: 8 }}
         />
       </Sider>

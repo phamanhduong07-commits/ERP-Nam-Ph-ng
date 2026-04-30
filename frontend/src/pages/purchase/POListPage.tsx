@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
-  Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Divider,
+  Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message, Divider,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, CheckCircleOutlined, ShopOutlined, MinusCircleOutlined,
+  FileExcelOutlined, FilePdfOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import {
   purchaseApi, PurchaseOrder, CreatePOPayload,
   TRANG_THAI_PO, TRANG_THAI_PO_COLOR,
@@ -168,6 +170,46 @@ export default function POListPage() {
     />
   )
 
+  const handleExportExcel = () => {
+    exportToExcel(`DonMuaHang_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Đơn mua hàng',
+      headers: ['STT', 'Số PO', 'Ngày PO', 'Nhà cung cấp', 'Trạng thái', 'Tổng tiền (đ)', 'Tiến độ nhận (%)'],
+      rows: poList.map((r, i) => [
+        i + 1, r.so_po, r.ngay_po, r.ten_ncc ?? '',
+        TRANG_THAI_PO[r.trang_thai] ?? r.trang_thai,
+        Number(r.tong_tien || 0),
+        r.tien_do_nhan != null ? r.tien_do_nhan : '',
+      ]),
+      colWidths: [5, 18, 12, 30, 18, 16, 16],
+    }])
+  }
+
+  const handleExportPdf = () => {
+    const cols = [
+      { header: 'STT', align: 'center' as const },
+      { header: 'Số PO' }, { header: 'Ngày PO' }, { header: 'Nhà cung cấp' },
+      { header: 'Trạng thái' },
+      { header: 'Tổng tiền (đ)', align: 'right' as const },
+      { header: 'Tiến độ', align: 'center' as const },
+    ]
+    const rows = poList.map((r, i) => [
+      i + 1, r.so_po, r.ngay_po, r.ten_ncc ?? '',
+      TRANG_THAI_PO[r.trang_thai] ?? r.trang_thai,
+      fmtVND(r.tong_tien),
+      r.tien_do_nhan != null ? `${r.tien_do_nhan}%` : '—',
+    ])
+    const tongTien = poList.reduce((s, r) => s + Number(r.tong_tien || 0), 0)
+    printToPdf(
+      'Danh sách đơn mua hàng',
+      `<h2>DANH SÁCH ĐƠN MUA HÀNG</h2>
+       <p class="meta">Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')} — ${poList.length} đơn</p>
+       ${buildHtmlTable(cols, rows, {
+         totalRow: ['', 'TỔNG CỘNG', '', '', '', fmtVND(tongTien) + 'đ', ''],
+       })}`,
+      true,
+    )
+  }
+
   return (
     <div style={{ paddingBottom: 24 }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
@@ -177,9 +219,17 @@ export default function POListPage() {
           </Space>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true) }}>
-            Tạo đơn mua
-          </Button>
+          <Space size={4}>
+            <Tooltip title="Xuất Excel">
+              <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
+            </Tooltip>
+            <Tooltip title="Xuất PDF">
+              <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
+            </Tooltip>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true) }}>
+              Tạo đơn mua
+            </Button>
+          </Space>
         </Col>
       </Row>
 

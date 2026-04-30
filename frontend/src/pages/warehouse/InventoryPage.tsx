@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Card, Col, Row, Select, Input, Spin, Table, Tag, Typography, Space, Statistic,
+  Button, Card, Col, Row, Select, Input, Spin, Table, Tag, Tooltip, Typography, Space, Statistic,
 } from 'antd'
-import { DatabaseOutlined, WarningOutlined } from '@ant-design/icons'
+import { DatabaseOutlined, FileExcelOutlined, FilePdfOutlined, WarningOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
 import { warehouseApi, TonKho } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
+import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, fmtNum } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 
@@ -41,6 +43,48 @@ export default function InventoryPage() {
 
   const thieu = filtered.filter(r => r.ton_luong < r.ton_toi_thieu && r.ton_toi_thieu > 0)
   const tongGiaTri = filtered.reduce((s, r) => s + r.gia_tri_ton, 0)
+
+  const handleExportExcel = () => {
+    exportToExcel(`TonKho_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Tồn kho',
+      headers: ['STT', 'Tên hàng', 'Kho', 'Tồn kho', 'ĐVT', 'Tồn tối thiểu', 'Đơn giá BQ', 'Giá trị tồn'],
+      rows: filtered.map((r, i) => [
+        i + 1, r.ten_hang, r.ten_kho,
+        Number(r.ton_luong), r.don_vi,
+        r.ton_toi_thieu > 0 ? Number(r.ton_toi_thieu) : '',
+        r.don_gia_binh_quan > 0 ? Number(r.don_gia_binh_quan) : '',
+        Number(r.gia_tri_ton),
+      ]),
+      colWidths: [5, 35, 18, 12, 8, 14, 14, 16],
+    }])
+  }
+
+  const handleExportPdf = () => {
+    const cols = [
+      { header: 'STT', align: 'center' as const },
+      { header: 'Tên hàng' },
+      { header: 'Kho' },
+      { header: 'Tồn kho', align: 'right' as const },
+      { header: 'ĐVT', align: 'center' as const },
+      { header: 'Đơn giá BQ', align: 'right' as const },
+      { header: 'Giá trị tồn', align: 'right' as const },
+    ]
+    const rows = filtered.map((r, i) => [
+      i + 1, r.ten_hang, r.ten_kho,
+      fmtNum(r.ton_luong), r.don_vi,
+      r.don_gia_binh_quan > 0 ? fmtVND(r.don_gia_binh_quan) : '—',
+      fmtVND(r.gia_tri_ton),
+    ])
+    printToPdf(
+      'Báo cáo tồn kho',
+      `<h2>BÁO CÁO TỒN KHO</h2>
+       <p class="meta">Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')} — ${filtered.length} mặt hàng | Tổng giá trị: ${fmtVND(tongGiaTri)}đ</p>
+       ${buildHtmlTable(cols, rows, {
+         totalRow: ['', 'TỔNG CỘNG', '', '', '', '', fmtVND(tongGiaTri) + 'đ'],
+       })}`,
+      true,
+    )
+  }
 
   const columns = [
     {
@@ -108,6 +152,16 @@ export default function InventoryPage() {
           <Space>
             <DatabaseOutlined style={{ fontSize: 20, color: '#1677ff' }} />
             <Title level={4} style={{ margin: 0 }}>Tồn kho</Title>
+          </Space>
+        </Col>
+        <Col>
+          <Space size={4}>
+            <Tooltip title="Xuất Excel">
+              <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
+            </Tooltip>
+            <Tooltip title="Xuất PDF">
+              <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
+            </Tooltip>
           </Space>
         </Col>
       </Row>
