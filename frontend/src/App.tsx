@@ -53,6 +53,8 @@ import ProductionOutputPage from './pages/warehouse/ProductionOutputPage'
 import DeliveryPage from './pages/warehouse/DeliveryPage'
 import POListPage from './pages/purchase/POListPage'
 import PhapNhanList from './pages/danhmuc/PhapNhanList'
+import PhanXuongList from './pages/danhmuc/PhanXuongList'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -75,15 +77,15 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
 
         {/* Bán hàng — master-detail list + standalone routes */}
-        <Route path="sales/orders" element={<SalesOrdersPage />} />
-        <Route path="sales/orders/new" element={<OrderCreate />} />
-        <Route path="sales/orders/:id" element={<OrderDetail />} />
+        <Route path="sales/orders" element={<ErrorBoundary><SalesOrdersPage /></ErrorBoundary>} />
+        <Route path="sales/orders/new" element={<ErrorBoundary><OrderCreate /></ErrorBoundary>} />
+        <Route path="sales/orders/:id" element={<ErrorBoundary><OrderDetail /></ErrorBoundary>} />
 
         {/* Báo giá — master-detail list + standalone routes */}
         <Route path="quotes" element={<QuotesPage />} />
-        <Route path="quotes/new" element={<QuoteForm />} />
-        <Route path="quotes/:id" element={<QuoteDetail />} />
-        <Route path="quotes/:id/edit" element={<QuoteForm />} />
+        <Route path="quotes/new" element={<ErrorBoundary><QuoteForm /></ErrorBoundary>} />
+        <Route path="quotes/:id" element={<ErrorBoundary><QuoteDetail /></ErrorBoundary>} />
+        <Route path="quotes/:id/edit" element={<ErrorBoundary><QuoteForm /></ErrorBoundary>} />
 
         {/* Danh mục */}
         <Route path="danhmuc/cau-truc" element={<CauTrucList />} />
@@ -144,6 +146,9 @@ export default function App() {
 
         {/* Pháp nhân */}
         <Route path="danhmuc/phap-nhan" element={<PhapNhanList />} />
+
+        {/* Nơi sản xuất (Phân xưởng) */}
+        <Route path="master/phan-xuong" element={<PhanXuongList />} />
 
         {/* BOM / Chi phí */}
         <Route path="master/indirect-costs" element={<IndirectCostList />} />

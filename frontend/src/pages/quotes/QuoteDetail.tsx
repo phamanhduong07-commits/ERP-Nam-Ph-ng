@@ -550,6 +550,15 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
               {QUOTE_STATUS_LABELS[trangThai] ?? trangThai}
             </Tag>
           </Descriptions.Item>
+          {quote.ten_phap_nhan && (
+            <Descriptions.Item label="Pháp nhân">{quote.ten_phap_nhan}</Descriptions.Item>
+          )}
+          {quote.ten_phan_xuong && (
+            <Descriptions.Item label="Nơi sản xuất">{quote.ten_phan_xuong}</Descriptions.Item>
+          )}
+          {quote.ten_nv_theo_doi && (
+            <Descriptions.Item label="NV theo dõi ĐH">{quote.ten_nv_theo_doi}</Descriptions.Item>
+          )}
           {quote.ghi_chu && (
             <Descriptions.Item label="Ghi chú" span={3}>{quote.ghi_chu}</Descriptions.Item>
           )}

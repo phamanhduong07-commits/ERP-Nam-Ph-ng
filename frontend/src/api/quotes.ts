@@ -60,6 +60,12 @@ export interface Quote {
   customer?: { id: number; ma_kh: string; ten_viet_tat: string; ten_don_vi: string | null } | null
   nv_phu_trach_id?: number | null
   nguoi_duyet_id?: number | null
+  phap_nhan_id?: number | null
+  ten_phap_nhan?: string | null
+  phan_xuong_id?: number | null
+  ten_phan_xuong?: string | null
+  nv_theo_doi_id?: number | null
+  ten_nv_theo_doi?: string | null
   ngay_het_han?: string | null
   chi_phi_bang_in: number
   chi_phi_khuon: number
@@ -100,7 +106,10 @@ export interface QuoteListItem {
 export interface CreateQuotePayload {
   customer_id: number
   ngay_bao_gia: string
+  phap_nhan_id?: number | null
+  phan_xuong_id?: number | null
   nv_phu_trach_id?: number | null
+  nv_theo_doi_id?: number | null
   ngay_het_han?: string | null
   so_bg_copy?: string | null
   chi_phi_bang_in?: number

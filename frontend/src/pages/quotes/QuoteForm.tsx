@@ -18,6 +18,9 @@ import { quotesApi, paperMaterialsApi, LOAI_IN_OPTIONS, LOAI_THUNG_OPTIONS, SO_L
 import type { QuoteItem, CreateQuotePayload } from '../../api/quotes'
 import { cauTrucApi, type CauTruc } from '../../api/cauTruc'
 import { productsApi, type ProductFull } from '../../api/products'
+import { phapNhanApi } from '../../api/phap_nhan'
+import { warehouseApi } from '../../api/warehouse'
+import { usersApi } from '../../api/usersApi'
 
 const { Title, Text } = Typography
 
@@ -203,6 +206,24 @@ export default function QuoteForm() {
   const [currentItem, setCurrentItem] = useState<QuoteItem>(emptyItem())
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [customerOptions, setCustomerOptions] = useState<{ value: number; label: string }[]>([])
+
+  const { data: phapNhanRaw } = useQuery({
+    queryKey: ['phap-nhan'],
+    queryFn: () => phapNhanApi.list().then(r => r.data),
+  })
+  const phapNhanList = Array.isArray(phapNhanRaw) ? phapNhanRaw : []
+
+  const { data: phanXuongRaw } = useQuery({
+    queryKey: ['phan-xuong'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+  })
+  const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
+
+  const { data: nhanVienRaw } = useQuery({
+    queryKey: ['nhan-vien-list'],
+    queryFn: () => usersApi.list({ trang_thai: true }).then(r => r.data),
+  })
+  const nhanVienList = Array.isArray(nhanVienRaw) ? nhanVienRaw : []
   const [cauTrucModal, setCauTrucModal] = useState(false)
   const [productOptions, setProductOptions] = useState<{ value: number; label: string; record: ProductFull }[]>([])
   const [productSearching, setProductSearching] = useState(false)
@@ -240,7 +261,10 @@ export default function QuoteForm() {
         customer_id: quoteData.customer_id,
         ngay_bao_gia: dayjs(quoteData.ngay_bao_gia),
         ngay_het_han: quoteData.ngay_het_han ? dayjs(quoteData.ngay_het_han) : null,
+        phap_nhan_id: quoteData.phap_nhan_id ?? null,
+        phan_xuong_id: quoteData.phan_xuong_id ?? null,
         nv_phu_trach_id: quoteData.nv_phu_trach_id,
+        nv_theo_doi_id: quoteData.nv_theo_doi_id ?? null,
         so_bg_copy: quoteData.so_bg_copy,
         ghi_chu: quoteData.ghi_chu,
         dieu_khoan: quoteData.dieu_khoan,
@@ -498,7 +522,10 @@ export default function QuoteForm() {
         customer_id: vals.customer_id,
         ngay_bao_gia: vals.ngay_bao_gia.format('YYYY-MM-DD'),
         ngay_het_han: vals.ngay_het_han?.format('YYYY-MM-DD') || null,
+        phap_nhan_id: vals.phap_nhan_id || null,
+        phan_xuong_id: vals.phan_xuong_id || null,
         nv_phu_trach_id: vals.nv_phu_trach_id || null,
+        nv_theo_doi_id: vals.nv_theo_doi_id || null,
         so_bg_copy: vals.so_bg_copy || null,
         ghi_chu: vals.ghi_chu || null,
         dieu_khoan: vals.dieu_khoan || null,
@@ -706,6 +733,41 @@ export default function QuoteForm() {
             <Col span={4}>
               <Form.Item label="Ngày hết hạn" name="ngay_het_han">
                 <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={12}>
+            <Col span={6}>
+              <Form.Item label="Pháp nhân" name="phap_nhan_id">
+                <Select
+                  allowClear
+                  placeholder="Chọn pháp nhân..."
+                  options={phapNhanList
+                    .filter(p => p.trang_thai)
+                    .map(p => ({ value: p.id, label: `[${p.ma_phap_nhan}] ${p.ten_viet_tat || p.ten_phap_nhan}` }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item label="Nơi sản xuất" name="phan_xuong_id">
+                <Select
+                  allowClear
+                  placeholder="Chọn phân xưởng..."
+                  options={phanXuongList
+                    .filter(p => p.trang_thai)
+                    .map(p => ({ value: p.id, label: p.ten_xuong }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item label="NV theo dõi đơn hàng" name="nv_theo_doi_id">
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  placeholder="Chọn nhân viên..."
+                  options={nhanVienList.map(nv => ({ value: nv.id, label: nv.ho_ten }))}
+                />
               </Form.Item>
             </Col>
           </Row>

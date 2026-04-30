@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import Customer
+from app.models.master import Customer, PhanXuong
 from app.models.sales import Quote, QuoteItem, SalesOrder, SalesOrderItem
 from app.schemas.master import CustomerShort
 from app.schemas.quotes import (
@@ -41,7 +41,11 @@ def _build_response(quote: Quote) -> QuoteResponse:
         customer=CustomerShort.model_validate(quote.customer) if quote.customer else None,
         phap_nhan_id=quote.phap_nhan_id,
         ten_phap_nhan=quote.phap_nhan.ten_phap_nhan if quote.phap_nhan else None,
+        phan_xuong_id=quote.phan_xuong_id,
+        ten_phan_xuong=quote.phan_xuong.ten_xuong if quote.phan_xuong else None,
         nv_phu_trach_id=quote.nv_phu_trach_id,
+        nv_theo_doi_id=quote.nv_theo_doi_id,
+        ten_nv_theo_doi=quote.nv_theo_doi.ho_ten if quote.nv_theo_doi else None,
         nguoi_duyet_id=quote.nguoi_duyet_id,
         ngay_het_han=quote.ngay_het_han,
         chi_phi_bang_in=quote.chi_phi_bang_in,
@@ -75,6 +79,8 @@ def _load_quote(quote_id: int, db: Session) -> Quote:
             joinedload(Quote.customer),
             joinedload(Quote.items),
             joinedload(Quote.phap_nhan),
+            joinedload(Quote.phan_xuong),
+            joinedload(Quote.nv_theo_doi),
         )
         .filter(Quote.id == quote_id)
         .first()
@@ -162,7 +168,9 @@ def create_quote(
         ngay_bao_gia=data.ngay_bao_gia,
         customer_id=data.customer_id,
         phap_nhan_id=data.phap_nhan_id,
+        phan_xuong_id=data.phan_xuong_id,
         nv_phu_trach_id=data.nv_phu_trach_id or current_user.id,
+        nv_theo_doi_id=data.nv_theo_doi_id,
         ngay_het_han=data.ngay_het_han,
         chi_phi_bang_in=data.chi_phi_bang_in,
         chi_phi_khuon=data.chi_phi_khuon,

@@ -39,7 +39,7 @@ def _to_dict(p: PhapNhan) -> dict:
     }
 
 
-@router.get("/")
+@router.get("")
 def list_phap_nhan(active_only: bool = False, db: Session = Depends(get_db)):
     q = db.query(PhapNhan).order_by(PhapNhan.ma_phap_nhan)
     if active_only:
@@ -47,7 +47,7 @@ def list_phap_nhan(active_only: bool = False, db: Session = Depends(get_db)):
     return [_to_dict(p) for p in q.all()]
 
 
-@router.post("/")
+@router.post("")
 def create_phap_nhan(body: PhapNhanCreate, db: Session = Depends(get_db)):
     if db.query(PhapNhan).filter(PhapNhan.ma_phap_nhan == body.ma_phap_nhan).first():
         raise HTTPException(400, "Mã pháp nhân đã tồn tại")

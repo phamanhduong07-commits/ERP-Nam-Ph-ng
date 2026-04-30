@@ -298,9 +298,20 @@ export const LOAI_XUAT_LABELS: Record<string, string> = {
   khac: 'Khác',
 }
 
+export interface CreatePhanXuongPayload {
+  ma_xuong: string
+  ten_xuong: string
+  dia_chi?: string | null
+  cong_doan: string
+  trang_thai: boolean
+}
+
 export const warehouseApi = {
   // Phân xưởng
   listPhanXuong: () => client.get<PhanXuong[]>('/warehouse/phan-xuong'),
+  createPhanXuong: (data: CreatePhanXuongPayload) => client.post<PhanXuong>('/warehouse/phan-xuong', data),
+  updatePhanXuong: (id: number, data: CreatePhanXuongPayload) => client.put<PhanXuong>(`/warehouse/phan-xuong/${id}`, data),
+  deletePhanXuong: (id: number) => client.delete(`/warehouse/phan-xuong/${id}`),
 
   // Tồn kho
   getTonKho: (params?: { warehouse_id?: number; phan_xuong_id?: number; loai?: string; search?: string }) =>

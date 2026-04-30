@@ -111,7 +111,7 @@ def _po_to_dict(po: PurchaseOrder, db: Session) -> dict:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.get("/")
+@router.get("")
 def list_pos(
     supplier_id: Optional[int] = None,
     trang_thai: Optional[str] = None,
@@ -150,7 +150,7 @@ def list_pos(
     return result
 
 
-@router.post("/")
+@router.post("")
 def create_po(body: POCreate, db: Session = Depends(get_db)):
     if not db.get(Supplier, body.supplier_id):
         raise HTTPException(404, "Nhà cung cấp không tồn tại")

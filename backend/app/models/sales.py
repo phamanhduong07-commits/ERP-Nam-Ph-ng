@@ -112,6 +112,8 @@ class Quote(Base):
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_het_han: Mapped[date | None] = mapped_column(Date)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
+    nv_theo_doi_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
 
     # Tài chính
     chi_phi_bang_in: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
@@ -143,7 +145,9 @@ class Quote(Base):
 
     customer: Mapped["Customer"] = relationship("Customer", foreign_keys=[customer_id])
     nv_phu_trach: Mapped["User | None"] = relationship("User", foreign_keys=[nv_phu_trach_id])
+    nv_theo_doi: Mapped["User | None"] = relationship("User", foreign_keys=[nv_theo_doi_id])
     phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
+    phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
     items: Mapped[list["QuoteItem"]] = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
 
 
