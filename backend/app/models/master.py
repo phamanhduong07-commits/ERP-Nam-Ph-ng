@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Integer, Numeric,
+    Boolean, DateTime, Float, ForeignKey, Integer, Numeric,
     SmallInteger, String, Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -16,10 +16,17 @@ class PhanXuong(Base):
     ten_xuong: Mapped[str] = mapped_column(String(100), nullable=False)
     dia_chi: Mapped[str | None] = mapped_column(String(255))
     cong_doan: Mapped[str] = mapped_column(String(20), default="cd2")  # "cd1_cd2" | "cd2"
+    # Xưởng CD2 trỏ sang xưởng CD1+CD2 cung cấp phôi cho mình
+    phoi_tu_phan_xuong_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("phan_xuong.id"), nullable=True
+    )
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     warehouses: Mapped[list["Warehouse"]] = relationship("Warehouse", back_populates="phan_xuong_obj")
+    phoi_tu_phan_xuong: Mapped["PhanXuong | None"] = relationship(
+        "PhanXuong", foreign_keys="PhanXuong.phoi_tu_phan_xuong_id", remote_side="PhanXuong.id"
+    )
 
 
 class Warehouse(Base):
@@ -31,6 +38,9 @@ class Warehouse(Base):
     dia_chi: Mapped[str | None] = mapped_column(Text)
     loai_kho: Mapped[str] = mapped_column(String(30), nullable=False)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
+    dien_tich: Mapped[float | None] = mapped_column(Float, nullable=True)
+    suc_chua: Mapped[float | None] = mapped_column(Float, nullable=True)
+    don_vi_suc_chua: Mapped[str | None] = mapped_column(String(20), nullable=True)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 

@@ -46,6 +46,7 @@ import SauInKanbanPage from './pages/production/SauInKanbanPage'
 import ShiftPage from './pages/production/ShiftPage'
 import ConfigPage from './pages/production/ConfigPage'
 import InventoryPage from './pages/warehouse/InventoryPage'
+import KhoTheoXuongPage from './pages/warehouse/KhoTheoXuongPage'
 import ReceiptsPage from './pages/warehouse/ReceiptsPage'
 import IssuesPage from './pages/warehouse/IssuesPage'
 import TransfersPage from './pages/warehouse/TransfersPage'
@@ -134,6 +135,7 @@ export default function App() {
         <Route path="production/cd2/config" element={<ConfigPage />} />
 
         {/* Kho */}
+        <Route path="warehouse/theo-xuong" element={<KhoTheoXuongPage />} />
         <Route path="warehouse/inventory" element={<InventoryPage />} />
         <Route path="warehouse/receipts" element={<ReceiptsPage />} />
         <Route path="warehouse/issues" element={<IssuesPage />} />

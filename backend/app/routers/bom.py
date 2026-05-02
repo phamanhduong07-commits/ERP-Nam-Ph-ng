@@ -692,10 +692,15 @@ def bom_from_production_item(
     source = "quote"
 
     # ── Số lớp & tổ hợp sóng ────────────────────────────────────────────────
+    _DEFAULT_THS = {3: 'B', 5: 'BC', 7: 'BCB'}
     so_lop_prod = (product.so_lop if product else None) or 3
     so_lop = qi.so_lop or so_lop_prod
-    to_hop_song_default = "C" if so_lop == 3 else "CB" if so_lop == 5 else "CBC"
-    to_hop_song = qi.to_hop_song or to_hop_song_default
+    # Fallback chain khớp production_orders.py: poi -> qi -> default
+    to_hop_song = (
+        getattr(poi, 'to_hop_song', None)
+        or getattr(qi, 'to_hop_song', None)
+        or _DEFAULT_THS.get(so_lop, 'B')
+    )
 
     # ── Build layers từ QuoteItem ────────────────────────────────────────────
     raw_pairs = _raw_pairs_from_object(qi)
@@ -1044,8 +1049,12 @@ def get_quote_spec(
         elif loai_in == 'ky_thuat_so':
             in_ky_thuat_so = True
 
+        _DEFAULT_TO_HOP_SONG = {3: 'B', 5: 'BC', 7: 'BCB'}
         qi_so_lop = getattr(qi, 'so_lop', None) or so_lop
-        qi_to_hop_song = getattr(qi, 'to_hop_song', None)
+        qi_to_hop_song = (
+            getattr(qi, 'to_hop_song', None)
+            or _DEFAULT_TO_HOP_SONG.get(qi_so_lop, 'B')
+        )
         # quote_item_id hợp lệ khi qi hoặc qi_addon là QuoteItem thật
         qi_quote_item_id = (
             qi.id if isinstance(qi, QuoteItem)
@@ -1060,7 +1069,7 @@ def get_quote_spec(
             "rong": float(qi.rong) if qi.rong else (float(product.rong) if product and product.rong else None),
             "cao": float(qi.cao) if qi.cao else (float(product.cao) if product and product.cao else None),
             "so_lop": qi_so_lop,
-            "to_hop_song": qi_to_hop_song or "C",
+            "to_hop_song": qi_to_hop_song,
             "so_luong": float(poi.so_luong_ke_hoach),
             "layers": _build_layers(qi_so_lop, qi_to_hop_song, _raw_pairs_from_object(qi)),
             # Addon flags — đọc từ QuoteItem thực (qi_addon); fallback về 0/False nếu không có

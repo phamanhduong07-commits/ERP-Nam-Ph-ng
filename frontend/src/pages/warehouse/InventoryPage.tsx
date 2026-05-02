@@ -1,17 +1,33 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Button, Card, Col, Row, Select, Input, Spin, Table, Tag, Tooltip, Typography, Space, Statistic,
+  Button, Card, Col, Row, Select, Input, Spin, Table, Tag, Tooltip, Typography, Space, Statistic, Tabs,
 } from 'antd'
 import { DatabaseOutlined, FileExcelOutlined, FilePdfOutlined, WarningOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { warehouseApi, TonKho } from '../../api/warehouse'
+import { warehouseApi, TonKho, PhanXuongWithWarehouses, WarehouseSlot } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, fmtNum } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 
+const LOAI_LABELS: Record<string, string> = {
+  GIAY_CUON: 'Giấy cuộn', NVL_PHU: 'NVL phụ', PHOI: 'Phôi sóng', THANH_PHAM: 'Thành phẩm',
+}
+const ALL_LOAI = ['GIAY_CUON', 'NVL_PHU', 'PHOI', 'THANH_PHAM']
+
+function fmtMoney(v: number) {
+  return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(v) + 'đ'
+}
+
+function getSlot(px: PhanXuongWithWarehouses, loai: string): WarehouseSlot | null | undefined {
+  const slot = (px.warehouses as any)[loai]
+  if (slot && 'not_applicable' in slot) return null
+  return slot as WarehouseSlot | null
+}
+
 export default function InventoryPage() {
+  const [activeTab, setActiveTab] = useState('tong-hop')
   const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
   const [warehouseId, setWarehouseId] = useState<number | undefined>()
   const [loai, setLoai] = useState<string | undefined>()
@@ -25,6 +41,12 @@ export default function InventoryPage() {
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses-all'],
     queryFn: () => warehousesApi.list().then(r => r.data),
+  })
+
+  const { data: khoTheoXuong = [], isLoading: loadingXuong } = useQuery({
+    queryKey: ['kho-theo-xuong'],
+    queryFn: () => warehouseApi.listTheoPhanXuong().then(r => r.data),
+    enabled: activeTab === 'theo-xuong',
   })
 
   const { data: tonKho = [], isLoading } = useQuery({
@@ -145,9 +167,31 @@ export default function InventoryPage() {
     },
   ]
 
+  const xuongColumns = [
+    { title: 'Xưởng', dataIndex: 'ten_xuong', width: 160, render: (v: string, r: PhanXuongWithWarehouses) =>
+      <Space><Tag color={r.cong_doan === 'cd1_cd2' ? 'blue' : 'green'}>{r.cong_doan === 'cd1_cd2' ? 'CD1+2' : 'CD2'}</Tag><span>{v}</span></Space>,
+    },
+    ...ALL_LOAI.map(loai => ({
+      title: LOAI_LABELS[loai],
+      key: loai,
+      width: 170,
+      render: (_: unknown, px: PhanXuongWithWarehouses) => {
+        const slot = getSlot(px, loai)
+        if (slot === null) return <Tag color="default">N/A</Tag>
+        if (!slot) return <Tag color="orange">Chưa tạo</Tag>
+        return (
+          <div>
+            <div style={{ fontSize: 12, color: '#555' }}>{slot.tong_so_luong.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} {slot.don_vi_suc_chua ?? ''}</div>
+            <div style={{ color: '#52c41a', fontSize: 12 }}>{fmtMoney(slot.tong_gia_tri)}</div>
+          </div>
+        )
+      },
+    })),
+  ]
+
   return (
     <div style={{ paddingBottom: 24 }}>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+      <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
         <Col>
           <Space>
             <DatabaseOutlined style={{ fontSize: 20, color: '#1677ff' }} />
@@ -165,6 +209,29 @@ export default function InventoryPage() {
           </Space>
         </Col>
       </Row>
+
+      <Tabs activeKey={activeTab} onChange={setActiveTab} style={{ marginBottom: 0 }}
+        items={[
+          { key: 'tong-hop', label: 'Tổng hợp' },
+          { key: 'theo-xuong', label: 'Theo xưởng' },
+        ]}
+      />
+
+      {activeTab === 'theo-xuong' && (
+        <Card size="small" styles={{ body: { padding: 0 } }} style={{ marginTop: 8 }}>
+          <Table
+            dataSource={khoTheoXuong as PhanXuongWithWarehouses[]}
+            columns={xuongColumns}
+            rowKey="id"
+            loading={loadingXuong}
+            size="small"
+            pagination={false}
+            scroll={{ x: 900 }}
+          />
+        </Card>
+      )}
+
+      {activeTab === 'tong-hop' && <>
 
       {/* Thống kê nhanh */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
@@ -277,6 +344,7 @@ export default function InventoryPage() {
           </Row>
         </Card>
       )}
+      </>}
     </div>
   )
 }

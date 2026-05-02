@@ -23,6 +23,7 @@ class SalesOrder(Base):
     tong_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     phap_nhan_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -39,6 +40,7 @@ class SalesOrder(Base):
     approver: Mapped["User | None"] = relationship("User", foreign_keys=[approved_by])
     phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
     phap_nhan_sx: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_sx_id])
+    phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
 
 
 class SalesOrderItem(Base):

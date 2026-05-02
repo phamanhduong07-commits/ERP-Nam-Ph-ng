@@ -6,7 +6,7 @@ from app.database import get_db, _BACKFILL_QI_PG, _BACKFILL_SPEC_PG
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.master import Customer, Product
-from app.models.sales import SalesOrder, SalesOrderItem
+from app.models.sales import SalesOrder, SalesOrderItem, QuoteItem
 from app.models.production import ProductionOrderItem
 from app.schemas.master import CustomerShort, ProductShort
 from app.schemas.sales import (
@@ -101,8 +101,9 @@ def get_order(
             joinedload(SalesOrder.customer),
             joinedload(SalesOrder.phap_nhan),
             joinedload(SalesOrder.phap_nhan_sx),
+            joinedload(SalesOrder.phan_xuong),
             joinedload(SalesOrder.items).joinedload(SalesOrderItem.product),
-            joinedload(SalesOrder.items).joinedload(SalesOrderItem.quote_item),
+            joinedload(SalesOrder.items).joinedload(SalesOrderItem.quote_item).joinedload(QuoteItem.quote),
         )
         .filter(SalesOrder.id == order_id)
         .first()
@@ -162,6 +163,14 @@ def get_order(
             for item in items
         ]
 
+    # Fallback: nếu đơn hàng chưa có phan_xuong_id, lấy từ báo giá qua quote_item
+    phan_xuong_id = order.phan_xuong_id
+    if not phan_xuong_id:
+        for item in order.items:
+            if item.quote_item and item.quote_item.quote and item.quote_item.quote.phan_xuong_id:
+                phan_xuong_id = item.quote_item.quote.phan_xuong_id
+                break
+
     result = SalesOrderResponse(
         id=order.id,
         so_don=order.so_don,
@@ -172,6 +181,8 @@ def get_order(
         ten_phap_nhan=order.phap_nhan.ten_phap_nhan if order.phap_nhan else None,
         phap_nhan_sx_id=order.phap_nhan_sx_id,
         ten_phap_nhan_sx=order.phap_nhan_sx.ten_phap_nhan if order.phap_nhan_sx else None,
+        phan_xuong_id=phan_xuong_id,
+        ten_phan_xuong=order.phan_xuong.ten_xuong if order.phan_xuong else None,
         trang_thai=order.trang_thai,
         ngay_giao_hang=order.ngay_giao_hang,
         dia_chi_giao=order.dia_chi_giao,
@@ -201,13 +212,13 @@ def create_order(
         ngay_don=data.ngay_don,
         customer_id=data.customer_id,
         phap_nhan_id=data.phap_nhan_id,
-        phap_nhan_sx_id=data.phap_nhan_sx_id,
+        phan_xuong_id=data.phan_xuong_id,
         ngay_giao_hang=data.ngay_giao_hang,
         dia_chi_giao=data.dia_chi_giao or customer.dia_chi_giao_hang,
         ghi_chu=data.ghi_chu,
         trang_thai="moi",
         created_by=current_user.id,
-        nv_kinh_doanh_id=current_user.id,
+        nv_kinh_doanh_id=data.nv_kinh_doanh_id or current_user.id,
     )
 
     tong_tien = 0

@@ -61,6 +61,8 @@ export interface SalesOrder {
   ten_phap_nhan: string | null
   phap_nhan_sx_id: number | null
   ten_phap_nhan_sx: string | null
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
   trang_thai: string
   ngay_giao_hang: string | null
   dia_chi_giao: string | null

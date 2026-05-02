@@ -16,10 +16,10 @@ load_dotenv()
 # 3. Import Base
 try:
     from app.database import Base
-    print("--- Đã kết nối thành công với Base từ app.database ---")
+    print("--- OK: Base from app.database ---")
 except ImportError:
     from app.models import Base
-    print("--- Đã kết nối thành công với Base từ app.models ---")
+    print("--- OK: Base from app.models ---")
 
 # --- BƯỚC QUAN TRỌNG: NẠP TẤT CẢ MODELS ĐỂ ALEMBIC KHÔNG ĐÒI XÓA BẢNG ---
 # Đoạn code này sẽ tự động tìm các file trong thư mục app/models và nạp chúng vào Metadata
@@ -30,7 +30,7 @@ if os.path.exists(models_path):
         if file.endswith(".py") and file != "__init__.py":
             module_name = f"app.models.{file[:-3]}"
             importlib.import_module(module_name)
-    print(f"--- Đã nạp xong Models từ thư mục app/models. Danh sách bảng hiện tại: {list(Base.metadata.tables.keys())} ---")
+    print(f"--- OK: models loaded, tables: {list(Base.metadata.tables.keys())} ---")
 # ----------------------------------------------------------------------
 
 config = context.config

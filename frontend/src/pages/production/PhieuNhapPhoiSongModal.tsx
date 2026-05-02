@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Button, DatePicker, Form, Input, InputNumber, message,
   Modal, Select, Space, Table, TimePicker, Tag, Typography,
@@ -6,8 +6,10 @@ import {
 import { PrinterOutlined, CheckOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
+import { useQuery } from '@tanstack/react-query'
 import { productionOrdersApi } from '../../api/productionOrders'
 import type { ProductionOrder, PhieuNhapPhoiSong, ProductionOrderItem } from '../../api/productionOrders'
+import { warehousesApi } from '../../api/warehouses'
 import { fmtN } from '../../utils/exportUtils'
 import { calcBoxDimensions } from '../../api/quotes'
 
@@ -77,10 +79,39 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
   const [ngay, setNgay] = useState(session?.ngay ?? dayjs().format('YYYY-MM-DD'))
   const [ca, setCa] = useState<string | null>(null)
   const [ghiChu, setGhiChu] = useState('')
+  const [warehouseId, setWarehouseId] = useState<number | null>(null)
   const [gioBatDau, setGioBatDau] = useState<dayjs.Dayjs | null>(
     session?.gio_bat_dau ? dayjs(session.gio_bat_dau, 'HH:mm') : dayjs()
   )
   const [gioKetThuc, setGioKetThuc] = useState<dayjs.Dayjs | null>(dayjs())
+
+  const { data: warehouses } = useQuery({
+    queryKey: ['warehouses-list'],
+    queryFn: () => warehousesApi.list().then(r => r.data),
+    staleTime: 60_000,
+  })
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong'],
+    queryFn: () => import('../../api/warehouse').then(m => m.warehouseApi.listPhanXuong().then(r => r.data)),
+    staleTime: 300_000,
+  })
+
+  // Với xưởng CD2: dùng kho PHOI của xưởng nguồn (phoi_tu_phan_xuong_id); fallback về xưởng hiện tại
+  const orderPx = order.phan_xuong_id ? phanXuongList.find(p => p.id === order.phan_xuong_id) : null
+  const phoiSourceId = orderPx?.cong_doan === 'cd2' && orderPx?.phoi_tu_phan_xuong_id
+    ? orderPx.phoi_tu_phan_xuong_id
+    : (order.phan_xuong_id ?? null)
+
+  const khoPhoi = (warehouses ?? []).filter(
+    w => w.loai_kho === 'PHOI' && w.trang_thai &&
+      (phoiSourceId ? w.phan_xuong_id === phoiSourceId : true)
+  )
+
+  useEffect(() => {
+    if (khoPhoi.length === 1 && warehouseId === null) {
+      setWarehouseId(khoPhoi[0].id)
+    }
+  }, [khoPhoi.length, khoPhoi[0]?.id, warehouseId])
 
   const [rows, setRows] = useState<RowState[]>(() =>
     order.items.map(it => ({
@@ -118,6 +149,7 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
         ghi_chu: ghiChu || null,
         gio_bat_dau: gioBatDau?.format('HH:mm') ?? null,
         gio_ket_thuc: gioKetThuc?.format('HH:mm') ?? null,
+        warehouse_id: warehouseId,
         items: rows.map(r => {
           const oi = order.items.find(i => i.id === r.poi_id)
           return {
@@ -486,14 +518,32 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
               </Form.Item>
             )}
           </Form>
-          <Form.Item label="Ghi chú" style={{ marginBottom: 12 }}>
-            <Input
-              style={{ width: 360 }}
-              value={ghiChu}
-              onChange={e => setGhiChu(e.target.value)}
-              placeholder="Ghi chú phiếu..."
-            />
-          </Form.Item>
+          <Form layout="inline" style={{ marginBottom: 12, gap: 8 }}>
+            <Form.Item label="Ghi chú" style={{ marginBottom: 0 }}>
+              <Input
+                style={{ width: 280 }}
+                value={ghiChu}
+                onChange={e => setGhiChu(e.target.value)}
+                placeholder="Ghi chú phiếu..."
+              />
+            </Form.Item>
+            <Form.Item
+              label="Nhập vào kho"
+              style={{ marginBottom: 0 }}
+              extra={orderPx?.cong_doan === 'cd2' && phoiSourceId !== order.phan_xuong_id
+                ? <span style={{ color: '#722ed1', fontSize: 11 }}>Kho phôi của {orderPx.ten_phoi_tu_phan_xuong ?? 'xưởng nguồn'}</span>
+                : undefined}
+            >
+              <Select
+                allowClear
+                placeholder={khoPhoi.length ? 'Chọn kho phôi...' : 'Chưa có kho PHOI'}
+                style={{ width: 220 }}
+                value={warehouseId ?? undefined}
+                onChange={v => setWarehouseId(v ?? null)}
+                options={khoPhoi.map(w => ({ value: w.id, label: `${w.ten_kho} (${w.ma_kho})` }))}
+              />
+            </Form.Item>
+          </Form>
 
           <Table<RowState>
             rowKey="poi_id"

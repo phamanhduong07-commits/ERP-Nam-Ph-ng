@@ -123,10 +123,10 @@ export default function PhieuInModal({ phieu, open, onClose, onSaved }: Props) {
     if (!phieu) return
     try {
       await cd2Api.huyPhieu(phieu.id)
-      message.success('Đã huỷ phiếu in')
+      message.success(phieu.may_in_id ? 'Đã trả phiếu về máy in — trạng thái Kế hoạch' : 'Đã trả phiếu về Chờ in')
       onSaved()
     } catch {
-      message.error('Lỗi huỷ phiếu')
+      message.error('Lỗi')
     }
   }
 
@@ -161,14 +161,21 @@ export default function PhieuInModal({ phieu, open, onClose, onSaved }: Props) {
           </Button>
         )}
         {tt === 'cho_dinh_hinh' && (
-          <Button
-            type="primary"
-            icon={<ForwardOutlined />}
-            style={{ background: '#722ed1', borderColor: '#722ed1' }}
-            onClick={() => setShowSauIn(true)}
-          >
-            Chuyển Sau in
-          </Button>
+          <>
+            <Button
+              type="primary"
+              icon={<ForwardOutlined />}
+              style={{ background: '#722ed1', borderColor: '#722ed1' }}
+              onClick={() => setShowSauIn(true)}
+            >
+              Chuyển Sau in
+            </Button>
+            <Popconfirm title="Bỏ qua sau in, hoàn thành luôn?" onConfirm={handleHoanThanh}>
+              <Button icon={<CheckOutlined />} loading={saving} style={{ color: '#389e0d', borderColor: '#389e0d' }}>
+                Hoàn thành
+              </Button>
+            </Popconfirm>
+          </>
         )}
         {tt === 'sau_in' && (
           <Popconfirm title="Xác nhận hoàn thành sau in?" onConfirm={handleHoanThanh}>
@@ -178,8 +185,15 @@ export default function PhieuInModal({ phieu, open, onClose, onSaved }: Props) {
           </Popconfirm>
         )}
         {tt !== 'hoan_thanh' && tt !== 'huy' && (
-          <Popconfirm title="Huỷ phiếu in này?" onConfirm={handleHuy} okButtonProps={{ danger: true }}>
-            <Button icon={<StopOutlined />} style={{ color: '#fa541c', borderColor: '#fa541c' }}>Huỷ phiếu</Button>
+          <Popconfirm
+            title={phieu?.may_in_id
+              ? `Trả phiếu về máy in (${phieu.ten_may ?? 'đã gán'}) — trạng thái Kế hoạch?`
+              : 'Trả phiếu về Chờ in?'
+            }
+            onConfirm={handleHuy}
+            okButtonProps={{ danger: true }}
+          >
+            <Button icon={<StopOutlined />} style={{ color: '#fa541c', borderColor: '#fa541c' }}>Trả về máy in</Button>
           </Popconfirm>
         )}
         <Popconfirm title="Xoá phiếu in này?" onConfirm={handleDelete} okButtonProps={{ danger: true }}>

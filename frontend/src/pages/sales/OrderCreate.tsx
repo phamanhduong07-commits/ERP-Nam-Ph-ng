@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Card, Form, Select, DatePicker, Input, Button, Table, Space,
-  InputNumber, Typography, Row, Col, Divider, message, Empty,
+  InputNumber, Typography, Row, Col, Divider, message, Empty, Spin,
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -12,6 +12,8 @@ import { customersApi } from '../../api/customers'
 import { productsApi } from '../../api/products'
 import { salesOrdersApi } from '../../api/salesOrders'
 import { phapNhanApi } from '../../api/phap_nhan'
+import { warehouseApi } from '../../api/warehouse'
+import { usersApi } from '../../api/usersApi'
 import type { Product } from '../../api/products'
 
 const { Title, Text } = Typography
@@ -34,16 +36,41 @@ export default function OrderCreate() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [productSearch, setProductSearch] = useState('')
+  const [customerOptions, setCustomerOptions] = useState<{ value: number; label: string }[]>([])
+  const [customerSearching, setCustomerSearching] = useState(false)
 
-  const { data: customers } = useQuery({
-    queryKey: ['customers-all'],
-    queryFn: () => customersApi.all().then((r) => r.data),
-  })
+  const handleCustomerSearch = async (q: string) => {
+    if (!q || q.length < 1) return
+    setCustomerSearching(true)
+    try {
+      const res = await customersApi.list({ search: q, page_size: 30 })
+      setCustomerOptions(
+        res.data.items.map(c => ({
+          value: c.id,
+          label: `[${c.ma_kh}] ${c.ten_viet_tat}`,
+        }))
+      )
+    } finally {
+      setCustomerSearching(false)
+    }
+  }
 
   const { data: phapNhanList } = useQuery({
     queryKey: ['phap-nhan-all'],
     queryFn: () => phapNhanApi.list({ active_only: true }).then((r) => r.data),
   })
+
+  const { data: phanXuongRaw } = useQuery({
+    queryKey: ['phan-xuong'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+  })
+  const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
+
+  const { data: nhanVienRaw } = useQuery({
+    queryKey: ['nhan-vien-list'],
+    queryFn: () => usersApi.list({ trang_thai: true }).then(r => r.data),
+  })
+  const nhanVienList = Array.isArray(nhanVienRaw) ? nhanVienRaw : []
 
   const { data: products } = useQuery({
     queryKey: ['products', productSearch, selectedCustomerId],
@@ -92,7 +119,8 @@ export default function OrderCreate() {
         customer_id: values.customer_id,
         ngay_don: dayjs(values.ngay_don).format('YYYY-MM-DD'),
         phap_nhan_id: values.phap_nhan_id ?? null,
-        phap_nhan_sx_id: values.phap_nhan_sx_id ?? null,
+        phan_xuong_id: values.phan_xuong_id ?? null,
+        nv_kinh_doanh_id: values.nv_kinh_doanh_id ?? null,
         ngay_giao_hang: values.ngay_giao_hang
           ? dayjs(values.ngay_giao_hang).format('YYYY-MM-DD')
           : undefined,
@@ -225,21 +253,17 @@ export default function OrderCreate() {
                   >
                     <Select
                       showSearch
-                      placeholder="Tìm khách hàng..."
-                      filterOption={(input, option) =>
-                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                      }
+                      filterOption={false}
+                      placeholder="Gõ để tìm khách hàng..."
+                      notFoundContent={customerSearching ? <Spin size="small" /> : 'Gõ tên / mã KH...'}
+                      onSearch={handleCustomerSearch}
                       onChange={(v) => {
                         setSelectedCustomerId(v)
-                        const kh = customers?.find((c) => c.id === v)
-                        if (kh?.dia_chi_giao_hang) {
-                          form.setFieldValue('dia_chi_giao', kh.dia_chi_giao_hang)
-                        }
+                        customersApi.get(v).then(r => {
+                          if (r.data?.dia_chi_giao_hang) form.setFieldValue('dia_chi_giao', r.data.dia_chi_giao_hang)
+                        })
                       }}
-                      options={customers?.map((c) => ({
-                        value: c.id,
-                        label: `[${c.ma_kh}] ${c.ten_viet_tat}`,
-                      }))}
+                      options={customerOptions}
                     />
                   </Form.Item>
                 </Col>
@@ -273,16 +297,21 @@ export default function OrderCreate() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="phap_nhan_sx_id" label="Pháp nhân sản xuất">
+                  <Form.Item name="phan_xuong_id" label="Xưởng sản xuất">
                     <Select
-                      showSearch allowClear placeholder="Chọn pháp nhân sản xuất (xưởng)..."
-                      filterOption={(input, option) =>
-                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                      }
-                      options={phapNhanList?.map((p) => ({
-                        value: p.id,
-                        label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
-                      }))}
+                      allowClear placeholder="Chọn xưởng sản xuất..."
+                      options={phanXuongList
+                        .filter(p => p.trang_thai)
+                        .map(p => ({ value: p.id, label: p.ten_xuong }))}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="nv_kinh_doanh_id" label="NV kinh doanh">
+                    <Select
+                      showSearch allowClear optionFilterProp="label"
+                      placeholder="Chọn nhân viên..."
+                      options={nhanVienList.map(nv => ({ value: nv.id, label: nv.ho_ten }))}
                     />
                   </Form.Item>
                 </Col>

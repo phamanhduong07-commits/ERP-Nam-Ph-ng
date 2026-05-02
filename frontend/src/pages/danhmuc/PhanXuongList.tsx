@@ -77,6 +77,7 @@ export default function PhanXuongList() {
       ten_xuong: r.ten_xuong,
       dia_chi:   r.dia_chi,
       cong_doan: r.cong_doan,
+      phoi_tu_phan_xuong_id: r.phoi_tu_phan_xuong_id ?? undefined,
       trang_thai: r.trang_thai,
     })
     setOpen(true)
@@ -90,6 +91,7 @@ export default function PhanXuongList() {
         ten_xuong: v.ten_xuong,
         dia_chi:   v.dia_chi || null,
         cong_doan: v.cong_doan,
+        phoi_tu_phan_xuong_id: v.cong_doan === 'cd2' ? (v.phoi_tu_phan_xuong_id ?? null) : null,
         trang_thai: v.trang_thai ?? true,
       }
       if (editing) {
@@ -113,6 +115,13 @@ export default function PhanXuongList() {
         const cfg = CONG_DOAN_LABEL[v] ?? { text: v, color: 'default' }
         return <Tag color={cfg.color}>{cfg.text}</Tag>
       },
+    },
+    {
+      title: 'Nhận phôi từ', dataIndex: 'ten_phoi_tu_phan_xuong', width: 160, ellipsis: true,
+      render: (v: string | null, r: PhanXuong) =>
+        r.cong_doan === 'cd2'
+          ? (v ? <Text style={{ color: '#722ed1' }}>{v}</Text> : <Text type="warning">Chưa cấu hình</Text>)
+          : <Text type="secondary">—</Text>,
     },
     {
       title: 'Hoạt động', dataIndex: 'trang_thai', width: 100, align: 'center' as const,
@@ -209,6 +218,24 @@ export default function PhanXuongList() {
             rules={[{ required: true, message: 'Chọn công đoạn' }]}
           >
             <Select options={CONG_DOAN_OPTIONS} />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.cong_doan !== cur.cong_doan}>
+            {({ getFieldValue }) => getFieldValue('cong_doan') === 'cd2' && (
+              <Form.Item
+                name="phoi_tu_phan_xuong_id"
+                label="Nhận phôi từ xưởng"
+                extra="Xưởng CD1+CD2 cung cấp phôi sóng cho xưởng này"
+              >
+                <Select
+                  allowClear
+                  placeholder="Chọn xưởng cung cấp phôi..."
+                  options={list
+                    .filter(px => px.cong_doan === 'cd1_cd2' && px.trang_thai)
+                    .map(px => ({ value: px.id, label: `${px.ten_xuong} (${px.ma_xuong})` }))
+                  }
+                />
+              </Form.Item>
+            )}
           </Form.Item>
           <Form.Item name="trang_thai" label="Hoạt động" valuePropName="checked">
             <Switch />

@@ -17,7 +17,7 @@ import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/
 import type { SalesOrderItem } from '../../api/salesOrders'
 import { productionOrdersApi } from '../../api/productionOrders'
 import { phapNhanApi } from '../../api/phap_nhan'
-import { warehousesApi } from '../../api/warehouses'
+import { warehouseApi } from '../../api/warehouse'
 import BomCalculatorPanel from '../production/BomCalculatorPanel'
 import { exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
 
@@ -50,10 +50,11 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     queryFn: () => phapNhanApi.list({ active_only: true }).then((r) => r.data),
   })
 
-  const { data: khoList } = useQuery({
-    queryKey: ['warehouses-all'],
-    queryFn: () => warehousesApi.list().then((r) => r.data),
+  const { data: phanXuongRaw } = useQuery({
+    queryKey: ['phan-xuong'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
   })
+  const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
 
   const handleApprove = async () => {
     try {
@@ -83,7 +84,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
         ngay_lenh: vals.ngay_lenh?.format('YYYY-MM-DD'),
         ngay_hoan_thanh_ke_hoach: vals.ngay_hoan_thanh_ke_hoach?.format('YYYY-MM-DD'),
         phap_nhan_sx_id: vals.phap_nhan_sx_id ?? null,
-        kho_sx_id: vals.kho_sx_id ?? null,
+        phan_xuong_id: vals.phan_xuong_id ?? null,
       })
       const orders = res.data
       message.success(`Đã tạo ${orders.length} lệnh sản xuất (1 lệnh / mã hàng)`)
@@ -398,7 +399,14 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 size={embedded ? 'small' : 'middle'}
                 type="primary"
                 icon={<ThunderboltOutlined />}
-                onClick={() => { lenhForm.resetFields(); setLenhModal(true) }}
+                onClick={() => {
+                  lenhForm.resetFields()
+                  lenhForm.setFieldsValue({
+                    phap_nhan_sx_id: order.phap_nhan_id ?? undefined,
+                    phan_xuong_id: order.phan_xuong_id ?? undefined,
+                  })
+                  setLenhModal(true)
+                }}
               >
                 Lập lệnh SX
               </Button>
@@ -713,11 +721,10 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           </Form.Item>
           <Form.Item
             name="phap_nhan_sx_id"
-            label="Pháp nhân sản xuất"
-            initialValue={order.phap_nhan_sx_id ?? undefined}
+            label="Pháp nhân xuất hoá đơn"
           >
             <Select
-              showSearch allowClear placeholder="Chọn pháp nhân sản xuất (xưởng)..."
+              showSearch allowClear placeholder="Chọn pháp nhân..."
               filterOption={(input, option) =>
                 String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
               }
@@ -728,19 +735,14 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
             />
           </Form.Item>
           <Form.Item
-            name="kho_sx_id"
-            label="Kho sản xuất"
-            rules={[{ required: true, message: 'Chọn kho sản xuất' }]}
+            name="phan_xuong_id"
+            label="Xưởng sản xuất"
           >
             <Select
-              showSearch allowClear placeholder="Chọn kho sản xuất..."
-              filterOption={(input, option) =>
-                String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-              }
-              options={khoList?.filter(k => k.trang_thai).map((k) => ({
-                value: k.id,
-                label: `[${k.ma_kho}] ${k.ten_kho}`,
-              }))}
+              allowClear placeholder="Chọn xưởng sản xuất..."
+              options={phanXuongList
+                .filter(p => p.trang_thai)
+                .map(p => ({ value: p.id, label: p.ten_xuong }))}
             />
           </Form.Item>
           <Text type="secondary" style={{ fontSize: 12 }}>

@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import {
-  PlayCircleOutlined, CheckCircleOutlined, DeleteOutlined,
+  CheckCircleOutlined, DeleteOutlined,
   ReloadOutlined, ClockCircleOutlined, ThunderboltOutlined,
   FileTextOutlined, CalculatorOutlined, InfoCircleOutlined,
 } from '@ant-design/icons'
@@ -195,11 +195,6 @@ export default function ProductionQueuePage() {
   const showPanel    = planningRows.length > 0
 
   // ── mutations ─────────────────────────────────────────────────────────────
-  const startMut = useMutation({
-    mutationFn: (id: number) => productionPlansApi.startQueueLine(id),
-    onSuccess: () => { message.success('Đã bắt đầu chạy'); qc.invalidateQueries({ queryKey: ['production-queue'] }) },
-    onError:   (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
-  })
   const completeMut = useMutation({
     mutationFn: ({ planId, lineId }: { planId: number; lineId: number }) =>
       productionPlansApi.completeLine(planId, lineId),
@@ -465,13 +460,6 @@ export default function ProductionQueuePage() {
       fixed: 'right',
       render: (_, r) => (
         <Space size={4}>
-          {r.trang_thai === 'cho' && (
-            <Tooltip title="Bắt đầu chạy máy">
-              <Popconfirm title="Bắt đầu chạy dòng này?" onConfirm={() => startMut.mutate(r.id)} okText="Bắt đầu">
-                <Button size="small" type="primary" icon={<PlayCircleOutlined />} loading={startMut.isPending} />
-              </Popconfirm>
-            </Tooltip>
-          )}
           {(r.trang_thai === 'cho' || r.trang_thai === 'dang_chay') && (
             <Tooltip title="Hoàn thành">
               <Popconfirm

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Card, Table, Button, Space, Modal, Form, Input,
+  Card, Table, Button, Space, Modal, Form, Input, InputNumber,
   Select, Tag, Popconfirm, message, Typography, Row, Col, Switch,
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
@@ -11,11 +11,35 @@ import { warehouseApi } from '../../api/warehouse'
 
 const { Title } = Typography
 
-const LOAI_KHO_OPTIONS = [
-  { value: 'nguyen_lieu', label: 'Nguyên liệu' },
-  { value: 'thanh_pham', label: 'Thành phẩm' },
-  { value: 'ban_thanh_pham', label: 'Bán thành phẩm' },
-  { value: 'khac', label: 'Khác' },
+export const LOAI_KHO_OPTIONS = [
+  { value: 'GIAY_CUON',      label: 'Kho giấy cuộn' },
+  { value: 'NVL_PHU',        label: 'Kho NVL phụ' },
+  { value: 'PHOI',           label: 'Kho phôi sóng' },
+  { value: 'THANH_PHAM',     label: 'Kho thành phẩm' },
+  { value: 'nguyen_lieu',    label: 'Nguyên liệu (cũ)' },
+  { value: 'thanh_pham',     label: 'Thành phẩm (cũ)' },
+  { value: 'ban_thanh_pham', label: 'Bán thành phẩm (cũ)' },
+  { value: 'khac',           label: 'Khác' },
+]
+
+export const LOAI_KHO_COLOR: Record<string, string> = {
+  GIAY_CUON: 'blue', NVL_PHU: 'orange', PHOI: 'purple', THANH_PHAM: 'green',
+  nguyen_lieu: 'orange', thanh_pham: 'green', ban_thanh_pham: 'blue', khac: 'default',
+}
+
+export const LOAI_KHO_LABEL: Record<string, string> = {
+  GIAY_CUON: 'Kho giấy cuộn', NVL_PHU: 'Kho NVL phụ',
+  PHOI: 'Kho phôi sóng', THANH_PHAM: 'Kho thành phẩm',
+  nguyen_lieu: 'Nguyên liệu', thanh_pham: 'Thành phẩm',
+  ban_thanh_pham: 'Bán thành phẩm', khac: 'Khác',
+}
+
+const DON_VI_SUC_CHUA_OPTIONS = [
+  { value: 'Kg', label: 'Kg' },
+  { value: 'Tấm', label: 'Tấm' },
+  { value: 'Cuộn', label: 'Cuộn' },
+  { value: 'Cái', label: 'Cái' },
+  { value: 'Thùng', label: 'Thùng' },
 ]
 
 export default function WarehouseList() {
@@ -75,6 +99,9 @@ export default function WarehouseList() {
       loai_kho: vals.loai_kho,
       dia_chi: vals.dia_chi || null,
       phan_xuong_id: vals.phan_xuong_id || null,
+      dien_tich: vals.dien_tich ?? null,
+      suc_chua: vals.suc_chua ?? null,
+      don_vi_suc_chua: vals.don_vi_suc_chua || null,
       trang_thai: vals.trang_thai ?? true,
     }
     if (editing) updateMut.mutate({ id: editing.id, data: payload })
@@ -85,16 +112,22 @@ export default function WarehouseList() {
     { title: 'Mã kho', dataIndex: 'ma_kho', width: 100 },
     { title: 'Tên kho', dataIndex: 'ten_kho', ellipsis: true },
     {
-      title: 'Loại kho', dataIndex: 'loai_kho', width: 150,
-      render: (v: string) => {
-        const colorMap: Record<string, string> = { nguyen_lieu: 'orange', thanh_pham: 'green', ban_thanh_pham: 'blue', khac: 'default' }
-        const labelMap: Record<string, string> = { nguyen_lieu: 'Nguyên liệu', thanh_pham: 'Thành phẩm', ban_thanh_pham: 'Bán thành phẩm', khac: 'Khác' }
-        return <Tag color={colorMap[v] ?? 'default'}>{labelMap[v] ?? v}</Tag>
-      },
+      title: 'Loại kho', dataIndex: 'loai_kho', width: 160,
+      render: (v: string) => <Tag color={LOAI_KHO_COLOR[v] ?? 'default'}>{LOAI_KHO_LABEL[v] ?? v}</Tag>,
     },
     {
       title: 'Phân xưởng', dataIndex: 'ten_xuong', width: 150,
       render: (v: string | null) => v ? <Tag color="purple">{v}</Tag> : <span style={{ color: '#bbb' }}>—</span>,
+    },
+    {
+      title: 'Diện tích', dataIndex: 'dien_tich', width: 100, align: 'right' as const,
+      render: (v: number | null) => v ? `${v.toLocaleString()} m²` : '—',
+    },
+    {
+      title: 'Sức chứa', key: 'suc_chua', width: 120, align: 'right' as const,
+      render: (_: unknown, r: Warehouse) => r.suc_chua
+        ? `${r.suc_chua.toLocaleString()} ${r.don_vi_suc_chua ?? ''}`
+        : '—',
     },
     { title: 'Địa chỉ', dataIndex: 'dia_chi', ellipsis: true, render: (v: string | null) => v ?? '—' },
     {
@@ -167,6 +200,23 @@ export default function WarehouseList() {
           <Form.Item label="Địa chỉ" name="dia_chi">
             <Input placeholder="Địa chỉ kho" />
           </Form.Item>
+          <Row gutter={12}>
+            <Col span={8}>
+              <Form.Item label="Diện tích (m²)" name="dien_tich">
+                <InputNumber min={0} style={{ width: '100%' }} placeholder="200" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Sức chứa tối đa" name="suc_chua">
+                <InputNumber min={0} style={{ width: '100%' }} placeholder="5000" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Đơn vị sức chứa" name="don_vi_suc_chua">
+                <Select placeholder="Kg" allowClear options={DON_VI_SUC_CHUA_OPTIONS} />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item label="Trạng thái" name="trang_thai" valuePropName="checked">
             <Switch checkedChildren="Hoạt động" unCheckedChildren="Ngừng" />
           </Form.Item>

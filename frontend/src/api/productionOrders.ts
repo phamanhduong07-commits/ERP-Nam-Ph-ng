@@ -57,6 +57,10 @@ export interface ProductionOrder {
   ten_phap_nhan_sx: string | null
   kho_sx_id: number | null
   ten_kho_sx: string | null
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
+  nv_theo_doi_id: number | null
+  ten_nv_theo_doi: string | null
   trang_thai: string
   ngay_bat_dau_ke_hoach: string | null
   ngay_hoan_thanh_ke_hoach: string | null
@@ -113,6 +117,7 @@ export interface CreateProductionOrderPayload {
   ngay_lenh: string
   sales_order_id?: number
   phap_nhan_sx_id?: number | null
+  phan_xuong_id?: number | null
   kho_sx_id?: number | null
   ngay_bat_dau_ke_hoach?: string
   ngay_hoan_thanh_ke_hoach?: string
@@ -151,6 +156,7 @@ export interface PhieuNhapPhoiSongPayload {
   ghi_chu?: string | null
   gio_bat_dau?: string | null  // HH:MM
   gio_ket_thuc?: string | null // HH:MM
+  warehouse_id?: number | null
   items: PhieuNhapPhoiSongItemPayload[]
 }
 
@@ -201,7 +207,7 @@ export const productionOrdersApi = {
       ngay_lenh?: string
       ngay_hoan_thanh_ke_hoach?: string
       phap_nhan_sx_id?: number | null
-      kho_sx_id?: number | null
+      phan_xuong_id?: number | null
       ghi_chu?: string
     },
   ) =>

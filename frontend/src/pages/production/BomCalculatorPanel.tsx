@@ -433,8 +433,10 @@ export default function BomCalculatorPanel({
     setDai(Number(bom.dai))
     setRong(Number(bom.rong))
     setCao(Number(bom.cao))
-    setSoLop(Number(bom.so_lop) as 3 | 5 | 7)
-    setToHopSong(bom.to_hop_song ?? '')
+    const bom_so_lop = Number(bom.so_lop) as 3 | 5 | 7
+    setSoLop(bom_so_lop)
+    const resolvedTHS = bom.to_hop_song || initialValues?.to_hop_song || TO_HOP_SONG_BY_LOP[bom_so_lop]?.[0] || 'B'
+    setToHopSong(resolvedTHS)
     setSoLuong(Number(bom.so_luong_sx))
     setChongTham(bom.chong_tham as 0 | 1 | 2)
     setInFlexoMau(bom.in_flexo_mau)
@@ -469,20 +471,28 @@ export default function BomCalculatorPanel({
     })
     setLayers(newLayers)
 
+    // Derive flute_type per wave layer from resolved to_hop_song when stored value is null
+    const resolvedSongs = resolvedTHS.split('')
+    let songIdx = 0
     calcMutation.mutate({
       loai_thung: bom.loai_thung as BomCalculateRequest['loai_thung'],
       dai: Number(bom.dai), rong: Number(bom.rong), cao: Number(bom.cao),
       so_lop: Number(bom.so_lop) as 3 | 5 | 7,
-      to_hop_song: bom.to_hop_song ?? '',
-      layers: bom.items.map(item => ({
-        vi_tri_lop: item.vi_tri_lop,
-        loai_lop: item.loai_lop as 'mat' | 'song',
-        flute_type: item.flute_type,
-        ma_ky_hieu: item.ma_ky_hieu ?? '',
-        paper_material_id: null,
-        dinh_luong: Number(item.dinh_luong),
-        don_gia_kg: Number(item.don_gia_kg),
-      })),
+      to_hop_song: resolvedTHS,
+      layers: bom.items.map(item => {
+        const isWave = item.loai_lop === 'song'
+        const derivedFlute = isWave ? (resolvedSongs[songIdx] ?? null) : null
+        if (isWave) songIdx++
+        return {
+          vi_tri_lop: item.vi_tri_lop,
+          loai_lop: item.loai_lop as 'mat' | 'song',
+          flute_type: item.flute_type || derivedFlute,
+          ma_ky_hieu: item.ma_ky_hieu ?? '',
+          paper_material_id: null,
+          dinh_luong: Number(item.dinh_luong),
+          don_gia_kg: Number(item.don_gia_kg),
+        }
+      }),
       so_luong: Number(bom.so_luong_sx),
       chong_tham: bom.chong_tham as 0 | 1 | 2,
       in_flexo_mau: bom.in_flexo_mau,
@@ -517,8 +527,13 @@ export default function BomCalculatorPanel({
     if (spec.dai) setDai(spec.dai)
     if (spec.rong) setRong(spec.rong)
     if (spec.cao) setCao(spec.cao)
-    setSoLop(spec.so_lop as 3 | 5 | 7)
-    setToHopSong(spec.to_hop_song)
+    const spec_so_lop = spec.so_lop as 3 | 5 | 7
+    setSoLop(spec_so_lop)
+    setToHopSong(
+      spec.to_hop_song ||
+      initialValues?.to_hop_song ||
+      TO_HOP_SONG_BY_LOP[spec_so_lop]?.[0] || 'B'
+    )
     setSoLuong(spec.so_luong)
     setChongTham(spec.chong_tham as 0 | 1 | 2)
     setInFlexoMau(spec.in_flexo_mau)
@@ -539,23 +554,32 @@ export default function BomCalculatorPanel({
     }
     spec.layers.forEach((layer, idx) => {
       if (idx < layerKeys.length) {
-        newLayers[layerKeys[idx]] = {
-          ma_ky_hieu: layer.ma_ky_hieu || null,
-          dinh_luong: layer.dinh_luong || null,
+        const key = layerKeys[idx]
+        const fallback = initialValues?.[key]
+        newLayers[key] = {
+          ma_ky_hieu: layer.ma_ky_hieu || fallback?.ma_ky_hieu || null,
+          dinh_luong: layer.dinh_luong || fallback?.dinh_luong || null,
           don_gia_kg: 0,
         }
+      }
+    })
+    // Nếu spec không có đủ layers, bổ sung từ initialValues
+    layerKeys.forEach((key, idx) => {
+      if (idx >= spec.layers.length && initialValues?.[key]) {
+        newLayers[key] = { ...initialValues[key]!, don_gia_kg: initialValues[key]!.don_gia_kg ?? 0 }
       }
     })
     setLayers(newLayers)
 
     // Auto-tính nếu đủ kích thước và định lượng
+    const resolvedTHS = spec.to_hop_song || initialValues?.to_hop_song || TO_HOP_SONG_BY_LOP[spec_so_lop]?.[0] || 'B'
     const hasFullLayers = spec.layers.length > 0 && spec.layers.every(l => l.dinh_luong > 0)
     if (spec.dai && spec.rong && spec.cao && hasFullLayers) {
       calcMutation.mutate({
         loai_thung: spec.loai_thung as BomCalculateRequest['loai_thung'],
         dai: spec.dai, rong: spec.rong, cao: spec.cao,
-        so_lop: spec.so_lop as 3 | 5 | 7,
-        to_hop_song: spec.to_hop_song,
+        so_lop: spec_so_lop,
+        to_hop_song: resolvedTHS,
         layers: spec.layers,
         so_luong: spec.so_luong,
         chong_tham: spec.chong_tham as 0 | 1 | 2,
@@ -576,7 +600,7 @@ export default function BomCalculatorPanel({
         chiet_khau: 0,
       })
     }
-  }, [quoteSpecQuery.data, existingBomQuery.isLoading, existingBomQuery.isSuccess]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [quoteSpecQuery.data, existingBomQuery.isLoading, existingBomQuery.isSuccess, initialValues]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildRequest = useCallback((): BomCalculateRequest | null => {
     if (!dai || !rong || !cao) {

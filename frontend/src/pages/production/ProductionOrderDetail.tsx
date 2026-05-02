@@ -699,9 +699,9 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   ? <Tag color="blue">{order.ten_phap_nhan_sx}</Tag>
                   : <Typography.Text type="secondary">—</Typography.Text>}
               </Descriptions.Item>
-              <Descriptions.Item label="Kho sản xuất">
-                {order.ten_kho_sx
-                  ? <Tag color="geekblue">{order.ten_kho_sx}</Tag>
+              <Descriptions.Item label="Xưởng sản xuất">
+                {order.ten_phan_xuong
+                  ? <Tag color="geekblue">{order.ten_phan_xuong}</Tag>
                   : <Typography.Text type="secondary">—</Typography.Text>}
               </Descriptions.Item>
               <Descriptions.Item label="Bắt đầu (KH)">
@@ -983,16 +983,37 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   destroyOnClose
                   bodyStyle={{ padding: 0 }}
                 >
-                  {editingBomItemId && (
-                    <BomCalculatorPanel
-                      key={editingBomItemId}
-                      production_order_item_id={editingBomItemId}
-                      onBomSaved={() => {
-                        qc.invalidateQueries({ queryKey: ['bom-by-item', editingBomItemId] })
-                        qc.invalidateQueries({ queryKey: ['bom-from-poi', editingBomItemId] })
-                      }}
-                    />
-                  )}
+                  {editingBomItemId && (() => {
+                    const it = order.items.find(i => i.id === editingBomItemId)
+                    const mkLayer = (code: string | null, dl: number | null) =>
+                      code ? { ma_ky_hieu: code, dinh_luong: dl ?? null, don_gia_kg: 0 } : undefined
+                    return (
+                      <BomCalculatorPanel
+                        key={editingBomItemId}
+                        production_order_item_id={editingBomItemId}
+                        initialValues={it ? {
+                          loai_thung: it.loai_thung ?? undefined,
+                          dai:  Number(it.dai  ?? it.product?.dai)  || undefined,
+                          rong: Number(it.rong ?? it.product?.rong) || undefined,
+                          cao:  Number(it.cao  ?? it.product?.cao)  || undefined,
+                          so_lop: ((it.so_lop ?? it.product?.so_lop ?? 3) as 3 | 5 | 7),
+                          to_hop_song: it.to_hop_song ?? undefined,
+                          so_luong: Number(it.so_luong_ke_hoach),
+                          mat:    mkLayer(it.mat,    it.mat_dl),
+                          song_1: mkLayer(it.song_1, it.song_1_dl),
+                          mat_1:  mkLayer(it.mat_1,  it.mat_1_dl),
+                          song_2: mkLayer(it.song_2, it.song_2_dl),
+                          mat_2:  mkLayer(it.mat_2,  it.mat_2_dl),
+                          song_3: mkLayer(it.song_3, it.song_3_dl),
+                          mat_3:  mkLayer(it.mat_3,  it.mat_3_dl),
+                        } : undefined}
+                        onBomSaved={() => {
+                          qc.invalidateQueries({ queryKey: ['bom-by-item', editingBomItemId] })
+                          qc.invalidateQueries({ queryKey: ['bom-from-poi', editingBomItemId] })
+                        }}
+                      />
+                    )
+                  })()}
                 </Drawer>
 
                 {/* ── Tổng kết lãi/lỗ toàn đơn hàng ─────────────────────── */}

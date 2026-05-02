@@ -227,6 +227,8 @@ export default function QuoteForm() {
   const [cauTrucModal, setCauTrucModal] = useState(false)
   const [productOptions, setProductOptions] = useState<{ value: number; label: string; record: ProductFull }[]>([])
   const [productSearching, setProductSearching] = useState(false)
+  const [selectItemsModal, setSelectItemsModal] = useState(false)
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([])
   const { mkList, byMk } = usePaperOptions()
 
   // Financial summary state
@@ -339,9 +341,10 @@ export default function QuoteForm() {
   })
 
   const taoDonMutation = useMutation({
-    mutationFn: () => quotesApi.taoDonHang(Number(id)),
+    mutationFn: (ids: number[]) => quotesApi.taoDonHang(Number(id), ids.length < items.length ? ids : undefined),
     onSuccess: (res) => {
       message.success(`Đã tạo đơn hàng ${res.data.so_don}`)
+      setSelectItemsModal(false)
       navigate('/sales/orders')
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo đơn'),
@@ -421,6 +424,13 @@ export default function QuoteForm() {
           next.dai_tt = calc.dai_tt
           next.dien_tich = calc.dien_tich
         }
+      }
+
+      // Khi khong_ct=true: tự tính dien_tich từ kho_tt * dai_tt nhập tay
+      const khoTriggers: (keyof QuoteItem)[] = ['kho_tt', 'dai_tt', 'khong_ct']
+      const hasKhoChange = Object.keys(patch).some(k => khoTriggers.includes(k as keyof QuoteItem))
+      if (hasKhoChange && next.khong_ct && next.kho_tt && next.dai_tt) {
+        next.dien_tich = Math.round(next.kho_tt * next.dai_tt / 10000 * 10000) / 10000
       }
 
       // Auto-generate tên hàng khi thay đổi kích thước/loại thùng,
@@ -546,6 +556,12 @@ export default function QuoteForm() {
   const itemColumns: ColumnsType<QuoteItem> = [
     { title: 'STT', dataIndex: 'stt', width: 45, align: 'center' },
     {
+      title: 'Mã hàng',
+      dataIndex: 'ma_amis',
+      width: 100,
+      render: (v: string) => v ? <Text code style={{ fontSize: 10 }}>{v}</Text> : '—',
+    },
+    {
       title: 'Tên hàng',
       dataIndex: 'ten_hang',
       ellipsis: true,
@@ -585,7 +601,7 @@ export default function QuoteForm() {
       dataIndex: 'dien_tich',
       width: 68,
       align: 'right' as const,
-      render: (v: number) => v ? v.toFixed(4) : '—',
+      render: (v: number | string | null) => (v != null && v !== '') ? Number(v).toFixed(4) : '—',
     },
     {
       title: 'Loại in',
@@ -681,23 +697,19 @@ export default function QuoteForm() {
                 </Popconfirm>
               )}
               {isEdit && quoteData?.trang_thai === 'da_duyet' && (
-                <Popconfirm
-                  title="Lập đơn hàng từ báo giá này?"
-                  description={`Sẽ tạo đơn hàng cho ${items.length} mặt hàng trong báo giá ${quoteData.so_bao_gia}.`}
-                  onConfirm={() => taoDonMutation.mutate()}
-                  okText="Lập đơn"
-                  cancelText="Huỷ"
-                  okButtonProps={{ loading: taoDonMutation.isPending }}
+                <Button
+                  type="primary"
+                  icon={<FileAddOutlined />}
+                  loading={taoDonMutation.isPending}
+                  style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                  onClick={() => {
+                    const allIds = items.map(it => it.id).filter(Boolean) as number[]
+                    setSelectedItemIds(allIds)
+                    setSelectItemsModal(true)
+                  }}
                 >
-                  <Button
-                    type="primary"
-                    icon={<FileAddOutlined />}
-                    loading={taoDonMutation.isPending}
-                    style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                  >
-                    Lập đơn hàng
-                  </Button>
-                </Popconfirm>
+                  Lập đơn hàng
+                </Button>
               )}
             </Space>
           </Col>
@@ -756,6 +768,17 @@ export default function QuoteForm() {
                   options={phanXuongList
                     .filter(p => p.trang_thai)
                     .map(p => ({ value: p.id, label: p.ten_xuong }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item label="NV phụ trách" name="nv_phu_trach_id">
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  placeholder="Chọn nhân viên..."
+                  options={nhanVienList.map(nv => ({ value: nv.id, label: nv.ho_ten }))}
                 />
               </Form.Item>
             </Col>
@@ -1443,6 +1466,54 @@ export default function QuoteForm() {
           message.success(`Đã chọn: ${ct.ten_cau_truc}`)
         }}
       />
+
+      {/* ── Chọn mặt hàng để lập đơn ──────────────────── */}
+      <Modal
+        title="Chọn mặt hàng để lập đơn hàng"
+        open={selectItemsModal}
+        onCancel={() => setSelectItemsModal(false)}
+        onOk={() => taoDonMutation.mutate(selectedItemIds)}
+        okText="Lập đơn"
+        cancelText="Huỷ"
+        confirmLoading={taoDonMutation.isPending}
+        okButtonProps={{ disabled: selectedItemIds.length === 0 }}
+        width={700}
+      >
+        <div style={{ marginBottom: 8 }}>
+          <Space>
+            <Button size="small" onClick={() => setSelectedItemIds(items.map(it => it.id).filter(Boolean) as number[])}>
+              Chọn tất cả
+            </Button>
+            <Button size="small" onClick={() => setSelectedItemIds([])}>Bỏ chọn tất cả</Button>
+            <Text type="secondary">Đã chọn {selectedItemIds.length}/{items.length} mặt hàng</Text>
+          </Space>
+        </div>
+        <Table
+          size="small"
+          pagination={false}
+          dataSource={items}
+          rowKey={r => String(r.id ?? r.stt)}
+          rowSelection={{
+            type: 'checkbox',
+            selectedRowKeys: selectedItemIds,
+            onChange: (keys) => setSelectedItemIds(keys as number[]),
+            getCheckboxProps: (r) => ({ disabled: !r.id }),
+          }}
+          columns={[
+            { title: 'STT', dataIndex: 'stt', width: 48, align: 'center' },
+            { title: 'Mã hàng', dataIndex: 'ma_amis', width: 100, render: (v: string) => v ? <Text code style={{ fontSize: 11 }}>{v}</Text> : '—' },
+            { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+            { title: 'SL', dataIndex: 'so_luong', width: 60, align: 'right' },
+            {
+              title: 'Giá bán',
+              dataIndex: 'gia_ban',
+              width: 110,
+              align: 'right',
+              render: (v: number) => v ? <Text style={{ color: '#f5222d' }}>{v.toLocaleString('vi-VN')}</Text> : '—',
+            },
+          ]}
+        />
+      </Modal>
     </div>
   )
 }

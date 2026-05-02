@@ -10,13 +10,18 @@ from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, contains_eager
 from app.database import get_db
 from app.deps import get_current_user
+import logging
 from app.models.auth import User
+from app.models.master import Warehouse
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
+
+_log = logging.getLogger("erp")
 
 router = APIRouter(prefix="/api/phieu-phoi", tags=["phieu-phoi"])
 
@@ -254,6 +259,39 @@ def create_phieu_xuat(
             ghi_chu=it.ghi_chu,
         ))
     db.add(phieu)
+    db.flush()  # lấy phieu.id trước khi commit
+
+    # Cập nhật tồn kho kho PHOI của xưởng (soft fail nếu chưa khởi tạo kho)
+    from app.services.inventory_service import (
+        get_or_create_balance, xuat_balance, log_tx, get_workshop_warehouse,
+    )
+    items_data = list(data.items)  # snapshot trước commit
+    for it in items_data:
+        if not it.production_order_item_id or it.so_luong <= 0:
+            continue
+        poi = db.get(ProductionOrderItem, it.production_order_item_id)
+        if not poi:
+            continue
+        order = db.get(ProductionOrder, poi.production_order_id)
+        if not order or not order.phan_xuong_id:
+            continue
+        phoi_wh = get_workshop_warehouse(db, order.phan_xuong_id, "PHOI")
+        if not phoi_wh:
+            _log.warning(
+                f"PhieuXuatPhoi: xưởng {order.phan_xuong_id} chưa có kho PHOI — bỏ qua inventory update"
+            )
+            continue
+        balance = get_or_create_balance(db, phoi_wh.id, ten_hang=it.ten_hang, don_vi="Tấm")
+        don_gia_xuat = balance.don_gia_binh_quan
+        try:
+            xuat_balance(balance, Decimal(str(it.so_luong)), it.ten_hang)
+        except HTTPException:
+            _log.warning(f"PhieuXuatPhoi: không đủ tồn kho {it.ten_hang} tại {phoi_wh.ma_kho}")
+            continue
+        log_tx(db, phoi_wh.id, "XUAT_PHOI", Decimal(str(it.so_luong)),
+               don_gia_xuat, balance.ton_luong,
+               "phieu_xuat_phoi", phieu.id, current_user.id)
+
     db.commit()
     db.refresh(phieu)
     return _xuat_phieu_to_dict(phieu)
@@ -274,3 +312,122 @@ def get_phieu_xuat(
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu xuất")
     return _xuat_phieu_to_dict(p)
+
+
+# ── Tồn kho phôi theo LSX ────────────────────────────────────────────────────
+
+@router.get("/ton-kho-lsx")
+def ton_kho_lsx(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Tổng hợp tồn kho phôi sóng theo LSX — dùng cho Tab Kho phôi sóng."""
+    from app.models.cd2 import PhieuIn
+
+    # 1. Nhập phôi: sum (thực tế - lỗi) per production_order_id
+    nhap_rows = (
+        db.query(
+            PhieuNhapPhoiSong.production_order_id,
+            func.coalesce(
+                func.sum(
+                    func.coalesce(PhieuNhapPhoiSongItem.so_luong_thuc_te, 0)
+                    - func.coalesce(PhieuNhapPhoiSongItem.so_luong_loi, 0)
+                ),
+                0,
+            ).label("tong_nhap"),
+            func.max(PhieuNhapPhoiSong.warehouse_id).label("warehouse_id"),
+        )
+        .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id)
+        .group_by(PhieuNhapPhoiSong.production_order_id)
+        .all()
+    )
+
+    if not nhap_rows:
+        return []
+
+    order_ids = [r.production_order_id for r in nhap_rows]
+    nhap_map = {
+        r.production_order_id: {
+            "tong_nhap": float(r.tong_nhap),
+            "warehouse_id": r.warehouse_id,
+        }
+        for r in nhap_rows
+    }
+
+    # 2. Xuất phôi: sum per production_order_id (qua production_order_items)
+    xuat_rows = (
+        db.query(
+            ProductionOrderItem.production_order_id,
+            func.coalesce(func.sum(PhieuXuatPhoiItem.so_luong), 0).label("tong_xuat"),
+        )
+        .join(PhieuXuatPhoiItem, PhieuXuatPhoiItem.production_order_item_id == ProductionOrderItem.id)
+        .filter(ProductionOrderItem.production_order_id.in_(order_ids))
+        .group_by(ProductionOrderItem.production_order_id)
+        .all()
+    )
+    xuat_map = {r.production_order_id: float(r.tong_xuat) for r in xuat_rows}
+
+    # 3. Active PhieuIn (chưa huỷ / hoàn thành) per LSX
+    active_phieus = (
+        db.query(PhieuIn)
+        .filter(
+            PhieuIn.production_order_id.in_(order_ids),
+            PhieuIn.trang_thai.notin_(["huy", "hoan_thanh"]),
+        )
+        .all()
+    )
+    active_map: dict[int, dict] = {}
+    for p in active_phieus:
+        if p.production_order_id not in active_map:
+            active_map[p.production_order_id] = {
+                "so_phieu": p.so_phieu,
+                "trang_thai": p.trang_thai,
+            }
+
+    # 4. ProductionOrder + items
+    orders = (
+        db.query(ProductionOrder)
+        .options(
+            joinedload(ProductionOrder.items),
+            joinedload(ProductionOrder.sales_order),
+        )
+        .filter(ProductionOrder.id.in_(order_ids))
+        .all()
+    )
+    order_map = {o.id: o for o in orders}
+
+    result = []
+    for order_id in order_ids:
+        nhap = nhap_map[order_id]
+        tong_nhap = nhap["tong_nhap"]
+        tong_xuat = xuat_map.get(order_id, 0.0)
+        ton_kho = round(tong_nhap - tong_xuat, 3)
+
+        order = order_map.get(order_id)
+        if not order:
+            continue
+
+        first = order.items[0] if order.items else None
+        co_in = any(it.loai_in in ("flexo", "ky_thuat_so") for it in order.items)
+
+        ten_khach_hang = None
+        if order.sales_order:
+            kh = getattr(order.sales_order, "customer", None)
+            if kh:
+                ten_khach_hang = getattr(kh, "ten_viet_tat", None) or getattr(kh, "ten_kh", None)
+
+        result.append({
+            "production_order_id": order_id,
+            "so_lenh": order.so_lenh,
+            "ten_hang": first.ten_hang if first else "",
+            "ten_khach_hang": ten_khach_hang,
+            "tong_nhap": tong_nhap,
+            "tong_xuat": tong_xuat,
+            "ton_kho": ton_kho,
+            "co_in": co_in,
+            "warehouse_id": nhap["warehouse_id"],
+            "phieu_in_hien_tai": active_map.get(order_id),
+        })
+
+    result.sort(key=lambda x: (-x["ton_kho"], x["so_lenh"]))
+    return result

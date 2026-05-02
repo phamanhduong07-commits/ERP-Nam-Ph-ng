@@ -19,12 +19,16 @@ class PhieuNhapPhoiSong(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     gio_bat_dau: Mapped[str | None] = mapped_column(String(8))     # HH:MM
     gio_ket_thuc: Mapped[str | None] = mapped_column(String(8))    # HH:MM
+    warehouse_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("warehouses.id"), nullable=True
+    )
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow
     )
 
     production_order = relationship("ProductionOrder")  # type: ignore[assignment]
+    warehouse = relationship("Warehouse")               # type: ignore[assignment]
     creator = relationship("User")                      # type: ignore[assignment]
     items: Mapped[list["PhieuNhapPhoiSongItem"]] = relationship(
         "PhieuNhapPhoiSongItem", cascade="all, delete-orphan", back_populates="phieu"

@@ -6,6 +6,8 @@ export interface PhanXuong {
   ten_xuong: string
   dia_chi: string | null
   cong_doan: string  // "cd1_cd2" | "cd2"
+  phoi_tu_phan_xuong_id: number | null
+  ten_phoi_tu_phan_xuong: string | null
   trang_thai: boolean
 }
 
@@ -181,7 +183,7 @@ export interface MaterialIssue {
 export interface CreateMaterialIssuePayload {
   ngay_xuat: string
   production_order_id: number
-  warehouse_id: number
+  warehouse_id?: number | null
   ghi_chu?: string | null
   items: Omit<MaterialIssueItem, 'id'>[]
 }
@@ -208,7 +210,7 @@ export interface ProductionOutput {
 export interface CreateProductionOutputPayload {
   ngay_nhap: string
   production_order_id: number
-  warehouse_id: number
+  warehouse_id?: number | null
   product_id?: number | null
   ten_hang?: string
   so_luong_nhap: number
@@ -251,7 +253,7 @@ export interface DeliveryOrder {
 export interface CreateDeliveryPayload {
   ngay_xuat: string
   sales_order_id: number
-  warehouse_id: number
+  warehouse_id?: number | null
   dia_chi_giao?: string | null
   nguoi_nhan?: string | null
   xe_van_chuyen?: string | null
@@ -284,6 +286,40 @@ export interface CreatePhieuChuyenPayload {
   items: Omit<PhieuKhoItem, 'id' | 'thanh_tien'>[]
 }
 
+// ── Kho theo xưởng ────────────────────────────────────────────────────────────
+export interface WarehouseSlot {
+  id: number
+  ma_kho: string
+  ten_kho: string
+  loai_kho: string
+  trang_thai: boolean
+  dien_tich: number | null
+  suc_chua: number | null
+  don_vi_suc_chua: string | null
+  tong_so_mat_hang: number
+  tong_gia_tri: number
+  tong_so_luong: number
+  phan_tram_lap_day: number | null
+}
+
+export interface WarehouseSlotNA {
+  not_applicable: true
+}
+
+export interface PhanXuongWithWarehouses {
+  id: number
+  ma_xuong: string
+  ten_xuong: string
+  cong_doan: string
+  trang_thai: boolean
+  warehouses: {
+    GIAY_CUON: WarehouseSlot | WarehouseSlotNA | null
+    NVL_PHU: WarehouseSlot | null
+    PHOI: WarehouseSlot | null
+    THANH_PHAM: WarehouseSlot | null
+  }
+}
+
 export const LOAI_NHAP_LABELS: Record<string, string> = {
   mua_hang: 'Mua hàng',
   tra_hang: 'Trả hàng',
@@ -303,6 +339,7 @@ export interface CreatePhanXuongPayload {
   ten_xuong: string
   dia_chi?: string | null
   cong_doan: string
+  phoi_tu_phan_xuong_id?: number | null
   trang_thai: boolean
 }
 
@@ -369,4 +406,11 @@ export const warehouseApi = {
   getDelivery: (id: number) => client.get<DeliveryOrder>(`/warehouse/deliveries/${id}`),
   createDelivery: (data: CreateDeliveryPayload) => client.post<DeliveryOrder>('/warehouse/deliveries', data),
   deleteDelivery: (id: number) => client.delete(`/warehouse/deliveries/${id}`),
+
+  // Kho theo xưởng
+  listTheoPhanXuong: () => client.get<PhanXuongWithWarehouses[]>('/warehouse/theo-phan-xuong'),
+  initWarehousesForPhanXuong: (pxId: number) =>
+    client.post<{ id: number; ma_kho: string; ten_kho: string; created: boolean }[]>(
+      `/warehouse/phan-xuong/${pxId}/init-warehouses`
+    ),
 }

@@ -109,6 +109,11 @@ class PhieuIn(Base):
     so_luong_sau_in_loi: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     ghi_chu_sau_in: Mapped[str | None] = mapped_column(Text)
 
+    gio_bat_dau_in: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    gio_hoan_thanh: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    gio_bat_dau_dinh_hinh: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    gio_hoan_thanh_dinh_hinh: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
 

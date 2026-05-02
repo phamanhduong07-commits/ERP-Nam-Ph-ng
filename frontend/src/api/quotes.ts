@@ -315,9 +315,10 @@ export const quotesApi = {
 
   cancel: (id: number) => client.patch(`/quotes/${id}/cancel`),
 
-  taoDonHang: (id: number) =>
+  taoDonHang: (id: number, item_ids?: number[]) =>
     client.post<{ so_don: string; order_id: number; message: string }>(
-      `/quotes/${id}/tao-don-hang`
+      `/quotes/${id}/tao-don-hang`,
+      item_ids ? { item_ids } : {}
     ),
 }
 

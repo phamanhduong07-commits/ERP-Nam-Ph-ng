@@ -213,6 +213,23 @@ function KanbanCard({
             Giao: {dayjs(phieu.ngay_giao_hang).format('DD/MM/YY')}
           </div>
         )}
+
+        {phieu.trang_thai === 'dang_in' && phieu.gio_bat_dau_in && (
+          <div style={{ fontSize: 10, color: '#fa8c16', marginTop: 4, fontWeight: 600 }}>
+            ▶ Bắt đầu: {dayjs(phieu.gio_bat_dau_in).format('HH:mm')}
+          </div>
+        )}
+
+        {phieu.trang_thai === 'hoan_thanh' && phieu.gio_bat_dau_in && phieu.gio_hoan_thanh && (() => {
+          const mins = dayjs(phieu.gio_hoan_thanh).diff(dayjs(phieu.gio_bat_dau_in), 'minute')
+          const h = Math.floor(mins / 60)
+          const m = mins % 60
+          return (
+            <div style={{ fontSize: 10, color: '#52c41a', marginTop: 4, fontWeight: 600 }}>
+              ⏱ {h > 0 ? `${h}h ` : ''}{m}m
+            </div>
+          )
+        })()}
       </Card>
     </div>
   )

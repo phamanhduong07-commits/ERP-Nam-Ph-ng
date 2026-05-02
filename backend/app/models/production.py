@@ -25,13 +25,16 @@ class ProductionOrder(Base):
     phap_nhan_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     kho_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("warehouses.id"))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    nv_theo_doi_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     sales_order: Mapped["SalesOrder | None"] = relationship("SalesOrder", foreign_keys=[sales_order_id])  # type: ignore[name-defined]
     creator: Mapped["User | None"] = relationship("User", foreign_keys=[created_by])  # type: ignore[name-defined]
+    nv_theo_doi: Mapped["User | None"] = relationship("User", foreign_keys=[nv_theo_doi_id])  # type: ignore[name-defined]
     phap_nhan_sx: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_sx_id])  # type: ignore[name-defined]
     kho_sx: Mapped["Warehouse | None"] = relationship("Warehouse", foreign_keys=[kho_sx_id])  # type: ignore[name-defined]
+    phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
     items: Mapped[list["ProductionOrderItem"]] = relationship(
         "ProductionOrderItem", back_populates="production_order",
         cascade="all, delete-orphan"

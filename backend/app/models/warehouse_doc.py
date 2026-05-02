@@ -122,20 +122,30 @@ class ProductionOutput(Base):
 
 
 class DeliveryOrder(Base):
-    """Phiếu xuất thành phẩm giao khách — linked to SalesOrder"""
+    """Phiếu xuất thành phẩm giao khách — Phiếu bán hàng"""
     __tablename__ = "delivery_orders"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # DO-YYYYMM-XXXX
     ngay_xuat: Mapped[date] = mapped_column(Date, nullable=False)
-    sales_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_orders.id"), nullable=False)
+    sales_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sales_orders.id"), nullable=True)
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    yeu_cau_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("yeu_cau_giao_hang.id"), nullable=True)
     dia_chi_giao: Mapped[str | None] = mapped_column(Text)
     nguoi_nhan: Mapped[str | None] = mapped_column(String(150))
     xe_van_chuyen: Mapped[str | None] = mapped_column(String(50))
+    xe_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("xe.id"), nullable=True)
+    tai_xe_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tai_xe.id"), nullable=True)
+    lo_xe: Mapped[str | None] = mapped_column(String(150))
+    don_gia_vc_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("don_gia_van_chuyen.id"), nullable=True)
+    tien_van_chuyen: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    tong_tien_hang: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    tong_thanh_toan: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")
     # nhap | da_xuat | da_giao | huy
+    trang_thai_cong_no: Mapped[str | None] = mapped_column(String(20), default="chua_thu")
+    # chua_thu | da_thu_mot_phan | da_thu_du
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -144,6 +154,9 @@ class DeliveryOrder(Base):
     customer = relationship("Customer")
     warehouse = relationship("Warehouse")
     creator = relationship("User")
+    xe = relationship("Xe", foreign_keys=[xe_id])
+    tai_xe = relationship("TaiXe", foreign_keys=[tai_xe_id])
+    don_gia_vc = relationship("DonGiaVanChuyen", foreign_keys=[don_gia_vc_id])
     items: Mapped[list["DeliveryOrderItem"]] = relationship(
         "DeliveryOrderItem", back_populates="delivery", cascade="all, delete-orphan"
     )
@@ -154,14 +167,20 @@ class DeliveryOrderItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     delivery_id: Mapped[int] = mapped_column(Integer, ForeignKey("delivery_orders.id"), nullable=False)
+    production_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=True)
     sales_order_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sales_order_items.id"))
     product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"))
     ten_hang: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     so_luong: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
+    dien_tich: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    trong_luong: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    don_gia: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    thanh_tien: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
 
     delivery: Mapped["DeliveryOrder"] = relationship("DeliveryOrder", back_populates="items")
+    production_order = relationship("ProductionOrder")
     product = relationship("Product")
 
 

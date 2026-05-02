@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
-  message, Modal, Pagination, Row, Select, Space, Spin, Table, Tag, Tabs, Typography, Tooltip,
+  message, Modal, Pagination, Popconfirm, Row, Select, Space, Spin, Table, Tag, Tabs, Typography, Tooltip,
 } from 'antd'
 import {
   PlusOutlined, PrinterOutlined, SearchOutlined, DeleteOutlined,
   FileExcelOutlined, FilePdfOutlined,
-  PlayCircleOutlined, StopOutlined, ClockCircleOutlined,
+  PlayCircleOutlined, StopOutlined, ClockCircleOutlined, SendOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -23,6 +24,19 @@ import type {
   ProductionOrder,
   PhieuNhapPhoiSong,
 } from '../../api/productionOrders'
+import { cd2Api } from '../../api/cd2'
+import type { KhoRow } from '../../api/cd2'
+import { TRANG_THAI_LABELS as CD2_LABELS } from '../../api/cd2'
+import { theoDoiApi, STAGE_COLORS } from '../../api/theoDoi'
+import type { DonHangTheoDoiRow, PhanXuongItem } from '../../api/theoDoi'
+import { yeuCauApi, deliveriesApi, YEU_CAU_TRANG_THAI_LABELS, YEU_CAU_TRANG_THAI_COLORS, CONG_NO_LABELS, CONG_NO_COLORS } from '../../api/deliveries'
+import type { YeuCauGiaoHang, DeliveryOrder } from '../../api/deliveries'
+import { xeApi, taiXeApi, donGiaVanChuyenApi } from '../../api/simpleApis'
+import type { Xe, TaiXe, DonGiaVanChuyen } from '../../api/simpleApis'
+import { warehousesApi } from '../../api/warehouses'
+import type { Warehouse } from '../../api/warehouses'
+import { usersApi } from '../../api/usersApi'
+import type { NhanVien } from '../../api/usersApi'
 import PhieuNhapPhoiSongModal, { phoiSessionKey } from './PhieuNhapPhoiSongModal'
 
 const { Text, Title } = Typography
@@ -1046,6 +1060,1110 @@ function TabXuat() {
   )
 }
 
+// ── Tab kho phôi sóng ─────────────────────────────────────────────────────────
+
+function TabKho() {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  const [pushingKey, setPushingKey] = useState<string | null>(null)  // `${orderId}-in` | `${orderId}-dinh_hinh`
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['ton-kho-lsx'],
+    queryFn: () => cd2Api.getTonKhoLsx().then(r => r.data),
+    refetchOnWindowFocus: false,
+  })
+
+  const handleDay = async (row: KhoRow, target: 'in' | 'sau_in') => {
+    const key = `${row.production_order_id}-${target}`
+    setPushingKey(key)
+    try {
+      await cd2Api.createFromLenhSx(row.production_order_id, target)
+      message.success(`Đã đẩy ${row.so_lenh} sang ${target === 'in' ? 'Chờ in' : 'Chờ định hình'}`)
+      qc.invalidateQueries({ queryKey: ['ton-kho-lsx'] })
+      navigate('/production/cd2')
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi đẩy sang CD2')
+    } finally {
+      setPushingKey(null)
+    }
+  }
+
+  const columns: ColumnsType<KhoRow> = [
+    {
+      title: 'Lệnh SX',
+      dataIndex: 'so_lenh',
+      width: 130,
+      render: (v: string) => <Text code style={{ fontSize: 12 }}>{v}</Text>,
+    },
+    {
+      title: 'Tên hàng',
+      dataIndex: 'ten_hang',
+      ellipsis: true,
+    },
+    {
+      title: 'Khách hàng',
+      dataIndex: 'ten_khach_hang',
+      width: 130,
+      render: (v: string | null) => v ?? <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Loại',
+      dataIndex: 'co_in',
+      width: 95,
+      align: 'center' as const,
+      render: (v: boolean) => v
+        ? <Tag color="blue" style={{ fontSize: 11 }}>Có in</Tag>
+        : <Tag color="purple" style={{ fontSize: 11 }}>Không in</Tag>,
+    },
+    {
+      title: 'Tổng nhập',
+      dataIndex: 'tong_nhap',
+      width: 100,
+      align: 'right' as const,
+      render: (v: number) => fmtN(v),
+    },
+    {
+      title: 'Đã xuất',
+      dataIndex: 'tong_xuat',
+      width: 90,
+      align: 'right' as const,
+      render: (v: number) => v > 0 ? fmtN(v) : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Tồn kho',
+      dataIndex: 'ton_kho',
+      width: 95,
+      align: 'right' as const,
+      render: (v: number) => (
+        <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322' }}>
+          {fmtN(v)}
+        </Text>
+      ),
+    },
+    {
+      title: 'Phiếu in hiện tại',
+      dataIndex: 'phieu_in_hien_tai',
+      width: 160,
+      render: (v: KhoRow['phieu_in_hien_tai']) => v
+        ? (
+          <Space direction="vertical" size={0}>
+            <Text code style={{ fontSize: 11 }}>{v.so_phieu}</Text>
+            <Tag color="processing" style={{ fontSize: 10, margin: 0 }}>
+              {CD2_LABELS[v.trang_thai] ?? v.trang_thai}
+            </Tag>
+          </Space>
+        )
+        : <Text type="secondary" style={{ fontSize: 11 }}>Chưa có</Text>,
+    },
+    {
+      title: 'Thao tác',
+      width: 220,
+      render: (_, row: KhoRow) => {
+        if (row.phieu_in_hien_tai) {
+          return <Tag color="cyan" style={{ fontSize: 11 }}>Đã đẩy sang CD2</Tag>
+        }
+        if (row.ton_kho <= 0) {
+          return <Text type="secondary" style={{ fontSize: 11 }}>Hết tồn kho</Text>
+        }
+        return (
+          <Space size={4}>
+            <Popconfirm
+              title={`Đẩy ${row.so_lenh} → Chờ in?`}
+              description={`${fmtN(row.ton_kho)} phôi sẽ được chuyển sang in`}
+              onConfirm={() => handleDay(row, 'in')}
+              okText="Đẩy"
+              cancelText="Huỷ"
+            >
+              <Button
+                size="small"
+                type={row.co_in ? 'primary' : 'default'}
+                icon={<SendOutlined />}
+                loading={pushingKey === `${row.production_order_id}-in`}
+              >
+                Chờ in
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title={`Đẩy ${row.so_lenh} → Chờ định hình?`}
+              description={`${fmtN(row.ton_kho)} phôi sẽ bỏ qua in, sang định hình`}
+              onConfirm={() => handleDay(row, 'sau_in')}
+              okText="Đẩy"
+              cancelText="Huỷ"
+            >
+              <Button
+                size="small"
+                type={!row.co_in ? 'primary' : 'default'}
+                loading={pushingKey === `${row.production_order_id}-sau_in`}
+                style={!row.co_in ? { background: '#722ed1', borderColor: '#722ed1' } : {}}
+              >
+                Định hình
+              </Button>
+            </Popconfirm>
+          </Space>
+        )
+      },
+    },
+  ]
+
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size={12}>
+      <Row justify="space-between" align="middle">
+        <Col>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Tồn kho phôi sóng theo LSX — nhấn "Đẩy sang In" hoặc "Chờ định hình" để tạo phiếu in CD2
+          </Text>
+        </Col>
+        <Col>
+          <Button size="small" onClick={() => refetch()}>Làm mới</Button>
+        </Col>
+      </Row>
+
+      <Table<KhoRow>
+        rowKey="production_order_id"
+        size="small"
+        loading={isLoading}
+        dataSource={data ?? []}
+        columns={columns}
+        pagination={{ pageSize: 50, showTotal: (t) => `${t} lệnh SX`, showSizeChanger: false }}
+        scroll={{ x: 900 }}
+        rowClassName={(row) => row.ton_kho <= 0 ? 'ant-table-row-disabled' : ''}
+      />
+    </Space>
+  )
+}
+
+// ── Tab Theo dõi đơn hàng ────────────────────────────────────────────────────
+
+function TabTheoDoi() {
+  const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
+  const [nvTheodoiId, setNvTheodoiId] = useState<number | undefined>()
+  const [includeHoanThanh, setIncludeHoanThanh] = useState(false)
+  const [search, setSearch] = useState('')
+  const [dateRange, setDateRange] = useState<[string | undefined, string | undefined]>([undefined, undefined])
+
+  const { data: phanXuongs = [] } = useQuery<PhanXuongItem[]>({
+    queryKey: ['theo-doi-phan-xuong'],
+    queryFn: () => theoDoiApi.listPhanXuong().then(r => r.data),
+  })
+
+  const { data: users = [] } = useQuery<{ id: number; ho_ten: string }[]>({
+    queryKey: ['users-list'],
+    queryFn: () => client.get<{ id: number; ho_ten: string }[]>('/users').then(r => r.data),
+  })
+
+  const { data: rows = [], isLoading, refetch } = useQuery<DonHangTheoDoiRow[]>({
+    queryKey: ['theo-doi-don-hang', phanXuongId, nvTheodoiId, includeHoanThanh, dateRange],
+    queryFn: () =>
+      theoDoiApi.getDonHang({
+        phan_xuong_id: phanXuongId,
+        nv_theo_doi_id: nvTheodoiId,
+        include_hoan_thanh: includeHoanThanh,
+        tu_ngay: dateRange[0],
+        den_ngay: dateRange[1],
+      }).then(r => r.data),
+  })
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return rows
+    const s = search.toLowerCase()
+    return rows.filter(r =>
+      (r.so_lenh ?? '').toLowerCase().includes(s) ||
+      (r.ten_khach_hang ?? '').toLowerCase().includes(s) ||
+      (r.so_don ?? '').toLowerCase().includes(s) ||
+      (r.ten_hang ?? '').toLowerCase().includes(s)
+    )
+  }, [rows, search])
+
+  const today = dayjs().format('YYYY-MM-DD')
+
+  const columns: ColumnsType<DonHangTheoDoiRow> = [
+    {
+      title: 'LSX', dataIndex: 'so_lenh', width: 130, fixed: 'left',
+      render: (v, r) => (
+        <div>
+          <Text strong>{v}</Text>
+          {r.so_don && <div><Text type="secondary" style={{ fontSize: 11 }}>{r.so_don}</Text></div>}
+        </div>
+      ),
+    },
+    {
+      title: 'Khách hàng', dataIndex: 'ten_khach_hang', width: 140, ellipsis: true,
+      render: v => v ?? <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Hàng', dataIndex: 'ten_hang', width: 180, ellipsis: true,
+      render: v => v ?? '—',
+    },
+    {
+      title: 'Xưởng', dataIndex: 'ten_phan_xuong', width: 100,
+      render: v => v ? <Tag>{v}</Tag> : '—',
+    },
+    {
+      title: 'NV theo dõi', dataIndex: 'ten_nv_theo_doi', width: 120,
+      render: v => v ?? <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Nhập phôi', width: 130,
+      render: (_, r) =>
+        r.tong_nhap_phoi > 0 ? (
+          <div>
+            <Text strong>{fmtN(r.tong_nhap_phoi)}</Text>
+            <Text type="secondary"> / {fmtN(r.so_luong_ke_hoach)}</Text>
+            {r.ngay_nhap_cuoi && <div><Text type="secondary" style={{ fontSize: 11 }}>{fmtDate(r.ngay_nhap_cuoi)}</Text></div>}
+          </div>
+        ) : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Tồn kho phôi', dataIndex: 'ton_kho_phoi', width: 110,
+      render: v =>
+        v > 0 ? <Tag color="lime">{fmtN(v)}</Tag>
+        : v < 0 ? <Tag color="red">{fmtN(v)}</Tag>
+        : <Text type="secondary">0</Text>,
+    },
+    {
+      title: 'Giai đoạn', width: 160,
+      render: (_, r) => (
+        <div>
+          <Tag color={STAGE_COLORS[r.stage] ?? 'default'}>{r.stage_label}</Tag>
+          {r.ten_may_in && <div><Text type="secondary" style={{ fontSize: 11 }}>{r.ten_may_in}</Text></div>}
+          {r.so_phieu_in && <div><Text type="secondary" style={{ fontSize: 11 }}>{r.so_phieu_in}</Text></div>}
+        </div>
+      ),
+    },
+    {
+      title: 'Giao hàng', dataIndex: 'ngay_giao_hang', width: 100,
+      render: v => {
+        if (!v) return <Text type="secondary">—</Text>
+        const late = v < today
+        return <Text style={{ color: late ? '#ff4d4f' : undefined, fontWeight: late ? 600 : undefined }}>{fmtDate(v)}</Text>
+      },
+      sorter: (a, b) => (a.ngay_giao_hang ?? '9999') < (b.ngay_giao_hang ?? '9999') ? -1 : 1,
+    },
+  ]
+
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      <Row gutter={[8, 8]} align="middle">
+        <Col>
+          <Select
+            placeholder="Tất cả xưởng"
+            allowClear
+            style={{ width: 160 }}
+            options={phanXuongs.map(p => ({ label: p.ten_xuong, value: p.id }))}
+            onChange={v => setPhanXuongId(v)}
+          />
+        </Col>
+        <Col>
+          <Select
+            placeholder="Tất cả nhân viên"
+            allowClear
+            style={{ width: 180 }}
+            showSearch
+            optionFilterProp="label"
+            options={users.map(u => ({ label: u.ho_ten, value: u.id }))}
+            onChange={v => setNvTheodoiId(v)}
+          />
+        </Col>
+        <Col>
+          <DatePicker.RangePicker
+            format="DD/MM/YYYY"
+            placeholder={['Từ ngày', 'Đến ngày']}
+            style={{ width: 240 }}
+            allowClear
+            onChange={dates => setDateRange([
+              dates?.[0]?.format('YYYY-MM-DD'),
+              dates?.[1]?.format('YYYY-MM-DD'),
+            ])}
+          />
+        </Col>
+        <Col>
+          <Input
+            placeholder="Tìm LSX / khách / hàng..."
+            prefix={<SearchOutlined />}
+            style={{ width: 220 }}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            allowClear
+          />
+        </Col>
+        <Col>
+          <Button
+            type={includeHoanThanh ? 'primary' : 'default'}
+            size="small"
+            onClick={() => setIncludeHoanThanh(v => !v)}
+          >
+            {includeHoanThanh ? 'Ẩn hoàn thành' : 'Hiện hoàn thành'}
+          </Button>
+        </Col>
+        <Col>
+          <Button size="small" onClick={() => refetch()}>Làm mới</Button>
+        </Col>
+        <Col flex="auto" />
+        <Col>
+          <Text type="secondary" style={{ fontSize: 12 }}>{filtered.length} lệnh SX</Text>
+        </Col>
+      </Row>
+
+      <Table<DonHangTheoDoiRow>
+        rowKey={r => r.production_order_id != null ? r.production_order_id : `so-${r.sales_order_id}`}
+        size="small"
+        loading={isLoading}
+        dataSource={filtered}
+        columns={columns}
+        pagination={{ pageSize: 50, showSizeChanger: false }}
+        scroll={{ x: 1150 }}
+        rowClassName={r => r.ngay_giao_hang && r.ngay_giao_hang < today && r.stage !== 'hoan_thanh' ? 'ant-table-row-danger' : ''}
+      />
+    </Space>
+  )
+}
+
+// ── Tab Giao Hàng ─────────────────────────────────────────────────────────────
+
+const fmtMoney = (v: number) =>
+  v ? new Intl.NumberFormat('vi-VN').format(v) : '0'
+
+function TabGiaoHang() {
+  const qc = useQueryClient()
+
+  // ── Master data ────────────────────────────────────────────────────────────
+  const { data: warehouses = [] } = useQuery({ queryKey: ['warehouses'], queryFn: () => warehousesApi.list().then(r => r.data) })
+  const { data: xeList = [] } = useQuery({ queryKey: ['xe'], queryFn: () => xeApi.list().then(r => r.data) })
+  const { data: taiXeList = [] } = useQuery({ queryKey: ['tai-xe'], queryFn: () => taiXeApi.list().then(r => r.data) })
+  const { data: donGiaList = [] } = useQuery({ queryKey: ['don-gia-van-chuyen'], queryFn: () => donGiaVanChuyenApi.list().then(r => r.data) })
+
+  // ── NV theo dõi list (for filters) ────────────────────────────────────────
+  const { data: nvList = [] } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list().then(r => r.data) })
+
+  // ── YC filters ────────────────────────────────────────────────────────────
+  const [ycFilter, setYCFilter] = useState<{
+    ten_khach: string; nv_theo_doi_id: number | undefined
+    so_lenh: string; so_don: string
+    tu_ngay: string | undefined; den_ngay: string | undefined
+  }>({ ten_khach: '', nv_theo_doi_id: undefined, so_lenh: '', so_don: '', tu_ngay: undefined, den_ngay: undefined })
+
+  // ── YeuCau list ────────────────────────────────────────────────────────────
+  const { data: yeuCauList = [], isLoading: loadingYC } = useQuery({
+    queryKey: ['yeu-cau-giao-hang', ycFilter],
+    queryFn: () => yeuCauApi.list({
+      ten_khach: ycFilter.ten_khach || undefined,
+      nv_theo_doi_id: ycFilter.nv_theo_doi_id,
+      so_lenh: ycFilter.so_lenh || undefined,
+      so_don: ycFilter.so_don || undefined,
+      tu_ngay: ycFilter.tu_ngay,
+      den_ngay: ycFilter.den_ngay,
+    }).then(r => r.data),
+  })
+
+  // ── DO filters ────────────────────────────────────────────────────────────
+  const [doFilter, setDOFilter] = useState<{
+    ten_khach: string; nv_theo_doi_id: number | undefined
+    so_lenh: string; so_don: string
+    tu_ngay: string | undefined; den_ngay: string | undefined
+  }>({ ten_khach: '', nv_theo_doi_id: undefined, so_lenh: '', so_don: '', tu_ngay: undefined, den_ngay: undefined })
+
+  // ── Delivery list ──────────────────────────────────────────────────────────
+  const { data: deliveryList = [], isLoading: loadingDO } = useQuery({
+    queryKey: ['deliveries', doFilter],
+    queryFn: () => deliveriesApi.list({
+      ten_khach: doFilter.ten_khach || undefined,
+      nv_theo_doi_id: doFilter.nv_theo_doi_id,
+      so_lenh: doFilter.so_lenh || undefined,
+      so_don: doFilter.so_don || undefined,
+      tu_ngay: doFilter.tu_ngay,
+      den_ngay: doFilter.den_ngay,
+    }).then(r => r.data),
+  })
+
+  // ── TheoDoiRows for PO selection ──────────────────────────────────────────
+  const [includeHT, setIncludeHT] = useState(false)
+  const { data: theoDoiRows = [], isLoading: loadingTD, refetch: refetchTD } = useQuery({
+    queryKey: ['theo-doi-giao', includeHT],
+    queryFn: () => theoDoiApi.getDonHang({ include_hoan_thanh: includeHT }).then(r => r.data),
+  })
+
+  // ── PO selection ──────────────────────────────────────────────────────────
+  const [selectedPOKeys, setSelectedPOKeys] = useState<number[]>([])
+  const selectedPORows = theoDoiRows.filter(r => r.production_order_id != null && selectedPOKeys.includes(r.production_order_id))
+
+  // ── YeuCau create modal ───────────────────────────────────────────────────
+  const [showYCModal, setShowYCModal] = useState(false)
+  const [ycForm] = Form.useForm()
+  const [ycItems, setYCItems] = useState<Array<{
+    production_order_id: number | null; so_lenh: string | null; ten_hang: string
+    phan_xuong_id: number | null; warehouse_id: number | null
+    so_luong: number; dvt: string; dien_tich: number | null; trong_luong: number | null; ghi_chu: string
+  }>>([])
+
+  const openYCModal = () => {
+    if (!selectedPORows.length) { message.warning('Chọn ít nhất 1 lệnh SX'); return }
+    setYCItems(selectedPORows.map(r => ({
+      production_order_id: r.production_order_id,
+      so_lenh: r.so_lenh,
+      ten_hang: r.ten_hang || '',
+      phan_xuong_id: r.phan_xuong_id,
+      warehouse_id: null,
+      so_luong: r.so_luong_ke_hoach,
+      dvt: 'Thùng',
+      dien_tich: null,
+      trong_luong: null,
+      ghi_chu: '',
+    })))
+    ycForm.resetFields()
+    ycForm.setFieldsValue({ ngay_yeu_cau: dayjs() })
+    setShowYCModal(true)
+  }
+
+  const createYCMutation = useMutation({
+    mutationFn: (payload: Parameters<typeof yeuCauApi.create>[0]) => yeuCauApi.create(payload).then(r => r.data),
+    onSuccess: () => {
+      message.success('Tạo yêu cầu giao hàng thành công')
+      qc.invalidateQueries({ queryKey: ['yeu-cau-giao-hang'] })
+      setShowYCModal(false)
+      setSelectedPOKeys([])
+    },
+    onError: (e: unknown) => message.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Lỗi tạo yêu cầu'),
+  })
+
+  const handleSaveYC = async () => {
+    const vals = await ycForm.validateFields()
+    for (const it of ycItems) {
+      if (!it.warehouse_id) { message.warning(`Chưa chọn kho cho lệnh ${it.so_lenh}`); return }
+    }
+    createYCMutation.mutate({
+      ngay_yeu_cau: vals.ngay_yeu_cau.format('YYYY-MM-DD'),
+      ngay_giao_yeu_cau: vals.ngay_giao_yeu_cau ? vals.ngay_giao_yeu_cau.format('YYYY-MM-DD') : undefined,
+      dia_chi_giao: vals.dia_chi_giao,
+      nguoi_nhan: vals.nguoi_nhan,
+      ghi_chu: vals.ghi_chu,
+      items: ycItems.map(it => ({
+        production_order_id: it.production_order_id!,
+        warehouse_id: it.warehouse_id!,
+        so_luong: it.so_luong,
+        dvt: it.dvt,
+        dien_tich: it.dien_tich ?? undefined,
+        trong_luong: it.trong_luong ?? undefined,
+        ghi_chu: it.ghi_chu || undefined,
+      })),
+    })
+  }
+
+  // ── DeliveryOrder create modal ────────────────────────────────────────────
+  const [showDOModal, setShowDOModal] = useState(false)
+  const [selectedYC, setSelectedYC] = useState<YeuCauGiaoHang | null>(null)
+  const [doForm] = Form.useForm()
+  const [doItems, setDOItems] = useState<Array<{
+    production_order_id: number | null; so_lenh: string | null; ten_hang: string
+    so_luong: number; dvt: string; dien_tich: number; trong_luong: number
+    don_gia: number; thanh_tien: number; ghi_chu: string
+  }>>([])
+
+  const openDOModal = (yc: YeuCauGiaoHang) => {
+    setSelectedYC(yc)
+    setDOItems(yc.items.map(it => ({
+      production_order_id: it.production_order_id,
+      so_lenh: it.so_lenh,
+      ten_hang: it.ten_hang,
+      so_luong: it.so_luong,
+      dvt: it.dvt,
+      dien_tich: it.dien_tich,
+      trong_luong: it.trong_luong,
+      don_gia: 0,
+      thanh_tien: 0,
+      ghi_chu: '',
+    })))
+    doForm.resetFields()
+    doForm.setFieldsValue({ ngay_xuat: dayjs() })
+    setShowDOModal(true)
+  }
+
+  const createDOMutation = useMutation({
+    mutationFn: (payload: Parameters<typeof deliveriesApi.create>[0]) => deliveriesApi.create(payload).then(r => r.data),
+    onSuccess: () => {
+      message.success('Tạo phiếu bán hàng thành công')
+      qc.invalidateQueries({ queryKey: ['deliveries'] })
+      qc.invalidateQueries({ queryKey: ['yeu-cau-giao-hang'] })
+      setShowDOModal(false)
+      setSelectedYC(null)
+    },
+    onError: (e: unknown) => message.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Lỗi tạo phiếu'),
+  })
+
+  const handleSaveDO = async () => {
+    const vals = await doForm.validateFields()
+    if (!selectedYC) return
+    const donGia = donGiaList.find((d: DonGiaVanChuyen) => d.id === vals.don_gia_vc_id)
+    createDOMutation.mutate({
+      ngay_xuat: vals.ngay_xuat.format('YYYY-MM-DD'),
+      warehouse_id: vals.warehouse_id,
+      customer_id: selectedYC.customer_id ?? undefined,
+      yeu_cau_id: selectedYC.id,
+      dia_chi_giao: selectedYC.dia_chi_giao ?? undefined,
+      nguoi_nhan: selectedYC.nguoi_nhan ?? undefined,
+      xe_id: vals.xe_id ?? undefined,
+      tai_xe_id: vals.tai_xe_id ?? undefined,
+      lo_xe: vals.lo_xe ?? undefined,
+      don_gia_vc_id: vals.don_gia_vc_id ?? undefined,
+      tien_van_chuyen: donGia ? Number(donGia.don_gia) : vals.tien_van_chuyen ?? undefined,
+      ghi_chu: vals.ghi_chu ?? undefined,
+      items: doItems.map(it => ({
+        production_order_id: it.production_order_id ?? undefined,
+        ten_hang: it.ten_hang,
+        so_luong: it.so_luong,
+        dvt: it.dvt,
+        dien_tich: it.dien_tich,
+        trong_luong: it.trong_luong,
+        don_gia: it.don_gia || undefined,
+        ghi_chu: it.ghi_chu || undefined,
+      })),
+    })
+  }
+
+  const tongTienHang = doItems.reduce((s, it) => s + it.thanh_tien, 0)
+
+  // ── YeuCau columns ────────────────────────────────────────────────────────
+  const ycCols: ColumnsType<YeuCauGiaoHang> = [
+    { title: 'Số YC', dataIndex: 'so_yeu_cau', width: 140, render: (v: string) => <Text code style={{ fontSize: 11 }}>{v}</Text> },
+    { title: 'Ngày YC', dataIndex: 'ngay_yeu_cau', width: 95, render: (v: string) => fmtDate(v) },
+    { title: 'Ngày giao YC', dataIndex: 'ngay_giao_yeu_cau', width: 105, render: (v: string | null) => fmtDate(v) },
+    { title: 'Khách hàng', dataIndex: 'ten_khach_hang', width: 140 },
+    { title: '∑ m²', dataIndex: 'tong_dien_tich', width: 80, render: (v: number) => fmtN(v) },
+    { title: '∑ kg', dataIndex: 'tong_trong_luong', width: 80, render: (v: number) => fmtN(v) },
+    {
+      title: 'Trạng thái', dataIndex: 'trang_thai', width: 110,
+      render: (v: string) => <Tag color={YEU_CAU_TRANG_THAI_COLORS[v] || 'default'}>{YEU_CAU_TRANG_THAI_LABELS[v] || v}</Tag>,
+    },
+    {
+      title: 'Thao tác', width: 160, fixed: 'right',
+      render: (_: unknown, row: YeuCauGiaoHang) => (
+        <Space size={4}>
+          {row.trang_thai !== 'da_tao_phieu' && row.trang_thai !== 'huy' && (
+            <Button size="small" type="primary" onClick={() => openDOModal(row)}>Tạo phiếu BH</Button>
+          )}
+          {row.trang_thai === 'moi' && (
+            <Popconfirm title="Xoá yêu cầu này?" onConfirm={() =>
+              yeuCauApi.delete(row.id).then(() => {
+                message.success('Đã xoá')
+                qc.invalidateQueries({ queryKey: ['yeu-cau-giao-hang'] })
+              })
+            }>
+              <Button size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
+        </Space>
+      ),
+    },
+  ]
+
+  // ── Delivery columns ──────────────────────────────────────────────────────
+  const doCols: ColumnsType<DeliveryOrder> = [
+    { title: 'Số phiếu', dataIndex: 'so_phieu', width: 150, render: (v: string) => <Text code style={{ fontSize: 11 }}>{v}</Text> },
+    { title: 'Ngày xuất', dataIndex: 'ngay_xuat', width: 95, render: (v: string) => fmtDate(v) },
+    { title: 'Khách hàng', dataIndex: 'ten_khach', width: 140 },
+    { title: 'Xe', dataIndex: 'bien_so', width: 110, render: (v: string | null) => v ?? '—' },
+    { title: 'Tài xế', dataIndex: 'ten_tai_xe', width: 120, render: (v: string | null) => v ?? '—' },
+    { title: '∑ m²', dataIndex: 'tong_dien_tich', width: 80, render: (v: number) => fmtN(v) },
+    { title: '∑ kg', dataIndex: 'tong_trong_luong', width: 80, render: (v: number) => fmtN(v) },
+    { title: 'Tổng TT (₫)', dataIndex: 'tong_thanh_toan', width: 120, render: (v: number) => fmtMoney(v) },
+    {
+      title: 'Công nợ', dataIndex: 'trang_thai_cong_no', width: 110,
+      render: (v: string) => <Tag color={CONG_NO_COLORS[v] || 'default'}>{CONG_NO_LABELS[v] || v}</Tag>,
+    },
+  ]
+
+  // ── PO selection columns (reuse from TheoDoiRow) ──────────────────────────
+  const poCols: ColumnsType<DonHangTheoDoiRow> = [
+    { title: 'Lệnh SX', dataIndex: 'so_lenh', width: 130, render: (v: string) => <Text code style={{ fontSize: 11 }}>{v}</Text> },
+    { title: 'Khách hàng', dataIndex: 'ten_khach_hang', width: 130 },
+    { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true, width: 180 },
+    { title: 'SL kế hoạch', dataIndex: 'so_luong_ke_hoach', width: 100, render: (v: number) => fmtN(v) },
+    { title: 'Ngày giao', dataIndex: 'ngay_giao_hang', width: 95, render: (v: string | null) => fmtDate(v) },
+    { title: 'Xưởng', dataIndex: 'ten_phan_xuong', width: 100 },
+    { title: 'Giai đoạn', dataIndex: 'stage_label', width: 110, render: (v: string, r: DonHangTheoDoiRow) => <Tag color={STAGE_COLORS[r.stage]}>{v}</Tag> },
+  ]
+
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size={16}>
+      <Tabs
+        size="small"
+        items={[
+          {
+            key: 'yeu-cau',
+            label: 'Yêu cầu giao hàng',
+            children: (
+              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                {/* A: chọn lệnh SX */}
+                <Card size="small" title="Chọn lệnh sản xuất cần giao">
+                  <Row gutter={8} style={{ marginBottom: 8 }}>
+                    <Col>
+                      <Button
+                        type={includeHT ? 'primary' : 'default'}
+                        size="small"
+                        onClick={() => setIncludeHT(v => !v)}
+                      >
+                        {includeHT ? 'Ẩn hoàn thành' : 'Hiện hoàn thành'}
+                      </Button>
+                    </Col>
+                    <Col>
+                      <Button size="small" onClick={() => refetchTD()}>Làm mới</Button>
+                    </Col>
+                    <Col flex="auto" />
+                    <Col>
+                      <Button
+                        type="primary"
+                        disabled={!selectedPOKeys.length}
+                        onClick={openYCModal}
+                      >
+                        Tạo yêu cầu giao hàng ({selectedPOKeys.length})
+                      </Button>
+                    </Col>
+                  </Row>
+                  <Table<DonHangTheoDoiRow>
+                    rowKey={r => r.production_order_id != null ? r.production_order_id : `so-${r.sales_order_id}`}
+                    size="small"
+                    loading={loadingTD}
+                    dataSource={theoDoiRows}
+                    columns={poCols}
+                    pagination={{ pageSize: 20, showSizeChanger: false }}
+                    scroll={{ x: 800 }}
+                    rowSelection={{
+                      type: 'checkbox',
+                      selectedRowKeys: selectedPOKeys,
+                      onChange: keys => setSelectedPOKeys(keys as number[]),
+                      getCheckboxProps: (record: DonHangTheoDoiRow) => ({ disabled: record.production_order_id === null }),
+                    }}
+                  />
+                </Card>
+
+                {/* B: danh sách yêu cầu */}
+                <Card size="small" title="Danh sách yêu cầu giao hàng">
+                  <Row gutter={8} style={{ marginBottom: 8 }}>
+                    <Col span={4}>
+                      <Input
+                        placeholder="Khách hàng"
+                        allowClear
+                        value={ycFilter.ten_khach}
+                        onChange={e => setYCFilter(f => ({ ...f, ten_khach: e.target.value }))}
+                      />
+                    </Col>
+                    <Col span={4}>
+                      <Select
+                        placeholder="NV theo dõi"
+                        allowClear
+                        style={{ width: '100%' }}
+                        value={ycFilter.nv_theo_doi_id}
+                        onChange={v => setYCFilter(f => ({ ...f, nv_theo_doi_id: v }))}
+                        options={nvList.map((nv: NhanVien) => ({ value: nv.id, label: nv.ho_ten || nv.username }))}
+                        showSearch
+                        filterOption={(input, opt) => (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                      />
+                    </Col>
+                    <Col span={3}>
+                      <Input
+                        placeholder="Số đơn"
+                        allowClear
+                        value={ycFilter.so_don}
+                        onChange={e => setYCFilter(f => ({ ...f, so_don: e.target.value }))}
+                      />
+                    </Col>
+                    <Col span={3}>
+                      <Input
+                        placeholder="Lệnh SX"
+                        allowClear
+                        value={ycFilter.so_lenh}
+                        onChange={e => setYCFilter(f => ({ ...f, so_lenh: e.target.value }))}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <DatePicker.RangePicker
+                        format="DD/MM/YYYY"
+                        style={{ width: '100%' }}
+                        onChange={dates => setYCFilter(f => ({
+                          ...f,
+                          tu_ngay: dates?.[0]?.format('YYYY-MM-DD'),
+                          den_ngay: dates?.[1]?.format('YYYY-MM-DD'),
+                        }))}
+                      />
+                    </Col>
+                    <Col>
+                      <Button onClick={() => setYCFilter({ ten_khach: '', nv_theo_doi_id: undefined, so_lenh: '', so_don: '', tu_ngay: undefined, den_ngay: undefined })}>
+                        Xoá lọc
+                      </Button>
+                    </Col>
+                  </Row>
+                  <Table<YeuCauGiaoHang>
+                    rowKey="id"
+                    size="small"
+                    loading={loadingYC}
+                    dataSource={yeuCauList}
+                    columns={ycCols}
+                    pagination={{ pageSize: 20, showSizeChanger: false }}
+                    scroll={{ x: 900 }}
+                    expandable={{
+                      expandedRowRender: (row: YeuCauGiaoHang) => (
+                        <Table
+                          size="small"
+                          rowKey="id"
+                          dataSource={row.items}
+                          pagination={false}
+                          columns={[
+                            { title: 'Lệnh SX', dataIndex: 'so_lenh', width: 130 },
+                            { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+                            { title: 'Kho xuất', dataIndex: 'ten_kho', width: 120 },
+                            { title: 'SL', dataIndex: 'so_luong', width: 80, render: (v: number) => fmtN(v) },
+                            { title: 'DVT', dataIndex: 'dvt', width: 60 },
+                            { title: 'm²', dataIndex: 'dien_tich', width: 80, render: (v: number) => fmtN(v) },
+                            { title: 'kg', dataIndex: 'trong_luong', width: 80, render: (v: number) => fmtN(v) },
+                          ]}
+                        />
+                      ),
+                    }}
+                  />
+                </Card>
+              </Space>
+            ),
+          },
+          {
+            key: 'phieu-ban-hang',
+            label: 'Phiếu bán hàng',
+            children: (
+              <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                <Row gutter={8}>
+                  <Col span={4}>
+                    <Input
+                      placeholder="Khách hàng"
+                      allowClear
+                      value={doFilter.ten_khach}
+                      onChange={e => setDOFilter(f => ({ ...f, ten_khach: e.target.value }))}
+                    />
+                  </Col>
+                  <Col span={4}>
+                    <Select
+                      placeholder="NV theo dõi"
+                      allowClear
+                      style={{ width: '100%' }}
+                      value={doFilter.nv_theo_doi_id}
+                      onChange={v => setDOFilter(f => ({ ...f, nv_theo_doi_id: v }))}
+                      options={nvList.map((nv: NhanVien) => ({ value: nv.id, label: nv.ho_ten || nv.username }))}
+                      showSearch
+                      filterOption={(input, opt) => (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                    />
+                  </Col>
+                  <Col span={3}>
+                    <Input
+                      placeholder="Số đơn"
+                      allowClear
+                      value={doFilter.so_don}
+                      onChange={e => setDOFilter(f => ({ ...f, so_don: e.target.value }))}
+                    />
+                  </Col>
+                  <Col span={3}>
+                    <Input
+                      placeholder="Lệnh SX"
+                      allowClear
+                      value={doFilter.so_lenh}
+                      onChange={e => setDOFilter(f => ({ ...f, so_lenh: e.target.value }))}
+                    />
+                  </Col>
+                  <Col span={6}>
+                    <DatePicker.RangePicker
+                      format="DD/MM/YYYY"
+                      style={{ width: '100%' }}
+                      onChange={dates => setDOFilter(f => ({
+                        ...f,
+                        tu_ngay: dates?.[0]?.format('YYYY-MM-DD'),
+                        den_ngay: dates?.[1]?.format('YYYY-MM-DD'),
+                      }))}
+                    />
+                  </Col>
+                  <Col>
+                    <Button onClick={() => setDOFilter({ ten_khach: '', nv_theo_doi_id: undefined, so_lenh: '', so_don: '', tu_ngay: undefined, den_ngay: undefined })}>
+                      Xoá lọc
+                    </Button>
+                  </Col>
+                </Row>
+              <Table<DeliveryOrder>
+                rowKey="id"
+                size="small"
+                loading={loadingDO}
+                dataSource={deliveryList}
+                columns={doCols}
+                pagination={{ pageSize: 30, showSizeChanger: false }}
+                scroll={{ x: 1050 }}
+                expandable={{
+                  expandedRowRender: (row: DeliveryOrder) => (
+                    <Table
+                      size="small"
+                      rowKey="id"
+                      dataSource={row.items}
+                      pagination={false}
+                      columns={[
+                        { title: 'Lệnh SX', dataIndex: 'so_lenh', width: 130 },
+                        { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+                        { title: 'SL', dataIndex: 'so_luong', width: 80, render: (v: number) => fmtN(v) },
+                        { title: 'DVT', dataIndex: 'dvt', width: 60 },
+                        { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, render: (v: number) => fmtMoney(v) },
+                        { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 120, render: (v: number) => fmtMoney(v) },
+                        { title: 'm²', dataIndex: 'dien_tich', width: 80, render: (v: number) => fmtN(v) },
+                        { title: 'kg', dataIndex: 'trong_luong', width: 80, render: (v: number) => fmtN(v) },
+                      ]}
+                    />
+                  ),
+                }}
+              />
+              </Space>
+            ),
+          },
+        ]}
+      />
+
+      {/* ── Modal tạo yêu cầu giao hàng ── */}
+      <Modal
+        title="Tạo yêu cầu giao hàng"
+        open={showYCModal}
+        onCancel={() => setShowYCModal(false)}
+        onOk={handleSaveYC}
+        okText="Tạo yêu cầu"
+        confirmLoading={createYCMutation.isPending}
+        width={900}
+      >
+        <Form form={ycForm} layout="vertical" style={{ marginBottom: 12 }}>
+          <Row gutter={12}>
+            <Col span={8}>
+              <Form.Item name="ngay_yeu_cau" label="Ngày yêu cầu" rules={[{ required: true }]}>
+                <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="ngay_giao_yeu_cau" label="Ngày giao yêu cầu">
+                <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="nguoi_nhan" label="Người nhận">
+                <Input placeholder="Tên người nhận hàng" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="dia_chi_giao" label="Địa chỉ giao">
+                <Input placeholder="Địa chỉ giao hàng" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="ghi_chu" label="Ghi chú">
+                <Input placeholder="Ghi chú" />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+
+        <Table
+          size="small"
+          rowKey="production_order_id"
+          dataSource={ycItems}
+          pagination={false}
+          columns={[
+            { title: 'Lệnh SX', dataIndex: 'so_lenh', width: 120 },
+            { title: 'Tên hàng', dataIndex: 'ten_hang', width: 160, ellipsis: true },
+            {
+              title: 'Kho xuất',
+              width: 160,
+              render: (_: unknown, row: typeof ycItems[0], idx: number) => (
+                <Select
+                  size="small"
+                  style={{ width: '100%' }}
+                  value={row.warehouse_id}
+                  placeholder="Chọn kho"
+                  onChange={v => setYCItems(prev => prev.map((it, i) => i === idx ? { ...it, warehouse_id: v } : it))}
+                  options={warehouses
+                    .filter((w: Warehouse) => !row.phan_xuong_id || w.phan_xuong_id === row.phan_xuong_id)
+                    .map((w: Warehouse) => ({ label: w.ten_kho, value: w.id }))}
+                  showSearch
+                  optionFilterProp="label"
+                />
+              ),
+            },
+            {
+              title: 'SL giao',
+              width: 90,
+              render: (_: unknown, row: typeof ycItems[0], idx: number) => (
+                <InputNumber
+                  size="small"
+                  min={0}
+                  value={row.so_luong}
+                  style={{ width: 80 }}
+                  onChange={v => setYCItems(prev => prev.map((it, i) => i === idx ? { ...it, so_luong: v ?? it.so_luong } : it))}
+                />
+              ),
+            },
+            {
+              title: 'm²',
+              width: 80,
+              render: (_: unknown, row: typeof ycItems[0], idx: number) => (
+                <InputNumber
+                  size="small"
+                  min={0}
+                  value={row.dien_tich}
+                  placeholder="auto"
+                  style={{ width: 72 }}
+                  onChange={v => setYCItems(prev => prev.map((it, i) => i === idx ? { ...it, dien_tich: v } : it))}
+                />
+              ),
+            },
+            {
+              title: 'kg',
+              width: 80,
+              render: (_: unknown, row: typeof ycItems[0], idx: number) => (
+                <InputNumber
+                  size="small"
+                  min={0}
+                  value={row.trong_luong}
+                  style={{ width: 72 }}
+                  onChange={v => setYCItems(prev => prev.map((it, i) => i === idx ? { ...it, trong_luong: v } : it))}
+                />
+              ),
+            },
+          ]}
+          summary={() => (
+            <Table.Summary.Row>
+              <Table.Summary.Cell index={0} colSpan={4}><Text strong>Tổng</Text></Table.Summary.Cell>
+              <Table.Summary.Cell index={4}><Text strong>{fmtN(ycItems.reduce((s, it) => s + (it.dien_tich ?? 0), 0))}</Text></Table.Summary.Cell>
+              <Table.Summary.Cell index={5}><Text strong>{fmtN(ycItems.reduce((s, it) => s + (it.trong_luong ?? 0), 0))}</Text></Table.Summary.Cell>
+            </Table.Summary.Row>
+          )}
+        />
+      </Modal>
+
+      {/* ── Modal tạo phiếu bán hàng ── */}
+      <Modal
+        title={`Tạo phiếu bán hàng${selectedYC ? ` — ${selectedYC.so_yeu_cau}` : ''}`}
+        open={showDOModal}
+        onCancel={() => { setShowDOModal(false); setSelectedYC(null) }}
+        onOk={handleSaveDO}
+        okText="Tạo phiếu"
+        confirmLoading={createDOMutation.isPending}
+        width={1000}
+      >
+        <Form form={doForm} layout="vertical" style={{ marginBottom: 12 }}>
+          <Row gutter={12}>
+            <Col span={6}>
+              <Form.Item name="ngay_xuat" label="Ngày xuất" rules={[{ required: true }]}>
+                <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="warehouse_id" label="Kho xuất" rules={[{ required: true, message: 'Chọn kho' }]}>
+                <Select placeholder="Chọn kho" showSearch optionFilterProp="label"
+                  options={warehouses.map((w: Warehouse) => ({ label: `${w.ten_kho} (${w.loai_kho})`, value: w.id }))} />
+              </Form.Item>
+            </Col>
+            <Col span={10}>
+              <Form.Item name="xe_id" label="Xe">
+                <Select placeholder="Chọn xe" allowClear showSearch optionFilterProp="label"
+                  options={xeList.filter((x: Xe) => x.trang_thai).map((x: Xe) => ({
+                    label: `${x.bien_so}${x.loai_xe ? ` (${x.loai_xe})` : ''}${x.trong_tai ? ` — ${x.trong_tai}T` : ''}`,
+                    value: x.id,
+                  }))} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="tai_xe_id" label="Tài xế">
+                <Select placeholder="Chọn tài xế" allowClear showSearch optionFilterProp="label"
+                  options={taiXeList.filter((t: TaiXe) => t.trang_thai).map((t: TaiXe) => ({ label: t.ho_ten, value: t.id }))} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="lo_xe" label="Lơ xe">
+                <Input placeholder="Tên lơ xe" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="don_gia_vc_id" label="Tuyến vận chuyển">
+                <Select placeholder="Chọn tuyến" allowClear showSearch optionFilterProp="label"
+                  options={donGiaList.filter((d: DonGiaVanChuyen) => d.trang_thai).map((d: DonGiaVanChuyen) => ({
+                    label: `${d.ten_tuyen} — ${fmtMoney(d.don_gia)}đ`,
+                    value: d.id,
+                  }))}
+                  onChange={v => {
+                    const dg = donGiaList.find((d: DonGiaVanChuyen) => d.id === v)
+                    if (dg) doForm.setFieldValue('tien_van_chuyen', dg.don_gia)
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="tien_van_chuyen" label="Tiền vận chuyển (đ)">
+                <InputNumber style={{ width: '100%' }} min={0} formatter={v => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="ghi_chu" label="Ghi chú">
+                <Input placeholder="Ghi chú" />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+
+        <Table
+          size="small"
+          rowKey="production_order_id"
+          dataSource={doItems}
+          pagination={false}
+          columns={[
+            { title: 'Lệnh SX', dataIndex: 'so_lenh', width: 120 },
+            { title: 'Tên hàng', dataIndex: 'ten_hang', width: 150, ellipsis: true },
+            { title: 'SL', dataIndex: 'so_luong', width: 70, render: (v: number) => fmtN(v) },
+            { title: 'DVT', dataIndex: 'dvt', width: 55 },
+            {
+              title: 'Đơn giá',
+              width: 110,
+              render: (_: unknown, row: typeof doItems[0], idx: number) => (
+                <InputNumber
+                  size="small"
+                  min={0}
+                  value={row.don_gia}
+                  style={{ width: 100 }}
+                  formatter={v => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  onChange={v => setDOItems(prev => prev.map((it, i) => {
+                    if (i !== idx) return it
+                    const dg = v ?? 0
+                    return { ...it, don_gia: dg, thanh_tien: dg * it.so_luong }
+                  }))}
+                />
+              ),
+            },
+            { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 110, render: (v: number) => fmtMoney(v) },
+            {
+              title: 'm²',
+              width: 80,
+              render: (_: unknown, row: typeof doItems[0], idx: number) => (
+                <InputNumber size="small" min={0} value={row.dien_tich} style={{ width: 72 }}
+                  onChange={v => setDOItems(prev => prev.map((it, i) => i === idx ? { ...it, dien_tich: v ?? 0 } : it))} />
+              ),
+            },
+            {
+              title: 'kg',
+              width: 80,
+              render: (_: unknown, row: typeof doItems[0], idx: number) => (
+                <InputNumber size="small" min={0} value={row.trong_luong} style={{ width: 72 }}
+                  onChange={v => setDOItems(prev => prev.map((it, i) => i === idx ? { ...it, trong_luong: v ?? 0 } : it))} />
+              ),
+            },
+          ]}
+          summary={() => (
+            <Table.Summary.Row>
+              <Table.Summary.Cell index={0} colSpan={5}><Text strong>Tổng tiền hàng</Text></Table.Summary.Cell>
+              <Table.Summary.Cell index={5}><Text strong style={{ color: '#1677ff' }}>{fmtMoney(tongTienHang)}</Text></Table.Summary.Cell>
+              <Table.Summary.Cell index={6}><Text strong>{fmtN(doItems.reduce((s, it) => s + it.dien_tich, 0))}</Text></Table.Summary.Cell>
+              <Table.Summary.Cell index={7}><Text strong>{fmtN(doItems.reduce((s, it) => s + it.trong_luong, 0))}</Text></Table.Summary.Cell>
+            </Table.Summary.Row>
+          )}
+        />
+      </Modal>
+    </Space>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function PhieuPhoiPage() {
@@ -1057,7 +2175,10 @@ export default function PhieuPhoiPage() {
           defaultActiveKey="nhap"
           items={[
             { key: 'nhap', label: 'Phiếu nhập phôi', children: <TabNhap /> },
+            { key: 'kho', label: 'Kho phôi sóng', children: <TabKho /> },
             { key: 'xuat', label: 'Phiếu xuất phôi', children: <TabXuat /> },
+            { key: 'theo-doi', label: 'Theo dõi đơn hàng', children: <TabTheoDoi /> },
+            { key: 'giao-hang', label: 'Giao hàng', children: <TabGiaoHang /> },
           ]}
         />
       </Card>

@@ -13,7 +13,7 @@ from app.routers import (
     don_vi_tinh, vi_tri, xe, tai_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
     production_orders, bom, production_plans, indirect_costs, addon_rates,
 )
-from app.routers import phieu_phoi, cd2, warehouse, purchase_orders, phap_nhan, dashboard
+from app.routers import phieu_phoi, cd2, warehouse, purchase_orders, phap_nhan, dashboard, theo_doi, yeu_cau_giao_hang
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -95,6 +95,8 @@ app.include_router(warehouse.router)
 app.include_router(purchase_orders.router)
 app.include_router(phap_nhan.router)
 app.include_router(dashboard.router)
+app.include_router(theo_doi.router)
+app.include_router(yeu_cau_giao_hang.router)
 
 
 @app.get("/api/health")

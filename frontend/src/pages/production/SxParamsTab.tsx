@@ -10,6 +10,7 @@ import type { ProductionOrderItem } from '../../api/productionOrders'
 import { productionOrdersApi } from '../../api/productionOrders'
 import { productionPlansApi } from '../../api/productionPlans'
 import { calcBoxDimensions, getHaoHutRate, paperMaterialsApi } from '../../api/quotes'
+import { TO_HOP_SONG_BY_LOP } from '../../api/bom'
 
 const { Text } = Typography
 
@@ -77,8 +78,9 @@ interface ItemSxCardProps {
 
 function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   const soLop     = item.so_lop ?? item.product?.so_lop ?? 3
-  const toHopSong = item.to_hop_song ?? ''
   const loaiThung = item.loai_thung ?? ''
+
+  const [toHopSong, setToHopSong] = useState<string>(item.to_hop_song ?? '')
   const soLuong   = Number(item.so_luong_ke_hoach)
 
   const dai  = Number(item.dai  ?? item.product?.dai  ?? 0)
@@ -114,6 +116,8 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   const [qccl, setQccl] = useState<string>(item.qccl ?? computedQccl)
 
   const [saving, setSaving] = useState(false)
+  // Đã lưu nếu item có kho_tt (chứng tỏ đã từng bấm Lưu)
+  const [saved,  setSaved]  = useState(() => !!item.kho_tt)
 
   const layerDefs = useMemo(() => getLayerDefs(soLop, toHopSong), [soLop, toHopSong])
   const haoHut    = getHaoHutRate(soLuong)
@@ -156,7 +160,10 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
 
   const tongKg = tableRows.reduce((s, r) => s + r.total_kg, 0)
 
+  const markDirty = () => { if (saved) setSaved(false) }
+
   const updateLayer = (key: LayerKey, field: 'ma_ky_hieu' | 'dinh_luong', value: string | number | null) => {
+    markDirty()
     setLayers(prev => ({
       ...prev,
       [key]: { ...prev[key], [field]: value },
@@ -167,6 +174,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
     setSaving(true)
     try {
       await productionOrdersApi.updateItemSxParams(orderId, item.id, {
+        to_hop_song: toHopSong || null,
         kho_tt: khoTt,
         dai_tt: daiTt,
         qccl:   qccl || null,
@@ -188,6 +196,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
         so_luong_ke_hoach: soLuong,
       })
 
+      setSaved(true)
       message.success('Đã lưu và thêm vào Kế hoạch SX chờ')
       onSaved()
     } catch {
@@ -301,7 +310,9 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
               <Tag color="blue">{soLuong.toLocaleString('vi-VN')} {item.dvt}</Tag>
               {loaiThung && <Tag>{loaiThung}</Tag>}
               {soLop && (
-                <Tag color="purple">{soLop} lớp {toHopSong ? `(${toHopSong})` : ''}</Tag>
+                <Tag color={toHopSong ? 'purple' : 'warning'}>
+                  {soLop} lớp {toHopSong ? `(${toHopSong})` : '— chưa có tổ hợp sóng'}
+                </Tag>
               )}
             </Space>
           </Col>
@@ -312,8 +323,9 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
               size="small"
               loading={saving}
               onClick={handleSave}
+              style={saved ? { background: '#52c41a', borderColor: '#52c41a' } : undefined}
             >
-              Lưu thông số SX
+              {saved ? '✓ Đã lưu' : 'Lưu thông số SX'}
             </Button>
           </Col>
         </Row>
@@ -331,14 +343,31 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                     ? <Text strong>{dai}×{rong}×{cao} cm</Text>
                     : <Text type="secondary">Chưa có thông tin</Text>}
                 </div>
-                <div>
+                <div style={{ marginBottom: 8 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
+                    Tổ hợp sóng
+                    {!item.to_hop_song && toHopSong && (
+                      <Text type="secondary" style={{ fontSize: 10, marginLeft: 4 }}>(mặc định)</Text>
+                    )}
+                  </Text>
+                  <Select
+                    size="small"
+                    style={{ width: '100%' }}
+                    value={toHopSong || undefined}
+                    placeholder="Chọn tổ hợp sóng..."
+                    allowClear
+                    onChange={v => { markDirty(); setToHopSong(v ?? '') }}
+                    options={(TO_HOP_SONG_BY_LOP[soLop] ?? []).map(s => ({ value: s, label: s }))}
+                  />
+                </div>
+              </Col>
+              <Col span={12}>
+                <div style={{ marginBottom: 8 }}>
                   <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Chiều cắt (dai_tt)</Text>
                   <Text strong style={{ color: '#52c41a' }}>
                     {daiTt > 0 ? `${daiTt} cm` : '—'}
                   </Text>
                 </div>
-              </Col>
-              <Col span={12}>
                 <div style={{ marginBottom: 8 }}>
                   <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Khổ min 1 con (kho1)</Text>
                   <Text strong>{kho1 > 0 ? `${kho1} cm` : '—'}</Text>
@@ -359,7 +388,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                   <Input
                     size="small"
                     value={qccl}
-                    onChange={e => setQccl(e.target.value)}
+                    onChange={e => { markDirty(); setQccl(e.target.value) }}
                     placeholder={computedQccl || 'vd: 16.1+22+16.1'}
                     style={{ fontFamily: 'monospace', fontWeight: 700, color: '#d46b08', width: 140 }}
                   />
@@ -396,6 +425,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                     style={{ width: 110 }}
                     addonAfter="cm"
                     onChange={v => {
+                      markDirty()
                       if (v && v > 0) setKhoTt(roundUpTo5(v))
                     }}
                   />

@@ -1,0 +1,8 @@
+BÁO GIÁ
+BÁO GIÁ TÌM THÊM KHÁCH HÀNG, NHÂN VIÊN
+TỪ 1 BÁO GIÁ CÓ THỂ CHỌN MÃ HÀNG ĐỂ LÊN ĐƠN THEO Ý (CÓ THỂ BÁO NHIỀU MÃ NHƯNG LÊN ĐƠN 1,2 MÃ)
+THIẾU MÃ HÀÀNG
+CHỌN KHÔNG CÔNG THỨC SẼ SỬA CHIỀU KHỔ VÀ CHIỀU CẮT, DIỆN TÍCH TÍNH THEO KÍCH THƯỚC VỪA NHẬP
+
+ĐƠN HÀNG
+TÌM THÊM KHÁCH HÀNG, NHÂN VIÊN

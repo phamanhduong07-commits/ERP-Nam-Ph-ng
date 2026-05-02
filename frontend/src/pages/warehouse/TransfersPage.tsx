@@ -17,6 +17,8 @@ export default function TransfersPage() {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
+  const [filterXuongNguon, setFilterXuongNguon] = useState<number | undefined>()
+  const [filterXuongDich, setFilterXuongDich] = useState<number | undefined>()
   const [filterKhoXuat, setFilterKhoXuat] = useState<number | undefined>()
   const [filterKhoNhap, setFilterKhoNhap] = useState<number | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
@@ -74,6 +76,18 @@ export default function TransfersPage() {
   })
 
   const activeWarehouses = warehouses.filter(w => w.trang_thai)
+  const khoXuatOptions = activeWarehouses
+    .filter(w => !filterXuongNguon || w.phan_xuong_id === filterXuongNguon)
+    .map(w => {
+      const px = phanXuongs.find((x: any) => x.id === w.phan_xuong_id)
+      return { value: w.id, label: px ? `${w.ten_kho} (${px.ten_xuong})` : w.ten_kho }
+    })
+  const khoNhapOptions = activeWarehouses
+    .filter(w => !filterXuongDich || w.phan_xuong_id === filterXuongDich)
+    .map(w => {
+      const px = phanXuongs.find((x: any) => x.id === w.phan_xuong_id)
+      return { value: w.id, label: px ? `${w.ten_kho} (${px.ten_xuong})` : w.ten_kho }
+    })
 
   const getPhanXuongName = (wid: number) => {
     const w = warehouses.find(x => x.id === wid)
@@ -181,12 +195,22 @@ export default function TransfersPage() {
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[8, 8]}>
           <Col xs={12} sm={6}>
+            <Select placeholder="Xưởng nguồn" style={{ width: '100%' }} allowClear value={filterXuongNguon}
+              onChange={v => { setFilterXuongNguon(v); setFilterKhoXuat(undefined) }}
+              options={(phanXuongs as any[]).map(x => ({ value: x.id, label: x.ten_xuong }))} />
+          </Col>
+          <Col xs={12} sm={6}>
+            <Select placeholder="Xưởng đích" style={{ width: '100%' }} allowClear value={filterXuongDich}
+              onChange={v => { setFilterXuongDich(v); setFilterKhoNhap(undefined) }}
+              options={(phanXuongs as any[]).map(x => ({ value: x.id, label: x.ten_xuong }))} />
+          </Col>
+          <Col xs={12} sm={6}>
             <Select placeholder="Kho xuất" style={{ width: '100%' }} allowClear value={filterKhoXuat} onChange={setFilterKhoXuat}
-              options={activeWarehouses.map(w => ({ value: w.id, label: w.ten_kho }))} />
+              options={khoXuatOptions} />
           </Col>
           <Col xs={12} sm={6}>
             <Select placeholder="Kho nhận" style={{ width: '100%' }} allowClear value={filterKhoNhap} onChange={setFilterKhoNhap}
-              options={activeWarehouses.map(w => ({ value: w.id, label: w.ten_kho }))} />
+              options={khoNhapOptions} />
           </Col>
           <Col xs={12} sm={6}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"

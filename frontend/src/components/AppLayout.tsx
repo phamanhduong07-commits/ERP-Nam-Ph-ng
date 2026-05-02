@@ -117,6 +117,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       label: 'Kho',
       roles: KHO_ROLES,
       children: [
+        { key: '/warehouse/theo-xuong', label: <Link to="/warehouse/theo-xuong">Kho theo xưởng</Link> },
         { key: '/warehouse/inventory', label: <Link to="/warehouse/inventory">Tồn kho</Link> },
         { key: '/warehouse/receipts', label: <Link to="/warehouse/receipts">Nhập kho (NVL)</Link> },
         { key: '/warehouse/issues', label: <Link to="/warehouse/issues">Xuất NVL sản xuất</Link> },

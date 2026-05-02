@@ -1,11 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
-import { Card, Col, Row, Space, Spin, Statistic, Typography, Button } from 'antd'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Card, Col, Row, Space, Spin, Statistic, Typography, Button, Table, Tag } from 'antd'
 import {
   PrinterOutlined, BarChartOutlined, HistoryOutlined,
   BarcodeOutlined, CheckCircleOutlined, ReloadOutlined,
 } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
-import { cd2Api } from '../../api/cd2'
+import { cd2Api, PhieuIn } from '../../api/cd2'
+import PhieuInModal from './PhieuInModal'
 
 const { Title, Text } = Typography
 
@@ -17,11 +19,26 @@ const MAIN_STATES = [
 ]
 
 export default function CD2DashboardPage() {
+  const qc = useQueryClient()
+  const [selectedPhieu, setSelectedPhieu] = useState<PhieuIn | null>(null)
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['cd2-dashboard'],
     queryFn: () => cd2Api.getDashboard().then(r => r.data),
     refetchInterval: 30_000,
   })
+
+  const { data: dangInList = [] } = useQuery({
+    queryKey: ['cd2-phieu-dang-in'],
+    queryFn: () => cd2Api.listPhieuIn({ trang_thai: 'dang_in' }).then(r => r.data),
+    refetchInterval: 30_000,
+  })
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['cd2-dashboard'] })
+    qc.invalidateQueries({ queryKey: ['cd2-phieu-dang-in'] })
+    qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
+  }
 
   if (isLoading) return <Spin style={{ margin: 40 }} />
 
@@ -67,6 +84,44 @@ export default function CD2DashboardPage() {
           </Col>
         ))}
       </Row>
+
+      {/* Phiếu đang in — quick action */}
+      {dangInList.length > 0 && (
+        <Card
+          size="small"
+          title={
+            <Space>
+              <PrinterOutlined style={{ color: '#fa8c16' }} />
+              <span style={{ color: '#d4380d' }}>Đang in ({dangInList.length})</span>
+            </Space>
+          }
+          style={{ marginBottom: 16, border: '1px solid #ffbb96' }}
+          styles={{ header: { background: '#fff2e8' } }}
+        >
+          <Table<PhieuIn>
+            dataSource={dangInList}
+            rowKey="id"
+            size="small"
+            pagination={false}
+            columns={[
+              { title: 'Số phiếu', dataIndex: 'so_phieu', width: 150 },
+              { title: 'Tên hàng', dataIndex: 'ten_hang', render: v => v || '—' },
+              { title: 'Khách hàng', dataIndex: 'ten_khach_hang', render: v => v || '—' },
+              { title: 'Máy in', dataIndex: 'ten_may', render: v => v ? <Tag color="orange">{v}</Tag> : '—' },
+              { title: 'SL phôi', dataIndex: 'so_luong_phoi', render: v => v?.toLocaleString('vi-VN') ?? '—', align: 'right' },
+              {
+                title: '',
+                width: 110,
+                render: (_, rec) => (
+                  <Button size="small" type="primary" onClick={() => setSelectedPhieu(rec)}>
+                    Xử lý
+                  </Button>
+                ),
+              },
+            ]}
+          />
+        </Card>
+      )}
 
       {/* Hoàn thành hôm nay + Sau in + Hoàn thành tổng */}
       <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
@@ -241,6 +296,15 @@ export default function CD2DashboardPage() {
           </Col>
         ))}
       </Row>
+
+      {selectedPhieu && (
+        <PhieuInModal
+          phieu={selectedPhieu}
+          open
+          onClose={() => setSelectedPhieu(null)}
+          onSaved={() => { setSelectedPhieu(null); invalidate(); refetch() }}
+        />
+      )}
     </div>
   )
 }

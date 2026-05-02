@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy import cast, Date
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
@@ -263,10 +264,11 @@ def cancel_quote(
 @router.post("/{quote_id}/tao-don-hang", response_model=dict)
 def tao_don_hang_tu_bao_gia(
     quote_id: int,
+    item_ids: Optional[List[int]] = Body(None, embed=True),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Chuyển báo giá đã duyệt thành đơn hàng."""
+    """Chuyển báo giá đã duyệt thành đơn hàng. item_ids=None → lấy tất cả."""
     from app.routers.sales_orders import _generate_so_don
     quote = _load_quote(quote_id, db)
     if quote.trang_thai != "da_duyet":
@@ -275,12 +277,20 @@ def tao_don_hang_tu_bao_gia(
             detail="Chỉ lập đơn từ báo giá ở trạng thái Đã duyệt"
         )
 
+    selected_items = [
+        qi for qi in sorted(quote.items, key=lambda x: x.stt)
+        if item_ids is None or qi.id in item_ids
+    ]
+    if not selected_items:
+        raise HTTPException(status_code=400, detail="Cần chọn ít nhất 1 mặt hàng")
+
     so_don = _generate_so_don(db)
     order = SalesOrder(
         so_don=so_don,
         ngay_don=date.today(),
         customer_id=quote.customer_id,
         phap_nhan_id=quote.phap_nhan_id,
+        phan_xuong_id=quote.phan_xuong_id,
         nv_kinh_doanh_id=quote.nv_phu_trach_id,
         trang_thai="moi",
         ghi_chu=f"Lập từ báo giá {quote.so_bao_gia}",
@@ -289,7 +299,7 @@ def tao_don_hang_tu_bao_gia(
 
     try:
         tong_tien = Decimal("0")
-        for qi in sorted(quote.items, key=lambda x: x.stt):
+        for qi in selected_items:
             item = SalesOrderItem(
                 product_id=qi.product_id,
                 quote_item_id=qi.id,

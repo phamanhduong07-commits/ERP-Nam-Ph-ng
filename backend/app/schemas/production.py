@@ -79,6 +79,8 @@ class TaoLenhBody(BaseModel):
     ngay_hoan_thanh_ke_hoach: date | None = None
     phap_nhan_sx_id: int | None = None
     kho_sx_id: int | None = None
+    phan_xuong_id: int | None = None
+    nv_theo_doi_id: int | None = None
     ghi_chu: str | None = None
     items: list[TaoLenhItemSpec] = []      # thông số SX per-item (có thể rỗng)
 
@@ -88,6 +90,8 @@ class ProductionOrderCreate(BaseModel):
     sales_order_id: int | None = None
     phap_nhan_sx_id: int | None = None
     kho_sx_id: int | None = None
+    phan_xuong_id: int | None = None
+    nv_theo_doi_id: int | None = None
     ngay_bat_dau_ke_hoach: date | None = None
     ngay_hoan_thanh_ke_hoach: date | None = None
     ghi_chu: str | None = None
@@ -104,6 +108,8 @@ class ProductionOrderCreate(BaseModel):
 class ProductionOrderUpdate(BaseModel):
     phap_nhan_sx_id: int | None = None
     kho_sx_id: int | None = None
+    phan_xuong_id: int | None = None
+    nv_theo_doi_id: int | None = None
     ngay_bat_dau_ke_hoach: date | None = None
     ngay_hoan_thanh_ke_hoach: date | None = None
     ngay_bat_dau_thuc_te: date | None = None
@@ -123,6 +129,10 @@ class ProductionOrderResponse(BaseModel):
     ten_phap_nhan_sx: str | None = None
     kho_sx_id: int | None = None
     ten_kho_sx: str | None = None
+    phan_xuong_id: int | None = None
+    ten_phan_xuong: str | None = None
+    nv_theo_doi_id: int | None = None
+    ten_nv_theo_doi: str | None = None
     trang_thai: str
     ngay_bat_dau_ke_hoach: date | None
     ngay_hoan_thanh_ke_hoach: date | None

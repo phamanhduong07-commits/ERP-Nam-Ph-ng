@@ -83,6 +83,10 @@ export interface PhieuIn {
   ghi_chu_sau_in: string | null
   may_sau_in_id: number | null
   ten_may_sau_in: string | null
+  gio_bat_dau_in: string | null
+  gio_hoan_thanh: string | null
+  gio_bat_dau_dinh_hinh: string | null
+  gio_hoan_thanh_dinh_hinh: string | null
   created_at: string
 }
 
@@ -226,6 +230,19 @@ export const TRANG_THAI_COLORS: Record<string, string> = {
   huy: 'red',
 }
 
+export interface KhoRow {
+  production_order_id: number
+  so_lenh: string
+  ten_hang: string
+  ten_khach_hang: string | null
+  tong_nhap: number
+  tong_xuat: number
+  ton_kho: number
+  co_in: boolean
+  warehouse_id: number | null
+  phieu_in_hien_tai: { so_phieu: string; trang_thai: string } | null
+}
+
 export const cd2Api = {
   // Máy in
   listMayIn: () => client.get<MayIn[]>('/cd2/may-in'),
@@ -244,8 +261,8 @@ export const cd2Api = {
   getPhieuIn: (id: number) => client.get<PhieuIn>(`/cd2/phieu-in/${id}`),
   createPhieuIn: (data: CreatePhieuInPayload) =>
     client.post<PhieuIn>('/cd2/phieu-in', data),
-  createFromLenhSx: (orderId: number) =>
-    client.post<PhieuIn>(`/cd2/phieu-in/tu-lenh-sx/${orderId}`),
+  createFromLenhSx: (orderId: number, target: 'auto' | 'in' | 'sau_in' = 'auto') =>
+    client.post<PhieuIn>(`/cd2/phieu-in/tu-lenh-sx/${orderId}?target=${target}`),
   updatePhieuIn: (id: number, data: Partial<CreatePhieuInPayload>) =>
     client.put<PhieuIn>(`/cd2/phieu-in/${id}`, data),
   deletePhieuIn: (id: number) => client.delete(`/cd2/phieu-in/${id}`),
@@ -288,6 +305,9 @@ export const cd2Api = {
   getScanHistory: (params?: { may_scan_id?: number; days?: number; so_lsx?: string }) =>
     client.get<ScanLog[]>('/cd2/scan/history', { params }),
   deleteScanLog: (id: number) => client.delete(`/cd2/scan/log/${id}`),
+
+  // Kho phôi sóng
+  getTonKhoLsx: () => client.get<KhoRow[]>('/phieu-phoi/ton-kho-lsx'),
 
   // Dashboard & History
   getDashboard: () => client.get<DashboardData>('/cd2/dashboard'),

@@ -8,6 +8,9 @@ export interface Warehouse {
   dia_chi: string | null
   phan_xuong_id: number | null
   ten_xuong: string | null
+  dien_tich: number | null
+  suc_chua: number | null
+  don_vi_suc_chua: string | null
   trang_thai: boolean
   created_at: string
 }
@@ -18,6 +21,9 @@ export interface WarehouseCreate {
   loai_kho: string
   dia_chi: string | null
   phan_xuong_id?: number | null
+  dien_tich?: number | null
+  suc_chua?: number | null
+  don_vi_suc_chua?: string | null
   trang_thai: boolean
 }
 

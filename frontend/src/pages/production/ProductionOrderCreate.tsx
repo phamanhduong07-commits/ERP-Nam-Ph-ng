@@ -12,7 +12,7 @@ import { salesOrdersApi } from '../../api/salesOrders'
 import { productsApi } from '../../api/products'
 import { productionOrdersApi } from '../../api/productionOrders'
 import { phapNhanApi } from '../../api/phap_nhan'
-import { warehousesApi } from '../../api/warehouses'
+import { warehouseApi } from '../../api/warehouse'
 import type { Product } from '../../api/products'
 
 const { Title, Text } = Typography
@@ -55,10 +55,11 @@ export default function ProductionOrderCreate() {
     queryFn: () => phapNhanApi.list({ active_only: true }).then((r) => r.data),
   })
 
-  const { data: khoList } = useQuery({
-    queryKey: ['warehouses-all'],
-    queryFn: () => warehousesApi.list().then((r) => r.data),
+  const { data: phanXuongRaw } = useQuery({
+    queryKey: ['phan-xuong'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
   })
+  const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
 
   const { data: selectedSO } = useQuery({
     queryKey: ['sales-order-detail', salesOrderId],
@@ -86,9 +87,12 @@ export default function ProductionOrderCreate() {
       ghi_chu: item.ghi_chu_san_pham,
     }))
     setLines(newLines)
-    // Tự điền pháp nhân SX từ đơn hàng nếu chưa chọn
-    if (selectedSO.phap_nhan_sx_id && !form.getFieldValue('phap_nhan_sx_id')) {
-      form.setFieldValue('phap_nhan_sx_id', selectedSO.phap_nhan_sx_id)
+    // Tự điền pháp nhân + xưởng SX từ đơn hàng nếu chưa chọn
+    if (selectedSO.phap_nhan_id && !form.getFieldValue('phap_nhan_sx_id')) {
+      form.setFieldValue('phap_nhan_sx_id', selectedSO.phap_nhan_id)
+    }
+    if ((selectedSO as any).phan_xuong_id && !form.getFieldValue('phan_xuong_id')) {
+      form.setFieldValue('phan_xuong_id', (selectedSO as any).phan_xuong_id)
     }
     message.success(`Đã import ${newLines.length} dòng từ đơn hàng ${selectedSO.so_don}`)
   }
@@ -134,7 +138,7 @@ export default function ProductionOrderCreate() {
         ngay_lenh: dayjs(values.ngay_lenh).format('YYYY-MM-DD'),
         sales_order_id: salesOrderId || undefined,
         phap_nhan_sx_id: values.phap_nhan_sx_id ?? null,
-        kho_sx_id: values.kho_sx_id ?? null,
+        phan_xuong_id: values.phan_xuong_id ?? null,
         ngay_bat_dau_ke_hoach: values.ngay_bat_dau_ke_hoach
           ? dayjs(values.ngay_bat_dau_ke_hoach).format('YYYY-MM-DD')
           : undefined,
@@ -274,9 +278,9 @@ export default function ProductionOrderCreate() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="phap_nhan_sx_id" label="Pháp nhân sản xuất" rules={[{ required: true, message: 'Chọn pháp nhân SX' }]}>
+                  <Form.Item name="phap_nhan_sx_id" label="Pháp nhân">
                     <Select
-                      showSearch allowClear placeholder="Chọn pháp nhân (xưởng)..."
+                      showSearch allowClear placeholder="Chọn pháp nhân..."
                       filterOption={(input, option) =>
                         String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                       }
@@ -288,16 +292,12 @@ export default function ProductionOrderCreate() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="kho_sx_id" label="Kho sản xuất" rules={[{ required: true, message: 'Chọn kho SX' }]}>
+                  <Form.Item name="phan_xuong_id" label="Xưởng sản xuất">
                     <Select
-                      showSearch allowClear placeholder="Chọn kho sản xuất..."
-                      filterOption={(input, option) =>
-                        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                      }
-                      options={khoList?.filter(k => k.trang_thai).map((k) => ({
-                        value: k.id,
-                        label: `[${k.ma_kho}] ${k.ten_kho}`,
-                      }))}
+                      allowClear placeholder="Chọn xưởng sản xuất..."
+                      options={phanXuongList
+                        .filter(p => p.trang_thai)
+                        .map(p => ({ value: p.id, label: p.ten_xuong }))}
                     />
                   </Form.Item>
                 </Col>
