@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.inventory import InventoryBalance, InventoryTransaction
-from app.models.master import Warehouse, PhanXuong
+from app.models.master import Warehouse, PhanXuong, PhapNhan
 
 
 # ── Balance helpers ───────────────────────────────────────────────────────────
@@ -147,18 +147,35 @@ def get_workshop_warehouse(
 
 def get_phoi_source_warehouse(
     db: Session,
-    phan_xuong_id: int,
+    phan_xuong_id: Optional[int],
+    phap_nhan_id: Optional[int] = None,
 ) -> Optional[Warehouse]:
     """
     Trả về kho PHOI nguồn để nhập phôi sóng.
 
-    - Xưởng CD1+CD2 (Hoàng Gia, Nam Thuận): dùng kho PHOI của chính xưởng đó.
-    - Xưởng CD2 (Hóc Môn, Củ Chi): dùng kho PHOI của xưởng CD1+CD2 được cấu hình
-      trong PhanXuong.phoi_tu_phan_xuong_id.
-    - Nếu chưa cấu hình phoi_tu_phan_xuong_id → fallback về kho PHOI của xưởng hiện tại.
+    Ưu tiên: phap_nhan_id → PhapNhan.phoi_phan_xuong_id → kho PHOI của xưởng đó.
+    Fallback: phan_xuong_id → kho PHOI của chính xưởng đó (nếu cd1_cd2)
+              hoặc kho PHOI của xưởng cd1_cd2 đầu tiên tìm được.
     """
-    px = db.get(PhanXuong, phan_xuong_id)
-    if not px:
-        return None
-    source_id = px.phoi_tu_phan_xuong_id if px.phoi_tu_phan_xuong_id else phan_xuong_id
-    return get_workshop_warehouse(db, source_id, "PHOI")
+    # 1. Dùng cấu hình pháp nhân (ưu tiên nhất)
+    if phap_nhan_id:
+        pn = db.get(PhapNhan, phap_nhan_id)
+        if pn and pn.phoi_phan_xuong_id:
+            wh = get_workshop_warehouse(db, pn.phoi_phan_xuong_id, "PHOI")
+            if wh:
+                return wh
+
+    # 2. Fallback: dùng phan_xuong_id
+    if phan_xuong_id:
+        px = db.get(PhanXuong, phan_xuong_id)
+        if px:
+            # CD1+CD2: dùng kho của chính xưởng
+            if px.cong_doan == "cd1_cd2":
+                return get_workshop_warehouse(db, phan_xuong_id, "PHOI")
+            # CD2: dùng phoi_tu_phan_xuong_id nếu đã cấu hình
+            if px.phoi_tu_phan_xuong_id:
+                wh = get_workshop_warehouse(db, px.phoi_tu_phan_xuong_id, "PHOI")
+                if wh:
+                    return wh
+
+    return None

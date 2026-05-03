@@ -13,8 +13,10 @@ class MayScan(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     don_gia: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
 
     scan_logs: Mapped[list["ScanLog"]] = relationship("ScanLog", back_populates="may_scan_obj")
+    phan_xuong_obj = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
 
 
 class ScanLog(Base):
@@ -48,8 +50,10 @@ class MaySauIn(Base):
     ten_may: Mapped[str] = mapped_column(String(50), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
 
     phieu_ins: Mapped[list["PhieuIn"]] = relationship("PhieuIn", back_populates="may_sau_in_obj")
+    phan_xuong_obj = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
 
 
 class MayIn(Base):
@@ -60,8 +64,10 @@ class MayIn(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     capacity: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
 
     phieu_ins: Mapped[list["PhieuIn"]] = relationship("PhieuIn", back_populates="may_in_obj")
+    phan_xuong_obj = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
 
 
 class PhieuIn(Base):
@@ -114,6 +120,7 @@ class PhieuIn(Base):
     gio_bat_dau_dinh_hinh: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     gio_hoan_thanh_dinh_hinh: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
 
@@ -121,6 +128,7 @@ class PhieuIn(Base):
     may_sau_in_obj: Mapped["MaySauIn | None"] = relationship("MaySauIn", back_populates="phieu_ins")
     production_order = relationship("ProductionOrder")  # type: ignore[assignment]
     creator = relationship("User")  # type: ignore[assignment]
+    phan_xuong_obj = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
 
 
 class ShiftCa(Base):
@@ -130,8 +138,10 @@ class ShiftCa(Base):
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     leader: Mapped[str | None] = mapped_column(String(100))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
 
     configs: Mapped[list["ShiftConfig"]] = relationship("ShiftConfig", back_populates="shift_ca_obj")
+    phan_xuong_obj = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
 
 
 class ShiftConfig(Base):

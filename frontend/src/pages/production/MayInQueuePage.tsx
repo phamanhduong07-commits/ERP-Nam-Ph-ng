@@ -11,6 +11,8 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, KanbanData, CompletePayload } from '../../api/cd2'
+import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
+import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 
 const { Text, Title } = Typography
 
@@ -431,10 +433,11 @@ function MachineTab({
 export default function MayInQueuePage() {
   const qc = useQueryClient()
   const [activeTab, setActiveTab] = useState<string>('')
+  const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
 
   const { data: kanban, isLoading } = useQuery({
-    queryKey: ['cd2-kanban'],
-    queryFn: () => cd2Api.getKanban().then(r => r.data),
+    queryKey: ['cd2-kanban', phanXuongId],
+    queryFn: () => cd2Api.getKanban(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
     refetchInterval: 15_000,
   })
 
@@ -462,6 +465,7 @@ export default function MayInQueuePage() {
           <Space>
             <PrinterOutlined style={{ fontSize: 20, color: '#1677ff' }} />
             <Title level={4} style={{ margin: 0 }}>Queue Máy In</Title>
+            <CD2WorkshopSelector value={phanXuongId} onChange={id => { setPhanXuongId(id); setActiveTab('') }} phanXuongList={phanXuongList} />
           </Space>
         </Col>
         <Col>

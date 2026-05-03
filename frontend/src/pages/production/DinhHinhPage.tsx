@@ -11,6 +11,8 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, SauInPayload } from '../../api/cd2'
+import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
+import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 
 const { Title, Text } = Typography
 
@@ -347,16 +349,17 @@ export default function DinhHinhPage() {
   const [dinhHinhPhieu, setDinhHinhPhieu] = useState<PhieuIn | null>(null)
   const [hoanThanhPhieu, setHoanThanhPhieu] = useState<PhieuIn | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
 
   const { data: choPhieus = [], isLoading, refetch } = useQuery({
-    queryKey: ['cd2-cho-dinh-hinh'],
-    queryFn: () => cd2Api.listPhieuIn({ trang_thai: 'cho_dinh_hinh' }).then(r => r.data),
+    queryKey: ['cd2-cho-dinh-hinh', phanXuongId],
+    queryFn: () => cd2Api.listPhieuIn({ trang_thai: 'cho_dinh_hinh', ...(phanXuongId ? { phan_xuong_id: phanXuongId } : {}) }).then(r => r.data),
     refetchInterval: 20_000,
   })
 
   const { data: dangPhieus = [], isLoading: loadingDang, refetch: refetchDang } = useQuery({
-    queryKey: ['cd2-dang-dinh-hinh'],
-    queryFn: () => cd2Api.listPhieuIn({ trang_thai: 'sau_in' }).then(r => r.data),
+    queryKey: ['cd2-dang-dinh-hinh', phanXuongId],
+    queryFn: () => cd2Api.listPhieuIn({ trang_thai: 'sau_in', ...(phanXuongId ? { phan_xuong_id: phanXuongId } : {}) }).then(r => r.data),
     refetchInterval: 20_000,
   })
 
@@ -394,6 +397,7 @@ export default function DinhHinhPage() {
               style={{ backgroundColor: '#722ed1' }}
               showZero
             />
+            <CD2WorkshopSelector value={phanXuongId} onChange={setPhanXuongId} phanXuongList={phanXuongList} />
           </Space>
         </Col>
         <Col>

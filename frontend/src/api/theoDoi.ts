@@ -20,6 +20,7 @@ export interface DonHangTheoDoiRow {
   ngay_nhap_cuoi: string | null
   // Kho
   ton_kho_phoi: number
+  tong_chuyen_phoi: number
   // CD2
   phieu_in_id: number | null
   so_phieu_in: string | null

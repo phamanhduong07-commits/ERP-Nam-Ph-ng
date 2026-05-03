@@ -13,6 +13,8 @@ export interface PhapNhan {
   ky_hieu_hd: string | null
   trang_thai: boolean
   created_at: string | null
+  phoi_phan_xuong_id: number | null
+  ten_phoi_phan_xuong: string | null
 }
 
 export interface CreatePhapNhanPayload {

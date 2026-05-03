@@ -7,6 +7,8 @@ import {
 import { DeleteOutlined, HistoryOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs, { Dayjs } from 'dayjs'
 import { cd2Api, MayScan, ScanLog } from '../../api/cd2'
+import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
+import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -16,6 +18,7 @@ export default function ScanHistoryPage() {
   const [machineId, setMachineId] = useState<number | null>(null)
   const [soLsx, setSoLsx] = useState('')
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
 
   // Tính days từ range picker
   const days = dateRange
@@ -23,17 +26,18 @@ export default function ScanHistoryPage() {
     : 30
 
   const { data: mayScanList = [] } = useQuery({
-    queryKey: ['may-scan'],
-    queryFn: () => cd2Api.listMayScan().then(r => r.data),
+    queryKey: ['may-scan', phanXuongId],
+    queryFn: () => cd2Api.listMayScan(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
   })
 
   const { data: logs = [], isLoading, refetch } = useQuery({
-    queryKey: ['scan-history-all', machineId, days, soLsx],
+    queryKey: ['scan-history-all', machineId, days, soLsx, phanXuongId],
     queryFn: () =>
       cd2Api.getScanHistory({
         may_scan_id: machineId ?? undefined,
         days,
         so_lsx: soLsx.trim() || undefined,
+        phan_xuong_id: phanXuongId,
       }).then(r => r.data),
   })
 
@@ -132,6 +136,7 @@ export default function ScanHistoryPage() {
           <Space>
             <HistoryOutlined style={{ fontSize: 20, color: '#1677ff' }} />
             <Title level={4} style={{ margin: 0 }}>Lịch sử Scan Sản Lượng</Title>
+            <CD2WorkshopSelector value={phanXuongId} onChange={id => { setPhanXuongId(id); setMachineId(null) }} phanXuongList={phanXuongList} />
           </Space>
         </Col>
         <Col>

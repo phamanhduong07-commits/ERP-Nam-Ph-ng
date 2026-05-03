@@ -55,7 +55,9 @@ class GoodsReceiptIn(BaseModel):
     ngay_nhap: date
     po_id: Optional[int] = None
     supplier_id: int
-    warehouse_id: int
+    warehouse_id: Optional[int] = None
+    phan_xuong_id: Optional[int] = None  # dùng để tự tìm kho khi warehouse_id không truyền
+    loai_kho_auto: str = "GIAY_CUON"     # loai_kho ưu tiên khi auto-resolve (GIAY_CUON hoặc NVL_PHU)
     loai_nhap: str = "MUA_HANG"
     ghi_chu: Optional[str] = None
     items: list[GoodsReceiptItemIn]
@@ -127,6 +129,7 @@ class DeliveryOrderIn(BaseModel):
 class PhieuChuyenItemIn(BaseModel):
     paper_material_id: Optional[int] = None
     other_material_id: Optional[int] = None
+    production_order_id: Optional[int] = None
     ten_hang: str = ""
     don_vi: str = "Kg"
     so_luong: Decimal
@@ -495,7 +498,18 @@ def create_goods_receipt(
 ):
     if not body.items:
         raise HTTPException(400, "Phiếu nhập phải có ít nhất 1 dòng hàng")
-    if not db.get(Warehouse, body.warehouse_id):
+
+    # Resolve warehouse: ưu tiên warehouse_id tường minh, fallback auto-find từ xưởng
+    wh_id = body.warehouse_id
+    if not wh_id and body.phan_xuong_id:
+        wh = _get_workshop_warehouse(db, body.phan_xuong_id, body.loai_kho_auto)
+        if wh is None:
+            wh = _get_workshop_warehouse(db, body.phan_xuong_id, "NVL_PHU")
+        if wh:
+            wh_id = wh.id
+    if not wh_id:
+        raise HTTPException(400, "Chọn kho nhập hoặc cung cấp phan_xuong_id để tự tìm kho")
+    if not db.get(Warehouse, wh_id):
         raise HTTPException(404, "Không tìm thấy kho")
     if not db.get(Supplier, body.supplier_id):
         raise HTTPException(404, "Không tìm thấy nhà cung cấp")
@@ -505,7 +519,7 @@ def create_goods_receipt(
         ngay_nhap=body.ngay_nhap,
         po_id=body.po_id,
         supplier_id=body.supplier_id,
-        warehouse_id=body.warehouse_id,
+        warehouse_id=wh_id,
         loai_nhap=body.loai_nhap,
         ghi_chu=body.ghi_chu,
         created_by=current_user.id,
@@ -539,11 +553,11 @@ def create_goods_receipt(
             ghi_chu=it.ghi_chu,
         ))
 
-        bal = _get_or_create_balance(db, body.warehouse_id,
+        bal = _get_or_create_balance(db, wh_id,
                                      it.paper_material_id, it.other_material_id,
                                      ten_hang=ten_hang, don_vi=dvt)
         _nhap_balance(bal, it.so_luong, it.don_gia)
-        _log_tx(db, body.warehouse_id, "NHAP_MUA",
+        _log_tx(db, wh_id, "NHAP_MUA",
                 it.so_luong, it.don_gia, bal.ton_luong,
                 "goods_receipts", gr.id, current_user.id,
                 paper_material_id=it.paper_material_id,
@@ -1302,6 +1316,7 @@ def create_phieu_chuyen(
             phieu_chuyen_kho_id=phieu.id,
             paper_material_id=it.paper_material_id,
             other_material_id=it.other_material_id,
+            production_order_id=it.production_order_id,
             ten_hang=ten_hang,
             don_vi=don_vi,
             so_luong=it.so_luong,

@@ -20,6 +20,7 @@ from app.models.master import Warehouse
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
+from app.models.warehouse_doc import PhieuChuyenKhoItem
 
 _log = logging.getLogger("erp")
 
@@ -324,18 +325,14 @@ def ton_kho_lsx(
     """Tổng hợp tồn kho phôi sóng theo LSX — dùng cho Tab Kho phôi sóng."""
     from app.models.cd2 import PhieuIn
 
-    # 1. Nhập phôi: sum (thực tế - lỗi) per production_order_id
+    # 1. Nhập phôi: sum(so_tam) per production_order_id — đơn vị TẤM
     nhap_rows = (
         db.query(
             PhieuNhapPhoiSong.production_order_id,
-            func.coalesce(
-                func.sum(
-                    func.coalesce(PhieuNhapPhoiSongItem.so_luong_thuc_te, 0)
-                    - func.coalesce(PhieuNhapPhoiSongItem.so_luong_loi, 0)
-                ),
-                0,
-            ).label("tong_nhap"),
+            func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_tam), 0).label("tong_nhap"),
             func.max(PhieuNhapPhoiSong.warehouse_id).label("warehouse_id"),
+            func.max(PhieuNhapPhoiSongItem.chieu_kho).label("chieu_kho"),
+            func.max(PhieuNhapPhoiSongItem.chieu_cat).label("chieu_cat"),
         )
         .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id)
         .group_by(PhieuNhapPhoiSong.production_order_id)
@@ -350,6 +347,8 @@ def ton_kho_lsx(
         r.production_order_id: {
             "tong_nhap": float(r.tong_nhap),
             "warehouse_id": r.warehouse_id,
+            "chieu_kho": float(r.chieu_kho) if r.chieu_kho is not None else None,
+            "chieu_cat": float(r.chieu_cat) if r.chieu_cat is not None else None,
         }
         for r in nhap_rows
     }
@@ -367,7 +366,19 @@ def ton_kho_lsx(
     )
     xuat_map = {r.production_order_id: float(r.tong_xuat) for r in xuat_rows}
 
-    # 3. Active PhieuIn (chưa huỷ / hoàn thành) per LSX
+    # 3. Chuyển kho: sum(so_luong) per production_order_id
+    chuyen_rows = (
+        db.query(
+            PhieuChuyenKhoItem.production_order_id,
+            func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0).label("tong_chuyen"),
+        )
+        .filter(PhieuChuyenKhoItem.production_order_id.in_(order_ids))
+        .group_by(PhieuChuyenKhoItem.production_order_id)
+        .all()
+    )
+    chuyen_map = {r.production_order_id: float(r.tong_chuyen) for r in chuyen_rows}
+
+    # 4. Active PhieuIn (chưa huỷ / hoàn thành) per LSX
     active_phieus = (
         db.query(PhieuIn)
         .filter(
@@ -384,12 +395,14 @@ def ton_kho_lsx(
                 "trang_thai": p.trang_thai,
             }
 
-    # 4. ProductionOrder + items
+    # 5. ProductionOrder + items
     orders = (
         db.query(ProductionOrder)
         .options(
             joinedload(ProductionOrder.items),
             joinedload(ProductionOrder.sales_order),
+            joinedload(ProductionOrder.phan_xuong),
+            joinedload(ProductionOrder.phap_nhan_sx),
         )
         .filter(ProductionOrder.id.in_(order_ids))
         .all()
@@ -401,7 +414,8 @@ def ton_kho_lsx(
         nhap = nhap_map[order_id]
         tong_nhap = nhap["tong_nhap"]
         tong_xuat = xuat_map.get(order_id, 0.0)
-        ton_kho = round(tong_nhap - tong_xuat, 3)
+        tong_chuyen = chuyen_map.get(order_id, 0.0)
+        ton_kho = round(tong_nhap - tong_xuat - tong_chuyen, 3)
 
         order = order_map.get(order_id)
         if not order:
@@ -416,6 +430,8 @@ def ton_kho_lsx(
             if kh:
                 ten_khach_hang = getattr(kh, "ten_viet_tat", None) or getattr(kh, "ten_kh", None)
 
+        px = getattr(order, "phan_xuong", None)
+        pn = getattr(order, "phap_nhan_sx", None)
         result.append({
             "production_order_id": order_id,
             "so_lenh": order.so_lenh,
@@ -424,9 +440,17 @@ def ton_kho_lsx(
             "tong_nhap": tong_nhap,
             "tong_xuat": tong_xuat,
             "ton_kho": ton_kho,
+            "tong_chuyen_phoi": chuyen_map.get(order_id, 0.0),
             "co_in": co_in,
             "warehouse_id": nhap["warehouse_id"],
+            "chieu_kho": nhap["chieu_kho"],
+            "chieu_cat": nhap["chieu_cat"],
             "phieu_in_hien_tai": active_map.get(order_id),
+            "phan_xuong_id": order.phan_xuong_id,
+            "ten_phan_xuong": px.ten_xuong if px else None,
+            "cong_doan": px.cong_doan if px else None,
+            "phap_nhan_sx_id": order.phap_nhan_sx_id,
+            "ten_phap_nhan_sx": pn.ten_viet_tat or pn.ma_phap_nhan if pn else None,
         })
 
     result.sort(key=lambda x: (-x["ton_kho"], x["so_lenh"]))

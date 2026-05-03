@@ -6,6 +6,7 @@ export interface MayIn {
   sort_order: number
   active: boolean
   capacity: number | null
+  phan_xuong_id: number | null
 }
 
 export interface ShiftCa {
@@ -13,6 +14,7 @@ export interface ShiftCa {
   name: string
   leader: string | null
   active: boolean
+  phan_xuong_id: number | null
 }
 
 export interface ShiftConfigItem {
@@ -44,6 +46,7 @@ export interface MaySauIn {
   ten_may: string
   sort_order: number
   active: boolean
+  phan_xuong_id: number | null
 }
 
 export interface PhieuIn {
@@ -87,6 +90,7 @@ export interface PhieuIn {
   gio_hoan_thanh: string | null
   gio_bat_dau_dinh_hinh: string | null
   gio_hoan_thanh_dinh_hinh: string | null
+  phan_xuong_id: number | null
   created_at: string
 }
 
@@ -144,6 +148,7 @@ export interface MayScan {
   sort_order: number
   active: boolean
   don_gia: number | null
+  phan_xuong_id: number | null
 }
 
 export interface ScanLog {
@@ -235,28 +240,36 @@ export interface KhoRow {
   so_lenh: string
   ten_hang: string
   ten_khach_hang: string | null
+  chieu_kho: number | null
+  chieu_cat: number | null
   tong_nhap: number
   tong_xuat: number
   ton_kho: number
+  tong_chuyen_phoi: number
   co_in: boolean
   warehouse_id: number | null
   phieu_in_hien_tai: { so_phieu: string; trang_thai: string } | null
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
+  cong_doan: string | null
+  phap_nhan_sx_id: number | null
+  ten_phap_nhan_sx: string | null
 }
 
 export const cd2Api = {
   // Máy in
-  listMayIn: () => client.get<MayIn[]>('/cd2/may-in'),
-  createMayIn: (data: { ten_may: string; sort_order?: number }) =>
+  listMayIn: (params?: { phan_xuong_id?: number }) => client.get<MayIn[]>('/cd2/may-in', { params }),
+  createMayIn: (data: { ten_may: string; sort_order?: number; phan_xuong_id?: number }) =>
     client.post<MayIn>('/cd2/may-in', data),
   updateMayIn: (id: number, data: Partial<MayIn>) =>
     client.put<MayIn>(`/cd2/may-in/${id}`, data),
   deleteMayIn: (id: number) => client.delete(`/cd2/may-in/${id}`),
 
   // Kanban
-  getKanban: () => client.get<KanbanData>('/cd2/kanban'),
+  getKanban: (params?: { phan_xuong_id?: number }) => client.get<KanbanData>('/cd2/kanban', { params }),
 
   // Phiếu in
-  listPhieuIn: (params?: { search?: string; trang_thai?: string }) =>
+  listPhieuIn: (params?: { search?: string; trang_thai?: string; phan_xuong_id?: number }) =>
     client.get<PhieuIn[]>('/cd2/phieu-in', { params }),
   getPhieuIn: (id: number) => client.get<PhieuIn>(`/cd2/phieu-in/${id}`),
   createPhieuIn: (data: CreatePhieuInPayload) =>
@@ -281,19 +294,19 @@ export const cd2Api = {
   huyPhieu: (id: number) => client.patch<PhieuIn>(`/cd2/phieu-in/${id}/huy`),
 
   // Máy sau in
-  listMaySauIn: () => client.get<MaySauIn[]>('/cd2/may-sau-in'),
-  createMaySauIn: (data: { ten_may: string; sort_order?: number }) =>
+  listMaySauIn: (params?: { phan_xuong_id?: number }) => client.get<MaySauIn[]>('/cd2/may-sau-in', { params }),
+  createMaySauIn: (data: { ten_may: string; sort_order?: number; phan_xuong_id?: number }) =>
     client.post<MaySauIn>('/cd2/may-sau-in', data),
   updateMaySauIn: (id: number, data: Partial<MaySauIn>) =>
     client.put<MaySauIn>(`/cd2/may-sau-in/${id}`, data),
   deleteMaySauIn: (id: number) => client.delete(`/cd2/may-sau-in/${id}`),
 
   // Sauin kanban
-  getSauInKanban: () => client.get<SauInKanbanData>('/cd2/sauin/kanban'),
+  getSauInKanban: (params?: { phan_xuong_id?: number }) => client.get<SauInKanbanData>('/cd2/sauin/kanban', { params }),
 
   // Máy Scan
-  listMayScan: () => client.get<MayScan[]>('/cd2/may-scan'),
-  createMayScan: (data: { ten_may: string; sort_order?: number; don_gia?: number }) =>
+  listMayScan: (params?: { phan_xuong_id?: number }) => client.get<MayScan[]>('/cd2/may-scan', { params }),
+  createMayScan: (data: { ten_may: string; sort_order?: number; don_gia?: number; phan_xuong_id?: number }) =>
     client.post<MayScan>('/cd2/may-scan', data),
   updateMayScan: (id: number, data: Partial<MayScan>) =>
     client.put<MayScan>(`/cd2/may-scan/${id}`, data),
@@ -302,7 +315,7 @@ export const cd2Api = {
   // Scan
   scanLookup: (soLsx: string) => client.get<ScanLookupResult>(`/cd2/scan/lookup/${encodeURIComponent(soLsx)}`),
   createScanLog: (data: ScanLogCreate) => client.post<ScanLog>('/cd2/scan/log', data),
-  getScanHistory: (params?: { may_scan_id?: number; days?: number; so_lsx?: string }) =>
+  getScanHistory: (params?: { may_scan_id?: number; days?: number; so_lsx?: string; phan_xuong_id?: number }) =>
     client.get<ScanLog[]>('/cd2/scan/history', { params }),
   deleteScanLog: (id: number) => client.delete(`/cd2/scan/log/${id}`),
 
@@ -310,13 +323,13 @@ export const cd2Api = {
   getTonKhoLsx: () => client.get<KhoRow[]>('/phieu-phoi/ton-kho-lsx'),
 
   // Dashboard & History
-  getDashboard: () => client.get<DashboardData>('/cd2/dashboard'),
-  getHistoryPhieuIn: (params?: { days?: number; search?: string; trang_thai?: string }) =>
+  getDashboard: (params?: { phan_xuong_id?: number }) => client.get<DashboardData>('/cd2/dashboard', { params }),
+  getHistoryPhieuIn: (params?: { days?: number; search?: string; trang_thai?: string; phan_xuong_id?: number }) =>
     client.get<PhieuIn[]>('/cd2/history/phieu-in', { params }),
 
   // Shift ca
-  listShiftCa: () => client.get<ShiftCa[]>('/cd2/shift/ca'),
-  createShiftCa: (data: { name: string; leader?: string }) =>
+  listShiftCa: (params?: { phan_xuong_id?: number }) => client.get<ShiftCa[]>('/cd2/shift/ca', { params }),
+  createShiftCa: (data: { name: string; leader?: string; phan_xuong_id?: number }) =>
     client.post<ShiftCa>('/cd2/shift/ca', data),
   updateShiftCa: (id: number, data: Partial<ShiftCa>) =>
     client.put<ShiftCa>(`/cd2/shift/ca/${id}`, data),

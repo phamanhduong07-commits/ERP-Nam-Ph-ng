@@ -91,6 +91,9 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         },
         { key: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link>, roles: SAN_XUAT_FULL },
         { key: '/production/phieu-phoi', label: <Link to="/production/phieu-phoi">Phiếu phôi sóng</Link>, roles: SAN_XUAT_FULL },
+        { key: '/production/phieu-nhap-phoi', label: <Link to="/production/phieu-nhap-phoi">DS nhập phôi sóng</Link>, roles: SAN_XUAT_FULL },
+        { key: '/production/kho-phoi', label: <Link to="/production/kho-phoi">Kho phôi sóng</Link>, roles: SAN_XUAT_FULL },
+        { key: '/production/kho-thanh-pham', label: <Link to="/production/kho-thanh-pham">Kho thành phẩm</Link>, roles: SAN_XUAT_FULL },
         { key: '/master/indirect-costs', label: <Link to="/master/indirect-costs">Chi phí gián tiếp</Link>, roles: ADMIN_GD },
         { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công</Link>, roles: ADMIN_GD },
         {

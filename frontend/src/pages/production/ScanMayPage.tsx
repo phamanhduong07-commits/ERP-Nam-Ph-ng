@@ -12,6 +12,8 @@ import {
 import dayjs from 'dayjs'
 import { cd2Api, MayScan, ScanLog, ScanLookupResult } from '../../api/cd2'
 import MayScanSettingsModal from './MayScanSettingsModal'
+import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
+import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 
 const { Title, Text } = Typography
 
@@ -31,10 +33,11 @@ export default function ScanMayPage() {
   const [showSettings, setShowSettings] = useState(false)
   const lsxRef = useRef<InputRef>(null)
   const slRef = useRef<InputNumberRef>(null)
+  const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
 
   const { data: mayScanList = [], isLoading: loadingMachines } = useQuery({
-    queryKey: ['may-scan'],
-    queryFn: () => cd2Api.listMayScan().then(r => r.data.filter((m: MayScan) => m.active)),
+    queryKey: ['may-scan', phanXuongId],
+    queryFn: () => cd2Api.listMayScan(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data.filter((m: MayScan) => m.active)),
   })
 
   // Auto-select first machine
@@ -200,6 +203,7 @@ export default function ScanMayPage() {
           <Space>
             <BarcodeOutlined style={{ fontSize: 20, color: '#1677ff' }} />
             <Title level={4} style={{ margin: 0 }}>Scan Sản Lượng</Title>
+            <CD2WorkshopSelector value={phanXuongId} onChange={id => { setPhanXuongId(id); setSelectedMachine(null) }} phanXuongList={phanXuongList} />
           </Space>
         </Col>
         <Col>

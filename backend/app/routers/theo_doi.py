@@ -12,6 +12,7 @@ from app.models.sales import SalesOrder, SalesOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoiItem
 from app.models.cd2 import PhieuIn
+from app.models.warehouse_doc import PhieuChuyenKhoItem
 
 router = APIRouter(prefix="/api/theo-doi", tags=["theo-doi"])
 
@@ -32,7 +33,7 @@ STAGE_LABELS = {
 }
 
 
-def _build_row(po, nhap_map, xuat_map, pi_map, plan_set):
+def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None):
     nhap = nhap_map.get(po.id)
     tong_nhap = float(nhap.tong_thuc_te or 0) - float(nhap.tong_loi or 0) if nhap else 0.0
     ton_kho = tong_nhap - xuat_map.get(po.id, 0.0)
@@ -69,6 +70,7 @@ def _build_row(po, nhap_map, xuat_map, pi_map, plan_set):
         "tong_nhap_phoi": tong_nhap,
         "ngay_nhap_cuoi": str(nhap.ngay_cuoi) if nhap and nhap.ngay_cuoi else None,
         "ton_kho_phoi": ton_kho,
+        "tong_chuyen_phoi": float((chuyen_map or {}).get(po.id) or 0),
         "phieu_in_id": pi.id if pi else None,
         "so_phieu_in": pi.so_phieu if pi else None,
         "trang_thai_in": pi.trang_thai if pi else None,
@@ -106,6 +108,7 @@ def _build_so_row(so: SalesOrder) -> dict:
         "tong_nhap_phoi": 0,
         "ngay_nhap_cuoi": None,
         "ton_kho_phoi": 0,
+        "tong_chuyen_phoi": 0,
         "phieu_in_id": None,
         "so_phieu_in": None,
         "trang_thai_in": None,
@@ -159,6 +162,7 @@ def _query_rows(
     xuat_map: dict = {}
     pi_map: dict = {}
     plan_set: set = set()
+    chuyen_map: dict = {}
 
     if po_ids:
         nhap_agg = (
@@ -210,7 +214,18 @@ def _query_rows(
         )
         plan_set = {r.production_order_id for r in plan_rows}
 
-    result = [_build_row(o, nhap_map, xuat_map, pi_map, plan_set) for o in orders]
+        chuyen_agg = (
+            db.query(
+                PhieuChuyenKhoItem.production_order_id,
+                func.sum(PhieuChuyenKhoItem.so_luong).label("tong_chuyen"),
+            )
+            .filter(PhieuChuyenKhoItem.production_order_id.in_(po_ids))
+            .group_by(PhieuChuyenKhoItem.production_order_id)
+            .all()
+        )
+        chuyen_map = {r.production_order_id: float(r.tong_chuyen or 0) for r in chuyen_agg}
+
+    result = [_build_row(o, nhap_map, xuat_map, pi_map, plan_set, chuyen_map) for o in orders]
 
     # SOs đã duyệt, chưa có lệnh SX — chỉ hiển thị khi không filter theo xưởng/NV
     if not phan_xuong_id and not nv_theo_doi_id and not include_hoan_thanh:

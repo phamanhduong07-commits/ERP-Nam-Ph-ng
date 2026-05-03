@@ -9,6 +9,8 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { cd2Api, ShiftCa, ShiftConfigItem } from '../../api/cd2'
+import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
+import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 
 const { Title, Text } = Typography
 
@@ -18,10 +20,11 @@ function ShiftCaTab() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<ShiftCa | null | 'new'>(null)
   const [form] = Form.useForm()
+  const { phanXuongId } = useCD2Workshop()
 
   const { data: cas = [], isLoading } = useQuery({
-    queryKey: ['cd2-shift-ca'],
-    queryFn: () => cd2Api.listShiftCa().then(r => r.data),
+    queryKey: ['cd2-shift-ca', phanXuongId],
+    queryFn: () => cd2Api.listShiftCa(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
   })
 
   const createMut = useMutation({
@@ -125,15 +128,16 @@ function ShiftCaTab() {
 function ShiftConfigTab() {
   const qc = useQueryClient()
   const [form] = Form.useForm()
+  const { phanXuongId } = useCD2Workshop()
   const [filterMayIn, setFilterMayIn] = useState<number | null>(null)
 
   const { data: cas = [] } = useQuery({
-    queryKey: ['cd2-shift-ca'],
-    queryFn: () => cd2Api.listShiftCa().then(r => r.data),
+    queryKey: ['cd2-shift-ca', phanXuongId],
+    queryFn: () => cd2Api.listShiftCa(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
   })
   const { data: mayIns = [] } = useQuery({
-    queryKey: ['cd2-may-in'],
-    queryFn: () => cd2Api.listMayIn().then(r => r.data),
+    queryKey: ['cd2-may-in', phanXuongId],
+    queryFn: () => cd2Api.listMayIn(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
   })
   const { data: configs = [], isLoading } = useQuery({
     queryKey: ['cd2-shift-config', filterMayIn],
@@ -283,6 +287,8 @@ function ShiftConfigTab() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ShiftPage() {
+  const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
+
   const tabItems = [
     {
       key: 'ca',
@@ -303,6 +309,7 @@ export default function ShiftPage() {
           <Space>
             <ClockCircleOutlined style={{ fontSize: 20, color: '#1677ff' }} />
             <Title level={4} style={{ margin: 0 }}>Quản lý ca</Title>
+            <CD2WorkshopSelector value={phanXuongId} onChange={setPhanXuongId} phanXuongList={phanXuongList} />
           </Space>
         </Col>
       </Row>

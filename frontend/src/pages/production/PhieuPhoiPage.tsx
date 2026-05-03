@@ -1,14 +1,14 @@
-import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
-  message, Modal, Pagination, Popconfirm, Row, Select, Space, Spin, Table, Tag, Tabs, Typography, Tooltip,
+  Menu, message, Modal, Pagination, Popconfirm, Row, Select, Space, Spin,
+  Table, Tag, Tabs, Typography, Tooltip,
 } from 'antd'
 import {
   PlusOutlined, PrinterOutlined, SearchOutlined, DeleteOutlined,
   FileExcelOutlined, FilePdfOutlined,
-  PlayCircleOutlined, StopOutlined, ClockCircleOutlined, SendOutlined,
+  PlayCircleOutlined, StopOutlined, ClockCircleOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -24,9 +24,6 @@ import type {
   ProductionOrder,
   PhieuNhapPhoiSong,
 } from '../../api/productionOrders'
-import { cd2Api } from '../../api/cd2'
-import type { KhoRow } from '../../api/cd2'
-import { TRANG_THAI_LABELS as CD2_LABELS } from '../../api/cd2'
 import { theoDoiApi, STAGE_COLORS } from '../../api/theoDoi'
 import type { DonHangTheoDoiRow, PhanXuongItem } from '../../api/theoDoi'
 import { yeuCauApi, deliveriesApi, YEU_CAU_TRANG_THAI_LABELS, YEU_CAU_TRANG_THAI_COLORS, CONG_NO_LABELS, CONG_NO_COLORS } from '../../api/deliveries'
@@ -46,6 +43,8 @@ const { RangePicker } = DatePicker
 
 const fmtN = (v: number | null | undefined) =>
   v != null ? new Intl.NumberFormat('vi-VN').format(v) : '—'
+const fmtCurrency = (v: number | null | undefined) =>
+  v != null ? new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(v) + ' đ' : '—'
 const fmtDate = (v: string | null | undefined) =>
   v ? dayjs(v).format('DD/MM/YYYY') : '—'
 const calcDuration = (bd: string | null, kt: string | null): string => {
@@ -1060,178 +1059,6 @@ function TabXuat() {
   )
 }
 
-// ── Tab kho phôi sóng ─────────────────────────────────────────────────────────
-
-function TabKho() {
-  const qc = useQueryClient()
-  const navigate = useNavigate()
-  const [pushingKey, setPushingKey] = useState<string | null>(null)  // `${orderId}-in` | `${orderId}-dinh_hinh`
-
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['ton-kho-lsx'],
-    queryFn: () => cd2Api.getTonKhoLsx().then(r => r.data),
-    refetchOnWindowFocus: false,
-  })
-
-  const handleDay = async (row: KhoRow, target: 'in' | 'sau_in') => {
-    const key = `${row.production_order_id}-${target}`
-    setPushingKey(key)
-    try {
-      await cd2Api.createFromLenhSx(row.production_order_id, target)
-      message.success(`Đã đẩy ${row.so_lenh} sang ${target === 'in' ? 'Chờ in' : 'Chờ định hình'}`)
-      qc.invalidateQueries({ queryKey: ['ton-kho-lsx'] })
-      navigate('/production/cd2')
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi đẩy sang CD2')
-    } finally {
-      setPushingKey(null)
-    }
-  }
-
-  const columns: ColumnsType<KhoRow> = [
-    {
-      title: 'Lệnh SX',
-      dataIndex: 'so_lenh',
-      width: 130,
-      render: (v: string) => <Text code style={{ fontSize: 12 }}>{v}</Text>,
-    },
-    {
-      title: 'Tên hàng',
-      dataIndex: 'ten_hang',
-      ellipsis: true,
-    },
-    {
-      title: 'Khách hàng',
-      dataIndex: 'ten_khach_hang',
-      width: 130,
-      render: (v: string | null) => v ?? <Text type="secondary">—</Text>,
-    },
-    {
-      title: 'Loại',
-      dataIndex: 'co_in',
-      width: 95,
-      align: 'center' as const,
-      render: (v: boolean) => v
-        ? <Tag color="blue" style={{ fontSize: 11 }}>Có in</Tag>
-        : <Tag color="purple" style={{ fontSize: 11 }}>Không in</Tag>,
-    },
-    {
-      title: 'Tổng nhập',
-      dataIndex: 'tong_nhap',
-      width: 100,
-      align: 'right' as const,
-      render: (v: number) => fmtN(v),
-    },
-    {
-      title: 'Đã xuất',
-      dataIndex: 'tong_xuat',
-      width: 90,
-      align: 'right' as const,
-      render: (v: number) => v > 0 ? fmtN(v) : <Text type="secondary">—</Text>,
-    },
-    {
-      title: 'Tồn kho',
-      dataIndex: 'ton_kho',
-      width: 95,
-      align: 'right' as const,
-      render: (v: number) => (
-        <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322' }}>
-          {fmtN(v)}
-        </Text>
-      ),
-    },
-    {
-      title: 'Phiếu in hiện tại',
-      dataIndex: 'phieu_in_hien_tai',
-      width: 160,
-      render: (v: KhoRow['phieu_in_hien_tai']) => v
-        ? (
-          <Space direction="vertical" size={0}>
-            <Text code style={{ fontSize: 11 }}>{v.so_phieu}</Text>
-            <Tag color="processing" style={{ fontSize: 10, margin: 0 }}>
-              {CD2_LABELS[v.trang_thai] ?? v.trang_thai}
-            </Tag>
-          </Space>
-        )
-        : <Text type="secondary" style={{ fontSize: 11 }}>Chưa có</Text>,
-    },
-    {
-      title: 'Thao tác',
-      width: 220,
-      render: (_, row: KhoRow) => {
-        if (row.phieu_in_hien_tai) {
-          return <Tag color="cyan" style={{ fontSize: 11 }}>Đã đẩy sang CD2</Tag>
-        }
-        if (row.ton_kho <= 0) {
-          return <Text type="secondary" style={{ fontSize: 11 }}>Hết tồn kho</Text>
-        }
-        return (
-          <Space size={4}>
-            <Popconfirm
-              title={`Đẩy ${row.so_lenh} → Chờ in?`}
-              description={`${fmtN(row.ton_kho)} phôi sẽ được chuyển sang in`}
-              onConfirm={() => handleDay(row, 'in')}
-              okText="Đẩy"
-              cancelText="Huỷ"
-            >
-              <Button
-                size="small"
-                type={row.co_in ? 'primary' : 'default'}
-                icon={<SendOutlined />}
-                loading={pushingKey === `${row.production_order_id}-in`}
-              >
-                Chờ in
-              </Button>
-            </Popconfirm>
-            <Popconfirm
-              title={`Đẩy ${row.so_lenh} → Chờ định hình?`}
-              description={`${fmtN(row.ton_kho)} phôi sẽ bỏ qua in, sang định hình`}
-              onConfirm={() => handleDay(row, 'sau_in')}
-              okText="Đẩy"
-              cancelText="Huỷ"
-            >
-              <Button
-                size="small"
-                type={!row.co_in ? 'primary' : 'default'}
-                loading={pushingKey === `${row.production_order_id}-sau_in`}
-                style={!row.co_in ? { background: '#722ed1', borderColor: '#722ed1' } : {}}
-              >
-                Định hình
-              </Button>
-            </Popconfirm>
-          </Space>
-        )
-      },
-    },
-  ]
-
-  return (
-    <Space direction="vertical" style={{ width: '100%' }} size={12}>
-      <Row justify="space-between" align="middle">
-        <Col>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Tồn kho phôi sóng theo LSX — nhấn "Đẩy sang In" hoặc "Chờ định hình" để tạo phiếu in CD2
-          </Text>
-        </Col>
-        <Col>
-          <Button size="small" onClick={() => refetch()}>Làm mới</Button>
-        </Col>
-      </Row>
-
-      <Table<KhoRow>
-        rowKey="production_order_id"
-        size="small"
-        loading={isLoading}
-        dataSource={data ?? []}
-        columns={columns}
-        pagination={{ pageSize: 50, showTotal: (t) => `${t} lệnh SX`, showSizeChanger: false }}
-        scroll={{ x: 900 }}
-        rowClassName={(row) => row.ton_kho <= 0 ? 'ant-table-row-disabled' : ''}
-      />
-    </Space>
-  )
-}
-
 // ── Tab Theo dõi đơn hàng ────────────────────────────────────────────────────
 
 function TabTheoDoi() {
@@ -1239,6 +1066,7 @@ function TabTheoDoi() {
   const [nvTheodoiId, setNvTheodoiId] = useState<number | undefined>()
   const [includeHoanThanh, setIncludeHoanThanh] = useState(false)
   const [search, setSearch] = useState('')
+  const [filterKhach, setFilterKhach] = useState<string | undefined>()
   const [dateRange, setDateRange] = useState<[string | undefined, string | undefined]>([undefined, undefined])
 
   const { data: phanXuongs = [] } = useQuery<PhanXuongItem[]>({
@@ -1263,16 +1091,27 @@ function TabTheoDoi() {
       }).then(r => r.data),
   })
 
+  const khachOptions = useMemo(() => {
+    const seen = new Set<string>()
+    return rows
+      .map(r => r.ten_khach_hang)
+      .filter((v): v is string => !!v && !seen.has(v) && !!seen.add(v))
+      .sort()
+      .map(v => ({ label: v, value: v }))
+  }, [rows])
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return rows
+    let data = rows
+    if (filterKhach) data = data.filter(r => r.ten_khach_hang === filterKhach)
+    if (!search.trim()) return data
     const s = search.toLowerCase()
-    return rows.filter(r =>
+    return data.filter(r =>
       (r.so_lenh ?? '').toLowerCase().includes(s) ||
       (r.ten_khach_hang ?? '').toLowerCase().includes(s) ||
       (r.so_don ?? '').toLowerCase().includes(s) ||
       (r.ten_hang ?? '').toLowerCase().includes(s)
     )
-  }, [rows, search])
+  }, [rows, search, filterKhach])
 
   const today = dayjs().format('YYYY-MM-DD')
 
@@ -1303,12 +1142,15 @@ function TabTheoDoi() {
       render: v => v ?? <Text type="secondary">—</Text>,
     },
     {
-      title: 'Nhập phôi', width: 130,
+      title: 'Số thùng', dataIndex: 'so_luong_ke_hoach', width: 90, align: 'right' as const,
+      render: v => <Text strong style={{ color: '#1677ff' }}>{fmtN(v)}</Text>,
+    },
+    {
+      title: 'Nhập phôi (tấm)', width: 120,
       render: (_, r) =>
         r.tong_nhap_phoi > 0 ? (
           <div>
-            <Text strong>{fmtN(r.tong_nhap_phoi)}</Text>
-            <Text type="secondary"> / {fmtN(r.so_luong_ke_hoach)}</Text>
+            <Text strong style={{ color: '#389e0d' }}>{fmtN(r.tong_nhap_phoi)} tấm</Text>
             {r.ngay_nhap_cuoi && <div><Text type="secondary" style={{ fontSize: 11 }}>{fmtDate(r.ngay_nhap_cuoi)}</Text></div>}
           </div>
         ) : <Text type="secondary">—</Text>,
@@ -1319,6 +1161,12 @@ function TabTheoDoi() {
         v > 0 ? <Tag color="lime">{fmtN(v)}</Tag>
         : v < 0 ? <Tag color="red">{fmtN(v)}</Tag>
         : <Text type="secondary">0</Text>,
+    },
+    {
+      title: 'Chuyển phôi', dataIndex: 'tong_chuyen_phoi', width: 100,
+      render: v =>
+        v > 0 ? <Tag color="purple">{fmtN(v)}</Tag>
+        : <Text type="secondary">—</Text>,
     },
     {
       title: 'Giai đoạn', width: 160,
@@ -1351,6 +1199,18 @@ function TabTheoDoi() {
             style={{ width: 160 }}
             options={phanXuongs.map(p => ({ label: p.ten_xuong, value: p.id }))}
             onChange={v => setPhanXuongId(v)}
+          />
+        </Col>
+        <Col>
+          <Select
+            placeholder="Tất cả khách hàng"
+            allowClear
+            style={{ width: 180 }}
+            showSearch
+            optionFilterProp="label"
+            options={khachOptions}
+            value={filterKhach}
+            onChange={v => setFilterKhach(v)}
           />
         </Col>
         <Col>
@@ -1411,7 +1271,7 @@ function TabTheoDoi() {
         dataSource={filtered}
         columns={columns}
         pagination={{ pageSize: 50, showSizeChanger: false }}
-        scroll={{ x: 1150 }}
+        scroll={{ x: 1340 }}
         rowClassName={r => r.ngay_giao_hang && r.ngay_giao_hang < today && r.stage !== 'hoan_thanh' ? 'ant-table-row-danger' : ''}
       />
     </Space>
@@ -2175,7 +2035,6 @@ export default function PhieuPhoiPage() {
           defaultActiveKey="nhap"
           items={[
             { key: 'nhap', label: 'Phiếu nhập phôi', children: <TabNhap /> },
-            { key: 'kho', label: 'Kho phôi sóng', children: <TabKho /> },
             { key: 'xuat', label: 'Phiếu xuất phôi', children: <TabXuat /> },
             { key: 'theo-doi', label: 'Theo dõi đơn hàng', children: <TabTheoDoi /> },
             { key: 'giao-hang', label: 'Giao hàng', children: <TabGiaoHang /> },

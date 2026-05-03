@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.master import PhapNhan
+from app.models.master import PhapNhan, PhanXuong
 
 router = APIRouter(prefix="/api/phap-nhan", tags=["phap-nhan"])
 
@@ -20,6 +20,7 @@ class PhapNhanCreate(BaseModel):
     ngan_hang: Optional[str] = None
     ky_hieu_hd: Optional[str] = None
     trang_thai: bool = True
+    phoi_phan_xuong_id: Optional[int] = None
 
 
 def _to_dict(p: PhapNhan) -> dict:
@@ -36,6 +37,8 @@ def _to_dict(p: PhapNhan) -> dict:
         "ky_hieu_hd": p.ky_hieu_hd,
         "trang_thai": p.trang_thai,
         "created_at": p.created_at.isoformat() if p.created_at else None,
+        "phoi_phan_xuong_id": p.phoi_phan_xuong_id,
+        "ten_phoi_phan_xuong": p.phoi_phan_xuong.ten_xuong if p.phoi_phan_xuong else None,
     }
 
 

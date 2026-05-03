@@ -13,6 +13,7 @@ import { productsApi } from '../../api/products'
 import { productionOrdersApi } from '../../api/productionOrders'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
+import { calcBoxDimensions } from '../../api/quotes'
 import type { Product } from '../../api/products'
 
 const { Title, Text } = Typography
@@ -27,6 +28,24 @@ interface ProdLine {
   dvt: string
   ngay_giao_hang: string | null
   ghi_chu: string | null
+  // Thông số kỹ thuật để tính số tấm
+  loai_thung: string | null
+  dai_spec: number | null
+  rong_spec: number | null
+  cao_spec: number | null
+  so_lop_spec: number | null
+}
+
+function calcSoTam(line: ProdLine): number | null {
+  const loai = line.loai_thung
+  const dai = line.dai_spec ?? line.product?.dai
+  const rong = line.rong_spec ?? line.product?.rong
+  const cao = line.cao_spec ?? line.product?.cao
+  const so_lop = line.so_lop_spec ?? line.product?.so_lop ?? 3
+  if (!loai || !dai || !rong || !cao) return null
+  const dims = calcBoxDimensions(loai, dai, rong, cao, so_lop)
+  if (!dims || dims.so_dao < 1) return null
+  return Math.ceil(line.so_luong_ke_hoach / dims.so_dao)
 }
 
 export default function ProductionOrderCreate() {
@@ -85,6 +104,11 @@ export default function ProductionOrderCreate() {
       dvt: item.dvt,
       ngay_giao_hang: selectedSO.ngay_giao_hang,
       ghi_chu: item.ghi_chu_san_pham,
+      loai_thung: item.loai_thung,
+      dai_spec: item.dai,
+      rong_spec: item.rong,
+      cao_spec: item.cao,
+      so_lop_spec: item.so_lop,
     }))
     setLines(newLines)
     // Tự điền pháp nhân + xưởng SX từ đơn hàng nếu chưa chọn
@@ -114,6 +138,11 @@ export default function ProductionOrderCreate() {
         dvt: product.dvt,
         ngay_giao_hang: null,
         ghi_chu: null,
+        loai_thung: null,
+        dai_spec: null,
+        rong_spec: null,
+        cao_spec: null,
+        so_lop_spec: null,
       },
     ])
   }
@@ -125,6 +154,7 @@ export default function ProductionOrderCreate() {
   }
 
   const totalKH = lines.reduce((s, l) => s + l.so_luong_ke_hoach, 0)
+  const totalTam = lines.reduce((s, l) => s + (calcSoTam(l) ?? 0), 0)
 
   const handleSubmit = async () => {
     try {
@@ -187,7 +217,7 @@ export default function ProductionOrderCreate() {
       ),
     },
     {
-      title: 'SL kế hoạch',
+      title: 'Số thùng',
       width: 130,
       render: (_, r) => (
         <InputNumber
@@ -197,6 +227,16 @@ export default function ProductionOrderCreate() {
           style={{ width: 110 }}
         />
       ),
+    },
+    {
+      title: 'Số tấm',
+      width: 90,
+      render: (_, r) => {
+        const tam = calcSoTam(r)
+        return tam != null
+          ? <Text strong style={{ color: '#722ed1' }}>{tam.toLocaleString('vi-VN')}</Text>
+          : <Text type="secondary">—</Text>
+      },
     },
     {
       title: 'ĐVT',
@@ -348,7 +388,7 @@ export default function ProductionOrderCreate() {
           </Card>
 
           <Card
-            title={`Chi tiết lệnh SX (${lines.length} dòng · Tổng SL: ${new Intl.NumberFormat('vi-VN').format(totalKH)})`}
+            title={`Chi tiết lệnh SX (${lines.length} dòng · Tổng thùng: ${new Intl.NumberFormat('vi-VN').format(totalKH)}${totalTam > 0 ? ` · Tổng tấm: ${new Intl.NumberFormat('vi-VN').format(totalTam)}` : ''})`}
           >
             <Table
               columns={columns}

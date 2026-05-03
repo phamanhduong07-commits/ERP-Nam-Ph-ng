@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { productionOrdersApi } from '../../api/productionOrders'
 import type { ProductionOrder, PhieuNhapPhoiSong, ProductionOrderItem } from '../../api/productionOrders'
 import { warehousesApi } from '../../api/warehouses'
+import { phapNhanApi } from '../../api/phap_nhan'
 import { fmtN } from '../../utils/exportUtils'
 import { calcBoxDimensions } from '../../api/quotes'
 
@@ -41,6 +42,18 @@ function getChieuCat(oi: ProductionOrderItem): number | null {
     oi.so_lop ?? (oi.product?.so_lop ?? 3),
   )
   return dims?.dai_tt ?? null
+}
+
+// Tính số tấm từ item lệnh SX (ceil(so_thung / so_dao))
+function calcSoTamFromOI(oi: ProductionOrderItem, soThung: number): number | null {
+  if (!oi.loai_thung || !oi.dai || !oi.rong || !oi.cao) return null
+  const dims = calcBoxDimensions(
+    oi.loai_thung,
+    Number(oi.dai), Number(oi.rong), Number(oi.cao),
+    oi.so_lop ?? (oi.product?.so_lop ?? 3),
+  )
+  if (!dims || dims.so_dao < 1) return null
+  return Math.ceil(soThung / dims.so_dao)
 }
 
 const { Text, Title } = Typography
@@ -90,21 +103,22 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
     queryFn: () => warehousesApi.list().then(r => r.data),
     staleTime: 60_000,
   })
-  const { data: phanXuongList = [] } = useQuery({
-    queryKey: ['phan-xuong'],
-    queryFn: () => import('../../api/warehouse').then(m => m.warehouseApi.listPhanXuong().then(r => r.data)),
+  const { data: phapNhanList = [] } = useQuery({
+    queryKey: ['phap-nhan'],
+    queryFn: () => phapNhanApi.list().then(r => r.data),
     staleTime: 300_000,
   })
 
-  // Với xưởng CD2: dùng kho PHOI của xưởng nguồn (phoi_tu_phan_xuong_id); fallback về xưởng hiện tại
-  const orderPx = order.phan_xuong_id ? phanXuongList.find(p => p.id === order.phan_xuong_id) : null
-  const phoiSourceId = orderPx?.cong_doan === 'cd2' && orderPx?.phoi_tu_phan_xuong_id
-    ? orderPx.phoi_tu_phan_xuong_id
-    : (order.phan_xuong_id ?? null)
+  // Pháp nhân → phoi_phan_xuong_id → kho PHOI của xưởng CD1+CD2 đó
+  const orderPhapNhan = order.phap_nhan_sx_id
+    ? phapNhanList.find(p => p.id === order.phap_nhan_sx_id)
+    : null
+  const phoiSourcePxId: number | null =
+    orderPhapNhan?.phoi_phan_xuong_id ?? order.phan_xuong_id ?? null
 
   const khoPhoi = (warehouses ?? []).filter(
     w => w.loai_kho === 'PHOI' && w.trang_thai &&
-      (phoiSourceId ? w.phan_xuong_id === phoiSourceId : true)
+      (phoiSourcePxId ? w.phan_xuong_id === phoiSourcePxId : true)
   )
 
   useEffect(() => {
@@ -114,15 +128,18 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
   }, [khoPhoi.length, khoPhoi[0]?.id, warehouseId])
 
   const [rows, setRows] = useState<RowState[]>(() =>
-    order.items.map(it => ({
-      poi_id: it.id,
-      ten_hang: it.ten_hang,
-      so_luong_ke_hoach: Number(it.so_luong_ke_hoach),
-      so_luong_thuc_te: null,
-      so_luong_loi: null,
-      so_tam: null,
-      ghi_chu: null,
-    }))
+    order.items.map(it => {
+      const soThung = Number(it.so_luong_ke_hoach)
+      return {
+        poi_id: it.id,
+        ten_hang: it.ten_hang,
+        so_luong_ke_hoach: soThung,
+        so_luong_thuc_te: null,
+        so_luong_loi: null,
+        so_tam: calcSoTamFromOI(it, soThung),
+        ghi_chu: null,
+      }
+    })
   )
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<PhieuNhapPhoiSong | null>(null)
@@ -266,7 +283,7 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
             <th width="36">Lớp</th>
             <th width="60">Chiều khổ</th>
             <th width="60">Chiều cắt</th>
-            <th width="70">SL kế hoạch</th>
+            <th width="70">Số thùng</th>
             <th width="70">SL thực tế</th>
             <th width="65">Phôi lỗi</th>
             <th width="70">Nhập kho</th>
@@ -318,39 +335,59 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
       },
     },
     {
-      title: 'SL kế hoạch',
+      title: 'Số thùng',
       dataIndex: 'so_luong_ke_hoach',
-      width: 100,
+      width: 90,
       align: 'right' as const,
-      render: (v: number) => <Text strong>{new Intl.NumberFormat('vi-VN').format(v)}</Text>,
+      render: (v: number) => (
+        <Text strong style={{ color: '#1677ff' }}>
+          {new Intl.NumberFormat('vi-VN').format(v)}
+        </Text>
+      ),
     },
     {
       title: 'SL thực tế',
       width: 110,
-      render: (_: unknown, r: RowState) => (
-        <InputNumber
-          size="small"
-          style={{ width: 100 }}
-          min={0}
-          value={r.so_luong_thuc_te ?? undefined}
-          placeholder="Thực tế"
-          onChange={v => updateRow(r.poi_id, { so_luong_thuc_te: v ?? null })}
-        />
-      ),
+      render: (_: unknown, r: RowState) => {
+        const oi = order.items.find(i => i.id === r.poi_id)
+        return (
+          <InputNumber
+            size="small"
+            style={{ width: 100 }}
+            min={0}
+            value={r.so_luong_thuc_te ?? undefined}
+            placeholder="Thực tế"
+            onChange={v => {
+              const thucTe = v ?? null
+              const net = (thucTe ?? 0) - (r.so_luong_loi ?? 0)
+              const soTam = oi && net > 0 ? calcSoTamFromOI(oi, net) : null
+              updateRow(r.poi_id, { so_luong_thuc_te: thucTe, ...(soTam != null ? { so_tam: soTam } : {}) })
+            }}
+          />
+        )
+      },
     },
     {
       title: 'Phôi lỗi',
       width: 100,
-      render: (_: unknown, r: RowState) => (
-        <InputNumber
-          size="small"
-          style={{ width: 88 }}
-          min={0}
-          value={r.so_luong_loi ?? undefined}
-          placeholder="Hư hao"
-          onChange={v => updateRow(r.poi_id, { so_luong_loi: v ?? null })}
-        />
-      ),
+      render: (_: unknown, r: RowState) => {
+        const oi = order.items.find(i => i.id === r.poi_id)
+        return (
+          <InputNumber
+            size="small"
+            style={{ width: 88 }}
+            min={0}
+            value={r.so_luong_loi ?? undefined}
+            placeholder="Hư hao"
+            onChange={v => {
+              const loi = v ?? null
+              const net = (r.so_luong_thuc_te ?? 0) - (loi ?? 0)
+              const soTam = oi && net > 0 ? calcSoTamFromOI(oi, net) : null
+              updateRow(r.poi_id, { so_luong_loi: loi, ...(soTam != null ? { so_tam: soTam } : {}) })
+            }}
+          />
+        )
+      },
     },
     {
       title: 'Chiều khổ',
@@ -379,29 +416,46 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
     {
       title: 'Nhập kho',
       width: 90,
-      align: 'right' as const,
+      align: 'center' as const,
       render: (_: unknown, r: RowState) => {
+        if (r.so_luong_thuc_te == null) return <Text type="secondary">—</Text>
         const net = (r.so_luong_thuc_te ?? 0) - (r.so_luong_loi ?? 0)
-        return r.so_luong_thuc_te != null
-          ? <Text strong style={{ color: net < 0 ? '#cf1322' : '#389e0d' }}>
-              {new Intl.NumberFormat('vi-VN').format(net)}
+        const oi = order.items.find(i => i.id === r.poi_id)
+        const tamNhap = oi && net > 0 ? calcSoTamFromOI(oi, net) : null
+        return (
+          <Space direction="vertical" size={0} align="center">
+            <Text strong style={{ color: tamNhap != null ? '#389e0d' : '#cf1322' }}>
+              {tamNhap != null ? `${tamNhap} tấm` : '—'}
             </Text>
-          : <Text type="secondary">—</Text>
+            <Text type="secondary" style={{ fontSize: 10 }}>{net} thùng</Text>
+          </Space>
+        )
       },
     },
     {
       title: 'Số tấm',
-      width: 85,
-      render: (_: unknown, r: RowState) => (
-        <InputNumber
-          size="small"
-          style={{ width: 75 }}
-          min={0}
-          value={r.so_tam ?? undefined}
-          placeholder="Tấm"
-          onChange={v => updateRow(r.poi_id, { so_tam: v ?? null })}
-        />
-      ),
+      width: 100,
+      render: (_: unknown, r: RowState) => {
+        const oi = order.items.find(i => i.id === r.poi_id)
+        const calc = oi ? calcSoTamFromOI(oi, r.so_luong_ke_hoach) : null
+        return (
+          <Space direction="vertical" size={0} style={{ width: '100%' }}>
+            <InputNumber
+              size="small"
+              style={{ width: 88 }}
+              min={0}
+              value={r.so_tam ?? undefined}
+              placeholder="Tấm"
+              onChange={v => updateRow(r.poi_id, { so_tam: v ?? null })}
+            />
+            {calc != null && (
+              <Text type="secondary" style={{ fontSize: 10 }}>
+                KH: {calc} tấm
+              </Text>
+            )}
+          </Space>
+        )
+      },
     },
     {
       title: 'Ghi chú',
@@ -530,8 +584,8 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
             <Form.Item
               label="Nhập vào kho"
               style={{ marginBottom: 0 }}
-              extra={orderPx?.cong_doan === 'cd2' && phoiSourceId !== order.phan_xuong_id
-                ? <span style={{ color: '#722ed1', fontSize: 11 }}>Kho phôi của {orderPx.ten_phoi_tu_phan_xuong ?? 'xưởng nguồn'}</span>
+              extra={orderPhapNhan?.phoi_phan_xuong_id && orderPhapNhan.phoi_phan_xuong_id !== order.phan_xuong_id
+                ? <span style={{ color: '#722ed1', fontSize: 11 }}>Kho phôi của {orderPhapNhan.ten_phoi_phan_xuong ?? 'xưởng nguồn'} ({orderPhapNhan.ma_phap_nhan})</span>
                 : undefined}
             >
               <Select

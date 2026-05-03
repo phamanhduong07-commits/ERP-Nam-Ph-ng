@@ -7,6 +7,8 @@ import {
 import { HistoryOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs, { Dayjs } from 'dayjs'
 import { cd2Api, PhieuIn, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/cd2'
+import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
+import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -19,18 +21,20 @@ export default function PhieuInHistoryPage() {
   const [search, setSearch] = useState('')
   const [trangThai, setTrangThai] = useState<string | null>(null)
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
 
   const days = dateRange
     ? Math.max(1, dateRange[1].diff(dateRange[0], 'day') + 1)
     : 30
 
   const { data: rows = [], isLoading, refetch } = useQuery({
-    queryKey: ['cd2-history-phieu-in', days, search, trangThai],
+    queryKey: ['cd2-history-phieu-in', days, search, trangThai, phanXuongId],
     queryFn: () =>
       cd2Api.getHistoryPhieuIn({
         days,
         search: search.trim() || undefined,
         trang_thai: trangThai ?? undefined,
+        phan_xuong_id: phanXuongId,
       }).then(r => r.data),
   })
 
@@ -134,6 +138,7 @@ export default function PhieuInHistoryPage() {
           <Space>
             <HistoryOutlined style={{ fontSize: 20, color: '#1677ff' }} />
             <Title level={4} style={{ margin: 0 }}>Lịch sử Phiếu In</Title>
+            <CD2WorkshopSelector value={phanXuongId} onChange={setPhanXuongId} phanXuongList={phanXuongList} />
           </Space>
         </Col>
         <Col>

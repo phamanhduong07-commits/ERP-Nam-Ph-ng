@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import Product, PhanXuong
+from app.models.master import Product, PhanXuong, Warehouse
 from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
 from app.services.inventory_service import (
     get_workshop_warehouse as _get_workshop_warehouse,
@@ -628,10 +628,14 @@ def create_phieu_nhap_phoi_song(
     if not order:
         raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
 
-    # Auto-resolve kho phôi nguồn: CD2 dùng kho của xưởng CD1+CD2 cấu hình sẵn
+    # Auto-resolve kho phôi nguồn theo pháp nhân → xưởng CD1+CD2 cấu hình sẵn
     warehouse_id = data.warehouse_id
-    if not warehouse_id and order.phan_xuong_id:
-        src_wh = _get_phoi_source_warehouse(db, order.phan_xuong_id)
+    if not warehouse_id:
+        src_wh = _get_phoi_source_warehouse(
+            db,
+            phan_xuong_id=order.phan_xuong_id,
+            phap_nhan_id=order.phap_nhan_sx_id,
+        )
         warehouse_id = src_wh.id if src_wh else None
 
     so_phieu = _generate_so_phieu(db)
@@ -670,28 +674,77 @@ def create_phieu_nhap_phoi_song(
     db.commit()
     db.refresh(phieu)
 
-    # Cập nhật tồn kho phôi nếu có warehouse_id
-    if data.warehouse_id:
+    # Cập nhật tồn kho phôi vào kho đã resolve
+    if warehouse_id:
         from app.services.inventory_service import get_or_create_balance, nhap_balance, log_tx
         items = db.query(PhieuNhapPhoiSongItem).filter(
             PhieuNhapPhoiSongItem.phieu_id == phieu.id
         ).all()
         for it in items:
-            sl_nhap = Decimal(str(it.so_luong_thuc_te or 0)) - Decimal(str(it.so_luong_loi or 0))
+            sl_nhap = Decimal(str(it.so_tam or 0))
             if sl_nhap <= 0:
                 continue
-            if it.chieu_kho and it.chieu_cat:
-                ten_hang = f"{int(it.chieu_kho)}x{int(it.chieu_cat)}"
-            else:
-                poi = db.get(ProductionOrderItem, it.production_order_item_id)
-                ten_hang = (poi.ten_hang if poi else None) or "Phôi sóng"
-            balance = get_or_create_balance(db, data.warehouse_id, ten_hang=ten_hang, don_vi="Tấm")
-            nhap_balance(balance, sl_nhap, Decimal("0"))
-            log_tx(db, data.warehouse_id, "NHAP_PHOI", sl_nhap, Decimal("0"),
+            poi = db.get(ProductionOrderItem, it.production_order_item_id)
+            ten_hang = (poi.ten_hang if poi else None) or "Phôi sóng"
+            # Tính đơn giá/tấm từ gia_ban_muc_tieu của lệnh SX
+            don_gia = Decimal("0")
+            if poi and poi.gia_ban_muc_tieu and poi.gia_ban_muc_tieu > 0:
+                net_boxes = Decimal(str(it.so_luong_thuc_te or 0)) - Decimal(str(it.so_luong_loi or 0))
+                if net_boxes > 0:
+                    don_gia = (poi.gia_ban_muc_tieu * net_boxes) / sl_nhap
+            balance = get_or_create_balance(db, warehouse_id, ten_hang=ten_hang, don_vi="Tấm")
+            nhap_balance(balance, sl_nhap, don_gia)
+            log_tx(db, warehouse_id, "NHAP_PHOI", sl_nhap, don_gia,
                    balance.ton_luong, "phieu_nhap_phoi_song", phieu.id, current_user.id)
         db.commit()
 
     return _phieu_to_dict(phieu)
+
+
+@router.get("/phieu-nhap-phoi-song")
+def list_all_phieu_nhap_phoi_song(
+    tu_ngay: date | None = None,
+    den_ngay: date | None = None,
+    production_order_id: int | None = None,
+    warehouse_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Danh sách tất cả phiếu nhập phôi sóng (toàn hệ thống)."""
+    q = (
+        db.query(PhieuNhapPhoiSong)
+        .options(
+            joinedload(PhieuNhapPhoiSong.items).joinedload(PhieuNhapPhoiSongItem.production_order_item),
+            joinedload(PhieuNhapPhoiSong.production_order),
+            joinedload(PhieuNhapPhoiSong.warehouse),
+            joinedload(PhieuNhapPhoiSong.creator),
+        )
+    )
+    if tu_ngay:
+        q = q.filter(PhieuNhapPhoiSong.ngay >= tu_ngay)
+    if den_ngay:
+        q = q.filter(PhieuNhapPhoiSong.ngay <= den_ngay)
+    if production_order_id:
+        q = q.filter(PhieuNhapPhoiSong.production_order_id == production_order_id)
+    if warehouse_id:
+        q = q.filter(PhieuNhapPhoiSong.warehouse_id == warehouse_id)
+    phieus = q.order_by(PhieuNhapPhoiSong.ngay.desc(), PhieuNhapPhoiSong.id.desc()).all()
+
+    result = []
+    for p in phieus:
+        base = _phieu_to_dict(p)
+        base["so_lenh"] = p.production_order.so_lenh if p.production_order else None
+        base["ten_kho"] = p.warehouse.ten_kho if p.warehouse else None
+        base["created_by_name"] = (
+            getattr(p.creator, "ho_ten", None) or getattr(p.creator, "username", None)
+            if p.creator else None
+        )
+        items = base.get("items", [])
+        base["tong_so_tam"] = sum(it.get("so_tam") or 0 for it in items)
+        base["tong_so_luong_thuc_te"] = sum(it.get("so_luong_thuc_te") or 0 for it in items)
+        base["tong_so_luong_loi"] = sum(it.get("so_luong_loi") or 0 for it in items)
+        result.append(base)
+    return result
 
 
 @router.get("/{order_id}/phieu-nhap-phoi-song")

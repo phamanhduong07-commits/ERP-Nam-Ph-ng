@@ -213,6 +213,7 @@ class PhieuChuyenKhoItem(Base):
     phieu_chuyen_kho_id: Mapped[int] = mapped_column(Integer, ForeignKey("phieu_chuyen_kho.id"), nullable=False)
     paper_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_materials.id"))
     other_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("other_materials.id"))
+    production_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=True)
     ten_hang: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     don_vi: Mapped[str] = mapped_column(String(20), default="Kg")
     so_luong: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)

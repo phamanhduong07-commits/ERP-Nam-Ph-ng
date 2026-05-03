@@ -19,6 +19,7 @@ export default function ProductionOutputPage() {
   const [filterKho, setFilterKho] = useState<number | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
+  const [formPxId, setFormPxId] = useState<number | null>(null)
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses-all'],
@@ -109,7 +110,7 @@ export default function ProductionOutputPage() {
           <Title level={4} style={{ margin: 0 }}>Nhập thành phẩm từ sản xuất</Title>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true) }}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setFormPxId(null); setOpen(true) }}>
             Tạo phiếu nhập TP
           </Button>
         </Col>
@@ -152,7 +153,16 @@ export default function ProductionOutputPage() {
               options={(lsxList as any[]).map((o: any) => ({
                 value: o.id,
                 label: `${o.so_lenh}${o.ten_khach_hang ? ' — ' + o.ten_khach_hang : ''}`,
-              }))} />
+              }))}
+              onChange={(orderId) => {
+                const order = (lsxList as any[]).find((o: any) => o.id === orderId)
+                const pxId = order?.phan_xuong_id ?? null
+                setFormPxId(pxId)
+                const tpWh = warehouses.find(w => w.loai_kho === 'THANH_PHAM' && w.trang_thai && w.phan_xuong_id === pxId)
+                if (tpWh) form.setFieldValue('warehouse_id', tpWh.id)
+                else form.setFieldValue('warehouse_id', undefined)
+              }}
+            />
           </Form.Item>
           <Row gutter={12}>
             <Col span={12}>
@@ -163,7 +173,9 @@ export default function ProductionOutputPage() {
             <Col span={12}>
               <Form.Item name="warehouse_id" label="Kho TP" rules={[{ required: true, message: 'Chọn kho' }]}>
                 <Select placeholder="Chọn kho TP"
-                  options={warehouses.filter(w => w.trang_thai).map(w => ({ value: w.id, label: w.ten_kho }))} />
+                  options={warehouses
+                    .filter(w => w.trang_thai && w.loai_kho === 'THANH_PHAM' && (!formPxId || w.phan_xuong_id === formPxId))
+                    .map(w => ({ value: w.id, label: w.ten_kho }))} />
               </Form.Item>
             </Col>
           </Row>

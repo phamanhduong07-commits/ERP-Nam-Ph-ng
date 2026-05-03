@@ -31,6 +31,7 @@ VALID_STATES = {"cho_in", "ke_hoach", "dang_in", "cho_dinh_hinh", "sau_in", "dan
 class MayInCreate(BaseModel):
     ten_may: str
     sort_order: int = 0
+    phan_xuong_id: Optional[int] = None
 
 
 class MayInUpdate(BaseModel):
@@ -38,6 +39,7 @@ class MayInUpdate(BaseModel):
     sort_order: Optional[int] = None
     active: Optional[bool] = None
     capacity: Optional[Decimal] = None
+    phan_xuong_id: Optional[int] = None
 
 
 class PhieuInCreate(BaseModel):
@@ -57,6 +59,7 @@ class PhieuInCreate(BaseModel):
     so_don: Optional[str] = None
     ngay_giao_hang: Optional[date] = None
     ghi_chu: Optional[str] = None
+    phan_xuong_id: Optional[int] = None
 
 
 class PhieuInUpdate(BaseModel):
@@ -145,6 +148,7 @@ def _to_dict(p: PhieuIn) -> dict:
         "gio_hoan_thanh": p.gio_hoan_thanh.isoformat() if p.gio_hoan_thanh else None,
         "gio_bat_dau_dinh_hinh": p.gio_bat_dau_dinh_hinh.isoformat() if p.gio_bat_dau_dinh_hinh else None,
         "gio_hoan_thanh_dinh_hinh": p.gio_hoan_thanh_dinh_hinh.isoformat() if p.gio_hoan_thanh_dinh_hinh else None,
+        "phan_xuong_id": p.phan_xuong_id,
         "created_at": p.created_at.isoformat() if p.created_at else None,
     }
 
@@ -241,8 +245,15 @@ def _load(phieu_id: int, db: Session) -> PhieuIn:
 # ── Máy in CRUD ────────────────────────────────────────────────────────────────
 
 @router.get("/may-in")
-def list_may_in(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return db.query(MayIn).order_by(MayIn.sort_order).all()
+def list_may_in(
+    phan_xuong_id: Optional[int] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(MayIn)
+    if phan_xuong_id is not None:
+        q = q.filter(MayIn.phan_xuong_id == phan_xuong_id)
+    return q.order_by(MayIn.sort_order).all()
 
 
 @router.post("/may-in", status_code=201)
@@ -281,17 +292,26 @@ def delete_may_in(may_id: int, db: Session = Depends(get_db), _: User = Depends(
 class MaySauInCreate(BaseModel):
     ten_may: str
     sort_order: int = 0
+    phan_xuong_id: Optional[int] = None
 
 
 class MaySauInUpdate(BaseModel):
     ten_may: Optional[str] = None
     sort_order: Optional[int] = None
     active: Optional[bool] = None
+    phan_xuong_id: Optional[int] = None
 
 
 @router.get("/may-sau-in")
-def list_may_sau_in(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return db.query(MaySauIn).order_by(MaySauIn.sort_order).all()
+def list_may_sau_in(
+    phan_xuong_id: Optional[int] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(MaySauIn)
+    if phan_xuong_id is not None:
+        q = q.filter(MaySauIn.phan_xuong_id == phan_xuong_id)
+    return q.order_by(MaySauIn.sort_order).all()
 
 
 @router.post("/may-sau-in", status_code=201)
@@ -328,16 +348,24 @@ def delete_may_sau_in(may_id: int, db: Session = Depends(get_db), _: User = Depe
 # ── Sau in kanban ──────────────────────────────────────────────────────────────
 
 @router.get("/sauin/kanban")
-def get_sauin_kanban(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    may_sau_ins = db.query(MaySauIn).filter(MaySauIn.active == True).order_by(MaySauIn.sort_order).all()
+def get_sauin_kanban(
+    phan_xuong_id: Optional[int] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q_may = db.query(MaySauIn).filter(MaySauIn.active == True)
+    if phan_xuong_id is not None:
+        q_may = q_may.filter(MaySauIn.phan_xuong_id == phan_xuong_id)
+    may_sau_ins = q_may.order_by(MaySauIn.sort_order).all()
 
-    phieus = (
+    q_phieu = (
         db.query(PhieuIn)
         .options(joinedload(PhieuIn.may_sau_in_obj))
         .filter(PhieuIn.trang_thai.in_(["sau_in", "dang_sau_in"]))
-        .order_by(PhieuIn.sort_order, PhieuIn.created_at)
-        .all()
     )
+    if phan_xuong_id is not None:
+        q_phieu = q_phieu.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
+    phieus = q_phieu.order_by(PhieuIn.sort_order, PhieuIn.created_at).all()
 
     cho_gang_may: list = []
     machines: dict[str, list] = {str(m.id): [] for m in may_sau_ins}
@@ -361,16 +389,24 @@ def get_sauin_kanban(db: Session = Depends(get_db), _: User = Depends(get_curren
 # ── Kanban endpoint ────────────────────────────────────────────────────────────
 
 @router.get("/kanban")
-def get_kanban(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    may_ins = db.query(MayIn).filter(MayIn.active == True).order_by(MayIn.sort_order).all()
+def get_kanban(
+    phan_xuong_id: Optional[int] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q_may = db.query(MayIn).filter(MayIn.active == True)
+    if phan_xuong_id is not None:
+        q_may = q_may.filter(MayIn.phan_xuong_id == phan_xuong_id)
+    may_ins = q_may.order_by(MayIn.sort_order).all()
 
-    phieus = (
+    q_phieu = (
         db.query(PhieuIn)
         .options(joinedload(PhieuIn.may_in_obj), joinedload(PhieuIn.may_sau_in_obj))
         .filter(PhieuIn.trang_thai != "huy")
-        .order_by(PhieuIn.sort_order, PhieuIn.created_at)
-        .all()
     )
+    if phan_xuong_id is not None:
+        q_phieu = q_phieu.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
+    phieus = q_phieu.order_by(PhieuIn.sort_order, PhieuIn.created_at).all()
 
     columns: dict[str, list] = {
         "cho_in": [],
@@ -411,6 +447,7 @@ def get_kanban(db: Session = Depends(get_db), _: User = Depends(get_current_user
 def list_phieu_in(
     search: str = Query(default=""),
     trang_thai: Optional[str] = Query(default=None),
+    phan_xuong_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -422,6 +459,8 @@ def list_phieu_in(
         )
     if trang_thai:
         q = q.filter(PhieuIn.trang_thai == trang_thai)
+    if phan_xuong_id is not None:
+        q = q.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
     return [_to_dict(p) for p in q.order_by(PhieuIn.created_at.desc()).limit(200).all()]
 
 
@@ -431,12 +470,18 @@ def create_phieu_in(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    fields = data.model_dump(exclude_none=True)
+    # Auto-populate phan_xuong_id từ production_order nếu chưa có
+    if not fields.get("phan_xuong_id") and fields.get("production_order_id"):
+        po = db.query(ProductionOrder).filter(ProductionOrder.id == fields["production_order_id"]).first()
+        if po and po.phan_xuong_id:
+            fields["phan_xuong_id"] = po.phan_xuong_id
     p = PhieuIn(
         so_phieu=_gen_so_phieu(db),
         trang_thai="cho_in",
         sort_order=0,
         created_by=current_user.id,
-        **data.model_dump(exclude_none=True),
+        **fields,
     )
     db.add(p)
     db.commit()
@@ -522,6 +567,7 @@ def create_from_lenh_sx(
     phieu_in = PhieuIn(
         so_phieu=_gen_so_phieu(db),
         production_order_id=order_id,
+        phan_xuong_id=order.phan_xuong_id,
         trang_thai=trang_thai_phieu,
         sort_order=0,
         ten_hang=first.ten_hang if first else None,
@@ -793,6 +839,7 @@ class MayScanCreate(BaseModel):
     ten_may: str
     sort_order: int = 0
     don_gia: Optional[Decimal] = None
+    phan_xuong_id: Optional[int] = None
 
 
 class MayScanUpdate(BaseModel):
@@ -800,6 +847,7 @@ class MayScanUpdate(BaseModel):
     sort_order: Optional[int] = None
     active: Optional[bool] = None
     don_gia: Optional[Decimal] = None
+    phan_xuong_id: Optional[int] = None
 
 
 class ScanLogCreate(BaseModel):
@@ -839,8 +887,15 @@ def _scan_log_to_dict(s: ScanLog) -> dict:
 
 
 @router.get("/may-scan")
-def list_may_scan(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return db.query(MayScan).order_by(MayScan.sort_order).all()
+def list_may_scan(
+    phan_xuong_id: Optional[int] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(MayScan)
+    if phan_xuong_id is not None:
+        q = q.filter(MayScan.phan_xuong_id == phan_xuong_id)
+    return q.order_by(MayScan.sort_order).all()
 
 
 @router.post("/may-scan", status_code=201)
@@ -926,6 +981,7 @@ def scan_history(
     may_scan_id: Optional[int] = Query(default=None),
     days: int = Query(default=30),
     so_lsx: Optional[str] = Query(default=None),
+    phan_xuong_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -934,12 +990,15 @@ def scan_history(
     q = (
         db.query(ScanLog)
         .options(joinedload(ScanLog.may_scan_obj))
+        .join(MayScan, ScanLog.may_scan_id == MayScan.id)
         .filter(ScanLog.created_at >= cutoff)
     )
     if may_scan_id:
         q = q.filter(ScanLog.may_scan_id == may_scan_id)
     if so_lsx:
         q = q.filter(ScanLog.so_lsx.ilike(f"%{so_lsx}%"))
+    if phan_xuong_id is not None:
+        q = q.filter(MayScan.phan_xuong_id == phan_xuong_id)
     logs = q.order_by(ScanLog.created_at.desc()).limit(500).all()
     return [_scan_log_to_dict(s) for s in logs]
 
@@ -957,7 +1016,11 @@ def delete_scan_log(log_id: int, db: Session = Depends(get_db), _: User = Depend
 # ── Dashboard ──────────────────────────────────────────────────────────────────
 
 @router.get("/dashboard")
-def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_dashboard(
+    phan_xuong_id: Optional[int] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
     from datetime import timedelta, date as date_type
     today = date_type.today()
 
@@ -965,25 +1028,34 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
     states = ["cho_in", "ke_hoach", "dang_in", "cho_dinh_hinh", "sau_in", "hoan_thanh"]
     counts: dict[str, int] = {}
     for s in states:
-        counts[s] = db.query(func.count(PhieuIn.id)).filter(PhieuIn.trang_thai == s).scalar() or 0
+        q_cnt = db.query(func.count(PhieuIn.id)).filter(PhieuIn.trang_thai == s)
+        if phan_xuong_id is not None:
+            q_cnt = q_cnt.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
+        counts[s] = q_cnt.scalar() or 0
 
     # Scan trong 24 giờ qua
     cutoff_24h = datetime.utcnow() - timedelta(hours=24)
-    scan_row = db.query(
+    q_scan = db.query(
         func.count(ScanLog.id),
         func.coalesce(func.sum(ScanLog.so_luong_tp), 0),
         func.coalesce(func.sum(ScanLog.dien_tich), 0),
         func.coalesce(func.sum(ScanLog.tien_luong), 0),
-    ).filter(ScanLog.created_at >= cutoff_24h).one()
+    ).filter(ScanLog.created_at >= cutoff_24h)
+    if phan_xuong_id is not None:
+        q_scan = q_scan.join(MayScan, ScanLog.may_scan_id == MayScan.id).filter(MayScan.phan_xuong_id == phan_xuong_id)
+    scan_row = q_scan.one()
 
     # Phiếu in hoàn thành hôm nay (ngay_in = today)
-    in_today = db.query(func.count(PhieuIn.id)).filter(
+    q_today = db.query(func.count(PhieuIn.id)).filter(
         PhieuIn.trang_thai == "hoan_thanh",
         PhieuIn.ngay_in == today,
-    ).scalar() or 0
+    )
+    if phan_xuong_id is not None:
+        q_today = q_today.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
+    in_today = q_today.scalar() or 0
 
     # Scan theo từng máy hôm nay
-    may_scan_stats = (
+    q_may_scan = (
         db.query(
             MayScan.id,
             MayScan.ten_may,
@@ -993,10 +1065,10 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
         )
         .outerjoin(ScanLog, (ScanLog.may_scan_id == MayScan.id) & (ScanLog.created_at >= cutoff_24h))
         .filter(MayScan.active == True)
-        .group_by(MayScan.id, MayScan.ten_may)
-        .order_by(MayScan.sort_order)
-        .all()
     )
+    if phan_xuong_id is not None:
+        q_may_scan = q_may_scan.filter(MayScan.phan_xuong_id == phan_xuong_id)
+    may_scan_stats = q_may_scan.group_by(MayScan.id, MayScan.ten_may).order_by(MayScan.sort_order).all()
 
     return {
         "phieu_in_counts": counts,
@@ -1027,6 +1099,7 @@ def history_phieu_in(
     days: int = Query(default=30),
     search: str = Query(default=""),
     trang_thai: Optional[str] = Query(default=None),
+    phan_xuong_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -1046,6 +1119,8 @@ def history_phieu_in(
         q = q.filter(
             PhieuIn.so_phieu.ilike(like) | PhieuIn.ten_hang.ilike(like) | PhieuIn.ma_kh.ilike(like)
         )
+    if phan_xuong_id is not None:
+        q = q.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
     return [_to_dict(p) for p in q.order_by(PhieuIn.created_at.desc()).limit(500).all()]
 
 
@@ -1054,17 +1129,26 @@ def history_phieu_in(
 class ShiftCaCreate(BaseModel):
     name: str
     leader: Optional[str] = None
+    phan_xuong_id: Optional[int] = None
 
 
 class ShiftCaUpdate(BaseModel):
     name: Optional[str] = None
     leader: Optional[str] = None
     active: Optional[bool] = None
+    phan_xuong_id: Optional[int] = None
 
 
 @router.get("/shift/ca")
-def list_shift_ca(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return db.query(ShiftCa).order_by(ShiftCa.id).all()
+def list_shift_ca(
+    phan_xuong_id: Optional[int] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(ShiftCa)
+    if phan_xuong_id is not None:
+        q = q.filter(ShiftCa.phan_xuong_id == phan_xuong_id)
+    return q.order_by(ShiftCa.id).all()
 
 
 @router.post("/shift/ca", status_code=201)

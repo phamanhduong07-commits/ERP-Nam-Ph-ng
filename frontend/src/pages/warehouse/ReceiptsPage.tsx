@@ -33,13 +33,21 @@ export default function ReceiptsPage() {
   const [form] = Form.useForm()
   const [filterKho, setFilterKho] = useState<number | undefined>()
   const [filterNCC, setFilterNCC] = useState<number | undefined>()
+  const [filterXuong, setFilterXuong] = useState<number | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [selectedPO, setSelectedPO] = useState<number | undefined>()
+  const [formPxId, setFormPxId] = useState<number | null>(null)
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses-all'],
     queryFn: () => warehousesApi.list().then(r => r.data),
+  })
+
+  const { data: phanXuongs = [] } = useQuery({
+    queryKey: ['phan-xuong-list'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 300_000,
   })
 
   const { data: paperPage } = useQuery({
@@ -225,7 +233,7 @@ export default function ReceiptsPage() {
           </Space>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setSelectedPO(undefined); setOpen(true) }}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setOpen(true) }}>
             Tạo phiếu nhập
           </Button>
         </Col>
@@ -233,15 +241,22 @@ export default function ReceiptsPage() {
 
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[8, 8]}>
-          <Col xs={12} sm={6}>
-            <Select placeholder="Tất cả kho" style={{ width: '100%' }} allowClear value={filterKho} onChange={setFilterKho}
-              options={warehouses.filter(w => w.trang_thai).map(w => ({ value: w.id, label: w.ten_kho }))} />
+          <Col xs={12} sm={5}>
+            <Select placeholder="Tất cả xưởng" style={{ width: '100%' }} allowClear value={filterXuong}
+              onChange={v => { setFilterXuong(v); setFilterKho(undefined) }}
+              options={phanXuongs.filter((p: any) => p.trang_thai).map((p: any) => ({ value: p.id, label: p.ten_xuong }))} />
           </Col>
-          <Col xs={12} sm={6}>
+          <Col xs={12} sm={5}>
+            <Select placeholder="Tất cả kho" style={{ width: '100%' }} allowClear value={filterKho} onChange={setFilterKho}
+              options={warehouses
+                .filter(w => w.trang_thai && (!filterXuong || w.phan_xuong_id === filterXuong))
+                .map(w => ({ value: w.id, label: w.ten_kho }))} />
+          </Col>
+          <Col xs={12} sm={5}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
               onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
-          <Col xs={12} sm={6}>
+          <Col xs={12} sm={5}>
             <DatePicker placeholder="Đến ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
               onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
@@ -294,9 +309,20 @@ export default function ReceiptsPage() {
           </Row>
           <Row gutter={12}>
             <Col span={12}>
+              <Form.Item label="Xưởng (để lọc kho)">
+                <Select placeholder="Chọn xưởng..." allowClear
+                  value={formPxId ?? undefined}
+                  onChange={v => { setFormPxId(v ?? null); form.setFieldValue('warehouse_id', undefined) }}
+                  options={phanXuongs.filter((p: any) => p.trang_thai).map((p: any) => ({ value: p.id, label: p.ten_xuong }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
               <Form.Item name="warehouse_id" label="Kho nhập" rules={[{ required: true, message: 'Chọn kho' }]}>
                 <Select placeholder="Chọn kho"
-                  options={warehouses.filter(w => w.trang_thai).map(w => ({ value: w.id, label: w.ten_kho }))} />
+                  options={warehouses
+                    .filter(w => w.trang_thai && (!formPxId || w.phan_xuong_id === formPxId))
+                    .map(w => ({ value: w.id, label: `${w.ten_kho}${w.loai_kho ? ` (${w.loai_kho})` : ''}` }))} />
               </Form.Item>
             </Col>
             <Col span={12}>

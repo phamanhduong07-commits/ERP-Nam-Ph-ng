@@ -12,6 +12,8 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, MaySauIn, SauInKanbanData } from '../../api/cd2'
+import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
+import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 
 const { Title, Text } = Typography
 
@@ -354,10 +356,11 @@ export default function SauInKanbanPage() {
   const [assignPhieu, setAssignPhieu] = useState<PhieuIn | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['cd2-sauin-kanban'],
-    queryFn: () => cd2Api.getSauInKanban().then(r => r.data),
+    queryKey: ['cd2-sauin-kanban', phanXuongId],
+    queryFn: () => cd2Api.getSauInKanban(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
     refetchInterval: 15_000,
   })
 
@@ -492,6 +495,7 @@ export default function SauInKanbanPage() {
             <AppstoreOutlined style={{ fontSize: 20, color: '#13c2c2' }} />
             <Title level={4} style={{ margin: 0 }}>Kanban Sau In</Title>
             <Badge count={totalSauIn} style={{ background: '#13c2c2' }} showZero />
+            <CD2WorkshopSelector value={phanXuongId} onChange={setPhanXuongId} phanXuongList={phanXuongList} />
           </Space>
         </Col>
         <Col>

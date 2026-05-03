@@ -320,3 +320,10 @@ class PhapNhan(Base):
     ky_hieu_hd: Mapped[str | None] = mapped_column(String(20))  # ký hiệu hóa đơn: AA, AB...
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    # Xưởng CD1+CD2 cung cấp phôi sóng cho lệnh SX của pháp nhân này
+    phoi_phan_xuong_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("phan_xuong.id"), nullable=True
+    )
+    phoi_phan_xuong: Mapped["PhanXuong | None"] = relationship(
+        "PhanXuong", foreign_keys="PhapNhan.phoi_phan_xuong_id"
+    )

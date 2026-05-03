@@ -8,6 +8,7 @@ import {
   DeleteOutlined, EditOutlined, PlusOutlined, SettingOutlined, SaveOutlined, CloseOutlined,
 } from '@ant-design/icons'
 import { cd2Api, MayIn, MaySauIn, MayScan, PrinterUser } from '../../api/cd2'
+import { warehouseApi, PhanXuong } from '../../api/warehouse'
 
 const { Title, Text } = Typography
 
@@ -19,10 +20,16 @@ function MayInTab() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editOrder, setEditOrder] = useState<number>(0)
+  const [editPhanXuong, setEditPhanXuong] = useState<number | null>(null)
 
   const { data: mayIns = [], isLoading } = useQuery({
     queryKey: ['cd2-may-in'],
     queryFn: () => cd2Api.listMayIn().then(r => r.data),
+  })
+  const { data: phanXuongList = [] } = useQuery<PhanXuong[]>({
+    queryKey: ['phan-xuong-list'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 5 * 60 * 1000,
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['cd2-may-in'] })
@@ -30,7 +37,7 @@ function MayInTab() {
   const handleAdd = async () => {
     try {
       const values = await form.validateFields()
-      await cd2Api.createMayIn({ ten_may: values.ten_may, sort_order: values.sort_order ?? 0 })
+      await cd2Api.createMayIn({ ten_may: values.ten_may, sort_order: values.sort_order ?? 0, phan_xuong_id: values.phan_xuong_id ?? undefined })
       message.success('Đã thêm máy in')
       form.resetFields()
       invalidate()
@@ -42,7 +49,7 @@ function MayInTab() {
   const handleSaveEdit = async (id: number) => {
     if (!editName.trim()) return
     try {
-      await cd2Api.updateMayIn(id, { ten_may: editName, sort_order: editOrder })
+      await cd2Api.updateMayIn(id, { ten_may: editName, sort_order: editOrder, phan_xuong_id: editPhanXuong ?? undefined })
       message.success('Đã cập nhật')
       setEditingId(null)
       invalidate()
@@ -70,6 +77,8 @@ function MayInTab() {
     }
   }
 
+  const xuongOptions = phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))
+
   const columns = [
     {
       title: 'Tên máy',
@@ -81,10 +90,31 @@ function MayInTab() {
             onChange={e => setEditName(e.target.value)}
             size="small"
             autoFocus
-            style={{ width: 180 }}
+            style={{ width: 160 }}
             onPressEnter={() => handleSaveEdit(r.id)}
           />
         ) : <Text strong>{v}</Text>,
+    },
+    {
+      title: 'Xưởng',
+      dataIndex: 'phan_xuong_id',
+      width: 160,
+      render: (v: number | null, r: MayIn) =>
+        editingId === r.id ? (
+          <Select
+            value={editPhanXuong ?? undefined}
+            onChange={val => setEditPhanXuong(val ?? null)}
+            options={xuongOptions}
+            size="small"
+            style={{ width: 140 }}
+            allowClear
+            placeholder="Chưa gán"
+          />
+        ) : (
+          v
+            ? <Tag color="blue">{phanXuongList.find(x => x.id === v)?.ten_xuong ?? `#${v}`}</Tag>
+            : <Text type="secondary">—</Text>
+        ),
     },
     {
       title: 'Thứ tự',
@@ -130,7 +160,7 @@ function MayInTab() {
             <Button
               size="small"
               icon={<EditOutlined />}
-              onClick={() => { setEditingId(r.id); setEditName(r.ten_may); setEditOrder(r.sort_order) }}
+              onClick={() => { setEditingId(r.id); setEditName(r.ten_may); setEditOrder(r.sort_order); setEditPhanXuong(r.phan_xuong_id ?? null) }}
             />
             <Popconfirm title="Xoá máy in này?" onConfirm={() => handleDelete(r.id)} okText="Xoá" cancelText="Không">
               <Button size="small" danger icon={<DeleteOutlined />} />
@@ -154,10 +184,13 @@ function MayInTab() {
       />
       <Form form={form} layout="inline">
         <Form.Item name="ten_may" rules={[{ required: true, message: 'Nhập tên máy' }]}>
-          <Input placeholder="Tên máy mới..." size="small" style={{ width: 200 }} />
+          <Input placeholder="Tên máy mới..." size="small" style={{ width: 180 }} />
+        </Form.Item>
+        <Form.Item name="phan_xuong_id">
+          <Select placeholder="Chọn xưởng" size="small" style={{ width: 140 }} options={xuongOptions} allowClear />
         </Form.Item>
         <Form.Item name="sort_order">
-          <InputNumber placeholder="Thứ tự" size="small" style={{ width: 80 }} min={0} />
+          <InputNumber placeholder="Thứ tự" size="small" style={{ width: 70 }} min={0} />
         </Form.Item>
         <Form.Item>
           <Button type="primary" size="small" icon={<PlusOutlined />} onClick={handleAdd}>Thêm</Button>
@@ -379,10 +412,16 @@ function MaySauInTab() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editOrder, setEditOrder] = useState<number>(0)
+  const [editPhanXuong, setEditPhanXuong] = useState<number | null>(null)
 
   const { data: list = [], isLoading } = useQuery({
     queryKey: ['cd2-may-sau-in'],
     queryFn: () => cd2Api.listMaySauIn().then(r => r.data),
+  })
+  const { data: phanXuongList = [] } = useQuery<PhanXuong[]>({
+    queryKey: ['phan-xuong-list'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 5 * 60 * 1000,
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['cd2-may-sau-in'] })
@@ -390,7 +429,7 @@ function MaySauInTab() {
   const handleAdd = async () => {
     try {
       const values = await form.validateFields()
-      await cd2Api.createMaySauIn({ ten_may: values.ten_may, sort_order: values.sort_order ?? 0 })
+      await cd2Api.createMaySauIn({ ten_may: values.ten_may, sort_order: values.sort_order ?? 0, phan_xuong_id: values.phan_xuong_id ?? undefined })
       message.success('Đã thêm máy sau in')
       form.resetFields()
       invalidate()
@@ -402,7 +441,7 @@ function MaySauInTab() {
   const handleSaveEdit = async (id: number) => {
     if (!editName.trim()) return
     try {
-      await cd2Api.updateMaySauIn(id, { ten_may: editName, sort_order: editOrder })
+      await cd2Api.updateMaySauIn(id, { ten_may: editName, sort_order: editOrder, phan_xuong_id: editPhanXuong ?? undefined })
       message.success('Đã cập nhật')
       setEditingId(null)
       invalidate()
@@ -430,6 +469,8 @@ function MaySauInTab() {
     }
   }
 
+  const xuongOptions = phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))
+
   const columns = [
     {
       title: 'Tên máy', dataIndex: 'ten_may',
@@ -438,10 +479,31 @@ function MaySauInTab() {
           <Input
             value={editName}
             onChange={e => setEditName(e.target.value)}
-            size="small" autoFocus style={{ width: 180 }}
+            size="small" autoFocus style={{ width: 160 }}
             onPressEnter={() => handleSaveEdit(r.id)}
           />
         ) : <Text strong>{v}</Text>,
+    },
+    {
+      title: 'Xưởng',
+      dataIndex: 'phan_xuong_id',
+      width: 160,
+      render: (v: number | null, r: MaySauIn) =>
+        editingId === r.id ? (
+          <Select
+            value={editPhanXuong ?? undefined}
+            onChange={val => setEditPhanXuong(val ?? null)}
+            options={xuongOptions}
+            size="small"
+            style={{ width: 140 }}
+            allowClear
+            placeholder="Chưa gán"
+          />
+        ) : (
+          v
+            ? <Tag color="blue">{phanXuongList.find(x => x.id === v)?.ten_xuong ?? `#${v}`}</Tag>
+            : <Text type="secondary">—</Text>
+        ),
     },
     {
       title: 'Thứ tự', dataIndex: 'sort_order', width: 90, align: 'center' as const,
@@ -467,7 +529,7 @@ function MaySauInTab() {
         ) : (
           <Space size={4}>
             <Button size="small" icon={<EditOutlined />}
-              onClick={() => { setEditingId(r.id); setEditName(r.ten_may); setEditOrder(r.sort_order) }} />
+              onClick={() => { setEditingId(r.id); setEditName(r.ten_may); setEditOrder(r.sort_order); setEditPhanXuong(r.phan_xuong_id ?? null) }} />
             <Popconfirm title="Xoá máy sau in này?" onConfirm={() => handleDelete(r.id)} okText="Xoá" cancelText="Không">
               <Button size="small" danger icon={<DeleteOutlined />} />
             </Popconfirm>
@@ -485,10 +547,13 @@ function MaySauInTab() {
       />
       <Form form={form} layout="inline">
         <Form.Item name="ten_may" rules={[{ required: true, message: 'Nhập tên máy' }]}>
-          <Input placeholder="Tên máy mới..." size="small" style={{ width: 200 }} />
+          <Input placeholder="Tên máy mới..." size="small" style={{ width: 180 }} />
+        </Form.Item>
+        <Form.Item name="phan_xuong_id">
+          <Select placeholder="Chọn xưởng" size="small" style={{ width: 140 }} options={xuongOptions} allowClear />
         </Form.Item>
         <Form.Item name="sort_order">
-          <InputNumber placeholder="Thứ tự" size="small" style={{ width: 80 }} min={0} />
+          <InputNumber placeholder="Thứ tự" size="small" style={{ width: 70 }} min={0} />
         </Form.Item>
         <Form.Item>
           <Button type="primary" size="small" icon={<PlusOutlined />} onClick={handleAdd}>Thêm</Button>
@@ -500,17 +565,22 @@ function MaySauInTab() {
 
 // ── Tab: Máy Scan ─────────────────────────────────────────────────────────────
 
-interface ScanEditState { ten_may: string; don_gia: number | null }
+interface ScanEditState { ten_may: string; don_gia: number | null; phan_xuong_id: number | null }
 
 function MayScanTab() {
   const qc = useQueryClient()
   const [form] = Form.useForm()
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [editState, setEditState] = useState<ScanEditState>({ ten_may: '', don_gia: null })
+  const [editState, setEditState] = useState<ScanEditState>({ ten_may: '', don_gia: null, phan_xuong_id: null })
 
   const { data: list = [], isLoading } = useQuery({
     queryKey: ['cd2-may-scan'],
     queryFn: () => cd2Api.listMayScan().then(r => r.data),
+  })
+  const { data: phanXuongList = [] } = useQuery<PhanXuong[]>({
+    queryKey: ['phan-xuong-list'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 5 * 60 * 1000,
   })
 
   const invalidate = () => {
@@ -521,7 +591,7 @@ function MayScanTab() {
   const handleAdd = async () => {
     try {
       const values = await form.validateFields()
-      await cd2Api.createMayScan({ ten_may: values.ten_may, sort_order: values.sort_order ?? 0, don_gia: values.don_gia ?? undefined })
+      await cd2Api.createMayScan({ ten_may: values.ten_may, sort_order: values.sort_order ?? 0, don_gia: values.don_gia ?? undefined, phan_xuong_id: values.phan_xuong_id ?? undefined })
       message.success('Đã thêm máy scan')
       form.resetFields()
       invalidate()
@@ -533,7 +603,7 @@ function MayScanTab() {
   const handleSaveEdit = async (id: number) => {
     if (!editState.ten_may.trim()) return
     try {
-      await cd2Api.updateMayScan(id, { ten_may: editState.ten_may, don_gia: editState.don_gia ?? undefined })
+      await cd2Api.updateMayScan(id, { ten_may: editState.ten_may, don_gia: editState.don_gia ?? undefined, phan_xuong_id: editState.phan_xuong_id ?? undefined })
       message.success('Đã cập nhật')
       setEditingId(null)
       invalidate()
@@ -561,6 +631,8 @@ function MayScanTab() {
     }
   }
 
+  const xuongOptions = phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))
+
   const columns = [
     {
       title: 'Tên máy', dataIndex: 'ten_may',
@@ -569,12 +641,33 @@ function MayScanTab() {
           <Input
             value={editState.ten_may}
             onChange={e => setEditState(s => ({ ...s, ten_may: e.target.value }))}
-            size="small" autoFocus style={{ width: 160 }}
+            size="small" autoFocus style={{ width: 140 }}
           />
         ) : <Text strong>{v}</Text>,
     },
     {
-      title: 'Đơn giá (đ/m²)', dataIndex: 'don_gia', width: 150,
+      title: 'Xưởng',
+      dataIndex: 'phan_xuong_id',
+      width: 160,
+      render: (v: number | null, r: MayScan) =>
+        editingId === r.id ? (
+          <Select
+            value={editState.phan_xuong_id ?? undefined}
+            onChange={val => setEditState(s => ({ ...s, phan_xuong_id: val ?? null }))}
+            options={xuongOptions}
+            size="small"
+            style={{ width: 140 }}
+            allowClear
+            placeholder="Chưa gán"
+          />
+        ) : (
+          v
+            ? <Tag color="blue">{phanXuongList.find(x => x.id === v)?.ten_xuong ?? `#${v}`}</Tag>
+            : <Text type="secondary">—</Text>
+        ),
+    },
+    {
+      title: 'Đơn giá (đ/m²)', dataIndex: 'don_gia', width: 140,
       render: (v: number | null, r: MayScan) =>
         editingId === r.id ? (
           <InputNumber
@@ -601,7 +694,7 @@ function MayScanTab() {
         ) : (
           <Space size={4}>
             <Button size="small" icon={<EditOutlined />}
-              onClick={() => { setEditingId(r.id); setEditState({ ten_may: r.ten_may, don_gia: r.don_gia }) }} />
+              onClick={() => { setEditingId(r.id); setEditState({ ten_may: r.ten_may, don_gia: r.don_gia, phan_xuong_id: r.phan_xuong_id ?? null }) }} />
             <Popconfirm title="Xoá máy scan này?" onConfirm={() => handleDelete(r.id)} okText="Xoá" cancelText="Không">
               <Button size="small" danger icon={<DeleteOutlined />} />
             </Popconfirm>
@@ -619,10 +712,13 @@ function MayScanTab() {
       />
       <Form form={form} layout="inline">
         <Form.Item name="ten_may" rules={[{ required: true, message: 'Nhập tên máy' }]}>
-          <Input placeholder="Tên máy scan..." size="small" style={{ width: 180 }} />
+          <Input placeholder="Tên máy scan..." size="small" style={{ width: 160 }} />
+        </Form.Item>
+        <Form.Item name="phan_xuong_id">
+          <Select placeholder="Chọn xưởng" size="small" style={{ width: 140 }} options={xuongOptions} allowClear />
         </Form.Item>
         <Form.Item name="don_gia">
-          <InputNumber placeholder="Đơn giá đ/m²" size="small" style={{ width: 130 }} min={0} />
+          <InputNumber placeholder="Đơn giá đ/m²" size="small" style={{ width: 120 }} min={0} />
         </Form.Item>
         <Form.Item name="sort_order">
           <InputNumber placeholder="Thứ tự" size="small" style={{ width: 70 }} min={0} />

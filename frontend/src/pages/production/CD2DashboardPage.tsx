@@ -8,6 +8,8 @@ import {
 import { Link } from 'react-router-dom'
 import { cd2Api, PhieuIn } from '../../api/cd2'
 import PhieuInModal from './PhieuInModal'
+import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
+import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 
 const { Title, Text } = Typography
 
@@ -21,16 +23,17 @@ const MAIN_STATES = [
 export default function CD2DashboardPage() {
   const qc = useQueryClient()
   const [selectedPhieu, setSelectedPhieu] = useState<PhieuIn | null>(null)
+  const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['cd2-dashboard'],
-    queryFn: () => cd2Api.getDashboard().then(r => r.data),
+    queryKey: ['cd2-dashboard', phanXuongId],
+    queryFn: () => cd2Api.getDashboard(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
     refetchInterval: 30_000,
   })
 
   const { data: dangInList = [] } = useQuery({
-    queryKey: ['cd2-phieu-dang-in'],
-    queryFn: () => cd2Api.listPhieuIn({ trang_thai: 'dang_in' }).then(r => r.data),
+    queryKey: ['cd2-phieu-dang-in', phanXuongId],
+    queryFn: () => cd2Api.listPhieuIn({ trang_thai: 'dang_in', ...(phanXuongId ? { phan_xuong_id: phanXuongId } : {}) }).then(r => r.data),
     refetchInterval: 30_000,
   })
 
@@ -54,6 +57,7 @@ export default function CD2DashboardPage() {
           <Space>
             <BarChartOutlined style={{ fontSize: 22, color: '#1677ff' }} />
             <Title level={4} style={{ margin: 0 }}>Tổng quan Công Đoạn 2</Title>
+            <CD2WorkshopSelector value={phanXuongId} onChange={setPhanXuongId} phanXuongList={phanXuongList} />
           </Space>
         </Col>
         <Col>

@@ -18,6 +18,8 @@ import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, KanbanData } from '../../api/cd2'
 import PhieuInModal from './PhieuInModal'
 import MayInSettingsModal from './MayInSettingsModal'
+import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
+import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 
 const { Text } = Typography
 
@@ -326,9 +328,11 @@ export default function CD2KanbanPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
+  const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
+
   const { data: kanban, isLoading } = useQuery({
-    queryKey: ['cd2-kanban'],
-    queryFn: () => cd2Api.getKanban().then(r => r.data),
+    queryKey: ['cd2-kanban', phanXuongId],
+    queryFn: () => cd2Api.getKanban(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
     refetchInterval: 30_000,
   })
 
@@ -345,6 +349,11 @@ export default function CD2KanbanPage() {
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
   }, [qc])
+
+  const handleXuongChange = (id: number | undefined) => {
+    setPhanXuongId(id)
+    setLocalColumns(null)
+  }
 
   const cols = kanban ? [
     { id: 'cho_in',       title: 'Chờ in',         color: '#fff7e6' },
@@ -460,6 +469,11 @@ export default function CD2KanbanPage() {
             <Typography.Title level={4} style={{ margin: 0 }}>
               Kanban Công Đoạn 2 — Máy In
             </Typography.Title>
+            <CD2WorkshopSelector
+              value={phanXuongId}
+              onChange={handleXuongChange}
+              phanXuongList={phanXuongList}
+            />
           </Space>
         </Col>
         <Col>

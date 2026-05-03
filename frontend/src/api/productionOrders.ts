@@ -186,6 +186,15 @@ export interface PhieuNhapPhoiSong {
   items: PhieuNhapPhoiSongItem[]
 }
 
+export interface PhieuNhapPhoiSongListItem extends PhieuNhapPhoiSong {
+  so_lenh: string | null
+  ten_kho: string | null
+  created_by_name: string | null
+  tong_so_tam: number
+  tong_so_luong_thuc_te: number
+  tong_so_luong_loi: number
+}
+
 export const productionOrdersApi = {
   list: (params?: {
     search?: string
@@ -234,6 +243,9 @@ export const productionOrdersApi = {
 
   listPhieu: (orderId: number) =>
     client.get<PhieuNhapPhoiSong[]>(`/production-orders/${orderId}/phieu-nhap-phoi-song`),
+
+  listAllPhieu: (params?: { tu_ngay?: string; den_ngay?: string; production_order_id?: number; warehouse_id?: number }) =>
+    client.get<PhieuNhapPhoiSongListItem[]>('/production-orders/phieu-nhap-phoi-song', { params }),
 
   pushToCD2: (orderId: number) =>
     client.post<{ ok: boolean; data: unknown; payload_sent: unknown }>(

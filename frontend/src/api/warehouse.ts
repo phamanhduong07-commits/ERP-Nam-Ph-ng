@@ -40,6 +40,7 @@ export interface PhieuKhoItem {
   id?: number
   paper_material_id: number | null
   other_material_id: number | null
+  production_order_id?: number | null
   ten_hang: string
   don_vi: string
   so_luong: number

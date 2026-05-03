@@ -35,6 +35,9 @@ import IndirectCostList from './pages/danhmuc/IndirectCostList'
 import AddonRateList from './pages/danhmuc/AddonRateList'
 import BomListPage from './pages/production/BomListPage'
 import PhieuPhoiPage from './pages/production/PhieuPhoiPage'
+import KhoPhoiPage from './pages/production/KhoPhoiPage'
+import KhoThanhPhamPage from './pages/production/KhoThanhPhamPage'
+import PhieuNhapPhoiSongPage from './pages/production/PhieuNhapPhoiSongPage'
 import CD2KanbanPage from './pages/production/CD2KanbanPage'
 import ScanMayPage from './pages/production/ScanMayPage'
 import ScanHistoryPage from './pages/production/ScanHistoryPage'
@@ -121,6 +124,9 @@ export default function App() {
 
         {/* Phiếu phôi sóng */}
         <Route path="production/phieu-phoi" element={<PhieuPhoiPage />} />
+        <Route path="production/phieu-nhap-phoi" element={<PhieuNhapPhoiSongPage />} />
+        <Route path="production/kho-phoi" element={<KhoPhoiPage />} />
+        <Route path="production/kho-thanh-pham" element={<KhoThanhPhamPage />} />
 
         {/* Công Đoạn 2 */}
         <Route path="production/cd2" element={<CD2KanbanPage />} />

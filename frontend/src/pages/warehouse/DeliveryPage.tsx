@@ -27,6 +27,7 @@ export default function DeliveryPage() {
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [selectedSOId, setSelectedSOId] = useState<number | undefined>()
+  const [formPxId, setFormPxId] = useState<number | null>(null)
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses-all'],
@@ -84,6 +85,12 @@ export default function DeliveryPage() {
   useEffect(() => {
     if (!soDetail) return
     form.setFieldsValue({ dia_chi_giao: (soDetail as any).dia_chi_giao || '' })
+    const pxId: number | null = (soDetail as any).phan_xuong_id ?? null
+    setFormPxId(pxId)
+    if (pxId) {
+      const tpWh = warehouses.find(w => w.phan_xuong_id === pxId && w.loai_kho === 'THANH_PHAM' && w.trang_thai)
+      if (tpWh) form.setFieldValue('warehouse_id', tpWh.id)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [soDetail])
 
@@ -170,7 +177,7 @@ export default function DeliveryPage() {
         </Col>
         <Col>
           <Button type="primary" icon={<PlusOutlined />}
-            onClick={() => { form.resetFields(); setSelectedSOId(undefined); setOpen(true) }}>
+            onClick={() => { form.resetFields(); setSelectedSOId(undefined); setFormPxId(null); setOpen(true) }}>
             Tạo phiếu giao hàng
           </Button>
         </Col>
@@ -198,7 +205,7 @@ export default function DeliveryPage() {
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 900 }} />
       </Card>
 
-      <Drawer open={open} onClose={() => setOpen(false)} title="Tạo phiếu giao hàng" width={820}
+      <Drawer open={open} onClose={() => { setOpen(false); setFormPxId(null) }} title="Tạo phiếu giao hàng" width={820}
         footer={
           <Space>
             <Button onClick={() => setOpen(false)}>Huỷ</Button>
@@ -230,7 +237,9 @@ export default function DeliveryPage() {
             <Col span={8}>
               <Form.Item name="warehouse_id" label="Kho xuất TP" rules={[{ required: true, message: 'Chọn kho' }]}>
                 <Select placeholder="Chọn kho"
-                  options={warehouses.filter(w => w.trang_thai).map(w => ({ value: w.id, label: w.ten_kho }))} />
+                  options={warehouses
+                    .filter(w => w.trang_thai && (!formPxId || w.phan_xuong_id === formPxId))
+                    .map(w => ({ value: w.id, label: w.ten_kho }))} />
               </Form.Item>
             </Col>
             <Col span={8}>
