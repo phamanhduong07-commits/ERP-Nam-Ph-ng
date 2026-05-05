@@ -155,27 +155,48 @@ def _to_dict(p: PhieuIn) -> dict:
 
 def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Optional[ProductionOutput]:
     """Tự động tạo phiếu nhập thành phẩm khi hoàn thành định hình.
-    Trả về ProductionOutput nếu tạo thành công, None nếu thiếu thông tin."""
+    Trả về ProductionOutput nếu tạo thành công."""
     import logging
     _log = logging.getLogger("erp")
 
     if not p.production_order_id:
-        return None
-    po = db.query(ProductionOrder).filter(ProductionOrder.id == p.production_order_id).first()
-    if not po or not po.phan_xuong_id:
-        return None
+        raise HTTPException(400, "Phiếu in chưa gắn LSX nên không thể nhập kho thành phẩm")
 
-    kho = _get_workshop_warehouse(db, po.phan_xuong_id, "THANH_PHAM")
+    existing = db.query(ProductionOutput).filter(
+        ProductionOutput.production_order_id == p.production_order_id,
+        ProductionOutput.ghi_chu.ilike(f"%{p.so_phieu}%"),
+    ).first()
+    if existing:
+        return existing
+
+    # Resolve phan_xuong_id: ưu tiên xưởng của PhieuIn (nơi định hình),
+    # fallback sang ProductionOrder nếu PhieuIn không có xưởng
+    po: Optional[ProductionOrder] = None
+    phan_xuong_id: Optional[int] = p.phan_xuong_id
+    don_gia = Decimal("0")
+
+    if p.production_order_id:
+        po = db.query(ProductionOrder).filter(ProductionOrder.id == p.production_order_id).first()
+        if po:
+            if not phan_xuong_id:
+                phan_xuong_id = po.phan_xuong_id
+            # Lấy giá bán mục tiêu từ item đầu tiên của LSX
+            first_item = db.query(ProductionOrderItem).filter(
+                ProductionOrderItem.production_order_id == po.id
+            ).order_by(ProductionOrderItem.id).first()
+            if first_item and first_item.gia_ban_muc_tieu:
+                don_gia = Decimal(str(first_item.gia_ban_muc_tieu))
+
+    if not phan_xuong_id:
+        raise HTTPException(400, "Không xác định được xưởng sản xuất nên không thể nhập kho thành phẩm")
+
+    kho = _get_workshop_warehouse(db, phan_xuong_id, "THANH_PHAM")
     if not kho:
-        _log.warning(
-            "Định hình %s: xưởng %s chưa có kho THANH_PHAM — bỏ qua auto nhập kho",
-            p.so_phieu, po.phan_xuong_id,
-        )
-        return None
+        raise HTTPException(400, "Xưởng sản xuất chưa có kho THÀNH PHẨM. Vui lòng khởi tạo kho cho xưởng trước.")
 
-    so_luong = p.so_luong_sau_in_ok or p.so_luong_in_ok
+    so_luong = p.so_luong_sau_in_ok or p.so_luong_in_ok or p.so_luong_phoi
     if not so_luong:
-        return None
+        raise HTTPException(400, "Chưa có số lượng đạt để nhập kho thành phẩm")
 
     ym = date.today().strftime("%Y%m")
     pattern = f"TP-{ym}-%"
@@ -189,6 +210,14 @@ def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Op
         except (ValueError, IndexError):
             seq = 1
 
+    product_id = None
+    if po:
+        first_item = db.query(ProductionOrderItem).filter(
+            ProductionOrderItem.production_order_id == po.id
+        ).order_by(ProductionOrderItem.id).first()
+        if first_item:
+            product_id = first_item.product_id
+
     ten_hang = p.ten_hang or ""
     sl = Decimal(str(so_luong))
     out = ProductionOutput(
@@ -196,22 +225,24 @@ def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Op
         ngay_nhap=date.today(),
         production_order_id=p.production_order_id,
         warehouse_id=kho.id,
+        product_id=product_id,
         ten_hang=ten_hang,
         so_luong_nhap=sl,
         so_luong_loi=Decimal(str(p.so_luong_sau_in_loi or 0)),
         dvt="Thùng",
-        don_gia_xuat_xuong=Decimal("0"),
+        don_gia_xuat_xuong=don_gia,
         ghi_chu=f"Tự động từ phiếu in {p.so_phieu}",
         created_by=user_id,
     )
     db.add(out)
     db.flush()
 
-    bal = _get_or_create_balance(db, kho.id, ten_hang=ten_hang, don_vi="Thùng")
-    _nhap_balance(bal, sl, Decimal("0"))
+    bal = _get_or_create_balance(db, kho.id, product_id=product_id, ten_hang=ten_hang, don_vi="Thùng")
+    _nhap_balance(bal, sl, don_gia)
     _log_tx(
-        db, kho.id, "NHAP_SX", sl, Decimal("0"), bal.ton_luong,
+        db, kho.id, "NHAP_SX", sl, don_gia, bal.ton_luong,
         "production_outputs", out.id, user_id,
+        product_id=product_id,
         ghi_chu=f"Hoàn thành định hình — {p.so_phieu}",
     )
     return out

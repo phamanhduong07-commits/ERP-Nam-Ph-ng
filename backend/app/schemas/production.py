@@ -157,6 +157,8 @@ class ProductionOrderListItem(BaseModel):
     ten_hang: str | None = None          # tên mã hàng (item đầu tiên của lệnh SX)
     ten_phap_nhan_sx: str | None = None
     ten_kho_sx: str | None = None
+    phan_xuong_id: int | None = None
+    gia_ban_muc_tieu: Decimal | None = None
     trang_thai: str
     ngay_hoan_thanh_ke_hoach: date | None
     so_dong: int = 0

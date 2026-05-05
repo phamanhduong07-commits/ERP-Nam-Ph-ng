@@ -714,6 +714,18 @@ CREATE INDEX idx_soi_product ON sales_order_items(product_id);
 
 -- Purchase Orders
 CREATE INDEX idx_po_ngay ON purchase_orders(ngay_po DESC);
+
+-- Additional indexes for performance
+CREATE INDEX idx_customers_ma_kh ON customers(ma_kh);
+CREATE INDEX idx_sales_orders_so_don ON sales_orders(so_don);
+CREATE INDEX idx_paper_materials_ma_chinh ON paper_materials(ma_chinh);
+CREATE INDEX idx_other_materials_ma_chinh ON other_materials(ma_chinh);
+CREATE INDEX idx_products_ma_chinh ON products(ma_chinh);
+
+-- Indexes for created_at ranges
+CREATE INDEX idx_customers_created_at ON customers(created_at DESC);
+CREATE INDEX idx_sales_orders_created_at ON sales_orders(created_at DESC);
+CREATE INDEX idx_purchase_orders_created_at ON purchase_orders(created_at DESC);
 CREATE INDEX idx_po_supplier ON purchase_orders(supplier_id);
 CREATE INDEX idx_po_trang_thai ON purchase_orders(trang_thai);
 

@@ -35,7 +35,7 @@ STAGE_LABELS = {
 
 def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None):
     nhap = nhap_map.get(po.id)
-    tong_nhap = float(nhap.tong_thuc_te or 0) - float(nhap.tong_loi or 0) if nhap else 0.0
+    tong_nhap = float(nhap.tong_tam or 0) if nhap else 0.0
     ton_kho = tong_nhap - xuat_map.get(po.id, 0.0)
     pi = pi_map.get(po.id)
 
@@ -168,8 +168,7 @@ def _query_rows(
         nhap_agg = (
             db.query(
                 PhieuNhapPhoiSong.production_order_id,
-                func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te).label("tong_thuc_te"),
-                func.sum(PhieuNhapPhoiSongItem.so_luong_loi).label("tong_loi"),
+                func.sum(PhieuNhapPhoiSongItem.so_tam).label("tong_tam"),
                 func.max(PhieuNhapPhoiSong.ngay).label("ngay_cuoi"),
             )
             .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSong.id == PhieuNhapPhoiSongItem.phieu_id)

@@ -25,6 +25,8 @@ export interface YeuCauGiaoHang {
   ngay_giao_yeu_cau: string | null
   customer_id: number | null
   ten_khach_hang: string | null
+  ten_phap_nhan: string | null
+  ten_kho_tp: string | null
   dia_chi_giao: string | null
   nguoi_nhan: string | null
   trang_thai: string  // moi | da_sap_xe | da_tao_phieu | huy

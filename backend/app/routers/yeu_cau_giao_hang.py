@@ -66,15 +66,28 @@ def _gen_yc_so(db: Session) -> str:
 def _yc_to_dict(yc: YeuCauGiaoHang, db: Session) -> dict:
     cus = db.get(Customer, yc.customer_id) if yc.customer_id else None
     items_out = []
+    ten_phap_nhan_set: list[str] = []
+    ten_kho_tp_set: list[str] = []
     for it in yc.items:
         po = db.get(ProductionOrder, it.production_order_id)
         wh = db.get(Warehouse, it.warehouse_id)
+        ten_kho = wh.ten_kho if wh else None
+        ten_phap_nhan = None
+        if po and po.phap_nhan_sx_id:
+            from app.models.master import PhapNhan
+            pn = db.get(PhapNhan, po.phap_nhan_sx_id)
+            ten_phap_nhan = pn.ten_phap_nhan if pn else None
+        if ten_phap_nhan and ten_phap_nhan not in ten_phap_nhan_set:
+            ten_phap_nhan_set.append(ten_phap_nhan)
+        if ten_kho and ten_kho not in ten_kho_tp_set:
+            ten_kho_tp_set.append(ten_kho)
         items_out.append({
             "id": it.id,
             "production_order_id": it.production_order_id,
             "so_lenh": po.so_lenh if po else None,
             "warehouse_id": it.warehouse_id,
-            "ten_kho": wh.ten_kho if wh else None,
+            "ten_kho": ten_kho,
+            "ten_phap_nhan": ten_phap_nhan,
             "product_id": it.product_id,
             "sales_order_item_id": it.sales_order_item_id,
             "ten_hang": it.ten_hang,
@@ -91,6 +104,8 @@ def _yc_to_dict(yc: YeuCauGiaoHang, db: Session) -> dict:
         "ngay_giao_yeu_cau": str(yc.ngay_giao_yeu_cau) if yc.ngay_giao_yeu_cau else None,
         "customer_id": yc.customer_id,
         "ten_khach_hang": cus.ten_viet_tat if cus else None,
+        "ten_phap_nhan": ", ".join(ten_phap_nhan_set) if ten_phap_nhan_set else None,
+        "ten_kho_tp": ", ".join(ten_kho_tp_set) if ten_kho_tp_set else None,
         "dia_chi_giao": yc.dia_chi_giao,
         "nguoi_nhan": yc.nguoi_nhan,
         "trang_thai": yc.trang_thai,

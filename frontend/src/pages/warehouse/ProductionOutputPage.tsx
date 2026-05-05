@@ -8,7 +8,7 @@ import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateProductionOutputPayload, ProductionOutput } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
-import { productionOrdersApi } from '../../api/productionOrders'
+import { productionOrdersApi, type ProductionOrderListItem } from '../../api/productionOrders'
 
 const { Title, Text } = Typography
 
@@ -155,12 +155,13 @@ export default function ProductionOutputPage() {
                 label: `${o.so_lenh}${o.ten_khach_hang ? ' — ' + o.ten_khach_hang : ''}`,
               }))}
               onChange={(orderId) => {
-                const order = (lsxList as any[]).find((o: any) => o.id === orderId)
+                const order = (lsxList as ProductionOrderListItem[]).find(o => o.id === orderId)
                 const pxId = order?.phan_xuong_id ?? null
                 setFormPxId(pxId)
                 const tpWh = warehouses.find(w => w.loai_kho === 'THANH_PHAM' && w.trang_thai && w.phan_xuong_id === pxId)
-                if (tpWh) form.setFieldValue('warehouse_id', tpWh.id)
-                else form.setFieldValue('warehouse_id', undefined)
+                form.setFieldValue('warehouse_id', tpWh?.id ?? undefined)
+                if (order?.ten_hang) form.setFieldValue('ten_hang', order.ten_hang)
+                if (order?.gia_ban_muc_tieu) form.setFieldValue('don_gia_xuat_xuong', order.gia_ban_muc_tieu)
               }}
             />
           </Form.Item>

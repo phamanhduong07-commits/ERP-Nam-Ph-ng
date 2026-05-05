@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import Product, Customer
+from app.services.product_service import ProductService
 from app.schemas.master import ProductCreate, ProductUpdate, ProductResponse, ProductShort
 from app.schemas.sales import PagedResponse
 
@@ -20,28 +20,8 @@ def list_products(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = db.query(Product).filter(Product.trang_thai == True)
-    if search:
-        like = f"%{search}%"
-        q = q.filter(
-            Product.ma_amis.ilike(like)
-            | Product.ma_hang.ilike(like)
-            | Product.ten_hang.ilike(like)
-        )
-    if ma_kh_id:
-        q = q.filter(Product.ma_kh_id == ma_kh_id)
-    if so_lop:
-        q = q.filter(Product.so_lop == so_lop)
-
-    total = q.count()
-    items = q.order_by(Product.ten_hang).offset((page - 1) * page_size).limit(page_size).all()
-    return PagedResponse(
-        items=[ProductShort.model_validate(p) for p in items],
-        total=total,
-        page=page,
-        page_size=page_size,
-        total_pages=(total + page_size - 1) // page_size,
-    )
+    service = ProductService(db)
+    return service.get_products_paginated(search, ma_kh_id, so_lop, page, page_size)
 
 
 @router.get("/by-customer/{customer_id}", response_model=list[ProductShort])
@@ -50,13 +30,8 @@ def get_products_by_customer(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    products = (
-        db.query(Product)
-        .filter(Product.ma_kh_id == customer_id, Product.trang_thai == True)
-        .order_by(Product.ten_hang)
-        .all()
-    )
-    return [ProductShort.model_validate(p) for p in products]
+    service = ProductService(db)
+    return service.get_products_by_customer(customer_id)
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
@@ -65,9 +40,8 @@ def get_product(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    product = db.query(Product).options(joinedload(Product.khach_hang)).filter(Product.id == product_id).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Không tìm thấy sản phẩm")
+    service = ProductService(db)
+    return service.get_product_by_id(product_id)
     result = ProductResponse.model_validate(product)
     if product.khach_hang:
         result.ten_khach_hang = product.khach_hang.ten_viet_tat

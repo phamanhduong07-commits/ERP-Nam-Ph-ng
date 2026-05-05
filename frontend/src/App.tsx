@@ -1,64 +1,70 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { useAuthStore } from './store/auth'
 import AppLayout from './components/AppLayout'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import OrderCreate from './pages/sales/OrderCreate'
-import OrderDetail from './pages/sales/OrderDetail'
-import SalesOrdersPage from './pages/sales/SalesOrdersPage'
-import QuoteForm from './pages/quotes/QuoteForm'
-import QuoteDetail from './pages/quotes/QuoteDetail'
-import QuotesPage from './pages/quotes/QuotesPage'
-import CauTrucList from './pages/danhmuc/CauTrucList'
-import CustomerList from './pages/danhmuc/CustomerList'
-import SupplierList from './pages/danhmuc/SupplierList'
-import MaterialGroupList from './pages/danhmuc/MaterialGroupList'
-import PaperMaterialList from './pages/danhmuc/PaperMaterialList'
-import OtherMaterialList from './pages/danhmuc/OtherMaterialList'
-import WarehouseList from './pages/danhmuc/WarehouseList'
-import ProductList from './pages/danhmuc/ProductList'
-import UserList from './pages/danhmuc/UserList'
-import DvtList from './pages/danhmuc/DvtList'
-import ViTriList from './pages/danhmuc/ViTriList'
-import XeList from './pages/danhmuc/XeList'
-import TaiXeList from './pages/danhmuc/TaiXeList'
-import TinhThanhList from './pages/danhmuc/TinhThanhList'
-import PhuongXaList from './pages/danhmuc/PhuongXaList'
-import DonGiaVanChuyenList from './pages/danhmuc/DonGiaVanChuyenList'
-import ProductionOrderCreate from './pages/production/ProductionOrderCreate'
-import ProductionOrderDetail from './pages/production/ProductionOrderDetail'
-import ProductionOrdersPage from './pages/production/ProductionOrdersPage'
-import ProductionPlansPage from './pages/production/ProductionPlansPage'
-import ProductionPlanForm from './pages/production/ProductionPlanForm'
-import ProductionQueuePage from './pages/production/ProductionQueuePage'
-import IndirectCostList from './pages/danhmuc/IndirectCostList'
-import AddonRateList from './pages/danhmuc/AddonRateList'
-import BomListPage from './pages/production/BomListPage'
-import PhieuPhoiPage from './pages/production/PhieuPhoiPage'
-import KhoPhoiPage from './pages/production/KhoPhoiPage'
-import KhoThanhPhamPage from './pages/production/KhoThanhPhamPage'
-import PhieuNhapPhoiSongPage from './pages/production/PhieuNhapPhoiSongPage'
-import CD2KanbanPage from './pages/production/CD2KanbanPage'
-import ScanMayPage from './pages/production/ScanMayPage'
-import ScanHistoryPage from './pages/production/ScanHistoryPage'
-import CD2DashboardPage from './pages/production/CD2DashboardPage'
-import PhieuInHistoryPage from './pages/production/PhieuInHistoryPage'
-import MayInQueuePage from './pages/production/MayInQueuePage'
-import DinhHinhPage from './pages/production/DinhHinhPage'
-import SauInKanbanPage from './pages/production/SauInKanbanPage'
-import ShiftPage from './pages/production/ShiftPage'
-import ConfigPage from './pages/production/ConfigPage'
-import InventoryPage from './pages/warehouse/InventoryPage'
-import KhoTheoXuongPage from './pages/warehouse/KhoTheoXuongPage'
-import ReceiptsPage from './pages/warehouse/ReceiptsPage'
-import IssuesPage from './pages/warehouse/IssuesPage'
-import TransfersPage from './pages/warehouse/TransfersPage'
-import ProductionOutputPage from './pages/warehouse/ProductionOutputPage'
-import DeliveryPage from './pages/warehouse/DeliveryPage'
-import POListPage from './pages/purchase/POListPage'
-import PhapNhanList from './pages/danhmuc/PhapNhanList'
-import PhanXuongList from './pages/danhmuc/PhanXuongList'
 import { ErrorBoundary } from './components/ErrorBoundary'
+
+const Login = lazy(() => import('./pages/Login'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const OrderCreate = lazy(() => import('./pages/sales/OrderCreate'))
+const OrderDetail = lazy(() => import('./pages/sales/OrderDetail'))
+const SalesOrdersPage = lazy(() => import('./pages/sales/SalesOrdersPage'))
+const QuoteForm = lazy(() => import('./pages/quotes/QuoteForm'))
+const QuoteDetail = lazy(() => import('./pages/quotes/QuoteDetail'))
+const QuotesPage = lazy(() => import('./pages/quotes/QuotesPage'))
+const CauTrucList = lazy(() => import('./pages/danhmuc/CauTrucList'))
+const CustomerList = lazy(() => import('./pages/danhmuc/CustomerList'))
+const SupplierList = lazy(() => import('./pages/danhmuc/SupplierList'))
+const MaterialGroupList = lazy(() => import('./pages/danhmuc/MaterialGroupList'))
+const PaperMaterialList = lazy(() => import('./pages/danhmuc/PaperMaterialList'))
+const OtherMaterialList = lazy(() => import('./pages/danhmuc/OtherMaterialList'))
+const WarehouseList = lazy(() => import('./pages/danhmuc/WarehouseList'))
+const ProductList = lazy(() => import('./pages/danhmuc/ProductList'))
+const UserList = lazy(() => import('./pages/danhmuc/UserList'))
+const DvtList = lazy(() => import('./pages/danhmuc/DvtList'))
+const ViTriList = lazy(() => import('./pages/danhmuc/ViTriList'))
+const XeList = lazy(() => import('./pages/danhmuc/XeList'))
+const TaiXeList = lazy(() => import('./pages/danhmuc/TaiXeList'))
+const TinhThanhList = lazy(() => import('./pages/danhmuc/TinhThanhList'))
+const PhuongXaList = lazy(() => import('./pages/danhmuc/PhuongXaList'))
+const DonGiaVanChuyenList = lazy(() => import('./pages/danhmuc/DonGiaVanChuyenList'))
+const ProductionOrderCreate = lazy(() => import('./pages/production/ProductionOrderCreate'))
+const ProductionOrderDetail = lazy(() => import('./pages/production/ProductionOrderDetail'))
+const ProductionOrdersPage = lazy(() => import('./pages/production/ProductionOrdersPage'))
+const ProductionPlansPage = lazy(() => import('./pages/production/ProductionPlansPage'))
+const ProductionPlanForm = lazy(() => import('./pages/production/ProductionPlanForm'))
+const ProductionQueuePage = lazy(() => import('./pages/production/ProductionQueuePage'))
+const IndirectCostList = lazy(() => import('./pages/danhmuc/IndirectCostList'))
+const AddonRateList = lazy(() => import('./pages/danhmuc/AddonRateList'))
+const BomListPage = lazy(() => import('./pages/production/BomListPage'))
+const PhieuPhoiPage = lazy(() => import('./pages/production/PhieuPhoiPage'))
+const KhoPhoiPage = lazy(() => import('./pages/production/KhoPhoiPage'))
+const KhoThanhPhamPage = lazy(() => import('./pages/production/KhoThanhPhamPage'))
+const PhieuNhapPhoiSongPage = lazy(() => import('./pages/production/PhieuNhapPhoiSongPage'))
+const CD2KanbanPage = lazy(() => import('./pages/production/CD2KanbanPage'))
+const ScanMayPage = lazy(() => import('./pages/production/ScanMayPage'))
+const ScanHistoryPage = lazy(() => import('./pages/production/ScanHistoryPage'))
+const CD2DashboardPage = lazy(() => import('./pages/production/CD2DashboardPage'))
+const PhieuInHistoryPage = lazy(() => import('./pages/production/PhieuInHistoryPage'))
+const MayInQueuePage = lazy(() => import('./pages/production/MayInQueuePage'))
+const DinhHinhPage = lazy(() => import('./pages/production/DinhHinhPage'))
+const SauInKanbanPage = lazy(() => import('./pages/production/SauInKanbanPage'))
+const ShiftPage = lazy(() => import('./pages/production/ShiftPage'))
+const ConfigPage = lazy(() => import('./pages/production/ConfigPage'))
+const InventoryPage = lazy(() => import('./pages/warehouse/InventoryPage'))
+const KhoTheoXuongPage = lazy(() => import('./pages/warehouse/KhoTheoXuongPage'))
+const ReceiptsPage = lazy(() => import('./pages/warehouse/ReceiptsPage'))
+const IssuesPage = lazy(() => import('./pages/warehouse/IssuesPage'))
+const TransfersPage = lazy(() => import('./pages/warehouse/TransfersPage'))
+const StockAdjustmentsPage = lazy(() => import('./pages/warehouse/StockAdjustmentsPage'))
+const ProductionOutputPage = lazy(() => import('./pages/warehouse/ProductionOutputPage'))
+const DeliveryPage = lazy(() => import('./pages/warehouse/DeliveryPage'))
+const TheoDonHangPage = lazy(() => import('./pages/sales/TheoDonHangPage'))
+const GiaoHangPage = lazy(() => import('./pages/sales/GiaoHangPage'))
+const POListPage = lazy(() => import('./pages/purchase/POListPage'))
+const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
+const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
+const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -67,7 +73,8 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <Routes>
+    <Suspense fallback={<div style={{ padding: 24 }}>Đang tải...</div>}>
+      <Routes>
       <Route path="/login" element={<Login />} />
       <Route
         path="/"
@@ -101,6 +108,7 @@ export default function App() {
         <Route path="master/warehouses" element={<WarehouseList />} />
         <Route path="master/products" element={<ProductList />} />
         <Route path="master/users" element={<UserList />} />
+        <Route path="master/roles" element={<RolePermissionsPage />} />
         <Route path="master/don-vi-tinh" element={<DvtList />} />
         <Route path="master/vi-tri" element={<ViTriList />} />
         <Route path="master/xe" element={<XeList />} />
@@ -124,9 +132,11 @@ export default function App() {
 
         {/* Phiếu phôi sóng */}
         <Route path="production/phieu-phoi" element={<PhieuPhoiPage />} />
+        <Route path="sales/theo-don-hang" element={<TheoDonHangPage />} />
+        <Route path="sales/giao-hang" element={<GiaoHangPage />} />
         <Route path="production/phieu-nhap-phoi" element={<PhieuNhapPhoiSongPage />} />
         <Route path="production/kho-phoi" element={<KhoPhoiPage />} />
-        <Route path="production/kho-thanh-pham" element={<KhoThanhPhamPage />} />
+        <Route path="production/kho-thanh-pham" element={<ErrorBoundary><KhoThanhPhamPage /></ErrorBoundary>} />
 
         {/* Công Đoạn 2 */}
         <Route path="production/cd2" element={<CD2KanbanPage />} />
@@ -141,6 +151,8 @@ export default function App() {
         <Route path="production/cd2/config" element={<ConfigPage />} />
 
         {/* Kho */}
+        <Route path="warehouse/kho-phoi" element={<KhoPhoiPage />} />
+        <Route path="warehouse/kho-thanh-pham" element={<ErrorBoundary><KhoThanhPhamPage /></ErrorBoundary>} />
         <Route path="warehouse/theo-xuong" element={<KhoTheoXuongPage />} />
         <Route path="warehouse/inventory" element={<InventoryPage />} />
         <Route path="warehouse/receipts" element={<ReceiptsPage />} />
@@ -148,6 +160,7 @@ export default function App() {
         <Route path="warehouse/production-output" element={<ProductionOutputPage />} />
         <Route path="warehouse/delivery" element={<DeliveryPage />} />
         <Route path="warehouse/transfers" element={<TransfersPage />} />
+        <Route path="warehouse/stock-adjustments" element={<StockAdjustmentsPage />} />
 
         {/* Mua hàng */}
         <Route path="purchasing/orders" element={<POListPage />} />
@@ -164,6 +177,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
-    </Routes>
+      </Routes>
+    </Suspense>
   )
 }

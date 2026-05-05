@@ -10,6 +10,7 @@ from app.models.warehouse_doc import (
     ProductionOutput,
     DeliveryOrder, DeliveryOrderItem,
     PhieuChuyenKho, PhieuChuyenKhoItem,
+    StockAdjustment, StockAdjustmentItem,
 )
 from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
 from app.models.inventory import InventoryBalance, InventoryTransaction, PaperRoll
@@ -21,3 +22,9 @@ from app.models.addon_rate import AddonRate
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
 from app.models.cd2 import MayIn, PhieuIn
+from app.models.billing import SalesInvoice
+from app.models.accounting import (
+    ChartOfAccounts, JournalEntry, JournalEntryLine,
+    PurchaseInvoice, CashReceipt, CashPayment,
+    DebtLedgerEntry, OpeningBalance,
+)

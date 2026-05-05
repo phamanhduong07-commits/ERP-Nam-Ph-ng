@@ -1,6 +1,17 @@
 /* ─── ERP Nam Phương — Global Typography & Base Styles ──────────────────── */
 
 /* ── Reset & Base ── */
+:root {
+  --np-blue: #1b168e;
+  --np-blue-700: #15116f;
+  --np-blue-050: #f5f7ff;
+  --np-orange: #ff8200;
+  --np-orange-050: #fff4e8;
+  --np-text: #20233a;
+  --np-muted: #60647a;
+  --np-border: #e7e9f2;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -12,12 +23,12 @@ html {
 
 body {
   margin: 0;
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Segoe UI Variable', 'Segoe UI', Arial, sans-serif;
   font-size: 14px;
   font-weight: 400;
-  line-height: 1.5;           /* ERP standard: 1.4–1.5 */
-  color: #333333;             /* darker gray — easier on eyes than #000 */
-  background: #f0f2f5;
+  line-height: 1.48;          /* ERP standard: 1.4-1.5 */
+  color: var(--np-text);       /* darker gray — easier on eyes than #000 */
+  background: var(--np-blue-050);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -45,11 +56,11 @@ body,
 .text-2xl { font-size: 20px; }
 
 /* ── Color tokens ── */
-.text-primary   { color: #333333; }
-.text-secondary { color: #666666; }
+.text-primary   { color: var(--np-text); }
+.text-secondary { color: var(--np-muted); }
 .text-muted     { color: #999999; }
 .text-danger    { color: #cf1322; }  /* số âm / cảnh báo */
-.text-link      { color: #1677ff; }  /* số có thể click */
+.text-link      { color: var(--np-blue); }  /* số có thể click */
 
 /* ── Ant Design component overrides ── */
 
@@ -58,15 +69,19 @@ body,
   font-size: 13px;            /* compact hơn body một chút cho bảng dữ liệu */
 }
 .ant-table-thead > tr > th {
-  font-size: 12px;
-  font-weight: 600;
-  color: #4a4a4a;
-  background: #fafafa;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--np-blue);
+  background: var(--np-blue-050);
   white-space: nowrap;
 }
 .ant-table-tbody > tr > td {
-  color: #333333;
-  line-height: 1.45;
+  color: var(--np-text);
+  line-height: 1.42;
+}
+.ant-table-small .ant-table-thead > tr > th,
+.ant-table-small .ant-table-tbody > tr > td {
+  padding: 7px 8px;
 }
 /* Cột số — luôn căn phải */
 .ant-table-tbody > tr > td.col-number,
@@ -77,14 +92,14 @@ body,
 /* Số âm */
 .num-negative { color: #cf1322; }
 /* Số clickable */
-.num-link     { color: #1677ff; cursor: pointer; }
+.num-link     { color: var(--np-blue); cursor: pointer; }
 .num-link:hover { text-decoration: underline; }
 
 /* Form labels */
 .ant-form-item-label > label {
   font-size: 13px;
-  font-weight: 500;
-  color: #4a4a4a;
+  font-weight: 600;
+  color: var(--np-muted);
 }
 
 /* Input / Select */
@@ -93,14 +108,20 @@ body,
 .ant-select-selection-item,
 .ant-picker-input > input {
   font-size: 14px;
-  color: #333333;
+  color: var(--np-text);
+}
+
+.ant-select-selection-placeholder,
+.ant-input::placeholder,
+.ant-picker-input > input::placeholder {
+  color: #a4a8b8;
 }
 
 /* Card titles */
 .ant-card-head-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333333;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--np-text);
 }
 
 /* Modal titles */
@@ -116,10 +137,10 @@ body,
 }
 
 /* Page headings (Typography.Title) */
-.ant-typography h1 { font-size: 20px; font-weight: 700; color: #222; }
-.ant-typography h2 { font-size: 18px; font-weight: 700; color: #222; }
-.ant-typography h3 { font-size: 16px; font-weight: 600; color: #333; }
-.ant-typography h4 { font-size: 14px; font-weight: 600; color: #333; }
+.ant-typography h1 { font-size: 22px; font-weight: 700; color: var(--np-blue); }
+.ant-typography h2 { font-size: 19px; font-weight: 700; color: var(--np-blue); }
+.ant-typography h3 { font-size: 17px; font-weight: 700; color: var(--np-text); }
+.ant-typography h4 { font-size: 15px; font-weight: 700; color: var(--np-text); }
 
 /* Statistic numbers */
 .ant-statistic-content-value {
@@ -128,21 +149,104 @@ body,
   font-variant-numeric: tabular-nums;
 }
 .ant-statistic-title {
-  font-size: 12px;
-  color: #666;
+  font-size: 13px;
+  color: var(--np-muted);
 }
 
 /* Tag — trạng thái */
 .ant-tag {
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 21px;
 }
 
 /* Menu sidebar */
 .ant-menu-item,
 .ant-menu-submenu-title {
   font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.ant-menu-item .anticon,
+.ant-menu-submenu-title .anticon {
+  font-size: 14px;
+}
+
+.ant-menu-inline .ant-menu-item,
+.ant-menu-inline .ant-menu-submenu-title {
+  margin-block: 2px;
+}
+
+.ant-layout-sider .ant-menu,
+.ant-layout-sider .ant-menu-sub,
+.ant-layout-sider .ant-menu-item,
+.ant-layout-sider .ant-menu-submenu-title {
+  background: var(--np-blue) !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.ant-layout-sider .ant-menu-item .anticon,
+.ant-layout-sider .ant-menu-submenu-title .anticon,
+.ant-layout-sider .ant-menu-submenu-arrow {
+  color: rgba(255, 255, 255, 0.82) !important;
+}
+
+.ant-layout-sider .ant-menu-item a {
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.ant-layout-sider .ant-menu-item:hover,
+.ant-layout-sider .ant-menu-submenu-title:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+.ant-layout-sider .ant-menu-item-selected {
+  background: var(--np-orange) !important;
+  color: #ffffff !important;
+  border-inline-end: 0 !important;
+  box-shadow: inset 4px 0 0 rgba(255, 255, 255, 0.75);
+}
+
+.ant-layout-sider .ant-menu-item-selected a,
+.ant-layout-sider .ant-menu-item-selected .anticon {
+  color: #ffffff !important;
+}
+
+.ant-btn-primary {
+  background: var(--np-blue);
+}
+
+.ant-btn-primary:not(:disabled):hover {
+  background: var(--np-blue-700);
+}
+
+.ant-menu-light .ant-menu-item-selected {
+  border-inline-end: 3px solid var(--np-orange);
+}
+
+.np-brand-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.np-brand-logo ~ .ant-typography {
+  display: none;
+}
+
+.np-login-brand > .ant-space-item:nth-child(2) {
+  display: none;
+}
+
+.ant-layout-content {
+  color: var(--np-text);
+}
+
+.ant-btn {
+  font-weight: 600;
 }
 
 /* Breadcrumb */

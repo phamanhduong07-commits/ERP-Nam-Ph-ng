@@ -160,6 +160,9 @@ class DeliveryOrder(Base):
     items: Mapped[list["DeliveryOrderItem"]] = relationship(
         "DeliveryOrderItem", back_populates="delivery", cascade="all, delete-orphan"
     )
+    invoices: Mapped[list["SalesInvoice"]] = relationship(
+        "SalesInvoice", back_populates="delivery"
+    )
 
 
 class DeliveryOrderItem(Base):
@@ -223,3 +226,48 @@ class PhieuChuyenKhoItem(Base):
     phieu: Mapped["PhieuChuyenKho"] = relationship("PhieuChuyenKho", back_populates="items")
     paper_material = relationship("PaperMaterial")
     other_material = relationship("OtherMaterial")
+
+
+class StockAdjustment(Base):
+    """Phieu kiem ke / dieu chinh ton kho."""
+    __tablename__ = "stock_adjustments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # KK-YYYYMM-XXXX
+    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    ngay: Mapped[date] = mapped_column(Date, nullable=False)
+    ly_do: Mapped[str | None] = mapped_column(String(100))
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    warehouse = relationship("Warehouse")
+    creator = relationship("User")
+    items: Mapped[list["StockAdjustmentItem"]] = relationship(
+        "StockAdjustmentItem", back_populates="adjustment", cascade="all, delete-orphan"
+    )
+
+
+class StockAdjustmentItem(Base):
+    __tablename__ = "stock_adjustment_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    adjustment_id: Mapped[int] = mapped_column(Integer, ForeignKey("stock_adjustments.id"), nullable=False)
+    inventory_balance_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("inventory_balances.id"))
+    paper_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_materials.id"))
+    other_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("other_materials.id"))
+    product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"))
+    ten_hang: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    don_vi: Mapped[str] = mapped_column(String(20), default="Kg")
+    so_luong_so_sach: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False, default=0)
+    so_luong_thuc_te: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False, default=0)
+    chenhlech: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False, default=0)
+    don_gia: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=0)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+
+    adjustment: Mapped["StockAdjustment"] = relationship("StockAdjustment", back_populates="items")
+    balance = relationship("InventoryBalance")
+    paper_material = relationship("PaperMaterial")
+    other_material = relationship("OtherMaterial")
+    product = relationship("Product")

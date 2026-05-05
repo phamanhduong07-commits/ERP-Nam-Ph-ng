@@ -28,31 +28,36 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         theme={{
           token: {
             // ── Brand ──────────────────────────────────────────────
-            colorPrimary: '#1677ff',
+            colorPrimary: '#1b168e',
+            colorInfo: '#1b168e',
+            colorWarning: '#ff8200',
+            colorLink: '#1b168e',
             borderRadius: 6,
 
             // ── Typography — ERP standard ──────────────────────────
-            fontFamily: "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
+            fontFamily: "'Segoe UI Variable', 'Segoe UI', Arial, sans-serif",
             fontSize:   14,       // body / data cells
-            fontSizeSM: 12,       // labels, captions
-            fontSizeLG: 16,       // sub-headings
+            fontSizeSM: 13,       // labels, captions
+            fontSizeLG: 15,       // sub-headings
             fontSizeXL: 20,       // page titles
-            fontSizeHeading1: 20,
-            fontSizeHeading2: 18,
-            fontSizeHeading3: 16,
-            fontSizeHeading4: 14,
+            fontSizeHeading1: 22,
+            fontSizeHeading2: 19,
+            fontSizeHeading3: 17,
+            fontSizeHeading4: 15,
             fontSizeHeading5: 13,
 
             // ── Line height (1.4–1.5 per standard) ─────────────────
-            lineHeight:   1.5,
-            lineHeightLG: 1.5,
-            lineHeightSM: 1.4,
+            lineHeight:   1.48,
+            lineHeightLG: 1.45,
+            lineHeightSM: 1.42,
 
             // ── Color — #333 easier on eyes than #000 ──────────────
-            colorText:            '#333333',
-            colorTextSecondary:   '#666666',
-            colorTextDescription: '#999999',
+            colorText:            '#20233a',
+            colorTextSecondary:   '#60647a',
+            colorTextDescription: '#8a8ea3',
             colorTextDisabled:    '#bfbfbf',
+            colorBgLayout:        '#f5f7fb',
+            colorBorderSecondary: '#e7e9f2',
 
             // ── Spacing ─────────────────────────────────────────────
             padding:   16,
@@ -63,22 +68,22 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             // Table — trái tim ERP
             Table: {
               fontSize:        13,
-              fontSizeSM:      12,
-              headerBg:        '#fafafa',
-              headerColor:     '#4a4a4a',
+              fontSizeSM:      13,
+              headerBg:        '#f5f7ff',
+              headerColor:     '#1b168e',
               cellFontSize:    13,
-              rowHoverBg:      '#e6f4ff',
-              borderColor:     '#e8e8e8',
+              rowHoverBg:      '#fff4e8',
+              borderColor:     '#e7e9f2',
             },
             // Form
             Form: {
               labelFontSize: 13,
-              labelColor:    '#4a4a4a',
+              labelColor:    '#4f5368',
             },
             // Input
             Input: {
               fontSize:        14,
-              colorText:       '#333333',
+              colorText:       '#20233a',
               paddingBlock:     6,
               paddingInline:   10,
             },
@@ -90,8 +95,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             // Button
             Button: {
               fontSize:         13,
-              fontWeight:       500,
+              fontWeight:       600,
               contentFontSize:  13,
+              primaryShadow:    '0 4px 10px rgba(27, 22, 142, 0.18)',
             },
             // Modal
             Modal: {
@@ -99,13 +105,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             },
             // Card
             Card: {
-              headerFontSize: 14,
+              headerFontSize: 15,
             },
             // Menu sidebar
             Menu: {
               fontSize:      13,
-              itemHeight:    38,
-              subMenuItemBg: '#f8f8f8',
+              itemHeight:    40,
+              itemSelectedBg: '#fff1e2',
+              itemSelectedColor: '#1b168e',
+              itemHoverBg: '#f3f5ff',
+              itemHoverColor: '#1b168e',
+              subMenuItemBg: '#f8f9ff',
             },
             // Tag / Badge
             Tag: {

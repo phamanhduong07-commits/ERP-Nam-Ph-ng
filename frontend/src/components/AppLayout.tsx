@@ -11,6 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
 import { productionPlansApi } from '../api/productionPlans'
+import namPhuongLogo from '../assets/nam-phuong-logo-cropped.png'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -63,7 +64,8 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       children: [
         { key: '/quotes', label: <Link to="/quotes">Báo giá</Link> },
         { key: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link> },
-        { key: '/warehouse/delivery', label: <Link to="/warehouse/delivery">Giao hàng</Link> },
+        { key: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link> },
+        { key: '/sales/giao-hang', label: <Link to="/sales/giao-hang">Giao hàng</Link> },
       ],
     },
     {
@@ -90,10 +92,8 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
           ),
         },
         { key: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link>, roles: SAN_XUAT_FULL },
-        { key: '/production/phieu-phoi', label: <Link to="/production/phieu-phoi">Phiếu phôi sóng</Link>, roles: SAN_XUAT_FULL },
+        { key: '/production/phieu-phoi', label: <Link to="/production/phieu-phoi">Phiếu nhập phôi sóng</Link>, roles: SAN_XUAT_FULL },
         { key: '/production/phieu-nhap-phoi', label: <Link to="/production/phieu-nhap-phoi">DS nhập phôi sóng</Link>, roles: SAN_XUAT_FULL },
-        { key: '/production/kho-phoi', label: <Link to="/production/kho-phoi">Kho phôi sóng</Link>, roles: SAN_XUAT_FULL },
-        { key: '/production/kho-thanh-pham', label: <Link to="/production/kho-thanh-pham">Kho thành phẩm</Link>, roles: SAN_XUAT_FULL },
         { key: '/master/indirect-costs', label: <Link to="/master/indirect-costs">Chi phí gián tiếp</Link>, roles: ADMIN_GD },
         { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công</Link>, roles: ADMIN_GD },
         {
@@ -122,11 +122,14 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       children: [
         { key: '/warehouse/theo-xuong', label: <Link to="/warehouse/theo-xuong">Kho theo xưởng</Link> },
         { key: '/warehouse/inventory', label: <Link to="/warehouse/inventory">Tồn kho</Link> },
+        { key: '/warehouse/kho-phoi', label: <Link to="/warehouse/kho-phoi">Kho phôi sóng</Link> },
+        { key: '/warehouse/kho-thanh-pham', label: <Link to="/warehouse/kho-thanh-pham">Kho thành phẩm</Link> },
         { key: '/warehouse/receipts', label: <Link to="/warehouse/receipts">Nhập kho (NVL)</Link> },
         { key: '/warehouse/issues', label: <Link to="/warehouse/issues">Xuất NVL sản xuất</Link> },
-        { key: '/warehouse/production-output', label: <Link to="/warehouse/production-output">Nhập TP từ SX</Link> },
+        { key: '/warehouse/production-output', label: <Link to="/warehouse/production-output">Phiếu nhập TP</Link> },
         { key: '/warehouse/delivery', label: <Link to="/warehouse/delivery">Giao hàng (TP)</Link> },
         { key: '/warehouse/transfers', label: <Link to="/warehouse/transfers">Chuyển kho</Link> },
+        { key: '/warehouse/stock-adjustments', label: <Link to="/warehouse/stock-adjustments">Kiểm kê / điều chỉnh</Link> },
       ],
     },
     {
@@ -144,7 +147,8 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       label: 'Danh mục',
       roles: ADMIN_GD,
       children: [
-        { key: '/master/users', label: <Link to="/master/users">Danh mục nhân viên</Link> },
+        { key: '/master/users', label: <Link to="/master/users">Tài khoản người dùng</Link> },
+        { key: '/master/roles', label: <Link to="/master/roles">Phân quyền vai trò</Link> },
         { key: '/master/customers', label: <Link to="/master/customers">Danh mục khách hàng</Link> },
         { key: '/danhmuc/phap-nhan', label: <Link to="/danhmuc/phap-nhan">Danh mục pháp nhân</Link> },
         { key: '/master/phan-xuong', label: <Link to="/master/phan-xuong">Nơi sản xuất (Phân xưởng)</Link> },
@@ -235,38 +239,50 @@ export default function AppLayout() {
         trigger={null}
         collapsible
         collapsed={collapsed}
-        width={240}
-        style={{ background: tk.colorBgContainer, borderRight: `1px solid ${tk.colorBorderSecondary}` }}
+        width={248}
+        style={{ background: '#1b168e', borderRight: '1px solid #15116f' }}
       >
         <div style={{
-          height: 64,
+          height: collapsed ? 72 : 96,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          borderBottom: `1px solid ${tk.colorBorderSecondary}`,
-          padding: '0 16px',
+          background: '#ffffff',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.18)',
+          borderTop: '4px solid #ff8200',
+          padding: collapsed ? '10px 8px' : '10px 20px',
         }}>
+          <img
+            src={namPhuongLogo}
+            alt="Nam Phuong"
+            className="np-brand-logo"
+            style={{
+              maxWidth: collapsed ? 42 : 188,
+              maxHeight: collapsed ? 42 : 74,
+            }}
+          />
           {!collapsed && (
-            <Text strong style={{ fontSize: 16, color: tk.colorPrimary }}>
+            <Text strong style={{ display: 'none', fontSize: 16, color: tk.colorPrimary }}>
               🏭 ERP Nam Phương
             </Text>
           )}
-          {collapsed && <Text strong style={{ color: tk.colorPrimary }}>NP</Text>}
+          {collapsed && <Text strong style={{ display: 'none', color: tk.colorPrimary }}>NP</Text>}
         </div>
         <Menu
           mode="inline"
           selectedKeys={selectedKeys}
           defaultOpenKeys={openKeys}
           items={menuItems as any}
-          style={{ border: 'none', marginTop: 8 }}
+          style={{ border: 'none', marginTop: 8, padding: '0 6px', background: '#1b168e' }}
         />
       </Sider>
 
       <Layout>
         <Header style={{
-          padding: '0 24px',
+          padding: '0 20px',
           background: tk.colorBgContainer,
           borderBottom: `1px solid ${tk.colorBorderSecondary}`,
+          boxShadow: '0 2px 10px rgba(27, 22, 142, 0.05)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -280,14 +296,14 @@ export default function AppLayout() {
 
           <Dropdown menu={{ items: userMenu, onClick: handleUserMenu }}>
             <Space style={{ cursor: 'pointer' }}>
-              <Avatar style={{ background: tk.colorPrimary }} icon={<UserOutlined />} />
+              <Avatar style={{ background: '#ff8200' }} icon={<UserOutlined />} />
               <Text>{user?.ho_ten}</Text>
               <Text type="secondary" style={{ fontSize: 12 }}>({user?.role})</Text>
             </Space>
           </Dropdown>
         </Header>
 
-        <Content style={{ margin: 24, background: tk.colorBgLayout }}>
+        <Content style={{ margin: 16, background: tk.colorBgLayout }}>
           <Outlet />
         </Content>
       </Layout>

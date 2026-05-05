@@ -4,6 +4,32 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class Permission(Base):
+    __tablename__ = "permissions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ma_quyen: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    ten_quyen: Mapped[str] = mapped_column(String(255), nullable=False)
+    mo_ta: Mapped[str | None] = mapped_column(Text)
+    nhom: Mapped[str | None] = mapped_column(String(50))
+    trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    role_permissions: Mapped[list["RolePermission"]] = relationship("RolePermission", back_populates="permission", cascade="all, delete-orphan")
+
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    role_id: Mapped[int] = mapped_column(Integer, ForeignKey("roles.id"), nullable=False)
+    permission_id: Mapped[int] = mapped_column(Integer, ForeignKey("permissions.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    role: Mapped["Role"] = relationship("Role", back_populates="role_permissions")
+    permission: Mapped["Permission"] = relationship("Permission", back_populates="role_permissions")
+
+
 class Role(Base):
     __tablename__ = "roles"
 
@@ -15,6 +41,7 @@ class Role(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     users: Mapped[list["User"]] = relationship("User", back_populates="role")
+    role_permissions: Mapped[list["RolePermission"]] = relationship("RolePermission", back_populates="role", cascade="all, delete-orphan")
 
 
 class User(Base):

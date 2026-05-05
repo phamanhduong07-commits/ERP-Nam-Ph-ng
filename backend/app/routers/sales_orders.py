@@ -8,6 +8,7 @@ from app.models.auth import User
 from app.models.master import Customer, Product
 from app.models.sales import SalesOrder, SalesOrderItem, QuoteItem
 from app.models.production import ProductionOrderItem
+from app.services.sales_order_service import SalesOrderService
 from app.schemas.master import CustomerShort, ProductShort
 from app.schemas.sales import (
     SalesOrderCreate, SalesOrderUpdate,
@@ -16,22 +17,6 @@ from app.schemas.sales import (
 )
 
 router = APIRouter(prefix="/api/sales-orders", tags=["sales-orders"])
-
-
-def _generate_so_don(db: Session) -> str:
-    today = date.today()
-    prefix = f"DH{today.strftime('%Y%m%d')}"
-    last = (
-        db.query(SalesOrder)
-        .filter(SalesOrder.so_don.like(f"{prefix}%"))
-        .order_by(SalesOrder.so_don.desc())
-        .first()
-    )
-    if last:
-        seq = int(last.so_don[-3:]) + 1
-    else:
-        seq = 1
-    return f"{prefix}{seq:03d}"
 
 
 @router.get("", response_model=PagedResponse)
@@ -46,46 +31,15 @@ def list_orders(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = db.query(SalesOrder).options(joinedload(SalesOrder.customer))
-
-    if search:
-        like = f"%{search}%"
-        q = q.join(Customer).filter(
-            SalesOrder.so_don.ilike(like) | Customer.ten_viet_tat.ilike(like)
-        )
-    if trang_thai:
-        q = q.filter(SalesOrder.trang_thai == trang_thai)
-    if customer_id:
-        q = q.filter(SalesOrder.customer_id == customer_id)
-    if tu_ngay:
-        q = q.filter(SalesOrder.ngay_don >= tu_ngay)
-    if den_ngay:
-        q = q.filter(SalesOrder.ngay_don <= den_ngay)
-
-    total = q.count()
-    orders = q.order_by(SalesOrder.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
-
-    items = []
-    for o in orders:
-        items.append(SalesOrderListItem(
-            id=o.id,
-            so_don=o.so_don,
-            ngay_don=o.ngay_don,
-            customer_id=o.customer_id,
-            ten_khach_hang=o.customer.ten_viet_tat if o.customer else None,
-            trang_thai=o.trang_thai,
-            ngay_giao_hang=o.ngay_giao_hang,
-            tong_tien=o.tong_tien,
-            so_dong=len(o.items),
-            created_at=o.created_at,
-        ))
-
-    return PagedResponse(
-        items=items,
-        total=total,
+    service = SalesOrderService(db)
+    return service.get_sales_orders_paginated(
+        search=search,
+        trang_thai=trang_thai,
+        customer_id=customer_id,
+        tu_ngay=tu_ngay,
+        den_ngay=den_ngay,
         page=page,
         page_size=page_size,
-        total_pages=(total + page_size - 1) // page_size,
     )
 
 
@@ -95,104 +49,8 @@ def get_order(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    order = (
-        db.query(SalesOrder)
-        .options(
-            joinedload(SalesOrder.customer),
-            joinedload(SalesOrder.phap_nhan),
-            joinedload(SalesOrder.phap_nhan_sx),
-            joinedload(SalesOrder.phan_xuong),
-            joinedload(SalesOrder.items).joinedload(SalesOrderItem.product),
-            joinedload(SalesOrder.items).joinedload(SalesOrderItem.quote_item).joinedload(QuoteItem.quote),
-        )
-        .filter(SalesOrder.id == order_id)
-        .first()
-    )
-    if not order:
-        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
-
-    def _spec(item: SalesOrderItem, field: str):
-        """Return spec from SOItem; fall back to linked QuoteItem if NULL."""
-        val = getattr(item, field, None)
-        if val is None and item.quote_item is not None:
-            val = getattr(item.quote_item, field, None)
-        return val
-
-    # Map sales_order_item_id → production_order_item_id (lấy bản mới nhất)
-    soi_ids = [item.id for item in order.items]
-    poi_rows = (
-        db.query(ProductionOrderItem.id, ProductionOrderItem.sales_order_item_id)
-        .filter(ProductionOrderItem.sales_order_item_id.in_(soi_ids))
-        .all()
-    ) if soi_ids else []
-    poi_map: dict[int, int] = {}
-    for poi_id, soi_id in poi_rows:
-        poi_map[soi_id] = poi_id  # nếu nhiều lệnh → lấy cái cuối
-
-    def _build_items(items, _db):
-        return [
-            SalesOrderItemResponse(
-                id=item.id,
-                product_id=item.product_id,
-                ten_hang=item.ten_hang,
-                product=ProductShort.model_validate(item.product) if item.product else None,
-                so_luong=item.so_luong,
-                dvt=item.dvt,
-                don_gia=item.don_gia,
-                thanh_tien=item.thanh_tien,
-                ngay_giao_hang=item.ngay_giao_hang,
-                ghi_chu_san_pham=item.ghi_chu_san_pham,
-                yeu_cau_in=item.yeu_cau_in,
-                so_luong_da_xuat=item.so_luong_da_xuat,
-                trang_thai_dong=item.trang_thai_dong,
-                loai_thung=_spec(item, 'loai_thung'),
-                dai=_spec(item, 'dai'),   rong=_spec(item, 'rong'),   cao=_spec(item, 'cao'),
-                so_lop=_spec(item, 'so_lop'),
-                to_hop_song=_spec(item, 'to_hop_song'),
-                mat=_spec(item, 'mat'),         mat_dl=_spec(item, 'mat_dl'),
-                song_1=_spec(item, 'song_1'),   song_1_dl=_spec(item, 'song_1_dl'),
-                mat_1=_spec(item, 'mat_1'),     mat_1_dl=_spec(item, 'mat_1_dl'),
-                song_2=_spec(item, 'song_2'),   song_2_dl=_spec(item, 'song_2_dl'),
-                mat_2=_spec(item, 'mat_2'),     mat_2_dl=_spec(item, 'mat_2_dl'),
-                song_3=_spec(item, 'song_3'),   song_3_dl=_spec(item, 'song_3_dl'),
-                mat_3=_spec(item, 'mat_3'),     mat_3_dl=_spec(item, 'mat_3_dl'),
-                loai_in=_spec(item, 'loai_in'),
-                so_mau=_spec(item, 'so_mau'),
-                production_order_item_id=poi_map.get(item.id),
-            )
-            for item in items
-        ]
-
-    # Fallback: nếu đơn hàng chưa có phan_xuong_id, lấy từ báo giá qua quote_item
-    phan_xuong_id = order.phan_xuong_id
-    if not phan_xuong_id:
-        for item in order.items:
-            if item.quote_item and item.quote_item.quote and item.quote_item.quote.phan_xuong_id:
-                phan_xuong_id = item.quote_item.quote.phan_xuong_id
-                break
-
-    result = SalesOrderResponse(
-        id=order.id,
-        so_don=order.so_don,
-        ngay_don=order.ngay_don,
-        customer_id=order.customer_id,
-        customer=CustomerShort.model_validate(order.customer) if order.customer else None,
-        phap_nhan_id=order.phap_nhan_id,
-        ten_phap_nhan=order.phap_nhan.ten_phap_nhan if order.phap_nhan else None,
-        phap_nhan_sx_id=order.phap_nhan_sx_id,
-        ten_phap_nhan_sx=order.phap_nhan_sx.ten_phap_nhan if order.phap_nhan_sx else None,
-        phan_xuong_id=phan_xuong_id,
-        ten_phan_xuong=order.phan_xuong.ten_xuong if order.phan_xuong else None,
-        trang_thai=order.trang_thai,
-        ngay_giao_hang=order.ngay_giao_hang,
-        dia_chi_giao=order.dia_chi_giao,
-        ghi_chu=order.ghi_chu,
-        tong_tien=order.tong_tien,
-        created_at=order.created_at,
-        updated_at=order.updated_at,
-        items=_build_items(order.items, db),
-    )
-    return result
+    service = SalesOrderService(db)
+    return service.get_sales_order_by_id(order_id)
 
 
 @router.post("", response_model=SalesOrderResponse, status_code=201)

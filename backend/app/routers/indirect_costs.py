@@ -14,11 +14,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.indirect_cost import IndirectCostItem
 
 router = APIRouter(prefix="/api/indirect-costs", tags=["indirect-costs"])
+config_admin_required = require_roles("ADMIN", "GIAM_DOC")
 
 # ─── Mặc định (mirror của price_calculator._INDIRECT_BREAKDOWN) ───────────────
 
@@ -97,7 +98,7 @@ def update_item(
     item_id: int,
     data: IndirectCostItemUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(config_admin_required),
 ):
     item = db.query(IndirectCostItem).filter(IndirectCostItem.id == item_id).first()
     if not item:
@@ -112,7 +113,7 @@ def update_item(
 @router.post("/seed", status_code=201)
 def seed_defaults(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(config_admin_required),
 ):
     """Reset toàn bộ chi phí gián tiếp về giá trị mặc định."""
     db.query(IndirectCostItem).delete()

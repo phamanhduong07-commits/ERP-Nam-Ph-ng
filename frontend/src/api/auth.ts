@@ -27,7 +27,5 @@ export const authApi = {
     client.post<TokenResponse>('/auth/refresh', { refresh_token }),
   me: () => client.get<UserInfo>('/auth/me'),
   changePassword: (old_password: string, new_password: string) =>
-    client.post('/auth/change-password', null, {
-      params: { old_password, new_password },
-    }),
+    client.post('/auth/change-password', { old_password, new_password }),
 }

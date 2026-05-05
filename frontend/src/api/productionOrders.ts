@@ -82,6 +82,8 @@ export interface ProductionOrderListItem {
   ten_hang: string | null       // mã hàng / tên hàng (item đầu tiên)
   ten_phap_nhan_sx: string | null
   ten_kho_sx: string | null
+  phan_xuong_id: number | null
+  gia_ban_muc_tieu: number | null
   trang_thai: string
   ngay_hoan_thanh_ke_hoach: string | null
   so_dong: number

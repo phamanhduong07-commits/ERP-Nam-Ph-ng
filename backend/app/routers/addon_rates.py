@@ -14,11 +14,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.addon_rate import AddonRate
 
 router = APIRouter(prefix="/api/addon-rates", tags=["addon-rates"])
+config_admin_required = require_roles("ADMIN", "GIAM_DOC")
 
 # ─── Mặc định ────────────────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ def update_item(
     item_id: int,
     data: AddonRateUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(config_admin_required),
 ):
     item = db.query(AddonRate).filter(AddonRate.id == item_id).first()
     if not item:
@@ -101,7 +102,7 @@ def update_item(
 @router.post("/seed", status_code=201)
 def seed_defaults(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(config_admin_required),
 ):
     """Reset toàn bộ phí gia công về giá trị mặc định."""
     db.query(AddonRate).delete()

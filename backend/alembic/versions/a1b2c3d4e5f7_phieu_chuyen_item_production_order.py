@@ -1,14 +1,14 @@
 """phieu_chuyen_kho_item: add production_order_id
 
 Revision ID: a1b2c3d4e5f7
-Revises: f2b3c4d5e6a7
+Revises: g1h2i3j4k5l6
 Create Date: 2026-05-03
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = 'a1b2c3d4e5f7'
-down_revision = 'f2b3c4d5e6a7'
+down_revision = 'g1h2i3j4k5l6'
 branch_labels = None
 depends_on = None
 

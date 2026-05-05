@@ -27,6 +27,7 @@ export interface TonKho {
   phan_xuong_id: number | null
   paper_material_id: number | null
   other_material_id: number | null
+  product_id: number | null
   ten_hang: string
   don_vi: string
   ton_luong: number
@@ -91,6 +92,34 @@ export interface PhieuChuyenKho {
   trang_thai: string
   created_at: string | null
   items: PhieuKhoItem[]
+}
+
+export interface StockAdjustmentItem {
+  id: number
+  inventory_balance_id: number
+  paper_material_id: number | null
+  other_material_id: number | null
+  product_id: number | null
+  ten_hang: string
+  don_vi: string
+  so_luong_so_sach: number
+  so_luong_thuc_te: number
+  chenhlech: number
+  don_gia: number
+  ghi_chu: string | null
+}
+
+export interface StockAdjustment {
+  id: number
+  so_phieu: string
+  warehouse_id: number
+  ten_kho: string
+  ngay: string
+  ly_do: string | null
+  ghi_chu: string | null
+  trang_thai: string
+  created_at: string | null
+  items: StockAdjustmentItem[]
 }
 
 export interface GiaoDich {
@@ -287,6 +316,18 @@ export interface CreatePhieuChuyenPayload {
   items: Omit<PhieuKhoItem, 'id' | 'thanh_tien'>[]
 }
 
+export interface CreateStockAdjustmentPayload {
+  warehouse_id: number
+  ngay: string
+  ly_do?: string | null
+  ghi_chu?: string | null
+  items: {
+    inventory_balance_id: number
+    so_luong_thuc_te: number
+    ghi_chu?: string | null
+  }[]
+}
+
 // ── Kho theo xưởng ────────────────────────────────────────────────────────────
 export interface WarehouseSlot {
   id: number
@@ -305,6 +346,27 @@ export interface WarehouseSlot {
 
 export interface WarehouseSlotNA {
   not_applicable: true
+}
+
+export interface TonKhoTPRow {
+  production_order_id: number
+  so_lenh: string
+  ngay_lenh: string | null
+  ten_hang: string | null
+  ten_khach_hang: string | null
+  nv_theo_doi_id: number | null
+  ten_nv_theo_doi: string | null
+  sl_ke_hoach: number
+  tong_nhap: number
+  tong_xuat: number
+  ton_kho: number
+  dvt: string
+  warehouse_id: number | null
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
+  phap_nhan_sx_id: number | null
+  ten_phap_nhan_sx: string | null
+  phieu_xuat_gan_nhat: { so_phieu: string; ngay_xuat: string } | null
 }
 
 export interface PhanXuongWithWarehouses {
@@ -376,6 +438,13 @@ export const warehouseApi = {
   createPhieuChuyen: (data: CreatePhieuChuyenPayload) => client.post<PhieuChuyenKho>('/warehouse/phieu-chuyen', data),
   deletePhieuChuyen: (id: number) => client.delete(`/warehouse/phieu-chuyen/${id}`),
 
+  // Kiem ke / dieu chinh ton kho
+  listStockAdjustments: (params?: { warehouse_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+    client.get<StockAdjustment[]>('/warehouse/stock-adjustments', { params }),
+  getStockAdjustment: (id: number) => client.get<StockAdjustment>(`/warehouse/stock-adjustments/${id}`),
+  createStockAdjustment: (data: CreateStockAdjustmentPayload) => client.post<StockAdjustment>('/warehouse/stock-adjustments', data),
+  deleteStockAdjustment: (id: number) => client.delete(`/warehouse/stock-adjustments/${id}`),
+
   // Lịch sử giao dịch
   getGiaoDich: (params?: { warehouse_id?: number; paper_material_id?: number; other_material_id?: number; product_id?: number; loai_giao_dich?: string; tu_ngay?: string; den_ngay?: string; limit?: number }) =>
     client.get<GiaoDich[]>('/warehouse/giao-dich', { params }),
@@ -410,6 +479,8 @@ export const warehouseApi = {
 
   // Kho theo xưởng
   listTheoPhanXuong: () => client.get<PhanXuongWithWarehouses[]>('/warehouse/theo-phan-xuong'),
+  getTonKhoTpLsx: (params?: { ten_khach?: string; so_lenh?: string; nv_theo_doi_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+    client.get<TonKhoTPRow[]>('/warehouse/ton-kho-tp-lsx', { params }),
   initWarehousesForPhanXuong: (pxId: number) =>
     client.post<{ id: number; ma_kho: string; ten_kho: string; created: boolean }[]>(
       `/warehouse/phan-xuong/${pxId}/init-warehouses`

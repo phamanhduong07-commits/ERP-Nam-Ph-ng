@@ -16,11 +16,12 @@ from app.database import get_db
 from app.deps import get_current_user
 import logging
 from app.models.auth import User
-from app.models.master import Warehouse
+from app.models.master import Warehouse, PhanXuong
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
-from app.models.warehouse_doc import PhieuChuyenKhoItem
+from app.models.warehouse_doc import PhieuChuyenKho, PhieuChuyenKhoItem
+from app.models.inventory import InventoryBalance
 
 _log = logging.getLogger("erp")
 
@@ -366,8 +367,77 @@ def ton_kho_lsx(
     )
     xuat_map = {r.production_order_id: float(r.tong_xuat) for r in xuat_rows}
 
-    # 3. Chuyển kho: sum(so_luong) per production_order_id
-    chuyen_rows = (
+    # 3. Chuyển kho — tách xuất và nhập để tính đúng theo loại xưởng
+    # 3a. Phôi XUẤT khỏi kho nguồn (kho gốc nơi nhập phôi)
+    source_wh_ids = list({v["warehouse_id"] for v in nhap_map.values() if v["warehouse_id"]})
+    chuyen_xuat_rows = (
+        db.query(
+            PhieuChuyenKhoItem.production_order_id,
+            func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0).label("tong_chuyen"),
+        )
+        .join(PhieuChuyenKho, PhieuChuyenKho.id == PhieuChuyenKhoItem.phieu_chuyen_kho_id)
+        .filter(
+            PhieuChuyenKhoItem.production_order_id.in_(order_ids),
+            PhieuChuyenKho.warehouse_xuat_id.in_(source_wh_ids),
+        )
+        .group_by(PhieuChuyenKhoItem.production_order_id)
+        .all()
+    )
+    chuyen_xuat_map = {r.production_order_id: float(r.tong_chuyen) for r in chuyen_xuat_rows}
+
+    # 3b. Phôi NHẬP vào kho phôi xưởng CD2 — dùng cho tính tồn kho phía CD2
+    # Tìm tất cả kho PHOI của các xưởng CD2 liên quan
+    px_ids = list({o.phan_xuong_id for o in db.query(ProductionOrder.phan_xuong_id)
+                   .filter(ProductionOrder.id.in_(order_ids)).all() if o.phan_xuong_id})
+    cd2_px_list = db.query(PhanXuong).filter(
+        PhanXuong.id.in_(px_ids), PhanXuong.cong_doan == "cd2"
+    ).all()
+    cd2_phoi_wh_ids: list[int] = []
+    cd2_px_to_wh: dict[int, int] = {}  # phan_xuong_id → warehouse_id
+    for px in cd2_px_list:
+        wh = db.query(Warehouse).filter(
+            Warehouse.phan_xuong_id == px.id,
+            Warehouse.loai_kho == "PHOI",
+            Warehouse.trang_thai == True,
+        ).first()
+        if wh:
+            cd2_phoi_wh_ids.append(wh.id)
+            cd2_px_to_wh[px.id] = wh.id
+
+    chuyen_nhap_map: dict[int, float] = {}
+    if cd2_phoi_wh_ids:
+        chuyen_nhap_rows = (
+            db.query(
+                PhieuChuyenKhoItem.production_order_id,
+                func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0).label("tong_chuyen_nhap"),
+            )
+            .join(PhieuChuyenKho, PhieuChuyenKho.id == PhieuChuyenKhoItem.phieu_chuyen_kho_id)
+            .filter(
+                PhieuChuyenKhoItem.production_order_id.in_(order_ids),
+                PhieuChuyenKho.warehouse_nhap_id.in_(cd2_phoi_wh_ids),
+            )
+            .group_by(PhieuChuyenKhoItem.production_order_id)
+            .all()
+        )
+        chuyen_nhap_map = {r.production_order_id: float(r.tong_chuyen_nhap) for r in chuyen_nhap_rows}
+
+    # 3c. Fallback: đọc InventoryBalance cho kho PHOI CD2
+    # (dùng khi transfer cũ không có production_order_id → chuyen_nhap_map trả về 0)
+    cd2_balance_map: dict[tuple, float] = {}
+    if cd2_phoi_wh_ids:
+        bal_rows = db.query(InventoryBalance).filter(
+            InventoryBalance.warehouse_id.in_(cd2_phoi_wh_ids),
+            InventoryBalance.paper_material_id.is_(None),
+            InventoryBalance.other_material_id.is_(None),
+            InventoryBalance.product_id.is_(None),
+            InventoryBalance.ton_luong > 0,
+        ).all()
+        for b in bal_rows:
+            key = (b.warehouse_id, b.ten_hang or "")
+            cd2_balance_map[key] = cd2_balance_map.get(key, 0.0) + float(b.ton_luong)
+
+    # Giữ chuyen_map cho field tong_chuyen_phoi (để frontend biết đã chuyển hay chưa)
+    chuyen_all_rows = (
         db.query(
             PhieuChuyenKhoItem.production_order_id,
             func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0).label("tong_chuyen"),
@@ -376,7 +446,7 @@ def ton_kho_lsx(
         .group_by(PhieuChuyenKhoItem.production_order_id)
         .all()
     )
-    chuyen_map = {r.production_order_id: float(r.tong_chuyen) for r in chuyen_rows}
+    chuyen_map = {r.production_order_id: float(r.tong_chuyen) for r in chuyen_all_rows}
 
     # 4. Active PhieuIn (chưa huỷ / hoàn thành) per LSX
     active_phieus = (
@@ -409,19 +479,65 @@ def ton_kho_lsx(
     )
     order_map = {o.id: o for o in orders}
 
+    # 5b. Phân bổ tồn kho CD2 theo tỷ lệ so_luong_ke_hoach
+    # Khi transfer cũ không có production_order_id, InventoryBalance chỉ biết tổng
+    # theo (warehouse_id, ten_hang) — phải chia tỷ lệ giữa các lệnh cùng nhóm.
+    proportional_map: dict[int, float] = {}
+    _cd2_groups: dict[tuple, list[tuple[int, float]]] = {}
+    for oid in order_ids:
+        o = order_map.get(oid)
+        if not o:
+            continue
+        _px = getattr(o, "phan_xuong", None)
+        if not (_px and getattr(_px, "cong_doan", None) == "cd2"):
+            continue
+        if chuyen_nhap_map.get(oid, 0.0) != 0.0:
+            continue  # đã có transfer linked → không dùng fallback
+        wh_id_ = cd2_px_to_wh.get(o.phan_xuong_id)
+        if not wh_id_:
+            continue
+        _first = o.items[0] if o.items else None
+        ten_ = (_first.ten_hang or "") if _first else ""
+        sl = float(_first.so_luong_ke_hoach or 0) if _first else 0.0
+        _cd2_groups.setdefault((wh_id_, ten_), []).append((oid, sl))
+
+    for _key, _entries in _cd2_groups.items():
+        _balance = cd2_balance_map.get(_key, 0.0)
+        _total_sl = sum(sl for _, sl in _entries)
+        for oid, sl in _entries:
+            if _total_sl > 0:
+                proportional_map[oid] = round(_balance * sl / _total_sl, 3)
+            else:
+                proportional_map[oid] = round(_balance / len(_entries), 3)
+
     result = []
     for order_id in order_ids:
         nhap = nhap_map[order_id]
         tong_nhap = nhap["tong_nhap"]
         tong_xuat = xuat_map.get(order_id, 0.0)
-        tong_chuyen = chuyen_map.get(order_id, 0.0)
-        ton_kho = round(tong_nhap - tong_xuat - tong_chuyen, 3)
+        tong_chuyen = chuyen_map.get(order_id, 0.0)  # tổng mọi chuyển kho (dùng cho flag daChuyen)
 
         order = order_map.get(order_id)
         if not order:
             continue
 
+        px = getattr(order, "phan_xuong", None)
+        is_cd2 = px and getattr(px, "cong_doan", None) == "cd2"
         first = order.items[0] if order.items else None
+
+        if is_cd2:
+            # CD2: Nhập = phôi chuyển đến kho CD2; Xuất không dùng PhieuXuatPhoi
+            # (PhieuXuatPhoi không có warehouse_id nên không phân biệt được CD1/CD2)
+            tong_nhap = chuyen_nhap_map.get(order_id, 0.0)
+            # Fallback: transfer cũ có production_order_id=NULL → dùng phân bổ tỷ lệ
+            if tong_nhap == 0.0:
+                tong_nhap = proportional_map.get(order_id, 0.0)
+            tong_xuat = 0.0
+            ton_kho = round(tong_nhap, 3)
+        else:
+            # CD1+CD2: Nhập = phôi nhập gốc; Tồn = Nhập − Xuất − Chuyển đi
+            tong_chuyen_xuat = chuyen_xuat_map.get(order_id, 0.0)
+            ton_kho = round(tong_nhap - tong_xuat - tong_chuyen_xuat, 3)
         co_in = any(it.loai_in in ("flexo", "ky_thuat_so") for it in order.items)
 
         ten_khach_hang = None

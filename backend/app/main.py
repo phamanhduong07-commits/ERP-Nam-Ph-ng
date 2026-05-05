@@ -11,9 +11,10 @@ from app.routers import (
     auth, customers, products, sales_orders, quotes, paper_materials, cau_truc,
     suppliers, material_groups, other_materials, warehouses, users,
     don_vi_tinh, vi_tri, xe, tai_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
-    production_orders, bom, production_plans, indirect_costs, addon_rates,
+    production_orders, bom, production_plans, indirect_costs, addon_rates, permissions,
 )
 from app.routers import phieu_phoi, cd2, warehouse, purchase_orders, phap_nhan, dashboard, theo_doi, yeu_cau_giao_hang
+from app.routers import billing, accounting
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -28,10 +29,11 @@ logging.basicConfig(
 logger = logging.getLogger("erp")
 
 # ─── DB init ──────────────────────────────────────────────────────────────────
-# Dùng Alembic cho production (alembic upgrade head)
-# create_all giữ lại để dev không cần chạy migration thủ công
-Base.metadata.create_all(bind=engine)
-ensure_schema()
+# Schema changes should normally go through Alembic. Keep the legacy
+# auto-create path opt-in for local recovery/import work only.
+if settings.AUTO_CREATE_SCHEMA:
+    Base.metadata.create_all(bind=engine)
+    ensure_schema()
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -55,6 +57,10 @@ app.add_middleware(
 async def log_requests(request: Request, call_next):
     start = time.time()
     response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     duration_ms = round((time.time() - start) * 1000)
     # Bỏ qua static assets để log không bị nhiễu
     if not request.url.path.startswith("/assets"):
@@ -66,6 +72,8 @@ async def log_requests(request: Request, call_next):
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(auth.router)
+app.include_router(permissions.router)
+app.include_router(permissions.role_router)
 app.include_router(customers.router)
 app.include_router(products.router)
 app.include_router(sales_orders.router)
@@ -97,6 +105,8 @@ app.include_router(phap_nhan.router)
 app.include_router(dashboard.router)
 app.include_router(theo_doi.router)
 app.include_router(yeu_cau_giao_hang.router)
+app.include_router(billing.router)
+app.include_router(accounting.router)
 
 
 @app.get("/api/health")

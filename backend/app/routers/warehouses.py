@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.master import Warehouse, PhanXuong
 
 router = APIRouter(prefix="/api/warehouses", tags=["warehouses"])
+master_admin_required = require_roles("ADMIN", "GIAM_DOC")
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -51,7 +52,7 @@ def list_warehouses(db: Session = Depends(get_db), _: User = Depends(get_current
 def create_warehouse(
     data: WarehouseBase,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(master_admin_required),
 ):
     if db.query(Warehouse).filter(Warehouse.ma_kho == data.ma_kho).first():
         raise HTTPException(status_code=400, detail=f"Mã kho '{data.ma_kho}' đã tồn tại")
@@ -74,7 +75,7 @@ def update_warehouse(
     id: int,
     data: WarehouseBase,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(master_admin_required),
 ):
     obj = db.query(Warehouse).filter(Warehouse.id == id).first()
     if not obj:
@@ -94,7 +95,7 @@ def update_warehouse(
 
 
 @router.delete("/{id}")
-def delete_warehouse(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def delete_warehouse(id: int, db: Session = Depends(get_db), _: User = Depends(master_admin_required)):
     obj = db.query(Warehouse).filter(Warehouse.id == id).first()
     if not obj:
         raise HTTPException(status_code=404, detail="Không tìm thấy kho")

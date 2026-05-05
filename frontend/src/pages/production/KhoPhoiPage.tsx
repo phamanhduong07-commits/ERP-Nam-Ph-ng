@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Col, Drawer, Input, InputNumber,
+  Alert, Button, Col, Drawer, Input, InputNumber,
   message, Modal, Popconfirm, Row, Select, Space, Spin,
   Statistic, Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd'
@@ -51,10 +51,13 @@ export default function KhoPhoiPage() {
     staleTime: 30_000,
   })
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['ton-kho-lsx'],
     queryFn: () => cd2Api.getTonKhoLsx().then(r => r.data),
-    refetchOnWindowFocus: false,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   })
 
   const { data: allWarehouses = [] } = useQuery({
@@ -286,6 +289,8 @@ export default function KhoPhoiPage() {
         const sourceKho = allWarehouses.find((w: Warehouse) => w.id === row.warehouse_id)
         const daChuyen = (row.tong_chuyen_phoi ?? 0) > 0
         const conTon = row.ton_kho > 0
+        // Phôi đã chuyển sang kho CD2 → vẫn có thể đẩy vào queue
+        const conPhoiTaiCD2 = isCD2 && daChuyen
 
         if (row.phieu_in_hien_tai) {
           return (
@@ -299,14 +304,13 @@ export default function KhoPhoiPage() {
             </Space>
           )
         }
-        if (!conTon) {
-          return daChuyen
-            ? <Tag color="green" style={{ fontSize: 11 }}>Đã chuyển xong</Tag>
-            : <Text type="secondary" style={{ fontSize: 11 }}>Hết tồn kho</Text>
+        // Hết tồn kho gốc VÀ chưa chuyển sang CD2 → kết thúc
+        if (!conTon && !conPhoiTaiCD2) {
+          return <Text type="secondary" style={{ fontSize: 11 }}>Hết tồn kho</Text>
         }
         return (
           <Space size={4} wrap>
-            {isCD2 && (
+            {isCD2 && conTon && (
               <Tooltip
                 title={sourceKho && targetKho
                   ? `${sourceKho.ten_kho} → ${targetKho.ten_kho}`
@@ -395,6 +399,15 @@ export default function KhoPhoiPage() {
       />
 
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        {isError && (
+          <Alert
+            type="error"
+            showIcon
+            message="Không tải được dữ liệu kho phôi sóng"
+            description={error instanceof Error ? error.message : 'Vui lòng bấm Làm mới hoặc đăng nhập lại.'}
+          />
+        )}
+
         {/* Filter bar */}
         <Row gutter={[8, 8]} align="middle">
           <Col xs={24} sm={8}>
@@ -482,8 +495,16 @@ export default function KhoPhoiPage() {
             }),
           }}
           onRow={(row) => ({
-            onClick: () => { if (row.warehouse_id) setDetailWhId(row.warehouse_id) },
-            style: { cursor: row.warehouse_id ? 'pointer' : 'default' },
+            onClick: () => {
+              // Nếu là CD2 và đã có phôi chuyển đến → show kho CD2
+              // Ngược lại → show kho nguồn (CD1) nơi phôi đang chờ chuyển
+              const daChuyen = (row.tong_chuyen_phoi ?? 0) > 0
+              const whId = (row.cong_doan === 'cd2' && daChuyen)
+                ? (findPhoiKho(row.phan_xuong_id)?.id ?? row.warehouse_id)
+                : row.warehouse_id
+              if (whId) setDetailWhId(whId)
+            },
+            style: { cursor: 'pointer' },
           })}
         />
 

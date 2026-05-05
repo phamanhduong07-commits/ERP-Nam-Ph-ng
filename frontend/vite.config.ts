@@ -6,6 +6,16 @@ export default defineConfig({
   build: {
     outDir: '../backend/dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          antd: ['antd', '@ant-design/icons'],
+          query: ['@tanstack/react-query', 'zustand'],
+          excel: ['xlsx', 'file-saver'],
+        },
+      },
+    },
   },
   server: {
     port: 5174,

@@ -4,6 +4,7 @@ import { Form, Input, Button, Card, Typography, Alert, Space } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { authApi } from '../api/auth'
 import { useAuthStore } from '../store/auth'
+import namPhuongLogo from '../assets/nam-phuong-logo-cropped.png'
 
 const { Title, Text } = Typography
 
@@ -34,10 +35,16 @@ export default function Login() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, #1677ff 0%, #0958d9 100%)',
+      background: 'linear-gradient(135deg, #1b168e 0%, #15116f 62%, #ff8200 100%)',
+      padding: 24,
     }}>
-      <Card style={{ width: 400, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-        <Space direction="vertical" style={{ width: '100%', textAlign: 'center' }} size={4}>
+      <Card style={{ width: 420, boxShadow: '0 16px 44px rgba(8, 12, 56, 0.28)', border: '1px solid rgba(255,255,255,0.72)' }}>
+        <Space className="np-login-brand" direction="vertical" style={{ width: '100%', textAlign: 'center' }} size={4}>
+          <img
+            src={namPhuongLogo}
+            alt="Nam Phuong"
+            style={{ width: 260, maxWidth: '100%', height: 118, objectFit: 'contain', margin: '0 auto' }}
+          />
           <Text style={{ fontSize: 32 }}>🏭</Text>
           <Title level={3} style={{ margin: 0 }}>ERP Nam Phương</Title>
           <Text type="secondary">Hệ thống quản lý sản xuất</Text>

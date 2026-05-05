@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
@@ -2027,19 +2028,13 @@ function TabGiaoHang() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function PhieuPhoiPage() {
+  const [searchParams] = useSearchParams()
+  const defaultTab = searchParams.get('tab') ?? 'nhap'
   return (
     <div style={{ padding: 24 }}>
       <Title level={4} style={{ marginBottom: 16 }}>Quản lý phiếu phôi sóng</Title>
       <Card>
-        <Tabs
-          defaultActiveKey="nhap"
-          items={[
-            { key: 'nhap', label: 'Phiếu nhập phôi', children: <TabNhap /> },
-            { key: 'xuat', label: 'Phiếu xuất phôi', children: <TabXuat /> },
-            { key: 'theo-doi', label: 'Theo dõi đơn hàng', children: <TabTheoDoi /> },
-            { key: 'giao-hang', label: 'Giao hàng', children: <TabGiaoHang /> },
-          ]}
-        />
+        <TabNhap />
       </Card>
     </div>
   )

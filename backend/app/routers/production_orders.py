@@ -14,6 +14,7 @@ from app.services.inventory_service import (
     get_workshop_warehouse as _get_workshop_warehouse,
     get_phoi_source_warehouse as _get_phoi_source_warehouse,
 )
+from app.services.production_order_service import ProductionOrderService
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.inventory import InventoryBalance, InventoryTransaction
@@ -165,62 +166,15 @@ def list_orders(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = db.query(ProductionOrder).options(
-        joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.customer),
-        joinedload(ProductionOrder.phap_nhan_sx),
-        joinedload(ProductionOrder.kho_sx),
-    )
-
-    if search:
-        like = f"%{search}%"
-        q = q.filter(ProductionOrder.so_lenh.ilike(like))
-    if trang_thai:
-        q = q.filter(ProductionOrder.trang_thai == trang_thai)
-    if sales_order_id:
-        q = q.filter(ProductionOrder.sales_order_id == sales_order_id)
-    if tu_ngay:
-        q = q.filter(ProductionOrder.ngay_lenh >= tu_ngay)
-    if den_ngay:
-        q = q.filter(ProductionOrder.ngay_lenh <= den_ngay)
-
-    total = q.count()
-    orders = (
-        q.order_by(ProductionOrder.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-
-    items_resp = []
-    for o in orders:
-        items_q = db.query(ProductionOrderItem).filter(
-            ProductionOrderItem.production_order_id == o.id
-        ).all()
-        tong_sl = sum(i.so_luong_ke_hoach for i in items_q)
-        kh = o.sales_order.customer if o.sales_order else None
-        items_resp.append(ProductionOrderListItem(
-            id=o.id,
-            so_lenh=o.so_lenh,
-            ngay_lenh=o.ngay_lenh,
-            sales_order_id=o.sales_order_id,
-            so_don=o.sales_order.so_don if o.sales_order else None,
-            ten_khach_hang=kh.ten_viet_tat if kh else None,
-            ten_hang=items_q[0].ten_hang if items_q else None,
-            ten_phap_nhan_sx=o.phap_nhan_sx.ten_phap_nhan if o.phap_nhan_sx else None,
-            ten_kho_sx=o.kho_sx.ten_kho if o.kho_sx else None,
-            trang_thai=o.trang_thai,
-            ngay_hoan_thanh_ke_hoach=o.ngay_hoan_thanh_ke_hoach,
-            so_dong=len(items_q),
-            tong_sl_ke_hoach=tong_sl,
-            created_at=o.created_at,
-        ))
-
-    return PagedResponse(
-        items=items_resp,
-        total=total,
+    service = ProductionOrderService(db)
+    return service.get_production_orders_paginated(
+        search=search,
+        trang_thai=trang_thai,
+        sales_order_id=sales_order_id,
+        tu_ngay=tu_ngay,
+        den_ngay=den_ngay,
         page=page,
         page_size=page_size,
-        total_pages=(total + page_size - 1) // page_size,
     )
 
 
@@ -230,7 +184,8 @@ def get_order(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return _build_response(_load_order(order_id, db))
+    service = ProductionOrderService(db)
+    return service.get_production_order_by_id(order_id)
 
 
 @router.post("/tu-don-hang/{order_id}", response_model=List[ProductionOrderResponse], status_code=201)
@@ -349,56 +304,8 @@ def create_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if data.sales_order_id:
-        so = db.query(SalesOrder).filter(SalesOrder.id == data.sales_order_id).first()
-        if not so:
-            raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
-        if so.trang_thai not in ("da_duyet", "dang_sx"):
-            raise HTTPException(status_code=400, detail="Chỉ tạo lệnh SX từ đơn hàng đã duyệt")
-
-    so_lenh = _generate_so_lenh(db)
-    kho_sx_id = _auto_kho_sx_id(db, data.phan_xuong_id, data.kho_sx_id)
-    order = ProductionOrder(
-        so_lenh=so_lenh,
-        ngay_lenh=data.ngay_lenh,
-        sales_order_id=data.sales_order_id,
-        trang_thai="moi",
-        phap_nhan_sx_id=data.phap_nhan_sx_id,
-        kho_sx_id=kho_sx_id,
-        phan_xuong_id=data.phan_xuong_id,
-        nv_theo_doi_id=data.nv_theo_doi_id,
-        ngay_bat_dau_ke_hoach=data.ngay_bat_dau_ke_hoach,
-        ngay_hoan_thanh_ke_hoach=data.ngay_hoan_thanh_ke_hoach,
-        ghi_chu=data.ghi_chu,
-        created_by=current_user.id,
-    )
-
-    for item_data in data.items:
-        product = None
-        if item_data.product_id:
-            product = db.query(Product).filter(Product.id == item_data.product_id).first()
-        item = ProductionOrderItem(
-            product_id=item_data.product_id,
-            sales_order_item_id=item_data.sales_order_item_id,
-            ten_hang=item_data.ten_hang or (product.ten_hang if product else ""),
-            so_luong_ke_hoach=item_data.so_luong_ke_hoach,
-            dvt=item_data.dvt,
-            ngay_giao_hang=item_data.ngay_giao_hang,
-            ghi_chu=item_data.ghi_chu,
-        )
-        order.items.append(item)
-
-    db.add(order)
-
-    # Cập nhật trạng thái đơn hàng → dang_sx
-    if data.sales_order_id:
-        so = db.query(SalesOrder).filter(SalesOrder.id == data.sales_order_id).first()
-        if so and so.trang_thai == "da_duyet":
-            so.trang_thai = "dang_sx"
-
-    db.commit()
-    db.refresh(order)
-    return _build_response(_load_order(order.id, db))
+    service = ProductionOrderService(db)
+    return service.create_production_order(data, current_user.id)
 
 
 @router.put("/{order_id}", response_model=ProductionOrderResponse)
@@ -408,16 +315,8 @@ def update_order(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
-    if order.trang_thai == "huy":
-        raise HTTPException(status_code=400, detail="Lệnh đã huỷ, không thể sửa")
-
-    for field, value in data.model_dump(exclude_none=True).items():
-        setattr(order, field, value)
-    db.commit()
-    return _build_response(_load_order(order_id, db))
+    service = ProductionOrderService(db)
+    return service.update_production_order(order_id, data)
 
 
 @router.patch("/{order_id}/start", response_model=ProductionOrderResponse)

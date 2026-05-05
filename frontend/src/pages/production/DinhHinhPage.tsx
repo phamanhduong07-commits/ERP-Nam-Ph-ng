@@ -101,7 +101,7 @@ function DinhHinhModal({
         layout="vertical"
         initialValues={{
           ngay_sau_in: dayjs(),
-          so_luong_sau_in_ok: phieu.so_luong_in_ok ?? undefined,
+          so_luong_sau_in_ok: phieu.so_luong_in_ok ?? phieu.so_luong_phoi ?? undefined,
           so_luong_sau_in_loi: 0,
         }}
       >
@@ -119,7 +119,14 @@ function DinhHinhModal({
         </Row>
         <Row gutter={12}>
           <Col span={12}>
-            <Form.Item name="so_luong_sau_in_ok" label="SL đạt">
+            <Form.Item
+              name="so_luong_sau_in_ok"
+              label="SL đạt"
+              rules={[
+                { required: true, message: 'Nhập số lượng đạt để nhập kho TP' },
+                { type: 'number', min: 1, message: 'SL đạt phải lớn hơn 0' },
+              ]}
+            >
               <InputNumber style={{ width: '100%' }} min={0} />
             </Form.Item>
           </Col>
@@ -336,7 +343,7 @@ function HoanThanhModal({
         )}
       </Card>
       <div style={{ fontSize: 13, color: '#595959' }}>
-        Xác nhận sẽ <strong>nhập thành phẩm vào kho</strong> của xưởng sản xuất tương ứng.
+        Xác nhận sẽ <strong>nhập thành phẩm vào kho</strong> của xưởng sản xuất tương ứng. Nếu thiếu LSX, xưởng, kho thành phẩm hoặc số lượng đạt, hệ thống sẽ báo lỗi và không cho hoàn thành.
       </div>
     </Modal>
   )
@@ -378,6 +385,9 @@ export default function DinhHinhPage() {
     qc.invalidateQueries({ queryKey: ['cd2-dang-dinh-hinh'] })
     qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
     qc.invalidateQueries({ queryKey: ['cd2-dashboard'] })
+    qc.invalidateQueries({ queryKey: ['production-outputs'] })
+    qc.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
+    qc.invalidateQueries({ queryKey: ['ton-kho'] })
   }
 
   const phieus = [...dangPhieus, ...choPhieus]

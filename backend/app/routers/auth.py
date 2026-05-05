@@ -8,7 +8,7 @@ from app.config import settings
 from app.database import get_db
 from app.deps import create_access_token, create_refresh_token, get_current_user, ALGORITHM
 from app.models.auth import User
-from app.schemas.auth import TokenResponse, UserInfo, UserCreate, UserResponse
+from app.schemas.auth import ChangePasswordRequest, TokenResponse, UserInfo
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -93,15 +93,14 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.post("/change-password")
 def change_password(
-    old_password: str,
-    new_password: str,
+    data: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not _verify_password(old_password, current_user.password_hash):
+    if not _verify_password(data.old_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Mật khẩu cũ không đúng")
-    if len(new_password) < 6:
+    if len(data.new_password) < 6:
         raise HTTPException(status_code=400, detail="Mật khẩu mới phải có ít nhất 6 ký tự")
-    current_user.password_hash = _hash_password(new_password)
+    current_user.password_hash = _hash_password(data.new_password)
     db.commit()
     return {"message": "Đổi mật khẩu thành công"}
