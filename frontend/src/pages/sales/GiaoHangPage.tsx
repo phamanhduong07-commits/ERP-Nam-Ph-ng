@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
   Modal, Popconfirm, Row, Select, Space, Table, Tabs, Tag, Typography,
 } from 'antd'
-import { DeleteOutlined, SearchOutlined } from '@ant-design/icons'
+import { DeleteOutlined, FileTextOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { message } from 'antd'
@@ -20,8 +21,12 @@ import { xeApi, taiXeApi, donGiaVanChuyenApi } from '../../api/simpleApis'
 import type { Xe, TaiXe, DonGiaVanChuyen } from '../../api/simpleApis'
 import { warehousesApi } from '../../api/warehouses'
 import type { Warehouse } from '../../api/warehouses'
+import { warehouseApi } from '../../api/warehouse'
+import type { TonKhoTPRow } from '../../api/warehouse'
 import { usersApi } from '../../api/usersApi'
 import type { NhanVien } from '../../api/usersApi'
+import { billingApi } from '../../api/billing'
+import { printToPdf } from '../../utils/exportUtils'
 
 const { Text, Title } = Typography
 
@@ -34,6 +39,7 @@ const fmtMoney = (v: number) =>
 
 export default function GiaoHangPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
 
   const { data: warehouses = [] } = useQuery({ queryKey: ['warehouses'], queryFn: () => warehousesApi.list().then(r => r.data) })
   const { data: xeList = [] } = useQuery({ queryKey: ['xe'], queryFn: () => xeApi.list().then(r => r.data) })
@@ -76,6 +82,29 @@ export default function GiaoHangPage() {
       den_ngay: doFilter.den_ngay,
     }).then(r => r.data),
   })
+
+  const [stockFilter, setStockFilter] = useState<{
+    ten_khach: string; nv_theo_doi_id: number | undefined
+    so_lenh: string; tu_ngay: string | undefined; den_ngay: string | undefined
+  }>({ ten_khach: '', nv_theo_doi_id: undefined, so_lenh: '', tu_ngay: undefined, den_ngay: undefined })
+  const [selectedStockKeys, setSelectedStockKeys] = useState<number[]>([])
+
+  const { data: stockRows = [], isLoading: loadingStock } = useQuery({
+    queryKey: ['ton-kho-tp-lsx-delivery', stockFilter],
+    queryFn: () => warehouseApi.getTonKhoTpLsx({
+      ten_khach: stockFilter.ten_khach || undefined,
+      nv_theo_doi_id: stockFilter.nv_theo_doi_id,
+      so_lenh: stockFilter.so_lenh || undefined,
+      tu_ngay: stockFilter.tu_ngay,
+      den_ngay: stockFilter.den_ngay,
+    }).then(r => r.data),
+  })
+
+  const availableStockRows = useMemo(
+    () => stockRows.filter(r => r.ton_kho > 0),
+    [stockRows],
+  )
+  const selectedStockRows = availableStockRows.filter(r => selectedStockKeys.includes(r.production_order_id))
 
   const [includeHT, setIncludeHT] = useState(false)
   const [poSearch, setPOSearch] = useState('')
@@ -181,11 +210,14 @@ export default function GiaoHangPage() {
 
   const [showDOModal, setShowDOModal] = useState(false)
   const [selectedYC, setSelectedYC] = useState<YeuCauGiaoHang | null>(null)
+  const [directCustomerId, setDirectCustomerId] = useState<number | null>(null)
+  const [directSalesOrderId, setDirectSalesOrderId] = useState<number | null>(null)
   const [doForm] = Form.useForm()
   const [doItems, setDOItems] = useState<Array<{
     production_order_id: number | null; so_lenh: string | null; ten_hang: string
-    so_luong: number; dvt: string; dien_tich: number; trong_luong: number
-    don_gia: number; thanh_tien: number; ghi_chu: string
+    product_id?: number | null; sales_order_item_id?: number | null
+    so_luong: number; dvt: string; dien_tich: number; trong_luong: number; the_tich: number
+    don_gia: number; thanh_tien: number; ghi_chu: string; ton_kho?: number
   }>>([])
 
   const openDOModal = (yc: YeuCauGiaoHang) => {
@@ -194,42 +226,132 @@ export default function GiaoHangPage() {
       production_order_id: it.production_order_id,
       so_lenh: it.so_lenh,
       ten_hang: it.ten_hang,
+      product_id: it.product_id,
+      sales_order_item_id: it.sales_order_item_id,
       so_luong: it.so_luong,
       dvt: it.dvt,
-      dien_tich: it.dien_tich,
-      trong_luong: it.trong_luong,
+      dien_tich: it.dien_tich || 0,
+      trong_luong: it.trong_luong || 0,
+      the_tich: it.the_tich || 0,
       don_gia: 0,
       thanh_tien: 0,
       ghi_chu: '',
     })))
     doForm.resetFields()
     doForm.setFieldsValue({ ngay_xuat: dayjs() })
+    setDirectCustomerId(null)
+    setDirectSalesOrderId(null)
+    setShowDOModal(true)
+  }
+
+  const openDirectDOModal = () => {
+    if (!selectedStockRows.length) {
+      message.warning('Chọn ít nhất 1 dòng tồn kho thành phẩm')
+      return
+    }
+
+    const customerIds = Array.from(new Set(selectedStockRows.map(r => r.customer_id).filter((v): v is number => v != null)))
+    if (customerIds.length !== 1) {
+      message.warning('Chỉ tạo một phiếu bán hàng cho cùng một khách hàng')
+      return
+    }
+
+    const warehouseIds = Array.from(new Set(selectedStockRows.map(r => r.warehouse_id).filter((v): v is number => v != null)))
+    if (warehouseIds.length !== 1) {
+      message.warning('Chỉ tạo một phiếu bán hàng từ cùng một kho thành phẩm')
+      return
+    }
+
+    const firstRow = selectedStockRows[0]
+    const salesOrderIds = Array.from(new Set(selectedStockRows.map(r => r.sales_order_id).filter((v): v is number => v != null)))
+    setSelectedYC(null)
+    setDirectCustomerId(customerIds[0])
+    setDirectSalesOrderId(salesOrderIds.length === 1 ? salesOrderIds[0] : null)
+    setDOItems(selectedStockRows.map(r => {
+      const donGia = r.don_gia || 0
+      const soLuong = r.ton_kho
+      return {
+        production_order_id: r.production_order_id,
+        so_lenh: r.so_lenh,
+        ten_hang: r.ten_hang || '',
+        product_id: r.product_id,
+        sales_order_item_id: r.sales_order_item_id,
+        so_luong: soLuong,
+        dvt: r.dvt || 'Thùng',
+        dien_tich: r.dien_tich || 0,
+        trong_luong: r.trong_luong || 0,
+        the_tich: r.the_tich || 0,
+        don_gia: donGia,
+        thanh_tien: donGia * soLuong,
+        ghi_chu: '',
+        ton_kho: r.ton_kho,
+      }
+    }))
+    doForm.resetFields()
+    doForm.setFieldsValue({
+      ngay_xuat: dayjs(),
+      warehouse_id: warehouseIds[0],
+      ghi_chu: firstRow.so_don ? `Xuất từ kho thành phẩm - ${firstRow.so_don}` : 'Xuất từ kho thành phẩm',
+    })
     setShowDOModal(true)
   }
 
   const createDOMutation = useMutation({
     mutationFn: (payload: Parameters<typeof deliveriesApi.create>[0]) => deliveriesApi.create(payload).then(r => r.data),
-    onSuccess: () => {
-      message.success('Tạo phiếu bán hàng thành công')
+    onSuccess: (delivery) => {
+      message.success({
+        content: (
+          <Space>
+            <span>Tạo phiếu bán hàng thành công</span>
+            <Button size="small" icon={<PrinterOutlined />} onClick={() => printDelivery(delivery)}>
+              In phiếu xuất kho PDF
+            </Button>
+          </Space>
+        ),
+        duration: 8,
+      })
       qc.invalidateQueries({ queryKey: ['deliveries'] })
       qc.invalidateQueries({ queryKey: ['yeu-cau-giao-hang'] })
+      qc.invalidateQueries({ queryKey: ['ton-kho-tp-lsx-delivery'] })
       setShowDOModal(false)
       setSelectedYC(null)
+      setDirectCustomerId(null)
+      setDirectSalesOrderId(null)
+      setSelectedStockKeys([])
     },
     onError: (e: unknown) => message.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Lỗi tạo phiếu'),
   })
 
+  const createInvoiceMutation = useMutation({
+    mutationFn: (deliveryId: number) => billingApi.createFromDelivery(deliveryId),
+    onSuccess: (invoice) => {
+      message.success('Tạo hóa đơn bán hàng thành công')
+      qc.invalidateQueries({ queryKey: ['billing-invoices'] })
+      navigate(`/billing/invoices/${invoice.id}`)
+    },
+    onError: (e: unknown) => message.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Lỗi tạo hóa đơn'),
+  })
+
   const handleSaveDO = async () => {
     const vals = await doForm.validateFields()
-    if (!selectedYC) return
+    if (!selectedYC && !directCustomerId) {
+      message.warning('Chưa xác định khách hàng cho phiếu bán hàng')
+      return
+    }
+    const overStock = doItems.find(it => it.ton_kho != null && it.so_luong > it.ton_kho)
+    if (overStock) {
+      message.warning(`Số lượng xuất của ${overStock.so_lenh || overStock.ten_hang} vượt tồn kho`)
+      return
+    }
     const donGia = donGiaList.find((d: DonGiaVanChuyen) => d.id === vals.don_gia_vc_id)
     createDOMutation.mutate({
       ngay_xuat: vals.ngay_xuat.format('YYYY-MM-DD'),
       warehouse_id: vals.warehouse_id,
-      customer_id: selectedYC.customer_id ?? undefined,
-      yeu_cau_id: selectedYC.id,
-      dia_chi_giao: selectedYC.dia_chi_giao ?? undefined,
-      nguoi_nhan: selectedYC.nguoi_nhan ?? undefined,
+      sales_order_id: directSalesOrderId ?? undefined,
+      customer_id: selectedYC?.customer_id ?? directCustomerId ?? undefined,
+      yeu_cau_id: selectedYC?.id,
+      dia_chi_giao: selectedYC?.dia_chi_giao ?? undefined,
+      nguoi_nhan: selectedYC?.nguoi_nhan ?? undefined,
       xe_id: vals.xe_id ?? undefined,
       tai_xe_id: vals.tai_xe_id ?? undefined,
       lo_xe: vals.lo_xe ?? undefined,
@@ -238,11 +360,14 @@ export default function GiaoHangPage() {
       ghi_chu: vals.ghi_chu ?? undefined,
       items: doItems.map(it => ({
         production_order_id: it.production_order_id ?? undefined,
+        product_id: it.product_id ?? undefined,
+        sales_order_item_id: it.sales_order_item_id ?? undefined,
         ten_hang: it.ten_hang,
         so_luong: it.so_luong,
         dvt: it.dvt,
-        dien_tich: it.dien_tich,
-        trong_luong: it.trong_luong,
+        dien_tich: it.dien_tich > 0 ? it.dien_tich : undefined,
+        trong_luong: it.trong_luong > 0 ? it.trong_luong : undefined,
+        the_tich: it.the_tich > 0 ? it.the_tich : undefined,
         don_gia: it.don_gia || undefined,
         ghi_chu: it.ghi_chu || undefined,
       })),
@@ -250,6 +375,68 @@ export default function GiaoHangPage() {
   }
 
   const tongTienHang = doItems.reduce((s, it) => s + it.thanh_tien, 0)
+
+  const printDelivery = (delivery: DeliveryOrder) => {
+    const rows = delivery.items.map((it, idx) => `
+      <tr>
+        <td class="center">${idx + 1}</td>
+        <td>${it.so_lenh || ''}</td>
+        <td>${it.ten_hang || ''}</td>
+        <td class="right">${fmtN(it.so_luong)}</td>
+        <td class="center">${it.dvt || ''}</td>
+        <td class="right">${fmtMoney(it.don_gia)}</td>
+        <td class="right">${fmtMoney(it.thanh_tien)}</td>
+        <td class="right">${fmtN(it.dien_tich)}</td>
+        <td class="right">${fmtN(it.trong_luong)}</td>
+        <td class="right">${fmtN(it.the_tich)}</td>
+      </tr>
+    `).join('')
+
+    printToPdf(
+      `Phieu xuat kho ${delivery.so_phieu}`,
+      `
+        <h2>PHIẾU XUẤT KHO / PHIẾU BÁN HÀNG</h2>
+        <div class="meta">Số phiếu: <b>${delivery.so_phieu}</b> · Ngày xuất: ${fmtDate(delivery.ngay_xuat)}</div>
+        <div class="info-grid">
+          <div><div class="info-label">Khách hàng</div><div class="info-value">${delivery.ten_khach || ''}</div></div>
+          <div><div class="info-label">Kho xuất</div><div class="info-value">${delivery.ten_kho || ''}</div></div>
+          <div><div class="info-label">Số đơn</div><div class="info-value">${delivery.so_don || ''}</div></div>
+          <div><div class="info-label">Xe</div><div class="info-value">${delivery.bien_so || delivery.xe_van_chuyen || ''}</div></div>
+          <div><div class="info-label">Tài xế</div><div class="info-value">${delivery.ten_tai_xe || ''}</div></div>
+          <div><div class="info-label">Người nhận</div><div class="info-value">${delivery.nguoi_nhan || ''}</div></div>
+          <div style="grid-column:1/-1"><div class="info-label">Địa chỉ giao</div><div class="info-value">${delivery.dia_chi_giao || ''}</div></div>
+        </div>
+        <table>
+          <thead><tr>
+            <th>STT</th><th>LSX</th><th>Tên hàng</th><th>SL</th><th>DVT</th>
+            <th>Đơn giá</th><th>Thành tiền</th><th>m²</th><th>kg</th><th>m³</th>
+          </tr></thead>
+          <tbody>
+            ${rows}
+            <tr class="total-row">
+              <td colspan="6" class="right">Tổng</td>
+              <td class="right">${fmtMoney(delivery.tong_tien_hang)}</td>
+              <td class="right">${fmtN(delivery.tong_dien_tich)}</td>
+              <td class="right">${fmtN(delivery.tong_trong_luong)}</td>
+              <td class="right">${fmtN(delivery.tong_the_tich)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="summary-box">
+          <div class="summary-item"><div class="s-label">Tiền hàng</div><div class="s-value">${fmtMoney(delivery.tong_tien_hang)}</div></div>
+          <div class="summary-item"><div class="s-label">Vận chuyển</div><div class="s-value">${fmtMoney(delivery.tien_van_chuyen)}</div></div>
+          <div class="summary-item"><div class="s-label">Tổng thanh toán</div><div class="s-value">${fmtMoney(delivery.tong_thanh_toan)}</div></div>
+          <div class="summary-item"><div class="s-label">Tổng m³</div><div class="s-value">${fmtN(delivery.tong_the_tich)}</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:40px;margin-top:28px;text-align:center">
+          <div><b>Người lập phiếu</b><div style="height:56px"></div></div>
+          <div><b>Thủ kho</b><div style="height:56px"></div></div>
+          <div><b>Người nhận hàng</b><div style="height:56px"></div></div>
+        </div>
+      `,
+      true,
+    )
+  }
 
   const ycCols: ColumnsType<YeuCauGiaoHang> = [
     { title: 'Số YC', dataIndex: 'so_yeu_cau', width: 140, render: (v: string) => <Text code style={{ fontSize: 11 }}>{v}</Text> },
@@ -302,11 +489,50 @@ export default function GiaoHangPage() {
     { title: 'Tài xế', dataIndex: 'ten_tai_xe', width: 120, render: (v: string | null) => v ?? '—' },
     { title: '∑ m²', dataIndex: 'tong_dien_tich', width: 80, render: (v: number) => fmtN(v) },
     { title: '∑ kg', dataIndex: 'tong_trong_luong', width: 80, render: (v: number) => fmtN(v) },
+    { title: '∑ m³', dataIndex: 'tong_the_tich', width: 80, render: (v: number) => fmtN(v) },
     { title: 'Tổng TT (₫)', dataIndex: 'tong_thanh_toan', width: 120, render: (v: number) => fmtMoney(v) },
     {
       title: 'Công nợ', dataIndex: 'trang_thai_cong_no', width: 110,
       render: (v: string) => <Tag color={CONG_NO_COLORS[v] || 'default'}>{CONG_NO_LABELS[v] || v}</Tag>,
     },
+    {
+      title: '',
+      width: 88,
+      fixed: 'right',
+      render: (_: unknown, row: DeliveryOrder) => (
+        <Space size={4}>
+          <Button size="small" icon={<PrinterOutlined />} onClick={() => printDelivery(row)} />
+          <Button
+            size="small"
+            icon={<FileTextOutlined />}
+            loading={createInvoiceMutation.isPending}
+            disabled={!row.tong_tien_hang}
+            onClick={() => createInvoiceMutation.mutate(row.id)}
+          />
+        </Space>
+      ),
+    },
+  ]
+
+  const stockCols: ColumnsType<TonKhoTPRow> = [
+    { title: 'Lệnh SX', dataIndex: 'so_lenh', width: 120, render: (v: string) => <Text code style={{ fontSize: 11 }}>{v}</Text> },
+    { title: 'Số đơn', dataIndex: 'so_don', width: 120, render: (v: string | null) => v ?? <Text type="secondary">-</Text> },
+    { title: 'Khách hàng', dataIndex: 'ten_khach_hang', width: 140 },
+    { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+    { title: 'Kho TP', dataIndex: 'ten_phan_xuong', width: 120, render: (v: string | null) => v ?? <Text type="secondary">-</Text> },
+    {
+      title: 'Tồn',
+      dataIndex: 'ton_kho',
+      width: 90,
+      align: 'right',
+      sorter: (a, b) => a.ton_kho - b.ton_kho,
+      render: (v: number, r) => <Text strong>{fmtN(v)} {r.dvt}</Text>,
+    },
+    { title: 'm²', dataIndex: 'dien_tich', width: 80, align: 'right', render: (v: number) => fmtN(v) },
+    { title: 'kg', dataIndex: 'trong_luong', width: 80, align: 'right', render: (v: number) => fmtN(v) },
+    { title: 'm³', dataIndex: 'the_tich', width: 80, align: 'right', render: (v: number) => fmtN(v) },
+    { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, align: 'right', render: (v: number) => fmtMoney(v) },
+    { title: 'NV theo dõi', dataIndex: 'ten_nv_theo_doi', width: 120, render: (v: string | null) => v ?? <Text type="secondary">-</Text> },
   ]
 
   const poCols: ColumnsType<DonHangTheoDoiRow> = [
@@ -516,6 +742,78 @@ export default function GiaoHangPage() {
                 label: 'Phiếu bán hàng',
                 children: (
                   <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                    <Card size="small" title="Tạo phiếu bán hàng từ kho thành phẩm">
+                      <Row gutter={8} style={{ marginBottom: 8 }}>
+                        <Col span={4}>
+                          <Input
+                            placeholder="Khách hàng"
+                            allowClear
+                            value={stockFilter.ten_khach}
+                            onChange={e => setStockFilter(f => ({ ...f, ten_khach: e.target.value }))}
+                          />
+                        </Col>
+                        <Col span={4}>
+                          <Select
+                            placeholder="NV theo dõi"
+                            allowClear
+                            style={{ width: '100%' }}
+                            value={stockFilter.nv_theo_doi_id}
+                            onChange={v => setStockFilter(f => ({ ...f, nv_theo_doi_id: v }))}
+                            options={nvList.map((nv: NhanVien) => ({ value: nv.id, label: nv.ho_ten || nv.username }))}
+                            showSearch
+                            filterOption={(input, opt) => (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                          />
+                        </Col>
+                        <Col span={3}>
+                          <Input
+                            placeholder="Lệnh SX"
+                            allowClear
+                            value={stockFilter.so_lenh}
+                            onChange={e => setStockFilter(f => ({ ...f, so_lenh: e.target.value }))}
+                          />
+                        </Col>
+                        <Col span={6}>
+                          <DatePicker.RangePicker
+                            format="DD/MM/YYYY"
+                            style={{ width: '100%' }}
+                            onChange={dates => setStockFilter(f => ({
+                              ...f,
+                              tu_ngay: dates?.[0]?.format('YYYY-MM-DD'),
+                              den_ngay: dates?.[1]?.format('YYYY-MM-DD'),
+                            }))}
+                          />
+                        </Col>
+                        <Col>
+                          <Button onClick={() => setStockFilter({ ten_khach: '', nv_theo_doi_id: undefined, so_lenh: '', tu_ngay: undefined, den_ngay: undefined })}>
+                            Xoá lọc
+                          </Button>
+                        </Col>
+                        <Col flex="auto" />
+                        <Col>
+                          <Button type="primary" disabled={!selectedStockKeys.length} onClick={openDirectDOModal}>
+                            Tạo phiếu từ tồn kho ({selectedStockKeys.length})
+                          </Button>
+                        </Col>
+                      </Row>
+                      <Table<TonKhoTPRow>
+                        rowKey="production_order_id"
+                        size="small"
+                        loading={loadingStock}
+                        dataSource={availableStockRows}
+                        columns={stockCols}
+                        pagination={{ pageSize: 10, showSizeChanger: false }}
+                        scroll={{ x: 950 }}
+                        rowSelection={{
+                          type: 'checkbox',
+                          selectedRowKeys: selectedStockKeys,
+                          onChange: keys => setSelectedStockKeys(keys as number[]),
+                          getCheckboxProps: (record) => ({
+                            disabled: !record.customer_id || !record.warehouse_id || record.ton_kho <= 0,
+                          }),
+                        }}
+                      />
+                    </Card>
+                    <Card size="small" title="Danh sách phiếu bán hàng">
                     <Row gutter={8}>
                       <Col span={4}>
                         <Input
@@ -594,11 +892,13 @@ export default function GiaoHangPage() {
                               { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 120, render: (v: number) => fmtMoney(v) },
                               { title: 'm²', dataIndex: 'dien_tich', width: 80, render: (v: number) => fmtN(v) },
                               { title: 'kg', dataIndex: 'trong_luong', width: 80, render: (v: number) => fmtN(v) },
+                              { title: 'm³', dataIndex: 'the_tich', width: 80, render: (v: number) => fmtN(v) },
                             ]}
                           />
                         ),
                       }}
                     />
+                    </Card>
                   </Space>
                 ),
               },
@@ -721,9 +1021,9 @@ export default function GiaoHangPage() {
 
       {/* Modal tạo phiếu bán hàng */}
       <Modal
-        title={`Tạo phiếu bán hàng${selectedYC ? ` — ${selectedYC.so_yeu_cau}` : ''}`}
+        title={`Tạo phiếu bán hàng${selectedYC ? ` — ${selectedYC.so_yeu_cau}` : ' từ kho thành phẩm'}`}
         open={showDOModal}
-        onCancel={() => { setShowDOModal(false); setSelectedYC(null) }}
+        onCancel={() => { setShowDOModal(false); setSelectedYC(null); setDirectCustomerId(null); setDirectSalesOrderId(null) }}
         onOk={handleSaveDO}
         okText="Tạo phiếu"
         confirmLoading={createDOMutation.isPending}
@@ -796,7 +1096,33 @@ export default function GiaoHangPage() {
           columns={[
             { title: 'Lệnh SX', dataIndex: 'so_lenh', width: 120 },
             { title: 'Tên hàng', dataIndex: 'ten_hang', width: 150, ellipsis: true },
-            { title: 'SL', dataIndex: 'so_luong', width: 70, render: (v: number) => fmtN(v) },
+            {
+              title: 'SL',
+              dataIndex: 'so_luong',
+              width: 90,
+              render: (_: number, row: typeof doItems[0], idx: number) => (
+                <InputNumber
+                  size="small"
+                  min={0.001}
+                  max={row.ton_kho}
+                  value={row.so_luong}
+                  style={{ width: 82 }}
+                  onChange={v => setDOItems(prev => prev.map((it, i) => {
+                    if (i !== idx) return it
+                    const soLuong = v ?? it.so_luong
+                    const ratio = it.so_luong > 0 ? soLuong / it.so_luong : 1
+                    return {
+                      ...it,
+                      so_luong: soLuong,
+                      dien_tich: it.dien_tich * ratio,
+                      trong_luong: it.trong_luong * ratio,
+                      the_tich: it.the_tich * ratio,
+                      thanh_tien: soLuong * it.don_gia,
+                    }
+                  }))}
+                />
+              ),
+            },
             { title: 'DVT', dataIndex: 'dvt', width: 55 },
             {
               title: 'Đơn giá', width: 110,
@@ -830,6 +1156,13 @@ export default function GiaoHangPage() {
                   onChange={v => setDOItems(prev => prev.map((it, i) => i === idx ? { ...it, trong_luong: v ?? 0 } : it))} />
               ),
             },
+            {
+              title: 'm³', width: 80,
+              render: (_: unknown, row: typeof doItems[0], idx: number) => (
+                <InputNumber size="small" min={0} value={row.the_tich} style={{ width: 72 }}
+                  onChange={v => setDOItems(prev => prev.map((it, i) => i === idx ? { ...it, the_tich: v ?? 0 } : it))} />
+              ),
+            },
           ]}
           summary={() => (
             <Table.Summary.Row>
@@ -837,6 +1170,7 @@ export default function GiaoHangPage() {
               <Table.Summary.Cell index={5}><Text strong style={{ color: '#1677ff' }}>{fmtMoney(tongTienHang)}</Text></Table.Summary.Cell>
               <Table.Summary.Cell index={6}><Text strong>{fmtN(doItems.reduce((s, it) => s + it.dien_tich, 0))}</Text></Table.Summary.Cell>
               <Table.Summary.Cell index={7}><Text strong>{fmtN(doItems.reduce((s, it) => s + it.trong_luong, 0))}</Text></Table.Summary.Cell>
+              <Table.Summary.Cell index={8}><Text strong>{fmtN(doItems.reduce((s, it) => s + it.the_tich, 0))}</Text></Table.Summary.Cell>
             </Table.Summary.Row>
           )}
         />

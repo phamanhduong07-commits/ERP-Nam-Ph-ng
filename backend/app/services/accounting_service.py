@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.billing import SalesInvoice
 from app.models.accounting import (
     PurchaseInvoice, CashReceipt, CashPayment,
-    DebtLedgerEntry, OpeningBalance,
+    DebtLedgerEntry, OpeningBalance, JournalEntry, JournalEntryLine,
 )
 from app.models.master import Supplier
 from app.models.purchase import PurchaseOrder
@@ -112,6 +112,74 @@ class AccountingService:
         self.db.refresh(receipt)
         return receipt
 
+    def _gen_so_but_toan(self, prefix: str) -> str:
+        full_prefix = f"{prefix}{date.today().strftime('%Y%m')}"
+        last = (
+            self.db.query(JournalEntry)
+            .filter(JournalEntry.so_but_toan.like(f"{full_prefix}%"))
+            .order_by(desc(JournalEntry.so_but_toan))
+            .first()
+        )
+        seq = int(last.so_but_toan[-4:]) + 1 if last else 1
+        return f"{full_prefix}-{seq:04d}"
+
+    def _create_journal_entry(
+        self,
+        ngay: date,
+        dien_giai: str,
+        loai_but_toan: str,
+        chung_tu_loai: str | None,
+        chung_tu_id: int | None,
+        lines: list[dict[str, object]],
+    ) -> JournalEntry:
+        entry = JournalEntry(
+            so_but_toan=self._gen_so_but_toan('BT'),
+            ngay_but_toan=ngay,
+            dien_giai=dien_giai,
+            loai_but_toan=loai_but_toan,
+            tong_no=sum(float(l['so_tien_no']) for l in lines),
+            tong_co=sum(float(l['so_tien_co']) for l in lines),
+            chung_tu_loai=chung_tu_loai,
+            chung_tu_id=chung_tu_id,
+        )
+        self.db.add(entry)
+        self.db.flush()
+        for line in lines:
+            entry_line = JournalEntryLine(
+                entry_id=entry.id,
+                so_tk=line['so_tk'],
+                dien_giai=line.get('dien_giai'),
+                so_tien_no=line.get('so_tien_no', 0),
+                so_tien_co=line.get('so_tien_co', 0),
+            )
+            self.db.add(entry_line)
+        self.db.flush()
+        return entry
+
+    def _post_cash_receipt_journal(self, receipt: CashReceipt) -> None:
+        lines = [
+            {
+                'so_tk': receipt.tk_no,
+                'dien_giai': f"Thu tiền HĐ {receipt.sales_invoice_id or ''}",
+                'so_tien_no': float(receipt.so_tien),
+                'so_tien_co': 0,
+            },
+            {
+                'so_tk': receipt.tk_co,
+                'dien_giai': f"Giảm công nợ KH {receipt.customer_id}",
+                'so_tien_no': 0,
+                'so_tien_co': float(receipt.so_tien),
+            },
+        ]
+        self._create_journal_entry(
+            ngay=receipt.ngay_phieu,
+            dien_giai=f"Phiếu thu {receipt.so_phieu}",
+            loai_but_toan='phieu_thu',
+            chung_tu_loai='phieu_thu',
+            chung_tu_id=receipt.id,
+            lines=lines,
+        )
+
     def approve_receipt(self, receipt_id: int, user_id: int) -> CashReceipt:
         receipt = self.db.query(CashReceipt).get(receipt_id)
         if not receipt:
@@ -121,6 +189,7 @@ class AccountingService:
         receipt.trang_thai = "da_duyet"
         receipt.nguoi_duyet_id = user_id
         receipt.ngay_duyet = datetime.utcnow()
+        self._post_cash_receipt_journal(receipt)
         self.db.commit()
         self.db.refresh(receipt)
         return receipt
@@ -129,6 +198,8 @@ class AccountingService:
         receipt = self.db.query(CashReceipt).get(receipt_id)
         if not receipt:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
+        if receipt.trang_thai == "huy":
+            return receipt
         if receipt.trang_thai == "da_duyet":
             raise HTTPException(400, "Không thể hủy phiếu thu đã duyệt")
 
@@ -140,8 +211,25 @@ class AccountingService:
                 invoice.da_thanh_toan = new_da_tt
                 invoice.trang_thai = "da_phat_hanh" if new_da_tt == 0 else "da_tt_mot_phan"
                 invoice.updated_at = datetime.utcnow()
+                if invoice.delivery_id:
+                    delivery = self.db.query(DeliveryOrder).get(invoice.delivery_id)
+                    if delivery:
+                        delivery.trang_thai_cong_no = (
+                            "chua_thu" if new_da_tt == 0 else "da_thu_mot_phan"
+                        )
 
         receipt.trang_thai = "huy"
+        entry = DebtLedgerEntry(
+            ngay=date.today(),
+            loai="tang_no",
+            doi_tuong="khach_hang",
+            customer_id=receipt.customer_id,
+            chung_tu_loai="huy_phieu_thu",
+            chung_tu_id=receipt.id,
+            so_tien=receipt.so_tien,
+            ghi_chu=f"Huy phieu thu {receipt.so_phieu}",
+        )
+        self.db.add(entry)
         self.db.commit()
         self.db.refresh(receipt)
         return receipt

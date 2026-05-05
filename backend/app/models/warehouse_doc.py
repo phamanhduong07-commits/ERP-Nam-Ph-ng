@@ -163,6 +163,9 @@ class DeliveryOrder(Base):
     invoices: Mapped[list["SalesInvoice"]] = relationship(
         "SalesInvoice", back_populates="delivery"
     )
+    returns: Mapped[list["SalesReturn"]] = relationship(
+        "SalesReturn", back_populates="delivery_order"
+    )
 
 
 class DeliveryOrderItem(Base):
@@ -178,6 +181,7 @@ class DeliveryOrderItem(Base):
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
     dien_tich: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     trong_luong: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    the_tich: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     don_gia: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     thanh_tien: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     ghi_chu: Mapped[str | None] = mapped_column(Text)

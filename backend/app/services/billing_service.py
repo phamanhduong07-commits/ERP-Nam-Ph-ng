@@ -1,11 +1,11 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy import desc
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.billing import SalesInvoice
-from app.models.accounting import CashReceipt, DebtLedgerEntry
+from app.models.accounting import CashReceipt, DebtLedgerEntry, JournalEntry, JournalEntryLine
 from app.models.master import Customer
 from app.models.warehouse_doc import DeliveryOrder
 from app.models.sales import SalesOrder, SalesOrderItem
@@ -30,6 +30,112 @@ class BillingService:
         seq = int(last.so_hoa_don[-4:]) + 1 if last else 1
         return f"{prefix}-{seq:04d}"
 
+    def _gen_so_but_toan(self, prefix: str) -> str:
+        full_prefix = f"{prefix}{date.today().strftime('%Y%m')}"
+        last = (
+            self.db.query(JournalEntry)
+            .filter(JournalEntry.so_but_toan.like(f"{full_prefix}%"))
+            .order_by(desc(JournalEntry.so_but_toan))
+            .first()
+        )
+        seq = int(last.so_but_toan[-4:]) + 1 if last else 1
+        return f"{full_prefix}-{seq:04d}"
+
+    def _create_journal_entry(
+        self,
+        ngay: date,
+        dien_giai: str,
+        loai_but_toan: str,
+        chung_tu_loai: str | None,
+        chung_tu_id: int | None,
+        lines: list[dict[str, object]],
+    ) -> JournalEntry:
+        entry = JournalEntry(
+            so_but_toan=self._gen_so_but_toan('BT'),
+            ngay_but_toan=ngay,
+            dien_giai=dien_giai,
+            loai_but_toan=loai_but_toan,
+            tong_no=sum(float(l['so_tien_no']) for l in lines),
+            tong_co=sum(float(l['so_tien_co']) for l in lines),
+            chung_tu_loai=chung_tu_loai,
+            chung_tu_id=chung_tu_id,
+        )
+        self.db.add(entry)
+        self.db.flush()
+        for line in lines:
+            entry_line = JournalEntryLine(
+                entry_id=entry.id,
+                so_tk=line['so_tk'],
+                dien_giai=line.get('dien_giai'),
+                so_tien_no=line.get('so_tien_no', 0),
+                so_tien_co=line.get('so_tien_co', 0),
+            )
+            self.db.add(entry_line)
+        self.db.flush()
+        return entry
+
+    def _post_sales_invoice_journal(self, invoice: SalesInvoice) -> None:
+        lines = [
+            {
+                'so_tk': '131',
+                'dien_giai': f"Ghi nhận doanh thu HĐ {invoice.so_hoa_don}",
+                'so_tien_no': float(invoice.tong_cong),
+                'so_tien_co': 0,
+            },
+            {
+                'so_tk': '511',
+                'dien_giai': f"Doanh thu bán hàng HĐ {invoice.so_hoa_don}",
+                'so_tien_no': 0,
+                'so_tien_co': float(invoice.tong_tien_hang),
+            },
+        ]
+        if invoice.tien_vat and float(invoice.tien_vat) > 0:
+            lines.append({
+                'so_tk': '3331',
+                'dien_giai': f"VAT HĐ {invoice.so_hoa_don}",
+                'so_tien_no': 0,
+                'so_tien_co': float(invoice.tien_vat),
+            })
+        self._create_journal_entry(
+            ngay=invoice.ngay_hoa_don,
+            dien_giai=f"Phát hành hóa đơn bán hàng {invoice.so_hoa_don}",
+            loai_but_toan='hoa_don_ban',
+            chung_tu_loai='hoa_don_ban',
+            chung_tu_id=invoice.id,
+            lines=lines,
+        )
+
+    def _reverse_sales_invoice_journal(self, invoice: SalesInvoice) -> None:
+        lines = [
+            {
+                'so_tk': '511',
+                'dien_giai': f"Hủy doanh thu HĐ {invoice.so_hoa_don}",
+                'so_tien_no': float(invoice.tong_tien_hang),
+                'so_tien_co': 0,
+            },
+            {
+                'so_tk': '131',
+                'dien_giai': f"Hủy công nợ HĐ {invoice.so_hoa_don}",
+                'so_tien_no': 0,
+                'so_tien_co': float(invoice.tong_cong),
+            },
+        ]
+        if invoice.tien_vat and float(invoice.tien_vat) > 0:
+            lines.insert(1, {
+                'so_tk': '3331',
+                'dien_giai': f"Hủy VAT HĐ {invoice.so_hoa_don}",
+                'so_tien_no': float(invoice.tien_vat),
+                'so_tien_co': 0,
+            })
+        self._create_journal_entry(
+            ngay=date.today(),
+            dien_giai=f"Hủy hóa đơn bán hàng {invoice.so_hoa_don}",
+            loai_but_toan='huy_hoa_don_ban',
+            chung_tu_loai='huy_hoa_don_ban',
+            chung_tu_id=invoice.id,
+            lines=lines,
+        )
+
     # ─────────────────────────────────────────
     # Tạo hóa đơn bán hàng
     # ─────────────────────────────────────────
@@ -39,8 +145,11 @@ class BillingService:
         if not customer:
             raise HTTPException(404, "Không tìm thấy khách hàng")
 
+        if not data.han_tt and customer.so_ngay_no and customer.so_ngay_no > 0:
+            data.han_tt = data.ngay_hoa_don + timedelta(days=customer.so_ngay_no)
+
         ten_don_vi = data.ten_don_vi or customer.ten_don_vi or customer.ten_viet_tat
-        dia_chi = data.dia_chi or customer.dia_chi
+        dia_chi = data.dia_chi or customer.dia_chi or customer.dia_chi_giao_hang
         ma_so_thue = data.ma_so_thue or getattr(customer, "ma_so_thue", None)
 
         invoice = SalesInvoice(
@@ -88,6 +197,14 @@ class BillingService:
     # Tạo hóa đơn từ phiếu xuất kho
     # ─────────────────────────────────────────
     def create_invoice_from_delivery(self, delivery_id: int, user_id: int) -> SalesInvoice:
+        existing = (
+            self.db.query(SalesInvoice)
+            .filter(SalesInvoice.delivery_id == delivery_id, SalesInvoice.trang_thai != "huy")
+            .first()
+        )
+        if existing:
+            return existing
+
         delivery = (
             self.db.query(DeliveryOrder)
             .options(joinedload(DeliveryOrder.customer))
@@ -216,16 +333,37 @@ class BillingService:
             raise HTTPException(400, "Chỉ phát hành được hóa đơn ở trạng thái Nháp")
         inv.trang_thai = "da_phat_hanh"
         inv.updated_at = datetime.utcnow()
+        self._post_sales_invoice_journal(inv)
         self.db.commit()
         self.db.refresh(inv)
         return inv
 
     def cancel_invoice(self, invoice_id: int) -> SalesInvoice:
         inv = self.get_invoice(invoice_id)
-        if inv.trang_thai == "da_tt_du":
-            raise HTTPException(400, "Không thể hủy hóa đơn đã thanh toán đủ")
+        if inv.trang_thai == "huy":
+            return inv
+        if inv.da_thanh_toan and inv.da_thanh_toan > 0:
+            raise HTTPException(400, "Khong the huy hoa don da co phieu thu")
+        should_reverse = inv.trang_thai != "nhap"
         inv.trang_thai = "huy"
         inv.updated_at = datetime.utcnow()
+        entry = DebtLedgerEntry(
+            ngay=date.today(),
+            loai="giam_no",
+            doi_tuong="khach_hang",
+            customer_id=inv.customer_id,
+            chung_tu_loai="huy_hoa_don_ban",
+            chung_tu_id=inv.id,
+            so_tien=inv.tong_cong,
+            ghi_chu=f"Huy hoa don ban {inv.so_hoa_don}",
+        )
+        self.db.add(entry)
+        if should_reverse:
+            self._reverse_sales_invoice_journal(inv)
+        if inv.delivery_id:
+            delivery = self.db.query(DeliveryOrder).get(inv.delivery_id)
+            if delivery:
+                delivery.trang_thai_cong_no = "chua_thu"
         self.db.commit()
         self.db.refresh(inv)
         return inv

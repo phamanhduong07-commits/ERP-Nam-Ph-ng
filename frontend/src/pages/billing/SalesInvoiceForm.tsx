@@ -137,9 +137,9 @@ export default function SalesInvoiceForm() {
                   filterOption={(input, opt) =>
                     (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
                   }
-                  options={customers.map((c: any) => ({
+                  options={customers.map(c => ({
                     value: c.id,
-                    label: `${c.ma_kh ? `[${c.ma_kh}] ` : ''}${c.ten_kh ?? c.ten_don_vi ?? ''}`,
+                    label: `${c.ma_kh ? `[${c.ma_kh}] ` : ''}${c.ten_don_vi ?? ''}`,
                   }))}
                   onChange={handleCustomerChange}
                   placeholder="Chọn khách hàng"

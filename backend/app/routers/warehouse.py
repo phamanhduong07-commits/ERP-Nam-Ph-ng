@@ -23,6 +23,7 @@ from app.models.warehouse_doc import (
     StockAdjustment, StockAdjustmentItem,
 )
 from app.models.yeu_cau_giao_hang import YeuCauGiaoHang
+from app.services.carton_metrics import production_item_metrics
 
 router = APIRouter(prefix="/api/warehouse", tags=["warehouse"])
 
@@ -105,6 +106,7 @@ class DeliveryOrderItemIn(BaseModel):
     dvt: str = "Thùng"
     dien_tich: Optional[Decimal] = None
     trong_luong: Optional[Decimal] = None
+    the_tich: Optional[Decimal] = None
     don_gia: Optional[Decimal] = None
     ghi_chu: Optional[str] = None
 
@@ -1061,6 +1063,27 @@ def create_delivery(
             if prod:
                 ten_hang = ten_hang or getattr(prod, "ten_san_pham", None) or ten_hang
         # Validate từ kho header (xuất kho chính)
+        if it.production_order_id:
+            tong_nhap_lsx = db.query(
+                func.coalesce(func.sum(ProductionOutput.so_luong_nhap), 0)
+            ).filter(
+                ProductionOutput.production_order_id == it.production_order_id,
+                ProductionOutput.warehouse_id == warehouse_id,
+            ).scalar() or Decimal("0")
+            tong_xuat_lsx = db.query(
+                func.coalesce(func.sum(DeliveryOrderItem.so_luong), 0)
+            ).join(
+                DeliveryOrder, DeliveryOrder.id == DeliveryOrderItem.delivery_id
+            ).filter(
+                DeliveryOrderItem.production_order_id == it.production_order_id,
+                DeliveryOrder.warehouse_id == warehouse_id,
+            ).scalar() or Decimal("0")
+            ton_lsx = Decimal(str(tong_nhap_lsx)) - Decimal(str(tong_xuat_lsx))
+            if ton_lsx < it.so_luong:
+                po_ref = db.get(ProductionOrder, it.production_order_id)
+                label = po_ref.so_lenh if po_ref else ten_hang
+                raise HTTPException(400, f"KhÃ´ng Ä‘á»§ tá»“n TP theo LSX: {label} â€” "
+                                    f"cáº§n {float(it.so_luong):g}, cÃ²n {float(ton_lsx):g}")
         bal = _get_or_create_balance(db, warehouse_id,
                                      product_id=it.product_id,
                                      ten_hang=ten_hang, don_vi=it.dvt)
@@ -1102,14 +1125,27 @@ def create_delivery(
                 dvt = dvt or getattr(prod, "dvt", "Thùng") or "Thùng"
 
         # Auto dien_tich từ ProductionOrderItem nếu không truyền
-        dien_tich = it.dien_tich
-        if dien_tich is None and it.production_order_id:
-            from app.models.production import ProductionOrderItem as POItem
-            po_item = db.query(POItem).filter(
-                POItem.production_order_id == it.production_order_id
+        po_item = None
+        if it.production_order_id:
+            po_item = db.query(ProductionOrderItem).filter(
+                ProductionOrderItem.production_order_id == it.production_order_id
             ).first()
-            if po_item and po_item.dien_tich:
-                dien_tich = Decimal(str(po_item.dien_tich)) * it.so_luong
+
+        dien_tich = it.dien_tich
+        trong_luong = it.trong_luong
+        the_tich = it.the_tich
+        if po_item and (
+            dien_tich is None or dien_tich <= 0 or
+            trong_luong is None or trong_luong <= 0 or
+            the_tich is None or the_tich <= 0
+        ):
+            metrics = production_item_metrics(po_item, it.so_luong)
+            if dien_tich is None or dien_tich <= 0:
+                dien_tich = metrics["dien_tich"]
+            if trong_luong is None or trong_luong <= 0:
+                trong_luong = metrics["trong_luong"]
+            if the_tich is None or the_tich <= 0:
+                the_tich = metrics["the_tich"]
 
         # Auto don_gia từ SalesOrderItem nếu không truyền
         don_gia = it.don_gia
@@ -1131,7 +1167,8 @@ def create_delivery(
             so_luong=it.so_luong,
             dvt=dvt,
             dien_tich=dien_tich,
-            trong_luong=it.trong_luong,
+            trong_luong=trong_luong,
+            the_tich=the_tich,
             don_gia=don_gia,
             thanh_tien=thanh_tien,
             ghi_chu=it.ghi_chu,
@@ -1232,6 +1269,7 @@ def _do_to_dict(do: DeliveryOrder, db: Session) -> dict:
         "trang_thai_cong_no": getattr(do, "trang_thai_cong_no", "chua_thu"),
         "tong_dien_tich": sum(float(it.dien_tich or 0) for it in do.items),
         "tong_trong_luong": sum(float(it.trong_luong or 0) for it in do.items),
+        "tong_the_tich": sum(float(getattr(it, "the_tich", None) or 0) for it in do.items),
         "trang_thai": do.trang_thai,
         "ghi_chu": do.ghi_chu,
         "created_at": do.created_at.isoformat() if do.created_at else None,
@@ -1246,6 +1284,7 @@ def _do_to_dict(do: DeliveryOrder, db: Session) -> dict:
             "dvt": it.dvt,
             "dien_tich": float(it.dien_tich or 0) if hasattr(it, "dien_tich") else 0.0,
             "trong_luong": float(it.trong_luong or 0) if hasattr(it, "trong_luong") else 0.0,
+            "the_tich": float(getattr(it, "the_tich", None) or 0),
             "don_gia": float(it.don_gia or 0) if hasattr(it, "don_gia") else 0.0,
             "thanh_tien": float(it.thanh_tien or 0) if hasattr(it, "thanh_tien") else 0.0,
             "ghi_chu": it.ghi_chu,
@@ -1743,6 +1782,10 @@ def ton_kho_tp_lsx(
     # 4. Item info per LSX (ten_hang + sl_ke_hoach)
     item_rows = (
         db.query(ProductionOrderItem)
+        .options(
+            joinedload(ProductionOrderItem.sales_order_item),
+            joinedload(ProductionOrderItem.product),
+        )
         .filter(ProductionOrderItem.production_order_id.in_(order_ids))
         .order_by(ProductionOrderItem.production_order_id, ProductionOrderItem.id)
         .all()
@@ -1777,6 +1820,7 @@ def ton_kho_tp_lsx(
         first_item = item_map.get(o.id)
         ten_khach_hang = kh.ten_viet_tat if kh else None
         ngay_lenh_str = o.ngay_lenh.isoformat() if o.ngay_lenh else None
+        sales_item = first_item.sales_order_item if first_item and first_item.sales_order_item else None
 
         if ten_khach and (not ten_khach_hang or ten_khach.lower() not in ten_khach_hang.lower()):
             continue
@@ -1789,18 +1833,33 @@ def ton_kho_tp_lsx(
         if den_ngay and (not ngay_lenh_str or ngay_lenh_str > den_ngay):
             continue
 
+        ton_kho = tong_nhap - tong_xuat
+        metrics = production_item_metrics(first_item, Decimal(str(ton_kho)))
+
         result.append({
             "production_order_id": o.id,
             "so_lenh": o.so_lenh,
             "ngay_lenh": ngay_lenh_str,
+            "sales_order_id": o.sales_order_id,
+            "so_don": o.sales_order.so_don if o.sales_order else None,
+            "customer_id": kh.id if kh else None,
             "ten_hang": first_item.ten_hang if first_item else None,
+            "product_id": first_item.product_id if first_item else None,
+            "sales_order_item_id": first_item.sales_order_item_id if first_item else None,
+            "don_gia": float(sales_item.don_gia) if sales_item and sales_item.don_gia else (
+                float(first_item.gia_ban_muc_tieu) if first_item and first_item.gia_ban_muc_tieu else 0.0
+            ),
+            "dia_chi_giao": o.sales_order.dia_chi_giao if o.sales_order else None,
             "ten_khach_hang": ten_khach_hang,
             "nv_theo_doi_id": o.nv_theo_doi_id,
             "ten_nv_theo_doi": o.nv_theo_doi.ho_ten if o.nv_theo_doi else None,
             "sl_ke_hoach": sl_ke_hoach_map.get(o.id, 0.0),
             "tong_nhap": tong_nhap,
             "tong_xuat": tong_xuat,
-            "ton_kho": tong_nhap - tong_xuat,
+            "ton_kho": ton_kho,
+            "dien_tich": float(metrics["dien_tich"]),
+            "trong_luong": float(metrics["trong_luong"]),
+            "the_tich": float(metrics["the_tich"]),
             "dvt": nh.get("dvt", "Thùng"),
             "warehouse_id": nh.get("warehouse_id"),
             "phan_xuong_id": o.phan_xuong_id,

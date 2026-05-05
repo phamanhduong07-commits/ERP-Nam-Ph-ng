@@ -1,7 +1,7 @@
 from datetime import date
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
-from app.models.sales import SalesOrder, SalesOrderItem
+from app.models.sales import QuoteItem, SalesOrder, SalesOrderItem
 from app.models.master import Customer
 from app.schemas.sales import (
     SalesOrderCreate, SalesOrderUpdate, SalesOrderResponse,

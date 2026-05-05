@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
-  Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Divider,
+  Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message, Divider,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, CarOutlined, MinusCircleOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, CarOutlined, MinusCircleOutlined, FileTextOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateDeliveryPayload, DeliveryOrder } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { salesOrdersApi } from '../../api/salesOrders'
+import { billingApi } from '../../api/billing'
 
 const { Title, Text } = Typography
 
@@ -21,6 +23,7 @@ const TRANG_THAI_DO: Record<string, { label: string; color: string }> = {
 
 export default function DeliveryPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
   const [filterKho, setFilterKho] = useState<number | undefined>()
@@ -76,6 +79,15 @@ export default function DeliveryPage() {
       message.success('Đã xoá phiếu giao hàng')
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
+  })
+
+  const createInvoiceMut = useMutation({
+    mutationFn: (deliveryId: number) => billingApi.createFromDelivery(deliveryId),
+    onSuccess: inv => {
+      message.success('Đã tạo hóa đơn')
+      navigate(`/billing/invoices/${inv.id}`)
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn'),
   })
 
   const handleSOSelect = (soId: number) => {
@@ -145,12 +157,23 @@ export default function DeliveryPage() {
         return <Tag color={tt.color}>{tt.label}</Tag>
       } },
     {
-      title: '', width: 50,
+      title: '', width: 90,
       render: (_: unknown, r: DeliveryOrder) => (
-        <Popconfirm title="Xoá phiếu giao hàng?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
-          disabled={r.trang_thai === 'da_giao'}>
-          <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_giao'} />
-        </Popconfirm>
+        <Space size={4}>
+          {r.trang_thai === 'da_giao' && (
+            <Tooltip title="Tạo hóa đơn bán hàng">
+              <Button
+                size="small" icon={<FileTextOutlined />} type="link"
+                loading={createInvoiceMut.isPending}
+                onClick={() => createInvoiceMut.mutate(r.id)}
+              />
+            </Tooltip>
+          )}
+          <Popconfirm title="Xoá phiếu giao hàng?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
+            disabled={r.trang_thai === 'da_giao'}>
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_giao'} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ]

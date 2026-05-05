@@ -269,7 +269,7 @@ def tao_don_hang_tu_bao_gia(
     current_user: User = Depends(get_current_user),
 ):
     """Chuyển báo giá đã duyệt thành đơn hàng. item_ids=None → lấy tất cả."""
-    from app.routers.sales_orders import _generate_so_don
+    from app.services.sales_order_service import SalesOrderService
     quote = _load_quote(quote_id, db)
     if quote.trang_thai != "da_duyet":
         raise HTTPException(
@@ -284,7 +284,7 @@ def tao_don_hang_tu_bao_gia(
     if not selected_items:
         raise HTTPException(status_code=400, detail="Cần chọn ít nhất 1 mặt hàng")
 
-    so_don = _generate_so_don(db)
+    so_don = SalesOrderService(db)._generate_so_don()
     order = SalesOrder(
         so_don=so_don,
         ngay_don=date.today(),

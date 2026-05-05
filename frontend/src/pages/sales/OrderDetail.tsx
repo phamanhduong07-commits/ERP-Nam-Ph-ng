@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Table, Space, Button, Typography,
   Divider, Popconfirm, message, Skeleton, Row, Col, Modal, DatePicker, Form, Select,
@@ -9,13 +9,14 @@ import {
 import {
   ArrowLeftOutlined, CheckOutlined, CloseOutlined,
   PrinterOutlined, ThunderboltOutlined, CalculatorOutlined,
-  FileExcelOutlined, FilePdfOutlined, EyeOutlined,
+  FileExcelOutlined, FilePdfOutlined, EyeOutlined, PercentageOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
 import type { SalesOrderItem } from '../../api/salesOrders'
 import { productionOrdersApi } from '../../api/productionOrders'
+import { billingApi } from '../../api/billing'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import BomCalculatorPanel from '../production/BomCalculatorPanel'
@@ -55,6 +56,17 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
   })
   const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
+
+  const createInvoiceMut = useMutation({
+    mutationFn: () => billingApi.createFromOrder(Number(id)),
+    onSuccess: (inv) => {
+      message.success('Đã tạo hóa đơn từ đơn hàng')
+      qc.invalidateQueries({ queryKey: ['sales-order', id] })
+      qc.invalidateQueries({ queryKey: ['billing-invoices'] })
+      if (inv?.id) navigate(`/billing/invoices/${inv.id}`)
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn'),
+  })
 
   const handleApprove = async () => {
     try {
@@ -393,6 +405,26 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                   Duyệt đơn
                 </Button>
               </Popconfirm>
+            )}
+            {['da_duyet', 'dang_sx', 'da_giao'].includes(order.trang_thai) && (
+              <Button
+                size={embedded ? 'small' : 'middle'}
+                type="default"
+                loading={createInvoiceMut.isPending}
+                onClick={() => createInvoiceMut.mutate()}
+              >
+                Tạo hóa đơn
+              </Button>
+            )}
+            {['da_duyet', 'dang_xuat', 'hoan_thanh'].includes(order.trang_thai) && (
+              <Button
+                size={embedded ? 'small' : 'middle'}
+                type="default"
+                icon={<PercentageOutlined />}
+                onClick={() => navigate(`/sales/orders/${order.id}/discount`)}
+              >
+                Cập nhật giảm giá
+              </Button>
             )}
             {['da_duyet', 'dang_sx'].includes(order.trang_thai) && (
               <Button

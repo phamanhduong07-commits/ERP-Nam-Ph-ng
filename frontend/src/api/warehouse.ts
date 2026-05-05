@@ -352,7 +352,14 @@ export interface TonKhoTPRow {
   production_order_id: number
   so_lenh: string
   ngay_lenh: string | null
+  sales_order_id: number | null
+  so_don: string | null
+  customer_id: number | null
   ten_hang: string | null
+  product_id: number | null
+  sales_order_item_id: number | null
+  don_gia: number
+  dia_chi_giao: string | null
   ten_khach_hang: string | null
   nv_theo_doi_id: number | null
   ten_nv_theo_doi: string | null
@@ -360,6 +367,9 @@ export interface TonKhoTPRow {
   tong_nhap: number
   tong_xuat: number
   ton_kho: number
+  dien_tich: number
+  trong_luong: number
+  the_tich: number
   dvt: string
   warehouse_id: number | null
   phan_xuong_id: number | null

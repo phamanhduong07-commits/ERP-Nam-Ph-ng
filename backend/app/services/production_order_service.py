@@ -55,28 +55,31 @@ class ProductionOrderService:
         if sales_order_id:
             q = q.filter(ProductionOrder.sales_order_id == sales_order_id)
         if tu_ngay:
-            q = q.filter(ProductionOrder.ngay_tao >= tu_ngay)
+            q = q.filter(ProductionOrder.ngay_lenh >= tu_ngay)
         if den_ngay:
-            q = q.filter(ProductionOrder.ngay_tao <= den_ngay)
+            q = q.filter(ProductionOrder.ngay_lenh <= den_ngay)
 
         total = q.count()
         orders = q.order_by(ProductionOrder.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
         items = []
         for o in orders:
+            first_item = o.items[0] if o.items else None
             items.append(ProductionOrderListItem(
                 id=o.id,
                 so_lenh=o.so_lenh,
-                ngay_tao=o.ngay_tao,
+                ngay_lenh=o.ngay_lenh,
                 sales_order_id=o.sales_order_id,
                 so_don=o.sales_order.so_don if o.sales_order else None,
                 ten_khach_hang=o.sales_order.customer.ten_viet_tat if o.sales_order and o.sales_order.customer else None,
-                phap_nhan_sx_id=o.phap_nhan_sx_id,
+                ten_hang=first_item.ten_hang if first_item else None,
                 ten_phap_nhan_sx=o.phap_nhan_sx.ten_phap_nhan if o.phap_nhan_sx else None,
-                kho_sx_id=o.kho_sx_id,
                 ten_kho_sx=o.kho_sx.ten_kho if o.kho_sx else None,
+                phan_xuong_id=o.phan_xuong_id,
+                gia_ban_muc_tieu=getattr(first_item, 'gia_ban', None) if first_item else None,
+                ngay_hoan_thanh_ke_hoach=o.ngay_hoan_thanh_ke_hoach,
                 trang_thai=o.trang_thai,
-                tong_so_luong=o.tong_so_luong,
+                tong_sl_ke_hoach=sum(i.so_luong_ke_hoach for i in o.items),
                 so_dong=len(o.items),
                 created_at=o.created_at,
             ))

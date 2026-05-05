@@ -15,6 +15,7 @@ export interface YeuCauItem {
   dvt: string
   dien_tich: number
   trong_luong: number
+  the_tich?: number
   ghi_chu: string | null
 }
 
@@ -104,6 +105,7 @@ export interface DeliveryOrderItem {
   dvt: string
   dien_tich: number
   trong_luong: number
+  the_tich: number
   don_gia: number
   thanh_tien: number
   ghi_chu: string | null
@@ -138,6 +140,7 @@ export interface DeliveryOrder {
   trang_thai_cong_no: string  // chua_thu | da_thu_mot_phan | da_thu_du
   tong_dien_tich: number
   tong_trong_luong: number
+  tong_the_tich: number
   trang_thai: string
   items: DeliveryOrderItem[]
   ghi_chu: string | null
@@ -153,6 +156,7 @@ export interface CreateDeliveryItemPayload {
   dvt?: string
   dien_tich?: number
   trong_luong?: number
+  the_tich?: number
   don_gia?: number
   ghi_chu?: string
 }
@@ -203,4 +207,6 @@ export const deliveriesApi = {
   create: (data: CreateDeliveryPayload) =>
     client.post<DeliveryOrder>('/warehouse/deliveries', data),
   delete: (id: number) => client.delete(`/warehouse/deliveries/${id}`),
+  getBySalesOrder: (salesOrderId: number) =>
+    client.get<DeliveryOrder[]>(`/warehouse/deliveries?sales_order_id=${salesOrderId}`),
 }

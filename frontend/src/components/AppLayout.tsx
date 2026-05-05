@@ -7,6 +7,7 @@ import {
   DashboardOutlined, ShoppingCartOutlined, ShopOutlined,
   TeamOutlined, UserOutlined, LogoutOutlined, SettingOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, FileTextOutlined, ClockCircleOutlined,
+  AccountBookOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
@@ -64,8 +65,10 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       children: [
         { key: '/quotes', label: <Link to="/quotes">Báo giá</Link> },
         { key: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link> },
+        { key: '/sales/returns', label: <Link to="/sales/returns">Trả lại hàng bán</Link> },
         { key: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link> },
         { key: '/sales/giao-hang', label: <Link to="/sales/giao-hang">Giao hàng</Link> },
+        { key: '/billing/invoices', label: <Link to="/billing/invoices">Hóa đơn bán hàng</Link> },
       ],
     },
     {
@@ -139,6 +142,30 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       roles: MUA_HANG,
       children: [
         { key: '/purchasing/orders', label: <Link to="/purchasing/orders">Đơn mua hàng (PO)</Link> },
+      ],
+    },
+    {
+      key: 'ke-toan',
+      icon: <AccountBookOutlined />,
+      label: 'Kế toán',
+      children: [
+        {
+          key: 'cong-no-phai-thu',
+          label: 'Công nợ phải thu',
+          children: [
+            { key: '/accounting/receipts', label: <Link to="/accounting/receipts">Phiếu thu</Link> },
+            { key: '/accounting/ar-ledger', label: <Link to="/accounting/ar-ledger">Sổ công nợ phải thu</Link> },
+          ],
+        },
+        {
+          key: 'cong-no-phai-tra',
+          label: 'Công nợ phải trả',
+          children: [
+            { key: '/accounting/purchase-invoices', label: <Link to="/accounting/purchase-invoices">Hóa đơn mua hàng</Link> },
+            { key: '/accounting/payments', label: <Link to="/accounting/payments">Phiếu chi</Link> },
+            { key: '/accounting/ap-ledger', label: <Link to="/accounting/ap-ledger">Sổ công nợ phải trả</Link> },
+          ],
+        },
       ],
     },
     {

@@ -1,5 +1,12 @@
 import client from './client'
 
+export const HINH_THUC_TT: Record<string, string> = {
+  tien_mat: 'Tien mat',
+  chuyen_khoan: 'Chuyen khoan',
+  bu_tru_cong_no: 'Bu tru cong no',
+  khac: 'Khac',
+}
+
 // ──────────────────────────────────────────────────────
 // Constants / Labels
 // ──────────────────────────────────────────────────────

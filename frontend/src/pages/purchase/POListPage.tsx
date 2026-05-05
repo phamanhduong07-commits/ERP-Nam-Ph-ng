@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
@@ -6,7 +7,7 @@ import {
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, CheckCircleOutlined, ShopOutlined, MinusCircleOutlined,
-  FileExcelOutlined, FilePdfOutlined,
+  FileExcelOutlined, FilePdfOutlined, FileTextOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
@@ -17,6 +18,7 @@ import {
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { suppliersApi } from '../../api/suppliers'
+import { purchaseInvoiceApi } from '../../api/accounting'
 
 const { Title, Text } = Typography
 
@@ -24,6 +26,7 @@ const DIEU_KHOAN_OPTIONS = ['COD', 'NET15', 'NET30', 'NET45', 'NET60', 'TT trư�
 
 export default function POListPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
@@ -82,6 +85,15 @@ export default function POListPage() {
       message.success('Đã xoá đơn mua hàng')
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
+  })
+
+  const createPurchaseInvoiceMut = useMutation({
+    mutationFn: (poId: number) => purchaseInvoiceApi.fromPO(poId),
+    onSuccess: inv => {
+      message.success('Đã tạo hóa đơn mua hàng')
+      navigate(`/accounting/purchase-invoices/${inv.id}`)
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn'),
   })
 
   const handleMatSelect = (itemName: number, loai: string, matId: number) => {
@@ -143,6 +155,15 @@ export default function POListPage() {
             <Popconfirm title="Xoá đơn mua này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}>
               <Button danger size="small" icon={<DeleteOutlined />} />
             </Popconfirm>
+          )}
+          {['da_duyet', 'da_gui_ncc', 'dang_giao', 'hoan_thanh'].includes(r.trang_thai) && (
+            <Tooltip title="Tạo hóa đơn mua hàng">
+              <Button
+                size="small" icon={<FileTextOutlined />} type="link"
+                loading={createPurchaseInvoiceMut.isPending}
+                onClick={() => createPurchaseInvoiceMut.mutate(r.id)}
+              />
+            </Tooltip>
           )}
         </Space>
       ),

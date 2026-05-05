@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import Base, engine, ensure_schema
 from app.routers import (
-    auth, customers, products, sales_orders, quotes, paper_materials, cau_truc,
+    auth, customers, products, sales_orders, sales_returns, quotes, paper_materials, cau_truc,
     suppliers, material_groups, other_materials, warehouses, users,
     don_vi_tinh, vi_tri, xe, tai_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
     production_orders, bom, production_plans, indirect_costs, addon_rates, permissions,
@@ -77,6 +77,7 @@ app.include_router(permissions.role_router)
 app.include_router(customers.router)
 app.include_router(products.router)
 app.include_router(sales_orders.router)
+app.include_router(sales_returns.router)
 app.include_router(quotes.router)
 app.include_router(paper_materials.router)
 app.include_router(cau_truc.router)

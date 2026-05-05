@@ -24,6 +24,8 @@ interface OrderLine {
   product: Product
   so_luong: number
   don_gia: number
+  ty_le_giam_gia: number
+  so_tien_giam_gia: number
   ngay_giao_hang: string | null
   ghi_chu_san_pham: string | null
   yeu_cau_in: string | null
@@ -93,6 +95,8 @@ export default function OrderCreate() {
       product,
       so_luong: 1,
       don_gia: Number(product.gia_ban) || 0,
+      ty_le_giam_gia: 0,
+      so_tien_giam_gia: 0,
       ngay_giao_hang: null,
       ghi_chu_san_pham: null,
       yeu_cau_in: null,
@@ -105,7 +109,15 @@ export default function OrderCreate() {
     setLines((prev) => prev.map((l) => l.key === key ? { ...l, [field]: value } : l))
   }
 
-  const tongTien = lines.reduce((s, l) => s + l.so_luong * l.don_gia, 0)
+  const tongTien = lines.reduce((s, l) => {
+    const tienHang = l.so_luong * l.don_gia
+    if (l.ty_le_giam_gia > 0) {
+      return s + tienHang * (1 - l.ty_le_giam_gia / 100)
+    } else if (l.so_tien_giam_gia > 0) {
+      return s + Math.max(0, tienHang - l.so_tien_giam_gia)
+    }
+    return s + tienHang
+  }, 0)
 
   const handleSubmit = async () => {
     try {
@@ -126,10 +138,16 @@ export default function OrderCreate() {
           : undefined,
         dia_chi_giao: values.dia_chi_giao,
         ghi_chu: values.ghi_chu,
+        ty_le_giam_gia: values.ty_le_giam_gia || 0,
+        so_tien_giam_gia: values.so_tien_giam_gia || 0,
         items: lines.map((l) => ({
           product_id: l.product_id,
+          ten_hang: l.product.ten_hang,
           so_luong: l.so_luong,
           don_gia: l.don_gia,
+          ty_le_giam_gia: l.ty_le_giam_gia,
+          so_tien_giam_gia: l.so_tien_giam_gia,
+          dvt: l.product.dvt,
           ngay_giao_hang: l.ngay_giao_hang || undefined,
           ghi_chu_san_pham: l.ghi_chu_san_pham || undefined,
           yeu_cau_in: l.yeu_cau_in || undefined,
@@ -197,12 +215,44 @@ export default function OrderCreate() {
       ),
     },
     {
+      title: '% Giảm',
+      width: 80,
+      render: (_, r) => (
+        <InputNumber
+          min={0}
+          max={100}
+          value={r.ty_le_giam_gia}
+          onChange={(v) => updateLine(r.key, 'ty_le_giam_gia', v || 0)}
+          style={{ width: 60 }}
+        />
+      ),
+    },
+    {
+      title: 'Giảm tiền',
+      width: 100,
+      render: (_, r) => (
+        <InputNumber
+          min={0}
+          value={r.so_tien_giam_gia}
+          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+          onChange={(v) => updateLine(r.key, 'so_tien_giam_gia', v || 0)}
+          style={{ width: 80 }}
+        />
+      ),
+    },
+    {
       title: 'Thành tiền',
       width: 120,
       align: 'right',
-      render: (_, r) => (
-        <Text strong>{new Intl.NumberFormat('vi-VN').format(r.so_luong * r.don_gia)}</Text>
-      ),
+      render: (_, r) => {
+        const tienHang = r.so_luong * r.don_gia
+        const thanhTien = r.ty_le_giam_gia > 0
+          ? tienHang * (1 - r.ty_le_giam_gia / 100)
+          : r.so_tien_giam_gia > 0
+          ? Math.max(0, tienHang - r.so_tien_giam_gia)
+          : tienHang
+        return <Text strong>{new Intl.NumberFormat('vi-VN').format(thanhTien)}</Text>
+      },
     },
     {
       title: 'Ghi chú',
@@ -325,6 +375,26 @@ export default function OrderCreate() {
                     <Input.TextArea rows={2} placeholder="Ghi chú..." />
                   </Form.Item>
                 </Col>
+                <Col span={12}>
+                  <Form.Item name="ty_le_giam_gia" label="% Giảm giá đơn hàng">
+                    <InputNumber
+                      min={0}
+                      max={100}
+                      placeholder="0"
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="so_tien_giam_gia" label="Số tiền giảm giá đơn hàng">
+                    <InputNumber
+                      min={0}
+                      placeholder="0"
+                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                </Col>
               </Row>
             </Form>
           </Card>
@@ -341,12 +411,44 @@ export default function OrderCreate() {
               summary={() => lines.length > 0 ? (
                 <Table.Summary fixed>
                   <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={6} align="right">
-                      <Text strong>Tổng tiền:</Text>
+                    <Table.Summary.Cell index={0} colSpan={8} align="right">
+                      <Text strong>Tổng tiền hàng:</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">
+                      <Text>{new Intl.NumberFormat('vi-VN').format(tongTien)}đ</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} colSpan={2} />
+                  </Table.Summary.Row>
+                  {(form.getFieldValue('ty_le_giam_gia') > 0 || form.getFieldValue('so_tien_giam_gia') > 0) && (
+                    <Table.Summary.Row>
+                      <Table.Summary.Cell index={0} colSpan={8} align="right">
+                        <Text strong>Giảm giá đơn hàng:</Text>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={1} align="right">
+                        <Text type="danger">
+                          -{new Intl.NumberFormat('vi-VN').format(
+                            form.getFieldValue('ty_le_giam_gia') > 0
+                              ? tongTien * form.getFieldValue('ty_le_giam_gia') / 100
+                              : Math.min(tongTien, form.getFieldValue('so_tien_giam_gia') || 0)
+                          )}đ
+                        </Text>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={2} colSpan={2} />
+                    </Table.Summary.Row>
+                  )}
+                  <Table.Summary.Row>
+                    <Table.Summary.Cell index={0} colSpan={8} align="right">
+                      <Text strong style={{ fontSize: 16 }}>Tổng cộng:</Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={1} align="right">
                       <Text strong style={{ fontSize: 16, color: '#1677ff' }}>
-                        {new Intl.NumberFormat('vi-VN').format(tongTien)}đ
+                        {new Intl.NumberFormat('vi-VN').format(
+                          form.getFieldValue('ty_le_giam_gia') > 0
+                            ? tongTien * (1 - form.getFieldValue('ty_le_giam_gia') / 100)
+                            : form.getFieldValue('so_tien_giam_gia') > 0
+                            ? Math.max(0, tongTien - (form.getFieldValue('so_tien_giam_gia') || 0))
+                            : tongTien
+                        )}đ
                       </Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={2} colSpan={2} />

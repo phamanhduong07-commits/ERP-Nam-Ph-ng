@@ -84,7 +84,6 @@ class PurchaseInvoice(Base):
     con_lai: Mapped[Decimal] = mapped_column(
         Numeric(18, 2),
         Computed("tong_thanh_toan - da_thanh_toan", persisted=True),
-        init=False,
     )
     trang_thai: Mapped[str] = mapped_column(String(30), default="nhap")
     # nhap | da_tt_mot_phan | da_tt_du | qua_han | huy

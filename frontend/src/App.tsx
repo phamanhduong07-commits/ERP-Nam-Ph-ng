@@ -8,7 +8,11 @@ const Login = lazy(() => import('./pages/Login'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const OrderCreate = lazy(() => import('./pages/sales/OrderCreate'))
 const OrderDetail = lazy(() => import('./pages/sales/OrderDetail'))
+const OrderDiscountUpdate = lazy(() => import('./pages/sales/OrderDiscountUpdate'))
 const SalesOrdersPage = lazy(() => import('./pages/sales/SalesOrdersPage'))
+const SalesReturnsPage = lazy(() => import('./pages/sales/SalesReturnsPage'))
+const SalesReturnCreate = lazy(() => import('./pages/sales/SalesReturnCreate'))
+const SalesReturnDetail = lazy(() => import('./pages/sales/SalesReturnDetail'))
 const QuoteForm = lazy(() => import('./pages/quotes/QuoteForm'))
 const QuoteDetail = lazy(() => import('./pages/quotes/QuoteDetail'))
 const QuotesPage = lazy(() => import('./pages/quotes/QuotesPage'))
@@ -65,6 +69,21 @@ const POListPage = lazy(() => import('./pages/purchase/POListPage'))
 const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
+// Billing
+const SalesInvoiceListPage = lazy(() => import('./pages/billing/SalesInvoiceListPage'))
+const SalesInvoiceDetailPage = lazy(() => import('./pages/billing/SalesInvoiceDetailPage'))
+const SalesInvoiceForm = lazy(() => import('./pages/billing/SalesInvoiceForm'))
+// Accounting
+const CashReceiptListPage = lazy(() => import('./pages/accounting/CashReceiptListPage'))
+const CashReceiptDetailPage = lazy(() => import('./pages/accounting/CashReceiptDetailPage'))
+const CashReceiptForm = lazy(() => import('./pages/accounting/CashReceiptForm'))
+const CashPaymentListPage = lazy(() => import('./pages/accounting/CashPaymentListPage'))
+const CashPaymentDetailPage = lazy(() => import('./pages/accounting/CashPaymentDetailPage'))
+const CashPaymentForm = lazy(() => import('./pages/accounting/CashPaymentForm'))
+const PurchaseInvoiceListPage = lazy(() => import('./pages/accounting/PurchaseInvoiceListPage'))
+const PurchaseInvoiceDetailPage = lazy(() => import('./pages/accounting/PurchaseInvoiceDetailPage'))
+const ARLedgerPage = lazy(() => import('./pages/accounting/ARLedgerPage'))
+const APLedgerPage = lazy(() => import('./pages/accounting/APLedgerPage'))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -91,6 +110,12 @@ export default function App() {
         <Route path="sales/orders" element={<ErrorBoundary><SalesOrdersPage /></ErrorBoundary>} />
         <Route path="sales/orders/new" element={<ErrorBoundary><OrderCreate /></ErrorBoundary>} />
         <Route path="sales/orders/:id" element={<ErrorBoundary><OrderDetail /></ErrorBoundary>} />
+        <Route path="sales/orders/:id/discount" element={<ErrorBoundary><OrderDiscountUpdate /></ErrorBoundary>} />
+
+        {/* Trả lại hàng bán */}
+        <Route path="sales/returns" element={<ErrorBoundary><SalesReturnsPage /></ErrorBoundary>} />
+        <Route path="sales/returns/create" element={<ErrorBoundary><SalesReturnCreate /></ErrorBoundary>} />
+        <Route path="sales/returns/:id" element={<ErrorBoundary><SalesReturnDetail /></ErrorBoundary>} />
 
         {/* Báo giá — master-detail list + standalone routes */}
         <Route path="quotes" element={<QuotesPage />} />
@@ -175,6 +200,24 @@ export default function App() {
         <Route path="master/indirect-costs" element={<IndirectCostList />} />
         <Route path="master/addon-rates" element={<AddonRateList />} />
 
+        {/* Billing — Hóa đơn bán hàng */}
+        <Route path="billing/invoices" element={<SalesInvoiceListPage />} />
+        <Route path="billing/invoices/new" element={<SalesInvoiceForm />} />
+        <Route path="billing/invoices/:id" element={<SalesInvoiceDetailPage />} />
+        {/* Accounting — Phiếu thu */}
+        <Route path="accounting/receipts" element={<CashReceiptListPage />} />
+        <Route path="accounting/receipts/new" element={<CashReceiptForm />} />
+        <Route path="accounting/receipts/:id" element={<CashReceiptDetailPage />} />
+        {/* Accounting — Phiếu chi */}
+        <Route path="accounting/payments" element={<CashPaymentListPage />} />
+        <Route path="accounting/payments/new" element={<CashPaymentForm />} />
+        <Route path="accounting/payments/:id" element={<CashPaymentDetailPage />} />
+        {/* Accounting — Hóa đơn mua hàng */}
+        <Route path="accounting/purchase-invoices" element={<PurchaseInvoiceListPage />} />
+        <Route path="accounting/purchase-invoices/:id" element={<PurchaseInvoiceDetailPage />} />
+        {/* Accounting — Sổ công nợ */}
+        <Route path="accounting/ar-ledger" element={<ARLedgerPage />} />
+        <Route path="accounting/ap-ledger" element={<APLedgerPage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
       </Routes>

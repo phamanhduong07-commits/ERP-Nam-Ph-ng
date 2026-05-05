@@ -115,6 +115,7 @@ class Customer(Base):
 
     sales_orders: Mapped[list["SalesOrder"]] = relationship("SalesOrder", back_populates="customer")
     products: Mapped[list["Product"]] = relationship("Product", back_populates="khach_hang")
+    sales_returns: Mapped[list["SalesReturn"]] = relationship("SalesReturn", back_populates="customer")
 
 
 class PaperMaterial(Base):

@@ -12,6 +12,7 @@ from app.models.master import Customer, Warehouse, Product
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.sales import SalesOrder, SalesOrderItem
 from app.models.yeu_cau_giao_hang import YeuCauGiaoHang, YeuCauGiaoHangItem
+from app.services.carton_metrics import production_item_metrics
 
 router = APIRouter(prefix="/api/yeu-cau-giao-hang", tags=["yeu-cau-giao-hang"])
 
@@ -68,6 +69,8 @@ def _yc_to_dict(yc: YeuCauGiaoHang, db: Session) -> dict:
     items_out = []
     ten_phap_nhan_set: list[str] = []
     ten_kho_tp_set: list[str] = []
+    tong_dien_tich = 0.0
+    tong_trong_luong = 0.0
     for it in yc.items:
         po = db.get(ProductionOrder, it.production_order_id)
         wh = db.get(Warehouse, it.warehouse_id)
@@ -81,6 +84,22 @@ def _yc_to_dict(yc: YeuCauGiaoHang, db: Session) -> dict:
             ten_phap_nhan_set.append(ten_phap_nhan)
         if ten_kho and ten_kho not in ten_kho_tp_set:
             ten_kho_tp_set.append(ten_kho)
+        first_item = po.items[0] if po and po.items else None
+        dien_tich = it.dien_tich
+        trong_luong = it.trong_luong
+        if first_item and (
+            dien_tich is None or dien_tich <= 0 or
+            trong_luong is None or trong_luong <= 0
+        ):
+            metrics = production_item_metrics(first_item, it.so_luong)
+            if dien_tich is None or dien_tich <= 0:
+                dien_tich = metrics["dien_tich"]
+            if trong_luong is None or trong_luong <= 0:
+                trong_luong = metrics["trong_luong"]
+        dien_tich_float = float(dien_tich or 0)
+        trong_luong_float = float(trong_luong or 0)
+        tong_dien_tich += dien_tich_float
+        tong_trong_luong += trong_luong_float
         items_out.append({
             "id": it.id,
             "production_order_id": it.production_order_id,
@@ -93,8 +112,8 @@ def _yc_to_dict(yc: YeuCauGiaoHang, db: Session) -> dict:
             "ten_hang": it.ten_hang,
             "so_luong": float(it.so_luong),
             "dvt": it.dvt,
-            "dien_tich": float(it.dien_tich) if it.dien_tich else 0.0,
-            "trong_luong": float(it.trong_luong) if it.trong_luong else 0.0,
+            "dien_tich": dien_tich_float,
+            "trong_luong": trong_luong_float,
             "ghi_chu": it.ghi_chu,
         })
     return {
@@ -110,8 +129,8 @@ def _yc_to_dict(yc: YeuCauGiaoHang, db: Session) -> dict:
         "nguoi_nhan": yc.nguoi_nhan,
         "trang_thai": yc.trang_thai,
         "ghi_chu": yc.ghi_chu,
-        "tong_dien_tich": sum(float(it.dien_tich or 0) for it in yc.items),
-        "tong_trong_luong": sum(float(it.trong_luong or 0) for it in yc.items),
+        "tong_dien_tich": tong_dien_tich,
+        "tong_trong_luong": tong_trong_luong,
         "items": items_out,
         "created_at": yc.created_at.isoformat() if yc.created_at else None,
     }
@@ -228,10 +247,18 @@ def create_yeu_cau(
             product_id = first_item.product_id
             soi_id = first_item.sales_order_item_id
 
-        # Auto dien_tich từ ProductionOrderItem.dien_tich × so_luong
+        # Auto metrics from ProductionOrderItem when the UI leaves them empty.
         dien_tich = it.dien_tich
-        if dien_tich is None and first_item and first_item.dien_tich:
-            dien_tich = Decimal(str(first_item.dien_tich)) * it.so_luong
+        trong_luong = it.trong_luong
+        if first_item and (
+            dien_tich is None or dien_tich <= 0 or
+            trong_luong is None or trong_luong <= 0
+        ):
+            metrics = production_item_metrics(first_item, it.so_luong)
+            if dien_tich is None or dien_tich <= 0:
+                dien_tich = metrics["dien_tich"]
+            if trong_luong is None or trong_luong <= 0:
+                trong_luong = metrics["trong_luong"]
 
         db.add(YeuCauGiaoHangItem(
             yeu_cau_id=yc.id,
@@ -243,7 +270,7 @@ def create_yeu_cau(
             so_luong=it.so_luong,
             dvt=it.dvt,
             dien_tich=dien_tich,
-            trong_luong=it.trong_luong,
+            trong_luong=trong_luong,
             ghi_chu=it.ghi_chu,
         ))
 

@@ -21,6 +21,9 @@ class SalesOrder(Base):
     dia_chi_giao: Mapped[str | None] = mapped_column(Text)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     tong_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ty_le_giam_gia: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)  # % giảm giá
+    so_tien_giam_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)  # Số tiền giảm giá
+    tong_tien_sau_giam: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)  # Tổng sau giảm giá
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     phap_nhan_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
@@ -54,6 +57,8 @@ class SalesOrderItem(Base):
     so_luong: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
     don_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ty_le_giam_gia: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)  # % giảm giá cho dòng
+    so_tien_giam_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)  # Số tiền giảm giá cho dòng
     ghi_chu_san_pham: Mapped[str | None] = mapped_column(Text)
     yeu_cau_in: Mapped[str | None] = mapped_column(Text)
     ngay_giao_hang: Mapped[date | None] = mapped_column(Date)
@@ -96,7 +101,71 @@ class SalesOrderItem(Base):
 
     @property
     def thanh_tien(self) -> Decimal:
-        return self.so_luong * self.don_gia
+        """Thành tiền sau giảm giá"""
+        tien_hang = self.so_luong * self.don_gia
+        if self.ty_le_giam_gia > 0:
+            return tien_hang * (1 - self.ty_le_giam_gia / 100)
+        elif self.so_tien_giam_gia > 0:
+            return max(0, tien_hang - self.so_tien_giam_gia)
+        return tien_hang
+
+
+# ─────────────────────────────────────────────
+# Trả lại hàng bán (Sales Return)
+# ─────────────────────────────────────────────
+
+class SalesReturn(Base):
+    __tablename__ = "sales_returns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    so_phieu_tra: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
+    ngay_tra: Mapped[date] = mapped_column(Date, nullable=False)
+    sales_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_orders.id"), nullable=False)
+    delivery_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("delivery_orders.id"), nullable=True)  # Phiếu xuất kho cụ thể
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
+    ly_do_tra: Mapped[str] = mapped_column(Text, nullable=False)
+    trang_thai: Mapped[str] = mapped_column(String(20), default="moi")  # moi | da_duyet | huy
+    tong_tien_tra: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    sales_order: Mapped["SalesOrder"] = relationship("SalesOrder", back_populates="returns")
+    delivery_order: Mapped["DeliveryOrder | None"] = relationship("DeliveryOrder", back_populates="returns")  # type: ignore[name-defined]
+    customer: Mapped["Customer"] = relationship("Customer", back_populates="sales_returns")
+    items: Mapped[list["SalesReturnItem"]] = relationship(
+        "SalesReturnItem", back_populates="sales_return", cascade="all, delete-orphan"
+    )
+    creator: Mapped["User | None"] = relationship("User", foreign_keys=[created_by])
+    approver: Mapped["User | None"] = relationship("User", foreign_keys=[approved_by])
+
+
+class SalesReturnItem(Base):
+    __tablename__ = "sales_return_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sales_return_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_returns.id", ondelete="CASCADE"), nullable=False)
+    sales_order_item_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_order_items.id"), nullable=False)
+    so_luong_tra: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    don_gia_tra: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ly_do_tra: Mapped[str | None] = mapped_column(Text)
+    tinh_trang_hang: Mapped[str] = mapped_column(String(50), default="tot")  # tot | hong | loi
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+
+    sales_return: Mapped["SalesReturn"] = relationship("SalesReturn", back_populates="items")
+    sales_order_item: Mapped["SalesOrderItem"] = relationship("SalesOrderItem", back_populates="return_items")
+
+
+# ─────────────────────────────────────────────
+# Cập nhật relationships
+# ─────────────────────────────────────────────
+
+SalesOrder.returns = relationship("SalesReturn", back_populates="sales_order", cascade="all, delete-orphan")
+SalesOrderItem.return_items = relationship("SalesReturnItem", back_populates="sales_order_item", cascade="all, delete-orphan")
 
 
 # ─────────────────────────────────────────────

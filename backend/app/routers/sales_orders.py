@@ -63,17 +63,20 @@ def create_order(
     if not customer:
         raise HTTPException(status_code=404, detail="Không tìm thấy khách hàng")
 
-    so_don = _generate_so_don(db)
+    so_don = SalesOrderService(db)._generate_so_don()
 
     order = SalesOrder(
         so_don=so_don,
         ngay_don=data.ngay_don,
         customer_id=data.customer_id,
         phap_nhan_id=data.phap_nhan_id,
+        phap_nhan_sx_id=data.phap_nhan_sx_id,
         phan_xuong_id=data.phan_xuong_id,
         ngay_giao_hang=data.ngay_giao_hang,
         dia_chi_giao=data.dia_chi_giao or customer.dia_chi_giao_hang,
         ghi_chu=data.ghi_chu,
+        ty_le_giam_gia=data.ty_le_giam_gia,
+        so_tien_giam_gia=data.so_tien_giam_gia,
         trang_thai="moi",
         created_by=current_user.id,
         nv_kinh_doanh_id=data.nv_kinh_doanh_id or current_user.id,
@@ -89,16 +92,26 @@ def create_order(
             product_id=item_data.product_id,
             ten_hang=item_data.ten_hang or product.ten_hang,
             so_luong=item_data.so_luong,
-            dvt=item_data.dvt,
+            dvt=item_data.dvt or product.dvt,
             don_gia=item_data.don_gia,
+            ty_le_giam_gia=item_data.ty_le_giam_gia,
+            so_tien_giam_gia=item_data.so_tien_giam_gia,
             ngay_giao_hang=item_data.ngay_giao_hang,
             ghi_chu_san_pham=item_data.ghi_chu_san_pham,
             yeu_cau_in=item_data.yeu_cau_in,
         )
         order.items.append(item)
-        tong_tien += float(item_data.so_luong) * float(item_data.don_gia)
+        tong_tien += float(item.thanh_tien)
 
     order.tong_tien = round(tong_tien, 2)
+
+    # Tính tổng tiền sau giảm giá đơn hàng
+    if order.ty_le_giam_gia > 0:
+        order.tong_tien_sau_giam = order.tong_tien * (1 - order.ty_le_giam_gia / 100)
+    elif order.so_tien_giam_gia > 0:
+        order.tong_tien_sau_giam = max(0, order.tong_tien - order.so_tien_giam_gia)
+    else:
+        order.tong_tien_sau_giam = order.tong_tien
     db.add(order)
     db.commit()
     db.refresh(order)
@@ -158,6 +171,68 @@ def cancel_order(
     order.trang_thai = "huy"
     db.commit()
     return {"message": f"Đã huỷ đơn hàng {order.so_don}"}
+
+
+@router.patch("/{order_id}/update-discount")
+def update_discount(
+    order_id: int,
+    ty_le_giam_gia: float | None = None,
+    so_tien_giam_gia: float | None = None,
+    ghi_chu: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Cập nhật giảm giá cho đơn hàng đã duyệt/xuất kho.
+    Chỉ cho phép cập nhật giảm giá, không cho phép sửa các thông tin khác.
+    """
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+
+    # Chỉ cho phép cập nhật giảm giá cho đơn hàng đã duyệt hoặc đã xuất kho
+    if order.trang_thai not in ("da_duyet", "dang_xuat", "hoan_thanh"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Chỉ có thể cập nhật giảm giá cho đơn hàng đã duyệt. Trạng thái hiện tại: '{order.trang_thai}'"
+        )
+
+    # Validate input
+    if ty_le_giam_gia is not None and (ty_le_giam_gia < 0 or ty_le_giam_gia > 100):
+        raise HTTPException(status_code=400, detail="Tỷ lệ giảm giá phải từ 0 đến 100")
+
+    if so_tien_giam_gia is not None and so_tien_giam_gia < 0:
+        raise HTTPException(status_code=400, detail="Số tiền giảm giá không được âm")
+
+    # Cập nhật giảm giá
+    if ty_le_giam_gia is not None:
+        order.ty_le_giam_gia = ty_le_giam_gia
+    if so_tien_giam_gia is not None:
+        order.so_tien_giam_gia = so_tien_giam_gia
+
+    # Cập nhật ghi chú nếu có
+    if ghi_chu is not None:
+        order.ghi_chu = ghi_chu
+
+    # Tính lại tổng tiền
+    tong_tien_hang = sum(item.so_luong * item.don_gia for item in order.items)
+    order.tong_tien_hang = tong_tien_hang
+
+    # Áp dụng giảm giá
+    if order.ty_le_giam_gia and order.ty_le_giam_gia > 0:
+        order.tong_tien_giam_gia = tong_tien_hang * (order.ty_le_giam_gia / 100)
+    elif order.so_tien_giam_gia and order.so_tien_giam_gia > 0:
+        order.tong_tien_giam_gia = order.so_tien_giam_gia
+    else:
+        order.tong_tien_giam_gia = 0
+
+    order.tong_thanh_toan = tong_tien_hang - order.tong_tien_giam_gia
+
+    # Cập nhật thời gian sửa đổi
+    order.updated_at = datetime.utcnow()
+
+    db.commit()
+    return get_order(order_id, db, current_user)
 
 
 @router.post("/admin/backfill-spec")

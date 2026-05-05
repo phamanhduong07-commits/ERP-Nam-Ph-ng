@@ -1,28 +1,20 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Row, Select, Space, Table, Tag, Typography,
-  message, Switch, Tooltip,
+  Button, Card, Col, DatePicker, Row, Select, Space, Switch, Table, Tag, Typography,
 } from 'antd'
-import {
-  PlusOutlined, FileExcelOutlined, FilePdfOutlined, EyeOutlined,
-} from '@ant-design/icons'
+import { PlusOutlined, FileExcelOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
-import {
-  billingApi, SalesInvoiceListItem,
-  TRANG_THAI_INVOICE, HINH_THUC_TT,
-} from '../../api/billing'
+import { exportToExcel, fmtVND } from '../../utils/exportUtils'
+import { purchaseInvoiceApi, TRANG_THAI_PO_INVOICE } from '../../api/accounting'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
-export default function SalesInvoiceListPage() {
+export default function PurchaseInvoiceListPage() {
   const navigate = useNavigate()
-  const qc = useQueryClient()
-
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
@@ -30,69 +22,50 @@ export default function SalesInvoiceListPage() {
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['billing-invoices', tuNgay, denNgay, filterTrangThai, quaHanOnly, page],
+    queryKey: ['purchase-invoices', tuNgay, denNgay, filterTrangThai, quaHanOnly, page],
     queryFn: () =>
-      billingApi.listInvoices({
-        tu_ngay: tuNgay,
-        den_ngay: denNgay,
+      purchaseInvoiceApi.list({
+        tu_ngay: tuNgay, den_ngay: denNgay,
         trang_thai: filterTrangThai,
         qua_han_only: quaHanOnly || undefined,
-        page,
-        page_size: 20,
+        page, page_size: 20,
       }),
   })
 
-  const invoices: SalesInvoiceListItem[] = data?.items ?? []
-  const total: number = data?.total ?? 0
-
-  const tongConLai = invoices.reduce((s, i) => s + (i.con_lai ?? 0), 0)
-  const tongDaTT = invoices.reduce((s, i) => s + (i.da_thanh_toan ?? 0), 0)
+  const invoices = data?.items ?? data ?? []
+  const total: number = data?.total ?? invoices.length
+  const tongConLai = invoices.reduce((s: number, i: any) => s + (i.con_lai ?? 0), 0)
 
   const handleExcel = () => {
-    const rows = invoices.map(i => ({
+    const rows = invoices.map((i: any) => ({
       'Số HĐ': i.so_hoa_don ?? '',
-      'Ngày HĐ': i.ngay_hoa_don,
+      'Ngày lập': i.ngay_lap,
       'Hạn TT': i.han_tt ?? '',
-      'Khách hàng': i.ten_don_vi ?? '',
-      'Tổng tiền': i.tong_cong,
+      'Nhà cung cấp': i.ten_don_vi ?? '',
+      'Tổng tiền': i.tong_thanh_toan,
       'Đã TT': i.da_thanh_toan,
       'Còn lại': i.con_lai,
-      'Trạng thái': TRANG_THAI_INVOICE[i.trang_thai]?.label ?? i.trang_thai,
+      'Trạng thái': TRANG_THAI_PO_INVOICE[i.trang_thai]?.label ?? i.trang_thai,
     }))
-    exportToExcel(`hoa-don-ban-${dayjs().format('YYYYMMDD')}`, [{
-      name: 'Hoa don ban',
+    exportToExcel(`hoa-don-mua-${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Hoa don mua',
       headers: Object.keys(rows[0] ?? {}),
-      rows: rows.map(r => Object.values(r)),
+      rows: rows.map((r: Record<string, string | number>) => Object.values(r)),
     }])
   }
 
-  const handlePrint = () => {
-    const headers = ['Số HĐ', 'Ngày HĐ', 'Hạn TT', 'Khách hàng', 'Tổng tiền', 'Đã TT', 'Còn lại', 'Trạng thái']
-    const rows = invoices.map(i => [
-      i.so_hoa_don ?? '',
-      i.ngay_hoa_don,
-      i.han_tt ?? '',
-      i.ten_don_vi ?? '',
-      fmtVND(i.tong_cong),
-      fmtVND(i.da_thanh_toan),
-      fmtVND(i.con_lai),
-      TRANG_THAI_INVOICE[i.trang_thai]?.label ?? i.trang_thai,
-    ])
-    printToPdf('Danh sách hóa đơn bán hàng', buildHtmlTable(headers.map(header => ({ header })), rows))
-  }
-
-  const columns: ColumnsType<SalesInvoiceListItem> = [
+  const columns: ColumnsType<any> = [
     {
       title: 'Số hóa đơn',
       dataIndex: 'so_hoa_don',
       width: 150,
       render: (v, r) => (
-        <a onClick={() => navigate(`/billing/invoices/${r.id}`)}>{v ?? `#${r.id}`}</a>
+        <a onClick={() => navigate(`/accounting/purchase-invoices/${r.id}`)}>{v ?? `#${r.id}`}</a>
       ),
     },
     {
-      title: 'Ngày HĐ',
-      dataIndex: 'ngay_hoa_don',
+      title: 'Ngày lập',
+      dataIndex: 'ngay_lap',
       width: 110,
       render: v => dayjs(v).format('DD/MM/YYYY'),
     },
@@ -106,14 +79,10 @@ export default function SalesInvoiceListPage() {
         return <span style={{ color: overdue ? '#f5222d' : undefined }}>{dayjs(v).format('DD/MM/YYYY')}</span>
       },
     },
-    {
-      title: 'Khách hàng',
-      dataIndex: 'ten_don_vi',
-      ellipsis: true,
-    },
+    { title: 'Nhà cung cấp', dataIndex: 'ten_don_vi', ellipsis: true },
     {
       title: 'Tổng tiền',
-      dataIndex: 'tong_cong',
+      dataIndex: 'tong_thanh_toan',
       align: 'right',
       width: 130,
       render: v => fmtVND(v),
@@ -141,38 +110,24 @@ export default function SalesInvoiceListPage() {
       dataIndex: 'trang_thai',
       width: 150,
       render: v => {
-        const s = TRANG_THAI_INVOICE[v]
+        const s = TRANG_THAI_PO_INVOICE[v]
         return <Tag color={s?.color}>{s?.label ?? v}</Tag>
       },
-    },
-    {
-      title: '',
-      width: 50,
-      render: (_, r) => (
-        <Tooltip title="Xem chi tiết">
-          <Button
-            type="text" size="small" icon={<EyeOutlined />}
-            onClick={() => navigate(`/billing/invoices/${r.id}`)}
-          />
-        </Tooltip>
-      ),
     },
   ]
 
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Hóa đơn bán hàng</Title>
+        <Title level={4} style={{ margin: 0 }}>Hóa đơn mua hàng</Title>
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
-          <Button icon={<FilePdfOutlined />} onClick={handlePrint}>In</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/billing/invoices/new')}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/accounting/purchase-invoices/new')}>
             Tạo hóa đơn
           </Button>
         </Space>
       </div>
 
-      {/* Filter bar */}
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[12, 8]} align="middle">
           <Col>
@@ -190,9 +145,7 @@ export default function SalesInvoiceListPage() {
             <Select
               style={{ width: 180 }} allowClear placeholder="Trạng thái"
               onChange={v => { setFilterTrangThai(v); setPage(1) }}
-              options={Object.entries(TRANG_THAI_INVOICE).map(([k, v]) => ({
-                value: k, label: v.label,
-              }))}
+              options={Object.entries(TRANG_THAI_PO_INVOICE).map(([k, v]) => ({ value: k, label: v.label }))}
             />
           </Col>
           <Col>
@@ -204,17 +157,10 @@ export default function SalesInvoiceListPage() {
         </Row>
       </Card>
 
-      {/* Tóm tắt */}
-      <Row gutter={16} style={{ marginBottom: 12 }}>
+      <Row style={{ marginBottom: 12 }}>
         <Col>
-          <Text type="secondary">Tổng còn lại: </Text>
-          <Text strong style={{ color: tongConLai > 0 ? '#fa8c16' : '#52c41a' }}>
-            {fmtVND(tongConLai)}
-          </Text>
-        </Col>
-        <Col>
-          <Text type="secondary">Đã thu: </Text>
-          <Text strong>{fmtVND(tongDaTT)}</Text>
+          <Text type="secondary">Tổng còn nợ NCC: </Text>
+          <Text strong style={{ color: tongConLai > 0 ? '#f5222d' : '#52c41a' }}>{fmtVND(tongConLai)}</Text>
         </Col>
       </Row>
 
@@ -233,7 +179,6 @@ export default function SalesInvoiceListPage() {
         }}
         rowClassName={r => r.trang_thai === 'qua_han' ? 'row-overdue' : ''}
       />
-
       <style>{`.row-overdue td { background: #fff1f0 !important; }`}</style>
     </div>
   )
