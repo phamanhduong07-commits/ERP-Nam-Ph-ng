@@ -4,16 +4,19 @@ import {
   Alert, Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
   Popconfirm, Row, Select, Space, Table, Tag, Typography, message,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, SwapOutlined, ArrowRightOutlined, MinusCircleOutlined } from '@ant-design/icons'
+import { FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined, SwapOutlined, ArrowRightOutlined, MinusCircleOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   warehouseApi, PhieuChuyenKho, CreatePhieuChuyenPayload, TonKho,
 } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
+import { exportToExcel, printDocument, buildHtmlTable } from '../../utils/exportUtils'
+import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
 
 export default function TransfersPage() {
+  const companyInfo = usePhapNhanForPrint()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -140,6 +143,50 @@ export default function TransfersPage() {
     } catch { /* validation shown inline */ }
   }
 
+  const handlePrintTransfer = (r: PhieuChuyenKho) => {
+    const cols = [
+      { header: 'Tên hàng' },
+      { header: 'ĐVT', align: 'center' as const },
+      { header: 'Số lượng', align: 'right' as const },
+      { header: 'Đơn giá', align: 'right' as const },
+    ]
+    const rowData = (r.items || []).map((it: any) => [
+      it.ten_hang,
+      it.don_vi,
+      Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
+      it.don_gia > 0 ? Number(it.don_gia).toLocaleString('vi-VN') + 'đ' : '—',
+    ])
+    printDocument({
+      title: `Phiếu chuyển kho ${r.so_phieu}`,
+      subtitle: 'PHIẾU CHUYỂN KHO',
+      companyInfo,
+      documentNumber: r.so_phieu,
+      documentDate: r.ngay ?? '',
+      fields: [
+        { label: 'Kho xuất (nguồn)', value: r.ten_kho_xuat ?? '—' },
+        { label: 'Kho nhận (đích)', value: r.ten_kho_nhap ?? '—' },
+        { label: 'Ghi chú', value: r.ghi_chu ?? '—' },
+      ],
+      bodyHtml: buildHtmlTable(cols, rowData),
+    })
+  }
+
+  const handleExportExcel = () => {
+    exportToExcel(`ChuyenKho_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Chuyển kho',
+      headers: ['Số phiếu', 'Ngày', 'Kho xuất', 'Kho nhận', 'Trạng thái', 'Ghi chú'],
+      rows: phieuList.map((r: PhieuChuyenKho) => [
+        r.so_phieu,
+        r.ngay,
+        r.ten_kho_xuat ?? '',
+        r.ten_kho_nhap ?? '',
+        r.trang_thai === 'da_duyet' ? 'Đã duyệt' : 'Nhập',
+        r.ghi_chu ?? '',
+      ]),
+      colWidths: [18, 12, 20, 20, 12, 25],
+    }])
+  }
+
   const columns = [
     { title: 'Số phiếu', dataIndex: 'so_phieu', width: 160, render: (v: string) => <Text strong style={{ color: '#722ed1' }}>{v}</Text> },
     { title: 'Ngày', dataIndex: 'ngay', width: 110 },
@@ -156,11 +203,14 @@ export default function TransfersPage() {
     { title: 'TT', dataIndex: 'trang_thai', width: 100, render: (v: string) => <Tag color={v === 'da_duyet' ? 'green' : 'default'}>{v === 'da_duyet' ? 'Đã duyệt' : 'Nhập'}</Tag> },
     { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '—' },
     {
-      title: '', width: 50,
+      title: '', width: 80,
       render: (_: unknown, r: PhieuChuyenKho) => (
-        <Popconfirm title="Xoá phiếu chuyển này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }} disabled={r.trang_thai !== 'nhap'}>
-          <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai !== 'nhap'} />
-        </Popconfirm>
+        <Space size={4}>
+          <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintTransfer(r)} />
+          <Popconfirm title="Xoá phiếu chuyển này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }} disabled={r.trang_thai !== 'nhap'}>
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai !== 'nhap'} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ]
@@ -184,11 +234,16 @@ export default function TransfersPage() {
           <Space><SwapOutlined style={{ fontSize: 20, color: '#722ed1' }} /><Title level={4} style={{ margin: 0 }}>Chuyển kho liên xưởng</Title></Space>
         </Col>
         <Col>
-          <Button icon={<PlusOutlined />}
-            onClick={() => { form.resetFields(); setSelectedKhoXuat(undefined); setSelectedKhoNhap(undefined); setOpen(true) }}
-            style={{ background: '#722ed1', borderColor: '#722ed1', color: '#fff' }}>
-            Tạo phiếu chuyển
-          </Button>
+          <Space>
+            <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
+              Xuất Excel
+            </Button>
+            <Button icon={<PlusOutlined />}
+              onClick={() => { form.resetFields(); setSelectedKhoXuat(undefined); setSelectedKhoNhap(undefined); setOpen(true) }}
+              style={{ background: '#722ed1', borderColor: '#722ed1', color: '#fff' }}>
+              Tạo phiếu chuyển
+            </Button>
+          </Space>
         </Col>
       </Row>
 

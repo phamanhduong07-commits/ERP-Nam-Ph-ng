@@ -1,10 +1,12 @@
 import client from './client'
 
 export const HINH_THUC_TT: Record<string, string> = {
-  tien_mat: 'Tien mat',
-  chuyen_khoan: 'Chuyen khoan',
-  bu_tru_cong_no: 'Bu tru cong no',
-  khac: 'Khac',
+  tien_mat: 'Tiền mặt',
+  TM: 'Tiền mặt',
+  chuyen_khoan: 'Chuyển khoản',
+  CK: 'Chuyển khoản',
+  bu_tru_cong_no: 'Bù trừ công nợ',
+  khac: 'Khác',
 }
 
 // ──────────────────────────────────────────────────────
@@ -176,6 +178,31 @@ export interface ARLedgerRow {
   trang_thai: string
 }
 
+export interface ARLedgerEntryRow {
+  id: number
+  ngay: string
+  customer_id: number | null
+  ten_don_vi: string | null
+  chung_tu_loai: string | null
+  chung_tu_id: number | null
+  so_chung_tu: string | null
+  dien_giai: string | null
+  phat_sinh_no: number
+  phat_sinh_co: number
+  so_du: number
+}
+
+export interface ARLedgerEntries {
+  tu_ngay: string
+  den_ngay: string
+  customer_id: number | null
+  so_du_dau_ky: number
+  phat_sinh_no: number
+  phat_sinh_co: number
+  so_du_cuoi_ky: number
+  rows: ARLedgerEntryRow[]
+}
+
 export interface ARAgingRow {
   customer_id: number
   ten_don_vi: string | null
@@ -288,11 +315,44 @@ export const arApi = {
   getLedger: (params?: Record<string, unknown>): Promise<ARLedgerRow[]> =>
     client.get('/accounting/ar/ledger', { params }).then(r => r.data),
 
+  getLedgerEntries: (params?: Record<string, unknown>): Promise<ARLedgerEntries> =>
+    client.get('/accounting/ar/ledger-entries', { params }).then(r => r.data),
+
   getAging: (asOfDate?: string): Promise<ARAgingRow[]> =>
     client.get('/accounting/ar/aging', { params: asOfDate ? { as_of_date: asOfDate } : {} }).then(r => r.data),
 
   getBalance: (params: { customer_id?: number; tu_ngay: string; den_ngay: string }): Promise<BalanceByPeriod> =>
     client.get('/accounting/ar/balance', { params }).then(r => r.data),
+
+  getReconciliation: (customerId: number, params: { tu_ngay: string; den_ngay: string }) =>
+    client.get(`/accounting/ar/reconciliation/${customerId}`, { params }).then(r => r.data),
+
+  getGeneralLedger: (params: { so_tk: string; tu_ngay: string; den_ngay: string; phap_nhan_id?: number | null; phan_xuong_id?: number | null }) =>
+    client.get('/accounting/general-ledger', { params }).then(r => r.data),
+
+  getTrialBalance: (params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number | null; phan_xuong_id?: number | null }) =>
+    client.get('/accounting/trial-balance', { params }).then(r => r.data),
+}
+
+export interface SoChiTietRow {
+  ngay: string
+  chung_tu_loai: string
+  chung_tu_id: number | null
+  supplier_id: number | null
+  ten_ncc: string | null
+  dien_giai: string | null
+  phat_sinh_no: number
+  phat_sinh_co: number
+  so_du: number
+}
+
+export interface SoChiTietResponse {
+  tu_ngay: string
+  den_ngay: string
+  supplier_id: number | null
+  so_du_dau_ky: number
+  so_du_cuoi_ky: number
+  rows: SoChiTietRow[]
 }
 
 export const apApi = {
@@ -304,6 +364,12 @@ export const apApi = {
 
   getBalance: (params: { supplier_id?: number; tu_ngay: string; den_ngay: string }): Promise<BalanceByPeriod> =>
     client.get('/accounting/ap/balance', { params }).then(r => r.data),
+
+  getSoChiTiet: (params: { supplier_id?: number; tu_ngay: string; den_ngay: string }): Promise<SoChiTietResponse> =>
+    client.get('/accounting/purchase/so-chi-tiet', { params }).then(r => r.data),
+
+  getReconciliation: (supplierId: number, params: { tu_ngay: string; den_ngay: string }) =>
+    client.get(`/accounting/ap/reconciliation/${supplierId}`, { params }).then(r => r.data),
 }
 
 // ──────────────────────────────────────────────────────
@@ -319,4 +385,104 @@ export const openingBalanceApi = {
     so_du_dau_ky: number
     ghi_chu?: string
   }) => client.post('/accounting/opening-balances', data).then(r => r.data),
+}
+
+// ──────────────────────────────────────────────────────
+// Phiếu hoàn tiền khách hàng
+// ──────────────────────────────────────────────────────
+
+export interface CustomerRefundVoucher {
+  id: number
+  so_phieu: string
+  ngay: string
+  customer_id: number
+  ten_khach_hang: string | null
+  sales_return_id: number
+  so_phieu_tra: string | null
+  sales_invoice_id: number | null
+  so_tien: number
+  hinh_thuc: string | null      // "bu_tru" | "hoan_tien"
+  tk_hoan_tien: string | null   // "111" | "112"
+  dien_giai: string | null
+  trang_thai: string             // "nhap" | "da_duyet" | "huy"
+  nguoi_duyet_id: number | null
+  ngay_duyet: string | null
+  created_by: number | null
+  created_at: string
+}
+
+export const TRANG_THAI_HOAN_TIEN: Record<string, { label: string; color: string }> = {
+  nhap:      { label: 'Nháp',       color: 'default' },
+  da_duyet:  { label: 'Đã duyệt',   color: 'green' },
+  huy:       { label: 'Đã hủy',     color: 'default' },
+}
+
+export const customerRefundApi = {
+  list: (params?: Record<string, unknown>) =>
+    client.get('/accounting/customer-refunds', { params }).then(r => r.data),
+
+  get: (id: number): Promise<CustomerRefundVoucher> =>
+    client.get(`/accounting/customer-refunds/${id}`).then(r => r.data),
+
+  update: (id: number, data: { hinh_thuc?: string; tk_hoan_tien?: string; dien_giai?: string }): Promise<CustomerRefundVoucher> =>
+    client.patch(`/accounting/customer-refunds/${id}`, data).then(r => r.data),
+
+  approve: (id: number): Promise<CustomerRefundVoucher> =>
+    client.patch(`/accounting/customer-refunds/${id}/approve`).then(r => r.data),
+
+  cancel: (id: number): Promise<CustomerRefundVoucher> =>
+    client.patch(`/accounting/customer-refunds/${id}/cancel`).then(r => r.data),
+}
+
+// ──────────────────────────────────────────────────────
+// Quản trị Phân xưởng & Chi phí
+// ──────────────────────────────────────────────────────
+
+export interface WorkshopPayroll {
+  id: number
+  so_phieu: string
+  thang: string
+  phan_xuong_id: number
+  phap_nhan_id: number | null
+  tong_luong: number
+  tong_thuong: number
+  tong_bao_hiem: number
+  ghi_chu: string | null
+  trang_thai: string
+  created_at: string
+}
+
+export interface FixedAsset {
+  id: number
+  ma_ts: string
+  ten_ts: string
+  ngay_mua: string
+  nguyen_gia: number
+  so_thang_khau_hao: number
+  da_khau_hao_thang: number
+  gia_tri_da_khau_hao: number
+  phan_xuong_id: number | null
+  phap_nhan_id: number | null
+  trang_thai: string
+}
+
+export const workshopManagementApi = {
+  // Bảng lương
+  listPayroll: (params?: any) => client.get('/accounting/workshop-payroll', { params }).then(r => r.data),
+  createPayroll: (data: any) => client.post('/accounting/workshop-payroll', data).then(r => r.data),
+  approvePayroll: (id: number) => client.patch(`/accounting/workshop-payroll/${id}/approve`).then(r => r.data),
+
+  // Tài sản & Khấu hao
+  listAssets: (params?: any) => client.get('/accounting/fixed-assets', { params }).then(r => r.data),
+  createAsset: (data: any) => client.post('/accounting/fixed-assets', data).then(r => r.data),
+  runDepreciation: (params: { thang: number; nam: number; phap_nhan_id: number }) => 
+    client.post('/accounting/fixed-assets/run-depreciation', null, { params }).then(r => r.data),
+
+  // Phân bổ chi phí
+  allocateOverhead: (data: any) => client.post('/accounting/allocate-overhead', data).then(r => r.data),
+}
+
+export const journalApi = {
+  list: (params?: any) => client.get('/accounting/journal-entries', { params }).then(r => r.data),
+  create: (data: any) => client.post('/accounting/journal-entries', data).then(r => r.data),
 }

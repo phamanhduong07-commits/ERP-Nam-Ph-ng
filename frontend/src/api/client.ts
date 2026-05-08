@@ -4,7 +4,10 @@ const client = axios.create({ baseURL: '/api' })
 
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  const url = config.url || ''
+  if (token && !url.includes('/auth/login') && !url.includes('/auth/refresh')) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
   return config
 })
 
@@ -12,6 +15,7 @@ client.interceptors.request.use((config) => {
 let _networkErrShown = false
 // Track refresh in progress to avoid concurrent refresh calls
 let _refreshPromise: Promise<void> | null = null
+let _loggingOut = false
 
 async function _tryRefresh(): Promise<boolean> {
   const refreshToken = localStorage.getItem('refresh_token')
@@ -37,6 +41,9 @@ client.interceptors.response.use(
   async (err) => {
     if (err.response?.status === 401) {
       const originalRequest = err.config
+      if (originalRequest?.url?.includes('/auth/login')) {
+        return Promise.reject(err)
+      }
       // Tránh vòng lặp vô hạn khi endpoint /auth/refresh cũng trả 401
       if (originalRequest?.url?.includes('/auth/refresh') || originalRequest?._retry) {
         _doLogout()
@@ -86,10 +93,15 @@ client.interceptors.response.use(
 )
 
 function _doLogout() {
+  if (_loggingOut) return
+  _loggingOut = true
+
   localStorage.removeItem('token')
   localStorage.removeItem('refresh_token')
   localStorage.removeItem('user')
   if (typeof window !== 'undefined') {
+    if (window.location.pathname === '/login') return
+
     const msg = document.createElement('div')
     msg.style.cssText = [
       'position:fixed;top:20px;left:50%;transform:translateX(-50%)',
@@ -97,7 +109,7 @@ function _doLogout() {
       'font-size:14px;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,.2)',
     ].join(';')
     msg.textContent = '⚠️ Phiên đăng nhập đã hết hạn. Đang chuyển về trang đăng nhập...'
-    document.body.appendChild(msg)
+    if (document.body) document.body.appendChild(msg)
     setTimeout(() => { window.location.href = '/login' }, 1500)
   }
 }

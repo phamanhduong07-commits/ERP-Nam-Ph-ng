@@ -1,4 +1,4 @@
-﻿from decimal import Decimal
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session

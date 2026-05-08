@@ -29,8 +29,8 @@ dist/
 npm-debug.log*
 
 # Logs
+logs/
 *.log
-uvicorn.log
 
 # OS
 .DS_Store

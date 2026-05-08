@@ -18,7 +18,7 @@ export default function RolePermissionsPage() {
 
   const { data: permissionsPage, isLoading: permissionsLoading } = useQuery({
     queryKey: ['permissions', 'list'],
-    queryFn: () => permissionsApi.list({ page: 1, page_size: 500 }).then(r => r.data),
+    queryFn: () => permissionsApi.list({ page: 1, page_size: 100 }).then(r => r.data),
   })
 
   const { data: roleDetail, isLoading: roleLoading } = useQuery({

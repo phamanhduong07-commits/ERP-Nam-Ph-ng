@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, Row, Select, Input, Spin, Table, Tag, Tooltip, Typography, Space, Statistic, Tabs,
+  Button, Card, Col, Row, Select, Input, Spin, Table, Tag, Tooltip, Typography, Space, Statistic, Tabs, message,
 } from 'antd'
-import { DatabaseOutlined, FileExcelOutlined, FilePdfOutlined, WarningOutlined } from '@ant-design/icons'
-import dayjs from 'dayjs'
-import { warehouseApi, TonKho, PhanXuongWithWarehouses, WarehouseSlot } from '../../api/warehouse'
-import { warehousesApi } from '../../api/warehouses'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, fmtNum } from '../../utils/exportUtils'
+import ImportExcelDialog from '../../components/ImportExcelDialog'
+import { PlusOutlined, DatabaseOutlined, FileExcelOutlined, FilePdfOutlined, WarningOutlined, UploadOutlined } from '@ant-design/icons'
+import { warehouseApi, PhanXuongWithWarehouses, WarehouseSlot, TonKho } from '../../api/warehouse'
+import { warehousesApi } from '../../api/warehouses'
+import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
 
@@ -27,11 +28,13 @@ function getSlot(px: PhanXuongWithWarehouses, loai: string): WarehouseSlot | nul
 }
 
 export default function InventoryPage() {
+  const qc = useQueryClient()
   const [activeTab, setActiveTab] = useState('tong-hop')
   const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
   const [warehouseId, setWarehouseId] = useState<number | undefined>()
   const [loai, setLoai] = useState<string | undefined>()
   const [search, setSearch] = useState('')
+  const [importVisible, setImportVisible] = useState(false)
 
   const { data: phanXuongs = [] } = useQuery({
     queryKey: ['phan-xuong'],
@@ -200,6 +203,17 @@ export default function InventoryPage() {
         </Col>
         <Col>
           <Space size={4}>
+            <Button
+              icon={<UploadOutlined />}
+              onClick={() => {
+                if (!warehouseId) {
+                  return message.warning('Vui lòng chọn kho để import tồn kho đầu kỳ')
+                }
+                setImportVisible(true)
+              }}
+            >
+              Import tồn đầu
+            </Button>
             <Tooltip title="Xuất Excel">
               <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
             </Tooltip>
@@ -345,6 +359,15 @@ export default function InventoryPage() {
         </Card>
       )}
       </>}
+
+      <ImportExcelDialog
+        title={`Import tồn kho đầu kỳ - ${warehouses.find(w => w.id === warehouseId)?.ten_kho}`}
+        visible={importVisible}
+        onCancel={() => setImportVisible(false)}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ['ton-kho'] })}
+        importFn={(file, commit) => warehouseApi.importInventory(warehouseId!, file, commit)}
+        templateUrl="/api/warehouse/inventory/import-template"
+      />
     </div>
   )
 }

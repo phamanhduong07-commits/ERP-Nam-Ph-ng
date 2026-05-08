@@ -77,7 +77,7 @@ class TaoLenhBody(BaseModel):
     """Body cho POST /tu-don-hang/{order_id}."""
     ngay_lenh: date | None = None
     ngay_hoan_thanh_ke_hoach: date | None = None
-    phap_nhan_sx_id: int | None = None
+    phap_nhan_id: int | None = None
     kho_sx_id: int | None = None
     phan_xuong_id: int | None = None
     nv_theo_doi_id: int | None = None
@@ -88,7 +88,7 @@ class TaoLenhBody(BaseModel):
 class ProductionOrderCreate(BaseModel):
     ngay_lenh: date
     sales_order_id: int | None = None
-    phap_nhan_sx_id: int | None = None
+    phap_nhan_id: int | None = None
     kho_sx_id: int | None = None
     phan_xuong_id: int | None = None
     nv_theo_doi_id: int | None = None
@@ -106,7 +106,7 @@ class ProductionOrderCreate(BaseModel):
 
 
 class ProductionOrderUpdate(BaseModel):
-    phap_nhan_sx_id: int | None = None
+    phap_nhan_id: int | None = None
     kho_sx_id: int | None = None
     phan_xuong_id: int | None = None
     nv_theo_doi_id: int | None = None
@@ -125,8 +125,8 @@ class ProductionOrderResponse(BaseModel):
     so_don: str | None = None
     ten_khach_hang: str | None = None
     ma_khach_hang: str | None = None
-    phap_nhan_sx_id: int | None = None
-    ten_phap_nhan_sx: str | None = None
+    phap_nhan_id: int | None = None
+    ten_phap_nhan: str | None = None
     kho_sx_id: int | None = None
     ten_kho_sx: str | None = None
     phan_xuong_id: int | None = None
@@ -155,7 +155,7 @@ class ProductionOrderListItem(BaseModel):
     so_don: str | None = None
     ten_khach_hang: str | None = None
     ten_hang: str | None = None          # tên mã hàng (item đầu tiên của lệnh SX)
-    ten_phap_nhan_sx: str | None = None
+    ten_phap_nhan: str | None = None
     ten_kho_sx: str | None = None
     phan_xuong_id: int | None = None
     gia_ban_muc_tieu: Decimal | None = None
@@ -196,7 +196,7 @@ class UpdateItemProgress(BaseModel):
 
 
 class PagedResponse(BaseModel):
-    items: list
+    items: list[ProductionOrderListItem]
     total: int
     page: int
     page_size: int

@@ -76,9 +76,9 @@ def _yc_to_dict(yc: YeuCauGiaoHang, db: Session) -> dict:
         wh = db.get(Warehouse, it.warehouse_id)
         ten_kho = wh.ten_kho if wh else None
         ten_phap_nhan = None
-        if po and po.phap_nhan_sx_id:
+        if po and po.phap_nhan_id:
             from app.models.master import PhapNhan
-            pn = db.get(PhapNhan, po.phap_nhan_sx_id)
+            pn = db.get(PhapNhan, po.phap_nhan_id)
             ten_phap_nhan = pn.ten_phap_nhan if pn else None
         if ten_phap_nhan and ten_phap_nhan not in ten_phap_nhan_set:
             ten_phap_nhan_set.append(ten_phap_nhan)

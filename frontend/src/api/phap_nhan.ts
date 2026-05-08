@@ -28,10 +28,11 @@ export interface CreatePhapNhanPayload {
   ngan_hang?: string | null
   ky_hieu_hd?: string | null
   trang_thai?: boolean
+  phoi_phan_xuong_id?: number | null
 }
 
 export const phapNhanApi = {
-  list: (params?: { active_only?: boolean }) =>
+  list: (params?: { active_only?: boolean; search?: string }) =>
     client.get<PhapNhan[]>('/phap-nhan', { params }),
 
   create: (data: CreatePhapNhanPayload) =>

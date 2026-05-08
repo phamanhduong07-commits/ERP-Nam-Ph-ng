@@ -1,14 +1,38 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.master import Warehouse, PhanXuong
+from app.services.excel_import_service import (
+    ImportField, build_template_response, import_excel, parse_bool, parse_text,
+)
 
 router = APIRouter(prefix="/api/warehouses", tags=["warehouses"])
 master_admin_required = require_roles("ADMIN", "GIAM_DOC")
+
+WAREHOUSE_IMPORT_FIELDS = [
+    ImportField("ma_kho", "Ma kho", required=True, parser=parse_text, help_text="Ma kho, duy nhat"),
+    ImportField("ten_kho", "Ten kho", required=True, parser=parse_text),
+    ImportField("loai_kho", "Loai kho", required=True, parser=parse_text, help_text="GIAY_CUON | NVL_PHU | THANH_PHAM | PHOI | BTP | KHO_KHAC"),
+    ImportField("dia_chi", "Dia chi", parser=parse_text),
+    ImportField("ma_xuong", "Ma xuong", parser=parse_text, help_text="Ma phan xuong neu co"),
+    ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
+]
+
+
+def _resolve_warehouse_import(db: Session, values: dict) -> tuple[dict, list[str]]:
+    errors: list[str] = []
+    ma_xuong = values.pop("ma_xuong", None)
+    if ma_xuong:
+        px = db.query(PhanXuong).filter(PhanXuong.ma_xuong == ma_xuong).first()
+        if not px:
+            errors.append(f"Ma xuong: khong ton tai '{ma_xuong}'")
+        else:
+            values["phan_xuong_id"] = px.id
+    return values, errors
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -32,6 +56,24 @@ class WarehouseResponse(WarehouseBase):
 
 
 # ─── Endpoints: Warehouse ────────────────────────────────────────────────────
+
+@router.get("/import-template")
+def download_warehouse_import_template(_: User = Depends(get_current_user)):
+    return build_template_response("mau_import_kho.xlsx", WAREHOUSE_IMPORT_FIELDS)
+
+
+@router.post("/import")
+async def import_warehouses(
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(master_admin_required),
+):
+    return await import_excel(
+        db=db, file=file, model=Warehouse, fields=WAREHOUSE_IMPORT_FIELDS,
+        key_field="ma_kho", commit=commit, resolver=_resolve_warehouse_import,
+    )
+
 
 @router.get("", response_model=list[WarehouseResponse])
 def list_warehouses(db: Session = Depends(get_db), _: User = Depends(get_current_user)):

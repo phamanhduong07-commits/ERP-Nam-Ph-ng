@@ -4,17 +4,20 @@ import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
   Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Divider,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, ExportOutlined, MinusCircleOutlined } from '@ant-design/icons'
+import { FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined, ExportOutlined, MinusCircleOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateMaterialIssuePayload, MaterialIssue } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { productionOrdersApi } from '../../api/productionOrders'
+import { exportToExcel, printDocument, buildHtmlTable } from '../../utils/exportUtils'
+import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
 
 export default function IssuesPage() {
+  const companyInfo = usePhapNhanForPrint()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -111,6 +114,49 @@ export default function IssuesPage() {
     } catch { /* validation shown inline */ }
   }
 
+  const handlePrintIssue = (r: MaterialIssue) => {
+    const cols = [
+      { header: 'Tên hàng' },
+      { header: 'ĐVT', align: 'center' as const },
+      { header: 'SL kế hoạch', align: 'right' as const },
+      { header: 'SL thực xuất', align: 'right' as const },
+    ]
+    const rowData = (r.items || []).map((it: any) => [
+      it.ten_hang,
+      it.dvt,
+      it.so_luong_ke_hoach > 0 ? Number(it.so_luong_ke_hoach).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—',
+      Number(it.so_luong_thuc_xuat).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
+    ])
+    printDocument({
+      title: `Phiếu xuất NVL ${r.so_phieu}`,
+      subtitle: 'PHIẾU XUẤT NVL SẢN XUẤT',
+      companyInfo,
+      documentNumber: r.so_phieu,
+      documentDate: r.ngay_xuat ?? '',
+      fields: [
+        { label: 'Kho xuất', value: r.ten_kho ?? '—' },
+        { label: 'Lệnh SX', value: (r as any).so_lenh ?? '—' },
+        { label: 'Ghi chú', value: (r as any).ghi_chu ?? '—' },
+      ],
+      bodyHtml: buildHtmlTable(cols, rowData),
+    })
+  }
+
+  const handleExportExcel = () => {
+    exportToExcel(`XuatNVL_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Xuất NVL',
+      headers: ['Số phiếu', 'Ngày xuất', 'Kho', 'Lệnh SX', 'Trạng thái'],
+      rows: issueList.map((r: MaterialIssue) => [
+        r.so_phieu,
+        r.ngay_xuat,
+        r.ten_kho ?? '',
+        (r as any).so_lenh ?? '',
+        r.trang_thai === 'da_xuat' ? 'Đã xuất' : r.trang_thai === 'huy' ? 'Huỷ' : 'Nhập',
+      ]),
+      colWidths: [18, 12, 18, 16, 12],
+    }])
+  }
+
   const columns = [
     { title: 'Số phiếu', dataIndex: 'so_phieu', width: 160,
       render: (v: string) => <Text strong style={{ color: '#fa8c16' }}>{v}</Text> },
@@ -125,12 +171,15 @@ export default function IssuesPage() {
         </Tag>
       ) },
     {
-      title: '', width: 50,
+      title: '', width: 80,
       render: (_: unknown, r: MaterialIssue) => (
-        <Popconfirm title="Xoá phiếu xuất này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
-          disabled={r.trang_thai === 'da_xuat'}>
-          <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_xuat'} />
-        </Popconfirm>
+        <Space size={4}>
+          <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintIssue(r)} />
+          <Popconfirm title="Xoá phiếu xuất này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
+            disabled={r.trang_thai === 'da_xuat'}>
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_xuat'} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ]
@@ -158,9 +207,14 @@ export default function IssuesPage() {
           </Space>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setFormPxId(null); setOpen(true) }}>
-            Tạo phiếu xuất
-          </Button>
+          <Space>
+            <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
+              Xuất Excel
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setFormPxId(null); setOpen(true) }}>
+              Tạo phiếu xuất
+            </Button>
+          </Space>
         </Col>
       </Row>
 

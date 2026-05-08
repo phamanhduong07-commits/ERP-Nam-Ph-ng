@@ -11,6 +11,9 @@ from app.models.purchase import PurchaseOrder
 from app.models.master import Customer, Warehouse, PaperMaterial, OtherMaterial, Product
 from app.models.inventory import InventoryBalance
 from app.models.warehouse_doc import GoodsReceipt, MaterialIssue, DeliveryOrder
+from app.models.accounting import CashReceipt, CashPayment
+from app.models.billing import SalesInvoice
+from app.models.accounting import PurchaseInvoice
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -110,7 +113,7 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         elif r.product_id:
             prod = db.get(Product, r.product_id)
             if prod:
-                ten_hang = prod.ten_san_pham
+                ten_hang = prod.ten_hang
                 don_vi = getattr(prod, "dvt", "Thung") or "Thung"
 
         if ton_toi_thieu > 0 and float(r.ton_luong or 0) < ton_toi_thieu:
@@ -138,6 +141,39 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         )
         .scalar()
     )
+
+    # Tháng trước
+    if today.month == 1:
+        prev_year, prev_month = today.year - 1, 12
+    else:
+        prev_year, prev_month = today.year, today.month - 1
+    doanh_thu_thang_truoc = (
+        db.query(func.coalesce(func.sum(SalesOrder.tong_tien), 0))
+        .filter(
+            func.extract("year", SalesOrder.ngay_don) == prev_year,
+            func.extract("month", SalesOrder.ngay_don) == prev_month,
+            SalesOrder.trang_thai != "huy",
+        )
+        .scalar()
+    )
+
+    # Kế toán
+    phieu_thu_cho_duyet = db.query(CashReceipt).filter(CashReceipt.trang_thai == "cho_duyet").count()
+    phieu_chi_cho_duyet = db.query(CashPayment).filter(CashPayment.trang_thai.in_(["cho_chot", "da_chot"])).count()
+
+    ar_qua_han = db.query(
+        func.count(SalesInvoice.id),
+        func.coalesce(func.sum(SalesInvoice.con_lai), 0),
+    ).filter(SalesInvoice.trang_thai == "qua_han").first()
+    ar_so_kh = int(ar_qua_han[0]) if ar_qua_han else 0
+    ar_tien_qua_han = float(ar_qua_han[1]) if ar_qua_han else 0.0
+
+    ap_qua_han = db.query(
+        func.count(PurchaseInvoice.id),
+        func.coalesce(func.sum(PurchaseInvoice.con_lai), 0),
+    ).filter(PurchaseInvoice.trang_thai == "qua_han").first()
+    ap_so_hd = int(ap_qua_han[0]) if ap_qua_han else 0
+    ap_tien_qua_han = float(ap_qua_han[1]) if ap_qua_han else 0.0
 
     return {
         "don_hang_moi_hom_nay": don_hang_moi_hom_nay,
@@ -169,5 +205,14 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         "purchase": {
             "po_cho_duyet": po_cho_duyet,
             "po_dang_ve": po_dang_ve,
+        },
+        "accounting": {
+            "phieu_thu_cho_duyet": phieu_thu_cho_duyet,
+            "phieu_chi_cho_duyet": phieu_chi_cho_duyet,
+            "ar_tien_qua_han": ar_tien_qua_han,
+            "ar_so_hoa_don_qua_han": ar_so_kh,
+            "ap_tien_qua_han": ap_tien_qua_han,
+            "ap_so_hoa_don_qua_han": ap_so_hd,
+            "doanh_thu_thang_truoc": float(doanh_thu_thang_truoc or 0),
         },
     }

@@ -4,12 +4,14 @@ import {
   Alert, Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
   Popconfirm, Row, Select, Space, Table, Tag, Typography, message,
 } from 'antd'
-import { AuditOutlined, DeleteOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons'
+import { AuditOutlined, DeleteOutlined, FileExcelOutlined, PrinterOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   CreateStockAdjustmentPayload, StockAdjustment, TonKho, warehouseApi,
 } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
+import { exportToExcel, printDocument, buildHtmlTable } from '../../utils/exportUtils'
+import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
 
@@ -24,6 +26,7 @@ function diffColor(v: number) {
 }
 
 export default function StockAdjustmentsPage() {
+  const companyInfo = usePhapNhanForPrint()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -58,12 +61,12 @@ export default function StockAdjustmentsPage() {
       qc.invalidateQueries({ queryKey: ['stock-adjustments'] })
       qc.invalidateQueries({ queryKey: ['ton-kho'] })
       qc.invalidateQueries({ queryKey: ['ton-kho-kiem-ke'] })
-      message.success('Da tao phieu kiem ke')
+      message.success('Đã tạo phiếu kiểm kê')
       setOpen(false)
       form.resetFields()
       setSelectedKho(undefined)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi tao phieu kiem ke'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu kiểm kê'),
   })
 
   const deleteMut = useMutation({
@@ -72,9 +75,9 @@ export default function StockAdjustmentsPage() {
       qc.invalidateQueries({ queryKey: ['stock-adjustments'] })
       qc.invalidateQueries({ queryKey: ['ton-kho'] })
       qc.invalidateQueries({ queryKey: ['ton-kho-kiem-ke'] })
-      message.success('Da xoa phieu kiem ke')
+      message.success('Đã xoá phiếu kiểm kê')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi xoa phieu'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá phiếu'),
   })
 
   const activeWarehouses = warehouses.filter(w => w.trang_thai)
@@ -107,14 +110,14 @@ export default function StockAdjustmentsPage() {
           ghi_chu: it.ghi_chu || null,
         }))
       if (items.length === 0) {
-        message.warning('Them it nhat 1 dong hang')
+        message.warning('Thêm ít nhất 1 dòng hàng')
         return
       }
       if (items.every((it: any) => {
         const ton = tonKho.find(t => t.id === it.inventory_balance_id)
         return ton && Number(it.so_luong_thuc_te) === Number(ton.ton_luong)
       })) {
-        message.warning('Chua co chenh lech ton kho')
+        message.warning('Chưa có chênh lệch tồn kho')
         return
       }
       createMut.mutate({
@@ -129,13 +132,58 @@ export default function StockAdjustmentsPage() {
     }
   }
 
+  const handlePrintAdjustment = (r: StockAdjustment) => {
+    const cols = [
+      { header: 'Tên hàng' },
+      { header: 'ĐVT', align: 'center' as const },
+      { header: 'Sổ sách', align: 'right' as const },
+      { header: 'Thực tế', align: 'right' as const },
+      { header: 'Chênh lệch', align: 'right' as const },
+    ]
+    const rowData = r.items.map((it: any) => [
+      it.ten_hang,
+      it.don_vi,
+      fmtNum(it.so_luong_so_sach),
+      fmtNum(it.so_luong_thuc_te),
+      fmtNum(it.chenhlech),
+    ])
+    printDocument({
+      title: `Biên bản kiểm kê ${r.so_phieu}`,
+      subtitle: 'BIÊN BẢN KIỂM KÊ TỒN KHO',
+      companyInfo,
+      documentNumber: r.so_phieu,
+      documentDate: r.ngay ?? '',
+      fields: [
+        { label: 'Kho kiểm kê', value: r.ten_kho ?? '—' },
+        { label: 'Lý do', value: r.ly_do ?? '—' },
+        { label: 'Ghi chú', value: r.ghi_chu ?? '—' },
+      ],
+      bodyHtml: buildHtmlTable(cols, rowData),
+    })
+  }
+
+  const handleExportExcel = () => {
+    const allRows: any[] = []
+    phieuList.forEach((r: StockAdjustment) => {
+      r.items.forEach((it: any) => {
+        allRows.push([r.so_phieu, r.ngay, r.ten_kho ?? '', it.ten_hang, it.don_vi, it.so_luong_so_sach, it.so_luong_thuc_te, it.chenhlech, r.ly_do ?? ''])
+      })
+    })
+    exportToExcel(`KiemKe_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Kiểm kê',
+      headers: ['Số phiếu', 'Ngày', 'Kho', 'Tên hàng', 'ĐVT', 'Sổ sách', 'Thực tế', 'Chênh lệch', 'Lý do'],
+      rows: allRows,
+      colWidths: [18, 12, 18, 28, 8, 12, 12, 12, 20],
+    }])
+  }
+
   const columns = [
-    { title: 'So phieu', dataIndex: 'so_phieu', width: 150, render: (v: string) => <Text strong style={{ color: '#1677ff' }}>{v}</Text> },
-    { title: 'Ngay', dataIndex: 'ngay', width: 110 },
+    { title: 'Số phiếu', dataIndex: 'so_phieu', width: 150, render: (v: string) => <Text strong style={{ color: '#1677ff' }}>{v}</Text> },
+    { title: 'Ngày', dataIndex: 'ngay', width: 110 },
     { title: 'Kho', dataIndex: 'ten_kho', width: 180 },
-    { title: 'Ly do', dataIndex: 'ly_do', render: (v: string | null) => v || '-' },
+    { title: 'Lý do', dataIndex: 'ly_do', render: (v: string | null) => v || '—' },
     {
-      title: 'Chenh lech', width: 130, align: 'right' as const,
+      title: 'Chênh lệch', width: 130, align: 'right' as const,
       render: (_: unknown, r: StockAdjustment) => {
         const total = r.items.reduce((s, it) => s + it.chenhlech, 0)
         return <Text strong style={{ color: diffColor(total) }}>{fmtNum(total)}</Text>
@@ -143,11 +191,14 @@ export default function StockAdjustmentsPage() {
     },
     { title: 'TT', dataIndex: 'trang_thai', width: 90, render: (v: string) => <Tag>{v}</Tag> },
     {
-      title: '', width: 50,
+      title: '', width: 80,
       render: (_: unknown, r: StockAdjustment) => (
-        <Popconfirm title="Xoa phieu kiem ke nay?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}>
-          <Button danger size="small" icon={<DeleteOutlined />} />
-        </Popconfirm>
+        <Space size={4}>
+          <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintAdjustment(r)} />
+          <Popconfirm title="Xoa phieu kiem ke nay?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}>
+            <Button danger size="small" icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ]
@@ -155,12 +206,12 @@ export default function StockAdjustmentsPage() {
   const expandedRowRender = (r: StockAdjustment) => (
     <Table dataSource={r.items} rowKey="id" size="small" pagination={false}
       columns={[
-        { title: 'Ten hang', dataIndex: 'ten_hang' },
-        { title: 'DVT', dataIndex: 'don_vi', width: 70 },
-        { title: 'So sach', dataIndex: 'so_luong_so_sach', width: 110, align: 'right' as const, render: fmtNum },
-        { title: 'Thuc te', dataIndex: 'so_luong_thuc_te', width: 110, align: 'right' as const, render: fmtNum },
-        { title: 'Chenh lech', dataIndex: 'chenhlech', width: 110, align: 'right' as const, render: (v: number) => <Text style={{ color: diffColor(v) }}>{fmtNum(v)}</Text> },
-        { title: 'Ghi chu', dataIndex: 'ghi_chu', render: (v: string | null) => v || '-' },
+        { title: 'Tên hàng', dataIndex: 'ten_hang' },
+        { title: 'ĐVT', dataIndex: 'don_vi', width: 70 },
+        { title: 'Sổ sách', dataIndex: 'so_luong_so_sach', width: 110, align: 'right' as const, render: fmtNum },
+        { title: 'Thực tế', dataIndex: 'so_luong_thuc_te', width: 110, align: 'right' as const, render: fmtNum },
+        { title: 'Chênh lệch', dataIndex: 'chenhlech', width: 110, align: 'right' as const, render: (v: number) => <Text style={{ color: diffColor(v) }}>{fmtNum(v)}</Text> },
+        { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '—' },
       ]}
     />
   )
@@ -169,13 +220,18 @@ export default function StockAdjustmentsPage() {
     <div style={{ paddingBottom: 24 }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
         <Col>
-          <Space><AuditOutlined style={{ fontSize: 20, color: '#1677ff' }} /><Title level={4} style={{ margin: 0 }}>Kiem ke / dieu chinh ton</Title></Space>
+          <Space><AuditOutlined style={{ fontSize: 20, color: '#1677ff' }} /><Title level={4} style={{ margin: 0 }}>Kiểm kê / điều chỉnh tồn</Title></Space>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />}
-            onClick={() => { form.resetFields(); setSelectedKho(undefined); setOpen(true) }}>
-            Tao phieu kiem ke
-          </Button>
+          <Space>
+            <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
+              Xuất Excel
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />}
+              onClick={() => { form.resetFields(); setSelectedKho(undefined); setOpen(true) }}>
+              Tạo phiếu kiểm kê
+            </Button>
+          </Space>
         </Col>
       </Row>
 
@@ -201,47 +257,47 @@ export default function StockAdjustmentsPage() {
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 850 }} />
       </Card>
 
-      <Drawer open={open} onClose={() => setOpen(false)} title="Tao phieu kiem ke / dieu chinh ton" width={820}
+      <Drawer open={open} onClose={() => setOpen(false)} title="Tạo phiếu kiểm kê / điều chỉnh tồn" width={820}
         footer={
           <Space>
-            <Button onClick={() => setOpen(false)}>Huy</Button>
-            <Button type="primary" loading={createMut.isPending} onClick={handleSubmit}>Luu phieu</Button>
+            <Button onClick={() => setOpen(false)}>Huỷ</Button>
+            <Button type="primary" loading={createMut.isPending} onClick={handleSubmit}>Lưu phiếu</Button>
           </Space>
         }
       >
         <Form form={form} layout="vertical" initialValues={{ ngay: dayjs(), items: [] }}>
           <Alert type="info" showIcon style={{ marginBottom: 16 }}
-            message="Nhap so luong thuc te sau kiem ke. He thong se tu dong tang/giam ton va luu lich su giao dich dieu chinh." />
+            message="Nhập số lượng thực tế sau kiểm kê. Hệ thống sẽ tự động tăng/giảm tồn và lưu lịch sử giao dịch điều chỉnh." />
 
           <Row gutter={12}>
             <Col span={12}>
-              <Form.Item name="warehouse_id" label="Kho kiem ke" rules={[{ required: true, message: 'Chon kho' }]}>
+              <Form.Item name="warehouse_id" label="Kho kiểm kê" rules={[{ required: true, message: 'Chọn kho' }]}>
                 <Select placeholder="Chon kho"
                   options={activeWarehouses.map(w => ({ value: w.id, label: w.ten_kho }))}
-                  onChange={v => { setSelectedKho(v); form.setFieldValue('items', []) }}
+                  onChange={(v: number) => { setSelectedKho(v); form.setFieldValue('items', []) }}
                 />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="ngay" label="Ngay kiem ke" rules={[{ required: true }]}>
+              <Form.Item name="ngay" label="Ngày kiểm kê" rules={[{ required: true }]}>
                 <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="ly_do" label="Ly do">
-                <Input placeholder="Kiem ke dinh ky, lech kho..." />
+              <Form.Item name="ly_do" label="Lý do">
+                <Input placeholder="Kiểm kê định kỳ, lệch kho..." />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="ghi_chu" label="Ghi chu">
-                <Input placeholder="Ghi chu phieu..." />
+              <Form.Item name="ghi_chu" label="Ghi chú">
+                <Input placeholder="Ghi chú phiếu..." />
               </Form.Item>
             </Col>
           </Row>
 
           {!selectedKho && (
             <div style={{ color: '#faad14', marginBottom: 12, fontSize: 13 }}>
-              Chon kho truoc de lay danh sach ton kho.
+              Chọn kho trước để lấy danh sách tồn kho.
             </div>
           )}
 
@@ -249,11 +305,11 @@ export default function StockAdjustmentsPage() {
             {(fields, { add, remove }) => (
               <>
                 <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
-                  <Text strong>Danh sach mat hang kiem ke</Text>
+                  <Text strong>Danh sách mặt hàng kiểm kê</Text>
                   <Button size="small" type="dashed" icon={<PlusOutlined />}
                     disabled={!selectedKho}
                     onClick={() => add({})}>
-                    Them dong
+                    Thêm dòng
                   </Button>
                 </Row>
 
@@ -269,9 +325,9 @@ export default function StockAdjustmentsPage() {
                     <Card key={key} size="small" style={{ marginBottom: 8, background: '#fafafa' }}>
                       <Row gutter={[8, 4]}>
                         <Col span={15}>
-                          <Form.Item name={[name, 'inventory_balance_id']} label="Mat hang"
-                            rules={[{ required: true, message: 'Chon mat hang' }]} style={{ marginBottom: 4 }}>
-                            <Select size="small" showSearch placeholder="Chon tu ton kho..."
+                          <Form.Item name={[name, 'inventory_balance_id']} label="Mặt hàng"
+                            rules={[{ required: true, message: 'Chọn mặt hàng' }]} style={{ marginBottom: 4 }}>
+                            <Select size="small" showSearch placeholder="Chọn từ tồn kho..."
                               filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
                               options={tonKho.map(t => ({
                                 value: t.id,
@@ -296,18 +352,18 @@ export default function StockAdjustmentsPage() {
                         </Col>
 
                         <Col span={8}>
-                          <Form.Item name={[name, 'so_luong_so_sach']} label="So sach" style={{ marginBottom: 4 }}>
+                          <Form.Item name={[name, 'so_luong_so_sach']} label="Sổ sách" style={{ marginBottom: 4 }}>
                             <InputNumber size="small" readOnly style={{ width: '100%', background: '#f5f5f5' }} />
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name={[name, 'so_luong_thuc_te']} label="Thuc te"
-                            rules={[{ required: true, message: 'Nhap so luong' }]} style={{ marginBottom: 4 }}>
+                          <Form.Item name={[name, 'so_luong_thuc_te']} label="Thực tế"
+                            rules={[{ required: true, message: 'Nhập số lượng' }]} style={{ marginBottom: 4 }}>
                             <InputNumber size="small" min={0} style={{ width: '100%' }} />
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name={[name, 'ghi_chu']} label="Ghi chu" style={{ marginBottom: 4 }}>
+                          <Form.Item name={[name, 'ghi_chu']} label="Ghi chú" style={{ marginBottom: 4 }}>
                             <Input size="small" placeholder="..." />
                           </Form.Item>
                         </Col>
@@ -319,11 +375,11 @@ export default function StockAdjustmentsPage() {
                 })}
 
                 {fields.length === 0 && selectedKho && tonKho.length === 0 && (
-                  <div style={{ textAlign: 'center', color: '#bbb', padding: 24 }}>Kho nay chua co ton kho</div>
+                  <div style={{ textAlign: 'center', color: '#bbb', padding: 24 }}>Kho này chưa có tồn kho</div>
                 )}
                 {fields.length === 0 && selectedKho && tonKho.length > 0 && (
                   <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add({})}>
-                    Them dong kiem ke
+                    Thêm dòng kiểm kê
                   </Button>
                 )}
               </>

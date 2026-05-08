@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import Computed, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Computed, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -35,10 +35,14 @@ class SalesInvoice(Base):
         Computed("tong_cong - da_thanh_toan", persisted=True),
     )
     trang_thai: Mapped[str] = mapped_column(String(30), default="nhap")
+    bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
     # nhap | da_phat_hanh | da_tt_mot_phan | da_tt_du | qua_han | huy
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    phap_nhan = relationship("PhapNhan")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
     )

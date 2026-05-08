@@ -2,8 +2,9 @@ from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import (
     Boolean, DateTime, Float, ForeignKey, Integer, Numeric,
-    SmallInteger, String, Text,
+    SmallInteger, String, Text, func,
 )
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -20,8 +21,13 @@ class PhanXuong(Base):
     phoi_tu_phan_xuong_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("phan_xuong.id"), nullable=True
     )
+    phap_nhan_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("phap_nhan.id"), nullable=True
+    )
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
 
     warehouses: Mapped[list["Warehouse"]] = relationship("Warehouse", back_populates="phan_xuong_obj")
     phoi_tu_phan_xuong: Mapped["PhanXuong | None"] = relationship(
@@ -83,6 +89,14 @@ class Supplier(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    @hybrid_property
+    def ten_nha_cung_cap(self) -> str:
+        return self.ten_viet_tat or self.ten_don_vi or self.ma_ncc or ""
+
+    @ten_nha_cung_cap.expression
+    def ten_nha_cung_cap(cls):
+        return func.coalesce(cls.ten_viet_tat, cls.ten_don_vi, cls.ma_ncc)
+
     paper_materials: Mapped[list["PaperMaterial"]] = relationship("PaperMaterial", back_populates="nsx")
     other_materials: Mapped[list["OtherMaterial"]] = relationship("OtherMaterial", back_populates="ncc")
 
@@ -113,6 +127,22 @@ class Customer(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    @hybrid_property
+    def ten_khach_hang(self) -> str:
+        return self.ten_viet_tat or self.ten_don_vi or self.ma_kh or ""
+
+    @ten_khach_hang.expression
+    def ten_khach_hang(cls):
+        return func.coalesce(cls.ten_viet_tat, cls.ten_don_vi, cls.ma_kh)
+
+    @property
+    def so_dien_thoai(self) -> str | None:
+        return self.dien_thoai or self.so_dien_thoai_lh
+
+    @property
+    def email(self) -> None:
+        return None
+
     sales_orders: Mapped[list["SalesOrder"]] = relationship("SalesOrder", back_populates="customer")
     products: Mapped[list["Product"]] = relationship("Product", back_populates="khach_hang")
     sales_returns: Mapped[list["SalesReturn"]] = relationship("SalesReturn", back_populates="customer")
@@ -139,6 +169,7 @@ class PaperMaterial(Base):
     do_day_tieu_chuan: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
     gia_mua: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     gia_ban: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    gia_dinh_muc: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ton_toi_thieu: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0)
     ton_toi_da: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     la_cuon: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -161,6 +192,7 @@ class OtherMaterial(Base):
     dvt: Mapped[str] = mapped_column(String(20), default="Kg")
     ma_nhom_id: Mapped[int] = mapped_column(Integer, ForeignKey("material_groups.id"), nullable=False)
     gia_mua: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    gia_dinh_muc: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ton_toi_thieu: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0)
     ton_toi_da: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     phan_xuong: Mapped[str | None] = mapped_column(String(50))
@@ -225,6 +257,7 @@ class Product(Base):
     ma_kh_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id"))
     gia_ban: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     gia_mua: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    gia_dinh_muc: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ton_toi_thieu: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0)
     ton_toi_da: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     khong_tinh_nxt: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -232,6 +265,14 @@ class Product(Base):
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @hybrid_property
+    def ten_san_pham(self) -> str:
+        return self.ten_hang
+
+    @ten_san_pham.expression
+    def ten_san_pham(cls):
+        return cls.ten_hang
 
     khach_hang: Mapped["Customer | None"] = relationship("Customer", back_populates="products")
     sales_order_items: Mapped[list["SalesOrderItem"]] = relationship("SalesOrderItem", back_populates="product")
@@ -300,6 +341,23 @@ class DonGiaVanChuyen(Base):
     khu_vuc_den: Mapped[str | None] = mapped_column(String(100))
     don_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     dvt: Mapped[str] = mapped_column(String(20), default="chuyến")
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class BankAccount(Base):
+    """Danh mục tài khoản ngân hàng của công ty"""
+    __tablename__ = "bank_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ma_tk: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    ten_ngan_hang: Mapped[str] = mapped_column(String(200), nullable=False)
+    so_tai_khoan: Mapped[str] = mapped_column(String(50), nullable=False)
+    chu_tai_khoan: Mapped[str | None] = mapped_column(String(200))
+    chi_nhanh: Mapped[str | None] = mapped_column(String(200))
+    swift_code: Mapped[str | None] = mapped_column(String(20))
+    so_du_dau: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

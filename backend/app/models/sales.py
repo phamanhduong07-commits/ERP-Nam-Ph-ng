@@ -45,6 +45,18 @@ class SalesOrder(Base):
     phap_nhan_sx: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_sx_id])
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
 
+    @property
+    def ten_phap_nhan(self) -> str | None:
+        return self.phap_nhan.ten_phap_nhan if self.phap_nhan else None
+
+    @property
+    def ten_phap_nhan_sx(self) -> str | None:
+        return self.phap_nhan_sx.ten_phap_nhan if self.phap_nhan_sx else None
+
+    @property
+    def ten_phan_xuong(self) -> str | None:
+        return self.phan_xuong.ten_xuong if self.phan_xuong else None
+
 
 class SalesOrderItem(Base):
     __tablename__ = "sales_order_items"
@@ -159,6 +171,14 @@ class SalesReturnItem(Base):
     sales_return: Mapped["SalesReturn"] = relationship("SalesReturn", back_populates="items")
     sales_order_item: Mapped["SalesOrderItem"] = relationship("SalesOrderItem", back_populates="return_items")
 
+    @property
+    def delivery_order_item_id(self) -> None:
+        return None
+
+    @property
+    def thanh_tien_tra(self) -> Decimal:
+        return (self.so_luong_tra or Decimal("0")) * (self.don_gia_tra or Decimal("0"))
+
 
 # ─────────────────────────────────────────────
 # Cập nhật relationships
@@ -183,6 +203,7 @@ class Quote(Base):
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_het_han: Mapped[date | None] = mapped_column(Date)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
+    phap_nhan_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     nv_theo_doi_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
 
@@ -218,6 +239,7 @@ class Quote(Base):
     nv_phu_trach: Mapped["User | None"] = relationship("User", foreign_keys=[nv_phu_trach_id])
     nv_theo_doi: Mapped["User | None"] = relationship("User", foreign_keys=[nv_theo_doi_id])
     phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
+    phap_nhan_sx: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_sx_id])
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
     items: Mapped[list["QuoteItem"]] = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
 

@@ -7,6 +7,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { materialGroupsApi, type MaterialGroup, type MaterialGroupCreate } from '../../api/materialGroups'
+import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title } = Typography
 
@@ -148,6 +149,14 @@ export default function MaterialGroupList() {
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm nhóm
               </Button>
+              <ImportExcelButton
+                endpoint="/material-groups"
+                templateFilename="mau_import_nhom_vat_tu.xlsx"
+                onImported={() => {
+                  queryClient.invalidateQueries({ queryKey: ['material-groups'] })
+                  queryClient.invalidateQueries({ queryKey: ['material-groups-all'] })
+                }}
+              />
             </Space>
           </Col>
         </Row>

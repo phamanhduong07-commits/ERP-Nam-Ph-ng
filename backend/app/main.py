@@ -13,8 +13,15 @@ from app.routers import (
     don_vi_tinh, vi_tri, xe, tai_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
     production_orders, bom, production_plans, indirect_costs, addon_rates, permissions,
 )
-from app.routers import phieu_phoi, cd2, warehouse, purchase_orders, phap_nhan, dashboard, theo_doi, yeu_cau_giao_hang
+from app.routers import phieu_phoi, cd2, warehouse, purchase_orders, purchase_returns, phap_nhan, dashboard, theo_doi, yeu_cau_giao_hang
+from app.routers import may_dung_log
 from app.routers import billing, accounting
+from app.routers import bank_accounts, ccdc as ccdc_router
+from app.routers import mst_lookup
+from app.routers import reports as reports_router
+from app.routers import customer_refunds as customer_refunds_router
+from app.routers import import_logs as import_logs_router
+from app.agent import router as agent_router
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -99,15 +106,24 @@ app.include_router(bom.router)
 app.include_router(indirect_costs.router)
 app.include_router(addon_rates.router)
 app.include_router(phieu_phoi.router)
+app.include_router(may_dung_log.router, prefix="/api")
 app.include_router(cd2.router)
 app.include_router(warehouse.router)
 app.include_router(purchase_orders.router)
+app.include_router(purchase_returns.router)
 app.include_router(phap_nhan.router)
 app.include_router(dashboard.router)
 app.include_router(theo_doi.router)
 app.include_router(yeu_cau_giao_hang.router)
 app.include_router(billing.router)
 app.include_router(accounting.router)
+app.include_router(bank_accounts.router)
+app.include_router(ccdc_router.router)
+app.include_router(reports_router.router)
+app.include_router(customer_refunds_router.router)
+app.include_router(import_logs_router.router)
+app.include_router(agent_router.router)
+app.include_router(mst_lookup.router)
 
 
 @app.get("/api/health")

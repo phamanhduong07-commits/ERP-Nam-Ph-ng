@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import cast, Date, text
 from sqlalchemy.orm import Session, joinedload
@@ -15,6 +16,23 @@ from app.schemas.sales import (
     SalesOrderResponse, SalesOrderListItem,
     SalesOrderItemResponse, PagedResponse,
 )
+from fastapi import File, UploadFile
+from app.services.sales_order_import_service import import_sales_orders_excel
+from app.services.excel_import_service import build_template_response, ImportField, parse_text, parse_decimal
+
+SALES_ORDER_IMPORT_FIELDS = [
+    ImportField("so_don", "So don hang", required=True, help_text="VD: DH2405-001"),
+    ImportField("ngay_don", "Ngay don", required=True, help_text="DD/MM/YYYY"),
+    ImportField("ma_kh", "Ma KH", required=True, help_text="Phai ton tai trong danh muc"),
+    ImportField("ma_amis", "Ma AMIS", required=True, help_text="Ma san pham"),
+    ImportField("ten_hang", "Ten hang", help_text="De trong neu lay theo ma AMIS"),
+    ImportField("so_luong", "So luong", required=True),
+    ImportField("don_gia", "Don gia", required=True),
+    ImportField("dvt", "DVT"),
+    ImportField("ngay_giao", "Ngay giao", help_text="DD/MM/YYYY"),
+    ImportField("dia_chi_giao", "Dia chi giao"),
+]
+
 
 router = APIRouter(prefix="/api/sales-orders", tags=["sales-orders"])
 
@@ -27,7 +45,7 @@ def list_orders(
     tu_ngay: date | None = Query(default=None),
     den_ngay: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=1000),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -206,27 +224,27 @@ def update_discount(
 
     # Cập nhật giảm giá
     if ty_le_giam_gia is not None:
-        order.ty_le_giam_gia = ty_le_giam_gia
+        order.ty_le_giam_gia = Decimal(str(ty_le_giam_gia))
     if so_tien_giam_gia is not None:
-        order.so_tien_giam_gia = so_tien_giam_gia
+        order.so_tien_giam_gia = Decimal(str(so_tien_giam_gia))
 
     # Cập nhật ghi chú nếu có
     if ghi_chu is not None:
         order.ghi_chu = ghi_chu
 
     # Tính lại tổng tiền
-    tong_tien_hang = sum(item.so_luong * item.don_gia for item in order.items)
-    order.tong_tien_hang = tong_tien_hang
+    tong_tien_hang = sum((item.so_luong * item.don_gia for item in order.items), Decimal("0"))
+    order.tong_tien = tong_tien_hang
 
     # Áp dụng giảm giá
     if order.ty_le_giam_gia and order.ty_le_giam_gia > 0:
-        order.tong_tien_giam_gia = tong_tien_hang * (order.ty_le_giam_gia / 100)
+        tien_giam = tong_tien_hang * order.ty_le_giam_gia / Decimal("100")
     elif order.so_tien_giam_gia and order.so_tien_giam_gia > 0:
-        order.tong_tien_giam_gia = order.so_tien_giam_gia
+        tien_giam = order.so_tien_giam_gia
     else:
-        order.tong_tien_giam_gia = 0
+        tien_giam = Decimal("0")
 
-    order.tong_thanh_toan = tong_tien_hang - order.tong_tien_giam_gia
+    order.tong_tien_sau_giam = max(Decimal("0"), tong_tien_hang - tien_giam)
 
     # Cập nhật thời gian sửa đổi
     order.updated_at = datetime.utcnow()
@@ -264,3 +282,23 @@ def backfill_spec(
         "qi_rows": qi_rows,
         "spec_rows": spec_rows,
     }
+
+
+@router.get("/import-template")
+def download_sales_order_template(
+    _: User = Depends(get_current_user),
+):
+    """Tải file mẫu Excel để import đơn hàng."""
+    return build_template_response("mau_import_don_hang.xlsx", SALES_ORDER_IMPORT_FIELDS)
+
+
+@router.post("/import")
+async def import_sales_orders(
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Import đơn hàng từ Excel. Hỗ trợ tạo mới hoặc cập nhật đơn hàng theo số đơn."""
+    return await import_sales_orders_excel(db, file, current_user, commit)
+

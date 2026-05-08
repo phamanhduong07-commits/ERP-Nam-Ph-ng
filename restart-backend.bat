@@ -23,5 +23,5 @@ set PYTHONIOENCODING=utf-8
 echo [3/3] Backend dang chay tai http://localhost:8000
 echo       Nhan Ctrl+C de dung.
 echo.
-"C:\Users\USER\AppData\Local\Programs\Python\Python312\python.exe" run.py
+"%~dp0backend\venv\Scripts\python.exe" run.py
 pause

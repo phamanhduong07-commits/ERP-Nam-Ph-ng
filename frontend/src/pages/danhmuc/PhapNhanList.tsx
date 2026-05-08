@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Drawer, Form, Input, Popconfirm, Space, Switch, Table, Typography, message, Row, Col,
+  Button, Card, Drawer, Form, Input, Popconfirm, Select, Space, Switch, Table, Typography, message, Row, Col,
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { phapNhanApi, PhapNhan, CreatePhapNhanPayload } from '../../api/phap_nhan'
+import { theoDoiApi, PhanXuongItem } from '../../api/theoDoi'
+import ImportExcelButton from '../../components/ImportExcelButton'
+import MSTLookupButton from '../../components/MSTLookupButton'
 
 const { Title, Text } = Typography
 
@@ -13,10 +16,17 @@ export default function PhapNhanList() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<PhapNhan | null>(null)
   const [form] = Form.useForm()
+  const [search, setSearch] = useState('')
 
   const { data: list = [], isLoading } = useQuery({
-    queryKey: ['phap-nhan'],
-    queryFn: () => phapNhanApi.list().then(r => r.data),
+    queryKey: ['phap-nhan', search],
+    queryFn: () => phapNhanApi.list({ search: search || undefined }).then(r => r.data),
+  })
+
+  const { data: phanXuongList = [] } = useQuery<PhanXuongItem[]>({
+    queryKey: ['phan-xuong-list'],
+    queryFn: () => theoDoiApi.listPhanXuong().then((r: any) => r.data),
+    staleTime: 300_000,
   })
 
   const createMut = useMutation({
@@ -72,6 +82,7 @@ export default function PhapNhanList() {
       ngan_hang: r.ngan_hang,
       ky_hieu_hd: r.ky_hieu_hd,
       trang_thai: r.trang_thai,
+      phoi_phan_xuong_id: r.phoi_phan_xuong_id ?? null,
     })
     setOpen(true)
   }
@@ -90,6 +101,7 @@ export default function PhapNhanList() {
         ngan_hang: v.ngan_hang || null,
         ky_hieu_hd: v.ky_hieu_hd || null,
         trang_thai: v.trang_thai ?? true,
+        phoi_phan_xuong_id: v.phoi_phan_xuong_id ?? null,
       }
       if (editing) {
         updateMut.mutate({ id: editing.id, data: payload })
@@ -129,9 +141,24 @@ export default function PhapNhanList() {
           <Title level={4} style={{ margin: 0 }}>Danh mục pháp nhân</Title>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Thêm pháp nhân
-          </Button>
+          <Space>
+            <Input.Search
+              placeholder="Tìm mã, tên, MST..."
+              allowClear
+              style={{ width: 220 }}
+              onSearch={v => setSearch(v)}
+              onChange={e => { if (!e.target.value) setSearch('') }}
+            />
+            <ImportExcelButton
+              endpoint="/api/phap-nhan"
+              templateFilename="mau_import_phap_nhan.xlsx"
+              buttonText="Import Excel"
+              onImported={() => qc.invalidateQueries({ queryKey: ['phap-nhan'] })}
+            />
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              Thêm pháp nhân
+            </Button>
+          </Space>
         </Col>
       </Row>
 
@@ -172,7 +199,22 @@ export default function PhapNhanList() {
           </Form.Item>
           <Row gutter={12}>
             <Col span={12}>
-              <Form.Item name="ma_so_thue" label="Mã số thuế">
+              <Form.Item
+                name="ma_so_thue"
+                label={
+                  <Space size={8}>
+                    Mã số thuế
+                    <MSTLookupButton
+                      getMST={() => form.getFieldValue('ma_so_thue') ?? ''}
+                      onFound={info => form.setFieldsValue({
+                        ten_phap_nhan: info.name || form.getFieldValue('ten_phap_nhan'),
+                        ten_viet_tat: info.shortName || form.getFieldValue('ten_viet_tat'),
+                        dia_chi: info.address || form.getFieldValue('dia_chi'),
+                      })}
+                    />
+                  </Space>
+                }
+              >
                 <Input placeholder="VD: 0312345678" />
               </Form.Item>
             </Col>
@@ -199,6 +241,17 @@ export default function PhapNhanList() {
           </Row>
           <Form.Item name="ngan_hang" label="Ngân hàng">
             <Input placeholder="VCB, TCB, BIDV..." />
+          </Form.Item>
+          <Form.Item name="phoi_phan_xuong_id" label="Xưởng phôi mặc định"
+            extra="Kho phôi mặc định khi nhập phôi sóng cho pháp nhân này">
+            <Select
+              allowClear
+              placeholder="Chọn xưởng chứa kho phôi..."
+              options={phanXuongList.map(px => ({
+                value: px.id,
+                label: `${px.ten_xuong} (${px.ma_xuong})`,
+              }))}
+            />
           </Form.Item>
           <Form.Item name="trang_thai" label="Hoạt động" valuePropName="checked">
             <Switch />

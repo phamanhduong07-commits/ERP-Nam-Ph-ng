@@ -7,17 +7,148 @@ import {
 } from 'antd'
 import {
   ArrowLeftOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, FileAddOutlined,
-  EyeOutlined,
+  EyeOutlined, PrinterOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, LOAI_IN_OPTIONS, getSongType } from '../../api/quotes'
-import type { QuoteItem } from '../../api/quotes'
+import type { Quote, QuoteItem } from '../../api/quotes'
+import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
+import { printDocument, fmtVND } from '../../utils/exportUtils'
+import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import type { PrintCompanyInfo } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 
 const vnd = (v: number | null | undefined) =>
   v != null ? new Intl.NumberFormat('vi-VN').format(Math.round(v)) : '—'
+
+function buildQuoteHtml(quote: Quote, logoUrl: string, companyInfo?: PrintCompanyInfo): string {
+  const fmtD = (v: string | null | undefined) =>
+    v ? dayjs(v).format('DD/MM/YYYY') : '—'
+
+  const itemRows = quote.items.map((it, i) => {
+    const kichthuoc = it.dai && it.rong && it.cao ? `${it.dai}×${it.rong}×${it.cao}` : '—'
+    const cauTruc = [it.mat, it.song_1 ? `~${it.song_1}` : null, it.mat_1, it.song_2 ? `~${it.song_2}` : null, it.mat_2]
+      .filter(Boolean).join(' | ') || '—'
+    const thanh_tien = Math.round((it.gia_ban || 0) * (it.so_luong || 0))
+    return `
+      <tr>
+        <td style="text-align:center">${i + 1}</td>
+        <td>${it.ten_hang || '—'}</td>
+        <td style="text-align:center">${kichthuoc}</td>
+        <td style="text-align:center">${it.so_lop}L</td>
+        <td style="font-size:10px;color:#555">${cauTruc}</td>
+        <td style="text-align:right">${new Intl.NumberFormat('vi-VN').format(it.so_luong)} ${it.dvt}</td>
+        <td style="text-align:right">${vnd(it.gia_ban)}</td>
+        <td style="text-align:right;font-weight:700">${vnd(thanh_tien)}</td>
+      </tr>`
+  }).join('')
+
+  const cpRows: [string, number][] = [
+    ['Chi phí bảng in', quote.chi_phi_bang_in],
+    ['Chi phí khuôn', quote.chi_phi_khuon],
+    ['Chi phí vận chuyển', quote.chi_phi_van_chuyen],
+    ['Chi phí hàng hoá DV', quote.chi_phi_hang_hoa_dv],
+  ]
+  if (quote.chi_phi_khac_1 > 0) cpRows.push([quote.chi_phi_khac_1_ten || 'Chi phí khác 1', quote.chi_phi_khac_1])
+  if (quote.chi_phi_khac_2 > 0) cpRows.push([quote.chi_phi_khac_2_ten || 'Chi phí khác 2', quote.chi_phi_khac_2])
+
+  const cpHtml = cpRows.filter(([, v]) => v > 0).map(([label, v]) => `
+    <tr><td>${label}</td><td style="text-align:right">${vnd(v)} đ</td></tr>`).join('')
+
+  return `
+    <!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Báo giá ${quote.so_bao_gia}</title>
+    <style>
+      @page { size: A4 portrait; margin: 15mm 12mm; }
+      body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #222; }
+      .header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+      .logo { height: 55px; }
+      .co-info { flex: 1; font-size: 9pt; line-height: 1.5; }
+      .co-name { font-size: 13pt; font-weight: 700; color: #E65100; }
+      .doc-title { text-align: center; margin: 12px 0 4px; }
+      .doc-title h2 { font-size: 17pt; font-weight: 700; letter-spacing: 2px; margin: 0; }
+      .doc-title .sub { font-size: 10pt; color: #666; margin: 2px 0; }
+      hr.divider { border: none; border-top: 2px solid #E65100; margin: 8px 0; }
+      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; font-size: 10.5pt; margin: 8px 0 12px; }
+      .info-row { display: flex; gap: 4px; }
+      .lbl { font-weight: 700; white-space: nowrap; min-width: 120px; }
+      .val { border-bottom: 1px dotted #888; flex: 1; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      th { background: #E65100; color: #fff; padding: 5px 6px; border: 1px solid #ccc; font-size: 10pt; }
+      td { border: 1px solid #ddd; padding: 4px 6px; font-size: 10pt; }
+      .sum-table { width: 40%; margin-left: auto; margin-top: 12px; }
+      .sum-table td { border: none; padding: 2px 6px; }
+      .sum-total td { font-size: 13pt; font-weight: 700; color: #E65100; border-top: 2px solid #E65100; }
+      .dieu-khoan { font-size: 9.5pt; color: #444; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 6px; }
+      .sig { display: flex; gap: 0; margin-top: 24px; }
+      .sig-box { flex: 1; text-align: center; font-size: 10pt; }
+      .sig-box .role { font-weight: 700; }
+      .sig-box .sign-line { margin: 28px auto 4px; width: 80%; border-bottom: 1px solid #888; }
+      @media print { button { display: none; } }
+    </style></head><body>
+
+    <div class="header">
+      <img class="logo" src="${logoUrl}" alt="Logo" />
+      <div class="co-info">
+        <div class="co-name">${companyInfo?.ten ?? quote.ten_phap_nhan ?? 'CÔNG TY TNHH NAM PHƯƠNG BAO BÌ'}</div>
+        ${companyInfo?.dia_chi ? `<div>Địa chỉ: ${companyInfo.dia_chi}</div>` : ''}
+        ${companyInfo?.ma_so_thue ? `<div>MST: ${companyInfo.ma_so_thue}</div>` : ''}
+        ${companyInfo?.so_dien_thoai ? `<div>ĐT: ${companyInfo.so_dien_thoai}</div>` : ''}
+        ${companyInfo?.tai_khoan ? `<div>TK: ${companyInfo.tai_khoan}${companyInfo.ngan_hang ? ' — ' + companyInfo.ngan_hang : ''}</div>` : ''}
+      </div>
+    </div>
+    <hr class="divider" />
+
+    <div class="doc-title">
+      <h2>BÁO GIÁ</h2>
+      <div class="sub">Số: ${quote.so_bao_gia} &nbsp;|&nbsp; Ngày: ${fmtD(quote.ngay_bao_gia)}${quote.ngay_het_han ? ` &nbsp;|&nbsp; Hiệu lực đến: ${fmtD(quote.ngay_het_han)}` : ''}</div>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-row"><span class="lbl">Kính gửi:</span><span class="val">${quote.customer?.ten_viet_tat ?? '—'}</span></div>
+      <div class="info-row"><span class="lbl">Tên công ty:</span><span class="val">${quote.customer?.ten_don_vi ?? '—'}</span></div>
+      <div class="info-row"><span class="lbl">Nơi sản xuất:</span><span class="val">${quote.ten_phan_xuong ?? '—'}</span></div>
+      <div class="info-row"><span class="lbl">NV phụ trách:</span><span class="val">${quote.ten_nv_theo_doi ?? '—'}</span></div>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th style="width:32px">STT</th>
+        <th>Tên hàng</th>
+        <th style="width:90px">Kích thước (cm)</th>
+        <th style="width:40px">Lớp</th>
+        <th style="width:140px">Cấu trúc giấy</th>
+        <th style="width:80px">Số lượng</th>
+        <th style="width:90px">Đơn giá (đ)</th>
+        <th style="width:100px">Thành tiền (đ)</th>
+      </tr></thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+
+    <table class="sum-table">
+      <tbody>
+        <tr><td>Tiền hàng</td><td style="text-align:right">${vnd(quote.tong_tien_hang)} đ</td></tr>
+        ${cpHtml}
+        ${quote.chiet_khau > 0 ? `<tr><td>Chiết khấu</td><td style="text-align:right;color:#c00">- ${vnd(quote.chiet_khau)} đ</td></tr>` : ''}
+        <tr><td>Giá bán</td><td style="text-align:right;font-weight:700">${vnd(quote.gia_ban)} đ</td></tr>
+        <tr><td>VAT (${(quote.ty_le_vat * 100).toFixed(0)}%)</td><td style="text-align:right">${vnd(quote.tien_vat)} đ</td></tr>
+        <tr class="sum-total"><td>TỔNG CỘNG</td><td style="text-align:right">${vnd(quote.tong_cong)} đ</td></tr>
+      </tbody>
+    </table>
+
+    ${quote.dieu_khoan ? `<div class="dieu-khoan"><strong>Điều khoản:</strong> ${quote.dieu_khoan.replace(/\n/g, '<br/>')}</div>` : ''}
+    ${quote.ghi_chu ? `<div class="dieu-khoan"><strong>Ghi chú:</strong> ${quote.ghi_chu.replace(/\n/g, '<br/>')}</div>` : ''}
+
+    <div class="sig">
+      <div class="sig-box"><div class="role">Khách hàng</div><div style="font-size:9pt;color:#666">(Ký, họ tên)</div><div class="sign-line"></div></div>
+      <div class="sig-box"><div class="role">Kế toán</div><div style="font-size:9pt;color:#666">(Ký, họ tên)</div><div class="sign-line"></div></div>
+      <div class="sig-box"><div class="role">Người lập báo giá</div><div style="font-size:9pt;color:#666">(Ký, họ tên)</div><div class="sign-line"></div></div>
+    </div>
+
+    </body></html>`
+}
 
 const GIAN_TIEP_M2: Record<number, number> = { 3: 898, 5: 1178.2, 7: 1800.2 }
 
@@ -350,6 +481,24 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
     },
   })
 
+  const companyInfo = usePhapNhanForPrint(quote?.phap_nhan_id ?? null)
+
+  const handlePrint = () => {
+    if (!quote) return
+    const html = buildQuoteHtml(quote, namPhuongLogo, companyInfo)
+    printDocument({
+      title: 'BÁO GIÁ',
+      subtitle: `Báo giá ${quote.so_bao_gia}`,
+      documentNumber: quote.so_bao_gia,
+      documentDate: dayjs(quote.ngay_bao_gia).format('DD/MM/YYYY'),
+      companyName: quote.ten_phap_nhan || 'CÔNG TY TNHH SX TM NAM PHƯƠNG',
+      bodyHtml: html,
+      fields: [
+        { label: 'Khách hàng', value: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—' },
+      ]
+    })
+  }
+
   const columns: ColumnsType<QuoteItem> = [
     {
       title: 'STT',
@@ -522,6 +671,9 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
                 </Button>
               </Popconfirm>
             )}
+            <Button icon={<PrinterOutlined />} onClick={handlePrint}>
+              In báo giá
+            </Button>
           </Space>
         </Col>
       </Row>

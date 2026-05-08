@@ -7,6 +7,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { phuongXaApi, tinhThanhApi, type PhuongXa } from '../../api/simpleApis'
+import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title } = Typography
 
@@ -141,6 +142,12 @@ export default function PhuongXaList() {
                   (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
                 }
                 options={tinhList.map(t => ({ value: t.id, label: t.ten_tinh }))}
+              />
+              <ImportExcelButton
+                endpoint="/api/phuong-xa"
+                templateFilename="mau_import_phuong_xa.xlsx"
+                buttonText="Import Excel"
+                onImported={() => queryClient.invalidateQueries({ queryKey: ['phuong-xa'] })}
               />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm mới

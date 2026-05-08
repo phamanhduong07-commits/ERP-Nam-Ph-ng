@@ -6,6 +6,7 @@ import {
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { warehouseApi, PhanXuong, CreatePhanXuongPayload } from '../../api/warehouse'
+import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title, Text } = Typography
 
@@ -152,9 +153,17 @@ export default function PhanXuongList() {
           <Title level={4} style={{ margin: 0 }}>Danh mục nơi sản xuất (Phân xưởng)</Title>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Thêm phân xưởng
-          </Button>
+          <Space>
+            <ImportExcelButton
+              endpoint="/api/warehouse/phan-xuong"
+              templateFilename="mau_import_phan_xuong.xlsx"
+              buttonText="Import Excel"
+              onImported={() => qc.invalidateQueries({ queryKey: ['phan-xuong'] })}
+            />
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              Thêm phân xưởng
+            </Button>
+          </Space>
         </Col>
       </Row>
 

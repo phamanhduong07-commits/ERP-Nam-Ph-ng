@@ -2,14 +2,14 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Row, Select, Space, Spin, Switch,
+  Button, Card, Col, DatePicker, Drawer, Row, Select, Space, Spin, Switch,
   Table, Tabs, Tag, Typography,
 } from 'antd'
-import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
+import { FileExcelOutlined, FilePdfOutlined, PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
-import { arApi, ARLedgerRow, ARAgingRow } from '../../api/accounting'
+import { arApi, ARLedgerEntryRow, ARLedgerRow, ARAgingRow } from '../../api/accounting'
 import { customersApi, Customer } from '../../api/customers'
 import { TRANG_THAI_INVOICE } from '../../api/billing'
 
@@ -220,12 +220,21 @@ function LedgerTab() {
 // ── Tab 2: Tuổi nợ (Aging) ──────────────────────────────────────────────────
 
 function AgingTab() {
+  const navigate = useNavigate()
   const [asOfDate, setAsOfDate] = useState<string | undefined>()
+  const [selectedCustomer, setSelectedCustomer] = useState<ARAgingRow | null>(null)
 
   const { data: rows = [], isLoading } = useQuery<ARAgingRow[]>({
     queryKey: ['ar-aging', asOfDate],
     queryFn: () => arApi.getAging(asOfDate),
   })
+
+  const { data: detailRows = [], isLoading: isDetailLoading } = useQuery<ARLedgerRow[]>({
+    queryKey: ['ar-ledger-customer-detail', selectedCustomer?.customer_id, asOfDate],
+    queryFn: () => arApi.getLedger({ customer_id: selectedCustomer?.customer_id, den_ngay: asOfDate }),
+    enabled: !!selectedCustomer?.customer_id,
+  })
+  const unpaidDetailRows = detailRows.filter(r => (r.con_lai ?? 0) > 0)
 
   const totals = rows.reduce(
     (acc, r) => ({
@@ -255,7 +264,12 @@ function AgingTab() {
   }
 
   const columns: ColumnsType<ARAgingRow> = [
-    { title: 'Khách hàng', dataIndex: 'ten_don_vi', ellipsis: true, render: v => v ?? '—' },
+    {
+      title: 'Khách hàng',
+      dataIndex: 'ten_don_vi',
+      ellipsis: true,
+      render: (v, r) => <a onClick={() => setSelectedCustomer(r)}>{v ?? '—'}</a>,
+    },
     {
       title: 'Tổng còn lại',
       dataIndex: 'tong_con_lai',
@@ -290,6 +304,54 @@ function AgingTab() {
       align: 'right',
       width: 120,
       render: v => v > 0 ? <span style={{ color: '#f5222d' }}>{fmtVND(v)}</span> : '—',
+    },
+    {
+      title: 'Thao tác',
+      width: 120,
+      render: (_, r) => (
+        <Space size="small">
+          <Button size="small" onClick={() => setSelectedCustomer(r)}>Chi tiết</Button>
+          <Button
+            size="small"
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => navigate(`/accounting/receipts/new?customer_id=${r.customer_id}&amount=${r.tong_con_lai}`)}
+          />
+        </Space>
+      ),
+    },
+  ]
+
+  const detailColumns: ColumnsType<ARLedgerRow> = [
+    {
+      title: 'Số hóa đơn',
+      dataIndex: 'so_hoa_don',
+      width: 130,
+      render: (v, r) => <a onClick={() => navigate(`/billing/invoices/${r.invoice_id}`)}>{v ?? `#${r.invoice_id}`}</a>,
+    },
+    { title: 'Ngày HĐ', dataIndex: 'ngay_hoa_don', width: 100, render: v => dayjs(v).format('DD/MM/YYYY') },
+    { title: 'Hạn TT', dataIndex: 'han_tt', width: 100, render: v => v ? dayjs(v).format('DD/MM/YYYY') : '—' },
+    { title: 'Tổng cộng', dataIndex: 'tong_cong', width: 120, align: 'right', render: v => fmtVND(v) },
+    { title: 'Đã TT', dataIndex: 'da_thanh_toan', width: 120, align: 'right', render: v => fmtVND(v) },
+    {
+      title: 'Còn lại',
+      dataIndex: 'con_lai',
+      width: 120,
+      align: 'right',
+      render: v => <Text strong style={{ color: '#fa8c16' }}>{fmtVND(v)}</Text>,
+    },
+    {
+      title: '',
+      width: 110,
+      render: (_, r) => (
+        <Button
+          size="small"
+          type="primary"
+          onClick={() => navigate(`/accounting/receipts/new?customer_id=${r.customer_id}&invoice_id=${r.invoice_id}&amount=${r.con_lai}`)}
+        >
+          Thu tiền
+        </Button>
+      ),
     },
   ]
 
@@ -349,11 +411,173 @@ function AgingTab() {
           </Table.Summary.Row>
         )}
       />
+
+      <Drawer
+        title={selectedCustomer ? `Chi tiết công nợ - ${selectedCustomer.ten_don_vi ?? ''}` : 'Chi tiết công nợ'}
+        open={!!selectedCustomer}
+        onClose={() => setSelectedCustomer(null)}
+        width={900}
+        extra={selectedCustomer && (
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => navigate(`/accounting/receipts/new?customer_id=${selectedCustomer.customer_id}&amount=${selectedCustomer.tong_con_lai}`)}
+          >
+            Lập phiếu thu
+          </Button>
+        )}
+      >
+        {selectedCustomer && (
+          <>
+            <Row gutter={16} style={{ marginBottom: 12 }}>
+              <Col><Text type="secondary">Tổng còn lại: </Text><Text strong>{fmtVND(selectedCustomer.tong_con_lai)}</Text></Col>
+              <Col><Text type="secondary">Trong hạn: </Text><Text strong style={{ color: '#52c41a' }}>{fmtVND(selectedCustomer.trong_han)}</Text></Col>
+              <Col>
+                <Text type="secondary">Quá hạn: </Text>
+                <Text strong style={{ color: '#f5222d' }}>
+                  {fmtVND(selectedCustomer.qua_han_30 + selectedCustomer.qua_han_60 + selectedCustomer.qua_han_90)}
+                </Text>
+              </Col>
+            </Row>
+            <Table
+              rowKey="invoice_id"
+              columns={detailColumns}
+              dataSource={unpaidDetailRows}
+              loading={isDetailLoading}
+              size="small"
+              pagination={{ pageSize: 20, showTotal: t => `${t} hóa đơn còn nợ` }}
+            />
+          </>
+        )}
+      </Drawer>
     </>
   )
 }
 
 // ── Main page ────────────────────────────────────────────────────────────────
+
+function LedgerEntriesTab() {
+  const navigate = useNavigate()
+  const [customerId, setCustomerId] = useState<number | undefined>()
+  const [tuNgay, setTuNgay] = useState<string | undefined>()
+  const [denNgay, setDenNgay] = useState<string | undefined>()
+
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ['customers-all'],
+    queryFn: () => customersApi.all().then(r => r.data),
+  })
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['ar-ledger-entries', customerId, tuNgay, denNgay],
+    queryFn: () => arApi.getLedgerEntries({ customer_id: customerId, tu_ngay: tuNgay, den_ngay: denNgay }),
+  })
+  const rows = data?.rows ?? []
+
+  const openDocument = (r: ARLedgerEntryRow) => {
+    if (r.chung_tu_loai === 'hoa_don_ban' && r.chung_tu_id) navigate(`/billing/invoices/${r.chung_tu_id}`)
+    if (r.chung_tu_loai === 'phieu_thu' && r.chung_tu_id) navigate(`/accounting/receipts/${r.chung_tu_id}`)
+  }
+
+  const columns: ColumnsType<ARLedgerEntryRow> = [
+    { title: 'Ngày', dataIndex: 'ngay', width: 100, render: v => dayjs(v).format('DD/MM/YYYY') },
+    {
+      title: 'Chứng từ',
+      dataIndex: 'so_chung_tu',
+      width: 140,
+      render: (v, r) => r.chung_tu_id ? <a onClick={() => openDocument(r)}>{v ?? `#${r.chung_tu_id}`}</a> : (v ?? '—'),
+    },
+    { title: 'Khách hàng', dataIndex: 'ten_don_vi', width: 220, ellipsis: true },
+    { title: 'Diễn giải', dataIndex: 'dien_giai', ellipsis: true },
+    { title: 'Nợ', dataIndex: 'phat_sinh_no', width: 130, align: 'right', render: v => v > 0 ? fmtVND(v) : '—' },
+    { title: 'Có', dataIndex: 'phat_sinh_co', width: 130, align: 'right', render: v => v > 0 ? <Text style={{ color: '#52c41a' }}>{fmtVND(v)}</Text> : '—' },
+    { title: 'Số dư', dataIndex: 'so_du', width: 130, align: 'right', render: v => <Text strong>{fmtVND(v)}</Text> },
+  ]
+
+  const handleExcel = () => {
+    const excelRows = rows.map(r => ({
+      'Ngày': r.ngay,
+      'Chứng từ': r.so_chung_tu ?? '',
+      'Khách hàng': r.ten_don_vi ?? '',
+      'Diễn giải': r.dien_giai ?? '',
+      'Nợ': r.phat_sinh_no,
+      'Có': r.phat_sinh_co,
+      'Số dư': r.so_du,
+    }))
+    exportToExcel(`so-cong-no-phai-thu-${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Cong no phai thu',
+      headers: Object.keys(excelRows[0] ?? {}),
+      rows: excelRows.map(r => Object.values(r)),
+    }])
+  }
+
+  const handlePrint = () => {
+    const headers = ['Ngày', 'Chứng từ', 'Khách hàng', 'Diễn giải', 'Nợ', 'Có', 'Số dư']
+    const printRows = rows.map(r => [
+      dayjs(r.ngay).format('DD/MM/YYYY'),
+      r.so_chung_tu ?? '',
+      r.ten_don_vi ?? '',
+      r.dien_giai ?? '',
+      fmtVND(r.phat_sinh_no),
+      fmtVND(r.phat_sinh_co),
+      fmtVND(r.so_du),
+    ])
+    printToPdf('Sổ công nợ phải thu', buildHtmlTable(headers.map(header => ({ header })), printRows))
+  }
+
+  return (
+    <>
+      <Card size="small" style={{ marginBottom: 12 }}>
+        <Row gutter={[12, 8]} align="middle">
+          <Col>
+            <Select
+              style={{ width: 220 }} allowClear showSearch placeholder="Lọc khách hàng"
+              filterOption={(input, opt) =>
+                (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={customers.map(c => ({
+                value: c.id,
+                label: `${c.ma_kh ? `[${c.ma_kh}] ` : ''}${c.ten_don_vi ?? ''}`,
+              }))}
+              onChange={v => setCustomerId(v)}
+            />
+          </Col>
+          <Col>
+            <RangePicker
+              format="DD/MM/YYYY"
+              placeholder={['Từ ngày', 'Đến ngày']}
+              onChange={v => {
+                setTuNgay(v?.[0]?.format('YYYY-MM-DD'))
+                setDenNgay(v?.[1]?.format('YYYY-MM-DD'))
+              }}
+            />
+          </Col>
+          <Col style={{ marginLeft: 'auto' }}>
+            <Space>
+              <Button size="small" icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
+              <Button size="small" icon={<FilePdfOutlined />} onClick={handlePrint}>In</Button>
+            </Space>
+          </Col>
+        </Row>
+      </Card>
+
+      <Row gutter={24} style={{ marginBottom: 12 }}>
+        <Col><Text type="secondary">Đầu kỳ: </Text><Text strong>{fmtVND(data?.so_du_dau_ky ?? 0)}</Text></Col>
+        <Col><Text type="secondary">Nợ: </Text><Text strong>{fmtVND(data?.phat_sinh_no ?? 0)}</Text></Col>
+        <Col><Text type="secondary">Có: </Text><Text strong style={{ color: '#52c41a' }}>{fmtVND(data?.phat_sinh_co ?? 0)}</Text></Col>
+        <Col><Text type="secondary">Cuối kỳ: </Text><Text strong style={{ color: (data?.so_du_cuoi_ky ?? 0) > 0 ? '#fa8c16' : '#52c41a' }}>{fmtVND(data?.so_du_cuoi_ky ?? 0)}</Text></Col>
+      </Row>
+
+      <Table
+        columns={columns}
+        dataSource={rows}
+        rowKey="id"
+        loading={isLoading}
+        size="small"
+        pagination={{ pageSize: 50, showTotal: t => `${t} chứng từ` }}
+      />
+    </>
+  )
+}
 
 export default function ARLedgerPage() {
   return (
@@ -362,7 +586,7 @@ export default function ARLedgerPage() {
       <Tabs
         defaultActiveKey="ledger"
         items={[
-          { key: 'ledger', label: 'Sổ chi tiết', children: <LedgerTab /> },
+          { key: 'ledger', label: 'Sổ chi tiết', children: <LedgerEntriesTab /> },
           { key: 'aging',  label: 'Tuổi nợ',     children: <AgingTab /> },
         ]}
       />

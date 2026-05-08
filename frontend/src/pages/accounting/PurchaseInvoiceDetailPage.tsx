@@ -5,10 +5,10 @@ import {
   Button, Card, Col, Descriptions, Form, DatePicker, InputNumber, Input,
   Modal, Row, Select, Space, Spin, Table, Tag, Typography, message,
 } from 'antd'
-import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, PrinterOutlined, PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import { fmtVND } from '../../utils/exportUtils'
+import { fmtVND, printToPdf } from '../../utils/exportUtils'
 import {
   purchaseInvoiceApi, paymentApi, PurchaseInvoice,
   CashPaymentShort, TRANG_THAI_PO_INVOICE, HINH_THUC_TT,
@@ -106,14 +106,53 @@ export default function PurchaseInvoiceDetailPage() {
           </Title>
           <Tag color={status?.color}>{status?.label ?? invoice.trang_thai}</Tag>
         </Space>
-        {canPay && (
+        <Space>
           <Button
-            type="primary" icon={<PlusOutlined />}
-            onClick={() => { form.resetFields(); setShowPayModal(true) }}
+            icon={<PrinterOutlined />}
+            onClick={() => {
+              const payRows = (invoice.payments ?? []).map((p: CashPaymentShort) => [
+                p.so_phieu,
+                dayjs(p.ngay_phieu).format('DD/MM/YYYY'),
+                HINH_THUC_TT[p.hinh_thuc_tt] ?? p.hinh_thuc_tt,
+                `<span style="text-align:right;display:block">${fmtVND(p.so_tien)}</span>`,
+              ])
+              printToPdf(
+                `HoaDonMua_${invoice.so_hoa_don ?? invoice.id}`,
+                `<h2 style="text-align:center">HÓA ĐƠN MUA HÀNG</h2>
+                 <p><strong>Số HĐ:</strong> ${invoice.so_hoa_don ?? '—'} &nbsp;&nbsp;
+                    <strong>Mẫu số:</strong> ${invoice.mau_so ?? '—'} &nbsp;&nbsp;
+                    <strong>Ký hiệu:</strong> ${invoice.ky_hieu ?? '—'}</p>
+                 <p><strong>Ngày lập:</strong> ${dayjs(invoice.ngay_lap).format('DD/MM/YYYY')}
+                    &nbsp;&nbsp; <strong>Hạn TT:</strong> ${invoice.han_tt ? dayjs(invoice.han_tt).format('DD/MM/YYYY') : '—'}</p>
+                 <p><strong>Nhà cung cấp:</strong> ${invoice.ten_don_vi ?? '—'}
+                    &nbsp;&nbsp; <strong>MST:</strong> ${invoice.ma_so_thue ?? '—'}</p>
+                 <hr/>
+                 <p><strong>Tiền hàng:</strong> ${fmtVND(invoice.tong_tien_hang)}</p>
+                 <p><strong>Thuế (${invoice.thue_suat}%):</strong> ${fmtVND(invoice.tien_thue)}</p>
+                 <p><strong>Tổng thanh toán:</strong> <span style="font-size:1.1em;color:#1677ff">${fmtVND(invoice.tong_thanh_toan)}</span></p>
+                 <p><strong>Đã thanh toán:</strong> ${fmtVND(invoice.da_thanh_toan)} &nbsp;&nbsp; <strong>Còn lại:</strong> ${fmtVND(invoice.con_lai ?? 0)}</p>
+                 ${payRows.length > 0 ? `
+                 <h4>Phiếu chi đã ghi</h4>
+                 <table border="1" cellpadding="4" style="border-collapse:collapse;width:100%;font-size:11px">
+                   <thead><tr><th>Số phiếu</th><th>Ngày</th><th>Hình thức</th><th>Số tiền</th></tr></thead>
+                   <tbody>${payRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+                 </table>` : ''}
+                 <p><strong>Ghi chú:</strong> ${invoice.ghi_chu ?? '—'}</p>`,
+                false,
+              )
+            }}
           >
-            Ghi nhận thanh toán
+            In PDF
           </Button>
-        )}
+          {canPay && (
+            <Button
+              type="primary" icon={<PlusOutlined />}
+              onClick={() => { form.resetFields(); setShowPayModal(true) }}
+            >
+              Ghi nhận thanh toán
+            </Button>
+          )}
+        </Space>
       </div>
 
       <Card size="small" style={{ marginBottom: 16 }}>

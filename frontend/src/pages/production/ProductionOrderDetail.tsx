@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useQueryClient, useQueries } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useQueries, useMutation } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Button, Space, Table, Typography,
   Row, Col, Divider, Popconfirm, message, Progress, InputNumber,
-  Statistic, Tabs, Collapse, Drawer, Tooltip,
+  Statistic, Tabs, Collapse, Drawer, Tooltip, Modal, Form, Select,
 } from 'antd'
 import {
   ArrowLeftOutlined, PlayCircleOutlined, CheckCircleOutlined,
   CloseOutlined, SaveOutlined, CalculatorOutlined, EditOutlined,
-  FileExcelOutlined, FilePdfOutlined, FileTextOutlined, SendOutlined,
+  FileExcelOutlined, FilePdfOutlined, FileTextOutlined, SendOutlined, AuditOutlined,
 } from '@ant-design/icons'
+import { phapNhanApi } from '../../api/phap_nhan'
+import { warehouseApi } from '../../api/warehouse'
 import PhieuNhapPhoiSongModal, { phoiSessionKey } from './PhieuNhapPhoiSongModal'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -24,7 +26,8 @@ import BomCalculatorPanel from './BomCalculatorPanel'
 import BomResultView from './BomResultView'
 import SxParamsTab from './SxParamsTab'
 import { bomApi } from '../../api/bom'
-import { exportToExcel, printToPdf, fmtVND, fmtDate, fmtNum, buildHtmlTable } from '../../utils/exportUtils'
+import { exportToExcel, printToPdf, fmtVND, fmtDate, fmtNum, fmtDim, buildHtmlTable, printProductionTag } from '../../utils/exportUtils'
+
 
 const { Title, Text } = Typography
 
@@ -216,6 +219,8 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const [savingProgress, setSavingProgress] = useState<number | null>(null)
   const [showPhieuModal, setShowPhieuModal] = useState(false)
   const [pushingCD2, setPushingCD2] = useState(false)
+  const [editSxModal, setEditSxModal] = useState(false)
+  const [editSxForm] = Form.useForm()
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['production-order', id],
@@ -224,6 +229,28 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['production-order', id] })
+
+  const { data: phapNhanList = [] } = useQuery({
+    queryKey: ['phap-nhan-all'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+  })
+
+  const { data: phanXuongRaw } = useQuery({
+    queryKey: ['phan-xuong'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+  })
+  const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
+
+  const updateSxMutation = useMutation({
+    mutationFn: (vals: { phap_nhan_id?: number | null; phan_xuong_id?: number | null }) =>
+      productionOrdersApi.update(Number(id), vals),
+    onSuccess: () => {
+      message.success('Cập nhật thành công')
+      invalidate()
+      setEditSxModal(false)
+    },
+    onError: () => message.error('Cập nhật thất bại'),
+  })
 
   const bomStatusQueries = useQueries({
     queries: (order?.items ?? []).map(item => ({
@@ -421,6 +448,65 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
       true,
     )
   }
+  
+  const handlePrintTag = () => {
+    const item = order.items[0]
+    if (!item) return
+
+    const bomDetail = bomDetailQueries[0]?.data
+
+    const canMangLabel = (v?: number | null) =>
+      v === 2 ? '2 mặt' : v === 1 ? '1 mặt' : 'Không'
+    const chongThamLabel = (v?: number | null) =>
+      v === 2 ? 'Toàn bộ' : v === 1 ? '1/2 mặt' : 'Không'
+
+    const congDoanParts: string[] = []
+    if (item.loai_in || (item.so_mau && item.so_mau > 0)) congDoanParts.push('Có in')
+    if (bomDetail?.flag_be_so_con && bomDetail.flag_be_so_con > 0) congDoanParts.push('Bế')
+    if (bomDetail?.flag_dan) congDoanParts.push('Dán')
+    const congDoan = congDoanParts.length > 0 ? congDoanParts.join('-') : 'Bế-Dán'
+
+    const khoTt = item.kho_tt ?? null
+    const daiTt = item.dai_tt ?? null
+
+    // Số dao lấy từ BOM (đã tính sẵn, chính xác)
+    const soDaoCalc = bomDetail?.dimensions?.so_dao ?? 1
+    const slTamLonQty = soDaoCalc > 0
+      ? Math.floor(item.so_luong_ke_hoach / soDaoCalc) : item.so_luong_ke_hoach
+    const slTamLon = (khoTt && daiTt)
+      ? `${fmtDim(khoTt)}x${fmtDim(daiTt)} = ${fmtNum(slTamLonQty)}`
+      : ''
+
+    // Tấm nhỏ: kho_tt/so_dao × dai_tt, số lượng = sl_thung
+    const khoPhoi = (khoTt && soDaoCalc > 0) ? Number(khoTt) / soDaoCalc : null
+    const slTamNho = (khoPhoi && daiTt)
+      ? `${fmtDim(khoPhoi)}x${fmtDim(daiTt)} = ${fmtNum(item.so_luong_ke_hoach)}`
+      : ''
+
+    printProductionTag({
+      so_lenh: order.so_lenh,
+      ten_khach_hang: order.ten_khach_hang,
+      so_don_hang: order.so_don,
+      so_po_kh: order.so_po_kh || '',
+      loai_sp: item.loai_thung || 'Thùng bế',
+      song: item.to_hop_song || '',
+      phan_xuong: order.ten_phan_xuong || 'Nam Phương',
+      qccl: item.qccl || '',
+      ngay_chay_song: dayjs(order.ngay_lenh).format('DD-MM-YYYY'),
+      ngay_giao_cu_chi: '',
+      ngay_giao_kh: item.ngay_giao_hang ? dayjs(item.ngay_giao_hang).format('DD-MM-YYYY') : '',
+      cong_doan: congDoan,
+      ten_san_pham: item.ten_hang,
+      sl_tam_lon: slTamLon,
+      sl_tam_nho: slTamNho,
+      sl_thung: `${fmtDim(item.dai)}x${fmtDim(item.rong)}x${fmtDim(item.cao)} = ${fmtNum(item.so_luong_ke_hoach)}`,
+      can_mang: canMangLabel(bomDetail?.flag_can_mang),
+      chong_tham: chongThamLabel(bomDetail?.flag_chong_tham),
+      bo_phan: item.ghi_chu || '',
+      ghi_chu: order.ghi_chu || ''
+    })
+  }
+
 
   const handleExportBomExcel = () => {
     if (!bomResults.length) return
@@ -625,7 +711,17 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
             <Tooltip title="Xuất PDF (lệnh SX)">
               <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
             </Tooltip>
+            <Button 
+              type="primary" 
+              size="small" 
+              icon={<AuditOutlined />} 
+              onClick={handlePrintTag}
+              style={{ background: '#1b168e' }}
+            >
+              In Tem Nhận Dạng
+            </Button>
           </Space>
+
         </Col>
       </Row>
 
@@ -694,15 +790,45 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   {TRANG_THAI_LABELS[order.trang_thai]}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Pháp nhân SX">
-                {order.ten_phap_nhan_sx
-                  ? <Tag color="blue">{order.ten_phap_nhan_sx}</Tag>
-                  : <Typography.Text type="secondary">—</Typography.Text>}
+              <Descriptions.Item label="Pháp nhân">
+                <Space size={4}>
+                  {order.ten_phap_nhan
+                    ? <Tag color="blue">{order.ten_phap_nhan}</Tag>
+                    : <Typography.Text type="secondary">—</Typography.Text>}
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<EditOutlined />}
+                    style={{ color: '#1677ff', padding: '0 4px' }}
+                    onClick={() => {
+                      editSxForm.setFieldsValue({
+                        phap_nhan_id: order.phap_nhan_id ?? undefined,
+                        phan_xuong_id: order.phan_xuong_id ?? undefined,
+                      })
+                      setEditSxModal(true)
+                    }}
+                  />
+                </Space>
               </Descriptions.Item>
-              <Descriptions.Item label="Xưởng sản xuất">
-                {order.ten_phan_xuong
-                  ? <Tag color="geekblue">{order.ten_phan_xuong}</Tag>
-                  : <Typography.Text type="secondary">—</Typography.Text>}
+              <Descriptions.Item label="Nơi sản xuất">
+                <Space size={4}>
+                  {order.ten_phan_xuong
+                    ? <Tag color="geekblue">{order.ten_phan_xuong}</Tag>
+                    : <Typography.Text type="secondary">—</Typography.Text>}
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<EditOutlined />}
+                    style={{ color: '#1677ff', padding: '0 4px' }}
+                    onClick={() => {
+                      editSxForm.setFieldsValue({
+                        phap_nhan_id: order.phap_nhan_id ?? undefined,
+                        phan_xuong_id: order.phan_xuong_id ?? undefined,
+                      })
+                      setEditSxModal(true)
+                    }}
+                  />
+                </Space>
               </Descriptions.Item>
               <Descriptions.Item label="Bắt đầu (KH)">
                 {order.ngay_bat_dau_ke_hoach
@@ -1118,6 +1244,41 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
           }}
         />
       )}
+
+      {/* Modal sửa Pháp nhân / Nơi sản xuất */}
+      <Modal
+        title="Cập nhật Pháp nhân & Nơi sản xuất"
+        open={editSxModal}
+        onCancel={() => setEditSxModal(false)}
+        onOk={() => editSxForm.submit()}
+        okText="Lưu"
+        cancelText="Huỷ"
+        confirmLoading={updateSxMutation.isPending}
+      >
+        <Form
+          form={editSxForm}
+          layout="vertical"
+          onFinish={(vals) => updateSxMutation.mutate({
+            phap_nhan_id: vals.phap_nhan_id ?? null,
+            phan_xuong_id: vals.phan_xuong_id ?? null,
+          })}
+        >
+          <Form.Item name="phap_nhan_id" label="Pháp nhân">
+            <Select
+              allowClear
+              placeholder="Chọn pháp nhân"
+              options={phapNhanList.map(p => ({ value: p.id, label: p.ten_phap_nhan }))}
+            />
+          </Form.Item>
+          <Form.Item name="phan_xuong_id" label="Nơi sản xuất">
+            <Select
+              allowClear
+              placeholder="Chọn xưởng"
+              options={phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }

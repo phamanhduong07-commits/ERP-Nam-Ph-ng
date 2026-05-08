@@ -1,12 +1,34 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import PhuongXa
+from app.models.master import PhuongXa, TinhThanh
+from app.services.excel_import_service import (
+    ImportField, build_template_response, import_excel, parse_bool, parse_text,
+)
 
 router = APIRouter(prefix="/api/phuong-xa", tags=["phuong-xa"])
+
+PHUONG_XA_IMPORT_FIELDS = [
+    ImportField("ten_phuong", "Ten phuong/xa/thi tran", required=True, parser=parse_text, help_text="Dung lam khoa upsert"),
+    ImportField("ma_phuong", "Ma phuong", required=True, parser=parse_text),
+    ImportField("ma_tinh", "Ma tinh", parser=parse_text, help_text="Ma tinh da co trong danh muc tinh thanh"),
+    ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
+]
+
+
+def _resolve_phuong_xa_import(db: Session, values: dict) -> tuple[dict, list[str]]:
+    errors: list[str] = []
+    ma_tinh = values.pop("ma_tinh", None)
+    if ma_tinh:
+        tinh = db.query(TinhThanh).filter(TinhThanh.ma_tinh == ma_tinh).first()
+        if not tinh:
+            errors.append(f"Ma tinh: khong ton tai '{ma_tinh}'")
+        else:
+            values["tinh_id"] = tinh.id
+    return values, errors
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -38,6 +60,24 @@ def _to_response(obj: PhuongXa) -> PhuongXaResponse:
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
+
+@router.get("/import-template")
+def download_phuong_xa_import_template(_: User = Depends(get_current_user)):
+    return build_template_response("mau_import_phuong_xa.xlsx", PHUONG_XA_IMPORT_FIELDS)
+
+
+@router.post("/import")
+async def import_phuong_xa(
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return await import_excel(
+        db=db, file=file, model=PhuongXa, fields=PHUONG_XA_IMPORT_FIELDS,
+        key_field="ten_phuong", commit=commit, resolver=_resolve_phuong_xa_import,
+    )
+
 
 @router.get("", response_model=list[PhuongXaResponse])
 def list_phuong_xa(

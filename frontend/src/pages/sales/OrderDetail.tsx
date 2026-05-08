@@ -95,7 +95,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       const res = await productionOrdersApi.createFromOrder(Number(id), {
         ngay_lenh: vals.ngay_lenh?.format('YYYY-MM-DD'),
         ngay_hoan_thanh_ke_hoach: vals.ngay_hoan_thanh_ke_hoach?.format('YYYY-MM-DD'),
-        phap_nhan_sx_id: vals.phap_nhan_sx_id ?? null,
+        phap_nhan_id: vals.phap_nhan_id ?? null,
         phan_xuong_id: vals.phan_xuong_id ?? null,
       })
       const orders = res.data
@@ -434,7 +434,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 onClick={() => {
                   lenhForm.resetFields()
                   lenhForm.setFieldsValue({
-                    phap_nhan_sx_id: order.phap_nhan_id ?? undefined,
+                    phap_nhan_id: order.phap_nhan_id ?? undefined,
                     phan_xuong_id: order.phan_xuong_id ?? undefined,
                   })
                   setLenhModal(true)
@@ -470,12 +470,12 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           <Descriptions.Item label="Điện thoại">
             {order.customer?.dien_thoai || '—'}
           </Descriptions.Item>
-          <Descriptions.Item label="Pháp nhân xuất HĐ">
+          <Descriptions.Item label="Pháp nhân">
             {order.ten_phap_nhan || <Text type="secondary">—</Text>}
           </Descriptions.Item>
-          <Descriptions.Item label="Pháp nhân sản xuất" span={2}>
-            {order.ten_phap_nhan_sx
-              ? <Tag color="blue">{order.ten_phap_nhan_sx}</Tag>
+          <Descriptions.Item label="Nơi sản xuất" span={2}>
+            {order.ten_phan_xuong
+              ? <Tag color="blue">{order.ten_phan_xuong}</Tag>
               : <Text type="secondary">—</Text>}
           </Descriptions.Item>
           <Descriptions.Item label="Địa chỉ giao hàng" span={3}>
@@ -752,8 +752,8 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
             <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
-            name="phap_nhan_sx_id"
-            label="Pháp nhân xuất hoá đơn"
+            name="phap_nhan_id"
+            label="Pháp nhân"
           >
             <Select
               showSearch allowClear placeholder="Chọn pháp nhân..."

@@ -18,7 +18,7 @@ export interface TokenResponse {
 
 export const authApi = {
   login: (username: string, password: string) => {
-    const form = new FormData()
+    const form = new URLSearchParams()
     form.append('username', username)
     form.append('password', password)
     return client.post<TokenResponse>('/auth/login', form)

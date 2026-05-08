@@ -7,6 +7,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { donViTinhApi, type DonViTinh } from '../../api/simpleApis'
+import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title } = Typography
 
@@ -124,9 +125,17 @@ export default function DvtList() {
             <Title level={4} style={{ margin: 0 }}>Đơn vị tính</Title>
           </Col>
           <Col>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Thêm mới
-            </Button>
+            <Space>
+              <ImportExcelButton
+                endpoint="/api/don-vi-tinh"
+                templateFilename="mau_import_don_vi_tinh.xlsx"
+                buttonText="Import Excel"
+                onImported={() => queryClient.invalidateQueries({ queryKey: ['don-vi-tinh'] })}
+              />
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                Thêm mới
+              </Button>
+            </Space>
           </Col>
         </Row>
 

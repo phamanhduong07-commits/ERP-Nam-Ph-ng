@@ -56,11 +56,13 @@ export interface SalesReturnListItem {
   ten_khach_hang: string | null
   ly_do_tra: string
   trang_thai: string
+  tong_so_luong_tra: number
   tong_tien_tra: number
   created_at: string
 }
 
 export interface CreateReturnItemPayload {
+  delivery_order_item_id?: number
   sales_order_item_id: number
   so_luong_tra: number
   don_gia_tra?: number
@@ -71,6 +73,7 @@ export interface CreateReturnItemPayload {
 
 export interface CreateReturnPayload {
   sales_order_id: number
+  delivery_order_id?: number
   customer_id: number
   ngay_tra: string
   ly_do_tra: string

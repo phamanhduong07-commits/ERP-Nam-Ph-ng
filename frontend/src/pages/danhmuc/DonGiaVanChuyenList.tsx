@@ -7,6 +7,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { donGiaVanChuyenApi, type DonGiaVanChuyen } from '../../api/simpleApis'
+import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title } = Typography
 
@@ -132,9 +133,17 @@ export default function DonGiaVanChuyenList() {
             <Title level={4} style={{ margin: 0 }}>Đơn giá vận chuyển</Title>
           </Col>
           <Col>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Thêm mới
-            </Button>
+            <Space>
+              <ImportExcelButton
+                endpoint="/api/don-gia-van-chuyen"
+                templateFilename="mau_import_don_gia_van_chuyen.xlsx"
+                buttonText="Import Excel"
+                onImported={() => queryClient.invalidateQueries({ queryKey: ['don-gia-van-chuyen'] })}
+              />
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                Thêm mới
+              </Button>
+            </Space>
           </Col>
         </Row>
 

@@ -8,6 +8,7 @@ import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { productsApi as productsFullApi, type ProductFull, type ProductFullCreate } from '../../api/products'
 import { customersApi } from '../../api/customers'
+import ImportExcelDialog from '../../components/ImportExcelDialog'
 
 const { Title } = Typography
 
@@ -22,6 +23,7 @@ export default function ProductList() {
   const [searchInput, setSearchInput] = useState('')
   const [filterKh, setFilterKh] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
+  const [importVisible, setImportVisible] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['products-full', search, filterKh, page],
@@ -195,6 +197,9 @@ export default function ProductList() {
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm sản phẩm
               </Button>
+              <Button onClick={() => setImportVisible(true)}>
+                Import Excel
+              </Button>
             </Space>
           </Col>
         </Row>
@@ -344,6 +349,15 @@ export default function ProductList() {
           )}
         </Form>
       </Modal>
+
+      <ImportExcelDialog
+        title="Import danh mục sản phẩm"
+        visible={importVisible}
+        onCancel={() => setImportVisible(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['products-full'] })}
+        importFn={(file, commit) => productsFullApi.import(file, commit)}
+        templateUrl="/api/products/import-template"
+      />
     </div>
   )
 }

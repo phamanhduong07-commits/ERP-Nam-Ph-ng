@@ -8,12 +8,14 @@ import {
 import {
   PlusOutlined, SearchOutlined, EyeOutlined,
   CheckOutlined, CloseOutlined, FileExcelOutlined, FilePdfOutlined,
+  UploadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
 import type { SalesOrderListItem } from '../../api/salesOrders'
 import { exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
+import ImportExcelDialog from '../../components/ImportExcelDialog'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -29,6 +31,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
   const [trangThai, setTrangThai] = useState<string | undefined>()
   const [dateRange, setDateRange] = useState<[string, string] | null>(null)
   const [page, setPage] = useState(1)
+  const [importVisible, setImportVisible] = useState(false)
 
   const isEmbedded = !!onSelect
 
@@ -245,6 +248,13 @@ export default function OrderList({ selectedId, onSelect }: Props) {
               >
                 Tạo đơn hàng
               </Button>
+              <Button
+                size="small"
+                icon={<UploadOutlined />}
+                onClick={() => setImportVisible(true)}
+              >
+                Import
+              </Button>
             </Space>
           </Col>
         </Row>
@@ -312,6 +322,15 @@ export default function OrderList({ selectedId, onSelect }: Props) {
         }}
         size="small"
         scroll={isEmbedded ? undefined : { x: 900 }}
+      />
+
+      <ImportExcelDialog
+        title="Import đơn hàng từ Excel"
+        visible={importVisible}
+        onCancel={() => setImportVisible(false)}
+        onSuccess={() => refetch()}
+        importFn={(file, commit) => salesOrdersApi.importOrders(file, commit)}
+        templateUrl="/api/sales-orders/import-template"
       />
     </div>
   )

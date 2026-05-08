@@ -3,10 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Descriptions, Modal, Space, Spin, Tag, Typography, message,
 } from 'antd'
-import { ArrowLeftOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, PrinterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { fmtVND } from '../../utils/exportUtils'
+import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
+import { fmtVND, printDocument } from '../../utils/exportUtils'
 import { receiptApi, CashReceipt, TRANG_THAI_PHIEU_THU, HINH_THUC_TT } from '../../api/accounting'
+import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title } = Typography
 
@@ -28,6 +30,9 @@ export default function CashReceiptDetailPage() {
       message.success('Đã duyệt phiếu thu')
       qc.invalidateQueries({ queryKey: ['receipt', receiptId] })
       qc.invalidateQueries({ queryKey: ['receipts'] })
+      qc.invalidateQueries({ queryKey: ['ar-ledger-entries'] })
+      qc.invalidateQueries({ queryKey: ['ar-ledger'] })
+      qc.invalidateQueries({ queryKey: ['ar-aging'] })
     },
     onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi duyệt'),
   })
@@ -38,6 +43,9 @@ export default function CashReceiptDetailPage() {
       message.success('Đã hủy phiếu thu')
       qc.invalidateQueries({ queryKey: ['receipt', receiptId] })
       qc.invalidateQueries({ queryKey: ['receipts'] })
+      qc.invalidateQueries({ queryKey: ['ar-ledger-entries'] })
+      qc.invalidateQueries({ queryKey: ['ar-ledger'] })
+      qc.invalidateQueries({ queryKey: ['ar-aging'] })
     },
     onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi hủy'),
   })
@@ -45,9 +53,36 @@ export default function CashReceiptDetailPage() {
   if (isLoading) return <Spin style={{ margin: 40 }} />
   if (!receipt) return <div style={{ padding: 24 }}>Không tìm thấy phiếu thu</div>
 
+  const companyInfo = usePhapNhanForPrint()
   const status = TRANG_THAI_PHIEU_THU[receipt.trang_thai]
   const canApprove = receipt.trang_thai === 'cho_duyet'
   const canCancel = receipt.trang_thai !== 'huy'
+
+  const handlePrint = () => {
+    printDocument({
+      companyInfo,
+      title: `Phiếu thu ${receipt.so_phieu}`,
+      subtitle: 'PHIẾU THU',
+      logoUrl: namPhuongLogo,
+      documentNumber: receipt.so_phieu || '—',
+      documentDate: dayjs(receipt.ngay_phieu).format('DD/MM/YYYY'),
+      status: status?.label ?? receipt.trang_thai,
+      fields: [
+        { label: 'Hình thức TT', value: HINH_THUC_TT[receipt.hinh_thuc_tt] ?? receipt.hinh_thuc_tt },
+        { label: 'Số tiền', value: fmtVND(receipt.so_tien) },
+        { label: 'Số tài khoản', value: receipt.so_tai_khoan ?? '—' },
+        { label: 'Số tham chiếu', value: receipt.so_tham_chieu ?? '—' },
+        { label: 'TK Nợ', value: receipt.tk_no ?? '—' },
+        { label: 'TK Có', value: receipt.tk_co ?? '—' },
+      ],
+      bodyHtml: `<div style="margin-bottom: 14px;"><strong>Diễn giải:</strong><div style="margin-top: 6px; font-size: 12px;">${receipt.dien_giai ? receipt.dien_giai.replace(/\n/g, '<br/>') : '—'}</div></div>
+        ${receipt.sales_invoice_id ? `<div style="font-size: 12px; color: #1b168e;">Hóa đơn liên kết: ${receipt.sales_invoice_id}</div>` : ''}`,
+      footerHtml: `
+        <div><strong>Ngày tạo:</strong> ${dayjs(receipt.created_at).format('DD/MM/YYYY HH:mm')}</div>
+        ${receipt.ngay_duyet ? `<div><strong>Ngày duyệt:</strong> ${dayjs(receipt.ngay_duyet).format('DD/MM/YYYY HH:mm')}</div>` : ''}
+      `,
+    })
+  }
 
   return (
     <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
@@ -84,6 +119,12 @@ export default function CashReceiptDetailPage() {
               Hủy
             </Button>
           )}
+          <Button
+            icon={<PrinterOutlined />}
+            onClick={handlePrint}
+          >
+            In/PDF phiếu thu
+          </Button>
         </Space>
       </div>
 

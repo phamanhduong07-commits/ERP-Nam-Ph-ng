@@ -1,13 +1,24 @@
-﻿from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException
+from decimal import Decimal
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.master import Xe
+from app.services.excel_import_service import (
+    ImportField, build_template_response, import_excel, parse_bool, parse_decimal, parse_text,
+)
 
 router = APIRouter(prefix="/api/xe", tags=["xe"])
+
+XE_IMPORT_FIELDS = [
+    ImportField("bien_so", "Bien so", required=True, parser=parse_text, help_text="Bien so xe, duy nhat"),
+    ImportField("loai_xe", "Loai xe", parser=parse_text),
+    ImportField("trong_tai", "Trong tai (tan)", parser=parse_decimal),
+    ImportField("ghi_chu", "Ghi chu", parser=parse_text),
+    ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
+]
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -28,6 +39,21 @@ class XeResponse(XeBase):
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
+
+@router.get("/import-template")
+def download_xe_import_template(_: User = Depends(get_current_user)):
+    return build_template_response("mau_import_xe.xlsx", XE_IMPORT_FIELDS)
+
+
+@router.post("/import")
+async def import_xe(
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return await import_excel(db=db, file=file, model=Xe, fields=XE_IMPORT_FIELDS, key_field="bien_so", commit=commit)
+
 
 @router.get("", response_model=list[XeResponse])
 def list_xe(

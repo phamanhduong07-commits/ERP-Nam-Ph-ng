@@ -156,4 +156,11 @@ export const salesOrdersApi = {
     client.patch<SalesOrder>(`/sales-orders/${id}/update-discount`, data),
   approve: (id: number) => client.patch<SalesOrder>(`/sales-orders/${id}/approve`),
   cancel: (id: number) => client.patch(`/sales-orders/${id}/cancel`),
+  importOrders: (file: File, commit: boolean = false) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return client.post(`/sales-orders/import?commit=${commit}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
 }

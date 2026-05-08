@@ -112,8 +112,8 @@ export default function ProductionOrderCreate() {
     }))
     setLines(newLines)
     // Tự điền pháp nhân + xưởng SX từ đơn hàng nếu chưa chọn
-    if (selectedSO.phap_nhan_id && !form.getFieldValue('phap_nhan_sx_id')) {
-      form.setFieldValue('phap_nhan_sx_id', selectedSO.phap_nhan_id)
+    if (selectedSO.phap_nhan_id && !form.getFieldValue('phap_nhan_id')) {
+      form.setFieldValue('phap_nhan_id', selectedSO.phap_nhan_id)
     }
     if ((selectedSO as any).phan_xuong_id && !form.getFieldValue('phan_xuong_id')) {
       form.setFieldValue('phan_xuong_id', (selectedSO as any).phan_xuong_id)
@@ -167,7 +167,7 @@ export default function ProductionOrderCreate() {
       const payload = {
         ngay_lenh: dayjs(values.ngay_lenh).format('YYYY-MM-DD'),
         sales_order_id: salesOrderId || undefined,
-        phap_nhan_sx_id: values.phap_nhan_sx_id ?? null,
+        phap_nhan_id: values.phap_nhan_id ?? null,
         phan_xuong_id: values.phan_xuong_id ?? null,
         ngay_bat_dau_ke_hoach: values.ngay_bat_dau_ke_hoach
           ? dayjs(values.ngay_bat_dau_ke_hoach).format('YYYY-MM-DD')
@@ -318,7 +318,7 @@ export default function ProductionOrderCreate() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="phap_nhan_sx_id" label="Pháp nhân">
+                  <Form.Item name="phap_nhan_id" label="Pháp nhân">
                     <Select
                       showSearch allowClear placeholder="Chọn pháp nhân..."
                       filterOption={(input, option) =>

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -19,6 +19,7 @@ class GoodsReceipt(Base):
     # MUA_HANG | TRA_SX | DIEU_CHINH | CHUYEN_KHO
     tong_gia_tri: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")  # nhap | da_duyet
+    bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -65,6 +66,7 @@ class MaterialIssue(Base):
     production_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=False)
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")  # nhap | da_xuat | huy
+    bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -111,6 +113,7 @@ class ProductionOutput(Base):
     so_luong_loi: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0)
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
     don_gia_xuat_xuong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -146,6 +149,7 @@ class DeliveryOrder(Base):
     # nhap | da_xuat | da_giao | huy
     trang_thai_cong_no: Mapped[str | None] = mapped_column(String(20), default="chua_thu")
     # chua_thu | da_thu_mot_phan | da_thu_du
+    bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -202,6 +206,7 @@ class PhieuChuyenKho(Base):
     ngay: Mapped[date] = mapped_column(Date, nullable=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")
+    bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
@@ -243,6 +248,7 @@ class StockAdjustment(Base):
     ly_do: Mapped[str | None] = mapped_column(String(100))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")
+    bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 

@@ -1,6 +1,12 @@
 # Kế hoạch hoàn thiện ERP Nam Phương
 
-> Cập nhật: 2026-04-30 | Trạng thái tổng thể: ~90% hoàn thiện
+> Cập nhật: 2026-05-07 | Trạng thái tổng thể: ~96% hoàn thiện
+
+---
+
+## Checklist bổ sung
+
+- [ ] Import/export toàn ERP: xem chi tiết tại `docs/IMPORT_EXPORT_CHECKLIST.md`
 
 ---
 
@@ -95,6 +101,31 @@
 
 ---
 
+## Module mới thêm 2026-05-07
+
+### M1. Danh mục tài khoản ngân hàng ✅
+- **Backend:** model `BankAccount` (master.py) + router `/api/bank-accounts`
+- **Frontend:** `pages/danhmuc/BankAccountList.tsx` + route `/master/bank-accounts`
+- **Menu:** Danh mục → Tài khoản ngân hàng
+
+### M2. Sổ quỹ tiền mặt ✅
+- **Backend:** endpoint `GET /api/accounting/cash-book?tu_ngay&den_ngay`
+- **Frontend:** `pages/accounting/CashBookPage.tsx` + route `/accounting/cash-book`
+- **Menu:** Kế toán → Sổ quỹ / Ngân hàng → Sổ quỹ tiền mặt
+
+### M3. Sổ ngân hàng ✅
+- **Backend:** endpoint `GET /api/accounting/bank-ledger?tu_ngay&den_ngay&so_tai_khoan`
+- **Frontend:** `pages/accounting/BankLedgerPage.tsx` + route `/accounting/bank-ledger`
+- **Menu:** Kế toán → Sổ quỹ / Ngân hàng → Sổ ngân hàng
+
+### M4. Công cụ dụng cụ (CCDC) ✅
+- **Backend:** models `NhomCCDC`, `CongCuDungCu`, `PhieuXuatCCDC`, `PhieuXuatCCDCItem` (ccdc.py)
+- **Router:** `/api/ccdc` — CRUD nhóm + CCDC + phiếu xuất (tạo/duyệt/hủy)
+- **Frontend:** `pages/accounting/CCDCListPage.tsx` (3 tab: Danh mục / Phiếu xuất / Nhóm)
+- **Menu:** Kế toán → Công cụ dụng cụ (CCDC)
+
+---
+
 ## Tóm tắt tiến độ
 
 | Nhóm | Số task | Hoàn thành |
@@ -103,7 +134,8 @@
 | Tính năng thiếu | 8 | 6/8 |
 | Cải thiện UX | 4 | 4/4 ✅ |
 | Kỹ thuật / production | 4 | 4/4 ✅ |
-| **Tổng** | **20** | **15/20** |
+| Module mới (ngân hàng, quỹ, CCDC) | 4 | 4/4 ✅ |
+| **Tổng** | **24** | **22/24** |
 
 ---
 

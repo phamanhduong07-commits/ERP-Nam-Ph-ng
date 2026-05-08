@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
   Row, Select, Space, Typography, message,
@@ -16,9 +16,14 @@ const { Title } = Typography
 
 export default function CashReceiptForm() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
+  const [searchParams] = useSearchParams()
   const [form] = Form.useForm()
   const [selectedCustomer, setSelectedCustomer] = useState<number | undefined>()
   const [selectedInvoice, setSelectedInvoice] = useState<SalesInvoiceListItem | undefined>()
+  const queryCustomerId = Number(searchParams.get('customer_id'))
+  const queryInvoiceId = Number(searchParams.get('invoice_id'))
+  const queryAmount = Number(searchParams.get('amount'))
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ['customers-all'],
@@ -38,10 +43,36 @@ export default function CashReceiptForm() {
   })
   const unpaidInvoices: SalesInvoiceListItem[] = invoiceData ?? []
 
+  useEffect(() => {
+    if (Number.isInteger(queryCustomerId) && queryCustomerId > 0) {
+      setSelectedCustomer(queryCustomerId)
+      form.setFieldsValue({ customer_id: queryCustomerId })
+    }
+  }, [form, queryCustomerId])
+
+  useEffect(() => {
+    if (Number.isInteger(queryInvoiceId) && queryInvoiceId > 0 && unpaidInvoices.length > 0) {
+      const inv = unpaidInvoices.find(i => i.id === queryInvoiceId)
+      if (inv) {
+        setSelectedInvoice(inv)
+        form.setFieldsValue({
+          sales_invoice_id: inv.id,
+          so_tien: Number.isFinite(queryAmount) && queryAmount > 0 ? queryAmount : inv.con_lai,
+        })
+      }
+    } else if (Number.isFinite(queryAmount) && queryAmount > 0) {
+      form.setFieldsValue({ so_tien: queryAmount })
+    }
+  }, [form, queryAmount, queryInvoiceId, unpaidInvoices])
+
   const createMut = useMutation({
     mutationFn: (data: CashReceiptCreate) => receiptApi.create(data),
     onSuccess: r => {
       message.success('Tạo phiếu thu thành công')
+      qc.invalidateQueries({ queryKey: ['receipts'] })
+      qc.invalidateQueries({ queryKey: ['ar-ledger-entries'] })
+      qc.invalidateQueries({ queryKey: ['ar-ledger'] })
+      qc.invalidateQueries({ queryKey: ['ar-aging'] })
       navigate(`/accounting/receipts/${r.id}`)
     },
     onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi tạo phiếu thu'),
@@ -84,7 +115,7 @@ export default function CashReceiptForm() {
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ ngay_phieu: dayjs(), hinh_thuc_tt: 'CK' }}
+        initialValues={{ ngay_phieu: dayjs(), hinh_thuc_tt: 'chuyen_khoan' }}
         onFinish={onFinish}
       >
         <Card size="small" title="Thông tin" style={{ marginBottom: 16 }}>

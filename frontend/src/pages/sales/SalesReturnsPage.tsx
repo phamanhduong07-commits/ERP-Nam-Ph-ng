@@ -1,15 +1,16 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Table, Button, Input, Select, DatePicker, Space, Tag, Typography,
   Card, Row, Col, message, Modal, Descriptions, List, Divider,
 } from 'antd'
-import { PlusOutlined, EyeOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
+import { FileExcelOutlined, PlusOutlined, EyeOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
-import { salesReturnsApi, type SalesReturnListItem, SALES_RETURN_TRANG_THAI_LABELS, SALES_RETURN_TRANG_THAI_COLORS } from '../api/salesReturns'
-import { customersApi } from '../api/customers'
+import { salesReturnsApi, type SalesReturnListItem, SALES_RETURN_TRANG_THAI_LABELS, SALES_RETURN_TRANG_THAI_COLORS } from '../../api/salesReturns'
+import { customersApi } from '../../api/customers'
+import { exportToExcel } from '../../utils/exportUtils'
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -17,6 +18,7 @@ const { confirm } = Modal
 
 export default function SalesReturnsPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [trangThai, setTrangThai] = useState<string>('')
   const [customerId, setCustomerId] = useState<number | null>(null)
@@ -26,7 +28,7 @@ export default function SalesReturnsPage() {
 
   const { data: customers } = useQuery({
     queryKey: ['customers-all'],
-    queryFn: () => customersApi.list({ page_size: 1000 }).then(r => r.data.items),
+    queryFn: () => customersApi.list({ page_size: 100 }).then(r => r.data.items),
   })
 
   const { data: returnsData, isLoading, refetch } = useQuery({
@@ -41,12 +43,15 @@ export default function SalesReturnsPage() {
       page_size: pageSize,
     }).then(r => r.data),
   })
+  const returnRows = returnsData?.items || (returnsData as { data?: SalesReturnListItem[] } | undefined)?.data || []
 
   const handleApprove = async (record: SalesReturnListItem) => {
     try {
       await salesReturnsApi.approve(record.id)
       message.success('Đã duyệt phiếu trả hàng')
       refetch()
+      queryClient.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
+      queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
     } catch (err: any) {
       message.error(err.response?.data?.detail || 'Có lỗi xảy ra')
     }
@@ -64,6 +69,8 @@ export default function SalesReturnsPage() {
           await salesReturnsApi.cancel(record.id)
           message.success('Đã hủy phiếu trả hàng')
           refetch()
+          queryClient.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
+          queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
         } catch (err: any) {
           message.error(err.response?.data?.detail || 'Có lỗi xảy ra')
         }
@@ -122,6 +129,13 @@ export default function SalesReturnsPage() {
       render: (v) => new Intl.NumberFormat('vi-VN').format(v) + 'đ',
     },
     {
+      title: 'SL trả',
+      dataIndex: 'tong_so_luong_tra',
+      width: 90,
+      align: 'right',
+      render: (v: number) => new Intl.NumberFormat('vi-VN').format(v || 0),
+    },
+    {
       title: 'Thao tác',
       width: 120,
       render: (_, r) => (
@@ -152,13 +166,36 @@ export default function SalesReturnsPage() {
     },
   ]
 
+  const handleExportExcel = () => {
+    exportToExcel(`TraHangBan_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Trả hàng bán',
+      headers: ['Số phiếu trả', 'Ngày trả', 'Đơn hàng', 'Khách hàng', 'Lý do trả', 'Trạng thái', 'SL trả', 'Tổng tiền (đ)'],
+      rows: returnRows.map((r: SalesReturnListItem) => [
+        r.so_phieu_tra,
+        dayjs(r.ngay_tra).format('DD/MM/YYYY'),
+        r.so_don_ban || '',
+        r.ten_khach_hang,
+        r.ly_do_tra || '',
+        SALES_RETURN_TRANG_THAI_LABELS[r.trang_thai] || r.trang_thai,
+        r.tong_so_luong_tra || 0,
+        r.tong_tien_tra,
+      ]),
+      colWidths: [18, 12, 14, 25, 25, 12, 10, 16],
+    }])
+  }
+
   return (
     <div>
       <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
         <Title level={4} style={{ margin: 0 }}>Quản lý trả lại hàng bán</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/sales/returns/create')}>
-          Tạo phiếu trả hàng
-        </Button>
+        <Space>
+          <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
+            Xuất Excel
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/sales/returns/create')}>
+            Tạo phiếu trả hàng
+          </Button>
+        </Space>
       </Space>
 
       <Card style={{ marginBottom: 16 }}>
@@ -227,7 +264,7 @@ export default function SalesReturnsPage() {
       <Card>
         <Table
           columns={columns}
-          dataSource={returnsData?.items || []}
+          dataSource={returnRows}
           rowKey="id"
           loading={isLoading}
           pagination={{

@@ -30,6 +30,7 @@ export interface TonKho {
   product_id: number | null
   ten_hang: string
   don_vi: string
+  tinh_trang_hang?: string
   ton_luong: number
   don_gia_binh_quan: number
   gia_tri_ton: number
@@ -126,10 +127,14 @@ export interface GiaoDich {
   id: number
   ngay_giao_dich: string | null
   warehouse_id: number
+  ten_kho: string
   paper_material_id: number | null
   other_material_id: number | null
   product_id: number | null
+  ma_hang: string
+  ten_hang: string
   loai_giao_dich: string
+  tinh_trang_hang?: string | null
   so_luong: number
   don_gia: number
   gia_tri: number
@@ -253,11 +258,18 @@ export interface CreateProductionOutputPayload {
 // ── DeliveryOrder (Phiếu xuất giao hàng) ─────────────────────────────────────
 export interface DeliveryOrderItem {
   id: number
+  production_order_id?: number | null
+  so_lenh?: string | null
   sales_order_item_id: number | null
   product_id: number | null
   ten_hang: string
   so_luong: number
   dvt: string
+  dien_tich?: number
+  trong_luong?: number
+  the_tich?: number
+  don_gia?: number
+  thanh_tien?: number
   ghi_chu: string | null
 }
 
@@ -274,6 +286,10 @@ export interface DeliveryOrder {
   dia_chi_giao: string | null
   nguoi_nhan: string | null
   xe_van_chuyen: string | null
+  tien_van_chuyen?: number
+  tong_tien_hang?: number
+  tong_thanh_toan?: number
+  trang_thai_cong_no?: string
   trang_thai: string
   ghi_chu: string | null
   created_at: string | null
@@ -366,6 +382,9 @@ export interface TonKhoTPRow {
   sl_ke_hoach: number
   tong_nhap: number
   tong_xuat: number
+  tong_tra?: number
+  tong_tra_da_duyet?: number
+  tinh_trang_hang?: string
   ton_kho: number
   dien_tich: number
   trong_luong: number
@@ -465,6 +484,7 @@ export const warehouseApi = {
   getGoodsReceipt: (id: number) => client.get<GoodsReceipt>(`/warehouse/goods-receipts/${id}`),
   createGoodsReceipt: (data: CreateGoodsReceiptPayload) => client.post<GoodsReceipt>('/warehouse/goods-receipts', data),
   deleteGoodsReceipt: (id: number) => client.delete(`/warehouse/goods-receipts/${id}`),
+  approveGoodsReceipt: (id: number) => client.patch(`/warehouse/goods-receipts/${id}/approve`),
 
   // Phiếu xuất NVL (MaterialIssue — linked to LSX)
   listMaterialIssues: (params?: { warehouse_id?: number; production_order_id?: number; tu_ngay?: string; den_ngay?: string }) =>
@@ -495,4 +515,12 @@ export const warehouseApi = {
     client.post<{ id: number; ma_kho: string; ten_kho: string; created: boolean }[]>(
       `/warehouse/phan-xuong/${pxId}/init-warehouses`
     ),
+
+  importInventory: (warehouseId: number, file: File, commit: boolean) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return client.post(`/warehouse/inventory/import?warehouse_id=${warehouseId}&commit=${commit}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
 }

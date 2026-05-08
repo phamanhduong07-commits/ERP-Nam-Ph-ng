@@ -62,6 +62,8 @@ export interface Quote {
   nguoi_duyet_id?: number | null
   phap_nhan_id?: number | null
   ten_phap_nhan?: string | null
+  phap_nhan_sx_id?: number | null
+  ten_phap_nhan_sx?: string | null
   phan_xuong_id?: number | null
   ten_phan_xuong?: string | null
   nv_theo_doi_id?: number | null
@@ -107,6 +109,7 @@ export interface CreateQuotePayload {
   customer_id: number
   ngay_bao_gia: string
   phap_nhan_id?: number | null
+  phap_nhan_sx_id?: number | null
   phan_xuong_id?: number | null
   nv_phu_trach_id?: number | null
   nv_theo_doi_id?: number | null

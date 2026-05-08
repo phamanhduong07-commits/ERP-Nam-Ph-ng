@@ -24,6 +24,7 @@ class CustomerService:
                 Customer.ma_kh.ilike(like)
                 | Customer.ten_viet_tat.ilike(like)
                 | Customer.ten_don_vi.ilike(like)
+                | Customer.ma_so_thue.ilike(like)
             )
         total = q.count()
         items = q.order_by(Customer.ten_viet_tat).offset((page - 1) * page_size).limit(page_size).all()

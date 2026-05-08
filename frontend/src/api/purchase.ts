@@ -83,4 +83,11 @@ export const purchaseApi = {
     client.post<{ ok: boolean; trang_thai: string }>(`/purchase-orders/${id}/duyet`),
 
   delete: (id: number) => client.delete(`/purchase-orders/${id}`),
+  importPOs: (file: File, commit: boolean = false) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return client.post(`/purchase-orders/import?commit=${commit}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
 }

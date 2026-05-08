@@ -9,6 +9,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { paperMaterialsFullApi, type PaperMaterial, type PaperMaterialCreate } from '../../api/paperMaterials'
 import { materialGroupsApi } from '../../api/materialGroups'
 import { suppliersApi } from '../../api/suppliers'
+import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title } = Typography
 
@@ -190,6 +191,11 @@ export default function PaperMaterialList() {
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm nguyên liệu
               </Button>
+              <ImportExcelButton
+                endpoint="/paper-materials"
+                templateFilename="mau_import_nguyen_lieu_giay.xlsx"
+                onImported={() => queryClient.invalidateQueries({ queryKey: ['paper-materials'] })}
+              />
             </Space>
           </Col>
         </Row>

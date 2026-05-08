@@ -131,6 +131,7 @@ export default function OrderCreate() {
         customer_id: values.customer_id,
         ngay_don: dayjs(values.ngay_don).format('YYYY-MM-DD'),
         phap_nhan_id: values.phap_nhan_id ?? null,
+        phap_nhan_sx_id: values.phap_nhan_sx_id ?? null,
         phan_xuong_id: values.phan_xuong_id ?? null,
         nv_kinh_doanh_id: values.nv_kinh_doanh_id ?? null,
         ngay_giao_hang: values.ngay_giao_hang
@@ -333,9 +334,9 @@ export default function OrderCreate() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="phap_nhan_id" label="Pháp nhân xuất hoá đơn">
+                  <Form.Item name="phap_nhan_id" label="Pháp nhân">
                     <Select
-                      showSearch allowClear placeholder="Chọn pháp nhân nhận đơn..."
+                      showSearch allowClear placeholder="Chọn pháp nhân..."
                       filterOption={(input, option) =>
                         String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                       }
@@ -347,7 +348,7 @@ export default function OrderCreate() {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="phan_xuong_id" label="Xưởng sản xuất">
+                  <Form.Item name="phan_xuong_id" label="Nơi sản xuất">
                     <Select
                       allowClear placeholder="Chọn xưởng sản xuất..."
                       options={phanXuongList

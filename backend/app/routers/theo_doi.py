@@ -288,4 +288,12 @@ def list_phan_xuong(
     _: User = Depends(get_current_user),
 ):
     rows = db.query(PhanXuong).filter(PhanXuong.trang_thai == True).order_by(PhanXuong.ma_xuong).all()  # noqa: E712
-    return [{"id": r.id, "ma_xuong": r.ma_xuong, "ten_xuong": r.ten_xuong} for r in rows]
+    return [
+        {
+            "id": r.id,
+            "ma_xuong": r.ma_xuong,
+            "ten_xuong": r.ten_xuong,
+            "phoi_tu_phan_xuong_id": r.phoi_tu_phan_xuong_id,
+        }
+        for r in rows
+    ]

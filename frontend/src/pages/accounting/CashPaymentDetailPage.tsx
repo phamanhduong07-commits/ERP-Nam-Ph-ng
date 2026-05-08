@@ -3,10 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Descriptions, Modal, Space, Spin, Tag, Typography, message,
 } from 'antd'
-import { ArrowLeftOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, PrinterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { fmtVND } from '../../utils/exportUtils'
+import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
+import { fmtVND, printDocument } from '../../utils/exportUtils'
 import { paymentApi, CashPayment, TRANG_THAI_PHIEU_CHI, HINH_THUC_TT } from '../../api/accounting'
+import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title } = Typography
 
@@ -45,9 +47,36 @@ export default function CashPaymentDetailPage() {
   if (isLoading) return <Spin style={{ margin: 40 }} />
   if (!payment) return <div style={{ padding: 24 }}>Không tìm thấy phiếu chi</div>
 
+  const companyInfo = usePhapNhanForPrint()
   const status = TRANG_THAI_PHIEU_CHI[payment.trang_thai]
   const canApprove = ['cho_chot', 'da_chot'].includes(payment.trang_thai)
   const canCancel = payment.trang_thai !== 'huy'
+
+  const handlePrint = () => {
+    printDocument({
+      title: `Phiếu chi ${payment.so_phieu}`,
+      subtitle: 'PHIẾU CHI',
+      logoUrl: namPhuongLogo,
+      companyInfo,
+      documentNumber: payment.so_phieu || '—',
+      documentDate: dayjs(payment.ngay_phieu).format('DD/MM/YYYY'),
+      status: status?.label ?? payment.trang_thai,
+      fields: [
+        { label: 'Hình thức TT', value: HINH_THUC_TT[payment.hinh_thuc_tt] ?? payment.hinh_thuc_tt },
+        { label: 'Số tiền', value: fmtVND(payment.so_tien) },
+        { label: 'Số tài khoản', value: payment.so_tai_khoan ?? '—' },
+        { label: 'Số tham chiếu', value: payment.so_tham_chieu ?? '—' },
+        { label: 'TK Nợ', value: payment.tk_no ?? '—' },
+        { label: 'TK Có', value: payment.tk_co ?? '—' },
+      ],
+      bodyHtml: `<div style="margin-bottom: 14px;"><strong>Diễn giải:</strong><div style="margin-top: 6px; font-size: 12px;">${payment.dien_giai ? payment.dien_giai.replace(/\n/g, '<br/>') : '—'}</div></div>
+        ${payment.purchase_invoice_id ? `<div style="font-size: 12px; color: #1b168e;">Hóa đơn mua liên kết: ${payment.purchase_invoice_id}</div>` : ''}`,
+      footerHtml: `
+        <div><strong>Ngày tạo:</strong> ${dayjs(payment.created_at).format('DD/MM/YYYY HH:mm')}</div>
+        ${payment.ngay_duyet ? `<div><strong>Ngày duyệt:</strong> ${dayjs(payment.ngay_duyet).format('DD/MM/YYYY HH:mm')}</div>` : ''}
+      `,
+    })
+  }
 
   return (
     <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
@@ -84,6 +113,12 @@ export default function CashPaymentDetailPage() {
               Hủy
             </Button>
           )}
+          <Button
+            icon={<PrinterOutlined />}
+            onClick={handlePrint}
+          >
+            In/PDF phiếu chi
+          </Button>
         </Space>
       </div>
 

@@ -472,7 +472,7 @@ def ton_kho_lsx(
             joinedload(ProductionOrder.items),
             joinedload(ProductionOrder.sales_order),
             joinedload(ProductionOrder.phan_xuong),
-            joinedload(ProductionOrder.phap_nhan_sx),
+            joinedload(ProductionOrder.phap_nhan),
         )
         .filter(ProductionOrder.id.in_(order_ids))
         .all()
@@ -547,7 +547,7 @@ def ton_kho_lsx(
                 ten_khach_hang = getattr(kh, "ten_viet_tat", None) or getattr(kh, "ten_kh", None)
 
         px = getattr(order, "phan_xuong", None)
-        pn = getattr(order, "phap_nhan_sx", None)
+        pn = getattr(order, "phap_nhan", None)
         result.append({
             "production_order_id": order_id,
             "so_lenh": order.so_lenh,
@@ -565,7 +565,7 @@ def ton_kho_lsx(
             "phan_xuong_id": order.phan_xuong_id,
             "ten_phan_xuong": px.ten_xuong if px else None,
             "cong_doan": px.cong_doan if px else None,
-            "phap_nhan_sx_id": order.phap_nhan_sx_id,
+            "phap_nhan_sx_id": order.phap_nhan_id,
             "ten_phap_nhan_sx": pn.ten_viet_tat or pn.ma_phap_nhan if pn else None,
         })
 

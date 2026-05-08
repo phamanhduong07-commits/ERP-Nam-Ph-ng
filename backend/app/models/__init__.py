@@ -2,7 +2,9 @@ from app.models.auth import Role, User, AuditLog
 from app.models.master import (
     PhanXuong, Warehouse, MaterialGroup, Supplier, Customer,
     PaperMaterial, OtherMaterial, CauTrucThongDung, Product, PhapNhan,
+    BankAccount,
 )
+from app.models.ccdc import NhomCCDC, CongCuDungCu, PhieuXuatCCDC, PhieuXuatCCDCItem
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.warehouse_doc import (
     GoodsReceipt, GoodsReceiptItem,
@@ -26,5 +28,6 @@ from app.models.billing import SalesInvoice
 from app.models.accounting import (
     ChartOfAccounts, JournalEntry, JournalEntryLine,
     PurchaseInvoice, CashReceipt, CashPayment,
-    DebtLedgerEntry, OpeningBalance,
+    DebtLedgerEntry, OpeningBalance, CustomerRefundVoucher,
 )
+from app.models.import_log import ImportLog

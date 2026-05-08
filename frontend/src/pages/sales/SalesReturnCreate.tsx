@@ -6,22 +6,20 @@ import {
   InputNumber, Typography, Row, Col, Divider, message, Empty, Spin,
   Alert,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons'
+import { DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import { customersApi } from '../../api/customers'
-import { salesOrdersApi } from '../../api/salesOrders'
 import { salesReturnsApi } from '../../api/salesReturns'
 import { deliveriesApi } from '../../api/deliveries'
 import { TINH_TRANG_HANG_LABELS } from '../../api/salesReturns'
-import type { SalesOrder } from '../../api/salesOrders'
+import type { DeliveryOrderItem } from '../../api/deliveries'
 
 const { Title, Text } = Typography
 
 interface ReturnLine {
   key: string
   sales_order_item_id: number
-  sales_order_item: SalesOrder['items'][0]
+  delivery_item: DeliveryOrderItem
   so_luong_tra: number
   don_gia_tra: number
   ly_do_tra: string
@@ -33,41 +31,38 @@ export default function SalesReturnCreate() {
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [lines, setLines] = useState<ReturnLine[]>([])
-  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null)
+  const [selectedDeliveryId, setSelectedDeliveryId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const { data: orders } = useQuery({
-    queryKey: ['sales-orders-approved'],
-    queryFn: () => salesOrdersApi.list({
-      trang_thai: 'da_duyet',
-      page_size: 1000
-    }).then(r => r.data.items),
-  })
-
-  const { data: selectedOrder, isLoading: orderLoading } = useQuery({
-    queryKey: ['sales-order', selectedOrderId],
-    queryFn: () => selectedOrderId ? salesOrdersApi.get(selectedOrderId).then(r => r.data) : null,
-    enabled: !!selectedOrderId,
-  })
-
   const { data: deliveryOrders } = useQuery({
-    queryKey: ['delivery-orders', selectedOrderId],
-    queryFn: () => {
-      if (!selectedOrderId) return []
-      return deliveriesApi.getBySalesOrder(selectedOrderId).then(r => r.data)
-    },
-    enabled: !!selectedOrderId,
+    queryKey: ['delivery-orders-for-return'],
+    queryFn: () => deliveriesApi.list().then(r => r.data),
   })
 
-  const addLine = (item: SalesOrder['items'][0]) => {
-    if (lines.find((l) => l.sales_order_item_id === item.id)) {
+  const { data: selectedDelivery, isLoading: deliveryLoading } = useQuery({
+    queryKey: ['delivery-order', selectedDeliveryId],
+    queryFn: () => selectedDeliveryId ? deliveriesApi.get(selectedDeliveryId).then(r => r.data) : null,
+    enabled: !!selectedDeliveryId,
+  })
+
+  const handleSelectDelivery = (deliveryId: number) => {
+    setSelectedDeliveryId(deliveryId)
+    setLines([])
+  }
+
+  const addLine = (item: DeliveryOrderItem) => {
+    if (!item.sales_order_item_id) {
+      message.warning('Dòng giao hàng này chưa gắn với đơn hàng bán')
+      return
+    }
+    if (lines.find((l) => l.key === String(item.id))) {
       message.warning('Sản phẩm đã có trong phiếu trả')
       return
     }
     setLines((prev) => [...prev, {
       key: String(item.id),
-      sales_order_item_id: item.id,
-      sales_order_item: item,
+      sales_order_item_id: item.sales_order_item_id!,
+      delivery_item: item,
       so_luong_tra: 1,
       don_gia_tra: item.don_gia,
       ly_do_tra: '',
@@ -87,28 +82,32 @@ export default function SalesReturnCreate() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      if (!selectedDelivery?.sales_order_id) {
+        message.error('Phiếu giao hàng chưa gắn với đơn hàng bán')
+        return
+      }
       if (lines.length === 0) {
         message.error('Vui lòng thêm ít nhất 1 sản phẩm trả lại')
         return
       }
 
-      // Validate quantities
       for (const line of lines) {
-        if (line.so_luong_tra > line.sales_order_item.so_luong) {
-          message.error(`Số lượng trả của ${line.sales_order_item.ten_hang} không được vượt quá ${line.sales_order_item.so_luong}`)
+        if (line.so_luong_tra > line.delivery_item.so_luong) {
+          message.error(`Số lượng trả của ${line.delivery_item.ten_hang} không được vượt quá số lượng đã giao (${line.delivery_item.so_luong})`)
           return
         }
       }
 
       setSaving(true)
       const payload = {
-        sales_order_id: selectedOrderId!,
-        delivery_order_id: values.delivery_order_id || undefined,
-        customer_id: selectedOrder!.customer_id,
+        sales_order_id: selectedDelivery.sales_order_id,
+        delivery_order_id: selectedDelivery.id,
+        customer_id: selectedDelivery.customer_id,
         ngay_tra: dayjs(values.ngay_tra).format('YYYY-MM-DD'),
         ly_do_tra: values.ly_do_tra,
         ghi_chu: values.ghi_chu,
         items: lines.map((l) => ({
+          delivery_order_item_id: l.delivery_item.id,
           sales_order_item_id: l.sales_order_item_id,
           so_luong_tra: l.so_luong_tra,
           don_gia_tra: l.don_gia_tra,
@@ -119,7 +118,11 @@ export default function SalesReturnCreate() {
       }
       const res = await salesReturnsApi.create(payload)
       message.success(`Tạo phiếu trả hàng ${res.data.so_phieu_tra} thành công`)
-      navigate(`/sales/returns/${res.data.id}`)
+      if (res.data?.id) {
+        navigate(`/sales/returns/${res.data.id}`)
+      } else {
+        navigate('/sales/returns')
+      }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       if (msg) message.error(msg)
@@ -131,14 +134,14 @@ export default function SalesReturnCreate() {
   const columns: ColumnsType<ReturnLine> = [
     {
       title: 'Tên hàng',
-      dataIndex: ['sales_order_item', 'ten_hang'],
+      dataIndex: ['delivery_item', 'ten_hang'],
       ellipsis: true,
     },
     {
-      title: 'SL đã bán',
+      title: 'SL đã giao',
       width: 100,
       align: 'center',
-      render: (_, r) => r.sales_order_item.so_luong,
+      render: (_, r) => r.delivery_item.so_luong,
     },
     {
       title: 'SL trả',
@@ -146,7 +149,7 @@ export default function SalesReturnCreate() {
       render: (_, r) => (
         <InputNumber
           min={1}
-          max={r.sales_order_item.so_luong}
+          max={r.delivery_item.so_luong}
           value={r.so_luong_tra}
           onChange={(v) => updateLine(r.key, 'so_luong_tra', v || 1)}
           style={{ width: 80 }}
@@ -225,27 +228,26 @@ export default function SalesReturnCreate() {
       </Space>
 
       <Row gutter={16}>
-        {/* Thông tin phiếu trả */}
         <Col xs={24} lg={16}>
           <Card title="Thông tin phiếu trả" style={{ marginBottom: 16 }}>
             <Form form={form} layout="vertical">
               <Row gutter={16}>
                 <Col span={12}>
                   <Form.Item
-                    name="sales_order_id"
-                    label="Đơn hàng"
-                    rules={[{ required: true, message: 'Chọn đơn hàng' }]}
+                    name="delivery_order_id"
+                    label="Phiếu giao hàng"
+                    rules={[{ required: true, message: 'Chọn phiếu giao hàng' }]}
                   >
                     <Select
                       showSearch
-                      placeholder="Chọn đơn hàng đã duyệt..."
+                      placeholder="Chọn phiếu giao hàng..."
                       optionFilterProp="children"
-                      onChange={(v) => setSelectedOrderId(v)}
-                      loading={!orders}
+                      onChange={handleSelectDelivery}
+                      loading={!deliveryOrders}
                     >
-                      {orders?.map((order) => (
-                        <Select.Option key={order.id} value={order.id}>
-                          {order.so_don} - {order.ten_khach_hang} ({dayjs(order.ngay_don).format('DD/MM/YYYY')})
+                      {deliveryOrders?.filter((delivery) => delivery.sales_order_id).map((delivery) => (
+                        <Select.Option key={delivery.id} value={delivery.id}>
+                          {delivery.so_phieu} - {delivery.so_don || 'Chưa có số đơn'} - {delivery.ten_khach || ''} ({dayjs(delivery.ngay_xuat).format('DD/MM/YYYY')})
                         </Select.Option>
                       ))}
                     </Select>
@@ -270,23 +272,6 @@ export default function SalesReturnCreate() {
                     <Input placeholder="Lý do trả hàng..." />
                   </Form.Item>
                 </Col>
-                <Col span={12}>
-                  <Form.Item name="delivery_order_id" label="Phiếu xuất kho (tùy chọn)">
-                    <Select
-                      showSearch
-                      placeholder="Chọn phiếu xuất kho cụ thể..."
-                      optionFilterProp="children"
-                      allowClear
-                      disabled={!selectedOrderId}
-                    >
-                      {deliveryOrders?.map((delivery) => (
-                        <Select.Option key={delivery.id} value={delivery.id}>
-                          {delivery.so_phieu} - {dayjs(delivery.ngay_xuat).format('DD/MM/YYYY')}
-                        </Select.Option>
-                      ))}
-                    </Select>
-                  </Form.Item>
-                </Col>
                 <Col span={24}>
                   <Form.Item name="ghi_chu" label="Ghi chú">
                     <Input.TextArea rows={2} placeholder="Ghi chú..." />
@@ -296,11 +281,10 @@ export default function SalesReturnCreate() {
             </Form>
           </Card>
 
-          {/* Chi tiết trả hàng */}
           <Card title={`Chi tiết trả hàng (${lines.length} dòng)`}>
-            {selectedOrder && (
+            {selectedDelivery && (
               <Alert
-                message={`Đơn hàng: ${selectedOrder.so_don} - Khách hàng: ${selectedOrder.customer?.ten_viet_tat}`}
+                message={`Phiếu giao hàng: ${selectedDelivery.so_phieu} - Đơn hàng: ${selectedDelivery.so_don || ''} - Khách hàng: ${selectedDelivery.ten_khach || ''}`}
                 type="info"
                 style={{ marginBottom: 16 }}
               />
@@ -344,29 +328,32 @@ export default function SalesReturnCreate() {
           </Card>
         </Col>
 
-        {/* Panel chọn sản phẩm từ đơn hàng */}
         <Col xs={24} lg={8}>
-          <Card title="Chọn sản phẩm từ đơn hàng" style={{ position: 'sticky', top: 24 }}>
-            {selectedOrderId ? (
-              orderLoading ? (
+          <Card title="Chọn sản phẩm từ phiếu giao hàng" style={{ position: 'sticky', top: 24 }}>
+            {selectedDeliveryId ? (
+              deliveryLoading ? (
                 <Spin />
-              ) : selectedOrder ? (
+              ) : selectedDelivery ? (
                 <div>
-                  <Text strong>Sản phẩm trong đơn {selectedOrder.so_don}:</Text>
+                  <Text strong>Sản phẩm trong phiếu {selectedDelivery.so_phieu}:</Text>
                   <div style={{ maxHeight: 500, overflowY: 'auto', marginTop: 8 }}>
-                    {selectedOrder.items.map((item) => (
+                    {selectedDelivery.items.map((item) => (
                       <Card
                         key={item.id}
                         size="small"
-                        hoverable
+                        hoverable={!!item.sales_order_item_id}
                         onClick={() => addLine(item)}
-                        style={{ marginBottom: 6, cursor: 'pointer' }}
+                        style={{
+                          marginBottom: 6,
+                          cursor: item.sales_order_item_id ? 'pointer' : 'not-allowed',
+                          opacity: item.sales_order_item_id ? 1 : 0.55,
+                        }}
                       >
                         <Text strong style={{ fontSize: 12 }}>{item.ten_hang}</Text>
                         <br />
                         <Space size={4}>
                           <Text type="secondary" style={{ fontSize: 11 }}>
-                            SL: {item.so_luong} | Giá: {new Intl.NumberFormat('vi-VN').format(item.don_gia)}đ
+                            SL giao: {item.so_luong} {item.dvt} | Giá: {new Intl.NumberFormat('vi-VN').format(item.don_gia)}đ
                           </Text>
                         </Space>
                       </Card>
@@ -374,10 +361,10 @@ export default function SalesReturnCreate() {
                   </div>
                 </div>
               ) : (
-                <Empty description="Không tìm thấy đơn hàng" />
+                <Empty description="Không tìm thấy phiếu giao hàng" />
               )
             ) : (
-              <Empty description="Chọn đơn hàng để xem sản phẩm" />
+              <Empty description="Chọn phiếu giao hàng để xem sản phẩm" />
             )}
           </Card>
         </Col>

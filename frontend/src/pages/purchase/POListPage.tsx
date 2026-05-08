@@ -8,7 +8,9 @@ import {
 import {
   PlusOutlined, DeleteOutlined, CheckCircleOutlined, ShopOutlined, MinusCircleOutlined,
   FileExcelOutlined, FilePdfOutlined, FileTextOutlined,
+  UploadOutlined,
 } from '@ant-design/icons'
+import ImportExcelDialog from '../../components/ImportExcelDialog'
 import dayjs from 'dayjs'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import {
@@ -32,6 +34,7 @@ export default function POListPage() {
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
+  const [importVisible, setImportVisible] = useState(false)
 
   const { data: suppliers = [] } = useQuery({
     queryKey: ['suppliers-all'],
@@ -250,6 +253,12 @@ export default function POListPage() {
             <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true) }}>
               Tạo đơn mua
             </Button>
+            <Button
+              icon={<UploadOutlined />}
+              onClick={() => setImportVisible(true)}
+            >
+              Import
+            </Button>
           </Space>
         </Col>
       </Row>
@@ -406,6 +415,15 @@ export default function POListPage() {
           </Form.List>
         </Form>
       </Drawer>
+
+      <ImportExcelDialog
+        title="Import đơn mua hàng từ Excel"
+        visible={importVisible}
+        onCancel={() => setImportVisible(false)}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ['purchase-orders'] })}
+        importFn={(file, commit) => purchaseApi.importPOs(file, commit)}
+        templateUrl="/api/purchase-orders/import-template"
+      />
     </div>
   )
 }

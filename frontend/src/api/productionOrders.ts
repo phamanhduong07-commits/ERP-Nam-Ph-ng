@@ -16,7 +16,10 @@ export interface ProductionOrderItem {
     so_lop: number
     dvt: string
     gia_ban: number
+    dai_phoi: number | null
+    rong_phoi: number | null
   } | null
+  cong_doan: string | null
   so_luong_ke_hoach: number
   so_luong_hoan_thanh: number
   dvt: string
@@ -53,8 +56,8 @@ export interface ProductionOrder {
   so_don: string | null
   ten_khach_hang: string | null
   ma_khach_hang: string | null
-  phap_nhan_sx_id: number | null
-  ten_phap_nhan_sx: string | null
+  phap_nhan_id: number | null
+  ten_phap_nhan: string | null
   kho_sx_id: number | null
   ten_kho_sx: string | null
   phan_xuong_id: number | null
@@ -67,6 +70,7 @@ export interface ProductionOrder {
   ngay_bat_dau_thuc_te: string | null
   ngay_hoan_thanh_thuc_te: string | null
   ghi_chu: string | null
+  so_po_kh: string | null
   items: ProductionOrderItem[]
   created_at: string
   updated_at: string
@@ -80,7 +84,7 @@ export interface ProductionOrderListItem {
   so_don: string | null
   ten_khach_hang: string | null
   ten_hang: string | null       // mã hàng / tên hàng (item đầu tiên)
-  ten_phap_nhan_sx: string | null
+  ten_phap_nhan: string | null
   ten_kho_sx: string | null
   phan_xuong_id: number | null
   gia_ban_muc_tieu: number | null
@@ -118,7 +122,7 @@ export interface CreateProductionItemPayload {
 export interface CreateProductionOrderPayload {
   ngay_lenh: string
   sales_order_id?: number
-  phap_nhan_sx_id?: number | null
+  phap_nhan_id?: number | null
   phan_xuong_id?: number | null
   kho_sx_id?: number | null
   ngay_bat_dau_ke_hoach?: string
@@ -217,7 +221,7 @@ export const productionOrdersApi = {
     opts?: {
       ngay_lenh?: string
       ngay_hoan_thanh_ke_hoach?: string
-      phap_nhan_sx_id?: number | null
+      phap_nhan_id?: number | null
       phan_xuong_id?: number | null
       ghi_chu?: string
     },

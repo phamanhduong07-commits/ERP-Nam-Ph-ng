@@ -5,12 +5,14 @@ import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
   Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message, Divider,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, CarOutlined, MinusCircleOutlined, FileTextOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, CarOutlined, MinusCircleOutlined, FileTextOutlined, PrinterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateDeliveryPayload, DeliveryOrder } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { salesOrdersApi } from '../../api/salesOrders'
 import { billingApi } from '../../api/billing'
+import { printDocument, buildHtmlTable } from '../../utils/exportUtils'
+import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
 
@@ -22,6 +24,7 @@ const TRANG_THAI_DO: Record<string, { label: string; color: string }> = {
 }
 
 export default function DeliveryPage() {
+  const companyInfo = usePhapNhanForPrint()
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -39,7 +42,7 @@ export default function DeliveryPage() {
 
   const { data: soPaged } = useQuery({
     queryKey: ['sales-orders-active'],
-    queryFn: () => salesOrdersApi.list({ page_size: 500 }).then(r => r.data),
+    queryFn: () => salesOrdersApi.list({ page_size: 100 }).then(r => r.data),
     staleTime: 60_000,
   })
   const soList = (soPaged as any)?.items ?? []
@@ -118,6 +121,38 @@ export default function DeliveryPage() {
     form.setFieldsValue({ items })
   }
 
+  const handlePrintDelivery = (r: DeliveryOrder) => {
+    const cols = [
+      { header: 'Tên hàng' },
+      { header: 'ĐVT', align: 'center' as const },
+      { header: 'Số lượng', align: 'right' as const },
+      { header: 'Ghi chú' },
+    ]
+    const rowData = (r.items || []).map((it: any) => [
+      it.ten_hang,
+      it.dvt,
+      Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
+      it.ghi_chu ?? '—',
+    ])
+    printDocument({
+      title: `Phiếu giao hàng ${r.so_phieu}`,
+      subtitle: 'PHIẾU GIAO HÀNG',
+      companyInfo,
+      documentNumber: r.so_phieu,
+      documentDate: r.ngay_xuat ?? '',
+      fields: [
+        { label: 'Đơn hàng', value: r.so_don ?? '—' },
+        { label: 'Khách hàng', value: r.ten_khach ?? '—' },
+        { label: 'Kho xuất', value: r.ten_kho ?? '—' },
+        { label: 'Người nhận', value: (r as any).nguoi_nhan ?? '—' },
+        { label: 'Xe vận chuyển', value: (r as any).xe_van_chuyen ?? '—' },
+        { label: 'Địa chỉ giao', value: (r as any).dia_chi_giao ?? '—' },
+      ],
+      bodyHtml: buildHtmlTable(cols, rowData),
+      footerHtml: (r as any).ghi_chu ? `Ghi chú: ${(r as any).ghi_chu}` : undefined,
+    })
+  }
+
   const handleSubmit = async () => {
     try {
       const v = await form.validateFields()
@@ -157,9 +192,10 @@ export default function DeliveryPage() {
         return <Tag color={tt.color}>{tt.label}</Tag>
       } },
     {
-      title: '', width: 90,
+      title: '', width: 100,
       render: (_: unknown, r: DeliveryOrder) => (
         <Space size={4}>
+          <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintDelivery(r)} />
           {r.trang_thai === 'da_giao' && (
             <Tooltip title="Tạo hóa đơn bán hàng">
               <Button

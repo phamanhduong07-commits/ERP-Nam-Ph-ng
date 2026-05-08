@@ -264,6 +264,7 @@ export default function QuoteForm() {
         ngay_bao_gia: dayjs(quoteData.ngay_bao_gia),
         ngay_het_han: quoteData.ngay_het_han ? dayjs(quoteData.ngay_het_han) : null,
         phap_nhan_id: quoteData.phap_nhan_id ?? null,
+        phap_nhan_sx_id: quoteData.phap_nhan_sx_id ?? null,
         phan_xuong_id: quoteData.phan_xuong_id ?? null,
         nv_phu_trach_id: quoteData.nv_phu_trach_id,
         nv_theo_doi_id: quoteData.nv_theo_doi_id ?? null,
@@ -533,6 +534,7 @@ export default function QuoteForm() {
         ngay_bao_gia: vals.ngay_bao_gia.format('YYYY-MM-DD'),
         ngay_het_han: vals.ngay_het_han?.format('YYYY-MM-DD') || null,
         phap_nhan_id: vals.phap_nhan_id || null,
+        phap_nhan_sx_id: vals.phap_nhan_sx_id || null,
         phan_xuong_id: vals.phan_xuong_id || null,
         nv_phu_trach_id: vals.nv_phu_trach_id || null,
         nv_theo_doi_id: vals.nv_theo_doi_id || null,
@@ -753,10 +755,20 @@ export default function QuoteForm() {
               <Form.Item label="Pháp nhân" name="phap_nhan_id">
                 <Select
                   allowClear
+                  showSearch
+                  optionFilterProp="label"
                   placeholder="Chọn pháp nhân..."
                   options={phapNhanList
                     .filter(p => p.trang_thai)
                     .map(p => ({ value: p.id, label: `[${p.ma_phap_nhan}] ${p.ten_viet_tat || p.ten_phap_nhan}` }))}
+                  notFoundContent={
+                    <div style={{ padding: '8px 4px', color: '#888', fontSize: 12 }}>
+                      Chưa có pháp nhân.{' '}
+                      <a href="/danhmuc/phap-nhan" target="_blank" rel="noreferrer">
+                        Thêm tại Danh mục → Pháp nhân
+                      </a>
+                    </div>
+                  }
                 />
               </Form.Item>
             </Col>

@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react'
+﻿import React, { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
   Modal, Popconfirm, Row, Select, Space, Table, Tabs, Tag, Typography,
 } from 'antd'
-import { DeleteOutlined, FileTextOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons'
+import { DeleteOutlined, FileExcelOutlined, FileTextOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { message } from 'antd'
@@ -26,7 +26,8 @@ import type { TonKhoTPRow } from '../../api/warehouse'
 import { usersApi } from '../../api/usersApi'
 import type { NhanVien } from '../../api/usersApi'
 import { billingApi } from '../../api/billing'
-import { printToPdf } from '../../utils/exportUtils'
+import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
+import { printDocument, exportToExcel } from '../../utils/exportUtils'
 
 const { Text, Title } = Typography
 
@@ -302,9 +303,9 @@ export default function GiaoHangPage() {
       message.success({
         content: (
           <Space>
-            <span>Tạo phiếu bán hàng thành công</span>
+            <span>Tạo phiếu giao hàng thành công</span>
             <Button size="small" icon={<PrinterOutlined />} onClick={() => printDelivery(delivery)}>
-              In phiếu xuất kho PDF
+              In phiếu giao hàng
             </Button>
           </Space>
         ),
@@ -392,20 +393,25 @@ export default function GiaoHangPage() {
       </tr>
     `).join('')
 
-    printToPdf(
-      `Phieu xuat kho ${delivery.so_phieu}`,
-      `
-        <h2>PHIẾU XUẤT KHO / PHIẾU BÁN HÀNG</h2>
-        <div class="meta">Số phiếu: <b>${delivery.so_phieu}</b> · Ngày xuất: ${fmtDate(delivery.ngay_xuat)}</div>
-        <div class="info-grid">
-          <div><div class="info-label">Khách hàng</div><div class="info-value">${delivery.ten_khach || ''}</div></div>
-          <div><div class="info-label">Kho xuất</div><div class="info-value">${delivery.ten_kho || ''}</div></div>
-          <div><div class="info-label">Số đơn</div><div class="info-value">${delivery.so_don || ''}</div></div>
-          <div><div class="info-label">Xe</div><div class="info-value">${delivery.bien_so || delivery.xe_van_chuyen || ''}</div></div>
-          <div><div class="info-label">Tài xế</div><div class="info-value">${delivery.ten_tai_xe || ''}</div></div>
-          <div><div class="info-label">Người nhận</div><div class="info-value">${delivery.nguoi_nhan || ''}</div></div>
-          <div style="grid-column:1/-1"><div class="info-label">Địa chỉ giao</div><div class="info-value">${delivery.dia_chi_giao || ''}</div></div>
-        </div>
+    printDocument({
+      title: `Phiếu giao hàng ${delivery.so_phieu}`,
+      subtitle: 'PHIẾU GIAO HÀNG',
+      logoUrl: namPhuongLogo,
+      companyName: 'CÔNG TY TNHH SX TM NAM PHƯƠNG',
+      documentNumber: delivery.so_phieu || '—',
+      documentDate: fmtDate(delivery.ngay_xuat),
+      fields: [
+        { label: 'Khách hàng', value: delivery.ten_khach || '—' },
+        { label: 'Số đơn', value: delivery.so_don || '—' },
+        { label: 'Số lệnh', value: delivery.items?.[0]?.so_lenh || '—' },
+        { label: 'Kho xuất', value: delivery.ten_kho || '—' },
+        { label: 'Ngày xuất', value: fmtDate(delivery.ngay_xuat) },
+        { label: 'Xe', value: delivery.bien_so || delivery.xe_van_chuyen || '—' },
+        { label: 'Tài xế', value: delivery.ten_tai_xe || '—' },
+        { label: 'Người nhận', value: delivery.nguoi_nhan || '—' },
+        { label: 'Địa chỉ giao', value: delivery.dia_chi_giao || '—' },
+      ],
+      bodyHtml: `
         <table>
           <thead><tr>
             <th>STT</th><th>LSX</th><th>Tên hàng</th><th>SL</th><th>DVT</th>
@@ -428,14 +434,13 @@ export default function GiaoHangPage() {
           <div class="summary-item"><div class="s-label">Tổng thanh toán</div><div class="s-value">${fmtMoney(delivery.tong_thanh_toan)}</div></div>
           <div class="summary-item"><div class="s-label">Tổng m³</div><div class="s-value">${fmtN(delivery.tong_the_tich)}</div></div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:40px;margin-top:28px;text-align:center">
-          <div><b>Người lập phiếu</b><div style="height:56px"></div></div>
-          <div><b>Thủ kho</b><div style="height:56px"></div></div>
-          <div><b>Người nhận hàng</b><div style="height:56px"></div></div>
+        <div class="signature-grid">
+          <div class="signature-box"><div class="sign-name">Người lập phiếu</div></div>
+          <div class="signature-box"><div class="sign-name">Thủ kho</div></div>
+          <div class="signature-box"><div class="sign-name">Người nhận hàng</div></div>
         </div>
       `,
-      true,
-    )
+    })
   }
 
   const ycCols: ColumnsType<YeuCauGiaoHang> = [
@@ -545,6 +550,46 @@ export default function GiaoHangPage() {
     { title: 'Xưởng', dataIndex: 'ten_phan_xuong', width: 100 },
     { title: 'Giai đoạn', dataIndex: 'stage_label', width: 110, render: (v: string, r: DonHangTheoDoiRow) => <Tag color={STAGE_COLORS[r.stage]}>{v}</Tag> },
   ]
+
+  const handleExportYC = () => {
+    exportToExcel(`yeu_cau_giao_hang_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Yêu cầu giao hàng',
+      headers: ['Số YC', 'Ngày YC', 'Ngày giao', 'Khách hàng', 'Kho TP', 'Địa chỉ giao', 'Tổng m²', 'Tổng kg', 'Trạng thái'],
+      rows: yeuCauList.map((r: YeuCauGiaoHang) => [
+        r.so_yeu_cau,
+        fmtDate(r.ngay_yeu_cau),
+        fmtDate(r.ngay_giao_yeu_cau),
+        r.ten_khach_hang ?? '',
+        r.ten_kho_tp ?? '',
+        r.dia_chi_giao ?? '',
+        r.tong_dien_tich,
+        r.tong_trong_luong,
+        YEU_CAU_TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
+      ]),
+      colWidths: [16, 12, 12, 24, 18, 28, 10, 10, 14],
+    }])
+  }
+
+  const handleExportDO = () => {
+    exportToExcel(`phieu_ban_hang_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Phiếu bán hàng',
+      headers: ['Số phiếu', 'Ngày xuất', 'Khách hàng', 'Biển số xe', 'Tài xế', 'm²', 'kg', 'm³', 'Tiền hàng (đ)', 'Tổng TT (đ)', 'Công nợ'],
+      rows: deliveryList.map((r: DeliveryOrder) => [
+        r.so_phieu,
+        fmtDate(r.ngay_xuat),
+        r.ten_khach ?? '',
+        r.bien_so ?? '',
+        r.ten_tai_xe ?? '',
+        r.tong_dien_tich,
+        r.tong_trong_luong,
+        r.tong_the_tich,
+        r.tong_tien_hang,
+        r.tong_thanh_toan,
+        CONG_NO_LABELS[r.trang_thai_cong_no] ?? r.trang_thai_cong_no,
+      ]),
+      colWidths: [16, 12, 24, 14, 18, 10, 10, 10, 16, 16, 16],
+    }])
+  }
 
   return (
     <div style={{ padding: 24 }}>
@@ -702,6 +747,11 @@ export default function GiaoHangPage() {
                         <Col>
                           <Button onClick={() => setYCFilter({ ten_khach: '', nv_theo_doi_id: undefined, so_lenh: '', so_don: '', tu_ngay: undefined, den_ngay: undefined })}>
                             Xoá lọc
+                          </Button>
+                        </Col>
+                        <Col>
+                          <Button icon={<FileExcelOutlined />} onClick={handleExportYC}>
+                            Xuất Excel
                           </Button>
                         </Col>
                       </Row>
@@ -865,6 +915,11 @@ export default function GiaoHangPage() {
                       <Col>
                         <Button onClick={() => setDOFilter({ ten_khach: '', nv_theo_doi_id: undefined, so_lenh: '', so_don: '', tu_ngay: undefined, den_ngay: undefined })}>
                           Xoá lọc
+                        </Button>
+                      </Col>
+                      <Col>
+                        <Button icon={<FileExcelOutlined />} onClick={handleExportDO}>
+                          Xuất Excel
                         </Button>
                       </Col>
                     </Row>
@@ -1178,3 +1233,4 @@ export default function GiaoHangPage() {
     </div>
   )
 }
+

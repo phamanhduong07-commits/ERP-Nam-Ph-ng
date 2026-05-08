@@ -1,6 +1,6 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -22,7 +22,7 @@ class ProductionOrder(Base):
 
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
-    phap_nhan_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     kho_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("warehouses.id"))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     nv_theo_doi_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
@@ -32,7 +32,7 @@ class ProductionOrder(Base):
     sales_order: Mapped["SalesOrder | None"] = relationship("SalesOrder", foreign_keys=[sales_order_id])  # type: ignore[name-defined]
     creator: Mapped["User | None"] = relationship("User", foreign_keys=[created_by])  # type: ignore[name-defined]
     nv_theo_doi: Mapped["User | None"] = relationship("User", foreign_keys=[nv_theo_doi_id])  # type: ignore[name-defined]
-    phap_nhan_sx: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_sx_id])  # type: ignore[name-defined]
+    phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])  # type: ignore[name-defined]
     kho_sx: Mapped["Warehouse | None"] = relationship("Warehouse", foreign_keys=[kho_sx_id])  # type: ignore[name-defined]
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
     items: Mapped[list["ProductionOrderItem"]] = relationship(
@@ -97,3 +97,25 @@ class ProductionOrderItem(Base):
     production_order: Mapped["ProductionOrder"] = relationship("ProductionOrder", back_populates="items")
     product: Mapped["Product | None"] = relationship("Product")  # type: ignore[name-defined]
     sales_order_item: Mapped["SalesOrderItem | None"] = relationship("SalesOrderItem")  # type: ignore[name-defined]
+
+
+class MayDungLog(Base):
+    """Ghi nhận mỗi lần tạm dừng máy trong ca sản xuất."""
+    __tablename__ = "may_dung_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    production_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_orders.id", ondelete="CASCADE"), nullable=False)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
+    ngay: Mapped[date] = mapped_column(Date, nullable=False)
+    gio_bat_dau_dung: Mapped[time] = mapped_column(Time, nullable=False)
+    gio_tiep_tuc: Mapped[time | None] = mapped_column(Time)
+    thoi_gian_dung: Mapped[int | None] = mapped_column(Integer)  # phút, tính khi có gio_tiep_tuc
+    # hong_may | het_nguyen_lieu | nghi_giai_lao | giao_ca | khac
+    ly_do: Mapped[str] = mapped_column(String(30), nullable=False, default="khac")
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    production_order: Mapped["ProductionOrder"] = relationship("ProductionOrder")
+    phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong")  # type: ignore[name-defined]
+    creator: Mapped["User | None"] = relationship("User")  # type: ignore[name-defined]

@@ -7,6 +7,8 @@ import {
 import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { customersApi, type Customer } from '../../api/customers'
+import ImportExcelDialog from '../../components/ImportExcelDialog'
+import MSTLookupButton from '../../components/MSTLookupButton'
 
 const { Title } = Typography
 
@@ -19,6 +21,7 @@ export default function CustomerList() {
   const [searchInput, setSearchInput] = useState('')
   const [filterActive, setFilterActive] = useState<boolean | undefined>(true)
   const [page, setPage] = useState(1)
+  const [importVisible, setImportVisible] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['customers', search, filterActive, page],
@@ -126,7 +129,7 @@ export default function CustomerList() {
           <Col>
             <Space>
               <Input.Search
-                placeholder="Tìm mã KH, tên..."
+                placeholder="Tìm mã KH, tên, MST..."
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 onSearch={v => { setSearch(v); setPage(1) }}
@@ -148,6 +151,9 @@ export default function CustomerList() {
               />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm khách hàng
+              </Button>
+              <Button onClick={() => setImportVisible(true)}>
+                Import Excel
               </Button>
             </Space>
           </Col>
@@ -224,7 +230,22 @@ export default function CustomerList() {
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item label="Mã số thuế" name="ma_so_thue">
+              <Form.Item
+                name="ma_so_thue"
+                label={
+                  <Space size={8}>
+                    Mã số thuế
+                    <MSTLookupButton
+                      getMST={() => form.getFieldValue('ma_so_thue') ?? ''}
+                      onFound={info => form.setFieldsValue({
+                        ten_don_vi: info.name || form.getFieldValue('ten_don_vi'),
+                        ten_viet_tat: info.shortName || form.getFieldValue('ten_viet_tat'),
+                        dia_chi: info.address || form.getFieldValue('dia_chi'),
+                      })}
+                    />
+                  </Space>
+                }
+              >
                 <Input placeholder="MST" />
               </Form.Item>
             </Col>
@@ -301,6 +322,15 @@ export default function CustomerList() {
           </Row>
         </Form>
       </Modal>
+
+      <ImportExcelDialog
+        title="Import danh mục khách hàng"
+        visible={importVisible}
+        onCancel={() => setImportVisible(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
+        importFn={(file, commit) => customersApi.import(file, commit)}
+        templateUrl="/api/customers/import-template"
+      />
     </div>
   )
 }

@@ -11,7 +11,7 @@ set PYTHONIOENCODING=utf-8
 
 :RESTART
 echo [%date% %time%] Starting ERP Backend on port 8000...
-"C:\Users\USER\AppData\Local\Programs\Python\Python312\python.exe" run.py
+"%~dp0backend\venv\Scripts\python.exe" run.py
 echo [%date% %time%] Backend crashed or stopped. Restarting in 3 seconds...
 timeout /t 3 /nobreak >nul
 goto RESTART

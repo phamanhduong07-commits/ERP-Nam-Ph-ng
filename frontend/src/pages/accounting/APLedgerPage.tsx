@@ -9,7 +9,7 @@ import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
-import { apApi, APLedgerRow, APAgingRow, TRANG_THAI_PO_INVOICE } from '../../api/accounting'
+import { apApi, APLedgerRow, APAgingRow, SoChiTietRow, SoChiTietResponse, TRANG_THAI_PO_INVOICE } from '../../api/accounting'
 import { suppliersApi, Supplier } from '../../api/suppliers'
 
 const { Title, Text } = Typography
@@ -350,6 +350,181 @@ function AgingTab() {
   )
 }
 
+// ── Tab 3: Sổ chi tiết NCC (journal-style) ──────────────────────────────────
+
+function SoChiTietTab() {
+  const [supplierId, setSupplierId] = useState<number | undefined>()
+  const [tuNgay, setTuNgay] = useState(dayjs().startOf('month').format('YYYY-MM-DD'))
+  const [denNgay, setDenNgay] = useState(dayjs().format('YYYY-MM-DD'))
+  const [enabled, setEnabled] = useState(true)
+
+  const { data: suppliers = [] } = useQuery<import('../../api/suppliers').Supplier[]>({
+    queryKey: ['suppliers-all'],
+    queryFn: () => import('../../api/suppliers').then(m => m.suppliersApi.all()).then(r => r.data),
+  })
+
+  const { data, isLoading } = useQuery<SoChiTietResponse>({
+    queryKey: ['ap-so-chi-tiet', supplierId, tuNgay, denNgay],
+    queryFn: () => apApi.getSoChiTiet({ supplier_id: supplierId, tu_ngay: tuNgay, den_ngay: denNgay }),
+    enabled,
+  })
+
+  const rows = data?.rows ?? []
+  const tongNo = rows.reduce((s, r) => s + r.phat_sinh_no, 0)
+  const tongCo = rows.reduce((s, r) => s + r.phat_sinh_co, 0)
+
+  const LOAI_LABEL: Record<string, string> = {
+    hoa_don_mua: 'HĐ mua',
+    phieu_chi: 'Phiếu chi',
+    tra_hang_mua: 'Trả hàng',
+    hoa_don_ban: 'HĐ bán',
+    phieu_thu: 'Phiếu thu',
+  }
+
+  const handleExcel = () => {
+    const exRows = rows.map(r => ({
+      'Ngày': dayjs(r.ngay).format('DD/MM/YYYY'),
+      'Loại chứng từ': LOAI_LABEL[r.chung_tu_loai] ?? r.chung_tu_loai,
+      'Nhà cung cấp': r.ten_ncc ?? '',
+      'Diễn giải': r.dien_giai ?? '',
+      'Phát sinh Nợ': r.phat_sinh_no,
+      'Phát sinh Có': r.phat_sinh_co,
+      'Số dư': r.so_du,
+    }))
+    exportToExcel(`so-chi-tiet-ncc-${dayjs().format('YYYYMMDD')}`, [{
+      name: 'So chi tiet NCC',
+      headers: Object.keys(exRows[0] ?? {}),
+      rows: exRows.map(r => Object.values(r)),
+    }])
+  }
+
+  const columns: ColumnsType<SoChiTietRow> = [
+    {
+      title: 'Ngày',
+      dataIndex: 'ngay',
+      width: 100,
+      render: v => dayjs(v).format('DD/MM/YYYY'),
+    },
+    {
+      title: 'Loại chứng từ',
+      dataIndex: 'chung_tu_loai',
+      width: 110,
+      render: v => <Tag>{LOAI_LABEL[v] ?? v}</Tag>,
+    },
+    {
+      title: 'Nhà cung cấp',
+      dataIndex: 'ten_ncc',
+      width: 180,
+      ellipsis: true,
+      render: v => v ?? '—',
+    },
+    {
+      title: 'Diễn giải',
+      dataIndex: 'dien_giai',
+      ellipsis: true,
+      render: v => v ?? '—',
+    },
+    {
+      title: 'Phát sinh Nợ',
+      dataIndex: 'phat_sinh_no',
+      align: 'right',
+      width: 140,
+      render: v => v > 0 ? <Text style={{ color: '#1677ff' }}>{fmtVND(v)}</Text> : '—',
+    },
+    {
+      title: 'Phát sinh Có',
+      dataIndex: 'phat_sinh_co',
+      align: 'right',
+      width: 140,
+      render: v => v > 0 ? <Text style={{ color: '#52c41a' }}>{fmtVND(v)}</Text> : '—',
+    },
+    {
+      title: 'Số dư',
+      dataIndex: 'so_du',
+      align: 'right',
+      width: 140,
+      render: v => <Text strong style={{ color: v > 0 ? '#fa8c16' : '#52c41a' }}>{fmtVND(Math.abs(v))}</Text>,
+    },
+  ]
+
+  return (
+    <>
+      <Card size="small" style={{ marginBottom: 12 }}>
+        <Row gutter={[12, 8]} align="middle">
+          <Col>
+            <Select
+              style={{ width: 220 }} allowClear showSearch placeholder="Tất cả nhà cung cấp"
+              filterOption={(input, opt) =>
+                (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={suppliers.map((s: any) => ({
+                value: s.id,
+                label: `${s.ma_ncc ? `[${s.ma_ncc}] ` : ''}${s.ten_don_vi ?? ''}`,
+              }))}
+              onChange={v => { setSupplierId(v); setEnabled(true) }}
+            />
+          </Col>
+          <Col>
+            <RangePicker
+              format="DD/MM/YYYY"
+              defaultValue={[dayjs().startOf('month'), dayjs()]}
+              onChange={v => {
+                setTuNgay(v?.[0]?.format('YYYY-MM-DD') ?? dayjs().startOf('month').format('YYYY-MM-DD'))
+                setDenNgay(v?.[1]?.format('YYYY-MM-DD') ?? dayjs().format('YYYY-MM-DD'))
+                setEnabled(true)
+              }}
+            />
+          </Col>
+          <Col style={{ marginLeft: 'auto' }}>
+            <Button size="small" icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!rows.length}>Excel</Button>
+          </Col>
+        </Row>
+      </Card>
+
+      {data && (
+        <Row gutter={12} style={{ marginBottom: 12 }}>
+          {[
+            { label: 'Số dư đầu kỳ', value: data.so_du_dau_ky, color: '#1677ff' },
+            { label: 'Phát sinh Nợ', value: tongNo, color: '#1677ff' },
+            { label: 'Phát sinh Có', value: tongCo, color: '#52c41a' },
+            { label: 'Số dư cuối kỳ', value: data.so_du_cuoi_ky, color: data.so_du_cuoi_ky > 0 ? '#fa8c16' : '#52c41a' },
+          ].map(item => (
+            <Col key={item.label}>
+              <Card size="small" style={{ minWidth: 160, textAlign: 'center' }}>
+                <div style={{ fontSize: 12, color: '#666' }}>{item.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: item.color }}>{fmtVND(item.value)}</div>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      )}
+
+      <Table
+        columns={columns}
+        dataSource={rows}
+        rowKey={(r, i) => `${r.ngay}-${r.chung_tu_loai}-${i}`}
+        loading={isLoading}
+        size="small"
+        pagination={{ pageSize: 100, showTotal: t => `${t} dòng` }}
+        summary={() => rows.length > 0 ? (
+          <Table.Summary.Row style={{ fontWeight: 600, background: '#fafafa' }}>
+            <Table.Summary.Cell index={0} colSpan={4}>Tổng cộng</Table.Summary.Cell>
+            <Table.Summary.Cell index={1} align="right">
+              <Text style={{ color: '#1677ff' }}>{fmtVND(tongNo)}</Text>
+            </Table.Summary.Cell>
+            <Table.Summary.Cell index={2} align="right">
+              <Text style={{ color: '#52c41a' }}>{fmtVND(tongCo)}</Text>
+            </Table.Summary.Cell>
+            <Table.Summary.Cell index={3} align="right">
+              <Text strong>{fmtVND(Math.abs(data?.so_du_cuoi_ky ?? 0))}</Text>
+            </Table.Summary.Cell>
+          </Table.Summary.Row>
+        ) : null}
+      />
+    </>
+  )
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function APLedgerPage() {
@@ -359,8 +534,9 @@ export default function APLedgerPage() {
       <Tabs
         defaultActiveKey="ledger"
         items={[
-          { key: 'ledger', label: 'Sổ chi tiết', children: <LedgerTab /> },
-          { key: 'aging',  label: 'Tuổi nợ',     children: <AgingTab /> },
+          { key: 'ledger',      label: 'Sổ chi tiết',    children: <LedgerTab /> },
+          { key: 'aging',       label: 'Tuổi nợ',        children: <AgingTab /> },
+          { key: 'so-chi-tiet', label: 'Sổ chi tiết NCC', children: <SoChiTietTab /> },
         ]}
       />
     </div>

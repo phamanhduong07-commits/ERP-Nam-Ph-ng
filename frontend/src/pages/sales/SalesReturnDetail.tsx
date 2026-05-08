@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Button, Space, Typography, Tag, Descriptions, Table, message,
-  Modal, Form, Input, InputNumber, Select, Row, Col, Divider, Alert,
+  Modal, Form, Input, InputNumber, Select, Row, Col, Divider, Alert, DatePicker,
 } from 'antd'
 import {
   ArrowLeftOutlined, EditOutlined, CheckCircleOutlined, CloseCircleOutlined,
@@ -12,6 +12,10 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { salesReturnsApi, type SalesReturn, SALES_RETURN_TRANG_THAI_LABELS, SALES_RETURN_TRANG_THAI_COLORS, TINH_TRANG_HANG_LABELS } from '../../api/salesReturns'
+import { customerRefundApi, CustomerRefundVoucher, TRANG_THAI_HOAN_TIEN } from '../../api/accounting'
+import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
+import { printDocument, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
+import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
 const { confirm } = Modal
@@ -19,22 +23,34 @@ const { confirm } = Modal
 export default function SalesReturnDetail() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
+  const isCreateRoute = id === 'create'
+  const returnId = Number(id)
+  const hasValidReturnId = !isCreateRoute && Number.isInteger(returnId) && returnId > 0
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [form] = Form.useForm()
 
   const { data: returnData, isLoading } = useQuery({
     queryKey: ['sales-return', id],
-    queryFn: () => salesReturnsApi.get(Number(id)).then(r => r.data),
-    enabled: !!id,
+    queryFn: () => salesReturnsApi.get(returnId).then(r => r.data),
+    enabled: hasValidReturnId,
+  })
+
+  const { data: refundVoucher } = useQuery<CustomerRefundVoucher | null>({
+    queryKey: ['customer-refund-for-return', returnId],
+    queryFn: () => customerRefundApi.list({ sales_return_id: returnId, page_size: 1 })
+      .then((d: any) => d.items?.[0] ?? null),
+    enabled: hasValidReturnId && returnData?.trang_thai === 'da_duyet',
   })
 
   const approveMutation = useMutation({
-    mutationFn: () => salesReturnsApi.approve(Number(id)),
+    mutationFn: () => salesReturnsApi.approve(returnId),
     onSuccess: () => {
       message.success('Đã duyệt phiếu trả hàng')
       queryClient.invalidateQueries({ queryKey: ['sales-return', id] })
       queryClient.invalidateQueries({ queryKey: ['sales-returns'] })
+      queryClient.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
+      queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
     },
     onError: (err: any) => {
       message.error(err.response?.data?.detail || 'Có lỗi xảy ra')
@@ -42,11 +58,13 @@ export default function SalesReturnDetail() {
   })
 
   const cancelMutation = useMutation({
-    mutationFn: () => salesReturnsApi.cancel(Number(id)),
+    mutationFn: () => salesReturnsApi.cancel(returnId),
     onSuccess: () => {
       message.success('Đã hủy phiếu trả hàng')
       queryClient.invalidateQueries({ queryKey: ['sales-return', id] })
       queryClient.invalidateQueries({ queryKey: ['sales-returns'] })
+      queryClient.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
+      queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
     },
     onError: (err: any) => {
       message.error(err.response?.data?.detail || 'Có lỗi xảy ra')
@@ -54,7 +72,7 @@ export default function SalesReturnDetail() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: (data: any) => salesReturnsApi.update(Number(id), data),
+    mutationFn: (data: any) => salesReturnsApi.update(returnId, data),
     onSuccess: () => {
       message.success('Đã cập nhật phiếu trả hàng')
       setEditing(false)
@@ -200,6 +218,108 @@ export default function SalesReturnDetail() {
     },
   ]
 
+  const companyInfo = usePhapNhanForPrint()
+
+  const handlePrintNhapKho = () => {
+    if (!returnData) return
+    const tableHtml = buildHtmlTable(
+      [
+        { header: 'STT', align: 'center' },
+        { header: 'Tên hàng' },
+        { header: 'SL nhập', align: 'center' },
+        { header: 'ĐVT', align: 'center' },
+        { header: 'Đơn giá', align: 'right' },
+        { header: 'Thành tiền', align: 'right' },
+        { header: 'Tình trạng' },
+        { header: 'Ghi chú' },
+      ],
+      returnData.items.map((item, i) => [
+        i + 1,
+        item.sales_order_item?.ten_hang ?? '—',
+        item.so_luong_tra,
+        item.sales_order_item?.dvt ?? '',
+        fmtVND(item.don_gia_tra),
+        fmtVND(item.thanh_tien_tra),
+        TINH_TRANG_HANG_LABELS[item.tinh_trang_hang] ?? item.tinh_trang_hang,
+        item.ghi_chu ?? '—',
+      ]),
+      { totalRow: ['', 'TỔNG CỘNG', '', '', '', fmtVND(returnData.tong_tien_tra), '', ''] },
+    )
+    printDocument({
+      companyInfo,
+      title: `Phiếu nhập kho trả hàng ${returnData.so_phieu_tra}`,
+      subtitle: 'PHIẾU NHẬP KHO (HÀNG TRẢ VỀ)',
+      logoUrl: namPhuongLogo,
+      documentNumber: returnData.so_phieu_tra,
+      documentDate: dayjs(returnData.ngay_tra).format('DD/MM/YYYY'),
+      status: 'Đã nhập kho',
+      fields: [
+        { label: 'Khách trả hàng', value: returnData.customer ? `[${returnData.customer.ma_kh}] ${returnData.customer.ten_viet_tat}` : '—' },
+        { label: 'Đơn hàng gốc', value: returnData.sales_order?.so_don ?? '—' },
+        { label: 'Lý do nhập', value: returnData.ly_do_tra ?? '—' },
+        { label: 'Người duyệt', value: returnData.ten_nguoi_duyet ?? '—' },
+        { label: 'Ngày duyệt', value: returnData.approved_at ? dayjs(returnData.approved_at).format('DD/MM/YYYY') : '—' },
+      ],
+      bodyHtml: tableHtml,
+      footerHtml: `<div style="font-size:10px;color:#888">Mẫu nội bộ — Phiếu nhập kho hàng trả. Căn cứ: Phiếu trả hàng ${returnData.so_phieu_tra}</div>`,
+    })
+  }
+
+  const handlePrint = () => {
+    if (!returnData) return
+    const tableHtml = buildHtmlTable(
+      [
+        { header: 'STT', align: 'center' },
+        { header: 'Tên hàng' },
+        { header: 'SL trả', align: 'center' },
+        { header: 'ĐVT', align: 'center' },
+        { header: 'Đơn giá', align: 'right' },
+        { header: 'Thành tiền', align: 'right' },
+        { header: 'Tình trạng' },
+        { header: 'Lý do' },
+      ],
+      returnData.items.map((item, i) => [
+        i + 1,
+        item.sales_order_item?.ten_hang ?? '—',
+        item.so_luong_tra,
+        item.sales_order_item?.dvt ?? '',
+        fmtVND(item.don_gia_tra),
+        fmtVND(item.thanh_tien_tra),
+        TINH_TRANG_HANG_LABELS[item.tinh_trang_hang] ?? item.tinh_trang_hang,
+        item.ly_do_tra ?? '—',
+      ]),
+      {
+        totalRow: ['', 'TỔNG CỘNG', '', '', '', fmtVND(returnData.tong_tien_tra), '', ''],
+      },
+    )
+    printDocument({
+      companyInfo,
+      title: `Phiếu trả hàng ${returnData.so_phieu_tra}`,
+      subtitle: 'PHIẾU TRẢ HÀNG BÁN',
+      logoUrl: namPhuongLogo,
+      documentNumber: returnData.so_phieu_tra,
+      documentDate: dayjs(returnData.ngay_tra).format('DD/MM/YYYY'),
+      status: SALES_RETURN_TRANG_THAI_LABELS[returnData.trang_thai] ?? returnData.trang_thai,
+      fields: [
+        { label: 'Khách hàng', value: returnData.customer ? `[${returnData.customer.ma_kh}] ${returnData.customer.ten_viet_tat}` : '—' },
+        { label: 'Đơn hàng gốc', value: returnData.sales_order?.so_don ?? '—' },
+        { label: 'Lý do trả', value: returnData.ly_do_tra ?? '—' },
+        { label: 'Người tạo', value: returnData.ten_nguoi_tao ?? '—' },
+        { label: 'Người duyệt', value: returnData.ten_nguoi_duyet ?? '—' },
+      ],
+      bodyHtml: tableHtml,
+      footerHtml: returnData.ghi_chu ? `<div><strong>Ghi chú:</strong> ${returnData.ghi_chu}</div>` : '',
+    })
+  }
+
+  if (isCreateRoute) {
+    return <Navigate to="/sales/returns/create" replace />
+  }
+
+  if (!hasValidReturnId) {
+    return <Navigate to="/sales/returns" replace />
+  }
+
   if (isLoading || !returnData) {
     return <div>Loading...</div>
   }
@@ -207,6 +327,7 @@ export default function SalesReturnDetail() {
   const canEdit = returnData.trang_thai === 'moi'
   const canApprove = returnData.trang_thai === 'moi'
   const canCancel = returnData.trang_thai === 'moi'
+  const salesOrder = returnData.sales_order
 
   return (
     <div>
@@ -261,9 +382,14 @@ export default function SalesReturnDetail() {
               Hủy phiếu
             </Button>
           )}
-          <Button icon={<PrinterOutlined />}>
-            In phiếu
+          <Button icon={<PrinterOutlined />} onClick={handlePrint}>
+            In phiếu trả hàng
           </Button>
+          {returnData.trang_thai === 'da_duyet' && (
+            <Button icon={<PrinterOutlined />} onClick={handlePrintNhapKho}>
+              In phiếu nhập kho
+            </Button>
+          )}
         </Space>
       </Space>
 
@@ -305,12 +431,12 @@ export default function SalesReturnDetail() {
                 <Descriptions.Item label="Số phiếu">{returnData.so_phieu_tra}</Descriptions.Item>
                 <Descriptions.Item label="Ngày trả">{dayjs(returnData.ngay_tra).format('DD/MM/YYYY')}</Descriptions.Item>
                 <Descriptions.Item label="Đơn hàng bán">
-                  {returnData.sales_order ? (
+                  {salesOrder ? (
                     <Button
                       type="link"
-                      onClick={() => navigate(`/sales/orders/${returnData.sales_order.id}`)}
+                      onClick={() => navigate(`/sales/orders/${salesOrder.id}`)}
                     >
-                      {returnData.sales_order.so_don}
+                      {salesOrder.so_don}
                     </Button>
                   ) : '—'}
                 </Descriptions.Item>
@@ -333,6 +459,51 @@ export default function SalesReturnDetail() {
       </Row>
 
       <Divider />
+
+      {returnData.trang_thai === 'da_duyet' && (
+        <Alert
+          message="Phiếu trả hàng đã được duyệt"
+          description="Hàng trả đã được nhập lại vào kho. Kiểm tra tồn kho để xác nhận."
+          type="success"
+          style={{ marginBottom: 16 }}
+          showIcon
+        />
+      )}
+
+      {returnData.trang_thai === 'da_duyet' && (
+        <Card
+          size="small"
+          title="Phiếu hoàn tiền khách hàng"
+          style={{ marginBottom: 16 }}
+          extra={refundVoucher && (
+            <Button size="small" type="link" onClick={() => navigate(`/accounting/customer-refunds/${refundVoucher.id}`)}>
+              Xem chi tiết
+            </Button>
+          )}
+        >
+          {refundVoucher ? (
+            <Descriptions size="small" column={3}>
+              <Descriptions.Item label="Số phiếu">
+                <a onClick={() => navigate(`/accounting/customer-refunds/${refundVoucher.id}`)}>
+                  {refundVoucher.so_phieu}
+                </a>
+              </Descriptions.Item>
+              <Descriptions.Item label="Số tiền">
+                <Text strong style={{ color: '#1b168e' }}>
+                  {Number(refundVoucher.so_tien).toLocaleString('vi-VN')} ₫
+                </Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Trạng thái">
+                <Tag color={TRANG_THAI_HOAN_TIEN[refundVoucher.trang_thai]?.color ?? 'default'}>
+                  {TRANG_THAI_HOAN_TIEN[refundVoucher.trang_thai]?.label ?? refundVoucher.trang_thai}
+                </Tag>
+              </Descriptions.Item>
+            </Descriptions>
+          ) : (
+            <Text type="secondary">Đang tải thông tin phiếu hoàn tiền...</Text>
+          )}
+        </Card>
+      )}
 
       <Card title="Chi tiết sản phẩm trả">
         {editing && (

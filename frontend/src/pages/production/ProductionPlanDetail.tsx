@@ -24,6 +24,29 @@ function getSongLetters(s: string | null | undefined) {
   return (s ?? '').replace(/-/g, '').toUpperCase().split('').filter(Boolean)
 }
 
+type SongSlot = { ma: string | null; dl: number | null; flute: string | null }
+
+/** Map song_1/song_2 vào đúng cột C/B theo to_hop_song thực tế */
+function getSongSlots(r: PlanLineResponse): { songC: SongSlot; songB: SongSlot } {
+  const songs = getSongLetters(r.to_hop_song)
+  const soLop = r.so_lop ?? 3
+  const empty: SongSlot = { ma: null, dl: null, flute: null }
+  let songC = { ...empty }
+  let songB = { ...empty }
+
+  const f1 = songs[0] ?? 'C'
+  if (f1 === 'B') songB = { ma: r.song_1, dl: r.song_1_dl, flute: 'B' }
+  else            songC = { ma: r.song_1, dl: r.song_1_dl, flute: f1 }
+
+  if (soLop >= 5) {
+    const f2 = songs[1] ?? 'B'
+    if (f2 === 'B') songB = { ma: r.song_2, dl: r.song_2_dl, flute: 'B' }
+    else            songC = { ma: r.song_2, dl: r.song_2_dl, flute: f2 }
+  }
+
+  return { songC, songB }
+}
+
 // ─── Tính toán ────────────────────────────────────────────────────────────────
 
 function calcSoTam(slKeHoach: number, soDao: number | null): number {
@@ -136,12 +159,13 @@ function calcGroupLayers(group: PlanLineResponse[]): LayerKgSummary {
     const songs = getSongLetters(r.to_hop_song)
     const inner = getMatInner(r)
 
-    accumLayer(maps.matC,  r.mat,    r.mat_dl,    calcLayerKg(soTam, kho1, daiTt, r.mat_dl,    false, null))
-    accumLayer(maps.songC, r.song_1, r.song_1_dl, calcLayerKg(soTam, kho1, daiTt, r.song_1_dl, true,  songs[0] ?? null))
+    const slots = getSongSlots(r)
+    accumLayer(maps.matC,  r.mat,         r.mat_dl,       calcLayerKg(soTam, kho1, daiTt, r.mat_dl,        false, null))
+    accumLayer(maps.songC, slots.songC.ma, slots.songC.dl, calcLayerKg(soTam, kho1, daiTt, slots.songC.dl, true,  slots.songC.flute))
     if (soLop >= 5) {
-      accumLayer(maps.matB,  r.mat_1,  r.mat_1_dl,  calcLayerKg(soTam, kho1, daiTt, r.mat_1_dl,  false, null))
-      accumLayer(maps.songB, r.song_2, r.song_2_dl, calcLayerKg(soTam, kho1, daiTt, r.song_2_dl, true,  songs[1] ?? null))
+      accumLayer(maps.matB,  r.mat_1,        r.mat_1_dl,    calcLayerKg(soTam, kho1, daiTt, r.mat_1_dl,     false, null))
     }
+    accumLayer(maps.songB, slots.songB.ma, slots.songB.dl, calcLayerKg(soTam, kho1, daiTt, slots.songB.dl, true,  slots.songB.flute))
     accumLayer(maps.inner, inner.ma, inner.dl, calcLayerKg(soTam, kho1, daiTt, inner.dl, false, null))
   }
   // Round kg và chuyển map → array
@@ -409,10 +433,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       const kho1   = r.kho1 ? Number(r.kho1) : null
       const daiTt  = r.dai_tt ? Number(r.dai_tt) : null
 
-      const kgMatC  = calcLayerKg(soTam, kho1, daiTt, r.mat_dl,    false, null)
-      const kgSongC = calcLayerKg(soTam, kho1, daiTt, r.song_1_dl, true,  songs[0] ?? null)
-      const kgMatB  = soLop >= 5 ? calcLayerKg(soTam, kho1, daiTt, r.mat_1_dl,  false, null) : 0
-      const kgSongB = soLop >= 5 ? calcLayerKg(soTam, kho1, daiTt, r.song_2_dl, true,  songs[1] ?? null) : 0
+      const slots   = getSongSlots(r)
+      const kgMatC  = calcLayerKg(soTam, kho1, daiTt, r.mat_dl,        false, null)
+      const kgSongC = calcLayerKg(soTam, kho1, daiTt, slots.songC.dl,  true,  slots.songC.flute)
+      const kgMatB  = soLop >= 5 ? calcLayerKg(soTam, kho1, daiTt, r.mat_1_dl, false, null) : 0
+      const kgSongB = calcLayerKg(soTam, kho1, daiTt, slots.songB.dl,  true,  slots.songB.flute)
       const kgInner = calcLayerKg(soTam, kho1, daiTt, inner.dl, false, null)
 
       const loaiLan = r.loai_lan ? (LOAI_LAN_LABELS[r.loai_lan] ?? r.loai_lan) : '—'
@@ -421,10 +446,10 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         <td class="center" style="color:#888">${r.thu_tu}</td>
         <td style="font-weight:600;white-space:nowrap">${r.ma_kh ?? '—'}</td>
         <td style="font-family:monospace;font-size:8px;font-weight:700">${r.so_lenh ?? '—'}</td>
-        <td>${paperCell(r.mat,    r.mat_dl,    kgMatC,  false)}</td>
-        <td>${paperCell(r.song_1, r.song_1_dl, kgSongC, true)}</td>
-        <td>${soLop >= 5 ? paperCell(r.mat_1,  r.mat_1_dl,  kgMatB,  false) : '<span style="color:#ccc">—</span>'}</td>
-        <td>${soLop >= 5 ? paperCell(r.song_2, r.song_2_dl, kgSongB, true)  : '<span style="color:#ccc">—</span>'}</td>
+        <td>${paperCell(r.mat,          r.mat_dl,        kgMatC,  false)}</td>
+        <td>${paperCell(slots.songC.ma, slots.songC.dl,  kgSongC, true)}</td>
+        <td>${soLop >= 5 ? paperCell(r.mat_1, r.mat_1_dl, kgMatB, false) : '<span style="color:#ccc">—</span>'}</td>
+        <td>${slots.songB.ma ? paperCell(slots.songB.ma, slots.songB.dl, kgSongB, true) : '<span style="color:#ccc">—</span>'}</td>
         <td>${paperCell(inner.ma, inner.dl, kgInner, false)}</td>
         <td style="white-space:nowrap">${calcQuyCache(r)}</td>
         <td class="center" style="font-weight:700;color:#531dab">${r.to_hop_song ?? '—'}</td>
@@ -626,11 +651,12 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
               const kho1     = r.kho1 ? Number(r.kho1) : null
               const daiTt    = r.dai_tt ? Number(r.dai_tt) : null
 
-              // Kg từng lớp
-              const kgMatC   = calcLayerKg(soTam, kho1, daiTt, r.mat_dl, false, null)
-              const kgSongC  = calcLayerKg(soTam, kho1, daiTt, r.song_1_dl, true, songs[0] ?? null)
+              // Kg từng lớp — map đúng cột theo loại sóng thực tế
+              const slots    = getSongSlots(r)
+              const kgMatC   = calcLayerKg(soTam, kho1, daiTt, r.mat_dl,        false, null)
+              const kgSongC  = calcLayerKg(soTam, kho1, daiTt, slots.songC.dl,  true,  slots.songC.flute)
               const kgMatB   = soLop >= 5 ? calcLayerKg(soTam, kho1, daiTt, r.mat_1_dl, false, null) : 0
-              const kgSongB  = soLop >= 5 ? calcLayerKg(soTam, kho1, daiTt, r.song_2_dl, true, songs[1] ?? null) : 0
+              const kgSongB  = calcLayerKg(soTam, kho1, daiTt, slots.songB.dl,  true,  slots.songB.flute)
               const kgInner  = calcLayerKg(soTam, kho1, daiTt, inner.dl, false, null)
 
               const isOdd = idx % 2 === 0
@@ -656,7 +682,9 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
 
                   {/* Sóng C */}
                   <td style={TD}>
-                    <PaperCell ma={r.song_1} dl={r.song_1_dl} kg={kgSongC} isSong={true} />
+                    {slots.songC.ma
+                      ? <PaperCell ma={slots.songC.ma} dl={slots.songC.dl} kg={kgSongC} isSong={true} />
+                      : <span style={{ color: '#d9d9d9', fontSize: 10 }}>—</span>}
                   </td>
 
                   {/* Mặt B (chỉ có ≥5 lớp) */}
@@ -666,10 +694,10 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                       : <span style={{ color: '#d9d9d9', fontSize: 10 }}>—</span>}
                   </td>
 
-                  {/* Sóng B (chỉ có ≥5 lớp) */}
+                  {/* Sóng B */}
                   <td style={TD}>
-                    {soLop >= 5
-                      ? <PaperCell ma={r.song_2} dl={r.song_2_dl} kg={kgSongB} isSong={true} />
+                    {slots.songB.ma
+                      ? <PaperCell ma={slots.songB.ma} dl={slots.songB.dl} kg={kgSongB} isSong={true} />
                       : <span style={{ color: '#d9d9d9', fontSize: 10 }}>—</span>}
                   </td>
 

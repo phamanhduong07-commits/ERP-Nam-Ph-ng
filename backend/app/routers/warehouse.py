@@ -1,19 +1,22 @@
+import io
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+import pandas as pd
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import PhanXuong, Warehouse, PaperMaterial, OtherMaterial, Supplier, Product
 from app.models.inventory import InventoryBalance, InventoryTransaction
-from app.models.purchase import PurchaseOrder, PurchaseOrderItem
+from app.models.master import Warehouse, PaperMaterial, OtherMaterial, Product, PhanXuong, Supplier, Customer
+from app.models.purchase import PurchaseOrder, PurchaseOrderItem, PurchaseReturn
 from app.models.production import ProductionOrder, ProductionOrderItem
-from app.models.sales import SalesOrder, SalesOrderItem
-from app.models.master import Customer
+from app.models.sales import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
+from app.models.billing import SalesInvoice
+from app.models.accounting import PurchaseInvoice
 from app.models.warehouse_doc import (
     GoodsReceipt, GoodsReceiptItem,
     MaterialIssue, MaterialIssueItem,
@@ -23,9 +26,22 @@ from app.models.warehouse_doc import (
     StockAdjustment, StockAdjustmentItem,
 )
 from app.models.yeu_cau_giao_hang import YeuCauGiaoHang
+from app.services.accounting_service import AccountingService
 from app.services.carton_metrics import production_item_metrics
+from app.services.excel_import_service import (
+    ImportField, build_template_response, import_excel, parse_bool, parse_decimal, parse_text,
+)
+
 
 router = APIRouter(prefix="/api/warehouse", tags=["warehouse"])
+
+PHAN_XUONG_IMPORT_FIELDS = [
+    ImportField("ma_xuong", "Ma xuong", required=True, parser=parse_text, help_text="Ma phan xuong, duy nhat"),
+    ImportField("ten_xuong", "Ten xuong", required=True, parser=parse_text),
+    ImportField("dia_chi", "Dia chi", parser=parse_text),
+    ImportField("cong_doan", "Cong doan", parser=parse_text, default="cd2", help_text="cd1_cd2 | cd2"),
+    ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
+]
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -203,6 +219,78 @@ def _resolve_nvl_name(db: Session, paper_material_id: Optional[int], other_mater
     return fallback, "Kg"
 
 
+def _recalc_purchase_order_receipt_status(db: Session, po_id: Optional[int]) -> None:
+    if not po_id:
+        return
+
+    po = (
+        db.query(PurchaseOrder)
+        .options(joinedload(PurchaseOrder.items))
+        .filter(PurchaseOrder.id == po_id)
+        .first()
+    )
+    if not po or not po.items or po.trang_thai == "huy":
+        return
+
+    any_received = False
+    all_received = True
+    for item in po.items:
+        ordered_qty = item.so_luong or Decimal("0")
+        received_qty = item.so_luong_da_nhan or Decimal("0")
+        if received_qty > 0:
+            any_received = True
+        if ordered_qty <= 0 or received_qty < ordered_qty:
+            all_received = False
+
+    if all_received:
+        po.trang_thai = "hoan_thanh"
+    elif any_received:
+        po.trang_thai = "dang_giao"
+    elif po.trang_thai in ("dang_giao", "hoan_thanh"):
+        po.trang_thai = "da_duyet"
+
+
+def _recalc_sales_order_delivery_status(db: Session, sales_order_id: Optional[int]) -> None:
+    if not sales_order_id:
+        return
+
+    order = (
+        db.query(SalesOrder)
+        .options(joinedload(SalesOrder.items))
+        .filter(SalesOrder.id == sales_order_id)
+        .first()
+    )
+    if not order or not order.items:
+        return
+
+    any_shipped = False
+    all_shipped = True
+    for item in order.items:
+        ordered_qty = item.so_luong or Decimal("0")
+        shipped_qty = item.so_luong_da_xuat or Decimal("0")
+        if shipped_qty > 0:
+            any_shipped = True
+        if ordered_qty <= 0 or shipped_qty < ordered_qty:
+            all_shipped = False
+
+        if shipped_qty <= 0:
+            if item.trang_thai_dong in ("dang_xuat", "da_xuat"):
+                item.trang_thai_dong = "dang_sx"
+        elif ordered_qty > 0 and shipped_qty >= ordered_qty:
+            item.trang_thai_dong = "da_xuat"
+        else:
+            item.trang_thai_dong = "dang_xuat"
+
+    if order.trang_thai == "huy":
+        return
+    if all_shipped:
+        order.trang_thai = "hoan_thanh"
+    elif any_shipped:
+        order.trang_thai = "da_xuat"
+    elif order.trang_thai in ("da_xuat", "hoan_thanh"):
+        order.trang_thai = "dang_sx"
+
+
 def _px_to_dict(r: PhanXuong) -> dict:
     return {
         "id": r.id, "ma_xuong": r.ma_xuong, "ten_xuong": r.ten_xuong,
@@ -214,6 +302,21 @@ def _px_to_dict(r: PhanXuong) -> dict:
 
 
 # ── Phân xưởng ────────────────────────────────────────────────────────────────
+
+@router.get("/phan-xuong/import-template")
+def download_phan_xuong_import_template(_: User = Depends(get_current_user)):
+    return build_template_response("mau_import_phan_xuong.xlsx", PHAN_XUONG_IMPORT_FIELDS)
+
+
+@router.post("/phan-xuong/import")
+async def import_phan_xuong(
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return await import_excel(db=db, file=file, model=PhanXuong, fields=PHAN_XUONG_IMPORT_FIELDS, key_field="ma_xuong", commit=commit)
+
 
 @router.get("/phan-xuong")
 def list_phan_xuong(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
@@ -472,6 +575,145 @@ def get_ton_kho(
     return result
 
 
+_TON_KHO_FIELDS = [
+    ImportField("ma_kho",    "Ma kho",    required=True,  parser=parse_text,    help_text="Ma kho phai ton tai trong he thong"),
+    ImportField("loai_hang", "Loai hang", required=True,  parser=parse_text,    help_text="giay | nvl | tp"),
+    ImportField("ma_hang",   "Ma hang",   required=True,  parser=parse_text,    help_text="Ma chinh vat tu giay/NVL hoac Ma AMIS san pham"),
+    ImportField("so_luong",  "So luong",  required=True,  parser=parse_decimal, help_text="Ton luong dau ky"),
+    ImportField("don_gia",   "Don gia",   parser=parse_decimal, default=0,       help_text="Don gia binh quan (de trong neu chua co)"),
+    ImportField("don_vi",    "Don vi",    parser=parse_text,                     help_text="Don vi tinh (de trong se lay tu danh muc)"),
+]
+
+
+@router.get("/ton-kho/import-template")
+def download_ton_kho_import_template(_: User = Depends(get_current_user)):
+    return build_template_response("mau_import_ton_kho_dau_ky.xlsx", _TON_KHO_FIELDS)
+
+
+@router.post("/ton-kho/import")
+async def import_ton_kho_dau_ky(
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(400, "Chi chap nhan file Excel .xlsx/.xls")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "File rong")
+    df = pd.read_excel(io.BytesIO(raw), dtype=object)
+    rows, errors_count = [], 0
+    objects_to_save = []
+
+    for idx, src in df.iterrows():
+        row_no = int(idx) + 2
+        errs = []
+        ma_kho    = str(src.get("Ma kho",    "") or "").strip()
+        loai_hang = str(src.get("Loai hang", "") or "").strip().lower()
+        ma_hang   = str(src.get("Ma hang",   "") or "").strip()
+        so_luong_raw = src.get("So luong")
+        don_gia_raw  = src.get("Don gia")
+        don_vi_raw   = str(src.get("Don vi",   "") or "").strip() or None
+
+        if not ma_kho:
+            errs.append("Ma kho: bat buoc")
+        if loai_hang not in ("giay", "nvl", "tp"):
+            errs.append("Loai hang: phai la 'giay', 'nvl', hoac 'tp'")
+        if not ma_hang:
+            errs.append("Ma hang: bat buoc")
+
+        try:
+            so_luong = Decimal(str(so_luong_raw).replace(",", "")) if so_luong_raw is not None else None
+        except Exception:
+            so_luong = None
+        if so_luong is None:
+            errs.append("So luong: bat buoc va phai la so")
+
+        try:
+            don_gia = Decimal(str(don_gia_raw).replace(",", "")) if don_gia_raw not in (None, "", "nan") else Decimal("0")
+        except Exception:
+            don_gia = Decimal("0")
+
+        wh = db.query(Warehouse).filter(Warehouse.ma_kho == ma_kho).first() if ma_kho else None
+        if ma_kho and not wh:
+            errs.append(f"Ma kho: khong ton tai '{ma_kho}'")
+
+        paper_material_id = other_material_id = product_id = None
+        resolved_don_vi = don_vi_raw
+
+        if not errs and wh and ma_hang:
+            if loai_hang == "giay":
+                mat = db.query(PaperMaterial).filter(PaperMaterial.ma_chinh == ma_hang).first()
+                if not mat:
+                    errs.append(f"Ma hang: khong tim thay vat tu giay '{ma_hang}'")
+                else:
+                    paper_material_id = mat.id
+                    if not resolved_don_vi:
+                        resolved_don_vi = mat.dvt
+            elif loai_hang == "nvl":
+                mat = db.query(OtherMaterial).filter(OtherMaterial.ma_chinh == ma_hang).first()
+                if not mat:
+                    errs.append(f"Ma hang: khong tim thay NVL '{ma_hang}'")
+                else:
+                    other_material_id = mat.id
+                    if not resolved_don_vi:
+                        resolved_don_vi = mat.dvt
+            elif loai_hang == "tp":
+                prod = db.query(Product).filter(
+                    (Product.ma_amis == ma_hang) | (Product.ma_hang == ma_hang)
+                ).first()
+                if not prod:
+                    errs.append(f"Ma hang: khong tim thay san pham '{ma_hang}'")
+                else:
+                    product_id = prod.id
+                    if not resolved_don_vi:
+                        resolved_don_vi = getattr(prod, "dvt", "Thung") or "Thung"
+
+        if errs:
+            errors_count += 1
+            rows.append({"row": row_no, "status": "error", "errors": errs, "data": {}})
+            continue
+
+        gia_tri = (so_luong or Decimal("0")) * (don_gia or Decimal("0"))
+        bal_filter = db.query(InventoryBalance).filter(InventoryBalance.warehouse_id == wh.id)
+        if loai_hang == "giay":
+            bal_filter = bal_filter.filter(InventoryBalance.paper_material_id == paper_material_id)
+        elif loai_hang == "nvl":
+            bal_filter = bal_filter.filter(InventoryBalance.other_material_id == other_material_id)
+        else:
+            bal_filter = bal_filter.filter(InventoryBalance.product_id == product_id)
+        existing = bal_filter.first()
+
+        status = "update" if existing else "create"
+        vals = {
+            "warehouse_id": wh.id,
+            "paper_material_id": paper_material_id,
+            "other_material_id": other_material_id,
+            "product_id": product_id,
+            "ton_luong": so_luong,
+            "don_gia_binh_quan": don_gia,
+            "gia_tri_ton": gia_tri,
+            "don_vi": resolved_don_vi,
+            "cap_nhat_luc": datetime.utcnow(),
+        }
+        objects_to_save.append((existing, vals))
+        rows.append({"row": row_no, "status": status, "errors": [], "data": {"ma_kho": ma_kho, "ma_hang": ma_hang, "so_luong": str(so_luong)}})
+
+    if commit and errors_count == 0:
+        for existing, vals in objects_to_save:
+            if existing:
+                for k, v in vals.items():
+                    setattr(existing, k, v)
+            else:
+                db.add(InventoryBalance(**vals))
+        db.commit()
+
+    updated = sum(1 for s in rows if s["status"] == "update")
+    created = sum(1 for s in rows if s["status"] == "create")
+    return {"commit": commit, "total": len(rows), "created": created, "updated": updated, "skipped": 0, "errors": errors_count, "rows": rows[:200]}
+
+
 # ── Phiếu nhập kho (GoodsReceipt) ────────────────────────────────────────────
 
 @router.get("/goods-receipts")
@@ -531,6 +773,24 @@ def create_goods_receipt(
     if not db.get(Supplier, body.supplier_id):
         raise HTTPException(404, "Không tìm thấy nhà cung cấp")
 
+    for it in body.items:
+        if not it.po_item_id:
+            continue
+        poi = db.get(PurchaseOrderItem, it.po_item_id)
+        if not poi:
+            raise HTTPException(404, "Khong tim thay dong PO")
+        if body.po_id and poi.po_id != body.po_id:
+            raise HTTPException(400, "Dong PO khong thuoc PO cua phieu nhap")
+        po_ref = db.get(PurchaseOrder, poi.po_id)
+        if po_ref and po_ref.supplier_id != body.supplier_id:
+            raise HTTPException(400, "Nha cung cap phieu nhap khong khop PO")
+        remaining_qty = (poi.so_luong or Decimal("0")) - (poi.so_luong_da_nhan or Decimal("0"))
+        if it.so_luong > remaining_qty:
+            raise HTTPException(
+                400,
+                f"So luong nhap vuot PO: can nhap {float(it.so_luong):g}, con {float(remaining_qty):g}",
+            )
+
     gr = GoodsReceipt(
         so_phieu=_gen_so(db, "GR", GoodsReceipt),
         ngay_nhap=body.ngay_nhap,
@@ -586,19 +846,69 @@ def create_goods_receipt(
             if poi:
                 poi.so_luong_da_nhan = (poi.so_luong_da_nhan or Decimal("0")) + it.so_luong
 
+    _recalc_purchase_order_receipt_status(db, body.po_id)
+
     gr.tong_gia_tri = tong
+
+    # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
+    acc_service = AccountingService(db)
+    wh = db.get(Warehouse, wh_id)
+    phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
+    if not gr.bo_qua_hach_toan:
+        acc_service.post_inventory_journal(
+            ngay=body.ngay_nhap,
+            loai="NHAP_MUA",
+            chung_tu_loai="goods_receipts",
+            chung_tu_id=gr.id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=wh.phan_xuong_id if wh else None,
+            items=[{
+                "ten_hang": it.ten_hang,
+                "so_luong": it.so_luong,
+                "don_gia": it.don_gia,
+                "tk_no": "1521" if body.loai_kho_auto != "THANH_PHAM" else "155",
+                "tk_co": "331"
+            } for it in gr.items]
+        )
+
     db.commit()
     db.refresh(gr)
     return _gr_to_dict(gr, db)
 
 
+@router.patch("/goods-receipts/{gr_id}/approve")
+def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    gr = db.get(GoodsReceipt, gr_id)
+    if not gr:
+        raise HTTPException(404, "Không tìm thấy phiếu nhập")
+    if gr.trang_thai == "da_duyet":
+        raise HTTPException(400, "Phiếu đã được duyệt")
+    gr.trang_thai = "da_duyet"
+    db.commit()
+    return {"ok": True, "trang_thai": "da_duyet"}
+
+
 @router.delete("/goods-receipts/{gr_id}")
-def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
         raise HTTPException(404, "Không tìm thấy phiếu nhập")
     if gr.trang_thai != "nhap":
         raise HTTPException(400, "Chỉ được xoá phiếu ở trạng thái Nhập")
+
+    active_invoice = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.gr_id == gr_id,
+        PurchaseInvoice.trang_thai != "huy",
+    ).first()
+    if active_invoice:
+        raise HTTPException(400, "Khong the xoa phieu nhap da lap hoa don mua")
+
+    active_return = db.query(PurchaseReturn).filter(
+        PurchaseReturn.gr_id == gr_id,
+        PurchaseReturn.trang_thai != "huy",
+    ).first()
+    if active_return:
+        raise HTTPException(400, "Khong the xoa phieu nhap da co phieu tra hang mua")
 
     for it in gr.items:
         bal = _get_or_create_balance(db, gr.warehouse_id,
@@ -607,11 +917,23 @@ def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = De
         bal.ton_luong = max(Decimal("0"), bal.ton_luong - it.so_luong)
         bal.gia_tri_ton = bal.ton_luong * bal.don_gia_binh_quan
         bal.cap_nhat_luc = datetime.utcnow()
+        _log_tx(db, gr.warehouse_id, "XOA_NHAP_MUA",
+                it.so_luong, it.don_gia, bal.ton_luong,
+                "goods_receipts", gr.id, current_user.id,
+                paper_material_id=it.paper_material_id,
+                other_material_id=it.other_material_id,
+                ghi_chu=f"Xóa {gr.so_phieu}")
 
         if it.po_item_id:
             poi = db.get(PurchaseOrderItem, it.po_item_id)
             if poi:
                 poi.so_luong_da_nhan = max(Decimal("0"), (poi.so_luong_da_nhan or Decimal("0")) - it.so_luong)
+
+    _recalc_purchase_order_receipt_status(db, gr.po_id)
+
+    # Đảo ngược bút toán kế toán
+    acc_service = AccountingService(db)
+    acc_service._reverse_journal_entries("goods_receipts", gr_id)
 
     db.delete(gr)
     db.commit()
@@ -761,13 +1083,35 @@ def create_material_issue(
                 other_material_id=it.other_material_id,
                 ghi_chu=it.ghi_chu)
 
+    # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
+    acc_service = AccountingService(db)
+    wh = db.get(Warehouse, warehouse_id)
+    phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
+    
+    if not mi.bo_qua_hach_toan:
+        acc_service.post_inventory_journal(
+            ngay=mi.ngay_xuat,
+            loai="XUAT_SX",
+            chung_tu_loai="material_issues",
+            chung_tu_id=mi.id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=wh.phan_xuong_id if wh else None,
+            items=[{
+                "ten_hang": it.ten_hang,
+                "so_luong": it.so_luong_thuc_xuat,
+                "don_gia": it.don_gia or 0,
+                "tk_no": "154",
+                "tk_co": "1521"
+            } for it in mi.items]
+        )
+
     db.commit()
     db.refresh(mi)
     return _mi_to_dict(mi, db)
 
 
 @router.delete("/material-issues/{mi_id}")
-def delete_material_issue(mi_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def delete_material_issue(mi_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     mi = db.get(MaterialIssue, mi_id)
     if not mi:
         raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
@@ -781,6 +1125,16 @@ def delete_material_issue(mi_id: int, db: Session = Depends(get_db), _: User = D
         bal.ton_luong += it.so_luong_thuc_xuat
         bal.gia_tri_ton = bal.ton_luong * bal.don_gia_binh_quan
         bal.cap_nhat_luc = datetime.utcnow()
+        _log_tx(db, mi.warehouse_id, "XOA_XUAT_SX",
+                it.so_luong_thuc_xuat, it.don_gia, bal.ton_luong,
+                "material_issues", mi.id, current_user.id,
+                paper_material_id=it.paper_material_id,
+                other_material_id=it.other_material_id,
+                ghi_chu=f"Xóa {mi.so_phieu}")
+
+    # Đảo ngược bút toán kế toán
+    acc_service = AccountingService(db)
+    acc_service._reverse_journal_entries("material_issues", mi_id)
 
     db.delete(mi)
     db.commit()
@@ -903,6 +1257,31 @@ def create_production_output(
             product_id=body.product_id,
             ghi_chu=body.ghi_chu)
 
+    # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
+    acc_service = AccountingService(db)
+    
+    # Lấy thông tin pháp nhân và xưởng
+    wh = db.get(Warehouse, body.warehouse_id)
+    phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
+    
+    # Nhập kho thành phẩm: Nợ 155 / Có 154
+    if not out.bo_qua_hach_toan:
+        acc_service.post_inventory_journal(
+            ngay=out.ngay_nhap,
+            loai="NHAP_TP",
+            chung_tu_loai="phieu_nhap_tp",
+            chung_tu_id=out.id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=wh.phan_xuong_id if wh else None,
+            items=[{
+                "ten_hang": out.production_order.items[0].ten_hang if out.production_order and out.production_order.items else "Thành phẩm",
+                "so_luong": out.so_luong_nhap,
+                "don_gia": out.don_gia_xuat_xuong or 0,
+                "tk_no": "155",
+                "tk_co": "154"
+            }]
+        )
+
     db.commit()
     db.refresh(out)
     return _po_out_to_dict(out, db)
@@ -914,12 +1293,32 @@ def delete_production_output(out_id: int, db: Session = Depends(get_db), _: User
     if not out:
         raise HTTPException(404, "Không tìm thấy phiếu nhập thành phẩm")
 
+    tong_nhap_lsx = db.query(
+        func.coalesce(func.sum(ProductionOutput.so_luong_nhap), 0)
+    ).filter(
+        ProductionOutput.production_order_id == out.production_order_id,
+        ProductionOutput.warehouse_id == out.warehouse_id,
+    ).scalar() or Decimal("0")
+    tong_xuat_lsx = db.query(
+        func.coalesce(func.sum(DeliveryOrderItem.so_luong), 0)
+    ).join(
+        DeliveryOrder, DeliveryOrder.id == DeliveryOrderItem.delivery_id
+    ).filter(
+        DeliveryOrderItem.production_order_id == out.production_order_id,
+        DeliveryOrder.warehouse_id == out.warehouse_id,
+    ).scalar() or Decimal("0")
+    if Decimal(str(tong_nhap_lsx)) - out.so_luong_nhap < Decimal(str(tong_xuat_lsx)):
+        raise HTTPException(400, "Khong the xoa phieu nhap TP vi hang cua LSX da duoc xuat giao")
+
     bal = _get_or_create_balance(db, out.warehouse_id,
                                  product_id=out.product_id,
                                  ten_hang=out.ten_hang or "", don_vi=out.dvt)
-    bal.ton_luong = max(Decimal("0"), bal.ton_luong - out.so_luong_nhap)
-    bal.gia_tri_ton = bal.ton_luong * bal.don_gia_binh_quan
-    bal.cap_nhat_luc = datetime.utcnow()
+    _xuat_balance(bal, out.so_luong_nhap, out.ten_hang or "")
+    _log_tx(db, out.warehouse_id, "XOA_NHAP_SX",
+            out.so_luong_nhap, out.don_gia_xuat_xuong or Decimal("0"), bal.ton_luong,
+            "production_outputs", out.id, None,
+            product_id=out.product_id,
+            ghi_chu="Xoa phieu nhap thanh pham")
 
     db.delete(out)
     db.commit()
@@ -1078,16 +1477,37 @@ def create_delivery(
                 DeliveryOrderItem.production_order_id == it.production_order_id,
                 DeliveryOrder.warehouse_id == warehouse_id,
             ).scalar() or Decimal("0")
-            ton_lsx = Decimal(str(tong_nhap_lsx)) - Decimal(str(tong_xuat_lsx))
+            tong_tra_lsx = db.query(
+                func.coalesce(func.sum(SalesReturnItem.so_luong_tra), 0)
+            ).select_from(SalesReturnItem).join(
+                SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id
+            ).join(
+                DeliveryOrder, DeliveryOrder.id == SalesReturn.delivery_order_id
+            ).join(
+                DeliveryOrderItem,
+                (DeliveryOrderItem.delivery_id == SalesReturn.delivery_order_id)
+                & (DeliveryOrderItem.sales_order_item_id == SalesReturnItem.sales_order_item_id)
+            ).filter(
+                DeliveryOrderItem.production_order_id == it.production_order_id,
+                DeliveryOrder.warehouse_id == warehouse_id,
+                SalesReturn.trang_thai == "da_duyet",
+            ).scalar() or Decimal("0")
+            ton_lsx = Decimal(str(tong_nhap_lsx)) - Decimal(str(tong_xuat_lsx)) + Decimal(str(tong_tra_lsx))
             if ton_lsx < it.so_luong:
                 po_ref = db.get(ProductionOrder, it.production_order_id)
                 label = po_ref.so_lenh if po_ref else ten_hang
-                raise HTTPException(400, f"KhÃ´ng Ä‘á»§ tá»“n TP theo LSX: {label} â€” "
-                                    f"cáº§n {float(it.so_luong):g}, cÃ²n {float(ton_lsx):g}")
+                raise HTTPException(400, f"Không đủ tồn TP theo LSX: {label} — "
+                                    f"cần {float(it.so_luong):g}, còn {float(ton_lsx):g}")
         bal = _get_or_create_balance(db, warehouse_id,
                                      product_id=it.product_id,
                                      ten_hang=ten_hang, don_vi=it.dvt)
-        if bal.ton_luong < it.so_luong:
+        balances = db.query(InventoryBalance).filter(
+            InventoryBalance.warehouse_id == warehouse_id,
+            InventoryBalance.product_id == it.product_id,
+            InventoryBalance.ton_luong > 0,
+        ).all() if it.product_id else [bal]
+        tong_ton_tp = sum((b.ton_luong or Decimal("0")) for b in balances)
+        if tong_ton_tp < it.so_luong:
             raise HTTPException(400, f"Không đủ tồn TP: {ten_hang} — "
                                 f"cần {float(it.so_luong):g}, còn {float(bal.ton_luong):g}")
 
@@ -1151,8 +1571,8 @@ def create_delivery(
         don_gia = it.don_gia
         if don_gia is None and it.sales_order_item_id:
             soi_ref = db.get(SalesOrderItem, it.sales_order_item_id)
-            if soi_ref and hasattr(soi_ref, "gia_ban") and soi_ref.gia_ban:
-                don_gia = Decimal(str(soi_ref.gia_ban))
+            if soi_ref and soi_ref.don_gia:
+                don_gia = Decimal(str(soi_ref.don_gia))
 
         thanh_tien = (it.so_luong * don_gia) if don_gia else None
         if thanh_tien:
@@ -1174,23 +1594,59 @@ def create_delivery(
             ghi_chu=it.ghi_chu,
         ))
 
-        bal = _get_or_create_balance(db, warehouse_id,
-                                     product_id=it.product_id,
-                                     ten_hang=ten_hang, don_vi=dvt)
-        don_gia_xuat = bal.don_gia_binh_quan
-        _xuat_balance(bal, it.so_luong, ten_hang)
-        _log_tx(db, warehouse_id, "XUAT_BAN",
-                it.so_luong, don_gia_xuat, bal.ton_luong,
-                "delivery_orders", do.id, current_user.id,
-                product_id=it.product_id,
-                ghi_chu=it.ghi_chu)
+        balances = db.query(InventoryBalance).filter(
+            InventoryBalance.warehouse_id == warehouse_id,
+            InventoryBalance.product_id == it.product_id,
+            InventoryBalance.ton_luong > 0,
+        ).all() if it.product_id else [
+            _get_or_create_balance(db, warehouse_id, product_id=it.product_id, ten_hang=ten_hang, don_vi=dvt)
+        ]
+        balances.sort(key=lambda b: 0)
+
+        remaining_qty = it.so_luong
+        for bal in balances:
+            if remaining_qty <= 0:
+                break
+            qty = min(remaining_qty, bal.ton_luong)
+            don_gia_xuat = bal.don_gia_binh_quan
+            _xuat_balance(bal, qty, ten_hang)
+            _log_tx(db, warehouse_id, "XUAT_BAN",
+                    qty, don_gia_xuat, bal.ton_luong,
+                    "delivery_orders", do.id, current_user.id,
+                    product_id=it.product_id,
+                    ghi_chu=it.ghi_chu)
+            remaining_qty -= qty
 
         if it.sales_order_item_id:
             soi = db.get(SalesOrderItem, it.sales_order_item_id)
             if soi:
                 soi.so_luong_da_xuat = (soi.so_luong_da_xuat or Decimal("0")) + it.so_luong
 
+    # ── Ghi sổ kế toán tự động (Giá vốn hàng bán) ───────────────────────────
+    acc_service = AccountingService(db)
+    wh = db.get(Warehouse, warehouse_id)
+    phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
+    
+    if not do.bo_qua_hach_toan:
+        acc_service.post_inventory_journal(
+            ngay=do.ngay_xuat,
+            loai="XUAT_BAN",
+            chung_tu_loai="delivery_orders",
+            chung_tu_id=do.id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=wh.phan_xuong_id if wh else None,
+            items=[{
+                "ten_hang": it.ten_hang,
+                "so_luong": it.so_luong,
+                "don_gia": it.don_gia or 0,
+                "tk_no": "632",
+                "tk_co": "155"
+            } for it in do.items]
+        )
+
     # Cập nhật tổng
+    _recalc_sales_order_delivery_status(db, body.sales_order_id)
+
     do.tong_tien_hang = tong_tien_hang if tong_tien_hang > 0 else None
     tien_vc = body.tien_van_chuyen or Decimal("0")
     do.tong_thanh_toan = (tong_tien_hang + tien_vc) if tong_tien_hang > 0 else (tien_vc if tien_vc > 0 else None)
@@ -1207,12 +1663,26 @@ def create_delivery(
 
 
 @router.delete("/deliveries/{do_id}")
-def delete_delivery(do_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def delete_delivery(do_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     do = db.get(DeliveryOrder, do_id)
     if not do:
         raise HTTPException(404, "Không tìm thấy phiếu giao hàng")
     if do.trang_thai in ("da_giao",):
         raise HTTPException(400, "Không thể xoá phiếu đã giao")
+
+    active_invoice = db.query(SalesInvoice).filter(
+        SalesInvoice.delivery_id == do_id,
+        SalesInvoice.trang_thai != "huy",
+    ).first()
+    if active_invoice:
+        raise HTTPException(400, "Khong the xoa phieu giao hang da lap hoa don")
+
+    active_return = db.query(SalesReturn).filter(
+        SalesReturn.delivery_order_id == do_id,
+        SalesReturn.trang_thai != "huy",
+    ).first()
+    if active_return:
+        raise HTTPException(400, "Khong the xoa phieu giao hang da co phieu tra hang")
 
     for it in do.items:
         ten_hang = it.ten_hang
@@ -1222,11 +1692,18 @@ def delete_delivery(do_id: int, db: Session = Depends(get_db), _: User = Depends
         bal.ton_luong += it.so_luong
         bal.gia_tri_ton = bal.ton_luong * bal.don_gia_binh_quan
         bal.cap_nhat_luc = datetime.utcnow()
+        _log_tx(db, do.warehouse_id, "XOA_XUAT_BAN",
+                it.so_luong, it.don_gia or Decimal("0"), bal.ton_luong,
+                "delivery_orders", do.id, current_user.id,
+                product_id=it.product_id,
+                ghi_chu=f"Xóa {do.so_phieu}")
 
         if it.sales_order_item_id:
             soi = db.get(SalesOrderItem, it.sales_order_item_id)
             if soi:
                 soi.so_luong_da_xuat = max(Decimal("0"), (soi.so_luong_da_xuat or Decimal("0")) - it.so_luong)
+
+    _recalc_sales_order_delivery_status(db, do.sales_order_id)
 
     db.delete(do)
     db.commit()
@@ -1401,13 +1878,96 @@ def create_phieu_chuyen(
                 other_material_id=it.other_material_id,
                 ghi_chu=it.ghi_chu)
 
+    # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
+    acc_service = AccountingService(db)
+    
+    # Lấy thông tin pháp nhân và xưởng
+    wh_xuat = db.get(Warehouse, body.warehouse_xuat_id)
+    wh_nhap = db.get(Warehouse, body.warehouse_nhap_id)
+    
+    phap_nhan_id = wh_xuat.phan_xuong_obj.phap_nhan_id if wh_xuat and wh_xuat.phan_xuong_obj else None
+    
+    # Chuẩn bị dữ liệu dòng cho kế toán
+    journal_items = []
+    for it in phieu.items:
+        # Xác định tài khoản 152 (NVL) hay 155 (Thành phẩm)
+        tk_kho = "155" if it.product_id or it.production_order_id else "152"
+        
+        # --- LẤY GIÁ ĐỊNH MỨC ---
+        std_price = Decimal("0")
+        if it.paper_material_id:
+            mat = db.get(PaperMaterial, it.paper_material_id)
+            std_price = mat.gia_dinh_muc if mat else Decimal("0")
+        elif it.other_material_id:
+            mat = db.get(OtherMaterial, it.other_material_id)
+            std_price = mat.gia_dinh_muc if mat else Decimal("0")
+        elif it.product_id:
+            prod = db.get(Product, it.product_id)
+            std_price = prod.gia_dinh_muc if prod else Decimal("0")
+            
+        # Nếu không có giá định mức, dùng giá bình quân (don_gia lưu trong item)
+        transfer_price = std_price if std_price > 0 else (it.don_gia or 0)
+
+        journal_items.append({
+            "ten_hang": it.ten_hang,
+            "so_luong": it.so_luong,
+            "don_gia": transfer_price,
+            "don_gia_binh_quan": it.don_gia or 0, # Giá bình quân lưu tại don_gia của item
+            "tk_kho": tk_kho
+        })
+
+    if journal_items and not phieu.bo_qua_hach_toan:
+        # 1. Bút toán xưởng xuất:
+        # - Nợ 1368 / Có 5112 (Doanh thu nội bộ theo Giá định mức)
+        # - Nợ 6322 / Có 152-155 (Giá vốn nội bộ theo Giá bình quân)
+        lines_xuat = []
+        for i in journal_items:
+            val_std = float(i["so_luong"]) * float(i["don_gia"])      # Giá định mức
+            val_act = float(i["so_luong"]) * float(i.get("don_gia_binh_quan", i["don_gia"])) # Giá bình quân
+            
+            # Cặp Doanh thu nội bộ
+            lines_xuat.append({"so_tk": "1368", "dien_giai": f"DTNB: {i['ten_hang']}", "so_tien_no": val_std, "so_tien_co": 0})
+            lines_xuat.append({"so_tk": "5112", "dien_giai": f"DTNB: {i['ten_hang']}", "so_tien_no": 0, "so_tien_co": val_std})
+            
+            # Cặp Giá vốn nội bộ
+            lines_xuat.append({"so_tk": "6322", "dien_giai": f"GVNB: {i['ten_hang']}", "so_tien_no": val_act, "so_tien_co": 0})
+            lines_xuat.append({"so_tk": i["tk_kho"], "dien_giai": f"GVNB: {i['ten_hang']}", "so_tien_no": 0, "so_tien_co": val_act})
+
+        acc_service._create_journal_entry(
+            ngay=phieu.ngay,
+            dien_giai=f"Xuất nội bộ: {phieu.so_phieu}",
+            loai_but_toan="chuyen_kho_xuat",
+            chung_tu_loai="phieu_chuyen_kho",
+            chung_tu_id=phieu.id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=wh_xuat.phan_xuong_id,
+            lines=lines_xuat
+        )
+        
+        # 2. Bút toán xưởng nhập: Nợ 152-155 / Có 3368 (Theo Giá định mức)
+        acc_service.post_inventory_journal(
+            ngay=phieu.ngay,
+            loai="CHUYEN_KHO_NHAP",
+            chung_tu_loai="phieu_chuyen_kho",
+            chung_tu_id=phieu.id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=wh_nhap.phan_xuong_id,
+            items=[{
+                "ten_hang": i["ten_hang"],
+                "so_luong": i["so_luong"],
+                "don_gia": i["don_gia"],
+                "tk_no": i["tk_kho"],
+                "tk_co": "3368"
+            } for i in journal_items]
+        )
+
     db.commit()
     db.refresh(phieu)
     return _ck_to_dict(phieu, db)
 
 
 @router.delete("/phieu-chuyen/{phieu_id}")
-def delete_phieu_chuyen(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def delete_phieu_chuyen(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     p = db.get(PhieuChuyenKho, phieu_id)
     if not p:
         raise HTTPException(404, "Không tìm thấy phiếu chuyển")
@@ -1421,6 +1981,12 @@ def delete_phieu_chuyen(phieu_id: int, db: Session = Depends(get_db), _: User = 
         bal_xuat.ton_luong += it.so_luong
         bal_xuat.gia_tri_ton = bal_xuat.ton_luong * bal_xuat.don_gia_binh_quan
         bal_xuat.cap_nhat_luc = datetime.utcnow()
+        _log_tx(db, p.warehouse_xuat_id, "XOA_CHUYEN_XUAT",
+                it.so_luong, it.don_gia, bal_xuat.ton_luong,
+                "phieu_chuyen_kho", p.id, current_user.id,
+                paper_material_id=it.paper_material_id,
+                other_material_id=it.other_material_id,
+                ghi_chu=f"Xóa {p.so_phieu}")
 
         bal_nhap = _get_or_create_balance(db, p.warehouse_nhap_id,
                                           it.paper_material_id, it.other_material_id,
@@ -1428,6 +1994,16 @@ def delete_phieu_chuyen(phieu_id: int, db: Session = Depends(get_db), _: User = 
         bal_nhap.ton_luong = max(Decimal("0"), bal_nhap.ton_luong - it.so_luong)
         bal_nhap.gia_tri_ton = bal_nhap.ton_luong * bal_nhap.don_gia_binh_quan
         bal_nhap.cap_nhat_luc = datetime.utcnow()
+        _log_tx(db, p.warehouse_nhap_id, "XOA_CHUYEN_NHAP",
+                it.so_luong, it.don_gia, bal_nhap.ton_luong,
+                "phieu_chuyen_kho", p.id, current_user.id,
+                paper_material_id=it.paper_material_id,
+                other_material_id=it.other_material_id,
+                ghi_chu=f"Xóa {p.so_phieu}")
+
+    # Đảo ngược bút toán kế toán
+    acc_service = AccountingService(db)
+    acc_service._reverse_journal_entries("phieu_chuyen_kho", phieu_id)
 
     db.delete(p)
     db.commit()
@@ -1570,13 +2146,35 @@ def create_stock_adjustment(
                 product_id=bal.product_id,
                 ghi_chu=it.ghi_chu or body.ly_do)
 
+    # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
+    acc_service = AccountingService(db)
+    wh = db.get(Warehouse, body.warehouse_id)
+    phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
+    
+    if not adj.bo_qua_hach_toan:
+        acc_service.post_inventory_journal(
+            ngay=adj.ngay,
+            loai="DIEU_CHINH",
+            chung_tu_loai="stock_adjustment",
+            chung_tu_id=adj.id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=wh.phan_xuong_id if wh else None,
+            items=[{
+                "ten_hang": it.ten_hang,
+                "so_luong": abs(it.chenhlech),
+                "don_gia": it.don_gia,
+                "tk_no": (it.inventory_balance.tk_kho or ("155" if it.product_id else "152")) if it.chenhlech > 0 else "811",
+                "tk_co": (it.inventory_balance.tk_kho or ("155" if it.product_id else "152")) if it.chenhlech < 0 else "711"
+            } for it in adj.items]
+        )
+
     db.commit()
     db.refresh(adj)
     return _adj_to_dict(adj, db)
 
 
 @router.delete("/stock-adjustments/{adj_id}")
-def delete_stock_adjustment(adj_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def delete_stock_adjustment(adj_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     adj = db.get(StockAdjustment, adj_id)
     if not adj:
         raise HTTPException(404, "Khong tim thay phieu kiem ke")
@@ -1591,8 +2189,22 @@ def delete_stock_adjustment(adj_id: int, db: Session = Depends(get_db), _: User 
         )
         if it.chenhlech > 0:
             _xuat_balance(bal, it.chenhlech, it.ten_hang)
+            _log_tx(db, adj.warehouse_id, "XOA_DIEU_CHINH_TANG",
+                    it.chenhlech, it.don_gia, bal.ton_luong,
+                    "stock_adjustment", adj.id, current_user.id,
+                    paper_material_id=it.paper_material_id,
+                    other_material_id=it.other_material_id,
+                    product_id=it.product_id,
+                    ghi_chu=f"Xóa {adj.so_phieu}")
         elif it.chenhlech < 0:
             _nhap_balance(bal, -it.chenhlech, it.don_gia)
+            _log_tx(db, adj.warehouse_id, "XOA_DIEU_CHINH_GIAM",
+                    -it.chenhlech, it.don_gia, bal.ton_luong,
+                    "stock_adjustment", adj.id, current_user.id,
+                    paper_material_id=it.paper_material_id,
+                    other_material_id=it.other_material_id,
+                    product_id=it.product_id,
+                    ghi_chu=f"Xóa {adj.so_phieu}")
 
     db.delete(adj)
     db.commit()
@@ -1688,14 +2300,36 @@ def get_giao_dich(
         q = q.filter(InventoryTransaction.ngay_giao_dich >= tu_ngay)
     if den_ngay:
         q = q.filter(InventoryTransaction.ngay_giao_dich <= den_ngay)
-    rows = q.order_by(InventoryTransaction.ngay_giao_dich.desc()).limit(limit).all()
+    rows = q.order_by(InventoryTransaction.ngay_giao_dich.asc(), InventoryTransaction.id.asc()).limit(limit).all()
+    # Batch-load names
+    wh_ids = {r.warehouse_id for r in rows}
+    pm_ids = {r.paper_material_id for r in rows if r.paper_material_id}
+    om_ids = {r.other_material_id for r in rows if r.other_material_id}
+    pd_ids = {r.product_id for r in rows if r.product_id}
+    wh_map = {w.id: w.ma_kho for w in db.query(Warehouse).filter(Warehouse.id.in_(wh_ids)).all()} if wh_ids else {}
+    pm_map = {p.id: (p.ma_chinh, p.ten) for p in db.query(PaperMaterial).filter(PaperMaterial.id.in_(pm_ids)).all()} if pm_ids else {}
+    om_map = {p.id: (p.ma_chinh, p.ten) for p in db.query(OtherMaterial).filter(OtherMaterial.id.in_(om_ids)).all()} if om_ids else {}
+    pd_map = {p.id: (p.ma_hang or p.ma_amis, p.ten_hang) for p in db.query(Product).filter(Product.id.in_(pd_ids)).all()} if pd_ids else {}
+
+    def _name(r) -> tuple[str, str]:
+        if r.paper_material_id and r.paper_material_id in pm_map:
+            return pm_map[r.paper_material_id]
+        if r.other_material_id and r.other_material_id in om_map:
+            return om_map[r.other_material_id]
+        if r.product_id and r.product_id in pd_map:
+            return pd_map[r.product_id]
+        return ("", "")
+
     return [{
         "id": r.id,
         "ngay_giao_dich": r.ngay_giao_dich.isoformat() if r.ngay_giao_dich else None,
         "warehouse_id": r.warehouse_id,
+        "ten_kho": wh_map.get(r.warehouse_id, ""),
         "paper_material_id": r.paper_material_id,
         "other_material_id": r.other_material_id,
         "product_id": r.product_id,
+        "ma_hang": _name(r)[0],
+        "ten_hang": _name(r)[1],
         "loai_giao_dich": r.loai_giao_dich,
         "so_luong": float(r.so_luong),
         "don_gia": float(r.don_gia),
@@ -1754,6 +2388,58 @@ def ton_kho_tp_lsx(
     )
     xuat_map = {r.production_order_id: float(r.tong_xuat) for r in xuat_rows}
 
+    tra_rows_all = (
+        db.query(
+            DeliveryOrderItem.production_order_id,
+            DeliveryOrder.warehouse_id,
+            func.coalesce(func.sum(SalesReturnItem.so_luong_tra), 0).label("tong_tra"),
+        )
+        .select_from(SalesReturnItem)
+        .join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id)
+        .join(DeliveryOrder, DeliveryOrder.id == SalesReturn.delivery_order_id)
+        .join(
+            DeliveryOrderItem,
+            (DeliveryOrderItem.delivery_id == SalesReturn.delivery_order_id)
+            & (DeliveryOrderItem.sales_order_item_id == SalesReturnItem.sales_order_item_id),
+        )
+        .filter(
+            DeliveryOrderItem.production_order_id.in_(order_ids),
+            SalesReturn.trang_thai != "huy",
+        )
+        .group_by(DeliveryOrderItem.production_order_id, DeliveryOrder.warehouse_id)
+        .all()
+    )
+    tra_map: dict[int, dict[int | None, float]] = {}
+    for r in tra_rows_all:
+        by_wh = tra_map.setdefault(r.production_order_id, {})
+        by_wh[r.warehouse_id] = by_wh.get(r.warehouse_id, 0.0) + float(r.tong_tra)
+
+    tra_rows_approved = (
+        db.query(
+            DeliveryOrderItem.production_order_id,
+            DeliveryOrder.warehouse_id,
+            func.coalesce(func.sum(SalesReturnItem.so_luong_tra), 0).label("tong_tra"),
+        )
+        .select_from(SalesReturnItem)
+        .join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id)
+        .join(DeliveryOrder, DeliveryOrder.id == SalesReturn.delivery_order_id)
+        .join(
+            DeliveryOrderItem,
+            (DeliveryOrderItem.delivery_id == SalesReturn.delivery_order_id)
+            & (DeliveryOrderItem.sales_order_item_id == SalesReturnItem.sales_order_item_id),
+        )
+        .filter(
+            DeliveryOrderItem.production_order_id.in_(order_ids),
+            SalesReturn.trang_thai == "da_duyet",
+        )
+        .group_by(DeliveryOrderItem.production_order_id, DeliveryOrder.warehouse_id)
+        .all()
+    )
+    tra_approved_map: dict[int, dict[int | None, float]] = {}
+    for r in tra_rows_approved:
+        by_wh = tra_approved_map.setdefault(r.production_order_id, {})
+        by_wh[r.warehouse_id] = by_wh.get(r.warehouse_id, 0.0) + float(r.tong_tra)
+
     # 3. Phiếu xuất gần nhất per LSX
     phieu_xuat_rows = (
         db.query(
@@ -1803,7 +2489,7 @@ def ton_kho_tp_lsx(
         db.query(ProductionOrder)
         .options(
             joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.customer),
-            joinedload(ProductionOrder.phap_nhan_sx),
+            joinedload(ProductionOrder.phap_nhan),
             joinedload(ProductionOrder.phan_xuong),
             joinedload(ProductionOrder.nv_theo_doi),
         )
@@ -1816,6 +2502,8 @@ def ton_kho_tp_lsx(
         nh = nhap_map.get(o.id, {})
         tong_nhap = nh.get("tong_nhap", 0.0)
         tong_xuat = xuat_map.get(o.id, 0.0)
+        tong_tra = tra_map.get(o.id, {}).get(nh.get("warehouse_id"), 0.0)
+        tong_tra_da_duyet = tra_approved_map.get(o.id, {}).get(nh.get("warehouse_id"), 0.0)
         kh = o.sales_order.customer if o.sales_order else None
         first_item = item_map.get(o.id)
         ten_khach_hang = kh.ten_viet_tat if kh else None
@@ -1833,7 +2521,7 @@ def ton_kho_tp_lsx(
         if den_ngay and (not ngay_lenh_str or ngay_lenh_str > den_ngay):
             continue
 
-        ton_kho = tong_nhap - tong_xuat
+        ton_kho = tong_nhap - tong_xuat + tong_tra_da_duyet
         metrics = production_item_metrics(first_item, Decimal(str(ton_kho)))
 
         result.append({
@@ -1856,6 +2544,9 @@ def ton_kho_tp_lsx(
             "sl_ke_hoach": sl_ke_hoach_map.get(o.id, 0.0),
             "tong_nhap": tong_nhap,
             "tong_xuat": tong_xuat,
+            "tong_tra": tong_tra,
+            "tong_tra_da_duyet": tong_tra_da_duyet,
+            "tinh_trang_hang": "hang_tra_ve" if tong_tra > 0 else "binh_thuong",
             "ton_kho": ton_kho,
             "dien_tich": float(metrics["dien_tich"]),
             "trong_luong": float(metrics["trong_luong"]),
@@ -1864,10 +2555,12 @@ def ton_kho_tp_lsx(
             "warehouse_id": nh.get("warehouse_id"),
             "phan_xuong_id": o.phan_xuong_id,
             "ten_phan_xuong": o.phan_xuong.ten_xuong if o.phan_xuong else None,
-            "phap_nhan_sx_id": o.phap_nhan_sx_id,
-            "ten_phap_nhan_sx": o.phap_nhan_sx.ten_phap_nhan if o.phap_nhan_sx else None,
+            "phap_nhan_id": o.phap_nhan_id,
+            "ten_phap_nhan_sx": o.phap_nhan.ten_phap_nhan if o.phap_nhan else None,
             "phieu_xuat_gan_nhat": phieu_xuat_map.get(o.id),
         })
 
     result.sort(key=lambda x: x["so_lenh"])
     return result
+
+

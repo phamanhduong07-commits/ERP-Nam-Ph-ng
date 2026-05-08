@@ -112,12 +112,12 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
         so_don=so_don,
         ten_khach_hang=ten_khach_hang,
         ma_khach_hang=ma_khach_hang,
-        phap_nhan_sx_id=order.phap_nhan_sx_id,
-        ten_phap_nhan_sx=order.phap_nhan_sx.ten_phap_nhan if order.phap_nhan_sx else None,
+        phap_nhan_id=order.phap_nhan_id,
+        ten_phap_nhan=order.phap_nhan.ten_phap_nhan if order.phap_nhan else (order.sales_order.phap_nhan.ten_phap_nhan if order.sales_order and order.sales_order.phap_nhan else None),
         kho_sx_id=order.kho_sx_id,
         ten_kho_sx=order.kho_sx.ten_kho if order.kho_sx else None,
         phan_xuong_id=order.phan_xuong_id,
-        ten_phan_xuong=order.phan_xuong.ten_xuong if order.phan_xuong else None,
+        ten_phan_xuong=order.phan_xuong.ten_xuong if order.phan_xuong else (order.sales_order.phan_xuong.ten_xuong if order.sales_order and order.sales_order.phan_xuong else None),
         nv_theo_doi_id=order.nv_theo_doi_id,
         ten_nv_theo_doi=order.nv_theo_doi.ho_ten if order.nv_theo_doi else None,
         trang_thai=order.trang_thai,
@@ -137,11 +137,13 @@ def _load_order(order_id: int, db: Session) -> ProductionOrder:
         db.query(ProductionOrder)
         .options(
             joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.customer),
+            joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.phap_nhan),
+            joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.phan_xuong),
             joinedload(ProductionOrder.items).joinedload(ProductionOrderItem.product),
             joinedload(ProductionOrder.items)
                 .joinedload(ProductionOrderItem.sales_order_item)
                 .joinedload(SalesOrderItem.quote_item),
-            joinedload(ProductionOrder.phap_nhan_sx),
+            joinedload(ProductionOrder.phap_nhan),
             joinedload(ProductionOrder.kho_sx),
             joinedload(ProductionOrder.phan_xuong),
             joinedload(ProductionOrder.nv_theo_doi),
@@ -178,17 +180,16 @@ def list_orders(
     )
 
 
-@router.get("/{order_id}", response_model=ProductionOrderResponse)
+@router.get("/{order_id:int}", response_model=ProductionOrderResponse)
 def get_order(
     order_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    service = ProductionOrderService(db)
-    return service.get_production_order_by_id(order_id)
+    return _build_response(_load_order(order_id, db))
 
 
-@router.post("/tu-don-hang/{order_id}", response_model=List[ProductionOrderResponse], status_code=201)
+@router.post("/tu-don-hang/{order_id:int}", response_model=List[ProductionOrderResponse], status_code=201)
 def tao_lenh_tu_don_hang(
     order_id: int,
     data: TaoLenhBody,
@@ -244,9 +245,9 @@ def tao_lenh_tu_don_hang(
             sales_order_id=so.id,
             trang_thai="moi",
             ngay_hoan_thanh_ke_hoach=data.ngay_hoan_thanh_ke_hoach or so.ngay_giao_hang,
-            phap_nhan_sx_id=data.phap_nhan_sx_id or so.phap_nhan_sx_id,
+            phap_nhan_id=data.phap_nhan_id or so.phap_nhan_id,
             kho_sx_id=kho_sx_id,
-            phan_xuong_id=data.phan_xuong_id,
+            phan_xuong_id=data.phan_xuong_id or so.phan_xuong_id,
             nv_theo_doi_id=nv_theo_doi_id,
             ghi_chu=data.ghi_chu,
             created_by=current_user.id,
@@ -308,7 +309,7 @@ def create_order(
     return service.create_production_order(data, current_user.id)
 
 
-@router.put("/{order_id}", response_model=ProductionOrderResponse)
+@router.put("/{order_id:int}", response_model=ProductionOrderResponse)
 def update_order(
     order_id: int,
     data: ProductionOrderUpdate,
@@ -319,7 +320,7 @@ def update_order(
     return service.update_production_order(order_id, data)
 
 
-@router.patch("/{order_id}/start", response_model=ProductionOrderResponse)
+@router.patch("/{order_id:int}/start", response_model=ProductionOrderResponse)
 def start_order(
     order_id: int,
     db: Session = Depends(get_db),
@@ -337,7 +338,7 @@ def start_order(
     return _build_response(_load_order(order_id, db))
 
 
-@router.patch("/{order_id}/complete", response_model=ProductionOrderResponse)
+@router.patch("/{order_id:int}/complete", response_model=ProductionOrderResponse)
 def complete_order(
     order_id: int,
     db: Session = Depends(get_db),
@@ -355,7 +356,7 @@ def complete_order(
     return _build_response(_load_order(order_id, db))
 
 
-@router.patch("/{order_id}/cancel")
+@router.patch("/{order_id:int}/cancel")
 def cancel_order(
     order_id: int,
     db: Session = Depends(get_db),
@@ -372,7 +373,7 @@ def cancel_order(
     return {"message": f"Đã huỷ lệnh {order.so_lenh}"}
 
 
-@router.patch("/{order_id}/items/{item_id}/progress", response_model=ProductionOrderItemResponse)
+@router.patch("/{order_id:int}/items/{item_id:int}/progress", response_model=ProductionOrderItemResponse)
 def update_item_progress(
     order_id: int,
     item_id: int,
@@ -417,7 +418,7 @@ def update_item_progress(
     )
 
 
-@router.patch("/{order_id}/items/{item_id}/sx-params", response_model=ProductionOrderResponse)
+@router.patch("/{order_id:int}/items/{item_id:int}/sx-params", response_model=ProductionOrderResponse)
 def update_item_sx_params(
     order_id: int,
     item_id: int,
@@ -515,7 +516,7 @@ def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
     }
 
 
-@router.post("/{order_id}/phieu-nhap-phoi-song", status_code=201)
+@router.post("/{order_id:int}/phieu-nhap-phoi-song", status_code=201)
 def create_phieu_nhap_phoi_song(
     order_id: int,
     data: PhieuBody,
@@ -533,7 +534,7 @@ def create_phieu_nhap_phoi_song(
         src_wh = _get_phoi_source_warehouse(
             db,
             phan_xuong_id=order.phan_xuong_id,
-            phap_nhan_id=order.phap_nhan_sx_id,
+            phap_nhan_id=order.phap_nhan_id,
         )
         warehouse_id = src_wh.id if src_wh else None
 
@@ -646,7 +647,7 @@ def list_all_phieu_nhap_phoi_song(
     return result
 
 
-@router.get("/{order_id}/phieu-nhap-phoi-song")
+@router.get("/{order_id:int}/phieu-nhap-phoi-song")
 def list_phieu_nhap_phoi_song(
     order_id: int,
     db: Session = Depends(get_db),
@@ -665,7 +666,7 @@ def list_phieu_nhap_phoi_song(
     return [_phieu_to_dict(p) for p in phieus]
 
 
-@router.delete("/{order_id}/phieu-nhap-phoi-song/{phieu_id}")
+@router.delete("/{order_id:int}/phieu-nhap-phoi-song/{phieu_id:int}")
 def delete_phieu_nhap_phoi_song(
     order_id: int,
     phieu_id: int,
@@ -708,7 +709,7 @@ def delete_phieu_nhap_phoi_song(
 
 # ── Đẩy lệnh sang hệ thống CD2 (Công Đoạn 2) ────────────────────────────────
 
-@router.post("/{order_id}/push-to-cd2")
+@router.post("/{order_id:int}/push-to-cd2")
 def push_to_cd2(
     order_id: int,
     db: Session = Depends(get_db),

@@ -8,6 +8,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { warehousesApi, type Warehouse, type WarehouseCreate } from '../../api/warehouses'
 import { warehouseApi } from '../../api/warehouse'
+import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title } = Typography
 
@@ -152,7 +153,17 @@ export default function WarehouseList() {
       <Card>
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col><Title level={4} style={{ margin: 0 }}>Danh mục kho</Title></Col>
-          <Col><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm kho</Button></Col>
+          <Col>
+            <Space>
+              <ImportExcelButton
+                endpoint="/api/warehouses"
+                templateFilename="mau_import_kho.xlsx"
+                buttonText="Import Excel"
+                onImported={() => queryClient.invalidateQueries({ queryKey: ['warehouses'] })}
+              />
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm kho</Button>
+            </Space>
+          </Col>
         </Row>
         <Table rowKey="id" dataSource={data} columns={columns} loading={isLoading} size="small" pagination={{ pageSize: 20 }} />
       </Card>

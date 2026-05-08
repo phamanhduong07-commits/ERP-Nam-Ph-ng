@@ -7,6 +7,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { tinhThanhApi, type TinhThanh } from '../../api/simpleApis'
+import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title } = Typography
 
@@ -116,9 +117,17 @@ export default function TinhThanhList() {
             <Title level={4} style={{ margin: 0 }}>Tỉnh / Thành phố</Title>
           </Col>
           <Col>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Thêm mới
-            </Button>
+            <Space>
+              <ImportExcelButton
+                endpoint="/api/tinh-thanh"
+                templateFilename="mau_import_tinh_thanh.xlsx"
+                buttonText="Import Excel"
+                onImported={() => queryClient.invalidateQueries({ queryKey: ['tinh-thanh'] })}
+              />
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                Thêm mới
+              </Button>
+            </Space>
           </Col>
         </Row>
 

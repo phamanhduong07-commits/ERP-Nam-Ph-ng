@@ -82,9 +82,11 @@ export default function OrderDiscountUpdate() {
     )
   }
 
-  const tongTienHang = order.tong_tien_hang || 0
-  const tongTienGiamGia = order.tong_tien_giam_gia || 0
-  const tongThanhToan = order.tong_thanh_toan || 0
+  const tongTienHang = order.tong_tien || 0
+  const tongTienGiamGia = order.ty_le_giam_gia > 0
+    ? order.tong_tien * (order.ty_le_giam_gia / 100)
+    : (order.so_tien_giam_gia || 0)
+  const tongThanhToan = order.tong_tien_sau_giam || 0
 
   return (
     <div>
@@ -172,14 +174,11 @@ export default function OrderDiscountUpdate() {
                 {order.customer?.ten_don_vi}
               </Descriptions.Item>
               <Descriptions.Item label="Trạng thái">
-                <Text type={
-                  order.trang_thai === 'da_duyet' ? 'success' :
-                  order.trang_thai === 'hoan_thanh' ? 'default' : 'warning'
-                } as "success" | "warning" | "danger" | "secondary">
+                <Text type="success">
                   {order.trang_thai}
                 </Text>
               </Descriptions.Item>
-              <Descriptions.Item label="Ngày đặt">{order.ngay_dat}</Descriptions.Item>
+              <Descriptions.Item label="Ngày đặt">{order.ngay_don}</Descriptions.Item>
             </Descriptions>
 
             <Divider />

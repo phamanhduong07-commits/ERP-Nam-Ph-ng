@@ -7,6 +7,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { viTriApi, type ViTri } from '../../api/simpleApis'
+import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title } = Typography
 
@@ -149,6 +150,12 @@ export default function ViTriList() {
                   { value: 'kho', label: 'Kho' },
                   { value: 'san_xuat', label: 'Sản xuất' },
                 ]}
+              />
+              <ImportExcelButton
+                endpoint="/api/vi-tri"
+                templateFilename="mau_import_vi_tri.xlsx"
+                buttonText="Import Excel"
+                onImported={() => queryClient.invalidateQueries({ queryKey: ['vi-tri'] })}
               />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm mới

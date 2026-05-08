@@ -6,7 +6,7 @@ import {
   Row, Select, Space, Spin, Table, Tag, Typography, message,
 } from 'antd'
 import {
-  ArrowLeftOutlined, CheckOutlined, CloseOutlined, PlusOutlined,
+  ArrowLeftOutlined, CheckOutlined, CloseOutlined, PlusOutlined, PrinterOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -169,6 +169,12 @@ export default function SalesInvoiceDetailPage() {
               Hủy HĐ
             </Button>
           )}
+          <Button
+            icon={<PrinterOutlined />}
+            onClick={() => window.open(`/api/billing/invoices/${invoiceId}/print`, '_blank')}
+          >
+            In hóa đơn
+          </Button>
         </Space>
       </div>
 

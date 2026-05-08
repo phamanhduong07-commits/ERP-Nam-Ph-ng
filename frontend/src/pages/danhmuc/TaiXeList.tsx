@@ -7,6 +7,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { taiXeApi, type TaiXe } from '../../api/simpleApis'
+import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title } = Typography
 
@@ -120,9 +121,17 @@ export default function TaiXeList() {
             <Title level={4} style={{ margin: 0 }}>Danh mục tài xế</Title>
           </Col>
           <Col>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Thêm mới
-            </Button>
+            <Space>
+              <ImportExcelButton
+                endpoint="/api/tai-xe"
+                templateFilename="mau_import_tai_xe.xlsx"
+                buttonText="Import Excel"
+                onImported={() => queryClient.invalidateQueries({ queryKey: ['tai-xe'] })}
+              />
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                Thêm mới
+              </Button>
+            </Space>
           </Col>
         </Row>
 

@@ -43,8 +43,9 @@ class ProductionOrderService:
     ) -> PagedResponse:
         q = self.db.query(ProductionOrder).options(
             joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.customer),
-            joinedload(ProductionOrder.phap_nhan_sx),
+            joinedload(ProductionOrder.phap_nhan),
             joinedload(ProductionOrder.kho_sx),
+            joinedload(ProductionOrder.items),
         )
 
         if search:
@@ -73,7 +74,7 @@ class ProductionOrderService:
                 so_don=o.sales_order.so_don if o.sales_order else None,
                 ten_khach_hang=o.sales_order.customer.ten_viet_tat if o.sales_order and o.sales_order.customer else None,
                 ten_hang=first_item.ten_hang if first_item else None,
-                ten_phap_nhan_sx=o.phap_nhan_sx.ten_phap_nhan if o.phap_nhan_sx else None,
+                ten_phap_nhan=o.phap_nhan.ten_phap_nhan if o.phap_nhan else None,
                 ten_kho_sx=o.kho_sx.ten_kho if o.kho_sx else None,
                 phan_xuong_id=o.phan_xuong_id,
                 gia_ban_muc_tieu=getattr(first_item, 'gia_ban', None) if first_item else None,

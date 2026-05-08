@@ -37,6 +37,7 @@ export interface PhanXuongItem {
   id: number
   ma_xuong: string
   ten_xuong: string
+  phoi_tu_phan_xuong_id: number | null
 }
 
 export interface TheoDoiParams {

@@ -169,6 +169,7 @@ class PagedResponse(BaseModel):
 # ─────────────────────────────────────────────
 
 class SalesReturnItemCreate(BaseModel):
+    delivery_order_item_id: int | None = None
     sales_order_item_id: int
     so_luong_tra: Decimal
     don_gia_tra: Decimal | None = None
@@ -194,6 +195,7 @@ class SalesReturnItemUpdate(BaseModel):
 
 class SalesReturnItemResponse(BaseModel):
     id: int
+    delivery_order_item_id: int | None = None
     sales_order_item_id: int
     sales_order_item: SalesOrderItemResponse | None = None
     so_luong_tra: Decimal
@@ -266,6 +268,7 @@ class SalesReturnListItem(BaseModel):
     ten_khach_hang: str | None = None
     ly_do_tra: str
     trang_thai: str
+    tong_so_luong_tra: Decimal = Decimal("0")
     tong_tien_tra: Decimal
     created_at: datetime
 

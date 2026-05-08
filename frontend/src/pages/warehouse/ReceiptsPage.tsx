@@ -4,7 +4,7 @@ import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
   Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Divider,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, InboxOutlined, MinusCircleOutlined } from '@ant-design/icons'
+import { FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined, InboxOutlined, MinusCircleOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
@@ -12,6 +12,8 @@ import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { purchaseApi } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
+import { exportToExcel, printDocument, buildHtmlTable } from '../../utils/exportUtils'
+import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
 
@@ -28,6 +30,7 @@ const KET_QUA_OPTIONS = [
 ]
 
 export default function ReceiptsPage() {
+  const companyInfo = usePhapNhanForPrint()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -113,6 +116,15 @@ export default function ReceiptsPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
   })
 
+  const approveMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.approveGoodsReceipt(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['goods-receipts'] })
+      message.success('Đã duyệt phiếu nhập kho')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi duyệt phiếu'),
+  })
+
   const handlePOSelect = (poId: number) => {
     setSelectedPO(poId)
   }
@@ -179,6 +191,55 @@ export default function ReceiptsPage() {
     } catch { /* validation shown inline */ }
   }
 
+  const handlePrintReceipt = (r: GoodsReceipt) => {
+    const cols = [
+      { header: 'Tên hàng' },
+      { header: 'ĐVT', align: 'center' as const },
+      { header: 'Số lượng', align: 'right' as const },
+      { header: 'Đơn giá (đ)', align: 'right' as const },
+      { header: 'Thành tiền (đ)', align: 'right' as const },
+    ]
+    const rowData = (r.items || []).map((it: any) => [
+      it.ten_hang,
+      it.dvt,
+      Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
+      Number(it.don_gia) > 0 ? Number(it.don_gia).toLocaleString('vi-VN') : '—',
+      (Number(it.thanh_tien) || 0).toLocaleString('vi-VN'),
+    ])
+    const tong = (r.items || []).reduce((s: number, it: any) => s + (Number(it.thanh_tien) || 0), 0)
+    printDocument({
+      title: `Phiếu nhập kho ${r.so_phieu}`,
+      subtitle: 'PHIẾU NHẬP KHO',
+      companyInfo,
+      documentNumber: r.so_phieu,
+      documentDate: r.ngay_nhap ?? '',
+      fields: [
+        { label: 'Kho nhập', value: r.ten_kho ?? '—' },
+        { label: 'Nhà cung cấp', value: r.ten_ncc ?? '—' },
+        { label: 'Loại nhập', value: r.loai_nhap ?? '—' },
+        { label: 'Ghi chú', value: r.ghi_chu ?? '—' },
+      ],
+      bodyHtml: buildHtmlTable(cols, rowData, { totalRow: ['TỔNG CỘNG', '', '', '', tong.toLocaleString('vi-VN') + ' đ'] }),
+    })
+  }
+
+  const handleExportExcel = () => {
+    exportToExcel(`PhieuNhapKho_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Phiếu nhập kho',
+      headers: ['Số phiếu', 'Ngày nhập', 'Kho', 'Nhà CC', 'Loại nhập', 'Tổng giá trị', 'Trạng thái'],
+      rows: receiptList.map((r: GoodsReceipt) => [
+        r.so_phieu,
+        r.ngay_nhap,
+        r.ten_kho ?? '',
+        r.ten_ncc ?? '',
+        r.loai_nhap,
+        r.tong_gia_tri,
+        r.trang_thai === 'da_duyet' ? 'Đã duyệt' : 'Nhập',
+      ]),
+      colWidths: [18, 12, 18, 22, 14, 16, 12],
+    }])
+  }
+
   const columns = [
     { title: 'Số phiếu', dataIndex: 'so_phieu', width: 160,
       render: (v: string) => <Text strong style={{ color: '#1677ff' }}>{v}</Text> },
@@ -192,12 +253,20 @@ export default function ReceiptsPage() {
     { title: 'TT', dataIndex: 'trang_thai', width: 90,
       render: (v: string) => <Tag color={v === 'da_duyet' ? 'green' : 'default'}>{v === 'da_duyet' ? 'Đã duyệt' : 'Nhập'}</Tag> },
     {
-      title: '', width: 50,
+      title: '', width: 120,
       render: (_: unknown, r: GoodsReceipt) => (
-        <Popconfirm title="Xoá phiếu nhập?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
-          disabled={r.trang_thai !== 'nhap'}>
-          <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai !== 'nhap'} />
-        </Popconfirm>
+        <Space size={4}>
+          <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintReceipt(r)} />
+          <Popconfirm title="Duyệt phiếu nhập?" onConfirm={() => approveMut.mutate(r.id)}
+            disabled={r.trang_thai !== 'nhap'}>
+            <Button size="small" icon={<CheckCircleOutlined />} style={{ color: '#52c41a', borderColor: '#52c41a' }}
+              disabled={r.trang_thai !== 'nhap'} />
+          </Popconfirm>
+          <Popconfirm title="Xoá phiếu nhập?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
+            disabled={r.trang_thai !== 'nhap'}>
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai !== 'nhap'} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ]
@@ -233,9 +302,14 @@ export default function ReceiptsPage() {
           </Space>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setOpen(true) }}>
-            Tạo phiếu nhập
-          </Button>
+          <Space>
+            <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
+              Xuất Excel
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setOpen(true) }}>
+              Tạo phiếu nhập
+            </Button>
+          </Space>
         </Col>
       </Row>
 

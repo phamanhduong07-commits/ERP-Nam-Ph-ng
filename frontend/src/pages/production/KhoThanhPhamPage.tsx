@@ -1,14 +1,21 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Alert, Button, Col, DatePicker, Input, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography,
+  Alert, Button, Col, DatePicker, Empty, Input, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography,
 } from 'antd'
-import { GoldOutlined, SearchOutlined } from '@ant-design/icons'
+import { EyeOutlined, GoldOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
+import { useNavigate } from 'react-router-dom'
 import client from '../../api/client'
 import { warehouseApi } from '../../api/warehouse'
 import type { TonKhoTPRow, PhanXuong } from '../../api/warehouse'
+import {
+  salesReturnsApi,
+  SALES_RETURN_TRANG_THAI_COLORS,
+  SALES_RETURN_TRANG_THAI_LABELS,
+  type SalesReturnListItem,
+} from '../../api/salesReturns'
 
 const { Text, Title } = Typography
 
@@ -16,6 +23,8 @@ const fmtN = (v: number | null | undefined) =>
   v != null ? new Intl.NumberFormat('vi-VN').format(v) : '—'
 
 export default function KhoThanhPhamPage() {
+  const navigate = useNavigate()
+  const [activeMainTab, setActiveMainTab] = useState<'stock' | 'returns'>('stock')
   const [activeXuong, setActiveXuong] = useState<string>('all')
   const [filterPhapNhan, setFilterPhapNhan] = useState<string | null>(null)
   const [filterTonKho, setFilterTonKho] = useState<'co_ton' | null>(null)
@@ -42,6 +51,14 @@ export default function KhoThanhPhamPage() {
     refetchOnWindowFocus: true,
   })
   const data: TonKhoTPRow[] = Array.isArray(rawData) ? rawData : []
+
+  const { data: returnsData, isLoading: isReturnsLoading, refetch: refetchReturns } = useQuery({
+    queryKey: ['sales-returns', 'finished-goods-tab'],
+    queryFn: () => salesReturnsApi.list({ page: 1, page_size: 100 }).then(r => r.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
+  const returnRows = returnsData?.items || (returnsData as { data?: SalesReturnListItem[] } | undefined)?.data || []
 
   const { data: phanXuongList = [] } = useQuery<PhanXuong[]>({
     queryKey: ['phan-xuong-list'],
@@ -93,9 +110,79 @@ export default function KhoThanhPhamPage() {
 
   const totalNhap = filteredData.reduce((s, r) => s + r.tong_nhap, 0)
   const totalXuat = filteredData.reduce((s, r) => s + r.tong_xuat, 0)
+  const totalTra = filteredData.reduce((s, r) => s + (r.tong_tra || 0), 0)
   const totalTon = filteredData.reduce((s, r) => s + r.ton_kho, 0)
 
   const showXuongCol = activeXuong === 'all'
+
+  const returnColumns: ColumnsType<SalesReturnListItem> = [
+    {
+      title: 'Số phiếu trả',
+      dataIndex: 'so_phieu_tra',
+      width: 140,
+      render: (v: string, r) => (
+        <Button type="link" size="small" onClick={() => navigate(`/sales/returns/${r.id}`)}>
+          {v}
+        </Button>
+      ),
+    },
+    {
+      title: 'Ngày trả',
+      dataIndex: 'ngay_tra',
+      width: 110,
+      render: (v: string) => dayjs(v).format('DD/MM/YYYY'),
+    },
+    {
+      title: 'Đơn hàng',
+      dataIndex: 'so_don_ban',
+      width: 120,
+      render: (v: string | null) => v || <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Khách hàng',
+      dataIndex: 'ten_khach_hang',
+      ellipsis: true,
+      render: (v: string | null) => v || <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Lý do trả',
+      dataIndex: 'ly_do_tra',
+      ellipsis: true,
+    },
+    {
+      title: 'Trạng thái',
+      dataIndex: 'trang_thai',
+      width: 110,
+      render: (v: string) => (
+        <Tag color={SALES_RETURN_TRANG_THAI_COLORS[v] || 'default'}>
+          {SALES_RETURN_TRANG_THAI_LABELS[v] || v}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Tổng tiền',
+      dataIndex: 'tong_tien_tra',
+      width: 120,
+      align: 'right' as const,
+      render: (v: number) => `${fmtN(v)}đ`,
+    },
+    {
+      title: 'SL trả',
+      dataIndex: 'tong_so_luong_tra',
+      width: 90,
+      align: 'right' as const,
+      render: (v: number) => <Text strong>{fmtN(v)}</Text>,
+    },
+    {
+      title: '',
+      width: 90,
+      render: (_, r) => (
+        <Button size="small" icon={<EyeOutlined />} onClick={() => navigate(`/sales/returns/${r.id}`)}>
+          Xem
+        </Button>
+      ),
+    },
+  ]
 
   const columns: ColumnsType<TonKhoTPRow> = [
     {
@@ -166,6 +253,15 @@ export default function KhoThanhPhamPage() {
       render: (v: number) => v > 0 ? fmtN(v) : <Text type="secondary">—</Text>,
     },
     {
+      title: 'Trả về',
+      dataIndex: 'tong_tra',
+      width: 90,
+      align: 'right' as const,
+      render: (v: number | undefined) => v && v > 0
+        ? <Tag color="green" style={{ marginInlineEnd: 0 }}>{fmtN(v)}</Tag>
+        : <Text type="secondary">—</Text>,
+    },
+    {
       title: 'Tồn thùng',
       dataIndex: 'ton_kho',
       width: 90,
@@ -205,11 +301,53 @@ export default function KhoThanhPhamPage() {
           </Space>
         </Col>
         <Col>
-          <Button size="small" onClick={() => refetch()}>Làm mới</Button>
+          <Space>
+            <Button size="small" icon={<PlusOutlined />} onClick={() => navigate('/sales/returns/create')}>
+              Tạo phiếu trả
+            </Button>
+            <Button size="small" onClick={() => { refetch(); refetchReturns() }}>Làm mới</Button>
+          </Space>
         </Col>
       </Row>
 
       {/* Sub-tab xưởng */}
+      <Tabs
+        size="small"
+        activeKey={activeMainTab}
+        onChange={key => setActiveMainTab(key as 'stock' | 'returns')}
+        items={[
+          { key: 'stock', label: 'Tồn kho thành phẩm' },
+          { key: 'returns', label: `Hàng trả về (${returnRows.length})` },
+        ]}
+        style={{ marginBottom: 8 }}
+      />
+
+      {activeMainTab === 'returns' ? (
+        <Table<SalesReturnListItem>
+          rowKey="id"
+          size="small"
+          loading={isReturnsLoading}
+          dataSource={returnRows}
+          columns={returnColumns}
+          locale={{
+            emptyText: (
+              <Empty
+                description="Chưa có phiếu hàng trả về"
+              >
+                <Space>
+                  <Button size="small" icon={<PlusOutlined />} type="primary" onClick={() => navigate('/sales/returns/create')}>
+                    Tạo phiếu trả
+                  </Button>
+                  <Button size="small" onClick={() => refetchReturns()}>Làm mới</Button>
+                </Space>
+              </Empty>
+            ),
+          }}
+          pagination={{ pageSize: 50, showSizeChanger: false }}
+          scroll={{ x: 900 }}
+        />
+      ) : (
+        <>
       <Tabs
         size="small"
         activeKey={activeXuong}
@@ -247,6 +385,14 @@ export default function KhoThanhPhamPage() {
               value={totalXuat}
               formatter={v => fmtN(Number(v))}
               valueStyle={{ fontSize: 18, color: '#fa8c16' }}
+            />
+          </Col>
+          <Col xs={8} sm={5}>
+            <Statistic
+              title="Hàng trả về"
+              value={totalTra}
+              formatter={v => fmtN(Number(v))}
+              valueStyle={{ fontSize: 18, color: '#389e0d' }}
             />
           </Col>
           <Col xs={24} sm={5}>
@@ -357,14 +503,19 @@ export default function KhoThanhPhamPage() {
                   <Text strong style={{ color: '#fa8c16', fontSize: 12 }}>{fmtN(totalXuat)}</Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={showXuongCol ? 9 : 8} align="right">
+                  <Text strong style={{ color: '#389e0d', fontSize: 12 }}>{fmtN(totalTra)}</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={showXuongCol ? 10 : 9} align="right">
                   <Text strong style={{ color: '#389e0d', fontSize: 12 }}>{fmtN(totalTon)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={showXuongCol ? 10 : 9} />
+                <Table.Summary.Cell index={showXuongCol ? 11 : 10} />
               </Table.Summary.Row>
             )
           }}
         />
       </Space>
+        </>
+      )}
     </div>
   )
 }

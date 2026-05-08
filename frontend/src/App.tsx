@@ -56,16 +56,20 @@ const SauInKanbanPage = lazy(() => import('./pages/production/SauInKanbanPage'))
 const ShiftPage = lazy(() => import('./pages/production/ShiftPage'))
 const ConfigPage = lazy(() => import('./pages/production/ConfigPage'))
 const InventoryPage = lazy(() => import('./pages/warehouse/InventoryPage'))
+const KhoNVLPage = lazy(() => import('./pages/warehouse/KhoNVLPage'))
 const KhoTheoXuongPage = lazy(() => import('./pages/warehouse/KhoTheoXuongPage'))
 const ReceiptsPage = lazy(() => import('./pages/warehouse/ReceiptsPage'))
 const IssuesPage = lazy(() => import('./pages/warehouse/IssuesPage'))
 const TransfersPage = lazy(() => import('./pages/warehouse/TransfersPage'))
 const StockAdjustmentsPage = lazy(() => import('./pages/warehouse/StockAdjustmentsPage'))
+const InventoryCardPage = lazy(() => import('./pages/warehouse/InventoryCardPage'))
 const ProductionOutputPage = lazy(() => import('./pages/warehouse/ProductionOutputPage'))
 const DeliveryPage = lazy(() => import('./pages/warehouse/DeliveryPage'))
 const TheoDonHangPage = lazy(() => import('./pages/sales/TheoDonHangPage'))
 const GiaoHangPage = lazy(() => import('./pages/sales/GiaoHangPage'))
 const POListPage = lazy(() => import('./pages/purchase/POListPage'))
+const PurchaseReturnPage = lazy(() => import('./pages/purchase/PurchaseReturnPage'))
+const PurchaseReportPage = lazy(() => import('./pages/purchase/PurchaseReportPage'))
 const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
@@ -73,6 +77,8 @@ const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPa
 const SalesInvoiceListPage = lazy(() => import('./pages/billing/SalesInvoiceListPage'))
 const SalesInvoiceDetailPage = lazy(() => import('./pages/billing/SalesInvoiceDetailPage'))
 const SalesInvoiceForm = lazy(() => import('./pages/billing/SalesInvoiceForm'))
+// Agent
+const AgentPage = lazy(() => import('./pages/agent/AgentPage'))
 // Accounting
 const CashReceiptListPage = lazy(() => import('./pages/accounting/CashReceiptListPage'))
 const CashReceiptDetailPage = lazy(() => import('./pages/accounting/CashReceiptDetailPage'))
@@ -84,6 +90,39 @@ const PurchaseInvoiceListPage = lazy(() => import('./pages/accounting/PurchaseIn
 const PurchaseInvoiceDetailPage = lazy(() => import('./pages/accounting/PurchaseInvoiceDetailPage'))
 const ARLedgerPage = lazy(() => import('./pages/accounting/ARLedgerPage'))
 const APLedgerPage = lazy(() => import('./pages/accounting/APLedgerPage'))
+const CashBookPage = lazy(() => import('./pages/accounting/CashBookPage'))
+const BankLedgerPage = lazy(() => import('./pages/accounting/BankLedgerPage'))
+const CCDCListPage = lazy(() => import('./pages/accounting/CCDCListPage'))
+const BankAccountList = lazy(() => import('./pages/danhmuc/BankAccountList'))
+// Reports
+const DebtSummaryPage = lazy(() => import('./pages/reports/DebtSummaryPage'))
+const RevenueReportPage = lazy(() => import('./pages/reports/RevenueReportPage'))
+const InventoryReportPage = lazy(() => import('./pages/reports/InventoryReportPage'))
+const ProductionPerformancePage = lazy(() => import('./pages/reports/ProductionPerformancePage'))
+const OrderProgressPage = lazy(() => import('./pages/reports/OrderProgressPage'))
+const DeliveryReportPage = lazy(() => import('./pages/reports/DeliveryReportPage'))
+const ImportHistoryPage = lazy(() => import('./pages/reports/ImportHistoryPage'))
+// Customer Refunds
+const CustomerRefundListPage = lazy(() => import('./pages/accounting/CustomerRefundListPage'))
+const CustomerRefundDetailPage = lazy(() => import('./pages/accounting/CustomerRefundDetailPage'))
+const CustomerReconciliation = lazy(() => import('./pages/accounting/CustomerReconciliation'))
+const SupplierReconciliation = lazy(() => import('./pages/accounting/SupplierReconciliation'))
+const GeneralLedgerPage = lazy(() => import('./pages/accounting/GeneralLedgerPage'))
+const TrialBalancePage = lazy(() => import('./pages/accounting/TrialBalancePage'))
+const WorkshopManagement = lazy(() => import('./pages/accounting/WorkshopManagement'))
+const JournalEntryListPage = lazy(() => import('./pages/accounting/JournalEntryListPage'))
+const JournalEntryForm = lazy(() => import('./pages/accounting/JournalEntryForm'))
+
+// Reports - Workshop
+const WorkshopPNLPage = lazy(() => import('./pages/reports/WorkshopPNLPage'))
+const LegalEntityCashflowPage = lazy(() => import('./pages/reports/LegalEntityCashflowPage'))
+const VATSummaryPage = lazy(() => import('./pages/reports/VATSummaryPage'))
+const TaxTrialBalancePage = lazy(() => import('./pages/reports/TaxTrialBalancePage'))
+const ProductionCostingPage = lazy(() => import('./pages/reports/ProductionCostingPage'))
+const ReportingHubPage = lazy(() => import('./pages/reports/ReportingHubPage'))
+
+
+
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -176,6 +215,7 @@ export default function App() {
         <Route path="production/cd2/config" element={<ConfigPage />} />
 
         {/* Kho */}
+        <Route path="warehouse/kho-nvl" element={<ErrorBoundary><KhoNVLPage /></ErrorBoundary>} />
         <Route path="warehouse/kho-phoi" element={<KhoPhoiPage />} />
         <Route path="warehouse/kho-thanh-pham" element={<ErrorBoundary><KhoThanhPhamPage /></ErrorBoundary>} />
         <Route path="warehouse/theo-xuong" element={<KhoTheoXuongPage />} />
@@ -186,9 +226,12 @@ export default function App() {
         <Route path="warehouse/delivery" element={<DeliveryPage />} />
         <Route path="warehouse/transfers" element={<TransfersPage />} />
         <Route path="warehouse/stock-adjustments" element={<StockAdjustmentsPage />} />
+        <Route path="warehouse/the-kho" element={<InventoryCardPage />} />
 
         {/* Mua hàng */}
         <Route path="purchasing/orders" element={<POListPage />} />
+        <Route path="purchasing/returns" element={<ErrorBoundary><PurchaseReturnPage /></ErrorBoundary>} />
+        <Route path="purchasing/reports" element={<ErrorBoundary><PurchaseReportPage /></ErrorBoundary>} />
 
         {/* Pháp nhân */}
         <Route path="danhmuc/phap-nhan" element={<PhapNhanList />} />
@@ -218,6 +261,46 @@ export default function App() {
         {/* Accounting — Sổ công nợ */}
         <Route path="accounting/ar-ledger" element={<ARLedgerPage />} />
         <Route path="accounting/ap-ledger" element={<APLedgerPage />} />
+        {/* Accounting — Sổ quỹ / Sổ ngân hàng */}
+        <Route path="accounting/cash-book" element={<CashBookPage />} />
+        <Route path="accounting/bank-ledger" element={<BankLedgerPage />} />
+        {/* CCDC */}
+        <Route path="accounting/ccdc" element={<CCDCListPage />} />
+        {/* Danh mục ngân hàng */}
+        <Route path="master/bank-accounts" element={<BankAccountList />} />
+        <Route path="accounting/ar-reconciliation" element={<ErrorBoundary><CustomerReconciliation /></ErrorBoundary>} />
+        <Route path="accounting/ap-reconciliation" element={<ErrorBoundary><SupplierReconciliation /></ErrorBoundary>} />
+        <Route path="accounting/general-ledger" element={<ErrorBoundary><GeneralLedgerPage /></ErrorBoundary>} />
+        <Route path="accounting/trial-balance" element={<ErrorBoundary><TrialBalancePage /></ErrorBoundary>} />
+        <Route path="accounting/workshop-management" element={<ErrorBoundary><WorkshopManagement /></ErrorBoundary>} />
+        <Route path="accounting/journal-entries" element={<ErrorBoundary><JournalEntryListPage /></ErrorBoundary>} />
+        <Route path="accounting/journal-entries/new" element={<ErrorBoundary><JournalEntryForm /></ErrorBoundary>} />
+
+
+
+
+        {/* Accounting — Phiếu hoàn tiền KH */}
+        <Route path="accounting/customer-refunds" element={<ErrorBoundary><CustomerRefundListPage /></ErrorBoundary>} />
+        <Route path="accounting/customer-refunds/:id" element={<ErrorBoundary><CustomerRefundDetailPage /></ErrorBoundary>} />
+
+        {/* Reports */}
+        <Route path="reports/hub" element={<ErrorBoundary><ReportingHubPage /></ErrorBoundary>} />
+        <Route path="reports/debt-summary" element={<ErrorBoundary><DebtSummaryPage /></ErrorBoundary>} />
+        <Route path="reports/revenue" element={<ErrorBoundary><RevenueReportPage /></ErrorBoundary>} />
+        <Route path="reports/inventory" element={<ErrorBoundary><InventoryReportPage /></ErrorBoundary>} />
+        <Route path="reports/production-performance" element={<ErrorBoundary><ProductionPerformancePage /></ErrorBoundary>} />
+        <Route path="reports/order-progress" element={<ErrorBoundary><OrderProgressPage /></ErrorBoundary>} />
+        <Route path="reports/delivery" element={<ErrorBoundary><DeliveryReportPage /></ErrorBoundary>} />
+        <Route path="reports/import-history" element={<ErrorBoundary><ImportHistoryPage /></ErrorBoundary>} />
+        <Route path="reports/workshop-pnl" element={<ErrorBoundary><WorkshopPNLPage /></ErrorBoundary>} />
+        <Route path="reports/cashflow" element={<ErrorBoundary><LegalEntityCashflowPage /></ErrorBoundary>} />
+        <Route path="reports/vat-summary" element={<ErrorBoundary><VATSummaryPage /></ErrorBoundary>} />
+        <Route path="reports/tax-trial-balance" element={<ErrorBoundary><TaxTrialBalancePage /></ErrorBoundary>} />
+        <Route path="accounting/reports/production-costing" element={<ErrorBoundary><ProductionCostingPage /></ErrorBoundary>} />
+
+        {/* Agent */}
+        <Route path="agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
+
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
       </Routes>

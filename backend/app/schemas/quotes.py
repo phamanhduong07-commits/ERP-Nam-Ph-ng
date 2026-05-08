@@ -132,6 +132,7 @@ class QuoteCreate(BaseModel):
     customer_id: int
     ngay_bao_gia: date
     phap_nhan_id: int | None = None
+    phap_nhan_sx_id: int | None = None
     phan_xuong_id: int | None = None
     nv_phu_trach_id: int | None = None
     nv_theo_doi_id: int | None = None
@@ -168,6 +169,7 @@ class QuoteCreate(BaseModel):
 
 class QuoteUpdate(BaseModel):
     phap_nhan_id: int | None = None
+    phap_nhan_sx_id: int | None = None
     phan_xuong_id: int | None = None
     nv_phu_trach_id: int | None = None
     nv_theo_doi_id: int | None = None
@@ -201,6 +203,8 @@ class QuoteResponse(BaseModel):
     customer: CustomerShort | None = None
     phap_nhan_id: int | None = None
     ten_phap_nhan: str | None = None
+    phap_nhan_sx_id: int | None = None
+    ten_phap_nhan_sx: str | None = None
     phan_xuong_id: int | None = None
     ten_phan_xuong: str | None = None
     nv_phu_trach_id: int | None

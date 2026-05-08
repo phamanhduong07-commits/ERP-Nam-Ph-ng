@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Button, DatePicker, Form, Input, InputNumber, message,
   Modal, Select, Space, Table, TimePicker, Tag, Typography,
 } from 'antd'
-import { PrinterOutlined, CheckOutlined, ClockCircleOutlined } from '@ant-design/icons'
+import { PrinterOutlined, CheckOutlined, ClockCircleOutlined, PauseCircleOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/react-query'
@@ -11,8 +11,21 @@ import { productionOrdersApi } from '../../api/productionOrders'
 import type { ProductionOrder, PhieuNhapPhoiSong, ProductionOrderItem } from '../../api/productionOrders'
 import { warehousesApi } from '../../api/warehouses'
 import { phapNhanApi } from '../../api/phap_nhan'
+import { theoDoiApi } from '../../api/theoDoi'
 import { fmtN } from '../../utils/exportUtils'
 import { calcBoxDimensions } from '../../api/quotes'
+import { mayDungLogApi, LY_DO_OPTIONS } from '../../api/mayDungLog'
+
+// Normalize tiếng Việt để so sánh tên không dấu, lowercase
+const normVi = (s: string) =>
+  s.toLowerCase()
+    .replace(/[àáảãạăắặằẳẵâầấậẩẫ]/g, 'a')
+    .replace(/[èéẻẽẹêềếệểễ]/g, 'e')
+    .replace(/[ìíỉĩị]/g, 'i')
+    .replace(/[òóỏõọôồốộổỗơờớợởỡ]/g, 'o')
+    .replace(/[ùúủũụưừứựửữ]/g, 'u')
+    .replace(/[ỳýỷỹỵ]/g, 'y')
+    .replace(/đ/g, 'd')
 
 // Làm tròn lên bội số 5 (giống SxParamsTab)
 const roundUpTo5 = (v: number) => Math.ceil(v / 5) * 5
@@ -60,6 +73,24 @@ const { Text, Title } = Typography
 
 // localStorage key lưu phiên bắt đầu
 export const phoiSessionKey = (orderId: number) => `phoi-session-${orderId}`
+const phoiTamDungKey = (orderId: number) => `phoi-tam-dung-${orderId}`
+
+interface TamDungSave {
+  rows: RowState[]
+  ca: string | null
+  ghi_chu: string
+  warehouse_id: number | null
+  gio_ket_thuc: string | null
+  log_id?: number
+}
+
+function getSavedTamDung(orderId: number): TamDungSave | null {
+  try {
+    const raw = localStorage.getItem(phoiTamDungKey(orderId))
+    if (raw) return JSON.parse(raw) as TamDungSave
+  } catch { /* ignore */ }
+  return null
+}
 
 interface RowState {
   poi_id: number
@@ -87,16 +118,19 @@ function getStoredSession(orderId: number): { ngay: string; gio_bat_dau: string 
 }
 
 export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess }: Props) {
-  const session = getStoredSession(order.id)
+  const session   = getStoredSession(order.id)
+  const tamDung   = getSavedTamDung(order.id)
 
   const [ngay, setNgay] = useState(session?.ngay ?? dayjs().format('YYYY-MM-DD'))
-  const [ca, setCa] = useState<string | null>(null)
-  const [ghiChu, setGhiChu] = useState('')
-  const [warehouseId, setWarehouseId] = useState<number | null>(null)
+  const [ca, setCa] = useState<string | null>(tamDung?.ca ?? null)
+  const [ghiChu, setGhiChu] = useState(tamDung?.ghi_chu ?? '')
+  const [warehouseId, setWarehouseId] = useState<number | null>(tamDung?.warehouse_id ?? null)
   const [gioBatDau, setGioBatDau] = useState<dayjs.Dayjs | null>(
     session?.gio_bat_dau ? dayjs(session.gio_bat_dau, 'HH:mm') : dayjs()
   )
-  const [gioKetThuc, setGioKetThuc] = useState<dayjs.Dayjs | null>(dayjs())
+  const [gioKetThuc, setGioKetThuc] = useState<dayjs.Dayjs | null>(
+    tamDung?.gio_ket_thuc ? dayjs(tamDung.gio_ket_thuc, 'HH:mm') : dayjs()
+  )
 
   const { data: warehouses } = useQuery({
     queryKey: ['warehouses-list'],
@@ -108,13 +142,30 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
     queryFn: () => phapNhanApi.list().then(r => r.data),
     staleTime: 300_000,
   })
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong'],
+    queryFn: () => theoDoiApi.listPhanXuong().then(r => r.data),
+    staleTime: 300_000,
+  })
 
-  // Pháp nhân → phoi_phan_xuong_id → kho PHOI của xưởng CD1+CD2 đó
-  const orderPhapNhan = order.phap_nhan_sx_id
-    ? phapNhanList.find(p => p.id === order.phap_nhan_sx_id)
+  const orderPhapNhan = order.phap_nhan_id
+    ? phapNhanList.find(p => p.id === order.phap_nhan_id)
     : null
-  const phoiSourcePxId: number | null =
-    orderPhapNhan?.phoi_phan_xuong_id ?? order.phan_xuong_id ?? null
+
+  // Xác định xưởng phôi nguồn theo tên pháp nhân:
+  // Nam Phương / Visun → xưởng Hoàng Gia
+  // Nam Phương Long An → xưởng Nam Thuận
+  const hoangGiaPx = phanXuongList.find(px => normVi(px.ten_xuong).includes('hoang gia'))
+  const namThuanPx = phanXuongList.find(px => normVi(px.ten_xuong).includes('nam thuan'))
+  const pnNorm = normVi(orderPhapNhan?.ten_phap_nhan ?? '')
+
+  const phoiSourcePxId: number | null = (() => {
+    if (orderPhapNhan?.phoi_phan_xuong_id) return orderPhapNhan.phoi_phan_xuong_id
+    if (pnNorm.includes('long an')) return namThuanPx?.id ?? null
+    if (pnNorm.includes('visun') || pnNorm.includes('nam phuong'))
+      return hoangGiaPx?.id ?? null
+    return order.phan_xuong_id ?? null
+  })()
 
   const khoPhoi = (warehouses ?? []).filter(
     w => w.loai_kho === 'PHOI' && w.trang_thai &&
@@ -130,19 +181,34 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
   const [rows, setRows] = useState<RowState[]>(() =>
     order.items.map(it => {
       const soThung = Number(it.so_luong_ke_hoach)
+      const saved = tamDung?.rows?.find(r => r.poi_id === it.id)
       return {
         poi_id: it.id,
         ten_hang: it.ten_hang,
         so_luong_ke_hoach: soThung,
-        so_luong_thuc_te: null,
-        so_luong_loi: null,
-        so_tam: calcSoTamFromOI(it, soThung),
-        ghi_chu: null,
+        so_luong_thuc_te: saved?.so_luong_thuc_te ?? null,
+        so_luong_loi: saved?.so_luong_loi ?? null,
+        so_tam: saved?.so_tam ?? calcSoTamFromOI(it, soThung),
+        ghi_chu: saved?.ghi_chu ?? null,
       }
     })
   )
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<PhieuNhapPhoiSong | null>(null)
+
+  // Tạm dừng modal state
+  const [tamDungModalOpen, setTamDungModalOpen] = useState(false)
+  const [tamDungLyDo, setTamDungLyDo] = useState<string>('khac')
+  const [tamDungGhiChu, setTamDungGhiChu] = useState('')
+  const [tamDungLoading, setTamDungLoading] = useState(false)
+
+  // Gọi tiepTuc một lần khi mở lại sau tạm dừng (destroyOnClose → fresh mount)
+  const tiepTucCalled = useRef(false)
+  useEffect(() => {
+    if (tiepTucCalled.current || !tamDung?.log_id) return
+    tiepTucCalled.current = true
+    mayDungLogApi.tiepTuc(tamDung.log_id, dayjs().format('HH:mm')).catch(() => {})
+  }, [])
 
   const updateRow = (poi_id: number, patch: Partial<RowState>) =>
     setRows(prev => prev.map(r => r.poi_id === poi_id ? { ...r, ...patch } : r))
@@ -181,8 +247,9 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
           }
         }),
       })
-      // Xóa phiên khỏi localStorage sau khi tạo phiếu thành công
+      // Xóa phiên & tạm dừng khỏi localStorage sau khi tạo phiếu thành công
       localStorage.removeItem(phoiSessionKey(order.id))
+      localStorage.removeItem(phoiTamDungKey(order.id))
       setResult(res.data)
       message.success(`Đã tạo ${res.data.so_phieu}`)
       onSuccess()
@@ -190,6 +257,35 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
       message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleTamDungConfirm = async () => {
+    setTamDungLoading(true)
+    try {
+      const now = dayjs().format('HH:mm')
+      const log = await mayDungLogApi.create({
+        production_order_id: order.id,
+        phan_xuong_id: phoiSourcePxId ?? undefined,
+        ngay,
+        gio_bat_dau_dung: now,
+        ly_do: tamDungLyDo,
+        ghi_chu: tamDungGhiChu || undefined,
+      })
+      const save: TamDungSave = {
+        rows, ca, ghi_chu: ghiChu,
+        warehouse_id: warehouseId,
+        gio_ket_thuc: gioKetThuc?.format('HH:mm') ?? null,
+        log_id: log.data.id,
+      }
+      localStorage.setItem(phoiTamDungKey(order.id), JSON.stringify(save))
+      setTamDungModalOpen(false)
+      message.info('Đã tạm dừng — dữ liệu nhập sẽ được khôi phục khi mở lại')
+      onClose()
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi ghi log tạm dừng')
+    } finally {
+      setTamDungLoading(false)
     }
   }
 
@@ -498,6 +594,12 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
           <Space>
             <Button onClick={onClose}>Hủy</Button>
             <Button
+              icon={<PauseCircleOutlined />}
+              onClick={() => setTamDungModalOpen(true)}
+            >
+              Tạm dừng
+            </Button>
+            <Button
               type="primary"
               icon={<CheckOutlined />}
               loading={loading}
@@ -523,6 +625,13 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
         </div>
       ) : (
         <>
+          {tamDung && (
+            <div style={{ background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 6,
+              padding: '6px 12px', marginBottom: 10, fontSize: 12, color: '#d48806' }}>
+              <PauseCircleOutlined style={{ marginRight: 6 }} />
+              Đang tiếp tục phiên tạm dừng — dữ liệu đã nhập được khôi phục tự động.
+            </div>
+          )}
           <Form layout="inline" style={{ marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
             <Form.Item label="Ngày" style={{ marginBottom: 8 }}>
               <DatePicker
@@ -609,6 +718,49 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
           />
         </>
       )}
+
+      {/* Modal nhập lý do tạm dừng */}
+      <Modal
+        open={tamDungModalOpen}
+        title={<Space><PauseCircleOutlined style={{ color: '#fa8c16' }} />Ghi nhận tạm dừng máy</Space>}
+        width={420}
+        onCancel={() => setTamDungModalOpen(false)}
+        footer={
+          <Space>
+            <Button onClick={() => setTamDungModalOpen(false)}>Hủy</Button>
+            <Button
+              type="primary"
+              loading={tamDungLoading}
+              onClick={handleTamDungConfirm}
+              icon={<PauseCircleOutlined />}
+            >
+              Xác nhận tạm dừng
+            </Button>
+          </Space>
+        }
+      >
+        <Form layout="vertical" style={{ marginTop: 8 }}>
+          <Form.Item label="Lý do dừng máy" required>
+            <Select
+              value={tamDungLyDo}
+              onChange={v => setTamDungLyDo(v)}
+              options={LY_DO_OPTIONS}
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+          <Form.Item label="Ghi chú thêm">
+            <Input.TextArea
+              rows={3}
+              value={tamDungGhiChu}
+              onChange={e => setTamDungGhiChu(e.target.value)}
+              placeholder="Mô tả chi tiết nếu cần..."
+            />
+          </Form.Item>
+          <div style={{ fontSize: 12, color: '#888' }}>
+            Thời gian dừng sẽ được tính từ lúc này đến khi mở lại phiếu.
+          </div>
+        </Form>
+      </Modal>
     </Modal>
   )
 }

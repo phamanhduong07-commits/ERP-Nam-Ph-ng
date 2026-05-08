@@ -8,6 +8,24 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.master import Supplier, PaperMaterial, OtherMaterial
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
+from app.deps import get_current_user
+from app.models.auth import User
+from fastapi import File, UploadFile
+from app.services.purchase_order_import_service import import_purchase_orders_excel
+from app.services.excel_import_service import build_template_response, ImportField
+
+PURCHASE_ORDER_IMPORT_FIELDS = [
+    ImportField("so_po", "So PO", required=True, help_text="VD: PO-202405-001"),
+    ImportField("ngay_po", "Ngay PO", required=True, help_text="DD/MM/YYYY"),
+    ImportField("ma_ncc", "Ma NCC", required=True, help_text="Phai ton tai trong danh muc"),
+    ImportField("ma_vt", "Ma VT", required=True, help_text="Ma chinh (Giay) hoac Ma VT (Khac)"),
+    ImportField("ten_hang", "Ten hang", help_text="De trong neu lay theo ma VT"),
+    ImportField("so_luong", "So luong", required=True),
+    ImportField("don_gia", "Don gia", required=True),
+    ImportField("dvt", "DVT"),
+    ImportField("ghi_chu", "Ghi chu"),
+]
+
 
 router = APIRouter(prefix="/api/purchase-orders", tags=["purchase-orders"])
 
@@ -265,3 +283,23 @@ def delete_po(po_id: int, db: Session = Depends(get_db)):
     db.delete(po)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/import-template")
+def download_purchase_order_template(
+    _: User = Depends(get_current_user),
+):
+    """Tải file mẫu Excel để import đơn mua hàng."""
+    return build_template_response("mau_import_don_mua_hang.xlsx", PURCHASE_ORDER_IMPORT_FIELDS)
+
+
+@router.post("/import")
+async def import_purchase_orders(
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Import đơn mua hàng từ Excel."""
+    return await import_purchase_orders_excel(db, file, current_user, commit)
+
