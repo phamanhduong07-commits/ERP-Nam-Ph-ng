@@ -368,9 +368,17 @@ function PrinterUserTab() {
       <Row justify="space-between" align="middle" style={{ marginBottom: 12 }}>
         <Col><Text type="secondary">Tài khoản vận hành máy in ({users.length})</Text></Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setEditing('new') }}>
-            Thêm tài khoản
-          </Button>
+          <Space>
+            <Button
+              icon={<QrcodeOutlined />}
+              onClick={() => window.open('/cd2/machine-login', '_blank')}
+            >
+              Mở trang đăng nhập máy
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setEditing('new') }}>
+              Thêm tài khoản
+            </Button>
+          </Space>
         </Col>
       </Row>
       <Table

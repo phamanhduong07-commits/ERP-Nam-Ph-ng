@@ -102,6 +102,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
             { key: '/production/cd2/may-in', label: <Link to="/production/cd2/may-in">🖨 Queue máy in</Link> },
             { key: '/production/cd2/scan', label: <Link to="/production/cd2/scan">📊 Scan sản lượng</Link> },
             { key: '/production/cd2/mobile-tracking', label: <Link to="/production/cd2/mobile-tracking">📱 Báo cáo máy (Mobile)</Link> },
+            { key: '/cd2/machine-login', label: <Link to="/cd2/machine-login">🔑 Đăng nhập máy (Công nhân)</Link> },
             { key: '/production/cd2/scan-history', label: <Link to="/production/cd2/scan-history">📋 Lịch sử scan</Link> },
             { key: '/production/cd2/history', label: <Link to="/production/cd2/history">📑 Lịch sử phiếu in</Link> },
             { key: '/production/cd2/dhcho2', label: <Link to="/production/cd2/dhcho2">🔧 Chờ định hình</Link> },
