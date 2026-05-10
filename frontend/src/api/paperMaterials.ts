@@ -27,7 +27,7 @@ export interface PaperMaterial {
 export type PaperMaterialCreate = Omit<PaperMaterial, 'id' | 'ten_nhom' | 'ten_nsx' | 'created_at'>
 
 export const paperMaterialsFullApi = {
-  list: (params?: { search?: string; ma_nhom_id?: number; page?: number; page_size?: number }) =>
+  list: (params?: { search?: string; ma_nhom_id?: number; ma_nsx_id?: number; page?: number; page_size?: number }) =>
     client.get<PagedResponse<PaperMaterial>>('/paper-materials', { params }),
   create: (data: PaperMaterialCreate) => client.post<PaperMaterial>('/paper-materials', data),
   update: (id: number, data: Partial<PaperMaterialCreate>) => client.put<PaperMaterial>(`/paper-materials/${id}`, data),

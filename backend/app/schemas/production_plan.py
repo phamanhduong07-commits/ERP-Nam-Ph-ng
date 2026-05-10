@@ -46,6 +46,7 @@ class ProductionPlanLineResponse(BaseModel):
     so_luong_ke_hoach: Decimal
     so_luong_hoan_thanh: Decimal
     trang_thai: str
+    mua_phoi_ngoai: bool = False
     ghi_chu: str | None
     # Thông tin join
     so_lenh: str | None = None
@@ -166,6 +167,7 @@ class QueueLineResponse(BaseModel):
     so_luong_ke_hoach: Decimal
     so_luong_hoan_thanh: Decimal
     trang_thai: str
+    mua_phoi_ngoai: bool = False
     ghi_chu: str | None
     so_lenh: str | None
     ma_kh: str | None

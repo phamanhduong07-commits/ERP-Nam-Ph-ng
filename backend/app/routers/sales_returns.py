@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import Customer
+from app.models.master import Customer, Warehouse
 from app.models.sales import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
 from app.models.warehouse_doc import DeliveryOrder, DeliveryOrderItem
 from app.models.accounting import CustomerRefundVoucher
+from app.services.accounting_service import AccountingService
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
     nhap_balance as _nhap_balance,
@@ -355,6 +356,32 @@ def approve_return(
             ghi_chu=f"Nhập lại hàng trả: {item.ly_do_tra or 'Không có lý do'}"
         )
 
+    # Ghi bút toán kế toán: Nợ 155 / Có 632 (đảo chiều entry xuất giao hàng)
+    wh = db.get(Warehouse, warehouse_id)
+    phap_nhan_id_acc = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
+    phan_xuong_id_acc = wh.phan_xuong_id if wh else None
+    acc_items = [
+        {
+            "ten_hang": (item.sales_order_item.ten_hang if item.sales_order_item else "") or "Hàng trả về",
+            "so_luong": float(item.so_luong_tra),
+            "don_gia": float(item.don_gia_tra or 0),
+            "tk_no": "155",
+            "tk_co": "632",
+        }
+        for item in return_obj.items
+        if item.so_luong_tra and item.don_gia_tra
+    ]
+    if acc_items:
+        AccountingService(db).post_inventory_journal(
+            ngay=return_obj.ngay_tra,
+            loai="NHAP_TRA_HANG",
+            chung_tu_loai="sales_returns",
+            chung_tu_id=return_obj.id,
+            items=acc_items,
+            phap_nhan_id=phap_nhan_id_acc,
+            phan_xuong_id=phan_xuong_id_acc,
+        )
+
     return_obj.trang_thai = "da_duyet"
     return_obj.approved_by = current_user.id
     return_obj.approved_at = datetime.utcnow()
@@ -443,6 +470,9 @@ def cancel_return(
                     product_id=product_id,
                     ghi_chu=f"Hủy nhập hàng trả: {item.ly_do_tra or 'Không có lý do'}"
                 )
+
+        # Đảo bút toán kế toán đã ghi khi duyệt (155/632)
+        AccountingService(db)._reverse_journal_entries("sales_returns", return_obj.id)
 
     return_obj.trang_thai = "huy"
     db.commit()

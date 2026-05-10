@@ -29,6 +29,7 @@ def _make_user_info(user: User) -> UserInfo:
         email=user.email,
         role=user.role.ma_vai_tro,
         phan_xuong=user.phan_xuong,
+        machine_id=user.machine_id,
     )
 
 

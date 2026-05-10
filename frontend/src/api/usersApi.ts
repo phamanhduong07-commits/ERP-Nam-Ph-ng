@@ -9,6 +9,8 @@ export interface NhanVien {
   role_id: number
   phan_xuong: string | null
   trang_thai: boolean
+  machine_id: number | null
+  ten_may?: string | null
   role_name: string | null
   role_code: string | null
   created_at: string
@@ -22,6 +24,7 @@ export interface UserCreatePayload {
   password: string
   role_id: number
   phan_xuong?: string | null
+  machine_id?: number | null
 }
 
 export interface UserUpdatePayload {
@@ -31,6 +34,7 @@ export interface UserUpdatePayload {
   role_id?: number
   phan_xuong?: string | null
   trang_thai?: boolean
+  machine_id?: number | null
 }
 
 export const usersApi = {

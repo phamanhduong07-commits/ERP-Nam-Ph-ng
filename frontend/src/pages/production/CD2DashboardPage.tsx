@@ -1,12 +1,18 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Card, Col, Row, Space, Spin, Statistic, Typography, Button, Table, Tag } from 'antd'
+import { Card, Col, Row, Space, Spin, Statistic, Typography, Button, Table, Tag, Modal } from 'antd'
 import {
   PrinterOutlined, BarChartOutlined, HistoryOutlined,
-  BarcodeOutlined, CheckCircleOutlined, ReloadOutlined,
+  BarcodeOutlined, CheckCircleOutlined, ReloadOutlined, MobileOutlined, EyeOutlined
 } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
+import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
+import 'dayjs/locale/vi'
 import { cd2Api, PhieuIn } from '../../api/cd2'
+
+dayjs.extend(relativeTime)
+dayjs.locale('vi')
 import PhieuInModal from './PhieuInModal'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
@@ -23,6 +29,7 @@ const MAIN_STATES = [
 export default function CD2DashboardPage() {
   const qc = useQueryClient()
   const [selectedPhieu, setSelectedPhieu] = useState<PhieuIn | null>(null)
+  const [showMobilePreview, setShowMobilePreview] = useState(false)
   const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
 
   const { data, isLoading, refetch } = useQuery({
@@ -37,10 +44,17 @@ export default function CD2DashboardPage() {
     refetchInterval: 30_000,
   })
 
+  const { data: machineStatus = [], isLoading: loadingMachines } = useQuery({
+    queryKey: ['cd2-machine-status', phanXuongId],
+    queryFn: () => cd2Api.getMachinesStatus(phanXuongId).then(r => r.data),
+    refetchInterval: 10_000, // Tự động cập nhật mỗi 10 giây
+  })
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['cd2-dashboard'] })
     qc.invalidateQueries({ queryKey: ['cd2-phieu-dang-in'] })
     qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
+    qc.invalidateQueries({ queryKey: ['cd2-machine-status'] })
   }
 
   if (isLoading) return <Spin style={{ margin: 40 }} />
@@ -88,6 +102,50 @@ export default function CD2DashboardPage() {
           </Col>
         ))}
       </Row>
+
+      {/* Giám sát máy móc trực tuyến (OEE) */}
+      <Card 
+        size="small" 
+        title={<Space><MobileOutlined style={{color: '#52c41a'}} /> <span style={{color: '#1a337e'}}>Giám sát Máy móc trực tuyến (OEE)</span></Space>}
+        style={{ marginBottom: 20, borderRadius: 12, border: '1px solid #d9f7be' }}
+        styles={{ header: { background: '#f6ffed' } }}
+        extra={
+          <Space>
+            <Button size="small" icon={<EyeOutlined />} onClick={() => setShowMobilePreview(true)}>Xem giao diện công nhân</Button>
+            <Text type="secondary" style={{fontSize: 12}}>Cập nhật: {dayjs().format('HH:mm:ss')}</Text>
+          </Space>
+        }
+      >
+        <Table
+          dataSource={machineStatus}
+          rowKey="id"
+          size="small"
+          pagination={false}
+          loading={loadingMachines}
+          columns={[
+            { title: 'Tên máy', dataIndex: 'ten_may', render: (v, r) => (
+              <Space>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: r.status === 'running' ? '#52c41a' : r.status === 'stopped' ? '#f5222d' : '#d9d9d9' }} />
+                <Text strong>{v}</Text>
+              </Space>
+            )},
+            { title: 'Trạng thái', dataIndex: 'status', render: v => (
+              <Tag color={v === 'RUNNING' ? 'success' : v === 'STOPPED' ? 'warning' : v === 'ERROR' ? 'error' : 'default'}>
+                {v === 'RUNNING' ? 'ĐANG CHẠY' : v === 'STOPPED' ? 'TẠM DỪNG' : v === 'ERROR' ? 'MÁY LỖI' : 'ĐANG NGHỈ'}
+              </Tag>
+            )},
+            { title: 'Lệnh sản xuất', dataIndex: 'current_lsx', render: (v, r) => v ? (
+              <div>
+                <Text code>{v}</Text> <br />
+                <Text type="secondary" style={{fontSize: 11}}>{r.current_order_name}</Text>
+              </div>
+            ) : '—' },
+            { title: 'Vận hành', dataIndex: 'worker' },
+            { title: 'Lý do / Ghi chú', dataIndex: 'reason', render: v => v ? <Text type="danger">{v}</Text> : '—' },
+            { title: 'Cập nhật cuối', dataIndex: 'last_event_time', render: v => v ? dayjs(v).fromNow() : '—' },
+          ]}
+        />
+      </Card>
 
       {/* Phiếu đang in — quick action */}
       {dangInList.length > 0 && (
@@ -228,7 +286,7 @@ export default function CD2DashboardPage() {
             </Link>
           </Row>
           <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
-            {mayStats.map(m => (
+            {mayStats.map((m: any) => (
               <Col xs={24} sm={12} md={8} key={m.may_scan_id}>
                 <Card
                   size="small"
@@ -281,6 +339,7 @@ export default function CD2DashboardPage() {
       <Row gutter={[12, 12]}>
         {[
           { to: '/production/cd2',              icon: <PrinterOutlined />,  label: 'Kanban máy in',    color: '#1677ff' },
+          { to: '/production/cd2/mobile-tracking', icon: <MobileOutlined />, label: 'Báo cáo máy (Mobile)', color: '#52c41a' },
           { to: '/production/cd2/scan',         icon: <BarcodeOutlined />,  label: 'Scan sản lượng',   color: '#722ed1' },
           { to: '/production/cd2/scan-history', icon: <HistoryOutlined />,  label: 'Lịch sử scan',     color: '#08979c' },
           { to: '/production/cd2/history',      icon: <HistoryOutlined />,  label: 'Lịch sử phiếu in', color: '#d46b08' },
@@ -308,6 +367,28 @@ export default function CD2DashboardPage() {
           onClose={() => setSelectedPhieu(null)}
           onSaved={() => { setSelectedPhieu(null); invalidate(); refetch() }}
         />
+      )}
+      {showMobilePreview && (
+        <Modal
+          open={showMobilePreview}
+          onCancel={() => setShowMobilePreview(false)}
+          footer={null}
+          width={400}
+          centered
+          styles={{ content: { padding: 0, overflow: 'hidden', borderRadius: 32, border: '8px solid #333' } }}
+          title={null}
+          closable={false}
+        >
+          <div style={{ height: 700, overflow: 'auto', position: 'relative' }}>
+            <div style={{ position: 'sticky', top: 0, zIndex: 100, background: '#333', color: '#fff', textAlign: 'center', padding: '4px 0', fontSize: 12 }}>
+              Màn hình giả lập (Mobile) - <Button type="link" size="small" onClick={() => setShowMobilePreview(false)} style={{color:'#fff'}}>Đóng</Button>
+            </div>
+            <iframe 
+              src={`${window.location.origin}/production/cd2/mobile-tracking`} 
+              style={{ width: '100%', height: 'calc(100% - 24px)', border: 'none' }} 
+            />
+          </div>
+        </Modal>
       )}
     </div>
   )

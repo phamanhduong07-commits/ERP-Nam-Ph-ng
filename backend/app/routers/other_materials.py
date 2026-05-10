@@ -121,8 +121,9 @@ def _to_response(obj: OtherMaterial) -> OtherMaterialResponse:
 def list_other_materials(
     search: str = Query(default=""),
     ma_nhom_id: int | None = Query(default=None),
+    ma_ncc_id: int | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=2000),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -135,6 +136,8 @@ def list_other_materials(
         )
     if ma_nhom_id is not None:
         q = q.filter(OtherMaterial.ma_nhom_id == ma_nhom_id)
+    if ma_ncc_id is not None:
+        q = q.filter(OtherMaterial.ma_ncc_id == ma_ncc_id)
     total = q.count()
     items = q.order_by(OtherMaterial.ten).offset((page - 1) * page_size).limit(page_size).all()
     return PagedResponse(
@@ -201,3 +204,33 @@ def update_other_material(
     db.commit()
     db.refresh(obj)
     return _to_response(obj)
+
+
+@router.get("/search")
+def search_other_materials(
+    q: str = Query(default=""),
+    limit: int = Query(default=20, le=50),
+    ma_nhom_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Quick search for autocomplete trong form mua NVL."""
+    query = db.query(OtherMaterial).filter(OtherMaterial.trang_thai == True)  # noqa: E712
+    if q:
+        like = f"%{q}%"
+        query = query.filter(OtherMaterial.ma_chinh.ilike(like) | OtherMaterial.ten.ilike(like))
+    if ma_nhom_id is not None:
+        query = query.filter(OtherMaterial.ma_nhom_id == ma_nhom_id)
+    items = query.order_by(OtherMaterial.ma_chinh).limit(limit).all()
+    return [
+        {
+            "value": m.ma_chinh,
+            "label": f"{m.ma_chinh} – {m.ten}",
+            "id": m.id,
+            "ten": m.ten,
+            "dvt": m.dvt,
+            "gia_mua": float(m.gia_mua) if m.gia_mua else 0,
+            "ma_nhom_id": m.ma_nhom_id,
+        }
+        for m in items
+    ]

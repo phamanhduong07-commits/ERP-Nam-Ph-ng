@@ -7,6 +7,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { EditOutlined, KeyOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { rolesApi } from '../../api/permissions'
 import { usersApi, type NhanVien, type UserCreatePayload, type UserUpdatePayload } from '../../api/usersApi'
+import { cd2Api } from '../../api/cd2'
 
 const { Title } = Typography
 
@@ -29,6 +30,7 @@ type UserFormValues = {
   role_id: number
   phan_xuong?: string
   trang_thai?: boolean
+  machine_id?: number
 }
 
 export default function UserList() {
@@ -58,6 +60,11 @@ export default function UserList() {
     queryFn: () => rolesApi.active().then(r => r.data),
   })
 
+  const { data: machines = [] } = useQuery({
+    queryKey: ['machines-all'],
+    queryFn: () => cd2Api.listMachines().then(r => r.data),
+  })
+
   const saveMutation = useMutation({
     mutationFn: (values: UserFormValues) => {
       if (editing) {
@@ -68,6 +75,7 @@ export default function UserList() {
           role_id: values.role_id,
           phan_xuong: values.phan_xuong || null,
           trang_thai: values.trang_thai ?? true,
+          machine_id: values.machine_id || null,
         }
         return usersApi.update(editing.id, payload)
       }
@@ -79,6 +87,7 @@ export default function UserList() {
         password: values.password || '',
         role_id: values.role_id,
         phan_xuong: values.phan_xuong || null,
+        machine_id: values.machine_id || null,
       }
       return usersApi.create(payload)
     },
@@ -119,6 +128,7 @@ export default function UserList() {
       role_id: record.role_id,
       phan_xuong: record.phan_xuong || undefined,
       trang_thai: record.trang_thai,
+      machine_id: record.machine_id || undefined,
     })
     setOpen(true)
   }
@@ -149,6 +159,12 @@ export default function UserList() {
       dataIndex: 'phan_xuong',
       width: 130,
       render: (v: string | null) => v ? (PHAN_XUONG_OPTIONS.find(o => o.value === v)?.label ?? v) : '-',
+    },
+    {
+      title: 'Máy trực',
+      dataIndex: 'machine_id',
+      width: 150,
+      render: (v: number | null, r) => v ? <Tag color="orange">{r.ten_may || `Máy #${v}`}</Tag> : '-',
     },
     {
       title: 'Trạng thái',
@@ -266,6 +282,15 @@ export default function UserList() {
                 </Form.Item>
               </Col>
             )}
+            <Col span={24}>
+               <Form.Item name="machine_id" label="Gán máy trực cố định (Cho công nhân)">
+                 <Select 
+                   allowClear 
+                   placeholder="-- Chọn máy --"
+                   options={machines.map(m => ({ value: m.id, label: `${m.ten_may} (${m.loai_may})` }))} 
+                 />
+               </Form.Item>
+            </Col>
           </Row>
         </Form>
       </Modal>

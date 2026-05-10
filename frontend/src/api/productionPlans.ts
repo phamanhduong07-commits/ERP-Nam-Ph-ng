@@ -38,6 +38,7 @@ export interface PlanLineResponse {
   so_luong_ke_hoach: number
   so_luong_hoan_thanh: number
   trang_thai: string
+  mua_phoi_ngoai: boolean
   ghi_chu: string | null
   // Joined fields
   so_lenh: string | null
@@ -130,6 +131,7 @@ export interface QueueLine {
   so_luong_ke_hoach: number
   so_luong_hoan_thanh: number
   trang_thai: string
+  mua_phoi_ngoai: boolean
   ghi_chu: string | null
   so_lenh: string | null
   ma_kh: string | null
@@ -229,6 +231,13 @@ export const productionPlansApi = {
 
   startQueueLine: (lineId: number) =>
     client.patch<QueueLine>(`/production-plans/queue/${lineId}/start`),
+
+  // Toggle mua phôi ngoài cho line KHSX
+  togglePhoiNgoai: (lineId: number, mua_phoi_ngoai: boolean) =>
+    client.patch<{ id: number; mua_phoi_ngoai: boolean }>(
+      `/production-plans/lines/${lineId}/phoi-ngoai`,
+      { mua_phoi_ngoai }
+    ),
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

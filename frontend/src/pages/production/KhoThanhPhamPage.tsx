@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Alert, Button, Col, DatePicker, Empty, Input, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography,
+  Alert, Button, Col, DatePicker, Empty, Input, Row, Select, Space, Statistic, Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd'
-import { EyeOutlined, GoldOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { EyeOutlined, GoldOutlined, InfoCircleOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
@@ -76,7 +76,8 @@ export default function KhoThanhPhamPage() {
     const allTab = { key: 'all', label: `Tất cả (${data.length})` }
     const xuongTabs = phanXuongList.map(x => {
       const count = data.filter(r => r.phan_xuong_id === x.id).length
-      return { key: String(x.id), label: `${x.ten_xuong} (${count})` }
+      const shortName = x.ten_xuong.replace(/^Xưởng\s+/i, '')
+      return { key: String(x.id), label: `Kho TP ${shortName} (${count})` }
     })
     return [allTab, ...xuongTabs]
   }, [phanXuongList, data])
@@ -108,12 +109,17 @@ export default function KhoThanhPhamPage() {
     setFilterTonKho(null)
   }
 
+  // Lọc phiếu trả theo xưởng đang chọn (dựa vào sales_order_id khớp với filteredData)
+  const filteredReturnRows = useMemo(() => {
+    if (activeXuong === 'all' && !filterPhapNhan) return returnRows
+    const soIds = new Set(filteredData.map(r => r.sales_order_id).filter(Boolean))
+    return returnRows.filter(r => soIds.has(r.sales_order_id))
+  }, [returnRows, filteredData, activeXuong, filterPhapNhan])
+
   const totalNhap = filteredData.reduce((s, r) => s + r.tong_nhap, 0)
   const totalXuat = filteredData.reduce((s, r) => s + r.tong_xuat, 0)
   const totalTra = filteredData.reduce((s, r) => s + (r.tong_tra || 0), 0)
   const totalTon = filteredData.reduce((s, r) => s + r.ton_kho, 0)
-
-  const showXuongCol = activeXuong === 'all'
 
   const returnColumns: ColumnsType<SalesReturnListItem> = [
     {
@@ -202,21 +208,30 @@ export default function KhoThanhPhamPage() {
     {
       title: 'Pháp nhân',
       dataIndex: 'ten_phap_nhan_sx',
-      width: 160,
+      width: 130,
       ellipsis: true,
       render: (v: string | null) => v
         ? <Tag color="blue" style={{ fontSize: 11, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>{v}</Tag>
         : <Text type="secondary">—</Text>,
     },
-    ...(showXuongCol ? [{
-      title: 'Xưởng SX',
-      dataIndex: 'ten_phan_xuong',
-      width: 140,
+    {
+      title: 'Nơi sản xuất',
+      dataIndex: 'order_ten_phan_xuong',
+      width: 130,
       ellipsis: true,
       render: (v: string | null) => v
         ? <Text style={{ fontSize: 12 }}>{v}</Text>
         : <Text type="secondary">—</Text>,
-    }] : []),
+    },
+    {
+      title: 'Kho hiện tại',
+      dataIndex: 'ten_kho_hien_tai',
+      width: 160,
+      ellipsis: true,
+      render: (v: string | null) => v
+        ? <Tooltip title={v}><Text style={{ fontSize: 12 }}>{v}</Text></Tooltip>
+        : <Text type="secondary">—</Text>,
+    },
     {
       title: 'Khách hàng',
       dataIndex: 'ten_khach_hang',
@@ -253,13 +268,26 @@ export default function KhoThanhPhamPage() {
       render: (v: number) => v > 0 ? fmtN(v) : <Text type="secondary">—</Text>,
     },
     {
-      title: 'Trả về',
+      title: (
+        <Tooltip title="Trả về (chờ duyệt / đã duyệt). Tồn kho chỉ cộng phần đã duyệt.">
+          <Space size={4}>Trả về<InfoCircleOutlined style={{ color: '#8c8c8c', fontSize: 11 }} /></Space>
+        </Tooltip>
+      ),
       dataIndex: 'tong_tra',
-      width: 90,
+      width: 100,
       align: 'right' as const,
-      render: (v: number | undefined) => v && v > 0
-        ? <Tag color="green" style={{ marginInlineEnd: 0 }}>{fmtN(v)}</Tag>
-        : <Text type="secondary">—</Text>,
+      render: (v: number | undefined, r: TonKhoTPRow) => {
+        if (!v || v <= 0) return <Text type="secondary">—</Text>
+        const daduyet = r.tong_tra_da_duyet ?? 0
+        const choduyet = v - daduyet
+        return (
+          <Tooltip title={`Đã duyệt: ${fmtN(daduyet)}${choduyet > 0 ? ` | Chờ duyệt: ${fmtN(choduyet)}` : ''}`}>
+            <Tag color={choduyet > 0 ? 'orange' : 'green'} style={{ marginInlineEnd: 0 }}>
+              {fmtN(v)}
+            </Tag>
+          </Tooltip>
+        )
+      },
     },
     {
       title: 'Tồn thùng',
@@ -317,7 +345,7 @@ export default function KhoThanhPhamPage() {
         onChange={key => setActiveMainTab(key as 'stock' | 'returns')}
         items={[
           { key: 'stock', label: 'Tồn kho thành phẩm' },
-          { key: 'returns', label: `Hàng trả về (${returnRows.length})` },
+          { key: 'returns', label: `Hàng trả về (${filteredReturnRows.length})` },
         ]}
         style={{ marginBottom: 8 }}
       />
@@ -327,7 +355,7 @@ export default function KhoThanhPhamPage() {
           rowKey="id"
           size="small"
           loading={isReturnsLoading}
-          dataSource={returnRows}
+          dataSource={filteredReturnRows}
           columns={returnColumns}
           locale={{
             emptyText: (
@@ -490,25 +518,26 @@ export default function KhoThanhPhamPage() {
           rowClassName={(r) => r.ton_kho <= 0 ? 'ant-table-row-disabled' : ''}
           summary={() => {
             if (filteredData.length === 0) return null
+            // Columns: 0=Lệnh SX, 1=Tên hàng, 2=Pháp nhân, 3=Nơi SX, 4=Kho hiện tại,
+            //          5=Khách, 6=NV, 7=Thùng KH, 8=Nhập, 9=Xuất, 10=Trả, 11=Tồn, 12=Phiếu xuất
             return (
               <Table.Summary.Row>
-                <Table.Summary.Cell index={0} colSpan={showXuongCol ? 6 : 5}>
+                <Table.Summary.Cell index={0} colSpan={8}>
                   <Text strong style={{ fontSize: 12 }}>Tổng cộng</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={showXuongCol ? 6 : 5} />
-                <Table.Summary.Cell index={showXuongCol ? 7 : 6} align="right">
+                <Table.Summary.Cell index={8} align="right">
                   <Text strong style={{ fontSize: 12 }}>{fmtN(totalNhap)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={showXuongCol ? 8 : 7} align="right">
+                <Table.Summary.Cell index={9} align="right">
                   <Text strong style={{ color: '#fa8c16', fontSize: 12 }}>{fmtN(totalXuat)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={showXuongCol ? 9 : 8} align="right">
+                <Table.Summary.Cell index={10} align="right">
                   <Text strong style={{ color: '#389e0d', fontSize: 12 }}>{fmtN(totalTra)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={showXuongCol ? 10 : 9} align="right">
+                <Table.Summary.Cell index={11} align="right">
                   <Text strong style={{ color: '#389e0d', fontSize: 12 }}>{fmtN(totalTon)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={showXuongCol ? 11 : 10} />
+                <Table.Summary.Cell index={12} />
               </Table.Summary.Row>
             )
           }}

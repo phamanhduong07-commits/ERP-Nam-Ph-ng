@@ -8,7 +8,7 @@ import {
   TeamOutlined, UserOutlined, LogoutOutlined, SettingOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, ToolOutlined, ClockCircleOutlined,
   AccountBookOutlined, RobotOutlined, BarChartOutlined, ShopOutlined, BankOutlined,
-  ThunderboltOutlined, FileTextOutlined,
+  ThunderboltOutlined, FileTextOutlined, MobileOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
@@ -42,12 +42,12 @@ function filterByRole(items: RawMenuItem[], role: string): object[] {
     })
 }
 
-const ADMIN_GD      = ['ADMIN', 'GIAM_DOC']
-const BAN_HANG      = ['ADMIN', 'GIAM_DOC', 'KINH_DOANH', 'KE_TOAN']
+const ADMIN_GD = ['ADMIN', 'GIAM_DOC']
+const BAN_HANG = ['ADMIN', 'GIAM_DOC', 'KINH_DOANH', 'KE_TOAN']
 const SAN_XUAT_FULL = ['ADMIN', 'GIAM_DOC', 'SAN_XUAT', 'KINH_DOANH']
-const SAN_XUAT_ALL  = ['ADMIN', 'GIAM_DOC', 'SAN_XUAT', 'KINH_DOANH', 'CONG_NHAN']
-const KHO_ROLES     = ['ADMIN', 'GIAM_DOC', 'KHO', 'SAN_XUAT', 'KE_TOAN', 'MUA_HANG']
-const MUA_HANG      = ['ADMIN', 'GIAM_DOC', 'MUA_HANG', 'KE_TOAN']
+const SAN_XUAT_ALL = ['ADMIN', 'GIAM_DOC', 'SAN_XUAT', 'KINH_DOANH', 'CONG_NHAN']
+const KHO_ROLES = ['ADMIN', 'GIAM_DOC', 'KHO', 'SAN_XUAT', 'KE_TOAN', 'MUA_HANG']
+const MUA_HANG = ['ADMIN', 'GIAM_DOC', 'MUA_HANG', 'KE_TOAN']
 
 function buildMenuItems(queueCount: number): RawMenuItem[] {
   return [
@@ -101,6 +101,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
             { key: '/production/cd2', label: <Link to="/production/cd2">🗂 Kanban máy in</Link> },
             { key: '/production/cd2/may-in', label: <Link to="/production/cd2/may-in">🖨 Queue máy in</Link> },
             { key: '/production/cd2/scan', label: <Link to="/production/cd2/scan">📊 Scan sản lượng</Link> },
+            { key: '/production/cd2/mobile-tracking', label: <Link to="/production/cd2/mobile-tracking">📱 Báo cáo máy (Mobile)</Link> },
             { key: '/production/cd2/scan-history', label: <Link to="/production/cd2/scan-history">📋 Lịch sử scan</Link> },
             { key: '/production/cd2/history', label: <Link to="/production/cd2/history">📑 Lịch sử phiếu in</Link> },
             { key: '/production/cd2/dhcho2', label: <Link to="/production/cd2/dhcho2">🔧 Chờ định hình</Link> },
@@ -122,7 +123,13 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/production/kho-thanh-pham', label: <Link to="/production/kho-thanh-pham">Kho thành phẩm</Link>, roles: SAN_XUAT_FULL },
         { key: '/production/phieu-nhap-phoi', label: <Link to="/production/phieu-nhap-phoi">DS nhập phôi sóng</Link>, roles: SAN_XUAT_FULL },
         { key: '/warehouse/inventory', label: <Link to="/warehouse/inventory">Tồn kho</Link> },
-        { key: '/warehouse/receipts', label: <Link to="/warehouse/receipts">Nhập kho (NVL)</Link> },
+        { key: '/warehouse/nhap-nhanh', label: <Link to="/warehouse/nhap-nhanh">📷 Ghi nhận xe nhập giấy</Link> },
+        { key: '/production/cd2/mobile-tracking-kho', label: <Link to="/production/cd2/mobile-tracking">📷 Báo cáo máy (Mobile)</Link> },
+        { key: '/warehouse/nhap-nhanh-nvl', label: <Link to="/warehouse/nhap-nhanh?loai=nvl">📷 Ghi nhận xe nhập NVL</Link> },
+        { key: '/warehouse/nhap-nhanh-phoi', label: <Link to="/warehouse/nhap-nhanh?loai=phoi">📷 Ghi nhận xe nhập phôi</Link> },
+        { key: '/warehouse/nhap-giay', label: <Link to="/warehouse/nhap-giay">Nhập giấy cuộn</Link> },
+        { key: '/warehouse/nhap-phoi-ngoai', label: <Link to="/warehouse/nhap-phoi-ngoai">Nhập phôi sóng (mua ngoài)</Link> },
+        { key: '/warehouse/receipts', label: <Link to="/warehouse/receipts">Nhập NVL khác</Link> },
         { key: '/warehouse/issues', label: <Link to="/warehouse/issues">Xuất NVL sản xuất</Link> },
         { key: '/warehouse/production-output', label: <Link to="/warehouse/production-output">Nhập TP từ SX</Link> },
         { key: '/warehouse/delivery', label: <Link to="/warehouse/delivery">Giao hàng (TP)</Link> },
@@ -137,6 +144,8 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       label: 'Mua hàng',
       roles: MUA_HANG,
       children: [
+        { key: '/purchasing/giay-cuon', label: <Link to="/purchasing/giay-cuon">Mua giấy</Link> },
+        { key: '/purchasing/nvl-khac', label: <Link to="/purchasing/nvl-khac">Mua NVL khác</Link> },
         { key: '/purchasing/orders', label: <Link to="/purchasing/orders">Đơn mua hàng (PO)</Link> },
         { key: '/accounting/purchase-invoices', label: <Link to="/accounting/purchase-invoices">Hóa đơn mua hàng</Link> },
         { key: '/purchasing/returns', label: <Link to="/purchasing/returns">Trả hàng NCC</Link> },

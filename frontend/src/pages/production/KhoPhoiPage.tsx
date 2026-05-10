@@ -81,7 +81,10 @@ export default function KhoPhoiPage() {
     const allTab = { key: 'all', label: `Tất cả (${allCount})` }
     const xuongTabs = phanXuongList.map(x => {
       const count = (data ?? []).filter(r => r.phan_xuong_id === x.id).length
-      return { key: String(x.id), label: `${x.ten_xuong} (${count})` }
+      const label = x.ten_xuong.startsWith('Xưởng ') 
+        ? x.ten_xuong.replace('Xưởng ', 'Kho phôi ') 
+        : `Kho phôi ${x.ten_xuong}`
+      return { key: String(x.id), label: `${label} (${count})` }
     })
     return [allTab, ...xuongTabs]
   }, [phanXuongList, data])
@@ -196,21 +199,33 @@ export default function KhoPhoiPage() {
         ? <Tag color="blue" style={{ fontSize: 11 }}>{v}</Tag>
         : <Text type="secondary">—</Text>,
     },
-    ...(showXuongCol ? [{
-      title: 'Xưởng SX',
-      dataIndex: 'ten_phan_xuong',
-      width: 130,
-      render: (v: string | null, row: KhoRow) => v
+    {
+      title: 'Nơi sản xuất',
+      dataIndex: 'order_ten_phan_xuong',
+      width: 120,
+      render: (v: string | null) => v
         ? (
           <Space size={2} direction="vertical">
             <Text style={{ fontSize: 12 }}>{v}</Text>
+          </Space>
+        )
+        : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Kho hiện tại',
+      dataIndex: 'ten_phan_xuong',
+      width: 140,
+      render: (v: string | null, row: KhoRow) => v
+        ? (
+          <Space size={4} wrap={false} align="center">
+            <Text style={{ fontSize: 12, fontWeight: 'bold' }}>{v}</Text>
             {row.cong_doan === 'cd2' && (
-              <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>CD2</Tag>
+              <Tag color="orange" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>CD2</Tag>
             )}
           </Space>
         )
         : <Text type="secondary">—</Text>,
-    }] : []),
+    },
     {
       title: 'Khách hàng',
       dataIndex: 'ten_khach_hang',

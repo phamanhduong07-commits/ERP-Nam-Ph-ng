@@ -158,6 +158,11 @@ export interface GoodsReceiptItem {
   dinh_luong_thuc_te: number | null
   do_am: number | null
   ket_qua_kiem_tra: string
+  kho_mm: number | null
+  so_cuon: number | null
+  ky_hieu_cuon: string | null
+  dai_mm: number | null      // chiều dài phôi tấm (mm)
+  so_lop: number | null      // số lớp: 3 | 5 | 7
   ghi_chu: string | null
 }
 
@@ -168,12 +173,17 @@ export interface GoodsReceipt {
   po_id: number | null
   supplier_id: number
   ten_ncc: string
-  warehouse_id: number
+  warehouse_id: number | null
   ten_kho: string
   loai_nhap: string
   tong_gia_tri: number
-  trang_thai: string
+  trang_thai: 'nhap_nhanh' | 'nhap' | 'da_duyet'
   ghi_chu: string | null
+  so_xe: string | null
+  phap_nhan_id: number | null
+  invoice_image: string | null   // null trong list, có giá trị trong detail
+  has_invoice_image: boolean
+  hd_tong_kg: number | null
   created_at: string | null
   items: GoodsReceiptItem[]
 }
@@ -185,6 +195,26 @@ export interface CreateGoodsReceiptPayload {
   warehouse_id: number
   loai_nhap?: string
   ghi_chu?: string | null
+  so_xe?: string | null
+  invoice_image?: string | null
+  hd_tong_kg?: number | null
+  items: Omit<GoodsReceiptItem, 'id' | 'thanh_tien'>[]
+}
+
+export interface QuickCapturePayload {
+  ngay_nhap: string
+  supplier_id: number
+  phan_xuong_id: number
+  loai_kho_auto?: string   // 'GIAY_CUON' | 'NVL_PHU'
+  so_xe?: string | null
+  invoice_image: string
+  hd_tong_kg?: number | null
+}
+
+export interface CompleteGoodsReceiptPayload {
+  warehouse_id?: number | null
+  ghi_chu?: string | null
+  hd_tong_kg?: number | null
   items: Omit<GoodsReceiptItem, 'id' | 'thanh_tien'>[]
 }
 
@@ -393,8 +423,10 @@ export interface TonKhoTPRow {
   warehouse_id: number | null
   phan_xuong_id: number | null
   ten_phan_xuong: string | null
-  phap_nhan_sx_id: number | null
+  order_ten_phan_xuong: string | null
+  phap_nhan_id: number | null
   ten_phap_nhan_sx: string | null
+  ten_kho_hien_tai: string | null
   phieu_xuat_gan_nhat: { so_phieu: string; ngay_xuat: string } | null
 }
 
@@ -433,6 +465,101 @@ export interface CreatePhanXuongPayload {
   cong_doan: string
   phoi_tu_phan_xuong_id?: number | null
   trang_thai: boolean
+}
+
+export interface TonKhoGiayRow {
+  paper_material_id: number
+  ma_chinh: string | null
+  ten: string | null
+  kho: number | null
+  dinh_luong: number | null
+  ton_toi_thieu: number
+  warehouse_id: number
+  ten_kho: string
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
+  ton_luong: number
+  gia_tri_ton: number
+  don_gia_binh_quan: number
+}
+
+export interface DuTruGiayPeriod {
+  label: string
+  date_from: string
+  date_to: string
+  can_kg: number
+  ton_sau_ky: number
+  am: boolean
+  cung_ky_nam_truoc_kg: number
+  tang_giam_pct: number | null
+}
+
+export interface DuTruGiayRow {
+  paper_material_id: number
+  ma_chinh: string | null
+  ten: string | null
+  kho: number | null
+  dinh_luong: number | null
+  ton_toi_thieu: number
+  ton_hien_tai: number
+  don_gia_binh_quan: number
+  periods: DuTruGiayPeriod[]
+  tong_can_kg: number
+  can_mua_ngay: number
+  gia_tri_can_mua: number
+}
+
+// ── KHSX cần mua phôi sóng ngoài ─────────────────────────────────────────────
+export interface KHSXCanPhoiNgoaiRow {
+  ppl_id: number
+  so_ke_hoach: string
+  ngay_ke_hoach: string | null
+  ngay_chay: string | null
+  so_lsx: string
+  poi_id: number
+  ten_san_pham: string
+  so_luong_thung: number
+  // KHSX paper sizing
+  kho1: number | null
+  kho_giay: number | null
+  so_dao: number | null
+  kho_tt: number | null
+  dai_tt: number | null
+  // Cấu trúc giấy
+  so_lop: number | null
+  to_hop_song: string | null
+  mat: string | null;   mat_dl: number | null
+  song_1: string | null; song_1_dl: number | null
+  mat_1: string | null;  mat_1_dl: number | null
+  song_2: string | null; song_2_dl: number | null
+  mat_2: string | null;  mat_2_dl: number | null
+  song_3: string | null; song_3_dl: number | null
+  mat_3: string | null;  mat_3_dl: number | null
+  // Kích thước thùng
+  loai_thung: string | null
+  dai: number | null; rong: number | null; cao: number | null
+  // QCCL
+  c_tham: string | null
+  can_man: string | null
+  loai_lan: string | null
+  qccl: string | null
+  // Đã đặt mua
+  da_dat_so_tam: number
+}
+
+// ── Tồn kho NVL (other_materials) ────────────────────────────────────────────
+export interface TonKhoNVLRow {
+  id: number
+  warehouse_id: number
+  ten_kho: string
+  phan_xuong_id: number | null
+  other_material_id: number | null
+  ten_hang: string
+  don_vi: string
+  ton_luong: number
+  don_gia_binh_quan: number
+  gia_tri_ton: number
+  ton_toi_thieu: number
 }
 
 export const warehouseApi = {
@@ -479,12 +606,15 @@ export const warehouseApi = {
     client.get<GiaoDich[]>('/warehouse/giao-dich', { params }),
 
   // Phiếu nhập kho (GoodsReceipt — linked to PO)
-  listGoodsReceipts: (params?: { warehouse_id?: number; supplier_id?: number; po_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+  listGoodsReceipts: (params?: { warehouse_id?: number; supplier_id?: number; po_id?: number; tu_ngay?: string; den_ngay?: string; loai_hang?: string }) =>
     client.get<GoodsReceipt[]>('/warehouse/goods-receipts', { params }),
   getGoodsReceipt: (id: number) => client.get<GoodsReceipt>(`/warehouse/goods-receipts/${id}`),
   createGoodsReceipt: (data: CreateGoodsReceiptPayload) => client.post<GoodsReceipt>('/warehouse/goods-receipts', data),
+  quickCaptureGoodsReceipt: (data: QuickCapturePayload) => client.post<GoodsReceipt>('/warehouse/goods-receipts/quick', data),
+  completeGoodsReceipt: (id: number, data: CompleteGoodsReceiptPayload) => client.post<GoodsReceipt>(`/warehouse/goods-receipts/${id}/complete`, data),
   deleteGoodsReceipt: (id: number) => client.delete(`/warehouse/goods-receipts/${id}`),
   approveGoodsReceipt: (id: number) => client.patch(`/warehouse/goods-receipts/${id}/approve`),
+  syncGiaBan: (id: number) => client.post<{ ok: boolean; updated: { ma_chinh: string; ten: string; gia_mua: number; gia_ban: number }[] }>(`/warehouse/goods-receipts/${id}/sync-gia-ban`),
 
   // Phiếu xuất NVL (MaterialIssue — linked to LSX)
   listMaterialIssues: (params?: { warehouse_id?: number; production_order_id?: number; tu_ngay?: string; den_ngay?: string }) =>
@@ -523,4 +653,20 @@ export const warehouseApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
+
+  getTonKhoGiay: (params?: { phan_xuong_id?: number }) =>
+    client.get<TonKhoGiayRow[]>('/warehouse/ton-kho-giay', { params }),
+
+  getDuTruGiay: (params?: { weeks?: number }) =>
+    client.get<DuTruGiayRow[]>('/warehouse/du-tru-giay', { params }),
+
+  // KHSX line cần mua phôi sóng ngoài
+  getKHSXCanPhoiNgoai: (params?: { trang_thai?: string }) =>
+    client.get<KHSXCanPhoiNgoaiRow[]>('/warehouse/khsx-can-phoi-ngoai', { params }),
+
+  // Tồn kho NVL khác (reuse ton-kho?loai=khac)
+  getTonKhoNVL: (params?: { phan_xuong_id?: number; search?: string }) =>
+    client.get<TonKhoNVLRow[]>('/warehouse/ton-kho', {
+      params: { loai: 'khac', ...params }
+    }),
 }

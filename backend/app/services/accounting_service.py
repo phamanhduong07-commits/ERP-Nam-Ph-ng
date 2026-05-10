@@ -294,7 +294,12 @@ class AccountingService:
         """
         Ghi sổ kế toán cho các giao dịch kho.
         loai: 'XUAT_SX', 'NHAP_TP', 'CHUYEN_KHO'
-        items: list of { 'ten_hang', 'so_luong', 'don_gia', 'tk_no', 'tk_co' }
+        items: list of { 
+            'ten_hang', 'so_luong', 'don_gia', 
+            'tk_no', 'tk_co',
+            'phan_xuong_id_no', 'phan_xuong_id_co',
+            'phap_nhan_id_no', 'phap_nhan_id_co'
+        }
         """
         if not items:
             return None
@@ -313,6 +318,8 @@ class AccountingService:
                 'dien_giai': f"{it.get('ten_hang', '')} ({it['so_luong']})",
                 'so_tien_no': thanh_tien,
                 'so_tien_co': 0,
+                'phan_xuong_id': it.get('phan_xuong_id_no', phan_xuong_id),
+                'phap_nhan_id': it.get('phap_nhan_id_no', phap_nhan_id),
             })
             # Line Có
             lines.append({
@@ -320,6 +327,8 @@ class AccountingService:
                 'dien_giai': f"{it.get('ten_hang', '')} ({it['so_luong']})",
                 'so_tien_no': 0,
                 'so_tien_co': thanh_tien,
+                'phan_xuong_id': it.get('phan_xuong_id_co', phan_xuong_id),
+                'phap_nhan_id': it.get('phap_nhan_id_co', phap_nhan_id),
             })
 
         if not lines:

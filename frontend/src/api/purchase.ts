@@ -11,6 +11,9 @@ export interface POItem {
   thanh_tien?: number
   so_luong_da_nhan?: number
   ghi_chu?: string | null
+  // Phôi sóng mua ngoài
+  production_plan_line_id?: number | null
+  phoi_spec?: Record<string, unknown> | null
 }
 
 export interface PurchaseOrder {
@@ -20,6 +23,10 @@ export interface PurchaseOrder {
   supplier_id: number
   ten_ncc: string
   trang_thai: string
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
+  ten_phap_nhan: string | null
+  loai_po: string
   ngay_du_kien_nhan: string | null
   dieu_khoan_tt: string | null
   tong_tien: number
@@ -33,6 +40,8 @@ export interface PurchaseOrder {
 export interface CreatePOPayload {
   supplier_id: number
   ngay_po: string
+  phan_xuong_id?: number | null
+  loai_po?: string
   ngay_du_kien_nhan?: string | null
   dieu_khoan_tt?: string | null
   ghi_chu?: string | null
@@ -40,6 +49,8 @@ export interface CreatePOPayload {
 }
 
 export interface UpdatePOPayload {
+  phan_xuong_id?: number | null
+  loai_po?: string
   ngay_du_kien_nhan?: string | null
   dieu_khoan_tt?: string | null
   ghi_chu?: string | null
@@ -70,6 +81,8 @@ export const purchaseApi = {
     trang_thai?: string
     tu_ngay?: string
     den_ngay?: string
+    phan_xuong_id?: number
+    loai_po?: string
   }) => client.get<PurchaseOrder[]>('/purchase-orders', { params }),
 
   get: (id: number) => client.get<PurchaseOrder>(`/purchase-orders/${id}`),

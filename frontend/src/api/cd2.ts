@@ -1,127 +1,133 @@
 import client from './client'
 
+export interface Machine {
+  id: number
+  ten_may: string
+  ma_may?: string
+  loai_may: string
+  sort_order: number
+  active: boolean
+  phan_xuong_id?: number
+}
+
+export interface ProductionLog {
+  id: number
+  production_order_id: number
+  phieu_in_id?: number
+  machine_id: number
+  event_type: string
+  quantity_ok?: number
+  quantity_loi?: number
+  quantity_setup?: number
+  ghi_chu?: string
+  created_at: string
+  worker?: string
+}
+
+export interface TrackPayload {
+  production_order_id: number
+  so_lsx?: string
+  machine_id: number
+  event_type: 'start' | 'stop' | 'resume' | 'complete' | 'error'
+  quantity_ok?: number
+  quantity_loi?: number
+  quantity_setup?: number
+  ghi_chu?: string
+}
+
 export interface MayIn {
   id: number
   ten_may: string
+  active: boolean
   sort_order: number
-  active: boolean
-  capacity: number | null
-  phan_xuong_id: number | null
-}
-
-export interface ShiftCa {
-  id: number
-  name: string
-  leader: string | null
-  active: boolean
-  phan_xuong_id: number | null
-}
-
-export interface ShiftConfigItem {
-  id: number
-  may_in_id: number
-  ten_may: string | null
-  shift_ca_id: number
-  ten_ca: string | null
-  ngay: string
-  gio_lam: number | null
-  gio_bat_dau: string | null
-  gio_ket_thuc: string | null
-  nghi_1: number | null
-  nghi_2: number | null
-  created_at: string
-}
-
-export interface PrinterUser {
-  id: number
-  rfid_key: string | null
-  token_user: string
-  shift: number | null
-  active: boolean
-  created_at: string
+  phan_xuong_id?: number
+  capacity?: number | null
 }
 
 export interface MaySauIn {
   id: number
   ten_may: string
-  sort_order: number
   active: boolean
-  phan_xuong_id: number | null
+  sort_order: number
+  phan_xuong_id?: number
+}
+
+export interface MayScan {
+  id: number
+  ten_may: string
+  active: boolean
+  sort_order: number
+  phan_xuong_id?: number
+  don_gia: number | null
+}
+
+export interface PrinterUser {
+  id: number
+  token_user: string
+  token_password?: string
+  rfid_key?: string | null
+  shift?: number | null
+  active: boolean
+  machine_id?: number | null
+  machine_name?: string
+}
+
+export interface WorkerSession {
+  printer_user_id: number
+  worker_name: string
+  shift?: number | null
+  machine_id: number
+  machine_name: string
+  loai_may: string
 }
 
 export interface PhieuIn {
   id: number
   so_phieu: string
-  production_order_id: number | null
-  may_in_id: number | null
-  ten_may: string | null
-  trang_thai: string
-  sort_order: number
-  ten_hang: string | null
-  ma_kh: string | null
-  ten_khach_hang: string | null
-  quy_cach: string | null
-  so_luong_phoi: number | null
-  ngay_lenh: string | null
-  loai_in: string | null
-  loai: string | null
-  ths: string | null
-  pp_ghep: string | null
-  ghi_chu_printer: string | null
-  ghi_chu_prepare: string | null
-  so_don: string | null
-  ngay_giao_hang: string | null
-  ghi_chu: string | null
-  ngay_in: string | null
-  ca: string | null
-  so_luong_in_ok: number | null
-  so_luong_loi: number | null
-  so_luong_setup: number | null
-  so_lan_setup: number | null
-  ghi_chu_ket_qua: string | null
-  ngay_sau_in: string | null
-  ca_sau_in: string | null
-  so_luong_sau_in_ok: number | null
-  so_luong_sau_in_loi: number | null
-  ghi_chu_sau_in: string | null
-  may_sau_in_id: number | null
-  ten_may_sau_in: string | null
-  gio_bat_dau_in: string | null
-  gio_hoan_thanh: string | null
-  gio_bat_dau_dinh_hinh: string | null
-  gio_hoan_thanh_dinh_hinh: string | null
-  phan_xuong_id: number | null
-  created_at: string
-}
-
-export interface SauInKanbanData {
-  may_sau_ins: { id: number; ten_may: string }[]
-  cho_gang_may: PhieuIn[]
-  machines: Record<string, PhieuIn[]>
-}
-
-export interface KanbanData {
-  may_ins: MayIn[]
-  columns: Record<string, PhieuIn[]>
-}
-
-export interface CreatePhieuInPayload {
-  production_order_id?: number
+  so_lsx: string
   ten_hang?: string
-  ma_kh?: string
   ten_khach_hang?: string
+  ma_kh?: string
   quy_cach?: string
-  so_luong_phoi?: number
-  ngay_lenh?: string
-  loai_in?: string
   loai?: string
-  ths?: string
+  loai_in?: string
   pp_ghep?: string
+  so_don?: string
+  ngay_lenh?: string
+  ngay_giao_hang?: string
   ghi_chu_printer?: string
   ghi_chu_prepare?: string
-  so_don?: string
-  ngay_giao_hang?: string
   ghi_chu?: string
+  so_luong_phoi: number
+  trang_thai: string
+  may_in_id?: number | null
+  ten_may?: string
+  nguoi_in_id?: number
+  ten_nguoi_in?: string
+  ghi_chu_in?: string
+  created_at: string
+  updated_at: string
+  kho_tt?: number
+  dai_tt?: number
+  ths?: string
+  // Kết quả in
+  so_luong_in_ok?: number
+  ngay_in?: string
+  ca?: string
+  so_luong_loi?: number
+  so_luong_setup?: number
+  so_lan_setup?: number
+  ghi_chu_ket_qua?: string
+  // Kết quả sau in
+  ngay_sau_in?: string
+  ca_sau_in?: string
+  so_luong_sau_in_ok?: number
+  so_luong_sau_in_loi?: number
+  ghi_chu_sau_in?: string
+  // Thời gian thực (timestamps)
+  gio_bat_dau_in?: string
+  gio_hoan_thanh?: string
+  gio_bat_dau_dinh_hinh?: string
 }
 
 export interface CompletePayload {
@@ -142,46 +148,19 @@ export interface SauInPayload {
   ghi_chu_sau_in?: string
 }
 
-export interface MayScan {
-  id: number
-  ten_may: string
-  sort_order: number
-  active: boolean
-  don_gia: number | null
-  phan_xuong_id: number | null
+export interface KanbanData {
+  columns: Record<string, PhieuIn[]>
+  may_ins: MayIn[]
+}
+
+export interface SauInKanbanData {
+  may_sau_ins: MaySauIn[]
+  cho_gang_may: PhieuIn[]
+  machines: Record<string, PhieuIn[]>
 }
 
 export interface ScanLog {
   id: number
-  may_scan_id: number
-  ten_may: string | null
-  so_lsx: string
-  ten_hang: string | null
-  dai: number | null
-  rong: number | null
-  cao: number | null
-  kho_tt: number | null
-  dien_tich: number | null
-  so_luong_tp: number
-  don_gia: number | null
-  tien_luong: number | null
-  nguoi_sx: string | null
-  ghi_chu: string | null
-  created_at: string
-}
-
-export interface ScanLookupResult {
-  so_lsx: string
-  ten_hang: string | null
-  dai: number | null
-  rong: number | null
-  cao: number | null
-  kho_tt: number | null
-  dai_tt: number | null
-  dien_tich_don_vi: number | null
-}
-
-export interface ScanLogCreate {
   may_scan_id: number
   so_lsx: string
   ten_hang?: string
@@ -192,164 +171,192 @@ export interface ScanLogCreate {
   dien_tich?: number
   so_luong_tp: number
   don_gia?: number
+  tien_luong?: number
   nguoi_sx?: string
-  ghi_chu?: string
+  created_at: string
 }
 
-export interface DashboardData {
-  phieu_in_counts: Record<string, number>
-  scan_24h: {
-    so_lan: number
-    so_luong_tp: number
-    dien_tich: number
-    tien_luong: number
-  }
-  in_hoan_thanh_hom_nay: number
-  may_scan_stats: {
-    may_scan_id: number
-    ten_may: string
-    so_lan: number
-    sl_tp: number
-    tien_luong: number
-  }[]
+export interface ScanLookupResult {
+  so_lsx: string
+  ten_hang?: string
+  kho_tt?: number
+  dai_tt?: number
+  dien_tich_don_vi?: number
+  dai?: number
+  rong?: number
+  cao?: number
+}
+
+export interface ShiftCa {
+  id: number
+  name: string
+  leader?: string | null
+  active: boolean
+  phan_xuong_id?: number
+}
+
+export interface ShiftConfigItem {
+  id: number
+  may_in_id: number
+  shift_ca_id: number
+  ngay: string
+  gio_lam?: number | null
+  gio_bat_dau?: string | null
+  gio_ket_thuc?: string | null
+  nghi_1?: number | null
+  nghi_2?: number | null
+  ten_may?: string
+  ten_ca?: string
+}
+
+export const TRANG_THAI_COLORS: Record<string, string> = {
+  cho_in: 'orange',
+  ke_hoach: 'blue',
+  dang_in: 'volcano',
+  cho_dinh_hinh: 'purple',
+  sau_in: 'cyan',
+  dang_sau_in: 'geekblue',
+  hoan_thanh: 'green',
 }
 
 export const TRANG_THAI_LABELS: Record<string, string> = {
-  dang_sau_in: 'Đang sau in',
   cho_in: 'Chờ in',
   ke_hoach: 'Kế hoạch',
   dang_in: 'Đang in',
   cho_dinh_hinh: 'Chờ định hình',
   sau_in: 'Sau in',
+  dang_sau_in: 'Đang sau in',
   hoan_thanh: 'Hoàn thành',
-  huy: 'Huỷ',
-}
-
-export const TRANG_THAI_COLORS: Record<string, string> = {
-  cho_in: 'default',
-  ke_hoach: 'blue',
-  dang_in: 'orange',
-  cho_dinh_hinh: 'purple',
-  sau_in: 'cyan',
-  hoan_thanh: 'green',
-  huy: 'red',
 }
 
 export interface KhoRow {
   production_order_id: number
   so_lenh: string
-  ten_hang: string
+  ten_hang: string | null
   ten_khach_hang: string | null
+  ten_phap_nhan_sx: string | null
+  order_ten_phan_xuong: string | null
+  warehouse_id: number | null
+  ten_phan_xuong: string | null
+  phan_xuong_id: number | null
+  cong_doan: string | null
+  co_in: boolean
   chieu_kho: number | null
   chieu_cat: number | null
   tong_nhap: number
   tong_xuat: number
-  ton_kho: number
   tong_chuyen_phoi: number
-  co_in: boolean
-  warehouse_id: number | null
+  ton_kho: number
   phieu_in_hien_tai: { so_phieu: string; trang_thai: string } | null
-  phan_xuong_id: number | null
-  ten_phan_xuong: string | null
-  cong_doan: string | null
-  phap_nhan_sx_id: number | null
-  ten_phap_nhan_sx: string | null
 }
 
 export const cd2Api = {
+  // Dashboard & monitor
+  getDashboard: (params?: any) => client.get('/cd2/dashboard', { params }),
+  getMachinesStatus: (phanXuongId?: number) =>
+    client.get<any[]>('/cd2/monitor/machines', { params: { phan_xuong_id: phanXuongId } }),
+
+  // Phiếu in — list / kanban
+  listPhieuIn: (params?: any) => client.get<PhieuIn[]>('/cd2/phieu-in', { params }),
+  getPhieuIn: (id: number) => client.get<PhieuIn>(`/cd2/phieu-in/${id}`),
+  getKanban: (params?: any) => client.get<KanbanData>('/cd2/kanban', { params }),
+  getSauInKanban: (params?: any) => client.get<SauInKanbanData>('/cd2/sau-in-kanban', { params }),
+  getHistoryPhieuIn: (params?: any) => client.get<PhieuIn[]>('/cd2/history/phieu-in', { params }),
+
+  // Phiếu in — CRUD & actions
+  createPhieuIn: (data: any) => client.post<PhieuIn>('/cd2/phieu-in', data),
+  updatePhieuIn: (id: number, data: any) => client.put<PhieuIn>(`/cd2/phieu-in/${id}`, data),
+  deletePhieuIn: (id: number) => client.delete(`/cd2/phieu-in/${id}`),
+  movePhieuIn: (id: number, data: { trang_thai?: string; may_in_id?: number | null; sort_order?: number }) =>
+    client.put(`/cd2/phieu-in/${id}/move`, data),
+  startPrinting: (id: number) => client.post(`/cd2/phieu-in/${id}/start`),
+  completePrinting: (id: number, data: CompletePayload) => client.post(`/cd2/phieu-in/${id}/complete`, data),
+  startSauIn: (id: number, data: SauInPayload) => client.post(`/cd2/phieu-in/${id}/sau-in`, data),
+  hoanThanh: (id: number) => client.post(`/cd2/phieu-in/${id}/hoan-thanh`),
+  huyPhieu: (id: number) => client.post(`/cd2/phieu-in/${id}/huy`),
+  assignSauIn: (id: number, maySauInId: number) =>
+    client.post(`/cd2/phieu-in/${id}/assign-sau-in`, { may_sau_in_id: maySauInId }),
+  batDauSauIn: (id: number) => client.post(`/cd2/phieu-in/${id}/bat-dau-sau-in`),
+  traVeSauIn: (id: number) => client.post(`/cd2/phieu-in/${id}/tra-ve-sau-in`),
+  createFromLenhSx: (orderId: number, target: 'in' | 'sau_in' | 'auto') =>
+    client.post(`/cd2/phieu-in/tu-lenh-sx/${orderId}`, { target }),
+
+  // Kho phôi
+  getTonKhoLsx: () => client.get<KhoRow[]>('/cd2/ton-kho-lsx'),
+
   // Máy in
-  listMayIn: (params?: { phan_xuong_id?: number }) => client.get<MayIn[]>('/cd2/may-in', { params }),
-  createMayIn: (data: { ten_may: string; sort_order?: number; phan_xuong_id?: number }) =>
-    client.post<MayIn>('/cd2/may-in', data),
-  updateMayIn: (id: number, data: Partial<MayIn>) =>
-    client.put<MayIn>(`/cd2/may-in/${id}`, data),
+  listMayIn: (params?: any) => client.get<MayIn[]>('/cd2/may-in', { params }),
+  createMayIn: (data: Partial<MayIn>) => client.post<MayIn>('/cd2/may-in', data),
+  updateMayIn: (id: number, data: Partial<MayIn>) => client.put<MayIn>(`/cd2/may-in/${id}`, data),
   deleteMayIn: (id: number) => client.delete(`/cd2/may-in/${id}`),
 
-  // Kanban
-  getKanban: (params?: { phan_xuong_id?: number }) => client.get<KanbanData>('/cd2/kanban', { params }),
-
-  // Phiếu in
-  listPhieuIn: (params?: { search?: string; trang_thai?: string; phan_xuong_id?: number }) =>
-    client.get<PhieuIn[]>('/cd2/phieu-in', { params }),
-  getPhieuIn: (id: number) => client.get<PhieuIn>(`/cd2/phieu-in/${id}`),
-  createPhieuIn: (data: CreatePhieuInPayload) =>
-    client.post<PhieuIn>('/cd2/phieu-in', data),
-  createFromLenhSx: (orderId: number, target: 'auto' | 'in' | 'sau_in' = 'auto') =>
-    client.post<PhieuIn>(`/cd2/phieu-in/tu-lenh-sx/${orderId}?target=${target}`),
-  updatePhieuIn: (id: number, data: Partial<CreatePhieuInPayload>) =>
-    client.put<PhieuIn>(`/cd2/phieu-in/${id}`, data),
-  deletePhieuIn: (id: number) => client.delete(`/cd2/phieu-in/${id}`),
-  movePhieuIn: (id: number, body: { trang_thai: string; may_in_id?: number | null; sort_order?: number }) =>
-    client.patch<PhieuIn>(`/cd2/phieu-in/${id}/move`, body),
-  startPrinting: (id: number) => client.patch<PhieuIn>(`/cd2/phieu-in/${id}/start`),
-  completePrinting: (id: number, data: CompletePayload) =>
-    client.patch<PhieuIn>(`/cd2/phieu-in/${id}/complete`, data),
-  startSauIn: (id: number, data: SauInPayload) =>
-    client.patch<PhieuIn>(`/cd2/phieu-in/${id}/sau-in`, data),
-  hoanThanh: (id: number) => client.patch<PhieuIn>(`/cd2/phieu-in/${id}/hoan-thanh`),
-  assignSauIn: (id: number, maySauInId: number | null) =>
-    client.patch<PhieuIn>(`/cd2/phieu-in/${id}/assign-sauin`, { may_sau_in_id: maySauInId }),
-  batDauSauIn: (id: number) => client.patch<PhieuIn>(`/cd2/phieu-in/${id}/bat-dau-sauin`),
-  traVeSauIn: (id: number) => client.patch<PhieuIn>(`/cd2/phieu-in/${id}/tra-ve-sauin`),
-  huyPhieu: (id: number) => client.patch<PhieuIn>(`/cd2/phieu-in/${id}/huy`),
-
   // Máy sau in
-  listMaySauIn: (params?: { phan_xuong_id?: number }) => client.get<MaySauIn[]>('/cd2/may-sau-in', { params }),
-  createMaySauIn: (data: { ten_may: string; sort_order?: number; phan_xuong_id?: number }) =>
-    client.post<MaySauIn>('/cd2/may-sau-in', data),
-  updateMaySauIn: (id: number, data: Partial<MaySauIn>) =>
-    client.put<MaySauIn>(`/cd2/may-sau-in/${id}`, data),
+  listMaySauIn: (params?: any) => client.get<MaySauIn[]>('/cd2/may-sau-in', { params }),
+  createMaySauIn: (data: Partial<MaySauIn>) => client.post<MaySauIn>('/cd2/may-sau-in', data),
+  updateMaySauIn: (id: number, data: Partial<MaySauIn>) => client.put<MaySauIn>(`/cd2/may-sau-in/${id}`, data),
   deleteMaySauIn: (id: number) => client.delete(`/cd2/may-sau-in/${id}`),
 
-  // Sauin kanban
-  getSauInKanban: (params?: { phan_xuong_id?: number }) => client.get<SauInKanbanData>('/cd2/sauin/kanban', { params }),
-
-  // Máy Scan
-  listMayScan: (params?: { phan_xuong_id?: number }) => client.get<MayScan[]>('/cd2/may-scan', { params }),
-  createMayScan: (data: { ten_may: string; sort_order?: number; don_gia?: number; phan_xuong_id?: number }) =>
-    client.post<MayScan>('/cd2/may-scan', data),
-  updateMayScan: (id: number, data: Partial<MayScan>) =>
-    client.put<MayScan>(`/cd2/may-scan/${id}`, data),
+  // Máy scan
+  listMayScan: (params?: any) => client.get<MayScan[]>('/cd2/may-scan', { params }),
+  createMayScan: (data: Partial<MayScan>) => client.post<MayScan>('/cd2/may-scan', data),
+  updateMayScan: (id: number, data: Partial<MayScan>) => client.put<MayScan>(`/cd2/may-scan/${id}`, data),
   deleteMayScan: (id: number) => client.delete(`/cd2/may-scan/${id}`),
 
-  // Scan
-  scanLookup: (soLsx: string) => client.get<ScanLookupResult>(`/cd2/scan/lookup/${encodeURIComponent(soLsx)}`),
-  createScanLog: (data: ScanLogCreate) => client.post<ScanLog>('/cd2/scan/log', data),
-  getScanHistory: (params?: { may_scan_id?: number; days?: number; so_lsx?: string; phan_xuong_id?: number }) =>
-    client.get<ScanLog[]>('/cd2/scan/history', { params }),
-  deleteScanLog: (id: number) => client.delete(`/cd2/scan/log/${id}`),
+  // Scan log
+  getScanHistory: (params?: any) => client.get<ScanLog[]>('/cd2/scan-history', { params }),
+  createScanLog: (data: {
+    may_scan_id: number
+    so_lsx: string
+    ten_hang?: string
+    dai?: number
+    rong?: number
+    cao?: number
+    kho_tt?: number
+    dien_tich?: number
+    so_luong_tp: number
+    don_gia?: number
+    nguoi_sx?: string
+  }) => client.post<ScanLog>('/cd2/scan-log', data),
+  deleteScanLog: (id: number) => client.delete(`/cd2/scan-log/${id}`),
+  scanLookup: (code: string) => client.get<ScanLookupResult>(`/cd2/scan-lookup/${code}`),
 
-  // Kho phôi sóng
-  getTonKhoLsx: () => client.get<KhoRow[]>('/phieu-phoi/ton-kho-lsx'),
+  // Ca làm việc
+  listShiftCa: (params?: any) => client.get<ShiftCa[]>('/cd2/shift-ca', { params }),
+  createShiftCa: (data: { name: string; leader?: string }) => client.post<ShiftCa>('/cd2/shift-ca', data),
+  updateShiftCa: (id: number, data: Partial<ShiftCa>) => client.put<ShiftCa>(`/cd2/shift-ca/${id}`, data),
+  deleteShiftCa: (id: number) => client.delete(`/cd2/shift-ca/${id}`),
 
-  // Dashboard & History
-  getDashboard: (params?: { phan_xuong_id?: number }) => client.get<DashboardData>('/cd2/dashboard', { params }),
-  getHistoryPhieuIn: (params?: { days?: number; search?: string; trang_thai?: string; phan_xuong_id?: number }) =>
-    client.get<PhieuIn[]>('/cd2/history/phieu-in', { params }),
-
-  // Shift ca
-  listShiftCa: (params?: { phan_xuong_id?: number }) => client.get<ShiftCa[]>('/cd2/shift/ca', { params }),
-  createShiftCa: (data: { name: string; leader?: string; phan_xuong_id?: number }) =>
-    client.post<ShiftCa>('/cd2/shift/ca', data),
-  updateShiftCa: (id: number, data: Partial<ShiftCa>) =>
-    client.put<ShiftCa>(`/cd2/shift/ca/${id}`, data),
-  deleteShiftCa: (id: number) => client.delete(`/cd2/shift/ca/${id}`),
-
-  // Shift config
-  listShiftConfig: (params?: { may_in_id?: number; shift_ca_id?: number; days?: number }) =>
-    client.get<ShiftConfigItem[]>('/cd2/shift/config', { params }),
+  // Lịch ca
+  listShiftConfig: (params?: any) => client.get<ShiftConfigItem[]>('/cd2/shift-config', { params }),
   createShiftConfig: (data: {
-    may_in_id: number; shift_ca_id: number; ngay: string;
-    gio_lam?: number; gio_bat_dau?: string; gio_ket_thuc?: string;
-    nghi_1?: number; nghi_2?: number
-  }) => client.post<ShiftConfigItem>('/cd2/shift/config', data),
-  deleteShiftConfig: (id: number) => client.delete(`/cd2/shift/config/${id}`),
+    may_in_id: number
+    shift_ca_id: number
+    ngay: string
+    gio_lam?: number
+    gio_bat_dau?: string
+    gio_ket_thuc?: string
+    nghi_1?: number
+    nghi_2?: number
+  }) => client.post<ShiftConfigItem>('/cd2/shift-config', data),
+  deleteShiftConfig: (id: number) => client.delete(`/cd2/shift-config/${id}`),
 
-  // Printer user
-  listPrinterUser: () => client.get<PrinterUser[]>('/cd2/config/printer-user'),
-  createPrinterUser: (data: { token_user: string; token_password: string; rfid_key?: string; shift?: number }) =>
+  // Machine login (no JWT required)
+  machineLogin: (data: { token_user?: string; token_password?: string; rfid_key?: string }) =>
+    client.post<WorkerSession>('/cd2/machine-login', data),
+
+  // Người in
+  listPrinterUser: (params?: any) => client.get<PrinterUser[]>('/cd2/config/printer-user', { params }),
+  createPrinterUser: (data: Partial<PrinterUser> & { token_user: string; token_password: string }) =>
     client.post<PrinterUser>('/cd2/config/printer-user', data),
-  updatePrinterUser: (id: number, data: { token_user?: string; token_password?: string; rfid_key?: string; shift?: number; active?: boolean }) =>
+  updatePrinterUser: (id: number, data: Partial<PrinterUser>) =>
     client.put<PrinterUser>(`/cd2/config/printer-user/${id}`, data),
   deletePrinterUser: (id: number) => client.delete(`/cd2/config/printer-user/${id}`),
+
+  // Máy sản xuất (Machine — loai_may)
+  listMachines: (params?: any) => client.get<Machine[]>('/cd2/machines', { params }),
+  createMachine: (data: Partial<Machine>) => client.post<Machine>('/cd2/machines', data),
+  updateMachine: (id: number, data: Partial<Machine>) => client.put<Machine>(`/cd2/machines/${id}`, data),
+  getMachineLogs: (machineId: number) => client.get<any[]>(`/cd2/machines/${machineId}/logs`),
+  trackProduction: (data: TrackPayload) => client.post<{ ok: boolean; log_id: number }>('/cd2/track', data),
+  getOrderProgress: (orderId: number) => client.get<ProductionLog[]>(`/cd2/progress/${orderId}`),
 }

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -58,6 +58,9 @@ class ProductionPlanLine(Base):
     so_luong_hoan_thanh: Mapped[Decimal] = mapped_column(Numeric(12, 0), default=0)
     trang_thai: Mapped[str] = mapped_column(String(20), default="cho")
     # cho | dang_chay | hoan_thanh
+
+    # Đánh dấu line này phải mua phôi sóng từ NCC ngoài (máy không cán được)
+    mua_phoi_ngoai: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     ghi_chu: Mapped[str | None] = mapped_column(Text)
 

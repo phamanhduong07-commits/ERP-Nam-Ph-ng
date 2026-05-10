@@ -29,7 +29,10 @@ logger = logging.getLogger(__name__)
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
-    pool_recycle=3600,
+    pool_recycle=1800,
+    pool_size=20,
+    max_overflow=30,
+    pool_timeout=30,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -112,3 +115,91 @@ def ensure_schema() -> None:
     _sync_all_tables(Base, engine)
     _run_backfills(engine)
     _seed_phan_xuong(engine)
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS phan_xuong_id INTEGER REFERENCES phan_xuong(id)"
+        ))
+        conn.execute(text(
+            "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS loai_po VARCHAR(20) DEFAULT 'chung'"
+        ))
+        conn.execute(text(
+            "UPDATE purchase_orders SET loai_po = 'chung' WHERE loai_po IS NULL"
+        ))
+
+        conn.execute(text("ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS kho_mm NUMERIC(7,1)"))
+        conn.execute(text("ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS so_cuon INTEGER"))
+        conn.execute(text("ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS ky_hieu_cuon VARCHAR(50)"))
+
+        # Phôi sóng mua ngoài: cờ trên KHSX line + spec/FK trên POItem
+        # (idempotent — IF NOT EXISTS)
+        conn.execute(text(
+            "ALTER TABLE production_plan_lines "
+            "ADD COLUMN IF NOT EXISTS mua_phoi_ngoai BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
+        conn.execute(text(
+            "ALTER TABLE purchase_order_items "
+            "ADD COLUMN IF NOT EXISTS phoi_spec JSONB"
+        ))
+        conn.execute(text(
+            "ALTER TABLE purchase_order_items "
+            "ADD COLUMN IF NOT EXISTS production_plan_line_id INTEGER "
+            "REFERENCES production_plan_lines(id)"
+        ))
+
+        # gia_dinh_muc: model đã có, DB cần thêm (3 bảng)
+        for tbl in ("paper_materials", "other_materials", "products"):
+            conn.execute(text(
+                f'ALTER TABLE "{tbl}" ADD COLUMN IF NOT EXISTS gia_dinh_muc NUMERIC(18,2) DEFAULT 0'
+            ))
+        # ma_dong_cap, do_buc_tb, do_nen_vong_tb trên paper_materials
+        conn.execute(text(
+            "ALTER TABLE paper_materials ADD COLUMN IF NOT EXISTS ma_dong_cap VARCHAR(20)"
+        ))
+        conn.execute(text(
+            "ALTER TABLE paper_materials ADD COLUMN IF NOT EXISTS do_buc_tb NUMERIC(8,2)"
+        ))
+        conn.execute(text(
+            "ALTER TABLE paper_materials ADD COLUMN IF NOT EXISTS do_nen_vong_tb NUMERIC(8,2)"
+        ))
+        # GoodsReceiptItem: Khổ cuộn, Số cuộn, Ký hiệu lô
+        conn.execute(text("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS kho_mm NUMERIC(7,1)"))
+        conn.execute(text("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS so_cuon INTEGER"))
+        conn.execute(text("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS ky_hieu_cuon VARCHAR(50)"))
+        # GoodsReceipt: split-view fields
+        conn.execute(text("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS so_xe VARCHAR(30)"))
+        conn.execute(text("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS invoice_image TEXT"))
+        conn.execute(text("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS hd_tong_kg NUMERIC(12,2)"))
+        # GoodsReceipt: pháp nhân (cho phôi mua ngoài)
+        conn.execute(text("ALTER TABLE goods_receipts ADD COLUMN IF NOT EXISTS phap_nhan_id INTEGER"))
+        # GoodsReceiptItem: phôi tấm (chiều dài + số lớp)
+        conn.execute(text("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS dai_mm NUMERIC(7,1)"))
+        conn.execute(text("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS so_lop INTEGER"))
+
+        # --- Bảng Máy móc & Nhật ký sản xuất cho Mobile Tracking ---
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS machines (
+                id SERIAL PRIMARY KEY,
+                ten_may VARCHAR(100) NOT NULL,
+                ma_may VARCHAR(50) UNIQUE,
+                loai_may VARCHAR(50) DEFAULT 'khac',
+                sort_order INTEGER DEFAULT 0,
+                active BOOLEAN DEFAULT TRUE,
+                phan_xuong_id INTEGER REFERENCES phan_xuong(id),
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS production_logs (
+                id SERIAL PRIMARY KEY,
+                production_order_id INTEGER REFERENCES production_orders(id) NOT NULL,
+                phieu_in_id INTEGER REFERENCES phieu_in(id),
+                machine_id INTEGER REFERENCES machines(id) NOT NULL,
+                event_type VARCHAR(20) NOT NULL,
+                quantity_ok NUMERIC(12,3),
+                quantity_loi NUMERIC(12,3),
+                quantity_setup NUMERIC(12,3),
+                ghi_chu TEXT,
+                created_by INTEGER REFERENCES users(id),
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))

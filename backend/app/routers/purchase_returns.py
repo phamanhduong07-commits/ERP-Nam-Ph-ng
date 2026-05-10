@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
-from app.models.master import Supplier, PaperMaterial, OtherMaterial
+from app.models.master import Supplier, PaperMaterial, OtherMaterial, Warehouse, PhanXuong
 from app.models.purchase import PurchaseReturn, PurchaseReturnItem
 from app.models.accounting import DebtLedgerEntry, JournalEntry, JournalEntryLine
 from app.models.warehouse_doc import GoodsReceipt
@@ -107,8 +107,26 @@ def _resolve_ten_hang(item: ReturnItemCreate, db: Session) -> str:
     return ""
 
 
+def _get_px_from_return(r: PurchaseReturn, db: Session) -> tuple[int | None, str | None, str | None]:
+    """Derive (phan_xuong_id, ten_phan_xuong, ten_phap_nhan) from GR → Warehouse → PhanXuong."""
+    if not r.gr_id:
+        return None, None, None
+    gr = db.get(GoodsReceipt, r.gr_id)
+    if not gr or not gr.warehouse_id:
+        return None, None, None
+    wh = db.get(Warehouse, gr.warehouse_id)
+    if not wh or not wh.phan_xuong_id:
+        return None, None, None
+    px = db.get(PhanXuong, wh.phan_xuong_id)
+    if not px:
+        return wh.phan_xuong_id, None, None
+    ten_phap_nhan = px.phap_nhan.ten_phap_nhan if px.phap_nhan else None
+    return px.id, px.ten_xuong, ten_phap_nhan
+
+
 def _return_to_dict(r: PurchaseReturn, db: Session) -> dict:
     sup = db.get(Supplier, r.supplier_id)
+    px_id, ten_px, ten_pn = _get_px_from_return(r, db)
     items = []
     for it in r.items:
         items.append({
@@ -128,6 +146,9 @@ def _return_to_dict(r: PurchaseReturn, db: Session) -> dict:
         "ngay": r.ngay.isoformat(),
         "supplier_id": r.supplier_id,
         "ten_ncc": sup.ten_viet_tat if sup else None,
+        "phan_xuong_id": px_id,
+        "ten_phan_xuong": ten_px,
+        "ten_phap_nhan": ten_pn,
         "po_id": r.po_id,
         "gr_id": r.gr_id,
         "invoice_id": r.invoice_id,
@@ -215,6 +236,7 @@ def list_returns(
     trang_thai: Optional[str] = Query(None),
     tu_ngay: Optional[date] = Query(None),
     den_ngay: Optional[date] = Query(None),
+    phan_xuong_id: Optional[int] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -231,6 +253,12 @@ def list_returns(
         q = q.filter(PurchaseReturn.ngay >= tu_ngay)
     if den_ngay:
         q = q.filter(PurchaseReturn.ngay <= den_ngay)
+    if phan_xuong_id:
+        # Filter qua GR → Warehouse → phan_xuong_id
+        from app.models.warehouse_doc import GoodsReceipt as GR
+        q = q.join(GR, GR.id == PurchaseReturn.gr_id).join(
+            Warehouse, Warehouse.id == GR.warehouse_id
+        ).filter(Warehouse.phan_xuong_id == phan_xuong_id)
 
     total = q.count()
     rows = q.order_by(desc(PurchaseReturn.ngay), desc(PurchaseReturn.id)) \
@@ -239,12 +267,16 @@ def list_returns(
     items = []
     for r in rows:
         sup = db.get(Supplier, r.supplier_id)
+        px_id, ten_px, ten_pn = _get_px_from_return(r, db)
         items.append({
             "id": r.id,
             "so_phieu": r.so_phieu,
             "ngay": r.ngay.isoformat(),
             "supplier_id": r.supplier_id,
             "ten_ncc": sup.ten_viet_tat if sup else None,
+            "phan_xuong_id": px_id,
+            "ten_phan_xuong": ten_px,
+            "ten_phap_nhan": ten_pn,
             "loai": r.loai,
             "tong_thanh_toan": float(r.tong_thanh_toan),
             "trang_thai": r.trang_thai,

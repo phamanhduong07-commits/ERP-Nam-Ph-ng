@@ -29,10 +29,12 @@ class PaperMaterialCreate(BaseModel):
     dvt: str = "Kg"
     kho: Decimal | None = None
     ma_ky_hieu: str | None = None
+    ma_dong_cap: str | None = None
     dinh_luong: Decimal | None = None
     ma_nsx_id: int | None = None
     gia_mua: Decimal | None = Decimal("0")
     gia_ban: Decimal | None = Decimal("0")
+    gia_dinh_muc: Decimal | None = Decimal("0")
     ton_toi_thieu: Decimal | None = Decimal("0")
     ton_toi_da: Decimal | None = None
     la_cuon: bool = True
@@ -47,10 +49,14 @@ class PaperMaterialUpdate(BaseModel):
     dvt: str | None = None
     kho: Decimal | None = None
     ma_ky_hieu: str | None = None
+    ma_dong_cap: str | None = None
     dinh_luong: Decimal | None = None
     ma_nsx_id: int | None = None
     gia_mua: Decimal | None = None
     gia_ban: Decimal | None = None
+    gia_dinh_muc: Decimal | None = None
+    do_buc_tb: Decimal | None = None
+    do_nen_vong_tb: Decimal | None = None
     ton_toi_thieu: Decimal | None = None
     ton_toi_da: Decimal | None = None
     la_cuon: bool | None = None
@@ -67,10 +73,14 @@ class PaperMaterialResponse(BaseModel):
     dvt: str
     kho: Decimal | None = None
     ma_ky_hieu: str | None = None
+    ma_dong_cap: str | None = None
     dinh_luong: Decimal | None = None
     ma_nsx_id: int | None = None
     gia_mua: Decimal | None = None
     gia_ban: Decimal | None = None
+    gia_dinh_muc: Decimal | None = None
+    do_buc_tb: Decimal | None = None
+    do_nen_vong_tb: Decimal | None = None
     ton_toi_thieu: Decimal | None = None
     ton_toi_da: Decimal | None = None
     la_cuon: bool
@@ -92,10 +102,13 @@ PAPER_MATERIAL_IMPORT_FIELDS = [
     ImportField("dvt", "DVT", parser=parse_text, default="Kg"),
     ImportField("kho", "Kho", parser=parse_decimal),
     ImportField("ma_ky_hieu", "Ma ky hieu", parser=parse_text),
+    ImportField("ma_dong_cap", "KyHieu", parser=parse_text),
     ImportField("dinh_luong", "Dinh luong", parser=parse_decimal),
+    ImportField("tieu_chuan_dinh_luong", "DL_TC", parser=parse_decimal),
     ImportField("ma_nsx", "Ma NSX", parser=parse_text, help_text="Neu co, phai ton tai trong danh muc NCC"),
     ImportField("gia_mua", "Gia mua", parser=parse_decimal, default=0),
     ImportField("gia_ban", "Gia ban", parser=parse_decimal, default=0),
+    ImportField("gia_dinh_muc", "Gia dinh muc", parser=parse_decimal, default=0),
     ImportField("ton_toi_thieu", "Ton toi thieu", parser=parse_decimal, default=0),
     ImportField("ton_toi_da", "Ton toi da", parser=parse_decimal),
     ImportField("la_cuon", "La cuon", parser=parse_bool, default=True),
@@ -135,8 +148,10 @@ def _resolve_paper_material_import_row(db: Session, values: dict) -> tuple[dict,
 @router.get("")
 def list_paper_materials(
     search: str = Query(default=""),
+    ma_nhom_id: int | None = Query(default=None),
+    ma_nsx_id: int | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=200),
+    page_size: int = Query(default=50, ge=1, le=5000),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -148,6 +163,10 @@ def list_paper_materials(
             | PaperMaterial.ten.ilike(like)
             | PaperMaterial.ma_ky_hieu.ilike(like)
         )
+    if ma_nhom_id is not None:
+        q = q.filter(PaperMaterial.ma_nhom_id == ma_nhom_id)
+    if ma_nsx_id is not None:
+        q = q.filter(PaperMaterial.ma_nsx_id == ma_nsx_id)
     total = q.count()
     items = q.order_by(PaperMaterial.ma_chinh).offset((page - 1) * page_size).limit(page_size).all()
     return {
@@ -162,10 +181,14 @@ def list_paper_materials(
                 "dvt": p.dvt,
                 "kho": p.kho,
                 "ma_ky_hieu": p.ma_ky_hieu,
+                "ma_dong_cap": p.ma_dong_cap,
                 "dinh_luong": p.dinh_luong,
                 "ma_nsx_id": p.ma_nsx_id,
                 "gia_mua": p.gia_mua,
                 "gia_ban": p.gia_ban,
+                "gia_dinh_muc": p.gia_dinh_muc,
+                "do_buc_tb": p.do_buc_tb,
+                "do_nen_vong_tb": p.do_nen_vong_tb,
                 "ton_toi_thieu": p.ton_toi_thieu,
                 "ton_toi_da": p.ton_toi_da,
                 "la_cuon": p.la_cuon,
@@ -294,6 +317,7 @@ def search_paper_materials(
             "value": p.ma_chinh,
             "label": f"{p.ma_chinh} – {p.ten}",
             "ma_ky_hieu": p.ma_ky_hieu,
+            "ma_dong_cap": p.ma_dong_cap,
             "dinh_luong": float(p.dinh_luong) if p.dinh_luong else None,
         }
         for p in items

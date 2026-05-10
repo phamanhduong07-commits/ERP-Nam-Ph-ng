@@ -21,6 +21,7 @@ import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { suppliersApi } from '../../api/suppliers'
 import { purchaseInvoiceApi } from '../../api/accounting'
+import { warehouseApi } from '../../api/warehouse'
 
 const { Title, Text } = Typography
 
@@ -32,6 +33,8 @@ export default function POListPage() {
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
+  const [filterXuong, setFilterXuong] = useState<number | undefined>()
+  const [filterLoaiPo, setFilterLoaiPo] = useState<string | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [importVisible, setImportVisible] = useState(false)
@@ -40,6 +43,12 @@ export default function POListPage() {
     queryKey: ['suppliers-all'],
     queryFn: () => suppliersApi.all().then(r => r.data),
     staleTime: 300_000,
+  })
+
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong-all'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 600_000,
   })
 
   const { data: paperPage } = useQuery({
@@ -57,8 +66,14 @@ export default function POListPage() {
   const otherMats = otherPage?.items ?? []
 
   const { data: poList = [], isLoading } = useQuery({
-    queryKey: ['purchase-orders', filterTrangThai, tuNgay, denNgay],
-    queryFn: () => purchaseApi.list({ trang_thai: filterTrangThai, tu_ngay: tuNgay, den_ngay: denNgay }).then(r => r.data),
+    queryKey: ['purchase-orders', filterTrangThai, tuNgay, denNgay, filterXuong, filterLoaiPo],
+    queryFn: () => purchaseApi.list({
+      trang_thai: filterTrangThai,
+      tu_ngay: tuNgay,
+      den_ngay: denNgay,
+      phan_xuong_id: filterXuong,
+      loai_po: filterLoaiPo,
+    }).then(r => r.data),
   })
 
   const createMut = useMutation({
@@ -124,6 +139,8 @@ export default function POListPage() {
       createMut.mutate({
         supplier_id: v.supplier_id,
         ngay_po: v.ngay_po.format('YYYY-MM-DD'),
+        phan_xuong_id: v.phan_xuong_id || null,
+        loai_po: v.loai_po || 'chung',
         ngay_du_kien_nhan: v.ngay_du_kien_nhan ? v.ngay_du_kien_nhan.format('YYYY-MM-DD') : null,
         dieu_khoan_tt: v.dieu_khoan_tt || null,
         ghi_chu: v.ghi_chu || null,
@@ -137,6 +154,10 @@ export default function POListPage() {
       render: (v: string) => <Text strong style={{ color: '#1677ff' }}>{v}</Text> },
     { title: 'Ngày', dataIndex: 'ngay_po', width: 110 },
     { title: 'Nhà cung cấp', dataIndex: 'ten_ncc', ellipsis: true },
+    { title: 'Xưởng', dataIndex: 'ten_phan_xuong', width: 130,
+      render: (v: string | null) => v || <Text type="secondary">—</Text> },
+    { title: 'Pháp nhân', dataIndex: 'ten_phap_nhan', width: 130,
+      render: (v: string | null) => v || <Text type="secondary">—</Text> },
     { title: 'Trạng thái', dataIndex: 'trang_thai', width: 120,
       render: (v: string) => (
         <Tag color={TRANG_THAI_PO_COLOR[v] || 'default'}>{TRANG_THAI_PO[v] || v}</Tag>
@@ -265,15 +286,27 @@ export default function POListPage() {
 
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[8, 8]}>
-          <Col xs={12} sm={6}>
+          <Col xs={12} sm={4}>
             <Select placeholder="Tất cả trạng thái" style={{ width: '100%' }} allowClear value={filterTrangThai} onChange={setFilterTrangThai}
               options={Object.entries(TRANG_THAI_PO).map(([v, l]) => ({ value: v, label: l }))} />
           </Col>
-          <Col xs={12} sm={6}>
+          <Col xs={12} sm={4}>
+            <Select placeholder="Tất cả xưởng" style={{ width: '100%' }} allowClear value={filterXuong} onChange={setFilterXuong}
+              options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))} />
+          </Col>
+          <Col xs={12} sm={4}>
+            <Select placeholder="Tất cả loại" style={{ width: '100%' }} allowClear value={filterLoaiPo} onChange={setFilterLoaiPo}
+              options={[
+                { value: 'giay_cuon', label: 'Giấy cuộn' },
+                { value: 'nvl_khac', label: 'NVL khác' },
+                { value: 'chung', label: 'Chung' },
+              ]} />
+          </Col>
+          <Col xs={12} sm={4}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
               onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
-          <Col xs={12} sm={6}>
+          <Col xs={12} sm={4}>
             <DatePicker placeholder="Đến ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
               onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
@@ -305,6 +338,23 @@ export default function POListPage() {
             <Col span={12}>
               <Form.Item name="ngay_po" label="Ngày PO" rules={[{ required: true }]}>
                 <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="phan_xuong_id" label="Xưởng">
+                <Select placeholder="Chọn xưởng..." allowClear
+                  options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="loai_po" label="Loại đơn" initialValue="chung">
+                <Select options={[
+                  { value: 'chung', label: 'Chung' },
+                  { value: 'giay_cuon', label: 'Giấy cuộn' },
+                  { value: 'nvl_khac', label: 'NVL khác' },
+                ]} />
               </Form.Item>
             </Col>
           </Row>

@@ -7,6 +7,7 @@ export interface UserInfo {
   email: string | null
   role: string
   phan_xuong: string | null
+  machine_id: number | null
 }
 
 export interface TokenResponse {

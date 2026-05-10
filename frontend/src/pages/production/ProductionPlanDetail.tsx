@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Popconfirm, Space, Tag, Typography, message,
+  Button, Card, Checkbox, Popconfirm, Space, Tag, Tooltip, Typography, message,
 } from 'antd'
 import {
   CheckCircleOutlined, DeleteOutlined, ExportOutlined,
@@ -286,6 +286,12 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
   const completeLineMut = useMutation({
     mutationFn: (lineId: number) => productionPlansApi.completeLine(planId, lineId),
     onSuccess: () => { message.success('Hoàn thành'); qc.invalidateQueries({ queryKey: ['production-plan', planId] }) },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+  })
+  const togglePhoiNgoaiMut = useMutation({
+    mutationFn: ({ lineId, value }: { lineId: number; value: boolean }) =>
+      productionPlansApi.togglePhoiNgoai(lineId, value),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['production-plan', planId] }),
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
   })
 
@@ -604,6 +610,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
               <th style={TH}>Loại In</th>
               <th style={TH}>Ghi Chú</th>
               <th style={{ ...TH, color: '#fa8c16' }}>Mét Tới</th>
+              <th style={{ ...TH, color: '#cf1322' }} className="no-print">
+                <Tooltip title="Đánh dấu line này phải mua phôi sóng từ NCC ngoài">
+                  Mua phôi
+                </Tooltip>
+              </th>
               <th style={{ ...TH }} className="no-print">Hành động</th>
             </tr>
           </thead>
@@ -635,6 +646,8 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                     <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#fa8c16', fontSize: 13, background: '#fff1b8' }}>
                       {row.soMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}
                     </td>
+                    {/* Mua phôi (footer rỗng) */}
+                    <td style={TD} className="no-print" />
                     {/* Hành động */}
                     <td style={TD} className="no-print" />
                   </tr>
@@ -789,6 +802,21 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                   {/* Mét Tới */}
                   <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#fa8c16', fontSize: 12 }}>
                     {metToi > 0 ? metToi.toLocaleString('vi-VN', { maximumFractionDigits: 1 }) : '—'}
+                  </td>
+
+                  {/* Mua phôi ngoài */}
+                  <td style={{ ...TD, textAlign: 'center' }} className="no-print">
+                    <Tooltip title={r.mua_phoi_ngoai
+                      ? 'Đang đánh dấu mua phôi ngoài'
+                      : 'Đánh dấu nếu phải mua phôi sóng từ NCC ngoài'}>
+                      <Checkbox
+                        checked={!!r.mua_phoi_ngoai}
+                        disabled={!canEdit || togglePhoiNgoaiMut.isPending}
+                        onChange={e => togglePhoiNgoaiMut.mutate({
+                          lineId: r.id, value: e.target.checked
+                        })}
+                      />
+                    </Tooltip>
                   </td>
 
                   {/* Hành động */}

@@ -1,19 +1,23 @@
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
+import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, desc
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.cd2 import MayIn, MaySauIn, PhieuIn, MayScan, ScanLog, ShiftCa, ShiftConfig, PrinterUser
+from app.models.cd2 import (
+    MayIn, MaySauIn, PhieuIn, MayScan, ScanLog, ShiftCa, ShiftConfig, PrinterUser,
+    Machine, ProductionLog
+)
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
 from app.models.inventory import InventoryBalance, InventoryTransaction
-from app.models.warehouse_doc import ProductionOutput
+from app.models.warehouse_doc import ProductionOutput, PhieuChuyenKho, PhieuChuyenKhoItem
 from app.models.master import Warehouse
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
@@ -27,6 +31,34 @@ router = APIRouter(prefix="/api/cd2", tags=["cd2"])
 VALID_STATES = {"cho_in", "ke_hoach", "dang_in", "cho_dinh_hinh", "sau_in", "dang_sau_in", "hoan_thanh"}
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
+
+class MachineCreate(BaseModel):
+    ten_may: str
+    ma_may: Optional[str] = None
+    loai_may: str = "khac"
+    phan_xuong_id: Optional[int] = None
+    sort_order: int = 0
+
+
+class MachineUpdate(BaseModel):
+    ten_may: Optional[str] = None
+    ma_may: Optional[str] = None
+    loai_may: Optional[str] = None
+    phan_xuong_id: Optional[int] = None
+    sort_order: Optional[int] = None
+    active: Optional[bool] = None
+
+
+class TrackPayload(BaseModel):
+    production_order_id: int
+    machine_id: int
+    event_type: str  # start | stop | resume | complete
+    phieu_in_id: Optional[int] = None
+    quantity_ok: Optional[Decimal] = 0
+    quantity_loi: Optional[Decimal] = 0
+    quantity_setup: Optional[Decimal] = 0
+    ghi_chu: Optional[str] = None
+
 
 class MayInCreate(BaseModel):
     ten_may: str
@@ -656,28 +688,51 @@ def create_from_lenh_sx(
         )
     db.add(phieu_xuat)
 
-    # Trừ InventoryBalance nếu có warehouse phôi
-    if warehouse_id_phoi and item_luong:
-        from app.routers.warehouse import _log_tx
-        for poi_id, sl in item_luong.items():
+    # Trừ InventoryBalance và Hạch toán kế toán
+    wh_phoi = _get_workshop_warehouse(db, order.phan_xuong_id, "PHOI")
+    if wh_phoi:
+        journal_items = []
+        for poi_id, sl in (item_luong.items() if item_luong else [(first.id if first else None, so_luong_phoi)]):
+            if not poi_id: continue
             ten_hang = poi_ten_hang.get(poi_id) or "Phôi sóng"
-            balance = (
-                db.query(InventoryBalance)
-                .filter(
-                    InventoryBalance.warehouse_id == warehouse_id_phoi,
-                    InventoryBalance.ten_hang == ten_hang,
-                )
-                .first()
-            )
-            if balance and balance.ton_luong >= Decimal(str(sl)):
-                sl_dec = Decimal(str(round(sl, 3)))
+            balance = db.query(InventoryBalance).filter(
+                InventoryBalance.warehouse_id == wh_phoi.id,
+                InventoryBalance.ten_hang == ten_hang,
+            ).first()
+            
+            sl_dec = Decimal(str(round(sl, 3)))
+            don_gia = balance.don_gia_binh_quan if balance else Decimal("0")
+            
+            if balance and balance.ton_luong >= sl_dec:
                 balance.ton_luong -= sl_dec
                 balance.gia_tri_ton = balance.ton_luong * balance.don_gia_binh_quan
                 _log_tx(
-                    db, warehouse_id_phoi, "XUAT_SX",
-                    sl_dec, balance.don_gia_binh_quan,
+                    db, wh_phoi.id, "XUAT_SX",
+                    sl_dec, don_gia,
                     balance.ton_luong, "phieu_in", phieu_in.id, current_user.id,
                 )
+            
+            journal_items.append({
+                "ten_hang": ten_hang,
+                "so_luong": sl_dec,
+                "don_gia": don_gia,
+                "tk_no": "621",
+                "tk_co": "155"
+            })
+            
+        if journal_items:
+            from app.services.accounting_service import AccountingService
+            acc_service = AccountingService(db)
+            phap_nhan_id = wh_phoi.phan_xuong_obj.phap_nhan_id if wh_phoi and wh_phoi.phan_xuong_obj else None
+            acc_service.post_inventory_journal(
+                ngay=today,
+                loai="XUAT_PHOI",
+                chung_tu_loai="phieu_in",
+                chung_tu_id=phieu_in.id,
+                items=journal_items,
+                phap_nhan_id=phap_nhan_id,
+                phan_xuong_id=order.phan_xuong_id
+            )
 
     db.commit()
     return _to_dict(_load(phieu_in.id, db))
@@ -1291,11 +1346,23 @@ def delete_shift_config(config_id: int, db: Session = Depends(get_db), _: User =
 
 # ── Config: Printer User ──────────────────────────────────────────────────────
 
+def _pw_hash(plain: str) -> str:
+    return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt()).decode()
+
+
+def _pw_verify(plain: str, stored: str) -> bool:
+    # backward-compat: plain-text passwords not yet hashed
+    if not stored.startswith("$2b$") and not stored.startswith("$2a$"):
+        return plain == stored
+    return _bcrypt.checkpw(plain.encode(), stored.encode())
+
+
 class PrinterUserCreate(BaseModel):
     token_user: str
     token_password: str
     rfid_key: Optional[str] = None
     shift: Optional[int] = None
+    machine_id: Optional[int] = None
 
 
 class PrinterUserUpdate(BaseModel):
@@ -1304,42 +1371,94 @@ class PrinterUserUpdate(BaseModel):
     rfid_key: Optional[str] = None
     shift: Optional[int] = None
     active: Optional[bool] = None
+    machine_id: Optional[int] = None
+
+
+class MachineLoginBody(BaseModel):
+    token_user: Optional[str] = None
+    token_password: Optional[str] = None
+    rfid_key: Optional[str] = None
 
 
 def _printer_user_to_dict(u: PrinterUser) -> dict:
+    machine_name = None
+    if u.machine:
+        machine_name = u.machine.ten_may
     return {
         "id": u.id,
         "rfid_key": u.rfid_key,
         "token_user": u.token_user,
         "shift": u.shift,
         "active": u.active,
+        "machine_id": u.machine_id,
+        "machine_name": machine_name,
         "created_at": u.created_at.isoformat() if u.created_at else None,
+    }
+
+
+@router.post("/machine-login")
+def machine_login(body: MachineLoginBody, db: Session = Depends(get_db)):
+    pu: Optional[PrinterUser] = None
+    if body.rfid_key:
+        pu = (db.query(PrinterUser)
+              .options(joinedload(PrinterUser.machine))
+              .filter(PrinterUser.rfid_key == body.rfid_key, PrinterUser.active == True)
+              .first())
+        if not pu:
+            raise HTTPException(status_code=401, detail="Thẻ RFID không hợp lệ")
+    else:
+        if not body.token_user or not body.token_password:
+            raise HTTPException(status_code=400, detail="Cần nhập tên đăng nhập và mật khẩu")
+        pu = (db.query(PrinterUser)
+              .options(joinedload(PrinterUser.machine))
+              .filter(PrinterUser.token_user == body.token_user, PrinterUser.active == True)
+              .first())
+        if not pu or not _pw_verify(body.token_password, pu.token_password):
+            raise HTTPException(status_code=401, detail="Sai tên hoặc mật khẩu")
+    if not pu.machine_id or not pu.machine:
+        raise HTTPException(status_code=400, detail="Tài khoản chưa được gán máy")
+    return {
+        "ok": True,
+        "printer_user_id": pu.id,
+        "worker_name": pu.token_user,
+        "shift": pu.shift,
+        "machine_id": pu.machine.id,
+        "machine_name": pu.machine.ten_may,
+        "loai_may": pu.machine.loai_may,
     }
 
 
 @router.get("/config/printer-user")
 def list_printer_user(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return [_printer_user_to_dict(u) for u in db.query(PrinterUser).order_by(PrinterUser.id).all()]
+    users = db.query(PrinterUser).options(joinedload(PrinterUser.machine)).order_by(PrinterUser.id).all()
+    return [_printer_user_to_dict(u) for u in users]
 
 
 @router.post("/config/printer-user", status_code=201)
 def create_printer_user(data: PrinterUserCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    u = PrinterUser(**data.model_dump())
+    payload = data.model_dump()
+    payload["token_password"] = _pw_hash(payload["token_password"])
+    u = PrinterUser(**payload)
     db.add(u)
     db.commit()
     db.refresh(u)
+    db.refresh(u, ["machine"])
     return _printer_user_to_dict(u)
 
 
 @router.put("/config/printer-user/{user_id}")
 def update_printer_user(user_id: int, data: PrinterUserUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    u = db.query(PrinterUser).filter(PrinterUser.id == user_id).first()
+    u = db.query(PrinterUser).options(joinedload(PrinterUser.machine)).filter(PrinterUser.id == user_id).first()
     if not u:
         raise HTTPException(status_code=404, detail="Không tìm thấy")
-    for k, v in data.model_dump(exclude_none=True).items():
+    updates = data.model_dump(exclude_none=True)
+    if "token_password" in updates:
+        updates["token_password"] = _pw_hash(updates["token_password"])
+    for k, v in updates.items():
         setattr(u, k, v)
     db.commit()
     db.refresh(u)
+    db.refresh(u, ["machine"])
     return _printer_user_to_dict(u)
 
 
@@ -1351,3 +1470,315 @@ def delete_printer_user(user_id: int, db: Session = Depends(get_db), _: User = D
     db.delete(u)
     db.commit()
     return {"ok": True}
+
+
+# ── Mobile Tracking & Monitoring ──────────────────────────────────────────────
+
+@router.get("/machines")
+def list_machines(phan_xuong_id: Optional[int] = None, db: Session = Depends(get_db)):
+    q = db.query(Machine).filter(Machine.active == True)
+    if phan_xuong_id:
+        q = q.filter(Machine.phan_xuong_id == phan_xuong_id)
+    return q.order_by(Machine.sort_order).all()
+
+
+@router.post("/machines", status_code=201)
+def create_machine(data: MachineCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    m = Machine(**data.model_dump())
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    return m
+
+
+@router.put("/machines/{machine_id}")
+def update_machine(machine_id: int, data: MachineUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    m = db.get(Machine, machine_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Không tìm thấy máy")
+    for k, v in data.model_dump(exclude_none=True).items():
+        setattr(m, k, v)
+    db.commit()
+    db.refresh(m)
+    return m
+
+
+@router.post("/track")
+def track_production(data: TrackPayload, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    log = ProductionLog(
+        production_order_id=data.production_order_id,
+        phieu_in_id=data.phieu_in_id,
+        machine_id=data.machine_id,
+        event_type=data.event_type,
+        quantity_ok=data.quantity_ok,
+        quantity_loi=data.quantity_loi,
+        quantity_setup=data.quantity_setup,
+        ghi_chu=data.ghi_chu,
+        created_by=current_user.id
+    )
+    db.add(log)
+    
+    # Đồng bộ trạng thái vào PhieuIn nếu có
+    if data.phieu_in_id:
+        p = db.get(PhieuIn, data.phieu_in_id)
+        if p:
+            if data.event_type == 'start':
+                if not p.gio_bat_dau_in: p.gio_bat_dau_in = datetime.utcnow()
+                p.trang_thai = 'dang_in'
+            elif data.event_type == 'complete':
+                p.gio_hoan_thanh = datetime.utcnow()
+                p.trang_thai = 'hoan_thanh'
+                p.so_luong_in_ok = (p.so_luong_in_ok or 0) + (data.quantity_ok or 0)
+                p.so_luong_loi = (p.so_luong_loi or 0) + (data.quantity_loi or 0)
+    
+    db.commit()
+    db.refresh(log)
+    return {"ok": True, "log_id": log.id}
+
+
+@router.get("/monitor/machines")
+def get_machines_status(phan_xuong_id: Optional[int] = None, db: Session = Depends(get_db)):
+    # 1. Máy báo cáo qua Mobile
+    machines = db.query(Machine).filter(Machine.active == True)
+    if phan_xuong_id:
+        machines = machines.filter(Machine.phan_xuong_id == phan_xuong_id)
+    machines = machines.all()
+    
+    results = []
+    for m in machines:
+        last_log = db.query(ProductionLog).filter(ProductionLog.machine_id == m.id)\
+                     .order_by(desc(ProductionLog.created_at)).first()
+        
+        status = "OFFLINE"
+        current_order = None
+        operator = None
+        last_event_time = None
+        
+        if last_log:
+            last_event_time = last_log.created_at
+            if last_log.event_type in ['start', 'resume']:
+                status = "RUNNING"
+            elif last_log.event_type == 'stop':
+                status = "STOPPED"
+            elif last_log.event_type == 'complete':
+                status = "IDLE"
+            elif last_log.event_type == 'error':
+                status = "ERROR"
+            
+            if last_log.phieu_in:
+                current_order = f"{last_log.phieu_in.so_phieu} - {last_log.phieu_in.ten_hang}"
+            if last_log.creator:
+                operator = last_log.creator.ho_ten
+
+        results.append({
+            "id": m.id,
+            "ten_may": m.ten_may,
+            "ma_may": m.ma_may,
+            "loai_may": m.loai_may,
+            "status": status,
+            "current_order": current_order,
+            "operator": operator,
+            "last_event_time": last_event_time
+        })
+        
+    # 2. Máy Scan sản lượng (Dữ liệu cũ)
+    scan_machines = db.query(MayScan).filter(MayScan.active == True)
+    if phan_xuong_id:
+        scan_machines = scan_machines.filter(MayScan.phan_xuong_id == phan_xuong_id)
+    
+    for s in scan_machines.all():
+        last_scan = db.query(ScanLog).filter(ScanLog.may_scan_id == s.id)\
+                      .order_by(desc(ScanLog.created_at)).first()
+        
+        status = "IDLE"
+        current_order = None
+        operator = None
+        last_event_time = None
+        
+        if last_scan:
+            last_event_time = last_scan.created_at
+            # Giả định: Nếu có scan trong 30p qua thì coi là đang chạy
+            if (datetime.utcnow() - last_scan.created_at).total_seconds() < 1800:
+                status = "RUNNING"
+            current_order = last_scan.so_lsx
+            operator = last_scan.nguoi_sx
+            
+        results.append({
+            "id": f"scan_{s.id}",
+            "ten_may": s.ten_may,
+            "ma_may": f"SCAN_{s.id}",
+            "loai_may": "scan",
+            "status": status,
+            "current_order": current_order,
+            "operator": operator,
+            "last_event_time": last_event_time
+        })
+
+    return results
+
+
+@router.get("/machines/{machine_id}/logs")
+def get_machine_logs(machine_id: int, limit: int = 10, db: Session = Depends(get_db)):
+    q = db.query(ProductionLog)
+    if machine_id > 0:
+        q = q.filter(ProductionLog.machine_id == machine_id)
+    
+    logs = q.order_by(desc(ProductionLog.created_at)).limit(limit).all()
+    
+    res = []
+    for l in logs:
+        res.append({
+            "id": l.id,
+            "event_type": l.event_type,
+            "ten_may": l.machine_obj.ten_may if l.machine_obj else "N/A",
+            "so_phieu": l.phieu_in.so_phieu if l.phieu_in else "N/A",
+            "ten_hang": l.phieu_in.ten_hang if l.phieu_in else "N/A",
+            "quantity_ok": l.quantity_ok,
+            "operator": l.creator.ho_ten if l.creator else "N/A",
+            "created_at": l.created_at
+        })
+    return res
+
+
+@router.get("/scan-lookup/{code}")
+def scan_lookup(code: str, db: Session = Depends(get_db)):
+    p = db.query(PhieuIn).filter(PhieuIn.so_phieu == code).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
+    return p
+
+
+@router.get("/progress/{order_id}")
+def get_order_progress(order_id: int, db: Session = Depends(get_db)):
+    logs = db.query(ProductionLog).filter(ProductionLog.production_order_id == order_id)\
+             .order_by(desc(ProductionLog.created_at)).all()
+    return logs
+
+
+@router.get("/ton-kho-lsx")
+def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Tồn kho phôi sóng theo từng Lệnh SX."""
+    from sqlalchemy import case
+
+    # 1. Tổng nhập phôi theo production_order_id
+    nhap_rows = (
+        db.query(
+            PhieuNhapPhoiSong.production_order_id,
+            func.sum(
+                func.coalesce(PhieuNhapPhoiSongItem.so_luong_thuc_te, 0)
+                - func.coalesce(PhieuNhapPhoiSongItem.so_luong_loi, 0)
+            ).label("tong_nhap"),
+            func.min(PhieuNhapPhoiSong.warehouse_id).label("warehouse_id"),
+        )
+        .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id)
+        .group_by(PhieuNhapPhoiSong.production_order_id)
+        .all()
+    )
+    if not nhap_rows:
+        return []
+
+    order_ids = [r.production_order_id for r in nhap_rows]
+    nhap_map  = {r.production_order_id: (float(r.tong_nhap or 0), r.warehouse_id) for r in nhap_rows}
+
+    # 2. Tổng xuất phôi (qua PhieuXuatPhoiItem → ProductionOrderItem)
+    xuat_rows = (
+        db.query(
+            ProductionOrderItem.production_order_id,
+            func.sum(PhieuXuatPhoiItem.so_luong).label("tong_xuat"),
+        )
+        .join(PhieuXuatPhoiItem, PhieuXuatPhoiItem.production_order_item_id == ProductionOrderItem.id)
+        .filter(ProductionOrderItem.production_order_id.in_(order_ids))
+        .group_by(ProductionOrderItem.production_order_id)
+        .all()
+    )
+    xuat_map = {r.production_order_id: float(r.tong_xuat or 0) for r in xuat_rows}
+
+    # 3. Tổng phôi đã chuyển kho theo production_order_id
+    chuyen_rows = (
+        db.query(
+            PhieuChuyenKhoItem.production_order_id,
+            func.sum(PhieuChuyenKhoItem.so_luong).label("tong_chuyen"),
+        )
+        .filter(PhieuChuyenKhoItem.production_order_id.in_(order_ids))
+        .group_by(PhieuChuyenKhoItem.production_order_id)
+        .all()
+    )
+    chuyen_map = {r.production_order_id: float(r.tong_chuyen or 0) for r in chuyen_rows}
+
+    # 4. Phiếu in hiện tại (active) theo production_order_id
+    phieu_in_rows = (
+        db.query(PhieuIn)
+        .filter(
+            PhieuIn.production_order_id.in_(order_ids),
+            PhieuIn.trang_thai.notin_(["huy", "hoan_thanh"]),
+        )
+        .all()
+    )
+    phieu_in_map = {p.production_order_id: p for p in phieu_in_rows}
+
+    # 5. ProductionOrder + items + relations
+    orders = (
+        db.query(ProductionOrder)
+        .filter(ProductionOrder.id.in_(order_ids))
+        .options(
+            joinedload(ProductionOrder.items),
+            joinedload(ProductionOrder.phan_xuong),
+            joinedload(ProductionOrder.phap_nhan),
+            joinedload(ProductionOrder.sales_order),
+        )
+        .all()
+    )
+    order_map = {o.id: o for o in orders}
+
+    # 6. Warehouse info
+    wh_ids = [wh_id for _, (_, wh_id) in nhap_map.items() if wh_id]
+    warehouses = db.query(Warehouse).filter(Warehouse.id.in_(wh_ids)).all() if wh_ids else []
+    wh_map = {w.id: w for w in warehouses}
+
+    results = []
+    for order_id_val, (tong_nhap, warehouse_id) in nhap_map.items():
+        order = order_map.get(order_id_val)
+        if not order:
+            continue
+
+        tong_xuat  = xuat_map.get(order_id_val, 0.0)
+        tong_chuyen = chuyen_map.get(order_id_val, 0.0)
+        ton_kho    = tong_nhap - tong_xuat
+
+        first_item = order.items[0] if order.items else None
+        co_in = bool(first_item and first_item.loai_in and first_item.loai_in.strip())
+
+        wh = wh_map.get(warehouse_id) if warehouse_id else None
+        wh_px = wh.phan_xuong_obj if wh and hasattr(wh, "phan_xuong_obj") else None
+
+        kh = None
+        if order.sales_order and hasattr(order.sales_order, "customer"):
+            kh = order.sales_order.customer
+
+        phieu_in = phieu_in_map.get(order_id_val)
+
+        results.append({
+            "production_order_id": order_id_val,
+            "so_lenh":             order.so_lenh,
+            "ten_hang":            first_item.ten_hang if first_item else None,
+            "ten_khach_hang":      getattr(kh, "ten_viet_tat", None) if kh else None,
+            "ten_phap_nhan_sx":    order.phap_nhan.ten_phap_nhan if order.phap_nhan else None,
+            "order_ten_phan_xuong": order.phan_xuong.ten_xuong if order.phan_xuong else None,
+            "warehouse_id":        warehouse_id,
+            "ten_phan_xuong":      wh_px.ten_xuong if wh_px else None,
+            "phan_xuong_id":       wh_px.id if wh_px else None,
+            "cong_doan":           wh_px.cong_doan if wh_px else None,
+            "co_in":               co_in,
+            "chieu_kho":           float(first_item.kho_tt) if first_item and first_item.kho_tt else None,
+            "chieu_cat":           float(first_item.dai_tt) if first_item and first_item.dai_tt else None,
+            "tong_nhap":           tong_nhap,
+            "tong_xuat":           tong_xuat,
+            "tong_chuyen_phoi":    tong_chuyen,
+            "ton_kho":             ton_kho,
+            "phieu_in_hien_tai":   {
+                "so_phieu":  phieu_in.so_phieu,
+                "trang_thai": phieu_in.trang_thai,
+            } if phieu_in else None,
+        })
+
+    return sorted(results, key=lambda r: r["so_lenh"])

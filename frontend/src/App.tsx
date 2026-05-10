@@ -55,10 +55,15 @@ const DinhHinhPage = lazy(() => import('./pages/production/DinhHinhPage'))
 const SauInKanbanPage = lazy(() => import('./pages/production/SauInKanbanPage'))
 const ShiftPage = lazy(() => import('./pages/production/ShiftPage'))
 const ConfigPage = lazy(() => import('./pages/production/ConfigPage'))
+const MobileTrackingPage = lazy(() => import('./pages/production/MobileTrackingPage'))
+const MachineLoginPage = lazy(() => import('./pages/production/MachineLoginPage'))
 const InventoryPage = lazy(() => import('./pages/warehouse/InventoryPage'))
 const KhoNVLPage = lazy(() => import('./pages/warehouse/KhoNVLPage'))
 const KhoTheoXuongPage = lazy(() => import('./pages/warehouse/KhoTheoXuongPage'))
 const ReceiptsPage = lazy(() => import('./pages/warehouse/ReceiptsPage'))
+const NhapGiayPage = lazy(() => import('./pages/warehouse/NhapGiayPage'))
+const NhapNhanhPage = lazy(() => import('./pages/warehouse/NhapNhanhPage'))
+const NhapPhoiNgoaiPage = lazy(() => import('./pages/warehouse/NhapPhoiNgoaiPage'))
 const IssuesPage = lazy(() => import('./pages/warehouse/IssuesPage'))
 const TransfersPage = lazy(() => import('./pages/warehouse/TransfersPage'))
 const StockAdjustmentsPage = lazy(() => import('./pages/warehouse/StockAdjustmentsPage'))
@@ -70,6 +75,8 @@ const GiaoHangPage = lazy(() => import('./pages/sales/GiaoHangPage'))
 const POListPage = lazy(() => import('./pages/purchase/POListPage'))
 const PurchaseReturnPage = lazy(() => import('./pages/purchase/PurchaseReturnPage'))
 const PurchaseReportPage = lazy(() => import('./pages/purchase/PurchaseReportPage'))
+const MuaGiayPage = lazy(() => import('./pages/purchase/MuaGiayPage'))
+const MuaNVLPage = lazy(() => import('./pages/purchase/MuaNVLPage'))
 const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
@@ -134,6 +141,8 @@ export default function App() {
     <Suspense fallback={<div style={{ padding: 24 }}>Đang tải...</div>}>
       <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/production/cd2/mobile-tracking" element={<PrivateRoute><ErrorBoundary><MobileTrackingPage /></ErrorBoundary></PrivateRoute>} />
+      <Route path="/cd2/machine-login" element={<ErrorBoundary><MachineLoginPage /></ErrorBoundary>} />
       <Route
         path="/"
         element={
@@ -220,6 +229,9 @@ export default function App() {
         <Route path="warehouse/kho-thanh-pham" element={<ErrorBoundary><KhoThanhPhamPage /></ErrorBoundary>} />
         <Route path="warehouse/theo-xuong" element={<KhoTheoXuongPage />} />
         <Route path="warehouse/inventory" element={<InventoryPage />} />
+        <Route path="warehouse/nhap-nhanh" element={<NhapNhanhPage />} />
+        <Route path="warehouse/nhap-giay" element={<NhapGiayPage />} />
+        <Route path="warehouse/nhap-phoi-ngoai" element={<NhapPhoiNgoaiPage />} />
         <Route path="warehouse/receipts" element={<ReceiptsPage />} />
         <Route path="warehouse/issues" element={<IssuesPage />} />
         <Route path="warehouse/production-output" element={<ProductionOutputPage />} />
@@ -229,6 +241,8 @@ export default function App() {
         <Route path="warehouse/the-kho" element={<InventoryCardPage />} />
 
         {/* Mua hàng */}
+        <Route path="purchasing/giay-cuon" element={<ErrorBoundary><MuaGiayPage /></ErrorBoundary>} />
+        <Route path="purchasing/nvl-khac" element={<ErrorBoundary><MuaNVLPage /></ErrorBoundary>} />
         <Route path="purchasing/orders" element={<POListPage />} />
         <Route path="purchasing/returns" element={<ErrorBoundary><PurchaseReturnPage /></ErrorBoundary>} />
         <Route path="purchasing/reports" element={<ErrorBoundary><PurchaseReportPage /></ErrorBoundary>} />

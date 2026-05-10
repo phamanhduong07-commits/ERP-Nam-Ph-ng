@@ -56,6 +56,7 @@ class User(Base):
     role_id: Mapped[int] = mapped_column(Integer, ForeignKey("roles.id"), nullable=False)
     phan_xuong: Mapped[str | None] = mapped_column(String(50))
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
+    machine_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     lan_dang_nhap_cuoi: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)

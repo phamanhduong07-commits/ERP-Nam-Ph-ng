@@ -91,6 +91,7 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         so_luong_ke_hoach=line.so_luong_ke_hoach,
         so_luong_hoan_thanh=line.so_luong_hoan_thanh,
         trang_thai=line.trang_thai,
+        mua_phoi_ngoai=getattr(line, "mua_phoi_ngoai", False),
         ghi_chu=line.ghi_chu,
         # Joined fields
         so_lenh=order.so_lenh if order else None,
@@ -696,6 +697,7 @@ def _build_queue_line(line: ProductionPlanLine, plan: ProductionPlan) -> QueueLi
         so_luong_ke_hoach=line.so_luong_ke_hoach,
         so_luong_hoan_thanh=line.so_luong_hoan_thanh,
         trang_thai=line.trang_thai,
+        mua_phoi_ngoai=getattr(line, "mua_phoi_ngoai", False),
         ghi_chu=line.ghi_chu,
         so_lenh=order.so_lenh if order else None,
         ma_kh=customer.ma_kh if customer else None,
@@ -745,4 +747,25 @@ def _load_queue_line_full(line_id: int, db: Session):
         line.production_order_item._bom_cache = bom
     plan = db.query(ProductionPlan).filter(ProductionPlan.id == line.plan_id).first()
     return line, plan
+
+
+# ─── Toggle mua phôi ngoài ────────────────────────────────────────────────────
+
+@router.patch("/lines/{line_id}/phoi-ngoai")
+def toggle_mua_phoi_ngoai(
+    line_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Đánh dấu hoặc bỏ đánh dấu KHSX line cần mua phôi sóng từ NCC ngoài.
+    Body: {"mua_phoi_ngoai": bool}
+    """
+    line = db.query(ProductionPlanLine).filter(ProductionPlanLine.id == line_id).first()
+    if not line:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dòng KHSX")
+    line.mua_phoi_ngoai = bool(body.get("mua_phoi_ngoai", False))
+    db.commit()
+    return {"id": line.id, "mua_phoi_ngoai": line.mua_phoi_ngoai}
 

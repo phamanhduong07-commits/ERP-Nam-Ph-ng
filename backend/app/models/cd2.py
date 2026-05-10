@@ -5,6 +5,49 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class Machine(Base):
+    """Bảng máy móc dùng chung cho toàn bộ nhà máy."""
+    __tablename__ = "machines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ten_may: Mapped[str] = mapped_column(String(100), nullable=False)
+    ma_may: Mapped[str | None] = mapped_column(String(50), unique=True)
+    # in | be | dan | ghim | can_mang | boi | phoi | khac
+    loai_may: Mapped[str] = mapped_column(String(50), default="khac")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
+
+    phan_xuong_obj = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
+    logs: Mapped[list["ProductionLog"]] = relationship("ProductionLog", back_populates="machine_obj")
+
+
+class ProductionLog(Base):
+    """Nhật ký chi tiết các sự kiện sản xuất tại máy (Start, Stop, Complete)."""
+    __tablename__ = "production_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    production_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=False)
+    phieu_in_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phieu_in.id"), nullable=True)
+    machine_id: Mapped[int] = mapped_column(Integer, ForeignKey("machines.id"), nullable=False)
+
+    # start | stop | resume | complete
+    event_type: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    quantity_ok: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    quantity_loi: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    quantity_setup: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    machine_obj: Mapped["Machine"] = relationship("Machine", back_populates="logs")
+    production_order = relationship("ProductionOrder")
+    phieu_in = relationship("PhieuIn")
+    creator = relationship("User")
+
+
 class MayScan(Base):
     __tablename__ = "may_scan"
 
@@ -171,4 +214,7 @@ class PrinterUser(Base):
     token_password: Mapped[str] = mapped_column(String(255), nullable=False)
     shift: Mapped[int | None] = mapped_column(Integer)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    machine_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("machines.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    machine: Mapped["Machine"] = relationship("Machine", foreign_keys=[machine_id])

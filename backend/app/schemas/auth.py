@@ -26,6 +26,7 @@ class UserInfo(BaseModel):
     email: str | None
     role: str
     phan_xuong: str | None
+    machine_id: int | None
 
     class Config:
         from_attributes = True
@@ -39,6 +40,7 @@ class UserCreate(BaseModel):
     password: str
     role_id: int
     phan_xuong: str | None = None
+    machine_id: int | None = None
 
 
 class UserUpdate(BaseModel):
@@ -47,6 +49,7 @@ class UserUpdate(BaseModel):
     so_dien_thoai: str | None = None
     role_id: int | None = None
     phan_xuong: str | None = None
+    machine_id: int | None = None
     trang_thai: bool | None = None
 
 
@@ -58,6 +61,7 @@ class UserResponse(BaseModel):
     so_dien_thoai: str | None
     role_id: int
     phan_xuong: str | None
+    machine_id: int | None
     trang_thai: bool
     created_at: datetime
 

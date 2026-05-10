@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.master import Supplier, PaperMaterial, OtherMaterial
+from app.models.master import Supplier, PaperMaterial, OtherMaterial, PhanXuong
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.deps import get_current_user
 from app.models.auth import User
@@ -40,11 +40,19 @@ class POItemCreate(BaseModel):
     dvt: str = "Kg"
     don_gia: Decimal = Decimal("0")
     ghi_chu: Optional[str] = None
+    kho_mm: Optional[Decimal] = None
+    so_cuon: Optional[int] = None
+    ky_hieu_cuon: Optional[str] = None
+    # Phôi sóng mua ngoài
+    production_plan_line_id: Optional[int] = None
+    phoi_spec: Optional[dict] = None
 
 
 class POCreate(BaseModel):
     supplier_id: int
     ngay_po: date
+    phan_xuong_id: Optional[int] = None
+    loai_po: str = "chung"
     ngay_du_kien_nhan: Optional[date] = None
     dieu_khoan_tt: Optional[str] = None
     ghi_chu: Optional[str] = None
@@ -52,6 +60,8 @@ class POCreate(BaseModel):
 
 
 class POUpdate(BaseModel):
+    phan_xuong_id: Optional[int] = None
+    loai_po: Optional[str] = None
     ngay_du_kien_nhan: Optional[date] = None
     dieu_khoan_tt: Optional[str] = None
     ghi_chu: Optional[str] = None
@@ -87,8 +97,20 @@ def _resolve_ten_hang(item: POItemCreate, db: Session) -> str:
     return ""
 
 
+def _px_info(po: PurchaseOrder, db: Session) -> tuple[int | None, str | None, str | None]:
+    """Returns (phan_xuong_id, ten_phan_xuong, ten_phap_nhan)."""
+    if not po.phan_xuong_id:
+        return None, None, None
+    px = db.get(PhanXuong, po.phan_xuong_id)
+    if not px:
+        return po.phan_xuong_id, None, None
+    ten_phap_nhan = px.phap_nhan.ten_phap_nhan if px.phap_nhan else None
+    return px.id, px.ten_xuong, ten_phap_nhan
+
+
 def _po_to_dict(po: PurchaseOrder, db: Session) -> dict:
     sup = db.get(Supplier, po.supplier_id)
+    px_id, ten_px, ten_pn = _px_info(po, db)
     items = []
     for it in po.items:
         ten = it.ten_hang
@@ -102,6 +124,8 @@ def _po_to_dict(po: PurchaseOrder, db: Session) -> dict:
             "id": it.id,
             "paper_material_id": it.paper_material_id,
             "other_material_id": it.other_material_id,
+            "production_plan_line_id": getattr(it, "production_plan_line_id", None),
+            "phoi_spec": getattr(it, "phoi_spec", None),
             "ten_hang": ten,
             "so_luong": float(it.so_luong),
             "dvt": it.dvt,
@@ -109,6 +133,9 @@ def _po_to_dict(po: PurchaseOrder, db: Session) -> dict:
             "thanh_tien": float(it.thanh_tien),
             "so_luong_da_nhan": float(it.so_luong_da_nhan),
             "ghi_chu": it.ghi_chu,
+            "kho_mm": float(it.kho_mm) if it.kho_mm else None,
+            "so_cuon": it.so_cuon,
+            "ky_hieu_cuon": it.ky_hieu_cuon,
         })
     return {
         "id": po.id,
@@ -117,6 +144,10 @@ def _po_to_dict(po: PurchaseOrder, db: Session) -> dict:
         "supplier_id": po.supplier_id,
         "ten_ncc": sup.ten_viet_tat if sup else "",
         "trang_thai": po.trang_thai,
+        "phan_xuong_id": px_id,
+        "ten_phan_xuong": ten_px,
+        "ten_phap_nhan": ten_pn,
+        "loai_po": po.loai_po or "chung",
         "ngay_du_kien_nhan": po.ngay_du_kien_nhan.isoformat() if po.ngay_du_kien_nhan else None,
         "dieu_khoan_tt": po.dieu_khoan_tt,
         "tong_tien": float(po.tong_tien),
@@ -135,6 +166,8 @@ def list_pos(
     trang_thai: Optional[str] = None,
     tu_ngay: Optional[date] = None,
     den_ngay: Optional[date] = None,
+    phan_xuong_id: Optional[int] = None,
+    loai_po: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     q = db.query(PurchaseOrder).order_by(PurchaseOrder.created_at.desc())
@@ -146,10 +179,15 @@ def list_pos(
         q = q.filter(PurchaseOrder.ngay_po >= tu_ngay)
     if den_ngay:
         q = q.filter(PurchaseOrder.ngay_po <= den_ngay)
-    pos = q.limit(200).all()
+    if phan_xuong_id:
+        q = q.filter(PurchaseOrder.phan_xuong_id == phan_xuong_id)
+    if loai_po:
+        q = q.filter(PurchaseOrder.loai_po == loai_po)
+    pos = q.limit(500).all()
     result = []
     for po in pos:
         sup = db.get(Supplier, po.supplier_id)
+        px_id, ten_px, ten_pn = _px_info(po, db)
         tong = sum(float(it.thanh_tien) for it in po.items)
         da_nhan = sum(float(it.so_luong_da_nhan) for it in po.items)
         tong_dat = sum(float(it.so_luong) for it in po.items)
@@ -160,6 +198,10 @@ def list_pos(
             "supplier_id": po.supplier_id,
             "ten_ncc": sup.ten_viet_tat if sup else "",
             "trang_thai": po.trang_thai,
+            "phan_xuong_id": px_id,
+            "ten_phan_xuong": ten_px,
+            "ten_phap_nhan": ten_pn,
+            "loai_po": po.loai_po or "chung",
             "ngay_du_kien_nhan": po.ngay_du_kien_nhan.isoformat() if po.ngay_du_kien_nhan else None,
             "tong_tien": tong,
             "tien_do_nhan": round(da_nhan / tong_dat * 100, 1) if tong_dat else 0,
@@ -180,6 +222,8 @@ def create_po(body: POCreate, db: Session = Depends(get_db)):
         so_po=so_po,
         ngay_po=body.ngay_po,
         supplier_id=body.supplier_id,
+        phan_xuong_id=body.phan_xuong_id,
+        loai_po=body.loai_po or "chung",
         ngay_du_kien_nhan=body.ngay_du_kien_nhan,
         dieu_khoan_tt=body.dieu_khoan_tt,
         ghi_chu=body.ghi_chu,
@@ -196,12 +240,17 @@ def create_po(body: POCreate, db: Session = Depends(get_db)):
             po_id=po.id,
             paper_material_id=it.paper_material_id,
             other_material_id=it.other_material_id,
+            production_plan_line_id=it.production_plan_line_id,
+            phoi_spec=it.phoi_spec,
             ten_hang=ten,
             so_luong=it.so_luong,
             dvt=it.dvt,
             don_gia=it.don_gia,
             thanh_tien=thanh_tien,
             ghi_chu=it.ghi_chu,
+            kho_mm=it.kho_mm,
+            so_cuon=it.so_cuon,
+            ky_hieu_cuon=it.ky_hieu_cuon,
         ))
 
     po.tong_tien = tong
@@ -226,6 +275,10 @@ def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db)):
     if po.trang_thai not in ("moi",):
         raise HTTPException(400, "Chỉ sửa được PO ở trạng thái Mới")
 
+    if body.phan_xuong_id is not None:
+        po.phan_xuong_id = body.phan_xuong_id
+    if body.loai_po is not None:
+        po.loai_po = body.loai_po
     if body.ngay_du_kien_nhan is not None:
         po.ngay_du_kien_nhan = body.ngay_du_kien_nhan
     if body.dieu_khoan_tt is not None:
@@ -246,6 +299,8 @@ def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db)):
                 po_id=po.id,
                 paper_material_id=it.paper_material_id,
                 other_material_id=it.other_material_id,
+                production_plan_line_id=it.production_plan_line_id,
+                phoi_spec=it.phoi_spec,
                 ten_hang=ten,
                 so_luong=it.so_luong,
                 dvt=it.dvt,

@@ -21,14 +21,16 @@ export default function PaperMaterialList() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [filterNhom, setFilterNhom] = useState<number | undefined>(undefined)
+  const [filterNsx, setFilterNsx] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['paper-materials', search, filterNhom, page],
+    queryKey: ['paper-materials', search, filterNhom, filterNsx, page],
     queryFn: () =>
       paperMaterialsFullApi.list({
         search: search || undefined,
         ma_nhom_id: filterNhom,
+        ma_nsx_id: filterNsx,
         page,
         page_size: 20,
       }).then(r => r.data),
@@ -179,10 +181,22 @@ export default function PaperMaterialList() {
               <Select
                 placeholder="Lọc theo nhóm"
                 allowClear
-                style={{ width: 200 }}
+                style={{ width: 170 }}
                 value={filterNhom}
                 onChange={v => { setFilterNhom(v); setPage(1) }}
                 options={nhomOptions}
+                showSearch
+                filterOption={(input, opt) =>
+                  (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+                }
+              />
+              <Select
+                placeholder="Lọc theo NSX"
+                allowClear
+                style={{ width: 180 }}
+                value={filterNsx}
+                onChange={v => { setFilterNsx(v); setPage(1) }}
+                options={nsxOptions}
                 showSearch
                 filterOption={(input, opt) =>
                   (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())

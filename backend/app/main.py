@@ -3,7 +3,7 @@ import os
 import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import Base, engine, ensure_schema
@@ -137,4 +137,7 @@ if os.path.exists("dist"):
 
     @app.exception_handler(404)
     async def not_found_exception_handler(request, exc):
+        if request.url.path.startswith("/api/"):
+            detail = getattr(exc, "detail", None) or "Not found"
+            return JSONResponse({"detail": detail}, status_code=404)
         return FileResponse("dist/index.html")

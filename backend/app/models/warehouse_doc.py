@@ -21,12 +21,17 @@ class GoodsReceipt(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")  # nhap | da_duyet
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    so_xe: Mapped[str | None] = mapped_column(String(30))
+    invoice_image: Mapped[str | None] = mapped_column(Text)
+    hd_tong_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     po = relationship("PurchaseOrder")
     supplier = relationship("Supplier")
     warehouse = relationship("Warehouse")
+    phap_nhan = relationship("PhapNhan")
     creator = relationship("User")
     items: Mapped[list["GoodsReceiptItem"]] = relationship(
         "GoodsReceiptItem", back_populates="receipt", cascade="all, delete-orphan"
@@ -49,6 +54,11 @@ class GoodsReceiptItem(Base):
     dinh_luong_thuc_te: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     do_am: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     ket_qua_kiem_tra: Mapped[str] = mapped_column(String(20), default="DAT")
+    kho_mm: Mapped[Decimal | None] = mapped_column(Numeric(7, 1))
+    so_cuon: Mapped[int | None] = mapped_column(Integer)
+    ky_hieu_cuon: Mapped[str | None] = mapped_column(String(50))
+    dai_mm: Mapped[Decimal | None] = mapped_column(Numeric(7, 1))   # chiều dài phôi tấm (mm)
+    so_lop: Mapped[int | None] = mapped_column(Integer)              # số lớp: 3 | 5 | 7
     ghi_chu: Mapped[str | None] = mapped_column(Text)
 
     receipt: Mapped["GoodsReceipt"] = relationship("GoodsReceipt", back_populates="items")

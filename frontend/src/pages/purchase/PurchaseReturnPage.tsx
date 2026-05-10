@@ -26,6 +26,7 @@ import {
 import type { PurchaseReturnListItem, PurchaseReturn, CreatePurchaseReturnPayload } from '../../api/purchaseReturns'
 import { suppliersApi, Supplier } from '../../api/suppliers'
 import { exportToExcel } from '../../utils/exportUtils'
+import { warehouseApi } from '../../api/warehouse'
 
 const { Title, Text } = Typography
 
@@ -43,6 +44,7 @@ export default function PurchaseReturnPage() {
   const [filterSupplier, setFilterSupplier] = useState<number | undefined>()
   const [filterLoai, setFilterLoai] = useState<string | undefined>()
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
+  const [filterXuong, setFilterXuong] = useState<number | undefined>()
   const [detailId, setDetailId] = useState<number | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [form] = Form.useForm()
@@ -51,15 +53,22 @@ export default function PurchaseReturnPage() {
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: listData, isLoading } = useQuery({
-    queryKey: ['purchase-returns', page, filterSupplier, filterLoai, filterTrangThai],
+    queryKey: ['purchase-returns', page, filterSupplier, filterLoai, filterTrangThai, filterXuong],
     queryFn: () => purchaseReturnsApi.list({
       supplier_id: filterSupplier,
       loai: filterLoai,
       trang_thai: filterTrangThai,
+      phan_xuong_id: filterXuong,
       page,
       page_size: 20,
     }).then(r => r.data),
     staleTime: 30_000,
+  })
+
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong-all'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 600_000,
   })
 
   const { data: detail } = useQuery({
@@ -138,6 +147,12 @@ export default function PurchaseReturnPage() {
       title: 'Nhà cung cấp',
       dataIndex: 'ten_ncc',
       ellipsis: true,
+    },
+    {
+      title: 'Xưởng',
+      dataIndex: 'ten_phan_xuong',
+      width: 120,
+      render: (v: string | null) => v || <Text type="secondary">—</Text>,
     },
     {
       title: 'Loại',
@@ -294,6 +309,16 @@ export default function PurchaseReturnPage() {
               { value: 'da_duyet', label: 'Đã duyệt' },
               { value: 'huy', label: 'Đã huỷ' },
             ]}
+          />
+        </Col>
+        <Col>
+          <Select
+            style={{ width: 160 }}
+            placeholder="Tất cả xưởng"
+            allowClear
+            value={filterXuong}
+            onChange={v => { setFilterXuong(v); setPage(1) }}
+            options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
           />
         </Col>
       </Row>

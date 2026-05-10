@@ -5,9 +5,10 @@ import {
   Modal, Popconfirm, Row, Select, Space, Switch, Table, Tabs, Tag, Typography, message,
 } from 'antd'
 import {
-  DeleteOutlined, EditOutlined, PlusOutlined, SettingOutlined, SaveOutlined, CloseOutlined,
+  DeleteOutlined, EditOutlined, PlusOutlined, SettingOutlined, SaveOutlined, CloseOutlined, QrcodeOutlined
 } from '@ant-design/icons'
-import { cd2Api, MayIn, MaySauIn, MayScan, PrinterUser } from '../../api/cd2'
+import QRCode from 'qrcode'
+import { cd2Api, MayIn, MaySauIn, MayScan, PrinterUser, Machine } from '../../api/cd2'
 import { warehouseApi, PhanXuong } from '../../api/warehouse'
 
 const { Title, Text } = Typography
@@ -290,6 +291,11 @@ function PrinterUserTab() {
     queryFn: () => cd2Api.listPrinterUser().then(r => r.data),
   })
 
+  const { data: machines = [] } = useQuery({
+    queryKey: ['cd2-machines'],
+    queryFn: () => cd2Api.listMachines().then(r => r.data),
+  })
+
   const createMut = useMutation({
     mutationFn: (d: Parameters<typeof cd2Api.createPrinterUser>[0]) => cd2Api.createPrinterUser(d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cd2-printer-user'] }); setEditing(null); message.success('Đã thêm') },
@@ -310,7 +316,7 @@ function PrinterUserTab() {
   })
 
   const openEdit = (u: PrinterUser) => {
-    form.setFieldsValue({ token_user: u.token_user, rfid_key: u.rfid_key, shift: u.shift, active: u.active })
+    form.setFieldsValue({ token_user: u.token_user, rfid_key: u.rfid_key, shift: u.shift, active: u.active, machine_id: u.machine_id ?? null })
     setEditing(u)
   }
 
@@ -328,6 +334,10 @@ function PrinterUserTab() {
 
   const columns = [
     { title: 'Token User', dataIndex: 'token_user', render: (v: string) => <Text strong>{v}</Text> },
+    {
+      title: 'Máy được gán', dataIndex: 'machine_name',
+      render: (v: string | undefined) => v ? <Tag color="geekblue">{v}</Tag> : <Text type="secondary">—</Text>,
+    },
     {
       title: 'RFID Key', dataIndex: 'rfid_key',
       render: (v: string | null) => v ? <Text code style={{ fontSize: 11 }}>{v}</Text> : <Text type="secondary">—</Text>,
@@ -384,6 +394,13 @@ function PrinterUserTab() {
           </Form.Item>
           <Form.Item name="token_password" label={editing === 'new' ? 'Mật khẩu' : 'Mật khẩu mới (để trống nếu không đổi)'}>
             <Input.Password placeholder="Mật khẩu" />
+          </Form.Item>
+          <Form.Item name="machine_id" label="Máy được gán">
+            <Select
+              placeholder="Chọn máy..."
+              allowClear
+              options={machines.map(m => ({ value: m.id, label: `${m.ten_may} (${m.loai_may})` }))}
+            />
           </Form.Item>
           <Form.Item name="rfid_key" label="RFID Key">
             <Input placeholder="Mã thẻ RFID (nếu có)" />
@@ -731,6 +748,121 @@ function MayScanTab() {
   )
 }
 
+// ── Tab: Máy móc chung (Mobile Tracking) ──────────────────────────────────────
+
+function MachineTab() {
+  const qc = useQueryClient()
+  const [form] = Form.useForm()
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editState, setEditState] = useState<Partial<Machine>>({})
+  const [qrModal, setQrModal] = useState<{ open: boolean; machine: Machine | null }>({ open: false, machine: null })
+  const [qrDataUrl, setQrDataUrl] = useState('')
+
+  const showQr = async (m: Machine) => {
+    const url = `${window.location.origin}/production/cd2/mobile-tracking?machine_id=${m.id}`
+    const dataUrl = await QRCode.toDataURL(url, { width: 300, margin: 2 })
+    setQrDataUrl(dataUrl)
+    setQrModal({ open: true, machine: m })
+  }
+
+  const { data: list = [], isLoading } = useQuery({
+    queryKey: ['cd2-machines-config'],
+    queryFn: () => cd2Api.listMachines().then(r => r.data),
+  })
+  const { data: phanXuongList = [] } = useQuery<PhanXuong[]>({
+    queryKey: ['phan-xuong-list'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+  })
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['cd2-machines-config'] })
+
+  const handleAdd = async () => {
+    try {
+      const v = await form.validateFields()
+      await cd2Api.createMachine(v)
+      message.success('Đã thêm máy')
+      form.resetFields()
+      invalidate()
+    } catch { message.error('Lỗi') }
+  }
+
+  const handleSaveEdit = async (id: number) => {
+    try {
+      await cd2Api.updateMachine(id, editState)
+      message.success('Đã cập nhật')
+      setEditingId(null)
+      invalidate()
+    } catch { message.error('Lỗi cập nhật máy') }
+  }
+
+  const columns = [
+    { title: 'Tên máy', dataIndex: 'ten_may', render: (v: string, r: Machine) => 
+        editingId === r.id ? <Input value={editState.ten_may} onChange={e => setEditState(s => ({...s, ten_may: e.target.value}))} size="small" /> : <Text strong>{v}</Text> 
+    },
+    { title: 'Mã máy', dataIndex: 'ma_may', render: (v: string, r: Machine) => 
+        editingId === r.id ? <Input value={editState.ma_may ?? ''} onChange={e => setEditState(s => ({...s, ma_may: e.target.value}))} size="small" /> : <Tag>{v || '—'}</Tag>
+    },
+    { title: 'Loại', dataIndex: 'loai_may', render: (v: string, r: Machine) => 
+        editingId === r.id ? (
+          <Select size="small" value={v} onChange={val => setEditState(s => ({...s, loai_may: val}))} style={{width: 100}}>
+            <Select.Option value="in">In</Select.Option>
+            <Select.Option value="be">Bế</Select.Option>
+            <Select.Option value="dan">Dán</Select.Option>
+            <Select.Option value="ghim">Ghim</Select.Option>
+            <Select.Option value="can_mang">Cán màng</Select.Option>
+            <Select.Option value="khac">Khác</Select.Option>
+          </Select>
+        ) : <Tag color="blue">{v.toUpperCase()}</Tag>
+    },
+    { title: 'Trạng thái', dataIndex: 'active', render: (v: boolean) => <Switch size="small" checked={v} disabled /> },
+    { title: '', width: 140, render: (_: any, r: Machine) => (
+      <Space>
+        {editingId === r.id ? <Button size="small" icon={<SaveOutlined />} onClick={() => handleSaveEdit(r.id)} /> : 
+          <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingId(r.id); setEditState(r) }} />}
+        <Button size="small" icon={<QrcodeOutlined />} onClick={() => showQr(r)} />
+      </Space>
+    )}
+  ]
+
+  return (
+    <div>
+      <Table dataSource={list} columns={columns} rowKey="id" size="small" pagination={false} loading={isLoading} style={{marginBottom: 16}} />
+      <Form form={form} layout="inline">
+        <Form.Item name="ten_may" rules={[{required: true}]}><Input placeholder="Tên máy" size="small" /></Form.Item>
+        <Form.Item name="loai_may" initialValue="khac">
+          <Select size="small" style={{width: 120}}>
+            <Select.Option value="in">In</Select.Option>
+            <Select.Option value="be">Bế</Select.Option>
+            <Select.Option value="dan">Dán</Select.Option>
+            <Select.Option value="ghim">Ghim</Select.Option>
+            <Select.Option value="can_mang">Cán màng</Select.Option>
+            <Select.Option value="khac">Khác</Select.Option>
+          </Select>
+        </Form.Item>
+        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={handleAdd}>Thêm máy</Button>
+      </Form>
+
+      <Modal
+        title="Mã QR cho máy"
+        open={qrModal.open}
+        onCancel={() => setQrModal({ open: false, machine: null })}
+        footer={[
+          <Button key="close" onClick={() => setQrModal({ open: false, machine: null })}>Đóng</Button>,
+          <Button key="print" type="primary" onClick={() => window.print()}>In mã</Button>
+        ]}
+      >
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          <Title level={4}>{qrModal.machine?.ten_may}</Title>
+          <img src={qrDataUrl} alt="QR Code" style={{ border: '1px solid #eee', borderRadius: 8 }} />
+          <div style={{ marginTop: 16 }}>
+            <Text type="secondary">Dán mã này lên máy để công nhân quét báo cáo.</Text>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ConfigPage() {
@@ -740,6 +872,7 @@ export default function ConfigPage() {
     { key: 'printer-user', label: 'Tài khoản người dùng', children: <PrinterUserTab /> },
     { key: 'may-sau-in',   label: 'Máy Sau In',      children: <MaySauInTab /> },
     { key: 'may-scan',     label: 'Máy Scan',         children: <MayScanTab /> },
+    { key: 'machines',     label: 'Máy móc (Mobile)', children: <MachineTab /> },
   ]
 
   return (

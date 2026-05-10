@@ -40,6 +40,9 @@ export interface PurchaseReturnListItem {
   ngay: string
   supplier_id: number
   ten_ncc: string | null
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
+  ten_phap_nhan: string | null
   loai: string
   tong_thanh_toan: number
   trang_thai: string
@@ -149,6 +152,7 @@ export const purchaseReturnsApi = {
     trang_thai?: string
     tu_ngay?: string
     den_ngay?: string
+    phan_xuong_id?: number
     page?: number
     page_size?: number
   }) => client.get<{ total: number; page: number; page_size: number; items: PurchaseReturnListItem[] }>(

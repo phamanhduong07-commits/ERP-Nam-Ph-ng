@@ -1,9 +1,14 @@
+from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from typing import TYPE_CHECKING
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.master import PhanXuong
 
 
 class PurchaseReturn(Base):
@@ -72,6 +77,9 @@ class PurchaseOrder(Base):
     supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
     trang_thai: Mapped[str] = mapped_column(String(30), default="moi")
     # moi | da_duyet | da_gui_ncc | dang_giao | hoan_thanh | huy
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
+    loai_po: Mapped[str] = mapped_column(String(20), default="chung")
+    # chung | giay_cuon | nvl_khac
     ngay_du_kien_nhan: Mapped[date | None] = mapped_column(Date)
     dieu_khoan_tt: Mapped[str | None] = mapped_column(String(50))
     tong_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
@@ -103,6 +111,9 @@ class PurchaseOrder(Base):
     supplier = relationship("Supplier")
     creator = relationship("User", foreign_keys=[created_by])
     approver = relationship("User", foreign_keys=[approved_by])
+    phan_xuong: Mapped["PhanXuong | None"] = relationship(
+        "PhanXuong", foreign_keys=[phan_xuong_id]
+    )
     items: Mapped[list["PurchaseOrderItem"]] = relationship(
         "PurchaseOrderItem", back_populates="po", cascade="all, delete-orphan"
     )
@@ -122,6 +133,15 @@ class PurchaseOrderItem(Base):
     thanh_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     so_luong_da_nhan: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    kho_mm: Mapped[Decimal | None] = mapped_column(Numeric(7, 1))
+    so_cuon: Mapped[int | None] = mapped_column(Integer)
+    ky_hieu_cuon: Mapped[str | None] = mapped_column(String(50))
+
+    # Phôi sóng mua ngoài: link tới KHSX line + spec đầy đủ (cấu trúc giấy + QCCL)
+    production_plan_line_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("production_plan_lines.id"), nullable=True
+    )
+    phoi_spec: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     po: Mapped["PurchaseOrder"] = relationship("PurchaseOrder", back_populates="items")
     paper_material = relationship("PaperMaterial")

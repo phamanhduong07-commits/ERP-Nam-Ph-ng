@@ -21,14 +21,16 @@ export default function OtherMaterialList() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [filterNhom, setFilterNhom] = useState<number | undefined>(undefined)
+  const [filterNcc, setFilterNcc] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['other-materials', search, filterNhom, page],
+    queryKey: ['other-materials', search, filterNhom, filterNcc, page],
     queryFn: () =>
       otherMaterialsApi.list({
         search: search || undefined,
         ma_nhom_id: filterNhom,
+        ma_ncc_id: filterNcc,
         page,
         page_size: 20,
       }).then(r => r.data),
@@ -162,10 +164,22 @@ export default function OtherMaterialList() {
               <Select
                 placeholder="Lọc theo nhóm"
                 allowClear
-                style={{ width: 190 }}
+                style={{ width: 180 }}
                 value={filterNhom}
                 onChange={v => { setFilterNhom(v); setPage(1) }}
                 options={nhomOptions}
+                showSearch
+                filterOption={(input, opt) =>
+                  (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+                }
+              />
+              <Select
+                placeholder="Lọc theo NCC"
+                allowClear
+                style={{ width: 180 }}
+                value={filterNcc}
+                onChange={v => { setFilterNcc(v); setPage(1) }}
+                options={nccOptions}
                 showSearch
                 filterOption={(input, opt) =>
                   (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
