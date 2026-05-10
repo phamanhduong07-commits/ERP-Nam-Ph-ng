@@ -1796,8 +1796,10 @@ def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current
             "order_ten_phan_xuong": order.phan_xuong.ten_xuong if order.phan_xuong else None,
             "warehouse_id":        warehouse_id,
             "ten_phan_xuong":      wh_px.ten_xuong if wh_px else None,
-            "phan_xuong_id":       wh_px.id if wh_px else None,
-            "cong_doan":           wh_px.cong_doan if wh_px else None,
+            # phan_xuong_id/cong_doan dùng xưởng SẢN XUẤT của LSX (không phải kho vật lý)
+            # → isCD2 trên frontend đúng để hiện nút "Chuyển kho"
+            "phan_xuong_id":       order.phan_xuong.id if order.phan_xuong else (wh_px.id if wh_px else None),
+            "cong_doan":           order.phan_xuong.cong_doan if order.phan_xuong else (wh_px.cong_doan if wh_px else None),
             "co_in":               co_in,
             "chieu_kho":           float(first_item.kho_tt) if first_item and first_item.kho_tt else None,
             "chieu_cat":           float(first_item.dai_tt) if first_item and first_item.dai_tt else None,
