@@ -203,3 +203,8 @@ def ensure_schema() -> None:
                 created_at TIMESTAMPTZ DEFAULT NOW()
             )
         """))
+
+        # PrinterUser: máy được gán cho công nhân
+        conn.execute(text(
+            "ALTER TABLE printer_user ADD COLUMN IF NOT EXISTS machine_id INTEGER REFERENCES machines(id)"
+        ))
