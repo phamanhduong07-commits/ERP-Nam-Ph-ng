@@ -132,12 +132,24 @@ def health():
 
 
 # ─── SPA fallback ─────────────────────────────────────────────────────────────
+# Dùng catch-all route thay vì StaticFiles mount tại "/" để tránh StaticFiles
+# chặn POST request (StaticFiles trả 405 với mọi non-GET request).
 if os.path.exists("dist"):
-    app.mount("/", StaticFiles(directory="dist", html=True), name="static")
+    app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        # Trả file tĩnh nếu tồn tại, ngược lại serve index.html cho SPA
+        file_path = os.path.join("dist", full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse("dist/index.html")
 
     @app.exception_handler(404)
     async def not_found_exception_handler(request, exc):
         if request.url.path.startswith("/api/"):
             detail = getattr(exc, "detail", None) or "Not found"
             return JSONResponse({"detail": detail}, status_code=404)
-        return FileResponse("dist/index.html")
+        if os.path.exists("dist/index.html"):
+            return FileResponse("dist/index.html")
+        return JSONResponse({"detail": "Not found"}, status_code=404)
