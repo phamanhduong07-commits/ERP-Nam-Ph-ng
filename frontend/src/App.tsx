@@ -136,12 +136,20 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated() ? <>{children}</> : <Navigate to="/login" replace />
 }
 
+// Cho phép vào nếu có ERP token HOẶC cd2_worker_session (công nhân đăng nhập máy)
+function WorkerOrPrivateRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuthStore()
+  const hasWorkerSession = !!localStorage.getItem('cd2_worker_session')
+  if (isAuthenticated() || hasWorkerSession) return <>{children}</>
+  return <Navigate to="/cd2/machine-login" replace />
+}
+
 export default function App() {
   return (
     <Suspense fallback={<div style={{ padding: 24 }}>Đang tải...</div>}>
       <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/production/cd2/mobile-tracking" element={<PrivateRoute><ErrorBoundary><MobileTrackingPage /></ErrorBoundary></PrivateRoute>} />
+      <Route path="/production/cd2/mobile-tracking" element={<WorkerOrPrivateRoute><ErrorBoundary><MobileTrackingPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
       <Route path="/cd2/machine-login" element={<ErrorBoundary><MachineLoginPage /></ErrorBoundary>} />
       <Route
         path="/"
