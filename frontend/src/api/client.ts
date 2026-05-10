@@ -102,6 +102,14 @@ function _doLogout() {
   if (typeof window !== 'undefined') {
     if (window.location.pathname === '/login') return
 
+    // Kiosk mode: công nhân chỉ có worker session, không có ERP token
+    // → redirect về machine-login thay vì /login
+    if (localStorage.getItem('cd2_worker_session')) {
+      localStorage.removeItem('cd2_worker_session')
+      window.location.href = '/cd2/machine-login'
+      return
+    }
+
     const msg = document.createElement('div')
     msg.style.cssText = [
       'position:fixed;top:20px;left:50%;transform:translateX(-50%)',

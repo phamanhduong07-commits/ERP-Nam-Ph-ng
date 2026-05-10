@@ -119,6 +119,7 @@ export default function MobileTrackingPage() {
       production_order_id: 0,
       machine_id: selectedMachine.id,
       event_type: eventType,
+      printer_user_id: workerSession?.printer_user_id ?? undefined,
       ...extraData
     })
   }

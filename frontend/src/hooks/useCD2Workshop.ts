@@ -11,10 +11,13 @@ export function useCD2Workshop() {
     return stored ? Number(stored) : undefined
   })
 
+  const isKioskMode = !!localStorage.getItem('cd2_worker_session')
+
   const { data: phanXuongList = [] } = useQuery<PhanXuong[]>({
     queryKey: ['phan-xuong-list'],
     queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
     staleTime: 5 * 60 * 1000,
+    enabled: !isKioskMode,
   })
 
   const setPhanXuongId = (id: number | undefined) => {

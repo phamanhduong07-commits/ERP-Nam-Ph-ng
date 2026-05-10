@@ -53,6 +53,30 @@ def get_current_user(
     return user
 
 
+from fastapi.security import OAuth2PasswordBearer as _OAB2
+from typing import Optional as _Opt
+
+_optional_scheme = _OAB2(tokenUrl="/api/auth/login", auto_error=False)
+
+
+def get_optional_user(
+    token: _Opt[str] = Depends(_optional_scheme),
+    db: Session = Depends(get_db),
+) -> _Opt[User]:
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") == "refresh":
+            return None
+        sub = payload.get("sub")
+        if sub is None:
+            return None
+        return db.query(User).filter(User.id == int(sub), User.trang_thai == True).first()
+    except JWTError:
+        return None
+
+
 def require_roles(*allowed_roles: str):
     def checker(current_user: User = Depends(get_current_user)) -> User:
         role_code = current_user.role.ma_vai_tro if current_user.role else None

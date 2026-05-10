@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_optional_user
 from app.models.auth import User
 from app.models.cd2 import (
     MayIn, MaySauIn, PhieuIn, MayScan, ScanLog, ShiftCa, ShiftConfig, PrinterUser,
@@ -58,6 +58,7 @@ class TrackPayload(BaseModel):
     quantity_loi: Optional[Decimal] = 0
     quantity_setup: Optional[Decimal] = 0
     ghi_chu: Optional[str] = None
+    printer_user_id: Optional[int] = None  # kiosk mode: từ cd2_worker_session
 
 
 class MayInCreate(BaseModel):
@@ -1504,7 +1505,7 @@ def update_machine(machine_id: int, data: MachineUpdate, db: Session = Depends(g
 
 
 @router.post("/track")
-def track_production(data: TrackPayload, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def track_production(data: TrackPayload, db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
     log = ProductionLog(
         production_order_id=data.production_order_id,
         phieu_in_id=data.phieu_in_id,
@@ -1514,7 +1515,7 @@ def track_production(data: TrackPayload, db: Session = Depends(get_db), current_
         quantity_loi=data.quantity_loi,
         quantity_setup=data.quantity_setup,
         ghi_chu=data.ghi_chu,
-        created_by=current_user.id
+        created_by=current_user.id if current_user else None
     )
     db.add(log)
     
