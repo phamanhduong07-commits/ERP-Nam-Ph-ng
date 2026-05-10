@@ -7,13 +7,14 @@ import {
 import {
   PlayCircleFilled, CheckCircleFilled, PauseCircleFilled,
   ArrowLeftOutlined, ScanOutlined, WarningFilled,
-  DesktopOutlined, HistoryOutlined as HistoryIcon, LogoutOutlined
+  DesktopOutlined, HistoryOutlined as HistoryIcon, LogoutOutlined, CameraOutlined
 } from '@ant-design/icons'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { useAuthStore } from '../../store/auth'
 import { cd2Api, Machine, ProductionLog, WorkerSession } from '../../api/cd2'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
+import QrScannerModal from '../../components/QrScannerModal'
 
 const { Title, Text } = Typography
 
@@ -38,6 +39,7 @@ export default function MobileTrackingPage() {
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false)
   const [isStopModalOpen, setIsStopModalOpen] = useState(false)
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false)
+  const [isScannerOpen, setIsScannerOpen] = useState(false)
   const [form] = Form.useForm()
 
   const lsxInputRef = useRef<any>(null)
@@ -239,16 +241,31 @@ export default function MobileTrackingPage() {
             <ScanOutlined style={{ fontSize: 18, color: '#1677ff' }} />
             <Text strong>Ghi nhận Lệnh sản xuất</Text>
           </Space>
-          <Input.Search
-            ref={lsxInputRef}
-            placeholder="Quét hoặc nhập số LSX..."
-            size="large"
-            value={soLsx}
-            onChange={e => setSoLsx(e.target.value.toUpperCase())}
-            onSearch={handleLookup}
-            enterButton={<Button type="primary" style={{ background: '#1a337e', border: 'none' }}>QUÉT</Button>}
-            style={{ borderRadius: 12, overflow: 'hidden' }}
-          />
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              ref={lsxInputRef}
+              placeholder="Nhập hoặc quét số LSX..."
+              size="large"
+              value={soLsx}
+              onChange={e => setSoLsx(e.target.value.toUpperCase())}
+              onPressEnter={() => handleLookup(soLsx)}
+            />
+            <Button
+              size="large"
+              icon={<CameraOutlined />}
+              onClick={() => setIsScannerOpen(true)}
+              style={{ background: '#1677ff', color: '#fff', border: 'none' }}
+              title="Quét QR bằng camera"
+            />
+            <Button
+              size="large"
+              type="primary"
+              onClick={() => handleLookup(soLsx)}
+              style={{ background: '#1a337e', border: 'none' }}
+            >
+              TÌM
+            </Button>
+          </Space.Compact>
         </Card>
 
         {currentOrder && (
@@ -467,6 +484,16 @@ export default function MobileTrackingPage() {
           ))}
         </div>
       </Modal>
+
+      <QrScannerModal
+        open={isScannerOpen}
+        onScan={(text) => {
+          setIsScannerOpen(false)
+          setSoLsx(text)
+          handleLookup(text)
+        }}
+        onClose={() => setIsScannerOpen(false)}
+      />
     </div>
   )
 }
