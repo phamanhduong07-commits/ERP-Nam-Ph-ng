@@ -1,6 +1,6 @@
 from datetime import date, datetime, time
 from decimal import Decimal
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text, Time
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -13,7 +13,7 @@ class ProductionOrder(Base):
     ngay_lenh: Mapped[date] = mapped_column(Date, nullable=False)
     sales_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sales_orders.id"))
     trang_thai: Mapped[str] = mapped_column(String(20), default="moi")
-    # moi | dang_chay | hoan_thanh | huy
+    # moi | dang_chay | hoan_thanh | huy | mua_ngoai
 
     ngay_bat_dau_ke_hoach: Mapped[date | None] = mapped_column(Date)
     ngay_hoan_thanh_ke_hoach: Mapped[date | None] = mapped_column(Date)
@@ -21,6 +21,7 @@ class ProductionOrder(Base):
     ngay_hoan_thanh_thuc_te: Mapped[date | None] = mapped_column(Date)
 
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    don_gia_noi_bo: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     kho_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("warehouses.id"))
@@ -88,6 +89,7 @@ class ProductionOrderItem(Base):
     qccl:       Mapped[str | None] = mapped_column(String(50))
     dien_tich:  Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     gia_ban_muc_tieu: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    mua_phoi_ngoai: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
 
     @property
     def gia_ban(self) -> "Decimal | None":

@@ -8,7 +8,7 @@ import {
 import {
   PlusOutlined, SearchOutlined, EyeOutlined,
   PlayCircleOutlined, CheckCircleOutlined, CloseOutlined,
-  FileExcelOutlined, FilePdfOutlined,
+  FileExcelOutlined, FilePdfOutlined, ShoppingCartOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -170,6 +170,16 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
     }
   }
 
+  const handleChuyenMuaPhoi = async (id: number, soLenh: string) => {
+    try {
+      await productionOrdersApi.chuyenMuaPhoi(id)
+      message.success(`Lệnh ${soLenh} đã chuyển sang mua phôi ngoài. Bộ phận mua hàng sẽ lên đơn.`)
+      refetch()
+    } catch {
+      message.error('Thất bại')
+    }
+  }
+
   // ── Cột compact (sidebar — child rows bên trong nhóm đơn hàng) ──────────
   const compactColumns: ColumnsType<ProductionOrderListItem> = [
     {
@@ -199,10 +209,15 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       title: 'Lệnh SX / Mã hàng',
       render: (_, r) => (
         <Space direction="vertical" size={1}>
-          <Button type="link" style={{ padding: 0, height: 'auto', fontSize: 13 }}
-            onClick={() => navigate(`/production/orders/${r.id}`)}>
-            {r.so_lenh}
-          </Button>
+          <Space size={4}>
+            <Button type="link" style={{ padding: 0, height: 'auto', fontSize: 13 }}
+              onClick={() => navigate(`/production/orders/${r.id}`)}>
+              {r.so_lenh}
+            </Button>
+            {r.de_xuat_mua_ngoai && r.trang_thai !== 'mua_ngoai' && (
+              <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>Khổ ≥2m</Tag>
+            )}
+          </Space>
           {r.ten_hang && (
             <Text style={{ fontSize: 12, fontWeight: 500 }}>{r.ten_hang}</Text>
           )}
@@ -279,6 +294,19 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
                 onConfirm={() => handleCancel(r.id, r.so_lenh)}
                 okText="Huỷ" okButtonProps={{ danger: true }}>
                 <Button size="small" danger icon={<CloseOutlined />} />
+              </Popconfirm>
+            </Tooltip>
+          )}
+          {['moi', 'dang_chay'].includes(r.trang_thai) && (
+            <Tooltip title="Mua phôi ngoài">
+              <Popconfirm
+                title={`Chuyển lệnh ${r.so_lenh} sang mua phôi ngoài?`}
+                description="Bộ phận mua hàng sẽ vào lên đơn mua phôi."
+                onConfirm={() => handleChuyenMuaPhoi(r.id, r.so_lenh)}
+                okText="Chuyển"
+              >
+                <Button size="small" icon={<ShoppingCartOutlined />}
+                  style={{ color: '#722ed1', borderColor: '#722ed1' }} />
               </Popconfirm>
             </Tooltip>
           )}

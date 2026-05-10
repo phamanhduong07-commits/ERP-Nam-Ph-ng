@@ -70,6 +70,7 @@ export interface ProductionOrder {
   ngay_bat_dau_thuc_te: string | null
   ngay_hoan_thanh_thuc_te: string | null
   ghi_chu: string | null
+  don_gia_noi_bo: number | null
   so_po_kh: string | null
   items: ProductionOrderItem[]
   created_at: string
@@ -92,6 +93,8 @@ export interface ProductionOrderListItem {
   ngay_hoan_thanh_ke_hoach: string | null
   so_dong: number
   tong_sl_ke_hoach: number
+  kho_tt_max: number | null      // kho lớn nhất trong các items (mm)
+  de_xuat_mua_ngoai: boolean     // kho >= 2000mm → đề xuất mua phôi ngoài
   created_at: string
 }
 
@@ -136,6 +139,7 @@ export const TRANG_THAI_LABELS: Record<string, string> = {
   dang_chay: 'Đang SX',
   hoan_thanh: 'Hoàn thành',
   huy: 'Huỷ',
+  mua_ngoai: 'Mua phôi ngoài',
 }
 
 export const TRANG_THAI_COLORS: Record<string, string> = {
@@ -143,6 +147,7 @@ export const TRANG_THAI_COLORS: Record<string, string> = {
   dang_chay: 'orange',
   hoan_thanh: 'green',
   huy: 'red',
+  mua_ngoai: 'purple',
 }
 
 export interface PhieuNhapPhoiSongItemPayload {
@@ -189,6 +194,7 @@ export interface PhieuNhapPhoiSong {
   gio_bat_dau: string | null
   gio_ket_thuc: string | null
   created_at: string | null
+  ten_kho: string | null
   items: PhieuNhapPhoiSongItem[]
 }
 
@@ -252,6 +258,11 @@ export const productionOrdersApi = {
 
   listAllPhieu: (params?: { tu_ngay?: string; den_ngay?: string; production_order_id?: number; warehouse_id?: number }) =>
     client.get<PhieuNhapPhoiSongListItem[]>('/production-orders/phieu-nhap-phoi-song', { params }),
+
+  chuyenMuaPhoi: (orderId: number) =>
+    client.patch<{ ok: boolean; trang_thai: string; so_lenh: string }>(
+      `/production-orders/${orderId}/chuyen-mua-phoi`
+    ),
 
   pushToCD2: (orderId: number) =>
     client.post<{ ok: boolean; data: unknown; payload_sent: unknown }>(

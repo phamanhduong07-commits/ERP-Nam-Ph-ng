@@ -307,19 +307,32 @@ export interface DeliveryOrder {
   id: number
   so_phieu: string
   ngay_xuat: string
-  sales_order_id: number
-  so_don: string
+  sales_order_id: number | null
+  so_don: string | null
   customer_id: number
-  ten_khach: string
+  ten_khach: string | null
   warehouse_id: number
-  ten_kho: string
+  ten_kho: string | null
+  yeu_cau_id: number | null
   dia_chi_giao: string | null
   nguoi_nhan: string | null
   xe_van_chuyen: string | null
-  tien_van_chuyen?: number
-  tong_tien_hang?: number
-  tong_thanh_toan?: number
-  trang_thai_cong_no?: string
+  xe_id: number | null
+  bien_so: string | null
+  loai_xe: string | null
+  trong_tai: number | null
+  tai_xe_id: number | null
+  ten_tai_xe: string | null
+  lo_xe: string | null
+  don_gia_vc_id: number | null
+  ten_tuyen: string | null
+  tien_van_chuyen: number
+  tong_tien_hang: number
+  tong_thanh_toan: number
+  tong_dien_tich: number
+  tong_trong_luong: number
+  tong_the_tich: number
+  trang_thai_cong_no: string
   trang_thai: string
   ghi_chu: string | null
   created_at: string | null
@@ -430,6 +443,27 @@ export interface TonKhoTPRow {
   phieu_xuat_gan_nhat: { so_phieu: string; ngay_xuat: string } | null
 }
 
+export interface TonKhoPhoiLsxRow {
+  production_order_id: number
+  so_lenh: string
+  ten_hang: string
+  ten_khach_hang: string | null
+  tong_nhap: number
+  tong_xuat: number
+  ton_kho: number
+  warehouse_id: number
+  ten_kho: string
+  chieu_kho: number | null
+  chieu_cat: number | null
+  phieu_in_hien_tai: { so_phieu: string; trang_thai: string } | null
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
+  cong_doan: string | null
+  order_ten_phan_xuong: string | null
+  phap_nhan_sx_id: number | null
+  ten_phap_nhan_sx: string | null
+}
+
 export interface PhanXuongWithWarehouses {
   id: number
   ma_xuong: string
@@ -511,8 +545,9 @@ export interface DuTruGiayRow {
 
 // ── KHSX cần mua phôi sóng ngoài ─────────────────────────────────────────────
 export interface KHSXCanPhoiNgoaiRow {
-  ppl_id: number
-  so_ke_hoach: string
+  ppl_id: number | null
+  so_ke_hoach: string | null
+  nguon?: 'khsx' | 'lenh_sx'
   ngay_ke_hoach: string | null
   ngay_chay: string | null
   so_lsx: string
@@ -645,6 +680,9 @@ export const warehouseApi = {
     client.post<{ id: number; ma_kho: string; ten_kho: string; created: boolean }[]>(
       `/warehouse/phan-xuong/${pxId}/init-warehouses`
     ),
+
+  getTonKhoPhoiLsx: (params?: { search?: string }) =>
+    client.get<TonKhoPhoiLsxRow[]>('/phieu-phoi/ton-kho-lsx', { params }),
 
   importInventory: (warehouseId: number, file: File, commit: boolean) => {
     const formData = new FormData()

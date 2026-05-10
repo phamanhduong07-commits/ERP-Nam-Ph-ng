@@ -37,7 +37,10 @@ export default function ScanMayPage() {
 
   const { data: mayScanList = [], isLoading: loadingMachines } = useQuery({
     queryKey: ['may-scan', phanXuongId],
-    queryFn: () => cd2Api.listMayScan(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data.filter((m: MayScan) => m.active)),
+    queryFn: () =>
+      cd2Api.listMayScan(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined)
+        .then(r => (Array.isArray(r.data) ? r.data.filter((m: MayScan) => m.active) : []))
+        .catch(() => []),
   })
 
   // Auto-select first machine
@@ -51,7 +54,10 @@ export default function ScanMayPage() {
 
   const { data: todayLogs = [], refetch: refetchLogs } = useQuery({
     queryKey: ['scan-history', selectedMachine],
-    queryFn: () => cd2Api.getScanHistory({ may_scan_id: selectedMachine ?? undefined, days: 1 }).then(r => r.data),
+    queryFn: () =>
+      cd2Api.getScanHistory({ may_scan_id: selectedMachine ?? undefined, days: 1 })
+        .then(r => (Array.isArray(r.data) ? r.data : []))
+        .catch(() => []),
     enabled: !!selectedMachine,
     refetchInterval: 15_000,
   })
@@ -123,9 +129,10 @@ export default function ScanMayPage() {
   const tienLuong = totalDt != null && donGia ? totalDt * donGia : null
 
   // Thống kê hôm nay
-  const todayTotal = todayLogs.reduce((s: number, l: ScanLog) => s + l.so_luong_tp, 0)
-  const todayDt = todayLogs.reduce((s: number, l: ScanLog) => s + (l.dien_tich ?? 0), 0)
-  const todayLuong = todayLogs.reduce((s: number, l: ScanLog) => s + (l.tien_luong ?? 0), 0)
+  const logs = Array.isArray(todayLogs) ? todayLogs : []
+  const todayTotal = logs.reduce((s: number, l: ScanLog) => s + l.so_luong_tp, 0)
+  const todayDt = logs.reduce((s: number, l: ScanLog) => s + (l.dien_tich ?? 0), 0)
+  const todayLuong = logs.reduce((s: number, l: ScanLog) => s + (l.tien_luong ?? 0), 0)
 
   const cols = [
     {

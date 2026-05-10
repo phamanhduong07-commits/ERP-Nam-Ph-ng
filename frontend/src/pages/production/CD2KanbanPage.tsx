@@ -20,6 +20,7 @@ import PhieuInModal from './PhieuInModal'
 import MayInSettingsModal from './MayInSettingsModal'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
+import { socket } from '../../utils/socket'
 
 const { Text } = Typography
 
@@ -333,7 +334,7 @@ export default function CD2KanbanPage() {
   const { data: kanban, isLoading } = useQuery({
     queryKey: ['cd2-kanban', phanXuongId],
     queryFn: () => cd2Api.getKanban(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
-    refetchInterval: 30_000,
+    // refetchInterval removed in favor of WebSockets
   })
 
   useEffect(() => {
@@ -349,6 +350,17 @@ export default function CD2KanbanPage() {
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
   }, [qc])
+
+  // Lắng nghe tín hiệu từ WebSockets
+  useEffect(() => {
+    const handleUpdate = () => {
+      invalidate()
+    }
+    socket.on('machine_status_update', handleUpdate)
+    return () => {
+      socket.off('machine_status_update', handleUpdate)
+    }
+  }, [invalidate])
 
   const handleXuongChange = (id: number | undefined) => {
     setPhanXuongId(id)

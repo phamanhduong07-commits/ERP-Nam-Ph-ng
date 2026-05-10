@@ -12,9 +12,12 @@ import {
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { useAuthStore } from '../../store/auth'
-import { cd2Api, Machine, ProductionLog, WorkerSession } from '../../api/cd2'
+import { cd2Api, Machine, PhieuIn, ProductionLog, WorkerSession } from '../../api/cd2'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import QrScannerModal from '../../components/QrScannerModal'
+import { useOnlineStatus } from '../../hooks/useOnlineStatus'
+
+const OFFLINE_QUEUE_KEY = 'cd2_offline_tracking_queue'
 
 const { Title, Text } = Typography
 
@@ -35,11 +38,13 @@ export default function MobileTrackingPage() {
 
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null)
   const [soLsx, setSoLsx] = useState('')
-  const [currentOrder, setCurrentOrder] = useState<any>(null)
+  const [currentOrder, setCurrentOrder] = useState<PhieuIn | null>(null)
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false)
   const [isStopModalOpen, setIsStopModalOpen] = useState(false)
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false)
   const [isScannerOpen, setIsScannerOpen] = useState(false)
+  const isOnline = useOnlineStatus()
+  const [offlineQueue, setOfflineQueue] = useState<any[]>([])
   const [form] = Form.useForm()
 
   const lsxInputRef = useRef<any>(null)
@@ -84,7 +89,8 @@ export default function MobileTrackingPage() {
     const code = val.trim().toUpperCase()
     if (!code) return
     try {
-      const res = await cd2Api.scanLookup(code)
+      // Phieu Lookup dành cho công nhân (không cần login)
+      const res = await cd2Api.phieuLookup(code)
       setCurrentOrder(res.data)
       setTimeout(() => window.scrollTo({ top: 300, behavior: 'smooth' }), 100)
     } catch {
@@ -93,13 +99,68 @@ export default function MobileTrackingPage() {
   }
 
   const trackMutation = useMutation({
-    mutationFn: (data: any) => cd2Api.trackProduction(data),
-    onSuccess: () => {
-      message.success('Đã cập nhật trạng thái!')
+    mutationFn: (data: any) => {
+      if (!isOnline) {
+        saveOfflineLog(data)
+        return Promise.resolve({ data: { ok: true, offline: true } })
+      }
+      return cd2Api.trackProduction(data)
+    },
+    onSuccess: (res: any) => {
+      if (res.data?.offline) {
+        message.warning('Đã lưu offline (mất mạng). Sẽ đồng bộ khi có mạng.')
+      } else {
+        message.success('Đã cập nhật trạng thái!')
+      }
       invalidate()
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Thất bại'),
   })
+
+  // Offline logic
+  useEffect(() => {
+    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY)
+    if (raw) {
+      try { setOfflineQueue(JSON.parse(raw)) } catch { setOfflineQueue([]) }
+    }
+  }, [])
+
+  const saveOfflineLog = (data: any) => {
+    const newQueue = [...offlineQueue, { ...data, timestamp: new Date().toISOString() }]
+    setOfflineQueue(newQueue)
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(newQueue))
+  }
+
+  useEffect(() => {
+    if (isOnline && offlineQueue.length > 0) {
+      syncOfflineLogs()
+    }
+  }, [isOnline, offlineQueue.length])
+
+  const syncOfflineLogs = async () => {
+    const queue = [...offlineQueue]
+    message.loading(`Đang đồng bộ ${queue.length} lệnh offline...`, 0)
+    
+    let successCount = 0
+    for (const item of queue) {
+      try {
+        await cd2Api.trackProduction(item)
+        successCount++
+      } catch (err) {
+        console.error('Failed to sync item:', item, err)
+      }
+    }
+    
+    const remaining = queue.slice(successCount)
+    setOfflineQueue(remaining)
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remaining))
+    
+    message.destroy()
+    if (successCount > 0) {
+      message.success(`Đã đồng bộ thành công ${successCount} lệnh!`)
+      invalidate()
+    }
+  }
 
   const invalidate = () => {
     if (currentOrder?.so_lsx) {
@@ -108,6 +169,7 @@ export default function MobileTrackingPage() {
   }
 
   const handleTrack = (eventType: 'start' | 'stop' | 'resume' | 'complete', extraData = {}) => {
+    if ('vibrate' in navigator) navigator.vibrate(50)
     if (!selectedMachine || !currentOrder) return
     if (eventType === 'complete') {
       setIsCompleteModalOpen(true)
@@ -118,7 +180,7 @@ export default function MobileTrackingPage() {
       return
     }
     trackMutation.mutate({
-      production_order_id: 0,
+      production_order_id: currentOrder?.production_order_id ?? 0,
       machine_id: selectedMachine.id,
       event_type: eventType,
       printer_user_id: workerSession?.printer_user_id ?? undefined,
@@ -128,7 +190,7 @@ export default function MobileTrackingPage() {
 
   const handleConfirmStop = (reason: string) => {
     trackMutation.mutate({
-      production_order_id: 0,
+      production_order_id: currentOrder?.production_order_id ?? 0,
       machine_id: selectedMachine!.id,
       event_type: 'stop',
       ghi_chu: reason
@@ -138,7 +200,7 @@ export default function MobileTrackingPage() {
 
   const onFinishComplete = (values: any) => {
     trackMutation.mutate({
-      production_order_id: 0, 
+      production_order_id: currentOrder?.production_order_id ?? 0,
       machine_id: selectedMachine!.id,
       event_type: 'complete',
       ...values
@@ -149,7 +211,7 @@ export default function MobileTrackingPage() {
 
   const { data: progress = [], isLoading: loadingProgress } = useQuery({
     queryKey: ['order-progress', currentOrder?.so_lsx],
-    queryFn: () => cd2Api.getOrderProgress(0).then(r => r.data),
+    queryFn: () => cd2Api.getOrderProgress(currentOrder?.production_order_id ?? 0).then(r => r.data),
     enabled: !!currentOrder?.so_lsx,
   })
 
@@ -184,8 +246,8 @@ export default function MobileTrackingPage() {
         <Divider style={{ margin: '32px 0 16px' }}><Text type="secondary">Nhật ký xưởng hôm nay</Text></Divider>
         <Card style={{ borderRadius: 20, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', marginBottom: 40 }}>
            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-              {factoryLogs.map((log: any, idx: number) => (
-                <div key={log.id} style={{ padding: '10px 0', borderBottom: idx < factoryLogs.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+              {(factoryLogs || []).map((log: any, idx: number) => (
+                <div key={log.id} style={{ padding: '10px 0', borderBottom: idx < (factoryLogs || []).length - 1 ? '1px solid #f0f0f0' : 'none' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                     <Text strong>{log.ten_may}</Text>
                     <Text type="secondary">{dayjs(log.created_at).format('HH:mm')}</Text>
@@ -196,7 +258,7 @@ export default function MobileTrackingPage() {
                   </div>
                 </div>
               ))}
-              {factoryLogs.length === 0 && <Empty description="Chưa có hoạt động" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+              {(factoryLogs || []).length === 0 && <Empty description="Chưa có hoạt động" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
            </div>
         </Card>
       </div>
@@ -228,7 +290,11 @@ export default function MobileTrackingPage() {
         )}
         <div style={{ flex: 1 }}>
           <Text strong style={{ fontSize: 18, color: '#1a337e', display: 'block' }}>{selectedMachine.ten_may}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>{selectedMachine.loai_may.toUpperCase()}</Text>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>{selectedMachine.loai_may.toUpperCase()}</Text>
+            {!isOnline && <Tag color="error" style={{ margin: 0, fontSize: 10 }}>MẤT MẠNG</Tag>}
+            {offlineQueue.length > 0 && <Tag color="warning" style={{ margin: 0, fontSize: 10 }}>CHỜ SYNC: {offlineQueue.length}</Tag>}
+          </div>
         </div>
         {workerSession && (
           <Tag color="blue" style={{ marginLeft: 8 }}>{workerSession.worker_name}</Tag>
@@ -246,6 +312,7 @@ export default function MobileTrackingPage() {
               ref={lsxInputRef}
               placeholder="Nhập hoặc quét số LSX..."
               size="large"
+              allowClear
               value={soLsx}
               onChange={e => setSoLsx(e.target.value.toUpperCase())}
               onPressEnter={() => handleLookup(soLsx)}
@@ -254,14 +321,14 @@ export default function MobileTrackingPage() {
               size="large"
               icon={<CameraOutlined />}
               onClick={() => setIsScannerOpen(true)}
-              style={{ background: '#1677ff', color: '#fff', border: 'none' }}
+              style={{ background: '#1890ff', color: '#fff', border: 'none', width: 60 }}
               title="Quét QR bằng camera"
             />
             <Button
               size="large"
               type="primary"
               onClick={() => handleLookup(soLsx)}
-              style={{ background: '#1a337e', border: 'none' }}
+              style={{ background: '#001529', border: 'none', fontWeight: 600 }}
             >
               TÌM
             </Button>
@@ -349,7 +416,7 @@ export default function MobileTrackingPage() {
             >
               {loadingProgress ? <Spin size="small" /> : (
                 <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                  {progress.slice(0, 5).map((log, idx) => (
+                  {(progress || []).slice(0, 5).map((log, idx) => (
                     <div key={log.id} style={{ padding: '8px 0', borderBottom: idx < 4 ? '1px solid #f0f0f0' : 'none' }}>
                       <div style={{ display: 'flex' }}>
                         <Text strong style={{ color: log.event_type === 'complete' ? '#52c41a' : log.event_type === 'error' ? '#f5222d' : '#1677ff' }}>
@@ -362,7 +429,7 @@ export default function MobileTrackingPage() {
                       <Text type="secondary" style={{ fontSize: 12 }}>{log.worker}</Text>
                     </div>
                   ))}
-                  {progress.length === 0 && <Empty description="Chưa có lịch sử" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+                  {(progress || []).length === 0 && <Empty description="Chưa có lịch sử" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
                 </div>
               )}
             </Card>
@@ -471,7 +538,7 @@ export default function MobileTrackingPage() {
               }}
               onClick={() => {
                 trackMutation.mutate({
-                  production_order_id: 0,
+                  production_order_id: currentOrder?.production_order_id ?? 0,
                   machine_id: selectedMachine!.id,
                   event_type: 'error',
                   ghi_chu: item.label,

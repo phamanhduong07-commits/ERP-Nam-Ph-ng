@@ -8,9 +8,10 @@ import {
 } from 'antd'
 import {
   CheckCircleOutlined, DeleteOutlined, MinusCircleOutlined,
-  PlusOutlined, ShopOutlined, ThunderboltOutlined, WarningOutlined,
+  PlusOutlined, SearchOutlined, ShopOutlined, ThunderboltOutlined, WarningOutlined,
 } from '@ant-design/icons'
 import { purchaseApi } from '../../api/purchase'
+import { productionOrdersApi } from '../../api/productionOrders'
 import type { PurchaseOrder, POItem } from '../../api/purchase'
 import { warehouseApi } from '../../api/warehouse'
 import type { TonKhoGiayRow, DuTruGiayRow, KHSXCanPhoiNgoaiRow } from '../../api/warehouse'
@@ -65,6 +66,37 @@ function qcclSummary(r: KHSXCanPhoiNgoaiRow): string {
     r.c_tham,
     r.can_man,
     r.loai_lan ? (LOAI_LAN_LABEL[r.loai_lan] ?? r.loai_lan) : null,
+  ].filter(Boolean)
+  return parts.join(' ') || '—'
+}
+
+function cauTrucFromSpec(s: Record<string, unknown>): string {
+  const so_lop = s.so_lop as number | null
+  const to_hop = s.to_hop_song as string | null
+  const mat = s.mat as string | null
+  if (!so_lop || !mat) return '—'
+  const parts: string[] = [mat]
+  if (so_lop >= 3 && s.song_1) {
+    parts.push(`${s.song_1}${to_hop?.[0] ?? 'B'}`)
+    parts.push((s.mat_1 as string) ?? '?')
+  }
+  if (so_lop >= 5 && s.song_2) {
+    parts.push(`${s.song_2}${to_hop?.[1] ?? 'C'}`)
+    parts.push((s.mat_2 as string) ?? '?')
+  }
+  if (so_lop >= 7 && s.song_3) {
+    parts.push(`${s.song_3}${to_hop?.[2] ?? 'D'}`)
+    parts.push((s.mat_3 as string) ?? '?')
+  }
+  return parts.join('/')
+}
+
+function qcclFromSpec(s: Record<string, unknown>): string {
+  const parts = [
+    s.c_tham as string | null,
+    s.can_man as string | null,
+    s.loai_lan ? (LOAI_LAN_LABEL[s.loai_lan as string] ?? s.loai_lan as string) : null,
+    s.qccl as string | null,
   ].filter(Boolean)
   return parts.join(' ') || '—'
 }
@@ -228,7 +260,7 @@ function TabDonMuaGiay() {
         supplier_id: v.supplier_id,
         ngay_po: v.ngay_po.format('YYYY-MM-DD'),
         phan_xuong_id: v.phan_xuong_id || null,
-        loai_po: 'giay_cuon',
+        loai_po: loaiPoParam ?? 'giay_cuon',
         ngay_du_kien_nhan: v.ngay_du_kien_nhan ? v.ngay_du_kien_nhan.format('YYYY-MM-DD') : null,
         dieu_khoan_tt: v.dieu_khoan_tt || null,
         ghi_chu: v.ghi_chu || null,
@@ -237,32 +269,93 @@ function TabDonMuaGiay() {
     } catch { /* validation inline */ }
   }
 
-  const expandedRowRender = (r: PurchaseOrder) => (
-    <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}
-      columns={[
-        { title: 'Tên giấy', dataIndex: 'ten_hang' },
-        { title: 'ĐVT', dataIndex: 'dvt', width: 60 },
-        { title: 'Số lượng (kg)', dataIndex: 'so_luong', width: 120, align: 'right' as const,
-          render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) },
-        { title: 'Đơn giá (đ/kg)', dataIndex: 'don_gia', width: 130, align: 'right' as const,
-          render: (v: number) => v > 0 ? fmtVND(v) + 'đ' : '—' },
-        { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 130, align: 'right' as const,
-          render: (v: number) => <Text strong>{fmtVND(v || 0)}đ</Text> },
-        { title: 'Đã nhận', dataIndex: 'so_luong_da_nhan', width: 90, align: 'right' as const,
-          render: (v: number, row: POItem) => {
-            const pct = (row.so_luong || 0) > 0 ? Math.round((v || 0) / row.so_luong * 100) : 0
-            return <Text type={pct >= 100 ? 'success' : undefined}>{pct}%</Text>
-          } },
-        { title: 'Khổ', dataIndex: 'kho_mm', width: 70, align: 'center' as const,
-          render: (v: number | null) => v ? `${v}cm` : '—' },
-        { title: 'Số cuộn', dataIndex: 'so_cuon', width: 80, align: 'right' as const,
-          render: (v: number | null) => v ?? '—' },
-        { title: 'Ký hiệu', dataIndex: 'ky_hieu_cuon', width: 80,
-          render: (v: string | null) => v || '—' },
-        { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '—' },
-      ]}
-    />
-  )
+  const expandedRowRender = (r: PurchaseOrder) => {
+    if (r.loai_po === 'giay_tam') {
+      return (
+        <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false} scroll={{ x: 900 }}
+          columns={[
+            { title: 'Sản phẩm', dataIndex: 'ten_hang', ellipsis: true,
+              render: (_: string, row: POItem) => {
+                const sp = row.phoi_spec as Record<string, unknown> | null
+                return <Text strong>{(sp?.ten_san_pham as string) || row.ten_hang}</Text>
+              } },
+            { title: 'Khổ giấy', width: 80, align: 'center' as const,
+              render: (_: unknown, row: POItem) => {
+                const s = row.phoi_spec as Record<string, unknown> | null
+                return s?.kho_giay ? `${s.kho_giay}` : '—'
+              } },
+            { title: 'Số dao', width: 70, align: 'center' as const,
+              render: (_: unknown, row: POItem) => {
+                const s = row.phoi_spec as Record<string, unknown> | null
+                return s?.so_dao ? `${s.so_dao}` : '—'
+              } },
+            { title: 'Khổ TT × Cắt', width: 120, align: 'center' as const,
+              render: (_: unknown, row: POItem) => {
+                const s = row.phoi_spec as Record<string, unknown> | null
+                return s?.kho_tt && s?.dai_tt ? `${s.kho_tt} × ${s.dai_tt}` : '—'
+              } },
+            { title: 'Lớp', width: 55, align: 'center' as const,
+              render: (_: unknown, row: POItem) => {
+                const s = row.phoi_spec as Record<string, unknown> | null
+                return s?.so_lop ? `${s.so_lop}` : '—'
+              } },
+            { title: 'Tổ hợp', width: 70, align: 'center' as const,
+              render: (_: unknown, row: POItem) => {
+                const s = row.phoi_spec as Record<string, unknown> | null
+                return s?.to_hop_song ? `${s.to_hop_song}` : '—'
+              } },
+            { title: 'Cấu trúc giấy', width: 160,
+              render: (_: unknown, row: POItem) => {
+                const s = row.phoi_spec as Record<string, unknown> | null
+                return <Text code style={{ fontSize: 11 }}>{s ? cauTrucFromSpec(s) : '—'}</Text>
+              } },
+            { title: 'QCCL', width: 150,
+              render: (_: unknown, row: POItem) => {
+                const s = row.phoi_spec as Record<string, unknown> | null
+                return <Text style={{ fontSize: 11 }}>{s ? qcclFromSpec(s) : '—'}</Text>
+              } },
+            { title: 'SL tấm', dataIndex: 'so_luong', width: 90, align: 'right' as const,
+              render: (v: number) => <Text strong>{v.toLocaleString('vi-VN')}</Text> },
+            { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, align: 'right' as const,
+              render: (v: number) => v > 0 ? fmtVND(v) + 'đ' : '—' },
+            { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 120, align: 'right' as const,
+              render: (v: number) => <Text strong style={{ color: '#f5222d' }}>{fmtVND(v || 0)}đ</Text> },
+            { title: 'Đã nhận', dataIndex: 'so_luong_da_nhan', width: 80, align: 'right' as const,
+              render: (v: number, row: POItem) => {
+                const pct = (row.so_luong || 0) > 0 ? Math.round((v || 0) / row.so_luong * 100) : 0
+                return <Text type={pct >= 100 ? 'success' : undefined}>{pct}%</Text>
+              } },
+          ]}
+        />
+      )
+    }
+    return (
+      <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}
+        columns={[
+          { title: 'Tên giấy', dataIndex: 'ten_hang' },
+          { title: 'ĐVT', dataIndex: 'dvt', width: 60 },
+          { title: 'Số lượng (kg)', dataIndex: 'so_luong', width: 120, align: 'right' as const,
+            render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) },
+          { title: 'Đơn giá (đ/kg)', dataIndex: 'don_gia', width: 130, align: 'right' as const,
+            render: (v: number) => v > 0 ? fmtVND(v) + 'đ' : '—' },
+          { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 130, align: 'right' as const,
+            render: (v: number) => <Text strong>{fmtVND(v || 0)}đ</Text> },
+          { title: 'Đã nhận', dataIndex: 'so_luong_da_nhan', width: 90, align: 'right' as const,
+            render: (v: number, row: POItem) => {
+              const pct = (row.so_luong || 0) > 0 ? Math.round((v || 0) / row.so_luong * 100) : 0
+              return <Text type={pct >= 100 ? 'success' : undefined}>{pct}%</Text>
+            } },
+          { title: 'Khổ', dataIndex: 'kho_mm', width: 70, align: 'center' as const,
+            render: (v: number | null) => v ? `${v}cm` : '—' },
+          { title: 'Số cuộn', dataIndex: 'so_cuon', width: 80, align: 'right' as const,
+            render: (v: number | null) => v ?? '—' },
+          { title: 'Ký hiệu', dataIndex: 'ky_hieu_cuon', width: 80,
+            render: (v: string | null) => v || '—' },
+          { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '—' },
+        ]}
+      />
+    )
+  }
 
   const columns = [
     { title: 'Số PO', dataIndex: 'so_po', width: 160,
@@ -335,7 +428,7 @@ function TabDonMuaGiay() {
         size="small" expandable={{ expandedRowRender }}
         pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 900 }} />
 
-      <Drawer open={open} onClose={() => setOpen(false)} title="Tạo đơn mua giấy cuộn"
+      <Drawer open={open} onClose={() => setOpen(false)} title={filterLoaiGiay === 'phoi' ? 'Tạo đơn mua phôi sóng' : 'Tạo đơn mua giấy cuộn'}
         width={860}
         footer={
           <Space>
@@ -833,11 +926,39 @@ function TabPhoiSongNgoai() {
   const [openModal, setOpenModal] = useState(false)
   const [form] = Form.useForm()
   const [itemVals, setItemVals] = useState<Record<number, { so_luong: number; don_gia: number }>>({})
+  const [search, setSearch] = useState('')
+  const [openPickLSX, setOpenPickLSX] = useState(false)
+  const [pickSearch, setPickSearch] = useState('')
+  const [extraPoiIds, setExtraPoiIds] = useState<number[]>([])
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['khsx-can-phoi-ngoai'],
     queryFn: () => warehouseApi.getKHSXCanPhoiNgoai().then(r => r.data),
     staleTime: 60_000,
+  })
+
+  // Lệnh SX có trang_thai=mua_ngoai để cho user chọn thủ công
+  const { data: muaNgoaiOrders = [], isFetching: fetchingOrders } = useQuery({
+    queryKey: ['production-orders-mua-ngoai', pickSearch],
+    queryFn: () => productionOrdersApi.list({ trang_thai: 'mua_ngoai', search: pickSearch, page_size: 50 }).then((r) => r.data.items),
+    enabled: openPickLSX,
+    staleTime: 30_000,
+  })
+
+  const addOrderToList = (orderId: number) => {
+    // Lệnh được chọn sẽ tự hiển thị khi rows refresh (vì mua_phoi_ngoai=True)
+    // Nếu chưa có → đánh dấu extra để hiện ngay
+    setExtraPoiIds(prev => [...new Set([...prev, orderId])])
+    setOpenPickLSX(false)
+    qc.invalidateQueries({ queryKey: ['khsx-can-phoi-ngoai'] })
+  }
+
+  const allRows = rows.filter(r => {
+    if (!search) return true
+    const s = search.toLowerCase()
+    return (r.so_lsx?.toLowerCase().includes(s) ?? false)
+      || (r.so_ke_hoach?.toLowerCase().includes(s) ?? false)
+      || (r.ten_san_pham?.toLowerCase().includes(s) ?? false)
   })
   const { data: suppliers = [] } = useQuery({
     queryKey: ['suppliers-all'],
@@ -862,7 +983,7 @@ function TabPhoiSongNgoai() {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo PO'),
   })
 
-  const selectedRows = rows.filter(r => selectedKeys.includes(r.ppl_id))
+  const selectedRows = allRows.filter(r => selectedKeys.includes(r.poi_id))
 
   const soTamCan = (r: KHSXCanPhoiNgoaiRow) =>
     r.so_dao ? Math.ceil(r.so_luong_thung / r.so_dao) : r.so_luong_thung
@@ -872,7 +993,7 @@ function TabPhoiSongNgoai() {
     form.setFieldsValue({ ngay_po: dayjs() })
     const init: Record<number, { so_luong: number; don_gia: number }> = {}
     selectedRows.forEach(r => {
-      init[r.ppl_id] = { so_luong: Math.max(0, soTamCan(r) - r.da_dat_so_tam), don_gia: 0 }
+      init[r.poi_id] = { so_luong: Math.max(0, soTamCan(r) - r.da_dat_so_tam), don_gia: 0 }
     })
     setItemVals(init)
     setOpenModal(true)
@@ -882,7 +1003,7 @@ function TabPhoiSongNgoai() {
     try {
       const v = await form.validateFields()
       const items = selectedRows.map(r => {
-        const iv = itemVals[r.ppl_id] ?? { so_luong: 0, don_gia: 0 }
+        const iv = itemVals[r.poi_id] ?? { so_luong: 0, don_gia: 0 }
         const cauTruc = cauTrucGiaySummary(r)
         return {
           paper_material_id: null,
@@ -891,8 +1012,9 @@ function TabPhoiSongNgoai() {
           so_luong: iv.so_luong,
           dvt: 'Tấm',
           don_gia: iv.don_gia,
-          production_plan_line_id: r.ppl_id,
+          production_plan_line_id: r.ppl_id ?? null,
           phoi_spec: {
+            ten_san_pham: r.ten_san_pham,
             kho_giay: r.kho_giay, kho_tt: r.kho_tt, kho1: r.kho1, so_dao: r.so_dao, dai_tt: r.dai_tt,
             so_lop: r.so_lop, to_hop_song: r.to_hop_song,
             mat: r.mat, mat_dl: r.mat_dl,
@@ -924,13 +1046,16 @@ function TabPhoiSongNgoai() {
     } catch { /* validation inline */ }
   }
 
-  const updateItemVal = (pplId: number, field: 'so_luong' | 'don_gia', val: number) => {
-    setItemVals(prev => ({ ...prev, [pplId]: { ...(prev[pplId] ?? { so_luong: 0, don_gia: 0 }), [field]: val } }))
+  const updateItemVal = (poiId: number, field: 'so_luong' | 'don_gia', val: number) => {
+    setItemVals(prev => ({ ...prev, [poiId]: { ...(prev[poiId] ?? { so_luong: 0, don_gia: 0 }), [field]: val } }))
   }
 
   const columns = [
-    { title: 'Số KHSX', dataIndex: 'so_ke_hoach', width: 120,
-      render: (v: string) => <Text strong style={{ color: '#1677ff' }}>{v}</Text> },
+    { title: 'Số KH / LSX', width: 130,
+      render: (_: unknown, r: KHSXCanPhoiNgoaiRow) =>
+        r.nguon === 'lenh_sx'
+          ? <><Tag color="purple" style={{ fontSize: 10 }}>LSX</Tag><Text strong>{r.so_lsx}</Text></>
+          : <Text strong style={{ color: '#1677ff' }}>{r.so_ke_hoach}</Text> },
     { title: 'Ngày chạy', dataIndex: 'ngay_chay', width: 95,
       render: (v: string) => v || <Text type="secondary">—</Text> },
     { title: 'Số LSX', dataIndex: 'so_lsx', width: 120 },
@@ -971,22 +1096,31 @@ function TabPhoiSongNgoai() {
     <>
       <Row gutter={[8, 8]} align="middle" style={{ marginBottom: 12 }}>
         <Col flex="auto">
-          <Text type="secondary">
-            KHSX có line đánh dấu "Mua phôi ngoài" — chọn để tạo đơn đặt hàng NCC
-          </Text>
+          <Input.Search
+            placeholder="Tìm theo mã lệnh SX / KHSX / tên hàng..."
+            allowClear
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ maxWidth: 360 }}
+          />
         </Col>
         <Col>
-          <Button type="primary" disabled={!selectedKeys.length} icon={<PlusOutlined />}
-            onClick={handleOpenModal}>
-            Tạo đơn mua phôi ({selectedKeys.length} KHSX)
-          </Button>
+          <Space>
+            <Button icon={<SearchOutlined />} onClick={() => { setPickSearch(''); setOpenPickLSX(true) }}>
+              Tìm lệnh SX
+            </Button>
+            <Button type="primary" disabled={!selectedKeys.length} icon={<PlusOutlined />}
+              onClick={handleOpenModal}>
+              Tạo đơn mua phôi ({selectedKeys.length} dòng)
+            </Button>
+          </Space>
         </Col>
       </Row>
 
       <Table
-        dataSource={rows}
+        dataSource={allRows}
         columns={columns}
-        rowKey="ppl_id"
+        rowKey="poi_id"
         loading={isLoading}
         size="small"
         rowClassName={(r: KHSXCanPhoiNgoaiRow) =>
@@ -1003,7 +1137,7 @@ function TabPhoiSongNgoai() {
       <Modal
         open={openModal}
         onCancel={() => setOpenModal(false)}
-        title={`Tạo đơn mua phôi sóng (${selectedRows.length} KHSX line)`}
+        title={`Tạo đơn mua phôi sóng (${selectedRows.length} dòng)`}
         width={1000}
         okText="Tạo đơn"
         onOk={handleSubmit}
@@ -1046,7 +1180,7 @@ function TabPhoiSongNgoai() {
 
         <Table
           dataSource={selectedRows}
-          rowKey="ppl_id"
+          rowKey="poi_id"
           size="small"
           pagination={false}
           scroll={{ x: 800 }}
@@ -1067,8 +1201,8 @@ function TabPhoiSongNgoai() {
               render: (_: unknown, r: KHSXCanPhoiNgoaiRow) => (
                 <InputNumber
                   size="small" min={1} style={{ width: '100%' }}
-                  value={itemVals[r.ppl_id]?.so_luong ?? 0}
-                  onChange={val => updateItemVal(r.ppl_id, 'so_luong', Number(val) || 0)}
+                  value={itemVals[r.poi_id]?.so_luong ?? 0}
+                  onChange={val => updateItemVal(r.poi_id, 'so_luong', Number(val) || 0)}
                   formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                 />
               ) },
@@ -1076,20 +1210,20 @@ function TabPhoiSongNgoai() {
               render: (_: unknown, r: KHSXCanPhoiNgoaiRow) => (
                 <InputNumber
                   size="small" min={0} style={{ width: '100%' }}
-                  value={itemVals[r.ppl_id]?.don_gia ?? 0}
-                  onChange={val => updateItemVal(r.ppl_id, 'don_gia', Number(val) || 0)}
+                  value={itemVals[r.poi_id]?.don_gia ?? 0}
+                  onChange={val => updateItemVal(r.poi_id, 'don_gia', Number(val) || 0)}
                   formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                 />
               ) },
             { title: 'Thành tiền', width: 130, align: 'right' as const,
               render: (_: unknown, r: KHSXCanPhoiNgoaiRow) => {
-                const iv = itemVals[r.ppl_id] ?? { so_luong: 0, don_gia: 0 }
+                const iv = itemVals[r.poi_id] ?? { so_luong: 0, don_gia: 0 }
                 return <Text strong>{fmtVND(iv.so_luong * iv.don_gia)}đ</Text>
               } },
           ]}
           summary={() => {
             const total = selectedRows.reduce((s, r) => {
-              const iv = itemVals[r.ppl_id] ?? { so_luong: 0, don_gia: 0 }
+              const iv = itemVals[r.poi_id] ?? { so_luong: 0, don_gia: 0 }
               return s + iv.so_luong * iv.don_gia
             }, 0)
             return (
@@ -1101,6 +1235,45 @@ function TabPhoiSongNgoai() {
               </Table.Summary.Row>
             )
           }}
+        />
+      </Modal>
+
+      <Modal
+        open={openPickLSX}
+        onCancel={() => setOpenPickLSX(false)}
+        title="Chọn lệnh SX cần mua phôi"
+        footer={null}
+        width={700}
+      >
+        <Input.Search
+          placeholder="Tìm theo mã lệnh SX, tên hàng..."
+          value={pickSearch}
+          onChange={e => setPickSearch(e.target.value)}
+          style={{ marginBottom: 12 }}
+          allowClear
+        />
+        <Table
+          dataSource={muaNgoaiOrders}
+          loading={fetchingOrders}
+          rowKey="id"
+          size="small"
+          pagination={false}
+          scroll={{ y: 400 }}
+          columns={[
+            { title: 'Số lệnh', dataIndex: 'so_lenh', width: 150,
+              render: (v: string) => <Text strong>{v}</Text> },
+            { title: 'Ngày lệnh', dataIndex: 'ngay_lenh', width: 100,
+              render: (v: string) => v ? dayjs(v).format('DD/MM/YYYY') : '—' },
+            { title: 'Khách hàng', dataIndex: 'ten_khach_hang', ellipsis: true },
+            { title: 'Mã hàng', dataIndex: 'ten_hang', ellipsis: true },
+            { title: '', width: 80,
+              render: (_: unknown, r: any) => (
+                <Button size="small" type="primary" onClick={() => addOrderToList(r.id)}>Chọn</Button>
+              )},
+          ]}
+          locale={{ emptyText: muaNgoaiOrders.length === 0 && !fetchingOrders
+            ? 'Không có lệnh SX nào ở trạng thái "Mua phôi ngoài"'
+            : 'Không tìm thấy' }}
         />
       </Modal>
     </>
@@ -1124,11 +1297,12 @@ export default function MuaGiayPage() {
       <Card size="small" styles={{ body: { padding: '8px 12px' } }}>
         <Tabs
           defaultActiveKey="don-mua"
+          tabBarStyle={{ overflowX: 'auto', flexWrap: 'nowrap' }}
           items={[
-            { key: 'don-mua', label: 'Đơn mua giấy', children: <TabDonMuaGiay /> },
-            { key: 'ton-kho', label: 'Tồn kho giấy', children: <TabTonKhoGiay /> },
-            { key: 'du-tru', label: 'Dự trù nhu cầu', children: <TabDuTruNhuCau /> },
-            { key: 'phoi-song-ngoai', label: 'Phôi sóng ngoài', children: <TabPhoiSongNgoai /> },
+            { key: 'don-mua', label: 'Đơn mua', children: <TabDonMuaGiay /> },
+            { key: 'ton-kho', label: 'Tồn kho', children: <TabTonKhoGiay /> },
+            { key: 'du-tru', label: 'Dự trù', children: <TabDuTruNhuCau /> },
+            { key: 'phoi-song-ngoai', label: 'Phôi ngoài', children: <TabPhoiSongNgoai /> },
             { key: 'lich-su-ncc', label: 'Lịch sử NCC', children: <TabLichSuNCC /> },
             { key: 'cong-no-ncc', label: 'Công nợ NCC', children: <TabCongNoNCC /> },
           ]}

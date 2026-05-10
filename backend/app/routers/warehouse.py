@@ -206,6 +206,10 @@ class StockAdjustmentIn(BaseModel):
     items: list[StockAdjustmentItemIn]
 
 
+class UpdateDeliveryStatusIn(BaseModel):
+    trang_thai: str  # nhap | da_xuat | da_giao | huy
+
+
 # ── Inventory helpers (delegate to service) ───────────────────────────────────
 
 from app.services.inventory_service import (
@@ -1876,6 +1880,28 @@ def create_delivery(
     return _do_to_dict(do, db)
 
 
+@router.patch("/deliveries/{do_id}/status")
+def update_delivery_status(
+    do_id: int,
+    body: UpdateDeliveryStatusIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    valid = {"nhap", "da_xuat", "da_giao", "huy"}
+    if body.trang_thai not in valid:
+        raise HTTPException(400, f"Trạng thái không hợp lệ. Chọn một trong: {', '.join(sorted(valid))}")
+    do = db.get(DeliveryOrder, do_id)
+    if not do:
+        raise HTTPException(404, "Không tìm thấy phiếu giao hàng")
+    if do.trang_thai == "huy":
+        raise HTTPException(400, "Phiếu đã huỷ, không thể đổi trạng thái")
+    if do.trang_thai == "da_giao" and body.trang_thai not in ("da_giao", "huy"):
+        raise HTTPException(400, "Phiếu đã giao không thể quay về trạng thái trước")
+    do.trang_thai = body.trang_thai
+    db.commit()
+    return {"id": do_id, "trang_thai": do.trang_thai}
+
+
 @router.delete("/deliveries/{do_id}")
 def delete_delivery(do_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     do = db.get(DeliveryOrder, do_id)
@@ -3127,7 +3153,7 @@ def khsx_can_phoi_ngoai(
     def _f(v):
         return float(v) if v is not None else None
 
-    return [
+    result = [
         {
             "ppl_id": r.ppl_id,
             "so_ke_hoach": r.so_ke_hoach,
@@ -3160,6 +3186,55 @@ def khsx_can_phoi_ngoai(
             "loai_lan": r.loai_lan, "qccl": r.qccl,
             # Số tấm đã đặt:
             "da_dat_so_tam": ordered_map.get(r.ppl_id, 0.0),
+            "nguon": "khsx",
         }
         for r in rows
     ]
+
+    # Thêm: lệnh SX có mua_phoi_ngoai=True trên ProductionOrderItem nhưng chưa có plan line
+    from app.models.production import ProductionOrder as _PO, ProductionOrderItem as _POI
+    from sqlalchemy import exists, select as _select
+    poi_rows = (
+        db.query(_POI, _PO.so_lenh)
+        .join(_PO, _PO.id == _POI.production_order_id)
+        .filter(
+            _POI.mua_phoi_ngoai == True,  # noqa: E712
+            _PO.trang_thai == "mua_ngoai",
+            ~exists(_select(ProductionPlanLine.id).where(
+                ProductionPlanLine.production_order_item_id == _POI.id
+            )),
+        )
+        .all()
+    )
+    for poi, so_lenh in poi_rows:
+        result.append({
+            "ppl_id": None,
+            "so_ke_hoach": None,
+            "ngay_ke_hoach": None,
+            "ngay_chay": None,
+            "so_lsx": so_lenh,
+            "poi_id": poi.id,
+            "ten_san_pham": poi.ten_hang or "",
+            "so_luong_thung": float(poi.so_luong_ke_hoach or 0),
+            "kho1": None,
+            "kho_giay": None,
+            "so_dao": None,
+            "kho_tt": _f(poi.kho_tt),
+            "dai_tt": _f(poi.dai_tt),
+            "so_lop": poi.so_lop, "to_hop_song": poi.to_hop_song,
+            "mat": poi.mat, "mat_dl": _f(poi.mat_dl),
+            "song_1": poi.song_1, "song_1_dl": _f(poi.song_1_dl),
+            "mat_1": poi.mat_1, "mat_1_dl": _f(poi.mat_1_dl),
+            "song_2": poi.song_2, "song_2_dl": _f(poi.song_2_dl),
+            "mat_2": poi.mat_2, "mat_2_dl": _f(poi.mat_2_dl),
+            "song_3": poi.song_3, "song_3_dl": _f(poi.song_3_dl),
+            "mat_3": poi.mat_3, "mat_3_dl": _f(poi.mat_3_dl),
+            "loai_thung": poi.loai_thung,
+            "dai": _f(poi.dai), "rong": _f(poi.rong), "cao": _f(poi.cao),
+            "c_tham": poi.c_tham, "can_man": poi.can_man,
+            "loai_lan": poi.loai_lan, "qccl": poi.qccl,
+            "da_dat_so_tam": 0.0,
+            "nguon": "lenh_sx",
+        })
+
+    return result

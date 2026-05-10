@@ -25,6 +25,7 @@ from app.services.inventory_service import (
     log_tx as _log_tx,
     get_workshop_warehouse as _get_workshop_warehouse,
 )
+from app.socket_manager import sio
 
 router = APIRouter(prefix="/api/cd2", tags=["cd2"])
 
@@ -768,8 +769,8 @@ def delete_phieu_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depe
     return {"ok": True}
 
 
-@router.patch("/phieu-in/{phieu_id}/move")
-def move_phieu(
+@router.put("/phieu-in/{phieu_id}/move")
+async def move_phieu(
     phieu_id: int,
     body: MoveBody,
     db: Session = Depends(get_db),
@@ -792,10 +793,16 @@ def move_phieu(
     if body.trang_thai == 'hoan_thanh' and prev_state != 'hoan_thanh':
         p.gio_hoan_thanh = datetime.utcnow()
     db.commit()
+    # Phat tin hieu WebSocket cho Dashboard
+    await sio.emit("machine_status_update", {
+        "machine_id": p.may_in_id,
+        "trang_thai": p.trang_thai,
+        "phieu_id": phieu_id
+    })
     return _to_dict(_load(phieu_id, db))
 
 
-@router.patch("/phieu-in/{phieu_id}/start")
+@router.post("/phieu-in/{phieu_id}/start")
 def start_printing(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
@@ -808,7 +815,7 @@ def start_printing(phieu_id: int, db: Session = Depends(get_db), _: User = Depen
     return _to_dict(_load(phieu_id, db))
 
 
-@router.patch("/phieu-in/{phieu_id}/complete")
+@router.post("/phieu-in/{phieu_id}/complete")
 def complete_printing(
     phieu_id: int,
     body: CompleteBody,
@@ -827,7 +834,7 @@ def complete_printing(
     return _to_dict(_load(phieu_id, db))
 
 
-@router.patch("/phieu-in/{phieu_id}/sau-in")
+@router.post("/phieu-in/{phieu_id}/sau-in")
 def start_sau_in(
     phieu_id: int,
     body: SauInBody,
@@ -847,7 +854,7 @@ def start_sau_in(
     return _to_dict(_load(phieu_id, db))
 
 
-@router.patch("/phieu-in/{phieu_id}/hoan-thanh")
+@router.post("/phieu-in/{phieu_id}/hoan-thanh")
 def finish_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
@@ -864,7 +871,7 @@ class AssignSauInBody(BaseModel):
     may_sau_in_id: Optional[int] = None
 
 
-@router.patch("/phieu-in/{phieu_id}/assign-sauin")
+@router.post("/phieu-in/{phieu_id}/assign-sauin")
 def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Gán máy sau in (hoặc bỏ gán nếu may_sau_in_id=null)."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
@@ -875,7 +882,7 @@ def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depends(ge
     return _to_dict(_load(phieu_id, db))
 
 
-@router.patch("/phieu-in/{phieu_id}/bat-dau-sauin")
+@router.post("/phieu-in/{phieu_id}/bat-dau-sauin")
 def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Bắt đầu sau in → dang_sau_in."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
@@ -886,7 +893,7 @@ def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depen
     return _to_dict(_load(phieu_id, db))
 
 
-@router.patch("/phieu-in/{phieu_id}/tra-ve-sauin")
+@router.post("/phieu-in/{phieu_id}/tra-ve-sauin")
 def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Trả về chờ gán máy — xoá may_sau_in_id và reset về sau_in."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
@@ -898,7 +905,7 @@ def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depend
     return _to_dict(_load(phieu_id, db))
 
 
-@router.patch("/phieu-in/{phieu_id}/huy")
+@router.post("/phieu-in/{phieu_id}/huy")
 def huy_phieu(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Trả phiếu về máy in: ke_hoach (nếu đang trên máy) hoặc cho_in (nếu chưa gán máy).
     Reset tiến độ thời gian. Không thể hoàn tác nếu đã hoàn thành."""
@@ -1042,7 +1049,7 @@ def scan_lookup(so_lsx: str, db: Session = Depends(get_db), _: User = Depends(ge
     }
 
 
-@router.post("/scan/log", status_code=201)
+@router.post("/scan-logs/submit", status_code=201)
 def create_scan_log(
     data: ScanLogCreate,
     db: Session = Depends(get_db),
@@ -1063,8 +1070,9 @@ def create_scan_log(
     return _scan_log_to_dict(log)
 
 
-@router.get("/scan/history")
+@router.get("/scan-logs/history-list")
 def scan_history(
+
     may_scan_id: Optional[int] = Query(default=None),
     days: int = Query(default=30),
     so_lsx: Optional[str] = Query(default=None),
@@ -1072,6 +1080,7 @@ def scan_history(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    print("DEBUG: API scan-logs/history-list called")
     from datetime import timedelta
     cutoff = datetime.utcnow() - timedelta(days=days)
     q = (
@@ -1090,7 +1099,7 @@ def scan_history(
     return [_scan_log_to_dict(s) for s in logs]
 
 
-@router.delete("/scan/log/{log_id}")
+@router.delete("/scan-logs/delete/{log_id}")
 def delete_scan_log(log_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     s = db.query(ScanLog).filter(ScanLog.id == log_id).first()
     if not s:
@@ -1108,6 +1117,7 @@ def get_dashboard(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    print("DEBUG: API scan-logs/history-list called")
     from datetime import timedelta, date as date_type
     today = date_type.today()
 
@@ -1190,6 +1200,7 @@ def history_phieu_in(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    print("DEBUG: API scan-logs/history-list called")
     from datetime import timedelta
     cutoff = datetime.utcnow() - timedelta(days=days)
     q = (
@@ -1307,6 +1318,7 @@ def list_shift_config(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    print("DEBUG: API scan-logs/history-list called")
     from datetime import timedelta, date as date_type
     cutoff = date_type.today() - timedelta(days=days)
     q = (
@@ -1505,7 +1517,7 @@ def update_machine(machine_id: int, data: MachineUpdate, db: Session = Depends(g
 
 
 @router.post("/track")
-def track_production(data: TrackPayload, db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
+async def track_production(data: TrackPayload, db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
     log = ProductionLog(
         production_order_id=data.production_order_id,
         phieu_in_id=data.phieu_in_id,
@@ -1533,7 +1545,23 @@ def track_production(data: TrackPayload, db: Session = Depends(get_db), current_
                 p.so_luong_loi = (p.so_luong_loi or 0) + (data.quantity_loi or 0)
     
     db.commit()
+    # Phat tin hieu WebSocket cho Dashboard cap nhat tuc thi
+    await sio.emit("machine_status_update", {
+        "machine_id": data.machine_id,
+        "event_type": data.event_type,
+        "production_order_id": data.production_order_id,
+        "operator": current_user.ho_ten if current_user else "N/A"
+    })
     db.refresh(log)
+    
+    # Phát tín hiệu WebSocket cho Dashboard cập nhật tức thì
+    await sio.emit("machine_status_update", {
+        "machine_id": data.machine_id,
+        "event_type": data.event_type,
+        "production_order_id": data.production_order_id,
+        "operator": current_user.ho_ten if current_user else "N/A"
+    })
+    
     return {"ok": True, "log_id": log.id}
 
 
@@ -1742,12 +1770,13 @@ def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current
         if not order:
             continue
 
-        tong_xuat  = xuat_map.get(order_id_val, 0.0)
+        tong_xuat   = xuat_map.get(order_id_val, 0.0)
         tong_chuyen = chuyen_map.get(order_id_val, 0.0)
-        ton_kho    = tong_nhap - tong_xuat
+        # ton_kho = tổng phôi còn trong hệ thống (chuyển kho là dịch chuyển vật lý, không tiêu thụ)
+        ton_kho     = tong_nhap - tong_xuat
 
         first_item = order.items[0] if order.items else None
-        co_in = bool(first_item and first_item.loai_in and first_item.loai_in.strip())
+        co_in = any(it.loai_in in ("flexo", "ky_thuat_so") for it in order.items)
 
         wh = wh_map.get(warehouse_id) if warehouse_id else None
         wh_px = wh.phan_xuong_obj if wh and hasattr(wh, "phan_xuong_obj") else None
@@ -1776,6 +1805,10 @@ def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current
             "tong_xuat":           tong_xuat,
             "tong_chuyen_phoi":    tong_chuyen,
             "ton_kho":             ton_kho,
+            # Phân tách vị trí phôi (chỉ có nghĩa với CD2 xưởng — Củ Chi, Hóc Môn)
+            "ton_kho_tai_nguon":   max(0.0, tong_nhap - tong_chuyen),
+            "ton_kho_tai_cd2":     max(0.0, tong_chuyen - tong_xuat),
+            "don_gia_noi_bo":      float(order.don_gia_noi_bo) if getattr(order, "don_gia_noi_bo", None) else None,
             "phieu_in_hien_tai":   {
                 "so_phieu":  phieu_in.so_phieu,
                 "trang_thai": phieu_in.trang_thai,

@@ -108,6 +108,14 @@ def _seed_phan_xuong(eng) -> None:
             for s in seeds:
                 db.add(s)
             db.commit()
+            # Hóc Môn và Củ Chi nhập phôi tại Hoàng Gia trước khi chuyển sang xưởng mình
+            hoang_gia = db.query(PhanXuong).filter_by(ma_xuong="hoang_gia").first()
+            if hoang_gia:
+                for ma in ("hoc_mon", "cu_chi"):
+                    px = db.query(PhanXuong).filter_by(ma_xuong=ma).first()
+                    if px:
+                        px.phoi_tu_phan_xuong_id = hoang_gia.id
+                db.commit()
             logger.info("seed_phan_xuong: đã tạo 4 xưởng")
 
 
@@ -116,6 +124,17 @@ def ensure_schema() -> None:
     _run_backfills(engine)
     _seed_phan_xuong(engine)
     with engine.begin() as conn:
+        # Nghiệp vụ: Hóc Môn và Củ Chi nhập phôi mặc định tại Hoàng Gia → rồi mới chuyển kho
+        # Idempotent: chỉ set khi chưa có giá trị
+        conn.execute(text("""
+            UPDATE phan_xuong
+            SET phoi_tu_phan_xuong_id = (
+                SELECT id FROM phan_xuong WHERE ma_xuong = 'hoang_gia' LIMIT 1
+            )
+            WHERE ma_xuong IN ('hoc_mon', 'cu_chi')
+              AND phoi_tu_phan_xuong_id IS NULL
+        """))
+
         conn.execute(text(
             "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS phan_xuong_id INTEGER REFERENCES phan_xuong(id)"
         ))
@@ -207,4 +226,26 @@ def ensure_schema() -> None:
         # PrinterUser: máy được gán cho công nhân
         conn.execute(text(
             "ALTER TABLE printer_user ADD COLUMN IF NOT EXISTS machine_id INTEGER REFERENCES machines(id)"
+        ))
+
+        # agent_sessions: Lịch sử chat AI (chuyển từ SQLite sang Postgres)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS agent_sessions (
+                session_id TEXT PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                history_json JSONB NOT NULL DEFAULT '[]',
+                last_active TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+            )
+        """))
+
+        # Chuyển lệnh SX sang mua phôi ngoài
+        conn.execute(text(
+            "ALTER TABLE production_order_items "
+            "ADD COLUMN IF NOT EXISTS mua_phoi_ngoai BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
+
+        # Giá nội bộ chuyển kho phôi — dùng cho hạch toán quản trị xưởng/pháp nhân
+        conn.execute(text(
+            "ALTER TABLE production_orders "
+            "ADD COLUMN IF NOT EXISTS don_gia_noi_bo NUMERIC(14,2)"
         ))

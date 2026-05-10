@@ -9,6 +9,7 @@ export interface DonHangTheoDoiRow {
   ten_phan_xuong: string | null
   sales_order_id: number | null
   so_don: string | null
+  customer_id: number | null
   ten_khach_hang: string | null
   ngay_giao_hang: string | null
   ten_hang: string | null

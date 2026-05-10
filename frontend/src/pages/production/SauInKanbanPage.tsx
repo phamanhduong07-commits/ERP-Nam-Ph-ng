@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Badge, Button, Card, Col, Divider, Empty,
@@ -14,6 +14,7 @@ import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, MaySauIn, SauInKanbanData } from '../../api/cd2'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
+import { socket } from '../../utils/socket'
 
 const { Title, Text } = Typography
 
@@ -361,13 +362,24 @@ export default function SauInKanbanPage() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['cd2-sauin-kanban', phanXuongId],
     queryFn: () => cd2Api.getSauInKanban(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
-    refetchInterval: 15_000,
+    // refetchInterval removed in favor of WebSockets
   })
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['cd2-sauin-kanban'] })
     qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
   }
+
+  // Lắng nghe tín hiệu từ WebSockets
+  useEffect(() => {
+    const handleUpdate = () => {
+      invalidate()
+    }
+    socket.on('machine_status_update', handleUpdate)
+    return () => {
+      socket.off('machine_status_update', handleUpdate)
+    }
+  }, [qc])
 
   const startMut = useMutation({
     mutationFn: (id: number) => cd2Api.batDauSauIn(id),

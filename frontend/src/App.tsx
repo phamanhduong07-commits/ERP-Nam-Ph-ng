@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useAuthStore } from './store/auth'
 import AppLayout from './components/AppLayout'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -119,6 +119,9 @@ const TrialBalancePage = lazy(() => import('./pages/accounting/TrialBalancePage'
 const WorkshopManagement = lazy(() => import('./pages/accounting/WorkshopManagement'))
 const JournalEntryListPage = lazy(() => import('./pages/accounting/JournalEntryListPage'))
 const JournalEntryForm = lazy(() => import('./pages/accounting/JournalEntryForm'))
+const ProfitLossPage = lazy(() => import('./pages/accounting/ProfitLossPage'))
+const BalanceSheetPage = lazy(() => import('./pages/accounting/BalanceSheetPage'))
+const PeriodClosingPage = lazy(() => import('./pages/accounting/PeriodClosingPage'))
 
 // Reports - Workshop
 const WorkshopPNLPage = lazy(() => import('./pages/reports/WorkshopPNLPage'))
@@ -128,15 +131,11 @@ const TaxTrialBalancePage = lazy(() => import('./pages/reports/TaxTrialBalancePa
 const ProductionCostingPage = lazy(() => import('./pages/reports/ProductionCostingPage'))
 const ReportingHubPage = lazy(() => import('./pages/reports/ReportingHubPage'))
 
-
-
-
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
   return isAuthenticated() ? <>{children}</> : <Navigate to="/login" replace />
 }
 
-// Cho phép vào nếu có ERP token HOẶC cd2_worker_session (công nhân đăng nhập máy)
 function WorkerOrPrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
   const hasWorkerSession = !!localStorage.getItem('cd2_worker_session')
@@ -145,187 +144,182 @@ function WorkerOrPrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const [installPrompt, setInstallPrompt] = useState<any>(null)
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault()
+      setInstallPrompt(e)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleInstall = async () => {
+    if (!installPrompt) return
+    installPrompt.prompt()
+    const { outcome } = await installPrompt.userChoice
+    if (outcome === 'accepted') setInstallPrompt(null)
+  }
+
   return (
-    <Suspense fallback={<div style={{ padding: 24 }}>Đang tải...</div>}>
-      <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/production/cd2/mobile-tracking" element={<WorkerOrPrivateRoute><ErrorBoundary><MobileTrackingPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
-      <Route path="/cd2/machine-login" element={<ErrorBoundary><MachineLoginPage /></ErrorBoundary>} />
-      <Route
-        path="/"
-        element={
-          <PrivateRoute>
-            <AppLayout />
-          </PrivateRoute>
-        }
-      >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-
-        {/* Bán hàng — master-detail list + standalone routes */}
-        <Route path="sales/orders" element={<ErrorBoundary><SalesOrdersPage /></ErrorBoundary>} />
-        <Route path="sales/orders/new" element={<ErrorBoundary><OrderCreate /></ErrorBoundary>} />
-        <Route path="sales/orders/:id" element={<ErrorBoundary><OrderDetail /></ErrorBoundary>} />
-        <Route path="sales/orders/:id/discount" element={<ErrorBoundary><OrderDiscountUpdate /></ErrorBoundary>} />
-
-        {/* Trả lại hàng bán */}
-        <Route path="sales/returns" element={<ErrorBoundary><SalesReturnsPage /></ErrorBoundary>} />
-        <Route path="sales/returns/create" element={<ErrorBoundary><SalesReturnCreate /></ErrorBoundary>} />
-        <Route path="sales/returns/:id" element={<ErrorBoundary><SalesReturnDetail /></ErrorBoundary>} />
-
-        {/* Báo giá — master-detail list + standalone routes */}
-        <Route path="quotes" element={<QuotesPage />} />
-        <Route path="quotes/new" element={<ErrorBoundary><QuoteForm /></ErrorBoundary>} />
-        <Route path="quotes/:id" element={<ErrorBoundary><QuoteDetail /></ErrorBoundary>} />
-        <Route path="quotes/:id/edit" element={<ErrorBoundary><QuoteForm /></ErrorBoundary>} />
-
-        {/* Danh mục */}
-        <Route path="danhmuc/cau-truc" element={<CauTrucList />} />
-        <Route path="master/customers" element={<CustomerList />} />
-        <Route path="master/suppliers" element={<SupplierList />} />
-        <Route path="master/material-groups" element={<MaterialGroupList />} />
-        <Route path="master/paper-materials" element={<PaperMaterialList />} />
-        <Route path="master/other-materials" element={<OtherMaterialList />} />
-        <Route path="master/warehouses" element={<WarehouseList />} />
-        <Route path="master/products" element={<ProductList />} />
-        <Route path="master/users" element={<UserList />} />
-        <Route path="master/roles" element={<RolePermissionsPage />} />
-        <Route path="master/don-vi-tinh" element={<DvtList />} />
-        <Route path="master/vi-tri" element={<ViTriList />} />
-        <Route path="master/xe" element={<XeList />} />
-        <Route path="master/tai-xe" element={<TaiXeList />} />
-        <Route path="master/tinh-thanh" element={<TinhThanhList />} />
-        <Route path="master/phuong-xa" element={<PhuongXaList />} />
-        <Route path="master/don-gia-van-chuyen" element={<DonGiaVanChuyenList />} />
-
-        {/* Sản xuất — master-detail list + standalone routes */}
-        <Route path="production/orders" element={<ProductionOrdersPage />} />
-        <Route path="production/orders/new" element={<ProductionOrderCreate />} />
-        <Route path="production/orders/:id" element={<ProductionOrderDetail />} />
-
-        {/* Kế hoạch sản xuất */}
-        <Route path="production/plans" element={<ProductionPlansPage />} />
-        <Route path="production/plans/new" element={<ProductionPlanForm />} />
-        <Route path="production/queue" element={<ProductionQueuePage />} />
-
-        {/* Định mức BOM */}
-        <Route path="production/bom" element={<BomListPage />} />
-
-        {/* Phiếu phôi sóng */}
-        <Route path="production/phieu-phoi" element={<PhieuPhoiPage />} />
-        <Route path="sales/theo-don-hang" element={<TheoDonHangPage />} />
-        <Route path="sales/giao-hang" element={<GiaoHangPage />} />
-        <Route path="production/phieu-nhap-phoi" element={<PhieuNhapPhoiSongPage />} />
-        <Route path="production/kho-phoi" element={<KhoPhoiPage />} />
-        <Route path="production/kho-thanh-pham" element={<ErrorBoundary><KhoThanhPhamPage /></ErrorBoundary>} />
-
-        {/* Công Đoạn 2 */}
-        <Route path="production/cd2" element={<CD2KanbanPage />} />
-        <Route path="production/cd2/dashboard" element={<CD2DashboardPage />} />
-        <Route path="production/cd2/may-in" element={<MayInQueuePage />} />
-        <Route path="production/cd2/scan" element={<ScanMayPage />} />
-        <Route path="production/cd2/scan-history" element={<ScanHistoryPage />} />
-        <Route path="production/cd2/history" element={<PhieuInHistoryPage />} />
-        <Route path="production/cd2/dhcho2" element={<DinhHinhPage />} />
-        <Route path="production/cd2/sauin-kanban" element={<SauInKanbanPage />} />
-        <Route path="production/cd2/shift" element={<ShiftPage />} />
-        <Route path="production/cd2/config" element={<ConfigPage />} />
-
-        {/* Kho */}
-        <Route path="warehouse/kho-nvl" element={<ErrorBoundary><KhoNVLPage /></ErrorBoundary>} />
-        <Route path="warehouse/kho-phoi" element={<KhoPhoiPage />} />
-        <Route path="warehouse/kho-thanh-pham" element={<ErrorBoundary><KhoThanhPhamPage /></ErrorBoundary>} />
-        <Route path="warehouse/theo-xuong" element={<KhoTheoXuongPage />} />
-        <Route path="warehouse/inventory" element={<InventoryPage />} />
-        <Route path="warehouse/nhap-nhanh" element={<NhapNhanhPage />} />
-        <Route path="warehouse/nhap-giay" element={<NhapGiayPage />} />
-        <Route path="warehouse/nhap-phoi-ngoai" element={<NhapPhoiNgoaiPage />} />
-        <Route path="warehouse/receipts" element={<ReceiptsPage />} />
-        <Route path="warehouse/issues" element={<IssuesPage />} />
-        <Route path="warehouse/production-output" element={<ProductionOutputPage />} />
-        <Route path="warehouse/delivery" element={<DeliveryPage />} />
-        <Route path="warehouse/transfers" element={<TransfersPage />} />
-        <Route path="warehouse/stock-adjustments" element={<StockAdjustmentsPage />} />
-        <Route path="warehouse/the-kho" element={<InventoryCardPage />} />
-
-        {/* Mua hàng */}
-        <Route path="purchasing/giay-cuon" element={<ErrorBoundary><MuaGiayPage /></ErrorBoundary>} />
-        <Route path="purchasing/nvl-khac" element={<ErrorBoundary><MuaNVLPage /></ErrorBoundary>} />
-        <Route path="purchasing/orders" element={<POListPage />} />
-        <Route path="purchasing/returns" element={<ErrorBoundary><PurchaseReturnPage /></ErrorBoundary>} />
-        <Route path="purchasing/reports" element={<ErrorBoundary><PurchaseReportPage /></ErrorBoundary>} />
-
-        {/* Pháp nhân */}
-        <Route path="danhmuc/phap-nhan" element={<PhapNhanList />} />
-
-        {/* Nơi sản xuất (Phân xưởng) */}
-        <Route path="master/phan-xuong" element={<PhanXuongList />} />
-
-        {/* BOM / Chi phí */}
-        <Route path="master/indirect-costs" element={<IndirectCostList />} />
-        <Route path="master/addon-rates" element={<AddonRateList />} />
-
-        {/* Billing — Hóa đơn bán hàng */}
-        <Route path="billing/invoices" element={<SalesInvoiceListPage />} />
-        <Route path="billing/invoices/new" element={<SalesInvoiceForm />} />
-        <Route path="billing/invoices/:id" element={<SalesInvoiceDetailPage />} />
-        {/* Accounting — Phiếu thu */}
-        <Route path="accounting/receipts" element={<CashReceiptListPage />} />
-        <Route path="accounting/receipts/new" element={<CashReceiptForm />} />
-        <Route path="accounting/receipts/:id" element={<CashReceiptDetailPage />} />
-        {/* Accounting — Phiếu chi */}
-        <Route path="accounting/payments" element={<CashPaymentListPage />} />
-        <Route path="accounting/payments/new" element={<CashPaymentForm />} />
-        <Route path="accounting/payments/:id" element={<CashPaymentDetailPage />} />
-        {/* Accounting — Hóa đơn mua hàng */}
-        <Route path="accounting/purchase-invoices" element={<PurchaseInvoiceListPage />} />
-        <Route path="accounting/purchase-invoices/:id" element={<PurchaseInvoiceDetailPage />} />
-        {/* Accounting — Sổ công nợ */}
-        <Route path="accounting/ar-ledger" element={<ARLedgerPage />} />
-        <Route path="accounting/ap-ledger" element={<APLedgerPage />} />
-        {/* Accounting — Sổ quỹ / Sổ ngân hàng */}
-        <Route path="accounting/cash-book" element={<CashBookPage />} />
-        <Route path="accounting/bank-ledger" element={<BankLedgerPage />} />
-        {/* CCDC */}
-        <Route path="accounting/ccdc" element={<CCDCListPage />} />
-        {/* Danh mục ngân hàng */}
-        <Route path="master/bank-accounts" element={<BankAccountList />} />
-        <Route path="accounting/ar-reconciliation" element={<ErrorBoundary><CustomerReconciliation /></ErrorBoundary>} />
-        <Route path="accounting/ap-reconciliation" element={<ErrorBoundary><SupplierReconciliation /></ErrorBoundary>} />
-        <Route path="accounting/general-ledger" element={<ErrorBoundary><GeneralLedgerPage /></ErrorBoundary>} />
-        <Route path="accounting/trial-balance" element={<ErrorBoundary><TrialBalancePage /></ErrorBoundary>} />
-        <Route path="accounting/workshop-management" element={<ErrorBoundary><WorkshopManagement /></ErrorBoundary>} />
-        <Route path="accounting/journal-entries" element={<ErrorBoundary><JournalEntryListPage /></ErrorBoundary>} />
-        <Route path="accounting/journal-entries/new" element={<ErrorBoundary><JournalEntryForm /></ErrorBoundary>} />
-
-
-
-
-        {/* Accounting — Phiếu hoàn tiền KH */}
-        <Route path="accounting/customer-refunds" element={<ErrorBoundary><CustomerRefundListPage /></ErrorBoundary>} />
-        <Route path="accounting/customer-refunds/:id" element={<ErrorBoundary><CustomerRefundDetailPage /></ErrorBoundary>} />
-
-        {/* Reports */}
-        <Route path="reports/hub" element={<ErrorBoundary><ReportingHubPage /></ErrorBoundary>} />
-        <Route path="reports/debt-summary" element={<ErrorBoundary><DebtSummaryPage /></ErrorBoundary>} />
-        <Route path="reports/revenue" element={<ErrorBoundary><RevenueReportPage /></ErrorBoundary>} />
-        <Route path="reports/inventory" element={<ErrorBoundary><InventoryReportPage /></ErrorBoundary>} />
-        <Route path="reports/production-performance" element={<ErrorBoundary><ProductionPerformancePage /></ErrorBoundary>} />
-        <Route path="reports/order-progress" element={<ErrorBoundary><OrderProgressPage /></ErrorBoundary>} />
-        <Route path="reports/delivery" element={<ErrorBoundary><DeliveryReportPage /></ErrorBoundary>} />
-        <Route path="reports/import-history" element={<ErrorBoundary><ImportHistoryPage /></ErrorBoundary>} />
-        <Route path="reports/workshop-pnl" element={<ErrorBoundary><WorkshopPNLPage /></ErrorBoundary>} />
-        <Route path="reports/cashflow" element={<ErrorBoundary><LegalEntityCashflowPage /></ErrorBoundary>} />
-        <Route path="reports/vat-summary" element={<ErrorBoundary><VATSummaryPage /></ErrorBoundary>} />
-        <Route path="reports/tax-trial-balance" element={<ErrorBoundary><TaxTrialBalancePage /></ErrorBoundary>} />
-        <Route path="accounting/reports/production-costing" element={<ErrorBoundary><ProductionCostingPage /></ErrorBoundary>} />
-
-        {/* Agent */}
-        <Route path="agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
-
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Route>
-      </Routes>
-    </Suspense>
+    <>
+      {installPrompt && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10000,
+          background: '#1b168e', color: '#fff', padding: '12px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.2)'
+        }}>
+          <span style={{ fontSize: 14, fontWeight: 500 }}>📥 Cài đặt App Nam Phương ERP để dùng nhanh hơn</span>
+          <button 
+            onClick={handleInstall}
+            style={{
+              background: '#ff8200', border: 'none', color: '#fff', 
+              padding: '6px 16px', borderRadius: 6, fontWeight: 600, cursor: 'pointer'
+            }}
+          >
+            CÀI ĐẶT NGAY
+          </button>
+        </div>
+      )}
+      <Suspense fallback={<div style={{ padding: 24 }}>Đang tải...</div>}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/production/cd2/mobile-tracking" element={<WorkerOrPrivateRoute><ErrorBoundary><MobileTrackingPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
+          <Route path="/cd2/machine-login" element={<ErrorBoundary><MachineLoginPage /></ErrorBoundary>} />
+          <Route
+            path="/"
+            element={
+              <PrivateRoute>
+                <AppLayout />
+              </PrivateRoute>
+            }
+          >
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="sales/orders" element={<ErrorBoundary><SalesOrdersPage /></ErrorBoundary>} />
+            <Route path="sales/orders/new" element={<ErrorBoundary><OrderCreate /></ErrorBoundary>} />
+            <Route path="sales/orders/:id" element={<ErrorBoundary><OrderDetail /></ErrorBoundary>} />
+            <Route path="sales/orders/:id/discount" element={<ErrorBoundary><OrderDiscountUpdate /></ErrorBoundary>} />
+            <Route path="sales/returns" element={<ErrorBoundary><SalesReturnsPage /></ErrorBoundary>} />
+            <Route path="sales/returns/create" element={<ErrorBoundary><SalesReturnCreate /></ErrorBoundary>} />
+            <Route path="sales/returns/:id" element={<ErrorBoundary><SalesReturnDetail /></ErrorBoundary>} />
+            <Route path="quotes" element={<QuotesPage />} />
+            <Route path="quotes/new" element={<ErrorBoundary><QuoteForm /></ErrorBoundary>} />
+            <Route path="quotes/:id" element={<ErrorBoundary><QuoteDetail /></ErrorBoundary>} />
+            <Route path="quotes/:id/edit" element={<ErrorBoundary><QuoteForm /></ErrorBoundary>} />
+            <Route path="danhmuc/cau-truc" element={<CauTrucList />} />
+            <Route path="master/customers" element={<CustomerList />} />
+            <Route path="master/suppliers" element={<SupplierList />} />
+            <Route path="master/material-groups" element={<MaterialGroupList />} />
+            <Route path="master/paper-materials" element={<PaperMaterialList />} />
+            <Route path="master/other-materials" element={<OtherMaterialList />} />
+            <Route path="master/warehouses" element={<WarehouseList />} />
+            <Route path="master/products" element={<ProductList />} />
+            <Route path="master/users" element={<UserList />} />
+            <Route path="master/roles" element={<RolePermissionsPage />} />
+            <Route path="master/don-vi-tinh" element={<DvtList />} />
+            <Route path="master/vi-tri" element={<ViTriList />} />
+            <Route path="master/xe" element={<XeList />} />
+            <Route path="master/tai-xe" element={<TaiXeList />} />
+            <Route path="master/tinh-thanh" element={<TinhThanhList />} />
+            <Route path="master/phuong-xa" element={<PhuongXaList />} />
+            <Route path="master/don-gia-van-chuyen" element={<DonGiaVanChuyenList />} />
+            <Route path="production/orders" element={<ProductionOrdersPage />} />
+            <Route path="production/orders/new" element={<ProductionOrderCreate />} />
+            <Route path="production/orders/:id" element={<ProductionOrderDetail />} />
+            <Route path="production/plans" element={<ProductionPlansPage />} />
+            <Route path="production/plans/new" element={<ProductionPlanForm />} />
+            <Route path="production/queue" element={<ProductionQueuePage />} />
+            <Route path="production/bom" element={<BomListPage />} />
+            <Route path="production/phieu-phoi" element={<PhieuPhoiPage />} />
+            <Route path="sales/theo-don-hang" element={<TheoDonHangPage />} />
+            <Route path="sales/giao-hang" element={<GiaoHangPage />} />
+            <Route path="production/phieu-nhap-phoi" element={<PhieuNhapPhoiSongPage />} />
+            <Route path="production/kho-phoi" element={<KhoPhoiPage />} />
+            <Route path="production/kho-thanh-pham" element={<ErrorBoundary><KhoThanhPhamPage /></ErrorBoundary>} />
+            <Route path="production/cd2" element={<CD2KanbanPage />} />
+            <Route path="production/cd2/dashboard" element={<CD2DashboardPage />} />
+            <Route path="production/cd2/may-in" element={<MayInQueuePage />} />
+            <Route path="production/cd2/scan" element={<ScanMayPage />} />
+            <Route path="production/cd2/scan-history" element={<ScanHistoryPage />} />
+            <Route path="production/cd2/history" element={<PhieuInHistoryPage />} />
+            <Route path="production/cd2/dhcho2" element={<DinhHinhPage />} />
+            <Route path="production/cd2/sauin-kanban" element={<SauInKanbanPage />} />
+            <Route path="production/cd2/shift" element={<ShiftPage />} />
+            <Route path="production/cd2/config" element={<ConfigPage />} />
+            <Route path="warehouse/kho-nvl" element={<ErrorBoundary><KhoNVLPage /></ErrorBoundary>} />
+            <Route path="warehouse/kho-phoi" element={<KhoPhoiPage />} />
+            <Route path="warehouse/kho-thanh-pham" element={<ErrorBoundary><KhoThanhPhamPage /></ErrorBoundary>} />
+            <Route path="warehouse/theo-xuong" element={<KhoTheoXuongPage />} />
+            <Route path="warehouse/inventory" element={<InventoryPage />} />
+            <Route path="warehouse/nhap-nhanh" element={<NhapNhanhPage />} />
+            <Route path="warehouse/nhap-giay" element={<NhapGiayPage />} />
+            <Route path="warehouse/nhap-phoi-ngoai" element={<NhapPhoiNgoaiPage />} />
+            <Route path="warehouse/receipts" element={<ReceiptsPage />} />
+            <Route path="warehouse/issues" element={<IssuesPage />} />
+            <Route path="warehouse/production-output" element={<ProductionOutputPage />} />
+            <Route path="warehouse/delivery" element={<DeliveryPage />} />
+            <Route path="warehouse/transfers" element={<TransfersPage />} />
+            <Route path="warehouse/stock-adjustments" element={<StockAdjustmentsPage />} />
+            <Route path="warehouse/the-kho" element={<InventoryCardPage />} />
+            <Route path="purchasing/giay-cuon" element={<ErrorBoundary><MuaGiayPage /></ErrorBoundary>} />
+            <Route path="purchasing/nvl-khac" element={<ErrorBoundary><MuaNVLPage /></ErrorBoundary>} />
+            <Route path="purchasing/orders" element={<POListPage />} />
+            <Route path="purchasing/returns" element={<ErrorBoundary><PurchaseReturnPage /></ErrorBoundary>} />
+            <Route path="purchasing/reports" element={<ErrorBoundary><PurchaseReportPage /></ErrorBoundary>} />
+            <Route path="danhmuc/phap-nhan" element={<PhapNhanList />} />
+            <Route path="master/phan-xuong" element={<PhanXuongList />} />
+            <Route path="master/indirect-costs" element={<IndirectCostList />} />
+            <Route path="master/addon-rates" element={<AddonRateList />} />
+            <Route path="billing/invoices" element={<SalesInvoiceListPage />} />
+            <Route path="billing/invoices/new" element={<SalesInvoiceForm />} />
+            <Route path="billing/invoices/:id" element={<SalesInvoiceDetailPage />} />
+            <Route path="accounting/receipts" element={<CashReceiptListPage />} />
+            <Route path="accounting/receipts/new" element={<CashReceiptForm />} />
+            <Route path="accounting/receipts/:id" element={<CashReceiptDetailPage />} />
+            <Route path="accounting/payments" element={<CashPaymentListPage />} />
+            <Route path="accounting/payments/new" element={<CashPaymentForm />} />
+            <Route path="accounting/payments/:id" element={<CashPaymentDetailPage />} />
+            <Route path="accounting/purchase-invoices" element={<PurchaseInvoiceListPage />} />
+            <Route path="accounting/purchase-invoices/:id" element={<PurchaseInvoiceDetailPage />} />
+            <Route path="accounting/ar-ledger" element={<ARLedgerPage />} />
+            <Route path="accounting/ap-ledger" element={<APLedgerPage />} />
+            <Route path="accounting/cash-book" element={<CashBookPage />} />
+            <Route path="accounting/bank-ledger" element={<BankLedgerPage />} />
+            <Route path="accounting/ccdc" element={<CCDCListPage />} />
+            <Route path="master/bank-accounts" element={<BankAccountList />} />
+            <Route path="accounting/ar-reconciliation" element={<ErrorBoundary><CustomerReconciliation /></ErrorBoundary>} />
+            <Route path="accounting/ap-reconciliation" element={<ErrorBoundary><SupplierReconciliation /></ErrorBoundary>} />
+            <Route path="accounting/general-ledger" element={<ErrorBoundary><GeneralLedgerPage /></ErrorBoundary>} />
+            <Route path="accounting/trial-balance" element={<ErrorBoundary><TrialBalancePage /></ErrorBoundary>} />
+            <Route path="accounting/workshop-management" element={<ErrorBoundary><WorkshopManagement /></ErrorBoundary>} />
+            <Route path="accounting/journal-entries" element={<ErrorBoundary><JournalEntryListPage /></ErrorBoundary>} />
+            <Route path="accounting/journal-entries/new" element={<ErrorBoundary><JournalEntryForm /></ErrorBoundary>} />
+            <Route path="accounting/profit-loss" element={<ErrorBoundary><ProfitLossPage /></ErrorBoundary>} />
+            <Route path="accounting/balance-sheet" element={<ErrorBoundary><BalanceSheetPage /></ErrorBoundary>} />
+            <Route path="accounting/period-closing" element={<ErrorBoundary><PeriodClosingPage /></ErrorBoundary>} />
+            <Route path="accounting/customer-refunds" element={<ErrorBoundary><CustomerRefundListPage /></ErrorBoundary>} />
+            <Route path="accounting/customer-refunds/:id" element={<ErrorBoundary><CustomerRefundDetailPage /></ErrorBoundary>} />
+            <Route path="reports/hub" element={<ErrorBoundary><ReportingHubPage /></ErrorBoundary>} />
+            <Route path="reports/debt-summary" element={<ErrorBoundary><DebtSummaryPage /></ErrorBoundary>} />
+            <Route path="reports/revenue" element={<ErrorBoundary><RevenueReportPage /></ErrorBoundary>} />
+            <Route path="reports/inventory" element={<ErrorBoundary><InventoryReportPage /></ErrorBoundary>} />
+            <Route path="reports/production-performance" element={<ErrorBoundary><ProductionPerformancePage /></ErrorBoundary>} />
+            <Route path="reports/order-progress" element={<ErrorBoundary><OrderProgressPage /></ErrorBoundary>} />
+            <Route path="reports/delivery" element={<ErrorBoundary><DeliveryReportPage /></ErrorBoundary>} />
+            <Route path="reports/import-history" element={<ErrorBoundary><ImportHistoryPage /></ErrorBoundary>} />
+            <Route path="reports/workshop-pnl" element={<ErrorBoundary><WorkshopPNLPage /></ErrorBoundary>} />
+            <Route path="reports/cashflow" element={<ErrorBoundary><LegalEntityCashflowPage /></ErrorBoundary>} />
+            <Route path="reports/vat-summary" element={<ErrorBoundary><VATSummaryPage /></ErrorBoundary>} />
+            <Route path="reports/tax-trial-balance" element={<ErrorBoundary><TaxTrialBalancePage /></ErrorBoundary>} />
+            <Route path="accounting/reports/production-costing" element={<ErrorBoundary><ProductionCostingPage /></ErrorBoundary>} />
+            <Route path="agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </>
   )
 }

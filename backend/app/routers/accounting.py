@@ -610,6 +610,46 @@ def bank_ledger(
 
 
 # ─────────────────────────────────────────────
+# BÁO CÁO TÀI CHÍNH
+# ─────────────────────────────────────────────
+
+@router.get("/reports/pnl")
+def get_pnl_report(
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
+    phan_xuong_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Báo cáo Kết quả kinh doanh (P&L)"""
+    return AccountingService(db).get_pnl(tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id)
+
+
+@router.get("/reports/balance-sheet")
+def get_balance_sheet(
+    ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Bảng cân đối kế toán"""
+    return AccountingService(db).get_balance_sheet(ngay, phap_nhan_id)
+
+
+@router.post("/reports/perform-closing")
+def perform_closing(
+    thang: int = Query(...),
+    nam: int = Query(...),
+    phap_nhan_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Thực hiện kết chuyển lãi lỗ cuối kỳ"""
+    return AccountingService(db).perform_closing(thang, nam, phap_nhan_id, current_user.id)
+
+
+# ─────────────────────────────────────────────
 # IN PHIẾU
 # ─────────────────────────────────────────────
 

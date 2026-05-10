@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Form, Input, Button, Tabs, Alert, Typography } from 'antd'
+import { Card, Form, Input, Button, Tabs, Alert, Typography, Modal, Divider } from 'antd'
 import { UserOutlined, LockOutlined, ScanOutlined } from '@ant-design/icons'
 import { cd2Api, WorkerSession } from '../../api/cd2'
 
@@ -127,6 +127,32 @@ export default function MachineLoginPage() {
             },
           ]}
         />
+        <div style={{ textAlign: 'center', marginTop: 24 }}>
+          <Button 
+            type="default" 
+            icon={<ScanOutlined />}
+            onClick={() => {
+              Modal.info({
+                title: 'Hướng dẫn cài đặt App Nam Phương',
+                width: 400,
+                content: (
+                  <div style={{ marginTop: 16 }}>
+                    <p><b>Dành cho Android (Samsung, Oppo...):</b></p>
+                    <p>1. Bấm nút <b>3 chấm</b> góc trên bên phải Chrome.</p>
+                    <p>2. Chọn <b>"Cài đặt ứng dụng"</b> hoặc "Thêm vào MH chính".</p>
+                    <Divider />
+                    <p><b>Dành cho iPhone (Safari):</b></p>
+                    <p>1. Bấm nút <b>Chia sẻ</b> (hình ô vuông mũi tên lên) ở dưới cùng.</p>
+                    <p>2. Chọn <b>"Thêm vào màn hình chính"</b>.</p>
+                  </div>
+                ),
+                okText: 'Đã hiểu',
+              });
+            }}
+          >
+            Tải App về điện thoại
+          </Button>
+        </div>
       </Card>
     </div>
   )

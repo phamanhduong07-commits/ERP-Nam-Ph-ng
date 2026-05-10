@@ -1930,6 +1930,141 @@ class AccountingService:
         
         return result
 
+    def get_pnl(self, tu_ngay: date, den_ngay: date, phap_nhan_id: int | None = None, phan_xuong_id: int | None = None):
+        """Báo cáo Kết quả kinh doanh (TT200)"""
+        
+        def _get_sum(tk_prefix: str, side: str):
+            q = self.db.query(func.coalesce(func.sum(
+                JournalEntryLine.so_tien_no if side == 'no' else JournalEntryLine.so_tien_co
+            ), 0)).join(JournalEntry).filter(
+                JournalEntryLine.so_tk.like(f"{tk_prefix}%"),
+                JournalEntry.ngay_but_toan >= tu_ngay,
+                JournalEntry.ngay_but_toan <= den_ngay
+            )
+            if phap_nhan_id:
+                q = q.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
+            if phan_xuong_id:
+                q = q.filter(JournalEntry.phan_xuong_id == phan_xuong_id)
+            return q.scalar() or Decimal("0")
+
+        # 1. Doanh thu bán hàng (511)
+        doanh_thu = _get_sum("511", "co")
+        # 2. Giảm trừ doanh thu (521)
+        giam_tru = _get_sum("521", "no")
+        # 3. Doanh thu thuần
+        doanh_thu_thuan = doanh_thu - giam_tru
+        # 4. Giá vốn hàng bán (632)
+        gia_von = _get_sum("632", "no")
+        # 5. Lợi nhuận gộp
+        loi_nhuan_gop = doanh_thu_thuan - gia_von
+        
+        # 6. Doanh thu tài chính (515)
+        dt_tai_chinh = _get_sum("515", "co")
+        # 7. Chi phí tài chính (635)
+        cp_tai_chinh = _get_sum("635", "no")
+        # 8. Chi phí bán hàng (641)
+        cp_ban_hang = _get_sum("641", "no")
+        # 9. Chi phí quản lý (642)
+        cp_quan_ly = _get_sum("642", "no")
+        
+        # 10. Lợi nhuận thuần từ HĐKD
+        ln_thuan_hdkd = loi_nhuan_gop + dt_tai_chinh - cp_tai_chinh - cp_ban_hang - cp_quan_ly
+        
+        # 11. Thu nhập khác (711)
+        tn_khac = _get_sum("711", "co")
+        # 12. Chi phí khác (811)
+        cp_khac = _get_sum("811", "no")
+        # 13. Lợi nhuận khác
+        ln_khac = tn_khac - cp_khac
+        
+        # 14. Tổng lợi nhuận kế toán trước thuế
+        tong_ln_truoc_thue = ln_thuan_hdkd + ln_khac
+        
+        # 15. Thuế TNDN (821)
+        thue_tndn = _get_sum("821", "no")
+        
+        # 16. Lợi nhuận sau thuế
+        ln_sau_thue = tong_ln_truoc_thue - thue_tndn
+        
+        return {
+            "doanh_thu_gop": doanh_thu,
+            "giam_tru_doanh_thu": giam_tru,
+            "doanh_thu_thuan": doanh_thu_thuan,
+            "gia_von_hang_ban": gia_von,
+            "loi_nhuan_gop": loi_nhuan_gop,
+            "doanh_thu_tai_chinh": dt_tai_chinh,
+            "chi_phi_tai_chinh": cp_tai_chinh,
+            "chi_phi_ban_hang": cp_ban_hang,
+            "chi_phi_quan_ly": cp_quan_ly,
+            "loi_nhuan_thuan_hdkd": ln_thuan_hdkd,
+            "thu_nhap_khac": tn_khac,
+            "chi_phi_khac": cp_khac,
+            "loi_nhuan_khac": ln_khac,
+            "tong_loi_nhuan_truoc_thue": tong_ln_truoc_thue,
+            "thue_tndn": thue_tndn,
+            "loi_nhuan_sau_thue": ln_sau_thue
+        }
+
+    def get_balance_sheet(self, ngay: date, phap_nhan_id: int | None = None):
+        """Bảng cân đối kế toán (Tài sản / Nguồn vốn)"""
+        
+        def _get_balance(tk_prefix: str):
+            q = self.db.query(
+                func.sum(JournalEntryLine.so_tien_no).label("no"),
+                func.sum(JournalEntryLine.so_tien_co).label("co")
+            ).join(JournalEntry).filter(
+                JournalEntryLine.so_tk.like(f"{tk_prefix}%"),
+                JournalEntry.ngay_but_toan <= ngay
+            )
+            if phap_nhan_id:
+                q = q.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
+            res = q.one()
+            no = res.no or Decimal("0")
+            co = res.co or Decimal("0")
+            
+            if tk_prefix.startswith(("1", "2")):
+                return no - co
+            else:
+                return co - no
+
+        # TÀI SẢN
+        tien = _get_balance("11")
+        phai_thu_kh = _get_balance("131")
+        ton_kho = _get_balance("15")
+        tscd = _get_balance("211")
+        hao_mon = _get_balance("214") # Sẽ là số âm vì dư Có
+        
+        tong_tai_san = tien + phai_thu_kh + ton_kho + tscd + hao_mon
+        
+        # NGUỒN VỐN
+        phai_tra_ncc = _get_balance("331")
+        thue_phai_nop = _get_balance("333")
+        phai_tra_nlv = _get_balance("334")
+        von_chu_so_huu = _get_balance("411")
+        ln_chua_phan_phoi = _get_balance("421")
+        
+        tong_nguon_von = phai_tra_ncc + thue_phai_nop + phai_tra_nlv + von_chu_so_huu + ln_chua_phan_phoi
+        
+        return {
+            "ngay": ngay,
+            "tai_san": {
+                "tien_mat_va_tgnh": tien,
+                "phai_thu_khach_hang": phai_thu_kh,
+                "hang_ton_kho": ton_kho,
+                "tai_san_co_dinh": tscd,
+                "hao_mon_luy_ke": hao_mon,
+                "tong_tai_san": tong_tai_san
+            },
+            "nguon_von": {
+                "phai_tra_nha_cung_cap": phai_tra_ncc,
+                "thue_va_cac_khoan_phai_nop": thue_phai_nop,
+                "phai_tra_nguoi_lao_dong": phai_tra_nlv,
+                "von_gop_chu_so_huu": von_chu_so_huu,
+                "loi_nhuan_sau_thue_chua_phan_phoi": ln_chua_phan_phoi,
+                "tong_nguon_von": tong_nguon_von
+            }
+        }
+
     def get_workshop_pnl(self, phan_xuong_id: int, tu_ngay: date, den_ngay: date):
         """Báo cáo Lãi/Lỗ theo phân xưởng (management P&L)."""
         # Dimension filter: prefer line-level tag, fall back to header-level
@@ -2497,3 +2632,96 @@ class AccountingService:
             })
             
         return results
+
+    def perform_closing(self, thang: int, nam: int, phap_nhan_id: int, user_id: int):
+        """Thực hiện bút toán kết chuyển doanh thu, chi phí cuối tháng"""
+        last_day = calendar.monthrange(nam, thang)[1]
+        closing_date = date(nam, thang, last_day)
+        
+        # 1. Xóa bút toán kết chuyển cũ nếu có
+        old_entry = self.db.query(JournalEntry).filter(
+            JournalEntry.phap_nhan_id == phap_nhan_id,
+            JournalEntry.ngay_but_toan == closing_date,
+            JournalEntry.loai_chung_tu == 'KET_CHUYEN'
+        ).first()
+        if old_entry:
+            self.db.delete(old_entry)
+            self.db.flush()
+
+        # 2. Helper lấy số dư phát sinh trong tháng (không tính các bút toán kết chuyển)
+        def _get_monthly_balance(tk_prefix: str):
+            res = self.db.query(
+                func.coalesce(func.sum(JournalEntryLine.so_tien_no), 0).label("no"),
+                func.coalesce(func.sum(JournalEntryLine.so_tien_co), 0).label("co")
+            ).join(JournalEntry).filter(
+                JournalEntryLine.so_tk.like(f"{tk_prefix}%"),
+                JournalEntry.ngay_but_toan >= date(nam, thang, 1),
+                JournalEntry.ngay_but_toan <= closing_date,
+                JournalEntry.phap_nhan_id == phap_nhan_id,
+                JournalEntry.loai_chung_tu != 'KET_CHUYEN',
+                JournalEntry.trang_thai == 'da_duyet'
+            ).one()
+            return Decimal(str(res.no)), Decimal(str(res.co))
+
+        # 3. Tạo header bút toán
+        entry = JournalEntry(
+            so_phieu=f"KC/{thang:02d}/{nam}",
+            ngay_but_toan=closing_date,
+            loai_chung_tu='KET_CHUYEN',
+            phap_nhan_id=phap_nhan_id,
+            ghi_chu=f"Kết chuyển doanh thu chi phí tháng {thang}/{nam}",
+            trang_thai='da_duyet',
+            created_by=user_id
+        )
+        self.db.add(entry)
+        self.db.flush()
+
+        lines = []
+        tong_doanh_thu = Decimal("0")
+        tong_chi_phi = Decimal("0")
+
+        # A. Kết chuyển doanh thu (5xx, 7xx -> 911)
+        for tk in ["511", "515", "711"]:
+            no, co = _get_monthly_balance(tk)
+            val = co - no # Số dư bên Có
+            if val > 0:
+                lines.append(JournalEntryLine(entry_id=entry.id, so_tk=tk, so_tien_no=val, so_tien_co=0, ghi_chu=f"Kết chuyển doanh thu {tk}"))
+                tong_doanh_thu += val
+        
+        # B. Kết chuyển giảm trừ doanh thu (521 -> 511)
+        no_521, co_521 = _get_monthly_balance("521")
+        val_521 = no_521 - co_521
+        if val_521 > 0:
+            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="511", so_tien_no=0, so_tien_co=val_521, ghi_chu="Kết chuyển giảm trừ doanh thu"))
+            tong_doanh_thu -= val_521
+
+        if tong_doanh_thu != 0:
+            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="911", so_tien_no=0, so_tien_co=tong_doanh_thu, ghi_chu="Kết chuyển doanh thu sang 911"))
+
+        # C. Kết chuyển chi phí (6xx, 8xx -> 911)
+        # Bao gồm: Giá vốn, CP tài chính, CP bán hàng, CP quản lý, CP khác, Thuế TNDN
+        for tk in ["632", "635", "641", "642", "811", "821"]:
+            no, co = _get_monthly_balance(tk)
+            val = no - co # Số dư bên Nợ
+            if val > 0:
+                lines.append(JournalEntryLine(entry_id=entry.id, so_tk=tk, so_tien_no=0, so_tien_co=val, ghi_chu=f"Kết chuyển chi phí {tk}"))
+                tong_chi_phi += val
+        
+        if tong_chi_phi != 0:
+            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="911", so_tien_no=tong_chi_phi, so_tien_co=0, ghi_chu="Kết chuyển chi phí sang 911"))
+
+        # D. Kết chuyển lãi lỗ (911 -> 421)
+        lai_lo = tong_doanh_thu - tong_chi_phi
+        if lai_lo > 0: # Có lãi
+            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="911", so_tien_no=lai_lo, so_tien_co=0, ghi_chu="Kết chuyển lãi sang 421"))
+            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="4212", so_tien_no=0, so_tien_co=lai_lo, ghi_chu="Lợi nhuận năm nay"))
+        elif lai_lo < 0: # Bị lỗ
+            abs_lo = abs(lai_lo)
+            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="911", so_tien_no=0, so_tien_co=abs_lo, ghi_chu="Kết chuyển lỗ sang 421"))
+            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="4212", so_tien_no=abs_lo, so_tien_co=0, ghi_chu="Lỗ năm nay"))
+
+        for line in lines:
+            self.db.add(line)
+        
+        self.db.commit()
+        return {"status": "success", "entry_id": entry.id, "profit": float(lai_lo)}

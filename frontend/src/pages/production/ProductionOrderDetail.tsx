@@ -10,6 +10,7 @@ import {
   ArrowLeftOutlined, PlayCircleOutlined, CheckCircleOutlined,
   CloseOutlined, SaveOutlined, CalculatorOutlined, EditOutlined,
   FileExcelOutlined, FilePdfOutlined, FileTextOutlined, SendOutlined, AuditOutlined,
+  ShoppingCartOutlined,
 } from '@ant-design/icons'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
@@ -235,6 +236,14 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
     queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
   })
 
+  // Dùng để hiển thị kho nhập phôi gần nhất trong Descriptions (cache chung với PhieuNhapPhoiSongTab)
+  const { data: phieuNhapList = [] } = useQuery({
+    queryKey: ['phieu-nhap-phoi-song', Number(id)],
+    queryFn: () => productionOrdersApi.listPhieu(Number(id)).then(r => r.data),
+    enabled: !!id,
+  })
+  const khoNhapPhoiGanNhat = phieuNhapList[0]?.ten_kho ?? null
+
   const { data: phanXuongRaw } = useQuery({
     queryKey: ['phan-xuong'],
     queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
@@ -311,6 +320,16 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
     try {
       await productionOrdersApi.cancel(Number(id))
       message.success('Đã huỷ lệnh')
+      invalidate()
+    } catch {
+      message.error('Thất bại')
+    }
+  }
+
+  const handleChuyenMuaPhoi = async () => {
+    try {
+      const res = await productionOrdersApi.chuyenMuaPhoi(Number(id))
+      message.success(`Lệnh ${res.data.so_lenh} đã chuyển sang mua phôi ngoài. Bộ phận mua hàng sẽ lên đơn.`)
       invalidate()
     } catch {
       message.error('Thất bại')
@@ -830,6 +849,18 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   />
                 </Space>
               </Descriptions.Item>
+              <Descriptions.Item label="Kho nhập phôi">
+                {khoNhapPhoiGanNhat
+                  ? <Tag color="orange">{khoNhapPhoiGanNhat}</Tag>
+                  : <Typography.Text type="secondary">—</Typography.Text>}
+              </Descriptions.Item>
+              <Descriptions.Item label="Giá nội bộ (đ/tấm)">
+                {order.don_gia_noi_bo != null
+                  ? <Typography.Text strong style={{ color: '#fa8c16' }}>
+                      {new Intl.NumberFormat('vi-VN').format(Number(order.don_gia_noi_bo))} đ
+                    </Typography.Text>
+                  : <Typography.Text type="secondary">Chưa đặt</Typography.Text>}
+              </Descriptions.Item>
               <Descriptions.Item label="Bắt đầu (KH)">
                 {order.ngay_bat_dau_ke_hoach
                   ? dayjs(order.ngay_bat_dau_ke_hoach).format('DD/MM/YYYY')
@@ -908,6 +939,18 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                     </Button>
                   </Popconfirm>
                 )}
+                {['moi', 'dang_chay'].includes(order.trang_thai) && (
+                  <Popconfirm
+                    title="Chuyển sang mua phôi ngoài?"
+                    description="Bộ phận mua hàng sẽ vào lên đơn mua phôi."
+                    onConfirm={handleChuyenMuaPhoi}
+                    okText="Chuyển"
+                  >
+                    <Button icon={<ShoppingCartOutlined />} block style={{ color: '#722ed1', borderColor: '#722ed1' }}>
+                      Mua phôi ngoài
+                    </Button>
+                  </Popconfirm>
+                )}
                 {order.trang_thai === 'hoan_thanh' && (
                   <Tooltip title="Tạo đơn hàng chờ in trong hệ thống CD2 (Công Đoạn 2)">
                     <Popconfirm
@@ -969,6 +1012,18 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                 {['moi', 'dang_chay'].includes(order.trang_thai) && (
                   <Popconfirm title="Huỷ lệnh?" onConfirm={handleCancel} okText="Huỷ" okButtonProps={{ danger: true }}>
                     <Button size="small" danger icon={<CloseOutlined />}>Huỷ</Button>
+                  </Popconfirm>
+                )}
+                {['moi', 'dang_chay'].includes(order.trang_thai) && (
+                  <Popconfirm
+                    title="Chuyển sang mua phôi ngoài?"
+                    description="Bộ phận mua hàng sẽ vào lên đơn mua phôi."
+                    onConfirm={handleChuyenMuaPhoi}
+                    okText="Chuyển"
+                  >
+                    <Button size="small" icon={<ShoppingCartOutlined />} style={{ color: '#722ed1', borderColor: '#722ed1' }}>
+                      Mua phôi ngoài
+                    </Button>
                   </Popconfirm>
                 )}
                 {order.trang_thai === 'hoan_thanh' && (

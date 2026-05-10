@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Form, Input, Button, Card, Typography, Alert, Space } from 'antd'
-import { UserOutlined, LockOutlined } from '@ant-design/icons'
+import { Form, Input, Button, Card, Typography, Alert, Space, Modal, Divider } from 'antd'
+import { UserOutlined, LockOutlined, ScanOutlined } from '@ant-design/icons'
 import { authApi } from '../api/auth'
 import { useAuthStore } from '../store/auth'
 import namPhuongLogo from '../assets/nam-phuong-logo-cropped.png'
@@ -78,10 +78,57 @@ export default function Login() {
 
           <Form.Item>
             <Button type="primary" htmlType="submit" loading={loading} block>
-              Đăng nhập
+              Đăng nhập Quản trị
             </Button>
           </Form.Item>
         </Form>
+
+        <div style={{ textAlign: 'center', marginTop: 16, marginBottom: 12 }}>
+          <Button 
+            type="primary" 
+            size="large"
+            onClick={() => navigate('/cd2/machine-login')}
+            style={{ 
+              fontWeight: 700, 
+              background: '#ff8200', 
+              borderColor: '#ff8200',
+              height: 50,
+              width: '100%',
+              fontSize: 16,
+              borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(255, 130, 0, 0.3)'
+            }}
+          >
+            🏭 ĐĂNG NHẬP MÁY
+          </Button>
+        </div>
+
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <Button 
+            type="default" 
+            icon={<ScanOutlined />}
+            onClick={() => {
+              Modal.info({
+                title: 'Hướng dẫn cài đặt App Nam Phương',
+                width: 400,
+                content: (
+                  <div style={{ marginTop: 16 }}>
+                    <p><b>Dành cho Android (Samsung, Oppo...):</b></p>
+                    <p>1. Bấm nút <b>3 chấm</b> góc trên bên phải Chrome.</p>
+                    <p>2. Chọn <b>"Cài đặt ứng dụng"</b> hoặc "Thêm vào MH chính".</p>
+                    <Divider />
+                    <p><b>Dành cho iPhone (Safari):</b></p>
+                    <p>1. Bấm nút <b>Chia sẻ</b> (hình ô vuông mũi tên lên) ở dưới cùng.</p>
+                    <p>2. Chọn <b>"Thêm vào màn hình chính"</b>.</p>
+                  </div>
+                ),
+                okText: 'Đã hiểu',
+              });
+            }}
+          >
+            Tải App về điện thoại
+          </Button>
+        </div>
 
         <Text type="secondary" style={{ display: 'block', textAlign: 'center', fontSize: 12 }}>
           Công ty TNHH SX TM Nam Phương

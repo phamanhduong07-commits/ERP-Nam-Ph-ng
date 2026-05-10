@@ -64,7 +64,7 @@ interface DashboardStats {
 
 const KPICard = ({ title, value, suffix, icon, color, gradient }: any) => (
   <Card 
-    bordered={false} 
+    variant="borderless" 
     style={{ 
       borderRadius: 16, 
       background: gradient || '#fff',
@@ -104,8 +104,7 @@ const QuickLink = ({ icon, label, path, color }: any) => (
     <Card 
       hoverable 
       size="small" 
-      style={{ borderRadius: 12, textAlign: 'center', border: '1px solid #f0f0f0' }}
-      bodyStyle={{ padding: '12px 8px' }}
+      styles={{ body: { padding: '12px 8px' } }}
     >
       <div style={{ color: color, fontSize: 24, marginBottom: 8 }}>{icon}</div>
       <Text strong style={{ fontSize: 12, display: 'block' }}>{label}</Text>
@@ -188,7 +187,7 @@ export default function Dashboard() {
       <Row gutter={24}>
         <Col span={16}>
           {/* Production & Sales Status */}
-          <Card bordered={false} style={{ borderRadius: 20, marginBottom: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+          <Card variant="borderless" style={{ borderRadius: 20, marginBottom: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <Title level={4} style={{ margin: 0 }}>Vận hành Sản xuất</Title>
               <Link to="/production/plans"><Button type="link">Xem kế hoạch <ArrowRightOutlined /></Button></Link>
@@ -218,7 +217,7 @@ export default function Dashboard() {
                     type="dashboard" 
                     percent={Math.round(((prod?.lenh_sx_hoan_thanh_hom_nay || 0) / Math.max(1, (prod?.lenh_sx_moi || 0) + (prod?.dang_san_xuat || 0))) * 100)} 
                     strokeColor="#1b168e"
-                    width={120}
+                    size={120}
                   />
                   <div style={{ marginTop: 12 }}>
                     <Text strong style={{ fontSize: 16 }}>{prod?.lenh_sx_hoan_thanh_hom_nay || 0} Lệnh hoàn thành</Text>
@@ -232,7 +231,7 @@ export default function Dashboard() {
 
           <Row gutter={24}>
             <Col span={12}>
-              <Card title="Kho & Giao nhận" bordered={false} style={{ borderRadius: 20, height: '100%', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+              <Card title="Kho & Giao nhận" variant="borderless" style={{ borderRadius: 20, height: '100%', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
                 <List size="small">
                   <List.Item extra={<Text strong>{wh?.phieu_nhap_hom_nay || 0}</Text>}>Nhập kho nguyên liệu</List.Item>
                   <List.Item extra={<Text strong>{wh?.phieu_xuat_nvl_hom_nay || 0}</Text>}>Xuất NVL sản xuất</List.Item>
@@ -242,7 +241,7 @@ export default function Dashboard() {
               </Card>
             </Col>
             <Col span={12}>
-              <Card title="Phê duyệt & Tài chính" bordered={false} style={{ borderRadius: 20, height: '100%', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+              <Card title="Phê duyệt & Tài chính" variant="borderless" style={{ borderRadius: 20, height: '100%', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
                 <List size="small">
                   <List.Item extra={<Tag color="orange">{sales?.don_hang_cho_duyet || 0}</Tag>}>Đơn hàng chờ duyệt</List.Item>
                   <List.Item extra={<Tag color="orange">{stats?.purchase?.po_cho_duyet || 0}</Tag>}>Đơn mua (PO) chờ duyệt</List.Item>
@@ -256,11 +255,11 @@ export default function Dashboard() {
 
         <Col span={8}>
           {/* Quick Actions */}
-          <Card title={<Space><ThunderboltOutlined style={{ color: '#faad14' }} /> Lối tắt nghiệp vụ</Space>} bordered={false} style={{ borderRadius: 20, marginBottom: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+          <Card title={<Space><ThunderboltOutlined style={{ color: '#faad14' }} /> Lối tắt nghiệp vụ</Space>} variant="borderless" style={{ borderRadius: 20, marginBottom: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
             <Row gutter={[12, 12]}>
               <Col span={8}><QuickLink label="LSX" path="/production/orders" icon={<ToolOutlined />} color="#1890ff" /></Col>
               <Col span={8}><QuickLink label="Tồn kho" path="/warehouse/inventory" icon={<InboxOutlined />} color="#52c41a" /></Col>
-              <Col span={8}><QuickLink label="Giao hàng" path="/warehouse/delivery" icon={<TruckOutlined />} color="#722ed1" /></Col>
+              <Col span={8}><QuickLink label="Giao hàng" path="/sales/giao-hang" icon={<TruckOutlined />} color="#722ed1" /></Col>
               <Col span={8}><QuickLink label="Giá thành" path="/reports/hub" icon={<AreaChartOutlined />} color="#eb2f96" /></Col>
               <Col span={8}><QuickLink label="Công nợ" path="/reports/debt-summary" icon={<AuditOutlined />} color="#2f54eb" /></Col>
               <Col span={8}><QuickLink label="Báo giá" path="/quotes" icon={<DollarOutlined />} color="#faad14" /></Col>
@@ -270,7 +269,7 @@ export default function Dashboard() {
           {/* Low Stock Alerts */}
           <Card 
             title={<Space><AlertOutlined style={{ color: '#f5222d' }} /> Cảnh báo tồn kho</Space>} 
-            bordered={false} 
+            variant="borderless" 
             style={{ borderRadius: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
             extra={<Link to="/warehouse/inventory">Xem hết</Link>}
           >

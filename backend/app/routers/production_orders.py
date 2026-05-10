@@ -16,6 +16,7 @@ from app.services.inventory_service import (
 )
 from app.services.production_order_service import ProductionOrderService
 from app.models.production import ProductionOrder, ProductionOrderItem
+from app.models.production_plan import ProductionPlanLine
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.inventory import InventoryBalance, InventoryTransaction
 from app.schemas.master import ProductShort
@@ -126,6 +127,7 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
         ngay_bat_dau_thuc_te=order.ngay_bat_dau_thuc_te,
         ngay_hoan_thanh_thuc_te=order.ngay_hoan_thanh_thuc_te,
         ghi_chu=order.ghi_chu,
+        don_gia_noi_bo=getattr(order, "don_gia_noi_bo", None),
         items=items,
         created_at=order.created_at,
         updated_at=order.updated_at,
@@ -658,12 +660,18 @@ def list_phieu_nhap_phoi_song(
         db.query(PhieuNhapPhoiSong)
         .filter(PhieuNhapPhoiSong.production_order_id == order_id)
         .options(
-            joinedload(PhieuNhapPhoiSong.items).joinedload(PhieuNhapPhoiSongItem.production_order_item)
+            joinedload(PhieuNhapPhoiSong.items).joinedload(PhieuNhapPhoiSongItem.production_order_item),
+            joinedload(PhieuNhapPhoiSong.warehouse),
         )
         .order_by(PhieuNhapPhoiSong.created_at.desc())
         .all()
     )
-    return [_phieu_to_dict(p) for p in phieus]
+    result = []
+    for p in phieus:
+        d = _phieu_to_dict(p)
+        d["ten_kho"] = p.warehouse.ten_kho if p.warehouse else None
+        result.append(d)
+    return result
 
 
 @router.delete("/{order_id:int}/phieu-nhap-phoi-song/{phieu_id:int}")
@@ -705,6 +713,51 @@ def delete_phieu_nhap_phoi_song(
     db.delete(phieu)
     db.commit()
     return {"ok": True}
+
+
+# ── Chuyển lệnh SX sang mua phôi ngoài ──────────────────────────────────────
+
+_KHO_DE_XUAT_MUA_NGOAI = 2000  # mm — kho 1 con >= 2m → đề xuất mua phôi ngoài
+
+
+@router.patch("/{order_id:int}/chuyen-mua-phoi")
+def chuyen_mua_phoi(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Chuyển lệnh SX sang trạng thái mua phôi ngoài.
+    Kế hoạch dùng khi phôi quá khổ hoặc định lượng không tự sản xuất được.
+    Mua hàng sẽ vào MuaGiayPage để lên đơn PO."""
+    order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
+    if order.trang_thai not in ("moi", "dang_chay"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Lệnh đang ở '{order.trang_thai}', không thể chuyển sang mua phôi ngoài"
+        )
+
+    order.trang_thai = "mua_ngoai"
+
+    items = (
+        db.query(ProductionOrderItem)
+        .filter(ProductionOrderItem.production_order_id == order_id)
+        .all()
+    )
+    for item in items:
+        item.mua_phoi_ngoai = True
+        # Nếu có ProductionPlanLine liên kết → set cờ luôn để khsx-can-phoi-ngoai nhận
+        plan_lines = (
+            db.query(ProductionPlanLine)
+            .filter(ProductionPlanLine.production_order_item_id == item.id)
+            .all()
+        )
+        for pl in plan_lines:
+            pl.mua_phoi_ngoai = True
+
+    db.commit()
+    return {"ok": True, "trang_thai": "mua_ngoai", "so_lenh": order.so_lenh}
 
 
 # ── Đẩy lệnh sang hệ thống CD2 (Công Đoạn 2) ────────────────────────────────

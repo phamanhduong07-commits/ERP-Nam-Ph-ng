@@ -85,6 +85,7 @@ export interface PhieuIn {
   id: number
   so_phieu: string
   so_lsx: string
+  production_order_id?: number | null
   ten_hang?: string
   ten_khach_hang?: string
   ma_kh?: string
@@ -247,6 +248,9 @@ export interface KhoRow {
   tong_xuat: number
   tong_chuyen_phoi: number
   ton_kho: number
+  ton_kho_tai_nguon: number  // phôi còn tại kho Hoàng Gia chưa chuyển đi (chỉ có nghĩa với CD2 xưởng)
+  ton_kho_tai_cd2: number    // phôi đã đến kho CD2 chưa sản xuất
+  don_gia_noi_bo: number | null  // giá nội bộ chuyển kho (đ/tấm) — từ LSX, dùng cho hạch toán quản trị
   phieu_in_hien_tai: { so_phieu: string; trang_thai: string } | null
 }
 
@@ -279,7 +283,7 @@ export const cd2Api = {
   batDauSauIn: (id: number) => client.post(`/cd2/phieu-in/${id}/bat-dau-sau-in`),
   traVeSauIn: (id: number) => client.post(`/cd2/phieu-in/${id}/tra-ve-sau-in`),
   createFromLenhSx: (orderId: number, target: 'in' | 'sau_in' | 'auto') =>
-    client.post(`/cd2/phieu-in/tu-lenh-sx/${orderId}`, { target }),
+    client.post(`/cd2/phieu-in/tu-lenh-sx/${orderId}`, null, { params: { target } }),
 
   // Kho phôi
   getTonKhoLsx: () => client.get<KhoRow[]>('/cd2/ton-kho-lsx'),
@@ -303,7 +307,7 @@ export const cd2Api = {
   deleteMayScan: (id: number) => client.delete(`/cd2/may-scan/${id}`),
 
   // Scan log
-  getScanHistory: (params?: any) => client.get<ScanLog[]>('/cd2/scan-history', { params }),
+  getScanHistory: (params?: any) => client.get<ScanLog[]>('/cd2/scan-logs/history-list', { params }),
   createScanLog: (data: {
     may_scan_id: number
     so_lsx: string
@@ -316,18 +320,21 @@ export const cd2Api = {
     so_luong_tp: number
     don_gia?: number
     nguoi_sx?: string
-  }) => client.post<ScanLog>('/cd2/scan-log', data),
-  deleteScanLog: (id: number) => client.delete(`/cd2/scan-log/${id}`),
-  scanLookup: (code: string) => client.get<ScanLookupResult>(`/cd2/scan-lookup/${code}`),
+  }) => client.post<ScanLog>('/cd2/scan-logs/submit', data),
+  deleteScanLog: (id: number) => client.delete(`/cd2/scan-logs/delete/${id}`),
+  // Tra cứu theo Số lệnh (Production Order) - Dành cho trang Scan Máy
+  scanLookup: (code: string) => client.get<ScanLookupResult>(`/cd2/scan/lookup/${code}`),
+  // Tra cứu theo Số phiếu (Phieu In) - Dành cho Mobile Tracking QR
+  phieuLookup: (code: string) => client.get<any>(`/cd2/scan-lookup/${code}`),
 
   // Ca làm việc
-  listShiftCa: (params?: any) => client.get<ShiftCa[]>('/cd2/shift-ca', { params }),
-  createShiftCa: (data: { name: string; leader?: string }) => client.post<ShiftCa>('/cd2/shift-ca', data),
-  updateShiftCa: (id: number, data: Partial<ShiftCa>) => client.put<ShiftCa>(`/cd2/shift-ca/${id}`, data),
-  deleteShiftCa: (id: number) => client.delete(`/cd2/shift-ca/${id}`),
+  listShiftCa: (params?: any) => client.get<ShiftCa[]>('/cd2/shift/ca', { params }),
+  createShiftCa: (data: { name: string; leader?: string }) => client.post<ShiftCa>('/cd2/shift/ca', data),
+  updateShiftCa: (id: number, data: Partial<ShiftCa>) => client.put<ShiftCa>(`/cd2/shift/ca/${id}`, data),
+  deleteShiftCa: (id: number) => client.delete(`/cd2/shift/ca/${id}`),
 
   // Lịch ca
-  listShiftConfig: (params?: any) => client.get<ShiftConfigItem[]>('/cd2/shift-config', { params }),
+  listShiftConfig: (params?: any) => client.get<ShiftConfigItem[]>('/cd2/shift/config', { params }),
   createShiftConfig: (data: {
     may_in_id: number
     shift_ca_id: number
@@ -337,8 +344,8 @@ export const cd2Api = {
     gio_ket_thuc?: string
     nghi_1?: number
     nghi_2?: number
-  }) => client.post<ShiftConfigItem>('/cd2/shift-config', data),
-  deleteShiftConfig: (id: number) => client.delete(`/cd2/shift-config/${id}`),
+  }) => client.post<ShiftConfigItem>('/cd2/shift/config', data),
+  deleteShiftConfig: (id: number) => client.delete(`/cd2/shift/config/${id}`),
 
   // Machine login (no JWT required)
   machineLogin: (data: { token_user?: string; token_password?: string; rfid_key?: string }) =>

@@ -95,6 +95,7 @@ class ProductionOrderCreate(BaseModel):
     ngay_bat_dau_ke_hoach: date | None = None
     ngay_hoan_thanh_ke_hoach: date | None = None
     ghi_chu: str | None = None
+    don_gia_noi_bo: Decimal | None = None
     items: list[ProductionOrderItemCreate]
 
     @field_validator("items")
@@ -115,6 +116,7 @@ class ProductionOrderUpdate(BaseModel):
     ngay_bat_dau_thuc_te: date | None = None
     ngay_hoan_thanh_thuc_te: date | None = None
     ghi_chu: str | None = None
+    don_gia_noi_bo: Decimal | None = None
 
 
 class ProductionOrderResponse(BaseModel):
@@ -139,6 +141,7 @@ class ProductionOrderResponse(BaseModel):
     ngay_bat_dau_thuc_te: date | None
     ngay_hoan_thanh_thuc_te: date | None
     ghi_chu: str | None
+    don_gia_noi_bo: Decimal | None = None
     items: list[ProductionOrderItemResponse] = []
     created_at: datetime
     updated_at: datetime
@@ -163,6 +166,8 @@ class ProductionOrderListItem(BaseModel):
     ngay_hoan_thanh_ke_hoach: date | None
     so_dong: int = 0
     tong_sl_ke_hoach: Decimal = Decimal("0")
+    kho_tt_max: float | None = None       # kho lớn nhất trong các items (mm)
+    de_xuat_mua_ngoai: bool = False       # kho >= 2000mm → đề xuất mua phôi ngoài
     created_at: datetime
 
     class Config:

@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, Col, Row, Space, Spin, Statistic, Typography, Button, Table, Tag, Modal } from 'antd'
 import {
   PrinterOutlined, BarChartOutlined, HistoryOutlined,
-  BarcodeOutlined, CheckCircleOutlined, ReloadOutlined, MobileOutlined, EyeOutlined
+  BarcodeOutlined, CheckCircleOutlined, ReloadOutlined, MobileOutlined, EyeOutlined, InboxOutlined
 } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
 import dayjs from 'dayjs'
@@ -16,6 +16,7 @@ dayjs.locale('vi')
 import PhieuInModal from './PhieuInModal'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
+import { socket } from '../../utils/socket'
 
 const { Title, Text } = Typography
 
@@ -35,19 +36,19 @@ export default function CD2DashboardPage() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['cd2-dashboard', phanXuongId],
     queryFn: () => cd2Api.getDashboard(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
-    refetchInterval: 30_000,
+    // refetchInterval removed in favor of WebSockets
   })
 
   const { data: dangInList = [] } = useQuery({
     queryKey: ['cd2-phieu-dang-in', phanXuongId],
     queryFn: () => cd2Api.listPhieuIn({ trang_thai: 'dang_in', ...(phanXuongId ? { phan_xuong_id: phanXuongId } : {}) }).then(r => r.data),
-    refetchInterval: 30_000,
+    // refetchInterval removed in favor of WebSockets
   })
 
   const { data: machineStatus = [], isLoading: loadingMachines } = useQuery({
     queryKey: ['cd2-machine-status', phanXuongId],
     queryFn: () => cd2Api.getMachinesStatus(phanXuongId).then(r => r.data),
-    refetchInterval: 10_000, // Tự động cập nhật mỗi 10 giây
+    // refetchInterval removed in favor of WebSockets
   })
 
   const invalidate = () => {
@@ -56,6 +57,20 @@ export default function CD2DashboardPage() {
     qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
     qc.invalidateQueries({ queryKey: ['cd2-machine-status'] })
   }
+
+  // Lắng nghe tín hiệu từ WebSockets để cập nhật tức thì
+  useEffect(() => {
+    const handleMachineUpdate = (data: any) => {
+      console.log('📡 Received real-time machine update:', data)
+      invalidate() // Làm mới tất cả dữ liệu liên quan
+    }
+
+    socket.on('machine_status_update', handleMachineUpdate)
+
+    return () => {
+      socket.off('machine_status_update', handleMachineUpdate)
+    }
+  }, [qc])
 
   if (isLoading) return <Spin style={{ margin: 40 }} />
 
@@ -77,6 +92,9 @@ export default function CD2DashboardPage() {
         <Col>
           <Space>
             <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
+            <Link to="/production/kho-phoi">
+              <Button icon={<InboxOutlined />}>Kho phôi sóng</Button>
+            </Link>
             <Link to="/production/cd2">
               <Button type="primary" icon={<PrinterOutlined />}>Kanban máy in</Button>
             </Link>

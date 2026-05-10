@@ -34,6 +34,7 @@ export default function QrScannerModal({ open, onScan, onClose }: Props) {
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         (text) => {
+          if ('vibrate' in navigator) navigator.vibrate(100)
           stopScanner()
           onScan(text.trim().toUpperCase())
         },

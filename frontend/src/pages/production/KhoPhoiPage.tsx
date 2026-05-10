@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Col, Drawer, Input, InputNumber,
+  Alert, Button, Card, Col, Drawer, Input, InputNumber,
   message, Modal, Popconfirm, Row, Select, Space, Spin,
   Statistic, Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd'
@@ -16,6 +16,7 @@ import { warehousesApi } from '../../api/warehouses'
 import type { Warehouse } from '../../api/warehouses'
 import { warehouseApi } from '../../api/warehouse'
 import type { TonKho, PhanXuong } from '../../api/warehouse'
+import TabGiaoHang from './TabGiaoHang'
 
 const { Text, Title } = Typography
 
@@ -27,9 +28,12 @@ const fmtCurrency = (v: number | null | undefined) =>
 export default function KhoPhoiPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState('inventory')
+  const [deliveryPOKeys, setDeliveryPOKeys] = useState<number[]>([])
   const [pushingKey, setPushingKey] = useState<string | null>(null)
   const [chuyenRows, setChuyenRows] = useState<KhoRow[]>([])
   const [chuyenQtys, setChuyenQtys] = useState<Record<number, number>>({})
+  const [chuyenDonGia, setChuyenDonGia] = useState<Record<number, number>>({})
   const [chuyenSrcId, setChuyenSrcId] = useState<number | null>(null)
   const [chuyenDstId, setChuyenDstId] = useState<number | null>(null)
   const [chuyenLoading, setChuyenLoading] = useState(false)
@@ -129,7 +133,9 @@ export default function KhoPhoiPage() {
   const openChuyenKho = (rows: KhoRow[]) => {
     if (!rows.length) return
     setChuyenRows(rows)
-    setChuyenQtys(Object.fromEntries(rows.map(r => [r.production_order_id, r.ton_kho])))
+    // Dùng ton_kho_tai_nguon (còn tại kho HG chưa chuyển) làm mặc định — không phải ton_kho tổng hệ thống
+    setChuyenQtys(Object.fromEntries(rows.map(r => [r.production_order_id, r.ton_kho_tai_nguon])))
+    setChuyenDonGia(Object.fromEntries(rows.map(r => [r.production_order_id, r.don_gia_noi_bo ?? 0])))
     setChuyenSrcId(rows[0].warehouse_id)
     const defaultDst = findPhoiKho(rows[0].phan_xuong_id)
     setChuyenDstId(defaultDst?.id ?? null)
@@ -162,7 +168,7 @@ export default function KhoPhoiPage() {
             ten_hang: r.ten_hang || 'Phôi sóng',
             don_vi: 'Tấm',
             so_luong: chuyenQtys[r.production_order_id],
-            don_gia: 0,
+            don_gia: chuyenDonGia[r.production_order_id] ?? 0,
           })),
       })
       message.success(`Đã chuyển ${fmtN(totalQty)} tấm (${chuyenRows.length} LSX) → ${dstWh?.ten_kho ?? 'kho đích'}`)
@@ -175,6 +181,11 @@ export default function KhoPhoiPage() {
     } finally {
       setChuyenLoading(false)
     }
+  }
+
+  const handleGoToDelivery = (poId: number) => {
+    setDeliveryPOKeys([poId])
+    setActiveTab('delivery')
   }
 
   const showXuongCol = activeXuong === 'all'
@@ -272,13 +283,33 @@ export default function KhoPhoiPage() {
     {
       title: 'Tồn (tấm)',
       dataIndex: 'ton_kho',
-      width: 90,
+      width: 110,
       align: 'right' as const,
-      render: (v: number) => (
-        <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322' }}>
-          {fmtN(v)}
-        </Text>
-      ),
+      render: (_: number, row: KhoRow) => {
+        if (row.cong_doan === 'cd2') {
+          return (
+            <Space direction="vertical" size={0} style={{ lineHeight: 1.4 }}>
+              <Text style={{ fontSize: 11, color: '#888' }}>
+                HG:{' '}
+                <Text strong style={{ fontSize: 12, color: row.ton_kho_tai_nguon > 0 ? '#fa8c16' : '#bbb' }}>
+                  {fmtN(row.ton_kho_tai_nguon)}
+                </Text>
+              </Text>
+              <Text style={{ fontSize: 11, color: '#888' }}>
+                CD2:{' '}
+                <Text strong style={{ fontSize: 12, color: row.ton_kho_tai_cd2 > 0 ? '#389e0d' : '#bbb' }}>
+                  {fmtN(row.ton_kho_tai_cd2)}
+                </Text>
+              </Text>
+            </Space>
+          )
+        }
+        return (
+          <Text strong style={{ color: row.ton_kho > 0 ? '#389e0d' : '#cf1322' }}>
+            {fmtN(row.ton_kho)}
+          </Text>
+        )
+      },
     },
     {
       title: 'Phiếu in hiện tại',
@@ -302,16 +333,19 @@ export default function KhoPhoiPage() {
         const isCD2 = row.cong_doan === 'cd2'
         const targetKho = isCD2 ? findPhoiKho(row.phan_xuong_id) : null
         const sourceKho = allWarehouses.find((w: Warehouse) => w.id === row.warehouse_id)
-        const daChuyen = (row.tong_chuyen_phoi ?? 0) > 0
-        const conTon = row.ton_kho > 0
-        // Phôi đã chuyển sang kho CD2 → vẫn có thể đẩy vào queue
-        const conPhoiTaiCD2 = isCD2 && daChuyen
+        const daChuyen = row.tong_chuyen_phoi > 0
+        // Còn phôi tại kho nguồn (HG) chưa chuyển → hiện nút Chuyển kho
+        const conPhoi_TaiNguon = row.ton_kho_tai_nguon > 0
+        // Có thể đẩy vào queue in/định hình:
+        //   - CD2 xưởng: phôi phải đã đến CD2 (ton_kho_tai_cd2 > 0)
+        //   - cd1_cd2 xưởng (HG, NT): dùng trực tiếp phôi tại chỗ (ton_kho > 0)
+        const canPrint = isCD2 ? row.ton_kho_tai_cd2 > 0 : row.ton_kho > 0
 
         if (row.phieu_in_hien_tai) {
           return (
             <Space size={4} wrap>
               <Tag color="cyan" style={{ fontSize: 11 }}>Đã đẩy sang CD2</Tag>
-              {isCD2 && conTon && (
+              {isCD2 && conPhoi_TaiNguon && (
                 <Button size="small" icon={<SwapOutlined />} onClick={() => openChuyenKho([row])} style={{ fontSize: 11 }}>
                   Chuyển kho
                 </Button>
@@ -319,13 +353,12 @@ export default function KhoPhoiPage() {
             </Space>
           )
         }
-        // Hết tồn kho gốc VÀ chưa chuyển sang CD2 → kết thúc
-        if (!conTon && !conPhoiTaiCD2) {
+        if (row.ton_kho <= 0) {
           return <Text type="secondary" style={{ fontSize: 11 }}>Hết tồn kho</Text>
         }
         return (
           <Space size={4} wrap>
-            {isCD2 && conTon && (
+            {isCD2 && conPhoi_TaiNguon && (
               <Tooltip
                 title={sourceKho && targetKho
                   ? `${sourceKho.ten_kho} → ${targetKho.ten_kho}`
@@ -345,40 +378,76 @@ export default function KhoPhoiPage() {
                 </Button>
               </Tooltip>
             )}
-            <Popconfirm
-              title={`Đẩy ${row.so_lenh} → Chờ in?`}
-              description={`${fmtN(row.ton_kho)} phôi sẽ được chuyển sang in`}
-              onConfirm={() => handleDay(row, 'in')}
-              okText="Đẩy" cancelText="Huỷ"
-            >
-              <Button
-                size="small"
-                type={row.co_in ? 'primary' : 'default'}
-                icon={<SendOutlined />}
-                loading={pushingKey === `${row.production_order_id}-in`}
-              >
-                Chờ in
-              </Button>
-            </Popconfirm>
-            <Popconfirm
-              title={`Đẩy ${row.so_lenh} → Chờ định hình?`}
-              description={`${fmtN(row.ton_kho)} phôi sẽ bỏ qua in, sang định hình`}
-              onConfirm={() => handleDay(row, 'sau_in')}
-              okText="Đẩy" cancelText="Huỷ"
-            >
-              <Button
-                size="small"
-                type={!row.co_in ? 'primary' : 'default'}
-                loading={pushingKey === `${row.production_order_id}-sau_in`}
-                style={!row.co_in ? { background: '#722ed1', borderColor: '#722ed1' } : {}}
-              >
-                Định hình
-              </Button>
-            </Popconfirm>
+            <Tooltip title={!canPrint && isCD2 ? 'Chưa có phôi tại kho CD2 — chuyển kho trước' : ''}>
+              <span>
+                <Popconfirm
+                  title={`Đẩy ${row.so_lenh} → Chờ in?`}
+                  description={`${fmtN(isCD2 ? row.ton_kho_tai_cd2 : row.ton_kho)} phôi sẽ được chuyển sang in`}
+                  onConfirm={() => handleDay(row, 'in')}
+                  okText="Đẩy" cancelText="Huỷ"
+                  disabled={!canPrint}
+                >
+                  <Button
+                    size="small"
+                    type={row.co_in ? 'primary' : 'default'}
+                    icon={<SendOutlined />}
+                    loading={pushingKey === `${row.production_order_id}-in`}
+                    disabled={!canPrint}
+                  >
+                    Chờ in
+                  </Button>
+                </Popconfirm>
+              </span>
+            </Tooltip>
+            <Tooltip title={!canPrint && isCD2 ? 'Chưa có phôi tại kho CD2 — chuyển kho trước' : ''}>
+              <span>
+                <Popconfirm
+                  title={`Đẩy ${row.so_lenh} → Chờ định hình?`}
+                  description={`${fmtN(isCD2 ? row.ton_kho_tai_cd2 : row.ton_kho)} phôi sẽ bỏ qua in, sang định hình`}
+                  onConfirm={() => handleDay(row, 'sau_in')}
+                  okText="Đẩy" cancelText="Huỷ"
+                  disabled={!canPrint}
+                >
+                  <Button
+                    size="small"
+                    type={!row.co_in ? 'primary' : 'default'}
+                    loading={pushingKey === `${row.production_order_id}-sau_in`}
+                    style={!row.co_in && canPrint ? { background: '#722ed1', borderColor: '#722ed1' } : {}}
+                    disabled={!canPrint}
+                  >
+                    Định hình
+                  </Button>
+                </Popconfirm>
+              </span>
+            </Tooltip>
           </Space>
         )
       },
     },
+  ]
+
+  const inventoryColumns = [
+    ...columns.slice(0, -1),
+    {
+      title: 'Thao tác',
+      width: 320,
+      render: (_: unknown, row: KhoRow) => (
+        <Space size={4} wrap>
+          {columns[columns.length - 1].render!(_, row, 0) as React.ReactNode}
+          {row.ton_kho > 0 && (
+            <Button
+              size="small"
+              type="primary"
+              icon={<SendOutlined />}
+              style={{ background: '#1b168e', borderColor: '#1b168e' }}
+              onClick={(e) => { e.stopPropagation(); handleGoToDelivery(row.production_order_id) }}
+            >
+              Giao hàng
+            </Button>
+          )}
+        </Space>
+      )
+    }
   ]
 
   const phoiWarehouseOptions = allWarehouses
@@ -390,356 +459,407 @@ export default function KhoPhoiPage() {
   const totalTonLuong = tonKhoDetail.reduce((s, r) => s + (r.ton_luong ?? 0), 0)
 
   return (
-    <div style={{ paddingBottom: 24 }}>
-      {/* Header */}
-      <Row align="middle" justify="space-between" style={{ marginBottom: 12 }}>
-        <Col>
-          <Space>
-            <InboxOutlined style={{ fontSize: 20, color: '#1677ff' }} />
-            <Title level={4} style={{ margin: 0 }}>Kho Phôi Sóng</Title>
-          </Space>
-        </Col>
-        <Col>
-          <Button size="small" onClick={() => refetch()}>Làm mới</Button>
-        </Col>
-      </Row>
-
-      {/* Sub-tab xưởng */}
-      <Tabs
-        size="small"
-        activeKey={activeXuong}
-        onChange={key => { setActiveXuong(key); setSelectedRowKeys([]) }}
-        items={xuongTabItems}
-        style={{ marginBottom: 4 }}
-      />
-
-      <Space direction="vertical" style={{ width: '100%' }} size={12}>
-        {isError && (
-          <Alert
-            type="error"
-            showIcon
-            message="Không tải được dữ liệu kho phôi sóng"
-            description={error instanceof Error ? error.message : 'Vui lòng bấm Làm mới hoặc đăng nhập lại.'}
-          />
-        )}
-
-        {/* Filter bar */}
-        <Row gutter={[8, 8]} align="middle">
-          <Col xs={24} sm={8}>
-            <Input.Search
-              size="small"
-              placeholder="Tìm LSX / khách hàng / tên hàng..."
-              allowClear
-              value={filterSearch}
-              onChange={e => setFilterSearch(e.target.value)}
-            />
-          </Col>
-          <Col xs={12} sm={4}>
-            <Select size="small" style={{ width: '100%' }} placeholder="Pháp nhân" allowClear
-              value={filterPhapNhan}
-              onChange={v => setFilterPhapNhan(v ?? null)}
-              options={phapNhanOptions}
-            />
-          </Col>
-          <Col xs={12} sm={4}>
-            <Select size="small" style={{ width: '100%' }} placeholder="Loại" allowClear
-              value={filterLoai}
-              onChange={v => setFilterLoai(v ?? null)}
-              options={[
-                { value: 'co_in', label: 'Có in' },
-                { value: 'khong_in', label: 'Không in' },
-              ]}
-            />
-          </Col>
-          <Col xs={12} sm={4}>
-            <Select size="small" style={{ width: '100%' }} placeholder="Tồn kho" allowClear
-              value={filterTonKho}
-              onChange={v => setFilterTonKho(v ?? null)}
-              options={[{ value: 'co_ton', label: 'Còn tồn' }]}
-            />
-          </Col>
-          <Col xs={12} sm={4}>
-            <Button size="small" style={{ width: '100%' }} onClick={() => {
-              setFilterSearch(''); setFilterPhapNhan(null)
-              setFilterLoai(null); setFilterTonKho(null)
-            }}>Xoá lọc</Button>
-          </Col>
-        </Row>
-
-        <Row justify="space-between" align="middle">
-          <Col>
-            <Space size={8}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {filteredData.length} lệnh SX
-              </Text>
-              {selectedRowKeys.length > 0 && (
-                <Button
-                  size="small"
-                  type="primary"
-                  icon={<SwapOutlined />}
-                  style={{ background: '#fa8c16', borderColor: '#fa8c16' }}
-                  onClick={() => {
-                    const rows = (data ?? []).filter(r =>
-                      selectedRowKeys.includes(r.production_order_id) && r.cong_doan === 'cd2' && r.ton_kho > 0
-                    )
-                    if (!rows.length) { message.warning('Không có LSX nào hợp lệ để chuyển kho'); return }
-                    openChuyenKho(rows)
-                  }}
-                >
-                  Chuyển kho ({selectedRowKeys.length} LSX)
-                </Button>
-              )}
-            </Space>
-          </Col>
-        </Row>
-
-        <Table<KhoRow>
-          rowKey="production_order_id"
-          size="small"
-          loading={isLoading}
-          dataSource={filteredData}
-          columns={columns}
-          pagination={{ pageSize: 50, showTotal: (t, r) => `${t} lệnh SX${r[0] !== 1 || r[1] !== (data ?? []).length ? ` (lọc từ ${(data ?? []).length})` : ''}`, showSizeChanger: false }}
-          scroll={{ x: 1100 }}
-          rowClassName={(row) => row.ton_kho <= 0 ? 'ant-table-row-disabled' : ''}
-          rowSelection={{
-            selectedRowKeys,
-            onChange: setSelectedRowKeys,
-            getCheckboxProps: (row: KhoRow) => ({
-              disabled: row.cong_doan !== 'cd2' || row.ton_kho <= 0,
-            }),
-          }}
-          onRow={(row) => ({
-            onClick: () => {
-              // Nếu là CD2 và đã có phôi chuyển đến → show kho CD2
-              // Ngược lại → show kho nguồn (CD1) nơi phôi đang chờ chuyển
-              const daChuyen = (row.tong_chuyen_phoi ?? 0) > 0
-              const whId = (row.cong_doan === 'cd2' && daChuyen)
-                ? (findPhoiKho(row.phan_xuong_id)?.id ?? row.warehouse_id)
-                : row.warehouse_id
-              if (whId) setDetailWhId(whId)
-            },
-            style: { cursor: 'pointer' },
-          })}
-        />
-
-        {/* Modal chuyển kho phôi sang xưởng CD2 */}
-        <Modal
-          open={chuyenRows.length > 0}
-          onCancel={() => { setChuyenRows([]); setSelectedRowKeys([]) }}
-          onOk={handleChuyenKho}
-          okText="Tạo phiếu chuyển kho"
-          cancelText="Huỷ"
-          confirmLoading={chuyenLoading}
-          title={
-            <Space>
-              <SwapOutlined style={{ color: '#fa8c16' }} />
-              <span>Chuyển kho phôi — {chuyenRows.length} lệnh SX</span>
-            </Space>
-          }
-          width={600}
-        >
-          {chuyenRows.length > 0 && (
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
-              <Row gutter={8} align="middle">
-                <Col span={11}>
-                  <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>Kho nguồn (xuất)</div>
-                  <Select
-                    style={{ width: '100%' }}
-                    options={phoiWarehouseOptions}
-                    value={chuyenSrcId}
-                    onChange={setChuyenSrcId}
-                    placeholder="Chọn kho nguồn"
-                    status={!chuyenSrcId ? 'error' : undefined}
-                  />
-                </Col>
-                <Col span={2} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 20 }}>
-                  <SwapOutlined style={{ color: '#fa8c16', fontSize: 18 }} />
-                </Col>
-                <Col span={11}>
-                  <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>Kho đích (nhập)</div>
-                  <Select
-                    style={{ width: '100%' }}
-                    options={phoiWarehouseOptions}
-                    value={chuyenDstId}
-                    onChange={setChuyenDstId}
-                    placeholder="Chọn kho đích"
-                    status={!chuyenDstId ? 'error' : undefined}
-                  />
-                </Col>
-              </Row>
-
-              <Table<KhoRow>
-                size="small"
-                dataSource={chuyenRows}
-                rowKey="production_order_id"
-                pagination={false}
-                columns={[
-                  {
-                    title: 'Lệnh SX',
-                    dataIndex: 'so_lenh',
-                    width: 130,
-                    render: (v: string) => <Text code style={{ fontSize: 12 }}>{v}</Text>,
-                  },
-                  {
-                    title: 'Tên hàng',
-                    dataIndex: 'ten_hang',
-                    ellipsis: true,
-                    render: (v: string | null) => v || 'Phôi sóng',
-                  },
-                  {
-                    title: 'Tồn (tấm)',
-                    dataIndex: 'ton_kho',
-                    width: 80,
-                    align: 'right' as const,
-                    render: (v: number) => <Text type="secondary" style={{ fontSize: 11 }}>{fmtN(v)}</Text>,
-                  },
-                  {
-                    title: 'SL chuyển (tấm)',
-                    width: 150,
-                    render: (_: unknown, row: KhoRow) => (
-                      <InputNumber
-                        size="small"
-                        style={{ width: '100%' }}
-                        min={1}
-                        max={row.ton_kho}
-                        value={chuyenQtys[row.production_order_id] ?? row.ton_kho}
-                        onChange={v => setChuyenQtys(prev => ({
-                          ...prev,
-                          [row.production_order_id]: v ?? row.ton_kho,
-                        }))}
-                      />
-                    ),
-                  },
-                ]}
-                summary={() => (
-                  <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={2}>
-                      <Text strong style={{ fontSize: 12 }}>Tổng</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={2} align="right">
-                      <Text strong style={{ fontSize: 12 }}>
-                        {fmtN(chuyenRows.reduce((s, r) => s + r.ton_kho, 0))}
-                      </Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={3}>
-                      <Text strong style={{ color: '#fa8c16', fontSize: 12 }}>
-                        {fmtN(Object.values(chuyenQtys).reduce((s, v) => s + (v || 0), 0))} tấm
-                      </Text>
-                    </Table.Summary.Cell>
-                  </Table.Summary.Row>
-                )}
-              />
-            </Space>
-          )}
-        </Modal>
-
-        {/* Drawer chi tiết kho */}
-        <Drawer
-          title={
-            <Space>
-              <span>{detailWh?.ten_kho ?? 'Chi tiết kho'}</span>
-              {detailWh?.ma_kho && <Tag color="blue">{detailWh.ma_kho}</Tag>}
-            </Space>
-          }
-          open={!!detailWhId}
-          onClose={() => setDetailWhId(null)}
-          width={560}
-        >
-          {detailFetching ? (
-            <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
-          ) : (
-            <Space direction="vertical" style={{ width: '100%' }} size={16}>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Statistic
-                    title="Tổng giá trị tồn"
-                    value={totalGiaTri}
-                    formatter={v => fmtN(Number(v)) + ' đ'}
-                    valueStyle={{ color: '#1677ff', fontSize: 18 }}
-                  />
-                </Col>
-                <Col span={12}>
-                  <Statistic
-                    title="Tổng tồn kho"
-                    value={totalTonLuong}
-                    formatter={v => fmtN(Number(v)) + ' tấm'}
-                    valueStyle={{ color: '#389e0d', fontSize: 18 }}
-                  />
-                </Col>
-              </Row>
-
-              <Table<TonKho>
-                rowKey="id"
-                size="small"
-                dataSource={tonKhoDetail}
-                pagination={false}
-                scroll={{ x: 480 }}
-                columns={[
-                  {
-                    title: 'Tên hàng',
-                    dataIndex: 'ten_hang',
-                    ellipsis: true,
-                    render: (v: string) => <Text strong style={{ fontSize: 12 }}>{v}</Text>,
-                  },
-                  {
-                    title: 'Tồn',
-                    dataIndex: 'ton_luong',
-                    width: 80,
-                    align: 'right' as const,
-                    render: (v: number, r: TonKho) => (
-                      <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
-                        <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322', fontSize: 12 }}>{fmtN(v)}</Text>
-                        <Text type="secondary" style={{ fontSize: 10 }}>{r.don_vi}</Text>
+    <div style={{ padding: 24 }}>
+      <Title level={4} style={{ marginBottom: 16 }}>Kho Phôi Sóng</Title>
+      <Card>
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'inventory',
+              label: <span>📦 Tồn kho phôi</span>,
+              children: (
+                <div style={{ paddingTop: 16 }}>
+                  {/* Header */}
+                  <Row align="middle" justify="space-between" style={{ marginBottom: 12 }}>
+                    <Col>
+                      <Space>
+                        <InboxOutlined style={{ fontSize: 20, color: '#1677ff' }} />
+                        <Text strong>Danh sách tồn kho</Text>
                       </Space>
-                    ),
-                  },
-                  {
-                    title: 'Đơn giá BQ',
-                    dataIndex: 'don_gia_binh_quan',
-                    width: 110,
-                    align: 'right' as const,
-                    render: (v: number) => v > 0
-                      ? <Text style={{ fontSize: 12 }}>{fmtCurrency(v)}</Text>
-                      : <Text type="secondary">—</Text>,
-                  },
-                  {
-                    title: 'Giá trị tồn',
-                    dataIndex: 'gia_tri_ton',
-                    width: 120,
-                    align: 'right' as const,
-                    render: (v: number) => (
-                      <Text strong style={{ color: v > 0 ? '#1677ff' : '#aaa', fontSize: 12 }}>
-                        {v > 0 ? fmtCurrency(v) : '—'}
-                      </Text>
-                    ),
-                  },
-                ]}
-                summary={() => tonKhoDetail.length > 0 ? (
-                  <Table.Summary.Row>
-                    <Table.Summary.Cell index={0}>
-                      <Text strong style={{ fontSize: 12 }}>Tổng cộng</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="right">
-                      <Text strong style={{ color: '#389e0d', fontSize: 12 }}>{fmtN(totalTonLuong)}</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={2} />
-                    <Table.Summary.Cell index={3} align="right">
-                      <Text strong style={{ color: '#1677ff', fontSize: 12 }}>{fmtCurrency(totalGiaTri)}</Text>
-                    </Table.Summary.Cell>
-                  </Table.Summary.Row>
-                ) : null}
-              />
+                    </Col>
+                    <Col>
+                      <Button size="small" onClick={() => refetch()}>Làm mới</Button>
+                    </Col>
+                  </Row>
 
-              {tonKhoDetail.length === 0 && !detailFetching && (
-                <Text type="secondary" style={{ display: 'block', textAlign: 'center', padding: '24px 0' }}>
-                  Kho này chưa có hàng tồn kho
-                </Text>
+                  {/* Sub-tab xưởng */}
+                  <Tabs
+                    size="small"
+                    activeKey={activeXuong}
+                    onChange={key => { setActiveXuong(key); setSelectedRowKeys([]) }}
+                    items={xuongTabItems}
+                    style={{ marginBottom: 4 }}
+                  />
+
+                  <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                    {isError && (
+                      <Alert
+                        type="error"
+                        showIcon
+                        message="Không tải được dữ liệu kho phôi sóng"
+                        description={error instanceof Error ? error.message : 'Vui lòng bấm Làm mới hoặc đăng nhập lại.'}
+                      />
+                    )}
+
+                    {/* Filter bar */}
+                    <Row gutter={[8, 8]} align="middle">
+                      <Col xs={24} sm={8}>
+                        <Input.Search
+                          size="small"
+                          placeholder="Tìm LSX / khách hàng / tên hàng..."
+                          allowClear
+                          value={filterSearch}
+                          onChange={e => setFilterSearch(e.target.value)}
+                        />
+                      </Col>
+                      <Col xs={12} sm={4}>
+                        <Select size="small" style={{ width: '100%' }} placeholder="Pháp nhân" allowClear
+                          value={filterPhapNhan}
+                          onChange={v => setFilterPhapNhan(v ?? null)}
+                          options={phapNhanOptions}
+                        />
+                      </Col>
+                      <Col xs={12} sm={4}>
+                        <Select size="small" style={{ width: '100%' }} placeholder="Loại" allowClear
+                          value={filterLoai}
+                          onChange={v => setFilterLoai(v ?? null)}
+                          options={[
+                            { value: 'co_in', label: 'Có in' },
+                            { value: 'khong_in', label: 'Không in' },
+                          ]}
+                        />
+                      </Col>
+                      <Col xs={12} sm={4}>
+                        <Select size="small" style={{ width: '100%' }} placeholder="Tồn kho" allowClear
+                          value={filterTonKho}
+                          onChange={v => setFilterTonKho(v ?? null)}
+                          options={[{ value: 'co_ton', label: 'Còn tồn' }]}
+                        />
+                      </Col>
+                      <Col xs={12} sm={4}>
+                        <Button size="small" style={{ width: '100%' }} onClick={() => {
+                          setFilterSearch(''); setFilterPhapNhan(null)
+                          setFilterLoai(null); setFilterTonKho(null)
+                        }}>Xoá lọc</Button>
+                      </Col>
+                    </Row>
+
+                    <Row justify="space-between" align="middle">
+                      <Col>
+                        <Space size={8}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {filteredData.length} lệnh SX
+                          </Text>
+                          {selectedRowKeys.length > 0 && (
+                            <Button
+                              size="small"
+                              type="primary"
+                              icon={<SwapOutlined />}
+                              style={{ background: '#fa8c16', borderColor: '#fa8c16' }}
+                              onClick={() => {
+                                const rows = (data ?? []).filter(r =>
+                                  selectedRowKeys.includes(r.production_order_id) &&
+                                  r.cong_doan === 'cd2' &&
+                                  r.ton_kho_tai_nguon > 0
+                                )
+                                if (!rows.length) { message.warning('Không có LSX nào hợp lệ để chuyển kho (cần có phôi tại kho nguồn)'); return }
+                                const dstIds = new Set(rows.map(r => r.phan_xuong_id))
+                                if (dstIds.size > 1) {
+                                  message.error('Các LSX thuộc nhiều xưởng đích khác nhau — vui lòng chuyển từng xưởng riêng')
+                                  return
+                                }
+                                openChuyenKho(rows)
+                              }}
+                            >
+                              Chuyển kho ({selectedRowKeys.length} LSX)
+                            </Button>
+                          )}
+                        </Space>
+                      </Col>
+                    </Row>
+
+                    <Table<KhoRow>
+                      rowKey="production_order_id"
+                      size="small"
+                      loading={isLoading}
+                      dataSource={filteredData}
+                      columns={inventoryColumns}
+                      pagination={{ pageSize: 50, showTotal: (t, r) => `${t} lệnh SX${r[0] !== 1 || r[1] !== (data ?? []).length ? ` (lọc từ ${(data ?? []).length})` : ''}`, showSizeChanger: false }}
+                      scroll={{ x: 1200 }}
+                      rowClassName={(row) => row.ton_kho <= 0 ? 'ant-table-row-disabled' : ''}
+                      rowSelection={{
+                        selectedRowKeys,
+                        onChange: setSelectedRowKeys,
+                        getCheckboxProps: (row: KhoRow) => ({
+                          disabled: row.cong_doan !== 'cd2' || row.ton_kho_tai_nguon <= 0,
+                        }),
+                      }}
+                      onRow={(row) => ({
+                        onClick: () => {
+                          const daChuyen = (row.tong_chuyen_phoi ?? 0) > 0
+                          const whId = (row.cong_doan === 'cd2' && daChuyen)
+                            ? (findPhoiKho(row.phan_xuong_id)?.id ?? row.warehouse_id)
+                            : row.warehouse_id
+                          if (whId) setDetailWhId(whId)
+                        },
+                        style: { cursor: 'pointer' },
+                      })}
+                    />
+                  </Space>
+                </div>
+              ),
+            },
+            {
+              key: 'delivery',
+              label: <span style={{ color: '#1b168e', fontWeight: 'bold' }}>🚚 Giao hàng</span>,
+              children: <div style={{ paddingTop: 16 }}><TabGiaoHang initialSelectedPOKeys={deliveryPOKeys} /></div>,
+            },
+          ]}
+        />
+      </Card>
+
+      {/* Modal chuyển kho phôi sang xưởng CD2 */}
+      <Modal
+        open={chuyenRows.length > 0}
+        onCancel={() => { setChuyenRows([]); setSelectedRowKeys([]) }}
+        onOk={handleChuyenKho}
+        okText="Tạo phiếu chuyển kho"
+        cancelText="Huỷ"
+        confirmLoading={chuyenLoading}
+        title={
+          <Space>
+            <SwapOutlined style={{ color: '#fa8c16' }} />
+            <span>Chuyển kho phôi — {chuyenRows.length} lệnh SX</span>
+          </Space>
+        }
+        width={750}
+      >
+        {chuyenRows.length > 0 && (
+          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Row gutter={8} align="middle">
+              <Col span={11}>
+                <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>Kho nguồn (xuất)</div>
+                <Select
+                  style={{ width: '100%' }}
+                  options={phoiWarehouseOptions}
+                  value={chuyenSrcId}
+                  onChange={setChuyenSrcId}
+                  placeholder="Chọn kho nguồn"
+                  status={!chuyenSrcId ? 'error' : undefined}
+                />
+              </Col>
+              <Col span={2} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 20 }}>
+                <SwapOutlined style={{ color: '#fa8c16', fontSize: 18 }} />
+              </Col>
+              <Col span={11}>
+                <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>Kho đích (nhập)</div>
+                <Select
+                  style={{ width: '100%' }}
+                  options={phoiWarehouseOptions}
+                  value={chuyenDstId}
+                  onChange={setChuyenDstId}
+                  placeholder="Chọn kho đích"
+                  status={!chuyenDstId ? 'error' : undefined}
+                />
+              </Col>
+            </Row>
+
+            <Table<KhoRow>
+              size="small"
+              dataSource={chuyenRows}
+              rowKey="production_order_id"
+              pagination={false}
+              columns={[
+                {
+                  title: 'Lệnh SX',
+                  dataIndex: 'so_lenh',
+                  width: 130,
+                  render: (v: string) => <Text code style={{ fontSize: 12 }}>{v}</Text>,
+                },
+                {
+                  title: 'Tên hàng',
+                  dataIndex: 'ten_hang',
+                  ellipsis: true,
+                  render: (v: string | null) => v || 'Phôi sóng',
+                },
+                {
+                  title: 'Tại HG (tấm)',
+                  dataIndex: 'ton_kho_tai_nguon',
+                  width: 90,
+                  align: 'right' as const,
+                  render: (v: number) => <Text type="secondary" style={{ fontSize: 11 }}>{fmtN(v)}</Text>,
+                },
+                {
+                  title: 'SL chuyển (tấm)',
+                  width: 140,
+                  render: (_: unknown, row: KhoRow) => (
+                    <InputNumber
+                      size="small"
+                      style={{ width: '100%' }}
+                      min={1}
+                      max={row.ton_kho_tai_nguon}
+                      value={chuyenQtys[row.production_order_id] ?? row.ton_kho_tai_nguon}
+                      onChange={v => setChuyenQtys(prev => ({
+                        ...prev,
+                        [row.production_order_id]: v ?? row.ton_kho_tai_nguon,
+                      }))}
+                    />
+                  ),
+                },
+                {
+                  title: (
+                    <Tooltip title="Giá nội bộ (đ/tấm) — dùng cho hạch toán quản trị xưởng/pháp nhân. Lấy từ LSX, có thể điều chỉnh trước khi chuyển.">
+                      Giá NB (đ/tấm)
+                    </Tooltip>
+                  ),
+                  width: 150,
+                  render: (_: unknown, row: KhoRow) => (
+                    <InputNumber
+                      size="small"
+                      style={{ width: '100%' }}
+                      min={0}
+                      step={1000}
+                      value={chuyenDonGia[row.production_order_id] ?? 0}
+                      formatter={v => v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0'}
+                      parser={v => v ? Number(v.replace(/,/g, '')) : 0}
+                      onChange={v => setChuyenDonGia(prev => ({
+                        ...prev,
+                        [row.production_order_id]: v ?? 0,
+                      }))}
+                      placeholder="0"
+                    />
+                  ),
+                },
+              ]}
+              summary={() => (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={2}>
+                    <Text strong style={{ fontSize: 12 }}>Tổng</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} align="right">
+                    <Text strong style={{ fontSize: 12 }}>
+                      {fmtN(chuyenRows.reduce((s, r) => s + r.ton_kho_tai_nguon, 0))}
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={3}>
+                    <Text strong style={{ color: '#fa8c16', fontSize: 12 }}>
+                      {fmtN(Object.values(chuyenQtys).reduce((s, v) => s + (v || 0), 0))} tấm
+                    </Text>
+                  </Table.Summary.Cell>
+                </Table.Summary.Row>
               )}
-            </Space>
-          )}
-        </Drawer>
-      </Space>
+            />
+          </Space>
+        )}
+      </Modal>
+
+      {/* Drawer chi tiết kho */}
+      <Drawer
+        title={
+          <Space>
+            <span>{detailWh?.ten_kho ?? 'Chi tiết kho'}</span>
+            {detailWh?.ma_kho && <Tag color="blue">{detailWh.ma_kho}</Tag>}
+          </Space>
+        }
+        open={!!detailWhId}
+        onClose={() => setDetailWhId(null)}
+        width={560}
+      >
+        {detailFetching ? (
+          <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+        ) : (
+          <Space direction="vertical" style={{ width: '100%' }} size={16}>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Statistic
+                  title="Tổng giá trị tồn"
+                  value={totalGiaTri}
+                  formatter={v => fmtN(Number(v)) + ' đ'}
+                  valueStyle={{ color: '#1677ff', fontSize: 18 }}
+                />
+              </Col>
+              <Col span={12}>
+                <Statistic
+                  title="Tổng tồn kho"
+                  value={totalTonLuong}
+                  formatter={v => fmtN(Number(v)) + ' tấm'}
+                  valueStyle={{ color: '#389e0d', fontSize: 18 }}
+                />
+              </Col>
+            </Row>
+
+            <Table<TonKho>
+              rowKey="id"
+              size="small"
+              dataSource={tonKhoDetail}
+              pagination={false}
+              scroll={{ x: 480 }}
+              columns={[
+                {
+                  title: 'Tên hàng',
+                  dataIndex: 'ten_hang',
+                  ellipsis: true,
+                  render: (v: string) => <Text strong style={{ fontSize: 12 }}>{v}</Text>,
+                },
+                {
+                  title: 'Tồn',
+                  dataIndex: 'ton_luong',
+                  width: 80,
+                  align: 'right' as const,
+                  render: (v: number, r: TonKho) => (
+                    <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
+                      <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322', fontSize: 12 }}>{fmtN(v)}</Text>
+                      <Text type="secondary" style={{ fontSize: 10 }}>{r.don_vi}</Text>
+                    </Space>
+                  ),
+                },
+                {
+                  title: 'Đơn giá BQ',
+                  dataIndex: 'don_gia_binh_quan',
+                  width: 110,
+                  align: 'right' as const,
+                  render: (v: number) => v > 0
+                    ? <Text style={{ fontSize: 12 }}>{fmtCurrency(v)}</Text>
+                    : <Text type="secondary">—</Text>,
+                },
+                {
+                  title: 'Giá trị tồn',
+                  dataIndex: 'gia_tri_ton',
+                  width: 120,
+                  align: 'right' as const,
+                  render: (v: number) => (
+                    <Text strong style={{ color: v > 0 ? '#1677ff' : '#aaa', fontSize: 12 }}>
+                      {v > 0 ? fmtCurrency(v) : '—'}
+                    </Text>
+                  ),
+                },
+              ]}
+              summary={() => tonKhoDetail.length > 0 ? (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0}>
+                    <Text strong style={{ fontSize: 12 }}>Tổng cộng</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <Text strong style={{ color: '#389e0d', fontSize: 12 }}>{fmtN(totalTonLuong)}</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} />
+                  <Table.Summary.Cell index={3} align="right">
+                    <Text strong style={{ color: '#1677ff', fontSize: 12 }}>{fmtCurrency(totalGiaTri)}</Text>
+                  </Table.Summary.Cell>
+                </Table.Summary.Row>
+              ) : null}
+            />
+
+            {tonKhoDetail.length === 0 && !detailFetching && (
+              <Text type="secondary" style={{ display: 'block', textAlign: 'center', padding: '24px 0' }}>
+                Kho này chưa có hàng tồn kho
+              </Text>
+            )}
+          </Space>
+        )}
+      </Drawer>
     </div>
   )
 }

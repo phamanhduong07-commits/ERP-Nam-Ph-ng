@@ -206,6 +206,8 @@ export const deliveriesApi = {
   get: (id: number) => client.get<DeliveryOrder>(`/warehouse/deliveries/${id}`),
   create: (data: CreateDeliveryPayload) =>
     client.post<DeliveryOrder>('/warehouse/deliveries', data),
+  updateStatus: (id: number, trang_thai: string) =>
+    client.patch<{ id: number; trang_thai: string }>(`/warehouse/deliveries/${id}/status`, { trang_thai }),
   delete: (id: number) => client.delete(`/warehouse/deliveries/${id}`),
   getBySalesOrder: (salesOrderId: number) =>
     client.get<DeliveryOrder[]>(`/warehouse/deliveries?sales_order_id=${salesOrderId}`),

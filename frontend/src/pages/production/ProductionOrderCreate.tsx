@@ -176,6 +176,7 @@ export default function ProductionOrderCreate() {
           ? dayjs(values.ngay_hoan_thanh_ke_hoach).format('YYYY-MM-DD')
           : undefined,
         ghi_chu: values.ghi_chu,
+        don_gia_noi_bo: values.don_gia_noi_bo ?? null,
         items: lines.map((l) => ({
           product_id: l.product_id || undefined,
           sales_order_item_id: l.sales_order_item_id || undefined,
@@ -378,7 +379,23 @@ export default function ProductionOrderCreate() {
                     )}
                   </Form.Item>
                 </Col>
-                <Col span={24}>
+                <Col span={8}>
+                  <Form.Item
+                    name="don_gia_noi_bo"
+                    label="Giá nội bộ (đ/tấm)"
+                    tooltip="Giá chuyển phôi nội bộ giữa các xưởng — dùng cho hạch toán quản trị pháp nhân/xưởng"
+                  >
+                    <InputNumber
+                      style={{ width: '100%' }}
+                      min={0}
+                      step={1000}
+                      formatter={v => v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                      parser={v => Number((v ?? '0').replace(/,/g, '')) as 0}
+                      placeholder="VD: 50,000"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={16}>
                   <Form.Item name="ghi_chu" label="Ghi chú">
                     <Input.TextArea rows={2} placeholder="Ghi chú lệnh SX..." />
                   </Form.Item>

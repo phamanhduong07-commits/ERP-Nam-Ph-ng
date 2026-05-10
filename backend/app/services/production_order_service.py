@@ -63,9 +63,13 @@ class ProductionOrderService:
         total = q.count()
         orders = q.order_by(ProductionOrder.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
+        _KHO_DE_XUAT = 2000  # mm — kho 1 con >= 2m → đề xuất mua phôi ngoài
+
         items = []
         for o in orders:
             first_item = o.items[0] if o.items else None
+            kho_vals = [float(i.kho_tt) for i in o.items if i.kho_tt is not None]
+            kho_tt_max = max(kho_vals) if kho_vals else None
             items.append(ProductionOrderListItem(
                 id=o.id,
                 so_lenh=o.so_lenh,
@@ -82,6 +86,8 @@ class ProductionOrderService:
                 trang_thai=o.trang_thai,
                 tong_sl_ke_hoach=sum(i.so_luong_ke_hoach for i in o.items),
                 so_dong=len(o.items),
+                kho_tt_max=kho_tt_max,
+                de_xuat_mua_ngoai=(kho_tt_max or 0) >= _KHO_DE_XUAT,
                 created_at=o.created_at,
             ))
 

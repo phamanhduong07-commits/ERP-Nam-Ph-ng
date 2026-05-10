@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from app.socket_manager import socket_app
 from app.config import settings
 from app.database import Base, engine, ensure_schema
 from app.routers import (
@@ -48,6 +49,10 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
+
+# ─── Socket.io ────────────────────────────────────────────────────────────────
+# Mount Socket.io ASGI app vào đường dẫn /ws
+app.mount("/ws/socket.io", socket_app)
 
 # ─── CORS ─────────────────────────────────────────────────────────────────────
 _origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
