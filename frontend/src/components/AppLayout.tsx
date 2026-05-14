@@ -8,12 +8,13 @@ import {
   TeamOutlined, UserOutlined, LogoutOutlined, SettingOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, ToolOutlined, ClockCircleOutlined,
   AccountBookOutlined, RobotOutlined, BarChartOutlined, ShopOutlined, BankOutlined,
-  ThunderboltOutlined, FileTextOutlined, MobileOutlined,
+  ThunderboltOutlined, FileTextOutlined, MobileOutlined, CarOutlined,
+  SolutionOutlined, TrophyOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
 import { productionPlansApi } from '../api/productionPlans'
-import namPhuongLogo from '../assets/nam-phuong-logo-cropped.png'
+const namPhuongLogo = '/logo_namphuong.png'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -43,7 +44,7 @@ function filterByRole(items: RawMenuItem[], role: string): object[] {
 }
 
 const ADMIN_GD = ['ADMIN', 'GIAM_DOC']
-const BAN_HANG = ['ADMIN', 'GIAM_DOC', 'KINH_DOANH', 'KE_TOAN']
+const BAN_HANG = ['ADMIN', 'GIAM_DOC', 'KINH_DOANH', 'KE_TOAN', 'SALE_ADMIN', 'TRUONG_PHONG_SALE_ADMIN']
 const SAN_XUAT_FULL = ['ADMIN', 'GIAM_DOC', 'SAN_XUAT', 'KINH_DOANH']
 const SAN_XUAT_ALL = ['ADMIN', 'GIAM_DOC', 'SAN_XUAT', 'KINH_DOANH', 'CONG_NHAN']
 const KHO_ROLES = ['ADMIN', 'GIAM_DOC', 'KHO', 'SAN_XUAT', 'KE_TOAN', 'MUA_HANG']
@@ -126,9 +127,8 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/production/phieu-nhap-phoi', label: <Link to="/production/phieu-nhap-phoi">DS nhập phôi sóng</Link>, roles: SAN_XUAT_FULL },
         { key: '/warehouse/inventory', label: <Link to="/warehouse/inventory">Tồn kho</Link> },
         { key: '/warehouse/nhap-nhanh', label: <Link to="/warehouse/nhap-nhanh">📷 Ghi nhận xe nhập giấy</Link> },
-        { key: '/production/cd2/mobile-tracking-kho', label: <Link to="/production/cd2/mobile-tracking">📷 Báo cáo máy (Mobile)</Link> },
-        { key: '/warehouse/nhap-nhanh-nvl', label: <Link to="/warehouse/nhap-nhanh?loai=nvl">📷 Ghi nhận xe nhập NVL</Link> },
-        { key: '/warehouse/nhap-nhanh-phoi', label: <Link to="/warehouse/nhap-nhanh?loai=phoi">📷 Ghi nhận xe nhập phôi</Link> },
+        { key: '/warehouse/nhap-nhanh?loai=nvl', label: <Link to="/warehouse/nhap-nhanh?loai=nvl">📷 Ghi nhận xe nhập NVL</Link> },
+        { key: '/warehouse/nhap-nhanh?loai=phoi', label: <Link to="/warehouse/nhap-nhanh?loai=phoi">📷 Ghi nhận xe nhập phôi</Link> },
         { key: '/warehouse/nhap-giay', label: <Link to="/warehouse/nhap-giay">Nhập giấy cuộn</Link> },
         { key: '/warehouse/nhap-phoi-ngoai', label: <Link to="/warehouse/nhap-phoi-ngoai">Nhập phôi sóng (mua ngoài)</Link> },
         { key: '/warehouse/receipts', label: <Link to="/warehouse/receipts">Nhập NVL khác</Link> },
@@ -148,6 +148,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/purchasing/giay-cuon', label: <Link to="/purchasing/giay-cuon">Mua giấy</Link> },
         { key: '/purchasing/nvl-khac', label: <Link to="/purchasing/nvl-khac">Mua NVL khác</Link> },
         { key: '/purchasing/orders', label: <Link to="/purchasing/orders">Đơn mua hàng (PO)</Link> },
+        { key: '/purchasing/goods-receipts', label: <Link to="/purchasing/goods-receipts">Phiếu nhập kho (GR)</Link> },
         { key: '/accounting/purchase-invoices', label: <Link to="/accounting/purchase-invoices">Hóa đơn mua hàng</Link> },
         { key: '/purchasing/returns', label: <Link to="/purchasing/returns">Trả hàng NCC</Link> },
       ],
@@ -175,12 +176,31 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
             { key: '/accounting/ap-ledger', label: <Link to="/accounting/ap-ledger">Sổ công nợ phải trả</Link> },
             { key: '/accounting/ar-reconciliation', label: <Link to="/accounting/ar-reconciliation">Đối soát công nợ</Link> },
             { key: '/accounting/customer-refunds', label: <Link to="/accounting/customer-refunds">Hoàn tiền trả hàng</Link> },
+            { key: '/billing/adjustments', label: <Link to="/billing/adjustments">Duyệt điều chỉnh HĐ</Link> },
           ]
         },
         { key: '/accounting/journal-entries', label: <Link to="/accounting/journal-entries">Bút toán tổng hợp</Link> },
         { key: '/accounting/workshop-management', label: <Link to="/accounting/workshop-management">Quản trị xưởng (Lương)</Link> },
         { key: '/accounting/ccdc', label: <Link to="/accounting/ccdc">Tài sản & CCDC</Link> },
         { key: '/accounting/general-ledger', label: <Link to="/accounting/general-ledger">Sổ cái tài khoản</Link> },
+      ],
+    },
+    {
+      key: 'hrm-group',
+      icon: <TeamOutlined />,
+      label: 'Nhân sự (HRM)',
+      roles: ADMIN_GD,
+      children: [
+        { key: '/hr/employees', label: <Link to="/hr/employees">Hồ sơ nhân viên</Link> },
+        { key: '/hr/departments', label: <Link to="/hr/departments">Cơ cấu tổ chức</Link> },
+        { key: '/hr/permission-matrix', label: <Link to="/hr/permission-matrix">Ma trận phân quyền</Link> },
+        { key: '/hr/attendance', label: <Link to="/hr/attendance">Chấm công & Đơn từ</Link> },
+        { key: '/hr/payroll', label: <Link to="/hr/payroll">Bảng lương sản phẩm</Link> },
+        { key: '/hr/payroll-config', label: <Link to="/hr/payroll-config">Cấu hình hệ số lương</Link> },
+        { key: '/hr/logistics', label: <Link to="/hr/logistics">🚚 Logistics & Đội xe</Link> },
+        { key: '/hr/approvals', label: <Link to="/hr/approvals">📝 Phê duyệt đơn từ</Link> },
+        { key: '/hr/rewards', label: <Link to="/hr/rewards">🏆 Khen thưởng & Kỷ luật</Link> },
+        { key: '/hr/me', label: <Link to="/hr/me">📱 Cổng nhân viên (Mobile)</Link> },
       ],
     },
     {
@@ -218,7 +238,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       label: 'Danh mục',
       roles: ADMIN_GD,
       children: [
-        { key: '/master/users', label: <Link to="/master/users">Danh mục nhân viên</Link> },
+        { key: '/master/users', label: <Link to="/master/users">Tài khoản hệ thống</Link> },
         { key: '/master/customers', label: <Link to="/master/customers">Danh mục khách hàng</Link> },
         { key: '/danhmuc/phap-nhan', label: <Link to="/danhmuc/phap-nhan">Danh mục pháp nhân</Link> },
         { key: '/master/phan-xuong', label: <Link to="/master/phan-xuong">Nơi sản xuất (Phân xưởng)</Link> },
@@ -231,6 +251,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/master/other-materials', label: <Link to="/master/other-materials">Danh mục nguyên liệu khác</Link> },
         { key: '/master/xe', label: <Link to="/master/xe">Danh mục xe</Link> },
         { key: '/master/tai-xe', label: <Link to="/master/tai-xe">Danh mục tài xế</Link> },
+        { key: '/master/lo-xe', label: <Link to="/master/lo-xe">Danh mục lơ xe</Link> },
         { key: '/master/warehouses', label: <Link to="/master/warehouses">Danh mục kho</Link> },
         { key: '/master/bank-accounts', label: <Link to="/master/bank-accounts">Tài khoản ngân hàng</Link> },
         { key: '/master/don-gia-van-chuyen', label: <Link to="/master/don-gia-van-chuyen">Đơn giá vận chuyển</Link> },
@@ -240,6 +261,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/master/indirect-costs', label: <Link to="/master/indirect-costs">Chi phí gián tiếp</Link> },
         { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công / Tỷ lệ lãi</Link> },
         { key: '/reports/import-history', label: <Link to="/reports/import-history">Lịch sử Import</Link> },
+        { key: '/master/print-templates', label: <Link to="/master/print-templates">⚙ Cấu hình biểu mẫu in</Link> },
       ],
     },
     {
@@ -268,7 +290,7 @@ export default function AppLayout() {
   const role = user?.role ?? 'ADMIN'
   const menuItems = filterByRole(buildMenuItems(queueCount), role)
 
-  const selectedKeys = [location.pathname]
+  const selectedKeys = [location.pathname + location.search]
 
   function collectOpenKeys(items: RawMenuItem[], path: string): string[] {
     const keys: string[] = []

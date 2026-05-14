@@ -29,6 +29,7 @@ const DvtList = lazy(() => import('./pages/danhmuc/DvtList'))
 const ViTriList = lazy(() => import('./pages/danhmuc/ViTriList'))
 const XeList = lazy(() => import('./pages/danhmuc/XeList'))
 const TaiXeList = lazy(() => import('./pages/danhmuc/TaiXeList'))
+const LoXeList = lazy(() => import('./pages/danhmuc/LoXeList'))
 const TinhThanhList = lazy(() => import('./pages/danhmuc/TinhThanhList'))
 const PhuongXaList = lazy(() => import('./pages/danhmuc/PhuongXaList'))
 const DonGiaVanChuyenList = lazy(() => import('./pages/danhmuc/DonGiaVanChuyenList'))
@@ -69,7 +70,6 @@ const TransfersPage = lazy(() => import('./pages/warehouse/TransfersPage'))
 const StockAdjustmentsPage = lazy(() => import('./pages/warehouse/StockAdjustmentsPage'))
 const InventoryCardPage = lazy(() => import('./pages/warehouse/InventoryCardPage'))
 const ProductionOutputPage = lazy(() => import('./pages/warehouse/ProductionOutputPage'))
-const DeliveryPage = lazy(() => import('./pages/warehouse/DeliveryPage'))
 const TheoDonHangPage = lazy(() => import('./pages/sales/TheoDonHangPage'))
 const GiaoHangPage = lazy(() => import('./pages/sales/GiaoHangPage'))
 const POListPage = lazy(() => import('./pages/purchase/POListPage'))
@@ -77,6 +77,7 @@ const PurchaseReturnPage = lazy(() => import('./pages/purchase/PurchaseReturnPag
 const PurchaseReportPage = lazy(() => import('./pages/purchase/PurchaseReportPage'))
 const MuaGiayPage = lazy(() => import('./pages/purchase/MuaGiayPage'))
 const MuaNVLPage = lazy(() => import('./pages/purchase/MuaNVLPage'))
+const GoodsReceiptPage = lazy(() => import('./pages/purchase/GoodsReceiptPage'))
 const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
@@ -84,6 +85,7 @@ const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPa
 const SalesInvoiceListPage = lazy(() => import('./pages/billing/SalesInvoiceListPage'))
 const SalesInvoiceDetailPage = lazy(() => import('./pages/billing/SalesInvoiceDetailPage'))
 const SalesInvoiceForm = lazy(() => import('./pages/billing/SalesInvoiceForm'))
+const InvoiceAdjustmentListPage = lazy(() => import('./pages/billing/InvoiceAdjustmentListPage'))
 // Agent
 const AgentPage = lazy(() => import('./pages/agent/AgentPage'))
 // Accounting
@@ -122,6 +124,19 @@ const JournalEntryForm = lazy(() => import('./pages/accounting/JournalEntryForm'
 const ProfitLossPage = lazy(() => import('./pages/accounting/ProfitLossPage'))
 const BalanceSheetPage = lazy(() => import('./pages/accounting/BalanceSheetPage'))
 const PeriodClosingPage = lazy(() => import('./pages/accounting/PeriodClosingPage'))
+const OpeningBalancePage = lazy(() => import('./pages/accounting/OpeningBalancePage'))
+// HR
+const EmployeeListPage = lazy(() => import('./pages/hr/EmployeeListPage'))
+const DepartmentPage = lazy(() => import('./pages/hr/DepartmentPage'))
+const PayrollConfigPage = lazy(() => import('./pages/hr/PayrollConfigPage'))
+const AttendancePage = lazy(() => import('./pages/hr/AttendancePage'))
+const PayrollPage = lazy(() => import('./pages/hr/PayrollPage'))
+const LogisticsPage = lazy(() => import('./pages/hr/LogisticsPage'))
+const LeaveApprovalPage = lazy(() => import('./pages/hr/LeaveApprovalPage'))
+const RewardDisciplinePage = lazy(() => import('./pages/hr/RewardDisciplinePage'))
+const EmployeeMobilePortal = lazy(() => import('./pages/hr/EmployeeMobilePortal'))
+const PermissionMatrixPage = lazy(() => import('./pages/hr/PermissionMatrixPage'))
+const PrintTemplatePage = lazy(() => import('./pages/master/PrintTemplatePage'))
 
 // Reports - Workshop
 const WorkshopPNLPage = lazy(() => import('./pages/reports/WorkshopPNLPage'))
@@ -223,6 +238,7 @@ export default function App() {
             <Route path="master/vi-tri" element={<ViTriList />} />
             <Route path="master/xe" element={<XeList />} />
             <Route path="master/tai-xe" element={<TaiXeList />} />
+            <Route path="master/lo-xe" element={<LoXeList />} />
             <Route path="master/tinh-thanh" element={<TinhThanhList />} />
             <Route path="master/phuong-xa" element={<PhuongXaList />} />
             <Route path="master/don-gia-van-chuyen" element={<DonGiaVanChuyenList />} />
@@ -250,8 +266,6 @@ export default function App() {
             <Route path="production/cd2/shift" element={<ShiftPage />} />
             <Route path="production/cd2/config" element={<ConfigPage />} />
             <Route path="warehouse/kho-nvl" element={<ErrorBoundary><KhoNVLPage /></ErrorBoundary>} />
-            <Route path="warehouse/kho-phoi" element={<KhoPhoiPage />} />
-            <Route path="warehouse/kho-thanh-pham" element={<ErrorBoundary><KhoThanhPhamPage /></ErrorBoundary>} />
             <Route path="warehouse/theo-xuong" element={<KhoTheoXuongPage />} />
             <Route path="warehouse/inventory" element={<InventoryPage />} />
             <Route path="warehouse/nhap-nhanh" element={<NhapNhanhPage />} />
@@ -260,13 +274,13 @@ export default function App() {
             <Route path="warehouse/receipts" element={<ReceiptsPage />} />
             <Route path="warehouse/issues" element={<IssuesPage />} />
             <Route path="warehouse/production-output" element={<ProductionOutputPage />} />
-            <Route path="warehouse/delivery" element={<DeliveryPage />} />
             <Route path="warehouse/transfers" element={<TransfersPage />} />
             <Route path="warehouse/stock-adjustments" element={<StockAdjustmentsPage />} />
             <Route path="warehouse/the-kho" element={<InventoryCardPage />} />
             <Route path="purchasing/giay-cuon" element={<ErrorBoundary><MuaGiayPage /></ErrorBoundary>} />
             <Route path="purchasing/nvl-khac" element={<ErrorBoundary><MuaNVLPage /></ErrorBoundary>} />
             <Route path="purchasing/orders" element={<POListPage />} />
+            <Route path="purchasing/goods-receipts" element={<ErrorBoundary><GoodsReceiptPage /></ErrorBoundary>} />
             <Route path="purchasing/returns" element={<ErrorBoundary><PurchaseReturnPage /></ErrorBoundary>} />
             <Route path="purchasing/reports" element={<ErrorBoundary><PurchaseReportPage /></ErrorBoundary>} />
             <Route path="danhmuc/phap-nhan" element={<PhapNhanList />} />
@@ -276,6 +290,7 @@ export default function App() {
             <Route path="billing/invoices" element={<SalesInvoiceListPage />} />
             <Route path="billing/invoices/new" element={<SalesInvoiceForm />} />
             <Route path="billing/invoices/:id" element={<SalesInvoiceDetailPage />} />
+            <Route path="billing/adjustments" element={<InvoiceAdjustmentListPage />} />
             <Route path="accounting/receipts" element={<CashReceiptListPage />} />
             <Route path="accounting/receipts/new" element={<CashReceiptForm />} />
             <Route path="accounting/receipts/:id" element={<CashReceiptDetailPage />} />
@@ -300,6 +315,7 @@ export default function App() {
             <Route path="accounting/profit-loss" element={<ErrorBoundary><ProfitLossPage /></ErrorBoundary>} />
             <Route path="accounting/balance-sheet" element={<ErrorBoundary><BalanceSheetPage /></ErrorBoundary>} />
             <Route path="accounting/period-closing" element={<ErrorBoundary><PeriodClosingPage /></ErrorBoundary>} />
+            <Route path="accounting/opening-balances" element={<ErrorBoundary><OpeningBalancePage /></ErrorBoundary>} />
             <Route path="accounting/customer-refunds" element={<ErrorBoundary><CustomerRefundListPage /></ErrorBoundary>} />
             <Route path="accounting/customer-refunds/:id" element={<ErrorBoundary><CustomerRefundDetailPage /></ErrorBoundary>} />
             <Route path="reports/hub" element={<ErrorBoundary><ReportingHubPage /></ErrorBoundary>} />
@@ -315,7 +331,18 @@ export default function App() {
             <Route path="reports/vat-summary" element={<ErrorBoundary><VATSummaryPage /></ErrorBoundary>} />
             <Route path="reports/tax-trial-balance" element={<ErrorBoundary><TaxTrialBalancePage /></ErrorBoundary>} />
             <Route path="accounting/reports/production-costing" element={<ErrorBoundary><ProductionCostingPage /></ErrorBoundary>} />
+            <Route path="hr/employees" element={<ErrorBoundary><EmployeeListPage /></ErrorBoundary>} />
+            <Route path="hr/attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
+            <Route path="hr/departments" element={<ErrorBoundary><DepartmentPage /></ErrorBoundary>} />
+            <Route path="hr/payroll" element={<ErrorBoundary><PayrollPage /></ErrorBoundary>} />
+            <Route path="hr/payroll-config" element={<ErrorBoundary><PayrollConfigPage /></ErrorBoundary>} />
+            <Route path="hr/logistics" element={<ErrorBoundary><LogisticsPage /></ErrorBoundary>} />
+            <Route path="hr/approvals" element={<ErrorBoundary><LeaveApprovalPage /></ErrorBoundary>} />
+            <Route path="hr/rewards" element={<ErrorBoundary><RewardDisciplinePage /></ErrorBoundary>} />
+            <Route path="hr/me" element={<ErrorBoundary><EmployeeMobilePortal /></ErrorBoundary>} />
+            <Route path="hr/permission-matrix" element={<ErrorBoundary><PermissionMatrixPage /></ErrorBoundary>} />
             <Route path="agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
+            <Route path="master/print-templates" element={<ErrorBoundary><PrintTemplatePage /></ErrorBoundary>} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>
