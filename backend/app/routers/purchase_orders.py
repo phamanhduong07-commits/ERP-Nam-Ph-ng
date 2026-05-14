@@ -6,10 +6,11 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.master import Supplier, PaperMaterial, OtherMaterial, PhanXuong
+from app.models.master import Supplier, PaperMaterial, OtherMaterial, PhanXuong, PhapNhan
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.warehouse_doc import GoodsReceipt, GoodsReceiptItem
 from app.models.inventory import InventoryBalance, InventoryTransaction
+from app.models.accounting import PurchaseInvoice
 from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from fastapi import File, UploadFile
@@ -623,6 +624,109 @@ def du_bao_nhu_cau(
 
     rows.sort(key=lambda x: (x["muc_do_uu_tien"] == "cao", x["can_mua"]), reverse=True)
     return rows
+
+
+@router.get("/dashboard")
+def purchase_dashboard(
+    tu_ngay: Optional[date] = None,
+    den_ngay: Optional[date] = None,
+    phap_nhan_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Báo cáo quản trị mua hàng: KPI tổng hợp theo pháp nhân và theo NCC."""
+    # ── Tổng PO ──────────────────────────────────────────────────────
+    po_q = db.query(PurchaseOrder)
+    if tu_ngay:
+        po_q = po_q.filter(PurchaseOrder.ngay_po >= tu_ngay)
+    if den_ngay:
+        po_q = po_q.filter(PurchaseOrder.ngay_po <= den_ngay)
+
+    # ── Tổng GR (da_duyet) ────────────────────────────────────────────
+    gr_q = db.query(GoodsReceipt).filter(GoodsReceipt.trang_thai == "da_duyet")
+    if tu_ngay:
+        gr_q = gr_q.filter(GoodsReceipt.ngay_nhap >= tu_ngay)
+    if den_ngay:
+        gr_q = gr_q.filter(GoodsReceipt.ngay_nhap <= den_ngay)
+    if phap_nhan_id:
+        gr_q = gr_q.filter(GoodsReceipt.phap_nhan_id == phap_nhan_id)
+
+    # ── HĐ mua hàng ───────────────────────────────────────────────────
+    inv_q = db.query(PurchaseInvoice).filter(PurchaseInvoice.trang_thai != "huy")
+    if tu_ngay:
+        inv_q = inv_q.filter(PurchaseInvoice.ngay_lap >= tu_ngay)
+    if den_ngay:
+        inv_q = inv_q.filter(PurchaseInvoice.ngay_lap <= den_ngay)
+    if phap_nhan_id:
+        inv_q = inv_q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
+
+    all_pos = po_q.all()
+    all_grs = gr_q.all()
+    all_invs = inv_q.all()
+
+    # ── KPI tổng ─────────────────────────────────────────────────────
+    tong_po = len(all_pos)
+    tong_gia_tri_po = sum(float(p.tong_tien) for p in all_pos)
+    tong_gr = len(all_grs)
+    tong_gia_tri_gr = sum(float(g.tong_gia_tri) for g in all_grs)
+    tong_hoa_don = len(all_invs)
+    tong_gia_tri_hd = sum(float(i.tong_thanh_toan) for i in all_invs)
+    tong_da_tt = sum(float(i.da_thanh_toan) for i in all_invs)
+    tong_con_no = sum(float(i.con_lai) for i in all_invs)
+
+    # ── KPI theo pháp nhân ────────────────────────────────────────────
+    phap_nhan_list = db.query(PhapNhan).all()
+    by_phap_nhan = []
+    for pn in phap_nhan_list:
+        pn_grs = [g for g in all_grs if g.phap_nhan_id == pn.id]
+        pn_invs = [i for i in all_invs if i.phap_nhan_id == pn.id]
+        by_phap_nhan.append({
+            "phap_nhan_id": pn.id,
+            "ten_phap_nhan": pn.ten_viet_tat or pn.ten_phap_nhan or "",
+            "so_phieu_gr": len(pn_grs),
+            "tong_gia_tri_gr": sum(float(g.tong_gia_tri) for g in pn_grs),
+            "so_hoa_don": len(pn_invs),
+            "tong_gia_tri_hd": sum(float(i.tong_thanh_toan) for i in pn_invs),
+            "tong_con_no": sum(float(i.con_lai) for i in pn_invs),
+        })
+    by_phap_nhan.sort(key=lambda x: x["tong_gia_tri_gr"], reverse=True)
+
+    # ── Top NCC theo giá trị GR ───────────────────────────────────────
+    ncc_map: dict[int, dict] = {}
+    for g in all_grs:
+        sid = g.supplier_id
+        if sid not in ncc_map:
+            sup = db.get(Supplier, sid)
+            ncc_map[sid] = {
+                "supplier_id": sid,
+                "ten_ncc": sup.ten_viet_tat if sup else "",
+                "so_phieu_gr": 0,
+                "tong_gia_tri_gr": 0.0,
+            }
+        ncc_map[sid]["so_phieu_gr"] += 1
+        ncc_map[sid]["tong_gia_tri_gr"] += float(g.tong_gia_tri)
+    top_ncc = sorted(ncc_map.values(), key=lambda x: x["tong_gia_tri_gr"], reverse=True)[:10]
+
+    # ── PO theo trạng thái ────────────────────────────────────────────
+    po_status: dict[str, int] = {}
+    for p in all_pos:
+        po_status[p.trang_thai] = po_status.get(p.trang_thai, 0) + 1
+
+    return {
+        "kpi": {
+            "tong_po": tong_po,
+            "tong_gia_tri_po": tong_gia_tri_po,
+            "tong_gr": tong_gr,
+            "tong_gia_tri_gr": tong_gia_tri_gr,
+            "tong_hoa_don": tong_hoa_don,
+            "tong_gia_tri_hd": tong_gia_tri_hd,
+            "tong_da_tt": tong_da_tt,
+            "tong_con_no": tong_con_no,
+        },
+        "by_phap_nhan": by_phap_nhan,
+        "top_ncc": top_ncc,
+        "po_by_status": po_status,
+    }
 
 
 @router.get("/import-template")

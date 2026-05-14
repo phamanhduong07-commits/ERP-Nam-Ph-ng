@@ -109,6 +109,35 @@ export interface DoiSoatKhoSummary {
   tong_tien_da_nhan: number
 }
 
+export interface PurchaseDashboard {
+  kpi: {
+    tong_po: number
+    tong_gia_tri_po: number
+    tong_gr: number
+    tong_gia_tri_gr: number
+    tong_hoa_don: number
+    tong_gia_tri_hd: number
+    tong_da_tt: number
+    tong_con_no: number
+  }
+  by_phap_nhan: {
+    phap_nhan_id: number
+    ten_phap_nhan: string
+    so_phieu_gr: number
+    tong_gia_tri_gr: number
+    so_hoa_don: number
+    tong_gia_tri_hd: number
+    tong_con_no: number
+  }[]
+  top_ncc: {
+    supplier_id: number
+    ten_ncc: string
+    so_phieu_gr: number
+    tong_gia_tri_gr: number
+  }[]
+  po_by_status: Record<string, number>
+}
+
 export interface DuBaoNhuCauRow {
   paper_material_id: number | null
   other_material_id: number | null
@@ -170,6 +199,12 @@ export const purchaseApi = {
     phan_xuong_id?: number
     loai_nvl?: string
   }) => client.get<DuBaoNhuCauRow[]>('/purchase-orders/du-bao-nhu-cau', { params }),
+
+  dashboard: (params?: {
+    tu_ngay?: string
+    den_ngay?: string
+    phap_nhan_id?: number
+  }) => client.get<PurchaseDashboard>('/purchase-orders/dashboard', { params }),
 
   importPOs: (file: File, commit: boolean = false) => {
     const formData = new FormData()

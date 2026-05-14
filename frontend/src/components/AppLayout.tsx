@@ -151,6 +151,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/purchasing/nvl-khac', label: <Link to="/purchasing/nvl-khac">Mua NVL khác</Link> },
         { key: '/purchasing/orders', label: <Link to="/purchasing/orders">Đơn mua hàng (PO)</Link> },
         { key: '/purchasing/goods-receipts', label: <Link to="/purchasing/goods-receipts">Phiếu nhập kho (GR)</Link> },
+        { key: '/purchasing/dashboard', label: <Link to="/purchasing/dashboard">Dashboard mua hàng</Link> },
         { key: '/purchasing/doi-soat-kho', label: <Link to="/purchasing/doi-soat-kho">Đối soát kho (PO vs GR)</Link> },
         { key: '/accounting/purchase-invoices', label: <Link to="/accounting/purchase-invoices">Hóa đơn mua hàng</Link> },
         { key: '/purchasing/returns', label: <Link to="/purchasing/returns">Trả hàng NCC</Link> },
