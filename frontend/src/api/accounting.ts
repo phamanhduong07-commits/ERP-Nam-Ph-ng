@@ -52,6 +52,7 @@ export interface CashReceipt {
   tk_no: string
   tk_co: string
   trang_thai: string
+  phap_nhan_id: number | null
   nguoi_duyet_id: number | null
   ngay_duyet: string | null
   created_at: string
@@ -60,6 +61,7 @@ export interface CashReceipt {
 export interface CashReceiptCreate {
   customer_id: number
   sales_invoice_id?: number
+  phap_nhan_id?: number | null
   ngay_phieu: string
   hinh_thuc_tt?: string
   so_tai_khoan?: string
@@ -142,6 +144,7 @@ export interface CashPayment {
   tk_no: string
   tk_co: string
   trang_thai: string
+  phap_nhan_id: number | null
   nguoi_duyet_id: number | null
   ngay_duyet: string | null
   created_at: string
@@ -150,6 +153,7 @@ export interface CashPayment {
 export interface CashPaymentCreate {
   supplier_id: number
   purchase_invoice_id?: number
+  phap_nhan_id?: number | null
   ngay_phieu: string
   hinh_thuc_tt?: string
   so_tai_khoan?: string
@@ -176,6 +180,7 @@ export interface ARLedgerRow {
   con_lai: number
   so_ngay_qua_han: number
   trang_thai: string
+  phap_nhan_id: number | null
 }
 
 export interface ARLedgerEntryRow {
@@ -225,6 +230,7 @@ export interface APLedgerRow {
   con_lai: number
   so_ngay_qua_han: number
   trang_thai: string
+  phap_nhan_id: number | null
 }
 
 export interface APAgingRow {
@@ -361,6 +367,17 @@ export interface SoChiTietResponse {
   rows: SoChiTietRow[]
 }
 
+export interface DoiChieuPhaiTraRow {
+  supplier_id: number
+  ten_ncc: string
+  ma_ncc: string
+  so_phieu_gr: number
+  tong_gia_tri_gr: number
+  so_hoa_don: number
+  tong_gia_tri_hd: number
+  chenh_lech: number
+}
+
 export const apApi = {
   getLedger: (params?: Record<string, unknown>): Promise<APLedgerRow[]> =>
     client.get('/accounting/ap/ledger', { params }).then(r => r.data),
@@ -376,6 +393,14 @@ export const apApi = {
 
   getReconciliation: (supplierId: number, params: { tu_ngay: string; den_ngay: string }) =>
     client.get(`/accounting/ap/reconciliation/${supplierId}`, { params }).then(r => r.data),
+
+  doiChieuPhaiTra: (params?: {
+    supplier_id?: number
+    tu_ngay?: string
+    den_ngay?: string
+    phap_nhan_id?: number
+  }): Promise<DoiChieuPhaiTraRow[]> =>
+    client.get('/accounting/ap/doi-chieu-phai-tra', { params }).then(r => r.data),
 }
 
 // ──────────────────────────────────────────────────────
@@ -391,6 +416,36 @@ export const openingBalanceApi = {
     so_du_dau_ky: number
     ghi_chu?: string
   }) => client.post('/accounting/opening-balances', data).then(r => r.data),
+
+  downloadTemplateAR: () =>
+    client.get('/accounting/opening-balances/template-ar', { responseType: 'blob' }),
+
+  downloadTemplateAP: () =>
+    client.get('/accounting/opening-balances/template-ap', { responseType: 'blob' }),
+
+  downloadTemplateCash: () =>
+    client.get('/accounting/opening-balances/cash/import-template', { responseType: 'blob' }),
+
+  importAR: (file: File, commit: boolean) => {
+    const fd = new FormData(); fd.append('file', file)
+    return client.post(`/accounting/opening-balances/import-ar?commit=${commit}`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }).then(r => r.data)
+  },
+
+  importAP: (file: File, commit: boolean) => {
+    const fd = new FormData(); fd.append('file', file)
+    return client.post(`/accounting/opening-balances/import-ap?commit=${commit}`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }).then(r => r.data)
+  },
+
+  importCash: (file: File, commit: boolean) => {
+    const fd = new FormData(); fd.append('file', file)
+    return client.post(`/accounting/opening-balances/cash/import?commit=${commit}`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }).then(r => r.data)
+  },
 }
 
 // ──────────────────────────────────────────────────────

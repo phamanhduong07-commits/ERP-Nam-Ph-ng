@@ -9,8 +9,9 @@ import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
-import { apApi, APLedgerRow, APAgingRow, SoChiTietRow, SoChiTietResponse, TRANG_THAI_PO_INVOICE } from '../../api/accounting'
+import { apApi, APLedgerRow, APAgingRow, SoChiTietRow, SoChiTietResponse, DoiChieuPhaiTraRow, TRANG_THAI_PO_INVOICE } from '../../api/accounting'
 import { suppliersApi, Supplier } from '../../api/suppliers'
+import { phapNhanApi } from '../../api/phap_nhan'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -23,16 +24,22 @@ function LedgerTab() {
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [quaHanOnly, setQuaHanOnly] = useState(false)
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
 
   const { data: suppliers = [] } = useQuery<Supplier[]>({
     queryKey: ['suppliers-all'],
     queryFn: () => suppliersApi.all().then(r => r.data),
   })
 
+  const { data: listPhapNhan = [] } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list().then(r => r.data),
+  })
+
   const { data: rows = [], isLoading } = useQuery<APLedgerRow[]>({
-    queryKey: ['ap-ledger', supplierId, tuNgay, denNgay, quaHanOnly],
+    queryKey: ['ap-ledger', supplierId, tuNgay, denNgay, quaHanOnly, phapNhanId],
     queryFn: () =>
-      apApi.getLedger({ supplier_id: supplierId, tu_ngay: tuNgay, den_ngay: denNgay, qua_han_only: quaHanOnly }),
+      apApi.getLedger({ supplier_id: supplierId, tu_ngay: tuNgay, den_ngay: denNgay, qua_han_only: quaHanOnly, phap_nhan_id: phapNhanId }),
   })
 
   const tongConLai = rows.reduce((s, r) => s + (r.con_lai ?? 0), 0)
@@ -148,6 +155,13 @@ function LedgerTab() {
     <>
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[12, 8]} align="middle">
+          <Col>
+            <Select
+              style={{ width: 150 }} allowClear placeholder="Pháp nhân"
+              options={listPhapNhan.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              onChange={v => setPhapNhanId(v)}
+            />
+          </Col>
           <Col>
             <Select
               style={{ width: 220 }} allowClear showSearch placeholder="Lọc nhà cung cấp"
@@ -525,6 +539,139 @@ function SoChiTietTab() {
   )
 }
 
+// ── Tab 4: Đối chiếu phải trả (GR vs HĐ) ───────────────────────────────────
+
+function DoiChieuPhaiTraTab() {
+  const [supplierId, setSupplierId] = useState<number | undefined>()
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
+  const [tuNgay, setTuNgay] = useState<string | undefined>()
+  const [denNgay, setDenNgay] = useState<string | undefined>()
+
+  const { data: suppliers = [] } = useQuery<Supplier[]>({
+    queryKey: ['suppliers-all'],
+    queryFn: () => suppliersApi.all().then(r => r.data),
+  })
+  const { data: listPhapNhan = [] } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list().then(r => r.data),
+  })
+  const { data: rows = [], isLoading } = useQuery<DoiChieuPhaiTraRow[]>({
+    queryKey: ['doi-chieu-phai-tra', supplierId, phapNhanId, tuNgay, denNgay],
+    queryFn: () => apApi.doiChieuPhaiTra({ supplier_id: supplierId, phap_nhan_id: phapNhanId, tu_ngay: tuNgay, den_ngay: denNgay }),
+  })
+
+  const tongGR = rows.reduce((s, r) => s + r.tong_gia_tri_gr, 0)
+  const tongHD = rows.reduce((s, r) => s + r.tong_gia_tri_hd, 0)
+  const tongChenh = tongGR - tongHD
+
+  const handleExcel = () => {
+    exportToExcel(`doi-chieu-phai-tra-${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Doi chieu phai tra',
+      headers: ['Mã NCC', 'Nhà cung cấp', 'Số GR', 'Tổng GR', 'Số HĐ', 'Tổng HĐ', 'Chênh lệch'],
+      rows: rows.map(r => [r.ma_ncc, r.ten_ncc, r.so_phieu_gr, r.tong_gia_tri_gr, r.so_hoa_don, r.tong_gia_tri_hd, r.chenh_lech]),
+      colWidths: [12, 24, 8, 16, 8, 16, 16],
+    }])
+  }
+
+  const columns: ColumnsType<DoiChieuPhaiTraRow> = [
+    { title: 'Mã NCC', dataIndex: 'ma_ncc', width: 100 },
+    { title: 'Nhà cung cấp', dataIndex: 'ten_ncc', ellipsis: true },
+    { title: 'Số GR', dataIndex: 'so_phieu_gr', width: 70, align: 'right' },
+    { title: 'Tổng GR (hàng nhận)', dataIndex: 'tong_gia_tri_gr', width: 160, align: 'right', render: fmtVND },
+    { title: 'Số HĐ', dataIndex: 'so_hoa_don', width: 70, align: 'right' },
+    { title: 'Tổng HĐ', dataIndex: 'tong_gia_tri_hd', width: 140, align: 'right', render: fmtVND },
+    {
+      title: 'Chênh lệch (GR − HĐ)',
+      dataIndex: 'chenh_lech',
+      width: 170,
+      align: 'right',
+      render: (v: number) => (
+        <Text strong style={{ color: v > 0 ? '#faad14' : v < 0 ? '#f5222d' : '#52c41a' }}>
+          {v > 0 ? '+' : ''}{fmtVND(v)}
+        </Text>
+      ),
+    },
+  ]
+
+  return (
+    <>
+      <Card size="small" style={{ marginBottom: 12 }}>
+        <Row gutter={[12, 8]} align="middle">
+          <Col>
+            <Select
+              style={{ width: 150 }} allowClear placeholder="Pháp nhân"
+              options={listPhapNhan.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              onChange={v => setPhapNhanId(v)}
+            />
+          </Col>
+          <Col>
+            <Select
+              style={{ width: 220 }} allowClear showSearch placeholder="Nhà cung cấp"
+              filterOption={(input, opt) => (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+              options={suppliers.map(s => ({ value: s.id, label: `${s.ma_ncc ? `[${s.ma_ncc}] ` : ''}${s.ten_don_vi ?? ''}` }))}
+              onChange={v => setSupplierId(v)}
+            />
+          </Col>
+          <Col>
+            <RangePicker
+              format="DD/MM/YYYY"
+              placeholder={['Từ ngày GR/HĐ', 'Đến ngày']}
+              onChange={v => {
+                setTuNgay(v?.[0]?.format('YYYY-MM-DD'))
+                setDenNgay(v?.[1]?.format('YYYY-MM-DD'))
+              }}
+            />
+          </Col>
+          <Col style={{ marginLeft: 'auto' }}>
+            <Button size="small" icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!rows.length}>Excel</Button>
+          </Col>
+        </Row>
+      </Card>
+
+      <Row gutter={12} style={{ marginBottom: 12 }}>
+        {[
+          { label: 'Tổng GR (hàng nhận)', value: tongGR, color: '#1677ff' },
+          { label: 'Tổng HĐ mua hàng', value: tongHD, color: '#722ed1' },
+          { label: 'Chênh lệch (GR−HĐ)', value: tongChenh, color: tongChenh > 0 ? '#faad14' : tongChenh < 0 ? '#f5222d' : '#52c41a' },
+        ].map(item => (
+          <Col key={item.label}>
+            <Card size="small" style={{ minWidth: 200, textAlign: 'center' }}>
+              <div style={{ fontSize: 12, color: '#666' }}>{item.label}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: item.color }}>{fmtVND(item.value)}</div>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+
+      <Table<DoiChieuPhaiTraRow>
+        columns={columns}
+        dataSource={rows}
+        rowKey="supplier_id"
+        loading={isLoading}
+        size="small"
+        pagination={{ pageSize: 50 }}
+        summary={() => (
+          <Table.Summary.Row style={{ fontWeight: 600, background: '#fafafa' }}>
+            <Table.Summary.Cell index={0} colSpan={3}>Tổng cộng</Table.Summary.Cell>
+            <Table.Summary.Cell index={1} align="right">{fmtVND(tongGR)}</Table.Summary.Cell>
+            <Table.Summary.Cell index={2} />
+            <Table.Summary.Cell index={3} align="right">{fmtVND(tongHD)}</Table.Summary.Cell>
+            <Table.Summary.Cell index={4} align="right">
+              <Text strong style={{ color: tongChenh > 0 ? '#faad14' : tongChenh < 0 ? '#f5222d' : '#52c41a' }}>
+                {tongChenh > 0 ? '+' : ''}{fmtVND(tongChenh)}
+              </Text>
+            </Table.Summary.Cell>
+          </Table.Summary.Row>
+        )}
+      />
+      <div style={{ marginTop: 8, color: '#888', fontSize: 12 }}>
+        Chênh lệch dương (+): GR chưa có HĐ tương ứng — cần yêu cầu NCC xuất HĐ.
+        Chênh lệch âm (−): HĐ vượt giá trị hàng nhận — cần kiểm tra lại.
+      </div>
+    </>
+  )
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function APLedgerPage() {
@@ -534,9 +681,10 @@ export default function APLedgerPage() {
       <Tabs
         defaultActiveKey="ledger"
         items={[
-          { key: 'ledger',      label: 'Sổ chi tiết',    children: <LedgerTab /> },
-          { key: 'aging',       label: 'Tuổi nợ',        children: <AgingTab /> },
-          { key: 'so-chi-tiet', label: 'Sổ chi tiết NCC', children: <SoChiTietTab /> },
+          { key: 'ledger',            label: 'Sổ chi tiết',         children: <LedgerTab /> },
+          { key: 'aging',             label: 'Tuổi nợ',             children: <AgingTab /> },
+          { key: 'so-chi-tiet',       label: 'Sổ chi tiết NCC',     children: <SoChiTietTab /> },
+          { key: 'doi-chieu-phai-tra', label: 'Đối chiếu phải trả', children: <DoiChieuPhaiTraTab /> },
         ]}
       />
     </div>

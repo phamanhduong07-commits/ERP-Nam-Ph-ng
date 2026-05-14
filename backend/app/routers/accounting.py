@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
-from app.models.accounting import CashReceipt, CashPayment, OpeningBalance
+from app.models.accounting import CashReceipt, CashPayment, OpeningBalance, PurchaseInvoice
 from app.models.master import Customer, PhapNhan, Supplier
+from app.models.warehouse_doc import GoodsReceipt
+from sqlalchemy import func
 from app.services.accounting_service import AccountingService
 from app.schemas.accounting import (
     PurchaseInvoiceCreate,
@@ -339,6 +341,81 @@ def so_chi_tiet_mua_hang(
 # ─────────────────────────────────────────────
 # BIÊN BẢN ĐỐI CHIẾU CÔNG NỢ
 # ─────────────────────────────────────────────
+
+@router.get("/ap/doi-chieu-phai-tra")
+def doi_chieu_phai_tra(
+    supplier_id: int | None = Query(default=None),
+    tu_ngay: date | None = Query(default=None),
+    den_ngay: date | None = Query(default=None),
+    phap_nhan_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Đối chiếu phải trả: so sánh GR (hàng nhận) với HĐ mua hàng theo nhà cung cấp.
+
+    Trả về danh sách theo nhà cung cấp với tổng GR, tổng HĐ, chênh lệch.
+    """
+    # Aggregate GRs
+    gr_q = db.query(
+        GoodsReceipt.supplier_id,
+        func.sum(GoodsReceipt.tong_gia_tri).label("tong_gr"),
+        func.count(GoodsReceipt.id).label("so_phieu_gr"),
+    ).filter(GoodsReceipt.trang_thai == "da_duyet")
+    if supplier_id:
+        gr_q = gr_q.filter(GoodsReceipt.supplier_id == supplier_id)
+    if phap_nhan_id:
+        gr_q = gr_q.filter(GoodsReceipt.phap_nhan_id == phap_nhan_id)
+    if tu_ngay:
+        gr_q = gr_q.filter(GoodsReceipt.ngay_nhap >= tu_ngay)
+    if den_ngay:
+        gr_q = gr_q.filter(GoodsReceipt.ngay_nhap <= den_ngay)
+    gr_by_sup = {
+        row.supplier_id: {"tong_gr": float(row.tong_gr or 0), "so_phieu_gr": row.so_phieu_gr}
+        for row in gr_q.group_by(GoodsReceipt.supplier_id).all()
+    }
+
+    # Aggregate PurchaseInvoices
+    inv_q = db.query(
+        PurchaseInvoice.supplier_id,
+        func.sum(PurchaseInvoice.tong_thanh_toan).label("tong_hd"),
+        func.count(PurchaseInvoice.id).label("so_hoa_don"),
+    ).filter(PurchaseInvoice.trang_thai != "huy")
+    if supplier_id:
+        inv_q = inv_q.filter(PurchaseInvoice.supplier_id == supplier_id)
+    if phap_nhan_id:
+        inv_q = inv_q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
+    if tu_ngay:
+        inv_q = inv_q.filter(PurchaseInvoice.ngay_lap >= tu_ngay)
+    if den_ngay:
+        inv_q = inv_q.filter(PurchaseInvoice.ngay_lap <= den_ngay)
+    inv_by_sup = {
+        row.supplier_id: {"tong_hd": float(row.tong_hd or 0), "so_hoa_don": row.so_hoa_don}
+        for row in inv_q.group_by(PurchaseInvoice.supplier_id).all()
+    }
+
+    # Merge by supplier
+    all_sup_ids = set(gr_by_sup) | set(inv_by_sup)
+    rows = []
+    for sid in all_sup_ids:
+        sup = db.get(Supplier, sid)
+        gr = gr_by_sup.get(sid, {"tong_gr": 0.0, "so_phieu_gr": 0})
+        inv = inv_by_sup.get(sid, {"tong_hd": 0.0, "so_hoa_don": 0})
+        tong_gr = gr["tong_gr"]
+        tong_hd = inv["tong_hd"]
+        chenh_lech = tong_gr - tong_hd  # >0: GR chưa có HĐ; <0: HĐ vượt GR
+        rows.append({
+            "supplier_id": sid,
+            "ten_ncc": sup.ten_viet_tat if sup else "",
+            "ma_ncc": sup.ma_ncc if sup else "",
+            "so_phieu_gr": gr["so_phieu_gr"],
+            "tong_gia_tri_gr": tong_gr,
+            "so_hoa_don": inv["so_hoa_don"],
+            "tong_gia_tri_hd": tong_hd,
+            "chenh_lech": chenh_lech,
+        })
+    rows.sort(key=lambda x: abs(x["chenh_lech"]), reverse=True)
+    return rows
+
 
 @router.get("/ap/doi-chieu/{supplier_id}")
 def doi_chieu_cong_no(
