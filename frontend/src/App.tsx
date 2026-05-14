@@ -78,6 +78,7 @@ const PurchaseReportPage = lazy(() => import('./pages/purchase/PurchaseReportPag
 const MuaGiayPage = lazy(() => import('./pages/purchase/MuaGiayPage'))
 const MuaNVLPage = lazy(() => import('./pages/purchase/MuaNVLPage'))
 const GoodsReceiptPage = lazy(() => import('./pages/purchase/GoodsReceiptPage'))
+const DoiSoatKhoPage = lazy(() => import('./pages/purchase/DoiSoatKhoPage'))
 const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
@@ -281,6 +282,7 @@ export default function App() {
             <Route path="purchasing/nvl-khac" element={<ErrorBoundary><MuaNVLPage /></ErrorBoundary>} />
             <Route path="purchasing/orders" element={<POListPage />} />
             <Route path="purchasing/goods-receipts" element={<ErrorBoundary><GoodsReceiptPage /></ErrorBoundary>} />
+            <Route path="purchasing/doi-soat-kho" element={<ErrorBoundary><DoiSoatKhoPage /></ErrorBoundary>} />
             <Route path="purchasing/returns" element={<ErrorBoundary><PurchaseReturnPage /></ErrorBoundary>} />
             <Route path="purchasing/reports" element={<ErrorBoundary><PurchaseReportPage /></ErrorBoundary>} />
             <Route path="danhmuc/phap-nhan" element={<PhapNhanList />} />

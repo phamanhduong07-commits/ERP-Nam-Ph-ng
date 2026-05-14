@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.master import Supplier, PaperMaterial, OtherMaterial, PhanXuong
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
-from app.deps import get_current_user
+from app.models.warehouse_doc import GoodsReceipt, GoodsReceiptItem
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from fastapi import File, UploadFile
 from app.services.purchase_order_import_service import import_purchase_orders_excel
@@ -340,6 +341,140 @@ def delete_po(po_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+@router.get("/doi-soat-kho")
+def doi_soat_kho(
+    supplier_id: Optional[int] = None,
+    tu_ngay: Optional[date] = None,
+    den_ngay: Optional[date] = None,
+    phan_xuong_id: Optional[int] = None,
+    trang_thai: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Đối soát kho: so sánh số lượng đặt trong PO vs số lượng đã nhận theo GR.
+
+    Trả về danh sách từng dòng PO với số lượng đặt, đã nhận, còn thiếu.
+    """
+    q = db.query(PurchaseOrder).order_by(PurchaseOrder.ngay_po.desc())
+    if supplier_id:
+        q = q.filter(PurchaseOrder.supplier_id == supplier_id)
+    if phan_xuong_id:
+        q = q.filter(PurchaseOrder.phan_xuong_id == phan_xuong_id)
+    if trang_thai:
+        q = q.filter(PurchaseOrder.trang_thai == trang_thai)
+    if tu_ngay:
+        q = q.filter(PurchaseOrder.ngay_po >= tu_ngay)
+    if den_ngay:
+        q = q.filter(PurchaseOrder.ngay_po <= den_ngay)
+
+    pos = q.limit(500).all()
+    rows = []
+    for po in pos:
+        sup = db.get(Supplier, po.supplier_id)
+        px_id, ten_px, ten_pn = _px_info(po, db)
+        for poi in po.items:
+            # Tính tổng số lượng đã nhận từ GR items liên kết với poi này
+            gr_total = (
+                db.query(func.coalesce(func.sum(GoodsReceiptItem.so_luong), 0))
+                .filter(GoodsReceiptItem.po_item_id == poi.id)
+                .scalar()
+            ) or Decimal("0")
+
+            so_luong_dat = float(poi.so_luong)
+            so_luong_da_nhan = float(gr_total)
+            so_luong_con_lai = max(so_luong_dat - so_luong_da_nhan, 0.0)
+            ty_le = round(so_luong_da_nhan / so_luong_dat * 100, 1) if so_luong_dat else 0.0
+
+            ten_hang = poi.ten_hang
+            if not ten_hang and poi.paper_material_id:
+                pm = db.get(PaperMaterial, poi.paper_material_id)
+                ten_hang = pm.ma_chinh if pm else ""
+            if not ten_hang and poi.other_material_id:
+                om = db.get(OtherMaterial, poi.other_material_id)
+                ten_hang = om.ten if om else ""
+
+            rows.append({
+                "po_id": po.id,
+                "so_po": po.so_po,
+                "ngay_po": po.ngay_po.isoformat() if po.ngay_po else None,
+                "supplier_id": po.supplier_id,
+                "ten_ncc": sup.ten_viet_tat if sup else "",
+                "phan_xuong_id": px_id,
+                "ten_phan_xuong": ten_px,
+                "ten_phap_nhan": ten_pn,
+                "po_trang_thai": po.trang_thai,
+                "poi_id": poi.id,
+                "ten_hang": ten_hang,
+                "dvt": poi.dvt,
+                "don_gia": float(poi.don_gia),
+                "so_luong_dat": so_luong_dat,
+                "so_luong_da_nhan": so_luong_da_nhan,
+                "so_luong_con_lai": so_luong_con_lai,
+                "ty_le_nhan": ty_le,
+                "thanh_tien_dat": float(poi.thanh_tien),
+                "thanh_tien_da_nhan": round(so_luong_da_nhan * float(poi.don_gia), 2),
+            })
+    return rows
+
+
+@router.get("/doi-soat-kho/summary")
+def doi_soat_kho_summary(
+    supplier_id: Optional[int] = None,
+    tu_ngay: Optional[date] = None,
+    den_ngay: Optional[date] = None,
+    phan_xuong_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Tổng hợp đối soát kho theo nhà cung cấp."""
+    q = db.query(PurchaseOrder)
+    if supplier_id:
+        q = q.filter(PurchaseOrder.supplier_id == supplier_id)
+    if phan_xuong_id:
+        q = q.filter(PurchaseOrder.phan_xuong_id == phan_xuong_id)
+    if tu_ngay:
+        q = q.filter(PurchaseOrder.ngay_po >= tu_ngay)
+    if den_ngay:
+        q = q.filter(PurchaseOrder.ngay_po <= den_ngay)
+
+    pos = q.all()
+    by_supplier: dict[int, dict] = {}
+    for po in pos:
+        sid = po.supplier_id
+        if sid not in by_supplier:
+            sup = db.get(Supplier, sid)
+            by_supplier[sid] = {
+                "supplier_id": sid,
+                "ten_ncc": sup.ten_viet_tat if sup else "",
+                "so_po_count": 0,
+                "tong_dat": 0.0,
+                "tong_da_nhan": 0.0,
+                "tong_tien_dat": 0.0,
+                "tong_tien_da_nhan": 0.0,
+            }
+        by_supplier[sid]["so_po_count"] += 1
+        for poi in po.items:
+            gr_total = (
+                db.query(func.coalesce(func.sum(GoodsReceiptItem.so_luong), 0))
+                .filter(GoodsReceiptItem.po_item_id == poi.id)
+                .scalar()
+            ) or Decimal("0")
+            by_supplier[sid]["tong_dat"] += float(poi.so_luong)
+            by_supplier[sid]["tong_da_nhan"] += float(gr_total)
+            by_supplier[sid]["tong_tien_dat"] += float(poi.thanh_tien)
+            by_supplier[sid]["tong_tien_da_nhan"] += float(gr_total) * float(poi.don_gia)
+
+    result = []
+    for v in by_supplier.values():
+        tong_dat = v["tong_dat"]
+        tong_da_nhan = v["tong_da_nhan"]
+        v["tong_con_lai"] = max(tong_dat - tong_da_nhan, 0.0)
+        v["ty_le_nhan"] = round(tong_da_nhan / tong_dat * 100, 1) if tong_dat else 0.0
+        result.append(v)
+    result.sort(key=lambda x: x["tong_tien_dat"], reverse=True)
+    return result
+
+
 @router.get("/import-template")
 def download_purchase_order_template(
     _: User = Depends(get_current_user),
@@ -353,7 +488,7 @@ async def import_purchase_orders(
     commit: bool = Query(default=False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("purchase.import")),
 ):
     """Import đơn mua hàng từ Excel."""
     return await import_purchase_orders_excel(db, file, current_user, commit)

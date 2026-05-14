@@ -75,6 +75,40 @@ export const TRANG_THAI_PO_COLOR: Record<string, string> = {
   huy: 'red',
 }
 
+export interface DoiSoatKhoRow {
+  po_id: number
+  so_po: string
+  ngay_po: string | null
+  supplier_id: number
+  ten_ncc: string
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
+  ten_phap_nhan: string | null
+  po_trang_thai: string
+  poi_id: number
+  ten_hang: string
+  dvt: string
+  don_gia: number
+  so_luong_dat: number
+  so_luong_da_nhan: number
+  so_luong_con_lai: number
+  ty_le_nhan: number
+  thanh_tien_dat: number
+  thanh_tien_da_nhan: number
+}
+
+export interface DoiSoatKhoSummary {
+  supplier_id: number
+  ten_ncc: string
+  so_po_count: number
+  tong_dat: number
+  tong_da_nhan: number
+  tong_con_lai: number
+  ty_le_nhan: number
+  tong_tien_dat: number
+  tong_tien_da_nhan: number
+}
+
 export const purchaseApi = {
   list: (params?: {
     supplier_id?: number
@@ -96,6 +130,22 @@ export const purchaseApi = {
     client.post<{ ok: boolean; trang_thai: string }>(`/purchase-orders/${id}/duyet`),
 
   delete: (id: number) => client.delete(`/purchase-orders/${id}`),
+
+  doiSoatKho: (params?: {
+    supplier_id?: number
+    tu_ngay?: string
+    den_ngay?: string
+    phan_xuong_id?: number
+    trang_thai?: string
+  }) => client.get<DoiSoatKhoRow[]>('/purchase-orders/doi-soat-kho', { params }),
+
+  doiSoatKhoSummary: (params?: {
+    supplier_id?: number
+    tu_ngay?: string
+    den_ngay?: string
+    phan_xuong_id?: number
+  }) => client.get<DoiSoatKhoSummary[]>('/purchase-orders/doi-soat-kho/summary', { params }),
+
   importPOs: (file: File, commit: boolean = false) => {
     const formData = new FormData()
     formData.append('file', file)
