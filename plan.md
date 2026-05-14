@@ -1,74 +1,73 @@
-# Plan: Hoàn thiện 7 vấn đề Module Kế Toán
+# Plan: Hoàn thiện 6 vấn đề Module Kế Toán (Đợt 2)
 Date: 2026-05-14
 Status: APPROVED
 
 ## Mục tiêu
-Sửa 7 bug và feature gap trong module kế toán (backend accounting router + service, không động đến HR hay các module khác).
+Sửa 6 bug và feature gap trong module kế toán — tập trung vào tính nhất quán hủy phiếu chi, số dư thử trên bảng CĐPS, phap_nhan_id cho OpeningBalance, filter aging theo pháp nhân, và hiển thị TK đối ứng đầy đủ.
+
+> **Lưu ý nghiệp vụ đã xác nhận:** Khi VAT = 0, hạch toán nội bộ (không có GR) KHÔNG tạo định khoản — hành vi hiện tại `_post_purchase_invoice_journal` là đúng, không sửa.
 
 ---
 
 ## Các bước thực thi
 
-### Bước 1 — Xoá duplicate endpoint `GET /fixed-assets`
-- **File**: `backend/app/routers/accounting.py` — dòng 1194–1202
-- **Vấn đề**: Python reassign tên hàm → FastAPI dùng bản thứ 2 (line 1194), bỏ filter `trang_thai` và đổi auth thành admin-only
-- **Fix**: Xoá toàn bộ block `@router.get("/fixed-assets")` thứ 2 (lines 1194–1202); giữ nguyên bản đúng ở line 1152
-- **Mục tiêu**: Endpoint `/fixed-assets` hoạt động với `trang_thai` filter và auth user thường
+### Bước 1 — Cho phép hủy phiếu chi `da_duyet` (nhất quán với hủy phiếu thu)
+- **File**: `backend/app/services/accounting_service.py` — line 670–689
+- **Vấn đề**: `cancel_payment` raise HTTP 400 khi `trang_thai == "da_duyet"`; trong khi `cancel_receipt` cho phép hủy `da_duyet` bằng cách đảo ngược bút toán
+- **Fix**: Bỏ dòng raise 400; thêm `if was_approved: self._reverse_journal_entries("phieu_chi", p.id)` (pattern giống `cancel_receipt`); giữ nguyên phần restore invoice + delete DebtLedgerEntry + set `trang_thai = "huy"`
+- **Mục tiêu**: Kế toán có thể hủy phiếu chi đã duyệt nhầm
 
-### Bước 2 — Thêm Pydantic schema cho `POST /journal-entries`
-- **File**: `backend/app/schemas/accounting.py` + `backend/app/routers/accounting.py` line 1104
-- **Vấn đề**: `data: dict` không validate → KeyError crash khi thiếu field
+### Bước 2 — Thêm OpeningBalance vào `get_trial_balance` cho TK 131/331/111/112
+- **File**: `backend/app/services/accounting_service.py` — line 1933–1971
+- **Vấn đề**: `so_du_dau = pre_no - pre_co` không nhìn vào `OpeningBalance`; bảng CĐPS hiện `so_du_dau` = 0 cho KH/NCC/tiền sau migration AMIS
+- **Fix**: Trong vòng lặp per-account, nếu `acc.so_tk` match prefix 131/331/111/112, lookup OB; điều chỉnh `base_pre` bắt từ `ob_date`; `so_du_dau = ob_amount + pre_no - pre_co`
+- **Mục tiêu**: Bảng CĐPS có `so_du_dau` đúng cho tài khoản KH/NCC/tiền
+
+### Bước 3 — Thêm OpeningBalance vào `get_trial_balance_tax`
+- **File**: `backend/app/services/accounting_service.py` — line 2488–2551
+- **Vấn đề**: Cùng vấn đề như Bước 2; bảng CĐPS thuế/BCTC không bao gồm OB
+- **Fix**: Cùng pattern: lookup OB per account khi prefix match; adjust pre-period query start; `so_du_dau = ob_amount + pre_no - pre_co`
+- **Mục tiêu**: Bảng CĐPS dùng cho kê khai thuế có số dư đầu kỳ đúng
+
+### Bước 4 — Thêm `phap_nhan_id` vào `OpeningBalanceCreate` schema + service
+- **Files**:
+  - `backend/app/schemas/accounting.py` — line 272–278 (class `OpeningBalanceCreate`)
+  - `backend/app/services/accounting_service.py` — line 1152–1165 (method `create_opening_balance`)
+- **Vấn đề**: Schema không có field `phap_nhan_id`; service không pass nó khi create; mọi OB tạo qua `POST /opening-balances` đều có `phap_nhan_id = NULL` → filter multi-entity không hoạt động
 - **Fix**:
-  - Thêm `ManualJournalLineIn` + `ManualJournalEntryCreate` vào schemas.py
-  - Thay `data: dict` → `data: ManualJournalEntryCreate` trong router
-- **Mục tiêu**: POST /journal-entries trả về 422 Unprocessable Entity khi thiếu field bắt buộc
+  - Thêm `phap_nhan_id: int | None = None` vào `OpeningBalanceCreate`
+  - Thêm `phap_nhan_id=data.phap_nhan_id` vào constructor `OpeningBalance(...)`
+- **Mục tiêu**: OB gắn với đúng pháp nhân; filter hoạt động trong GL/CĐKT
 
-### Bước 3 — Xoá dead code `get_ar_balance` tại line 771
-- **File**: `backend/app/services/accounting_service.py` — dòng 771–800
-- **Vấn đề**: Định nghĩa bị override bởi bản đúng ở line 1128; bản line 771 gọi `_calc_balance_before("131", tu_ngay, customer_id=customer_id)` sai signature
-- **Fix**: Xoá toàn bộ method definition tại lines 771–800
-- **Mục tiêu**: Không còn dead code gây nhầm lẫn
-
-### Bước 4 — Thêm `trang_thai` filter vào service `list_fixed_assets`
-- **File**: `backend/app/services/accounting_service.py` — dòng 2273–2279
-- **Vấn đề**: Router truyền `trang_thai` query param (sau bước 1) nhưng service method không nhận
-- **Fix**: Thêm `trang_thai: str | None = None` vào signature service method; áp dụng filter nếu có
-- **Mục tiêu**: Filter TSCĐ theo trạng thái (dang_su_dung / da_kh_het / thanh_ly) hoạt động end-to-end
-
-### Bước 5 — Thêm AMIS opening balance vào `get_bank_ledger`
-- **File**: `backend/app/services/accounting_service.py` — dòng 1564–1579
-- **Vấn đề**: `so_du_dau` tính từ đầu thời gian, không dùng `OpeningBalance` — không nhất quán với cash book; ngân hàng chưa có `doi_tuong="ngan_hang"` trong OB
+### Bước 5 — Thêm `phap_nhan_id` filter vào `get_ar_aging` và `get_ap_aging`
+- **Files**:
+  - `backend/app/services/accounting_service.py` — `get_ar_aging` line 771; `get_ap_aging` line 1046
+  - `backend/app/routers/accounting.py` — `/ar/aging` line 240; `/ap/aging` line 292
+- **Vấn đề**: Báo cáo tuổi nợ mix data từ tất cả pháp nhân; không có parameter lọc theo entity
 - **Fix**:
-  - Thêm OB lookup `doi_tuong="ngan_hang"` vào `get_bank_ledger` (giống pattern cash book)
-  - Cập nhật import router (`POST /opening-balances/cash`) để hỗ trợ nhập OB ngân hàng (doi_tuong="ngan_hang") hoặc thêm field `so_tai_khoan` trong query OB
-- **Mục tiêu**: Số dư đầu kỳ sổ ngân hàng chính xác từ ngày mở sổ AMIS
+  - Thêm `phap_nhan_id: int | None = None` vào signature service; thêm filter khi provided
+  - Thêm `phap_nhan_id: int | None = Query(None)` vào router và truyền xuống service
+- **Mục tiêu**: `GET /ar/aging?phap_nhan_id=X` chỉ trả về aging cho pháp nhân X
 
-### Bước 6 — Bổ sung OpeningBalance vào `get_general_ledger`
-- **File**: `backend/app/services/accounting_service.py` — dòng 1852–1862
-- **Vấn đề**: `so_du_dau = pre_no - pre_co` chỉ tổng hợp bút toán, bỏ qua số dư đầu kỳ AMIS cho TK 131 (KH) và 331 (NCC)
-- **Fix**: Sau khi tính `pre_no - pre_co`, thêm lookup `OpeningBalance` cho TK prefix 131/331/111/112; cộng `ob.so_du_dau_ky` vào `so_du_dau` nếu `ob.ky_mo_so < tu_ngay`
-- **Mục tiêu**: Sổ cái TK 131/331 có số dư mở đúng sau migration AMIS
-
-### Bước 7 — Bổ sung OpeningBalance vào `get_balance_sheet`
-- **File**: `backend/app/services/accounting_service.py` — dòng 2030–2047 (hàm `_get_balance`)
-- **Vấn đề**: Bảng CĐKT tổng hợp từ JournalEntryLines không có OB → TK 131/331/111/112 bị sai khi mới migrate
-- **Fix**: Trong `_get_balance(tk_prefix)`, với prefix "131"/"331"/"11", tổng hợp thêm `SUM(OpeningBalance.so_du_dau_ky)` filter theo `phap_nhan_id` và `ky_mo_so <= ngay`; cộng vào `no` hoặc `co` tương ứng
-- **Mục tiêu**: Bảng CĐKT phản ánh đúng số dư kể cả tài sản/nợ từ kỳ AMIS
+### Bước 6 — Sửa `_get_tk_doi_ung` hiển thị đầy đủ TK đối ứng
+- **File**: `backend/app/services/accounting_service.py` — line 1926–1931
+- **Vấn đề**: `.first()` chỉ lấy một TK đối ứng; bút toán phức tạp (Dr 152 + Dr 1331 / Cr 331) hiển thị "331" thay vì "1331/331" trong sổ cái
+- **Fix**: Thay `.first()` bằng `.all()`; collect tất cả TK đối ứng distinct; join với "/"
+- **Mục tiêu**: Sổ cái hiển thị TK đối ứng đầy đủ (e.g. "1331/331")
 
 ---
 
 ## Done Criteria
-- [ ] GET /fixed-assets trả về đúng list theo `trang_thai` filter (kiểm tra bằng curl)
-- [ ] POST /journal-entries với body thiếu `lines` trả về HTTP 422
-- [ ] Không còn định nghĩa `get_ar_balance` thứ 2 tại line 771 (grep confirm)
-- [ ] GET /fixed-assets?trang_thai=da_kh_het chỉ trả về TSCĐ đã khấu hao hết
-- [ ] GET /bank-ledger trả về `so_du_dau` khác 0 khi đã nhập OB ngân hàng
-- [ ] GET /general-ledger?so_tk=131 có `so_du_dau` bao gồm OB AMIS
-- [ ] GET /balance-sheet?ngay=... có `phai_thu_khach_hang` bao gồm OB AMIS
+- [ ] `PATCH /payments/{id}/cancel` thành công khi payment ở `da_duyet`; journal entry đảo ngược
+- [ ] `GET /trial-balance?tu_ngay=...` trả về `so_du_dau` ≠ 0 cho TK 131 khi đã có OB
+- [ ] `GET /reports/trial-balance-tax?tu_ngay=...` tương tự có `so_du_dau` đúng cho TK 131
+- [ ] `POST /opening-balances` với `phap_nhan_id` → OB lưu đúng pháp nhân vào DB
+- [ ] `GET /ar/aging?phap_nhan_id=1` chỉ trả về data của pháp nhân 1
+- [ ] `GET /general-ledger?so_tk=331` bút toán phức tạp hiển thị `tk_doi_ung` đầy đủ
 - [ ] Lint: không có error mới
 - [ ] Server khởi động không lỗi
 
 ## Rủi ro
-- **Bước 5 + 6 + 7**: Nếu `doi_tuong` value không khớp với data đã nhập trong DB → OB không được cộng. Cần kiểm tra giá trị `doi_tuong` trong bảng `opening_balances` trước khi fix.
-- **Bước 6 + 7**: Tránh double-count — OB chỉ cộng một lần (dùng MAX ky_mo_so < ngày bắt đầu, không SUM toàn bộ lịch sử).
-- **Bước 2**: Phải import schema mới vào router — tránh circular import.
+- **Bước 1**: Khi payment `da_duyet` bị hủy, `DebtLedgerEntry` cần được xóa (không add reversing entry, giống pattern hiện tại của cancel_payment non-approved)
+- **Bước 2 + 3**: Tránh double-count — `base_pre` phải bắt từ `ob_date`, không phải epoch
+- **Bước 5**: `get_ar_aging` dùng `DebtLedgerEntry.customer_id` aggregation — cần thêm phap_nhan filter cho cả phần credits và reversals

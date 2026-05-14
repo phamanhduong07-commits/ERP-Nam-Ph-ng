@@ -276,6 +276,7 @@ class OpeningBalanceCreate(BaseModel):
     supplier_id: int | None = None
     so_du_dau_ky: Decimal
     ghi_chu: str | None = None
+    phap_nhan_id: int | None = None
 
 
 # ──────────────────────────────────────────────

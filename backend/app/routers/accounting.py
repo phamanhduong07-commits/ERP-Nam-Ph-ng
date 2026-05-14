@@ -240,10 +240,11 @@ def ar_ledger(
 @router.get("/ar/aging")
 def ar_aging(
     as_of_date: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_ar_aging(as_of_date)
+    return AccountingService(db).get_ar_aging(as_of_date, phap_nhan_id=phap_nhan_id)
 
 
 @router.get("/ar/balance")
@@ -292,10 +293,11 @@ def ap_ledger(
 @router.get("/ap/aging")
 def ap_aging(
     as_of_date: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_ap_aging(as_of_date)
+    return AccountingService(db).get_ap_aging(as_of_date, phap_nhan_id=phap_nhan_id)
 
 
 @router.get("/ap/balance")

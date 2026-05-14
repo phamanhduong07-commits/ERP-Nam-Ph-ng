@@ -671,8 +671,11 @@ class AccountingService:
         p = self.db.query(CashPayment).get(payment_id)
         if not p:
             raise HTTPException(404, "Không tìm thấy phiếu chi")
-        if p.trang_thai == "da_duyet":
-            raise HTTPException(400, "Không thể hủy phiếu chi đã duyệt")
+        if p.trang_thai == "huy":
+            return p
+        was_approved = p.trang_thai == "da_duyet"
+        if was_approved:
+            self._reverse_journal_entries("phieu_chi", p.id)
         if p.purchase_invoice_id:
             inv = self.db.query(PurchaseInvoice).get(p.purchase_invoice_id)
             if inv:
@@ -768,48 +771,45 @@ class AccountingService:
             ))
         return rows
 
-    def get_ar_aging(self, as_of_date: date | None = None) -> list[ARAgingRow]:
+    def get_ar_aging(self, as_of_date: date | None = None, phap_nhan_id: int | None = None) -> list[ARAgingRow]:
         today = as_of_date or date.today()
         self._mark_overdue_ar()
 
-        invoices = (
-            self.db.query(SalesInvoice)
-            .filter(
-                SalesInvoice.trang_thai != "huy",
-                SalesInvoice.ngay_hoa_don <= today,
-            )
-            .order_by(SalesInvoice.customer_id, SalesInvoice.han_tt, SalesInvoice.ngay_hoa_don, SalesInvoice.id)
-            .all()
+        inv_q = self.db.query(SalesInvoice).filter(
+            SalesInvoice.trang_thai != "huy",
+            SalesInvoice.ngay_hoa_don <= today,
         )
+        if phap_nhan_id:
+            inv_q = inv_q.filter(SalesInvoice.phap_nhan_id == phap_nhan_id)
+        invoices = inv_q.order_by(
+            SalesInvoice.customer_id, SalesInvoice.han_tt, SalesInvoice.ngay_hoa_don, SalesInvoice.id
+        ).all()
 
-        credits = (
-            self.db.query(
-                DebtLedgerEntry.customer_id,
-                func.coalesce(func.sum(DebtLedgerEntry.so_tien), 0),
-            )
-            .filter(
-                DebtLedgerEntry.doi_tuong == "khach_hang",
-                DebtLedgerEntry.loai == "giam_no",
-                DebtLedgerEntry.chung_tu_loai == "phieu_thu",
-                DebtLedgerEntry.ngay <= today,
-            )
-            .group_by(DebtLedgerEntry.customer_id)
-            .all()
+        credits_q = self.db.query(
+            DebtLedgerEntry.customer_id,
+            func.coalesce(func.sum(DebtLedgerEntry.so_tien), 0),
+        ).filter(
+            DebtLedgerEntry.doi_tuong == "khach_hang",
+            DebtLedgerEntry.loai == "giam_no",
+            DebtLedgerEntry.chung_tu_loai == "phieu_thu",
+            DebtLedgerEntry.ngay <= today,
         )
-        reversals = (
-            self.db.query(
-                DebtLedgerEntry.customer_id,
-                func.coalesce(func.sum(DebtLedgerEntry.so_tien), 0),
-            )
-            .filter(
-                DebtLedgerEntry.doi_tuong == "khach_hang",
-                DebtLedgerEntry.loai == "tang_no",
-                DebtLedgerEntry.chung_tu_loai == "huy_phieu_thu",
-                DebtLedgerEntry.ngay <= today,
-            )
-            .group_by(DebtLedgerEntry.customer_id)
-            .all()
+        if phap_nhan_id:
+            credits_q = credits_q.filter(DebtLedgerEntry.phap_nhan_id == phap_nhan_id)
+        credits = credits_q.group_by(DebtLedgerEntry.customer_id).all()
+
+        reversals_q = self.db.query(
+            DebtLedgerEntry.customer_id,
+            func.coalesce(func.sum(DebtLedgerEntry.so_tien), 0),
+        ).filter(
+            DebtLedgerEntry.doi_tuong == "khach_hang",
+            DebtLedgerEntry.loai == "tang_no",
+            DebtLedgerEntry.chung_tu_loai == "huy_phieu_thu",
+            DebtLedgerEntry.ngay <= today,
         )
+        if phap_nhan_id:
+            reversals_q = reversals_q.filter(DebtLedgerEntry.phap_nhan_id == phap_nhan_id)
+        reversals = reversals_q.group_by(DebtLedgerEntry.customer_id).all()
         credit_by_customer: dict[int, Decimal] = {
             cid: Decimal(str(amount or 0)) for cid, amount in credits if cid
         }
@@ -1043,18 +1043,17 @@ class AccountingService:
             ))
         return rows
 
-    def get_ap_aging(self, as_of_date: date | None = None) -> list[APAgingRow]:
+    def get_ap_aging(self, as_of_date: date | None = None, phap_nhan_id: int | None = None) -> list[APAgingRow]:
         today = as_of_date or date.today()
         self._mark_overdue_ap()
 
-        invoices = (
-            self.db.query(PurchaseInvoice)
-            .filter(
-                PurchaseInvoice.trang_thai.notin_(["huy", "da_tt_du"]),
-                PurchaseInvoice.con_lai > 0,
-            )
-            .all()
+        ap_q = self.db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.trang_thai.notin_(["huy", "da_tt_du"]),
+            PurchaseInvoice.con_lai > 0,
         )
+        if phap_nhan_id:
+            ap_q = ap_q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
+        invoices = ap_q.all()
 
         by_supplier: dict[int, dict] = {}
         for inv in invoices:
@@ -1157,6 +1156,7 @@ class AccountingService:
             supplier_id=data.supplier_id,
             so_du_dau_ky=data.so_du_dau_ky,
             ghi_chu=data.ghi_chu,
+            phap_nhan_id=data.phap_nhan_id,
             created_by=user_id,
         )
         self.db.add(ob)
@@ -1924,24 +1924,65 @@ class AccountingService:
         }
 
     def _get_tk_doi_ung(self, entry_id: int, current_tk: str) -> str:
-        other = self.db.query(JournalEntryLine.so_tk)\
+        rows = self.db.query(JournalEntryLine.so_tk)\
             .filter(JournalEntryLine.entry_id == entry_id)\
             .filter(JournalEntryLine.so_tk != current_tk)\
-            .first()
-        return other[0] if other else ""
+            .distinct()\
+            .all()
+        return "/".join(r[0] for r in rows) if rows else ""
 
     def get_trial_balance(self, tu_ngay: date, den_ngay: date, phap_nhan_id: int | None = None, phan_xuong_id: int | None = None):
         """Bảng cân đối số phát sinh"""
         from app.models.accounting import ChartOfAccounts
+
+        _OB_TYPES = [
+            ("111", "quy_tien_mat"),
+            ("112", "ngan_hang"),
+            ("131", "khach_hang"),
+            ("331", "nha_cung_cap"),
+        ]
+
+        def _get_ob_for_account(so_tk: str) -> tuple[Decimal, date]:
+            matched = [dt for tk, dt in _OB_TYPES if so_tk.startswith(tk) or tk.startswith(so_tk)]
+            if not matched:
+                return Decimal("0"), date(2000, 1, 1)
+            total = Decimal("0")
+            ob_date = date(2000, 1, 1)
+            for doi_tuong in matched:
+                ob_q = self.db.query(OpeningBalance).filter(
+                    OpeningBalance.doi_tuong == doi_tuong,
+                    OpeningBalance.ky_mo_so < tu_ngay,
+                )
+                if phap_nhan_id:
+                    ob_q = ob_q.filter(OpeningBalance.phap_nhan_id == phap_nhan_id)
+                latest = ob_q.with_entities(func.max(OpeningBalance.ky_mo_so)).scalar()
+                if latest:
+                    if latest > ob_date:
+                        ob_date = latest
+                    total += Decimal(str(
+                        ob_q.filter(OpeningBalance.ky_mo_so == latest)
+                        .with_entities(func.coalesce(func.sum(OpeningBalance.so_du_dau_ky), 0))
+                        .scalar() or 0
+                    ))
+            return total, ob_date
+
         accounts = self.db.query(ChartOfAccounts).order_by(ChartOfAccounts.so_tk).all()
-        
+
         result = []
         for acc in accounts:
-            # Base query cho so du dau
-            base_pre = self.db.query(JournalEntryLine).join(JournalEntry).filter(JournalEntryLine.so_tk == acc.so_tk, JournalEntry.ngay_but_toan < tu_ngay)
-            # Base query cho phat sinh
-            base_cur = self.db.query(JournalEntryLine).join(JournalEntry).filter(JournalEntryLine.so_tk == acc.so_tk, JournalEntry.ngay_but_toan >= tu_ngay, JournalEntry.ngay_but_toan <= den_ngay)
-            
+            ob_amount, ob_date = _get_ob_for_account(acc.so_tk)
+
+            base_pre = self.db.query(JournalEntryLine).join(JournalEntry).filter(
+                JournalEntryLine.so_tk == acc.so_tk,
+                JournalEntry.ngay_but_toan >= ob_date,
+                JournalEntry.ngay_but_toan < tu_ngay,
+            )
+            base_cur = self.db.query(JournalEntryLine).join(JournalEntry).filter(
+                JournalEntryLine.so_tk == acc.so_tk,
+                JournalEntry.ngay_but_toan >= tu_ngay,
+                JournalEntry.ngay_but_toan <= den_ngay,
+            )
+
             if phap_nhan_id:
                 base_pre = base_pre.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
                 base_cur = base_cur.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
@@ -1951,13 +1992,12 @@ class AccountingService:
 
             pre_no = base_pre.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_no), 0)).scalar() or Decimal("0")
             pre_co = base_pre.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_co), 0)).scalar() or Decimal("0")
-
             cur_no = base_cur.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_no), 0)).scalar() or Decimal("0")
             cur_co = base_cur.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_co), 0)).scalar() or Decimal("0")
-            
-            so_du_dau = pre_no - pre_co
+
+            so_du_dau = ob_amount + pre_no - pre_co
             so_du_cuoi = so_du_dau + cur_no - cur_co
-            
+
             if so_du_dau != 0 or cur_no != 0 or cur_co != 0:
                 result.append({
                     "so_tk": acc.so_tk,
@@ -1965,9 +2005,9 @@ class AccountingService:
                     "so_du_dau": so_du_dau,
                     "phat_sinh_no": cur_no,
                     "phat_sinh_co": cur_co,
-                    "so_du_cuoi": so_du_cuoi
+                    "so_du_cuoi": so_du_cuoi,
                 })
-        
+
         return result
 
     def get_pnl(self, tu_ngay: date, den_ngay: date, phap_nhan_id: int | None = None, phan_xuong_id: int | None = None):
@@ -2495,6 +2535,37 @@ class AccountingService:
         Loại bỏ TK nội bộ 5112/6322/1368/3368."""
         from app.models.accounting import ChartOfAccounts
 
+        _OB_TYPES = [
+            ("111", "quy_tien_mat"),
+            ("112", "ngan_hang"),
+            ("131", "khach_hang"),
+            ("331", "nha_cung_cap"),
+        ]
+
+        def _get_ob_for_account(so_tk: str) -> tuple[Decimal, date]:
+            matched = [dt for tk, dt in _OB_TYPES if so_tk.startswith(tk) or tk.startswith(so_tk)]
+            if not matched:
+                return Decimal("0"), date(2000, 1, 1)
+            total = Decimal("0")
+            ob_date = date(2000, 1, 1)
+            for doi_tuong in matched:
+                ob_q = self.db.query(OpeningBalance).filter(
+                    OpeningBalance.doi_tuong == doi_tuong,
+                    OpeningBalance.ky_mo_so < tu_ngay,
+                )
+                if phap_nhan_id:
+                    ob_q = ob_q.filter(OpeningBalance.phap_nhan_id == phap_nhan_id)
+                latest = ob_q.with_entities(func.max(OpeningBalance.ky_mo_so)).scalar()
+                if latest:
+                    if latest > ob_date:
+                        ob_date = latest
+                    total += Decimal(str(
+                        ob_q.filter(OpeningBalance.ky_mo_so == latest)
+                        .with_entities(func.coalesce(func.sum(OpeningBalance.so_du_dau_ky), 0))
+                        .scalar() or 0
+                    ))
+            return total, ob_date
+
         accounts = (
             self.db.query(ChartOfAccounts)
             .filter(ChartOfAccounts.so_tk.notin_(self._INTERNAL_ACCOUNTS))
@@ -2504,24 +2575,26 @@ class AccountingService:
 
         result = []
         for acc in accounts:
-            # Skip any account whose prefix matches an internal account (e.g. sub-accounts)
             if any(acc.so_tk.startswith(ik) for ik in self._INTERNAL_ACCOUNTS):
                 continue
 
-            def _sum(q_base):
+            ob_amount, ob_date = _get_ob_for_account(acc.so_tk)
+
+            def _apply_pn(q_base):
                 if phap_nhan_id:
                     q_base = q_base.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
                 return q_base
 
-            pre = _sum(
+            pre = _apply_pn(
                 self.db.query(JournalEntryLine)
                 .join(JournalEntry)
                 .filter(
                     JournalEntryLine.so_tk == acc.so_tk,
+                    JournalEntry.ngay_but_toan >= ob_date,
                     JournalEntry.ngay_but_toan < tu_ngay,
                 )
             )
-            cur = _sum(
+            cur = _apply_pn(
                 self.db.query(JournalEntryLine)
                 .join(JournalEntry)
                 .filter(
@@ -2536,17 +2609,17 @@ class AccountingService:
             cur_no = cur.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_no), 0)).scalar() or Decimal("0")
             cur_co = cur.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_co), 0)).scalar() or Decimal("0")
 
-            so_du_dau  = pre_no - pre_co
+            so_du_dau  = ob_amount + pre_no - pre_co
             so_du_cuoi = so_du_dau + cur_no - cur_co
 
             if so_du_dau != 0 or cur_no != 0 or cur_co != 0:
                 result.append({
-                    "so_tk":       acc.so_tk,
-                    "ten_tk":      acc.ten_tk,
-                    "so_du_dau":   so_du_dau,
+                    "so_tk":        acc.so_tk,
+                    "ten_tk":       acc.ten_tk,
+                    "so_du_dau":    so_du_dau,
                     "phat_sinh_no": cur_no,
                     "phat_sinh_co": cur_co,
-                    "so_du_cuoi":  so_du_cuoi,
+                    "so_du_cuoi":   so_du_cuoi,
                 })
 
         return result
