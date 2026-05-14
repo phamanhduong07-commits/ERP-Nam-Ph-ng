@@ -1,15 +1,21 @@
+import json
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy import desc
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.billing import SalesInvoice
-from app.models.accounting import CashReceipt, DebtLedgerEntry, JournalEntry, JournalEntryLine
+from app.models.billing import InvoiceAdjustmentLog, SalesInvoice
+from app.models.accounting import DebtLedgerEntry, JournalEntry, JournalEntryLine
 from app.models.master import Customer
 from app.models.warehouse_doc import DeliveryOrder
-from app.models.sales import SalesOrder, SalesOrderItem
-from app.schemas.billing import SalesInvoiceCreate, SalesInvoiceUpdate
+from app.models.sales import SalesOrder
+from app.schemas.billing import (
+    AdjustmentApprove,
+    AdjustmentRequest,
+    SalesInvoiceCreate,
+    SalesInvoiceUpdate,
+)
 
 
 class BillingService:
@@ -49,6 +55,8 @@ class BillingService:
         chung_tu_loai: str | None,
         chung_tu_id: int | None,
         lines: list[dict[str, object]],
+        phap_nhan_id: int | None = None,
+        phan_xuong_id: int | None = None,
     ) -> JournalEntry:
         entry = JournalEntry(
             so_but_toan=self._gen_so_but_toan('BT'),
@@ -59,6 +67,8 @@ class BillingService:
             tong_co=sum(float(l['so_tien_co']) for l in lines),
             chung_tu_loai=chung_tu_loai,
             chung_tu_id=chung_tu_id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=phan_xuong_id,
         )
         self.db.add(entry)
         self.db.flush()
@@ -69,6 +79,7 @@ class BillingService:
                 dien_giai=line.get('dien_giai'),
                 so_tien_no=line.get('so_tien_no', 0),
                 so_tien_co=line.get('so_tien_co', 0),
+                phap_nhan_id=phap_nhan_id,
             )
             self.db.add(entry_line)
         self.db.flush()
@@ -103,6 +114,7 @@ class BillingService:
             chung_tu_loai='hoa_don_ban',
             chung_tu_id=invoice.id,
             lines=lines,
+            phap_nhan_id=invoice.phap_nhan_id,
         )
 
     def _reverse_sales_invoice_journal(self, invoice: SalesInvoice) -> None:
@@ -134,13 +146,37 @@ class BillingService:
             chung_tu_loai='huy_hoa_don_ban',
             chung_tu_id=invoice.id,
             lines=lines,
+            phap_nhan_id=invoice.phap_nhan_id,
         )
+
+    def _snapshot(self, inv: SalesInvoice) -> str:
+        items = []
+        if inv.delivery:
+            items = [
+                {
+                    "item_id":    it.id,
+                    "ten_hang":   it.ten_hang or "",
+                    "dvt":        it.dvt or "",
+                    "so_luong":   float(it.so_luong or 0),
+                    "don_gia":    float(it.don_gia or 0),
+                    "thanh_tien": float(it.thanh_tien or 0),
+                }
+                for it in (inv.delivery.items or [])
+            ]
+        return json.dumps({
+            'tong_tien_hang': str(inv.tong_tien_hang),
+            'ty_le_vat': str(inv.ty_le_vat),
+            'tien_vat': str(inv.tien_vat),
+            'tong_cong': str(inv.tong_cong),
+            'han_tt': str(inv.han_tt) if inv.han_tt else None,
+            'hinh_thuc_tt': inv.hinh_thuc_tt,
+            'items': items,
+        }, ensure_ascii=False)
 
     # ─────────────────────────────────────────
     # Tạo hóa đơn bán hàng
     # ─────────────────────────────────────────
     def create_invoice(self, data: SalesInvoiceCreate, user_id: int) -> SalesInvoice:
-        # Nếu không nhập snapshot → lấy từ Customer
         customer = self.db.query(Customer).get(data.customer_id)
         if not customer:
             raise HTTPException(404, "Không tìm thấy khách hàng")
@@ -161,6 +197,7 @@ class BillingService:
             customer_id=data.customer_id,
             delivery_id=data.delivery_id,
             sales_order_id=data.sales_order_id,
+            phap_nhan_id=data.phap_nhan_id,
             ten_don_vi=ten_don_vi,
             dia_chi=dia_chi,
             ma_so_thue=ma_so_thue,
@@ -177,7 +214,6 @@ class BillingService:
         self.db.add(invoice)
         self.db.flush()
 
-        # Ghi vào sổ công nợ phải thu
         entry = DebtLedgerEntry(
             ngay=data.ngay_hoa_don,
             loai="tang_no",
@@ -187,6 +223,7 @@ class BillingService:
             chung_tu_id=invoice.id,
             so_tien=data.tong_cong,
             ghi_chu=f"HĐ bán hàng {invoice.so_hoa_don}",
+            phap_nhan_id=invoice.phap_nhan_id,
         )
         self.db.add(entry)
         self.db.commit()
@@ -194,9 +231,14 @@ class BillingService:
         return invoice
 
     # ─────────────────────────────────────────
-    # Tạo hóa đơn từ phiếu xuất kho
+    # Tạo hóa đơn từ phiếu xuất kho — VAT được chọn từ frontend
     # ─────────────────────────────────────────
-    def create_invoice_from_delivery(self, delivery_id: int, user_id: int) -> SalesInvoice:
+    def create_invoice_from_delivery(
+        self,
+        delivery_id: int,
+        user_id: int,
+        ty_le_vat: Decimal = Decimal("10"),
+    ) -> SalesInvoice:
         existing = (
             self.db.query(SalesInvoice)
             .filter(SalesInvoice.delivery_id == delivery_id, SalesInvoice.trang_thai != "huy")
@@ -217,16 +259,23 @@ class BillingService:
             raise HTTPException(400, "Phiếu xuất chưa có tổng tiền hàng")
 
         tong_tien_hang = delivery.tong_tien_hang
-        tien_vat = round(tong_tien_hang * Decimal("10") / 100, 0)
+        tien_vat = round(tong_tien_hang * ty_le_vat / 100, 0)
         tong_cong = tong_tien_hang + tien_vat
+
+        phap_nhan_id: int | None = getattr(delivery, "phap_nhan_id", None)
+        if delivery.sales_order_id:
+            order = self.db.get(SalesOrder, delivery.sales_order_id)
+            if order and order.phap_nhan_id:
+                phap_nhan_id = order.phap_nhan_id
 
         data = SalesInvoiceCreate(
             customer_id=delivery.customer_id,
             delivery_id=delivery.id,
             sales_order_id=delivery.sales_order_id,
+            phap_nhan_id=phap_nhan_id,
             ngay_hoa_don=date.today(),
             tong_tien_hang=tong_tien_hang,
-            ty_le_vat=Decimal("10"),
+            ty_le_vat=ty_le_vat,
             tien_vat=tien_vat,
             tong_cong=tong_cong,
         )
@@ -254,6 +303,7 @@ class BillingService:
         data = SalesInvoiceCreate(
             customer_id=order.customer_id,
             sales_order_id=order.id,
+            phap_nhan_id=order.phap_nhan_id,
             ngay_hoa_don=date.today(),
             tong_tien_hang=tong_tien_hang,
             tien_vat=tien_vat,
@@ -262,7 +312,7 @@ class BillingService:
         return self.create_invoice(data, user_id)
 
     # ─────────────────────────────────────────
-    # Lấy danh sách hóa đơn (phân trang)
+    # Danh sách hóa đơn
     # ─────────────────────────────────────────
     def list_invoices(
         self,
@@ -274,10 +324,13 @@ class BillingService:
         search: str | None = None,
         page: int = 1,
         page_size: int = 20,
+        phap_nhan_id: int | None = None,
     ):
         self._mark_overdue_ar()
 
-        q = self.db.query(SalesInvoice)
+        q = self.db.query(SalesInvoice).options(joinedload(SalesInvoice.phap_nhan))
+        if phap_nhan_id:
+            q = q.filter(SalesInvoice.phap_nhan_id == phap_nhan_id)
         if customer_id:
             q = q.filter(SalesInvoice.customer_id == customer_id)
         if trang_thai:
@@ -307,7 +360,12 @@ class BillingService:
     def get_invoice(self, invoice_id: int) -> SalesInvoice:
         inv = (
             self.db.query(SalesInvoice)
-            .options(joinedload(SalesInvoice.receipts))
+            .options(
+                joinedload(SalesInvoice.phap_nhan),
+                joinedload(SalesInvoice.receipts),
+                joinedload(SalesInvoice.adjustment_logs).joinedload(InvoiceAdjustmentLog.adjusted_by),
+                joinedload(SalesInvoice.adjustment_logs).joinedload(InvoiceAdjustmentLog.approved_by),
+            )
             .filter(SalesInvoice.id == invoice_id)
             .first()
         )
@@ -315,19 +373,201 @@ class BillingService:
             raise HTTPException(404, "Không tìm thấy hóa đơn")
         return inv
 
-    def update_invoice(self, invoice_id: int, data: SalesInvoiceUpdate) -> SalesInvoice:
+    # ─────────────────────────────────────────
+    # Điều chỉnh TRƯỚC kết chuyển (trực tiếp)
+    # ─────────────────────────────────────────
+    def update_invoice(self, invoice_id: int, data: SalesInvoiceUpdate, user_id: int) -> SalesInvoice:
         inv = self.get_invoice(invoice_id)
         if inv.trang_thai != "nhap":
-            raise HTTPException(400, "Chỉ sửa được hóa đơn ở trạng thái Nháp")
-        for field, value in data.model_dump(exclude_none=True).items():
+            raise HTTPException(
+                400,
+                "Hóa đơn đã kết chuyển. Dùng chức năng 'Yêu cầu điều chỉnh' để thay đổi.",
+            )
+        if inv.adjustment_logs:
+            raise HTTPException(400, "Hóa đơn này đã được điều chỉnh 1 lần. Không thể điều chỉnh thêm.")
+
+        before_snap = self._snapshot(inv)
+        old_tong_cong = inv.tong_cong
+
+        update_fields = data.model_dump(exclude_none=True, exclude={'ghi_chu_dieu_chinh'})
+        financial_changed = 'tong_tien_hang' in update_fields or 'ty_le_vat' in update_fields
+
+        for field, value in update_fields.items():
             setattr(inv, field, value)
+
+        if financial_changed:
+            inv.tien_vat = round(inv.tong_tien_hang * inv.ty_le_vat / 100, 0)
+            inv.tong_cong = inv.tong_tien_hang + inv.tien_vat
+
         inv.updated_at = datetime.utcnow()
+
+        # Điều chỉnh debt ledger nếu số tiền thay đổi
+        if financial_changed and inv.tong_cong != old_tong_cong:
+            self.db.add(DebtLedgerEntry(
+                ngay=date.today(),
+                loai="giam_no",
+                doi_tuong="khach_hang",
+                customer_id=inv.customer_id,
+                chung_tu_loai="dieu_chinh_hoa_don",
+                chung_tu_id=inv.id,
+                so_tien=old_tong_cong,
+                ghi_chu=f"Đảo nợ HĐ {inv.so_hoa_don} trước điều chỉnh",
+                phap_nhan_id=inv.phap_nhan_id,
+            ))
+            self.db.add(DebtLedgerEntry(
+                ngay=date.today(),
+                loai="tang_no",
+                doi_tuong="khach_hang",
+                customer_id=inv.customer_id,
+                chung_tu_loai="dieu_chinh_hoa_don",
+                chung_tu_id=inv.id,
+                so_tien=inv.tong_cong,
+                ghi_chu=f"Điều chỉnh HĐ {inv.so_hoa_don}",
+                phap_nhan_id=inv.phap_nhan_id,
+            ))
+
+        after_snap = self._snapshot(inv)
+        self.db.add(InvoiceAdjustmentLog(
+            invoice_id=inv.id,
+            adjusted_by_id=user_id,
+            loai="truoc_ket_chuyen",
+            ghi_chu=data.ghi_chu_dieu_chinh or "Điều chỉnh thông tin hóa đơn",
+            trang_thai="na",
+            du_lieu_truoc=before_snap,
+            du_lieu_sau=after_snap,
+        ))
+
         self.db.commit()
         self.db.refresh(inv)
         return inv
 
+    # ─────────────────────────────────────────
+    # Upload ảnh phiếu giao
+    # ─────────────────────────────────────────
+    def update_anh_phieu_giao(self, invoice_id: int, url: str) -> SalesInvoice:
+        inv = self.db.query(SalesInvoice).get(invoice_id)
+        if not inv:
+            raise HTTPException(404, "Không tìm thấy hóa đơn")
+        inv.anh_phieu_giao = url
+        inv.updated_at = datetime.utcnow()
+        self.db.commit()
+        return self.get_invoice(invoice_id)
+
+    # ─────────────────────────────────────────
+    # Yêu cầu điều chỉnh SAU kết chuyển
+    # ─────────────────────────────────────────
+    def request_adjustment(
+        self, invoice_id: int, data: AdjustmentRequest, user_id: int
+    ) -> InvoiceAdjustmentLog:
+        inv = self.get_invoice(invoice_id)
+        if inv.trang_thai not in ("da_phat_hanh", "da_tt_mot_phan", "qua_han"):
+            raise HTTPException(400, "Chỉ yêu cầu điều chỉnh được hóa đơn đã kết chuyển")
+        raise HTTPException(
+            400,
+            "Hóa đơn đã phát hành không thể điều chỉnh. Mọi thay đổi cần thực hiện trước khi tạo hóa đơn.",
+        )
+
+        tien_vat_moi = round(data.tong_tien_hang * data.ty_le_vat / 100, 0)
+        tong_cong_moi = data.tong_tien_hang + tien_vat_moi
+
+        before_snap = self._snapshot(inv)
+        after_snap = json.dumps({
+            'tong_tien_hang': str(data.tong_tien_hang),
+            'ty_le_vat': str(data.ty_le_vat),
+            'tien_vat': str(tien_vat_moi),
+            'tong_cong': str(tong_cong_moi),
+        }, ensure_ascii=False)
+
+        log = InvoiceAdjustmentLog(
+            invoice_id=inv.id,
+            adjusted_by_id=user_id,
+            loai="sau_ket_chuyen",
+            ghi_chu=data.ghi_chu_dieu_chinh,
+            trang_thai="pending",
+            du_lieu_truoc=before_snap,
+            du_lieu_sau=after_snap,
+        )
+        self.db.add(log)
+        self.db.commit()
+        self.db.refresh(log)
+        return log
+
+    # ─────────────────────────────────────────
+    # Duyệt / Từ chối yêu cầu điều chỉnh
+    # ─────────────────────────────────────────
+    def approve_adjustment(
+        self, log_id: int, data: AdjustmentApprove, user_id: int
+    ) -> InvoiceAdjustmentLog:
+        log = self.db.query(InvoiceAdjustmentLog).get(log_id)
+        if not log:
+            raise HTTPException(404, "Không tìm thấy yêu cầu điều chỉnh")
+        if log.trang_thai != "pending":
+            raise HTTPException(400, "Yêu cầu không ở trạng thái chờ duyệt")
+
+        log.approved_by_id = user_id
+        log.approved_at = datetime.utcnow()
+
+        if data.approved:
+            log.trang_thai = "approved"
+            if data.ghi_chu:
+                log.ghi_chu = log.ghi_chu + f"\n[Ghi chú duyệt]: {data.ghi_chu}"
+
+            inv = self.db.query(SalesInvoice).get(log.invoice_id)
+            new_vals = json.loads(log.du_lieu_sau)
+
+            old_tong_cong = inv.tong_cong
+
+            # 1. Đảo ngược debt ledger entry cũ
+            self.db.add(DebtLedgerEntry(
+                ngay=date.today(),
+                loai="giam_no",
+                doi_tuong="khach_hang",
+                customer_id=inv.customer_id,
+                chung_tu_loai="dieu_chinh_hoa_don",
+                chung_tu_id=inv.id,
+                so_tien=old_tong_cong,
+                ghi_chu=f"Đảo nợ HĐ {inv.so_hoa_don} theo yêu cầu #{log.id}",
+                phap_nhan_id=inv.phap_nhan_id,
+            ))
+
+            # 2. Đảo ngược journal entries
+            self._reverse_sales_invoice_journal(inv)
+
+            # 3. Áp dụng giá trị mới
+            inv.tong_tien_hang = Decimal(new_vals['tong_tien_hang'])
+            inv.ty_le_vat = Decimal(new_vals['ty_le_vat'])
+            inv.tien_vat = Decimal(new_vals['tien_vat'])
+            inv.tong_cong = Decimal(new_vals['tong_cong'])
+            inv.updated_at = datetime.utcnow()
+
+            # 4. Debt ledger entry mới
+            self.db.add(DebtLedgerEntry(
+                ngay=date.today(),
+                loai="tang_no",
+                doi_tuong="khach_hang",
+                customer_id=inv.customer_id,
+                chung_tu_loai="dieu_chinh_hoa_don",
+                chung_tu_id=inv.id,
+                so_tien=inv.tong_cong,
+                ghi_chu=f"Điều chỉnh HĐ {inv.so_hoa_don} theo yêu cầu #{log.id}",
+                phap_nhan_id=inv.phap_nhan_id,
+            ))
+
+            # 5. Journal entries mới
+            self._post_sales_invoice_journal(inv)
+        else:
+            log.trang_thai = "rejected"
+            if data.ghi_chu:
+                log.ghi_chu = log.ghi_chu + f"\n[Lý do từ chối]: {data.ghi_chu}"
+
+        self.db.commit()
+        self.db.refresh(log)
+        return log
+
+    # ─────────────────────────────────────────
+    # Phát hành (kết chuyển)
+    # ─────────────────────────────────────────
     def issue_invoice(self, invoice_id: int) -> SalesInvoice:
-        """Phát hành hóa đơn: nhap → da_phat_hanh"""
         inv = self.get_invoice(invoice_id)
         if inv.trang_thai != "nhap":
             raise HTTPException(400, "Chỉ phát hành được hóa đơn ở trạng thái Nháp")
@@ -347,7 +587,7 @@ class BillingService:
         should_reverse = inv.trang_thai != "nhap"
         inv.trang_thai = "huy"
         inv.updated_at = datetime.utcnow()
-        entry = DebtLedgerEntry(
+        self.db.add(DebtLedgerEntry(
             ngay=date.today(),
             loai="giam_no",
             doi_tuong="khach_hang",
@@ -356,8 +596,8 @@ class BillingService:
             chung_tu_id=inv.id,
             so_tien=inv.tong_cong,
             ghi_chu=f"Huy hoa don ban {inv.so_hoa_don}",
-        )
-        self.db.add(entry)
+            phap_nhan_id=inv.phap_nhan_id,
+        ))
         if should_reverse:
             self._reverse_sales_invoice_journal(inv)
         if inv.delivery_id:

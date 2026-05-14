@@ -30,6 +30,14 @@ from app.schemas.accounting import (
 
 
 class AccountingService:
+    _ACCOUNT_OB_TYPES: list[tuple[str, str]] = [
+        ("111", "quy_tien_mat"),
+        ("112", "ngan_hang"),
+        ("131", "khach_hang"),
+        ("331", "nha_cung_cap"),
+        ("141", "tam_ung"),
+    ]
+
     def __init__(self, db: Session):
         self.db = db
 
@@ -931,10 +939,11 @@ class AccountingService:
         customer_id: int | None = None,
         tu_ngay: date | None = None,
         den_ngay: date | None = None,
+        phap_nhan_id: int | None = None,
     ) -> dict:
         start_date = tu_ngay or date(2000, 1, 1)
         end_date = den_ngay or date.today()
-        so_du_dau = Decimal(str(self._calc_balance_before(customer_id, None, start_date, "khach_hang")))
+        so_du_dau = Decimal(str(self._calc_balance_before(customer_id, None, start_date, "khach_hang", phap_nhan_id=phap_nhan_id)))
         so_du_luy_ke = so_du_dau
         tong_no = Decimal("0")
         tong_co = Decimal("0")
@@ -946,16 +955,31 @@ class AccountingService:
         )
         if customer_id:
             q = q.filter(DebtLedgerEntry.customer_id == customer_id)
+        if phap_nhan_id:
+            q = q.filter(DebtLedgerEntry.phap_nhan_id == phap_nhan_id)
+
+        entries = q.order_by(DebtLedgerEntry.ngay, DebtLedgerEntry.id).all()
+
+        # Batch preload để tránh N+1
+        cust_ids = {e.customer_id for e in entries if e.customer_id}
+        inv_ids = {e.chung_tu_id for e in entries if e.chung_tu_id and e.chung_tu_loai in {"hoa_don_ban", "huy_hoa_don_ban"}}
+        rec_ids = {e.chung_tu_id for e in entries if e.chung_tu_id and e.chung_tu_loai in {"phieu_thu", "huy_phieu_thu"}}
+
+        cust_map: dict[int, Customer] = {}
+        inv_map: dict[int, SalesInvoice] = {}
+        rec_map: dict[int, CashReceipt] = {}
+        if cust_ids:
+            cust_map = {c.id: c for c in self.db.query(Customer).filter(Customer.id.in_(cust_ids)).all()}
+        if inv_ids:
+            inv_map = {i.id: i for i in self.db.query(SalesInvoice).filter(SalesInvoice.id.in_(inv_ids)).all()}
+        if rec_ids:
+            rec_map = {r.id: r for r in self.db.query(CashReceipt).filter(CashReceipt.id.in_(rec_ids)).all()}
 
         rows = []
-        for e in q.order_by(DebtLedgerEntry.ngay, DebtLedgerEntry.id).all():
-            customer = self.db.get(Customer, e.customer_id) if e.customer_id else None
-            invoice = None
-            receipt = None
-            if e.chung_tu_loai in {"hoa_don_ban", "huy_hoa_don_ban"} and e.chung_tu_id:
-                invoice = self.db.get(SalesInvoice, e.chung_tu_id)
-            elif e.chung_tu_loai in {"phieu_thu", "huy_phieu_thu"} and e.chung_tu_id:
-                receipt = self.db.get(CashReceipt, e.chung_tu_id)
+        for e in entries:
+            customer = cust_map.get(e.customer_id) if e.customer_id else None
+            invoice = inv_map.get(e.chung_tu_id) if e.chung_tu_id and e.chung_tu_loai in {"hoa_don_ban", "huy_hoa_don_ban"} else None
+            receipt = rec_map.get(e.chung_tu_id) if e.chung_tu_id and e.chung_tu_loai in {"phieu_thu", "huy_phieu_thu"} else None
 
             if e.loai == "tang_no":
                 phat_sinh_no = e.so_tien
@@ -1242,6 +1266,8 @@ class AccountingService:
         tu_ngay: date,
         den_ngay: date,
         phap_nhan_id: int | None = None,
+        page: int = 1,
+        page_size: int = 50,
     ) -> dict:
         """
         Sổ chi tiết mua hàng theo NCC trong kỳ.
@@ -1302,6 +1328,10 @@ class AccountingService:
                 "so_du": float(so_du_luy_ke),
             })
 
+        total = len(rows)
+        start = (page - 1) * page_size
+        paged_rows = rows[start : start + page_size]
+
         return {
             "tu_ngay": tu_ngay.isoformat(),
             "den_ngay": den_ngay.isoformat(),
@@ -1310,7 +1340,10 @@ class AccountingService:
             "so_du_cuoi_ky": float(so_du_luy_ke),
             "phat_sinh_no": float(ps_no),
             "phat_sinh_co": float(ps_co),
-            "rows": rows,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "rows": paged_rows,
         }
 
     # ─────────────────────────────────────────────
@@ -1862,12 +1895,7 @@ class AccountingService:
 
         # 1. Tinh so du dau ky
         # Với một số TK, số dư đầu kỳ có thể bao gồm OB từ AMIS migration
-        _ACCOUNT_OB_MAP = {
-            "131": "khach_hang",
-            "331": "nha_cung_cap",
-            "111": "quy_tien_mat",
-            "112": "ngan_hang",
-        }
+        _ACCOUNT_OB_MAP = {tk: dt for tk, dt in self._ACCOUNT_OB_TYPES}
         doi_tuong_ob = next(
             (v for k, v in _ACCOUNT_OB_MAP.items() if so_tk.startswith(k)), None
         )
@@ -1982,15 +2010,8 @@ class AccountingService:
         """Bảng cân đối số phát sinh"""
         from app.models.accounting import ChartOfAccounts
 
-        _OB_TYPES = [
-            ("111", "quy_tien_mat"),
-            ("112", "ngan_hang"),
-            ("131", "khach_hang"),
-            ("331", "nha_cung_cap"),
-        ]
-
         def _get_ob_for_account(so_tk: str) -> tuple[Decimal, date]:
-            matched = [dt for tk, dt in _OB_TYPES if so_tk.startswith(tk) or tk.startswith(so_tk)]
+            matched = [dt for tk, dt in self._ACCOUNT_OB_TYPES if so_tk.startswith(tk) or tk.startswith(so_tk)]
             if not matched:
                 return Decimal("0"), date(2000, 1, 1)
             total = Decimal("0")
@@ -2136,17 +2157,10 @@ class AccountingService:
         """Bảng cân đối kế toán (Tài sản / Nguồn vốn)"""
 
         # Mapping TK prefix → doi_tuong cho OpeningBalance (AMIS migration)
-        _OB_TYPES = [
-            ("111", "quy_tien_mat"),
-            ("112", "ngan_hang"),
-            ("131", "khach_hang"),
-            ("331", "nha_cung_cap"),
-        ]
-
         def _get_ob(tk_prefix: str) -> tuple[Decimal, date]:
             """Trả về (tổng OB, ngày OB sớm nhất) cho prefix đã cho."""
             matched = [
-                dt for tk, dt in _OB_TYPES
+                dt for tk, dt in self._ACCOUNT_OB_TYPES
                 if tk.startswith(tk_prefix) or tk_prefix.startswith(tk)
             ]
             total = Decimal("0")
@@ -2582,15 +2596,8 @@ class AccountingService:
         Loại bỏ TK nội bộ 5112/6322/1368/3368."""
         from app.models.accounting import ChartOfAccounts
 
-        _OB_TYPES = [
-            ("111", "quy_tien_mat"),
-            ("112", "ngan_hang"),
-            ("131", "khach_hang"),
-            ("331", "nha_cung_cap"),
-        ]
-
         def _get_ob_for_account(so_tk: str) -> tuple[Decimal, date]:
-            matched = [dt for tk, dt in _OB_TYPES if so_tk.startswith(tk) or tk.startswith(so_tk)]
+            matched = [dt for tk, dt in self._ACCOUNT_OB_TYPES if so_tk.startswith(tk) or tk.startswith(so_tk)]
             if not matched:
                 return Decimal("0"), date(2000, 1, 1)
             total = Decimal("0")

@@ -268,10 +268,11 @@ def ar_ledger_entries(
     customer_id: int | None = Query(None),
     tu_ngay: date | None = Query(None),
     den_ngay: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_ar_ledger_entries(customer_id, tu_ngay, den_ngay)
+    return AccountingService(db).get_ar_ledger_entries(customer_id, tu_ngay, den_ngay, phap_nhan_id=phap_nhan_id)
 
 
 @router.get("/ap/ledger")
@@ -323,10 +324,16 @@ def so_chi_tiet_mua_hang(
     tu_ngay: date = Query(...),
     den_ngay: date = Query(...),
     phap_nhan_id: int | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_so_chi_tiet_mua_hang(supplier_id, tu_ngay, den_ngay, phap_nhan_id=phap_nhan_id)
+    return AccountingService(db).get_so_chi_tiet_mua_hang(
+        supplier_id, tu_ngay, den_ngay,
+        phap_nhan_id=phap_nhan_id,
+        page=page, page_size=page_size,
+    )
 
 
 # ─────────────────────────────────────────────
