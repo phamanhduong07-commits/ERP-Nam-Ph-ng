@@ -8,7 +8,7 @@ from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.accounting import CashReceipt, CashPayment, OpeningBalance
-from app.models.master import Customer, Supplier
+from app.models.master import Customer, PhapNhan, Supplier
 from app.services.accounting_service import AccountingService
 from app.schemas.accounting import (
     PurchaseInvoiceCreate,
@@ -19,6 +19,7 @@ from app.schemas.accounting import (
     WorkshopPayrollCreate, WorkshopPayrollResponse,
     OverheadAllocationRequest,
     FixedAssetCreate, FixedAssetResponse,
+    ManualJournalEntryCreate,
 )
 from app.services.excel_import_service import (
     ImportField, build_template_response, parse_bool, parse_decimal, parse_text,
@@ -42,6 +43,7 @@ def list_receipts(
     trang_thai: str | None = Query(None),
     tu_ngay: date | None = Query(None),
     den_ngay: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -50,6 +52,7 @@ def list_receipts(
     return AccountingService(db).list_receipts(
         customer_id=customer_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
+        phap_nhan_id=phap_nhan_id,
         page=page, page_size=page_size,
     )
 
@@ -101,6 +104,7 @@ def list_purchase_invoices(
     tu_ngay: date | None = Query(None),
     den_ngay: date | None = Query(None),
     qua_han_only: bool = Query(False),
+    phap_nhan_id: int | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -109,7 +113,7 @@ def list_purchase_invoices(
     return AccountingService(db).list_purchase_invoices(
         supplier_id=supplier_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
-        qua_han_only=qua_han_only,
+        qua_han_only=qua_han_only, phap_nhan_id=phap_nhan_id,
         page=page, page_size=page_size,
     )
 
@@ -162,6 +166,7 @@ def list_payments(
     trang_thai: str | None = Query(None),
     tu_ngay: date | None = Query(None),
     den_ngay: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -170,6 +175,7 @@ def list_payments(
     return AccountingService(db).list_payments(
         supplier_id=supplier_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
+        phap_nhan_id=phap_nhan_id,
         page=page, page_size=page_size,
     )
 
@@ -221,12 +227,13 @@ def ar_ledger(
     den_ngay: date | None = Query(None),
     trang_thai: str | None = Query(None),
     qua_han_only: bool = Query(False),
+    phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     return AccountingService(db).get_ar_ledger(
         customer_id=customer_id, tu_ngay=tu_ngay, den_ngay=den_ngay,
-        trang_thai=trang_thai, qua_han_only=qua_han_only,
+        trang_thai=trang_thai, qua_han_only=qua_han_only, phap_nhan_id=phap_nhan_id,
     )
 
 
@@ -272,12 +279,13 @@ def ap_ledger(
     den_ngay: date | None = Query(None),
     trang_thai: str | None = Query(None),
     qua_han_only: bool = Query(False),
+    phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     return AccountingService(db).get_ap_ledger(
         supplier_id=supplier_id, tu_ngay=tu_ngay, den_ngay=den_ngay,
-        trang_thai=trang_thai, qua_han_only=qua_han_only,
+        trang_thai=trang_thai, qua_han_only=qua_han_only, phap_nhan_id=phap_nhan_id,
     )
 
 
@@ -587,11 +595,10 @@ async def import_ob_cash(
 def cash_book(
     tu_ngay: date = Query(...),
     den_ngay: date = Query(...),
-    phap_nhan_id: int | None = Query(None),
-    phan_xuong_id: int | None = Query(None),
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_trial_balance(tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id)
+    return AccountingService(db).get_cash_book(tu_ngay, den_ngay)
 
 
 # ─────────────────────────────────────────────
@@ -771,7 +778,15 @@ def print_receipt(
     if not r:
         raise HTTPException(404, "Không tìm thấy phiếu thu")
 
-    accent = "#1565C0"
+    pn: PhapNhan | None = (
+        db.get(PhapNhan, r.phap_nhan_id) if r.phap_nhan_id
+        else db.query(PhapNhan).filter(PhapNhan.trang_thai == True).first()
+    )
+    accent = (pn.mau_sac_chinh if pn and pn.mau_sac_chinh else "#1565C0")
+    ten_cty = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+    dia_chi_cty = pn.dia_chi if pn else ""
+    mst_cty = pn.ma_so_thue if pn else ""
+    dt_cty = pn.so_dien_thoai if pn else ""
     ten_kh = r.customer.ten_viet_tat if r.customer else ""
     dia_chi_kh = r.customer.dia_chi if r.customer else ""
     hinh_thuc = HINH_THUC_LABEL.get(r.hinh_thuc_tt, r.hinh_thuc_tt)
@@ -792,10 +807,9 @@ def print_receipt(
 </div>
 <div class="header">
   <div>
-    <div class="company-name">CÔNG TY TNHH NAM PHƯƠNG BAO BÌ</div>
+    <div class="company-name">{ten_cty}</div>
     <div class="company-info">
-      Địa chỉ: 123 Đường Nguyễn Văn Linh, Q.7, TP.HCM<br>
-      MST: 0312345678 &nbsp;|&nbsp; ĐT: (028) 3456 7890
+      {"Địa chỉ: " + dia_chi_cty + "<br>" if dia_chi_cty else ""}{"MST: " + mst_cty + " &nbsp;|&nbsp; " if mst_cty else ""}{"ĐT: " + dt_cty if dt_cty else ""}
     </div>
   </div>
   <div class="mau">
@@ -847,7 +861,15 @@ def print_payment(
     if not p:
         raise HTTPException(404, "Không tìm thấy phiếu chi")
 
-    accent = "#B71C1C"
+    pn: PhapNhan | None = (
+        db.get(PhapNhan, p.phap_nhan_id) if p.phap_nhan_id
+        else db.query(PhapNhan).filter(PhapNhan.trang_thai == True).first()
+    )
+    accent = (pn.mau_sac_chinh if pn and pn.mau_sac_chinh else "#B71C1C")
+    ten_cty = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+    dia_chi_cty = pn.dia_chi if pn else ""
+    mst_cty = pn.ma_so_thue if pn else ""
+    dt_cty = pn.so_dien_thoai if pn else ""
     ten_ncc = p.supplier.ten_viet_tat if p.supplier else ""
     dia_chi_ncc = p.supplier.dia_chi if p.supplier else ""
     hinh_thuc = HINH_THUC_LABEL.get(p.hinh_thuc_tt, p.hinh_thuc_tt)
@@ -868,10 +890,9 @@ def print_payment(
 </div>
 <div class="header">
   <div>
-    <div class="company-name">CÔNG TY TNHH NAM PHƯƠNG BAO BÌ</div>
+    <div class="company-name">{ten_cty}</div>
     <div class="company-info">
-      Địa chỉ: 123 Đường Nguyễn Văn Linh, Q.7, TP.HCM<br>
-      MST: 0312345678 &nbsp;|&nbsp; ĐT: (028) 3456 7890
+      {"Địa chỉ: " + dia_chi_cty + "<br>" if dia_chi_cty else ""}{"MST: " + mst_cty + " &nbsp;|&nbsp; " if mst_cty else ""}{"ĐT: " + dt_cty if dt_cty else ""}
     </div>
   </div>
   <div class="mau">
@@ -1081,20 +1102,20 @@ def list_journal_entries(
 
 @router.post("/journal-entries")
 def create_manual_journal_entry(
-    data: dict, # Simplification for now, or use a Schema
+    data: ManualJournalEntryCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
     """Tạo bút toán tổng hợp thủ công"""
     return AccountingService(db)._create_journal_entry(
-        ngay=date.fromisoformat(data['ngay_but_toan']),
-        dien_giai=data['dien_giai'],
+        ngay=data.ngay_but_toan,
+        dien_giai=data.dien_giai,
         loai_but_toan='tong_hop',
         chung_tu_loai='tong_hop',
         chung_tu_id=None,
-        lines=data['lines'],
-        phap_nhan_id=data.get('phap_nhan_id'),
-        phan_xuong_id=data.get('phan_xuong_id'),
+        lines=[l.model_dump() for l in data.lines],
+        phap_nhan_id=data.phap_nhan_id,
+        phan_xuong_id=data.phan_xuong_id,
     )
 
 
@@ -1169,17 +1190,6 @@ def create_fixed_asset(
 ):
     """Đăng ký tài sản cố định mới"""
     return AccountingService(db).create_fixed_asset(data)
-
-
-@router.get("/fixed-assets")
-def list_fixed_assets(
-    phan_xuong_id: int = Query(None),
-    phap_nhan_id: int = Query(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
-):
-    """Danh sách tài sản cố định"""
-    return AccountingService(db).list_fixed_assets(phan_xuong_id, phap_nhan_id)
 
 
 @router.post("/fixed-assets/run-depreciation")

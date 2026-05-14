@@ -216,6 +216,7 @@ class ARLedgerRow(BaseModel):
     con_lai: Decimal
     so_ngay_qua_han: int          # số ngày quá hạn (0 nếu chưa quá)
     trang_thai: str
+    phap_nhan_id: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -244,6 +245,7 @@ class APLedgerRow(BaseModel):
     con_lai: Decimal
     so_ngay_qua_han: int
     trang_thai: str
+    phap_nhan_id: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -524,6 +526,47 @@ class OverheadAllocationRequest(BaseModel):
     so_tk: str
     phap_nhan_id: int
     allocations: list[AllocationItem]
+
+
+# ──────────────────────────────────────────────
+# Bút toán thủ công (journal entry)
+# ──────────────────────────────────────────────
+
+class ManualJournalLineIn(BaseModel):
+    so_tk: str
+    so_tien_no: Decimal = Decimal("0")
+    so_tien_co: Decimal = Decimal("0")
+    dien_giai: str | None = None
+    phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
+
+    @model_validator(mode="after")
+    def check_one_side(self) -> "ManualJournalLineIn":
+        if self.so_tien_no < 0 or self.so_tien_co < 0:
+            raise ValueError("Số tiền không được âm")
+        if self.so_tien_no == 0 and self.so_tien_co == 0:
+            raise ValueError("Mỗi dòng phải có ít nhất một bên Nợ hoặc Có")
+        return self
+
+
+class ManualJournalEntryCreate(BaseModel):
+    ngay_but_toan: date
+    dien_giai: str
+    lines: list[ManualJournalLineIn]
+    phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
+
+    @model_validator(mode="after")
+    def check_balanced(self) -> "ManualJournalEntryCreate":
+        if not self.lines:
+            raise ValueError("Bút toán phải có ít nhất một dòng chi tiết")
+        tong_no = sum(l.so_tien_no for l in self.lines)
+        tong_co = sum(l.so_tien_co for l in self.lines)
+        if tong_no != tong_co:
+            raise ValueError(
+                f"Bút toán không cân: Tổng Nợ={tong_no}, Tổng Có={tong_co}"
+            )
+        return self
 
 
 # ──────────────────────────────────────────────

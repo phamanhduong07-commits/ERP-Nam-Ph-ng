@@ -77,7 +77,6 @@ class AccountingService:
             tk_no=data.tk_no,
             tk_co=data.tk_co,
             phap_nhan_id=data.phap_nhan_id,
-            phan_xuong_id=data.phan_xuong_id,
             created_by=user_id,
         )
         self.db.add(receipt)
@@ -114,6 +113,7 @@ class AccountingService:
             chung_tu_id=receipt.id,
             so_tien=data.so_tien,
             ghi_chu=data.dien_giai or f"Phiếu thu {receipt.so_phieu}",
+            phap_nhan_id=receipt.phap_nhan_id,
         )
         self.db.add(entry)
         self.db.commit()
@@ -396,6 +396,7 @@ class AccountingService:
             chung_tu_id=receipt.id,
             so_tien=receipt.so_tien,
             ghi_chu=f"Huy phieu thu {receipt.so_phieu}",
+            phap_nhan_id=receipt.phap_nhan_id,
         )
         self.db.add(entry)
         self.db.commit()
@@ -408,6 +409,7 @@ class AccountingService:
         trang_thai: str | None = None,
         tu_ngay: date | None = None,
         den_ngay: date | None = None,
+        phap_nhan_id: int | None = None,
         page: int = 1,
         page_size: int = 20,
     ):
@@ -420,6 +422,8 @@ class AccountingService:
             q = q.filter(CashReceipt.ngay_phieu >= tu_ngay)
         if den_ngay:
             q = q.filter(CashReceipt.ngay_phieu <= den_ngay)
+        if phap_nhan_id:
+            q = q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
 
         total = q.count()
         items = q.order_by(desc(CashReceipt.ngay_phieu)).offset((page - 1) * page_size).limit(page_size).all()
@@ -473,7 +477,6 @@ class AccountingService:
             da_thanh_toan=Decimal("0"),
             ghi_chu=data.ghi_chu,
             phap_nhan_id=data.phap_nhan_id,
-            phan_xuong_id=data.phan_xuong_id,
             created_by=user_id,
         )
         self.db.add(inv)
@@ -489,6 +492,7 @@ class AccountingService:
             chung_tu_id=inv.id,
             so_tien=data.tong_thanh_toan,
             ghi_chu=f"HĐ mua hàng {data.so_hoa_don or ''}",
+            phap_nhan_id=data.phap_nhan_id,
         )
         self.db.add(entry)
         
@@ -553,6 +557,7 @@ class AccountingService:
         tu_ngay: date | None = None,
         den_ngay: date | None = None,
         qua_han_only: bool = False,
+        phap_nhan_id: int | None = None,
         page: int = 1,
         page_size: int = 20,
     ):
@@ -568,6 +573,8 @@ class AccountingService:
             q = q.filter(PurchaseInvoice.ngay_lap <= den_ngay)
         if qua_han_only:
             q = q.filter(PurchaseInvoice.trang_thai == "qua_han")
+        if phap_nhan_id:
+            q = q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
 
         total = q.count()
         items = q.order_by(desc(PurchaseInvoice.ngay_lap)).offset((page - 1) * page_size).limit(page_size).all()
@@ -609,7 +616,6 @@ class AccountingService:
             tk_no=data.tk_no,
             tk_co=data.tk_co,
             phap_nhan_id=data.phap_nhan_id,
-            phan_xuong_id=data.phan_xuong_id,
             created_by=user_id,
         )
         self.db.add(payment)
@@ -637,6 +643,7 @@ class AccountingService:
             chung_tu_id=payment.id,
             so_tien=data.so_tien,
             ghi_chu=data.dien_giai or f"Phiếu chi {payment.so_phieu}",
+            phap_nhan_id=payment.phap_nhan_id,
         )
         self.db.add(entry)
         self.db.commit()
@@ -687,6 +694,7 @@ class AccountingService:
         trang_thai: str | None = None,
         tu_ngay: date | None = None,
         den_ngay: date | None = None,
+        phap_nhan_id: int | None = None,
         page: int = 1,
         page_size: int = 20,
     ):
@@ -699,6 +707,8 @@ class AccountingService:
             q = q.filter(CashPayment.ngay_phieu >= tu_ngay)
         if den_ngay:
             q = q.filter(CashPayment.ngay_phieu <= den_ngay)
+        if phap_nhan_id:
+            q = q.filter(CashPayment.phap_nhan_id == phap_nhan_id)
         total = q.count()
         items = q.order_by(desc(CashPayment.ngay_phieu)).offset((page - 1) * page_size).limit(page_size).all()
         return {"total": total, "page": page, "page_size": page_size, "items": items}
@@ -719,6 +729,7 @@ class AccountingService:
         den_ngay: date | None = None,
         trang_thai: str | None = None,
         qua_han_only: bool = False,
+        phap_nhan_id: int | None = None,
     ) -> list[ARLedgerRow]:
         self._mark_overdue_ar()
         today = date.today()
@@ -733,6 +744,8 @@ class AccountingService:
             q = q.filter(SalesInvoice.trang_thai == trang_thai)
         if qua_han_only:
             q = q.filter(SalesInvoice.han_tt < today, SalesInvoice.trang_thai != "da_tt_du")
+        if phap_nhan_id:
+            q = q.filter(SalesInvoice.phap_nhan_id == phap_nhan_id)
 
         rows = []
         for inv in q.order_by(SalesInvoice.ngay_hoa_don).all():
@@ -751,39 +764,9 @@ class AccountingService:
                 con_lai=inv.con_lai,
                 so_ngay_qua_han=so_ngay_qua_han,
                 trang_thai=inv.trang_thai,
+                phap_nhan_id=inv.phap_nhan_id,
             ))
         return rows
-
-    def get_ar_balance(
-        self,
-        customer_id: int | None,
-        tu_ngay: date,
-        den_ngay: date
-    ) -> dict:
-        """Tính số dư công nợ khách hàng trong một khoảng thời gian"""
-        so_du_dau = self._calc_balance_before("131", tu_ngay, customer_id=customer_id)
-        
-        q = self.db.query(
-            func.sum(JournalEntryLine.so_tien_no).label("tang"),
-            func.sum(JournalEntryLine.so_tien_co).label("giam")
-        ).join(JournalEntry).filter(
-            JournalEntryLine.so_tk.like("131%"),
-            JournalEntry.ngay >= tu_ngay,
-            JournalEntry.ngay <= den_ngay
-        )
-        if customer_id:
-            q = q.filter(JournalEntryLine.doi_tuong_id == customer_id)
-            
-        res = q.one()
-        tang = float(res.tang or 0)
-        giam = float(res.giam or 0)
-        
-        return {
-            "so_du_dau_ky": so_du_dau,
-            "phat_sinh_tang": tang,
-            "phat_sinh_giam": giam,
-            "so_du_cuoi_ky": so_du_dau + tang - giam
-        }
 
     def get_ar_aging(self, as_of_date: date | None = None) -> list[ARAgingRow]:
         today = as_of_date or date.today()
@@ -1021,6 +1004,7 @@ class AccountingService:
         den_ngay: date | None = None,
         trang_thai: str | None = None,
         qua_han_only: bool = False,
+        phap_nhan_id: int | None = None,
     ) -> list[APLedgerRow]:
         self._mark_overdue_ap()
         today = date.today()
@@ -1035,6 +1019,8 @@ class AccountingService:
             q = q.filter(PurchaseInvoice.trang_thai == trang_thai)
         if qua_han_only:
             q = q.filter(PurchaseInvoice.han_tt < today, PurchaseInvoice.trang_thai != "da_tt_du")
+        if phap_nhan_id:
+            q = q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
 
         rows = []
         for inv in q.order_by(PurchaseInvoice.ngay_lap).all():
@@ -1053,6 +1039,7 @@ class AccountingService:
                 con_lai=inv.con_lai,
                 so_ngay_qua_han=so_ngay_qua_han,
                 trang_thai=inv.trang_thai,
+                phap_nhan_id=inv.phap_nhan_id,
             ))
         return rows
 
@@ -1558,7 +1545,23 @@ class AccountingService:
             r_prev_q = r_prev_q.filter(CashReceipt.so_tai_khoan == so_tai_khoan)
             p_prev_q = p_prev_q.filter(CashPayment.so_tai_khoan == so_tai_khoan)
 
-        so_du_dau = Decimal(str(r_prev_q.scalar())) - Decimal(str(p_prev_q.scalar()))
+        # Số dư đầu kỳ: dùng opening balance từ AMIS migration làm gốc (giống cash book)
+        ob_bank_q = self.db.query(OpeningBalance).filter(
+            OpeningBalance.doi_tuong == "ngan_hang",
+            OpeningBalance.ky_mo_so < tu_ngay,
+        )
+        if so_tai_khoan:
+            ob_bank_q = ob_bank_q.filter(OpeningBalance.ghi_chu == so_tai_khoan)
+        ob_bank = ob_bank_q.order_by(desc(OpeningBalance.ky_mo_so)).first()
+
+        ob_date   = ob_bank.ky_mo_so if ob_bank else date(2000, 1, 1)
+        ob_amount = Decimal(str(ob_bank.so_du_dau_ky)) if ob_bank else Decimal("0")
+
+        # Giới hạn tổng phát sinh từ ob_date để tính số dư đầu kỳ
+        r_prev_q = r_prev_q.filter(CashReceipt.ngay_phieu >= ob_date)
+        p_prev_q = p_prev_q.filter(CashPayment.ngay_phieu >= ob_date)
+
+        so_du_dau = ob_amount + Decimal(str(r_prev_q.scalar())) - Decimal(str(p_prev_q.scalar()))
 
         entries = []
         for r in receipts:
@@ -1707,6 +1710,7 @@ class AccountingService:
             chung_tu_id=v.id,
             so_tien=v.so_tien,
             ghi_chu=v.dien_giai or f"Hoàn tiền trả hàng {v.so_phieu}",
+            phap_nhan_id=v.phap_nhan_id,
         ))
 
         # 2. Bút toán: Dr 5213 / Cr 131
@@ -1831,16 +1835,52 @@ class AccountingService:
             raise HTTPException(404, f"Không tìm thấy tài khoản {so_tk}")
 
         # 1. Tinh so du dau ky
-        base_pre = self.db.query(JournalEntryLine).join(JournalEntry).filter(JournalEntryLine.so_tk == so_tk, JournalEntry.ngay_but_toan < tu_ngay)
+        # Với một số TK, số dư đầu kỳ có thể bao gồm OB từ AMIS migration
+        _ACCOUNT_OB_MAP = {
+            "131": "khach_hang",
+            "331": "nha_cung_cap",
+            "111": "quy_tien_mat",
+            "112": "ngan_hang",
+        }
+        doi_tuong_ob = next(
+            (v for k, v in _ACCOUNT_OB_MAP.items() if so_tk.startswith(k)), None
+        )
+        ob_amount = Decimal("0")
+        ob_date = date(2000, 1, 1)
+        if doi_tuong_ob:
+            ob_q = self.db.query(OpeningBalance).filter(
+                OpeningBalance.doi_tuong == doi_tuong_ob,
+                OpeningBalance.ky_mo_so < tu_ngay,
+            )
+            if phap_nhan_id:
+                ob_q = ob_q.filter(OpeningBalance.phap_nhan_id == phap_nhan_id)
+            latest_ob_date = ob_q.with_entities(func.max(OpeningBalance.ky_mo_so)).scalar()
+            if latest_ob_date:
+                ob_date = latest_ob_date
+                ob_amount = Decimal(str(
+                    ob_q.filter(OpeningBalance.ky_mo_so == latest_ob_date)
+                    .with_entities(func.coalesce(func.sum(OpeningBalance.so_du_dau_ky), 0))
+                    .scalar() or 0
+                ))
+
+        base_pre = (
+            self.db.query(JournalEntryLine)
+            .join(JournalEntry)
+            .filter(
+                JournalEntryLine.so_tk == so_tk,
+                JournalEntry.ngay_but_toan >= ob_date,
+                JournalEntry.ngay_but_toan < tu_ngay,
+            )
+        )
         if phap_nhan_id:
             base_pre = base_pre.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
         if phan_xuong_id:
             base_pre = base_pre.filter(JournalEntry.phan_xuong_id == phan_xuong_id)
-            
+
         pre_no = base_pre.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_no), 0)).scalar() or Decimal("0")
         pre_co = base_pre.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_co), 0)).scalar() or Decimal("0")
 
-        so_du_dau = pre_no - pre_co
+        so_du_dau = ob_amount + pre_no - pre_co
 
         # 2. Lay cac but toan trong ky
         query = self.db.query(JournalEntryLine)\
@@ -2007,13 +2047,49 @@ class AccountingService:
 
     def get_balance_sheet(self, ngay: date, phap_nhan_id: int | None = None):
         """Bảng cân đối kế toán (Tài sản / Nguồn vốn)"""
-        
+
+        # Mapping TK prefix → doi_tuong cho OpeningBalance (AMIS migration)
+        _OB_TYPES = [
+            ("111", "quy_tien_mat"),
+            ("112", "ngan_hang"),
+            ("131", "khach_hang"),
+            ("331", "nha_cung_cap"),
+        ]
+
+        def _get_ob(tk_prefix: str) -> tuple[Decimal, date]:
+            """Trả về (tổng OB, ngày OB sớm nhất) cho prefix đã cho."""
+            matched = [
+                dt for tk, dt in _OB_TYPES
+                if tk.startswith(tk_prefix) or tk_prefix.startswith(tk)
+            ]
+            total = Decimal("0")
+            ob_date = date(2000, 1, 1)
+            for doi_tuong in matched:
+                ob_q = self.db.query(OpeningBalance).filter(
+                    OpeningBalance.doi_tuong == doi_tuong,
+                    OpeningBalance.ky_mo_so <= ngay,
+                )
+                if phap_nhan_id:
+                    ob_q = ob_q.filter(OpeningBalance.phap_nhan_id == phap_nhan_id)
+                latest = ob_q.with_entities(func.max(OpeningBalance.ky_mo_so)).scalar()
+                if latest:
+                    if latest > ob_date:
+                        ob_date = latest
+                    total += Decimal(str(
+                        ob_q.filter(OpeningBalance.ky_mo_so == latest)
+                        .with_entities(func.coalesce(func.sum(OpeningBalance.so_du_dau_ky), 0))
+                        .scalar() or 0
+                    ))
+            return total, ob_date
+
         def _get_balance(tk_prefix: str):
+            ob_amount, ob_date = _get_ob(tk_prefix)
             q = self.db.query(
                 func.sum(JournalEntryLine.so_tien_no).label("no"),
                 func.sum(JournalEntryLine.so_tien_co).label("co")
             ).join(JournalEntry).filter(
                 JournalEntryLine.so_tk.like(f"{tk_prefix}%"),
+                JournalEntry.ngay_but_toan >= ob_date,
                 JournalEntry.ngay_but_toan <= ngay
             )
             if phap_nhan_id:
@@ -2021,11 +2097,11 @@ class AccountingService:
             res = q.one()
             no = res.no or Decimal("0")
             co = res.co or Decimal("0")
-            
+
             if tk_prefix.startswith(("1", "2")):
-                return no - co
+                return ob_amount + no - co
             else:
-                return co - no
+                return ob_amount + co - no
 
         # TÀI SẢN
         tien = _get_balance("11")
@@ -2251,13 +2327,20 @@ class AccountingService:
         self.db.commit()
         return fa
 
-    def list_fixed_assets(self, phan_xuong_id: int | None = None, phap_nhan_id: int | None = None) -> list[FixedAsset]:
+    def list_fixed_assets(
+        self,
+        phan_xuong_id: int | None = None,
+        phap_nhan_id: int | None = None,
+        trang_thai: str | None = None,
+    ) -> list[FixedAsset]:
         q = self.db.query(FixedAsset)
         if phan_xuong_id:
             q = q.filter(FixedAsset.phan_xuong_id == phan_xuong_id)
         if phap_nhan_id:
             q = q.filter(FixedAsset.phap_nhan_id == phap_nhan_id)
-        return q.all()
+        if trang_thai:
+            q = q.filter(FixedAsset.trang_thai == trang_thai)
+        return q.order_by(FixedAsset.ngay_mua.desc()).all()
 
     def run_monthly_depreciation(self, thang: int, nam: int, phap_nhan_id: int, user_id: int):
         # 0. Kiểm tra đã chạy chưa
@@ -2637,18 +2720,21 @@ class AccountingService:
         """Thực hiện bút toán kết chuyển doanh thu, chi phí cuối tháng"""
         last_day = calendar.monthrange(nam, thang)[1]
         closing_date = date(nam, thang, last_day)
-        
-        # 1. Xóa bút toán kết chuyển cũ nếu có
+
+        # 1. Xóa bút toán kết chuyển cũ nếu có (cho phép chạy lại)
         old_entry = self.db.query(JournalEntry).filter(
             JournalEntry.phap_nhan_id == phap_nhan_id,
             JournalEntry.ngay_but_toan == closing_date,
-            JournalEntry.loai_chung_tu == 'KET_CHUYEN'
+            JournalEntry.loai_but_toan == 'ket_chuyen'
         ).first()
         if old_entry:
+            self.db.query(JournalEntryLine).filter(
+                JournalEntryLine.entry_id == old_entry.id
+            ).delete()
             self.db.delete(old_entry)
             self.db.flush()
 
-        # 2. Helper lấy số dư phát sinh trong tháng (không tính các bút toán kết chuyển)
+        # 2. Helper lấy số phát sinh thuần trong tháng (loại trừ bút toán kết chuyển)
         def _get_monthly_balance(tk_prefix: str):
             res = self.db.query(
                 func.coalesce(func.sum(JournalEntryLine.so_tien_no), 0).label("no"),
@@ -2658,20 +2744,22 @@ class AccountingService:
                 JournalEntry.ngay_but_toan >= date(nam, thang, 1),
                 JournalEntry.ngay_but_toan <= closing_date,
                 JournalEntry.phap_nhan_id == phap_nhan_id,
-                JournalEntry.loai_chung_tu != 'KET_CHUYEN',
-                JournalEntry.trang_thai == 'da_duyet'
+                JournalEntry.loai_but_toan != 'ket_chuyen',
             ).one()
             return Decimal(str(res.no)), Decimal(str(res.co))
 
         # 3. Tạo header bút toán
+        dien_giai_entry = f"Kết chuyển doanh thu chi phí tháng {thang}/{nam}"
         entry = JournalEntry(
-            so_phieu=f"KC/{thang:02d}/{nam}",
+            so_but_toan=self._gen_so_but_toan('KC'),
             ngay_but_toan=closing_date,
-            loai_chung_tu='KET_CHUYEN',
+            dien_giai=dien_giai_entry,
+            loai_but_toan='ket_chuyen',
+            tong_no=Decimal("0"),
+            tong_co=Decimal("0"),
+            chung_tu_loai='closing_period',
             phap_nhan_id=phap_nhan_id,
-            ghi_chu=f"Kết chuyển doanh thu chi phí tháng {thang}/{nam}",
-            trang_thai='da_duyet',
-            created_by=user_id
+            created_by=user_id,
         )
         self.db.add(entry)
         self.db.flush()
@@ -2680,48 +2768,103 @@ class AccountingService:
         tong_doanh_thu = Decimal("0")
         tong_chi_phi = Decimal("0")
 
-        # A. Kết chuyển doanh thu (5xx, 7xx -> 911)
+        # A. Kết chuyển doanh thu (511, 515, 711 → 911)
         for tk in ["511", "515", "711"]:
             no, co = _get_monthly_balance(tk)
-            val = co - no # Số dư bên Có
+            val = co - no  # Doanh thu: số dư Có
             if val > 0:
-                lines.append(JournalEntryLine(entry_id=entry.id, so_tk=tk, so_tien_no=val, so_tien_co=0, ghi_chu=f"Kết chuyển doanh thu {tk}"))
+                lines.append(JournalEntryLine(
+                    entry_id=entry.id, so_tk=tk,
+                    so_tien_no=val, so_tien_co=Decimal("0"),
+                    dien_giai=f"KC doanh thu TK {tk} tháng {thang}/{nam}",
+                    phap_nhan_id=phap_nhan_id,
+                ))
                 tong_doanh_thu += val
-        
-        # B. Kết chuyển giảm trừ doanh thu (521 -> 511)
+
+        # B. Kết chuyển giảm trừ doanh thu (521 → đối trừ 511 trước khi sang 911)
         no_521, co_521 = _get_monthly_balance("521")
-        val_521 = no_521 - co_521
+        val_521 = no_521 - co_521  # Giảm trừ: số dư Nợ
         if val_521 > 0:
-            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="511", so_tien_no=0, so_tien_co=val_521, ghi_chu="Kết chuyển giảm trừ doanh thu"))
+            lines.append(JournalEntryLine(
+                entry_id=entry.id, so_tk="521",
+                so_tien_no=Decimal("0"), so_tien_co=val_521,
+                dien_giai=f"KC giảm trừ doanh thu tháng {thang}/{nam}",
+                phap_nhan_id=phap_nhan_id,
+            ))
             tong_doanh_thu -= val_521
 
         if tong_doanh_thu != 0:
-            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="911", so_tien_no=0, so_tien_co=tong_doanh_thu, ghi_chu="Kết chuyển doanh thu sang 911"))
+            lines.append(JournalEntryLine(
+                entry_id=entry.id, so_tk="911",
+                so_tien_no=Decimal("0"), so_tien_co=tong_doanh_thu,
+                dien_giai=f"KC doanh thu thuần sang TK 911 tháng {thang}/{nam}",
+                phap_nhan_id=phap_nhan_id,
+            ))
 
-        # C. Kết chuyển chi phí (6xx, 8xx -> 911)
-        # Bao gồm: Giá vốn, CP tài chính, CP bán hàng, CP quản lý, CP khác, Thuế TNDN
+        # C. Kết chuyển chi phí (632, 635, 641, 642, 811, 821 → 911)
         for tk in ["632", "635", "641", "642", "811", "821"]:
             no, co = _get_monthly_balance(tk)
-            val = no - co # Số dư bên Nợ
+            val = no - co  # Chi phí: số dư Nợ
             if val > 0:
-                lines.append(JournalEntryLine(entry_id=entry.id, so_tk=tk, so_tien_no=0, so_tien_co=val, ghi_chu=f"Kết chuyển chi phí {tk}"))
+                lines.append(JournalEntryLine(
+                    entry_id=entry.id, so_tk=tk,
+                    so_tien_no=Decimal("0"), so_tien_co=val,
+                    dien_giai=f"KC chi phí TK {tk} tháng {thang}/{nam}",
+                    phap_nhan_id=phap_nhan_id,
+                ))
                 tong_chi_phi += val
-        
-        if tong_chi_phi != 0:
-            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="911", so_tien_no=tong_chi_phi, so_tien_co=0, ghi_chu="Kết chuyển chi phí sang 911"))
 
-        # D. Kết chuyển lãi lỗ (911 -> 421)
+        if tong_chi_phi != 0:
+            lines.append(JournalEntryLine(
+                entry_id=entry.id, so_tk="911",
+                so_tien_no=tong_chi_phi, so_tien_co=Decimal("0"),
+                dien_giai=f"KC chi phí sang TK 911 tháng {thang}/{nam}",
+                phap_nhan_id=phap_nhan_id,
+            ))
+
+        # D. Kết chuyển lãi/lỗ (911 → 4212)
         lai_lo = tong_doanh_thu - tong_chi_phi
-        if lai_lo > 0: # Có lãi
-            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="911", so_tien_no=lai_lo, so_tien_co=0, ghi_chu="Kết chuyển lãi sang 421"))
-            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="4212", so_tien_no=0, so_tien_co=lai_lo, ghi_chu="Lợi nhuận năm nay"))
-        elif lai_lo < 0: # Bị lỗ
+        if lai_lo > 0:  # Có lãi: Nợ 911 / Có 4212
+            lines.append(JournalEntryLine(
+                entry_id=entry.id, so_tk="911",
+                so_tien_no=lai_lo, so_tien_co=Decimal("0"),
+                dien_giai=f"KC lãi sang TK 4212 tháng {thang}/{nam}",
+                phap_nhan_id=phap_nhan_id,
+            ))
+            lines.append(JournalEntryLine(
+                entry_id=entry.id, so_tk="4212",
+                so_tien_no=Decimal("0"), so_tien_co=lai_lo,
+                dien_giai=f"Lợi nhuận chưa phân phối tháng {thang}/{nam}",
+                phap_nhan_id=phap_nhan_id,
+            ))
+        elif lai_lo < 0:  # Bị lỗ: Nợ 4212 / Có 911
             abs_lo = abs(lai_lo)
-            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="911", so_tien_no=0, so_tien_co=abs_lo, ghi_chu="Kết chuyển lỗ sang 421"))
-            lines.append(JournalEntryLine(entry_id=entry.id, so_tk="4212", so_tien_no=abs_lo, so_tien_co=0, ghi_chu="Lỗ năm nay"))
+            lines.append(JournalEntryLine(
+                entry_id=entry.id, so_tk="911",
+                so_tien_no=Decimal("0"), so_tien_co=abs_lo,
+                dien_giai=f"KC lỗ sang TK 4212 tháng {thang}/{nam}",
+                phap_nhan_id=phap_nhan_id,
+            ))
+            lines.append(JournalEntryLine(
+                entry_id=entry.id, so_tk="4212",
+                so_tien_no=abs_lo, so_tien_co=Decimal("0"),
+                dien_giai=f"Lỗ chưa xử lý tháng {thang}/{nam}",
+                phap_nhan_id=phap_nhan_id,
+            ))
 
         for line in lines:
             self.db.add(line)
-        
+
+        # Cập nhật tổng Nợ/Có trên header
+        entry.tong_no = sum(l.so_tien_no for l in lines)
+        entry.tong_co = sum(l.so_tien_co for l in lines)
+
         self.db.commit()
-        return {"status": "success", "entry_id": entry.id, "profit": float(lai_lo)}
+        return {
+            "status": "success",
+            "entry_id": entry.id,
+            "so_but_toan": entry.so_but_toan,
+            "doanh_thu": float(tong_doanh_thu),
+            "chi_phi": float(tong_chi_phi),
+            "lai_lo": float(lai_lo),
+        }
