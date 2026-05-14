@@ -109,6 +109,24 @@ export interface DoiSoatKhoSummary {
   tong_tien_da_nhan: number
 }
 
+export interface DuBaoNhuCauRow {
+  paper_material_id: number | null
+  other_material_id: number | null
+  ma_hang: string
+  ten_hang: string
+  loai: 'giay_cuon' | 'nvl_khac' | ''
+  tong_xuat_ky: number
+  tong_nhap_ky: number
+  tb_xuat_thang: number
+  ton_hien_tai: number
+  gia_tri_ton: number
+  du_kien_can: number
+  can_mua: number
+  don_gia_mua_gan_nhat: number
+  uoc_tinh_tien_mua: number
+  muc_do_uu_tien: 'cao' | 'trung_binh' | 'thap'
+}
+
 export const purchaseApi = {
   list: (params?: {
     supplier_id?: number
@@ -145,6 +163,13 @@ export const purchaseApi = {
     den_ngay?: string
     phan_xuong_id?: number
   }) => client.get<DoiSoatKhoSummary[]>('/purchase-orders/doi-soat-kho/summary', { params }),
+
+  duBaoNhuCau: (params?: {
+    thang_phan_tich?: number
+    thang_du_tru?: number
+    phan_xuong_id?: number
+    loai_nvl?: string
+  }) => client.get<DuBaoNhuCauRow[]>('/purchase-orders/du-bao-nhu-cau', { params }),
 
   importPOs: (file: File, commit: boolean = false) => {
     const formData = new FormData()

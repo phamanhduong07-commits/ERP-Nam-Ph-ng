@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.master import Supplier, PaperMaterial, OtherMaterial, PhanXuong
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.warehouse_doc import GoodsReceipt, GoodsReceiptItem
+from app.models.inventory import InventoryBalance, InventoryTransaction
 from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from fastapi import File, UploadFile
@@ -473,6 +474,155 @@ def doi_soat_kho_summary(
         result.append(v)
     result.sort(key=lambda x: x["tong_tien_dat"], reverse=True)
     return result
+
+
+@router.get("/du-bao-nhu-cau")
+def du_bao_nhu_cau(
+    thang_phan_tich: int = Query(default=3, ge=1, le=12, description="Số tháng lấy trung bình tiêu thụ"),
+    thang_du_tru: int = Query(default=1, ge=1, le=6, description="Số tháng muốn đảm bảo tồn kho"),
+    phan_xuong_id: Optional[int] = None,
+    loai_nvl: Optional[str] = Query(default=None, description="giay_cuon | nvl_khac"),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Dự báo nhu cầu mua hàng dựa trên:
+    - Tồn kho thực tế (InventoryBalance)
+    - Lịch sử xuất kho sản xuất (XUAT_SX transactions)
+    - Lịch sử mua hàng (NHAP_MUA transactions)
+
+    Gợi ý số lượng cần mua = max(0, TB tiêu thụ/tháng × thang_du_tru − tồn kho hiện tại)
+    """
+    cutoff = datetime.utcnow() - timedelta(days=30 * thang_phan_tich)
+
+    # Aggregate consumption (XUAT_SX) per material in the analysis period
+    xuat_q = (
+        db.query(
+            InventoryTransaction.paper_material_id,
+            InventoryTransaction.other_material_id,
+            func.sum(InventoryTransaction.so_luong).label("tong_xuat"),
+        )
+        .filter(
+            InventoryTransaction.loai_giao_dich == "XUAT_SX",
+            InventoryTransaction.ngay_giao_dich >= cutoff,
+        )
+        .group_by(
+            InventoryTransaction.paper_material_id,
+            InventoryTransaction.other_material_id,
+        )
+        .all()
+    )
+
+    # Aggregate purchases (NHAP_MUA) per material in the same period
+    nhap_q = (
+        db.query(
+            InventoryTransaction.paper_material_id,
+            InventoryTransaction.other_material_id,
+            func.sum(InventoryTransaction.so_luong).label("tong_nhap"),
+        )
+        .filter(
+            InventoryTransaction.loai_giao_dich == "NHAP_MUA",
+            InventoryTransaction.ngay_giao_dich >= cutoff,
+        )
+        .group_by(
+            InventoryTransaction.paper_material_id,
+            InventoryTransaction.other_material_id,
+        )
+        .all()
+    )
+    nhap_map: dict[tuple, float] = {(r.paper_material_id, r.other_material_id): float(r.tong_nhap or 0) for r in nhap_q}
+
+    # Aggregate current stock per material
+    bal_q = (
+        db.query(
+            InventoryBalance.paper_material_id,
+            InventoryBalance.other_material_id,
+            func.sum(InventoryBalance.ton_luong).label("ton_luong"),
+            func.sum(InventoryBalance.gia_tri_ton).label("gia_tri_ton"),
+        )
+        .group_by(InventoryBalance.paper_material_id, InventoryBalance.other_material_id)
+        .all()
+    )
+    bal_map: dict[tuple, dict] = {
+        (r.paper_material_id, r.other_material_id): {
+            "ton_luong": float(r.ton_luong or 0),
+            "gia_tri_ton": float(r.gia_tri_ton or 0),
+        }
+        for r in bal_q
+    }
+
+    rows = []
+    for xuat in xuat_q:
+        key = (xuat.paper_material_id, xuat.other_material_id)
+        tong_xuat = float(xuat.tong_xuat or 0)
+        if tong_xuat <= 0:
+            continue
+
+        avg_monthly = tong_xuat / thang_phan_tich
+        bal = bal_map.get(key, {"ton_luong": 0.0, "gia_tri_ton": 0.0})
+        ton_hien_tai = bal["ton_luong"]
+        du_kien_can = avg_monthly * thang_du_tru
+        can_mua = max(0.0, du_kien_can - ton_hien_tai)
+
+        # Resolve material name and info
+        ten_hang = ""
+        ma_hang = ""
+        loai = ""
+        don_gia_mua = 0.0
+        if xuat.paper_material_id:
+            pm = db.get(PaperMaterial, xuat.paper_material_id)
+            if pm:
+                ten_hang = pm.ten_giay or pm.ma_chinh or ""
+                ma_hang = pm.ma_chinh or ""
+                loai = "giay_cuon"
+        elif xuat.other_material_id:
+            om = db.get(OtherMaterial, xuat.other_material_id)
+            if om:
+                ten_hang = om.ten or ""
+                ma_hang = om.ma_vt or ""
+                loai = "nvl_khac"
+
+        if loai_nvl and loai != loai_nvl:
+            continue
+
+        # Recent average purchase price from NHAP_MUA transactions
+        price_rows = (
+            db.query(
+                func.sum(InventoryTransaction.gia_tri).label("tv"),
+                func.sum(InventoryTransaction.so_luong).label("sl"),
+            )
+            .filter(
+                InventoryTransaction.loai_giao_dich == "NHAP_MUA",
+                InventoryTransaction.paper_material_id == xuat.paper_material_id if xuat.paper_material_id else InventoryTransaction.paper_material_id.is_(None),
+                InventoryTransaction.other_material_id == xuat.other_material_id if xuat.other_material_id else InventoryTransaction.other_material_id.is_(None),
+                InventoryTransaction.ngay_giao_dich >= cutoff,
+            )
+            .first()
+        )
+        if price_rows and price_rows.sl and float(price_rows.sl) > 0:
+            don_gia_mua = float(price_rows.tv or 0) / float(price_rows.sl)
+
+        rows.append({
+            "paper_material_id": xuat.paper_material_id,
+            "other_material_id": xuat.other_material_id,
+            "ma_hang": ma_hang,
+            "ten_hang": ten_hang,
+            "loai": loai,
+            "tong_xuat_ky": tong_xuat,
+            "tong_nhap_ky": nhap_map.get(key, 0.0),
+            "tb_xuat_thang": round(avg_monthly, 3),
+            "ton_hien_tai": ton_hien_tai,
+            "gia_tri_ton": bal["gia_tri_ton"],
+            "du_kien_can": round(du_kien_can, 3),
+            "can_mua": round(can_mua, 3),
+            "don_gia_mua_gan_nhat": round(don_gia_mua, 2),
+            "uoc_tinh_tien_mua": round(can_mua * don_gia_mua, 2),
+            "muc_do_uu_tien": "cao" if ton_hien_tai < avg_monthly * 0.5 else (
+                "trung_binh" if ton_hien_tai < avg_monthly else "thap"
+            ),
+        })
+
+    rows.sort(key=lambda x: (x["muc_do_uu_tien"] == "cao", x["can_mua"]), reverse=True)
+    return rows
 
 
 @router.get("/import-template")
