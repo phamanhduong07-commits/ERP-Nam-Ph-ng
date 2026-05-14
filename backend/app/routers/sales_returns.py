@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -7,8 +8,9 @@ from app.deps import get_current_user
 from app.models.auth import User
 from app.models.master import Customer, Warehouse
 from app.models.sales import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
+from app.models.production import ProductionOrderItem
 from app.models.warehouse_doc import DeliveryOrder, DeliveryOrderItem
-from app.models.accounting import CustomerRefundVoucher
+from app.models.accounting import CustomerRefundVoucher, DebtLedgerEntry
 from app.services.accounting_service import AccountingService
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
@@ -21,6 +23,172 @@ from app.schemas.sales import (
 )
 
 router = APIRouter(prefix="/api/sales-returns", tags=["sales-returns"])
+
+
+def _resolve_delivery_order_item(
+    db: Session,
+    delivery_order_id: int,
+    sales_order_item_id: int | None,
+    delivery_order_item_id: int | None = None,
+) -> DeliveryOrderItem:
+    if delivery_order_item_id:
+        delivery_item = db.query(DeliveryOrderItem).filter(
+            DeliveryOrderItem.id == delivery_order_item_id,
+            DeliveryOrderItem.delivery_id == delivery_order_id,
+        ).first()
+        if not delivery_item:
+            raise HTTPException(status_code=404, detail="Khong tim thay dong phieu giao hang")
+        if sales_order_item_id and delivery_item.sales_order_item_id and delivery_item.sales_order_item_id != sales_order_item_id:
+            raise HTTPException(status_code=400, detail="Dong phieu giao hang khong khop voi dong don ban")
+        return delivery_item
+
+    if not sales_order_item_id:
+        raise HTTPException(status_code=400, detail="Can truyen delivery_order_item_id khi tra hang theo lenh san xuat")
+
+    matches = db.query(DeliveryOrderItem).filter(
+        DeliveryOrderItem.delivery_id == delivery_order_id,
+        DeliveryOrderItem.sales_order_item_id == sales_order_item_id,
+    ).all()
+    if not matches:
+        raise HTTPException(status_code=400, detail=f"Item don hang ID {sales_order_item_id} khong co trong phieu giao hang da chon")
+    if len(matches) > 1:
+        raise HTTPException(status_code=400, detail="Can truyen delivery_order_item_id vi phieu giao hang co nhieu dong cung item don ban")
+    return matches[0]
+
+
+def _returned_qty_by_delivery_item(
+    db: Session,
+    delivery_order_id: int,
+    exclude_return_id: int | None = None,
+) -> dict[int, Decimal]:
+    delivery_items = db.query(DeliveryOrderItem).filter(
+        DeliveryOrderItem.delivery_id == delivery_order_id,
+    ).all()
+    item_ids = [it.id for it in delivery_items]
+    result: dict[int, Decimal] = {it.id: Decimal("0") for it in delivery_items}
+
+    q = db.query(
+        SalesReturnItem.delivery_order_item_id,
+        func.coalesce(func.sum(SalesReturnItem.so_luong_tra), 0),
+    ).join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id).filter(
+        SalesReturn.delivery_order_id == delivery_order_id,
+        SalesReturn.trang_thai != "huy",
+        SalesReturnItem.delivery_order_item_id.in_(item_ids) if item_ids else False,
+    )
+    if exclude_return_id:
+        q = q.filter(SalesReturn.id != exclude_return_id)
+    for delivery_item_id, qty in q.group_by(SalesReturnItem.delivery_order_item_id).all():
+        if delivery_item_id:
+            result[delivery_item_id] = Decimal(str(qty or 0))
+
+    # Legacy rows before delivery_order_item_id existed: only map when the delivery has
+    # exactly one row for that sales_order_item_id, otherwise the old data is ambiguous.
+    item_ids_by_sales_item: dict[int, list[int]] = {}
+    for it in delivery_items:
+        if it.sales_order_item_id:
+            item_ids_by_sales_item.setdefault(it.sales_order_item_id, []).append(it.id)
+
+    legacy_q = db.query(
+        SalesReturnItem.sales_order_item_id,
+        func.coalesce(func.sum(SalesReturnItem.so_luong_tra), 0),
+    ).join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id).filter(
+        SalesReturn.delivery_order_id == delivery_order_id,
+        SalesReturn.trang_thai != "huy",
+        SalesReturnItem.delivery_order_item_id.is_(None),
+    )
+    if exclude_return_id:
+        legacy_q = legacy_q.filter(SalesReturn.id != exclude_return_id)
+    for sales_order_item_id, qty in legacy_q.group_by(SalesReturnItem.sales_order_item_id).all():
+        matched_item_ids = item_ids_by_sales_item.get(sales_order_item_id, [])
+        if len(matched_item_ids) == 1:
+            result[matched_item_ids[0]] += Decimal(str(qty or 0))
+
+    return result
+
+
+def _resolve_sales_order_item_id(
+    db: Session,
+    delivery_item: DeliveryOrderItem,
+    sales_order_id: int,
+    provided_sales_order_item_id: int | None,
+) -> int:
+    if provided_sales_order_item_id:
+        return provided_sales_order_item_id
+    if delivery_item.sales_order_item_id:
+        return delivery_item.sales_order_item_id
+    if delivery_item.production_order_id:
+        production_item = db.query(ProductionOrderItem).filter(
+            ProductionOrderItem.production_order_id == delivery_item.production_order_id,
+            ProductionOrderItem.sales_order_item_id.isnot(None),
+        ).first()
+        if production_item and production_item.sales_order_item_id:
+            return production_item.sales_order_item_id
+    raise HTTPException(
+        status_code=400,
+        detail=f"Khong xac dinh duoc dong don ban cho dong giao hang ID {delivery_item.id}",
+    )
+
+
+def _prepare_return_items(
+    db: Session,
+    delivery_order_id: int,
+    sales_order_id: int,
+    items,
+    exclude_return_id: int | None = None,
+) -> tuple[list[tuple[SalesReturnItem, Decimal]], Decimal]:
+    returned_qty = _returned_qty_by_delivery_item(db, delivery_order_id, exclude_return_id)
+    requested_qty: dict[int, Decimal] = {}
+    prepared: list[tuple[SalesReturnItem, Decimal]] = []
+    total = Decimal("0")
+
+    for item_data in items:
+        delivery_item = _resolve_delivery_order_item(
+            db,
+            delivery_order_id,
+            item_data.sales_order_item_id,
+            item_data.delivery_order_item_id,
+        )
+        sales_order_item_id = _resolve_sales_order_item_id(
+            db,
+            delivery_item,
+            sales_order_id,
+            item_data.sales_order_item_id,
+        )
+        requested_qty[delivery_item.id] = requested_qty.get(delivery_item.id, Decimal("0")) + item_data.so_luong_tra
+
+        sales_order_item = db.query(SalesOrderItem).filter(
+            SalesOrderItem.id == sales_order_item_id,
+            SalesOrderItem.order_id == sales_order_id,
+        ).first()
+        if not sales_order_item:
+            raise HTTPException(status_code=404, detail=f"Khong tim thay item don hang ID {sales_order_item_id}")
+
+        unit_price = item_data.don_gia_tra or sales_order_item.don_gia
+        return_item = SalesReturnItem(
+            delivery_order_item_id=delivery_item.id,
+            sales_order_item_id=sales_order_item_id,
+            so_luong_tra=item_data.so_luong_tra,
+            don_gia_tra=unit_price,
+            ly_do_tra=item_data.ly_do_tra,
+            tinh_trang_hang=item_data.tinh_trang_hang,
+            ghi_chu=item_data.ghi_chu,
+        )
+        prepared.append((return_item, item_data.so_luong_tra))
+        total += item_data.so_luong_tra * unit_price
+
+    for delivery_item_id, return_qty in requested_qty.items():
+        delivery_item = db.get(DeliveryOrderItem, delivery_item_id)
+        delivered_qty = Decimal(str(delivery_item.so_luong or 0)) if delivery_item else Decimal("0")
+        already_returned = returned_qty.get(delivery_item_id, Decimal("0"))
+        remaining_qty = delivered_qty - already_returned
+        if return_qty > remaining_qty:
+            label = delivery_item.ten_hang if delivery_item else f"dong {delivery_item_id}"
+            raise HTTPException(
+                status_code=400,
+                detail=f"So luong tra cua {label} khong duoc vuot qua so luong con co the tra ({remaining_qty})",
+            )
+
+    return prepared, total
 
 
 @router.get("", response_model=PagedResponse)
@@ -108,8 +276,10 @@ def get_return(
 ):
     return_obj = db.query(SalesReturn).options(
         joinedload(SalesReturn.customer),
+        joinedload(SalesReturn.delivery_order),
         joinedload(SalesReturn.sales_order),
         joinedload(SalesReturn.items).joinedload(SalesReturnItem.sales_order_item),
+        joinedload(SalesReturn.items).joinedload(SalesReturnItem.delivery_order_item),
         joinedload(SalesReturn.creator),
         joinedload(SalesReturn.approver)
     ).filter(SalesReturn.id == return_id).first()
@@ -138,7 +308,7 @@ def create_return(
         raise HTTPException(status_code=400, detail="Khách hàng không khớp với đơn hàng")
 
     # Validate delivery order if provided
-    if data.delivery_order_id:
+    if False and data.delivery_order_id:
         from app.models.warehouse_doc import DeliveryOrder
         delivery_order = db.query(DeliveryOrder).filter(
             DeliveryOrder.id == data.delivery_order_id,
@@ -152,40 +322,21 @@ def create_return(
 
     delivery_order = db.query(DeliveryOrder).filter(
         DeliveryOrder.id == data.delivery_order_id,
-        DeliveryOrder.sales_order_id == data.sales_order_id,
         DeliveryOrder.customer_id == data.customer_id,
     ).first()
     if not delivery_order:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu giao hàng tương ứng với đơn hàng và khách hàng này")
 
-    delivered_qty_by_item: dict[int, float] = {}
-    for row in db.query(DeliveryOrderItem).filter(
-        DeliveryOrderItem.delivery_id == data.delivery_order_id,
-        DeliveryOrderItem.sales_order_item_id.isnot(None),
-    ).all():
-        delivered_qty_by_item[row.sales_order_item_id] = (
-            delivered_qty_by_item.get(row.sales_order_item_id, 0) + float(row.so_luong or 0)
-        )
+    if delivery_order.sales_order_id and delivery_order.sales_order_id != data.sales_order_id:
+        raise HTTPException(status_code=400, detail="Phieu giao hang khong khop voi don hang")
 
-    return_qty_by_item: dict[int, float] = {}
-    for item_data in data.items:
-        return_qty_by_item[item_data.sales_order_item_id] = (
-            return_qty_by_item.get(item_data.sales_order_item_id, 0) + float(item_data.so_luong_tra)
-        )
-
-    returned_qty_by_item: dict[int, float] = dict(
-        db.query(
-            SalesReturnItem.sales_order_item_id,
-            func.coalesce(func.sum(SalesReturnItem.so_luong_tra), 0),
-        )
-        .join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id)
-        .filter(
-            SalesReturn.delivery_order_id == data.delivery_order_id,
-            SalesReturn.trang_thai != "huy",
-        )
-        .group_by(SalesReturnItem.sales_order_item_id)
-        .all()
+    prepared_items, tong_tien_tra = _prepare_return_items(
+        db,
+        data.delivery_order_id,
+        data.sales_order_id,
+        data.items,
     )
+    return_qty_by_item = {}
 
     for sales_order_item_id, return_qty in return_qty_by_item.items():
         delivered_qty = delivered_qty_by_item.get(sales_order_item_id, 0)
@@ -211,8 +362,15 @@ def create_return(
         created_by=current_user.id,
     )
 
+    data.items = []
     tong_tien_tra = 0
     for item_data in data.items:
+        delivery_item = _resolve_delivery_order_item(
+            db,
+            data.delivery_order_id,
+            item_data.sales_order_item_id,
+            item_data.delivery_order_item_id,
+        )
         # Validate sales order item exists
         sales_order_item = db.query(SalesOrderItem).filter(
             SalesOrderItem.id == item_data.sales_order_item_id,
@@ -226,6 +384,7 @@ def create_return(
             raise HTTPException(status_code=400, detail=f"Số lượng trả không được vượt quá số lượng đã bán ({sales_order_item.so_luong})")
 
         return_item = SalesReturnItem(
+            delivery_order_item_id=delivery_item.id,
             sales_order_item_id=item_data.sales_order_item_id,
             so_luong_tra=item_data.so_luong_tra,
             don_gia_tra=item_data.don_gia_tra or sales_order_item.don_gia,
@@ -237,6 +396,9 @@ def create_return(
         tong_tien_tra += float(item_data.so_luong_tra) * float(return_item.don_gia_tra)
 
     return_obj.tong_tien_tra = round(tong_tien_tra, 2)
+    for return_item, _qty in prepared_items:
+        return_obj.items.append(return_item)
+    return_obj.tong_tien_tra = tong_tien_tra
     db.add(return_obj)
     db.commit()
     db.refresh(return_obj)
@@ -250,7 +412,9 @@ def update_return(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return_obj = db.query(SalesReturn).filter(SalesReturn.id == return_id).first()
+    return_obj = db.query(SalesReturn).options(
+        joinedload(SalesReturn.items)
+    ).filter(SalesReturn.id == return_id).first()
     if not return_obj:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu trả hàng")
     if return_obj.trang_thai != "moi":
@@ -261,12 +425,35 @@ def update_return(
             setattr(return_obj, field, value)
 
     if data.items is not None:
+        if not return_obj.delivery_order_id:
+            raise HTTPException(status_code=400, detail="Phieu tra hang chua gan phieu giao hang")
+
+        prepared_items, tong_tien_tra = _prepare_return_items(
+            db,
+            return_obj.delivery_order_id,
+            return_obj.sales_order_id,
+            data.items,
+            exclude_return_id=return_obj.id,
+        )
+        data.items = []
         # Clear existing items
         return_obj.items.clear()
 
         # Add updated items
         tong_tien_tra = 0
+        tong_tien_tra = sum(
+            (ri.so_luong_tra or Decimal("0")) * (ri.don_gia_tra or Decimal("0"))
+            for ri, _qty in prepared_items
+        )
         for item_data in data.items:
+            delivery_item = None
+            if return_obj.delivery_order_id:
+                delivery_item = _resolve_delivery_order_item(
+                    db,
+                    return_obj.delivery_order_id,
+                    item_data.sales_order_item_id,
+                    item_data.delivery_order_item_id,
+                )
             sales_order_item = db.query(SalesOrderItem).filter(
                 SalesOrderItem.id == item_data.sales_order_item_id,
                 SalesOrderItem.order_id == return_obj.sales_order_id
@@ -278,6 +465,7 @@ def update_return(
                 raise HTTPException(status_code=400, detail=f"Số lượng trả không được vượt quá số lượng đã bán ({sales_order_item.so_luong})")
 
             return_item = SalesReturnItem(
+                delivery_order_item_id=delivery_item.id if delivery_item else None,
                 sales_order_item_id=item_data.sales_order_item_id,
                 so_luong_tra=item_data.so_luong_tra,
                 don_gia_tra=item_data.don_gia_tra or sales_order_item.don_gia,
@@ -288,7 +476,9 @@ def update_return(
             return_obj.items.append(return_item)
             tong_tien_tra += float(item_data.so_luong_tra) * float(return_item.don_gia_tra)
 
-        return_obj.tong_tien_tra = round(tong_tien_tra, 2)
+        for return_item, _qty in prepared_items:
+            return_obj.items.append(return_item)
+        return_obj.tong_tien_tra = round(float(tong_tien_tra), 2)
 
     db.commit()
     return get_return(return_id, db, current_user)
@@ -302,6 +492,7 @@ def approve_return(
 ):
     return_obj = db.query(SalesReturn).options(
         joinedload(SalesReturn.items).joinedload(SalesReturnItem.sales_order_item),
+        joinedload(SalesReturn.items).joinedload(SalesReturnItem.delivery_order_item),
         joinedload(SalesReturn.delivery_order),
         joinedload(SalesReturn.sales_order)
     ).filter(SalesReturn.id == return_id).first()
@@ -385,6 +576,20 @@ def approve_return(
     return_obj.trang_thai = "da_duyet"
     return_obj.approved_by = current_user.id
     return_obj.approved_at = datetime.utcnow()
+
+    # Ghi sổ công nợ phải thu (giam_no — giảm AR khi khách trả hàng)
+    db.add(DebtLedgerEntry(
+        ngay=return_obj.ngay_tra or date.today(),
+        loai="giam_no",
+        doi_tuong="khach_hang",
+        customer_id=return_obj.customer_id,
+        chung_tu_loai="sales_return",
+        chung_tu_id=return_obj.id,
+        so_tien=return_obj.tong_tien_tra,
+        ghi_chu=f"Hàng trả: {getattr(return_obj, 'so_phieu_tra', '') or ''}",
+        phap_nhan_id=phap_nhan_id_acc,
+    ))
+
     db.flush()
 
     # Auto-tạo phiếu hoàn tiền (nháp) nếu chưa có
@@ -407,6 +612,7 @@ def approve_return(
             sales_return_id=return_obj.id,
             so_tien=return_obj.tong_tien_tra,
             trang_thai="nhap",
+            phap_nhan_id=phap_nhan_id_acc,
             created_by=current_user.id,
         ))
 
@@ -422,6 +628,7 @@ def cancel_return(
 ):
     return_obj = db.query(SalesReturn).options(
         joinedload(SalesReturn.items).joinedload(SalesReturnItem.sales_order_item),
+        joinedload(SalesReturn.items).joinedload(SalesReturnItem.delivery_order_item),
         joinedload(SalesReturn.delivery_order),
         joinedload(SalesReturn.sales_order)
     ).filter(SalesReturn.id == return_id).first()
@@ -473,6 +680,12 @@ def cancel_return(
 
         # Đảo bút toán kế toán đã ghi khi duyệt (155/632)
         AccountingService(db)._reverse_journal_entries("sales_returns", return_obj.id)
+
+        # Hoàn nguyên sổ công nợ phải thu
+        db.query(DebtLedgerEntry).filter(
+            DebtLedgerEntry.chung_tu_loai == "sales_return",
+            DebtLedgerEntry.chung_tu_id == return_obj.id,
+        ).delete(synchronize_session=False)
 
     return_obj.trang_thai = "huy"
     db.commit()

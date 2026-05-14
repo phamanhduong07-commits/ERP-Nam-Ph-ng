@@ -1,73 +1,71 @@
-# Plan: Hoàn thiện 6 vấn đề Module Kế Toán (Đợt 2)
+# Plan: Hoàn thiện 5 vấn đề Module Kế Toán (Đợt 3)
 Date: 2026-05-14
 Status: APPROVED
 
 ## Mục tiêu
-Sửa 6 bug và feature gap trong module kế toán — tập trung vào tính nhất quán hủy phiếu chi, số dư thử trên bảng CĐPS, phap_nhan_id cho OpeningBalance, filter aging theo pháp nhân, và hiển thị TK đối ứng đầy đủ.
-
-> **Lưu ý nghiệp vụ đã xác nhận:** Khi VAT = 0, hạch toán nội bộ (không có GR) KHÔNG tạo định khoản — hành vi hiện tại `_post_purchase_invoice_journal` là đúng, không sửa.
+Sửa 5 bug đã xác minh: data bleed phap_nhan trong balance reports, N+1 queries trong general ledger và sổ chi tiết, thiếu DebtLedgerEntry khi duyệt phiếu trả hàng, và N+1 trong list_customer_refunds.
 
 ---
 
 ## Các bước thực thi
 
-### Bước 1 — Cho phép hủy phiếu chi `da_duyet` (nhất quán với hủy phiếu thu)
-- **File**: `backend/app/services/accounting_service.py` — line 670–689
-- **Vấn đề**: `cancel_payment` raise HTTP 400 khi `trang_thai == "da_duyet"`; trong khi `cancel_receipt` cho phép hủy `da_duyet` bằng cách đảo ngược bút toán
-- **Fix**: Bỏ dòng raise 400; thêm `if was_approved: self._reverse_journal_entries("phieu_chi", p.id)` (pattern giống `cancel_receipt`); giữ nguyên phần restore invoice + delete DebtLedgerEntry + set `trang_thai = "huy"`
-- **Mục tiêu**: Kế toán có thể hủy phiếu chi đã duyệt nhầm
-
-### Bước 2 — Thêm OpeningBalance vào `get_trial_balance` cho TK 131/331/111/112
-- **File**: `backend/app/services/accounting_service.py` — line 1933–1971
-- **Vấn đề**: `so_du_dau = pre_no - pre_co` không nhìn vào `OpeningBalance`; bảng CĐPS hiện `so_du_dau` = 0 cho KH/NCC/tiền sau migration AMIS
-- **Fix**: Trong vòng lặp per-account, nếu `acc.so_tk` match prefix 131/331/111/112, lookup OB; điều chỉnh `base_pre` bắt từ `ob_date`; `so_du_dau = ob_amount + pre_no - pre_co`
-- **Mục tiêu**: Bảng CĐPS có `so_du_dau` đúng cho tài khoản KH/NCC/tiền
-
-### Bước 3 — Thêm OpeningBalance vào `get_trial_balance_tax`
-- **File**: `backend/app/services/accounting_service.py` — line 2488–2551
-- **Vấn đề**: Cùng vấn đề như Bước 2; bảng CĐPS thuế/BCTC không bao gồm OB
-- **Fix**: Cùng pattern: lookup OB per account khi prefix match; adjust pre-period query start; `so_du_dau = ob_amount + pre_no - pre_co`
-- **Mục tiêu**: Bảng CĐPS dùng cho kê khai thuế có số dư đầu kỳ đúng
-
-### Bước 4 — Thêm `phap_nhan_id` vào `OpeningBalanceCreate` schema + service
+### Bước 1 — Thêm `phap_nhan_id` vào `_calc_balance_before`, `get_ar_balance`, `get_ap_balance` và router
 - **Files**:
-  - `backend/app/schemas/accounting.py` — line 272–278 (class `OpeningBalanceCreate`)
-  - `backend/app/services/accounting_service.py` — line 1152–1165 (method `create_opening_balance`)
-- **Vấn đề**: Schema không có field `phap_nhan_id`; service không pass nó khi create; mọi OB tạo qua `POST /opening-balances` đều có `phap_nhan_id = NULL` → filter multi-entity không hoạt động
+  - `backend/app/services/accounting_service.py` — `_calc_balance_before` line 1171; `get_ar_balance` line 1097; `get_ap_balance` line 1122
+  - `backend/app/routers/accounting.py` — `/ar/balance` line 250; `/ap/balance` line 303
+- **Vấn đề**: `_calc_balance_before` không có param `phap_nhan_id` → filter OB và DebtLedgerEntry không theo pháp nhân; `get_ar_balance`/`get_ap_balance` cũng không lọc DebtLedgerEntry theo pháp nhân; router không expose param này
 - **Fix**:
-  - Thêm `phap_nhan_id: int | None = None` vào `OpeningBalanceCreate`
-  - Thêm `phap_nhan_id=data.phap_nhan_id` vào constructor `OpeningBalance(...)`
-- **Mục tiêu**: OB gắn với đúng pháp nhân; filter hoạt động trong GL/CĐKT
+  - Thêm `phap_nhan_id: int | None = None` vào `_calc_balance_before`; thêm filter `OpeningBalance.phap_nhan_id == phap_nhan_id` và `DebtLedgerEntry.phap_nhan_id == phap_nhan_id`
+  - Thêm `phap_nhan_id` vào `get_ar_balance` + `get_ap_balance`; pass vào `_calc_balance_before` và DebtLedgerEntry query
+  - Thêm `phap_nhan_id: int | None = Query(None)` vào 2 router endpoints
+- **Mục tiêu**: `GET /ar/balance?phap_nhan_id=X` chỉ trả số dư đúng pháp nhân X
 
-### Bước 5 — Thêm `phap_nhan_id` filter vào `get_ar_aging` và `get_ap_aging`
+### Bước 2 — Loại bỏ N+1 trong `get_general_ledger` (batch TK đối ứng)
+- **File**: `backend/app/services/accounting_service.py` — line 1901–1914 (vòng lặp gọi `_get_tk_doi_ung`)
+- **Vấn đề**: Vòng lặp gọi `self._get_tk_doi_ung(line.entry.id, so_tk)` per line → 1 DB query per line; sổ cái 500 dòng = 500 extra queries
+- **Fix**: Trước vòng lặp, collect tất cả `entry_id` từ `lines`, query 1 lần `WHERE entry_id IN (...)`, build dict `{entry_id: "tk1/tk2"}`; thay `self._get_tk_doi_ung(...)` bằng dict lookup
+- **Mục tiêu**: `get_general_ledger` chỉ dùng O(1) extra queries thay vì O(N)
+
+### Bước 3 — Sửa `get_so_chi_tiet_mua_hang`: N+1 + thêm `phap_nhan_id`
 - **Files**:
-  - `backend/app/services/accounting_service.py` — `get_ar_aging` line 771; `get_ap_aging` line 1046
-  - `backend/app/routers/accounting.py` — `/ar/aging` line 240; `/ap/aging` line 292
-- **Vấn đề**: Báo cáo tuổi nợ mix data từ tất cả pháp nhân; không có parameter lọc theo entity
+  - `backend/app/services/accounting_service.py` — line 1229–1293
+  - `backend/app/routers/accounting.py` — line 318–326
+- **Vấn đề 1**: Line 1261: `sup = self.db.get(Sup, e.supplier_id)` trong vòng lặp → N+1 query
+- **Vấn đề 2**: Không có `phap_nhan_id` filter trong DebtLedgerEntry query; không pass vào `_calc_balance_before`
 - **Fix**:
-  - Thêm `phap_nhan_id: int | None = None` vào signature service; thêm filter khi provided
-  - Thêm `phap_nhan_id: int | None = Query(None)` vào router và truyền xuống service
-- **Mục tiêu**: `GET /ar/aging?phap_nhan_id=X` chỉ trả về aging cho pháp nhân X
+  - Preload suppliers: collect `supplier_ids` từ entries, query 1 lần `WHERE id IN (...)`, build dict → thay `db.get` bằng dict lookup
+  - Thêm `phap_nhan_id: int | None = None` vào service + router; thêm `DebtLedgerEntry.phap_nhan_id == phap_nhan_id` filter; pass vào `_calc_balance_before`
+- **Mục tiêu**: 1 extra query thay vì N; sổ chi tiết đúng theo pháp nhân
 
-### Bước 6 — Sửa `_get_tk_doi_ung` hiển thị đầy đủ TK đối ứng
-- **File**: `backend/app/services/accounting_service.py` — line 1926–1931
-- **Vấn đề**: `.first()` chỉ lấy một TK đối ứng; bút toán phức tạp (Dr 152 + Dr 1331 / Cr 331) hiển thị "331" thay vì "1331/331" trong sổ cái
-- **Fix**: Thay `.first()` bằng `.all()`; collect tất cả TK đối ứng distinct; join với "/"
-- **Mục tiêu**: Sổ cái hiển thị TK đối ứng đầy đủ (e.g. "1331/331")
+### Bước 4 — Thêm `DebtLedgerEntry` khi duyệt/hủy phiếu trả hàng bán
+- **File**: `backend/app/routers/sales_returns.py` — `approve_return` line 487; `cancel_return` line ~620
+- **Vấn đề**: Khi duyệt phiếu trả hàng, bút toán kho (Dr 155/Cr 632) được tạo nhưng KHÔNG có `DebtLedgerEntry(loai="giam_no")` → số dư AR (TK 131) trong sổ công nợ sai; trong khi purchase_return.py tạo đầy đủ (line 399)
+- **Fix**:
+  - Trong `approve_return`: sau `return_obj.trang_thai = "da_duyet"`, thêm `DebtLedgerEntry(loai="giam_no", doi_tuong="khach_hang", chung_tu_loai="sales_return", ...)`
+  - Trong `cancel_return`: trước `return_obj.trang_thai = "huy"`, xóa DebtLedgerEntry tương ứng (`chung_tu_loai="sales_return"`) để hoàn nguyên
+- **Mục tiêu**: AR ledger phản ánh đúng khi hàng bán bị trả về
+
+### Bước 5 — Loại bỏ N+1 trong `list_customer_refunds`
+- **File**: `backend/app/services/accounting_service.py` — line 1638–1641
+- **Vấn đề**: Vòng lặp dùng `self.db.get(Customer, v.customer_id)` + `self.db.get(SalesReturn, v.sales_return_id)` per item → 2 queries per phiếu hoàn tiền; page 20 items = 40 extra queries
+- **Fix**: Collect `customer_ids` và `sales_return_ids` từ `items`; query 2 lần với `IN`; build dicts; thay `db.get` bằng dict lookup trong vòng lặp
+- **Mục tiêu**: 2 extra queries cho cả page thay vì 2×N
 
 ---
 
 ## Done Criteria
-- [ ] `PATCH /payments/{id}/cancel` thành công khi payment ở `da_duyet`; journal entry đảo ngược
-- [ ] `GET /trial-balance?tu_ngay=...` trả về `so_du_dau` ≠ 0 cho TK 131 khi đã có OB
-- [ ] `GET /reports/trial-balance-tax?tu_ngay=...` tương tự có `so_du_dau` đúng cho TK 131
-- [ ] `POST /opening-balances` với `phap_nhan_id` → OB lưu đúng pháp nhân vào DB
-- [ ] `GET /ar/aging?phap_nhan_id=1` chỉ trả về data của pháp nhân 1
-- [ ] `GET /general-ledger?so_tk=331` bút toán phức tạp hiển thị `tk_doi_ung` đầy đủ
+- [ ] `GET /ar/balance?phap_nhan_id=1&tu_ngay=...&den_ngay=...` chỉ trả số dư pháp nhân 1
+- [ ] `GET /ap/balance?phap_nhan_id=1&...` tương tự
+- [ ] `GET /general-ledger?so_tk=331&...` với 500+ lines: số lượng SQL queries không tăng tuyến tính
+- [ ] `GET /purchase/so-chi-tiet?phap_nhan_id=1&...` chỉ trả data pháp nhân 1; SQL queries không N+1
+- [ ] Duyệt phiếu trả hàng → DebtLedgerEntry(loai="giam_no") tồn tại trong DB
+- [ ] Hủy phiếu trả hàng đã duyệt → DebtLedgerEntry bị xóa
+- [ ] `GET /customer-refunds` page 20 items: SQL log không có 40 extra queries
 - [ ] Lint: không có error mới
 - [ ] Server khởi động không lỗi
 
 ## Rủi ro
-- **Bước 1**: Khi payment `da_duyet` bị hủy, `DebtLedgerEntry` cần được xóa (không add reversing entry, giống pattern hiện tại của cancel_payment non-approved)
-- **Bước 2 + 3**: Tránh double-count — `base_pre` phải bắt từ `ob_date`, không phải epoch
-- **Bước 5**: `get_ar_aging` dùng `DebtLedgerEntry.customer_id` aggregation — cần thêm phap_nhan filter cho cả phần credits và reversals
+- **Bước 1**: `get_doi_chieu_cong_no` cũng gọi `_calc_balance_before` — sau khi thêm param, cần kiểm tra caller này có pass phap_nhan_id không (hoặc để mặc định None vì hàm đó lấy 1 supplier cụ thể)
+- **Bước 2**: Khi `lines` rỗng → `entry_ids` rỗng → không query; cần guard `if not lines: return {...}` hoặc kiểm tra trước khi IN query
+- **Bước 4**: `return_obj.tong_tien_tra` phải khác NULL; kiểm tra field name trong SalesReturn model trước khi dùng
+- **Bước 5**: `sales_return_id` có thể NULL trên CustomerRefundVoucher → lọc ra trước khi query

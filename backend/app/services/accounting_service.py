@@ -1094,9 +1094,10 @@ class AccountingService:
         return sorted(result, key=lambda r: r.tong_con_lai, reverse=True)
 
     def get_ar_balance(
-        self, customer_id: int | None, tu_ngay: date, den_ngay: date
+        self, customer_id: int | None, tu_ngay: date, den_ngay: date,
+        phap_nhan_id: int | None = None,
     ) -> BalanceByPeriod:
-        so_du_dau = self._calc_balance_before(customer_id, None, tu_ngay, "khach_hang")
+        so_du_dau = self._calc_balance_before(customer_id, None, tu_ngay, "khach_hang", phap_nhan_id=phap_nhan_id)
         filters_base = [
             DebtLedgerEntry.doi_tuong == "khach_hang",
             DebtLedgerEntry.ngay >= tu_ngay,
@@ -1104,6 +1105,8 @@ class AccountingService:
         ]
         if customer_id:
             filters_base.append(DebtLedgerEntry.customer_id == customer_id)
+        if phap_nhan_id:
+            filters_base.append(DebtLedgerEntry.phap_nhan_id == phap_nhan_id)
 
         tang = self.db.query(func.coalesce(func.sum(DebtLedgerEntry.so_tien), 0)).filter(
             *filters_base, DebtLedgerEntry.loai == "tang_no"
@@ -1120,9 +1123,10 @@ class AccountingService:
         )
 
     def get_ap_balance(
-        self, supplier_id: int | None, tu_ngay: date, den_ngay: date
+        self, supplier_id: int | None, tu_ngay: date, den_ngay: date,
+        phap_nhan_id: int | None = None,
     ) -> BalanceByPeriod:
-        so_du_dau = self._calc_balance_before(None, supplier_id, tu_ngay, "nha_cung_cap")
+        so_du_dau = self._calc_balance_before(None, supplier_id, tu_ngay, "nha_cung_cap", phap_nhan_id=phap_nhan_id)
         filters_base = [
             DebtLedgerEntry.doi_tuong == "nha_cung_cap",
             DebtLedgerEntry.ngay >= tu_ngay,
@@ -1130,6 +1134,8 @@ class AccountingService:
         ]
         if supplier_id:
             filters_base.append(DebtLedgerEntry.supplier_id == supplier_id)
+        if phap_nhan_id:
+            filters_base.append(DebtLedgerEntry.phap_nhan_id == phap_nhan_id)
 
         tang = self.db.query(func.coalesce(func.sum(DebtLedgerEntry.so_tien), 0)).filter(
             *filters_base, DebtLedgerEntry.loai == "tang_no"
@@ -1173,9 +1179,9 @@ class AccountingService:
         supplier_id: int | None,
         before_date: date,
         doi_tuong: str,
+        phap_nhan_id: int | None = None,
     ) -> float:
         """Tính số dư trước một ngày dựa trên opening_balances + debt_ledger_entries"""
-        # Lấy opening balance gần nhất trước before_date
         ob_q = self.db.query(OpeningBalance).filter(
             OpeningBalance.doi_tuong == doi_tuong,
             OpeningBalance.ky_mo_so < before_date,
@@ -1184,6 +1190,8 @@ class AccountingService:
             ob_q = ob_q.filter(OpeningBalance.customer_id == customer_id)
         if supplier_id:
             ob_q = ob_q.filter(OpeningBalance.supplier_id == supplier_id)
+        if phap_nhan_id:
+            ob_q = ob_q.filter(OpeningBalance.phap_nhan_id == phap_nhan_id)
         ob = ob_q.order_by(desc(OpeningBalance.ky_mo_so)).first()
 
         start_date = ob.ky_mo_so if ob else date(2000, 1, 1)
@@ -1198,6 +1206,8 @@ class AccountingService:
             filters.append(DebtLedgerEntry.customer_id == customer_id)
         if supplier_id:
             filters.append(DebtLedgerEntry.supplier_id == supplier_id)
+        if phap_nhan_id:
+            filters.append(DebtLedgerEntry.phap_nhan_id == phap_nhan_id)
 
         tang = self.db.query(func.coalesce(func.sum(DebtLedgerEntry.so_tien), 0)).filter(
             *filters, DebtLedgerEntry.loai == "tang_no"
@@ -1231,34 +1241,45 @@ class AccountingService:
         supplier_id: int | None,
         tu_ngay: date,
         den_ngay: date,
+        phap_nhan_id: int | None = None,
     ) -> dict:
         """
         Sổ chi tiết mua hàng theo NCC trong kỳ.
         Trả về: số dư đầu kỳ + từng giao dịch (HĐ mua / phiếu chi / trả hàng) + số dư cuối kỳ.
         """
-        from app.models.purchase import PurchaseReturn
         from app.models.master import Supplier as Sup
 
-        so_du_dau = self._calc_balance_before(None, supplier_id, tu_ngay, "nha_cung_cap")
+        so_du_dau = self._calc_balance_before(None, supplier_id, tu_ngay, "nha_cung_cap", phap_nhan_id=phap_nhan_id)
+
+        entry_filters = [
+            DebtLedgerEntry.doi_tuong == "nha_cung_cap",
+            DebtLedgerEntry.ngay >= tu_ngay,
+            DebtLedgerEntry.ngay <= den_ngay,
+        ]
+        if supplier_id:
+            entry_filters.append(DebtLedgerEntry.supplier_id == supplier_id)
+        if phap_nhan_id:
+            entry_filters.append(DebtLedgerEntry.phap_nhan_id == phap_nhan_id)
 
         entries = (
             self.db.query(DebtLedgerEntry)
-            .filter(
-                DebtLedgerEntry.doi_tuong == "nha_cung_cap",
-                DebtLedgerEntry.ngay >= tu_ngay,
-                DebtLedgerEntry.ngay <= den_ngay,
-                *([DebtLedgerEntry.supplier_id == supplier_id] if supplier_id else []),
-            )
+            .filter(*entry_filters)
             .order_by(DebtLedgerEntry.ngay, DebtLedgerEntry.id)
             .all()
         )
+
+        # Preload suppliers để tránh N+1
+        sup_ids = {e.supplier_id for e in entries if e.supplier_id}
+        sup_map: dict[int, str] = {}
+        if sup_ids:
+            sups = self.db.query(Sup.id, Sup.ten_viet_tat).filter(Sup.id.in_(sup_ids)).all()
+            sup_map = {s.id: s.ten_viet_tat for s in sups}
 
         so_du_luy_ke = Decimal(str(so_du_dau))
         ps_no = Decimal("0")
         ps_co = Decimal("0")
         rows = []
         for e in entries:
-            sup = self.db.get(Sup, e.supplier_id) if e.supplier_id else None
             if e.loai == "tang_no":
                 so_du_luy_ke += e.so_tien
                 phat_sinh_no = e.so_tien
@@ -1274,7 +1295,7 @@ class AccountingService:
                 "chung_tu_loai": e.chung_tu_loai,
                 "chung_tu_id": e.chung_tu_id,
                 "supplier_id": e.supplier_id,
-                "ten_ncc": sup.ten_viet_tat if sup else None,
+                "ten_ncc": sup_map.get(e.supplier_id) if e.supplier_id else None,
                 "dien_giai": e.ghi_chu,
                 "phat_sinh_no": float(phat_sinh_no),    # phát sinh Nợ TK 331 = tăng nợ phải trả
                 "phat_sinh_co": float(phat_sinh_co),    # phát sinh Có TK 331 = giảm nợ phải trả
@@ -1634,11 +1655,16 @@ class AccountingService:
             q = q.filter(CustomerRefundVoucher.ngay <= den_ngay)
         total = q.count()
         items = q.order_by(desc(CustomerRefundVoucher.ngay)).offset((page - 1) * page_size).limit(page_size).all()
+
+        # Preload customers và sales returns để tránh N+1
+        cust_ids = {v.customer_id for v in items if v.customer_id}
+        sr_ids = {v.sales_return_id for v in items if v.sales_return_id}
+        cust_map = {c.id: c for c in self.db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
+        sr_map = {sr.id: sr for sr in self.db.query(SalesReturn).filter(SalesReturn.id.in_(sr_ids)).all()} if sr_ids else {}
+
         result = []
         for v in items:
-            customer = self.db.get(Customer, v.customer_id)
-            sr = self.db.get(SalesReturn, v.sales_return_id)
-            result.append(self._refund_to_dict(v, customer, sr))
+            result.append(self._refund_to_dict(v, cust_map.get(v.customer_id), sr_map.get(v.sales_return_id)))
         return {"total": total, "page": page, "page_size": page_size, "items": result}
 
     def _refund_to_dict(self, v: CustomerRefundVoucher, customer=None, sr=None) -> dict:
@@ -1896,6 +1922,27 @@ class AccountingService:
             
         lines = query.options(joinedload(JournalEntryLine.entry)).order_by(JournalEntry.ngay_but_toan, JournalEntry.so_but_toan).all()
 
+        # Batch-load TK đối ứng: 1 query cho tất cả entry_ids thay vì N queries
+        entry_ids = [line.entry.id for line in lines]
+        tk_doi_ung_map: dict[int, str] = {}
+        if entry_ids:
+            other_lines = (
+                self.db.query(JournalEntryLine.entry_id, JournalEntryLine.so_tk)
+                .filter(
+                    JournalEntryLine.entry_id.in_(entry_ids),
+                    JournalEntryLine.so_tk != so_tk,
+                )
+                .distinct()
+                .all()
+            )
+            for eid, tk in other_lines:
+                if eid in tk_doi_ung_map:
+                    existing = tk_doi_ung_map[eid]
+                    if tk not in existing.split("/"):
+                        tk_doi_ung_map[eid] = existing + "/" + tk
+                else:
+                    tk_doi_ung_map[eid] = tk
+
         rows = []
         current_balance = so_du_dau
         for line in lines:
@@ -1905,12 +1952,12 @@ class AccountingService:
                 "ngay": line.entry.ngay_but_toan,
                 "so_phieu": line.entry.so_but_toan,
                 "dien_giai": line.dien_giai or line.entry.dien_giai,
-                "tk_doi_ung": self._get_tk_doi_ung(line.entry.id, so_tk),
+                "tk_doi_ung": tk_doi_ung_map.get(line.entry.id, ""),
                 "phat_sinh_no": line.so_tien_no,
                 "phat_sinh_co": line.so_tien_co,
                 "so_du": current_balance,
                 "chung_tu_loai": line.entry.chung_tu_loai,
-                "chung_tu_id": line.entry.chung_tu_id
+                "chung_tu_id": line.entry.chung_tu_id,
             })
 
         return {

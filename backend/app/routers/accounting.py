@@ -252,10 +252,11 @@ def ar_balance(
     customer_id: int | None = Query(None),
     tu_ngay: date = Query(...),
     den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_ar_balance(customer_id, tu_ngay, den_ngay)
+    return AccountingService(db).get_ar_balance(customer_id, tu_ngay, den_ngay, phap_nhan_id=phap_nhan_id)
 
 
 # ─────────────────────────────────────────────
@@ -305,10 +306,11 @@ def ap_balance(
     supplier_id: int | None = Query(None),
     tu_ngay: date = Query(...),
     den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_ap_balance(supplier_id, tu_ngay, den_ngay)
+    return AccountingService(db).get_ap_balance(supplier_id, tu_ngay, den_ngay, phap_nhan_id=phap_nhan_id)
 
 
 # ─────────────────────────────────────────────
@@ -320,10 +322,11 @@ def so_chi_tiet_mua_hang(
     supplier_id: int | None = Query(None),
     tu_ngay: date = Query(...),
     den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_so_chi_tiet_mua_hang(supplier_id, tu_ngay, den_ngay)
+    return AccountingService(db).get_so_chi_tiet_mua_hang(supplier_id, tu_ngay, den_ngay, phap_nhan_id=phap_nhan_id)
 
 
 # ─────────────────────────────────────────────
