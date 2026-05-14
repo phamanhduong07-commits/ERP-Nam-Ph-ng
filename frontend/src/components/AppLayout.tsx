@@ -146,6 +146,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       roles: MUA_HANG,
       children: [
         { key: '/purchasing/du-bao-nhu-cau', label: <Link to="/purchasing/du-bao-nhu-cau">Dự báo nhu cầu</Link> },
+        { key: '/purchasing/ymh', label: <Link to="/purchasing/ymh">Yêu cầu mua hàng (YMH)</Link> },
         { key: '/purchasing/giay-cuon', label: <Link to="/purchasing/giay-cuon">Mua giấy</Link> },
         { key: '/purchasing/nvl-khac', label: <Link to="/purchasing/nvl-khac">Mua NVL khác</Link> },
         { key: '/purchasing/orders', label: <Link to="/purchasing/orders">Đơn mua hàng (PO)</Link> },

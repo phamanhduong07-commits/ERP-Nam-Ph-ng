@@ -11,10 +11,12 @@ from app.database import Base, engine, ensure_schema
 from app.routers import (
     auth, customers, products, sales_orders, sales_returns, quotes, paper_materials, cau_truc,
     suppliers, material_groups, other_materials, warehouses, users,
-    don_vi_tinh, vi_tri, xe, tai_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
+    don_vi_tinh, vi_tri, xe, tai_xe, lo_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
     production_orders, bom, production_plans, indirect_costs, addon_rates, permissions,
+    hr, logistics_hr, hr_payroll_calc, hr_reward, hr_self_service,
 )
 from app.routers import phieu_phoi, cd2, warehouse, purchase_orders, purchase_returns, phap_nhan, dashboard, theo_doi, yeu_cau_giao_hang
+from app.routers import purchase_requisitions
 from app.routers import may_dung_log
 from app.routers import billing, accounting
 from app.routers import bank_accounts, ccdc as ccdc_router
@@ -22,6 +24,7 @@ from app.routers import mst_lookup
 from app.routers import reports as reports_router
 from app.routers import customer_refunds as customer_refunds_router
 from app.routers import import_logs as import_logs_router
+from app.routers import system as system_router
 from app.agent import router as agent_router
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
@@ -102,6 +105,7 @@ app.include_router(don_vi_tinh.router)
 app.include_router(vi_tri.router)
 app.include_router(xe.router)
 app.include_router(tai_xe.router)
+app.include_router(lo_xe.router)
 app.include_router(tinh_thanh.router)
 app.include_router(phuong_xa.router)
 app.include_router(don_gia_van_chuyen.router)
@@ -116,6 +120,7 @@ app.include_router(cd2.router)
 app.include_router(warehouse.router)
 app.include_router(purchase_orders.router)
 app.include_router(purchase_returns.router)
+app.include_router(purchase_requisitions.router)
 app.include_router(phap_nhan.router)
 app.include_router(dashboard.router)
 app.include_router(theo_doi.router)
@@ -127,8 +132,14 @@ app.include_router(ccdc_router.router)
 app.include_router(reports_router.router)
 app.include_router(customer_refunds_router.router)
 app.include_router(import_logs_router.router)
+app.include_router(system_router.router)
 app.include_router(agent_router.router)
 app.include_router(mst_lookup.router)
+app.include_router(hr.router)
+app.include_router(logistics_hr.router)
+app.include_router(hr_payroll_calc.router)
+app.include_router(hr_reward.router)
+app.include_router(hr_self_service.router)
 
 
 @app.get("/api/health")
@@ -139,6 +150,9 @@ def health():
 # ─── SPA fallback ─────────────────────────────────────────────────────────────
 # Dùng catch-all route thay vì StaticFiles mount tại "/" để tránh StaticFiles
 # chặn POST request (StaticFiles trả 405 với mọi non-GET request).
+os.makedirs("uploads/invoices", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 if os.path.exists("dist"):
     app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
 
