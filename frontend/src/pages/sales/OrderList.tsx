@@ -3,18 +3,19 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Table, Button, Input, Select, Space, Tag, Card, Typography,
-  DatePicker, Row, Col, Tooltip, Popconfirm, message,
+  DatePicker, Row, Col, Tooltip, Popconfirm, message, Badge,
 } from 'antd'
 import {
   PlusOutlined, SearchOutlined, EyeOutlined,
   CheckOutlined, CloseOutlined, FileExcelOutlined, FilePdfOutlined,
-  UploadOutlined,
+  UploadOutlined, WarningOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
 import type { SalesOrderListItem } from '../../api/salesOrders'
 import { phapNhanApi } from '../../api/phap_nhan'
+import { useAuthStore } from '../../store/auth'
 import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 
@@ -32,6 +33,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const isEmbedded = !!onSelect
+  const currentUser = useAuthStore((s) => s.user)
 
   // ── Restore filters từ sessionStorage (chỉ khi không embedded) ──
   const savedFilters = !isEmbedded
@@ -45,6 +47,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
   const [dateRange, setDateRange] = useState<[string, string] | null>(savedFilters.dateRange ?? null)
   const [page, setPage] = useState<number>(savedFilters.page ?? 1)
   const [importVisible, setImportVisible] = useState(false)
+  const [myOnly, setMyOnly] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Debounce search 400ms ──
@@ -67,14 +70,22 @@ export default function OrderList({ selectedId, onSelect }: Props) {
     staleTime: 5 * 60 * 1000,
   })
 
+  const { data: countsData } = useQuery({
+    queryKey: ['sales-orders-counts'],
+    queryFn: () => salesOrdersApi.counts().then((r) => r.data),
+    enabled: !isEmbedded,
+    staleTime: 30 * 1000,
+  })
+
   const { data, isLoading } = useQuery({
-    queryKey: ['sales-orders', search, trangThai, phapNhanId, dateRange, page],
+    queryKey: ['sales-orders', search, trangThai, phapNhanId, dateRange, page, myOnly],
     queryFn: () => salesOrdersApi.list({
       search,
       trang_thai: trangThai,
       phap_nhan_id: phapNhanId,
       tu_ngay: dateRange?.[0],
       den_ngay: dateRange?.[1],
+      ...(myOnly && currentUser ? { created_by: currentUser.id } : {}),
       page,
       page_size: 20,
     }).then((r) => r.data),
@@ -148,7 +159,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
       ten_phap_nhan: r.ten_phap_nhan ?? '—',
       ngay_giao_hang: fmtDate(r.ngay_giao_hang),
       so_dong: r.so_dong,
-      tong_tien: fmtVND(r.tong_tien),
+      tong_tien: fmtVND(r.tong_tien_sau_giam),
       trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
     }))
 
@@ -228,8 +239,18 @@ export default function OrderList({ selectedId, onSelect }: Props) {
     {
       title: 'Ngày giao',
       dataIndex: 'ngay_giao_hang',
-      width: 100,
-      render: (v) => v ? dayjs(v).format('DD/MM/YYYY') : '—',
+      width: 110,
+      render: (v) => {
+        if (!v) return '—'
+        const d = dayjs(v)
+        const daysLeft = d.diff(dayjs(), 'day')
+        const fmt = d.format('DD/MM/YYYY')
+        if (daysLeft < 0)
+          return <span style={{ color: '#f5222d', fontWeight: 500 }}>{fmt}</span>
+        if (daysLeft <= 3)
+          return <span style={{ color: '#fa8c16', fontWeight: 500 }}><WarningOutlined style={{ marginRight: 3 }} />{fmt}</span>
+        return fmt
+      },
     },
     {
       title: 'Số dòng',
@@ -330,6 +351,31 @@ export default function OrderList({ selectedId, onSelect }: Props) {
             </Space>
           </Col>
         </Row>
+
+        {!isEmbedded && (
+          <Row gutter={8} style={{ marginTop: 8 }}>
+            <Col>
+              <Badge count={countsData?.moi ?? 0} size="small">
+                <Button
+                  size="small"
+                  type={trangThai === 'moi' ? 'primary' : 'default'}
+                  onClick={() => { setTrangThai(trangThai === 'moi' ? undefined : 'moi'); setPage(1) }}
+                >
+                  Mới
+                </Button>
+              </Badge>
+            </Col>
+            <Col>
+              <Button
+                size="small"
+                type={myOnly ? 'primary' : 'default'}
+                onClick={() => { setMyOnly(!myOnly); setPage(1) }}
+              >
+                Của tôi
+              </Button>
+            </Col>
+          </Row>
+        )}
 
         <Row gutter={8} style={{ marginTop: 8 }}>
           <Col flex="auto">

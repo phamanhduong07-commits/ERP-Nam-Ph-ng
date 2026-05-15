@@ -36,12 +36,15 @@ class SalesOrderService:
         phap_nhan_id: int = None,
         tu_ngay: str = None,
         den_ngay: str = None,
+        created_by: int = None,
         page: int = 1,
         page_size: int = 20,
     ) -> PagedResponse:
+        from app.models.auth import User as UserModel
         q = self.db.query(SalesOrder).options(
             joinedload(SalesOrder.customer),
             joinedload(SalesOrder.phap_nhan),
+            joinedload(SalesOrder.creator),
             subqueryload(SalesOrder.items),
         )
 
@@ -60,6 +63,8 @@ class SalesOrderService:
             q = q.filter(SalesOrder.ngay_don >= tu_ngay)
         if den_ngay:
             q = q.filter(SalesOrder.ngay_don <= den_ngay)
+        if created_by:
+            q = q.filter(SalesOrder.created_by == created_by)
 
         total = q.count()
         orders = q.order_by(SalesOrder.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -79,6 +84,7 @@ class SalesOrderService:
                 tong_tien=o.tong_tien,
                 tong_tien_sau_giam=o.tong_tien_sau_giam,
                 so_dong=len(o.items),
+                created_by_name=o.creator.ho_ten if o.creator else None,
                 created_at=o.created_at,
             ))
 

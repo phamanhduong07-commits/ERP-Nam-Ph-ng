@@ -153,6 +153,7 @@ class SalesOrderListItem(BaseModel):
     tong_tien: Decimal
     tong_tien_sau_giam: Decimal = Decimal(0)
     so_dong: int = 0
+    created_by_name: str | None = None
     created_at: datetime
 
     class Config:

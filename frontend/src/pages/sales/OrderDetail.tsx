@@ -219,7 +219,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     {
       title: 'Mã SP',
       width: 110,
-      render: (_, r) => <Text code style={{ fontSize: 11 }}>{r.product?.ma_amis}</Text>,
+      render: (_, r) => <Text code style={{ fontSize: 11 }}>{r.product?.ma_amis ?? '—'}</Text>,
     },
     {
       title: 'Tên hàng hoá',
@@ -448,7 +448,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       </Row>
 
       {(() => {
-        if (order.trang_thai !== 'da_duyet' || !order.ngay_giao_hang) return null
+        if (!['da_duyet', 'dang_sx'].includes(order.trang_thai) || !order.ngay_giao_hang) return null
         const daysLeft = dayjs(order.ngay_giao_hang).diff(dayjs(), 'day')
         if (daysLeft > 3) return null
         const fmt = dayjs(order.ngay_giao_hang).format('DD/MM/YYYY')
@@ -490,7 +490,10 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
         </Descriptions>
       </Card>
 
-      <Card title={`Chi tiết sản phẩm (${order.items.length} dòng)`}>
+      <Card
+        title={`Chi tiết sản phẩm (${order.items.length} dòng)`}
+        extra={<Text type="secondary" style={{ fontSize: 11 }}><EyeOutlined /> Nhấn vào dòng để xem chi tiết</Text>}
+      >
         <Table
           columns={columns}
           dataSource={order.items}
@@ -514,7 +517,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           summary={() => (
             <Table.Summary fixed>
               <Table.Summary.Row>
-                <Table.Summary.Cell index={0} colSpan={7} align="right">
+                <Table.Summary.Cell index={0} colSpan={9} align="right">
                   <Text strong>Tổng tiền hàng:</Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={1} align="right">
@@ -526,7 +529,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
               </Table.Summary.Row>
               {hasDiscount && (
                 <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={7} align="right">
+                  <Table.Summary.Cell index={0} colSpan={9} align="right">
                     <Text type="secondary">
                       Giảm giá{Number(order.ty_le_giam_gia) > 0 ? ` (${order.ty_le_giam_gia}%)` : ''}:
                     </Text>
@@ -541,7 +544,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
               )}
               {hasDiscount && (
                 <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={7} align="right">
+                  <Table.Summary.Cell index={0} colSpan={9} align="right">
                     <Text strong>Tổng cộng:</Text>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={1} align="right">
@@ -554,7 +557,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
               )}
               {!hasDiscount && (
                 <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={7} />
+                  <Table.Summary.Cell index={0} colSpan={9} />
                   <Table.Summary.Cell index={1} align="right">
                     <Text strong style={{ fontSize: 16, color: '#1677ff' }}>
                       {fmtVND(tongTienHang)} đ
@@ -621,6 +624,12 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                     <Col span={12}>
                       <Text type="secondary" style={{ fontSize: 11 }}>Ghi chú</Text>
                       <div><Text>{item.ghi_chu_san_pham}</Text></div>
+                    </Col>
+                  )}
+                  {item.yeu_cau_in && (
+                    <Col span={12}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>Yêu cầu in</Text>
+                      <div><Text>{item.yeu_cau_in}</Text></div>
                     </Col>
                   )}
                 </Row>

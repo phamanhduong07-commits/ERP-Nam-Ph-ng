@@ -45,6 +45,7 @@ def list_orders(
     phap_nhan_id: int | None = Query(default=None),
     tu_ngay: date | None = Query(default=None),
     den_ngay: date | None = Query(default=None),
+    created_by: int | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=1000),
     db: Session = Depends(get_db),
@@ -58,9 +59,21 @@ def list_orders(
         phap_nhan_id=phap_nhan_id,
         tu_ngay=tu_ngay,
         den_ngay=den_ngay,
+        created_by=created_by,
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/counts")
+def get_counts(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from app.models.sales import SalesOrder as SO
+    moi = db.query(SO).filter(SO.trang_thai == "moi").count()
+    da_duyet = db.query(SO).filter(SO.trang_thai == "da_duyet").count()
+    return {"moi": moi, "da_duyet": da_duyet}
 
 
 @router.get("/{order_id}", response_model=SalesOrderResponse)

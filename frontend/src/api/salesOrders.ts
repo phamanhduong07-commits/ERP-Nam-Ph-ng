@@ -91,6 +91,7 @@ export interface SalesOrderListItem {
   tong_tien: number
   tong_tien_sau_giam: number
   so_dong: number
+  created_by_name: string | null
   created_at: string
 }
 
@@ -148,9 +149,12 @@ export const salesOrdersApi = {
     phap_nhan_id?: number
     tu_ngay?: string
     den_ngay?: string
+    created_by?: number
     page?: number
     page_size?: number
   }) => client.get<PagedResponse<SalesOrderListItem>>('/sales-orders', { params }),
+
+  counts: () => client.get<Record<string, number>>('/sales-orders/counts'),
 
   get: (id: number) => client.get<SalesOrder>(`/sales-orders/${id}`),
   create: (data: CreateOrderPayload) => client.post<SalesOrder>('/sales-orders', data),
