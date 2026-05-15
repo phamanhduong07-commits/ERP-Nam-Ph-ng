@@ -327,7 +327,9 @@ export default function QuoteForm() {
   const hasFormulaPriceData = (item: QuoteItem) => {
     if (![3, 5, 7].includes(item.so_lop)) return false
     if (!item.loai_thung || item.loai_thung === 'KHAC') return false
+    const needsCao = item.loai_thung !== 'LOT'
     if (!item.dai || !item.rong || !item.to_hop_song || !item.so_luong) return false
+    if (needsCao && !item.cao) return false
     const layers: [keyof QuoteItem, keyof QuoteItem][] = [
       ['mat', 'mat_dl'],
       ['song_1', 'song_1_dl'],
@@ -834,7 +836,20 @@ export default function QuoteForm() {
                 <Popconfirm
                   title="Gửi báo giá để trưởng phòng duyệt?"
                   description="Sau khi gửi, bạn sẽ không thể chỉnh sửa nữa."
-                  onConfirm={() => submitMutation.mutate()}
+                  onConfirm={() => {
+                    const zeroItems = items.filter(it => !(it.gia_ban > 0))
+                    if (zeroItems.length > 0) {
+                      Modal.confirm({
+                        title: 'Có mặt hàng chưa có giá bán',
+                        content: `${zeroItems.length} mặt hàng có giá bán = 0. Vẫn tiếp tục gửi duyệt?`,
+                        okText: 'Gửi duyệt',
+                        cancelText: 'Xem lại',
+                        onOk: () => submitMutation.mutate(),
+                      })
+                    } else {
+                      submitMutation.mutate()
+                    }
+                  }}
                   okText="Gửi duyệt"
                   cancelText="Huỷ"
                 >
@@ -903,7 +918,7 @@ export default function QuoteForm() {
               </Form.Item>
             </Col>
             <Col span={4}>
-              <Form.Item label="Ngày hết hạn" name="ngay_het_han">
+              <Form.Item label="Ngày hết hạn" name="ngay_het_han" initialValue={!isEdit ? dayjs().add(30, 'day') : undefined}>
                 <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
               </Form.Item>
             </Col>

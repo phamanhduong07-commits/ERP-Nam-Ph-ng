@@ -309,9 +309,14 @@ def _build_response(quote: Quote) -> QuoteResponse:
         phan_xuong_id=quote.phan_xuong_id,
         ten_phan_xuong=quote.phan_xuong.ten_xuong if quote.phan_xuong else None,
         nv_phu_trach_id=quote.nv_phu_trach_id,
+        ten_nv_phu_trach=quote.nv_phu_trach.ho_ten if quote.nv_phu_trach else None,
         nv_theo_doi_id=quote.nv_theo_doi_id,
         ten_nv_theo_doi=quote.nv_theo_doi.ho_ten if quote.nv_theo_doi else None,
         nguoi_duyet_id=quote.nguoi_duyet_id,
+        ten_nguoi_duyet=quote.approver.ho_ten if quote.approver else None,
+        approved_at=quote.approved_at,
+        created_by=quote.created_by,
+        created_by_name=quote.creator.ho_ten if quote.creator else None,
         ngay_het_han=quote.ngay_het_han,
         chi_phi_bang_in=quote.chi_phi_bang_in,
         chi_phi_khuon=quote.chi_phi_khuon,
@@ -346,7 +351,10 @@ def _load_quote(quote_id: int, db: Session) -> Quote:
             joinedload(Quote.phap_nhan),
             joinedload(Quote.phap_nhan_sx),
             joinedload(Quote.phan_xuong),
+            joinedload(Quote.nv_phu_trach),
             joinedload(Quote.nv_theo_doi),
+            joinedload(Quote.approver),
+            joinedload(Quote.creator),
         )
         .filter(Quote.id == quote_id)
         .first()
@@ -354,6 +362,21 @@ def _load_quote(quote_id: int, db: Session) -> Quote:
     if not quote:
         raise HTTPException(status_code=404, detail="Không tìm thấy báo giá")
     return quote
+
+
+def _auto_expire_quotes(db: Session) -> None:
+    """Chuyển BG quá ngày hết hạn sang trạng thái het_han (lazy, gọi khi list)."""
+    today = date.today()
+    (
+        db.query(Quote)
+        .filter(
+            Quote.trang_thai.in_(["moi", "cho_duyet"]),
+            Quote.ngay_het_han < today,
+            Quote.ngay_het_han.isnot(None),
+        )
+        .update({"trang_thai": "het_han"}, synchronize_session=False)
+    )
+    db.commit()
 
 
 @router.get("", response_model=PagedResponse)
@@ -369,7 +392,8 @@ def list_quotes(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = db.query(Quote).options(joinedload(Quote.customer))
+    _auto_expire_quotes(db)
+    q = db.query(Quote).options(joinedload(Quote.customer), joinedload(Quote.creator))
     if search:
         like = f"%{search}%"
         q = q.join(Customer).filter(
@@ -401,6 +425,7 @@ def list_quotes(
             tong_cong=qt.tong_cong,
             so_dong=len(qt.items),
             created_at=qt.created_at,
+            created_by_name=qt.creator.ho_ten if qt.creator else None,
         )
         for qt in quotes
     ]
@@ -774,6 +799,31 @@ def cancel_quote(
     quote.trang_thai = "huy"
     db.commit()
     return {"message": f"Đã huỷ báo giá {quote.so_bao_gia}"}
+
+
+class GiaHanBody(BaseModel):
+    ngay_het_han: date
+
+
+@router.patch("/{quote_id}/gia-han", response_model=QuoteResponse)
+def gia_han_quote(
+    quote_id: int,
+    body: GiaHanBody,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Gia hạn báo giá hết hạn — đặt ngày mới và trả về trạng thái 'moi'."""
+    quote = db.query(Quote).filter(Quote.id == quote_id).first()
+    if not quote:
+        raise HTTPException(status_code=404, detail="Không tìm thấy báo giá")
+    if quote.trang_thai != "het_han":
+        raise HTTPException(status_code=400, detail="Chỉ gia hạn được báo giá ở trạng thái Hết hạn")
+    if body.ngay_het_han <= date.today():
+        raise HTTPException(status_code=400, detail="Ngày hết hạn mới phải sau hôm nay")
+    quote.ngay_het_han = body.ngay_het_han
+    quote.trang_thai = "moi"
+    db.commit()
+    return _build_response(_load_quote(quote_id, db))
 
 
 @router.post("/{quote_id}/copy", response_model=QuoteResponse, status_code=201)

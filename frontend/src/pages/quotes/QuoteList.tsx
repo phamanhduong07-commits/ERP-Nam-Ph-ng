@@ -8,7 +8,7 @@ import {
 import {
   PlusOutlined, SearchOutlined, EyeOutlined,
   CheckCircleOutlined, StopOutlined, FileAddOutlined,
-  FileExcelOutlined, FilePdfOutlined, CopyOutlined, SendOutlined,
+  FileExcelOutlined, FilePdfOutlined, CopyOutlined, SendOutlined, SyncOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -148,6 +148,15 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Copy báo giá thất bại'),
   })
 
+  const giaHanMutation = useMutation({
+    mutationFn: ({ id, ngay }: { id: number; ngay: string }) => quotesApi.giaHan(id, ngay),
+    onSuccess: () => {
+      message.success('Đã gia hạn báo giá')
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Gia hạn thất bại'),
+  })
+
   const compactColumns: ColumnsType<QuoteListItem> = [
     {
       title: 'Số BG',
@@ -231,6 +240,13 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
       ),
     },
     {
+      title: 'Người lập',
+      dataIndex: 'created_by_name',
+      width: 120,
+      ellipsis: true,
+      render: (v: string | null) => v || <Text type="secondary">—</Text>,
+    },
+    {
       title: '',
       key: 'actions',
       width: 140,
@@ -265,10 +281,24 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
               </Popconfirm>
             </Tooltip>
           )}
-          {row.trang_thai !== 'huy' && (
+          {row.trang_thai !== 'huy' && row.trang_thai !== 'het_han' && (
             <Tooltip title="Huỷ">
               <Popconfirm title="Huỷ báo giá này?" onConfirm={() => cancelMutation.mutate(row.id)}>
                 <Button size="small" icon={<StopOutlined />} danger />
+              </Popconfirm>
+            </Tooltip>
+          )}
+          {row.trang_thai === 'het_han' && (
+            <Tooltip title="Gia hạn">
+              <Popconfirm
+                title="Gia hạn thêm 30 ngày?"
+                onConfirm={() => giaHanMutation.mutate({
+                  id: row.id,
+                  ngay: dayjs().add(30, 'day').format('YYYY-MM-DD'),
+                })}
+                okText="Gia hạn"
+              >
+                <Button size="small" icon={<SyncOutlined />} />
               </Popconfirm>
             </Tooltip>
           )}

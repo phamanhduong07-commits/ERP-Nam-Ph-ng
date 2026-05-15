@@ -1,15 +1,15 @@
-// @ts-nocheck
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Table, Button, Space, Typography, Row, Col,
-  Divider, Popconfirm, message, Skeleton, Drawer, Badge,
+  Divider, Popconfirm, message, Skeleton, Drawer, Badge, Modal, DatePicker,
 } from 'antd'
 import {
   ArrowLeftOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, FileAddOutlined,
-  EyeOutlined, PrinterOutlined, CopyOutlined, SendOutlined,
+  EyeOutlined, PrinterOutlined, CopyOutlined, SendOutlined, SyncOutlined,
 } from '@ant-design/icons'
+import type { Dayjs } from 'dayjs'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, LOAI_IN_OPTIONS, getSongType, buildPaperSymbol } from '../../api/quotes'
@@ -447,6 +447,8 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [previewItem, setPreviewItem] = useState<QuoteItem | null>(null)
+  const [giaHanModal, setGiaHanModal] = useState(false)
+  const [giaHanDate, setGiaHanDate] = useState<Dayjs | null>(null)
   const role = useAuthStore(s => s.user?.role)
   const hideCostDetails = role === 'SALE_ADMIN' || role === 'TRUONG_PHONG_SALE_ADMIN'
   const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
@@ -501,6 +503,21 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       navigate(`/quotes/${res.data.id}/edit`)
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Copy báo giá thất bại'),
+  })
+
+  const giaHanMutation = useMutation({
+    mutationFn: (ngay: string) => quotesApi.giaHan(Number(id), ngay),
+    onSuccess: () => {
+      message.success('Đã gia hạn báo giá')
+      setGiaHanModal(false)
+      setGiaHanDate(null)
+      queryClient.invalidateQueries({ queryKey: ['quote', id] })
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+    },
+    onError: (e: unknown) => {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(detail || 'Gia hạn thất bại')
+    },
   })
 
   const taoDonHangMutation = useMutation({
@@ -632,13 +649,13 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       title: 'Mã Ký Hiệu',
       dataIndex: 'ma_ky_hieu',
       width: 150,
-      render: (v: string | null, r) => v || buildPaperSymbol(r) || '—',
+      render: (v: string | null, r: QuoteItem) => v || buildPaperSymbol(r) || '—',
     },
     !hideCostDetails ? {
       title: 'CP Gián tiếp',
       width: 110,
       align: 'right',
-      render: (_, r) => {
+      render: (_: unknown, r: QuoteItem) => {
         const rate = GIAN_TIEP_M2[r.so_lop]
         if (!rate || !r.dien_tich) return '—'
         return (
@@ -763,7 +780,16 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
                 </Button>
               </Popconfirm>
             )}
-            {trangThai !== 'huy' && (
+            {trangThai === 'het_han' && (
+              <Button
+                size={embedded ? 'small' : 'middle'}
+                icon={<SyncOutlined />}
+                onClick={() => setGiaHanModal(true)}
+              >
+                Gia hạn
+              </Button>
+            )}
+            {trangThai !== 'huy' && trangThai !== 'het_han' && (
               <Popconfirm
                 title="Huỷ báo giá này?"
                 onConfirm={() => cancelMutation.mutate()}
@@ -820,6 +846,23 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
           {quote.ten_nv_theo_doi && (
             <Descriptions.Item label="NV theo dõi ĐH">{quote.ten_nv_theo_doi}</Descriptions.Item>
           )}
+          {quote.created_by_name && (
+            <Descriptions.Item label="Người lập">{quote.created_by_name}</Descriptions.Item>
+          )}
+          {quote.ten_nv_phu_trach && (
+            <Descriptions.Item label="NV phụ trách">{quote.ten_nv_phu_trach}</Descriptions.Item>
+          )}
+          {trangThai === 'da_duyet' && quote.ten_nguoi_duyet && (
+            <Descriptions.Item label="Người duyệt">
+              <Space size={4}>
+                <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                <Text strong>{quote.ten_nguoi_duyet}</Text>
+                {quote.approved_at && (
+                  <Text type="secondary">— {dayjs(quote.approved_at).format('DD/MM/YYYY HH:mm')}</Text>
+                )}
+              </Space>
+            </Descriptions.Item>
+          )}
           {quote.ghi_chu && (
             <Descriptions.Item label="Ghi chú" span={3}>{quote.ghi_chu}</Descriptions.Item>
           )}
@@ -856,6 +899,31 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
         onClose={() => setPreviewItem(null)}
         onEditClick={() => { setPreviewItem(null); navigate(`/quotes/${id}/edit`) }}
       />
+
+      <Modal
+        title="Gia hạn báo giá"
+        open={giaHanModal}
+        onCancel={() => { setGiaHanModal(false); setGiaHanDate(null) }}
+        onOk={() => {
+          if (!giaHanDate) { message.warning('Chọn ngày hết hạn mới'); return }
+          giaHanMutation.mutate(giaHanDate.format('YYYY-MM-DD'))
+        }}
+        confirmLoading={giaHanMutation.isPending}
+        okText="Gia hạn"
+        cancelText="Huỷ"
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Text>Chọn ngày hết hạn mới cho báo giá <Text strong>{quote.so_bao_gia}</Text>:</Text>
+          <DatePicker
+            style={{ width: '100%' }}
+            format="DD/MM/YYYY"
+            placeholder="Ngày hết hạn mới"
+            disabledDate={(d) => d.isBefore(dayjs(), 'day')}
+            value={giaHanDate}
+            onChange={setGiaHanDate}
+          />
+        </Space>
+      </Modal>
 
       <Card title="Tổng hợp chi phí">
         <Row gutter={[16, 8]} style={{ maxWidth: 500 }}>

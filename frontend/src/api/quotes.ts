@@ -60,7 +60,12 @@ export interface Quote {
   customer_id: number
   customer?: { id: number; ma_kh: string; ten_viet_tat: string; ten_don_vi: string | null } | null
   nv_phu_trach_id?: number | null
+  ten_nv_phu_trach?: string | null
   nguoi_duyet_id?: number | null
+  ten_nguoi_duyet?: string | null
+  approved_at?: string | null
+  created_by?: number | null
+  created_by_name?: string | null
   phap_nhan_id?: number | null
   ten_phap_nhan?: string | null
   phap_nhan_sx_id?: number | null
@@ -104,6 +109,7 @@ export interface QuoteListItem {
   tong_cong: number
   so_dong: number
   created_at: string
+  created_by_name?: string | null
 }
 
 export interface CreateQuotePayload {
@@ -366,6 +372,9 @@ export const quotesApi = {
       `/quotes/${id}/tao-don-hang`,
       item_ids ? { item_ids } : {}
     ),
+
+  giaHan: (id: number, ngay_het_han: string) =>
+    client.patch<Quote>(`/quotes/${id}/gia-han`, { ngay_het_han }),
 }
 
 export const paperMaterialsApi = {

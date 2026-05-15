@@ -1,3 +1,4 @@
+from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy import (
@@ -238,6 +239,8 @@ class Quote(Base):
     customer: Mapped["Customer"] = relationship("Customer", foreign_keys=[customer_id])
     nv_phu_trach: Mapped["User | None"] = relationship("User", foreign_keys=[nv_phu_trach_id])
     nv_theo_doi: Mapped["User | None"] = relationship("User", foreign_keys=[nv_theo_doi_id])
+    approver: Mapped["User | None"] = relationship("User", foreign_keys=[approved_by])
+    creator: Mapped["User | None"] = relationship("User", foreign_keys=[created_by])
     phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
     phap_nhan_sx: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_sx_id])
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])

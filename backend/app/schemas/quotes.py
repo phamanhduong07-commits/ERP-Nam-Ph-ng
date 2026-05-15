@@ -210,9 +210,14 @@ class QuoteResponse(BaseModel):
     phan_xuong_id: int | None = None
     ten_phan_xuong: str | None = None
     nv_phu_trach_id: int | None
+    ten_nv_phu_trach: str | None = None
     nv_theo_doi_id: int | None = None
     ten_nv_theo_doi: str | None = None
     nguoi_duyet_id: int | None
+    ten_nguoi_duyet: str | None = None
+    approved_at: datetime | None = None
+    created_by: int | None = None
+    created_by_name: str | None = None
     ngay_het_han: date | None
     chi_phi_bang_in: Decimal
     chi_phi_khuon: Decimal
@@ -251,6 +256,7 @@ class QuoteListItem(BaseModel):
     tong_cong: Decimal
     so_dong: int = 0
     created_at: datetime
+    created_by_name: str | None = None
 
     class Config:
         from_attributes = True
