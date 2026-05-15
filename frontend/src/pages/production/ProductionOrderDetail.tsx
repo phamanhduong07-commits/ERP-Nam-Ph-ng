@@ -4,13 +4,13 @@ import { useQuery, useQueryClient, useQueries, useMutation } from '@tanstack/rea
 import {
   Card, Descriptions, Tag, Button, Space, Table, Typography,
   Row, Col, Divider, Popconfirm, message, Progress, InputNumber,
-  Statistic, Tabs, Collapse, Drawer, Tooltip, Modal, Form, Select,
+  Statistic, Tabs, Collapse, Drawer, Tooltip, Modal, Form, Select, Alert,
 } from 'antd'
 import {
   ArrowLeftOutlined, PlayCircleOutlined, CheckCircleOutlined,
   CloseOutlined, SaveOutlined, CalculatorOutlined, EditOutlined,
   FileExcelOutlined, FilePdfOutlined, FileTextOutlined, SendOutlined, AuditOutlined,
-  ShoppingCartOutlined,
+  ShoppingCartOutlined, WarningOutlined,
 } from '@ant-design/icons'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
@@ -27,7 +27,7 @@ import BomCalculatorPanel from './BomCalculatorPanel'
 import BomResultView from './BomResultView'
 import SxParamsTab from './SxParamsTab'
 import { bomApi } from '../../api/bom'
-import { exportToExcel, printToPdf, fmtVND, fmtDate, fmtNum, fmtDim, buildHtmlTable, printProductionTag } from '../../utils/exportUtils'
+import { exportToExcel, printToPdf, fmtVND, fmtDate, fmtNum, fmtDim, buildHtmlTable, printProductionTag, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
 
 
 const { Title, Text } = Typography
@@ -58,54 +58,52 @@ function PhieuNhapPhoiSongTab({
       const h = Math.floor(diff / 60); const m = diff % 60
       return h > 0 ? `${h} giờ ${m} phút` : `${m} phút`
     })()
+    
+    const cols = [
+      { header: 'STT', key: 'stt', align: 'center' as const },
+      { header: 'Tên hàng', key: 'ten_hang' },
+      { header: 'Kích thước', key: 'kich_thuoc', align: 'center' as const },
+      { header: 'SL kế hoạch', key: 'sl_kh', align: 'right' as const },
+      { header: 'SL thực tế', key: 'sl_tt', align: 'right' as const },
+      { header: 'Phôi lỗi', key: 'sl_loi', align: 'right' as const },
+      { header: 'Nhập kho', key: 'sl_nhap', align: 'right' as const },
+      { header: 'Số tấm', key: 'so_tam', align: 'center' as const },
+      { header: 'Ghi chú', key: 'ghi_chu' },
+    ]
+
     const itemRows = p.items.map((it, i) => {
       const oi = order.items.find(x => x.id === it.production_order_item_id)
       const dims = oi ? [oi.dai, oi.rong, oi.cao].filter(Boolean).join('×') : ''
       const net = it.so_luong_thuc_te != null ? it.so_luong_thuc_te - (it.so_luong_loi ?? 0) : null
-      return `<tr>
-        <td style="text-align:center">${i + 1}</td>
-        <td>${oi?.ten_hang ?? ''}</td>
-        <td style="text-align:center">${dims || '—'}</td>
-        <td style="text-align:right">${new Intl.NumberFormat('vi-VN').format(it.so_luong_ke_hoach)}</td>
-        <td style="text-align:right">${it.so_luong_thuc_te != null ? new Intl.NumberFormat('vi-VN').format(it.so_luong_thuc_te) : ''}</td>
-        <td style="text-align:right">${it.so_luong_loi != null ? new Intl.NumberFormat('vi-VN').format(it.so_luong_loi) : ''}</td>
-        <td style="text-align:right;color:${net != null && net < 0 ? '#cf1322' : '#389e0d'}">${net != null ? new Intl.NumberFormat('vi-VN').format(net) : ''}</td>
-        <td style="text-align:center">${it.so_tam ?? ''}</td>
-        <td>${it.ghi_chu ?? ''}</td>
-      </tr>`
-    }).join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${p.so_phieu}</title>
-      <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;padding:20px}
-      h2{font-size:16px;text-align:center;margin-bottom:6px}.info{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border:1px solid #ccc;padding:8px;margin-bottom:8px;border-radius:4px}
-      .time-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border:1px solid #ccc;padding:8px;margin-bottom:12px;border-radius:4px;background:#f9f9f9}
-      .lbl{font-size:10px;color:#777}.val{font-weight:600;font-size:13px}
-      table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#f0f0f0;padding:5px 6px;border:1px solid #ccc;font-size:11px}
-      td{padding:4px 6px;border:1px solid #ddd;font-size:11px}.sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:24px;text-align:center}
-      .sig-label{font-weight:600;font-size:11px;margin-bottom:40px}.sig-name{font-size:10px;color:#777}
-      @media print{@page{margin:12mm}}</style></head><body>
-      <div style="text-align:center;margin-bottom:12px"><div style="font-size:11px;color:#555">CÔNG TY CP BAO BÌ NAM PHƯƠNG</div>
-      <h2>PHIẾU NHẬP PHÔI SÓNG</h2><div style="font-size:11px">Số phiếu: <strong>${p.so_phieu}</strong></div></div>
-      <div class="info">
-        <div><div class="lbl">Lệnh SX</div><div class="val">${order.so_lenh}</div></div>
-        <div><div class="lbl">Ngày</div><div class="val">${ngayFmt}</div></div>
-        <div><div class="lbl">Ca</div><div class="val">${p.ca ?? '—'}</div></div>
-        <div><div class="lbl">Khách hàng</div><div class="val">${order.ten_khach_hang ?? '—'}</div></div>
-      </div>
-      <div class="time-row">
-        <div><div class="lbl">Giờ bắt đầu</div><div class="val">${p.gio_bat_dau ?? '—'}</div></div>
-        <div><div class="lbl">Giờ kết thúc</div><div class="val">${p.gio_ket_thuc ?? '—'}</div></div>
-        <div><div class="lbl">Thời gian thực hiện</div><div class="val">${duration ?? '—'}</div></div>
-      </div>
-      <table><thead><tr><th>STT</th><th>Tên hàng</th><th>Kích thước</th><th>SL kế hoạch</th><th>SL thực tế</th><th>Phôi lỗi</th><th>Nhập kho</th><th>Số tấm</th><th>Ghi chú</th></tr></thead>
-      <tbody>${itemRows}</tbody></table>
-      <div class="sig">
-        <div><div class="sig-label">Người lập phiếu</div><div class="sig-name">(Ký, ghi rõ họ tên)</div></div>
-        <div><div class="sig-label">Vận hành máy sóng</div><div class="sig-name">(Ký, ghi rõ họ tên)</div></div>
-        <div><div class="sig-label">Quản lý sản xuất</div><div class="sig-name">(Ký, ghi rõ họ tên)</div></div>
-      </div>
-      <script>window.onload=()=>{window.print()}</script></body></html>`
-    const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+      return {
+        stt: i + 1,
+        ten_hang: oi?.ten_hang ?? '',
+        kich_thuoc: dims || '—',
+        sl_kh: new Intl.NumberFormat('vi-VN').format(it.so_luong_ke_hoach),
+        sl_tt: it.so_luong_thuc_te != null ? new Intl.NumberFormat('vi-VN').format(it.so_luong_thuc_te) : '',
+        sl_loi: it.so_luong_loi != null ? new Intl.NumberFormat('vi-VN').format(it.so_luong_loi) : '',
+        sl_nhap: net != null ? new Intl.NumberFormat('vi-VN').format(net) : '',
+        so_tam: it.so_tam ?? '',
+        ghi_chu: it.ghi_chu ?? '',
+      }
+    })
+
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), itemRows.map(r => cols.map(c => (r as any)[c.key])))
+    
+    const printData = {
+      subtitle: 'PHIẾU NHẬP PHÔI SÓNG',
+      document_number: p.so_phieu,
+      document_date: ngayFmt,
+      so_lenh: order.so_lenh,
+      ca: p.ca ?? '—',
+      customer_name: order.ten_khach_hang ?? '—',
+      gio_bat_dau: p.gio_bat_dau ?? '—',
+      gio_ket_thuc: p.gio_ket_thuc ?? '—',
+      duration: duration ?? '—',
+      body_html: table,
+    }
+
+    smartPrintPdf('PRODUCTION_PHOI_RECEIPT', printData, order.phap_nhan_id ?? undefined)
   }
 
   const canCreate = ['moi', 'dang_chay'].includes(order.trang_thai)
@@ -373,6 +371,17 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
 
   const canEdit = ['moi', 'dang_chay'].includes(order.trang_thai)
 
+  const today = dayjs().startOf('day')
+  const deadlineAlert = (() => {
+    if (!['moi', 'dang_chay'].includes(order.trang_thai)) return null
+    if (!order.ngay_hoan_thanh_ke_hoach) return null
+    const d = dayjs(order.ngay_hoan_thanh_ke_hoach).startOf('day')
+    const diff = d.diff(today, 'day')
+    if (diff < 0) return { type: 'error' as const, msg: `Lệnh SX đã quá hạn hoàn thành ${Math.abs(diff)} ngày!` }
+    if (diff <= 3) return { type: 'warning' as const, msg: `Còn ${diff} ngày đến hạn hoàn thành!` }
+    return null
+  })()
+
   const tong_ke_hoach = order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
   const tong_hoan_thanh = order.items.reduce((s, i) => s + Number(i.so_luong_hoan_thanh), 0)
   const pct = tong_ke_hoach > 0 ? Math.round((tong_hoan_thanh / tong_ke_hoach) * 100) : 0
@@ -387,85 +396,81 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const fmt = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v))
 
   const handleExportExcel = () => {
-    exportToExcel(`${order.so_lenh}_${new Date().toISOString().slice(0, 10)}`, [
-      {
-        name: 'Thông tin lệnh SX',
-        headers: ['Thông tin', 'Giá trị'],
-        rows: [
-          ['Số lệnh', order.so_lenh],
-          ['Ngày lệnh', fmtDate(order.ngay_lenh)],
-          ['Đơn hàng liên kết', order.so_don ?? ''],
-          ['Bắt đầu KH', fmtDate(order.ngay_bat_dau_ke_hoach)],
-          ['Hoàn thành KH', fmtDate(order.ngay_hoan_thanh_ke_hoach)],
-          ['Trạng thái', TRANG_THAI_LABELS[order.trang_thai] ?? order.trang_thai],
-          ['Ghi chú', order.ghi_chu ?? ''],
-        ],
-        colWidths: [22, 30],
-      },
-      {
-        name: 'Chi tiết sản phẩm',
-        headers: ['STT', 'Mã SP', 'Tên sản phẩm', 'Loại thùng', 'Kích thước (DxRxC)', 'Lớp', 'Tổ hợp sóng', 'SL kế hoạch', 'ĐVT', 'SL hoàn thành', 'Ngày giao', 'Ghi chú'],
-        rows: order.items.map((r, i) => {
-          const d = r.dai ?? r.product?.dai
-          const rw = r.rong ?? r.product?.rong
-          const c = r.cao ?? r.product?.cao
-          return [
-            i + 1,
-            r.product?.ma_amis ?? '',
-            r.ten_hang,
-            r.loai_thung ?? '',
-            d ? `${d}×${rw}×${c} cm` : '',
-            r.so_lop ?? '',
-            r.to_hop_song ?? '',
-            Number(r.so_luong_ke_hoach),
-            r.dvt,
-            Number(r.so_luong_hoan_thanh),
-            fmtDate(r.ngay_giao_hang),
-            r.ghi_chu ?? '',
-          ]
-        }),
-        colWidths: [5, 14, 30, 12, 20, 6, 10, 12, 8, 12, 12, 20],
-      },
-    ])
+    const defaultConfig = [
+      { key: 'stt', label: 'STT', width: 5 },
+      { key: 'ma_amis', label: 'Mã SP', width: 14 },
+      { key: 'ten_hang', label: 'Tên sản phẩm', width: 30 },
+      { key: 'loai_thung', label: 'Loại thùng', width: 12 },
+      { key: 'kich_thuoc', label: 'Kích thước', width: 20 },
+      { key: 'so_lop', label: 'Lớp', width: 6 },
+      { key: 'to_hop_song', label: 'Tổ hợp sóng', width: 10 },
+      { key: 'so_luong_ke_hoach', label: 'SL kế hoạch', width: 12 },
+      { key: 'dvt', label: 'ĐVT', width: 8 },
+      { key: 'so_luong_hoan_thanh', label: 'SL hoàn thành', width: 12 },
+      { key: 'ngay_giao', label: 'Ngày giao', width: 12 },
+      { key: 'ghi_chu', label: 'Ghi chú', width: 20 },
+    ]
+
+    const exportData = order.items.map((r, i) => {
+      const d = r.dai ?? r.product?.dai
+      const rw = r.rong ?? r.product?.rong
+      const c = r.cao ?? r.product?.cao
+      return {
+        ...r,
+        stt: i + 1,
+        ma_amis: r.product?.ma_amis ?? '',
+        kich_thuoc: d ? `${d}×${rw}×${c} cm` : '',
+        ngay_giao: fmtDate(r.ngay_giao_hang),
+      }
+    })
+
+    smartExportExcel('PRODUCTION_ORDER_DETAIL', exportData, defaultConfig, `${order.so_lenh}_${dayjs().format('YYYYMMDD')}`, order.phap_nhan_id ?? undefined)
   }
 
   const handleExportPdf = () => {
     const cols = [
-      { header: 'STT', align: 'center' as const }, { header: 'Mã SP' }, { header: 'Tên sản phẩm' },
-      { header: 'Kích thước' }, { header: 'Lớp', align: 'center' as const },
-      { header: 'SL KH', align: 'right' as const }, { header: 'ĐVT' },
-      { header: 'SL hoàn thành', align: 'right' as const }, { header: 'Ngày giao' },
+      { header: 'STT', key: 'stt', align: 'center' as const }, 
+      { header: 'Mã SP', key: 'ma_amis' }, 
+      { header: 'Tên sản phẩm', key: 'ten_hang' },
+      { header: 'Kích thước', key: 'kich_thuoc' }, 
+      { header: 'Lớp', key: 'so_lop', align: 'center' as const },
+      { header: 'SL KH', key: 'so_luong_ke_hoach', align: 'right' as const }, 
+      { header: 'ĐVT', key: 'dvt' },
+      { header: 'SL hoàn thành', key: 'so_luong_hoan_thanh', align: 'right' as const }, 
+      { header: 'Ngày giao', key: 'ngay_giao' },
     ]
+    
     const rows = order.items.map((r, i) => {
       const d = r.dai ?? r.product?.dai
       const rw = r.rong ?? r.product?.rong
       const c = r.cao ?? r.product?.cao
-      return [
-        i + 1, r.product?.ma_amis ?? '—', r.ten_hang,
-        d ? `${d}×${rw}×${c}` : '—',
-        r.so_lop ?? '—',
-        fmtNum(r.so_luong_ke_hoach), r.dvt,
-        fmtNum(r.so_luong_hoan_thanh),
-        fmtDate(r.ngay_giao_hang),
-      ]
+      return {
+        stt: i + 1,
+        ma_amis: r.product?.ma_amis ?? '—',
+        ten_hang: r.ten_hang,
+        kich_thuoc: d ? `${d}×${rw}×${c}` : '—',
+        so_lop: r.so_lop ?? '—',
+        so_luong_ke_hoach: fmtNum(r.so_luong_ke_hoach),
+        dvt: r.dvt,
+        so_luong_hoan_thanh: fmtNum(r.so_luong_hoan_thanh),
+        ngay_giao: fmtDate(r.ngay_giao_hang),
+      }
     })
-    const infoHtml = `
-      <div class="info-grid">
-        <div><div class="info-label">Số lệnh</div><div class="info-value">${order.so_lenh}</div></div>
-        <div><div class="info-label">Ngày lệnh</div><div class="info-value">${fmtDate(order.ngay_lenh)}</div></div>
-        <div><div class="info-label">Đơn hàng LK</div><div class="info-value">${order.so_don ?? '—'}</div></div>
-        <div><div class="info-label">Hoàn thành KH</div><div class="info-value">${fmtDate(order.ngay_hoan_thanh_ke_hoach)}</div></div>
-        <div><div class="info-label">Trạng thái</div><div class="info-value">${TRANG_THAI_LABELS[order.trang_thai] ?? order.trang_thai}</div></div>
-        <div><div class="info-label">Ghi chú</div><div class="info-value">${order.ghi_chu ?? '—'}</div></div>
-      </div>`
-    printToPdf(
-      `Lệnh sản xuất ${order.so_lenh}`,
-      `<h2>LỆNH SẢN XUẤT: ${order.so_lenh}</h2>
-       <p class="meta">Xuất ngày: ${new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
-       ${infoHtml}
-       ${buildHtmlTable(cols, rows)}`,
-      true,
-    )
+    
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as any)[c.key])))
+    
+    const printData = {
+      subtitle: 'LỆNH SẢN XUẤT',
+      document_number: order.so_lenh,
+      document_date: fmtDate(order.ngay_lenh),
+      so_don: order.so_don ?? '—',
+      ngay_hoan_thanh_kh: fmtDate(order.ngay_hoan_thanh_ke_hoach),
+      trang_thai: TRANG_THAI_LABELS[order.trang_thai] ?? order.trang_thai,
+      ghi_chu: order.ghi_chu ?? '—',
+      body_html: table,
+    }
+
+    smartPrintPdf('PRODUCTION_ORDER', printData, order.phap_nhan_id ?? undefined)
   }
   
   const handlePrintTag = () => {
@@ -744,6 +749,16 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
         </Col>
       </Row>
 
+      {deadlineAlert && (
+        <Alert
+          type={deadlineAlert.type}
+          message={deadlineAlert.msg}
+          showIcon
+          icon={<WarningOutlined />}
+          style={{ marginBottom: 12 }}
+        />
+      )}
+
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={24} md={embedded ? 24 : 16}>
           <Card>
@@ -809,6 +824,9 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   {TRANG_THAI_LABELS[order.trang_thai]}
                 </Tag>
               </Descriptions.Item>
+              <Descriptions.Item label="Người lập">
+                {order.created_by_name ?? '—'}
+              </Descriptions.Item>
               <Descriptions.Item label="Pháp nhân">
                 <Space size={4}>
                   {order.ten_phap_nhan
@@ -871,6 +889,21 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   ? dayjs(order.ngay_hoan_thanh_ke_hoach).format('DD/MM/YYYY')
                   : '—'}
               </Descriptions.Item>
+              {order.so_po_kh && (
+                <Descriptions.Item label="PO khách hàng">
+                  {order.so_po_kh}
+                </Descriptions.Item>
+              )}
+              {['dang_chay', 'hoan_thanh'].includes(order.trang_thai) && order.ngay_bat_dau_thuc_te && (
+                <Descriptions.Item label="Bắt đầu thực tế">
+                  {dayjs(order.ngay_bat_dau_thuc_te).format('DD/MM/YYYY')}
+                </Descriptions.Item>
+              )}
+              {order.ngay_hoan_thanh_thuc_te && (
+                <Descriptions.Item label="Hoàn thành thực tế">
+                  {dayjs(order.ngay_hoan_thanh_thuc_te).format('DD/MM/YYYY')}
+                </Descriptions.Item>
+              )}
               {order.ghi_chu && (
                 <Descriptions.Item label="Ghi chú" span={2}>
                   {order.ghi_chu}
