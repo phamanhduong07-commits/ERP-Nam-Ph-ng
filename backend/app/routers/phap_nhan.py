@@ -11,7 +11,32 @@ from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_bool, parse_text,
 )
 
+from fastapi.responses import FileResponse
+import os
+
 router = APIRouter(prefix="/api/phap-nhan", tags=["phap-nhan"])
+
+@router.get("/logo/{ma_phap_nhan}")
+async def get_phap_nhan_logo(ma_phap_nhan: str):
+    # Mapping ma_phap_nhan to existing logo files
+    logo_map = {
+        "NAMPHUONG": "logo_namphuong.png",
+        "VISUN": "logo_visunpack.png",
+        "NAMPHUONG LA": "logo_namphuong.png", # Use same logo for LA if missing
+    }
+    
+    file_name = logo_map.get(ma_phap_nhan, "logo_namphuong.png")
+    # Check in dist folder first (where current logos are)
+    file_path = os.path.join("dist", file_name)
+    
+    if not os.path.exists(file_path):
+        # Fallback to any np-icon if logo missing
+        file_path = os.path.join("dist", "np-icon-192.png")
+        
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    
+    raise HTTPException(status_code=404, detail="Logo not found")
 
 PHAP_NHAN_IMPORT_FIELDS = [
     ImportField("ma_phap_nhan", "Ma phap nhan", required=True, parser=parse_text, help_text="Ma phap nhan, duy nhat"),
@@ -23,6 +48,7 @@ PHAP_NHAN_IMPORT_FIELDS = [
     ImportField("tai_khoan", "So tai khoan", parser=parse_text),
     ImportField("ngan_hang", "Ngan hang", parser=parse_text),
     ImportField("ky_hieu_hd", "Ky hieu hoa don", parser=parse_text),
+    ImportField("email", "Email", parser=parse_text),
     ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
 ]
 
@@ -37,6 +63,9 @@ class PhapNhanCreate(BaseModel):
     tai_khoan: Optional[str] = None
     ngan_hang: Optional[str] = None
     ky_hieu_hd: Optional[str] = None
+    email: Optional[str] = None
+    logo_path: Optional[str] = None
+    mau_sac_chinh: Optional[str] = None
     trang_thai: bool = True
     phoi_phan_xuong_id: Optional[int] = None
 
@@ -53,6 +82,9 @@ def _to_dict(p: PhapNhan) -> dict:
         "tai_khoan": p.tai_khoan,
         "ngan_hang": p.ngan_hang,
         "ky_hieu_hd": p.ky_hieu_hd,
+        "email": p.email,
+        "logo_path": p.logo_path,
+        "mau_sac_chinh": p.mau_sac_chinh,
         "trang_thai": p.trang_thai,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "phoi_phan_xuong_id": p.phoi_phan_xuong_id,

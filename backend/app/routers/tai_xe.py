@@ -5,8 +5,9 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.master import TaiXe
+from decimal import Decimal
 from app.services.excel_import_service import (
-    ImportField, build_template_response, import_excel, parse_bool, parse_text,
+    ImportField, build_template_response, import_excel, parse_bool, parse_decimal, parse_int, parse_text,
 )
 
 router = APIRouter(prefix="/api/tai-xe", tags=["tai-xe"])
@@ -15,6 +16,8 @@ TAI_XE_IMPORT_FIELDS = [
     ImportField("so_dien_thoai", "So dien thoai", required=True, parser=parse_text, help_text="SDT, dung lam khoa upsert"),
     ImportField("ho_ten", "Ho ten", required=True, parser=parse_text),
     ImportField("so_bang_lai", "So bang lai", parser=parse_text),
+    ImportField("employee_id", "Employee ID", parser=parse_int),
+    ImportField("he_so_chuyen", "He so chuyen", parser=parse_decimal, default=1),
     ImportField("ghi_chu", "Ghi chu", parser=parse_text),
     ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
 ]
@@ -26,6 +29,8 @@ class TaiXeBase(BaseModel):
     ho_ten: str
     so_dien_thoai: str | None = None
     so_bang_lai: str | None = None
+    employee_id: int | None = None
+    he_so_chuyen: Decimal = Decimal("1")
     ghi_chu: str | None = None
     trang_thai: bool = True
 

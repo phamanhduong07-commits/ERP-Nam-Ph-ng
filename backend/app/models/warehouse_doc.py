@@ -151,6 +151,12 @@ class DeliveryOrder(Base):
     xe_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("xe.id"), nullable=True)
     tai_xe_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tai_xe.id"), nullable=True)
     lo_xe: Mapped[str | None] = mapped_column(String(150))
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    lo_xe_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("lo_xe.id"), nullable=True)
+    lo_xe_id_2: Mapped[int | None] = mapped_column(Integer, ForeignKey("lo_xe.id"), nullable=True)
+    lo_xe_2: Mapped[str | None] = mapped_column(String(150))
+    so_seal: Mapped[str | None] = mapped_column(String(50))
+    gui_kem_theo: Mapped[str | None] = mapped_column(Text)
     don_gia_vc_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("don_gia_van_chuyen.id"), nullable=True)
     tien_van_chuyen: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     tong_tien_hang: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
@@ -160,6 +166,7 @@ class DeliveryOrder(Base):
     trang_thai_cong_no: Mapped[str | None] = mapped_column(String(20), default="chua_thu")
     # chua_thu | da_thu_mot_phan | da_thu_du
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
+    da_dieu_chinh: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -170,6 +177,8 @@ class DeliveryOrder(Base):
     creator = relationship("User")
     xe = relationship("Xe", foreign_keys=[xe_id])
     tai_xe = relationship("TaiXe", foreign_keys=[tai_xe_id])
+    lo_xe_rel = relationship("LoXe", foreign_keys=[lo_xe_id])
+    lo_xe_rel_2 = relationship("LoXe", foreign_keys=[lo_xe_id_2])
     don_gia_vc = relationship("DonGiaVanChuyen", foreign_keys=[don_gia_vc_id])
     items: Mapped[list["DeliveryOrderItem"]] = relationship(
         "DeliveryOrderItem", back_populates="delivery", cascade="all, delete-orphan"
@@ -203,6 +212,7 @@ class DeliveryOrderItem(Base):
     delivery: Mapped["DeliveryOrder"] = relationship("DeliveryOrder", back_populates="items")
     production_order = relationship("ProductionOrder")
     product = relationship("Product")
+    sales_return_items = relationship("SalesReturnItem", back_populates="delivery_order_item")
 
 
 class PhieuChuyenKho(Base):

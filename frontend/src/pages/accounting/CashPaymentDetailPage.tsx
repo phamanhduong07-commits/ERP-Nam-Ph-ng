@@ -9,6 +9,7 @@ import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
 import { fmtVND, printDocument } from '../../utils/exportUtils'
 import { paymentApi, CashPayment, TRANG_THAI_PHIEU_CHI, HINH_THUC_TT } from '../../api/accounting'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import { systemApi } from '../../api/system'
 
 const { Title } = Typography
 
@@ -22,6 +23,13 @@ export default function CashPaymentDetailPage() {
     queryKey: ['payment', paymentId],
     queryFn: () => paymentApi.get(paymentId),
     enabled: !!paymentId,
+  })
+
+  const { data: template } = useQuery({
+    queryKey: ['print-template', 'CASH_PAYMENT', payment?.phap_nhan_id],
+    queryFn: () => systemApi.getTemplate('CASH_PAYMENT', payment?.phap_nhan_id ?? undefined),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!payment,
   })
 
   const approveMut = useMutation({
@@ -44,10 +52,10 @@ export default function CashPaymentDetailPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi hủy'),
   })
 
+  const companyInfo = usePhapNhanForPrint(payment?.phap_nhan_id)
+
   if (isLoading) return <Spin style={{ margin: 40 }} />
   if (!payment) return <div style={{ padding: 24 }}>Không tìm thấy phiếu chi</div>
-
-  const companyInfo = usePhapNhanForPrint()
   const status = TRANG_THAI_PHIEU_CHI[payment.trang_thai]
   const canApprove = ['cho_chot', 'da_chot'].includes(payment.trang_thai)
   const canCancel = payment.trang_thai !== 'huy'
@@ -56,7 +64,7 @@ export default function CashPaymentDetailPage() {
     printDocument({
       title: `Phiếu chi ${payment.so_phieu}`,
       subtitle: 'PHIẾU CHI',
-      logoUrl: namPhuongLogo,
+      logoUrl: companyInfo?.logo || '/logo_namphuong.png',
       companyInfo,
       documentNumber: payment.so_phieu || '—',
       documentDate: dayjs(payment.ngay_phieu).format('DD/MM/YYYY'),
@@ -75,6 +83,7 @@ export default function CashPaymentDetailPage() {
         <div><strong>Ngày tạo:</strong> ${dayjs(payment.created_at).format('DD/MM/YYYY HH:mm')}</div>
         ${payment.ngay_duyet ? `<div><strong>Ngày duyệt:</strong> ${dayjs(payment.ngay_duyet).format('DD/MM/YYYY HH:mm')}</div>` : ''}
       `,
+      customHtml: template?.html_content,
     })
   }
 

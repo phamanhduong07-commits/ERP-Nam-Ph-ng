@@ -1,1 +1,15 @@
-Generic single-database configuration.
+Alembic migrations for ERP Nam Phuong.
+
+Common commands:
+
+  alembic current
+  alembic heads
+  alembic upgrade head
+  alembic revision -m "short_description"
+
+Rules:
+
+- Do not edit production database schema manually when a migration can be written.
+- Keep every migration file in backend/alembic/versions/.
+- Test upgrades on a fresh local database before merging.
+- If a migration depends on seed data, document that seed step in docs/DEVELOPER_GUIDE.md.

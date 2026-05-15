@@ -37,6 +37,8 @@ import type { NhanVien } from '../../api/usersApi'
 import { useSearchParams } from 'react-router-dom'
 import TabGiaoHang from './TabGiaoHang'
 import PhieuNhapPhoiSongModal, { phoiSessionKey } from './PhieuNhapPhoiSongModal'
+import { usePhapNhanList } from '../../hooks/usePhapNhan'
+import { systemApi } from '../../api/system'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -248,6 +250,7 @@ function PhieuNhapForOrder({
 
 function TabNhap() {
   const qc = useQueryClient()
+  const { data: phapNhanList = [] } = usePhapNhanList()
   const [search, setSearch] = useState('')
   const [trangThai, setTrangThai] = useState<string | undefined>(undefined)
   const [dateRange, setDateRange] = useState<[string, string] | null>(null)
@@ -313,7 +316,21 @@ function TabNhap() {
   }
 
   // ── Hàm in phiếu ─────────────────────────────────────────────────────────
-  const handlePrint = (phieu: PhieuNhapPhoiSong, soLenh: string) => {
+  const handlePrint = async (phieu: PhieuNhapPhoiSong, soLenh: string, phapNhanId?: number | null) => {
+    const pn = phapNhanId
+      ? phapNhanList.find(p => p.id === phapNhanId)
+      : phapNhanList[0]
+    const tenCty = pn?.ten_phap_nhan ?? 'CÔNG TY CP BAO BÌ NAM PHƯƠNG'
+
+    // Thử lấy template từ hệ thống — fallback inline nếu không có
+    try {
+      const tpl = await systemApi.getTemplate('delivery_order', pn?.id)
+      if (tpl?.html_content) {
+        const w = window.open('', '_blank')
+        if (w) { w.document.write(tpl.html_content); w.document.close() }
+        return
+      }
+    } catch { /* không có template → dùng HTML inline bên dưới */ }
     const ngayFmt = fmtDate(phieu.ngay)
     const duration = calcDuration(phieu.gio_bat_dau, phieu.gio_ket_thuc)
     const tong_tt = phieu.items.reduce((s, it) => s + (it.so_luong_thuc_te ?? 0), 0)
@@ -348,7 +365,7 @@ function TabNhap() {
     .sig-label{font-weight:600;font-size:11px;margin-bottom:40px}
     @media print{@page{margin:10mm;size:A4 landscape}}</style></head><body>
     <div style="text-align:center;margin-bottom:12px">
-      <div style="font-size:11px;color:#555">CÔNG TY CP BAO BÌ NAM PHƯƠNG</div>
+      <div style="font-size:11px;color:#555">${tenCty}</div>
       <h2>PHIẾU NHẬP PHÔI SÓNG</h2>
       <div style="font-size:11px">Số phiếu: <strong>${phieu.so_phieu}</strong></div>
     </div>
@@ -603,7 +620,7 @@ function TabNhap() {
         @media print{@page{margin:8mm;size:A4 landscape}}
       </style></head><body>
       <div class="page-header">
-        <div class="company">CÔNG TY CP BAO BÌ NAM PHƯƠNG</div>
+        <div class="company">${phapNhanList[0]?.ten_phap_nhan ?? 'CÔNG TY CP BAO BÌ NAM PHƯƠNG'}</div>
         <h2>DANH SÁCH PHIẾU NHẬP PHÔI SÓNG</h2>
         <div class="meta">Xuất lúc: ${dateStr} &nbsp;|&nbsp; ${tongPhieu} phiếu &nbsp;·&nbsp; ${grouped.length} lệnh SX &nbsp;·&nbsp; ${stt} dòng hàng</div>
         <div class="filter-badge">Bộ lọc: ${filterDesc}</div>

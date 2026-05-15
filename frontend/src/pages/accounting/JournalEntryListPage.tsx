@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Table, Card, Button, Typography, Space, Tag, DatePicker, Row, Col, Input
+  Table, Card, Button, Typography, Space, Tag, DatePicker, Row, Col, Input, Select
 } from 'antd'
 import {
   PlusOutlined, SearchOutlined, FileTextOutlined
@@ -10,13 +10,15 @@ import {
 import dayjs from 'dayjs'
 import { journalApi } from '../../api/accounting'
 import { fmtVND } from '../../utils/exportUtils'
+import { usePhapNhan } from '../../hooks/useMasterData'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
 export default function JournalEntryListPage() {
   const navigate = useNavigate()
-  const [params, setParams] = useState({
+  const { phapNhanList } = usePhapNhan()
+  const [params, setParams] = useState<any>({
     tu_ngay: dayjs().startOf('month').format('YYYY-MM-DD'),
     den_ngay: dayjs().endOf('month').format('YYYY-MM-DD'),
     page: 1,
@@ -114,10 +116,15 @@ export default function JournalEntryListPage() {
               }
             }}
           />
-          <Input 
-            placeholder="Tìm số chứng từ..." 
-            prefix={<SearchOutlined />} 
+          <Input
+            placeholder="Tìm số chứng từ..."
+            prefix={<SearchOutlined />}
             style={{ width: 200 }}
+          />
+          <Select
+            style={{ width: 180 }} allowClear placeholder="Pháp nhân"
+            onChange={v => setParams({ ...params, phap_nhan_id: v || undefined, page: 1 })}
+            options={phapNhanList.map((p: any) => ({ value: p.id, label: p.ten_phap_nhan }))}
           />
         </Space>
       </Card>

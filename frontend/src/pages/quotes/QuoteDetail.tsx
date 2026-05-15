@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -7,26 +8,70 @@ import {
 } from 'antd'
 import {
   ArrowLeftOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, FileAddOutlined,
-  EyeOutlined, PrinterOutlined,
+  EyeOutlined, PrinterOutlined, CopyOutlined, SendOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, LOAI_IN_OPTIONS, getSongType } from '../../api/quotes'
+import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, LOAI_IN_OPTIONS, getSongType, buildPaperSymbol } from '../../api/quotes'
 import type { Quote, QuoteItem } from '../../api/quotes'
 import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
 import { printDocument, fmtVND } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import { systemApi } from '../../api/system'
 import type { PrintCompanyInfo } from '../../utils/exportUtils'
+import { useAuthStore } from '../../store/auth'
 
 const { Title, Text } = Typography
 
 const vnd = (v: number | null | undefined) =>
   v != null ? new Intl.NumberFormat('vi-VN').format(Math.round(v)) : '—'
 
-function buildQuoteHtml(quote: Quote, logoUrl: string, companyInfo?: PrintCompanyInfo): string {
-  const fmtD = (v: string | null | undefined) =>
-    v ? dayjs(v).format('DD/MM/YYYY') : '—'
+function buildQuoteHtml(quote: Quote, logoUrl: string, companyInfo?: PrintCompanyInfo, templateColumns?: any[]): string {
+  const tableStyle = `
+    <style>
+      .quote-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      .quote-table th { background: #E65100; color: #fff; padding: 5px 6px; border: 1px solid #ccc; font-size: 10pt; }
+      .quote-table td { border: 1px solid #ddd; padding: 4px 6px; font-size: 10pt; }
+    </style>
+  `
 
+  if (templateColumns && templateColumns.length === 0) {
+    return ``;
+  }
+
+  if (templateColumns && templateColumns.length > 0) {
+    const headerHtml = `<tr>${templateColumns.map(c => `<th style="border: 1px solid #ddd; padding: 6px; background: #E65100; color: #fff;">${c.label}</th>`).join('')}</tr>`
+    
+    const rowsHtml = quote.items.map((it, i) => {
+      const cells = templateColumns.map(c => {
+        let val: any = '—'
+        const key = c.key
+        if (key === 'stt') val = i + 1
+        else if (key === 'ten_hang') val = it.ten_hang
+        else if (key === 'ma_sp' || key === 'ma_amis') val = it.ma_amis
+        else if (key === 'kich_thuoc') val = it.dai && it.rong && it.cao ? `${it.dai}×${it.rong}×${it.cao}` : '—'
+        else if (key === 'so_lop') val = it.so_lop ? `${it.so_lop}L` : '—'
+        else if (key === 'to_hop_song') val = it.to_hop_song
+        else if (key === 'ma_ky_hieu') val = it.ma_ky_hieu || buildPaperSymbol(it)
+        else if (key === 'so_luong') val = `${new Intl.NumberFormat('vi-VN').format(it.so_luong)} ${it.dvt}`
+        else if (key === 'dvt') val = it.dvt
+        else if (key === 'don_gia' || key === 'gia_ban') val = vnd(it.gia_ban)
+        else if (key === 'thanh_tien') val = vnd(Math.round((it.gia_ban || 0) * (it.so_luong || 0)))
+        else if (key === 'ghi_chu') val = it.ghi_chu
+        
+        const align = (key === 'so_luong' || key === 'don_gia' || key === 'gia_ban' || key === 'thanh_tien') ? 'right' : (key === 'stt' ? 'center' : 'left')
+        return `<td style="border: 1px solid #ddd; padding: 4px 6px; text-align: ${align}">${val || '—'}</td>`
+      }).join('')
+      return `<tr>${cells}</tr>`
+    }).join('')
+
+    return `${tableStyle}
+      <table class="quote-table"><thead>${headerHtml}</thead><tbody>${rowsHtml}</tbody></table>
+      ${buildSummaryHtml(quote)}
+    `
+  }
+
+  // Fallback to DEFAULT layout
   const itemRows = quote.items.map((it, i) => {
     const kichthuoc = it.dai && it.rong && it.cao ? `${it.dai}×${it.rong}×${it.cao}` : '—'
     const cauTruc = [it.mat, it.song_1 ? `~${it.song_1}` : null, it.mat_1, it.song_2 ? `~${it.song_2}` : null, it.mat_2]
@@ -38,6 +83,7 @@ function buildQuoteHtml(quote: Quote, logoUrl: string, companyInfo?: PrintCompan
         <td>${it.ten_hang || '—'}</td>
         <td style="text-align:center">${kichthuoc}</td>
         <td style="text-align:center">${it.so_lop}L</td>
+        <td style="text-align:center">${it.ma_ky_hieu || buildPaperSymbol(it) || '—'}</td>
         <td style="font-size:10px;color:#555">${cauTruc}</td>
         <td style="text-align:right">${new Intl.NumberFormat('vi-VN').format(it.so_luong)} ${it.dvt}</td>
         <td style="text-align:right">${vnd(it.gia_ban)}</td>
@@ -45,80 +91,14 @@ function buildQuoteHtml(quote: Quote, logoUrl: string, companyInfo?: PrintCompan
       </tr>`
   }).join('')
 
-  const cpRows: [string, number][] = [
-    ['Chi phí bảng in', quote.chi_phi_bang_in],
-    ['Chi phí khuôn', quote.chi_phi_khuon],
-    ['Chi phí vận chuyển', quote.chi_phi_van_chuyen],
-    ['Chi phí hàng hoá DV', quote.chi_phi_hang_hoa_dv],
-  ]
-  if (quote.chi_phi_khac_1 > 0) cpRows.push([quote.chi_phi_khac_1_ten || 'Chi phí khác 1', quote.chi_phi_khac_1])
-  if (quote.chi_phi_khac_2 > 0) cpRows.push([quote.chi_phi_khac_2_ten || 'Chi phí khác 2', quote.chi_phi_khac_2])
-
-  const cpHtml = cpRows.filter(([, v]) => v > 0).map(([label, v]) => `
-    <tr><td>${label}</td><td style="text-align:right">${vnd(v)} đ</td></tr>`).join('')
-
-  return `
-    <!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>Báo giá ${quote.so_bao_gia}</title>
-    <style>
-      @page { size: A4 portrait; margin: 15mm 12mm; }
-      body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #222; }
-      .header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
-      .logo { height: 55px; }
-      .co-info { flex: 1; font-size: 9pt; line-height: 1.5; }
-      .co-name { font-size: 13pt; font-weight: 700; color: #E65100; }
-      .doc-title { text-align: center; margin: 12px 0 4px; }
-      .doc-title h2 { font-size: 17pt; font-weight: 700; letter-spacing: 2px; margin: 0; }
-      .doc-title .sub { font-size: 10pt; color: #666; margin: 2px 0; }
-      hr.divider { border: none; border-top: 2px solid #E65100; margin: 8px 0; }
-      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; font-size: 10.5pt; margin: 8px 0 12px; }
-      .info-row { display: flex; gap: 4px; }
-      .lbl { font-weight: 700; white-space: nowrap; min-width: 120px; }
-      .val { border-bottom: 1px dotted #888; flex: 1; }
-      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-      th { background: #E65100; color: #fff; padding: 5px 6px; border: 1px solid #ccc; font-size: 10pt; }
-      td { border: 1px solid #ddd; padding: 4px 6px; font-size: 10pt; }
-      .sum-table { width: 40%; margin-left: auto; margin-top: 12px; }
-      .sum-table td { border: none; padding: 2px 6px; }
-      .sum-total td { font-size: 13pt; font-weight: 700; color: #E65100; border-top: 2px solid #E65100; }
-      .dieu-khoan { font-size: 9.5pt; color: #444; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 6px; }
-      .sig { display: flex; gap: 0; margin-top: 24px; }
-      .sig-box { flex: 1; text-align: center; font-size: 10pt; }
-      .sig-box .role { font-weight: 700; }
-      .sig-box .sign-line { margin: 28px auto 4px; width: 80%; border-bottom: 1px solid #888; }
-      @media print { button { display: none; } }
-    </style></head><body>
-
-    <div class="header">
-      <img class="logo" src="${logoUrl}" alt="Logo" />
-      <div class="co-info">
-        <div class="co-name">${companyInfo?.ten ?? quote.ten_phap_nhan ?? 'CÔNG TY TNHH NAM PHƯƠNG BAO BÌ'}</div>
-        ${companyInfo?.dia_chi ? `<div>Địa chỉ: ${companyInfo.dia_chi}</div>` : ''}
-        ${companyInfo?.ma_so_thue ? `<div>MST: ${companyInfo.ma_so_thue}</div>` : ''}
-        ${companyInfo?.so_dien_thoai ? `<div>ĐT: ${companyInfo.so_dien_thoai}</div>` : ''}
-        ${companyInfo?.tai_khoan ? `<div>TK: ${companyInfo.tai_khoan}${companyInfo.ngan_hang ? ' — ' + companyInfo.ngan_hang : ''}</div>` : ''}
-      </div>
-    </div>
-    <hr class="divider" />
-
-    <div class="doc-title">
-      <h2>BÁO GIÁ</h2>
-      <div class="sub">Số: ${quote.so_bao_gia} &nbsp;|&nbsp; Ngày: ${fmtD(quote.ngay_bao_gia)}${quote.ngay_het_han ? ` &nbsp;|&nbsp; Hiệu lực đến: ${fmtD(quote.ngay_het_han)}` : ''}</div>
-    </div>
-
-    <div class="info-grid">
-      <div class="info-row"><span class="lbl">Kính gửi:</span><span class="val">${quote.customer?.ten_viet_tat ?? '—'}</span></div>
-      <div class="info-row"><span class="lbl">Tên công ty:</span><span class="val">${quote.customer?.ten_don_vi ?? '—'}</span></div>
-      <div class="info-row"><span class="lbl">Nơi sản xuất:</span><span class="val">${quote.ten_phan_xuong ?? '—'}</span></div>
-      <div class="info-row"><span class="lbl">NV phụ trách:</span><span class="val">${quote.ten_nv_theo_doi ?? '—'}</span></div>
-    </div>
-
-    <table>
+  return `${tableStyle}
+    <table class="quote-table">
       <thead><tr>
         <th style="width:32px">STT</th>
         <th>Tên hàng</th>
         <th style="width:90px">Kích thước (cm)</th>
         <th style="width:40px">Lớp</th>
+        <th style="width:110px">Mã Ký Hiệu</th>
         <th style="width:140px">Cấu trúc giấy</th>
         <th style="width:80px">Số lượng</th>
         <th style="width:90px">Đơn giá (đ)</th>
@@ -126,28 +106,46 @@ function buildQuoteHtml(quote: Quote, logoUrl: string, companyInfo?: PrintCompan
       </tr></thead>
       <tbody>${itemRows}</tbody>
     </table>
+    ${buildSummaryHtml(quote)}`
+}
 
-    <table class="sum-table">
-      <tbody>
-        <tr><td>Tiền hàng</td><td style="text-align:right">${vnd(quote.tong_tien_hang)} đ</td></tr>
-        ${cpHtml}
-        ${quote.chiet_khau > 0 ? `<tr><td>Chiết khấu</td><td style="text-align:right;color:#c00">- ${vnd(quote.chiet_khau)} đ</td></tr>` : ''}
-        <tr><td>Giá bán</td><td style="text-align:right;font-weight:700">${vnd(quote.gia_ban)} đ</td></tr>
-        <tr><td>VAT (${(quote.ty_le_vat * 100).toFixed(0)}%)</td><td style="text-align:right">${vnd(quote.tien_vat)} đ</td></tr>
-        <tr class="sum-total"><td>TỔNG CỘNG</td><td style="text-align:right">${vnd(quote.tong_cong)} đ</td></tr>
-      </tbody>
-    </table>
+function buildSummaryHtml(quote: Quote): string {
+  const costs = [
+    { label: 'Tiền hàng', value: quote.tong_tien_hang, isStrong: true },
+    { label: 'CP Bảng in', value: quote.chi_phi_bang_in },
+    { label: 'CP Khuôn', value: quote.chi_phi_khuon },
+    { label: 'CP Vận chuyển', value: quote.chi_phi_van_chuyen },
+    { label: 'CP Hàng hóa DV', value: quote.chi_phi_hang_hoa_dv },
+    { label: quote.chi_phi_khac_1_ten || 'Chi phí khác 1', value: quote.chi_phi_khac_1 },
+    { label: quote.chi_phi_khac_2_ten || 'Chi phí khác 2', value: quote.chi_phi_khac_2 },
+  ].filter(c => c.value > 0 || c.label === 'Tiền hàng')
 
-    ${quote.dieu_khoan ? `<div class="dieu-khoan"><strong>Điều khoản:</strong> ${quote.dieu_khoan.replace(/\n/g, '<br/>')}</div>` : ''}
-    ${quote.ghi_chu ? `<div class="dieu-khoan"><strong>Ghi chú:</strong> ${quote.ghi_chu.replace(/\n/g, '<br/>')}</div>` : ''}
+  const vatRow = quote.tien_vat > 0 ? `
+    <tr>
+      <td style="padding: 4px 10px; text-align: right; color: #666;">Thuế VAT (${quote.ty_le_vat}%):</td>
+      <td style="padding: 4px 10px; text-align: right; width: 140px; font-weight: 600; border-bottom: 1px solid #eee;">${vnd(quote.tien_vat)} đ</td>
+    </tr>
+  ` : ''
 
-    <div class="sig">
-      <div class="sig-box"><div class="role">Khách hàng</div><div style="font-size:9pt;color:#666">(Ký, họ tên)</div><div class="sign-line"></div></div>
-      <div class="sig-box"><div class="role">Kế toán</div><div style="font-size:9pt;color:#666">(Ký, họ tên)</div><div class="sign-line"></div></div>
-      <div class="sig-box"><div class="role">Người lập báo giá</div><div style="font-size:9pt;color:#666">(Ký, họ tên)</div><div class="sign-line"></div></div>
+  const rowsHtml = costs.map(c => `
+    <tr>
+      <td style="padding: 4px 10px; text-align: right; color: #666;">${c.label}:</td>
+      <td style="padding: 4px 10px; text-align: right; width: 140px; ${c.isStrong ? 'font-weight: 700;' : 'font-weight: 600;'} border-bottom: 1px solid #eee;">${vnd(c.value)} đ</td>
+    </tr>
+  `).join('')
+
+  return `
+    <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
+      <table style="border-collapse: collapse; min-width: 300px; font-size: 11pt;">
+        ${rowsHtml}
+        ${vatRow}
+        <tr>
+          <td style="padding: 8px 10px; text-align: right; font-weight: 700; font-size: 13pt; color: #d32f2f;">TỔNG CỘNG:</td>
+          <td style="padding: 8px 10px; text-align: right; font-weight: 700; font-size: 13pt; color: #d32f2f; border-bottom: 2px double #d32f2f;">${vnd(quote.tong_cong)} đ</td>
+        </tr>
+      </table>
     </div>
-
-    </body></html>`
+  `
 }
 
 const GIAN_TIEP_M2: Record<number, number> = { 3: 898, 5: 1178.2, 7: 1800.2 }
@@ -169,12 +167,14 @@ function ItemDetailDrawer({
   item,
   quoteId,
   canEdit,
+  hideCostDetails,
   onClose,
   onEditClick,
 }: {
   item: QuoteItem | null
   quoteId: number | undefined
   canEdit: boolean
+  hideCostDetails: boolean
   onClose: () => void
   onEditClick: () => void
 }) {
@@ -205,11 +205,11 @@ function ItemDetailDrawer({
   const checkFlags = [
     item.do_kho && 'Độ khó',
     item.ghim && 'Ghim',
-    item.chap_xa && 'CHAP XÃ',
+    item.chap_xa && 'Chạp Xã',
     item.do_phu && 'Độ phủ',
     item.dan && 'Dán',
-    item.boi && 'Bổi',
-    item.be_lo && 'Bê lỗ',
+    item.boi && 'Bồi',
+    item.be_lo && 'Bế Lỗ',
   ].filter(Boolean) as string[]
 
   const PANEL = { borderRadius: 8, padding: '10px 14px', marginBottom: 10 }
@@ -272,7 +272,7 @@ function ItemDetailDrawer({
         <div style={{ marginTop: 8 }}>
           <Row style={{ marginBottom: 2 }}>
             <Col span={8}><Text style={{ fontSize: 10, color: '#8c8c8c', fontWeight: 600 }}>Lớp</Text></Col>
-            <Col span={9}><Text style={{ fontSize: 10, color: '#8c8c8c', fontWeight: 600 }}>Mã KH đồng cấp</Text></Col>
+            <Col span={9}><Text style={{ fontSize: 10, color: '#8c8c8c', fontWeight: 600 }}>Mã Giấy Đồng Cấp</Text></Col>
             <Col span={7}><Text style={{ fontSize: 10, color: '#8c8c8c', fontWeight: 600 }}>Định lượng</Text></Col>
           </Row>
           {layers.map((l, i) => (
@@ -296,7 +296,12 @@ function ItemDetailDrawer({
           ))}
         </div>
 
-        {item.don_gia_m2 != null && (
+        <Row style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid #adc6ff' }}>
+          <Col span={8}><Text style={{ fontSize: 11 }}>Mã Ký Hiệu</Text></Col>
+          <Col span={16}><Tag color="geekblue">{item.ma_ky_hieu || buildPaperSymbol(item) || '—'}</Tag></Col>
+        </Row>
+
+        {!hideCostDetails && item.don_gia_m2 != null && (
           <Row style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid #adc6ff' }}>
             <Col span={8}><Text style={{ fontSize: 11 }}>Đơn giá m²</Text></Col>
             <Col span={16}><Text strong style={{ fontSize: 11 }}>{vnd(item.don_gia_m2)} đ</Text></Col>
@@ -378,7 +383,7 @@ function ItemDetailDrawer({
             {item.can_man && item.can_man !== 'Không' && (
               <Col span={8}><Text type="secondary" style={{ fontSize: 11 }}>Cán màng: </Text><Tag color="cyan" style={{ fontSize: 10 }}>{item.can_man}</Tag></Col>
             )}
-            {item.so_c_be   && <Col span={8}><Text type="secondary" style={{ fontSize: 11 }}>Số c bề: </Text><Text style={{ fontSize: 11 }}>{item.so_c_be}</Text></Col>}
+            {item.so_c_be   && <Col span={8}><Text type="secondary" style={{ fontSize: 11 }}>Số Con Bế: </Text><Text style={{ fontSize: 11 }}>{item.so_c_be}</Text></Col>}
             {item.may_in    && <Col span={8}><Text type="secondary" style={{ fontSize: 11 }}>Máy in: </Text><Tag color="geekblue" style={{ fontSize: 10 }}>{item.may_in}</Tag></Col>}
             {item.ban_ve_kt && <Col span={16}><Text type="secondary" style={{ fontSize: 11 }}>Bản vẽ KT: </Text><Text style={{ fontSize: 11 }}>{item.ban_ve_kt}</Text></Col>}
           </Row>
@@ -389,26 +394,26 @@ function ItemDetailDrawer({
       <div style={{ ...PANEL, background: '#fff7e6', border: '1px solid #ffd591' }}>
         <Text strong style={{ fontSize: 12, color: '#fa8c16' }}>TÀI CHÍNH</Text>
         <Row gutter={[12, 6]} style={{ marginTop: 8 }}>
-          <Col span={12}>
+          {!hideCostDetails && <Col span={12}>
             <Text type="secondary" style={{ fontSize: 11 }}>Đơn giá m²</Text>
             <div><Text>{item.don_gia_m2 != null ? `${vnd(item.don_gia_m2)} đ` : '—'}</Text></div>
-          </Col>
-          <Col span={12}>
+          </Col>}
+          {!hideCostDetails && <Col span={12}>
             <Text type="secondary" style={{ fontSize: 11 }}>Chi phí giấy ≈</Text>
             <div>
               {item.don_gia_m2 && item.dien_tich
                 ? <Text>{vnd(item.don_gia_m2 * item.dien_tich)} đ</Text>
                 : <Text type="secondary">—</Text>}
             </div>
-          </Col>
-          <Col span={12}>
+          </Col>}
+          {!hideCostDetails && <Col span={12}>
             <Text type="secondary" style={{ fontSize: 11 }}>CP Gián tiếp (m²)</Text>
             <div>
               {chiPhiGianTiep != null
                 ? <Text>{vnd(chiPhiGianTiep)} đ</Text>
                 : <Text type="secondary">—</Text>}
             </div>
-          </Col>
+          </Col>}
           <Col span={12}>
             <Text type="secondary" style={{ fontSize: 11 }}>Giá bán / thùng</Text>
             <div><Text strong style={{ fontSize: 15, color: '#f5222d' }}>{vnd(item.gia_ban)} đ</Text></div>
@@ -442,11 +447,30 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [previewItem, setPreviewItem] = useState<QuoteItem | null>(null)
+  const role = useAuthStore(s => s.user?.role)
+  const hideCostDetails = role === 'SALE_ADMIN' || role === 'TRUONG_PHONG_SALE_ADMIN'
+  const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ['print-templates'],
+    queryFn: systemApi.getTemplates,
+    staleTime: 0,
+  })
 
   const { data: quote, isLoading } = useQuery({
     queryKey: ['quote', id],
     queryFn: () => quotesApi.get(Number(id)).then((r) => r.data),
     enabled: !!id,
+  })
+
+  const submitMutation = useMutation({
+    mutationFn: () => quotesApi.submit(Number(id)),
+    onSuccess: () => {
+      message.success('Đã gửi báo giá để duyệt')
+      queryClient.invalidateQueries({ queryKey: ['quote', id] })
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Gửi duyệt thất bại'),
   })
 
   const approveMutation = useMutation({
@@ -469,6 +493,16 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Huỷ thất bại'),
   })
 
+  const copyMutation = useMutation({
+    mutationFn: () => quotesApi.copy(Number(id)),
+    onSuccess: (res) => {
+      message.success(`Đã copy sang báo giá ${res.data.so_bao_gia}`)
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      navigate(`/quotes/${res.data.id}/edit`)
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Copy báo giá thất bại'),
+  })
+
   const taoDonHangMutation = useMutation({
     mutationFn: () => quotesApi.taoDonHang(Number(id)),
     onSuccess: (res) => {
@@ -485,26 +519,61 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
 
   const handlePrint = () => {
     if (!quote) return
-    const html = buildQuoteHtml(quote, namPhuongLogo, companyInfo)
+
+    // Tìm mẫu in phù hợp: Ưu tiên mẫu của pháp nhân, sau đó là mẫu mặc định
+    const quotationTemplates = templates.filter(t => ['SALES_QUOTE', 'QUOTATION'].includes(t.ma_mau?.toUpperCase()))
+    const template = quotationTemplates.find(t => t.phap_nhan_id === quote.phap_nhan_id)
+                  || quotationTemplates.find(t => !t.phap_nhan_id)
+
+    if (!template) {
+      console.log('No custom template found for QUOTATION, using default layout.')
+    }
+    
+    // Get columns from template metadata. If no template, pass undefined to use default table.
+    const templateCols = template ? ((template?.variables_meta as any)?.columns || []) : undefined
+    
     printDocument({
       title: 'BÁO GIÁ',
       subtitle: `Báo giá ${quote.so_bao_gia}`,
       documentNumber: quote.so_bao_gia,
       documentDate: dayjs(quote.ngay_bao_gia).format('DD/MM/YYYY'),
       companyName: quote.ten_phap_nhan || 'CÔNG TY TNHH SX TM NAM PHƯƠNG',
-      bodyHtml: html,
+      bodyHtml: buildQuoteHtml(quote, '', companyInfo, templateCols), 
+      customHtml: template?.html_content,
       fields: [
         { label: 'Khách hàng', value: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—' },
-      ]
+      ],
+      vars: {
+        customer_name: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—',
+        tong_tien_hang: vnd(quote.tong_tien_hang),
+        chi_phi_bang_in: vnd(quote.chi_phi_bang_in),
+        chi_phi_khuon: vnd(quote.chi_phi_khuon),
+        chi_phi_van_chuyen: vnd(quote.chi_phi_van_chuyen),
+        chi_phi_hang_hoa_dv: vnd(quote.chi_phi_hang_hoa_dv),
+        chi_phi_khac_1: vnd(quote.chi_phi_khac_1),
+        chi_phi_khac_1_ten: quote.chi_phi_khac_1_ten || 'Chi phí khác 1',
+        chi_phi_khac_2: vnd(quote.chi_phi_khac_2),
+        chi_phi_khac_2_ten: quote.chi_phi_khac_2_ten || 'Chi phí khác 2',
+        chi_phi_bang_in_vis: quote.chi_phi_bang_in > 0 ? 'table-row' : 'none',
+        chi_phi_khuon_vis: quote.chi_phi_khuon > 0 ? 'table-row' : 'none',
+        chi_phi_van_chuyen_vis: quote.chi_phi_van_chuyen > 0 ? 'table-row' : 'none',
+        chi_phi_khac_1_vis: quote.chi_phi_khac_1 > 0 ? 'table-row' : 'none',
+        chi_phi_khac_2_vis: quote.chi_phi_khac_2 > 0 ? 'table-row' : 'none',
+        ty_le_vat: String(quote.ty_le_vat),
+        tien_vat: vnd(quote.tien_vat),
+        tong_cong: vnd(quote.tong_cong),
+        ghi_chu: quote.ghi_chu || '',
+        dieu_khoan: quote.dieu_khoan || '',
+      }
     })
   }
 
-  const columns: ColumnsType<QuoteItem> = [
+  const columns: any[] = [
     {
       title: 'STT',
       width: 46,
       align: 'center',
-      render: (_, __, i) => i + 1,
+      render: (_: unknown, __: QuoteItem, i: number) => i + 1,
     },
     {
       title: 'Mã SP',
@@ -529,12 +598,12 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       title: 'SL / ĐVT',
       width: 100,
       align: 'right',
-      render: (_, r) => `${new Intl.NumberFormat('vi-VN').format(r.so_luong)} ${r.dvt}`,
+      render: (_: unknown, r: QuoteItem) => `${new Intl.NumberFormat('vi-VN').format(r.so_luong)} ${r.dvt}`,
     },
     {
       title: 'Kích thước',
       width: 130,
-      render: (_, r) =>
+      render: (_: unknown, r: QuoteItem) =>
         r.dai && r.rong && r.cao
           ? `${r.dai}×${r.rong}×${r.cao} cm`
           : '—',
@@ -555,11 +624,17 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
     {
       title: 'Cấu trúc giấy',
       width: 200,
-      render: (_, r) => (
+      render: (_: unknown, r: QuoteItem) => (
         <Text style={{ fontSize: 11 }} type="secondary">{paperSummary(r)}</Text>
       ),
     },
     {
+      title: 'Mã Ký Hiệu',
+      dataIndex: 'ma_ky_hieu',
+      width: 150,
+      render: (v: string | null, r) => v || buildPaperSymbol(r) || '—',
+    },
+    !hideCostDetails ? {
       title: 'CP Gián tiếp',
       width: 110,
       align: 'right',
@@ -572,7 +647,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
           </Text>
         )
       },
-    },
+    } : {},
     {
       title: 'Đơn giá',
       dataIndex: 'gia_ban',
@@ -586,7 +661,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       ellipsis: true,
       render: (v: string | null) => v || '—',
     },
-  ]
+  ].filter(c => Object.keys(c).length > 0) as ColumnsType<QuoteItem>
 
   if (isLoading) return <Skeleton active />
   if (!quote) return <Text type="secondary" style={{ padding: 24, display: 'block' }}>Không tìm thấy báo giá</Text>
@@ -613,7 +688,16 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
         </Col>
         <Col>
           <Space>
-            {trangThai === 'moi' && (
+            {(trangThai === 'moi' || trangThai === 'cho_duyet') && canApprove && (
+              <Button
+                size={embedded ? 'small' : 'middle'}
+                icon={<EditOutlined />}
+                onClick={() => navigate(`/quotes/${id}/edit`)}
+              >
+                Sửa
+              </Button>
+            )}
+            {trangThai === 'moi' && !canApprove && (
               <Button
                 size={embedded ? 'small' : 'middle'}
                 icon={<EditOutlined />}
@@ -623,6 +707,21 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
               </Button>
             )}
             {trangThai === 'moi' && (
+              <Popconfirm
+                title="Gửi báo giá để trưởng phòng duyệt?"
+                onConfirm={() => submitMutation.mutate()}
+                okText="Gửi duyệt"
+              >
+                <Button
+                  size={embedded ? 'small' : 'middle'}
+                  icon={<SendOutlined />}
+                  loading={submitMutation.isPending}
+                >
+                  Gửi duyệt
+                </Button>
+              </Popconfirm>
+            )}
+            {(trangThai === 'moi' || trangThai === 'cho_duyet') && canApprove && (
               <Popconfirm
                 title="Duyệt báo giá này?"
                 onConfirm={() => approveMutation.mutate()}
@@ -637,6 +736,16 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
                   Duyệt
                 </Button>
               </Popconfirm>
+            )}
+            {trangThai === 'da_duyet' && (
+              <Button
+                size={embedded ? 'small' : 'middle'}
+                icon={<CopyOutlined />}
+                loading={copyMutation.isPending}
+                onClick={() => copyMutation.mutate()}
+              >
+                Copy chỉnh sửa
+              </Button>
             )}
             {trangThai === 'da_duyet' && (
               <Popconfirm
@@ -743,6 +852,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
         item={previewItem}
         quoteId={id}
         canEdit={trangThai === 'moi'}
+        hideCostDetails={hideCostDetails}
         onClose={() => setPreviewItem(null)}
         onEditClick={() => { setPreviewItem(null); navigate(`/quotes/${id}/edit`) }}
       />
@@ -796,46 +906,15 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
             </>
           )}
 
-          {quote.chiet_khau > 0 && (
-            <>
-              <Col span={14}><Text>Chiết khấu</Text></Col>
-              <Col span={10} style={{ textAlign: 'right' }}>
-                <Text type="danger">- {vnd(quote.chiet_khau)} đ</Text>
-              </Col>
-            </>
-          )}
+          <Col span={24}><Divider style={{ margin: '8px 0' }} /></Col>
 
-          <Col span={24}><Divider style={{ margin: '4px 0' }} /></Col>
-
-          <Col span={14}><Text strong>Giá bán</Text></Col>
+          <Col span={14}><Text strong>TỔNG CỘNG</Text></Col>
           <Col span={10} style={{ textAlign: 'right' }}>
-            <Text strong>{vnd(quote.gia_ban)} đ</Text>
-          </Col>
-
-          <Col span={14}>
-            <Text>VAT ({(quote.ty_le_vat * 100).toFixed(0)}%)</Text>
-          </Col>
-          <Col span={10} style={{ textAlign: 'right' }}>
-            <Text>{vnd(quote.tien_vat)} đ</Text>
-          </Col>
-
-          <Col span={24}><Divider style={{ margin: '4px 0' }} /></Col>
-
-          <Col span={14}>
-            <Text strong style={{ fontSize: 15 }}>Tổng cộng</Text>
-          </Col>
-          <Col span={10} style={{ textAlign: 'right' }}>
-            <Text strong style={{ fontSize: 16, color: '#1677ff' }}>
+            <Text strong style={{ fontSize: 18, color: '#f5222d' }}>
               {vnd(quote.tong_cong)} đ
             </Text>
           </Col>
         </Row>
-
-        <Divider />
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          Tạo lúc: {dayjs(quote.created_at).format('DD/MM/YYYY HH:mm')} •{' '}
-          Cập nhật: {dayjs(quote.updated_at).format('DD/MM/YYYY HH:mm')}
-        </Text>
       </Card>
     </div>
   )

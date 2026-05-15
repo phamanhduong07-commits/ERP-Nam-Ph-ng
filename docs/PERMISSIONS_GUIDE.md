@@ -1,261 +1,91 @@
-# Hệ thống Phân Quyền (RBAC) - ERP Nam Phương
+# Permissions Guide
 
-## Tổng Quan
+ERP dung ket hop role va permission:
 
-Đã tạo hệ thống **Role-Based Access Control (RBAC)** hoàn chỉnh để quản lý quyền cho từng vị trí trong công ty.
+- Role hien tai anh huong menu frontend trong `AppLayout.tsx`.
+- Permission backend dung cho cac endpoint can guard chi tiet.
+- Seed permission nam trong `backend/app/seeds/seed_permissions.py`.
 
-## Cấu Trúc
+## Role dang dung trong code
 
-### 1. Database Tables
+| Role | Mo ta |
+| --- | --- |
+| `ADMIN` | Quan tri toan he thong |
+| `GIAM_DOC` | Ban giam doc |
+| `KINH_DOANH` | Ban hang/bao gia/don hang |
+| `SALE_ADMIN` | Sale admin |
+| `TRUONG_PHONG_SALE_ADMIN` | Truong phong sale admin |
+| `SAN_XUAT` | San xuat/CD2/BOM/ke hoach |
+| `CONG_NHAN` | Cong nhan, uu tien mobile/CD2 |
+| `KHO` | Kho, nhap/xuat/ton |
+| `MUA_HANG` | Mua hang/PO/GR |
+| `KE_TOAN` | Ke toan, hoa don, cong no, bao cao |
 
-#### `permissions` (Quyền)
-```sql
-id: INT - ID duy nhất
-ma_quyen: VARCHAR(100) - Mã quyền (VD: "customer.view", "sales_order.create")
-ten_quyen: VARCHAR(255) - Tên quyền (VD: "Xem danh sách khách hàng")
-mo_ta: TEXT - Mô tả chi tiết
-nhom: VARCHAR(50) - Nhóm quyền (sales, production, inventory, master_data, admin, reports)
-trang_thai: BOOLEAN - Có hoạt động hay không (DEFAULT: TRUE)
-created_at: TIMESTAMPTZ - Ngày tạo
-```
+## Menu role frontend
 
-#### `role_permissions` (Liên kết Role-Permission)
-```sql
-id: INT - ID duy nhất
-role_id: INT (FK) - Vai trò
-permission_id: INT (FK) - Quyền
-created_at: TIMESTAMPTZ - Ngày gán
-UNIQUE(role_id, permission_id) - Mỗi quyền chỉ gán 1 lần cho mỗi role
-```
+File: `frontend/src/components/AppLayout.tsx`
 
-### 2. Models (Python/SQLAlchemy)
+Nhom role chinh:
 
-```python
-# app/models/auth.py
+- `ADMIN_GD`: `ADMIN`, `GIAM_DOC`
+- `BAN_HANG`: ban hang va ke toan co lien quan hoa don
+- `SAN_XUAT_FULL`, `SAN_XUAT_ALL`
+- `KHO_ROLES`
+- `MUA_HANG`
 
-class Permission(Base):
-    id, ma_quyen, ten_quyen, mo_ta, nhom, trang_thai, created_at
-    role_permissions: list[RolePermission]  # Relationships
+Khi them menu moi:
 
-class RolePermission(Base):
-    id, role_id, permission_id, created_at
-    role: Role  # Relationship
-    permission: Permission  # Relationship
+1. Them route trong `frontend/src/App.tsx`.
+2. Them menu trong `buildMenuItems`.
+3. Gan role phu hop.
+4. Test bang user role tuong ung.
 
-class Role(Base):  # (cập nhật)
-    # ... (các field cũ)
-    role_permissions: list[RolePermission]  # Thêm relationship
-```
+## API permissions
 
-### 3. API Endpoints
+Router chinh:
 
-#### Permission Management (`/api/permissions`)
+- `/api/permissions`
+- `/api/roles`
 
-```
-GET    /api/permissions                    # Danh sách quyền (có phân trang)
-  ?search=<string>&nhom=<string>&page=1&page_size=20
+File:
 
-GET    /api/permissions/{permission_id}   # Chi tiết quyền
+- `backend/app/routers/permissions.py`
+- `backend/app/services/role_service.py`
+- `backend/app/models/auth.py`
+- `backend/app/schemas/auth.py`
 
-GET    /api/permissions/group/{nhom}      # Danh sách quyền theo nhóm
-
-POST   /api/permissions                    # Tạo quyền mới
-Body: { "ma_quyen": "...", "ten_quyen": "...", "mo_ta": "...", "nhom": "..." }
-
-PUT    /api/permissions/{permission_id}   # Cập nhật quyền
-Body: { "ten_quyen": "...", "mo_ta": "...", "nhom": "...", "trang_thai": true }
-
-DELETE /api/permissions/{permission_id}   # Xóa quyền
-```
-
-#### Role Management (`/api/roles`)
-
-```
-GET    /api/roles                          # Danh sách vai trò (có phân trang)
-  ?search=<string>&page=1&page_size=20
-
-GET    /api/roles/active                   # Danh sách vai trò hoạt động
-
-GET    /api/roles/{role_id}                # Chi tiết vai trò + danh sách quyền
-
-POST   /api/roles                          # Tạo vai trò mới
-Body: { "ma_vai_tro": "...", "ten_vai_tro": "...", "mo_ta": "..." }
-
-PUT    /api/roles/{role_id}                # Cập nhật vai trò
-Body: { "ten_vai_tro": "...", "mo_ta": "...", "trang_thai": true }
-
-DELETE /api/roles/{role_id}                # Xóa vai trò (nếu không có user)
-```
-
-#### Role-Permission Assignment
-
-```
-POST   /api/roles/{role_id}/permissions         # Gán nhiều quyền cho role (thay thế toàn bộ)
-Body: { "permission_ids": [1, 2, 3, ...] }
-
-POST   /api/roles/{role_id}/permissions/{permission_id}      # Thêm 1 quyền cho role
-
-DELETE /api/roles/{role_id}/permissions/{permission_id}      # Xóa 1 quyền khỏi role
-```
-
-### 4. Danh Sách Quyền (40 quyền)
-
-#### Sales (6 quyền)
-- `customer.view` - Xem danh sách khách hàng
-- `customer.create` - Tạo khách hàng
-- `customer.edit` - Sửa khách hàng
-- `customer.delete` - Xóa khách hàng
-- `sales_order.view` - Xem đơn hàng
-- `sales_order.create` - Tạo đơn hàng
-- `sales_order.edit` - Sửa đơn hàng
-- `sales_order.approve` - Duyệt đơn hàng
-- `sales_order.cancel` - Hủy đơn hàng
-
-#### Production (6 quyền)
-- `production_order.view` - Xem lệnh sản xuất
-- `production_order.create` - Tạo lệnh sản xuất
-- `production_order.edit` - Sửa lệnh sản xuất
-- `production_order.start` - Bắt đầu sản xuất
-- `production_order.complete` - Hoàn thành sản xuất
-- `production_order.cancel` - Hủy lệnh sản xuất
-
-#### Inventory (5 quyền)
-- `inventory.view` - Xem kho
-- `inventory.import` - Nhập kho
-- `inventory.export` - Xuất kho
-- `inventory.adjust` - Điều chỉnh kho
-- `inventory.transfer` - Chuyển kho
-
-#### Master Data (4 quyền)
-- `product.view` - Xem sản phẩm
-- `product.create` - Tạo sản phẩm
-- `product.edit` - Sửa sản phẩm
-- `product.delete` - Xóa sản phẩm
-
-#### Admin (9 quyền)
-- `user.view` - Xem người dùng
-- `user.create` - Tạo người dùng
-- `user.edit` - Sửa người dùng
-- `user.delete` - Xóa người dùng
-- `user.reset_password` - Reset mật khẩu
-- `permission.view` - Xem quyền
-- `permission.manage` - Quản lý quyền
-- `role.view` - Xem vai trò
-- `role.create` - Tạo vai trò
-- `role.edit` - Sửa vai trò
-
-#### Reports (3 quyền)
-- `report.view` - Xem báo cáo
-- `report.export` - Xuất báo cáo
-- `report.schedule` - Lên lịch báo cáo
-
-### 5. Mô Tả Từng Vị Trí
-
-#### BGD (Ban Giám Đốc) - `bgd`
-✅ Có **TẤT CẢ** quyền (40/40)
-
-#### Trưởng Phòng - `truong_phong`
-✅ 20 quyền: Quản lý bộ phận (customer, sales_order, production_order, inventory, product, report)
-
-#### Giám Sát - `giam_sat`
-✅ 15 quyền: Giám sát quy trình sản xuất (sales_order, production_order, inventory.adjust, product, report)
-
-#### Tổ Trưởng - `to_truong`
-✅ 8 quyền: Quản lý nhóm (sales_order, production_order.start/complete, inventory, product)
-
-#### Nhân Viên - `nhan_vien`
-✅ 4 quyền: Quyền cơ bản (sales_order.view, production_order.view, inventory.view, product.view)
-
-#### Nhân Viên Theo Dõi (SA) - `nhan_vien_theo_doi`
-✅ 7 quyền: Theo dõi đơn hàng (customer.view, sales_order.*,  production_order.view, inventory.view, product.view, report.view)
-
-## Files Tạo/Sửa
-
-### Mới Tạo
-1. **database/migrate_006_permissions.sql** - Migration SQL tạo bảng + seed data
-2. **backend/app/services/role_service.py** - Service layer cho permissions & roles
-3. **backend/app/routers/permissions.py** - API endpoints
-4. **backend/reset_and_migrate.py** - Script thực hiện migration
-5. **backend/migrate_db.py** - Script legacy (có thể xóa)
-6. **PERMISSIONS_GUIDE.md** - File này
-
-### Sửa Đổi
-1. **backend/app/models/auth.py** - Thêm Permission, RolePermission models
-2. **backend/app/schemas/auth.py** - Thêm Pydantic schemas cho permissions
-3. **backend/app/main.py** - Import + include routers
-
-## Cách Sử Dụng
-
-### 1. Áp Dụng Migration
-```bash
-cd backend
-python reset_and_migrate.py
-```
-
-### 2. Khởi Động Server
-```bash
-python run.py
-```
-
-### 3. Test API
-```bash
-# Xem danh sách quyền
-curl -H "Authorization: Bearer <token>" \
-  "http://localhost:8000/api/permissions?page=1"
-
-# Xem vai trò và quyền
-curl -H "Authorization: Bearer <token>" \
-  "http://localhost:8000/api/roles/1"
-
-# Gán quyền cho role
-curl -X POST -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"permission_ids": [1, 2, 3]}' \
-  "http://localhost:8000/api/roles/1/permissions"
-```
-
-### 4. Thêm Guard vào Endpoints (Tiếp Theo)
-Để bảo vệ endpoint, thêm dependency injection:
+Mau guard endpoint:
 
 ```python
 from app.deps import get_current_user_with_permission
 
-@router.get("/sensitive-data")
-def get_data(
+@router.post("")
+def create_item(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user_with_permission("sensitive_data.view"))
+    user: User = Depends(get_current_user_with_permission("example.create")),
 ):
-    # Chỉ user có "sensitive_data.view" permission mới vào được
     ...
 ```
 
-## Mô Tả Nhóm Quyền
+## Nhom permission nen dung
 
-| Nhóm | Mô Tả |
-|------|-------|
-| **sales** | Quản lý khách hàng, đơn hàng, báo giá |
-| **production** | Quản lý lệnh sản xuất, quy trình SX |
-| **inventory** | Quản lý kho, tồn kho, nhập xuất |
-| **master_data** | Quản lý dữ liệu cơ bản (sản phẩm, nhà cung cấp, ...) |
-| **admin** | Quản lý hệ thống (người dùng, vai trò, quyền) |
-| **reports** | Xem báo cáo, xuất dữ liệu |
+| Nhom | Vi du |
+| --- | --- |
+| `sales` | `quote.view`, `sales_order.create`, `sales_return.approve` |
+| `production` | `production_order.view`, `bom.manage`, `cd2.scan` |
+| `inventory` | `inventory.view`, `inventory.import`, `inventory.adjust` |
+| `purchase` | `purchase_order.create`, `goods_receipt.approve` |
+| `accounting` | `cash_receipt.approve`, `journal_entry.create` |
+| `master` | `customer.import`, `product.edit` |
+| `report` | `report.view`, `report.export` |
+| `admin` | `user.manage`, `role.manage`, `permission.manage` |
+| `hr` | `hr.employee.view`, `hr.payroll.approve` |
 
-## Tiếp Theo
+## Checklist khi them module moi
 
-1. ✅ Tạo hệ thống RBAC
-2. ⏳ Thêm guard decorator để check permission trên endpoints
-3. ⏳ Thêm audit log cho thay đổi quyền
-4. ⏳ Frontend: Tạo giao diện quản lý vai trò & quyền
-5. ⏳ Frontend: Ẩn/hiện button dựa trên user permission
-
-## Testing Checklist
-
-- [x] Database tables created successfully
-- [x] Models generated without errors
-- [x] API endpoints registered
-- [x] Server starts without errors
-- [ ] Permission list returns data
-- [ ] Can assign permissions to role
-- [ ] Can update role
-- [ ] Can delete role (if no users assigned)
-- [ ] Error handling for invalid IDs
+- Tao permission codes.
+- Seed permission.
+- Gan permission cho role can dung.
+- Guard API quan trong.
+- An/hien menu/button theo role/permission.
+- Test user khong co quyen bi 403 va UI khong lo nut thao tac nguy hiem.

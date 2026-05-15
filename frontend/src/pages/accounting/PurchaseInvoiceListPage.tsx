@@ -9,24 +9,28 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import { purchaseInvoiceApi, TRANG_THAI_PO_INVOICE } from '../../api/accounting'
+import { usePhapNhan } from '../../hooks/useMasterData'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
 export default function PurchaseInvoiceListPage() {
   const navigate = useNavigate()
+  const { phapNhanList } = usePhapNhan()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
   const [quaHanOnly, setQuaHanOnly] = useState(false)
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['purchase-invoices', tuNgay, denNgay, filterTrangThai, quaHanOnly, page],
+    queryKey: ['purchase-invoices', tuNgay, denNgay, filterTrangThai, filterPhapNhan, quaHanOnly, page],
     queryFn: () =>
       purchaseInvoiceApi.list({
         tu_ngay: tuNgay, den_ngay: denNgay,
         trang_thai: filterTrangThai,
+        phap_nhan_id: filterPhapNhan,
         qua_han_only: quaHanOnly || undefined,
         page, page_size: 20,
       }),
@@ -146,6 +150,13 @@ export default function PurchaseInvoiceListPage() {
               style={{ width: 180 }} allowClear placeholder="Trạng thái"
               onChange={v => { setFilterTrangThai(v); setPage(1) }}
               options={Object.entries(TRANG_THAI_PO_INVOICE).map(([k, v]) => ({ value: k, label: v.label }))}
+            />
+          </Col>
+          <Col>
+            <Select
+              style={{ width: 180 }} allowClear placeholder="Pháp nhân"
+              onChange={v => { setFilterPhapNhan(v); setPage(1) }}
+              options={phapNhanList.map((p: any) => ({ value: p.id, label: p.ten_phap_nhan }))}
             />
           </Col>
           <Col>

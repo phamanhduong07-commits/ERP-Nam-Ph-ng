@@ -28,7 +28,7 @@ def is_port_free(port: int) -> bool:
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8001))
     reload_enabled = os.environ.get("ERP_RELOAD", "").lower() in ("1", "true", "yes", "on")
 
     if not is_port_free(port):

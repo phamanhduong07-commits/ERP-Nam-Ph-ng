@@ -24,7 +24,7 @@ export const viTriApi = {
 
 // ── Xe ─────────────────────────────────────────────────────────
 export interface Xe {
-  id: number; bien_so: string; loai_xe: string | null; trong_tai: number | null; ghi_chu: string | null; trang_thai: boolean
+  id: number; bien_so: string; loai_xe: string | null; trong_tai: number | null; dinh_muc_dau?: number | null; ghi_chu: string | null; trang_thai: boolean
 }
 export const xeApi = {
   list: () => client.get<Xe[]>('/xe'),
@@ -35,7 +35,7 @@ export const xeApi = {
 
 // ── Tài xế ─────────────────────────────────────────────────────
 export interface TaiXe {
-  id: number; ho_ten: string; so_dien_thoai: string | null; so_bang_lai: string | null; ghi_chu: string | null; trang_thai: boolean
+  id: number; ho_ten: string; so_dien_thoai: string | null; so_bang_lai: string | null; employee_id?: number | null; he_so_chuyen?: number; ghi_chu: string | null; trang_thai: boolean
 }
 export const taiXeApi = {
   list: () => client.get<TaiXe[]>('/tai-xe'),
@@ -66,9 +66,20 @@ export const phuongXaApi = {
   delete: (id: number) => client.delete(`/phuong-xa/${id}`),
 }
 
+// ── Lơ xe ──────────────────────────────────────────────────────────
+export interface LoXe {
+  id: number; ho_ten: string; so_dien_thoai: string | null; employee_id?: number | null; he_so_chuyen?: number; ghi_chu: string | null; trang_thai: boolean
+}
+export const loXeApi = {
+  list: () => client.get<LoXe[]>('/lo-xe'),
+  create: (d: Omit<LoXe,'id'>) => client.post<LoXe>('/lo-xe', d),
+  update: (id: number, d: Partial<Omit<LoXe,'id'>>) => client.put<LoXe>(`/lo-xe/${id}`, d),
+  delete: (id: number) => client.delete(`/lo-xe/${id}`),
+}
+
 // ── Đơn giá vận chuyển ─────────────────────────────────────────
 export interface DonGiaVanChuyen {
-  id: number; ten_tuyen: string; khu_vuc_tu: string | null; khu_vuc_den: string | null; don_gia: number; dvt: string; ghi_chu: string | null; trang_thai: boolean
+  id: number; ten_tuyen: string; khu_vuc_tu: string | null; khu_vuc_den: string | null; don_gia: number; don_gia_m2: number; dvt: string; ghi_chu: string | null; trang_thai: boolean
 }
 export const donGiaVanChuyenApi = {
   list: () => client.get<DonGiaVanChuyen[]>('/don-gia-van-chuyen'),

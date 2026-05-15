@@ -9,21 +9,24 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import { receiptApi, TRANG_THAI_PHIEU_THU, HINH_THUC_TT } from '../../api/accounting'
+import { usePhapNhan } from '../../hooks/useMasterData'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
 export default function CashReceiptListPage() {
   const navigate = useNavigate()
+  const { phapNhanList } = usePhapNhan()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['receipts', tuNgay, denNgay, filterTrangThai, page],
+    queryKey: ['receipts', tuNgay, denNgay, filterTrangThai, filterPhapNhan, page],
     queryFn: () =>
-      receiptApi.list({ tu_ngay: tuNgay, den_ngay: denNgay, trang_thai: filterTrangThai, page, page_size: 20 }),
+      receiptApi.list({ tu_ngay: tuNgay, den_ngay: denNgay, trang_thai: filterTrangThai, phap_nhan_id: filterPhapNhan, page, page_size: 20 }),
   })
 
   const receipts = data?.items ?? data ?? []
@@ -129,6 +132,13 @@ export default function CashReceiptListPage() {
               style={{ width: 160 }} allowClear placeholder="Trạng thái"
               onChange={v => { setFilterTrangThai(v); setPage(1) }}
               options={Object.entries(TRANG_THAI_PHIEU_THU).map(([k, v]) => ({ value: k, label: v.label }))}
+            />
+          </Col>
+          <Col>
+            <Select
+              style={{ width: 180 }} allowClear placeholder="Pháp nhân"
+              onChange={v => { setFilterPhapNhan(v); setPage(1) }}
+              options={phapNhanList.map((p: any) => ({ value: p.id, label: p.ten_phap_nhan }))}
             />
           </Col>
         </Row>

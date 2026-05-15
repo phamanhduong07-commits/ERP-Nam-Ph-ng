@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import cast, Date, text
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db, _BACKFILL_QI_PG, _BACKFILL_SPEC_PG
-from app.deps import get_current_user
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.master import Customer, Product
 from app.models.sales import SalesOrder, SalesOrderItem, QuoteItem
@@ -297,7 +297,7 @@ async def import_sales_orders(
     commit: bool = Query(default=False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("sales.import")),
 ):
     """Import đơn hàng từ Excel. Hỗ trợ tạo mới hoặc cập nhật đơn hàng theo số đơn."""
     return await import_sales_orders_excel(db, file, current_user, commit)

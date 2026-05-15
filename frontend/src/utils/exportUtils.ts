@@ -41,18 +41,24 @@ export function exportToExcel(filename: string, sheets: ExcelSheet[]) {
  * The user saves as PDF from the browser's print dialog.
  * This approach gives perfect Vietnamese text rendering.
  */
-export function printToPdf(title: string, html: string, landscape = false) {
+export function printToPdf(title: string, html: string, landscape = false, companyInfo?: PrintCompanyInfo) {
   const win = window.open('', '_blank', 'width=1050,height=780')
   if (!win) {
     alert('Vui lòng cho phép popup để xuất PDF')
     return
   }
+  const theme = getPrintThemeVars(companyInfo)
   win.document.write(`<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
   <title>${title}</title>
   <style>
+	    :root {
+	      --primary: ${theme.primary};
+	      --accent: ${theme.accent};
+	      --footer-accent: ${theme.footer};
+	    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 11px; color: #222; padding: 10mm; }
     h2  { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
@@ -61,31 +67,31 @@ export function printToPdf(title: string, html: string, landscape = false) {
     .info-label { color: #888; font-size: 9px; }
     .info-value { font-weight: 600; }
     .doc-panel { border: 1px solid #ddd; border-radius: 10px; padding: 18px; }
-    .doc-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; border-bottom: 2px solid #1b168e; padding-bottom: 10px; }
+    .doc-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; border-bottom: 2px solid var(--primary); padding-bottom: 10px; }
     .doc-brand { flex: 0 0 100px; }
     .doc-brand img { max-height: 75px; max-width: 100px; object-fit: contain; }
     .doc-title-block { flex: 1; padding: 0 20px; }
-    .company-name { font-size: 14px; font-weight: 700; color: #1b168e; text-transform: uppercase; margin-bottom: 4px; }
+    .company-name { font-size: 14px; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 4px; }
     .co-details .co-line { font-size: 10px; color: #333; margin-top: 2px; line-height: 1.3; }
-    .document-type { font-size: 22px; font-weight: 700; color: #d32f2f; margin-top: 8px; text-transform: uppercase; }
+    .document-type { font-size: 22px; font-weight: 700; color: var(--accent); margin-top: 8px; text-transform: uppercase; }
     .doc-meta { flex: 0 0 160px; text-align: right; font-size: 11px; }
     .meta-row { margin-bottom: 4px; }
     .meta-label { color: #555; margin-right: 4px; }
     .doc-info { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
     .doc-body { margin-bottom: 20px; font-size: 12px; line-height: 1.5; }
-    .doc-footer { padding: 12px; background: #fff7e6; border-left: 4px solid #ff8200; border-radius: 6px; margin-bottom: 20px; font-size: 12px; }
+    .doc-footer { padding: 12px; background: #fff7e6; border-left: 4px solid var(--footer-accent); border-radius: 6px; margin-bottom: 20px; font-size: 12px; }
     .signature-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
     .signature-box { min-height: 90px; padding-top: 6px; border-top: 1px dashed #999; color: #555; font-size: 12px; }
     .sign-name { font-weight: 700; margin-bottom: 8px; }
     table { width: 100%; border-collapse: collapse; margin-top: 6px; page-break-inside: auto; }
-    thead { background: #1b168e; color: #fff; display: table-header-group; }
+    thead { background: var(--primary); color: #fff; display: table-header-group; }
     th { padding: 4px 5px; font-size: 9px; font-weight: 700; text-align: left; white-space: nowrap; }
     td { padding: 3px 5px; font-size: 9px; border-bottom: 1px solid #eee; vertical-align: top; }
     tr:nth-child(even) td { background: #f9f9f9; }
     .right { text-align: right; }
     .center { text-align: center; }
-    .total-row td { font-weight: 700; background: #e6f4ff !important; border-top: 2px solid #1b168e; }
-    .footer-row td { font-weight: 600; background: #fffbe6 !important; border-top: 2px solid #ff8200; font-style: italic; }
+    .total-row td { font-weight: 700; background: #e6f4ff !important; border-top: 2px solid var(--primary); }
+    .footer-row td { font-weight: 600; background: #fffbe6 !important; border-top: 2px solid var(--footer-accent); font-style: italic; }
     .summary-box { margin-top: 12px; border: 1px solid #ddd; padding: 8px; border-radius: 3px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
     .summary-item .s-label { font-size: 9px; color: #888; }
     .summary-item .s-value { font-size: 13px; font-weight: 700; }
@@ -114,6 +120,17 @@ export interface PrintCompanyInfo {
   so_dien_thoai?: string | null
   tai_khoan?: string | null
   ngan_hang?: string | null
+  logo?: string
+  primary_color?: string
+  accent_color?: string
+  footer_accent_color?: string
+}
+
+export function getPrintThemeVars(companyInfo?: PrintCompanyInfo) {
+  const primary = companyInfo?.primary_color || "#1b168e"
+  const accent = companyInfo?.accent_color || "#d32f2f"
+  const footer = companyInfo?.footer_accent_color || accent
+  return { primary, accent, footer }
 }
 
 export interface PrintDocumentOptions {
@@ -129,29 +146,65 @@ export interface PrintDocumentOptions {
   fields?: PrintDocumentField[]
   bodyHtml: string
   footerHtml?: string
+  customHtml?: string // New: allow full HTML override
+  vars?: Record<string, string> // New: arbitrary variables for template
 }
 
 // ─── Company Configurations ───────────────────────────────────────────────────
+//
+// Bảng màu thương hiệu — nguồn gốc:
+//   primary_color  = màu chủ đạo trích tự động từ pixel logo (lưu trong DB: phap_nhan.mau_sac_chinh)
+//   accent_color   = màu nhấn dùng cho header/border biểu mẫu in ấn (chọn thủ công theo thiết kế)
+//
+//  Pháp nhân            Logo file               primary (logo)   accent (tài liệu)
+//  ─────────────────────────────────────────────────────────────────────────────
+//  Nam Phương           logo_namphuong.png       #202878          #d32f2f
+//  Nam Phương L.A       logo_namphuong.png       #202878          #2e7d32
+//  Visunpack            logo_visunpack.png        #F0B018          #E65100
 
 export const COMPANY_CONFIGS: Record<string, PrintCompanyInfo & { logo?: string }> = {
-  "CÔNG TY TNHH SX TM NAM PHƯƠNG": {
+  "NAM PHUONG": {
     ten: "CÔNG TY TNHH SX TM NAM PHƯƠNG",
     dia_chi: "12/2 Ấp 2, Xã Xuân Thới Sơn, Thành phố Hồ Chí Minh, Việt Nam.",
     so_dien_thoai: "0903.113.638",
-    tai_khoan: "Email: banhang.namphuong@gmail.com", // Dùng trường này để hiển thị email hoặc hotline linh hoạt
+    tai_khoan: "banhang.namphuong@gmail.com",
+    logo: "/logo_namphuong.png",
+    primary_color: "#202878",  // trích từ logo_namphuong.png
+    accent_color: "#d32f2f",
+    footer_accent_color: "#ff8200",
   },
-  "CÔNG TY TNHH SX TM NAM PHƯƠNG L.A": {
+  "NAM PHUONG LONG AN": {
     ten: "CÔNG TY TNHH SX TM NAM PHƯƠNG L.A",
     dia_chi: "Lô Q3, Đường N11 và Lô Q18, đường N9, Khu Công Nghiệp Nam Thuận, Xã Mỹ Hạnh, Tỉnh Tây Ninh, Việt Nam.",
     so_dien_thoai: "0909.969.559",
-    tai_khoan: "Email: namphuongbaobi@gmail.com",
+    tai_khoan: "namphuongbaobi@gmail.com",
+    logo: "/logo_namphuong.png",
+    primary_color: "#202878",  // trích từ logo_namphuong.png (cùng hệ thống Nam Phương)
+    accent_color: "#2e7d32",
+    footer_accent_color: "#2e7d32",
   },
-  "CÔNG TY TNHH BAO BÌ VISUNPACK": {
+  "VISUNPACK": {
     ten: "CÔNG TY TNHH BAO BÌ VISUNPACK",
     dia_chi: "96 Tỉnh Lộ 15, Ấp 11A, Xã Phú Hòa Đông, Thành phố Hồ Chí Minh, Việt Nam.",
     so_dien_thoai: "0377.959.323",
-    tai_khoan: "Email: visunpack@gmail.com",
+    tai_khoan: "visunpack@gmail.com",
+    logo: "/logo_visunpack.png",
+    primary_color: "#F0B018",  // trích từ logo_visunpack.png
+    accent_color: "#E65100",
+    footer_accent_color: "#E65100",
   }
+}
+
+// Fallback configs based on partial name match
+const CONFIG_MAPPING: Record<string, string> = {
+  "NAM PHUONG": "NAM PHUONG",
+  "NAM PHƯƠNG": "NAM PHUONG",
+  "NAM PHUONG L.A": "NAM PHUONG LONG AN",
+  "NAM PHƯƠNG L.A": "NAM PHUONG LONG AN",
+  "NAM PHUONG LA": "NAM PHUONG LONG AN",
+  "NAM PHƯƠNG LA": "NAM PHUONG LONG AN",
+  "LONG AN": "NAM PHUONG LONG AN",
+  "VISUNPACK": "VISUNPACK"
 }
 
 export function buildDocumentHtml(opts: PrintDocumentOptions): string {
@@ -166,10 +219,22 @@ export function buildDocumentHtml(opts: PrintDocumentOptions): string {
   const coName = co?.ten ?? opts.companyName ?? 'CÔNG TY TNHH SX TM NAM PHƯƠNG'
   
   // Tự động lấy config chuẩn từ tên nếu không truyền companyInfo đầy đủ
-  const config = COMPANY_CONFIGS[coName]
+  let configKey = ""
+  for (const [k, v] of Object.entries(CONFIG_MAPPING)) {
+    if (coName.toUpperCase().includes(k)) {
+      configKey = v
+      break
+    }
+  }
+  
+  const config = configKey ? COMPANY_CONFIGS[configKey] : undefined
   if (config && !co?.dia_chi) {
     co = { ...config, ...co } // Gộp thông tin mặc định với thông tin từ DB (nếu có)
   }
+
+  const themePrimary = co?.primary_color || config?.primary_color || "#1b168e"
+  const themeAccent = co?.accent_color || config?.accent_color || "#d32f2f"
+  const themeFooter = co?.footer_accent_color || config?.footer_accent_color || themeAccent
 
   const coLines = [
     co?.dia_chi ? `<div class="co-line">Địa chỉ: ${co.dia_chi}</div>` : '',
@@ -179,18 +244,42 @@ export function buildDocumentHtml(opts: PrintDocumentOptions): string {
     co?.ma_so_thue ? `<div class="co-line">MST: ${co.ma_so_thue}</div>` : '',
   ].filter(Boolean).join('')
 
-  const logoSrc = opts.logoUrl || (coName.includes('VISUNPACK') ? '/logo_visunpack.png' : '/logo_namphuong.png')
+  const logoSrc = opts.logoUrl || config?.logo || '/logo_namphuong.png'
+
+  if (opts.customHtml) {
+    // Replace variables in customHtml
+    let html = opts.customHtml
+    const vars: Record<string, string> = {
+      company_name: coName,
+      company_details: coLines,
+      subtitle: opts.subtitle ?? opts.title,
+      document_number: opts.documentNumber ?? '',
+      document_date: opts.documentDate ?? '',
+      status: opts.status ?? '',
+      body_html: opts.bodyHtml,
+      footer_html: opts.footerHtml ?? '',
+      logo_img: logoSrc ? `<img src="${logoSrc}" alt="Logo" style="max-height: 70px; object-fit: contain;" />` : '',
+      ...opts.vars,
+    }
+    for (const [k, v] of Object.entries(vars)) {
+      html = html.replace(new RegExp(`{{${k}}}`, 'g'), v ?? '')
+    }
+    return html
+  }
 
   return `
+    <style>
+      :root { --primary: ${themePrimary}; --accent: ${themeAccent}; --footer-accent: ${themeFooter}; }
+    </style>
     <div class="doc-panel">
-      <div class="doc-head" style="border-bottom: 2px solid #1b168e; padding-bottom: 10px; margin-bottom: 15px;">
+      <div class="doc-head" style="border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 15px;">
         <div class="doc-brand" style="flex: 0 0 100px;">
           ${logoSrc ? `<img src="${logoSrc}" alt="Logo" style="max-height: 70px; object-fit: contain;" />` : ''}
         </div>
         <div class="doc-title-block" style="flex: 1; padding-left: 15px;">
-          <div class="company-name" style="font-size: 14px; color: #1b168e;">${coName}</div>
+          <div class="company-name" style="font-size: 14px; color: var(--primary);">${coName}</div>
           ${coLines ? `<div class="co-details" style="font-size: 10px; line-height: 1.4;">${coLines}</div>` : ''}
-          <div class="document-type" style="margin-top: 10px; font-size: 18px; color: #d32f2f;">${opts.subtitle ?? opts.title}</div>
+          <div class="document-type" style="margin-top: 10px; font-size: 18px; color: var(--accent);">${opts.subtitle ?? opts.title}</div>
         </div>
         <div class="doc-meta" style="flex: 0 0 150px; text-align: right; font-size: 10px;">
           ${opts.documentNumber ? `<div class="meta-row"><span class="meta-label">Số:</span> <b>${opts.documentNumber}</b></div>` : ''}
@@ -221,7 +310,43 @@ export function buildDocumentHtml(opts: PrintDocumentOptions): string {
 
 export function printDocument(opts: PrintDocumentOptions, landscape = false) {
   const html = buildDocumentHtml(opts)
-  printToPdf(opts.title, html, landscape)
+  printToPdf(opts.title, html, landscape, opts.companyInfo)
+}
+
+/**
+ * In từ template thuần túy — không dùng layout mặc định.
+ * Template chứa {{variable}} — được thay thế bởi vars + company info.
+ * Template tự kiểm soát 100% HTML: table, header, chữ ký, CSS.
+ */
+export function renderTemplateAndPrint(
+  title: string,
+  templateHtml: string,
+  vars: Record<string, string>,
+  companyInfo?: PrintCompanyInfo,
+  landscape = false,
+) {
+  const co = companyInfo
+  const coName = co?.ten ?? ''
+  const coLines = [
+    co?.dia_chi ? `<div class="co-line">${co.dia_chi}</div>` : '',
+    co?.so_dien_thoai ? `<div class="co-line">ĐT: ${co.so_dien_thoai}</div>` : '',
+    co?.ma_so_thue ? `<div class="co-line">MST: ${co.ma_so_thue}</div>` : '',
+  ].filter(Boolean).join('')
+  const logoSrc = co?.logo || '/logo_namphuong.png'
+
+  const allVars: Record<string, string> = {
+    company_name: coName,
+    company_details: coLines,
+    logo_img: logoSrc ? `<img src="${logoSrc}" alt="Logo" style="max-height:70px;object-fit:contain;" />` : '',
+    ...vars,
+  }
+
+  let html = templateHtml
+  for (const [k, v] of Object.entries(allVars)) {
+    html = html.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v ?? '')
+  }
+
+  printToPdf(title, html, landscape, companyInfo)
 }
 
 // ─── Formatting Helpers ───────────────────────────────────────────────────────
@@ -450,5 +575,3 @@ export async function printProductionTag(data: any) {
   win.document.close()
   setTimeout(() => win.print(), 500)
 }
-
-

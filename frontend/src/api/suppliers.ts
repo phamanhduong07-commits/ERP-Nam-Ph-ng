@@ -24,7 +24,7 @@ export type SupplierCreate = Omit<Supplier, 'id' | 'created_at'>
 export const suppliersApi = {
   list: (params?: { search?: string; page?: number; page_size?: number; trang_thai?: boolean }) =>
     client.get<PagedResponse<Supplier>>('/suppliers', { params }),
-  all: () => client.get<Supplier[]>('/suppliers/all'),
+  all: (loai?: string) => client.get<Supplier[]>('/suppliers/all', loai ? { params: { loai } } : undefined),
   get: (id: number) => client.get<Supplier>(`/suppliers/${id}`),
   create: (data: SupplierCreate) => client.post<Supplier>('/suppliers', data),
   update: (id: number, data: Partial<SupplierCreate>) => client.put<Supplier>(`/suppliers/${id}`, data),

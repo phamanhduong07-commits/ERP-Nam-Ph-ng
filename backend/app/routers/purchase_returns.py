@@ -4,7 +4,7 @@ Module Trả hàng / Giảm giá hàng mua (PurchaseReturn)
 Quy trình:
   1. Tạo phiếu (trang_thai=nhap) — lưu thông tin, chưa ảnh hưởng kế toán
   2. Duyệt phiếu → ghi sổ công nợ + bút toán kế toán
-     - tra_hang : Nợ 331 / Có 152 + Có 133 (nếu có thuế)
+     - tra_hang : Nợ 331 / Có 1521/1522 (per item type) + Có 133 (nếu có thuế)
      - giam_gia : Nợ 331 / Có 632 (hoặc 156)
   3. Huỷ phiếu (chỉ được khi còn ở nhap) — xoá khỏi luồng
 """
@@ -107,26 +107,26 @@ def _resolve_ten_hang(item: ReturnItemCreate, db: Session) -> str:
     return ""
 
 
-def _get_px_from_return(r: PurchaseReturn, db: Session) -> tuple[int | None, str | None, str | None]:
-    """Derive (phan_xuong_id, ten_phan_xuong, ten_phap_nhan) from GR → Warehouse → PhanXuong."""
+def _get_px_from_return(r: PurchaseReturn, db: Session) -> tuple[int | None, str | None, str | None, int | None]:
+    """Derive (phan_xuong_id, ten_phan_xuong, ten_phap_nhan, phap_nhan_id) from GR → Warehouse → PhanXuong."""
     if not r.gr_id:
-        return None, None, None
+        return None, None, None, None
     gr = db.get(GoodsReceipt, r.gr_id)
     if not gr or not gr.warehouse_id:
-        return None, None, None
+        return None, None, None, None
     wh = db.get(Warehouse, gr.warehouse_id)
     if not wh or not wh.phan_xuong_id:
-        return None, None, None
+        return None, None, None, None
     px = db.get(PhanXuong, wh.phan_xuong_id)
     if not px:
-        return wh.phan_xuong_id, None, None
+        return wh.phan_xuong_id, None, None, None
     ten_phap_nhan = px.phap_nhan.ten_phap_nhan if px.phap_nhan else None
-    return px.id, px.ten_xuong, ten_phap_nhan
+    return px.id, px.ten_xuong, ten_phap_nhan, px.phap_nhan_id
 
 
 def _return_to_dict(r: PurchaseReturn, db: Session) -> dict:
     sup = db.get(Supplier, r.supplier_id)
-    px_id, ten_px, ten_pn = _get_px_from_return(r, db)
+    px_id, ten_px, ten_pn, _pn_id = _get_px_from_return(r, db)
     items = []
     for it in r.items:
         items.append({
@@ -166,21 +166,26 @@ def _return_to_dict(r: PurchaseReturn, db: Session) -> dict:
     }
 
 
-def _post_journal(db: Session, r: PurchaseReturn, user_id: int) -> None:
+def _post_journal(
+    db: Session,
+    r: PurchaseReturn,
+    user_id: int,
+    phap_nhan_id: Optional[int] = None,
+    phan_xuong_id: Optional[int] = None,
+) -> None:
     """
     Bút toán ghi sổ kép khi duyệt phiếu trả hàng / giảm giá.
 
     tra_hang:
-      Nợ TK 331 (Phải trả NCC)   = tong_thanh_toan
-      Có TK 152/153 (NVL)         = tong_tien_hang
-      Có TK 133 (Thuế GTGT đầu vào bị hoàn)  = tien_thue  [nếu có]
+      Nợ TK 331 (Phải trả NCC)        = tong_thanh_toan
+      Có TK 1521 (giấy cuộn) hoặc 1522 (NVL phụ) = tong_tien_hang  [per item type]
+      Có TK 133 (Thuế GTGT đầu vào bị hoàn)       = tien_thue  [nếu có]
 
     giam_gia:
       Nợ TK 331 (Phải trả NCC)   = tong_thanh_toan
       Có TK 632 (Giá vốn / Giảm giá)  = tong_tien_hang
       Có TK 133 (Thuế GTGT đầu vào)   = tien_thue  [nếu có]
     """
-    tk_co_hang = "152" if r.loai == "tra_hang" else "632"
     lines: list[dict] = [
         {
             "so_tk": "331",
@@ -188,13 +193,28 @@ def _post_journal(db: Session, r: PurchaseReturn, user_id: int) -> None:
             "so_tien_no": float(r.tong_thanh_toan),
             "so_tien_co": 0,
         },
-        {
-            "so_tk": tk_co_hang,
+    ]
+
+    if r.loai == "tra_hang" and r.items:
+        by_tk: dict[str, Decimal] = {}
+        for it in r.items:
+            tk = "1521" if it.paper_material_id else "1522"
+            by_tk[tk] = by_tk.get(tk, Decimal("0")) + it.thanh_tien
+        for tk, so_tien in sorted(by_tk.items()):
+            lines.append({
+                "so_tk": tk,
+                "dien_giai": f"Hàng trả — {r.so_phieu}",
+                "so_tien_no": 0,
+                "so_tien_co": float(so_tien),
+            })
+    else:
+        tk_co = "632" if r.loai != "tra_hang" else "1521"
+        lines.append({
+            "so_tk": tk_co,
             "dien_giai": f"Hàng trả / giảm giá — {r.so_phieu}",
             "so_tien_no": 0,
             "so_tien_co": float(r.tong_tien_hang),
-        },
-    ]
+        })
     if float(r.tien_thue) > 0:
         lines.append({
             "so_tk": "133",
@@ -212,6 +232,8 @@ def _post_journal(db: Session, r: PurchaseReturn, user_id: int) -> None:
         tong_co=sum(l["so_tien_co"] for l in lines),
         chung_tu_loai="purchase_return",
         chung_tu_id=r.id,
+        phap_nhan_id=phap_nhan_id,
+        phan_xuong_id=phan_xuong_id,
         created_by=user_id,
     )
     db.add(entry)
@@ -224,6 +246,8 @@ def _post_journal(db: Session, r: PurchaseReturn, user_id: int) -> None:
             dien_giai=line.get("dien_giai"),
             so_tien_no=line["so_tien_no"],
             so_tien_co=line["so_tien_co"],
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=phan_xuong_id,
         ))
 
 
@@ -267,7 +291,7 @@ def list_returns(
     items = []
     for r in rows:
         sup = db.get(Supplier, r.supplier_id)
-        px_id, ten_px, ten_pn = _get_px_from_return(r, db)
+        px_id, ten_px, ten_pn, _pn_id = _get_px_from_return(r, db)
         items.append({
             "id": r.id,
             "so_phieu": r.so_phieu,
@@ -368,6 +392,9 @@ def approve_return(
     r.approved_by = current_user.id
     r.approved_at = datetime.utcnow()
 
+    # Lấy phan_xuong_id và phap_nhan_id từ GR → Warehouse → PhanXuong
+    phan_xuong_id, _, _, phap_nhan_id = _get_px_from_return(r, db)
+
     # Ghi sổ công nợ phải trả (giam_no — giảm số tiền phải trả NCC)
     db.add(DebtLedgerEntry(
         ngay=r.ngay,
@@ -378,10 +405,11 @@ def approve_return(
         chung_tu_id=r.id,
         so_tien=r.tong_thanh_toan,
         ghi_chu=f"Trả hàng/giảm giá NCC — {r.so_phieu}",
+        phap_nhan_id=phap_nhan_id,
     ))
 
     # Bút toán ghi sổ kép
-    _post_journal(db, r, current_user.id)
+    _post_journal(db, r, current_user.id, phap_nhan_id=phap_nhan_id, phan_xuong_id=phan_xuong_id)
 
     # Giảm tồn kho khi trả hàng vật chất (loai=tra_hang)
     if r.loai == "tra_hang":

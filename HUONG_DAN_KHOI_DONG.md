@@ -1,106 +1,102 @@
-# HƯỚNG DẪN KHỞI ĐỘNG ERP NAM PHƯƠNG
+# Huong Dan Khoi Dong ERP Nam Phuong
 
-## Yêu cầu
-- Python 3.14 (đã cài)
-- Node.js 24 (đã cài)
-- PostgreSQL 15+ (cần cài thêm)
+Tai lieu nay dung cho may dev Windows. Neu moi clone repo, lam tu tren xuong duoi.
 
----
+## 1. Yeu cau
 
-## BƯỚC 1: Cài PostgreSQL
+- Python 3.11+.
+- Node.js 20+ hoac 22+.
+- PostgreSQL 15+.
+- Git.
 
-1. Tải tại: https://www.postgresql.org/download/windows/
-2. Cài với mật khẩu `postgres`
-3. Tạo database và user:
+## 2. Tao database PostgreSQL
+
+Mo `psql` hoac pgAdmin va chay:
 
 ```sql
--- Chạy trong psql hoặc pgAdmin
 CREATE USER erp_user WITH PASSWORD 'erp_password';
 CREATE DATABASE erp_nam_phuong OWNER erp_user;
 GRANT ALL PRIVILEGES ON DATABASE erp_nam_phuong TO erp_user;
 ```
 
----
+Connection mac dinh trong code:
 
-## BƯỚC 2: Cấu hình Backend
-
-```bash
-cd backend
-copy .env.example .env
-# Sửa .env nếu cần đổi mật khẩu DB
+```text
+postgresql://erp_user:erp_password@localhost:5432/erp_nam_phuong
 ```
 
----
+Neu dung thong tin khac, tao file `backend/.env` va khai bao `DATABASE_URL`.
 
-## BƯỚC 3: Khởi tạo Database & Import dữ liệu Excel
+## 3. Cai backend
 
-```bash
+```powershell
 cd backend
-
-# Tạo bảng + import dữ liệu từ Excel
-C:\Users\USER\AppData\Local\Programs\Python\Python314\python.exe scripts/import_excel.py
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
+alembic upgrade head
 ```
 
----
+Neu can seed mau in/quyen:
 
-## BƯỚC 4: Chạy Backend (cửa sổ 1)
-
-```bash
-cd backend
-C:\Users\USER\AppData\Local\Programs\Python\Python314\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```powershell
+python -m app.seeds.seed_permissions
+python -m app.seeds.seed_templates
 ```
 
-API docs: http://localhost:8000/api/docs
+## 4. Cai frontend
 
----
+```powershell
+cd frontend
+npm install
+```
 
-## BƯỚC 5: Chạy Frontend (cửa sổ 2)
+## 5. Chay he thong
 
-```bash
+Chay backend:
+
+```powershell
+cd backend
+.\venv\Scripts\activate
+python run.py
+```
+
+Chay frontend o terminal khac:
+
+```powershell
 cd frontend
 npm run dev
 ```
 
-Truy cập: http://localhost:5173
+Dia chi thuong dung:
 
----
+- Frontend: `http://localhost:5173`
+- API docs: `http://localhost:8000/api/docs`
+- Health check: `http://localhost:8000/api/health`
 
-## Đăng nhập lần đầu
-- **Tài khoản**: admin
-- **Mật khẩu**: Admin@123
-- **⚠️ Đổi mật khẩu ngay!**
+## 6. Cach khoi dong nhanh bang script
 
----
+O thu muc goc co cac script:
 
-## Cấu trúc dự án
+- `start.bat`: khoi dong nhanh ca he thong theo cau hinh local.
+- `start-backend.bat`: chi backend.
+- `start-frontend.bat`: chi frontend.
+- `restart-backend.bat`: restart backend.
 
-```
-erp-nam-phuong/
-├── database/
-│   └── schema.sql          -- Schema PostgreSQL đầy đủ
-├── backend/                -- FastAPI (Python)
-│   ├── app/
-│   │   ├── models/         -- SQLAlchemy models
-│   │   ├── schemas/        -- Pydantic schemas
-│   │   └── routers/        -- API endpoints
-│   └── scripts/
-│       └── import_excel.py -- Import dữ liệu từ Excel
-└── frontend/               -- React + Ant Design
-    └── src/
-        ├── pages/sales/    -- Module Đơn hàng
-        ├── api/            -- API clients
-        └── store/          -- Zustand state
-```
+Neu script khong dung voi may minh, uu tien chay thu cong theo muc 5 roi cap nhat script sau.
 
-## Module đã hoàn thành
-- ✅ Database schema (9 module, 45+ bảng)
-- ✅ Xác thực & phân quyền (8 vai trò)
-- ✅ Import dữ liệu từ Excel (khách hàng, sản phẩm, NVL, tồn kho)
-- ✅ Module Bán hàng: Nhận đơn / Duyệt / Huỷ
-- ✅ Module Lệnh sản xuất: Tạo / Bắt đầu / Cập nhật tiến độ / Hoàn thành / Huỷ
+## 7. Dang nhap
 
-## Module tiếp theo sẽ làm
-- Mua hàng & Nhập kho NVL
-- Quản lý tồn kho cuộn giấy
-- Xuất kho thành phẩm / Giao hàng
-- Kế toán công nợ
+Tai khoan admin tuy thuoc database/seed dang dung. Thuong gap:
+
+- `admin` / `Admin@123`
+- `admin` / `admin123`
+
+Sau khi vao duoc he thong, doi mat khau admin ngay neu la moi truong that.
+
+## 8. Loi thuong gap
+
+- Backend khong ket noi DB: kiem tra PostgreSQL service, `DATABASE_URL`, database/user/password.
+- Frontend goi API loi CORS: them origin frontend vao `ALLOWED_ORIGINS` trong `backend/.env`.
+- Alembic bao loi revision: kiem tra cac file trong `backend/alembic/versions/`, dam bao repo khong thieu migration.
+- Import Excel loi font/cot: tai file mau tu dung man hinh import, khong tu tao file bang cot khac ten.

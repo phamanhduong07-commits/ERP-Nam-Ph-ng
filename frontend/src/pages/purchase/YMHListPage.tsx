@@ -1,51 +1,107 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Popconfirm,
-  Select, Space, Table, Tag, message,
+  Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
+  Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
-  PlusOutlined, EyeOutlined, CheckCircleOutlined, StopOutlined, DeleteOutlined,
+  CheckCircleOutlined, DeleteOutlined, EyeOutlined, FileAddOutlined, PlusOutlined, StopOutlined,
 } from '@ant-design/icons'
 import {
-  ymhApi, PurchaseRequisition, TRANG_THAI_YMH, TRANG_THAI_YMH_COLOR,
+  CreateYmhPayload, PurchaseRequisition, TRANG_THAI_YMH, TRANG_THAI_YMH_COLOR, ymhApi,
 } from '../../api/purchase_requisitions'
 import { fmtVND } from '../../utils/exportUtils'
-import { useAuthStore } from '../../store/auth'
+import { phapNhanApi } from '../../api/phap_nhan'
+import { warehouseApi } from '../../api/warehouse'
+import { paperMaterialsFullApi } from '../../api/paperMaterials'
+import { otherMaterialsApi } from '../../api/otherMaterials'
+import { suppliersApi } from '../../api/suppliers'
 
 const { RangePicker } = DatePicker
+const { Text, Title } = Typography
+
+type FormItem = {
+  loai_vat_tu?: 'giay' | 'khac' | 'tu_do'
+  mat_id?: number
+  ten_hang?: string
+  so_luong?: number
+  dvt?: string
+  don_gia_du_kien?: number
+  ngay_can?: dayjs.Dayjs | null
+  ghi_chu?: string | null
+}
+
+const DVT_OPTIONS = ['Kg', 'Tấn', 'Cuộn', 'Tờ', 'Cái', 'Bộ', 'Hộp', 'Lít'].map(v => ({ value: v, label: v }))
+const DIEU_KHOAN_OPTIONS = ['COD', 'NET15', 'NET30', 'NET45', 'NET60', 'TT trước'].map(v => ({ value: v, label: v }))
 
 export default function YMHListPage() {
   const qc = useQueryClient()
-  const { user } = useAuthStore()
+  const [form] = Form.useForm()
+  const [poForm] = Form.useForm()
 
-  // Filters
   const [trangThai, setTrangThai] = useState<string | undefined>()
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
+  const [filterXuong, setFilterXuong] = useState<number | undefined>()
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null)
-
-  // Drawers
   const [viewRecord, setViewRecord] = useState<PurchaseRequisition | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
-  const [form] = Form.useForm()
+  const [poRecord, setPoRecord] = useState<PurchaseRequisition | null>(null)
 
-  // Queries
+  const { data: phapNhanList = [] } = useQuery({
+    queryKey: ['phap-nhan-active'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+    staleTime: 300_000,
+  })
+
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong-list'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 300_000,
+  })
+
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['suppliers-all'],
+    queryFn: () => suppliersApi.all().then(r => r.data),
+    staleTime: 300_000,
+  })
+
+  const { data: paperPage } = useQuery({
+    queryKey: ['paper-materials-for-ymh'],
+    queryFn: () => paperMaterialsFullApi.list({ page_size: 2000 }).then(r => r.data),
+    staleTime: 300_000,
+  })
+  const paperMats = paperPage?.items ?? []
+
+  const { data: otherPage } = useQuery({
+    queryKey: ['other-materials-for-ymh'],
+    queryFn: () => otherMaterialsApi.list({ page_size: 2000 }).then(r => r.data),
+    staleTime: 300_000,
+  })
+  const otherMats = otherPage?.items ?? []
+
+  const filteredXuongList = useMemo(() => {
+    if (!filterPhapNhan) return phanXuongList
+    return phanXuongList.filter((px: any) => px.phap_nhan_id === filterPhapNhan)
+  }, [filterPhapNhan, phanXuongList])
+
   const { data: ymhs = [], isFetching } = useQuery({
-    queryKey: ['ymh-list', trangThai, dateRange],
+    queryKey: ['ymh-list', trangThai, filterPhapNhan, filterXuong, dateRange],
     queryFn: () => ymhApi.list({
       trang_thai: trangThai,
+      phap_nhan_id: filterPhapNhan,
+      phan_xuong_id: filterXuong,
       tu_ngay: dateRange?.[0]?.format('YYYY-MM-DD'),
       den_ngay: dateRange?.[1]?.format('YYYY-MM-DD'),
     }).then(r => r.data),
   })
 
-  // Mutations
   const createMutation = useMutation({
-    mutationFn: (data: Parameters<typeof ymhApi.create>[0]) => ymhApi.create(data),
+    mutationFn: (data: CreateYmhPayload) => ymhApi.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
-      message.success('Tạo YMH thành công')
+      message.success('Đã tạo yêu cầu mua hàng')
       setCreateOpen(false)
       form.resetFields()
     },
@@ -54,94 +110,164 @@ export default function YMHListPage() {
 
   const duyetPBMutation = useMutation({
     mutationFn: (id: number) => ymhApi.duyetPB(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ymh-list'] }); message.success('Phòng ban đã duyệt') },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ymh-list'] })
+      message.success('Phòng ban đã duyệt')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi duyệt PB'),
   })
 
   const duyetGDMutation = useMutation({
     mutationFn: (id: number) => ymhApi.duyetGD(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ymh-list'] }); message.success('Giám đốc đã duyệt') },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ymh-list'] })
+      message.success('GĐ đã duyệt')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi duyệt GĐ'),
   })
 
   const huyMutation = useMutation({
     mutationFn: (id: number) => ymhApi.huy(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ymh-list'] }); message.success('Đã huỷ YMH') },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ymh-list'] })
+      message.success('Đã hủy YMH')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi hủy YMH'),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => ymhApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ymh-list'] }); message.success('Đã xoá YMH') },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ymh-list'] })
+      message.success('Đã xóa YMH')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi xóa YMH'),
   })
 
-  function handleCreate(values: any) {
-    const items = (values.items ?? []).map((it: any) => ({
+  const taoPOMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof ymhApi.taoPO>[1] }) => ymhApi.taoPO(id, data),
+    onSuccess: res => {
+      qc.invalidateQueries({ queryKey: ['ymh-list'] })
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] })
+      message.success(`Đã tạo PO ${res.data.so_po}`)
+      setPoRecord(null)
+      poForm.resetFields()
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi tạo PO'),
+  })
+
+  function syncXuongToPhapNhan(phanXuongId?: number) {
+    const px = phanXuongList.find((x: any) => x.id === phanXuongId) as any
+    if (px?.phap_nhan_id) form.setFieldValue('phap_nhan_id', px.phap_nhan_id)
+  }
+
+  function handleMaterialSelect(itemName: number, loai: 'giay' | 'khac', matId: number) {
+    const mat = loai === 'giay'
+      ? paperMats.find(m => m.id === matId)
+      : otherMats.find(m => m.id === matId)
+    if (!mat) return
+    const items: FormItem[] = form.getFieldValue('items') || []
+    const updated = [...items]
+    updated[itemName] = {
+      ...updated[itemName],
+      mat_id: matId,
+      ten_hang: mat.ten,
+      dvt: mat.dvt || 'Kg',
+      don_gia_du_kien: Number(mat.gia_mua || 0),
+    }
+    form.setFieldValue('items', updated)
+  }
+
+  function toPayload(values: any): CreateYmhPayload {
+    const items = (values.items ?? []).map((it: FormItem) => ({
+      paper_material_id: it.loai_vat_tu === 'giay' ? (it.mat_id || null) : null,
+      other_material_id: it.loai_vat_tu === 'khac' ? (it.mat_id || null) : null,
       ten_hang: it.ten_hang ?? '',
-      so_luong: it.so_luong,
+      so_luong: Number(it.so_luong || 0),
       dvt: it.dvt ?? 'Kg',
-      don_gia_du_kien: it.don_gia_du_kien ?? 0,
+      don_gia_du_kien: Number(it.don_gia_du_kien || 0),
       ngay_can: it.ngay_can ? dayjs(it.ngay_can).format('YYYY-MM-DD') : null,
       ghi_chu: it.ghi_chu ?? null,
-      paper_material_id: null,
-      other_material_id: null,
     }))
-    createMutation.mutate({
+    return {
       ngay_yeu_cau: dayjs(values.ngay_yeu_cau).format('YYYY-MM-DD'),
+      phap_nhan_id: values.phap_nhan_id ?? null,
+      phan_xuong_id: values.phan_xuong_id ?? null,
       ghi_chu: values.ghi_chu ?? null,
       items,
+    }
+  }
+
+  async function handleCreate() {
+    const values = await form.validateFields()
+    const payload = toPayload(values)
+    if (!payload.items.length) {
+      message.warning('Thêm ít nhất 1 dòng hàng')
+      return
+    }
+    createMutation.mutate(payload)
+  }
+
+  async function handleCreatePO() {
+    if (!poRecord) return
+    const values = await poForm.validateFields()
+    taoPOMutation.mutate({
+      id: poRecord.id,
+      data: {
+        supplier_id: values.supplier_id,
+        ngay_po: dayjs(values.ngay_po).format('YYYY-MM-DD'),
+        ngay_du_kien_nhan: values.ngay_du_kien_nhan ? dayjs(values.ngay_du_kien_nhan).format('YYYY-MM-DD') : null,
+        dieu_khoan_tt: values.dieu_khoan_tt ?? null,
+        ghi_chu: values.ghi_chu ?? null,
+      },
     })
   }
 
   const columns: ColumnsType<PurchaseRequisition> = [
-    { title: 'Số YMH', dataIndex: 'so_ymh', width: 140 },
-    { title: 'Ngày YC', dataIndex: 'ngay_yeu_cau', width: 100, render: v => v ?? '-' },
-    { title: 'Phân xưởng', dataIndex: 'ten_phan_xuong', width: 130, render: v => v ?? '-' },
-    { title: 'Người YC', dataIndex: 'ten_nguoi_yeu_cau', width: 130, render: v => v ?? '-' },
+    { title: 'Số YMH', dataIndex: 'so_ymh', width: 145, render: v => <Text strong>{v}</Text> },
+    { title: 'Ngày YC', dataIndex: 'ngay_yeu_cau', width: 105 },
+    { title: 'Pháp nhân', dataIndex: 'ten_phap_nhan', width: 130, render: v => v ?? '-' },
+    { title: 'Xưởng', dataIndex: 'ten_phan_xuong', width: 140, render: v => v ?? '-' },
+    { title: 'Người YC', dataIndex: 'ten_nguoi_yeu_cau', width: 140, render: v => v ?? '-' },
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
-      width: 120,
+      width: 125,
       render: (v: string) => <Tag color={TRANG_THAI_YMH_COLOR[v] ?? 'default'}>{TRANG_THAI_YMH[v] ?? v}</Tag>,
     },
+    { title: 'Dòng', dataIndex: 'so_dong', width: 70, align: 'right' },
+    { title: 'Tổng dự kiến', dataIndex: 'tong_du_kien', width: 135, align: 'right', render: fmtVND },
     {
-      title: 'Tổng dự kiến',
-      dataIndex: 'tong_du_kien',
-      width: 130,
+      title: 'Thao tác',
+      width: 190,
       align: 'right',
-      render: fmtVND,
-    },
-    {
-      title: 'Duyệt PB', width: 80, align: 'center',
-      render: (_, r) =>
-        r.trang_thai === 'nhap' ? (
-          <Popconfirm title="Duyệt phòng ban?" onConfirm={() => duyetPBMutation.mutate(r.id)}>
-            <Button size="small" type="link" icon={<CheckCircleOutlined />}>PB</Button>
-          </Popconfirm>
-        ) : null,
-    },
-    {
-      title: 'Duyệt GĐ', width: 80, align: 'center',
-      render: (_, r) =>
-        r.trang_thai === 'duyet_pb' ? (
-          <Popconfirm title="Giám đốc duyệt?" onConfirm={() => duyetGDMutation.mutate(r.id)}>
-            <Button size="small" type="link" icon={<CheckCircleOutlined />} style={{ color: 'green' }}>GĐ</Button>
-          </Popconfirm>
-        ) : null,
-    },
-    {
-      title: '', width: 90, align: 'right',
       render: (_, r) => (
         <Space size={4}>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => setViewRecord(r)} />
-          {r.trang_thai !== 'huy' && r.trang_thai !== 'tao_po' && (
-            <Popconfirm title="Huỷ YMH?" onConfirm={() => huyMutation.mutate(r.id)}>
+          <Tooltip title="Xem chi tiết">
+            <Button size="small" icon={<EyeOutlined />} onClick={() => setViewRecord(r)} />
+          </Tooltip>
+          {r.trang_thai === 'nhap' && (
+            <Popconfirm title="Duyệt phòng ban?" onConfirm={() => duyetPBMutation.mutate(r.id)}>
+              <Button size="small" type="link" icon={<CheckCircleOutlined />}>PB</Button>
+            </Popconfirm>
+          )}
+          {r.trang_thai === 'duyet_pb' && (
+            <Popconfirm title="Giám đốc duyệt?" onConfirm={() => duyetGDMutation.mutate(r.id)}>
+              <Button size="small" type="link" icon={<CheckCircleOutlined />} style={{ color: 'green' }}>GĐ</Button>
+            </Popconfirm>
+          )}
+          {r.trang_thai === 'duyet_gd' && (
+            <Tooltip title="Tạo PO">
+              <Button size="small" type="primary" icon={<FileAddOutlined />} onClick={() => setPoRecord(r)} />
+            </Tooltip>
+          )}
+          {!['huy', 'tao_po'].includes(r.trang_thai) && (
+            <Popconfirm title="Hủy YMH?" onConfirm={() => huyMutation.mutate(r.id)}>
               <Button size="small" icon={<StopOutlined />} danger />
             </Popconfirm>
           )}
-          {(r.trang_thai === 'nhap' || r.trang_thai === 'huy') && (
-            <Popconfirm title="Xoá YMH?" onConfirm={() => deleteMutation.mutate(r.id)}>
+          {['nhap', 'huy'].includes(r.trang_thai) && (
+            <Popconfirm title="Xóa YMH?" onConfirm={() => deleteMutation.mutate(r.id)}>
               <Button size="small" icon={<DeleteOutlined />} danger type="text" />
             </Popconfirm>
           )}
@@ -151,128 +277,276 @@ export default function YMHListPage() {
   ]
 
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <h2 style={{ margin: 0 }}>Yêu cầu mua hàng (YMH)</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          Tạo YMH
-        </Button>
-      </div>
+    <div style={{ paddingBottom: 24 }}>
+      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+        <Col>
+          <Title level={4} style={{ margin: 0 }}>Yêu cầu mua hàng</Title>
+        </Col>
+        <Col>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              form.resetFields()
+              form.setFieldsValue({ ngay_yeu_cau: dayjs(), items: [{ loai_vat_tu: 'giay', dvt: 'Kg', don_gia_du_kien: 0 }] })
+              setCreateOpen(true)
+            }}
+          >
+            Tạo yêu cầu
+          </Button>
+        </Col>
+      </Row>
 
-      {/* Filters */}
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Select
-          allowClear placeholder="Trạng thái" style={{ width: 150 }}
-          options={Object.entries(TRANG_THAI_YMH).map(([k, v]) => ({ value: k, label: v }))}
-          value={trangThai}
-          onChange={setTrangThai}
+      <Card size="small" style={{ marginBottom: 12 }}>
+        <Row gutter={[8, 8]}>
+          <Col xs={24} sm={6} md={4}>
+            <Select
+              allowClear
+              placeholder="Trạng thái"
+              style={{ width: '100%' }}
+              options={Object.entries(TRANG_THAI_YMH).map(([value, label]) => ({ value, label }))}
+              value={trangThai}
+              onChange={setTrangThai}
+            />
+          </Col>
+          <Col xs={24} sm={6} md={5}>
+            <Select
+              allowClear
+              showSearch
+              placeholder="Pháp nhân"
+              style={{ width: '100%' }}
+              optionFilterProp="label"
+              options={phapNhanList.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              value={filterPhapNhan}
+              onChange={v => { setFilterPhapNhan(v); setFilterXuong(undefined) }}
+            />
+          </Col>
+          <Col xs={24} sm={6} md={5}>
+            <Select
+              allowClear
+              showSearch
+              placeholder="Xưởng"
+              style={{ width: '100%' }}
+              optionFilterProp="label"
+              options={filteredXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
+              value={filterXuong}
+              onChange={setFilterXuong}
+            />
+          </Col>
+          <Col xs={24} sm={12} md={7}>
+            <RangePicker
+              style={{ width: '100%' }}
+              format="DD/MM/YYYY"
+              value={dateRange as [dayjs.Dayjs, dayjs.Dayjs] | null}
+              onChange={v => setDateRange(v)}
+            />
+          </Col>
+        </Row>
+      </Card>
+
+      <Card size="small" styles={{ body: { padding: 0 } }}>
+        <Table<PurchaseRequisition>
+          rowKey="id"
+          columns={columns}
+          dataSource={ymhs}
+          loading={isFetching}
+          size="small"
+          pagination={{ pageSize: 50, showSizeChanger: true }}
+          scroll={{ x: 1180 }}
         />
-        <RangePicker
-          format="DD/MM/YYYY"
-          value={dateRange as [dayjs.Dayjs, dayjs.Dayjs] | null}
-          onChange={v => setDateRange(v)}
-        />
-      </Space>
+      </Card>
 
-      <Table<PurchaseRequisition>
-        rowKey="id"
-        columns={columns}
-        dataSource={ymhs}
-        loading={isFetching}
-        size="small"
-        pagination={{ pageSize: 50 }}
-        scroll={{ x: 900 }}
-      />
-
-      {/* View Drawer */}
       <Drawer
-        title={`Chi tiết YMH — ${viewRecord?.so_ymh}`}
+        title={`Chi tiết YMH - ${viewRecord?.so_ymh ?? ''}`}
         open={!!viewRecord}
         onClose={() => setViewRecord(null)}
-        width={640}
+        width={760}
       >
         {viewRecord && (
           <>
             <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
               <Descriptions.Item label="Số YMH">{viewRecord.so_ymh}</Descriptions.Item>
-              <Descriptions.Item label="Ngày YC">{viewRecord.ngay_yeu_cau}</Descriptions.Item>
-              <Descriptions.Item label="Phân xưởng">{viewRecord.ten_phan_xuong ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label="Người YC">{viewRecord.ten_nguoi_yeu_cau ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label="Trạng thái" span={2}>
+              <Descriptions.Item label="Ngày yêu cầu">{viewRecord.ngay_yeu_cau}</Descriptions.Item>
+              <Descriptions.Item label="Pháp nhân">{viewRecord.ten_phap_nhan ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="Xưởng">{viewRecord.ten_phan_xuong ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="Người yêu cầu">{viewRecord.ten_nguoi_yeu_cau ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="Trạng thái">
                 <Tag color={TRANG_THAI_YMH_COLOR[viewRecord.trang_thai]}>{TRANG_THAI_YMH[viewRecord.trang_thai]}</Tag>
               </Descriptions.Item>
-              {viewRecord.ten_nguoi_duyet_pb && (
-                <Descriptions.Item label="PB duyệt">{viewRecord.ten_nguoi_duyet_pb} — {viewRecord.ngay_duyet_pb?.slice(0, 10)}</Descriptions.Item>
-              )}
-              {viewRecord.ten_nguoi_duyet_gd && (
-                <Descriptions.Item label="GĐ duyệt">{viewRecord.ten_nguoi_duyet_gd} — {viewRecord.ngay_duyet_gd?.slice(0, 10)}</Descriptions.Item>
-              )}
-              <Descriptions.Item label="Tổng dự kiến" span={2}>{fmtVND(viewRecord.tong_du_kien)}</Descriptions.Item>
+              <Descriptions.Item label="PB duyệt">{viewRecord.ten_nguoi_duyet_pb ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="GĐ duyệt">{viewRecord.ten_nguoi_duyet_gd ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="PO đã tạo">{viewRecord.po_id ? `#${viewRecord.po_id}` : '-'}</Descriptions.Item>
+              <Descriptions.Item label="Tổng dự kiến">{fmtVND(viewRecord.tong_du_kien)}</Descriptions.Item>
               {viewRecord.ghi_chu && <Descriptions.Item label="Ghi chú" span={2}>{viewRecord.ghi_chu}</Descriptions.Item>}
             </Descriptions>
             <Table
-              rowKey="id"
+              rowKey={(r: any, i) => r.id ?? `${r.ten_hang}-${i}`}
               size="small"
               dataSource={viewRecord.items}
               pagination={false}
               columns={[
                 { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
-                { title: 'SL', dataIndex: 'so_luong', width: 80, align: 'right' },
-                { title: 'ĐVT', dataIndex: 'dvt', width: 60 },
-                { title: 'Đơn giá DK', dataIndex: 'don_gia_du_kien', width: 120, align: 'right', render: fmtVND },
-                { title: 'Ngày cần', dataIndex: 'ngay_can', width: 100, render: v => v ?? '-' },
+                { title: 'SL', dataIndex: 'so_luong', width: 95, align: 'right' },
+                { title: 'ĐVT', dataIndex: 'dvt', width: 70 },
+                { title: 'Đơn giá DK', dataIndex: 'don_gia_du_kien', width: 125, align: 'right', render: fmtVND },
+                { title: 'Ngày cần', dataIndex: 'ngay_can', width: 105, render: v => v ?? '-' },
+                { title: 'Ghi chú', dataIndex: 'ghi_chu', width: 160, render: v => v ?? '-' },
               ]}
             />
           </>
         )}
       </Drawer>
 
-      {/* Create Drawer */}
       <Drawer
         title="Tạo yêu cầu mua hàng"
         open={createOpen}
         onClose={() => { setCreateOpen(false); form.resetFields() }}
-        width={680}
+        width={920}
         extra={
-          <Button type="primary" onClick={() => form.submit()} loading={createMutation.isPending}>
-            Lưu
+          <Button type="primary" onClick={handleCreate} loading={createMutation.isPending}>
+            Lưu yêu cầu
           </Button>
         }
       >
-        <Form form={form} onFinish={handleCreate} layout="vertical">
-          <Form.Item name="ngay_yeu_cau" label="Ngày yêu cầu" rules={[{ required: true }]} initialValue={dayjs()}>
-            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="ghi_chu" label="Ghi chú">
-            <Input.TextArea rows={2} />
+        <Form form={form} layout="vertical">
+          <Row gutter={12}>
+            <Col xs={24} md={8}>
+              <Form.Item name="ngay_yeu_cau" label="Ngày yêu cầu" rules={[{ required: true, message: 'Chọn ngày yêu cầu' }]}>
+                <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="phap_nhan_id" label="Pháp nhân">
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  placeholder="Chọn pháp nhân"
+                  options={phapNhanList.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="phan_xuong_id" label="Xưởng / bộ phận">
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  placeholder="Chọn xưởng"
+                  options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
+                  onChange={syncXuongToPhapNhan}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="ghi_chu" label="Lý do / ghi chú">
+            <Input.TextArea rows={2} placeholder="VD: mua bù tồn tối thiểu, mua cho đơn hàng, mua vật tư văn phòng..." />
           </Form.Item>
 
           <Form.List name="items">
             {(fields, { add, remove }) => (
               <>
-                {fields.map(({ key, name, ...restField }) => (
-                  <div key={key} style={{ border: '1px solid #f0f0f0', borderRadius: 6, padding: '8px 12px', marginBottom: 8 }}>
-                    <Space wrap size={8}>
-                      <Form.Item {...restField} name={[name, 'ten_hang']} label="Tên hàng" style={{ marginBottom: 4 }} rules={[{ required: true }]}>
-                        <Input placeholder="Tên hàng" style={{ width: 200 }} />
-                      </Form.Item>
-                      <Form.Item {...restField} name={[name, 'so_luong']} label="Số lượng" style={{ marginBottom: 4 }} rules={[{ required: true }]}>
-                        <InputNumber min={0.001} style={{ width: 100 }} />
-                      </Form.Item>
-                      <Form.Item {...restField} name={[name, 'dvt']} label="ĐVT" style={{ marginBottom: 4 }} initialValue="Kg">
-                        <Input style={{ width: 70 }} />
-                      </Form.Item>
-                      <Form.Item {...restField} name={[name, 'don_gia_du_kien']} label="Đơn giá DK" style={{ marginBottom: 4 }}>
-                        <InputNumber min={0} style={{ width: 130 }} />
-                      </Form.Item>
-                      <Form.Item {...restField} name={[name, 'ngay_can']} label="Ngày cần" style={{ marginBottom: 4 }}>
-                        <DatePicker format="DD/MM/YYYY" />
-                      </Form.Item>
-                      <Button danger size="small" onClick={() => remove(name)} style={{ marginTop: 28 }}>Xoá</Button>
-                    </Space>
-                  </div>
+                {fields.map(({ key, name }) => (
+                  <Card key={key} size="small" style={{ marginBottom: 8, background: '#fafafa' }}>
+                    <Row gutter={[8, 4]} align="top">
+                      <Col xs={24} md={4}>
+                        <Form.Item name={[name, 'loai_vat_tu']} label="Loại" rules={[{ required: true }]} style={{ marginBottom: 4 }}>
+                          <Select
+                            options={[
+                              { value: 'giay', label: 'Giấy cuộn' },
+                              { value: 'khac', label: 'NVL khác' },
+                              { value: 'tu_do', label: 'Tự do' },
+                            ]}
+                            onChange={() => {
+                              const items: FormItem[] = form.getFieldValue('items') || []
+                              const updated = [...items]
+                              updated[name] = { ...updated[name], mat_id: undefined, ten_hang: '', dvt: 'Kg', don_gia_du_kien: 0 }
+                              form.setFieldValue('items', updated)
+                            }}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} md={9}>
+                        <Form.Item noStyle dependencies={[['items', name, 'loai_vat_tu']]}>
+                          {({ getFieldValue }) => {
+                            const loai = getFieldValue(['items', name, 'loai_vat_tu'])
+                            if (loai === 'giay') {
+                              return (
+                                <Form.Item name={[name, 'mat_id']} label="Giấy cuộn" rules={[{ required: true, message: 'Chọn giấy' }]} style={{ marginBottom: 4 }}>
+                                  <Select
+                                    showSearch
+                                    optionFilterProp="label"
+                                    placeholder="Chọn giấy cuộn"
+                                    options={paperMats.filter(m => m.su_dung).map(m => ({
+                                      value: m.id,
+                                      label: `${m.ma_chinh} - ${m.ten}`,
+                                    }))}
+                                    onChange={id => handleMaterialSelect(name, 'giay', id)}
+                                  />
+                                </Form.Item>
+                              )
+                            }
+                            if (loai === 'khac') {
+                              return (
+                                <Form.Item name={[name, 'mat_id']} label="NVL khác" rules={[{ required: true, message: 'Chọn NVL' }]} style={{ marginBottom: 4 }}>
+                                  <Select
+                                    showSearch
+                                    optionFilterProp="label"
+                                    placeholder="Chọn NVL khác"
+                                    options={otherMats.filter(m => m.trang_thai).map(m => ({
+                                      value: m.id,
+                                      label: `${m.ma_chinh} - ${m.ten}`,
+                                    }))}
+                                    onChange={id => handleMaterialSelect(name, 'khac', id)}
+                                  />
+                                </Form.Item>
+                              )
+                            }
+                            return (
+                              <Form.Item name={[name, 'ten_hang']} label="Tên hàng" rules={[{ required: true, message: 'Nhập tên hàng' }]} style={{ marginBottom: 4 }}>
+                                <Input placeholder="Tên hàng cần mua" />
+                              </Form.Item>
+                            )
+                          }}
+                        </Form.Item>
+                      </Col>
+                      <Col xs={12} md={3}>
+                        <Form.Item name={[name, 'so_luong']} label="Số lượng" rules={[{ required: true, message: 'Nhập SL' }]} style={{ marginBottom: 4 }}>
+                          <InputNumber min={0.001} style={{ width: '100%' }} />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={12} md={3}>
+                        <Form.Item name={[name, 'dvt']} label="ĐVT" style={{ marginBottom: 4 }}>
+                          <Select options={DVT_OPTIONS} />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={12} md={4}>
+                        <Form.Item name={[name, 'don_gia_du_kien']} label="Giá dự kiến" style={{ marginBottom: 4 }}>
+                          <InputNumber min={0} style={{ width: '100%' }} formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={12} md={4}>
+                        <Form.Item name={[name, 'ngay_can']} label="Ngày cần" style={{ marginBottom: 4 }}>
+                          <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={21} md={6}>
+                        <Form.Item name={[name, 'ghi_chu']} label="Ghi chú dòng" style={{ marginBottom: 4 }}>
+                          <Input placeholder="..." />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={3} md={1} style={{ paddingTop: 30 }}>
+                        <Button danger size="small" type="text" icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                      </Col>
+                    </Row>
+                  </Card>
                 ))}
-                <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                <Button
+                  type="dashed"
+                  block
+                  icon={<PlusOutlined />}
+                  onClick={() => add({ loai_vat_tu: 'giay', dvt: 'Kg', don_gia_du_kien: 0 })}
+                >
                   Thêm dòng hàng
                 </Button>
               </>
@@ -280,6 +554,44 @@ export default function YMHListPage() {
           </Form.List>
         </Form>
       </Drawer>
+
+      <Modal
+        title={`Tạo PO từ ${poRecord?.so_ymh ?? ''}`}
+        open={!!poRecord}
+        onCancel={() => { setPoRecord(null); poForm.resetFields() }}
+        onOk={handleCreatePO}
+        confirmLoading={taoPOMutation.isPending}
+        okText="Tạo PO"
+      >
+        <Form form={poForm} layout="vertical" initialValues={{ ngay_po: dayjs() }}>
+          <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true, message: 'Chọn nhà cung cấp' }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="Chọn nhà cung cấp"
+              options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))}
+            />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="ngay_po" label="Ngày PO" rules={[{ required: true }]}>
+                <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="ngay_du_kien_nhan" label="Ngày dự kiến nhận">
+                <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="dieu_khoan_tt" label="Điều khoản thanh toán">
+            <Select allowClear options={DIEU_KHOAN_OPTIONS} />
+          </Form.Item>
+          <Form.Item name="ghi_chu" label="Ghi chú PO">
+            <Input.TextArea rows={2} placeholder={`Tạo từ ${poRecord?.so_ymh ?? 'YMH'}`} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }

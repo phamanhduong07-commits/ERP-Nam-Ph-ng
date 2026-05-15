@@ -3,18 +3,20 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Table, Button, Space, Tag, Input, Select, DatePicker,
-  Popconfirm, message, Card, Row, Col, Typography, Tooltip,
+  Popconfirm, message, Card, Row, Col, Typography, Tooltip, Badge,
 } from 'antd'
 import {
   PlusOutlined, SearchOutlined, EyeOutlined,
   CheckCircleOutlined, StopOutlined, FileAddOutlined,
-  FileExcelOutlined, FilePdfOutlined,
+  FileExcelOutlined, FilePdfOutlined, CopyOutlined, SendOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS } from '../../api/quotes'
 import type { QuoteListItem } from '../../api/quotes'
 import { exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
+import ImportExcelButton from '../../components/ImportExcelButton'
+import { useAuthStore } from '../../store/auth'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -31,11 +33,16 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
   const [trangThai, setTrangThai] = useState<string | undefined>()
   const [dateRange, setDateRange] = useState<[string, string] | []>([])
   const [page, setPage] = useState(1)
+  const role = useAuthStore(s => s.user?.role)
+  const userId = useAuthStore(s => s.user?.id)
+  const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
+  const isSaleAdmin = role === 'SALE_ADMIN'
 
   const isEmbedded = !!onSelect
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const items = data?.items ?? []
+    const details = await Promise.all(items.map(r => quotesApi.get(r.id).then(res => res.data)))
     exportToExcel(`BaoGia_${dayjs().format('YYYYMMDD')}`, [{
       name: 'Báo giá',
       headers: ['STT', 'Số BG', 'Ngày BG', 'Khách hàng', 'Ngày HH', 'Số dòng', 'Tổng cộng (đ)', 'Trạng thái'],
@@ -44,6 +51,16 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
         fmtDate(r.ngay_het_han ?? null), r.so_dong, Number(r.tong_cong ?? 0), QUOTE_STATUS_LABELS[r.trang_thai] ?? r.trang_thai,
       ]),
       colWidths: [5, 18, 12, 30, 12, 8, 16, 14],
+    }, {
+      name: 'Chi tiet',
+      headers: ['So BG', 'Ngay BG', 'Khach hang', 'STT', 'Ma hang', 'Ten hang', 'DVT', 'So luong', 'Gia ban', 'Ma Ky Hieu', 'Ghi Chu', 'So lop', 'To hop song', 'Mat', 'Mat DL', 'Song 1', 'Song 1 DL', 'Mat 1', 'Mat 1 DL'],
+      rows: details.flatMap(q => q.items.map((it, idx) => [
+        q.so_bao_gia, fmtDate(q.ngay_bao_gia), q.customer?.ten_viet_tat || '', idx + 1,
+        it.ma_amis || '', it.ten_hang, it.dvt, it.so_luong, it.gia_ban,
+        it.ma_ky_hieu || '', it.ghi_chu || '', it.so_lop, it.to_hop_song || '',
+        it.mat || '', it.mat_dl || '', it.song_1 || '', it.song_1_dl || '', it.mat_1 || '', it.mat_1_dl || '',
+      ])),
+      colWidths: [18, 12, 28, 6, 14, 34, 10, 12, 14, 22, 28, 8, 12, 12, 10, 12, 10, 12, 10],
     }])
   }
 
@@ -68,8 +85,10 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
     )
   }
 
+  const [myOnly, setMyOnly] = useState(false)
+
   const { data, isLoading } = useQuery({
-    queryKey: ['quotes', search, trangThai, dateRange, page],
+    queryKey: ['quotes', search, trangThai, dateRange, page, myOnly],
     queryFn: () =>
       quotesApi.list({
         search,
@@ -78,7 +97,17 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
         den_ngay: dateRange[1],
         page,
         page_size: 20,
+        ...(myOnly && userId ? { created_by: userId } : {}),
       }).then(r => r.data),
+  })
+
+  const submitMutation = useMutation({
+    mutationFn: (id: number) => quotesApi.submit(id),
+    onSuccess: () => {
+      message.success('Đã gửi duyệt')
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi gửi duyệt'),
   })
 
   const approveMutation = useMutation({
@@ -107,6 +136,16 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
       navigate('/sales/orders')
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo đơn'),
+  })
+
+  const copyMutation = useMutation({
+    mutationFn: (id: number) => quotesApi.copy(id),
+    onSuccess: (res) => {
+      message.success(`Đã copy ${res.data.so_bao_gia}`)
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      navigate(`/quotes/${res.data.id}/edit`)
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Copy báo giá thất bại'),
   })
 
   const compactColumns: ColumnsType<QuoteListItem> = [
@@ -200,11 +239,23 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
           <Tooltip title="Xem chi tiết">
             <Button size="small" icon={<EyeOutlined />} onClick={() => navigate(`/quotes/${row.id}`)} />
           </Tooltip>
-          {row.trang_thai === 'moi' && (
+          {row.trang_thai === 'moi' && !canApprove && (
+            <Tooltip title="Gửi duyệt">
+              <Popconfirm title="Gửi báo giá để duyệt?" onConfirm={() => submitMutation.mutate(row.id)}>
+                <Button size="small" icon={<SendOutlined />} />
+              </Popconfirm>
+            </Tooltip>
+          )}
+          {(row.trang_thai === 'moi' || row.trang_thai === 'cho_duyet') && canApprove && (
             <Tooltip title="Duyệt">
               <Popconfirm title="Duyệt báo giá này?" onConfirm={() => approveMutation.mutate(row.id)}>
                 <Button size="small" icon={<CheckCircleOutlined />} type="primary" ghost />
               </Popconfirm>
+            </Tooltip>
+          )}
+          {row.trang_thai === 'da_duyet' && (
+            <Tooltip title="Copy chỉnh sửa">
+              <Button size="small" icon={<CopyOutlined />} onClick={() => copyMutation.mutate(row.id)} />
             </Tooltip>
           )}
           {(row.trang_thai === 'moi' || row.trang_thai === 'da_duyet') && (
@@ -237,16 +288,18 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
           </Col>
           <Col>
             <Space size={4}>
-              {!isEmbedded && (
-                <>
-                  <Tooltip title="Xuất Excel">
-                    <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
-                  </Tooltip>
-                  <Tooltip title="Xuất PDF">
-                    <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
-                  </Tooltip>
-                </>
-              )}
+              <Tooltip title="Xuất Excel">
+                <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
+              </Tooltip>
+              <Tooltip title="Xuất PDF">
+                <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
+              </Tooltip>
+              <ImportExcelButton
+                endpoint="/quotes"
+                templateFilename="mau_import_bao_gia.xlsx"
+                buttonText="Import"
+                onImported={() => queryClient.invalidateQueries({ queryKey: ['quotes'] })}
+              />
               <Button
                 type="primary"
                 size="small"
@@ -258,6 +311,41 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
             </Space>
           </Col>
         </Row>
+
+        {/* Shortcut filter theo role */}
+        {!isEmbedded && (canApprove || isSaleAdmin) && (
+          <Row style={{ marginTop: 8 }} gutter={4}>
+            {canApprove && (
+              <Col>
+                <Badge
+                  count={data?.items.filter(r => r.trang_thai === 'cho_duyet').length || 0}
+                  size="small"
+                  offset={[-4, 0]}
+                >
+                  <Button
+                    size="small"
+                    type={trangThai === 'cho_duyet' ? 'primary' : 'default'}
+                    icon={<SendOutlined />}
+                    onClick={() => { setTrangThai(trangThai === 'cho_duyet' ? undefined : 'cho_duyet'); setPage(1) }}
+                  >
+                    Chờ duyệt
+                  </Button>
+                </Badge>
+              </Col>
+            )}
+            {isSaleAdmin && (
+              <Col>
+                <Button
+                  size="small"
+                  type={myOnly ? 'primary' : 'default'}
+                  onClick={() => { setMyOnly(!myOnly); setPage(1) }}
+                >
+                  Của tôi
+                </Button>
+              </Col>
+            )}
+          </Row>
+        )}
 
         <Row gutter={8} style={{ marginTop: 8 }}>
           <Col flex="auto">
@@ -274,7 +362,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
             <Select
               placeholder="TT"
               size="small"
-              style={{ width: 110 }}
+              style={{ width: 115 }}
               allowClear
               value={trangThai}
               onChange={(v) => { setTrangThai(v); setPage(1) }}

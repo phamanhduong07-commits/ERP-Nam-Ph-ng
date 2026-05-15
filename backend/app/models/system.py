@@ -1,0 +1,27 @@
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON
+from app.database import Base
+
+class PrintTemplate(Base):
+    """Lưu trữ các biểu mẫu in ấn tùy chỉnh (HTML/CSS)"""
+    __tablename__ = "print_templates"
+
+    id = Column(Integer, primary_key=True)
+    ma_mau = Column(String(50), nullable=False) # ví dụ: 'delivery_order', 'sales_invoice'
+    phap_nhan_id = Column(Integer, nullable=True) # ID của pháp nhân (NULL nếu dùng chung)
+    ten_mau = Column(String(100), nullable=False)
+    html_content = Column(Text, nullable=False)
+    css_content = Column(Text)
+    variables_meta = Column(JSON) # Lưu danh sách các biến khả dụng: { "so_phieu": "Số phiếu", "ngay": "Ngày" }
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class SystemSetting(Base):
+    """Cấu hình hệ thống chung"""
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(100), unique=True, nullable=False)
+    value = Column(Text)
+    description = Column(String(255))
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)

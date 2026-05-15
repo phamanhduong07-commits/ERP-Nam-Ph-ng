@@ -22,6 +22,7 @@ from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSong
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
 from app.models.warehouse_doc import PhieuChuyenKho, PhieuChuyenKhoItem
 from app.models.inventory import InventoryBalance
+from app.services.carton_metrics import dec_or_zero, _to_hop_song, song_take_up, standard_thickness_m
 
 _log = logging.getLogger("erp")
 
@@ -502,6 +503,24 @@ def ton_kho_lsx(
         px_order = px_map.get(order.phan_xuong_id)
         pn = getattr(order, "phap_nhan", None)
 
+        # Tính diện tích / trọng lượng / thể tích theo kích thước tấm phôi thực tế
+        kho_mm = Decimal(str(data["chieu_kho"] or 0))
+        cat_mm = Decimal(str(data["chieu_cat"] or 0))
+        qty = Decimal(str(ton_kho))
+        phoi_area = kho_mm * cat_mm * qty / Decimal("1000000")  # m²
+
+        trong_luong = Decimal("0")
+        the_tich = Decimal("0")
+        if first and phoi_area > 0:
+            gsm_total = Decimal("0")
+            for _f in ("mat_dl", "mat_1_dl", "mat_2_dl", "mat_3_dl"):
+                gsm_total += dec_or_zero(getattr(first, _f, None))
+            to_hop = _to_hop_song(first)
+            for _idx, _f in enumerate(("song_1_dl", "song_2_dl", "song_3_dl")):
+                gsm_total += dec_or_zero(getattr(first, _f, None)) * song_take_up(to_hop, _idx)
+            trong_luong = phoi_area * gsm_total / Decimal("1000")
+            the_tich = phoi_area * standard_thickness_m(to_hop)
+
         result.append({
             "production_order_id": order_id,
             "so_lenh": order.so_lenh,
@@ -514,6 +533,9 @@ def ton_kho_lsx(
             "ten_kho": wh.ten_kho,
             "chieu_kho": data["chieu_kho"],
             "chieu_cat": data["chieu_cat"],
+            "dien_tich": float(phoi_area),
+            "trong_luong": float(trong_luong),
+            "the_tich": float(the_tich),
             "phieu_in_hien_tai": active_map.get(order_id),
             "phan_xuong_id": wh.phan_xuong_id,
             "ten_phan_xuong": px_wh.ten_xuong.replace("Xưởng ", "Kho phôi ") if px_wh and px_wh.ten_xuong else None,

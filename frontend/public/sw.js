@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nam-phuong-erp-v3';
+const CACHE_NAME = 'nam-phuong-erp-v14';
 
 // Install: skip waiting immediately, no pre-caching (assets change every build)
 self.addEventListener('install', () => {

@@ -109,6 +109,19 @@ export interface DeliveryOrderItem {
   don_gia: number
   thanh_tien: number
   ghi_chu: string | null
+  so_luong_da_tra?: number
+  so_luong_con_lai?: number
+  // print fields (only present when fetched via GET /deliveries/{id})
+  so_don_item?: string | null
+  ngay_po?: string | null
+  ket_cau?: string | null
+  quy_cach?: string | null
+  kho_tt?: number | null
+  dai_tt?: number | null
+  dai?: number | null
+  rong?: number | null
+  cao?: number | null
+  so_lop?: number | null
 }
 
 export interface DeliveryOrder {
@@ -121,6 +134,8 @@ export interface DeliveryOrder {
   ten_khach: string | null
   warehouse_id: number
   ten_kho: string | null
+  loai_kho: string | null
+  phap_nhan_id: number | null
   yeu_cau_id: number | null
   dia_chi_giao: string | null
   nguoi_nhan: string | null
@@ -132,6 +147,12 @@ export interface DeliveryOrder {
   tai_xe_id: number | null
   ten_tai_xe: string | null
   lo_xe: string | null
+  lo_xe_id: number | null
+  ten_lo_xe: string | null
+  lo_xe_id_2: number | null
+  ten_lo_xe_2: string | null
+  so_seal: string | null
+  gui_kem_theo: string | null
   don_gia_vc_id: number | null
   ten_tuyen: string | null
   tien_van_chuyen: number
@@ -145,6 +166,10 @@ export interface DeliveryOrder {
   items: DeliveryOrderItem[]
   ghi_chu: string | null
   created_at: string
+  da_dieu_chinh: boolean
+  has_issued_invoice: boolean
+  invoice_id: number | null
+  invoice_status: string | null
 }
 
 export interface CreateDeliveryItemPayload {
@@ -164,6 +189,7 @@ export interface CreateDeliveryItemPayload {
 export interface CreateDeliveryPayload {
   ngay_xuat: string
   warehouse_id: number
+  phap_nhan_id?: number
   sales_order_id?: number
   customer_id?: number
   yeu_cau_id?: number
@@ -173,6 +199,10 @@ export interface CreateDeliveryPayload {
   xe_id?: number
   tai_xe_id?: number
   lo_xe?: string
+  lo_xe_id?: number
+  lo_xe_id_2?: number
+  so_seal?: string
+  gui_kem_theo?: string
   don_gia_vc_id?: number
   tien_van_chuyen?: number
   ghi_chu?: string
@@ -201,6 +231,7 @@ export const deliveriesApi = {
     so_don?: string
     tu_ngay?: string
     den_ngay?: string
+    so_phieu?: string
   }) =>
     client.get<DeliveryOrder[]>('/warehouse/deliveries', { params }),
   get: (id: number) => client.get<DeliveryOrder>(`/warehouse/deliveries/${id}`),
@@ -211,4 +242,7 @@ export const deliveriesApi = {
   delete: (id: number) => client.delete(`/warehouse/deliveries/${id}`),
   getBySalesOrder: (salesOrderId: number) =>
     client.get<DeliveryOrder[]>(`/warehouse/deliveries?sales_order_id=${salesOrderId}`),
+
+  adjustItems: (id: number, items: { item_id: number; so_luong_moi: number }[], ghi_chu: string) =>
+    client.post(`/warehouse/deliveries/${id}/adjust-items`, { items, ghi_chu }),
 }

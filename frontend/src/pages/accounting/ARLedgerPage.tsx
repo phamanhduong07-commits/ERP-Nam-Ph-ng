@@ -12,6 +12,7 @@ import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/e
 import { arApi, ARLedgerEntryRow, ARLedgerRow, ARAgingRow } from '../../api/accounting'
 import { customersApi, Customer } from '../../api/customers'
 import { TRANG_THAI_INVOICE } from '../../api/billing'
+import { phapNhanApi } from '../../api/phap_nhan'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -24,16 +25,22 @@ function LedgerTab() {
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [quaHanOnly, setQuaHanOnly] = useState(false)
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ['customers-all'],
     queryFn: () => customersApi.all().then(r => r.data),
   })
 
+  const { data: listPhapNhan = [] } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list().then(r => r.data),
+  })
+
   const { data: rows = [], isLoading } = useQuery<ARLedgerRow[]>({
-    queryKey: ['ar-ledger', customerId, tuNgay, denNgay, quaHanOnly],
+    queryKey: ['ar-ledger', customerId, tuNgay, denNgay, quaHanOnly, phapNhanId],
     queryFn: () =>
-      arApi.getLedger({ customer_id: customerId, tu_ngay: tuNgay, den_ngay: denNgay, qua_han_only: quaHanOnly }),
+      arApi.getLedger({ customer_id: customerId, tu_ngay: tuNgay, den_ngay: denNgay, qua_han_only: quaHanOnly, phap_nhan_id: phapNhanId }),
   })
 
   const tongConLai = rows.reduce((s, r) => s + (r.con_lai ?? 0), 0)
@@ -149,6 +156,13 @@ function LedgerTab() {
     <>
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[12, 8]} align="middle">
+          <Col>
+            <Select
+              style={{ width: 150 }} allowClear placeholder="Pháp nhân"
+              options={listPhapNhan.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              onChange={v => setPhapNhanId(v)}
+            />
+          </Col>
           <Col>
             <Select
               style={{ width: 220 }} allowClear showSearch placeholder="Lọc khách hàng"

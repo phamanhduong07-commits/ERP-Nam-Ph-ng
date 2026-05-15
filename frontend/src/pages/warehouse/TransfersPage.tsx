@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
+  Alert, Button, Card, Col, DatePicker, Descriptions, Divider, Drawer, Form, Input, InputNumber,
   Popconfirm, Row, Select, Space, Table, Tag, Typography, message,
 } from 'antd'
-import { FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined, SwapOutlined, ArrowRightOutlined, MinusCircleOutlined } from '@ant-design/icons'
+import { EyeOutlined, FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined, SwapOutlined, ArrowRightOutlined, MinusCircleOutlined } from '@ant-design/icons'
+import { systemApi } from '../../api/system'
 import dayjs from 'dayjs'
 import {
   warehouseApi, PhieuChuyenKho, CreatePhieuChuyenPayload, TonKho,
 } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
-import { exportToExcel, printDocument, buildHtmlTable } from '../../utils/exportUtils'
+import { exportToExcel, renderTemplateAndPrint } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
@@ -28,6 +29,7 @@ export default function TransfersPage() {
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [selectedKhoXuat, setSelectedKhoXuat] = useState<number | undefined>()
   const [selectedKhoNhap, setSelectedKhoNhap] = useState<number | undefined>()
+  const [detailPhieu, setDetailPhieu] = useState<PhieuChuyenKho | null>(null)
 
   const { data: phanXuongs = [] } = useQuery({
     queryKey: ['phan-xuong'],
@@ -44,6 +46,14 @@ export default function TransfersPage() {
     queryFn: () => warehouseApi.listPhieuChuyen({
       warehouse_xuat_id: filterKhoXuat, warehouse_nhap_id: filterKhoNhap, tu_ngay: tuNgay, den_ngay: denNgay,
     }).then(r => r.data),
+  })
+
+  const phapNhanIdForPrint = detailPhieu?.phap_nhan_id_for_print ?? undefined
+  const { data: printTemplate } = useQuery({
+    queryKey: ['print-template', 'WAREHOUSE_TRANSFER', phapNhanIdForPrint],
+    queryFn: () => systemApi.getTemplate('WAREHOUSE_TRANSFER', phapNhanIdForPrint),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!detailPhieu,
   })
 
   const { data: tonKhoXuat = [] } = useQuery({
@@ -143,32 +153,93 @@ export default function TransfersPage() {
     } catch { /* validation shown inline */ }
   }
 
-  const handlePrintTransfer = (r: PhieuChuyenKho) => {
-    const cols = [
-      { header: 'Tên hàng' },
-      { header: 'ĐVT', align: 'center' as const },
-      { header: 'Số lượng', align: 'right' as const },
-      { header: 'Đơn giá', align: 'right' as const },
-    ]
-    const rowData = (r.items || []).map((it: any) => [
-      it.ten_hang,
-      it.don_vi,
-      Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
-      it.don_gia > 0 ? Number(it.don_gia).toLocaleString('vi-VN') + 'đ' : '—',
-    ])
-    printDocument({
-      title: `Phiếu chuyển kho ${r.so_phieu}`,
-      subtitle: 'PHIẾU CHUYỂN KHO',
+  const handlePrintDetail = () => {
+    if (!detailPhieu) return
+    if (!printTemplate?.html_content) {
+      message.error('Chưa có mẫu in phiếu chuyển kho. Vào Cài đặt → Mẫu in để tạo mẫu WAREHOUSE_TRANSFER.')
+      return
+    }
+    // Đọc selectedColumns từ metadata template (giống TabGiaoHang)
+    const metaAny = printTemplate.variables_meta as any
+    let tplCols: { key: string; label: string }[] = metaAny?.columns || []
+    if (!tplCols.length && metaAny?.easy_config) {
+      try { const cfg = JSON.parse(metaAny.easy_config); if (cfg?.selectedColumns?.length) tplCols = cfg.selectedColumns } catch { /* ignore */ }
+    }
+
+    const vi = new Intl.NumberFormat('vi-VN')
+    const viDec = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 })
+    const numKeys = ['so_luong', 'don_gia', 'don_vi']
+
+    const itemsHtml = (detailPhieu.items || []).map((it: any, i: number) => {
+      if (tplCols.length) {
+        const cells = tplCols.map((col: any) => {
+          let val = ''
+          switch (col.key) {
+            case 'stt':          val = String(i + 1); break
+            case 'ten_hang':     val = it.ten_hang ?? ''; break
+            case 'don_vi': case 'dvt': val = it.don_vi ?? ''; break
+            case 'so_luong':     val = viDec.format(Number(it.so_luong)); break
+            case 'don_gia': case 'gia_ban': val = it.don_gia > 0 ? vi.format(Number(it.don_gia)) : '—'; break
+            case 'ghi_chu':      val = it.ghi_chu ?? ''; break
+            // LSX-enriched columns (phôi)
+            case 'so_lsx':       val = it.so_lsx ?? ''; break
+            case 'ma_sp': case 'ma_amis': val = it.ma_sp ?? ''; break
+            case 'so_lop':       val = it.so_lop != null ? String(it.so_lop) : ''; break
+            case 'to_hop_song':  val = it.to_hop_song ?? ''; break
+            case 'quy_cach': case 'kich_thuoc': val = it.quy_cach ?? ''; break
+            case 'kho_cat':      val = it.kho_cat ?? ''; break
+            default:             val = ''
+          }
+          const isNum = ['so_luong', 'don_gia'].includes(col.key)
+          return `<td${isNum ? ' style="text-align:right"' : ''}>${val}</td>`
+        }).join('')
+        return `<tr>${cells}</tr>`
+      }
+      // fallback nếu template không có selectedColumns
+      return `<tr>
+        <td style="text-align:center">${i + 1}</td>
+        <td>${it.ten_hang ?? ''}</td>
+        <td style="text-align:center">${it.don_vi ?? ''}</td>
+        <td style="text-align:right">${viDec.format(Number(it.so_luong))}</td>
+        <td style="text-align:right">${it.don_gia > 0 ? vi.format(Number(it.don_gia)) + 'đ' : '—'}</td>
+        <td>${it.ghi_chu ?? ''}</td>
+      </tr>`
+    }).join('')
+
+    const ngay = detailPhieu.ngay ?? ''
+    const [yyyy, mm, dd] = ngay.split('-')
+    renderTemplateAndPrint(
+      `Phiếu chuyển kho ${detailPhieu.so_phieu}`,
+      printTemplate.html_content,
+      {
+        // biến chuẩn easy-mode template
+        subtitle: 'PHIẾU CHUYỂN KHO',
+        document_number: detailPhieu.so_phieu,
+        document_date: ngay ? `${dd}/${mm}/${yyyy}` : '—',
+        document_day: dd ?? '', document_month: mm ?? '', document_year: yyyy ?? '',
+        customer_name: `${detailPhieu.ten_kho_xuat ?? '—'}${detailPhieu.ten_phan_xuong_xuat ? ` (${detailPhieu.ten_phan_xuong_xuat})` : ''}`,
+        delivery_address: `${detailPhieu.ten_kho_nhap ?? '—'}${detailPhieu.ten_phan_xuong_nhap ? ` (${detailPhieu.ten_phan_xuong_nhap})` : ''}`,
+        warehouse_name: detailPhieu.ten_phap_nhan_xuat ?? '',
+        body_html: itemsHtml,
+        footer_html: detailPhieu.ghi_chu ?? '',
+        // biến tường minh cho template tự viết
+        so_phieu: detailPhieu.so_phieu,
+        ngay: ngay ? `${dd}/${mm}/${yyyy}` : '—',
+        kho_xuat: detailPhieu.ten_kho_xuat ?? '—',
+        ten_phan_xuong_xuat: detailPhieu.ten_phan_xuong_xuat ?? '',
+        phap_nhan_xuat: detailPhieu.ten_phap_nhan_xuat ?? '',
+        kho_nhap: detailPhieu.ten_kho_nhap ?? '—',
+        ten_phan_xuong_nhap: detailPhieu.ten_phan_xuong_nhap ?? '',
+        phap_nhan_nhap: detailPhieu.ten_phap_nhan_nhap ?? '',
+        ghi_chu: detailPhieu.ghi_chu ?? '',
+        items_html: itemsHtml,
+        // biến giao hàng — không dùng trong phiếu chuyển kho, xóa khỏi output
+        driver_name: '', assistant_1: '', assistant_2: '',
+        total_m2: '', total_so_luong: '', trong_luong: '', the_tich: '',
+        customer_name_2: '', delivery_address_2: '',
+      },
       companyInfo,
-      documentNumber: r.so_phieu,
-      documentDate: r.ngay ?? '',
-      fields: [
-        { label: 'Kho xuất (nguồn)', value: r.ten_kho_xuat ?? '—' },
-        { label: 'Kho nhận (đích)', value: r.ten_kho_nhap ?? '—' },
-        { label: 'Ghi chú', value: r.ghi_chu ?? '—' },
-      ],
-      bodyHtml: buildHtmlTable(cols, rowData),
-    })
+    )
   }
 
   const handleExportExcel = () => {
@@ -206,7 +277,7 @@ export default function TransfersPage() {
       title: '', width: 80,
       render: (_: unknown, r: PhieuChuyenKho) => (
         <Space size={4}>
-          <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintTransfer(r)} />
+          <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailPhieu(r)} />
           <Popconfirm title="Xoá phiếu chuyển này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }} disabled={r.trang_thai !== 'nhap'}>
             <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai !== 'nhap'} />
           </Popconfirm>
@@ -449,6 +520,90 @@ export default function TransfersPage() {
             )}
           </Form.List>
         </Form>
+      </Drawer>
+
+      {/* ── Chi tiết phiếu chuyển ── */}
+      <Drawer
+        open={!!detailPhieu}
+        onClose={() => setDetailPhieu(null)}
+        title={detailPhieu ? <Space><SwapOutlined style={{ color: '#722ed1' }} /><Text strong>{detailPhieu.so_phieu}</Text></Space> : ''}
+        width={620}
+        footer={
+          <Space>
+            <Button onClick={() => setDetailPhieu(null)}>Đóng</Button>
+            <Button icon={<PrinterOutlined />} type="primary" onClick={handlePrintDetail}
+              style={{ background: '#722ed1', borderColor: '#722ed1' }}>
+              In phiếu
+            </Button>
+          </Space>
+        }
+      >
+        {detailPhieu && (
+          <>
+            <Descriptions column={2} size="small" bordered>
+              <Descriptions.Item label="Ngày">{detailPhieu.ngay}</Descriptions.Item>
+              <Descriptions.Item label="Trạng thái">
+                <Tag color={detailPhieu.trang_thai === 'da_duyet' ? 'green' : 'default'}>
+                  {detailPhieu.trang_thai === 'da_duyet' ? 'Đã duyệt' : 'Nhập'}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Pháp nhân xuất" span={2}>
+                <Text strong style={{ color: '#1677ff' }}>{detailPhieu.ten_phap_nhan_xuat || '—'}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Kho xuất" span={2}>
+                <Tag color="blue">{detailPhieu.ten_kho_xuat}</Tag>
+                {detailPhieu.ten_phan_xuong_xuat && (
+                  <Text type="secondary" style={{ fontSize: 12, marginLeft: 6 }}>({detailPhieu.ten_phan_xuong_xuat})</Text>
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="Pháp nhân nhận" span={2}>
+                <Text strong style={{ color: '#722ed1' }}>{detailPhieu.ten_phap_nhan_nhap || '—'}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Kho nhận" span={2}>
+                <Tag color="purple">{detailPhieu.ten_kho_nhap}</Tag>
+                {detailPhieu.ten_phan_xuong_nhap && (
+                  <Text type="secondary" style={{ fontSize: 12, marginLeft: 6 }}>({detailPhieu.ten_phan_xuong_nhap})</Text>
+                )}
+              </Descriptions.Item>
+              {detailPhieu.ghi_chu && (
+                <Descriptions.Item label="Ghi chú" span={2}>{detailPhieu.ghi_chu}</Descriptions.Item>
+              )}
+            </Descriptions>
+
+            <Divider orientation="left" style={{ margin: '16px 0 10px', fontSize: 13 }}>
+              Danh sách hàng chuyển
+            </Divider>
+
+            {(() => {
+              const hasLsx = detailPhieu.items.some((it: any) => it.so_lsx)
+              return (
+                <Table
+                  dataSource={detailPhieu.items}
+                  rowKey={(_, i) => `detail-item-${i}`}
+                  size="small"
+                  pagination={false}
+                  scroll={{ x: hasLsx ? 700 : undefined }}
+                  columns={[
+                    { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true, width: hasLsx ? 160 : undefined },
+                    ...(hasLsx ? [
+                      { title: 'Số LSX', dataIndex: 'so_lsx', width: 130, render: (v: string) => <Text code style={{ fontSize: 11 }}>{v || '—'}</Text> },
+                      { title: 'Mã SP', dataIndex: 'ma_sp', width: 90, render: (v: string) => v || '—' },
+                      { title: 'Quy cách', dataIndex: 'quy_cach', width: 100, render: (v: string) => v || '—' },
+                      { title: 'Khổ×Cắt', dataIndex: 'kho_cat', width: 90, render: (v: string) => v || '—' },
+                      { title: 'Lớp', dataIndex: 'so_lop', width: 50, align: 'center' as const },
+                    ] : []),
+                    { title: 'ĐVT', dataIndex: 'don_vi', width: 55 },
+                    { title: 'Số lượng', dataIndex: 'so_luong', width: 90, align: 'right' as const,
+                      render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) },
+                    { title: 'Đơn giá', dataIndex: 'don_gia', width: 100, align: 'right' as const,
+                      render: (v: number) => v > 0 ? v.toLocaleString('vi-VN') + 'đ' : '—' },
+                    { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '—' },
+                  ]}
+                />
+              )
+            })()}
+          </>
+        )}
       </Drawer>
     </div>
   )

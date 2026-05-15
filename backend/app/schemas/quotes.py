@@ -9,6 +9,7 @@ class QuoteItemCreate(BaseModel):
     product_id: int | None = None
     loai: str | None = None
     ma_amis: str | None = None
+    ma_ky_hieu: str | None = None
     ten_hang: str
     dvt: str = "Thùng"
     so_luong: Decimal
@@ -77,6 +78,7 @@ class QuoteItemResponse(BaseModel):
     product_id: int | None
     loai: str | None
     ma_amis: str | None
+    ma_ky_hieu: str | None
     ten_hang: str
     dvt: str
     so_luong: Decimal

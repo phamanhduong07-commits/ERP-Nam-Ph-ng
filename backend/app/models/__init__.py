@@ -6,6 +6,7 @@ from app.models.master import (
 )
 from app.models.ccdc import NhomCCDC, CongCuDungCu, PhieuXuatCCDC, PhieuXuatCCDCItem
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
+from app.models.purchase_requisition import PurchaseRequisition, PurchaseRequisitionItem
 from app.models.warehouse_doc import (
     GoodsReceipt, GoodsReceiptItem,
     MaterialIssue, MaterialIssueItem,
@@ -30,4 +31,10 @@ from app.models.accounting import (
     PurchaseInvoice, CashReceipt, CashPayment,
     DebtLedgerEntry, OpeningBalance, CustomerRefundVoucher,
 )
+from app.models.hr import (
+    Vehicle, Department, Position, Employee, LaborContract, AttendanceLog,
+    LeaveRequest, EmployeeHistory, EmployeeDocument, FuelLog,
+    PayrollConfig, PayrollRun, RewardDiscipline,
+)
 from app.models.import_log import ImportLog
+from app.models.system import SystemSetting, PrintTemplate

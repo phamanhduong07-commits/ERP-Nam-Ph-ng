@@ -9,6 +9,7 @@ import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
 import { fmtVND, printDocument } from '../../utils/exportUtils'
 import { receiptApi, CashReceipt, TRANG_THAI_PHIEU_THU, HINH_THUC_TT } from '../../api/accounting'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import { systemApi } from '../../api/system'
 
 const { Title } = Typography
 
@@ -22,6 +23,13 @@ export default function CashReceiptDetailPage() {
     queryKey: ['receipt', receiptId],
     queryFn: () => receiptApi.get(receiptId),
     enabled: !!receiptId,
+  })
+
+  const { data: template } = useQuery({
+    queryKey: ['print-template', 'CASH_RECEIPT', receipt?.phap_nhan_id],
+    queryFn: () => systemApi.getTemplate('CASH_RECEIPT', receipt?.phap_nhan_id ?? undefined),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!receipt,
   })
 
   const approveMut = useMutation({
@@ -50,10 +58,10 @@ export default function CashReceiptDetailPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi hủy'),
   })
 
+  const companyInfo = usePhapNhanForPrint(receipt?.phap_nhan_id)
+
   if (isLoading) return <Spin style={{ margin: 40 }} />
   if (!receipt) return <div style={{ padding: 24 }}>Không tìm thấy phiếu thu</div>
-
-  const companyInfo = usePhapNhanForPrint()
   const status = TRANG_THAI_PHIEU_THU[receipt.trang_thai]
   const canApprove = receipt.trang_thai === 'cho_duyet'
   const canCancel = receipt.trang_thai !== 'huy'
@@ -63,7 +71,7 @@ export default function CashReceiptDetailPage() {
       companyInfo,
       title: `Phiếu thu ${receipt.so_phieu}`,
       subtitle: 'PHIẾU THU',
-      logoUrl: namPhuongLogo,
+      logoUrl: companyInfo?.logo || '/logo_namphuong.png',
       documentNumber: receipt.so_phieu || '—',
       documentDate: dayjs(receipt.ngay_phieu).format('DD/MM/YYYY'),
       status: status?.label ?? receipt.trang_thai,
@@ -81,6 +89,7 @@ export default function CashReceiptDetailPage() {
         <div><strong>Ngày tạo:</strong> ${dayjs(receipt.created_at).format('DD/MM/YYYY HH:mm')}</div>
         ${receipt.ngay_duyet ? `<div><strong>Ngày duyệt:</strong> ${dayjs(receipt.ngay_duyet).format('DD/MM/YYYY HH:mm')}</div>` : ''}
       `,
+      customHtml: template?.html_content,
     })
   }
 

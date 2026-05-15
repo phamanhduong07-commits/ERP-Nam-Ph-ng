@@ -1,13 +1,17 @@
 from datetime import date, datetime
 from decimal import Decimal
+from io import BytesIO
+import unicodedata
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+import pandas as pd
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import cast, Date
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
-from app.models.master import Customer, PhanXuong
+from app.models.master import Customer, PhanXuong, PaperMaterial
 from app.models.sales import Quote, QuoteItem, SalesOrder, SalesOrderItem
 from app.schemas.master import CustomerShort
 from app.schemas.quotes import (
@@ -15,21 +19,279 @@ from app.schemas.quotes import (
     QuoteResponse, QuoteListItem, QuoteItemResponse,
 )
 from app.schemas.sales import PagedResponse
+from app.services.excel_import_service import (
+    ImportField,
+    build_template_response,
+    parse_bool,
+    parse_date,
+    parse_decimal,
+    parse_int,
+    parse_text,
+)
+from app.services.price_calculator import calculate_price
+from app.routers.indirect_costs import get_indirect_breakdown_from_db
+from app.routers.addon_rates import get_addon_rates_from_db
 
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
 
 
+class QuoteItemPriceRequest(BaseModel):
+    item: dict
+
+
+class QuoteItemPriceResponse(BaseModel):
+    gia_ban: Decimal
+
+
+QUOTE_IMPORT_FIELDS = [
+    ImportField("so_bao_gia", "So bao gia", parser=parse_text, help_text="De trong de tao so moi dang BG26-05-0001"),
+    ImportField("ngay_bao_gia", "Ngay bao gia", required=True, parser=parse_date, help_text="DD/MM/YYYY"),
+    ImportField("ma_kh", "Ma KH", required=True, parser=parse_text, help_text="Ma khach hang da co trong danh muc"),
+    ImportField("ngay_het_han", "Ngay het han", parser=parse_date),
+    ImportField("so_bg_copy", "So BG copy", parser=parse_text),
+    ImportField("ghi_chu_bao_gia", "Ghi chu bao gia", parser=parse_text),
+    ImportField("dieu_khoan", "Dieu khoan", parser=parse_text),
+    ImportField("ma_amis", "Ma hang", parser=parse_text),
+    ImportField("ten_hang", "Ten hang", required=True, parser=parse_text),
+    ImportField("dvt", "DVT", parser=parse_text, default="Thung"),
+    ImportField("so_luong", "So luong", required=True, parser=parse_decimal),
+    ImportField("gia_ban_dong", "Gia ban dong", parser=parse_decimal, default=0),
+    ImportField("don_gia_m2", "Don gia m2", parser=parse_decimal),
+    ImportField("ma_ky_hieu", "Ma Ky Hieu", parser=parse_text, help_text="Khong bat buoc, he thong tu sinh neu de trong"),
+    ImportField("ghi_chu", "Ghi Chu", parser=parse_text),
+    ImportField("so_lop", "So lop", parser=parse_int, default=3),
+    ImportField("to_hop_song", "To hop song", parser=parse_text),
+    ImportField("mat", "Mat", parser=parse_text),
+    ImportField("mat_dl", "Mat DL", parser=parse_decimal),
+    ImportField("song_1", "Song 1", parser=parse_text),
+    ImportField("song_1_dl", "Song 1 DL", parser=parse_decimal),
+    ImportField("mat_1", "Mat 1", parser=parse_text),
+    ImportField("mat_1_dl", "Mat 1 DL", parser=parse_decimal),
+    ImportField("song_2", "Song 2", parser=parse_text),
+    ImportField("song_2_dl", "Song 2 DL", parser=parse_decimal),
+    ImportField("mat_2", "Mat 2", parser=parse_text),
+    ImportField("mat_2_dl", "Mat 2 DL", parser=parse_decimal),
+    ImportField("song_3", "Song 3", parser=parse_text),
+    ImportField("song_3_dl", "Song 3 DL", parser=parse_decimal),
+    ImportField("mat_3", "Mat 3", parser=parse_text),
+    ImportField("mat_3_dl", "Mat 3 DL", parser=parse_decimal),
+    ImportField("loai_thung", "Loai thung", parser=parse_text),
+    ImportField("dai", "Dai", parser=parse_decimal),
+    ImportField("rong", "Rong", parser=parse_decimal),
+    ImportField("cao", "Cao", parser=parse_decimal),
+    ImportField("kho_tt", "Kho TT", parser=parse_decimal),
+    ImportField("dai_tt", "Dai TT", parser=parse_decimal),
+    ImportField("dien_tich", "Dien tich", parser=parse_decimal),
+    ImportField("loai_in", "Loai in", parser=parse_text, default="khong_in"),
+    ImportField("so_mau", "So mau", parser=parse_int, default=0),
+    ImportField("do_kho", "Do kho", parser=parse_bool, default=False),
+    ImportField("ghim", "Ghim", parser=parse_bool, default=False),
+    ImportField("chap_xa", "Chap Xa", parser=parse_bool, default=False),
+    ImportField("do_phu", "Do phu", parser=parse_bool, default=False),
+    ImportField("dan", "Dan", parser=parse_bool, default=False),
+    ImportField("boi", "Boi", parser=parse_bool, default=False),
+    ImportField("be_lo", "Be Lo", parser=parse_bool, default=False),
+    ImportField("so_c_be", "So Con Be", parser=parse_text),
+    ImportField("gia_noi_bo", "Gia Noi Bo", parser=parse_decimal, default=0),
+]
+
+
 def _generate_so_bao_gia(db: Session) -> str:
     today = date.today()
-    prefix = f"BG{today.strftime('%Y%m%d')}"
+    prefix = f"BG{today.strftime('%y-%m')}-"
     last = (
         db.query(Quote)
         .filter(Quote.so_bao_gia.like(f"{prefix}%"))
         .order_by(Quote.so_bao_gia.desc())
         .first()
     )
-    seq = int(last.so_bao_gia[-3:]) + 1 if last else 1
-    return f"{prefix}{seq:03d}"
+    seq = int(last.so_bao_gia[-4:]) + 1 if last else 1
+    return f"{prefix}{seq:04d}"
+
+
+def _strip_accents(value: str) -> str:
+    return "".join(
+        ch for ch in unicodedata.normalize("NFD", value.lower())
+        if unicodedata.category(ch) != "Mn"
+    )
+
+
+def _paper_suffix(name: str | None) -> str | None:
+    text = _strip_accents(name or "")
+    if "trang" in text:
+        return "W"
+    if "nau" in text:
+        return "N"
+    if "xeo" in text:
+        return "X"
+    if "vang" in text:
+        return "V"
+    return None
+
+
+def _paper_code_map(db: Session) -> dict[tuple[str, str], str]:
+    rows = (
+        db.query(PaperMaterial)
+        .filter(PaperMaterial.su_dung == True, PaperMaterial.ma_ky_hieu.isnot(None))
+        .all()
+    )
+    result: dict[tuple[str, str], str] = {}
+    for p in rows:
+        base = (p.ma_ky_hieu or "").strip()
+        if not base:
+            continue
+        dl_key = _decimal_key(p.dinh_luong)
+        suffix = _paper_suffix(p.ten_viet_tat or p.ten)
+        result.setdefault((base, dl_key), f"{base}-{suffix}" if suffix else base)
+        result.setdefault((base, ""), f"{base}-{suffix}" if suffix else base)
+    return result
+
+
+def _decimal_key(value) -> str:
+    if value is None:
+        return ""
+    dec = Decimal(str(value))
+    return format(dec.normalize(), "f")
+
+
+def _build_ma_ky_hieu(item: QuoteItem | dict, paper_codes: dict[tuple[str, str], str] | None = None) -> str | None:
+    def get(name: str):
+        return item.get(name) if isinstance(item, dict) else getattr(item, name)
+
+    layers = [
+        ("mat", "mat_dl"),
+        ("song_1", "song_1_dl"),
+        ("mat_1", "mat_1_dl"),
+        ("song_2", "song_2_dl"),
+        ("mat_2", "mat_2_dl"),
+        ("song_3", "song_3_dl"),
+        ("mat_3", "mat_3_dl"),
+    ]
+    parts: list[str] = []
+    for code_field, _dl_field in layers:
+        code = get(code_field)
+        if not code:
+            continue
+        base = str(code).strip()
+        parts.append(base)
+    return ".".join(parts) or None
+
+
+def _item_get(item: QuoteItem | dict, name: str):
+    return item.get(name) if isinstance(item, dict) else getattr(item, name)
+
+
+def _parse_mat_field(value) -> int:
+    text = _strip_accents(str(value or "")).strip()
+    if text in ("2", "2 mat", "hai mat"):
+        return 2
+    if text in ("1", "1 mat", "mot mat"):
+        return 1
+    return 0
+
+
+def _parse_so_con(value) -> int:
+    if value is None:
+        return 0
+    text = str(value).strip()
+    digits = "".join(ch for ch in text if ch.isdigit())
+    num = int(digits) if digits else 0
+    return num if num in (1, 2, 4, 6, 8) else 0
+
+
+def _resolve_quote_layer(code, dl, loai_lop: str, vi_tri_lop: str, db: Session) -> dict:
+    if not code or not dl:
+        raise ValueError(f"Thieu ma giay/dinh luong lop {vi_tri_lop}")
+    base = str(code).strip()
+    candidates = [base]
+    if "-" in base:
+        candidates.append(base.split("-", 1)[0])
+    query = db.query(PaperMaterial).filter(
+        PaperMaterial.su_dung == True,
+        PaperMaterial.ma_ky_hieu.in_(candidates),
+    )
+    paper = query.filter(PaperMaterial.dinh_luong == Decimal(str(dl))).first()
+    if not paper:
+        paper = query.order_by(PaperMaterial.dinh_luong.asc()).first()
+    if not paper:
+        raise ValueError(f"Khong tim thay giay {base} {dl}gsm")
+    return {
+        "vi_tri_lop": vi_tri_lop,
+        "loai_lop": loai_lop,
+        "flute_type": None,
+        "ma_ky_hieu": base,
+        "paper_material_id": paper.id,
+        "dinh_luong": float(dl),
+        "don_gia_kg": float(paper.gia_mua or 0),
+    }
+
+
+def _quote_layers(item: QuoteItem | dict, db: Session) -> list[dict]:
+    so_lop = int(_item_get(item, "so_lop") or 3)
+    layer_defs = [
+        ("Mặt", "mat", "mat", "mat_dl"),
+        ("Sóng 1", "song", "song_1", "song_1_dl"),
+        ("Mặt 1", "mat", "mat_1", "mat_1_dl"),
+    ]
+    if so_lop >= 5:
+        layer_defs.extend([
+            ("Sóng 2", "song", "song_2", "song_2_dl"),
+            ("Mặt 2", "mat", "mat_2", "mat_2_dl"),
+        ])
+    if so_lop >= 7:
+        layer_defs.extend([
+            ("Sóng 3", "song", "song_3", "song_3_dl"),
+            ("Mặt 3", "mat", "mat_3", "mat_3_dl"),
+        ])
+    return [
+        _resolve_quote_layer(_item_get(item, code_field), _item_get(item, dl_field), loai_lop, label, db)
+        for label, loai_lop, code_field, dl_field in layer_defs
+    ]
+
+
+def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
+    so_lop = int(_item_get(item, "so_lop") or 0)
+    if so_lop not in (3, 5, 7):
+        return Decimal("0")
+    loai_thung = (_item_get(item, "loai_thung") or "A1").upper()
+    if loai_thung == "LOT":
+        loai_thung = "TAM"
+    if loai_thung == "KHAC":
+        return Decimal("0")
+    if not (_item_get(item, "dai") and _item_get(item, "rong") and _item_get(item, "to_hop_song")):
+        return Decimal("0")
+
+    loai_in = _item_get(item, "loai_in")
+    calc_input = {
+        "loai_thung": loai_thung,
+        "dai": float(_item_get(item, "dai") or 0),
+        "rong": float(_item_get(item, "rong") or 0),
+        "cao": float(_item_get(item, "cao") or 0),
+        "so_lop": so_lop,
+        "to_hop_song": _item_get(item, "to_hop_song"),
+        "so_luong": float(_item_get(item, "so_luong") or 0),
+        "layers": _quote_layers(item, db),
+        "chong_tham": _parse_mat_field(_item_get(item, "c_tham")),
+        "in_flexo_mau": int(_item_get(item, "so_mau") or 0) if loai_in == "flexo" else 0,
+        "in_flexo_phu_nen": bool(_item_get(item, "do_phu")),
+        "in_ky_thuat_so": loai_in == "ky_thuat_so",
+        "chap_xa": bool(_item_get(item, "chap_xa")),
+        "boi": bool(_item_get(item, "boi")),
+        "be_so_con": _parse_so_con(_item_get(item, "so_c_be")),
+        "dan": bool(_item_get(item, "dan")),
+        "ghim": bool(_item_get(item, "ghim")),
+        "can_mang": _parse_mat_field(_item_get(item, "can_man")),
+        "san_pham_kho": bool(_item_get(item, "do_kho")),
+        "ty_le_loi_nhuan": None,
+        "hoa_hong_kd_pct": 0.0,
+        "hoa_hong_kh_pct": 0.0,
+        "chi_phi_khac": 0.0,
+        "chiet_khau": 0.0,
+    }
+    indirect_bd = get_indirect_breakdown_from_db(so_lop, db)
+    addon_rates_db = get_addon_rates_from_db(db)
+    result = calculate_price(calc_input, indirect_breakdown=indirect_bd, addon_rates=addon_rates_db)
+    return Decimal(str(result["gia_ban_cuoi"])).quantize(Decimal("1"))
 
 
 def _build_response(quote: Quote) -> QuoteResponse:
@@ -82,6 +344,7 @@ def _load_quote(quote_id: int, db: Session) -> Quote:
             joinedload(Quote.customer),
             joinedload(Quote.items),
             joinedload(Quote.phap_nhan),
+            joinedload(Quote.phap_nhan_sx),
             joinedload(Quote.phan_xuong),
             joinedload(Quote.nv_theo_doi),
         )
@@ -98,6 +361,7 @@ def list_quotes(
     search: str = Query(default=""),
     trang_thai: str | None = Query(default=None),
     customer_id: int | None = Query(default=None),
+    created_by: int | None = Query(default=None),
     tu_ngay: date | None = Query(default=None),
     den_ngay: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -115,6 +379,8 @@ def list_quotes(
         q = q.filter(Quote.trang_thai == trang_thai)
     if customer_id:
         q = q.filter(Quote.customer_id == customer_id)
+    if created_by:
+        q = q.filter(Quote.created_by == created_by)
     if tu_ngay:
         q = q.filter(Quote.ngay_bao_gia >= tu_ngay)
     if den_ngay:
@@ -145,6 +411,216 @@ def list_quotes(
     )
 
 
+@router.post("/calculate-item-price", response_model=QuoteItemPriceResponse)
+def calculate_quote_item_price(
+    payload: QuoteItemPriceRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    try:
+        gia_ban = _quote_item_price(payload.item, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return QuoteItemPriceResponse(gia_ban=gia_ban)
+
+
+@router.get("/import-template")
+def download_quote_import_template(_: User = Depends(get_current_user)):
+    return build_template_response("mau_import_bao_gia.xlsx", QUOTE_IMPORT_FIELDS)
+
+
+def _column_map(columns) -> dict[str, str]:
+    normalized = {str(col).strip().lower().replace(" ", "_"): col for col in columns}
+    result: dict[str, str] = {}
+    for field in QUOTE_IMPORT_FIELDS:
+        for candidate in (field.label, field.name, *field.aliases):
+            key = str(candidate).strip().lower().replace(" ", "_")
+            if key in normalized:
+                result[field.name] = normalized[key]
+                break
+    return result
+
+
+def _parse_quote_import_row(source, column_map: dict[str, str]) -> tuple[dict, list[str]]:
+    values: dict = {}
+    errors: list[str] = []
+    for field in QUOTE_IMPORT_FIELDS:
+        raw_value = source[column_map[field.name]] if field.name in column_map else None
+        try:
+            parsed = field.parser(raw_value) if field.parser else parse_text(raw_value)
+        except ValueError as exc:
+            errors.append(f"{field.label}: {exc}")
+            parsed = None
+        if parsed is None and field.default is not None:
+            parsed = field.default() if callable(field.default) else field.default
+        if field.required and (parsed is None or parsed == ""):
+            errors.append(f"{field.label}: bat buoc")
+        if parsed is not None:
+            values[field.name] = parsed
+    return values, errors
+
+
+def _quote_item_from_import(values: dict, stt: int, paper_codes: dict[tuple[str, str], str], db: Session) -> dict:
+    item = {
+        "stt": stt,
+        "ma_amis": values.get("ma_amis"),
+        "ten_hang": values.get("ten_hang") or "",
+        "dvt": values.get("dvt") or "Thung",
+        "so_luong": values.get("so_luong") or Decimal("0"),
+        "don_gia_m2": values.get("don_gia_m2"),
+        "gia_ban": values.get("gia_ban_dong") or Decimal("0"),
+        "ma_ky_hieu": values.get("ma_ky_hieu"),
+        "ghi_chu": values.get("ghi_chu"),
+        "so_lop": values.get("so_lop") or 3,
+        "to_hop_song": values.get("to_hop_song"),
+        "mat": values.get("mat"),
+        "mat_dl": values.get("mat_dl"),
+        "song_1": values.get("song_1"),
+        "song_1_dl": values.get("song_1_dl"),
+        "mat_1": values.get("mat_1"),
+        "mat_1_dl": values.get("mat_1_dl"),
+        "song_2": values.get("song_2"),
+        "song_2_dl": values.get("song_2_dl"),
+        "mat_2": values.get("mat_2"),
+        "mat_2_dl": values.get("mat_2_dl"),
+        "song_3": values.get("song_3"),
+        "song_3_dl": values.get("song_3_dl"),
+        "mat_3": values.get("mat_3"),
+        "mat_3_dl": values.get("mat_3_dl"),
+        "loai_thung": values.get("loai_thung"),
+        "dai": values.get("dai"),
+        "rong": values.get("rong"),
+        "cao": values.get("cao"),
+        "kho_tt": values.get("kho_tt"),
+        "dai_tt": values.get("dai_tt"),
+        "dien_tich": values.get("dien_tich"),
+        "loai_in": values.get("loai_in") or "khong_in",
+        "so_mau": values.get("so_mau") or 0,
+        "do_kho": bool(values.get("do_kho") or False),
+        "ghim": bool(values.get("ghim") or False),
+        "chap_xa": bool(values.get("chap_xa") or False),
+        "do_phu": bool(values.get("do_phu") or False),
+        "dan": bool(values.get("dan") or False),
+        "boi": bool(values.get("boi") or False),
+        "be_lo": bool(values.get("be_lo") or False),
+        "so_c_be": values.get("so_c_be"),
+    }
+    item["ma_ky_hieu"] = item["ma_ky_hieu"] or _build_ma_ky_hieu(item, paper_codes)
+    if not item["gia_ban"]:
+        try:
+            item["gia_ban"] = _quote_item_price(item, db)
+        except Exception:
+            item["gia_ban"] = Decimal("0")
+    return item
+
+
+@router.post("/import")
+async def import_quotes(
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("sales.import")),
+):
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Chi chap nhan file Excel .xlsx/.xls")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="File rong")
+    try:
+        df = pd.read_excel(BytesIO(raw), dtype=object)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Khong doc duoc file Excel: {exc}") from exc
+    if df.empty:
+        raise HTTPException(status_code=400, detail="File khong co du lieu")
+
+    column_map = _column_map(df.columns)
+    missing = [field.label for field in QUOTE_IMPORT_FIELDS if field.required and field.name not in column_map]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Thieu cot bat buoc: {', '.join(missing)}")
+
+    paper_codes = _paper_code_map(db)
+    groups: dict[str, dict] = {}
+    rows = []
+    errors_count = skipped = 0
+
+    for idx, source in df.iterrows():
+        row_number = int(idx) + 2
+        if all(value is None or pd.isna(value) or str(value).strip() == "" for value in source.values):
+            skipped += 1
+            rows.append({"row": row_number, "status": "skip", "errors": [], "data": {}})
+            continue
+        values, row_errors = _parse_quote_import_row(source, column_map)
+        customer = None
+        if values.get("ma_kh"):
+            customer = db.query(Customer).filter(Customer.ma_kh == values["ma_kh"]).first()
+            if not customer:
+                row_errors.append(f"Ma KH: khong ton tai '{values['ma_kh']}'")
+        if values.get("so_luong") is not None and values["so_luong"] <= 0:
+            row_errors.append("So luong: phai lon hon 0")
+
+        key = values.get("so_bao_gia") or f"__new_{row_number}"
+        status = "error" if row_errors else ("update" if values.get("so_bao_gia") and db.query(Quote).filter(Quote.so_bao_gia == values["so_bao_gia"]).first() else "create")
+        if row_errors:
+            errors_count += 1
+        else:
+            group = groups.setdefault(key, {"header": values, "customer": customer, "items": []})
+            group["items"].append(_quote_item_from_import(values, len(group["items"]) + 1, paper_codes, db))
+        rows.append({"row": row_number, "status": status, "errors": row_errors, "data": {k: str(v) for k, v in values.items()}})
+
+    if commit:
+        if errors_count:
+            raise HTTPException(status_code=400, detail="File con loi, chua import. Hay sua loi va thu lai.")
+        for group in groups.values():
+            header = group["header"]
+            quote = db.query(Quote).filter(Quote.so_bao_gia == header.get("so_bao_gia")).first() if header.get("so_bao_gia") else None
+            if quote and quote.trang_thai != "moi":
+                raise HTTPException(status_code=400, detail=f"Bao gia {quote.so_bao_gia} khong o trang thai moi")
+            if not quote:
+                quote = Quote(
+                    so_bao_gia=header.get("so_bao_gia") or _generate_so_bao_gia(db),
+                    ngay_bao_gia=header["ngay_bao_gia"],
+                    customer_id=group["customer"].id,
+                    nv_phu_trach_id=current_user.id,
+                    created_by=current_user.id,
+                    trang_thai="moi",
+                )
+                db.add(quote)
+            quote.ngay_bao_gia = header["ngay_bao_gia"]
+            quote.customer_id = group["customer"].id
+            quote.ngay_het_han = header.get("ngay_het_han")
+            quote.so_bg_copy = header.get("so_bg_copy")
+            quote.ghi_chu = header.get("ghi_chu_bao_gia")
+            quote.dieu_khoan = header.get("dieu_khoan")
+            quote.gia_xuat_phoi_vsp = header.get("gia_noi_bo") or Decimal("0")
+            for old in quote.items:
+                db.delete(old)
+            db.flush()
+            tong_tien = Decimal("0")
+            tong_so_luong = Decimal("0")
+            for item in group["items"]:
+                quote.items.append(QuoteItem(**item))
+                tong_tien += item["so_luong"] * item["gia_ban"]
+                tong_so_luong += item["so_luong"]
+            quote.tong_tien_hang = tong_tien
+            quote.chi_phi_hang_hoa_dv = tong_tien + (tong_tien * (quote.ty_le_vat or Decimal("0")) / Decimal("100"))
+            quote.tien_vat = quote.chi_phi_hang_hoa_dv - tong_tien
+            quote.tong_cong = quote.chi_phi_hang_hoa_dv
+            quote.gia_ban = (tong_tien / tong_so_luong).quantize(Decimal("1")) if tong_so_luong else Decimal("0")
+        db.commit()
+
+    created = sum(1 for row in rows if row["status"] == "create")
+    updated = sum(1 for row in rows if row["status"] == "update")
+    return {
+        "commit": commit,
+        "total": len(rows),
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors_count,
+        "rows": rows[:200],
+    }
+
+
 @router.get("/{quote_id}", response_model=QuoteResponse)
 def get_quote(
     quote_id: int,
@@ -165,6 +641,7 @@ def create_quote(
         raise HTTPException(status_code=404, detail="Không tìm thấy khách hàng")
 
     so_bao_gia = _generate_so_bao_gia(db)
+    paper_codes = _paper_code_map(db)
     quote = Quote(
         so_bao_gia=so_bao_gia,
         so_bg_copy=data.so_bg_copy,
@@ -197,7 +674,14 @@ def create_quote(
         created_by=current_user.id,
     )
     for item_data in data.items:
-        quote.items.append(QuoteItem(**item_data.model_dump()))
+        item_values = item_data.model_dump()
+        item_values["ma_ky_hieu"] = item_values.get("ma_ky_hieu") or _build_ma_ky_hieu(item_values, paper_codes)
+        if not item_values.get("gia_ban"):
+            try:
+                item_values["gia_ban"] = _quote_item_price(item_values, db)
+            except Exception:
+                item_values["gia_ban"] = Decimal("0")
+        quote.items.append(QuoteItem(**item_values))
 
     db.add(quote)
     db.commit()
@@ -221,12 +705,37 @@ def update_quote(
         setattr(quote, field, value)
 
     if data.items is not None:
+        paper_codes = _paper_code_map(db)
         for item in quote.items:
             db.delete(item)
         db.flush()
         for item_data in data.items:
-            quote.items.append(QuoteItem(**item_data.model_dump()))
+            item_values = item_data.model_dump()
+            item_values["ma_ky_hieu"] = item_values.get("ma_ky_hieu") or _build_ma_ky_hieu(item_values, paper_codes)
+            if not item_values.get("gia_ban"):
+                try:
+                    item_values["gia_ban"] = _quote_item_price(item_values, db)
+                except Exception:
+                    item_values["gia_ban"] = Decimal("0")
+            quote.items.append(QuoteItem(**item_values))
 
+    db.commit()
+    return _build_response(_load_quote(quote_id, db))
+
+
+@router.patch("/{quote_id}/submit", response_model=QuoteResponse)
+def submit_quote(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Gửi báo giá để duyệt — SALE_ADMIN hoặc người tạo BG."""
+    quote = _load_quote(quote_id, db)
+    if quote.trang_thai != "moi":
+        raise HTTPException(status_code=400, detail="Chỉ gửi duyệt được báo giá ở trạng thái Mới")
+    if not quote.items:
+        raise HTTPException(status_code=400, detail="Báo giá cần có ít nhất 1 mặt hàng")
+    quote.trang_thai = "cho_duyet"
     db.commit()
     return _build_response(_load_quote(quote_id, db))
 
@@ -237,9 +746,12 @@ def approve_quote(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code not in ("ADMIN", "GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN"):
+        raise HTTPException(status_code=403, detail="Ban khong co quyen duyet bao gia")
     quote = _load_quote(quote_id, db)
-    if quote.trang_thai != "moi":
-        raise HTTPException(status_code=400, detail="Chỉ duyệt được báo giá ở trạng thái Mới")
+    if quote.trang_thai not in ("moi", "cho_duyet"):
+        raise HTTPException(status_code=400, detail="Chỉ duyệt được báo giá ở trạng thái Mới hoặc Chờ duyệt")
     quote.trang_thai = "da_duyet"
     quote.nguoi_duyet_id = current_user.id
     quote.approved_by = current_user.id
@@ -262,6 +774,60 @@ def cancel_quote(
     quote.trang_thai = "huy"
     db.commit()
     return {"message": f"Đã huỷ báo giá {quote.so_bao_gia}"}
+
+
+@router.post("/{quote_id}/copy", response_model=QuoteResponse, status_code=201)
+def copy_quote(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    source = _load_quote(quote_id, db)
+    if source.trang_thai != "da_duyet":
+        raise HTTPException(status_code=400, detail="Chi copy bao gia da duyet")
+
+    quote = Quote(
+        so_bao_gia=_generate_so_bao_gia(db),
+        so_bg_copy=source.so_bao_gia,
+        ngay_bao_gia=date.today(),
+        customer_id=source.customer_id,
+        phap_nhan_id=source.phap_nhan_id,
+        phap_nhan_sx_id=source.phap_nhan_sx_id,
+        phan_xuong_id=source.phan_xuong_id,
+        nv_phu_trach_id=current_user.id,
+        nv_theo_doi_id=source.nv_theo_doi_id,
+        ngay_het_han=source.ngay_het_han,
+        chi_phi_bang_in=source.chi_phi_bang_in,
+        chi_phi_khuon=source.chi_phi_khuon,
+        chi_phi_van_chuyen=source.chi_phi_van_chuyen,
+        tong_tien_hang=source.tong_tien_hang,
+        ty_le_vat=source.ty_le_vat,
+        tien_vat=source.tien_vat,
+        chi_phi_hang_hoa_dv=source.chi_phi_hang_hoa_dv,
+        tong_cong=source.tong_cong,
+        chi_phi_khac_1_ten=source.chi_phi_khac_1_ten,
+        chi_phi_khac_1=source.chi_phi_khac_1,
+        chi_phi_khac_2_ten=source.chi_phi_khac_2_ten,
+        chi_phi_khac_2=source.chi_phi_khac_2,
+        chiet_khau=source.chiet_khau,
+        gia_ban=source.gia_ban,
+        gia_xuat_phoi_vsp=source.gia_xuat_phoi_vsp,
+        ghi_chu=source.ghi_chu,
+        dieu_khoan=source.dieu_khoan,
+        trang_thai="moi",
+        created_by=current_user.id,
+    )
+    for src in sorted(source.items, key=lambda x: x.stt):
+        data = {
+            c.name: getattr(src, c.name)
+            for c in QuoteItem.__table__.columns
+            if c.name not in ("id", "quote_id")
+        }
+        quote.items.append(QuoteItem(**data))
+    db.add(quote)
+    db.commit()
+    db.refresh(quote)
+    return _build_response(_load_quote(quote.id, db))
 
 
 @router.post("/{quote_id}/tao-don-hang", response_model=dict)

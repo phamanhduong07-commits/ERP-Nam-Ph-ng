@@ -155,6 +155,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/purchasing/doi-soat-kho', label: <Link to="/purchasing/doi-soat-kho">Đối soát kho (PO vs GR)</Link> },
         { key: '/accounting/purchase-invoices', label: <Link to="/accounting/purchase-invoices">Hóa đơn mua hàng</Link> },
         { key: '/purchasing/returns', label: <Link to="/purchasing/returns">Trả hàng NCC</Link> },
+        { key: '/purchasing/reports', label: <Link to="/purchasing/reports">Báo cáo mua hàng</Link> },
       ],
     },
     {

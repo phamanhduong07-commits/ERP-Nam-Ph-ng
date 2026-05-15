@@ -3,6 +3,7 @@ import type { PagedResponse } from './customers'
 
 export interface SalesReturnItem {
   id: number
+  delivery_order_item_id: number | null
   sales_order_item_id: number
   sales_order_item: {
     id: number
@@ -24,6 +25,7 @@ export interface SalesReturn {
   so_phieu_tra: string
   ngay_tra: string
   sales_order_id: number
+  delivery_order_id: number | null
   sales_order: {
     id: number
     so_don: string
@@ -63,7 +65,7 @@ export interface SalesReturnListItem {
 
 export interface CreateReturnItemPayload {
   delivery_order_item_id?: number
-  sales_order_item_id: number
+  sales_order_item_id?: number
   so_luong_tra: number
   don_gia_tra?: number
   ly_do_tra?: string

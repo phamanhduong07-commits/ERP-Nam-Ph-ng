@@ -16,7 +16,6 @@ import { warehousesApi } from '../../api/warehouses'
 import type { Warehouse } from '../../api/warehouses'
 import { warehouseApi } from '../../api/warehouse'
 import type { TonKho, PhanXuong } from '../../api/warehouse'
-import TabGiaoHang from './TabGiaoHang'
 
 const { Text, Title } = Typography
 
@@ -28,8 +27,6 @@ const fmtCurrency = (v: number | null | undefined) =>
 export default function KhoPhoiPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('inventory')
-  const [deliveryPOKeys, setDeliveryPOKeys] = useState<number[]>([])
   const [pushingKey, setPushingKey] = useState<string | null>(null)
   const [chuyenRows, setChuyenRows] = useState<KhoRow[]>([])
   const [chuyenQtys, setChuyenQtys] = useState<Record<number, number>>({})
@@ -183,11 +180,6 @@ export default function KhoPhoiPage() {
     }
   }
 
-  const handleGoToDelivery = (poId: number) => {
-    setDeliveryPOKeys([poId])
-    setActiveTab('delivery')
-  }
-
   const showXuongCol = activeXuong === 'all'
 
   const columns: ColumnsType<KhoRow> = [
@@ -205,20 +197,22 @@ export default function KhoPhoiPage() {
     {
       title: 'Pháp nhân',
       dataIndex: 'ten_phap_nhan_sx',
-      width: 110,
+      width: 140,
+      ellipsis: true,
       render: (v: string | null) => v
-        ? <Tag color="blue" style={{ fontSize: 11 }}>{v}</Tag>
+        ? <Tooltip title={v}><Tag color="blue" style={{ fontSize: 11, maxWidth: '100%', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</Tag></Tooltip>
         : <Text type="secondary">—</Text>,
     },
     {
       title: 'Nơi sản xuất',
       dataIndex: 'order_ten_phan_xuong',
       width: 120,
+      ellipsis: true,
       render: (v: string | null) => v
         ? (
-          <Space size={2} direction="vertical">
+          <Tooltip title={v}>
             <Text style={{ fontSize: 12 }}>{v}</Text>
-          </Space>
+          </Tooltip>
         )
         : <Text type="secondary">—</Text>,
     },
@@ -226,14 +220,17 @@ export default function KhoPhoiPage() {
       title: 'Kho hiện tại',
       dataIndex: 'ten_phan_xuong',
       width: 140,
+      ellipsis: true,
       render: (v: string | null, row: KhoRow) => v
         ? (
-          <Space size={4} wrap={false} align="center">
-            <Text style={{ fontSize: 12, fontWeight: 'bold' }}>{v}</Text>
-            {row.cong_doan === 'cd2' && (
-              <Tag color="orange" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>CD2</Tag>
-            )}
-          </Space>
+          <Tooltip title={v}>
+            <Space size={4} wrap={false} align="center" style={{ maxWidth: '100%' }}>
+              <Text style={{ fontSize: 12, fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</Text>
+              {row.cong_doan === 'cd2' && (
+                <Tag color="orange" style={{ fontSize: 10, margin: 0, lineHeight: '16px', flexShrink: 0 }}>CD2</Tag>
+              )}
+            </Space>
+          </Tooltip>
         )
         : <Text type="secondary">—</Text>,
     },
@@ -241,7 +238,8 @@ export default function KhoPhoiPage() {
       title: 'Khách hàng',
       dataIndex: 'ten_khach_hang',
       width: 120,
-      render: (v: string | null) => v ?? <Text type="secondary">—</Text>,
+      ellipsis: true,
+      render: (v: string | null) => v ? <Tooltip title={v}>{v}</Tooltip> : <Text type="secondary">—</Text>,
     },
     {
       title: 'Loại',
@@ -426,30 +424,6 @@ export default function KhoPhoiPage() {
     },
   ]
 
-  const inventoryColumns = [
-    ...columns.slice(0, -1),
-    {
-      title: 'Thao tác',
-      width: 320,
-      render: (_: unknown, row: KhoRow) => (
-        <Space size={4} wrap>
-          {columns[columns.length - 1].render!(_, row, 0) as React.ReactNode}
-          {row.ton_kho > 0 && (
-            <Button
-              size="small"
-              type="primary"
-              icon={<SendOutlined />}
-              style={{ background: '#1b168e', borderColor: '#1b168e' }}
-              onClick={(e) => { e.stopPropagation(); handleGoToDelivery(row.production_order_id) }}
-            >
-              Giao hàng
-            </Button>
-          )}
-        </Space>
-      )
-    }
-  ]
-
   const phoiWarehouseOptions = allWarehouses
     .filter((w: Warehouse) => w.loai_kho === 'PHOI' && w.trang_thai)
     .map((w: Warehouse) => ({ value: w.id, label: `${w.ten_kho} (${w.ma_kho})` }))
@@ -462,15 +436,7 @@ export default function KhoPhoiPage() {
     <div style={{ padding: 24 }}>
       <Title level={4} style={{ marginBottom: 16 }}>Kho Phôi Sóng</Title>
       <Card>
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={[
-            {
-              key: 'inventory',
-              label: <span>📦 Tồn kho phôi</span>,
-              children: (
-                <div style={{ paddingTop: 16 }}>
+        <div style={{ paddingTop: 16 }}>
                   {/* Header */}
                   <Row align="middle" justify="space-between" style={{ marginBottom: 12 }}>
                     <Col>
@@ -585,9 +551,9 @@ export default function KhoPhoiPage() {
                       size="small"
                       loading={isLoading}
                       dataSource={filteredData}
-                      columns={inventoryColumns}
+                      columns={columns}
                       pagination={{ pageSize: 50, showTotal: (t, r) => `${t} lệnh SX${r[0] !== 1 || r[1] !== (data ?? []).length ? ` (lọc từ ${(data ?? []).length})` : ''}`, showSizeChanger: false }}
-                      scroll={{ x: 1200 }}
+                      scroll={{ x: 1700 }}
                       rowClassName={(row) => row.ton_kho <= 0 ? 'ant-table-row-disabled' : ''}
                       rowSelection={{
                         selectedRowKeys,
@@ -608,16 +574,7 @@ export default function KhoPhoiPage() {
                       })}
                     />
                   </Space>
-                </div>
-              ),
-            },
-            {
-              key: 'delivery',
-              label: <span style={{ color: '#1b168e', fontWeight: 'bold' }}>🚚 Giao hàng</span>,
-              children: <div style={{ paddingTop: 16 }}><TabGiaoHang initialSelectedPOKeys={deliveryPOKeys} /></div>,
-            },
-          ]}
-        />
+        </div>
       </Card>
 
       {/* Modal chuyển kho phôi sang xưởng CD2 */}

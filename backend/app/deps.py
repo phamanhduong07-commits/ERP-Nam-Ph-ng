@@ -87,3 +87,26 @@ def require_roles(*allowed_roles: str):
             )
         return current_user
     return checker
+
+
+def require_permissions(*permissions: str):
+    def checker(
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        role_code = current_user.role.ma_vai_tro if current_user.role else None
+        if role_code == "ADMIN":
+            return current_user
+        
+        from app.models.auth import RolePermission, Permission, Role
+        q = db.query(Permission.ma_quyen).join(RolePermission).join(Role).join(User).filter(User.id == current_user.id)
+        owned_permissions = [r[0] for r in q.all()]
+        
+        for p in permissions:
+            if p not in owned_permissions:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Bạn thiếu quyền: {p}",
+                )
+        return current_user
+    return checker

@@ -16,6 +16,7 @@ XE_IMPORT_FIELDS = [
     ImportField("bien_so", "Bien so", required=True, parser=parse_text, help_text="Bien so xe, duy nhat"),
     ImportField("loai_xe", "Loai xe", parser=parse_text),
     ImportField("trong_tai", "Trong tai (tan)", parser=parse_decimal),
+    ImportField("dinh_muc_dau", "Dinh muc dau (L/100km)", parser=parse_decimal, default=0),
     ImportField("ghi_chu", "Ghi chu", parser=parse_text),
     ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
 ]
@@ -27,6 +28,7 @@ class XeBase(BaseModel):
     bien_so: str
     loai_xe: str | None = None
     trong_tai: Decimal | None = None
+    dinh_muc_dau: Decimal | None = Decimal("0")
     ghi_chu: str | None = None
     trang_thai: bool = True
 

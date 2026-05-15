@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Button, Space, Typography, Tag, Descriptions, Table, message,
   Modal, Form, Input, InputNumber, Select, Row, Col, Divider, Alert, DatePicker,
+  Steps,
 } from 'antd'
 import {
   ArrowLeftOutlined, EditOutlined, CheckCircleOutlined, CloseCircleOutlined,
@@ -113,6 +114,7 @@ export default function SalesReturnDetail() {
         ly_do_tra: values.ly_do_tra,
         ghi_chu: values.ghi_chu,
         items: returnData?.items.map(item => ({
+          delivery_order_item_id: item.delivery_order_item_id ?? undefined,
           sales_order_item_id: item.sales_order_item_id,
           so_luong_tra: values[`so_luong_tra_${item.id}`],
           don_gia_tra: values[`don_gia_tra_${item.id}`],
@@ -249,7 +251,7 @@ export default function SalesReturnDetail() {
       companyInfo,
       title: `Phiếu nhập kho trả hàng ${returnData.so_phieu_tra}`,
       subtitle: 'PHIẾU NHẬP KHO (HÀNG TRẢ VỀ)',
-      logoUrl: namPhuongLogo,
+      logoUrl: companyInfo?.logo || '/logo_namphuong.png',
       documentNumber: returnData.so_phieu_tra,
       documentDate: dayjs(returnData.ngay_tra).format('DD/MM/YYYY'),
       status: 'Đã nhập kho',
@@ -296,7 +298,7 @@ export default function SalesReturnDetail() {
       companyInfo,
       title: `Phiếu trả hàng ${returnData.so_phieu_tra}`,
       subtitle: 'PHIẾU TRẢ HÀNG BÁN',
-      logoUrl: namPhuongLogo,
+      logoUrl: companyInfo?.logo || '/logo_namphuong.png',
       documentNumber: returnData.so_phieu_tra,
       documentDate: dayjs(returnData.ngay_tra).format('DD/MM/YYYY'),
       status: SALES_RETURN_TRANG_THAI_LABELS[returnData.trang_thai] ?? returnData.trang_thai,
@@ -339,9 +341,6 @@ export default function SalesReturnDetail() {
           <Title level={4} style={{ margin: 0 }}>
             Phiếu trả hàng: {returnData.so_phieu_tra}
           </Title>
-          <Tag color={SALES_RETURN_TRANG_THAI_COLORS[returnData.trang_thai]}>
-            {SALES_RETURN_TRANG_THAI_LABELS[returnData.trang_thai]}
-          </Tag>
         </Space>
         <Space>
           {canEdit && !editing && (
@@ -393,6 +392,25 @@ export default function SalesReturnDetail() {
         </Space>
       </Space>
 
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Steps
+          size="small"
+          current={
+            returnData.trang_thai === 'da_duyet' ? 2 :
+            returnData.trang_thai === 'huy' ? -1 : 1
+          }
+          status={returnData.trang_thai === 'huy' ? 'error' : 'process'}
+          items={[
+            { title: 'Tạo mới', description: dayjs(returnData.created_at).format('DD/MM HH:mm') },
+            { 
+              title: returnData.trang_thai === 'huy' ? 'Đã hủy' : 'Duyệt phiếu', 
+              description: returnData.approved_at ? dayjs(returnData.approved_at).format('DD/MM HH:mm') : 'Chờ duyệt' 
+            },
+            { title: 'Hoàn tất', description: returnData.trang_thai === 'da_duyet' ? 'Đã nhập kho' : '' },
+          ]}
+        />
+      </Card>
+
       <Row gutter={16}>
         <Col span={24}>
           <Card title="Thông tin phiếu trả">
@@ -427,13 +445,27 @@ export default function SalesReturnDetail() {
                 </Row>
               </Form>
             ) : (
-              <Descriptions bordered column={2}>
-                <Descriptions.Item label="Số phiếu">{returnData.so_phieu_tra}</Descriptions.Item>
-                <Descriptions.Item label="Ngày trả">{dayjs(returnData.ngay_tra).format('DD/MM/YYYY')}</Descriptions.Item>
+              <Descriptions 
+                bordered 
+                column={{ xs: 1, sm: 2, md: 3 }}
+                labelStyle={{ fontWeight: 'bold', background: '#fafafa' }}
+              >
+                <Descriptions.Item label="Số phiếu">
+                  <Text copyable strong>{returnData.so_phieu_tra}</Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="Ngày trả">
+                  {dayjs(returnData.ngay_tra).format('DD/MM/YYYY')}
+                </Descriptions.Item>
+                <Descriptions.Item label="Trạng thái">
+                  <Tag color={SALES_RETURN_TRANG_THAI_COLORS[returnData.trang_thai]}>
+                    {SALES_RETURN_TRANG_THAI_LABELS[returnData.trang_thai]}
+                  </Tag>
+                </Descriptions.Item>
                 <Descriptions.Item label="Đơn hàng bán">
                   {salesOrder ? (
                     <Button
                       type="link"
+                      style={{ padding: 0 }}
                       onClick={() => navigate(`/sales/orders/${salesOrder.id}`)}
                     >
                       {salesOrder.so_don}
@@ -441,17 +473,22 @@ export default function SalesReturnDetail() {
                   ) : '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Khách hàng">
-                  {returnData.customer ? `[${returnData.customer.ma_kh}] ${returnData.customer.ten_viet_tat}` : '—'}
+                  {returnData.customer ? (
+                    <Space direction="vertical" size={0}>
+                      <Text strong>{returnData.customer.ten_viet_tat}</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>[{returnData.customer.ma_kh}]</Text>
+                    </Space>
+                  ) : '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Lý do trả">{returnData.ly_do_tra}</Descriptions.Item>
+                <Descriptions.Item label="Người tạo">{returnData.ten_nguoi_tao || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Người duyệt">{returnData.ten_nguoi_duyet || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Tổng tiền trả">
-                  <Text strong style={{ fontSize: 16, color: '#1677ff' }}>
+                  <Text strong style={{ fontSize: 18, color: '#cf1322' }}>
                     {new Intl.NumberFormat('vi-VN').format(returnData.tong_tien_tra)}đ
                   </Text>
                 </Descriptions.Item>
-                <Descriptions.Item label="Người tạo">{returnData.ten_nguoi_tao || '—'}</Descriptions.Item>
-                <Descriptions.Item label="Người duyệt">{returnData.ten_nguoi_duyet || '—'}</Descriptions.Item>
-                <Descriptions.Item label="Ghi chú" span={2}>{returnData.ghi_chu || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Ghi chú" span={3}>{returnData.ghi_chu || '—'}</Descriptions.Item>
               </Descriptions>
             )}
           </Card>

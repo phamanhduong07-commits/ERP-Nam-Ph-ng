@@ -1,8 +1,7 @@
-BÁO GIÁ
-BÁO GIÁ TÌM THÊM KHÁCH HÀNG, NHÂN VIÊN
-TỪ 1 BÁO GIÁ CÓ THỂ CHỌN MÃ HÀNG ĐỂ LÊN ĐƠN THEO Ý (CÓ THỂ BÁO NHIỀU MÃ NHƯNG LÊN ĐƠN 1,2 MÃ)
-THIẾU MÃ HÀÀNG
-CHỌN KHÔNG CÔNG THỨC SẼ SỬA CHIỀU KHỔ VÀ CHIỀU CẮT, DIỆN TÍCH TÍNH THEO KÍCH THƯỚC VỪA NHẬP
+Can chinh sua / theo doi
 
-ĐƠN HÀNG
-TÌM THÊM KHÁCH HÀNG, NHÂN VIÊN
+- Kiem tra lai toan bo migration Alembic moi va thu chay tren database rong.
+- Build frontend sau khi gop cac thay doi lon.
+- Test cac luong co side effect: GR -> ke toan, giao hang -> hoa don, tra hang -> ton kho/cong no.
+- Cap nhat permission seed cho module HR/logistics/billing/report moi.
+- Don encoding tieng Viet trong code comment/UI neu con hien sai.

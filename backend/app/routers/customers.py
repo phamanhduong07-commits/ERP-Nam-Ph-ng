@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.master import Customer
 from app.services.customer_service import CustomerService
@@ -74,7 +74,7 @@ async def import_customers(
     commit: bool = Query(default=False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("sales.import")),
 ):
     return await import_excel(
         db=db,
@@ -83,7 +83,7 @@ async def import_customers(
         fields=CUSTOMER_IMPORT_FIELDS,
         key_field="ma_kh",
         commit=commit,
-        user=_,
+        user=current_user,
         loai_du_lieu="khach_hang",
     )
 

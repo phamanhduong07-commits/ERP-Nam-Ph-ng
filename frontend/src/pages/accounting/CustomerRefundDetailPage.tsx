@@ -88,7 +88,7 @@ export default function CustomerRefundDetailPage() {
     printDocument({
       title: `${isBuTru ? 'Biên bản cấn trừ' : 'Credit note'} ${voucher.so_phieu}`,
       subtitle,
-      logoUrl: namPhuongLogo,
+      logoUrl: '/logo_namphuong.png',
       documentNumber: voucher.so_phieu,
       documentDate: dayjs(voucher.ngay).format('DD/MM/YYYY'),
       status: ts.label,

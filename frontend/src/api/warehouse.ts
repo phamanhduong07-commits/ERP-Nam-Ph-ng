@@ -8,6 +8,7 @@ export interface PhanXuong {
   cong_doan: string  // "cd1_cd2" | "cd2"
   phoi_tu_phan_xuong_id: number | null
   ten_phoi_tu_phan_xuong: string | null
+  phap_nhan_id?: number | null
   trang_thai: boolean
 }
 
@@ -49,6 +50,13 @@ export interface PhieuKhoItem {
   don_gia: number
   thanh_tien?: number
   ghi_chu?: string | null
+  // LSX-enriched (phôi items)
+  so_lsx?: string
+  ma_sp?: string
+  so_lop?: number | null
+  to_hop_song?: string
+  quy_cach?: string
+  kho_cat?: string
 }
 
 export interface PhieuNhapKho {
@@ -86,12 +94,21 @@ export interface PhieuChuyenKho {
   so_phieu: string
   warehouse_xuat_id: number
   ten_kho_xuat: string
+  phan_xuong_xuat_id: number | null
+  ten_phan_xuong_xuat: string
+  phap_nhan_xuat_id: number | null
+  ten_phap_nhan_xuat: string
   warehouse_nhap_id: number
   ten_kho_nhap: string
+  phan_xuong_nhap_id: number | null
+  ten_phan_xuong_nhap: string
+  phap_nhan_nhap_id: number | null
+  ten_phap_nhan_nhap: string
   ngay: string
   ghi_chu: string | null
   trang_thai: string
   created_at: string | null
+  phap_nhan_id_for_print: number | null
   items: PhieuKhoItem[]
 }
 
@@ -441,6 +458,10 @@ export interface TonKhoTPRow {
   ten_phap_nhan_sx: string | null
   ten_kho_hien_tai: string | null
   phieu_xuat_gan_nhat: { so_phieu: string; ngay_xuat: string } | null
+  loai_thung?: string | null
+  kho_tt?: number | null
+  dai_tt?: number | null
+  so_lop?: number | null
 }
 
 export interface TonKhoPhoiLsxRow {
@@ -455,6 +476,9 @@ export interface TonKhoPhoiLsxRow {
   ten_kho: string
   chieu_kho: number | null
   chieu_cat: number | null
+  dien_tich?: number | null
+  trong_luong?: number | null
+  the_tich?: number | null
   phieu_in_hien_tai: { so_phieu: string; trang_thai: string } | null
   phan_xuong_id: number | null
   ten_phan_xuong: string | null

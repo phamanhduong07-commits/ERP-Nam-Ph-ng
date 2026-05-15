@@ -190,6 +190,7 @@ class DebtLedgerEntry(Base):
     # khach_hang | nha_cung_cap
     customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id"))
     supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"))
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     chung_tu_loai: Mapped[str | None] = mapped_column(String(50))
     chung_tu_id: Mapped[int | None] = mapped_column(Integer)
     so_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
@@ -198,6 +199,7 @@ class DebtLedgerEntry(Base):
 
     customer = relationship("Customer")
     supplier = relationship("Supplier")
+    phap_nhan = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
 
 
 class CustomerRefundVoucher(Base):
@@ -215,6 +217,7 @@ class CustomerRefundVoucher(Base):
     tk_hoan_tien: Mapped[str | None] = mapped_column(String(20))  # "111" | "112" — dùng khi hoan_tien
     dien_giai: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")  # nhap | da_duyet | huy
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -222,6 +225,7 @@ class CustomerRefundVoucher(Base):
 
     customer = relationship("Customer")
     sales_return = relationship("SalesReturn")
+    phap_nhan = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
     nguoi_duyet = relationship("User", foreign_keys=[nguoi_duyet_id])
     creator = relationship("User", foreign_keys=[created_by])
 
@@ -236,12 +240,14 @@ class OpeningBalance(Base):
     customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id"))
     supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"))
     so_du_dau_ky: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     customer = relationship("Customer")
     supplier = relationship("Supplier")
+    phap_nhan = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
 
 
 class WorkshopPayroll(Base):

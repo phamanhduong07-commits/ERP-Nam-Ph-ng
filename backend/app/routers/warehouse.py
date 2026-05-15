@@ -17,7 +17,7 @@ from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.bom import ProductionBOM, ProductionBOMItem
 from app.models.sales import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
 from app.models.billing import SalesInvoice, InvoiceAdjustmentLog
-from app.models.accounting import PurchaseInvoice, JournalEntry
+from app.models.accounting import PurchaseInvoice, JournalEntry, JournalEntryLine, DebtLedgerEntry
 from app.models.warehouse_doc import (
     GoodsReceipt, GoodsReceiptItem,
     MaterialIssue, MaterialIssueItem,
@@ -94,6 +94,7 @@ class GoodsReceiptIn(BaseModel):
     loai_kho_auto: str = "GIAY_CUON"     # loai_kho ưu tiên khi auto-resolve
     loai_nhap: str = "MUA_HANG"
     phap_nhan_id: Optional[int] = None
+    bo_qua_hach_toan: bool = False
     ghi_chu: Optional[str] = None
     so_xe: Optional[str] = None
     invoice_image: Optional[str] = None
@@ -350,6 +351,7 @@ def _px_to_dict(r: PhanXuong) -> dict:
         "dia_chi": r.dia_chi, "cong_doan": r.cong_doan,
         "phoi_tu_phan_xuong_id": r.phoi_tu_phan_xuong_id,
         "ten_phoi_tu_phan_xuong": r.phoi_tu_phan_xuong.ten_xuong if r.phoi_tu_phan_xuong else None,
+        "phap_nhan_id": r.phap_nhan_id,
         "trang_thai": r.trang_thai,
     }
 
@@ -888,6 +890,7 @@ def create_goods_receipt(
         warehouse_id=wh_id,
         loai_nhap=body.loai_nhap,
         phap_nhan_id=_phap_nhan_id,
+        bo_qua_hach_toan=body.bo_qua_hach_toan,
         so_xe=getattr(body, 'so_xe', None),
         invoice_image=getattr(body, 'invoice_image', None),
         hd_tong_kg=getattr(body, 'hd_tong_kg', None),
@@ -1110,20 +1113,93 @@ def complete_goods_receipt(
     return _gr_to_dict(gr, db)
 
 
+def _gen_so_bt_gr(db: Session) -> str:
+    prefix = f"BT{datetime.today().strftime('%Y%m')}"
+    last = db.query(func.max(JournalEntry.so_but_toan)).filter(
+        JournalEntry.so_but_toan.like(f"{prefix}%")
+    ).scalar()
+    seq = int(last[-4:]) + 1 if last else 1
+    return f"{prefix}-{seq:04d}"
+
+
 @router.patch("/goods-receipts/{gr_id}/approve")
-def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
         raise HTTPException(404, "Không tìm thấy phiếu nhập")
     if gr.trang_thai == "da_duyet":
         raise HTTPException(400, "Phiếu đã được duyệt")
     gr.trang_thai = "da_duyet"
+
     # Auto-sync gia_mua từ don_gia trên PNK khi duyệt
     for item in gr.items:
         if item.paper_material_id and item.don_gia and item.don_gia > 0:
             pm = db.get(PaperMaterial, item.paper_material_id)
             if pm:
                 pm.gia_mua = item.don_gia
+
+    # Ghi sổ kế toán — chỉ cho phiếu mua hàng thực tế
+    if not gr.bo_qua_hach_toan and gr.loai_nhap == "MUA_HANG" and gr.tong_gia_tri > 0:
+        wh = db.get(Warehouse, gr.warehouse_id)
+        phan_xuong_id = wh.phan_xuong_id if wh else None
+        phap_nhan_id = gr.phap_nhan_id
+        if not phap_nhan_id and phan_xuong_id:
+            px = db.get(PhanXuong, phan_xuong_id)
+            phap_nhan_id = px.phap_nhan_id if px else None
+
+        # Gom thanh_tien theo TK (1521 giấy cuộn, 1522 NVL khác)
+        by_tk: dict[str, Decimal] = {}
+        for it in gr.items:
+            tk = "1521" if it.paper_material_id else "1522"
+            by_tk[tk] = by_tk.get(tk, Decimal("0")) + it.thanh_tien
+
+        lines = []
+        for tk, so_tien in sorted(by_tk.items()):
+            lines.append({"so_tk": tk, "so_tien_no": so_tien, "so_tien_co": Decimal("0"),
+                          "dien_giai": f"Nhập kho NVL — {gr.so_phieu}"})
+        lines.append({"so_tk": "331", "so_tien_no": Decimal("0"), "so_tien_co": gr.tong_gia_tri,
+                      "dien_giai": f"Phải trả NCC — {gr.so_phieu}"})
+
+        entry = JournalEntry(
+            so_but_toan=_gen_so_bt_gr(db),
+            ngay_but_toan=gr.ngay_nhap,
+            dien_giai=f"Nhập kho mua hàng — {gr.so_phieu}",
+            loai_but_toan="goods_receipt",
+            tong_no=sum(l["so_tien_no"] for l in lines),
+            tong_co=sum(l["so_tien_co"] for l in lines),
+            chung_tu_loai="goods_receipt",
+            chung_tu_id=gr.id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=phan_xuong_id,
+            created_by=current_user.id,
+        )
+        db.add(entry)
+        db.flush()
+
+        for line in lines:
+            db.add(JournalEntryLine(
+                entry_id=entry.id,
+                so_tk=line["so_tk"],
+                dien_giai=line.get("dien_giai"),
+                so_tien_no=line["so_tien_no"],
+                so_tien_co=line["so_tien_co"],
+                phap_nhan_id=phap_nhan_id,
+                phan_xuong_id=phan_xuong_id,
+            ))
+
+        # Ghi sổ công nợ phải trả NCC (tăng nợ)
+        db.add(DebtLedgerEntry(
+            ngay=gr.ngay_nhap,
+            loai="tang_no",
+            doi_tuong="nha_cung_cap",
+            supplier_id=gr.supplier_id,
+            phap_nhan_id=phap_nhan_id,
+            chung_tu_loai="goods_receipt",
+            chung_tu_id=gr.id,
+            so_tien=gr.tong_gia_tri,
+            ghi_chu=f"Nhập kho — {gr.so_phieu}",
+        ))
+
     db.commit()
     return {"ok": True, "trang_thai": "da_duyet"}
 

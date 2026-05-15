@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.master import Supplier
 from app.services.excel_import_service import (
@@ -134,10 +134,14 @@ def list_suppliers(
 
 @router.get("/all", response_model=list[SupplierShort])
 def get_all_suppliers(
+    loai: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    items = db.query(Supplier).filter(Supplier.trang_thai == True).order_by(Supplier.ten_viet_tat).all()
+    q = db.query(Supplier).filter(Supplier.trang_thai == True)
+    if loai:
+        q = q.filter(Supplier.phan_loai.ilike(f"%{loai}%"))
+    items = q.order_by(Supplier.ten_viet_tat).all()
     return [SupplierShort.model_validate(s) for s in items]
 
 
@@ -153,7 +157,7 @@ async def import_suppliers(
     commit: bool = Query(default=False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("purchase.import")),
 ):
     return await import_excel(
         db=db,
@@ -162,7 +166,7 @@ async def import_suppliers(
         fields=SUPPLIER_IMPORT_FIELDS,
         key_field="ma_ncc",
         commit=commit,
-        user=_,
+        user=current_user,
         loai_du_lieu="nha_cung_cap",
     )
 

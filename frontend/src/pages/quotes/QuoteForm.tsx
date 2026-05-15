@@ -9,18 +9,19 @@ import {
 import {
   PlusOutlined, DeleteOutlined, SaveOutlined, CheckCircleOutlined,
   ArrowLeftOutlined, FileAddOutlined, AppstoreOutlined, CopyOutlined,
-  ThunderboltOutlined, SyncOutlined,
+  ThunderboltOutlined, SyncOutlined, SendOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { customersApi } from '../../api/customers'
-import { quotesApi, paperMaterialsApi, LOAI_IN_OPTIONS, LOAI_THUNG_OPTIONS, SO_LOP_OPTIONS, TO_HOP_SONG_OPTIONS, getSongType, calcBoxDimensions, suggestGiaBan } from '../../api/quotes'
+import { quotesApi, paperMaterialsApi, LOAI_IN_OPTIONS, LOAI_THUNG_OPTIONS, SO_LOP_OPTIONS, TO_HOP_SONG_OPTIONS, getSongType, calcBoxDimensions, buildPaperSymbol, paperCodeKey } from '../../api/quotes'
 import type { QuoteItem, CreateQuotePayload } from '../../api/quotes'
 import { cauTrucApi, type CauTruc } from '../../api/cauTruc'
 import { productsApi, type ProductFull } from '../../api/products'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { usersApi } from '../../api/usersApi'
+import { useAuthStore } from '../../store/auth'
 
 const { Title, Text } = Typography
 
@@ -95,6 +96,7 @@ const emptyItem = (): QuoteItem => ({
   product_id: null,
   loai: null,
   ma_amis: null,
+  ma_ky_hieu: null,
   ten_hang: '',
   dvt: 'Thùng',
   so_luong: 1,
@@ -127,6 +129,7 @@ const emptyItem = (): QuoteItem => ({
 function usePaperOptions() {
   const [mkList, setMkList] = useState<string[]>([])
   const [byMk, setByMk] = useState<Record<string, number[]>>({})
+  const [paperCodes, setPaperCodes] = useState<Record<string, string>>({})
   const loaded = useRef(false)
   useEffect(() => {
     if (loaded.current) return
@@ -134,14 +137,15 @@ function usePaperOptions() {
     paperMaterialsApi.options().then(res => {
       setMkList(res.data.ma_ky_hieu)
       setByMk(res.data.by_mk)
+      setPaperCodes(res.data.paper_codes || {})
     })
   }, [])
-  return { mkList, byMk }
+  return { mkList, byMk, paperCodes }
 }
 
 // ─── LayerRow: 1 dòng lớp giấy với Mã KH + Định lượng ───────────────────────
 function LayerRow({
-  label, mkField, dlField, ci, setCI, mkList, byMk,
+  label, mkField, dlField, ci, setCI, mkList, byMk, paperCodes,
 }: {
   label: string
   mkField: keyof QuoteItem
@@ -150,9 +154,12 @@ function LayerRow({
   setCI: (p: Partial<QuoteItem>) => void
   mkList: string[]
   byMk: Record<string, number[]>
+  paperCodes: Record<string, string>
 }) {
   const mkVal = ci[mkField] as string | null | undefined
   const dlVal = ci[dlField] as number | null | undefined
+  const paperLabel = (mk: string) =>
+    paperCodes[paperCodeKey(mk, dlVal)] || paperCodes[paperCodeKey(mk, null)] || mk
   const dlOptions = mkVal && byMk[mkVal]
     ? byMk[mkVal].map(n => ({ value: n, label: `${n} g/m²` }))
     : Object.values(byMk).flat().filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b)
@@ -169,12 +176,12 @@ function LayerRow({
           style={{ width: '100%' }}
           showSearch
           allowClear
-          placeholder="Mã KH"
+          placeholder="Mã giấy"
           value={mkVal || undefined}
-          options={mkList.map(mk => ({ value: mk, label: mk }))}
+          options={mkList.map(mk => ({ value: mk, label: paperLabel(mk) }))}
           onChange={v => setCI({ [mkField]: v ?? null, [dlField]: null })}
           filterOption={(input, opt) =>
-            (opt?.value as string ?? '').toLowerCase().includes(input.toLowerCase())
+            `${opt?.value ?? ''} ${opt?.label ?? ''}`.toLowerCase().includes(input.toLowerCase())
           }
         />
       </Col>
@@ -206,6 +213,9 @@ export default function QuoteForm() {
   const [currentItem, setCurrentItem] = useState<QuoteItem>(emptyItem())
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [customerOptions, setCustomerOptions] = useState<{ value: number; label: string }[]>([])
+  const role = useAuthStore(s => s.user?.role)
+  const hideCostDetails = role === 'SALE_ADMIN' || role === 'TRUONG_PHONG_SALE_ADMIN'
+  const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
 
   const { data: phapNhanRaw } = useQuery({
     queryKey: ['phap-nhan'],
@@ -229,7 +239,9 @@ export default function QuoteForm() {
   const [productSearching, setProductSearching] = useState(false)
   const [selectItemsModal, setSelectItemsModal] = useState(false)
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([])
-  const { mkList, byMk } = usePaperOptions()
+  const { mkList, byMk, paperCodes } = usePaperOptions()
+  const giaBanManualRef = useRef(false)
+  const priceCalcSeq = useRef(0)
 
   // Financial summary state
   const [finance, setFinance] = useState({
@@ -305,13 +317,48 @@ export default function QuoteForm() {
     const chiPhiHhDv = f.tong_tien_hang + tienVat
     const tongCong = chiPhiHhDv + f.chi_phi_bang_in + f.chi_phi_khuon + f.chi_phi_van_chuyen
       + f.chi_phi_khac_1 + f.chi_phi_khac_2 - f.chiet_khau
-    const giaBan = tongCong
-    return { ...f, tien_vat: tienVat, chi_phi_hang_hoa_dv: chiPhiHhDv, tong_cong: tongCong, gia_ban: giaBan }
+    return { ...f, tien_vat: tienVat, chi_phi_hang_hoa_dv: chiPhiHhDv, tong_cong: tongCong }
   }, [])
 
   const updateFinance = (patch: Partial<typeof finance>) => {
     setFinance(prev => recalcFinance({ ...prev, ...patch }))
   }
+
+  const hasFormulaPriceData = (item: QuoteItem) => {
+    if (![3, 5, 7].includes(item.so_lop)) return false
+    if (!item.loai_thung || item.loai_thung === 'KHAC') return false
+    if (!item.dai || !item.rong || !item.to_hop_song || !item.so_luong) return false
+    const layers: [keyof QuoteItem, keyof QuoteItem][] = [
+      ['mat', 'mat_dl'],
+      ['song_1', 'song_1_dl'],
+      ['mat_1', 'mat_1_dl'],
+    ]
+    if (item.so_lop >= 5) layers.push(['song_2', 'song_2_dl'], ['mat_2', 'mat_2_dl'])
+    if (item.so_lop >= 7) layers.push(['song_3', 'song_3_dl'], ['mat_3', 'mat_3_dl'])
+    return layers.every(([codeKey, dlKey]) => Boolean(item[codeKey]) && Boolean(item[dlKey]))
+  }
+
+  const canCalculateItemPrice = (item: QuoteItem) =>
+    !giaBanManualRef.current && hasFormulaPriceData(item)
+
+  const applyFormulaPrice = useCallback(async (item: QuoteItem, force = false) => {
+    if (!force && !canCalculateItemPrice(item)) return
+    const seq = ++priceCalcSeq.current
+    try {
+      const res = await quotesApi.calculateItemPrice(item)
+      if (seq !== priceCalcSeq.current) return
+      const giaBan = Number(res.data.gia_ban || 0)
+      if (giaBan > 0 && (force || !giaBanManualRef.current)) {
+        setCurrentItem(prev => ({ ...prev, gia_ban: giaBan }))
+        setFinance(prev => recalcFinance({ ...prev, gia_ban: giaBan }))
+      } else if (force) {
+        message.warning('Công thức trả về giá bán bằng 0. Kiểm tra giá mua giấy và định mức chi phí.')
+      }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail
+      if (force) message.warning(detail || 'Chưa đủ dữ liệu hoặc chưa tìm được giá giấy để tính giá bán')
+    }
+  }, [recalcFinance])
 
   const createMutation = useMutation({
     mutationFn: (data: CreateQuotePayload) => quotesApi.create(data),
@@ -330,6 +377,17 @@ export default function QuoteForm() {
       queryClient.invalidateQueries({ queryKey: ['quote', id] })
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi cập nhật'),
+  })
+
+  const submitMutation = useMutation({
+    mutationFn: () => quotesApi.submit(Number(id)),
+    onSuccess: () => {
+      message.success('Đã gửi báo giá để duyệt')
+      queryClient.invalidateQueries({ queryKey: ['quote', id] })
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      navigate(`/quotes/${id}`)
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Gửi duyệt thất bại'),
   })
 
   const approveMutation = useMutation({
@@ -383,6 +441,7 @@ export default function QuoteForm() {
 
   const handleProductSelect = (_val: number, opt: unknown) => {
     const p = (opt as { record: ProductFull }).record
+    giaBanManualRef.current = false
     setCI({
       product_id: p.id,
       ma_amis: p.ma_amis,
@@ -414,6 +473,18 @@ export default function QuoteForm() {
   const setCI = (patch: Partial<QuoteItem>) =>
     setCurrentItem(prev => {
       const next = { ...prev, ...patch }
+      const formulaTriggers = [
+        'so_lop', 'to_hop_song', 'so_luong', 'loai_thung', 'dai', 'rong', 'cao',
+        'kho_tt', 'dai_tt', 'dien_tich', 'khong_ct',
+        'mat', 'mat_dl', 'song_1', 'song_1_dl', 'mat_1', 'mat_1_dl',
+        'song_2', 'song_2_dl', 'mat_2', 'mat_2_dl', 'song_3', 'song_3_dl', 'mat_3', 'mat_3_dl',
+        'loai_in', 'so_mau', 'do_phu', 'c_tham', 'can_man', 'chap_xa',
+        'boi', 'be_lo', 'so_c_be', 'dan', 'ghim', 'do_kho',
+      ]
+      const hasFormulaChange = Object.keys(patch).some(k => formulaTriggers.includes(k))
+      if (hasFormulaChange && !Object.prototype.hasOwnProperty.call(patch, 'gia_ban')) {
+        giaBanManualRef.current = false
+      }
 
       // Auto-calculate kho_tt, dai_tt, dien_tich when relevant fields change
       const dimTriggers: (keyof QuoteItem)[] = ['loai_thung', 'dai', 'rong', 'cao', 'so_lop']
@@ -459,33 +530,78 @@ export default function QuoteForm() {
         next.ghi_chu = buildGhiChu(next) || null
       }
 
+      const hasPaperChange = Object.keys(patch).some(k => [
+        'mat', 'mat_dl', 'song_1', 'song_1_dl', 'mat_1', 'mat_1_dl',
+        'song_2', 'song_2_dl', 'mat_2', 'mat_2_dl', 'song_3', 'song_3_dl', 'mat_3', 'mat_3_dl',
+      ].includes(k))
+      if (hasPaperChange) {
+        next.ma_ky_hieu = buildPaperSymbol(next, paperCodes)
+      }
+
       return next
     })
 
-  const handleAddItem = () => {
+  useEffect(() => {
+    if (!canCalculateItemPrice(currentItem)) return
+    const timer = window.setTimeout(() => {
+      applyFormulaPrice(currentItem)
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [
+    currentItem.so_lop, currentItem.to_hop_song, currentItem.so_luong,
+    currentItem.loai_thung, currentItem.dai, currentItem.rong, currentItem.cao,
+    currentItem.mat, currentItem.mat_dl, currentItem.song_1, currentItem.song_1_dl,
+    currentItem.mat_1, currentItem.mat_1_dl, currentItem.song_2, currentItem.song_2_dl,
+    currentItem.mat_2, currentItem.mat_2_dl, currentItem.song_3, currentItem.song_3_dl,
+    currentItem.mat_3, currentItem.mat_3_dl, currentItem.loai_in, currentItem.so_mau,
+    currentItem.do_phu, currentItem.c_tham, currentItem.can_man, currentItem.chap_xa,
+    currentItem.boi, currentItem.be_lo, currentItem.so_c_be, currentItem.dan,
+    currentItem.ghim, currentItem.do_kho, applyFormulaPrice,
+  ])
+
+  const handleAddItem = async () => {
     if (!currentItem.ten_hang) {
       message.warning('Vui lòng nhập tên hàng')
       return
     }
+    const itemToSave: QuoteItem = {
+      ...currentItem,
+      ma_ky_hieu: currentItem.ma_ky_hieu || buildPaperSymbol(currentItem, paperCodes),
+    }
+    if (!itemToSave.gia_ban && hasFormulaPriceData(itemToSave)) {
+      try {
+        const res = await quotesApi.calculateItemPrice(itemToSave)
+        itemToSave.gia_ban = Number(res.data.gia_ban || 0)
+        if (itemToSave.gia_ban > 0) {
+          setFinance(prev => recalcFinance({ ...prev, gia_ban: itemToSave.gia_ban }))
+        }
+      } catch {
+        message.warning('Chưa tính được giá bán. Kiểm tra lại mã giấy, định lượng, kích thước và tổ hợp sóng.')
+      }
+    }
     let newItems: QuoteItem[]
     if (editingIdx !== null) {
-      newItems = items.map((it, i) => i === editingIdx ? { ...currentItem, stt: it.stt } : it)
+      newItems = items.map((it, i) => i === editingIdx ? { ...itemToSave, stt: it.stt } : it)
       setItems(newItems)
       setEditingIdx(null)
     } else {
-      newItems = [...items, { ...currentItem, stt: items.length + 1 }]
+      newItems = [...items, { ...itemToSave, stt: items.length + 1 }]
       setItems(newItems)
     }
     // Auto-update tong_tien_hang = Σ (gia_ban * so_luong)
     const tongTienHang = newItems.reduce((sum, it) => sum + (it.gia_ban || 0) * (it.so_luong || 0), 0)
-    updateFinance({ tong_tien_hang: tongTienHang })
+    const tongSoLuong = newItems.reduce((sum, it) => sum + (Number(it.so_luong) || 0), 0)
+    const giaBanBinhQuan = tongSoLuong ? Math.round(tongTienHang / tongSoLuong) : 0
+    updateFinance({ tong_tien_hang: tongTienHang, gia_ban: giaBanBinhQuan })
     setCurrentItem(emptyItem())
+    giaBanManualRef.current = false
     setProductOptions([])
   }
 
   const handleEditItem = (idx: number) => {
     const item = items[idx]
     setCurrentItem(item)
+    giaBanManualRef.current = false
     setEditingIdx(idx)
     // Nếu dòng có product_id, inject option vào Select để hiển thị đúng
     if (item.product_id && item.ma_amis) {
@@ -502,13 +618,16 @@ export default function QuoteForm() {
     setItems(newItems)
     if (editingIdx === idx) { setCurrentItem(emptyItem()); setEditingIdx(null) }
     const tongTienHang = newItems.reduce((sum, it) => sum + (it.gia_ban || 0) * (it.so_luong || 0), 0)
-    updateFinance({ tong_tien_hang: tongTienHang })
+    const tongSoLuong = newItems.reduce((sum, it) => sum + (Number(it.so_luong) || 0), 0)
+    const giaBanBinhQuan = tongSoLuong ? Math.round(tongTienHang / tongSoLuong) : 0
+    updateFinance({ tong_tien_hang: tongTienHang, gia_ban: giaBanBinhQuan })
   }
 
   // Sao chép dòng → load vào editor để chỉnh sửa trước khi thêm
   const handleCopyItem = (idx: number) => {
     const { id: _id, stt: _stt, ...rest } = items[idx]
     setCurrentItem({ ...rest, stt: items.length + 1 })
+    giaBanManualRef.current = false
     setEditingIdx(null)
     // Giữ lại product option nếu có
     if (rest.product_id && rest.ma_amis) {
@@ -542,7 +661,10 @@ export default function QuoteForm() {
         ghi_chu: vals.ghi_chu || null,
         dieu_khoan: vals.dieu_khoan || null,
         ...finance,
-        items: items.map(({ id: _id, ...rest }) => rest),
+        items: items.map(({ id: _id, ...rest }) => ({
+          ...rest,
+          ma_ky_hieu: rest.ma_ky_hieu || buildPaperSymbol(rest, paperCodes),
+        })),
       }
       if (isEdit) updateMutation.mutate(payload)
       else createMutation.mutate(payload)
@@ -551,9 +673,10 @@ export default function QuoteForm() {
     }
   }
 
-  // isReadonly: chỉ khoá khi ĐÃ có dữ liệu và trạng thái không phải 'moi'
-  // (tránh khoá form trong khi đang loading quoteData)
-  const isReadonly = isEdit && !!quoteData && quoteData.trang_thai !== 'moi'
+  // isReadonly: khoá khi đã duyệt/huỷ/hết hạn.
+  // SALE_ADMIN chỉ sửa được 'moi', TRUONG_PHONG/ADMIN sửa được cả 'cho_duyet'.
+  const editableStatuses = canApprove ? ['moi', 'cho_duyet'] : ['moi']
+  const isReadonly = isEdit && !!quoteData && !editableStatuses.includes(quoteData.trang_thai)
 
   const itemColumns: ColumnsType<QuoteItem> = [
     { title: 'STT', dataIndex: 'stt', width: 45, align: 'center' },
@@ -593,6 +716,12 @@ export default function QuoteForm() {
       render: (v: string) => v ? <Tag style={{ fontSize: 10 }}>{v}</Tag> : '—',
     },
     {
+      title: 'Mã Ký Hiệu',
+      dataIndex: 'ma_ky_hieu',
+      width: 150,
+      render: (v: string | null, r: QuoteItem) => v || buildPaperSymbol(r, paperCodes) || '—',
+    },
+    {
       title: 'D×R×C (cm)',
       width: 120,
       render: (_: unknown, r: QuoteItem) =>
@@ -615,13 +744,29 @@ export default function QuoteForm() {
       },
     },
     {
-      title: 'Giá bán',
+      title: 'Đơn giá',
       dataIndex: 'gia_ban',
       width: 105,
       align: 'right',
       render: (v: number) => v
         ? <Text strong style={{ color: '#f5222d' }}>{v.toLocaleString('vi-VN')}</Text>
         : '—',
+    },
+    {
+      title: 'Thành tiền',
+      width: 115,
+      align: 'right',
+      render: (_: unknown, r: QuoteItem) => {
+        const tt = (r.gia_ban || 0) * (r.so_luong || 0)
+        return tt ? <Text strong style={{ color: '#1677ff' }}>{tt.toLocaleString('vi-VN')}</Text> : '—'
+      },
+    },
+    {
+      title: 'Ghi Chú',
+      dataIndex: 'ghi_chu',
+      width: 140,
+      ellipsis: true,
+      render: (v: string | null) => v || '—',
     },
     !isReadonly ? {
       title: '',
@@ -685,7 +830,20 @@ export default function QuoteForm() {
                   {isEdit ? 'Lưu thay đổi' : 'Lưu báo giá'}
                 </Button>
               )}
-              {isEdit && quoteData?.trang_thai === 'moi' && (
+              {isEdit && quoteData?.trang_thai === 'moi' && !canApprove && (
+                <Popconfirm
+                  title="Gửi báo giá để trưởng phòng duyệt?"
+                  description="Sau khi gửi, bạn sẽ không thể chỉnh sửa nữa."
+                  onConfirm={() => submitMutation.mutate()}
+                  okText="Gửi duyệt"
+                  cancelText="Huỷ"
+                >
+                  <Button icon={<SendOutlined />} loading={submitMutation.isPending}>
+                    Gửi duyệt
+                  </Button>
+                </Popconfirm>
+              )}
+              {isEdit && (quoteData?.trang_thai === 'moi' || quoteData?.trang_thai === 'cho_duyet') && canApprove && (
                 <Popconfirm
                   title="Duyệt báo giá này?"
                   description="Sau khi duyệt sẽ không thể chỉnh sửa nội dung báo giá."
@@ -892,9 +1050,9 @@ export default function QuoteForm() {
             <Col span={3}>
               <Tooltip
                 title={
-                  ci.don_gia_m2 && ci.dien_tich
-                    ? `Giá giấy: ${Math.round(ci.don_gia_m2 * ci.dien_tich).toLocaleString('vi-VN')}đ — Bấm để gợi ý giá (gồm hao hụt + lợi nhuận)`
-                    : 'Nhập Đơn giá m² và Diện tích để gợi ý giá'
+                  hasFormulaPriceData(ci)
+                    ? 'Bấm để tính theo công thức giá giấy + gián tiếp + gia công + hao hụt'
+                    : 'Nhập đủ kích thước, số lượng, sóng và các lớp giấy để tính giá'
                 }
               >
                 <InputNumber
@@ -902,16 +1060,19 @@ export default function QuoteForm() {
                   style={{ width: '100%', borderColor: ci.gia_ban ? undefined : '#ff4d4f' }}
                   placeholder="Giá bán/thùng"
                   value={ci.gia_ban || undefined}
-                  onChange={v => setCI({ gia_ban: v || 0 })}
+                  onChange={v => {
+                    giaBanManualRef.current = true
+                    setCI({ gia_ban: v || 0 })
+                  }}
                   formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                   min={0}
                   addonAfter={
-                    ci.don_gia_m2 && ci.dien_tich ? (
+                    hasFormulaPriceData(ci) ? (
                       <span
                         style={{ cursor: 'pointer', fontSize: 10, color: '#1890ff' }}
                         onClick={() => {
-                          const suggested = suggestGiaBan(ci.don_gia_m2!, ci.dien_tich!, ci.so_luong, ci.so_lop)
-                          setCI({ gia_ban: suggested })
+                          giaBanManualRef.current = false
+                          applyFormulaPrice(ci, true)
                         }}
                       >
                         Gợi ý
@@ -974,30 +1135,30 @@ export default function QuoteForm() {
                 {/* Header cột */}
                 <Row gutter={4} style={{ marginTop: 8 }}>
                   <Col span={7} />
-                  <Col span={9}><Text style={{ fontSize: 10, color: '#8c8c8c' }}>Mã KH đồng cấp</Text></Col>
+                  <Col span={9}><Text style={{ fontSize: 10, color: '#8c8c8c' }}>Mã Giấy Đồng Cấp</Text></Col>
                   <Col span={8}><Text style={{ fontSize: 10, color: '#8c8c8c' }}>Định lượng</Text></Col>
                 </Row>
 
                 {/* Mặt (lớp mặt ngoài) */}
                 <LayerRow label="Mặt" mkField="mat" dlField="mat_dl"
-                  ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} />
+                  ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} paperCodes={paperCodes} />
 
                 {/* Sóng 1 + Mặt 1 */}
                 <LayerRow
                   label={`Sóng ${getSongType(ci.to_hop_song, 0)}`}
                   mkField="song_1" dlField="song_1_dl"
-                  ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} />
+                  ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} paperCodes={paperCodes} />
                 <LayerRow label="Mặt 1" mkField="mat_1" dlField="mat_1_dl"
-                  ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} />
+                  ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} paperCodes={paperCodes} />
 
                 {/* 5+ lớp: Sóng 2 + Mặt 2 */}
                 {ci.so_lop >= 5 && <>
                   <LayerRow
                     label={`Sóng ${getSongType(ci.to_hop_song, 1)}`}
                     mkField="song_2" dlField="song_2_dl"
-                    ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} />
+                    ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} paperCodes={paperCodes} />
                   <LayerRow label="Mặt 2" mkField="mat_2" dlField="mat_2_dl"
-                    ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} />
+                    ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} paperCodes={paperCodes} />
                 </>}
 
                 {/* 7 lớp: Sóng 3 + Mặt 3 */}
@@ -1005,10 +1166,19 @@ export default function QuoteForm() {
                   <LayerRow
                     label={`Sóng ${getSongType(ci.to_hop_song, 2)}`}
                     mkField="song_3" dlField="song_3_dl"
-                    ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} />
+                    ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} paperCodes={paperCodes} />
                   <LayerRow label="Mặt 3" mkField="mat_3" dlField="mat_3_dl"
-                    ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} />
+                    ci={ci} setCI={setCI} mkList={mkList} byMk={byMk} paperCodes={paperCodes} />
                 </>}
+
+                <Row style={{ marginTop: 6 }}>
+                  <Col span={7}><Text style={{ fontSize: 11 }}>Mã Ký Hiệu</Text></Col>
+                  <Col span={17}>
+                    <Tag color="geekblue" style={{ margin: 0 }}>
+                      {ci.ma_ky_hieu || buildPaperSymbol(ci, paperCodes) || '—'}
+                    </Tag>
+                  </Col>
+                </Row>
 
                 <Divider style={{ margin: '6px 0' }} />
                 <Row style={{ marginTop: 2 }} align="middle">
@@ -1019,7 +1189,7 @@ export default function QuoteForm() {
                     </Checkbox>
                   </Col>
                 </Row>
-                <Row style={{ marginTop: 4 }} gutter={4} align="middle">
+                {!hideCostDetails && <Row style={{ marginTop: 4 }} gutter={4} align="middle">
                   <Col span={8}><Text style={{ fontSize: 11 }}>Đơn giá m²</Text></Col>
                   <Col span={16}>
                     <InputNumber size="small" style={{ width: '100%' }}
@@ -1029,7 +1199,7 @@ export default function QuoteForm() {
                       formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                     />
                   </Col>
-                </Row>
+                </Row>}
               </div>
             </Col>
 
@@ -1100,7 +1270,7 @@ export default function QuoteForm() {
                       readOnly={!ci.khong_ct && Boolean(ci.loai_thung && ci.dai && ci.rong && ci.cao)}
                     />
                   </Col>
-                  {ci.dien_tich && ci.don_gia_m2 ? (
+                  {!hideCostDetails && ci.dien_tich && ci.don_gia_m2 ? (
                     <Col span={10}>
                       <Text style={{ fontSize: 11 }}>
                         Giá giấy ≈
@@ -1151,7 +1321,7 @@ export default function QuoteForm() {
                         <Text style={{ fontSize: 11 }}>Ghim</Text>
                       </Checkbox>
                       <Checkbox checked={ci.chap_xa} onChange={e => setCI({ chap_xa: e.target.checked })}>
-                        <Text style={{ fontSize: 11 }}>CHAP XÃ</Text>
+                        <Text style={{ fontSize: 11 }}>Chạp Xã</Text>
                       </Checkbox>
                       <Checkbox checked={ci.do_phu} onChange={e => setCI({ do_phu: e.target.checked })}>
                         <Text style={{ fontSize: 11 }}>Độ phủ</Text>
@@ -1160,10 +1330,10 @@ export default function QuoteForm() {
                         <Text style={{ fontSize: 11 }}>Dán</Text>
                       </Checkbox>
                       <Checkbox checked={ci.boi} onChange={e => setCI({ boi: e.target.checked })}>
-                        <Text style={{ fontSize: 11 }}>Bổi</Text>
+                        <Text style={{ fontSize: 11 }}>Bồi</Text>
                       </Checkbox>
                       <Checkbox checked={ci.be_lo} onChange={e => setCI({ be_lo: e.target.checked })}>
-                        <Text style={{ fontSize: 11 }}>Bê lỗ</Text>
+                        <Text style={{ fontSize: 11 }}>Bế Lỗ</Text>
                       </Checkbox>
                     </Space>
                   </Col>
@@ -1203,7 +1373,7 @@ export default function QuoteForm() {
                     />
                   </Col>
                   <Col span={8}>
-                    <Text style={{ fontSize: 11 }}>Số c bề</Text>
+                    <Text style={{ fontSize: 11 }}>Số Con Bế</Text>
                     <Input size="small" value={ci.so_c_be || ''}
                       onChange={e => setCI({ so_c_be: e.target.value })} />
                   </Col>
@@ -1409,7 +1579,7 @@ export default function QuoteForm() {
                   </Col>
                 </Row>
                 <Row gutter={4} style={{ marginTop: 4 }} align="middle">
-                  <Col span={12}><Text style={{ fontSize: 11 }}>GX phôi VSP</Text></Col>
+                  <Col span={12}><Text style={{ fontSize: 11 }}>Giá Nội Bộ</Text></Col>
                   <Col span={12}>
                     <InputNumber size="small" style={{ width: '100%' }}
                       value={finance.gia_xuat_phoi_vsp}

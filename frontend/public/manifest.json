@@ -3,25 +3,25 @@
   "name": "Hệ thống Quản lý Nam Phương ERP",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "logo_namphuong.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any"
     },
     {
-      "src": "icon-192.png",
+      "src": "logo_namphuong.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "maskable"
     },
     {
-      "src": "icon-512.png",
+      "src": "logo_namphuong.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "logo_namphuong.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"

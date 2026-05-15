@@ -11,6 +11,7 @@ import { fmtVND } from '../../utils/exportUtils'
 import { receiptApi, CashReceiptCreate, HINH_THUC_TT } from '../../api/accounting'
 import { customersApi, Customer } from '../../api/customers'
 import { billingApi, SalesInvoiceListItem } from '../../api/billing'
+import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 
 const { Title } = Typography
 
@@ -28,6 +29,12 @@ export default function CashReceiptForm() {
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ['customers-all'],
     queryFn: () => customersApi.all().then(r => r.data),
+  })
+
+  const { data: phapNhanList = [] } = useQuery<PhapNhan[]>({
+    queryKey: ['phap-nhan-active'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+    staleTime: 5 * 60 * 1000,
   })
 
   // Load hóa đơn còn nợ của KH được chọn
@@ -88,7 +95,10 @@ export default function CashReceiptForm() {
     const inv = unpaidInvoices.find(i => i.id === invId)
     setSelectedInvoice(inv)
     if (inv) {
-      form.setFieldsValue({ so_tien: inv.con_lai })
+      form.setFieldsValue({
+        so_tien: inv.con_lai,
+        ...(inv.phap_nhan_id ? { phap_nhan_id: inv.phap_nhan_id } : {}),
+      })
     }
   }
 
@@ -96,6 +106,7 @@ export default function CashReceiptForm() {
     createMut.mutate({
       customer_id: values.customer_id,
       sales_invoice_id: values.sales_invoice_id,
+      phap_nhan_id: values.phap_nhan_id ?? null,
       ngay_phieu: values.ngay_phieu.format('YYYY-MM-DD'),
       hinh_thuc_tt: values.hinh_thuc_tt,
       so_tai_khoan: values.so_tai_khoan || undefined,
@@ -131,6 +142,16 @@ export default function CashReceiptForm() {
               </Form.Item>
             </Col>
           </Row>
+
+          <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true, message: 'Chọn pháp nhân' }]}>
+            <Select
+              placeholder="Chọn pháp nhân phát hành phiếu"
+              options={phapNhanList.map(p => ({
+                value: p.id,
+                label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
+              }))}
+            />
+          </Form.Item>
 
           <Form.Item name="customer_id" label="Khách hàng" rules={[{ required: true }]}>
             <Select

@@ -17,6 +17,7 @@ DGV_IMPORT_FIELDS = [
     ImportField("khu_vuc_tu", "Khu vuc tu", parser=parse_text),
     ImportField("khu_vuc_den", "Khu vuc den", parser=parse_text),
     ImportField("don_gia", "Don gia", required=True, parser=parse_decimal, default=0),
+    ImportField("don_gia_m2", "Don gia m2", parser=parse_decimal, default=0),
     ImportField("dvt", "DVT", parser=parse_text, default="chuyến"),
     ImportField("ghi_chu", "Ghi chu", parser=parse_text),
     ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
@@ -30,6 +31,7 @@ class DonGiaVanChuyenBase(BaseModel):
     khu_vuc_tu: str | None = None
     khu_vuc_den: str | None = None
     don_gia: Decimal = Decimal("0")
+    don_gia_m2: Decimal = Decimal("0")
     dvt: str = "chuyến"
     ghi_chu: str | None = None
     trang_thai: bool = True

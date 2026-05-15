@@ -9,6 +9,8 @@ import dayjs from 'dayjs'
 import { bomApi, vnd } from '../../api/bom'
 import type { BomSummaryItem } from '../../api/bom'
 import BomCalculatorPanel from './BomCalculatorPanel'
+import ImportExcelDialog from '../../components/ImportExcelDialog'
+import { UploadOutlined } from '@ant-design/icons'
 import { exportToExcel, printToPdf, fmtVND, buildHtmlTable } from '../../utils/exportUtils'
 
 const { Text } = Typography
@@ -24,6 +26,7 @@ export default function BomListPage() {
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
   const [editingId, setEditingId] = useState<number | null>(null)   // BOM id
   const [editingPoiId, setEditingPoiId] = useState<number | null>(null)  // production_order_item_id
+  const [importVisible, setImportVisible] = useState(false)
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['bom-summary', filterTrangThai],
@@ -255,6 +258,12 @@ export default function BomListPage() {
               <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>Excel</Button>
               <Button icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf}>PDF</Button>
             </Button.Group>
+            <Button
+              icon={<UploadOutlined />}
+              onClick={() => setImportVisible(true)}
+            >
+              Import
+            </Button>
           </Space>
         }
       >
@@ -297,6 +306,15 @@ export default function BomListPage() {
           </div>
         ) : null}
       </Drawer>
+
+      <ImportExcelDialog
+        title="Import Định mức BOM từ Excel"
+        visible={importVisible}
+        onCancel={() => setImportVisible(false)}
+        onSuccess={() => refetch()}
+        importFn={(file, commit) => bomApi.importBoms(file, commit)}
+        templateUrl="/api/bom/import-template"
+      />
     </div>
   )
 }

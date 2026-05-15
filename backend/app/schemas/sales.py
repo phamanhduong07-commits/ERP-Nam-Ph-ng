@@ -170,7 +170,7 @@ class PagedResponse(BaseModel):
 
 class SalesReturnItemCreate(BaseModel):
     delivery_order_item_id: int | None = None
-    sales_order_item_id: int
+    sales_order_item_id: int | None = None
     so_luong_tra: Decimal
     don_gia_tra: Decimal | None = None
     ly_do_tra: str | None = None
@@ -238,6 +238,7 @@ class SalesReturnResponse(BaseModel):
     so_phieu_tra: str
     ngay_tra: date
     sales_order_id: int
+    delivery_order_id: int | None = None
     sales_order: SalesOrderResponse | None = None
     customer_id: int
     customer: CustomerShort | None = None

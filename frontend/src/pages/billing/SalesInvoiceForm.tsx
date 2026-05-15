@@ -9,6 +9,7 @@ import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { billingApi, SalesInvoiceCreate, HINH_THUC_TT } from '../../api/billing'
 import { customersApi, Customer } from '../../api/customers'
+import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 
 const { Title } = Typography
 
@@ -26,6 +27,11 @@ export default function SalesInvoiceForm() {
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ['customers-all'],
     queryFn: () => customersApi.all().then(r => r.data),
+  })
+
+  const { data: phapNhans = [] } = useQuery<PhapNhan[]>({
+    queryKey: ['phap-nhan-all'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
   })
 
   const createMut = useMutation({
@@ -71,6 +77,7 @@ export default function SalesInvoiceForm() {
       hinh_thuc_tt: values.hinh_thuc_tt,
       tong_tien_hang: values.tong_tien_hang,
       ty_le_vat: values.ty_le_vat,
+      phap_nhan_id: values.phap_nhan_id,
       ghi_chu: values.ghi_chu || undefined,
     }
     createMut.mutate(payload)
@@ -98,6 +105,24 @@ export default function SalesInvoiceForm() {
           }
         }}
       >
+        <Card size="small" title="Thông tin pháp nhân bán hàng" style={{ marginBottom: 16 }}>
+          <Form.Item name="phap_nhan_id" label="Pháp nhân bán hàng" rules={[{ required: true, message: 'Vui lòng chọn pháp nhân' }]}>
+            <Select
+              placeholder="Chọn pháp nhân bán hàng..."
+              options={phapNhans.map(p => ({
+                value: p.id,
+                label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
+              }))}
+              onChange={(v) => {
+                const pn = phapNhans.find(p => p.id === v)
+                if (pn) {
+                  form.setFieldsValue({ ky_hieu: pn.ky_hieu_hd })
+                }
+              }}
+            />
+          </Form.Item>
+        </Card>
+
         <Card size="small" title="Thông tin hóa đơn" style={{ marginBottom: 16 }}>
           <Row gutter={16}>
             <Col span={12}>

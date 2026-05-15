@@ -161,6 +161,7 @@ class SalesReturnItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     sales_return_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_returns.id", ondelete="CASCADE"), nullable=False)
+    delivery_order_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("delivery_order_items.id"), nullable=True)
     sales_order_item_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_order_items.id"), nullable=False)
     so_luong_tra: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     don_gia_tra: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
@@ -169,11 +170,10 @@ class SalesReturnItem(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
 
     sales_return: Mapped["SalesReturn"] = relationship("SalesReturn", back_populates="items")
+    delivery_order_item: Mapped["DeliveryOrderItem | None"] = relationship(
+        "DeliveryOrderItem", back_populates="sales_return_items"
+    )  # type: ignore[name-defined]
     sales_order_item: Mapped["SalesOrderItem"] = relationship("SalesOrderItem", back_populates="return_items")
-
-    @property
-    def delivery_order_item_id(self) -> None:
-        return None
 
     @property
     def thanh_tien_tra(self) -> Decimal:
@@ -255,6 +255,7 @@ class QuoteItem(Base):
     # Thông tin sản phẩm
     loai: Mapped[str | None] = mapped_column(String(50))
     ma_amis: Mapped[str | None] = mapped_column(String(50))
+    ma_ky_hieu: Mapped[str | None] = mapped_column(String(100))
     ten_hang: Mapped[str] = mapped_column(String(255), nullable=False)
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
     so_luong: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)

@@ -80,7 +80,10 @@ export default function PhapNhanList() {
       so_dien_thoai: r.so_dien_thoai,
       tai_khoan: r.tai_khoan,
       ngan_hang: r.ngan_hang,
+      email: r.email,
       ky_hieu_hd: r.ky_hieu_hd,
+      logo_path: r.logo_path,
+      mau_sac_chinh: r.mau_sac_chinh,
       trang_thai: r.trang_thai,
       phoi_phan_xuong_id: r.phoi_phan_xuong_id ?? null,
     })
@@ -100,6 +103,9 @@ export default function PhapNhanList() {
         tai_khoan: v.tai_khoan || null,
         ngan_hang: v.ngan_hang || null,
         ky_hieu_hd: v.ky_hieu_hd || null,
+        email: v.email || null,
+        logo_path: v.logo_path || null,
+        mau_sac_chinh: v.mau_sac_chinh || null,
         trang_thai: v.trang_thai ?? true,
         phoi_phan_xuong_id: v.phoi_phan_xuong_id ?? null,
       }
@@ -119,6 +125,7 @@ export default function PhapNhanList() {
     { title: 'Mã số thuế', dataIndex: 'ma_so_thue', width: 140 },
     { title: 'KH hoá đơn', dataIndex: 'ky_hieu_hd', width: 120 },
     { title: 'SĐT', dataIndex: 'so_dien_thoai', width: 130 },
+    { title: 'Email', dataIndex: 'email', width: 150 },
     { title: 'Hoạt động', dataIndex: 'trang_thai', width: 100, align: 'center' as const,
       render: (v: boolean) => <Switch checked={v} size="small" disabled /> },
     {
@@ -242,6 +249,23 @@ export default function PhapNhanList() {
           <Form.Item name="ngan_hang" label="Ngân hàng">
             <Input placeholder="VCB, TCB, BIDV..." />
           </Form.Item>
+          <Form.Item name="email" label="Email">
+            <Input placeholder="info@namphuong.com.vn" />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={14}>
+              <Form.Item name="logo_path" label="Logo (đường dẫn file)"
+                extra="VD: logos/namphuong.png — file đặt trong thư mục static">
+                <Input placeholder="logos/namphuong.png" />
+              </Form.Item>
+            </Col>
+            <Col span={10}>
+              <Form.Item name="mau_sac_chinh" label="Màu sắc chính (hex)"
+                extra="VD: #E65100">
+                <Input placeholder="#E65100" maxLength={7} />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item name="phoi_phan_xuong_id" label="Xưởng phôi mặc định"
             extra="Kho phôi mặc định khi nhập phôi sóng cho pháp nhân này">
             <Select

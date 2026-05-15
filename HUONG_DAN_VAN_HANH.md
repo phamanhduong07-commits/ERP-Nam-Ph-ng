@@ -1,54 +1,77 @@
-# HƯỚNG DẪN VẬN HÀNH & QUẢN LÝ DỮ LIỆU ERP NAM PHƯƠNG
+# Huong Dan Van Hanh ERP Nam Phuong
 
-Tài liệu này ghi lại các thay đổi quan trọng sau đợt khôi phục hệ thống (Tháng 05/2026).
+Tai lieu nay danh cho nguoi quan tri he thong va team ho tro van hanh.
 
-## 1. Thay đổi cốt lõi (Core Changes)
-- **Cơ sở dữ liệu:** Đã chuyển hoàn toàn từ **SQLite** (`.db` file) sang **PostgreSQL**.
-- **Lý do:** Tăng hiệu năng, tính bảo mật và khả năng mở rộng cho báo cáo kế toán.
-- **Dữ liệu hiện tại:** Đã migrate toàn bộ danh mục Master (13.000+ bản ghi) từ máy cũ sang Postgres.
+## Thong tin he thong
 
-## 2. Thông tin kỹ thuật (Technical Info)
-- **Database Engine:** PostgreSQL 15+
-- **DB Name:** `erp_nam_phuong`
-- **Cổng Backend:** 8088
-- **Cổng Frontend:** 5178
-- **Tài khoản Admin khôi phục:** `admin` / `admin123`
+| Thanh phan | Gia tri mac dinh |
+| --- | --- |
+| Database | PostgreSQL `erp_nam_phuong` |
+| Backend | FastAPI, cong `8000` |
+| Frontend dev | Vite, cong `5173` |
+| API docs | `/api/docs` |
+| File upload | `backend/uploads/` |
+| Log backend | `backend.log`, `erp_server.log` neu chay script |
 
-## 3. Luồng khởi động (Startup Workflow)
-Mỗi khi khởi động máy, cần thực hiện theo thứ tự:
+## Thu tu khoi dong hang ngay
 
-### Bước 1: Kiểm tra Database
-Đảm bảo PostgreSQL Service đã chạy. (Mở `Services.msc` trên Windows, tìm `postgresql-x64-15`).
+1. Kiem tra PostgreSQL service dang chay.
+2. Khoi dong backend bang `python run.py` hoac `start-backend.bat`.
+3. Khoi dong frontend bang `npm run dev` hoac `start-frontend.bat`.
+4. Mo `http://localhost:5173` va thu dang nhap.
+5. Kiem tra `http://localhost:8000/api/health` neu nghi backend loi.
 
-### Bước 2: Chạy Backend
-Mở Terminal tại `backend/`:
+## Backup
+
+Backup database bang pgAdmin hoac `pg_dump`:
+
 ```powershell
-.\venv\Scripts\activate
-python main.py
+pg_dump -Fc -U erp_user -d erp_nam_phuong -f erp_nam_phuong_YYYYMMDD.backup
 ```
 
-### Bước 3: Chạy Frontend
-Mở Terminal tại `frontend/`:
-```bash
-npm run dev
+Can backup kem:
+
+- `backend/uploads/`
+- File `.env` production, luu rieng va bao mat.
+- Cac file migration trong `backend/alembic/versions/`.
+
+Khuyen nghi backup it nhat moi ngay trong giai do go-live, sau do toi thieu moi tuan.
+
+## Restore
+
+Tao database rong roi restore:
+
+```powershell
+createdb -U erp_user erp_nam_phuong
+pg_restore -U erp_user -d erp_nam_phuong erp_nam_phuong_YYYYMMDD.backup
 ```
 
-## 4. Quản lý dữ liệu (Data Management)
-- **Dữ liệu mới:** Mọi thông tin nhập từ giao diện web sẽ lưu trực tiếp vào **PostgreSQL**. 
-- **File đính kèm:** Lưu tại `backend/static/uploads/`.
-- **Lưu ý quan trọng:** Không nhập dữ liệu vào file `.db` cũ vì hệ thống không còn sử dụng file đó.
+Sau restore, chay:
 
-## 5. Quy trình Sao lưu (Backup) - QUAN TRỌNG
-Vì dữ liệu không còn là 1 file đơn lẻ như SQLite, cần dùng công cụ để backup:
-1. Mở **pgAdmin 4**.
-2. Chuột phải vào database `erp_nam_phuong` -> chọn **Backup...**
-3. Lưu file thành định dạng `.backup` (nên đặt tên theo ngày, ví dụ: `erp_backup_2026_05_08.backup`).
-4. **Khuyến nghị:** Backup 1 lần/tuần và lưu vào Google Drive hoặc USB.
+```powershell
+cd backend
+alembic upgrade head
+```
 
-## 6. Xử lý lỗi thường gặp
-- **Lỗi 422 khi load vật tư:** Thường do dữ liệu cũ có các trường NULL. Đã được xử lý trong code bằng cách ép kiểu an toàn. Nếu gặp lại, kiểm tra log tại `backend/backend.log`.
-- **Trang báo cáo trống:** Do dữ liệu giao dịch cũ (Sổ cái) không có trong file backup ban đầu. Cần nhập mới hoặc khôi phục từ file dump kế toán riêng biệt.
+## Quy tac du lieu
 
----
-*Người soạn: Antigravity AI Assistant*
-*Ngày cập nhật: 08/05/2026*
+- Khong sua truc tiep database production neu khong co backup.
+- Thay doi schema phai co Alembic migration.
+- Import du lieu lon phai tai file mau tu he thong, preview loi, roi moi xac nhan import.
+- File dinh kem nam trong `backend/uploads/`; khong xoa thu muc nay khi don log/cache.
+
+## Kiem tra nhanh sau khi cap nhat
+
+- Backend khoi dong khong loi import.
+- `/api/health` tra `status: ok`.
+- Frontend build duoc bang `npm run build`.
+- Dang nhap thanh cong.
+- Thu cac luong chinh: bao gia, don hang, ton kho, phieu thu/chi, bao cao.
+
+## Xu ly loi thuong gap
+
+- Loi 401/403: kiem tra token, role, permission va menu role trong `AppLayout.tsx`.
+- Loi 422 khi import: sai ten cot, kieu ngay/tien/so luong, hoac thieu khoa tham chieu.
+- Ton kho lech: kiem tra `inventory_transactions`, `inventory_balances`, phieu kho da duyet/huy.
+- Cong no lech: kiem tra hoa don, phieu thu/chi, tra hang, hoan tien, opening balance.
+- File in thieu thong tin phap nhan: kiem tra danh muc phap nhan va cau hinh mau in.

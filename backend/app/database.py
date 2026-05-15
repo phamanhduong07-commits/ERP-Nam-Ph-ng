@@ -181,6 +181,14 @@ def ensure_schema() -> None:
             "ALTER TABLE paper_materials ADD COLUMN IF NOT EXISTS do_nen_vong_tb NUMERIC(8,2)"
         ))
         # GoodsReceiptItem: Khổ cuộn, Số cuộn, Ký hiệu lô
+        conn.execute(text("ALTER TABLE quote_items ADD COLUMN IF NOT EXISTS ma_ky_hieu VARCHAR(100)"))
+        conn.execute(text("""
+            INSERT INTO roles (ma_vai_tro, ten_vai_tro, mo_ta, trang_thai, created_at)
+            VALUES
+              ('SALE_ADMIN', 'Sale Admin', 'Nhap va quan ly bao gia ban hang', TRUE, NOW()),
+              ('TRUONG_PHONG_SALE_ADMIN', 'Truong phong Sale Admin', 'Duyet bao gia sale admin', TRUE, NOW())
+            ON CONFLICT (ma_vai_tro) DO NOTHING
+        """))
         conn.execute(text("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS kho_mm NUMERIC(7,1)"))
         conn.execute(text("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS so_cuon INTEGER"))
         conn.execute(text("ALTER TABLE goods_receipt_items ADD COLUMN IF NOT EXISTS ky_hieu_cuon VARCHAR(50)"))
@@ -249,3 +257,35 @@ def ensure_schema() -> None:
             "ALTER TABLE production_orders "
             "ADD COLUMN IF NOT EXISTS don_gia_noi_bo NUMERIC(14,2)"
         ))
+
+        # Danh mục lơ xe (người phụ bốc xếp hàng)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS lo_xe (
+                id SERIAL PRIMARY KEY,
+                ho_ten VARCHAR(150) NOT NULL,
+                so_dien_thoai VARCHAR(20),
+                ghi_chu TEXT,
+                trang_thai BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        conn.execute(text(
+            "ALTER TABLE delivery_orders "
+            "ADD COLUMN IF NOT EXISTS lo_xe_id INTEGER REFERENCES lo_xe(id)"
+        ))
+        conn.execute(text(
+            "ALTER TABLE delivery_orders "
+            "ADD COLUMN IF NOT EXISTS lo_xe_id_2 INTEGER REFERENCES lo_xe(id)"
+        ))
+        conn.execute(text("ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS lo_xe_2 VARCHAR(150)"))
+        conn.execute(text("ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS so_seal VARCHAR(50)"))
+        conn.execute(text("ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS gui_kem_theo TEXT"))
+        conn.execute(text("ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS phap_nhan_id INTEGER REFERENCES phap_nhan(id)"))
+        conn.execute(text("ALTER TABLE don_gia_van_chuyen ADD COLUMN IF NOT EXISTS don_gia_m2 NUMERIC(18,2) DEFAULT 0"))
+
+        # --- Bảng PrintTemplate đa pháp nhân ---
+        conn.execute(text("ALTER TABLE print_templates ADD COLUMN IF NOT EXISTS phap_nhan_id INTEGER"))
+        # Xóa ràng buộc unique cũ trên ma_mau nếu có (để cho phép trùng ma_mau nhưng khác phap_nhan_id)
+        try:
+            conn.execute(text("ALTER TABLE print_templates DROP CONSTRAINT IF EXISTS print_templates_ma_mau_key"))
+        except: pass

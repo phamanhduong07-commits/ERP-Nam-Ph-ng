@@ -306,6 +306,7 @@ class Xe(Base):
     bien_so: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     loai_xe: Mapped[str | None] = mapped_column(String(50))
     trong_tai: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    dinh_muc_dau: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -316,9 +317,24 @@ class TaiXe(Base):
     ho_ten: Mapped[str] = mapped_column(String(150), nullable=False)
     so_dien_thoai: Mapped[str | None] = mapped_column(String(20))
     so_bang_lai: Mapped[str | None] = mapped_column(String(30))
+    employee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("hr_employees.id"), nullable=True)
+    he_so_chuyen: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=1)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    employee = relationship("Employee")
+
+class LoXe(Base):
+    __tablename__ = "lo_xe"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ho_ten: Mapped[str] = mapped_column(String(150), nullable=False)
+    so_dien_thoai: Mapped[str | None] = mapped_column(String(20))
+    employee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("hr_employees.id"), nullable=True)
+    he_so_chuyen: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=Decimal("0.3"))
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    employee = relationship("Employee")
 
 class TinhThanh(Base):
     __tablename__ = "tinh_thanh"
@@ -343,6 +359,7 @@ class DonGiaVanChuyen(Base):
     khu_vuc_tu: Mapped[str | None] = mapped_column(String(100))
     khu_vuc_den: Mapped[str | None] = mapped_column(String(100))
     don_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    don_gia_m2: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0) # Đơn giá theo m2 (Ảnh 3)
     dvt: Mapped[str] = mapped_column(String(20), default="chuyến")
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -380,6 +397,9 @@ class PhapNhan(Base):
     tai_khoan: Mapped[str | None] = mapped_column(String(50))
     ngan_hang: Mapped[str | None] = mapped_column(String(100))
     ky_hieu_hd: Mapped[str | None] = mapped_column(String(20))  # ký hiệu hóa đơn: AA, AB...
+    email: Mapped[str | None] = mapped_column(String(100))
+    logo_path: Mapped[str | None] = mapped_column(String(255))       # path logo: "logos/namphuong.png"
+    mau_sac_chinh: Mapped[str | None] = mapped_column(String(7))     # hex color: "#E65100"
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     # Xưởng CD1+CD2 cung cấp phôi sóng cho lệnh SX của pháp nhân này

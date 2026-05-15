@@ -19,7 +19,7 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.bom import ProductionBOM, ProductionBOMItem, ProductionBOMIndirectCostItem
 from app.models.master import PaperMaterial, CauTrucThongDung
@@ -44,8 +44,41 @@ from app.services.price_calculator import (
 )
 from app.routers.indirect_costs import get_indirect_breakdown_from_db
 from app.routers.addon_rates import get_addon_rates_from_db
+from app.services.excel_import_service import build_template_response, ImportField, parse_text, parse_decimal, parse_int, parse_bool
+from fastapi import File, UploadFile
 
 router = APIRouter(prefix="/api/bom", tags=["bom"])
+
+
+BOM_IMPORT_FIELDS = [
+    ImportField("ma_hang", "Ma hang", required=True, help_text="Ma AMIS san pham"),
+    ImportField("loai_thung", "Loai thung", required=True, help_text="A1/A3/A5/tam"),
+    ImportField("dai", "Dai", required=True, parser=parse_decimal),
+    ImportField("rong", "Rong", required=True, parser=parse_decimal),
+    ImportField("cao", "Cao", required=True, parser=parse_decimal),
+    ImportField("so_lop", "So lop", required=True, parser=parse_int, help_text="3/5/7"),
+    ImportField("to_hop_song", "To hop song", help_text="VD: B, BC, BCB"),
+    
+    ImportField("mat", "Mat ngoai"),
+    ImportField("mat_dl", "Mat DL", parser=parse_decimal),
+    ImportField("song_1", "Song 1"),
+    ImportField("song_1_dl", "Song 1 DL", parser=parse_decimal),
+    ImportField("mat_1", "Mat giua"),
+    ImportField("mat_1_dl", "Mat giua DL", parser=parse_decimal),
+    ImportField("song_2", "Song 2"),
+    ImportField("song_2_dl", "Song 2 DL", parser=parse_decimal),
+    ImportField("mat_2", "Mat 2"),
+    ImportField("mat_2_dl", "Mat 2 DL", parser=parse_decimal),
+    ImportField("song_3", "Song 3"),
+    ImportField("song_3_dl", "Song 3 DL", parser=parse_decimal),
+    ImportField("mat_3", "Mat trong"),
+    ImportField("mat_3_dl", "Mat trong DL", parser=parse_decimal),
+
+    ImportField("chong_tham", "Chong tham", parser=parse_int, default=0, help_text="0/1/2"),
+    ImportField("in_flexo_mau", "So mau in", parser=parse_int, default=0),
+    ImportField("be_so_con", "So con be", parser=parse_int, default=0),
+    ImportField("ghi_chu", "Ghi chu"),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -1364,3 +1397,21 @@ def list_boms(
         q = q.filter(ProductionBOM.production_order_item_id == production_order_item_id)
     boms = q.order_by(ProductionBOM.created_at.desc()).limit(limit).all()
     return [_bom_to_response(b) for b in boms]
+
+
+@router.get("/import-template")
+def download_bom_template(
+    _: User = Depends(get_current_user),
+):
+    return build_template_response("mau_import_bom.xlsx", BOM_IMPORT_FIELDS)
+
+
+@router.post("/import")
+async def import_boms(
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("master.import")),
+):
+    from app.services.bom_import_service import import_bom_excel
+    return await import_bom_excel(db, file, current_user, commit)

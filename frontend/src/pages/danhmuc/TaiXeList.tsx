@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  Card, Table, Button, Space, Modal, Form, Input,
-  Tag, Popconfirm, message, Typography, Row, Col, Switch,
-} from 'antd'
+import { Card, Table, Button, Space, Modal, Form, Input, InputNumber, Select, Tag, Popconfirm, message, Typography, Row, Col, Switch } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { taiXeApi, type TaiXe } from '../../api/simpleApis'
+import { hrApi } from '../../api/hr'
 import ImportExcelButton from '../../components/ImportExcelButton'
 
 const { Title } = Typography
@@ -16,59 +14,29 @@ export default function TaiXeList() {
   const [form] = Form.useForm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<TaiXe | null>(null)
-
-  const { data = [], isLoading } = useQuery({
-    queryKey: ['tai-xe'],
-    queryFn: () => taiXeApi.list().then(r => r.data),
-  })
+  const { data = [], isLoading } = useQuery({ queryKey: ['tai-xe'], queryFn: () => taiXeApi.list().then(r => r.data) })
+  const { data: employees = [] } = useQuery({ queryKey: ['hr-employees'], queryFn: () => hrApi.listEmployees().then(r => r.data) })
 
   const createMut = useMutation({
     mutationFn: (d: Omit<TaiXe, 'id'>) => taiXeApi.create(d),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tai-xe'] })
-      closeModal()
-      message.success('Đã thêm tài xế')
-    },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm'),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tai-xe'] }); closeModal(); message.success('Da them tai xe') },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi khi them'),
   })
-
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Omit<TaiXe, 'id'>> }) =>
-      taiXeApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tai-xe'] })
-      closeModal()
-      message.success('Đã cập nhật')
-    },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
+    mutationFn: ({ id, data }: { id: number; data: Partial<Omit<TaiXe, 'id'>> }) => taiXeApi.update(id, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tai-xe'] }); closeModal(); message.success('Da cap nhat') },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi khi cap nhat'),
   })
-
   const deleteMut = useMutation({
     mutationFn: (id: number) => taiXeApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tai-xe'] })
-      message.success('Đã xoá')
-    },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi xoá'),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tai-xe'] }); message.success('Da xoa') },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi khi xoa'),
   })
 
-  const openCreate = () => {
-    setEditing(null)
-    form.resetFields()
-    form.setFieldsValue({ trang_thai: true })
-    setModalOpen(true)
-  }
-
-  const openEdit = (row: TaiXe) => {
-    setEditing(row)
-    form.setFieldsValue({ ...row })
-    setModalOpen(true)
-  }
-
-  const closeModal = () => {
-    setModalOpen(false)
-    setEditing(null)
-  }
+  const employeeOptions = employees.map((e: any) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))
+  const openCreate = () => { setEditing(null); form.resetFields(); form.setFieldsValue({ trang_thai: true, he_so_chuyen: 1 }); setModalOpen(true) }
+  const openEdit = (row: TaiXe) => { setEditing(row); form.setFieldsValue({ ...row }); setModalOpen(true) }
+  const closeModal = () => { setModalOpen(false); setEditing(null) }
 
   const handleSave = async () => {
     const vals = await form.validateFields()
@@ -76,36 +44,27 @@ export default function TaiXeList() {
       ho_ten: vals.ho_ten,
       so_dien_thoai: vals.so_dien_thoai || null,
       so_bang_lai: vals.so_bang_lai || null,
+      employee_id: vals.employee_id ?? null,
+      he_so_chuyen: vals.he_so_chuyen ?? 1,
       ghi_chu: vals.ghi_chu || null,
       trang_thai: vals.trang_thai ?? true,
     }
-    if (editing) {
-      updateMut.mutate({ id: editing.id, data: payload })
-    } else {
-      createMut.mutate(payload)
-    }
+    editing ? updateMut.mutate({ id: editing.id, data: payload }) : createMut.mutate(payload)
   }
 
   const columns: ColumnsType<TaiXe> = [
-    { title: 'Họ tên', dataIndex: 'ho_ten' },
-    { title: 'SĐT', dataIndex: 'so_dien_thoai', width: 130, render: (v: string | null) => v ?? '—' },
-    { title: 'Số bằng lái', dataIndex: 'so_bang_lai', width: 140, render: (v: string | null) => v ?? '—' },
-    { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v ?? '—' },
+    { title: 'Ho ten', dataIndex: 'ho_ten' },
+    { title: 'SDT', dataIndex: 'so_dien_thoai', width: 130, render: (v: string | null) => v ?? '-' },
+    { title: 'Bang lai', dataIndex: 'so_bang_lai', width: 140, render: (v: string | null) => v ?? '-' },
+    { title: 'Nhan vien HR', dataIndex: 'employee_id', width: 180, render: (v: number | null) => employeeOptions.find(e => e.value === v)?.label || '-' },
+    { title: 'He so chuyen', dataIndex: 'he_so_chuyen', width: 120, align: 'right', render: (v: number) => v ?? 1 },
+    { title: 'Trang thai', dataIndex: 'trang_thai', width: 110, align: 'center', render: (v: boolean) => <Tag color={v ? 'green' : 'default'}>{v ? 'Dang dung' : 'Ngung'}</Tag> },
     {
-      title: 'Trạng thái',
-      dataIndex: 'trang_thai',
-      width: 110,
-      align: 'center',
-      render: (v: boolean) => <Tag color={v ? 'green' : 'default'}>{v ? 'Đang dùng' : 'Ngừng'}</Tag>,
-    },
-    {
-      title: '',
-      key: 'act',
-      width: 90,
+      title: '', key: 'act', width: 90,
       render: (_: unknown, r: TaiXe) => (
         <Space>
           <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-          <Popconfirm title="Xoá tài xế này?" onConfirm={() => deleteMut.mutate(r.id)}>
+          <Popconfirm title="Xoa tai xe nay?" onConfirm={() => deleteMut.mutate(r.id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
@@ -117,60 +76,26 @@ export default function TaiXeList() {
     <div>
       <Card>
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-          <Col>
-            <Title level={4} style={{ margin: 0 }}>Danh mục tài xế</Title>
-          </Col>
+          <Col><Title level={4} style={{ margin: 0 }}>Danh muc tai xe</Title></Col>
           <Col>
             <Space>
-              <ImportExcelButton
-                endpoint="/api/tai-xe"
-                templateFilename="mau_import_tai_xe.xlsx"
-                buttonText="Import Excel"
-                onImported={() => queryClient.invalidateQueries({ queryKey: ['tai-xe'] })}
-              />
-              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-                Thêm mới
-              </Button>
+              <ImportExcelButton endpoint="/api/tai-xe" templateFilename="mau_import_tai_xe.xlsx" buttonText="Import Excel" onImported={() => queryClient.invalidateQueries({ queryKey: ['tai-xe'] })} />
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Them moi</Button>
             </Space>
           </Col>
         </Row>
-
-        <Table
-          rowKey="id"
-          dataSource={data}
-          columns={columns}
-          loading={isLoading}
-          pagination={{ pageSize: 20 }}
-          size="small"
-        />
+        <Table rowKey="id" dataSource={data} columns={columns} loading={isLoading} pagination={{ pageSize: 20 }} size="small" />
       </Card>
 
-      <Modal
-        title={editing ? 'Sửa tài xế' : 'Thêm tài xế'}
-        open={modalOpen}
-        onCancel={closeModal}
-        onOk={handleSave}
-        confirmLoading={createMut.isPending || updateMut.isPending}
-        okText="Lưu"
-        cancelText="Huỷ"
-        destroyOnClose
-      >
+      <Modal title={editing ? 'Sua tai xe' : 'Them tai xe'} open={modalOpen} onCancel={closeModal} onOk={handleSave} confirmLoading={createMut.isPending || updateMut.isPending} okText="Luu" cancelText="Huy" destroyOnClose>
         <Form form={form} layout="vertical" size="small">
-          <Form.Item label="Họ tên" name="ho_ten" rules={[{ required: true, message: 'Nhập họ tên tài xế' }]}>
-            <Input placeholder="VD: Nguyễn Văn A" />
-          </Form.Item>
-          <Form.Item label="Số điện thoại" name="so_dien_thoai">
-            <Input placeholder="VD: 0901234567" />
-          </Form.Item>
-          <Form.Item label="Số bằng lái" name="so_bang_lai">
-            <Input placeholder="VD: 012345678901" />
-          </Form.Item>
-          <Form.Item label="Ghi chú" name="ghi_chu">
-            <Input placeholder="Ghi chú thêm (không bắt buộc)" />
-          </Form.Item>
-          <Form.Item label="Đang dùng" name="trang_thai" valuePropName="checked">
-            <Switch />
-          </Form.Item>
+          <Form.Item label="Ho ten" name="ho_ten" rules={[{ required: true, message: 'Nhap ho ten tai xe' }]}><Input /></Form.Item>
+          <Form.Item label="So dien thoai" name="so_dien_thoai"><Input /></Form.Item>
+          <Form.Item label="So bang lai" name="so_bang_lai"><Input /></Form.Item>
+          <Form.Item label="Gan nhan vien HR" name="employee_id"><Select allowClear showSearch optionFilterProp="label" options={employeeOptions} /></Form.Item>
+          <Form.Item label="He so chuyen" name="he_so_chuyen" rules={[{ required: true }]}><InputNumber min={0} step={0.1} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item label="Ghi chu" name="ghi_chu"><Input /></Form.Item>
+          <Form.Item label="Dang dung" name="trang_thai" valuePropName="checked"><Switch /></Form.Item>
         </Form>
       </Modal>
     </div>

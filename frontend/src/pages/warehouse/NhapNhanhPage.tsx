@@ -31,8 +31,8 @@ export default function NhapNhanhPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: suppliers = [] } = useQuery({
-    queryKey: ['suppliers-all'],
-    queryFn: () => suppliersApi.all().then(r => r.data),
+    queryKey: ['suppliers-all', loaiParam],
+    queryFn: () => suppliersApi.all(loaiParam ?? undefined).then(r => r.data),
     staleTime: 300_000,
   })
 

@@ -1,11 +1,12 @@
 from datetime import datetime
 from decimal import Decimal
+import unicodedata
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.master import MaterialGroup, PaperMaterial, Supplier
 from app.services.excel_import_service import (
@@ -145,6 +146,26 @@ def _resolve_paper_material_import_row(db: Session, values: dict) -> tuple[dict,
     return values, errors
 
 
+def _strip_accents(value: str) -> str:
+    return "".join(
+        ch for ch in unicodedata.normalize("NFD", value.lower())
+        if unicodedata.category(ch) != "Mn"
+    )
+
+
+def _paper_suffix(name: str | None) -> str | None:
+    text = _strip_accents(name or "")
+    if "trang" in text:
+        return "W"
+    if "nau" in text:
+        return "N"
+    if "xeo" in text:
+        return "X"
+    if "vang" in text:
+        return "V"
+    return None
+
+
 @router.get("")
 def list_paper_materials(
     search: str = Query(default=""),
@@ -216,7 +237,7 @@ async def import_paper_materials(
     commit: bool = Query(default=False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("master.import")),
 ):
     return await import_excel(
         db=db,
@@ -226,7 +247,7 @@ async def import_paper_materials(
         key_field="ma_chinh",
         commit=commit,
         resolver=_resolve_paper_material_import_row,
-        user=_,
+        user=current_user,
         loai_du_lieu="vat_tu_giay",
     )
 
@@ -287,9 +308,29 @@ def get_paper_options(
     by_mk: dict[str, list[float]] = {}
     for mk, dl in rows:
         by_mk.setdefault(mk, []).append(float(dl))
+    papers = (
+        db.query(PaperMaterial)
+        .filter(
+            PaperMaterial.su_dung == True,
+            PaperMaterial.ma_ky_hieu.isnot(None),
+        )
+        .order_by(PaperMaterial.ma_ky_hieu, PaperMaterial.dinh_luong)
+        .all()
+    )
+    paper_codes: dict[str, str] = {}
+    for p in papers:
+        mk = (p.ma_ky_hieu or "").strip()
+        if not mk:
+            continue
+        dl_key = "" if p.dinh_luong is None else format(Decimal(str(p.dinh_luong)).normalize(), "f")
+        suffix = _paper_suffix(p.ten_viet_tat or p.ten)
+        code = f"{mk}-{suffix}" if suffix else mk
+        paper_codes.setdefault(f"{mk}|{dl_key}", code)
+        paper_codes.setdefault(f"{mk}|", code)
     return {
         "ma_ky_hieu": sorted(by_mk.keys()),
         "by_mk": by_mk,
+        "paper_codes": paper_codes,
     }
 
 
@@ -317,6 +358,11 @@ def search_paper_materials(
             "value": p.ma_chinh,
             "label": f"{p.ma_chinh} – {p.ten}",
             "ma_ky_hieu": p.ma_ky_hieu,
+            "ma_ky_hieu_mau": (
+                f"{p.ma_ky_hieu}-{_paper_suffix(p.ten_viet_tat or p.ten)}"
+                if p.ma_ky_hieu and _paper_suffix(p.ten_viet_tat or p.ten)
+                else p.ma_ky_hieu
+            ),
             "ma_dong_cap": p.ma_dong_cap,
             "dinh_luong": float(p.dinh_luong) if p.dinh_luong else None,
         }

@@ -126,6 +126,8 @@ def seed_defaults(db: Session):
         ("GIAM_DOC",   "Giam doc"),
         ("KE_TOAN",    "Ke toan"),
         ("KINH_DOANH", "Kinh doanh"),
+        ("SALE_ADMIN", "Sale Admin"),
+        ("TRUONG_PHONG_SALE_ADMIN", "Truong phong Sale Admin"),
         ("KHO",        "Thu kho"),
         ("SAN_XUAT",   "Quan ly san xuat"),
         ("MUA_HANG",   "Mua hang"),

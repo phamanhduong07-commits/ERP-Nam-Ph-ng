@@ -7,6 +7,7 @@ export interface QuoteItem {
   product_id?: number | null
   loai?: string | null
   ma_amis?: string | null
+  ma_ky_hieu?: string | null
   ten_hang: string
   dvt: string
   so_luong: number
@@ -137,6 +138,7 @@ export interface CreateQuotePayload {
 
 export const QUOTE_STATUS_LABELS: Record<string, string> = {
   moi: 'Mới',
+  cho_duyet: 'Chờ duyệt',
   da_duyet: 'Đã duyệt',
   het_han: 'Hết hạn',
   huy: 'Huỷ',
@@ -144,6 +146,7 @@ export const QUOTE_STATUS_LABELS: Record<string, string> = {
 
 export const QUOTE_STATUS_COLORS: Record<string, string> = {
   moi: 'blue',
+  cho_duyet: 'gold',
   da_duyet: 'green',
   het_han: 'orange',
   huy: 'red',
@@ -190,6 +193,38 @@ export const TO_HOP_SONG_OPTIONS: Record<number, string[]> = {
 export function getSongType(to_hop_song: string | null | undefined, idx: number): string {
   if (!to_hop_song) return `${idx + 1}`
   return to_hop_song[idx] ?? `${idx + 1}`
+}
+
+export function paperCodeKey(code?: string | null, dl?: number | string | null): string {
+  const dlText = dl == null || dl === '' ? '' : String(Number(dl))
+  return `${code || ''}|${dlText}`
+}
+
+export function buildPaperSymbol(
+  item: Pick<QuoteItem,
+    'mat' | 'mat_dl' | 'song_1' | 'song_1_dl' | 'mat_1' | 'mat_1_dl' |
+    'song_2' | 'song_2_dl' | 'mat_2' | 'mat_2_dl' | 'song_3' | 'song_3_dl' | 'mat_3' | 'mat_3_dl'
+  >,
+  _paperCodes: Record<string, string> = {},
+): string | null {
+  type PaperLayerKey = keyof typeof item
+  const layers: [PaperLayerKey, PaperLayerKey][] = [
+    ['mat', 'mat_dl'],
+    ['song_1', 'song_1_dl'],
+    ['mat_1', 'mat_1_dl'],
+    ['song_2', 'song_2_dl'],
+    ['mat_2', 'mat_2_dl'],
+    ['song_3', 'song_3_dl'],
+    ['mat_3', 'mat_3_dl'],
+  ]
+  const parts = layers
+    .map(([codeKey]) => {
+      const code = item[codeKey] as string | null | undefined
+      if (!code) return null
+      return code
+    })
+    .filter(Boolean) as string[]
+  return parts.length ? parts.join('.') : null
 }
 
 // ─── Dimension auto-calculation (TÀI LIỆU 02) ─────────────────────────────
@@ -301,6 +336,7 @@ export const quotesApi = {
     search?: string
     trang_thai?: string
     customer_id?: number
+    created_by?: number
     tu_ngay?: string
     den_ngay?: string
     page?: number
@@ -314,9 +350,16 @@ export const quotesApi = {
   update: (id: number, data: Partial<CreateQuotePayload>) =>
     client.put<Quote>(`/quotes/${id}`, data),
 
+  submit: (id: number) => client.patch<Quote>(`/quotes/${id}/submit`),
+
   approve: (id: number) => client.patch<Quote>(`/quotes/${id}/approve`),
 
   cancel: (id: number) => client.patch(`/quotes/${id}/cancel`),
+
+  copy: (id: number) => client.post<Quote>(`/quotes/${id}/copy`),
+
+  calculateItemPrice: (item: QuoteItem) =>
+    client.post<{ gia_ban: number }>('/quotes/calculate-item-price', { item }),
 
   taoDonHang: (id: number, item_ids?: number[]) =>
     client.post<{ so_don: string; order_id: number; message: string }>(
@@ -333,7 +376,7 @@ export const paperMaterialsApi = {
     ),
 
   options: () =>
-    client.get<{ ma_ky_hieu: string[]; by_mk: Record<string, number[]> }>(
+    client.get<{ ma_ky_hieu: string[]; by_mk: Record<string, number[]>; paper_codes?: Record<string, string> }>(
       '/paper-materials/options'
     ),
 }

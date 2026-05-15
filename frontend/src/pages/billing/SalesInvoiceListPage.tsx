@@ -75,6 +75,8 @@ export default function SalesInvoiceListPage() {
 
   const tongConLai = invoices.reduce((s, i) => s + (i.con_lai ?? 0), 0)
   const tongDaTT = invoices.reduce((s, i) => s + (i.da_thanh_toan ?? 0), 0)
+  const getPhapNhanTen = (i: SalesInvoiceListItem) =>
+    i.phap_nhan?.ten_phap_nhan ?? (i.phap_nhan_id != null ? `#${i.phap_nhan_id}` : '')
 
   const handleExcel = () => {
     const rows = invoices.map(i => ({
@@ -82,6 +84,7 @@ export default function SalesInvoiceListPage() {
       'Ngày HĐ': i.ngay_hoa_don,
       'Hạn TT': i.han_tt ?? '',
       'Khách hàng': i.ten_don_vi ?? '',
+      'Pháp nhân': getPhapNhanTen(i),
       'Tổng tiền': i.tong_cong,
       'Đã TT': i.da_thanh_toan,
       'Còn lại': i.con_lai,
@@ -95,12 +98,13 @@ export default function SalesInvoiceListPage() {
   }
 
   const handlePrint = () => {
-    const headers = ['Số HĐ', 'Ngày HĐ', 'Hạn TT', 'Khách hàng', 'Tổng tiền', 'Đã TT', 'Còn lại', 'Trạng thái']
+    const headers = ['Số HĐ', 'Ngày HĐ', 'Hạn TT', 'Khách hàng', 'Pháp nhân', 'Tổng tiền', 'Đã TT', 'Còn lại', 'Trạng thái']
     const rows = invoices.map(i => [
       i.so_hoa_don ?? '',
       i.ngay_hoa_don,
       i.han_tt ?? '',
       i.ten_don_vi ?? '',
+      getPhapNhanTen(i),
       fmtVND(i.tong_cong),
       fmtVND(i.da_thanh_toan),
       fmtVND(i.con_lai),
@@ -138,6 +142,13 @@ export default function SalesInvoiceListPage() {
       title: 'Khách hàng',
       dataIndex: 'ten_don_vi',
       ellipsis: true,
+    },
+    {
+      title: 'Pháp nhân',
+      dataIndex: 'phap_nhan_id',
+      width: 150,
+      ellipsis: true,
+      render: (_v, r) => <Text type="secondary" style={{ fontSize: 12 }}>{getPhapNhanTen(r)}</Text>,
     },
     {
       title: 'Tổng tiền',

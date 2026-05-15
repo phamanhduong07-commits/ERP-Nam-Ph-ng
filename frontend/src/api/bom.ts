@@ -388,6 +388,15 @@ export const bomApi = {
       `/bom/from-production-item/${productionOrderItemId}`,
       soLuong !== undefined ? { params: { so_luong: soLuong } } : undefined,
     ),
+
+  importBoms: (file: File, commit: boolean) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return client.post('/bom/import', formData, {
+      params: { commit },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 // ─── Display helpers ──────────────────────────────────────────────────────────

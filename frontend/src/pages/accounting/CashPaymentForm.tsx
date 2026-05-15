@@ -8,9 +8,9 @@ import {
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { fmtVND } from '../../utils/exportUtils'
-import { paymentApi, CashPaymentCreate, HINH_THUC_TT, PurchaseInvoice } from '../../api/accounting'
+import { paymentApi, CashPaymentCreate, HINH_THUC_TT, PurchaseInvoice, purchaseInvoiceApi } from '../../api/accounting'
 import { suppliersApi, Supplier } from '../../api/suppliers'
-import { purchaseInvoiceApi } from '../../api/accounting'
+import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 
 const { Title } = Typography
 
@@ -23,6 +23,12 @@ export default function CashPaymentForm() {
   const { data: suppliers = [] } = useQuery<Supplier[]>({
     queryKey: ['suppliers-all'],
     queryFn: () => suppliersApi.all().then(r => r.data),
+  })
+
+  const { data: phapNhanList = [] } = useQuery<PhapNhan[]>({
+    queryKey: ['phap-nhan-active'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: invoiceData } = useQuery({
@@ -64,6 +70,7 @@ export default function CashPaymentForm() {
     createMut.mutate({
       supplier_id: values.supplier_id,
       purchase_invoice_id: values.purchase_invoice_id,
+      phap_nhan_id: values.phap_nhan_id ?? null,
       ngay_phieu: values.ngay_phieu.format('YYYY-MM-DD'),
       hinh_thuc_tt: values.hinh_thuc_tt,
       so_tai_khoan: values.so_tai_khoan || undefined,
@@ -99,6 +106,16 @@ export default function CashPaymentForm() {
               </Form.Item>
             </Col>
           </Row>
+
+          <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true, message: 'Chọn pháp nhân' }]}>
+            <Select
+              placeholder="Chọn pháp nhân phát hành phiếu"
+              options={phapNhanList.map(p => ({
+                value: p.id,
+                label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
+              }))}
+            />
+          </Form.Item>
 
           <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true }]}>
             <Select

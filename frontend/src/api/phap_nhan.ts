@@ -11,6 +11,9 @@ export interface PhapNhan {
   tai_khoan: string | null
   ngan_hang: string | null
   ky_hieu_hd: string | null
+  email: string | null
+  logo_path: string | null
+  mau_sac_chinh: string | null
   trang_thai: boolean
   created_at: string | null
   phoi_phan_xuong_id: number | null
@@ -27,6 +30,9 @@ export interface CreatePhapNhanPayload {
   tai_khoan?: string | null
   ngan_hang?: string | null
   ky_hieu_hd?: string | null
+  email?: string | null
+  logo_path?: string | null
+  mau_sac_chinh?: string | null
   trang_thai?: boolean
   phoi_phan_xuong_id?: number | null
 }
