@@ -213,6 +213,8 @@ export default function QuoteForm() {
   const [currentItem, setCurrentItem] = useState<QuoteItem>(emptyItem())
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [customerOptions, setCustomerOptions] = useState<{ value: number; label: string }[]>([])
+  const [customerSearching, setCustomerSearching] = useState(false)
+  const [isCalcLoading, setIsCalcLoading] = useState(false)
   const role = useAuthStore(s => s.user?.role)
   const hideCostDetails = role === 'SALE_ADMIN' || role === 'TRUONG_PHONG_SALE_ADMIN'
   const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
@@ -242,6 +244,7 @@ export default function QuoteForm() {
   const { mkList, byMk, paperCodes } = usePaperOptions()
   const giaBanManualRef = useRef(false)
   const priceCalcSeq = useRef(0)
+  const confirmOpenRef = useRef(false)
 
   // Financial summary state
   const [finance, setFinance] = useState({
@@ -346,6 +349,7 @@ export default function QuoteForm() {
   const applyFormulaPrice = useCallback(async (item: QuoteItem, force = false) => {
     if (!force && !canCalculateItemPrice(item)) return
     const seq = ++priceCalcSeq.current
+    if (force) setIsCalcLoading(true)
     try {
       const res = await quotesApi.calculateItemPrice(item)
       if (seq !== priceCalcSeq.current) return
@@ -359,6 +363,8 @@ export default function QuoteForm() {
     } catch (err: any) {
       const detail = err?.response?.data?.detail
       if (force) message.warning(detail || 'Chưa đủ dữ liệu hoặc chưa tìm được giá giấy để tính giá bán')
+    } finally {
+      if (force) setIsCalcLoading(false)
     }
   }, [recalcFinance])
 
@@ -414,13 +420,18 @@ export default function QuoteForm() {
   // ── Customer search ──────────────────────────────────────
   const handleCustomerSearch = async (q: string) => {
     if (!q || q.length < 1) return
-    const res = await customersApi.list({ search: q, page_size: 30 })
-    setCustomerOptions(
-      res.data.items.map(c => ({
-        value: c.id,
-        label: `${c.ten_viet_tat}${c.ten_don_vi ? ' – ' + c.ten_don_vi : ''}`,
-      }))
-    )
+    setCustomerSearching(true)
+    try {
+      const res = await customersApi.list({ search: q, page_size: 30 })
+      setCustomerOptions(
+        res.data.items.map(c => ({
+          value: c.id,
+          label: `${c.ten_viet_tat}${c.ten_don_vi ? ' – ' + c.ten_don_vi : ''}`,
+        }))
+      )
+    } finally {
+      setCustomerSearching(false)
+    }
   }
 
   // ── Product search from catalog ───────────────────────────
@@ -605,6 +616,7 @@ export default function QuoteForm() {
     setCurrentItem(item)
     giaBanManualRef.current = false
     setEditingIdx(idx)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
     // Nếu dòng có product_id, inject option vào Select để hiển thị đúng
     if (item.product_id && item.ma_amis) {
       setProductOptions([{
@@ -619,6 +631,7 @@ export default function QuoteForm() {
     const newItems = items.filter((_, i) => i !== idx).map((it, i) => ({ ...it, stt: i + 1 }))
     setItems(newItems)
     if (editingIdx === idx) { setCurrentItem(emptyItem()); setEditingIdx(null) }
+    else if (editingIdx !== null && idx < editingIdx) setEditingIdx(editingIdx - 1)
     const tongTienHang = newItems.reduce((sum, it) => sum + (it.gia_ban || 0) * (it.so_luong || 0), 0)
     const tongSoLuong = newItems.reduce((sum, it) => sum + (Number(it.so_luong) || 0), 0)
     const giaBanBinhQuan = tongSoLuong ? Math.round(tongTienHang / tongSoLuong) : 0
@@ -646,8 +659,7 @@ export default function QuoteForm() {
   }
 
   // ── Submit ───────────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (items.length === 0) { message.warning('Báo giá cần ít nhất 1 mặt hàng'); return }
+  const doSave = async () => {
     try {
       const vals = await headerForm.validateFields()
       const payload: CreateQuotePayload = {
@@ -673,6 +685,24 @@ export default function QuoteForm() {
     } catch {
       // validateFields() tự hiện lỗi inline trên form, không cần xử lý thêm
     }
+  }
+
+  const handleSubmit = () => {
+    if (items.length === 0) { message.warning('Báo giá cần ít nhất 1 mặt hàng'); return }
+    if (editingIdx !== null) {
+      if (confirmOpenRef.current) return
+      confirmOpenRef.current = true
+      Modal.confirm({
+        title: `Dòng ${editingIdx + 1} đang được chỉnh sửa`,
+        content: 'Bạn chưa bấm "Cập nhật dòng". Lưu báo giá sẽ bỏ qua thay đổi chưa lưu của dòng này.',
+        okText: 'Tiếp tục lưu',
+        cancelText: 'Quay lại cập nhật dòng',
+        onOk: doSave,
+        afterClose: () => { confirmOpenRef.current = false },
+      })
+      return
+    }
+    doSave()
   }
 
   // isReadonly: khoá khi đã duyệt/huỷ/hết hạn.
@@ -748,11 +778,13 @@ export default function QuoteForm() {
     {
       title: 'Đơn giá',
       dataIndex: 'gia_ban',
-      width: 105,
+      width: 115,
       align: 'right',
-      render: (v: number) => v
-        ? <Text strong style={{ color: '#f5222d' }}>{v.toLocaleString('vi-VN')}</Text>
-        : '—',
+      render: (v: number, r: QuoteItem) => {
+        if (v > 0) return <Text strong style={{ color: '#f5222d' }}>{v.toLocaleString('vi-VN')}</Text>
+        if (r.ten_hang) return <Tag color="warning" style={{ fontSize: 11 }}>Chưa có giá</Tag>
+        return '—'
+      },
     },
     {
       title: 'Thành tiền',
@@ -800,6 +832,10 @@ export default function QuoteForm() {
 
   return (
     <div style={{ maxWidth: 1600 }}>
+      <style>{`
+        .editing-row > td { background-color: #e6f7ff !important; outline: 2px solid #1677ff; }
+        .no-price-row > td { background-color: #fffbe6 !important; }
+      `}</style>
       {/* ── Toolbar ──────────────────────────────────── */}
       <Card style={{ marginBottom: 12 }}>
         <Row justify="space-between" align="middle">
@@ -913,7 +949,7 @@ export default function QuoteForm() {
                   onSearch={handleCustomerSearch}
                   options={customerOptions}
                   placeholder="Tìm khách hàng..."
-                  notFoundContent="Gõ để tìm..."
+                  notFoundContent={customerSearching ? <Spin size="small" /> : 'Gõ để tìm...'}
                 />
               </Form.Item>
             </Col>
@@ -1083,15 +1119,19 @@ export default function QuoteForm() {
                   min={0}
                   addonAfter={
                     hasFormulaPriceData(ci) ? (
-                      <span
-                        style={{ cursor: 'pointer', fontSize: 10, color: '#1890ff' }}
-                        onClick={() => {
-                          giaBanManualRef.current = false
-                          applyFormulaPrice(ci, true)
-                        }}
-                      >
-                        Gợi ý
-                      </span>
+                      isCalcLoading
+                        ? <Spin size="small" />
+                        : (
+                          <span
+                            style={{ cursor: 'pointer', fontSize: 10, color: '#1890ff' }}
+                            onClick={() => {
+                              giaBanManualRef.current = false
+                              applyFormulaPrice(ci, true)
+                            }}
+                          >
+                            Gợi ý
+                          </span>
+                        )
                     ) : undefined
                   }
                 />
@@ -1540,12 +1580,14 @@ export default function QuoteForm() {
                 {/* Chi phí khác */}
                 <Row gutter={4} style={{ marginTop: 4 }}>
                   <Col span={12}>
-                    <Input size="small" placeholder="CP khác 1 tên"
+                    <Input size="small" placeholder="Tên CP khác 1"
+                      addonBefore={<span style={{ fontSize: 10, color: '#888' }}>CP1</span>}
                       value={finance.chi_phi_khac_1_ten}
                       onChange={e => updateFinance({ chi_phi_khac_1_ten: e.target.value })} />
                   </Col>
                   <Col span={12}>
                     <InputNumber size="small" style={{ width: '100%' }}
+                      addonBefore={<span style={{ fontSize: 10, color: '#888' }}>₫</span>}
                       value={finance.chi_phi_khac_1}
                       onChange={v => updateFinance({ chi_phi_khac_1: v || 0 })}
                       formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
@@ -1553,12 +1595,14 @@ export default function QuoteForm() {
                 </Row>
                 <Row gutter={4} style={{ marginTop: 4 }}>
                   <Col span={12}>
-                    <Input size="small" placeholder="CP khác 2 tên"
+                    <Input size="small" placeholder="Tên CP khác 2"
+                      addonBefore={<span style={{ fontSize: 10, color: '#888' }}>CP2</span>}
                       value={finance.chi_phi_khac_2_ten}
                       onChange={e => updateFinance({ chi_phi_khac_2_ten: e.target.value })} />
                   </Col>
                   <Col span={12}>
                     <InputNumber size="small" style={{ width: '100%' }}
+                      addonBefore={<span style={{ fontSize: 10, color: '#888' }}>₫</span>}
                       value={finance.chi_phi_khac_2}
                       onChange={v => updateFinance({ chi_phi_khac_2: v || 0 })}
                       formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
@@ -1629,12 +1673,17 @@ export default function QuoteForm() {
       {/* ── Items table ───────────────────────────────── */}
       <Card title={<Text strong>Chi tiết mặt hàng ({items.length} dòng)</Text>}>
         <Table
-          rowKey="stt"
+          rowKey={(_, idx) => String(idx)}
           dataSource={items}
           columns={itemColumns}
           pagination={false}
           size="small"
           scroll={{ x: 900 }}
+          rowClassName={(row, idx) => {
+            if (idx === editingIdx) return 'editing-row'
+            if (row.ten_hang && !(row.gia_ban > 0)) return 'no-price-row'
+            return ''
+          }}
           onRow={(_, idx) => ({
             onDoubleClick: () => !isReadonly && idx !== undefined && handleEditItem(idx),
             style: { cursor: isReadonly ? 'default' : 'pointer' },

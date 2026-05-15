@@ -1,46 +1,40 @@
-# Plan: Ổn định nền tảng ERP
+# Plan: Fix 5 UI Issues — QuoteForm + QuoteList (Round 4)
 Date: 2026-05-15
-Status: PENDING_APPROVAL
+Status: COMPLETED
 
 ## Mục tiêu
-Đảm bảo toàn bộ chuỗi Alembic migration là một chuỗi tuyến tính duy nhất có thể chạy
-trên database trắng, backend import không lỗi, và frontend build thành công.
+Sửa 5 vấn đề cụ thể: rowKey không ổn định, editingIdx trỏ sai sau delete,
+copy button thiếu loading, export button thiếu loading, và modal chồng nhau khi click nhanh.
 
 ## Các bước thực thi
 
-- [ ] Bước 1: Merge nhánh HR vào main chain
-  - File: `backend/alembic/versions/h1r2s3t4u5v8_logistics_trip_vehicle_payroll.py`
-  - Mục tiêu: Sửa `down_revision` của migration tiếp theo trong main chain để nối HR vào sau `ac1_add_purchase_requisitions` (head hiện tại), hoặc tạo merge migration bằng `alembic merge`
-  - Cách làm: Tạo 1 merge migration `alembic merge -m "merge_hr_into_main" ac1_add_purchase_requisitions h1r2s3t4u5v8`
+- [x] Bước 1: QuoteForm — đổi rowKey từ "stt" sang array index
+  - File: `frontend/src/pages/quotes/QuoteForm.tsx`
+  - `rowKey="stt"` → `rowKey={(_, idx) => String(idx)}`
 
-- [ ] Bước 2: Merge nhánh quote_item vào main chain
-  - File: `backend/alembic/versions/aa_quote_item_ma_ky_hieu_sale_admin_roles.py`
-  - Mục tiêu: Nối migration này vào sau merge ở bước 1
-  - Cách làm: Tạo merge migration thứ 2 hoặc nối tiếp vào kết quả bước 1
+- [x] Bước 2: QuoteForm — điều chỉnh editingIdx khi xóa dòng trước dòng đang edit
+  - File: `frontend/src/pages/quotes/QuoteForm.tsx` hàm `handleDeleteItem`
+  - Thêm: `else if (editingIdx !== null && idx < editingIdx) setEditingIdx(editingIdx - 1)`
 
-- [ ] Bước 3: Kiểm tra chuỗi sau merge
-  - Chạy `alembic heads` → phải ra đúng 1 head
-  - Chạy `alembic history --verbose` để xác nhận thứ tự
+- [x] Bước 3: QuoteList — thêm loading state cho nút Copy trong bảng
+  - File: `frontend/src/pages/quotes/QuoteList.tsx`
+  - Thêm `loading={copyMutation.isPending}` vào Button
 
-- [ ] Bước 4: Test upgrade trên database dev
-  - Chạy `alembic upgrade head` trên database dev
-  - Xác nhận không có lỗi
+- [x] Bước 4: QuoteList — thêm loading state cho nút Xuất Excel
+  - File: `frontend/src/pages/quotes/QuoteList.tsx`
+  - Thêm state `const [isExporting, setIsExporting] = useState(false)`
+  - Wrap `handleExportExcel` với setIsExporting(true/false) trong try/finally
+  - Thêm `loading={isExporting}` + `disabled={isExporting}` vào cả 2 nút Excel và PDF
 
-- [ ] Bước 5: Smoke test backend import
-  - Chạy `python -c "from app.main import app"` trong venv
-  - Xác nhận tất cả router import được, không có ImportError
-
-- [ ] Bước 6: Build frontend
-  - Chạy `npm run build` trong thư mục `frontend/`
-  - Xác nhận build thành công, không có TypeScript error
+- [x] Bước 5: QuoteForm — chặn Modal.confirm chồng nhau khi click nhanh
+  - File: `frontend/src/pages/quotes/QuoteForm.tsx` hàm `handleSubmit`
+  - Thêm `const confirmOpenRef = useRef(false)`
+  - Guard `if (confirmOpenRef.current) return` + `afterClose` reset
 
 ## Done Criteria
-- [ ] `alembic heads` trả về đúng 1 revision
-- [ ] `alembic upgrade head` chạy thành công trên database trắng
-- [ ] `python -c "from app.main import app"` không có error
-- [ ] `npm run build` thành công (exit code 0)
-- [ ] Lint: không có error blocking
-
-## Rủi ro
-- Merge migration có thể gây conflict nếu HR và main chain đều tạo cùng 1 bảng/column → kiểm tra nội dung 2 nhánh trước khi merge
-- `alembic upgrade head` trên database đang có dữ liệu có thể fail nếu column NOT NULL không có default → test trên database dev mới trước
+- [x] rowKey dùng array index thay vì stt — ổn định sau delete/reorder
+- [x] Xóa dòng trước dòng đang edit → editingIdx cập nhật đúng
+- [x] Click Copy → nút show loading spinner đến khi navigate
+- [x] Click Xuất Excel → spinner trên nút, không thể click lại trong khi fetch
+- [x] Click "Lưu" nhanh 3 lần khi editingIdx != null → chỉ 1 modal xuất hiện
+- [x] TypeScript: 1 lỗi pre-existing ở PrintTemplatePage.tsx (không do chúng ta gây ra)

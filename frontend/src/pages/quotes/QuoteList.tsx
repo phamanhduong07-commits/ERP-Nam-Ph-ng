@@ -1,14 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Table, Button, Space, Tag, Input, Select, DatePicker,
-  Popconfirm, message, Card, Row, Col, Typography, Tooltip, Badge,
+  Popconfirm, message, Card, Row, Col, Typography, Tooltip, Badge, Modal,
 } from 'antd'
 import {
   PlusOutlined, SearchOutlined, EyeOutlined,
   CheckCircleOutlined, StopOutlined, FileAddOutlined,
   FileExcelOutlined, FilePdfOutlined, CopyOutlined, SendOutlined, SyncOutlined,
+  WarningOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -26,21 +27,55 @@ interface Props {
   onSelect?: (id: number) => void
 }
 
+const FILTER_KEY = 'quote-list-filter'
+function readFilter() {
+  try { return JSON.parse(sessionStorage.getItem(FILTER_KEY) || '{}') } catch { return {} }
+}
+
 export default function QuoteList({ selectedId, onSelect }: Props) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
-  const [trangThai, setTrangThai] = useState<string | undefined>()
-  const [dateRange, setDateRange] = useState<[string, string] | []>([])
-  const [page, setPage] = useState(1)
+  const isEmbedded = !!onSelect
+
+  const saved = isEmbedded ? {} : readFilter()
+  const [inputText, setInputText] = useState<string>(saved.search || '')
+  const [search, setSearch] = useState<string>(saved.search || '')
+  const [trangThai, setTrangThai] = useState<string | undefined>(saved.trangThai)
+  const [dateRange, setDateRange] = useState<[string, string] | []>(saved.dateRange || [])
+  const [page, setPage] = useState<number>(saved.page || 1)
+  const [myOnly, setMyOnly] = useState<boolean>(saved.myOnly || false)
+  const [isExporting, setIsExporting] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const role = useAuthStore(s => s.user?.role)
   const userId = useAuthStore(s => s.user?.id)
   const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
   const isSaleAdmin = role === 'SALE_ADMIN'
 
-  const isEmbedded = !!onSelect
+  // Debounce: cập nhật search state 400ms sau khi ngừng gõ
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!inputText) { setSearch(''); setPage(1); return }
+    debounceRef.current = setTimeout(() => { setSearch(inputText); setPage(1) }, 400)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [inputText])
+
+  // Lưu filter vào sessionStorage khi thay đổi (chỉ non-embedded)
+  useEffect(() => {
+    if (isEmbedded) return
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify({ search, trangThai, dateRange, page, myOnly }))
+  }, [search, trangThai, dateRange, page, myOnly, isEmbedded])
+
+  const { data: counts } = useQuery({
+    queryKey: ['quotes-counts'],
+    queryFn: () => quotesApi.counts().then(r => r.data),
+  })
+  const [giaHanTarget, setGiaHanTarget] = useState<{ id: number; so_bao_gia: string } | null>(null)
+  const [giaHanDate, setGiaHanDate] = useState('')
 
   const handleExportExcel = async () => {
+    setIsExporting(true)
+    try {
     const items = data?.items ?? []
     const details = await Promise.all(items.map(r => quotesApi.get(r.id).then(res => res.data)))
     exportToExcel(`BaoGia_${dayjs().format('YYYYMMDD')}`, [{
@@ -62,6 +97,9 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
       ])),
       colWidths: [18, 12, 28, 6, 14, 34, 10, 12, 14, 22, 28, 8, 12, 12, 10, 12, 10, 12, 10],
     }])
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const handleExportPdf = () => {
@@ -85,8 +123,6 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
     )
   }
 
-  const [myOnly, setMyOnly] = useState(false)
-
   const { data, isLoading } = useQuery({
     queryKey: ['quotes', search, trangThai, dateRange, page, myOnly],
     queryFn: () =>
@@ -101,11 +137,14 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
       }).then(r => r.data),
   })
 
+  const invalidateCounts = () => queryClient.invalidateQueries({ queryKey: ['quotes-counts'] })
+
   const submitMutation = useMutation({
     mutationFn: (id: number) => quotesApi.submit(id),
     onSuccess: () => {
       message.success('Đã gửi duyệt')
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi gửi duyệt'),
   })
@@ -115,6 +154,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
     onSuccess: () => {
       message.success('Đã duyệt báo giá')
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi duyệt'),
   })
@@ -124,6 +164,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
     onSuccess: () => {
       message.success('Đã huỷ báo giá')
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi huỷ'),
   })
@@ -153,6 +194,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
     onSuccess: () => {
       message.success('Đã gia hạn báo giá')
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Gia hạn thất bại'),
   })
@@ -167,7 +209,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
       title: 'Ngày',
       dataIndex: 'ngay_bao_gia',
       width: 76,
-      render: (v) => dayjs(v).format('DD/MM/YY'),
+      render: (v) => dayjs(v).format('DD/MM/YYYY'),
     },
     {
       title: 'Khách hàng',
@@ -213,8 +255,22 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
     {
       title: 'Ngày HH',
       dataIndex: 'ngay_het_han',
-      width: 100,
-      render: (v) => (v ? dayjs(v).format('DD/MM/YYYY') : '—'),
+      width: 110,
+      render: (v, row) => {
+        if (!v) return '—'
+        const d = dayjs(v)
+        const daysLeft = d.diff(dayjs(), 'day')
+        if (row.trang_thai === 'het_han' || daysLeft < 0) {
+          return <span style={{ color: '#f5222d' }}>{d.format('DD/MM/YYYY')}</span>
+        }
+        if (daysLeft <= 3) {
+          return <span style={{ color: '#f5222d' }}><WarningOutlined style={{ marginRight: 3 }} />{d.format('DD/MM/YYYY')}</span>
+        }
+        if (daysLeft <= 7) {
+          return <span style={{ color: '#fa8c16' }}>{d.format('DD/MM/YYYY')}</span>
+        }
+        return d.format('DD/MM/YYYY')
+      },
     },
     {
       title: 'Số dòng',
@@ -271,7 +327,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
           )}
           {row.trang_thai === 'da_duyet' && (
             <Tooltip title="Copy chỉnh sửa">
-              <Button size="small" icon={<CopyOutlined />} onClick={() => copyMutation.mutate(row.id)} />
+              <Button size="small" icon={<CopyOutlined />} onClick={() => copyMutation.mutate(row.id)} loading={copyMutation.isPending} />
             </Tooltip>
           )}
           {row.trang_thai === 'da_duyet' && (
@@ -290,16 +346,11 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
           )}
           {row.trang_thai === 'het_han' && (
             <Tooltip title="Gia hạn">
-              <Popconfirm
-                title="Gia hạn thêm 30 ngày?"
-                onConfirm={() => giaHanMutation.mutate({
-                  id: row.id,
-                  ngay: dayjs().add(30, 'day').format('YYYY-MM-DD'),
-                })}
-                okText="Gia hạn"
-              >
-                <Button size="small" icon={<SyncOutlined />} />
-              </Popconfirm>
+              <Button
+                size="small"
+                icon={<SyncOutlined />}
+                onClick={() => setGiaHanTarget({ id: row.id, so_bao_gia: row.so_bao_gia })}
+              />
             </Tooltip>
           )}
         </Space>
@@ -319,10 +370,10 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
           <Col>
             <Space size={4}>
               <Tooltip title="Xuất Excel">
-                <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
+                <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} loading={isExporting} disabled={isExporting} />
               </Tooltip>
               <Tooltip title="Xuất PDF">
-                <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
+                <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} loading={isExporting} disabled={isExporting} />
               </Tooltip>
               <ImportExcelButton
                 endpoint="/quotes"
@@ -348,7 +399,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
             {canApprove && (
               <Col>
                 <Badge
-                  count={data?.items.filter(r => r.trang_thai === 'cho_duyet').length || 0}
+                  count={counts?.cho_duyet || 0}
                   size="small"
                   offset={[-4, 0]}
                 >
@@ -363,15 +414,27 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
                 </Badge>
               </Col>
             )}
-            {isSaleAdmin && (
+            <Col>
+              <Button
+                size="small"
+                type={myOnly ? 'primary' : 'default'}
+                onClick={() => { setMyOnly(!myOnly); setPage(1) }}
+              >
+                Của tôi
+              </Button>
+            </Col>
+            {(counts?.het_han ?? 0) > 0 && (
               <Col>
-                <Button
-                  size="small"
-                  type={myOnly ? 'primary' : 'default'}
-                  onClick={() => { setMyOnly(!myOnly); setPage(1) }}
-                >
-                  Của tôi
-                </Button>
+                <Badge count={counts?.het_han || 0} size="small" color="orange" offset={[-4, 0]}>
+                  <Button
+                    size="small"
+                    type={trangThai === 'het_han' ? 'primary' : 'default'}
+                    icon={<WarningOutlined />}
+                    onClick={() => { setTrangThai(trangThai === 'het_han' ? undefined : 'het_han'); setPage(1) }}
+                  >
+                    Hết hạn
+                  </Button>
+                </Badge>
               </Col>
             )}
           </Row>
@@ -383,8 +446,8 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
               placeholder="Tìm số BG, khách hàng..."
               prefix={<SearchOutlined />}
               size="small"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
               allowClear
             />
           </Col>
@@ -406,6 +469,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
             <RangePicker
               format="DD/MM/YYYY"
               placeholder={['Ngày BG từ', 'Đến ngày']}
+              value={dateRange.length === 2 ? [dayjs(dateRange[0]), dayjs(dateRange[1])] : null}
               onChange={(_, s) => {
                 setDateRange(s[0] && s[1] ? [
                   dayjs(s[0], 'DD/MM/YYYY').format('YYYY-MM-DD'),
@@ -424,6 +488,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
         loading={isLoading}
         columns={isEmbedded ? compactColumns : fullColumns}
         dataSource={data?.items || []}
+        locale={{ emptyText: search || trangThai || dateRange.length ? 'Không tìm thấy báo giá nào' : 'Chưa có báo giá nào' }}
         rowClassName={(r) => r.id === selectedId ? 'md-selected-row' : ''}
         onRow={(r) => ({
           onClick: isEmbedded ? () => onSelect!(r.id) : undefined,
@@ -441,6 +506,34 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
         size="small"
         scroll={isEmbedded ? undefined : { x: 900 }}
       />
+
+      <Modal
+        title={`Gia hạn báo giá ${giaHanTarget?.so_bao_gia}`}
+        open={!!giaHanTarget}
+        onCancel={() => { setGiaHanTarget(null); setGiaHanDate('') }}
+        onOk={() => {
+          if (!giaHanTarget || !giaHanDate) return
+          giaHanMutation.mutate(
+            { id: giaHanTarget.id, ngay: giaHanDate },
+            { onSuccess: () => { setGiaHanTarget(null); setGiaHanDate('') } },
+          )
+        }}
+        okText="Gia hạn"
+        okButtonProps={{ disabled: !giaHanDate }}
+        confirmLoading={giaHanMutation.isPending}
+        destroyOnClose
+      >
+        <p style={{ marginBottom: 12 }}>Chọn ngày hết hạn mới:</p>
+        <DatePicker
+          format="DD/MM/YYYY"
+          style={{ width: '100%' }}
+          disabledDate={(d) => d && d.isBefore(dayjs(), 'day')}
+          onChange={(_, dateString) => {
+            const s = Array.isArray(dateString) ? dateString[0] : dateString
+            setGiaHanDate(s ? dayjs(s, 'DD/MM/YYYY').format('YYYY-MM-DD') : '')
+          }}
+        />
+      </Modal>
     </div>
   )
 }
