@@ -64,6 +64,8 @@ export interface ProductionOrder {
   ten_phan_xuong: string | null
   nv_theo_doi_id: number | null
   ten_nv_theo_doi: string | null
+  created_by_name: string | null
+  so_po_kh: string | null
   trang_thai: string
   ngay_bat_dau_ke_hoach: string | null
   ngay_hoan_thanh_ke_hoach: string | null
@@ -71,7 +73,6 @@ export interface ProductionOrder {
   ngay_hoan_thanh_thuc_te: string | null
   ghi_chu: string | null
   don_gia_noi_bo: number | null
-  so_po_kh: string | null
   items: ProductionOrderItem[]
   created_at: string
   updated_at: string
@@ -85,10 +86,12 @@ export interface ProductionOrderListItem {
   so_don: string | null
   ten_khach_hang: string | null
   ten_hang: string | null       // mã hàng / tên hàng (item đầu tiên)
+  phap_nhan_id: number | null
   ten_phap_nhan: string | null
   ten_kho_sx: string | null
   phan_xuong_id: number | null
   gia_ban_muc_tieu: number | null
+  created_by_name: string | null
   trang_thai: string
   ngay_hoan_thanh_ke_hoach: string | null
   so_dong: number

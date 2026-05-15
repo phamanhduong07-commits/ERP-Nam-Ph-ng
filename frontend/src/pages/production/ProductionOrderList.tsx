@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -9,6 +9,7 @@ import {
   PlusOutlined, SearchOutlined, EyeOutlined,
   PlayCircleOutlined, CheckCircleOutlined, CloseOutlined,
   FileExcelOutlined, FilePdfOutlined, ShoppingCartOutlined,
+  WarningOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -18,10 +19,19 @@ import {
   TRANG_THAI_COLORS,
 } from '../../api/productionOrders'
 import type { ProductionOrderListItem } from '../../api/productionOrders'
-import { exportToExcel, printToPdf, fmtDate, fmtNum, buildHtmlTable } from '../../utils/exportUtils'
+import { exportToExcel, printToPdf, fmtDate, fmtNum, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
+
+const FILTER_KEY = 'prod_order_filters'
+
+function loadFilters() {
+  try {
+    const saved = sessionStorage.getItem(FILTER_KEY)
+    return saved ? JSON.parse(saved) : {}
+  } catch { return {} }
+}
 
 interface Props {
   selectedId?: number | null
@@ -72,63 +82,120 @@ function groupOrders(orders: ProductionOrderListItem[]): DonHangGroup[] {
 
 export default function ProductionOrderList({ selectedId, onSelect }: Props) {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
-  const [trangThai, setTrangThai] = useState<string | undefined>()
-  const [dateRange, setDateRange] = useState<[string, string] | null>(null)
-  const [page, setPage] = useState(1)
+  const saved = loadFilters()
+
+  const [search, setSearch] = useState<string>(saved.search ?? '')
+  const [trangThai, setTrangThai] = useState<string | undefined>(saved.trangThai)
+  const [shortcutFilter, setShortcutFilter] = useState<string | null>(saved.shortcutFilter ?? null)
+  const [dateRange, setDateRange] = useState<[string, string] | null>(saved.dateRange ?? null)
+  const [page, setPage] = useState<number>(saved.page ?? 1)
 
   const isEmbedded = !!onSelect
 
+  // Persist filters to sessionStorage
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(FILTER_KEY, JSON.stringify({ search, trangThai, shortcutFilter, dateRange, page }))
+    } catch {}
+  }, [search, trangThai, shortcutFilter, dateRange, page])
+
+  // Effective trangThai for API: shortcut overrides Select (except 'qua_han')
+  const effectiveTrangThai = shortcutFilter === 'moi' || shortcutFilter === 'dang_chay'
+    ? shortcutFilter
+    : trangThai
+
   const handleExportExcel = () => {
     const items = data?.items ?? []
-    exportToExcel(`LenhSX_${dayjs().format('YYYYMMDD')}`, [{
-      name: 'Lệnh sản xuất',
-      headers: ['STT', 'Số lệnh', 'Ngày lệnh', 'Đơn hàng', 'Khách hàng', 'Mã/Tên hàng', 'Hoàn thành dự kiến', 'Số dòng', 'SL kế hoạch', 'Trạng thái'],
-      rows: items.map((r, i) => [
-        i + 1, r.so_lenh, fmtDate(r.ngay_lenh),
-        r.so_don ?? '', r.ten_khach_hang ?? '', r.ten_hang ?? '',
-        fmtDate(r.ngay_hoan_thanh_ke_hoach),
-        r.so_dong, Number(r.tong_sl_ke_hoach),
-        TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
-      ]),
-      colWidths: [5, 18, 12, 16, 20, 28, 18, 8, 14, 14],
-    }])
+    const resolvedPhapNhanId = resolveSinglePhapNhanId(items)
+    if (!items.length) {
+      message.warning('Không có dữ liệu để xuất Excel')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ xuất Excel lệnh sản xuất khi danh sách thuộc một pháp nhân. Vui lòng lọc hoặc tìm theo một pháp nhân.')
+      return
+    }
+    const defaultConfig = [
+      { key: 'stt', label: 'STT', width: 5 },
+      { key: 'so_lenh', label: 'Số lệnh', width: 18 },
+      { key: 'ngay_lenh', label: 'Ngày lệnh', width: 12 },
+      { key: 'so_don', label: 'Đơn hàng', width: 16 },
+      { key: 'ten_khach_hang', label: 'Khách hàng', width: 20 },
+      { key: 'ten_hang', label: 'Mã/Tên hàng', width: 28 },
+      { key: 'ngay_hoan_thanh_ke_hoach', label: 'Hoàn thành DK', width: 18 },
+      { key: 'so_dong', label: 'Số dòng', width: 8 },
+      { key: 'tong_sl_ke_hoach', label: 'SL kế hoạch', width: 14 },
+      { key: 'trang_thai_lbl', label: 'Trạng thái', width: 14 },
+    ]
+
+    const exportData = items.map((r, i) => ({
+      ...r,
+      stt: i + 1,
+      ngay_lenh: fmtDate(r.ngay_lenh),
+      ngay_hoan_thanh_ke_hoach: fmtDate(r.ngay_hoan_thanh_ke_hoach),
+      tong_sl_ke_hoach: Number(r.tong_sl_ke_hoach),
+      trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
+    }))
+
+    smartExportExcel('PRODUCTION_ORDER', exportData, defaultConfig, `LenhSX_${dayjs().format('YYYYMMDD')}`, resolvedPhapNhanId)
   }
 
   const handleExportPdf = () => {
     const items = data?.items ?? []
+    const resolvedPhapNhanId = resolveSinglePhapNhanId(items)
+    if (!items.length) {
+      message.warning('Không có dữ liệu để in')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ in danh sách lệnh sản xuất khi danh sách thuộc một pháp nhân. Vui lòng lọc hoặc tìm theo một pháp nhân.')
+      return
+    }
     const cols = [
-      { header: 'STT', align: 'center' as const },
-      { header: 'Số lệnh' }, { header: 'Ngày lệnh' },
-      { header: 'Đơn hàng' }, { header: 'Khách hàng' }, { header: 'Mã/Tên hàng' },
-      { header: 'Hoàn thành DK' },
-      { header: 'Số dòng', align: 'center' as const },
-      { header: 'SL kế hoạch', align: 'right' as const },
-      { header: 'Trạng thái' },
+      { header: 'STT', key: 'stt', align: 'center' as const },
+      { header: 'Số lệnh', key: 'so_lenh' },
+      { header: 'Ngày lệnh', key: 'ngay_lenh' },
+      { header: 'Đơn hàng', key: 'so_don' },
+      { header: 'Khách hàng', key: 'ten_khach_hang' },
+      { header: 'Mã/Tên hàng', key: 'ten_hang' },
+      { header: 'Hoàn thành DK', key: 'ngay_hoan_thanh_ke_hoach' },
+      { header: 'Số dòng', key: 'so_dong', align: 'center' as const },
+      { header: 'SL kế hoạch', key: 'tong_sl_ke_hoach', align: 'right' as const },
+      { header: 'Trạng thái', key: 'trang_thai_lbl' },
     ]
-    const rows = items.map((r, i) => [
-      i + 1, r.so_lenh, fmtDate(r.ngay_lenh),
-      r.so_don ?? '', r.ten_khach_hang ?? '', r.ten_hang ?? '',
-      fmtDate(r.ngay_hoan_thanh_ke_hoach),
-      r.so_dong, fmtNum(r.tong_sl_ke_hoach),
-      TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
-    ])
-    printToPdf(
-      'Danh sách lệnh sản xuất',
-      `<h2>DANH SÁCH LỆNH SẢN XUẤT</h2>
-       <p class="meta">Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')} — ${items.length} lệnh</p>
-       ${buildHtmlTable(cols, rows)}`,
-      true,
-    )
+
+    const rows = items.map((r, i) => ({
+      stt: i + 1,
+      so_lenh: r.so_lenh,
+      ngay_lenh: fmtDate(r.ngay_lenh),
+      so_don: r.so_don ?? '',
+      ten_khach_hang: r.ten_khach_hang ?? '',
+      ten_hang: r.ten_hang ?? '',
+      ngay_hoan_thanh_ke_hoach: fmtDate(r.ngay_hoan_thanh_ke_hoach),
+      so_dong: r.so_dong,
+      tong_sl_ke_hoach: fmtNum(r.tong_sl_ke_hoach),
+      trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
+    }))
+
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as any)[c.key])))
+
+    const printData = {
+      subtitle: 'DANH SÁCH LỆNH SẢN XUẤT',
+      document_date: dayjs().format('DD/MM/YYYY HH:mm'),
+      document_number: `${items.length} lệnh`,
+      body_html: table,
+    }
+
+    smartPrintPdf('PRODUCTION_ORDER', printData, resolvedPhapNhanId)
   }
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['production-orders', search, trangThai, dateRange, page],
+    queryKey: ['production-orders', search, effectiveTrangThai, dateRange, page],
     queryFn: () =>
       productionOrdersApi
         .list({
           search,
-          trang_thai: trangThai,
+          trang_thai: effectiveTrangThai,
           tu_ngay: dateRange?.[0],
           den_ngay: dateRange?.[1],
           page,
@@ -137,8 +204,20 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
         .then((r) => r.data),
   })
 
+  // Quá hạn: filter on frontend (active orders past deadline)
+  const today = dayjs().startOf('day')
+  const displayItems = useMemo(() => {
+    const items = data?.items ?? []
+    if (shortcutFilter !== 'qua_han') return items
+    return items.filter(o =>
+      ['moi', 'dang_chay'].includes(o.trang_thai) &&
+      o.ngay_hoan_thanh_ke_hoach != null &&
+      dayjs(o.ngay_hoan_thanh_ke_hoach).isBefore(today)
+    )
+  }, [data?.items, shortcutFilter])
+
   // Gom nhóm theo đơn hàng (chỉ dùng cho chế độ full)
-  const groups = useMemo(() => groupOrders(data?.items ?? []), [data?.items])
+  const groups = useMemo(() => groupOrders(displayItems), [displayItems])
 
   const handleStart = async (id: number, soLenh: string) => {
     try {
@@ -252,14 +331,43 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
     {
       title: 'Hoàn thành DK',
       dataIndex: 'ngay_hoan_thanh_ke_hoach',
-      width: 130,
-      render: (v) => (v ? dayjs(v).format('DD/MM/YYYY') : '—'),
+      width: 140,
+      render: (v, r) => {
+        if (!v) return '—'
+        const d = dayjs(v)
+        const isActive = ['moi', 'dang_chay'].includes(r.trang_thai)
+        const diffDays = d.diff(today, 'day')
+        if (isActive && diffDays < 0) {
+          return (
+            <Space size={4}>
+              <WarningOutlined style={{ color: '#cf1322' }} />
+              <span style={{ color: '#cf1322', fontWeight: 600 }}>{d.format('DD/MM/YYYY')}</span>
+            </Space>
+          )
+        }
+        if (isActive && diffDays <= 3) {
+          return <span style={{ color: '#d46b08', fontWeight: 500 }}>{d.format('DD/MM/YYYY')}</span>
+        }
+        return d.format('DD/MM/YYYY')
+      },
     },
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
       width: 120,
       render: (v) => <Tag color={TRANG_THAI_COLORS[v]}>{TRANG_THAI_LABELS[v] || v}</Tag>,
+    },
+    {
+      title: 'Pháp nhân',
+      dataIndex: 'ten_phap_nhan',
+      width: 120,
+      render: (v) => v ?? '—',
+    },
+    {
+      title: 'Người lập',
+      dataIndex: 'created_by_name',
+      width: 120,
+      render: (v) => v ?? '—',
     },
     {
       title: 'Thao tác',
@@ -397,7 +505,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
         <Row gutter={8} style={{ marginTop: 8 }}>
           <Col flex="auto">
             <Input
-              placeholder="Tìm số lệnh / mã hàng..."
+              placeholder="Tìm số lệnh / khách hàng / tên hàng..."
               prefix={<SearchOutlined />}
               size="small"
               value={search}
@@ -412,7 +520,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
               style={{ width: 110 }}
               allowClear
               value={trangThai}
-              onChange={(v) => { setTrangThai(v); setPage(1) }}
+              onChange={(v) => { setTrangThai(v); setShortcutFilter(null); setPage(1) }}
               options={Object.entries(TRANG_THAI_LABELS).map(([v, l]) => ({ value: v, label: l }))}
             />
           </Col>
@@ -424,6 +532,9 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
               style={{ width: '100%' }}
               format="DD/MM/YYYY"
               placeholder={['Ngày lệnh từ', 'Đến ngày']}
+              value={dateRange
+                ? [dayjs(dateRange[0], 'YYYY-MM-DD'), dayjs(dateRange[1], 'YYYY-MM-DD')]
+                : null}
               onChange={(_, s) => {
                 setDateRange(
                   s[0] && s[1]
@@ -436,6 +547,51 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
                 setPage(1)
               }}
             />
+          </Col>
+        </Row>
+
+        {/* ── Shortcut filter buttons ── */}
+        <Row style={{ marginTop: 8 }} gutter={6}>
+          <Col>
+            <Button
+              size="small"
+              type={shortcutFilter === 'moi' ? 'primary' : 'default'}
+              onClick={() => {
+                setShortcutFilter(shortcutFilter === 'moi' ? null : 'moi')
+                setTrangThai(undefined)
+                setPage(1)
+              }}
+            >
+              Mới
+            </Button>
+          </Col>
+          <Col>
+            <Button
+              size="small"
+              type={shortcutFilter === 'dang_chay' ? 'primary' : 'default'}
+              onClick={() => {
+                setShortcutFilter(shortcutFilter === 'dang_chay' ? null : 'dang_chay')
+                setTrangThai(undefined)
+                setPage(1)
+              }}
+            >
+              Đang SX
+            </Button>
+          </Col>
+          <Col>
+            <Button
+              size="small"
+              danger={shortcutFilter === 'qua_han'}
+              type={shortcutFilter === 'qua_han' ? 'primary' : 'default'}
+              icon={shortcutFilter === 'qua_han' ? <WarningOutlined /> : undefined}
+              onClick={() => {
+                setShortcutFilter(shortcutFilter === 'qua_han' ? null : 'qua_han')
+                setTrangThai(undefined)
+                setPage(1)
+              }}
+            >
+              Quá hạn
+            </Button>
           </Col>
         </Row>
       </Card>
@@ -526,7 +682,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
                     dataSource={g.orders}
                     columns={orderColumns}
                     pagination={false}
-                    scroll={{ x: 820 }}
+                    scroll={{ x: 1000 }}
                   />
                 </div>
               ),
