@@ -11,6 +11,7 @@ export default function QuotesPage() {
     <MasterDetailLayout
       master={
         <QuoteList
+          primaryList
           selectedId={selectedId}
           onSelect={(id) => setSearchParams({ id: String(id) })}
         />

@@ -11,6 +11,7 @@ export default function SalesOrdersPage() {
     <MasterDetailLayout
       master={
         <OrderList
+          primaryList
           selectedId={selectedId}
           onSelect={(id) => setSearchParams({ id: String(id) })}
         />

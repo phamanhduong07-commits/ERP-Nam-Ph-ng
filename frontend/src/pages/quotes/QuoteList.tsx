@@ -16,7 +16,7 @@ import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS } from '../../api/quotes'
 import type { QuoteListItem } from '../../api/quotes'
 import { phapNhanApi } from '../../api/phap_nhan'
-import { exportExcelWithTemplate, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
+import { analyzeSinglePhapNhanId, singlePhapNhanError, smartPrintPdf, exportExcelWithTemplate, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
 import { systemApi } from '../../api/system'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import { useAuthStore } from '../../store/auth'
@@ -27,6 +27,7 @@ const { RangePicker } = DatePicker
 interface Props {
   selectedId?: number | null
   onSelect?: (id: number) => void
+  primaryList?: boolean
 }
 
 const FILTER_KEY = 'quote-list-filter'
@@ -34,12 +35,13 @@ function readFilter() {
   try { return JSON.parse(sessionStorage.getItem(FILTER_KEY) || '{}') } catch { return {} }
 }
 
-export default function QuoteList({ selectedId, onSelect }: Props) {
+export default function QuoteList({ selectedId, onSelect, primaryList }: Props) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const isEmbedded = !!onSelect
+  const persistFilters = !isEmbedded || !!primaryList
 
-  const saved = isEmbedded ? {} : readFilter()
+  const saved = persistFilters ? readFilter() : {}
   const [inputText, setInputText] = useState<string>(saved.search || '')
   const [search, setSearch] = useState<string>(saved.search || '')
   const [trangThai, setTrangThai] = useState<string | undefined>(saved.trangThai)
@@ -63,11 +65,11 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [inputText])
 
-  // Lưu filter vào sessionStorage khi thay đổi (chỉ non-embedded)
+  // Lưu filter vào sessionStorage khi thay đổi (chỉ primary list)
   useEffect(() => {
-    if (isEmbedded) return
+    if (!persistFilters) return
     sessionStorage.setItem(FILTER_KEY, JSON.stringify({ search, trangThai, phapNhanId, dateRange, page, myOnly }))
-  }, [search, trangThai, phapNhanId, dateRange, page, myOnly, isEmbedded])
+  }, [search, trangThai, phapNhanId, dateRange, page, myOnly, persistFilters])
 
   const { data: counts } = useQuery({
     queryKey: ['quotes-counts'],
@@ -136,8 +138,15 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
     }
   }
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
+    setIsExporting(true)
+    try {
     const items = data?.items ?? []
+    const phapNhanResult = analyzeSinglePhapNhanId(items)
+    if (!phapNhanResult.ok) {
+      message.error(singlePhapNhanError(phapNhanResult, 'danh sach bao gia'))
+      return
+    }
     const cols = [
       { header: 'STT', align: 'center' as const },
       { header: 'Số BG' }, { header: 'Ngày BG' }, { header: 'Khách hàng' },
@@ -148,13 +157,15 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
       i + 1, r.so_bao_gia, fmtDate(r.ngay_bao_gia), r.ten_khach_hang ?? '',
       fmtDate(r.ngay_het_han ?? null), r.so_dong, fmtVND(r.tong_cong), QUOTE_STATUS_LABELS[r.trang_thai] ?? r.trang_thai,
     ])
-    printToPdf(
-      'Danh sách báo giá',
-      `<h2>DANH SÁCH BÁO GIÁ</h2>
-       <p class="meta">Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')} — ${items.length} báo giá</p>
-       ${buildHtmlTable(cols, rows)}`,
-      true,
-    )
+    await smartPrintPdf('SALES_QUOTE_LIST', {
+      title: 'DANH SACH BAO GIA',
+      exported_at: dayjs().format('DD/MM/YYYY HH:mm'),
+      total_count: String(items.length),
+      body_html: buildHtmlTable(cols, rows),
+    }, phapNhanResult.phapNhanId)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const { data, isLoading } = useQuery({

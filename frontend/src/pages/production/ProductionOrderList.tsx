@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -84,13 +84,23 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
   const navigate = useNavigate()
   const saved = loadFilters()
 
+  const [inputSearch, setInputSearch] = useState<string>(saved.search ?? '')
   const [search, setSearch] = useState<string>(saved.search ?? '')
   const [trangThai, setTrangThai] = useState<string | undefined>(saved.trangThai)
   const [shortcutFilter, setShortcutFilter] = useState<string | null>(saved.shortcutFilter ?? null)
   const [dateRange, setDateRange] = useState<[string, string] | null>(saved.dateRange ?? null)
   const [page, setPage] = useState<number>(saved.page ?? 1)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isEmbedded = !!onSelect
+
+  // Debounce search 400ms
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!inputSearch) { setSearch(''); setPage(1); return }
+    debounceRef.current = setTimeout(() => { setSearch(inputSearch); setPage(1) }, 400)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [inputSearch])
 
   // Persist filters to sessionStorage
   useEffect(() => {
@@ -508,8 +518,8 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
               placeholder="Tìm số lệnh / khách hàng / tên hàng..."
               prefix={<SearchOutlined />}
               size="small"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+              value={inputSearch}
+              onChange={(e) => setInputSearch(e.target.value)}
               allowClear
             />
           </Col>

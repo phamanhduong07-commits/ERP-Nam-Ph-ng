@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -10,13 +10,13 @@ import {
   CheckOutlined, CloseOutlined, FileExcelOutlined, FilePdfOutlined,
   UploadOutlined, WarningOutlined,
 } from '@ant-design/icons'
-import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
+import type { ColumnsType } from 'antd/es/table'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
 import type { SalesOrderListItem } from '../../api/salesOrders'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { useAuthStore } from '../../store/auth'
-import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
+import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 
 const { Title, Text } = Typography
@@ -27,16 +27,18 @@ const SS_KEY = 'order-list-filters'
 interface Props {
   selectedId?: number | null
   onSelect?: (id: number) => void
+  primaryList?: boolean
 }
 
-export default function OrderList({ selectedId, onSelect }: Props) {
+export default function OrderList({ selectedId, onSelect, primaryList }: Props) {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const isEmbedded = !!onSelect
+  const persistFilters = !isEmbedded || !!primaryList
   const currentUser = useAuthStore((s) => s.user)
 
-  // ── Restore filters từ sessionStorage (chỉ khi không embedded) ──
-  const savedFilters = !isEmbedded
+  // ── Restore filters từ sessionStorage (chỉ primary list) ──
+  const savedFilters = persistFilters
     ? (() => { try { return JSON.parse(sessionStorage.getItem(SS_KEY) ?? '{}') } catch { return {} } })()
     : {}
 
@@ -48,6 +50,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
   const [page, setPage] = useState<number>(savedFilters.page ?? 1)
   const [importVisible, setImportVisible] = useState(false)
   const [myOnly, setMyOnly] = useState(savedFilters.myOnly ?? false)
+  const [shortcutFilter, setShortcutFilter] = useState<string | null>(savedFilters.shortcutFilter ?? null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Debounce search 400ms ──
@@ -60,9 +63,9 @@ export default function OrderList({ selectedId, onSelect }: Props) {
 
   // ── Persist filters vào sessionStorage ──
   useEffect(() => {
-    if (isEmbedded) return
-    sessionStorage.setItem(SS_KEY, JSON.stringify({ search, trangThai, phapNhanId, dateRange, page, myOnly }))
-  }, [search, trangThai, phapNhanId, dateRange, page, myOnly, isEmbedded])
+    if (!persistFilters) return
+    sessionStorage.setItem(SS_KEY, JSON.stringify({ search, trangThai, phapNhanId, dateRange, page, myOnly, shortcutFilter }))
+  }, [search, trangThai, phapNhanId, dateRange, page, myOnly, shortcutFilter, persistFilters])
 
   const { data: phapNhanList = [] } = useQuery({
     queryKey: ['phap-nhan-list'],
@@ -91,6 +94,18 @@ export default function OrderList({ selectedId, onSelect }: Props) {
     }).then((r) => r.data),
   })
 
+  // Quá hạn giao: active orders where ngay_giao_hang < today (frontend filter)
+  const today = dayjs().startOf('day')
+  const displayItems = useMemo(() => {
+    const items = data?.items ?? []
+    if (shortcutFilter !== 'qua_han') return items
+    return items.filter(r =>
+      ['moi', 'da_duyet', 'dang_giao_hang'].includes(r.trang_thai) &&
+      r.ngay_giao_hang != null &&
+      dayjs(r.ngay_giao_hang).isBefore(today)
+    )
+  }, [data?.items, shortcutFilter, today])
+
   const approveMutation = useMutation({
     mutationFn: (id: number) => salesOrdersApi.approve(id),
     onSuccess: (_, id) => {
@@ -115,6 +130,15 @@ export default function OrderList({ selectedId, onSelect }: Props) {
 
   const handleExportExcel = () => {
     const items = data?.items ?? []
+    const resolvedPhapNhanId = resolveSinglePhapNhanId(items)
+    if (!items.length) {
+      message.warning('Không có dữ liệu để xuất Excel')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ xuất Excel đơn hàng khi danh sách thuộc một pháp nhân. Vui lòng lọc pháp nhân trước.')
+      return
+    }
     const defaultConfig = [
       { key: 'stt', label: 'STT', width: 5 },
       { key: 'so_don', label: 'Số đơn hàng', width: 18 },
@@ -136,11 +160,20 @@ export default function OrderList({ selectedId, onSelect }: Props) {
       trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
     }))
 
-    smartExportExcel('SALES_ORDER', exportData, defaultConfig, `DonHang_${dayjs().format('YYYYMMDD')}`)
+    smartExportExcel('SALES_ORDER', exportData, defaultConfig, `DonHang_${dayjs().format('YYYYMMDD')}`, resolvedPhapNhanId)
   }
 
   const handleExportPdf = () => {
     const items = data?.items ?? []
+    const resolvedPhapNhanId = resolveSinglePhapNhanId(items)
+    if (!items.length) {
+      message.warning('Không có dữ liệu để in')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ in danh sách đơn hàng khi danh sách thuộc một pháp nhân. Vui lòng lọc pháp nhân trước.')
+      return
+    }
     const cols = [
       { header: 'STT', key: 'stt', align: 'center' as const },
       { header: 'Số đơn hàng', key: 'so_don' },
@@ -174,7 +207,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
       body_html: table,
     }
 
-    smartPrintPdf('SALES_ORDER', printData)
+    smartPrintPdf('SALES_ORDER', printData, resolvedPhapNhanId)
   }
 
   const compactColumns: ColumnsType<SalesOrderListItem> = [
@@ -319,7 +352,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
     },
   ]
 
-  const hasFilter = !!(search || trangThai || phapNhanId || dateRange)
+  const hasFilter = !!(search || trangThai || phapNhanId || dateRange || shortcutFilter)
 
   return (
     <div>
@@ -368,7 +401,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
                 <Button
                   size="small"
                   type={trangThai === 'moi' ? 'primary' : 'default'}
-                  onClick={() => { setTrangThai(trangThai === 'moi' ? undefined : 'moi'); setPage(1) }}
+                  onClick={() => { setTrangThai(trangThai === 'moi' ? undefined : 'moi'); setShortcutFilter(null); setPage(1) }}
                 >
                   Mới
                 </Button>
@@ -381,6 +414,21 @@ export default function OrderList({ selectedId, onSelect }: Props) {
                 onClick={() => { setMyOnly(!myOnly); setPage(1) }}
               >
                 Của tôi
+              </Button>
+            </Col>
+            <Col>
+              <Button
+                size="small"
+                danger={shortcutFilter === 'qua_han'}
+                type={shortcutFilter === 'qua_han' ? 'primary' : 'default'}
+                icon={<WarningOutlined />}
+                onClick={() => {
+                  setShortcutFilter(shortcutFilter === 'qua_han' ? null : 'qua_han')
+                  setTrangThai(undefined)
+                  setPage(1)
+                }}
+              >
+                Quá hạn giao
               </Button>
             </Col>
           </Row>
@@ -450,7 +498,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
 
       <Table
         columns={isEmbedded ? compactColumns : fullColumns}
-        dataSource={data?.items || []}
+        dataSource={displayItems}
         rowKey="id"
         loading={isLoading}
         locale={{ emptyText: hasFilter ? 'Không tìm thấy đơn hàng nào' : 'Chưa có đơn hàng nào' }}
