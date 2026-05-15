@@ -15,6 +15,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS } from '../../api/quotes'
 import type { QuoteListItem } from '../../api/quotes'
+import { phapNhanApi } from '../../api/phap_nhan'
 import { exportExcelWithTemplate, exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
 import { systemApi } from '../../api/system'
 import ImportExcelButton from '../../components/ImportExcelButton'
@@ -42,6 +43,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
   const [inputText, setInputText] = useState<string>(saved.search || '')
   const [search, setSearch] = useState<string>(saved.search || '')
   const [trangThai, setTrangThai] = useState<string | undefined>(saved.trangThai)
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>(saved.phapNhanId)
   const [dateRange, setDateRange] = useState<[string, string] | []>(saved.dateRange || [])
   const [page, setPage] = useState<number>(saved.page || 1)
   const [myOnly, setMyOnly] = useState<boolean>(saved.myOnly || false)
@@ -64,12 +66,18 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
   // Lưu filter vào sessionStorage khi thay đổi (chỉ non-embedded)
   useEffect(() => {
     if (isEmbedded) return
-    sessionStorage.setItem(FILTER_KEY, JSON.stringify({ search, trangThai, dateRange, page, myOnly }))
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify({ search, trangThai, phapNhanId, dateRange, page, myOnly }))
   }, [search, trangThai, dateRange, page, myOnly, isEmbedded])
 
   const { data: counts } = useQuery({
     queryKey: ['quotes-counts'],
     queryFn: () => quotesApi.counts().then(r => r.data),
+  })
+
+  const { data: phapNhanList } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+    staleTime: 5 * 60 * 1000,
   })
   const [giaHanTarget, setGiaHanTarget] = useState<{ id: number; so_bao_gia: string } | null>(null)
   const [giaHanDate, setGiaHanDate] = useState('')
@@ -83,13 +91,18 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
         return
       }
       const detailsForTemplate = await Promise.all(itemsForTemplate.map(r => quotesApi.get(r.id).then(res => res.data)))
-      const phapNhanIds = Array.from(new Set(detailsForTemplate.map(q => q.phap_nhan_id).filter(Boolean)))
-      if (phapNhanIds.length !== 1) {
-        message.error('Chỉ xuất Excel báo giá khi danh sách cùng một pháp nhân. Vui lòng lọc/chọn một pháp nhân trước.')
-        return
+      let resolvedPhapNhanId: number
+      if (phapNhanId) {
+        resolvedPhapNhanId = phapNhanId
+      } else {
+        const phapNhanIds = Array.from(new Set(detailsForTemplate.map(q => q.phap_nhan_id).filter(Boolean)))
+        if (phapNhanIds.length !== 1) {
+          message.error('Chỉ xuất Excel báo giá khi danh sách cùng một pháp nhân. Vui lòng lọc theo pháp nhân trước.')
+          return
+        }
+        resolvedPhapNhanId = phapNhanIds[0] as number
       }
-      const phapNhanId = phapNhanIds[0] as number
-      const template = await systemApi.getExcelTemplate('SALES_QUOTE', phapNhanId, true)
+      const template = await systemApi.getExcelTemplate('SALES_QUOTE', resolvedPhapNhanId, true)
       const config = template.column_config || []
       if (!config.length) {
         message.error('Mẫu Excel SALES_QUOTE chưa cấu hình cột.')
@@ -145,11 +158,12 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
   }
 
   const { data, isLoading } = useQuery({
-    queryKey: ['quotes', search, trangThai, dateRange, page, myOnly],
+    queryKey: ['quotes', search, trangThai, phapNhanId, dateRange, page, myOnly],
     queryFn: () =>
       quotesApi.list({
         search,
         trang_thai: trangThai,
+        phap_nhan_id: phapNhanId,
         tu_ngay: dateRange[0],
         den_ngay: dateRange[1],
         page,
@@ -324,6 +338,13 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
       render: (v: string | null) => v || <Text type="secondary">—</Text>,
     },
     {
+      title: 'Pháp nhân',
+      dataIndex: 'ten_phap_nhan',
+      width: 130,
+      ellipsis: true,
+      render: (v: string | null) => v || <Text type="secondary">—</Text>,
+    },
+    {
       title: '',
       key: 'actions',
       width: 140,
@@ -481,6 +502,17 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
               value={trangThai}
               onChange={(v) => { setTrangThai(v); setPage(1) }}
               options={Object.entries(QUOTE_STATUS_LABELS).map(([k, v]) => ({ value: k, label: v }))}
+            />
+          </Col>
+          <Col>
+            <Select
+              placeholder="Pháp nhân"
+              size="small"
+              style={{ width: 150 }}
+              allowClear
+              value={phapNhanId}
+              onChange={(v) => { setPhapNhanId(v); setPage(1) }}
+              options={(phapNhanList ?? []).map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
             />
           </Col>
         </Row>

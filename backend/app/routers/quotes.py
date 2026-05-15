@@ -385,6 +385,7 @@ def list_quotes(
     trang_thai: str | None = Query(default=None),
     customer_id: int | None = Query(default=None),
     created_by: int | None = Query(default=None),
+    phap_nhan_id: int | None = Query(default=None),
     tu_ngay: date | None = Query(default=None),
     den_ngay: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -393,7 +394,11 @@ def list_quotes(
     _: User = Depends(get_current_user),
 ):
     _auto_expire_quotes(db)
-    q = db.query(Quote).options(joinedload(Quote.customer), joinedload(Quote.creator))
+    q = db.query(Quote).options(
+        joinedload(Quote.customer),
+        joinedload(Quote.creator),
+        joinedload(Quote.phap_nhan),
+    )
     if search:
         like = f"%{search}%"
         q = q.join(Customer).filter(
@@ -405,6 +410,8 @@ def list_quotes(
         q = q.filter(Quote.customer_id == customer_id)
     if created_by:
         q = q.filter(Quote.created_by == created_by)
+    if phap_nhan_id:
+        q = q.filter(Quote.phap_nhan_id == phap_nhan_id)
     if tu_ngay:
         q = q.filter(Quote.ngay_bao_gia >= tu_ngay)
     if den_ngay:
@@ -426,6 +433,8 @@ def list_quotes(
             so_dong=len(qt.items),
             created_at=qt.created_at,
             created_by_name=qt.creator.ho_ten if qt.creator else None,
+            phap_nhan_id=qt.phap_nhan_id,
+            ten_phap_nhan=qt.phap_nhan.ten_phap_nhan if qt.phap_nhan else None,
         )
         for qt in quotes
     ]

@@ -110,6 +110,8 @@ export interface QuoteListItem {
   so_dong: number
   created_at: string
   created_by_name?: string | null
+  phap_nhan_id?: number | null
+  ten_phap_nhan?: string | null
 }
 
 export interface CreateQuotePayload {
@@ -343,6 +345,7 @@ export const quotesApi = {
     trang_thai?: string
     customer_id?: number
     created_by?: number
+    phap_nhan_id?: number
     tu_ngay?: string
     den_ngay?: string
     page?: number
@@ -375,6 +378,8 @@ export const quotesApi = {
 
   giaHan: (id: number, ngay_het_han: string) =>
     client.patch<Quote>(`/quotes/${id}/gia-han`, { ngay_het_han }),
+
+  counts: () => client.get<Record<string, number>>('/quotes/counts'),
 }
 
 export const paperMaterialsApi = {

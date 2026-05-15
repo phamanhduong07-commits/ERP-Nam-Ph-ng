@@ -15,6 +15,7 @@ import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, LOAI_IN_OPTIONS, getSongType, buildPaperSymbol } from '../../api/quotes'
 import type { Quote, QuoteItem } from '../../api/quotes'
 import { printDocument, buildDocumentHtml, downloadAsPdf, fmtVND } from '../../utils/exportUtils'
+import type { PrintDocumentOptions } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { systemApi } from '../../api/system'
 import { useAuthStore } from '../../store/auth'
@@ -491,140 +492,83 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
 
   const companyInfo = usePhapNhanForPrint(quote?.phap_nhan_id ?? null)
 
-  const handlePrint = async () => {
-    if (!quote) return
-    if (!quote.phap_nhan_id) {
-      message.error('Báo giá chưa có pháp nhân. Vui lòng chọn pháp nhân trước khi in.')
-      return
-    }
+  const buildQuotePrintOpts = (templateCols: any[], template: any): PrintDocumentOptions => ({
+    title: 'BÁO GIÁ',
+    subtitle: `Báo giá ${quote!.so_bao_gia}`,
+    documentNumber: quote!.so_bao_gia,
+    documentDate: dayjs(quote!.ngay_bao_gia).format('DD/MM/YYYY'),
+    companyInfo,
+    bodyHtml: buildQuoteRowsHtml(quote!, templateCols),
+    customHtml: template.html_content,
+    fields: [
+      { label: 'Khách hàng', value: quote!.customer?.ten_viet_tat || quote!.customer?.ten_don_vi || '—' },
+    ],
+    vars: {
+      customer_name: quote!.customer?.ten_viet_tat || quote!.customer?.ten_don_vi || '—',
+      delivery_address: quote!.ngay_het_han ? dayjs(quote!.ngay_het_han).format('DD/MM/YYYY') : '',
+      document_day: dayjs(quote!.ngay_bao_gia).format('DD'),
+      document_month: dayjs(quote!.ngay_bao_gia).format('MM'),
+      document_year: dayjs(quote!.ngay_bao_gia).format('YYYY'),
+      ngay_het_han: quote!.ngay_het_han ? dayjs(quote!.ngay_het_han).format('DD/MM/YYYY') : '',
+      nguoi_lap: quote!.created_by_name || '',
+      nguoi_duyet: quote!.ten_nguoi_duyet || '',
+      phap_nhan: quote!.ten_phap_nhan || '',
+      tong_tien_hang: vnd(quote!.tong_tien_hang),
+      chi_phi_bang_in: vnd(quote!.chi_phi_bang_in),
+      chi_phi_khuon: vnd(quote!.chi_phi_khuon),
+      chi_phi_van_chuyen: vnd(quote!.chi_phi_van_chuyen),
+      chi_phi_hang_hoa_dv: vnd(quote!.chi_phi_hang_hoa_dv),
+      chi_phi_khac_1: vnd(quote!.chi_phi_khac_1),
+      chi_phi_khac_1_ten: quote!.chi_phi_khac_1_ten || 'Chi phí khác 1',
+      chi_phi_khac_2: vnd(quote!.chi_phi_khac_2),
+      chi_phi_khac_2_ten: quote!.chi_phi_khac_2_ten || 'Chi phí khác 2',
+      chi_phi_bang_in_vis: quote!.chi_phi_bang_in > 0 ? 'table-row' : 'none',
+      chi_phi_khuon_vis: quote!.chi_phi_khuon > 0 ? 'table-row' : 'none',
+      chi_phi_van_chuyen_vis: quote!.chi_phi_van_chuyen > 0 ? 'table-row' : 'none',
+      chi_phi_khac_1_vis: quote!.chi_phi_khac_1 > 0 ? 'table-row' : 'none',
+      chi_phi_khac_2_vis: quote!.chi_phi_khac_2 > 0 ? 'table-row' : 'none',
+      ty_le_vat: String(quote!.ty_le_vat),
+      tien_vat: vnd(quote!.tien_vat),
+      tong_cong: vnd(quote!.tong_cong),
+      ghi_chu: quote!.ghi_chu || '',
+      dieu_khoan: quote!.dieu_khoan || '',
+    },
+  })
 
-    // Tìm mẫu in phù hợp: Ưu tiên mẫu của pháp nhân, sau đó là mẫu mặc định
+  const fetchTemplate = async (action: string): Promise<{ template: any; templateCols: any[] } | null> => {
+    if (!quote) return null
+    if (!quote.phap_nhan_id) {
+      message.error(`Báo giá chưa có pháp nhân. Vui lòng chọn pháp nhân trước khi ${action}.`)
+      return null
+    }
     let template
     try {
       template = await systemApi.getTemplate('SALES_QUOTE', quote.phap_nhan_id, true)
     } catch (e: any) {
       message.error(e?.response?.data?.detail || `Chưa cấu hình mẫu in SALES_QUOTE cho pháp nhân ${quote.ten_phap_nhan || quote.phap_nhan_id}`)
-      return
+      return null
     }
-
     const templateCols = ((template.variables_meta as any)?.columns || []) as any[]
     if (!templateCols.length) {
       message.error('Mẫu in SALES_QUOTE chưa cấu hình cột hàng hóa.')
-      return
+      return null
     }
-    
-    printDocument({
-      title: 'BÁO GIÁ',
-      subtitle: `Báo giá ${quote.so_bao_gia}`,
-      documentNumber: quote.so_bao_gia,
-      documentDate: dayjs(quote.ngay_bao_gia).format('DD/MM/YYYY'),
-      companyInfo,
-      bodyHtml: buildQuoteRowsHtml(quote, templateCols),
-      customHtml: template.html_content,
-      fields: [
-        { label: 'Khách hàng', value: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—' },
-      ],
-      vars: {
-        customer_name: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—',
-        delivery_address: quote.ngay_het_han ? dayjs(quote.ngay_het_han).format('DD/MM/YYYY') : '',
-        document_day: dayjs(quote.ngay_bao_gia).format('DD'),
-        document_month: dayjs(quote.ngay_bao_gia).format('MM'),
-        document_year: dayjs(quote.ngay_bao_gia).format('YYYY'),
-        ngay_het_han: quote.ngay_het_han ? dayjs(quote.ngay_het_han).format('DD/MM/YYYY') : '',
-        nguoi_lap: quote.created_by_name || '',
-        nguoi_duyet: quote.ten_nguoi_duyet || '',
-        phap_nhan: quote.ten_phap_nhan || '',
-        tong_tien_hang: vnd(quote.tong_tien_hang),
-        chi_phi_bang_in: vnd(quote.chi_phi_bang_in),
-        chi_phi_khuon: vnd(quote.chi_phi_khuon),
-        chi_phi_van_chuyen: vnd(quote.chi_phi_van_chuyen),
-        chi_phi_hang_hoa_dv: vnd(quote.chi_phi_hang_hoa_dv),
-        chi_phi_khac_1: vnd(quote.chi_phi_khac_1),
-        chi_phi_khac_1_ten: quote.chi_phi_khac_1_ten || 'Chi phí khác 1',
-        chi_phi_khac_2: vnd(quote.chi_phi_khac_2),
-        chi_phi_khac_2_ten: quote.chi_phi_khac_2_ten || 'Chi phí khác 2',
-        chi_phi_bang_in_vis: quote.chi_phi_bang_in > 0 ? 'table-row' : 'none',
-        chi_phi_khuon_vis: quote.chi_phi_khuon > 0 ? 'table-row' : 'none',
-        chi_phi_van_chuyen_vis: quote.chi_phi_van_chuyen > 0 ? 'table-row' : 'none',
-        chi_phi_khac_1_vis: quote.chi_phi_khac_1 > 0 ? 'table-row' : 'none',
-        chi_phi_khac_2_vis: quote.chi_phi_khac_2 > 0 ? 'table-row' : 'none',
-        ty_le_vat: String(quote.ty_le_vat),
-        tien_vat: vnd(quote.tien_vat),
-        tong_cong: vnd(quote.tong_cong),
-        ghi_chu: quote.ghi_chu || '',
-        dieu_khoan: quote.dieu_khoan || '',
-      }
-    })
+    return { template, templateCols }
+  }
+
+  const handlePrint = async () => {
+    const result = await fetchTemplate('in')
+    if (!result) return
+    printDocument(buildQuotePrintOpts(result.templateCols, result.template))
   }
 
   const handleDownloadPdf = async () => {
-    if (!quote) return
-    if (!quote.phap_nhan_id) {
-      message.error('Báo giá chưa có pháp nhân. Vui lòng chọn pháp nhân trước khi tải PDF.')
-      return
-    }
-
+    const result = await fetchTemplate('tải PDF')
+    if (!result) return
     setIsPdfLoading(true)
     try {
-      let template
-      try {
-        template = await systemApi.getTemplate('SALES_QUOTE', quote.phap_nhan_id, true)
-      } catch (e: any) {
-        message.error(e?.response?.data?.detail || `Chưa cấu hình mẫu in SALES_QUOTE cho pháp nhân ${quote.ten_phap_nhan || quote.phap_nhan_id}`)
-        return
-      }
-
-      const templateCols = ((template.variables_meta as any)?.columns || []) as any[]
-      if (!templateCols.length) {
-        message.error('Mẫu in SALES_QUOTE chưa cấu hình cột hàng hóa.')
-        return
-      }
-
-      const opts = {
-        title: 'BÁO GIÁ',
-        subtitle: `Báo giá ${quote.so_bao_gia}`,
-        documentNumber: quote.so_bao_gia,
-        documentDate: dayjs(quote.ngay_bao_gia).format('DD/MM/YYYY'),
-        companyInfo,
-        bodyHtml: buildQuoteRowsHtml(quote, templateCols),
-        customHtml: template.html_content,
-        fields: [
-          { label: 'Khách hàng', value: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—' },
-        ],
-        vars: {
-          customer_name: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—',
-          delivery_address: quote.ngay_het_han ? dayjs(quote.ngay_het_han).format('DD/MM/YYYY') : '',
-          document_day: dayjs(quote.ngay_bao_gia).format('DD'),
-          document_month: dayjs(quote.ngay_bao_gia).format('MM'),
-          document_year: dayjs(quote.ngay_bao_gia).format('YYYY'),
-          ngay_het_han: quote.ngay_het_han ? dayjs(quote.ngay_het_han).format('DD/MM/YYYY') : '',
-          nguoi_lap: quote.created_by_name || '',
-          nguoi_duyet: quote.ten_nguoi_duyet || '',
-          phap_nhan: quote.ten_phap_nhan || '',
-          tong_tien_hang: vnd(quote.tong_tien_hang),
-          chi_phi_bang_in: vnd(quote.chi_phi_bang_in),
-          chi_phi_khuon: vnd(quote.chi_phi_khuon),
-          chi_phi_van_chuyen: vnd(quote.chi_phi_van_chuyen),
-          chi_phi_hang_hoa_dv: vnd(quote.chi_phi_hang_hoa_dv),
-          chi_phi_khac_1: vnd(quote.chi_phi_khac_1),
-          chi_phi_khac_1_ten: quote.chi_phi_khac_1_ten || 'Chi phí khác 1',
-          chi_phi_khac_2: vnd(quote.chi_phi_khac_2),
-          chi_phi_khac_2_ten: quote.chi_phi_khac_2_ten || 'Chi phí khác 2',
-          chi_phi_bang_in_vis: quote.chi_phi_bang_in > 0 ? 'table-row' : 'none',
-          chi_phi_khuon_vis: quote.chi_phi_khuon > 0 ? 'table-row' : 'none',
-          chi_phi_van_chuyen_vis: quote.chi_phi_van_chuyen > 0 ? 'table-row' : 'none',
-          chi_phi_khac_1_vis: quote.chi_phi_khac_1 > 0 ? 'table-row' : 'none',
-          chi_phi_khac_2_vis: quote.chi_phi_khac_2 > 0 ? 'table-row' : 'none',
-          ty_le_vat: String(quote.ty_le_vat),
-          tien_vat: vnd(quote.tien_vat),
-          tong_cong: vnd(quote.tong_cong),
-          ghi_chu: quote.ghi_chu || '',
-          dieu_khoan: quote.dieu_khoan || '',
-        },
-      }
-
-      const html = buildDocumentHtml(opts)
-      await downloadAsPdf(html, `BaoGia_${quote.so_bao_gia}`, false, companyInfo ?? undefined)
+      const html = buildDocumentHtml(buildQuotePrintOpts(result.templateCols, result.template))
+      await downloadAsPdf(html, `BaoGia_${quote!.so_bao_gia}`, false, companyInfo ?? undefined)
     } finally {
       setIsPdfLoading(false)
     }
@@ -750,17 +694,8 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
           </Space>
         </Col>
         <Col>
-          <Space>
-            {(trangThai === 'moi' || trangThai === 'cho_duyet') && canApprove && (
-              <Button
-                size={embedded ? 'small' : 'middle'}
-                icon={<EditOutlined />}
-                onClick={() => navigate(`/quotes/${id}/edit`)}
-              >
-                Sửa
-              </Button>
-            )}
-            {trangThai === 'moi' && !canApprove && (
+          <Space wrap>
+            {(trangThai === 'moi' || (trangThai === 'cho_duyet' && canApprove)) && (
               <Button
                 size={embedded ? 'small' : 'middle'}
                 icon={<EditOutlined />}
