@@ -1,18 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
+  Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber, Modal,
   Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message, Divider,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, CheckCircleOutlined, ShopOutlined, MinusCircleOutlined,
-  FileExcelOutlined, FilePdfOutlined, FileTextOutlined,
-  UploadOutlined,
+  FileExcelOutlined, FilePdfOutlined, FileTextOutlined, UploadOutlined, WarningOutlined,
 } from '@ant-design/icons'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import dayjs from 'dayjs'
-import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
+import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, smartPrintPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import {
   purchaseApi, PurchaseOrder, CreatePOPayload,
   TRANG_THAI_PO, TRANG_THAI_PO_COLOR,
@@ -25,18 +24,30 @@ import { warehouseApi } from '../../api/warehouse'
 
 const { Title, Text } = Typography
 
+const VAT_OPTIONS = [0, 5, 8, 10].map(v => ({ value: v, label: `${v}%` }))
+
 const DIEU_KHOAN_OPTIONS = ['COD', 'NET15', 'NET30', 'NET45', 'NET60', 'TT trước'].map(v => ({ value: v, label: v }))
+
+const PO_ACTIVE_STATUSES = ['moi', 'da_duyet', 'da_gui_ncc', 'dang_giao']
+const PO_FILTER_KEY = 'po_filters'
+
+function loadPOFilters() {
+  try { return JSON.parse(sessionStorage.getItem(PO_FILTER_KEY) ?? '{}') } catch { return {} }
+}
 
 export default function POListPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
-  const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
-  const [filterXuong, setFilterXuong] = useState<number | undefined>()
-  const [filterLoaiPo, setFilterLoaiPo] = useState<string | undefined>()
-  const [tuNgay, setTuNgay] = useState<string | undefined>()
-  const [denNgay, setDenNgay] = useState<string | undefined>()
+  const _pf = loadPOFilters()
+  const [search, setSearch] = useState<string>(_pf.search ?? '')
+  const [shortcutFilter, setShortcutFilter] = useState<string | null>(_pf.shortcutFilter ?? null)
+  const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>(_pf.filterTrangThai)
+  const [filterXuong, setFilterXuong] = useState<number | undefined>(_pf.filterXuong)
+  const [filterLoaiPo, setFilterLoaiPo] = useState<string | undefined>(_pf.filterLoaiPo)
+  const [tuNgay, setTuNgay] = useState<string | undefined>(_pf.tuNgay)
+  const [denNgay, setDenNgay] = useState<string | undefined>(_pf.denNgay)
   const [importVisible, setImportVisible] = useState(false)
 
   const { data: suppliers = [] } = useQuery({
@@ -65,16 +76,43 @@ export default function POListPage() {
   })
   const otherMats = otherPage?.items ?? []
 
-  const { data: poList = [], isLoading } = useQuery({
-    queryKey: ['purchase-orders', filterTrangThai, tuNgay, denNgay, filterXuong, filterLoaiPo],
+  const effectivePOTrangThai = shortcutFilter === 'qua_han' ? undefined
+    : shortcutFilter === 'chua_giao' ? undefined
+    : shortcutFilter === 'dang_giao' ? 'dang_giao'
+    : filterTrangThai
+
+  useEffect(() => {
+    sessionStorage.setItem(PO_FILTER_KEY, JSON.stringify({
+      search, shortcutFilter, filterTrangThai, filterXuong, filterLoaiPo, tuNgay, denNgay,
+    }))
+  }, [search, shortcutFilter, filterTrangThai, filterXuong, filterLoaiPo, tuNgay, denNgay])
+
+  const { data: rawPoList = [], isLoading } = useQuery({
+    queryKey: ['purchase-orders', search, shortcutFilter, filterTrangThai, tuNgay, denNgay, filterXuong, filterLoaiPo],
     queryFn: () => purchaseApi.list({
-      trang_thai: filterTrangThai,
+      search: search || undefined,
+      trang_thai: effectivePOTrangThai,
       tu_ngay: tuNgay,
       den_ngay: denNgay,
       phan_xuong_id: filterXuong,
       loai_po: filterLoaiPo,
     }).then(r => r.data),
   })
+
+  const today = dayjs().startOf('day')
+  const poList = useMemo(() => {
+    if (shortcutFilter === 'qua_han') {
+      return rawPoList.filter(r =>
+        PO_ACTIVE_STATUSES.includes(r.trang_thai) &&
+        r.ngay_du_kien_nhan &&
+        dayjs(r.ngay_du_kien_nhan).startOf('day').isBefore(today)
+      )
+    }
+    if (shortcutFilter === 'chua_giao') {
+      return rawPoList.filter(r => ['da_duyet', 'da_gui_ncc'].includes(r.trang_thai))
+    }
+    return rawPoList
+  }, [rawPoList, shortcutFilter, today])
 
   const createMut = useMutation({
     mutationFn: (data: CreatePOPayload) => purchaseApi.create(data),
@@ -106,13 +144,39 @@ export default function POListPage() {
   })
 
   const createPurchaseInvoiceMut = useMutation({
-    mutationFn: (poId: number) => purchaseInvoiceApi.fromPO(poId),
+    mutationFn: (data: { poId: number; thue_suat: number; co_vat: boolean }) =>
+      purchaseInvoiceApi.fromPO(data.poId, { thue_suat: data.thue_suat, co_vat: data.co_vat }),
     onSuccess: inv => {
       message.success('Đã tạo hóa đơn mua hàng')
       navigate(`/accounting/purchase-invoices/${inv.id}`)
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn'),
   })
+
+  function openCreateInvoice(poId: number) {
+    let coVat = true
+    let thueSuat = 8
+    Modal.confirm({
+      title: 'Tạo hóa đơn mua',
+      okText: 'Tạo hóa đơn',
+      cancelText: 'Hủy',
+      content: (
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Select
+            defaultValue={true}
+            style={{ width: '100%' }}
+            options={[
+              { value: true, label: 'V: Có VAT' },
+              { value: false, label: 'V: Không VAT' },
+            ]}
+            onChange={v => { coVat = v }}
+          />
+          <Select defaultValue={8} style={{ width: '100%' }} options={VAT_OPTIONS} onChange={v => { thueSuat = v }} />
+        </Space>
+      ),
+      onOk: () => createPurchaseInvoiceMut.mutate({ poId, thue_suat: thueSuat, co_vat: coVat }),
+    })
+  }
 
   const handleMatSelect = (itemName: number, loai: string, matId: number) => {
     const mat = loai === 'giay' ? paperMats.find(m => m.id === matId) : otherMats.find(m => m.id === matId)
@@ -162,6 +226,18 @@ export default function POListPage() {
       render: (v: string) => (
         <Tag color={TRANG_THAI_PO_COLOR[v] || 'default'}>{TRANG_THAI_PO[v] || v}</Tag>
       ) },
+    {
+      title: 'Ngày DK nhận', dataIndex: 'ngay_du_kien_nhan', width: 130,
+      render: (v: string | null, r: PurchaseOrder) => {
+        if (!v) return <Text type="secondary">—</Text>
+        const active = PO_ACTIVE_STATUSES.includes(r.trang_thai)
+        if (!active) return dayjs(v).format('DD/MM/YYYY')
+        const diff = dayjs(v).startOf('day').diff(today, 'day')
+        if (diff < 0) return <span style={{ color: '#cf1322', fontWeight: 600 }}><WarningOutlined style={{ marginRight: 4 }} />{dayjs(v).format('DD/MM/YYYY')}</span>
+        if (diff <= 3) return <span style={{ color: '#d46b08', fontWeight: 600 }}>{dayjs(v).format('DD/MM/YYYY')}</span>
+        return dayjs(v).format('DD/MM/YYYY')
+      },
+    },
     { title: 'Tổng tiền', dataIndex: 'tong_tien', width: 140, align: 'right' as const,
       render: (v: number) => <Text strong>{(v || 0).toLocaleString('vi-VN', { maximumFractionDigits: 0 })}đ</Text> },
     { title: 'Tiến độ nhận', dataIndex: 'tien_do_nhan', width: 120, align: 'right' as const,
@@ -185,7 +261,7 @@ export default function POListPage() {
               <Button
                 size="small" icon={<FileTextOutlined />} type="link"
                 loading={createPurchaseInvoiceMut.isPending}
-                onClick={() => createPurchaseInvoiceMut.mutate(r.id)}
+                onClick={() => openCreateInvoice(r.id)}
               />
             </Tooltip>
           )}
@@ -216,43 +292,60 @@ export default function POListPage() {
   )
 
   const handleExportExcel = () => {
-    exportToExcel(`DonMuaHang_${dayjs().format('YYYYMMDD')}`, [{
-      name: 'Đơn mua hàng',
-      headers: ['STT', 'Số PO', 'Ngày PO', 'Nhà cung cấp', 'Trạng thái', 'Tổng tiền (đ)', 'Tiến độ nhận (%)'],
-      rows: poList.map((r, i) => [
-        i + 1, r.so_po, r.ngay_po, r.ten_ncc ?? '',
-        TRANG_THAI_PO[r.trang_thai] ?? r.trang_thai,
-        Number(r.tong_tien || 0),
-        r.tien_do_nhan != null ? r.tien_do_nhan : '',
-      ]),
-      colWidths: [5, 18, 12, 30, 18, 16, 16],
-    }])
+    const phapNhanResult = analyzeSinglePhapNhanId(poList)
+    if (!phapNhanResult.ok) {
+      message.error(singlePhapNhanError(phapNhanResult, 'danh sach don mua hang'))
+      return
+    }
+    const rows = poList.map((r, i) => ({
+      stt: i + 1,
+      so_po: r.so_po,
+      ngay_po: r.ngay_po,
+      ten_ncc: r.ten_ncc ?? '',
+      trang_thai: TRANG_THAI_PO[r.trang_thai] ?? r.trang_thai,
+      tong_tien: Number(r.tong_tien || 0),
+      tien_do_nhan: r.tien_do_nhan != null ? r.tien_do_nhan : '',
+    }))
+    smartExportExcel('PURCHASE_ORDER', rows, [
+      { key: 'stt', label: 'STT', width: 6 },
+      { key: 'so_po', label: 'So PO', width: 18 },
+      { key: 'ngay_po', label: 'Ngay PO', width: 12 },
+      { key: 'ten_ncc', label: 'Nha cung cap', width: 30 },
+      { key: 'trang_thai', label: 'Trang thai', width: 18 },
+      { key: 'tong_tien', label: 'Tong tien', width: 16 },
+      { key: 'tien_do_nhan', label: 'Tien do nhan', width: 16 },
+    ], `DonMuaHang_${dayjs().format('YYYYMMDD')}`, phapNhanResult.phapNhanId)
   }
 
   const handleExportPdf = () => {
+    const phapNhanResult = analyzeSinglePhapNhanId(poList)
+    if (!phapNhanResult.ok) {
+      message.error(singlePhapNhanError(phapNhanResult, 'danh sach don mua hang'))
+      return
+    }
     const cols = [
       { header: 'STT', align: 'center' as const },
-      { header: 'Số PO' }, { header: 'Ngày PO' }, { header: 'Nhà cung cấp' },
-      { header: 'Trạng thái' },
-      { header: 'Tổng tiền (đ)', align: 'right' as const },
-      { header: 'Tiến độ', align: 'center' as const },
+      { header: 'So PO' }, { header: 'Ngay PO' }, { header: 'Nha cung cap' },
+      { header: 'Trang thai' },
+      { header: 'Tong tien', align: 'right' as const },
+      { header: 'Tien do', align: 'center' as const },
     ]
     const rows = poList.map((r, i) => [
       i + 1, r.so_po, r.ngay_po, r.ten_ncc ?? '',
       TRANG_THAI_PO[r.trang_thai] ?? r.trang_thai,
       fmtVND(r.tong_tien),
-      r.tien_do_nhan != null ? `${r.tien_do_nhan}%` : '—',
+      r.tien_do_nhan != null ? `${r.tien_do_nhan}%` : '-',
     ])
     const tongTien = poList.reduce((s, r) => s + Number(r.tong_tien || 0), 0)
-    printToPdf(
-      'Danh sách đơn mua hàng',
-      `<h2>DANH SÁCH ĐƠN MUA HÀNG</h2>
-       <p class="meta">Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')} — ${poList.length} đơn</p>
-       ${buildHtmlTable(cols, rows, {
-         totalRow: ['', 'TỔNG CỘNG', '', '', '', fmtVND(tongTien) + 'đ', ''],
-       })}`,
-      true,
-    )
+    smartPrintPdf('PURCHASE_ORDER_LIST', {
+      title: 'DANH SACH DON MUA HANG',
+      exported_at: dayjs().format('DD/MM/YYYY HH:mm'),
+      total_count: String(poList.length),
+      tong_tien: fmtVND(tongTien),
+      body_html: buildHtmlTable(cols, rows, {
+        totalRow: ['', 'TONG CONG', '', '', '', fmtVND(tongTien), ''],
+      }),
+    }, phapNhanResult.phapNhanId)
   }
 
   return (
@@ -284,10 +377,22 @@ export default function POListPage() {
         </Col>
       </Row>
 
-      <Card size="small" style={{ marginBottom: 12 }}>
+      <Card size="small" style={{ marginBottom: 8 }}>
         <Row gutter={[8, 8]}>
+          <Col xs={24} sm={6} md={5}>
+            <Input.Search
+              placeholder="Tìm số PO / tên NCC..."
+              allowClear
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onSearch={v => setSearch(v)}
+            />
+          </Col>
           <Col xs={12} sm={4}>
-            <Select placeholder="Tất cả trạng thái" style={{ width: '100%' }} allowClear value={filterTrangThai} onChange={setFilterTrangThai}
+            <Select placeholder="Tất cả trạng thái" style={{ width: '100%' }} allowClear
+              value={shortcutFilter ? undefined : filterTrangThai}
+              onChange={v => { setFilterTrangThai(v); setShortcutFilter(null) }}
+              disabled={!!shortcutFilter}
               options={Object.entries(TRANG_THAI_PO).map(([v, l]) => ({ value: v, label: l }))} />
           </Col>
           <Col xs={12} sm={4}>
@@ -304,11 +409,36 @@ export default function POListPage() {
           </Col>
           <Col xs={12} sm={4}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={tuNgay ? dayjs(tuNgay) : null}
               onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
           <Col xs={12} sm={4}>
             <DatePicker placeholder="Đến ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={denNgay ? dayjs(denNgay) : null}
               onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
+          </Col>
+        </Row>
+        <Row style={{ marginTop: 8 }} gutter={8}>
+          <Col>
+            <Space size={6}>
+              <span style={{ fontSize: 12, color: '#888' }}>Lọc nhanh:</span>
+              {[
+                { key: 'chua_giao', label: 'Chưa giao' },
+                { key: 'dang_giao', label: 'Đang giao' },
+                { key: 'qua_han', label: 'Quá hạn DK', danger: true },
+              ].map(s => (
+                <Button
+                  key={s.key}
+                  size="small"
+                  type={shortcutFilter === s.key ? 'primary' : 'default'}
+                  danger={s.danger && shortcutFilter === s.key}
+                  icon={s.key === 'qua_han' ? <WarningOutlined /> : undefined}
+                  onClick={() => setShortcutFilter(shortcutFilter === s.key ? null : s.key)}
+                >
+                  {s.label}
+                </Button>
+              ))}
+            </Space>
           </Col>
         </Row>
       </Card>

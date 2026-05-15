@@ -1,21 +1,28 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber,
+  Button, Card, Checkbox, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
   Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message, Divider,
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, CheckCircleOutlined, EyeOutlined,
-  FileTextOutlined, InboxOutlined,
+  FileTextOutlined, InboxOutlined, FileDoneOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { warehouseApi, GoodsReceipt, GoodsReceiptItem, CreateGoodsReceiptPayload } from '../../api/warehouse'
+import { warehouseApi, GoodsReceipt, CreateGoodsReceiptPayload } from '../../api/warehouse'
 import { purchaseApi, PurchaseOrder } from '../../api/purchase'
+import { purchaseInvoiceApi } from '../../api/accounting'
 import { suppliersApi } from '../../api/suppliers'
-import { warehousesApi } from '../../api/warehouses'
-import { exportToExcel, fmtVND, ExcelSheet } from '../../utils/exportUtils'
+import { warehousesApi, Warehouse } from '../../api/warehouses'
+import { phapNhanApi } from '../../api/phap_nhan'
+import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, fmtVND } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
+
+const GR_FILTER_KEY = 'gr_filters'
+function loadGRFilters() {
+  try { return JSON.parse(sessionStorage.getItem(GR_FILTER_KEY) ?? '{}') } catch { return {} }
+}
 
 const TRANG_THAI_GR: Record<string, string> = {
   nhap_nhanh: 'Nhập nhanh',
@@ -29,27 +36,46 @@ const TRANG_THAI_COLOR: Record<string, string> = {
   da_duyet: 'green',
 }
 
+const PO_STATUS_FOR_GR = ['da_duyet', 'da_gui_ncc', 'dang_giao']
+
+const VAT_OPTIONS = [0, 5, 8, 10].map(v => ({ value: v, label: `${v}%` }))
+
 const KET_QUA_OPTIONS = [
   { value: 'DAT', label: 'Đạt' },
   { value: 'KHONG_DAT', label: 'Không đạt' },
 ]
 
+function poLoaiKhoAuto(po?: PurchaseOrder | null) {
+  if (!po) return 'GIAY_CUON'
+  if (po.loai_po === 'giay_tam') return 'PHOI'
+  if (po.loai_po === 'nvl_khac') return 'NVL_PHU'
+  return 'GIAY_CUON'
+}
+
+function remainingQty(item: { so_luong: number; so_luong_da_nhan?: number }) {
+  return Math.max(0, Number(item.so_luong || 0) - Number(item.so_luong_da_nhan || 0))
+}
+
 export default function GoodsReceiptPage() {
   const qc = useQueryClient()
-
-  // Filters
-  const [filterNCC, setFilterNCC] = useState<number | undefined>()
-  const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
-  const [tuNgay, setTuNgay] = useState<string | undefined>()
-  const [denNgay, setDenNgay] = useState<string | undefined>()
-
-  // Form state
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [selectedPOId, setSelectedPOId] = useState<number | undefined>()
-  const [detailDrawer, setDetailDrawer] = useState<GoodsReceipt | null>(null)
   const [form] = Form.useForm()
 
-  // Master data
+  const _gf = loadGRFilters()
+  const [search, setSearch] = useState<string>(_gf.search ?? '')
+  const [shortcutFilter, setShortcutFilter] = useState<string | null>(_gf.shortcutFilter ?? null)
+  const [filterNCC, setFilterNCC] = useState<number | undefined>(_gf.filterNCC)
+  const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>(_gf.filterTrangThai)
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>(_gf.filterPhapNhan)
+  const [filterXuong, setFilterXuong] = useState<number | undefined>(_gf.filterXuong)
+  const [filterKho, setFilterKho] = useState<number | undefined>(_gf.filterKho)
+  const [tuNgay, setTuNgay] = useState<string | undefined>(_gf.tuNgay)
+  const [denNgay, setDenNgay] = useState<string | undefined>(_gf.denNgay)
+
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [selectedPOId, setSelectedPOId] = useState<number | undefined>()
+  const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
+  const [detailDrawer, setDetailDrawer] = useState<GoodsReceipt | null>(null)
+
   const { data: suppliers = [] } = useQuery({
     queryKey: ['suppliers-all'],
     queryFn: () => suppliersApi.all().then(r => r.data),
@@ -62,45 +88,81 @@ export default function GoodsReceiptPage() {
     staleTime: 300_000,
   })
 
-  // PO list (approved only, not yet complete)
-  const { data: poList = [] } = useQuery({
-    queryKey: ['po-for-gr'],
-    queryFn: () => purchaseApi.list({ trang_thai: 'da_duyet' }).then(r => r.data),
-    staleTime: 60_000,
+  const { data: phapNhanList = [] } = useQuery({
+    queryKey: ['phap-nhan-active'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+    staleTime: 300_000,
   })
 
-  const allPOs = useQuery({
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong-list'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 300_000,
+  })
+
+  const { data: poList = [] } = useQuery({
     queryKey: ['po-for-gr-all'],
     queryFn: () => purchaseApi.list().then(r => r.data),
     staleTime: 60_000,
   })
 
-  // GR list
-  const { data: grList = [], isLoading } = useQuery({
-    queryKey: ['goods-receipts', filterNCC, tuNgay, denNgay, filterTrangThai],
+  const filteredXuongList = useMemo(() => {
+    if (!filterPhapNhan) return phanXuongList
+    return phanXuongList.filter((px: any) => px.phap_nhan_id === filterPhapNhan)
+  }, [filterPhapNhan, phanXuongList])
+
+  const filteredKhoList = useMemo(() => {
+    return warehouses.filter(w => {
+      if (filterXuong && w.phan_xuong_id !== filterXuong) return false
+      return w.trang_thai
+    })
+  }, [warehouses, filterXuong])
+
+  const poOptions = useMemo(() => {
+    return poList
+      .filter(p => PO_STATUS_FOR_GR.includes(p.trang_thai))
+      .filter(p => (p.items ?? []).some(it => remainingQty(it) > 0))
+  }, [poList])
+
+  const effectiveGRTrangThai = shortcutFilter === 'cho_duyet' ? 'nhap'
+    : shortcutFilter === 'da_duyet' ? 'da_duyet'
+    : filterTrangThai
+
+  useEffect(() => {
+    sessionStorage.setItem(GR_FILTER_KEY, JSON.stringify({
+      search, shortcutFilter, filterNCC, filterTrangThai, filterPhapNhan,
+      filterXuong, filterKho, tuNgay, denNgay,
+    }))
+  }, [search, shortcutFilter, filterNCC, filterTrangThai, filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay])
+
+  const { data: rawGrList = [], isLoading } = useQuery({
+    queryKey: ['goods-receipts', search, shortcutFilter, filterNCC, filterTrangThai, filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay],
     queryFn: () => warehouseApi.listGoodsReceipts({
+      search: search || undefined,
       supplier_id: filterNCC,
+      trang_thai: effectiveGRTrangThai,
+      phap_nhan_id: filterPhapNhan,
+      phan_xuong_id: filterXuong,
+      warehouse_id: filterKho,
       tu_ngay: tuNgay,
       den_ngay: denNgay,
     }).then(r => r.data),
   })
 
-  const filtered = filterTrangThai
-    ? grList.filter(g => g.trang_thai === filterTrangThai)
-    : grList
-
-  // PO detail (for form pre-fill)
-  const { data: selectedPO } = useQuery({
-    queryKey: ['po-detail-for-gr', selectedPOId],
-    queryFn: () => selectedPOId ? purchaseApi.get(selectedPOId).then(r => r.data) : null,
-    enabled: !!selectedPOId,
-  })
+  // "Chờ duyệt" shortcut bao gồm cả nhap_nhanh (backend chỉ filter nhap), thêm nhap_nhanh ở frontend
+  const grList = useMemo(() => {
+    if (shortcutFilter === 'cho_duyet') {
+      return rawGrList.filter(r => r.trang_thai === 'nhap' || r.trang_thai === 'nhap_nhanh')
+    }
+    return rawGrList
+  }, [rawGrList, shortcutFilter])
 
   const approveMut = useMutation({
     mutationFn: (id: number) => warehouseApi.approveGoodsReceipt(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goods-receipts'] })
-      message.success('Đã duyệt phiếu nhập kho — tồn kho đã được cập nhật')
+      qc.invalidateQueries({ queryKey: ['po-for-gr-all'] })
+      message.success('Đã duyệt phiếu nhập kho và cập nhật tồn kho')
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi duyệt phiếu'),
   })
@@ -109,71 +171,159 @@ export default function GoodsReceiptPage() {
     mutationFn: (id: number) => warehouseApi.deleteGoodsReceipt(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goods-receipts'] })
-      message.success('Đã xoá phiếu nhập kho')
+      message.success('Đã xóa phiếu nhập kho')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá phiếu'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xóa phiếu'),
   })
 
   const createMut = useMutation({
     mutationFn: (data: CreateGoodsReceiptPayload) => warehouseApi.createGoodsReceipt(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goods-receipts'] })
-      qc.invalidateQueries({ queryKey: ['po-for-gr'] })
-      message.success('Đã tạo phiếu nhập kho — chờ duyệt để cập nhật tồn kho')
+      qc.invalidateQueries({ queryKey: ['po-for-gr-all'] })
+      message.success('Đã tạo phiếu nhập kho, chờ duyệt để cập nhật tồn')
       setDrawerOpen(false)
       setSelectedPOId(undefined)
+      setSelectedPO(null)
       form.resetFields()
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu nhập kho'),
   })
 
+  const createInvoiceMut = useMutation({
+    mutationFn: (data: { grId: number; thue_suat: number; co_vat: boolean }) =>
+      purchaseInvoiceApi.fromGR(data.grId, { thue_suat: data.thue_suat, co_vat: data.co_vat }),
+    onSuccess: inv => {
+      qc.invalidateQueries({ queryKey: ['goods-receipts'] })
+      message.success(`Đã tạo hóa đơn mua #${inv.id}`)
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn mua từ phiếu nhập'),
+  })
+
+  function openCreateInvoice(grId: number) {
+    let coVat = true
+    let thueSuat = 8
+    Modal.confirm({
+      title: 'Tạo hóa đơn mua',
+      okText: 'Tạo hóa đơn',
+      cancelText: 'Hủy',
+      content: (
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Select
+            defaultValue={true}
+            style={{ width: '100%' }}
+            options={[
+              { value: true, label: 'V: Có VAT' },
+              { value: false, label: 'V: Không VAT' },
+            ]}
+            onChange={v => { coVat = v }}
+          />
+          <Select
+            defaultValue={8}
+            style={{ width: '100%' }}
+            options={VAT_OPTIONS}
+            onChange={v => { thueSuat = v }}
+          />
+        </Space>
+      ),
+      onOk: () => createInvoiceMut.mutate({ grId, thue_suat: thueSuat, co_vat: coVat }),
+    })
+  }
+
+  function suggestWarehouse(po: PurchaseOrder): Warehouse | undefined {
+    const loaiKho = poLoaiKhoAuto(po)
+    return warehouses.find(w => (
+      w.trang_thai &&
+      w.phan_xuong_id === po.phan_xuong_id &&
+      w.loai_kho === loaiKho
+    ))
+  }
+
   function openCreate() {
     form.resetFields()
     setSelectedPOId(undefined)
+    setSelectedPO(null)
+    form.setFieldsValue({ ngay_nhap: dayjs(), items: [] })
     setDrawerOpen(true)
   }
 
-  function onPOSelect(poId: number) {
+  async function onPOSelect(poId?: number) {
     setSelectedPOId(poId)
-    const po = (allPOs.data ?? []).find(p => p.id === poId)
-    if (!po) return
-    form.setFieldsValue({
-      supplier_id: po.supplier_id,
-      ngay_nhap: dayjs(),
-    })
-    const items = po.items.map(item => ({
-      po_item_id: item.id,
-      paper_material_id: item.paper_material_id,
-      other_material_id: item.other_material_id,
-      ten_hang: item.ten_hang,
-      dvt: item.dvt,
-      don_gia: item.don_gia,
-      so_luong: Math.max(0, item.so_luong - (item.so_luong_da_nhan ?? 0)),
-      ket_qua_kiem_tra: 'DAT',
-      ghi_chu: null,
-    }))
-    form.setFieldsValue({ items })
+    if (!poId) {
+      setSelectedPO(null)
+      form.setFieldsValue({ items: [] })
+      return
+    }
+
+    try {
+      const po = await purchaseApi.get(poId).then(r => r.data)
+      const wh = suggestWarehouse(po)
+      setSelectedPO(po)
+      form.setFieldsValue({
+        supplier_id: po.supplier_id,
+        ngay_nhap: dayjs(),
+        warehouse_id: wh?.id,
+        items: po.items
+          .filter(item => remainingQty(item) > 0)
+          .map(item => ({
+            po_item_id: item.id,
+            paper_material_id: item.paper_material_id,
+            other_material_id: item.other_material_id,
+            ten_hang: item.ten_hang,
+            dvt: item.dvt || 'Kg',
+            don_gia: Number(item.don_gia || 0),
+            so_luong: remainingQty(item),
+            ket_qua_kiem_tra: 'DAT',
+            ghi_chu: null,
+          })),
+      })
+      if (!wh && po.phan_xuong_id) {
+        message.info('Chưa tìm thấy kho phù hợp, hệ thống sẽ thử tự chọn kho khi lưu phiếu')
+      }
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Không đọc được PO')
+    }
   }
 
   function onFinish(values: any) {
+    const items = (values.items ?? []).map((it: any) => ({
+      po_item_id: it.po_item_id ?? null,
+      paper_material_id: it.paper_material_id ?? null,
+      other_material_id: it.other_material_id ?? null,
+      ten_hang: it.ten_hang ?? '',
+      so_luong: Number(it.so_luong) || 0,
+      dvt: it.dvt ?? 'Kg',
+      don_gia: Number(it.don_gia) || 0,
+      ket_qua_kiem_tra: it.ket_qua_kiem_tra ?? 'DAT',
+      ghi_chu: it.ghi_chu ?? null,
+    }))
+
+    if (!items.length) {
+      message.warning('Thêm ít nhất 1 dòng hàng')
+      return
+    }
+    if (items.some((it: any) => !it.ten_hang || it.so_luong <= 0)) {
+      message.warning('Mỗi dòng hàng cần có tên hàng và số lượng lớn hơn 0')
+      return
+    }
+    if (!values.warehouse_id && !selectedPO?.phan_xuong_id) {
+      message.warning('Chọn kho nhập hoặc chọn PO có xưởng để hệ thống tự tìm kho')
+      return
+    }
+
     const payload: CreateGoodsReceiptPayload = {
       ngay_nhap: values.ngay_nhap.format('YYYY-MM-DD'),
       po_id: selectedPOId ?? null,
       supplier_id: values.supplier_id,
-      warehouse_id: values.warehouse_id,
-      loai_nhap: 'MUA_HANG',
+      warehouse_id: values.warehouse_id ?? null,
+      phan_xuong_id: selectedPO?.phan_xuong_id ?? null,
+      loai_kho_auto: poLoaiKhoAuto(selectedPO),
+      phap_nhan_id: null,
+      bo_qua_hach_toan: Boolean(values.bo_qua_hach_toan),
+      loai_nhap: selectedPO?.loai_po === 'giay_tam' ? 'PHOI_NGOAI' : 'MUA_HANG',
       ghi_chu: values.ghi_chu ?? null,
-      items: (values.items ?? []).map((it: any) => ({
-        po_item_id: it.po_item_id ?? null,
-        paper_material_id: it.paper_material_id ?? null,
-        other_material_id: it.other_material_id ?? null,
-        ten_hang: it.ten_hang ?? '',
-        so_luong: Number(it.so_luong) || 0,
-        dvt: it.dvt ?? 'Kg',
-        don_gia: Number(it.don_gia) || 0,
-        ket_qua_kiem_tra: it.ket_qua_kiem_tra ?? 'DAT',
-        ghi_chu: it.ghi_chu ?? null,
-      })),
+      so_xe: values.so_xe ?? null,
+      items,
     }
     createMut.mutate(payload)
   }
@@ -182,84 +332,67 @@ export default function GoodsReceiptPage() {
     {
       title: 'Số phiếu',
       dataIndex: 'so_phieu',
-      width: 160,
+      width: 150,
       render: (v: string, r: GoodsReceipt) => (
         <Button type="link" style={{ padding: 0 }} onClick={() => setDetailDrawer(r)}>
           {v}
         </Button>
       ),
     },
+    { title: 'Ngày nhập', dataIndex: 'ngay_nhap', width: 105, render: (v: string) => v ? dayjs(v).format('DD/MM/YYYY') : '-' },
+    { title: 'Nhà cung cấp', dataIndex: 'ten_ncc', ellipsis: true },
     {
-      title: 'Ngày nhập',
-      dataIndex: 'ngay_nhap',
-      width: 110,
-      render: (v: string) => v ? dayjs(v).format('DD/MM/YYYY') : '—',
-    },
-    {
-      title: 'Nhà cung cấp',
-      dataIndex: 'ten_ncc',
-      ellipsis: true,
-    },
-    {
-      title: 'Từ PO',
+      title: 'PO',
       dataIndex: 'po_id',
-      width: 160,
-      render: (v: number | null, r: GoodsReceipt) => {
-        const po = (allPOs.data ?? []).find(p => p.id === v)
-        return po ? <Tag color="blue">{po.so_po}</Tag> : <Text type="secondary">—</Text>
+      width: 145,
+      render: (v: number | null) => {
+        const po = poList.find(p => p.id === v)
+        return po ? <Tag color="blue">{po.so_po}</Tag> : <Text type="secondary">-</Text>
       },
     },
-    {
-      title: 'Kho nhập',
-      dataIndex: 'ten_kho',
-      width: 140,
-      ellipsis: true,
-    },
-    {
-      title: 'Tổng giá trị',
-      dataIndex: 'tong_gia_tri',
-      width: 130,
-      align: 'right' as const,
-      render: (v: number) => fmtVND(v),
-    },
+    { title: 'Xưởng', dataIndex: 'ten_phan_xuong', width: 130, render: (v: string | null) => v ?? '-' },
+    { title: 'Kho nhập', dataIndex: 'ten_kho', width: 150, ellipsis: true },
+    { title: 'Tổng giá trị', dataIndex: 'tong_gia_tri', width: 125, align: 'right' as const, render: (v: number) => fmtVND(v) },
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
-      width: 120,
-      render: (v: string) => (
-        <Tag color={TRANG_THAI_COLOR[v] ?? 'default'}>
-          {TRANG_THAI_GR[v] ?? v}
-        </Tag>
-      ),
+      width: 115,
+      render: (v: string) => <Tag color={TRANG_THAI_COLOR[v] ?? 'default'}>{TRANG_THAI_GR[v] ?? v}</Tag>,
     },
     {
       title: '',
       key: 'actions',
-      width: 110,
-      render: (_: any, r: GoodsReceipt) => (
+      width: 135,
+      align: 'right' as const,
+      render: (_: unknown, r: GoodsReceipt) => (
         <Space size={4}>
           <Tooltip title="Xem chi tiết">
             <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailDrawer(r)} />
           </Tooltip>
+          {r.trang_thai === 'da_duyet' && (
+            <Tooltip title="Tạo hóa đơn mua">
+              <Button
+                size="small"
+                icon={<FileDoneOutlined />}
+                loading={createInvoiceMut.isPending}
+                onClick={() => openCreateInvoice(r.id)}
+              />
+            </Tooltip>
+          )}
           {(r.trang_thai === 'nhap' || r.trang_thai === 'nhap_nhanh') && (
-            <Tooltip title="Duyệt — cập nhật tồn kho">
+            <Tooltip title="Duyệt và cập nhật tồn kho">
               <Popconfirm
                 title="Duyệt phiếu nhập kho?"
-                description="Tồn kho sẽ được cập nhật ngay và không thể hoàn tác."
+                description="Tồn kho sẽ được cập nhật ngay."
                 onConfirm={() => approveMut.mutate(r.id)}
               >
-                <Button
-                  size="small"
-                  type="primary"
-                  icon={<CheckCircleOutlined />}
-                  loading={approveMut.isPending}
-                />
+                <Button size="small" type="primary" icon={<CheckCircleOutlined />} loading={approveMut.isPending} />
               </Popconfirm>
             </Tooltip>
           )}
           {r.trang_thai !== 'da_duyet' && (
-            <Tooltip title="Xoá">
-              <Popconfirm title="Xoá phiếu này?" onConfirm={() => deleteMut.mutate(r.id)}>
+            <Tooltip title="Xóa">
+              <Popconfirm title="Xóa phiếu này?" onConfirm={() => deleteMut.mutate(r.id)}>
                 <Button size="small" danger icon={<DeleteOutlined />} />
               </Popconfirm>
             </Tooltip>
@@ -272,37 +405,43 @@ export default function GoodsReceiptPage() {
   const itemColumns = [
     { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
     { title: 'ĐVT', dataIndex: 'dvt', width: 70 },
-    {
-      title: 'Số lượng',
-      dataIndex: 'so_luong',
-      width: 100,
-      align: 'right' as const,
-      render: (v: number) => v.toLocaleString('vi-VN'),
-    },
-    {
-      title: 'Đơn giá',
-      dataIndex: 'don_gia',
-      width: 120,
-      align: 'right' as const,
-      render: (v: number) => fmtVND(v),
-    },
-    {
-      title: 'Thành tiền',
-      dataIndex: 'thanh_tien',
-      width: 130,
-      align: 'right' as const,
-      render: (v: number) => fmtVND(v),
-    },
+    { title: 'Số lượng', dataIndex: 'so_luong', width: 105, align: 'right' as const, render: (v: number) => v.toLocaleString('vi-VN') },
+    { title: 'Đơn giá', dataIndex: 'don_gia', width: 120, align: 'right' as const, render: (v: number) => fmtVND(v) },
+    { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 130, align: 'right' as const, render: (v: number) => fmtVND(v) },
     {
       title: 'Kiểm tra',
       dataIndex: 'ket_qua_kiem_tra',
       width: 100,
-      render: (v: string) => (
-        <Tag color={v === 'DAT' ? 'green' : 'red'}>{v === 'DAT' ? 'Đạt' : 'Không đạt'}</Tag>
-      ),
+      render: (v: string) => <Tag color={v === 'DAT' ? 'green' : 'red'}>{v === 'DAT' ? 'Đạt' : 'Không đạt'}</Tag>,
     },
-    { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true },
+    { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true, render: (v: string | null) => v ?? '-' },
   ]
+
+  const handleExportExcel = () => {
+    const phapNhanResult = analyzeSinglePhapNhanId(grList)
+    if (!phapNhanResult.ok) {
+      message.error(singlePhapNhanError(phapNhanResult, 'danh sach phieu nhap mua hang'))
+      return
+    }
+    const rows = grList.map(g => ({
+      so_phieu: g.so_phieu,
+      ngay_nhap: g.ngay_nhap,
+      ten_ncc: g.ten_ncc,
+      ten_phan_xuong: g.ten_phan_xuong ?? '',
+      ten_kho: g.ten_kho,
+      tong_gia_tri: g.tong_gia_tri,
+      trang_thai: TRANG_THAI_GR[g.trang_thai] ?? g.trang_thai,
+    }))
+    smartExportExcel('GOODS_RECEIPT_PURCHASE', rows, [
+      { key: 'so_phieu', label: 'So phieu', width: 18 },
+      { key: 'ngay_nhap', label: 'Ngay nhap', width: 12 },
+      { key: 'ten_ncc', label: 'Nha cung cap', width: 28 },
+      { key: 'ten_phan_xuong', label: 'Xuong', width: 18 },
+      { key: 'ten_kho', label: 'Kho', width: 20 },
+      { key: 'tong_gia_tri', label: 'Tong gia tri', width: 16 },
+      { key: 'trang_thai', label: 'Trang thai', width: 16 },
+    ], `phieu_nhap_kho_mua_hang_${dayjs().format('YYYYMMDD')}`, phapNhanResult.phapNhanId)
+  }
 
   return (
     <div style={{ padding: 16 }}>
@@ -310,74 +449,123 @@ export default function GoodsReceiptPage() {
         <Col>
           <Title level={4} style={{ margin: 0 }}>
             <InboxOutlined style={{ marginRight: 8 }} />
-            Phiếu Nhập Kho Mua Hàng (GR)
+            Phiếu nhập kho mua hàng
           </Title>
         </Col>
         <Col>
           <Space>
             <Button
               icon={<FileTextOutlined />}
-              onClick={() => {
-                const sheet: ExcelSheet = {
-                  name: 'Phiếu nhập kho',
-                  headers: ['Số phiếu', 'Ngày nhập', 'Nhà cung cấp', 'Kho', 'Tổng giá trị', 'Trạng thái'],
-                  rows: filtered.map(g => [
-                    g.so_phieu,
-                    g.ngay_nhap,
-                    g.ten_ncc,
-                    g.ten_kho,
-                    g.tong_gia_tri,
-                    TRANG_THAI_GR[g.trang_thai] ?? g.trang_thai,
-                  ]),
-                }
-                exportToExcel('phieu_nhap_kho', [sheet])
-              }}
+              onClick={handleExportExcel}
             >
               Xuất Excel
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Tạo phiếu nhập kho
+              Tạo phiếu nhập
             </Button>
           </Space>
         </Col>
       </Row>
 
-      {/* Filter bar */}
-      <Card size="small" style={{ marginBottom: 12 }}>
-        <Row gutter={12} align="middle">
-          <Col>
+      <Card size="small" style={{ marginBottom: 8 }}>
+        <Row gutter={[8, 8]} align="middle">
+          <Col xs={24} sm={8} md={5}>
+            <Input.Search
+              placeholder="Tìm số phiếu / tên NCC..."
+              allowClear
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onSearch={v => setSearch(v)}
+            />
+          </Col>
+          <Col xs={24} sm={8} md={4}>
+            <Select
+              placeholder="Trạng thái"
+              style={{ width: '100%' }}
+              allowClear
+              options={Object.entries(TRANG_THAI_GR).map(([value, label]) => ({ value, label }))}
+              value={shortcutFilter ? undefined : filterTrangThai}
+              onChange={v => { setFilterTrangThai(v); setShortcutFilter(null) }}
+              disabled={!!shortcutFilter}
+            />
+          </Col>
+          <Col xs={24} sm={8} md={5}>
             <Select
               placeholder="Nhà cung cấp"
-              style={{ width: 220 }}
+              style={{ width: '100%' }}
               allowClear
               showSearch
               optionFilterProp="label"
-              options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))}
+              options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))}
+              value={filterNCC}
               onChange={setFilterNCC}
             />
           </Col>
-          <Col>
+          <Col xs={24} sm={8} md={4}>
             <Select
-              placeholder="Trạng thái"
-              style={{ width: 150 }}
+              placeholder="Pháp nhân"
+              style={{ width: '100%' }}
               allowClear
-              options={Object.entries(TRANG_THAI_GR).map(([k, v]) => ({ value: k, label: v }))}
-              onChange={setFilterTrangThai}
+              showSearch
+              optionFilterProp="label"
+              options={phapNhanList.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              value={filterPhapNhan}
+              onChange={v => { setFilterPhapNhan(v); setFilterXuong(undefined); setFilterKho(undefined) }}
             />
           </Col>
-          <Col>
-            <DatePicker
-              placeholder="Từ ngày"
-              format="DD/MM/YYYY"
-              onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)}
+          <Col xs={24} sm={8} md={4}>
+            <Select
+              placeholder="Xưởng"
+              style={{ width: '100%' }}
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={filteredXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
+              value={filterXuong}
+              onChange={v => { setFilterXuong(v); setFilterKho(undefined) }}
             />
           </Col>
-          <Col>
-            <DatePicker
-              placeholder="Đến ngày"
-              format="DD/MM/YYYY"
-              onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)}
+          <Col xs={24} sm={8} md={4}>
+            <Select
+              placeholder="Kho"
+              style={{ width: '100%' }}
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={filteredKhoList.map(w => ({ value: w.id, label: w.ten_kho }))}
+              value={filterKho}
+              onChange={setFilterKho}
             />
+          </Col>
+          <Col xs={12} sm={8} md={3}>
+            <DatePicker placeholder="Từ ngày" format="DD/MM/YYYY" style={{ width: '100%' }}
+              value={tuNgay ? dayjs(tuNgay) : null}
+              onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
+          </Col>
+          <Col xs={12} sm={8} md={3}>
+            <DatePicker placeholder="Đến ngày" format="DD/MM/YYYY" style={{ width: '100%' }}
+              value={denNgay ? dayjs(denNgay) : null}
+              onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
+          </Col>
+        </Row>
+        <Row style={{ marginTop: 8 }} gutter={8}>
+          <Col>
+            <Space size={6}>
+              <span style={{ fontSize: 12, color: '#888' }}>Lọc nhanh:</span>
+              {[
+                { key: 'cho_duyet', label: 'Chờ duyệt' },
+                { key: 'da_duyet', label: 'Đã duyệt' },
+              ].map(s => (
+                <Button
+                  key={s.key}
+                  size="small"
+                  type={shortcutFilter === s.key ? 'primary' : 'default'}
+                  onClick={() => setShortcutFilter(shortcutFilter === s.key ? null : s.key)}
+                >
+                  {s.label}
+                </Button>
+              ))}
+            </Space>
           </Col>
         </Row>
       </Card>
@@ -385,102 +573,99 @@ export default function GoodsReceiptPage() {
       <Table
         size="small"
         columns={columns}
-        dataSource={filtered}
+        dataSource={grList}
         rowKey="id"
         loading={isLoading}
         pagination={{ pageSize: 20, showSizeChanger: true }}
+        scroll={{ x: 1120 }}
         summary={pageData => {
           const total = pageData.reduce((s, r) => s + (r.tong_gia_tri || 0), 0)
           return (
             <Table.Summary.Row>
-              <Table.Summary.Cell index={0} colSpan={5}>
+              <Table.Summary.Cell index={0} colSpan={6}>
                 <Text strong>Tổng trang</Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={5} align="right">
+              <Table.Summary.Cell index={6} align="right">
                 <Text strong>{fmtVND(total)}</Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={6} colSpan={2} />
+              <Table.Summary.Cell index={7} colSpan={2} />
             </Table.Summary.Row>
           )
         }}
       />
 
-      {/* Detail drawer */}
       <Drawer
-        title={detailDrawer ? `Chi tiết: ${detailDrawer.so_phieu}` : ''}
+        title={detailDrawer ? `Chi tiết ${detailDrawer.so_phieu}` : ''}
         open={!!detailDrawer}
         onClose={() => setDetailDrawer(null)}
-        width={700}
+        width={760}
       >
         {detailDrawer && (
           <>
             <Descriptions bordered size="small" column={2} style={{ marginBottom: 16 }}>
               <Descriptions.Item label="Số phiếu">{detailDrawer.so_phieu}</Descriptions.Item>
-              <Descriptions.Item label="Ngày nhập">
-                {dayjs(detailDrawer.ngay_nhap).format('DD/MM/YYYY')}
-              </Descriptions.Item>
-              <Descriptions.Item label="Nhà cung cấp" span={2}>
-                {detailDrawer.ten_ncc}
-              </Descriptions.Item>
+              <Descriptions.Item label="Ngày nhập">{dayjs(detailDrawer.ngay_nhap).format('DD/MM/YYYY')}</Descriptions.Item>
+              <Descriptions.Item label="Nhà cung cấp" span={2}>{detailDrawer.ten_ncc}</Descriptions.Item>
+              <Descriptions.Item label="Xưởng">{detailDrawer.ten_phan_xuong ?? '-'}</Descriptions.Item>
               <Descriptions.Item label="Kho nhập">{detailDrawer.ten_kho}</Descriptions.Item>
               <Descriptions.Item label="Trạng thái">
                 <Tag color={TRANG_THAI_COLOR[detailDrawer.trang_thai]}>
                   {TRANG_THAI_GR[detailDrawer.trang_thai]}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Tổng giá trị" span={2}>
+              <Descriptions.Item label="Tổng giá trị">
                 <Text strong>{fmtVND(detailDrawer.tong_gia_tri)}</Text>
               </Descriptions.Item>
-              {detailDrawer.ghi_chu && (
-                <Descriptions.Item label="Ghi chú" span={2}>
-                  {detailDrawer.ghi_chu}
-                </Descriptions.Item>
-              )}
+              {detailDrawer.ghi_chu && <Descriptions.Item label="Ghi chú" span={2}>{detailDrawer.ghi_chu}</Descriptions.Item>}
             </Descriptions>
 
             <Divider orientation="left" orientationMargin={0}>Chi tiết hàng nhập</Divider>
-            <Table
-              size="small"
-              dataSource={detailDrawer.items}
-              columns={itemColumns}
-              rowKey="id"
-              pagination={false}
-            />
+            <Table size="small" dataSource={detailDrawer.items} columns={itemColumns} rowKey="id" pagination={false} />
 
-            {(detailDrawer.trang_thai === 'nhap' || detailDrawer.trang_thai === 'nhap_nhanh') && (
-              <div style={{ marginTop: 16, textAlign: 'right' }}>
-                <Popconfirm
-                  title="Duyệt phiếu nhập kho?"
-                  description="Tồn kho sẽ được cập nhật và không thể hoàn tác."
-                  onConfirm={() => {
-                    approveMut.mutate(detailDrawer.id)
-                    setDetailDrawer(null)
-                  }}
-                >
-                  <Button type="primary" icon={<CheckCircleOutlined />} loading={approveMut.isPending}>
-                    Duyệt phiếu — Cập nhật tồn kho
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+              <Space>
+                {detailDrawer.trang_thai === 'da_duyet' && (
+                  <Button
+                    icon={<FileDoneOutlined />}
+                    loading={createInvoiceMut.isPending}
+                    onClick={() => openCreateInvoice(detailDrawer.id)}
+                  >
+                    Tạo hóa đơn mua
                   </Button>
-                </Popconfirm>
-              </div>
-            )}
+                )}
+                {(detailDrawer.trang_thai === 'nhap' || detailDrawer.trang_thai === 'nhap_nhanh') && (
+                  <Popconfirm
+                    title="Duyệt phiếu nhập kho?"
+                    description="Tồn kho sẽ được cập nhật ngay."
+                    onConfirm={() => {
+                      approveMut.mutate(detailDrawer.id)
+                      setDetailDrawer(null)
+                    }}
+                  >
+                    <Button type="primary" icon={<CheckCircleOutlined />} loading={approveMut.isPending}>
+                      Duyệt phiếu
+                    </Button>
+                  </Popconfirm>
+                )}
+              </Space>
+            </div>
           </>
         )}
       </Drawer>
 
-      {/* Create GR drawer */}
       <Drawer
-        title="Tạo phiếu nhập kho"
+        title="Tạo phiếu nhập kho mua hàng"
         open={drawerOpen}
-        onClose={() => { setDrawerOpen(false); setSelectedPOId(undefined); form.resetFields() }}
-        width={800}
+        onClose={() => { setDrawerOpen(false); setSelectedPOId(undefined); setSelectedPO(null); form.resetFields() }}
+        width={900}
         footer={
           <div style={{ textAlign: 'right' }}>
             <Space>
-              <Button onClick={() => { setDrawerOpen(false); setSelectedPOId(undefined); form.resetFields() }}>
-                Huỷ
+              <Button onClick={() => { setDrawerOpen(false); setSelectedPOId(undefined); setSelectedPO(null); form.resetFields() }}>
+                Hủy
               </Button>
               <Button type="primary" onClick={() => form.submit()} loading={createMut.isPending}>
-                Lưu phiếu nhập kho
+                Lưu phiếu nhập
               </Button>
             </Space>
           </div>
@@ -489,53 +674,69 @@ export default function GoodsReceiptPage() {
         <Form form={form} layout="vertical" onFinish={onFinish}>
           <Row gutter={12}>
             <Col span={24}>
-              <Form.Item label="Từ đơn mua hàng (PO)">
+              <Form.Item label="Đơn mua hàng">
                 <Select
-                  placeholder="Chọn PO để tự động điền hàng"
+                  placeholder="Chọn PO để tự điền nhà cung cấp, hàng hóa và kho nhập"
                   style={{ width: '100%' }}
                   allowClear
                   showSearch
                   optionFilterProp="label"
-                  options={(allPOs.data ?? []).map(p => ({
+                  value={selectedPOId}
+                  options={poOptions.map(p => ({
                     value: p.id,
-                    label: `${p.so_po} — ${p.ten_ncc} — ${fmtVND(p.tong_tien)}`,
+                    label: `${p.so_po} - ${p.ten_ncc} - ${p.ten_phan_xuong ?? 'Chưa gán xưởng'} - ${fmtVND(p.tong_tien)}`,
                   }))}
-                  onChange={v => v ? onPOSelect(v) : undefined}
+                  onChange={v => void onPOSelect(v)}
                 />
               </Form.Item>
             </Col>
           </Row>
 
           <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item name="ngay_nhap" label="Ngày nhập" rules={[{ required: true }]} initialValue={dayjs()}>
+            <Col xs={24} md={8}>
+              <Form.Item name="ngay_nhap" label="Ngày nhập" rules={[{ required: true, message: 'Chọn ngày nhập' }]}>
                 <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
               </Form.Item>
             </Col>
-            <Col span={12}>
-              <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true }]}>
+            <Col xs={24} md={8}>
+              <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true, message: 'Chọn nhà cung cấp' }]}>
                 <Select
                   showSearch
                   optionFilterProp="label"
-                  options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))}
+                  options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="warehouse_id" label="Kho nhập">
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  placeholder={selectedPO ? 'Tự gợi ý theo xưởng/loại hàng' : 'Chọn kho nhập'}
+                  options={warehouses.filter(w => w.trang_thai).map(w => ({
+                    value: w.id,
+                    label: `${w.ten_kho}${w.ten_xuong ? ` - ${w.ten_xuong}` : ''}`,
+                  }))}
                 />
               </Form.Item>
             </Col>
           </Row>
 
           <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item name="warehouse_id" label="Kho nhập" rules={[{ required: true }]}>
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  options={warehouses.map((w: any) => ({ value: w.id, label: w.ten_kho }))}
-                />
+            <Col xs={24} md={8}>
+              <Form.Item name="so_xe" label="Số xe / số phiếu NCC">
+                <Input />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={8}>
+              <Form.Item name="bo_qua_hach_toan" valuePropName="checked" label=" ">
+                <Checkbox>Bỏ qua hạch toán tự động</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
               <Form.Item name="ghi_chu" label="Ghi chú">
-                <Input placeholder="Số xe, ghi chú..." />
+                <Input />
               </Form.Item>
             </Col>
           </Row>
@@ -545,56 +746,45 @@ export default function GoodsReceiptPage() {
           <Form.List name="items">
             {(fields, { add, remove }) => (
               <>
-                {fields.map(({ key, name, ...rest }) => (
-                  <Card
-                    key={key}
-                    size="small"
-                    style={{ marginBottom: 8, background: '#fafafa' }}
-                    extra={
-                      <Button
-                        type="text"
-                        danger
-                        size="small"
-                        icon={<DeleteOutlined />}
-                        onClick={() => remove(name)}
-                      />
-                    }
-                  >
-                    <Row gutter={8}>
-                      <Col span={10}>
-                        <Form.Item name={[name, 'ten_hang']} label="Tên hàng" rules={[{ required: true }]}>
+                {fields.map(({ key, name }) => (
+                  <Card key={key} size="small" style={{ marginBottom: 8, background: '#fafafa' }}>
+                    <Row gutter={8} align="top">
+                      <Col xs={24} md={9}>
+                        <Form.Item name={[name, 'ten_hang']} label="Tên hàng" rules={[{ required: true, message: 'Nhập tên hàng' }]}>
                           <Input />
                         </Form.Item>
                       </Col>
-                      <Col span={4}>
+                      <Col xs={8} md={3}>
                         <Form.Item name={[name, 'dvt']} label="ĐVT">
                           <Input placeholder="Kg" />
                         </Form.Item>
                       </Col>
-                      <Col span={5}>
-                        <Form.Item name={[name, 'so_luong']} label="Số lượng" rules={[{ required: true }]}>
+                      <Col xs={8} md={4}>
+                        <Form.Item name={[name, 'so_luong']} label="Số lượng" rules={[{ required: true, message: 'Nhập số lượng' }]}>
                           <InputNumber style={{ width: '100%' }} min={0} />
                         </Form.Item>
                       </Col>
-                      <Col span={5}>
+                      <Col xs={8} md={4}>
                         <Form.Item name={[name, 'don_gia']} label="Đơn giá">
-                          <InputNumber style={{ width: '100%' }} min={0} formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
+                          <InputNumber style={{ width: '100%' }} min={0} />
                         </Form.Item>
                       </Col>
-                    </Row>
-                    <Row gutter={8}>
-                      <Col span={8}>
-                        <Form.Item name={[name, 'ket_qua_kiem_tra']} label="Kết quả KT" initialValue="DAT">
+                      <Col xs={18} md={3}>
+                        <Form.Item name={[name, 'ket_qua_kiem_tra']} label="Kiểm tra" initialValue="DAT">
                           <Select options={KET_QUA_OPTIONS} />
                         </Form.Item>
                       </Col>
-                      <Col span={16}>
-                        <Form.Item name={[name, 'ghi_chu']} label="Ghi chú">
+                      <Col xs={6} md={1} style={{ paddingTop: 30, textAlign: 'right' }}>
+                        <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                      </Col>
+                    </Row>
+                    <Row gutter={8}>
+                      <Col span={24}>
+                        <Form.Item name={[name, 'ghi_chu']} label="Ghi chú dòng">
                           <Input />
                         </Form.Item>
                       </Col>
                     </Row>
-                    {/* Hidden fields for linking */}
                     <Form.Item name={[name, 'po_item_id']} hidden><Input /></Form.Item>
                     <Form.Item name={[name, 'paper_material_id']} hidden><Input /></Form.Item>
                     <Form.Item name={[name, 'other_material_id']} hidden><Input /></Form.Item>

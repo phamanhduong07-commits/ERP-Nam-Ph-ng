@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
@@ -7,12 +7,13 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
-  CheckCircleOutlined, DeleteOutlined, EyeOutlined, FileAddOutlined, PlusOutlined, StopOutlined,
+  CheckCircleOutlined, DeleteOutlined, EyeOutlined, FileAddOutlined, FileExcelOutlined,
+  PlusOutlined, StopOutlined, WarningOutlined,
 } from '@ant-design/icons'
 import {
   CreateYmhPayload, PurchaseRequisition, TRANG_THAI_YMH, TRANG_THAI_YMH_COLOR, ymhApi,
 } from '../../api/purchase_requisitions'
-import { fmtVND } from '../../utils/exportUtils'
+import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
@@ -36,15 +37,35 @@ type FormItem = {
 const DVT_OPTIONS = ['Kg', 'Tấn', 'Cuộn', 'Tờ', 'Cái', 'Bộ', 'Hộp', 'Lít'].map(v => ({ value: v, label: v }))
 const DIEU_KHOAN_OPTIONS = ['COD', 'NET15', 'NET30', 'NET45', 'NET60', 'TT trước'].map(v => ({ value: v, label: v }))
 
+const ACTIVE_STATUSES = ['nhap', 'duyet_pb', 'duyet_gd']
+const FILTER_KEY = 'ymh_filters'
+
+function loadFilters() {
+  try { return JSON.parse(sessionStorage.getItem(FILTER_KEY) ?? '{}') } catch { return {} }
+}
+
+function deadlineStyle(ngay: string | null | undefined, active: boolean): React.CSSProperties {
+  if (!active || !ngay) return {}
+  const diff = dayjs(ngay).startOf('day').diff(dayjs().startOf('day'), 'day')
+  if (diff < 0) return { color: '#cf1322', fontWeight: 600 }
+  if (diff <= 3) return { color: '#d46b08', fontWeight: 600 }
+  return {}
+}
+
 export default function YMHListPage() {
   const qc = useQueryClient()
   const [form] = Form.useForm()
   const [poForm] = Form.useForm()
 
-  const [trangThai, setTrangThai] = useState<string | undefined>()
-  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
-  const [filterXuong, setFilterXuong] = useState<number | undefined>()
-  const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null)
+  const _f = loadFilters()
+  const [search, setSearch] = useState<string>(_f.search ?? '')
+  const [trangThai, setTrangThai] = useState<string | undefined>(_f.trangThai)
+  const [shortcutFilter, setShortcutFilter] = useState<string | null>(_f.shortcutFilter ?? null)
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>(_f.filterPhapNhan)
+  const [filterXuong, setFilterXuong] = useState<number | undefined>(_f.filterXuong)
+  const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(
+    _f.tuNgay ? [dayjs(_f.tuNgay), dayjs(_f.denNgay)] : null
+  )
   const [viewRecord, setViewRecord] = useState<PurchaseRequisition | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [poRecord, setPoRecord] = useState<PurchaseRequisition | null>(null)
@@ -86,16 +107,49 @@ export default function YMHListPage() {
     return phanXuongList.filter((px: any) => px.phap_nhan_id === filterPhapNhan)
   }, [filterPhapNhan, phanXuongList])
 
+  const effectiveTrangThai = shortcutFilter ?? trangThai
+
+  useEffect(() => {
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify({
+      search,
+      trangThai,
+      shortcutFilter,
+      filterPhapNhan,
+      filterXuong,
+      tuNgay: dateRange?.[0]?.format('YYYY-MM-DD') ?? null,
+      denNgay: dateRange?.[1]?.format('YYYY-MM-DD') ?? null,
+    }))
+  }, [search, trangThai, shortcutFilter, filterPhapNhan, filterXuong, dateRange])
+
   const { data: ymhs = [], isFetching } = useQuery({
-    queryKey: ['ymh-list', trangThai, filterPhapNhan, filterXuong, dateRange],
+    queryKey: ['ymh-list', search, effectiveTrangThai, filterPhapNhan, filterXuong, dateRange],
     queryFn: () => ymhApi.list({
-      trang_thai: trangThai,
+      search: search || undefined,
+      trang_thai: effectiveTrangThai,
       phap_nhan_id: filterPhapNhan,
       phan_xuong_id: filterXuong,
       tu_ngay: dateRange?.[0]?.format('YYYY-MM-DD'),
       den_ngay: dateRange?.[1]?.format('YYYY-MM-DD'),
     }).then(r => r.data),
   })
+
+  function handleExcel() {
+    const rows = ymhs.map(r => ({
+      'Số YMH': r.so_ymh,
+      'Ngày YC': r.ngay_yeu_cau,
+      'Pháp nhân': r.ten_phap_nhan ?? '',
+      'Xưởng': r.ten_phan_xuong ?? '',
+      'Người YC': r.ten_nguoi_yeu_cau ?? '',
+      'Trạng thái': TRANG_THAI_YMH[r.trang_thai] ?? r.trang_thai,
+      'Dòng': r.so_dong,
+      'Tổng dự kiến': r.tong_du_kien,
+    }))
+    exportToExcel(`ymh-${dayjs().format('YYYYMMDD')}`, [{
+      name: 'YeuCauMuaHang',
+      headers: Object.keys(rows[0] ?? {}),
+      rows: rows.map(r => Object.values(r) as (string | number)[]),
+    }])
+  }
 
   const createMutation = useMutation({
     mutationFn: (data: CreateYmhPayload) => ymhApi.create(data),
@@ -178,6 +232,18 @@ export default function YMHListPage() {
     form.setFieldValue('items', updated)
   }
 
+  function clearMaterialSelect(itemName: number) {
+    const items: FormItem[] = form.getFieldValue('items') || []
+    const updated = [...items]
+    updated[itemName] = {
+      ...updated[itemName],
+      mat_id: undefined,
+      ten_hang: '',
+      don_gia_du_kien: 0,
+    }
+    form.setFieldValue('items', updated)
+  }
+
   function toPayload(values: any): CreateYmhPayload {
     const items = (values.items ?? []).map((it: FormItem) => ({
       paper_material_id: it.loai_vat_tu === 'giay' ? (it.mat_id || null) : null,
@@ -236,6 +302,24 @@ export default function YMHListPage() {
       render: (v: string) => <Tag color={TRANG_THAI_YMH_COLOR[v] ?? 'default'}>{TRANG_THAI_YMH[v] ?? v}</Tag>,
     },
     { title: 'Dòng', dataIndex: 'so_dong', width: 70, align: 'right' },
+    {
+      title: 'Cần sớm nhất',
+      width: 125,
+      render: (_, r) => {
+        const dates = r.items.map(i => i.ngay_can).filter(Boolean) as string[]
+        if (!dates.length) return '-'
+        const min = dates.reduce((a, b) => (a < b ? a : b))
+        const active = ACTIVE_STATUSES.includes(r.trang_thai)
+        const style = deadlineStyle(min, active)
+        const diff = dayjs(min).startOf('day').diff(dayjs().startOf('day'), 'day')
+        return (
+          <span style={style}>
+            {active && diff < 0 && <WarningOutlined style={{ marginRight: 4 }} />}
+            {dayjs(min).format('DD/MM/YYYY')}
+          </span>
+        )
+      },
+    },
     { title: 'Tổng dự kiến', dataIndex: 'tong_du_kien', width: 135, align: 'right', render: fmtVND },
     {
       title: 'Thao tác',
@@ -283,30 +367,43 @@ export default function YMHListPage() {
           <Title level={4} style={{ margin: 0 }}>Yêu cầu mua hàng</Title>
         </Col>
         <Col>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              form.resetFields()
-              form.setFieldsValue({ ngay_yeu_cau: dayjs(), items: [{ loai_vat_tu: 'giay', dvt: 'Kg', don_gia_du_kien: 0 }] })
-              setCreateOpen(true)
-            }}
-          >
-            Tạo yêu cầu
-          </Button>
+          <Space>
+            <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                form.resetFields()
+                form.setFieldsValue({ ngay_yeu_cau: dayjs(), items: [{ loai_vat_tu: 'giay', dvt: 'Kg', don_gia_du_kien: 0 }] })
+                setCreateOpen(true)
+              }}
+            >
+              Tạo yêu cầu
+            </Button>
+          </Space>
         </Col>
       </Row>
 
-      <Card size="small" style={{ marginBottom: 12 }}>
+      <Card size="small" style={{ marginBottom: 8 }}>
         <Row gutter={[8, 8]}>
+          <Col xs={24} sm={8} md={6}>
+            <Input.Search
+              placeholder="Tìm số YMH / tên hàng..."
+              allowClear
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onSearch={v => setSearch(v)}
+            />
+          </Col>
           <Col xs={24} sm={6} md={4}>
             <Select
               allowClear
               placeholder="Trạng thái"
               style={{ width: '100%' }}
               options={Object.entries(TRANG_THAI_YMH).map(([value, label]) => ({ value, label }))}
-              value={trangThai}
-              onChange={setTrangThai}
+              value={shortcutFilter ? undefined : trangThai}
+              onChange={v => { setTrangThai(v); setShortcutFilter(null) }}
+              disabled={!!shortcutFilter}
             />
           </Col>
           <Col xs={24} sm={6} md={5}>
@@ -321,7 +418,7 @@ export default function YMHListPage() {
               onChange={v => { setFilterPhapNhan(v); setFilterXuong(undefined) }}
             />
           </Col>
-          <Col xs={24} sm={6} md={5}>
+          <Col xs={24} sm={6} md={4}>
             <Select
               allowClear
               showSearch
@@ -340,6 +437,23 @@ export default function YMHListPage() {
               value={dateRange as [dayjs.Dayjs, dayjs.Dayjs] | null}
               onChange={v => setDateRange(v)}
             />
+          </Col>
+        </Row>
+        <Row style={{ marginTop: 8 }} gutter={8}>
+          <Col>
+            <Space size={6}>
+              <span style={{ fontSize: 12, color: '#888' }}>Lọc nhanh:</span>
+              {(['nhap', 'duyet_pb', 'duyet_gd'] as const).map(s => (
+                <Button
+                  key={s}
+                  size="small"
+                  type={shortcutFilter === s ? 'primary' : 'default'}
+                  onClick={() => setShortcutFilter(shortcutFilter === s ? null : s)}
+                >
+                  {TRANG_THAI_YMH[s]}
+                </Button>
+              ))}
+            </Space>
           </Col>
         </Row>
       </Card>
@@ -389,7 +503,21 @@ export default function YMHListPage() {
                 { title: 'SL', dataIndex: 'so_luong', width: 95, align: 'right' },
                 { title: 'ĐVT', dataIndex: 'dvt', width: 70 },
                 { title: 'Đơn giá DK', dataIndex: 'don_gia_du_kien', width: 125, align: 'right', render: fmtVND },
-                { title: 'Ngày cần', dataIndex: 'ngay_can', width: 105, render: v => v ?? '-' },
+                {
+                  title: 'Ngày cần', dataIndex: 'ngay_can', width: 105,
+                  render: (v: string | null) => {
+                    if (!v) return '-'
+                    const active = viewRecord ? ACTIVE_STATUSES.includes(viewRecord.trang_thai) : false
+                    const style = deadlineStyle(v, active)
+                    const diff = dayjs(v).startOf('day').diff(dayjs().startOf('day'), 'day')
+                    return (
+                      <span style={style}>
+                        {active && diff < 0 && <WarningOutlined style={{ marginRight: 4 }} />}
+                        {dayjs(v).format('DD/MM/YYYY')}
+                      </span>
+                    )
+                  },
+                },
                 { title: 'Ghi chú', dataIndex: 'ghi_chu', width: 160, render: v => v ?? '-' },
               ]}
             />
@@ -474,6 +602,7 @@ export default function YMHListPage() {
                               return (
                                 <Form.Item name={[name, 'mat_id']} label="Giấy cuộn" rules={[{ required: true, message: 'Chọn giấy' }]} style={{ marginBottom: 4 }}>
                                   <Select
+                                    allowClear
                                     showSearch
                                     optionFilterProp="label"
                                     placeholder="Chọn giấy cuộn"
@@ -481,7 +610,8 @@ export default function YMHListPage() {
                                       value: m.id,
                                       label: `${m.ma_chinh} - ${m.ten}`,
                                     }))}
-                                    onChange={id => handleMaterialSelect(name, 'giay', id)}
+                                    onChange={id => id ? handleMaterialSelect(name, 'giay', id) : clearMaterialSelect(name)}
+                                    onClear={() => clearMaterialSelect(name)}
                                   />
                                 </Form.Item>
                               )
@@ -490,6 +620,7 @@ export default function YMHListPage() {
                               return (
                                 <Form.Item name={[name, 'mat_id']} label="NVL khác" rules={[{ required: true, message: 'Chọn NVL' }]} style={{ marginBottom: 4 }}>
                                   <Select
+                                    allowClear
                                     showSearch
                                     optionFilterProp="label"
                                     placeholder="Chọn NVL khác"
@@ -497,7 +628,8 @@ export default function YMHListPage() {
                                       value: m.id,
                                       label: `${m.ma_chinh} - ${m.ten}`,
                                     }))}
-                                    onChange={id => handleMaterialSelect(name, 'khac', id)}
+                                    onChange={id => id ? handleMaterialSelect(name, 'khac', id) : clearMaterialSelect(name)}
+                                    onClear={() => clearMaterialSelect(name)}
                                   />
                                 </Form.Item>
                               )
