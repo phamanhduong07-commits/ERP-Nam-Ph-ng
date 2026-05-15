@@ -14,7 +14,8 @@ DEFAULT_HEADER = """
         <div class="document-type" style="margin-top: 10px; font-size: 18px; color: var(--accent);">{{subtitle}}</div>
     </div>
     <div class="doc-meta" style="flex: 0 0 150px; text-align: right; font-size: 10px;">
-        {{meta_rows}}
+        <div>Số: <strong>{{document_number}}</strong></div>
+        <div>Ngày: {{document_date}}</div>
     </div>
 </div>
 """

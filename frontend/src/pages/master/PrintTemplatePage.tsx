@@ -24,6 +24,7 @@ const DOC_TYPE_SCHEMAS: Record<string, { label: string, defaultColumns: any[], s
     showTable: true,
     showTotal: true,
     customerLabel: 'Khách hàng',
+    deliveryLabel: 'Địa chỉ giao hàng',
     defaultColumns: [
       { key: 'stt', label: 'STT' },
       { key: 'ten_hang', label: 'Tên hàng hóa' },
@@ -44,6 +45,7 @@ const DOC_TYPE_SCHEMAS: Record<string, { label: string, defaultColumns: any[], s
     showTable: true,
     showTotal: true,
     customerLabel: 'Người mua hàng',
+    deliveryLabel: 'Địa chỉ',
     defaultColumns: [
       { key: 'stt', label: 'STT' },
       { key: 'ten_hang', label: 'Tên hàng hóa, dịch vụ' },
@@ -62,6 +64,7 @@ const DOC_TYPE_SCHEMAS: Record<string, { label: string, defaultColumns: any[], s
     showTable: true,
     showTotal: true,
     customerLabel: 'Nhà cung cấp',
+    deliveryLabel: 'Ngày giao dự kiến',
     defaultColumns: [
       { key: 'stt', label: 'STT' },
       { key: 'ten_hang', label: 'Tên hàng hóa' },
@@ -79,6 +82,7 @@ const DOC_TYPE_SCHEMAS: Record<string, { label: string, defaultColumns: any[], s
     label: 'Phiếu xuất kho',
     showTable: true,
     customerLabel: 'Khách hàng',
+    deliveryLabel: 'Lý do xuất',
     defaultColumns: [
       { key: 'stt', label: 'STT' },
       { key: 'ma_amis', label: 'Mã hàng' },
@@ -111,6 +115,7 @@ const DOC_TYPE_SCHEMAS: Record<string, { label: string, defaultColumns: any[], s
     label: 'Phiếu nhập kho',
     showTable: true,
     customerLabel: 'Người giao hàng',
+    deliveryLabel: 'Kho nhập',
     defaultColumns: [
       { key: 'stt', label: 'STT' },
       { key: 'ten_hang', label: 'Tên hàng hóa' },
@@ -185,6 +190,7 @@ const DOC_TYPE_SCHEMAS: Record<string, { label: string, defaultColumns: any[], s
     label: 'Phiếu giao hàng',
     showTable: true,
     customerLabel: 'Khách hàng',
+    deliveryLabel: 'Địa chỉ giao',
     defaultColumns: [
       { key: 'stt', label: 'STT' },
       { key: 'ten_hang', label: 'Tên hàng' },
