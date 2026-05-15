@@ -44,55 +44,55 @@ class QuoteItemPriceResponse(BaseModel):
 
 
 QUOTE_IMPORT_FIELDS = [
-    ImportField("so_bao_gia", "So bao gia", parser=parse_text, help_text="De trong de tao so moi dang BG26-05-0001"),
-    ImportField("ngay_bao_gia", "Ngay bao gia", required=True, parser=parse_date, help_text="DD/MM/YYYY"),
-    ImportField("ma_kh", "Ma KH", required=True, parser=parse_text, help_text="Ma khach hang da co trong danh muc"),
-    ImportField("ngay_het_han", "Ngay het han", parser=parse_date),
-    ImportField("so_bg_copy", "So BG copy", parser=parse_text),
-    ImportField("ghi_chu_bao_gia", "Ghi chu bao gia", parser=parse_text),
-    ImportField("dieu_khoan", "Dieu khoan", parser=parse_text),
-    ImportField("ma_amis", "Ma hang", parser=parse_text),
-    ImportField("ten_hang", "Ten hang", required=True, parser=parse_text),
-    ImportField("dvt", "DVT", parser=parse_text, default="Thung"),
-    ImportField("so_luong", "So luong", required=True, parser=parse_decimal),
-    ImportField("gia_ban_dong", "Gia ban dong", parser=parse_decimal, default=0),
-    ImportField("don_gia_m2", "Don gia m2", parser=parse_decimal),
-    ImportField("ma_ky_hieu", "Ma Ky Hieu", parser=parse_text, help_text="Khong bat buoc, he thong tu sinh neu de trong"),
-    ImportField("ghi_chu", "Ghi Chu", parser=parse_text),
-    ImportField("so_lop", "So lop", parser=parse_int, default=3),
-    ImportField("to_hop_song", "To hop song", parser=parse_text),
-    ImportField("mat", "Mat", parser=parse_text),
-    ImportField("mat_dl", "Mat DL", parser=parse_decimal),
-    ImportField("song_1", "Song 1", parser=parse_text),
-    ImportField("song_1_dl", "Song 1 DL", parser=parse_decimal),
-    ImportField("mat_1", "Mat 1", parser=parse_text),
-    ImportField("mat_1_dl", "Mat 1 DL", parser=parse_decimal),
-    ImportField("song_2", "Song 2", parser=parse_text),
-    ImportField("song_2_dl", "Song 2 DL", parser=parse_decimal),
-    ImportField("mat_2", "Mat 2", parser=parse_text),
-    ImportField("mat_2_dl", "Mat 2 DL", parser=parse_decimal),
-    ImportField("song_3", "Song 3", parser=parse_text),
-    ImportField("song_3_dl", "Song 3 DL", parser=parse_decimal),
-    ImportField("mat_3", "Mat 3", parser=parse_text),
-    ImportField("mat_3_dl", "Mat 3 DL", parser=parse_decimal),
-    ImportField("loai_thung", "Loai thung", parser=parse_text),
-    ImportField("dai", "Dai", parser=parse_decimal),
-    ImportField("rong", "Rong", parser=parse_decimal),
+    ImportField("so_bao_gia", "Số báo giá", parser=parse_text, help_text="Để trống để tạo số mới dạng BG26-05-0001"),
+    ImportField("ngay_bao_gia", "Ngày báo giá", required=True, parser=parse_date, help_text="DD/MM/YYYY"),
+    ImportField("ma_kh", "Mã KH", required=True, parser=parse_text, help_text="Mã khách hàng đã có trong danh mục"),
+    ImportField("ngay_het_han", "Ngày hết hạn", parser=parse_date),
+    ImportField("so_bg_copy", "Số BG copy", parser=parse_text),
+    ImportField("ghi_chu_bao_gia", "Ghi chú báo giá", parser=parse_text),
+    ImportField("dieu_khoan", "Điều khoản", parser=parse_text),
+    ImportField("ma_amis", "Mã hàng", parser=parse_text),
+    ImportField("ten_hang", "Tên hàng", required=True, parser=parse_text),
+    ImportField("dvt", "ĐVT", parser=parse_text, default="Thung"),
+    ImportField("so_luong", "Số lượng", required=True, parser=parse_decimal),
+    ImportField("gia_ban_dong", "Giá bán đồng", parser=parse_decimal, default=0),
+    ImportField("don_gia_m2", "Đơn giá m2", parser=parse_decimal),
+    ImportField("ma_ky_hieu", "Mã ký hiệu", parser=parse_text, help_text="Không bắt buộc, hệ thống tự sinh nếu để trống"),
+    ImportField("ghi_chu", "Ghi chú", parser=parse_text),
+    ImportField("so_lop", "Số lớp", parser=parse_int, default=3),
+    ImportField("to_hop_song", "Tổ hợp sóng", parser=parse_text),
+    ImportField("mat", "Mặt", parser=parse_text),
+    ImportField("mat_dl", "Mặt ĐL", parser=parse_decimal),
+    ImportField("song_1", "Sóng 1", parser=parse_text),
+    ImportField("song_1_dl", "Sóng 1 ĐL", parser=parse_decimal),
+    ImportField("mat_1", "Mặt 1", parser=parse_text),
+    ImportField("mat_1_dl", "Mặt 1 ĐL", parser=parse_decimal),
+    ImportField("song_2", "Sóng 2", parser=parse_text),
+    ImportField("song_2_dl", "Sóng 2 ĐL", parser=parse_decimal),
+    ImportField("mat_2", "Mặt 2", parser=parse_text),
+    ImportField("mat_2_dl", "Mặt 2 ĐL", parser=parse_decimal),
+    ImportField("song_3", "Sóng 3", parser=parse_text),
+    ImportField("song_3_dl", "Sóng 3 ĐL", parser=parse_decimal),
+    ImportField("mat_3", "Mặt 3", parser=parse_text),
+    ImportField("mat_3_dl", "Mặt 3 ĐL", parser=parse_decimal),
+    ImportField("loai_thung", "Loại thùng", parser=parse_text),
+    ImportField("dai", "Dài", parser=parse_decimal),
+    ImportField("rong", "Rộng", parser=parse_decimal),
     ImportField("cao", "Cao", parser=parse_decimal),
-    ImportField("kho_tt", "Kho TT", parser=parse_decimal),
-    ImportField("dai_tt", "Dai TT", parser=parse_decimal),
-    ImportField("dien_tich", "Dien tich", parser=parse_decimal),
-    ImportField("loai_in", "Loai in", parser=parse_text, default="khong_in"),
-    ImportField("so_mau", "So mau", parser=parse_int, default=0),
-    ImportField("do_kho", "Do kho", parser=parse_bool, default=False),
+    ImportField("kho_tt", "Khổ TT", parser=parse_decimal),
+    ImportField("dai_tt", "Dài TT", parser=parse_decimal),
+    ImportField("dien_tich", "Diện tích", parser=parse_decimal),
+    ImportField("loai_in", "Loại in", parser=parse_text, default="khong_in"),
+    ImportField("so_mau", "Số màu", parser=parse_int, default=0),
+    ImportField("do_kho", "Độ khô", parser=parse_bool, default=False),
     ImportField("ghim", "Ghim", parser=parse_bool, default=False),
-    ImportField("chap_xa", "Chap Xa", parser=parse_bool, default=False),
-    ImportField("do_phu", "Do phu", parser=parse_bool, default=False),
-    ImportField("dan", "Dan", parser=parse_bool, default=False),
-    ImportField("boi", "Boi", parser=parse_bool, default=False),
-    ImportField("be_lo", "Be Lo", parser=parse_bool, default=False),
-    ImportField("so_c_be", "So Con Be", parser=parse_text),
-    ImportField("gia_noi_bo", "Gia Noi Bo", parser=parse_decimal, default=0),
+    ImportField("chap_xa", "Chắp xà", parser=parse_bool, default=False),
+    ImportField("do_phu", "Độ phủ", parser=parse_bool, default=False),
+    ImportField("dan", "Dán", parser=parse_bool, default=False),
+    ImportField("boi", "Bồi", parser=parse_bool, default=False),
+    ImportField("be_lo", "Bế lỗ", parser=parse_bool, default=False),
+    ImportField("so_c_be", "Số con bế", parser=parse_text),
+    ImportField("gia_noi_bo", "Giá nội bộ", parser=parse_decimal, default=0),
 ]
 
 
@@ -447,6 +447,20 @@ def calculate_quote_item_price(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return QuoteItemPriceResponse(gia_ban=gia_ban)
+
+
+@router.get("/counts")
+def get_quote_counts(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from sqlalchemy import func
+    rows = (
+        db.query(Quote.trang_thai, func.count(Quote.id))
+        .group_by(Quote.trang_thai)
+        .all()
+    )
+    return {trang_thai: count for trang_thai, count in rows}
 
 
 @router.get("/import-template")

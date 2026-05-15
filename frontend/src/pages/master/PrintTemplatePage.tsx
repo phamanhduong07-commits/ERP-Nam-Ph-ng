@@ -11,8 +11,9 @@ import {
 } from '@ant-design/icons'
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
-import { systemApi, PrintTemplate } from '../../api/system'
+import { systemApi, PrintTemplate, ExcelTemplate } from '../../api/system'
 import { phapNhanApi, PhapNhan } from '../../api/phap-nhan'
+import { DragOutlined } from '@ant-design/icons'
 
 const { Title, Text } = Typography
 
@@ -146,17 +147,34 @@ const DOC_TYPE_SCHEMAS: Record<string, { label: string, defaultColumns: any[], s
       { title: 'Người nhận', sub: '(Ký tên)', align: 'left' },
     ]
   },
-  'sales_quote': {
+  'SALES_QUOTE': {
     label: 'Báo giá',
     showTable: true,
     showTotal: true,
     customerLabel: 'Kính gửi',
+    deliveryLabel: 'Hiệu lực đến',
+    easyOverrides: {
+      showWarehouse: false,
+      showDriver: false,
+      showAssistant1: false,
+      showAssistant2: false,
+      showM2: false,
+      showPlateCost: true,
+      showMouldCost: true,
+      showTransportCost: true,
+    },
     defaultColumns: [
       { key: 'stt', label: 'STT' },
+      { key: 'ma_amis', label: 'Mã hàng' },
       { key: 'ten_hang', label: 'Tên sản phẩm' },
       { key: 'kich_thuoc', label: 'Quy cách' },
+      { key: 'so_lop', label: 'Lớp' },
+      { key: 'to_hop_song', label: 'Sóng' },
+      { key: 'ma_ky_hieu', label: 'Mã ký hiệu' },
+      { key: 'so_luong', label: 'Số lượng' },
       { key: 'dvt', label: 'ĐVT' },
       { key: 'gia_ban', label: 'Đơn giá' },
+      { key: 'thanh_tien', label: 'Thành tiền' },
       { key: 'ghi_chu', label: 'Ghi chú' },
     ],
     signatures: [
@@ -181,6 +199,7 @@ const DOC_TYPE_SCHEMAS: Record<string, { label: string, defaultColumns: any[], s
     ]
   }
 }
+
 
 const DEFAULT_CONFIG = {
   logoPos: 'left',
@@ -628,34 +647,49 @@ export default function PrintTemplatePage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Card 
-        title={<Title level={4} style={{ margin: 0 }}>⚙ Quản lý Biểu mẫu In ấn</Title>}
-        extra={
-          <Button 
-            type="primary" 
-            icon={<PlusOutlined />} 
-            onClick={() => {
-              setIsNewMode(true)
-              setEditModal({ ma_mau: '', ten_mau: '', html_content: '' })
-              form.resetFields()
-              setEasyConfig(DEFAULT_CONFIG)
-              setSelectedPhapNhanId((phapNhans[0]?.id as any) ?? null)
-            }}
-          >
-            Thêm mẫu mới
-          </Button>
-        }
-      >
-        <Alert 
-          message="Hệ thống In ấn đa Pháp nhân"
-          description="Hệ thống tự động lưu mẫu in riêng cho từng pháp nhân khi bạn chọn pháp nhân trong trình thiết kế và nhấn Lưu."
-          type="success"
-          showIcon
-          style={{ marginBottom: 24 }}
-        />
-        
-        <Table dataSource={templates} columns={columns} rowKey={(r, i) => `${r.ma_mau}_${r.phap_nhan_id || 0}`} loading={isLoading} pagination={false} />
-      </Card>
+      <Tabs 
+        type="card"
+        items={[
+          {
+            key: 'print',
+            label: <span><LayoutOutlined /> Biểu mẫu In ấn (PDF)</span>,
+            children: (
+              <Card 
+                title={<Title level={4} style={{ margin: 0 }}>⚙ Quản lý Biểu mẫu In ấn</Title>}
+                extra={
+                  <Button 
+                    type="primary" 
+                    icon={<PlusOutlined />} 
+                    onClick={() => {
+                      setIsNewMode(true)
+                      setEditModal({ ma_mau: '', ten_mau: '', html_content: '' })
+                      form.resetFields()
+                      setEasyConfig(DEFAULT_CONFIG)
+                      setSelectedPhapNhanId((phapNhans[0]?.id as any) ?? null)
+                    }}
+                  >
+                    Thêm mẫu mới
+                  </Button>
+                }
+              >
+                <Alert 
+                  message="Hệ thống In ấn đa Pháp nhân"
+                  description="Hệ thống tự động lưu mẫu in riêng cho từng pháp nhân khi bạn chọn pháp nhân trong trình thiết kế và nhấn Lưu."
+                  type="success"
+                  showIcon
+                  style={{ marginBottom: 24 }}
+                />
+                <Table dataSource={templates} columns={columns} rowKey={(r, i) => `${r.ma_mau}_${r.phap_nhan_id || 0}`} loading={isLoading} pagination={false} />
+              </Card>
+            )
+          },
+          {
+            key: 'excel',
+            label: <span><ThunderboltOutlined /> Biểu mẫu Excel</span>,
+            children: <ExcelTemplateTab phapNhans={phapNhans} />
+          }
+        ]}
+      />
 
       <Modal
         title={
@@ -848,6 +882,188 @@ export default function PrintTemplatePage() {
           </Col>
         </Row>
       </Modal>
+    </div>
+  )
+}
+
+function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
+  const qc = useQueryClient()
+  const [form] = Form.useForm()
+  const [editModal, setEditModal] = useState<ExcelTemplate | null>(null)
+  const [selectedPhapNhanId, setSelectedPhapNhanId] = useState<number | null>(null)
+  const [availableColumns, setAvailableColumns] = useState<any[]>([])
+
+  const { data: templates = [], isLoading } = useQuery({
+    queryKey: ['excel-templates'],
+    queryFn: systemApi.getExcelTemplates,
+  })
+
+  const saveMut = useMutation({
+    mutationFn: (vals: any) => systemApi.updateExcelTemplate(vals.ma_mau, {
+      ...vals,
+      phap_nhan_id: selectedPhapNhanId ?? undefined
+    }),
+    onSuccess: () => {
+      message.success('Đã lưu mẫu Excel')
+      setEditModal(null)
+      qc.invalidateQueries({ queryKey: ['excel-templates'] })
+    }
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (tpl: ExcelTemplate) => systemApi.deleteExcelTemplate(tpl.ma_mau, tpl.phap_nhan_id),
+    onSuccess: () => {
+      message.success('Đã xóa mẫu Excel')
+      qc.invalidateQueries({ queryKey: ['excel-templates'] })
+    }
+  })
+
+  const columns = [
+    { title: 'Mã mẫu', dataIndex: 'ma_mau', key: 'ma_mau' },
+    { title: 'Tên mẫu', dataIndex: 'ten_mau', key: 'ten_mau' },
+    { 
+      title: 'Pháp nhân', 
+      dataIndex: 'phap_nhan_id', 
+      render: (id: number) => {
+        const pn = phapNhans.find(p => p.id === id)
+        return pn ? <Tag color="blue">{pn.ten_viet_tat || pn.ten_phap_nhan}</Tag> : <Tag color="default">Mặc định</Tag>
+      }
+    },
+    {
+      title: 'Số cột',
+      dataIndex: 'column_config',
+      render: (cfg: any[]) => cfg?.length || 0
+    },
+    {
+      title: 'Thao tác',
+      key: 'action',
+      render: (_: any, record: ExcelTemplate) => (
+        <Space>
+          <Button icon={<EditOutlined />} onClick={() => {
+            setEditModal(record)
+            form.setFieldsValue(record)
+            setSelectedPhapNhanId(record.phap_nhan_id ?? null)
+            const schema = DOC_TYPE_SCHEMAS[record.ma_mau]
+            if (schema) setAvailableColumns(schema.defaultColumns)
+          }}>Sửa</Button>
+          <Button danger icon={<DeleteOutlined />} onClick={() => Modal.confirm({
+            title: 'Xóa mẫu Excel?',
+            onOk: () => deleteMut.mutate(record)
+          })} />
+        </Space>
+      )
+    }
+  ]
+
+  return (
+    <Card 
+      title={<Title level={4} style={{ margin: 0 }}>📊 Cấu hình xuất dữ liệu Excel</Title>}
+      extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => {
+        setEditModal({ ma_mau: '', ten_mau: '', column_config: [] })
+        form.resetFields()
+        setSelectedPhapNhanId(null)
+      }}>Thêm mẫu Excel</Button>}
+    >
+      <Table dataSource={templates} columns={columns} loading={isLoading} rowKey={r => `${r.ma_mau}_${r.phap_nhan_id || 0}`} pagination={false} />
+
+      <Modal
+        title="Thiết kế Cột Excel"
+        open={!!editModal}
+        onCancel={() => setEditModal(null)}
+        onOk={() => form.submit()}
+        width={800}
+      >
+        <Form form={form} layout="vertical" onFinish={saveMut.mutate}>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="ma_mau" label="Loại chứng từ" rules={[{ required: true }]}>
+                <Select 
+                  options={Object.entries(DOC_TYPE_SCHEMAS).map(([k, s]) => ({ label: s.label, value: k }))}
+                  onChange={(val) => {
+                    const schema = DOC_TYPE_SCHEMAS[val]
+                    if (schema) {
+                      setAvailableColumns(schema.defaultColumns)
+                      form.setFieldsValue({ ten_mau: `Xuất Excel ${schema.label}` })
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Pháp nhân">
+                <Select value={selectedPhapNhanId} onChange={setSelectedPhapNhanId} options={[{label: 'Dùng chung (Mặc định)', value: null}, ...phapNhans.map(p => ({ label: p.ten_phap_nhan, value: p.id }))]} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="ten_mau" label="Tên mẫu" rules={[{ required: true }]}><Input /></Form.Item>
+          
+          <Divider orientation="left">Cấu hình cột</Divider>
+          <Form.Item name="column_config">
+            <ExcelColumnDesigner availableColumns={availableColumns} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Card>
+  )
+}
+
+function ExcelColumnDesigner({ value = [], onChange, availableColumns }: { value?: any[], onChange?: (v: any[]) => void, availableColumns: any[] }) {
+  const toggleColumn = (col: any) => {
+    const exists = value.find(c => c.key === col.key)
+    if (exists) {
+      onChange?.(value.filter(c => c.key !== col.key))
+    } else {
+      onChange?.([...value, { ...col, width: 15 }])
+    }
+  }
+
+  const updateCol = (key: string, field: string, val: any) => {
+    onChange?.(value.map(c => c.key === key ? { ...c, [field]: val } : c))
+  }
+
+  return (
+    <div style={{ background: '#f5f5f5', padding: 16, borderRadius: 8 }}>
+      <Text strong>Cột có sẵn:</Text>
+      <div style={{ margin: '8px 0 16px' }}>
+        <Space wrap>
+          {availableColumns.map(c => (
+            <Button 
+              key={c.key} 
+              size="small" 
+              type={value.find(v => v.key === c.key) ? 'primary' : 'default'}
+              onClick={() => toggleColumn(c)}
+            >
+              {c.label}
+            </Button>
+          ))}
+        </Space>
+      </div>
+
+      <Table 
+        size="small"
+        dataSource={value}
+        pagination={false}
+        rowKey="key"
+        columns={[
+          { 
+            title: 'Sắp xếp', 
+            width: 50, 
+            render: () => <DragOutlined style={{ cursor: 'move' }} /> 
+          },
+          { title: 'Trường dữ liệu', dataIndex: 'key', key: 'key' },
+          { 
+            title: 'Tiêu đề Excel', 
+            dataIndex: 'label', 
+            render: (text, record) => <Input size="small" value={text} onChange={e => updateCol(record.key, 'label', e.target.value)} />
+          },
+          { 
+            title: 'Độ rộng', 
+            dataIndex: 'width', 
+            width: 100,
+            render: (val, record) => <InputNumber size="small" min={5} max={100} value={val} onChange={v => updateCol(record.key, 'width', v)} />
+          }
+        ]}
+      />
     </div>
   )
 }

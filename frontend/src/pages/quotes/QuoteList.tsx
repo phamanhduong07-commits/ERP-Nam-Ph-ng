@@ -15,7 +15,8 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS } from '../../api/quotes'
 import type { QuoteListItem } from '../../api/quotes'
-import { exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
+import { exportExcelWithTemplate, exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
+import { systemApi } from '../../api/system'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import { useAuthStore } from '../../store/auth'
 
@@ -76,27 +77,47 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
   const handleExportExcel = async () => {
     setIsExporting(true)
     try {
-    const items = data?.items ?? []
-    const details = await Promise.all(items.map(r => quotesApi.get(r.id).then(res => res.data)))
-    exportToExcel(`BaoGia_${dayjs().format('YYYYMMDD')}`, [{
-      name: 'Báo giá',
-      headers: ['STT', 'Số BG', 'Ngày BG', 'Khách hàng', 'Ngày HH', 'Số dòng', 'Tổng cộng (đ)', 'Trạng thái'],
-      rows: items.map((r, i) => [
-        i + 1, r.so_bao_gia, fmtDate(r.ngay_bao_gia), r.ten_khach_hang ?? '',
-        fmtDate(r.ngay_het_han ?? null), r.so_dong, Number(r.tong_cong ?? 0), QUOTE_STATUS_LABELS[r.trang_thai] ?? r.trang_thai,
-      ]),
-      colWidths: [5, 18, 12, 30, 12, 8, 16, 14],
-    }, {
-      name: 'Chi tiet',
-      headers: ['So BG', 'Ngay BG', 'Khach hang', 'STT', 'Ma hang', 'Ten hang', 'DVT', 'So luong', 'Gia ban', 'Ma Ky Hieu', 'Ghi Chu', 'So lop', 'To hop song', 'Mat', 'Mat DL', 'Song 1', 'Song 1 DL', 'Mat 1', 'Mat 1 DL'],
-      rows: details.flatMap(q => q.items.map((it, idx) => [
-        q.so_bao_gia, fmtDate(q.ngay_bao_gia), q.customer?.ten_viet_tat || '', idx + 1,
-        it.ma_amis || '', it.ten_hang, it.dvt, it.so_luong, it.gia_ban,
-        it.ma_ky_hieu || '', it.ghi_chu || '', it.so_lop, it.to_hop_song || '',
-        it.mat || '', it.mat_dl || '', it.song_1 || '', it.song_1_dl || '', it.mat_1 || '', it.mat_1_dl || '',
-      ])),
-      colWidths: [18, 12, 28, 6, 14, 34, 10, 12, 14, 22, 28, 8, 12, 12, 10, 12, 10, 12, 10],
-    }])
+      const itemsForTemplate = data?.items ?? []
+      if (!itemsForTemplate.length) {
+        message.warning('Không có báo giá để xuất Excel')
+        return
+      }
+      const detailsForTemplate = await Promise.all(itemsForTemplate.map(r => quotesApi.get(r.id).then(res => res.data)))
+      const phapNhanIds = Array.from(new Set(detailsForTemplate.map(q => q.phap_nhan_id).filter(Boolean)))
+      if (phapNhanIds.length !== 1) {
+        message.error('Chỉ xuất Excel báo giá khi danh sách cùng một pháp nhân. Vui lòng lọc/chọn một pháp nhân trước.')
+        return
+      }
+      const phapNhanId = phapNhanIds[0] as number
+      const template = await systemApi.getExcelTemplate('SALES_QUOTE', phapNhanId, true)
+      const config = template.column_config || []
+      if (!config.length) {
+        message.error('Mẫu Excel SALES_QUOTE chưa cấu hình cột.')
+        return
+      }
+      const rows = detailsForTemplate.flatMap(q => q.items.map((it, idx) => ({
+        stt: idx + 1,
+        so_bao_gia: q.so_bao_gia,
+        ngay_bao_gia: fmtDate(q.ngay_bao_gia),
+        ngay_het_han: fmtDate(q.ngay_het_han ?? null),
+        phap_nhan: q.ten_phap_nhan || '',
+        customer_name: q.customer?.ten_viet_tat || q.customer?.ten_don_vi || '',
+        ma_amis: it.ma_amis || '',
+        ten_hang: it.ten_hang,
+        kich_thuoc: it.dai && it.rong && it.cao ? `${it.dai}x${it.rong}x${it.cao}` : '',
+        so_lop: it.so_lop,
+        to_hop_song: it.to_hop_song || '',
+        ma_ky_hieu: it.ma_ky_hieu || '',
+        so_luong: Number(it.so_luong || 0),
+        dvt: it.dvt,
+        gia_ban: Number(it.gia_ban || 0),
+        thanh_tien: Number(it.gia_ban || 0) * Number(it.so_luong || 0),
+        trang_thai: QUOTE_STATUS_LABELS[q.trang_thai] ?? q.trang_thai,
+        ghi_chu: it.ghi_chu || '',
+      })))
+      exportExcelWithTemplate(`BaoGia_${dayjs().format('YYYYMMDD')}`, 'Bao gia', rows, config)
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Xuat Excel bao gia that bai')
     } finally {
       setIsExporting(false)
     }
