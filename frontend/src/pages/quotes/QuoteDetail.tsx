@@ -3,19 +3,18 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Table, Button, Space, Typography, Row, Col,
-  Divider, Popconfirm, message, Skeleton, Drawer, Badge, Modal, DatePicker,
+  Divider, Popconfirm, message, Skeleton, Drawer, Badge, Modal, DatePicker, Alert,
 } from 'antd'
 import {
   ArrowLeftOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, FileAddOutlined,
-  EyeOutlined, PrinterOutlined, CopyOutlined, SendOutlined, SyncOutlined,
+  EyeOutlined, PrinterOutlined, CopyOutlined, SendOutlined, SyncOutlined, WarningOutlined, DownloadOutlined,
 } from '@ant-design/icons'
 import type { Dayjs } from 'dayjs'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, LOAI_IN_OPTIONS, getSongType, buildPaperSymbol } from '../../api/quotes'
 import type { Quote, QuoteItem } from '../../api/quotes'
-import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
-import { printDocument, fmtVND } from '../../utils/exportUtils'
+import { printDocument, buildDocumentHtml, downloadAsPdf, fmtVND } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { systemApi } from '../../api/system'
 import type { PrintCompanyInfo } from '../../utils/exportUtils'
@@ -26,87 +25,45 @@ const { Title, Text } = Typography
 const vnd = (v: number | null | undefined) =>
   v != null ? new Intl.NumberFormat('vi-VN').format(Math.round(v)) : '—'
 
-function buildQuoteHtml(quote: Quote, logoUrl: string, companyInfo?: PrintCompanyInfo, templateColumns?: any[]): string {
-  const tableStyle = `
-    <style>
-      .quote-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-      .quote-table th { background: #E65100; color: #fff; padding: 5px 6px; border: 1px solid #ccc; font-size: 10pt; }
-      .quote-table td { border: 1px solid #ddd; padding: 4px 6px; font-size: 10pt; }
-    </style>
-  `
+const num = (v: number | null | undefined) =>
+  v != null ? new Intl.NumberFormat('vi-VN').format(Number(v)) : '-'
 
-  if (templateColumns && templateColumns.length === 0) {
-    return ``;
+function quoteCellValue(quote: Quote, item: QuoteItem, index: number, key: string): string {
+  const size = item.dai && item.rong && item.cao ? `${item.dai}x${item.rong}x${item.cao}` : ''
+  const amount = Math.round((item.gia_ban || 0) * (item.so_luong || 0))
+  const values: Record<string, string | number | null | undefined> = {
+    stt: index + 1,
+    so_bao_gia: quote.so_bao_gia,
+    ngay_bao_gia: dayjs(quote.ngay_bao_gia).format('DD/MM/YYYY'),
+    customer_name: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '',
+    ma_amis: item.ma_amis,
+    ma_sp: item.ma_amis,
+    ten_hang: item.ten_hang,
+    kich_thuoc: size,
+    so_lop: item.so_lop ? `${item.so_lop}L` : '',
+    to_hop_song: item.to_hop_song,
+    ma_ky_hieu: item.ma_ky_hieu || buildPaperSymbol(item) || '',
+    so_luong: num(item.so_luong),
+    dvt: item.dvt,
+    gia_ban: vnd(item.gia_ban),
+    don_gia: vnd(item.gia_ban),
+    thanh_tien: vnd(amount),
+    ghi_chu: item.ghi_chu,
   }
+  return String(values[key] ?? '')
+}
 
-  if (templateColumns && templateColumns.length > 0) {
-    const headerHtml = `<tr>${templateColumns.map(c => `<th style="border: 1px solid #ddd; padding: 6px; background: #E65100; color: #fff;">${c.label}</th>`).join('')}</tr>`
-    
-    const rowsHtml = quote.items.map((it, i) => {
-      const cells = templateColumns.map(c => {
-        let val: any = '—'
-        const key = c.key
-        if (key === 'stt') val = i + 1
-        else if (key === 'ten_hang') val = it.ten_hang
-        else if (key === 'ma_sp' || key === 'ma_amis') val = it.ma_amis
-        else if (key === 'kich_thuoc') val = it.dai && it.rong && it.cao ? `${it.dai}×${it.rong}×${it.cao}` : '—'
-        else if (key === 'so_lop') val = it.so_lop ? `${it.so_lop}L` : '—'
-        else if (key === 'to_hop_song') val = it.to_hop_song
-        else if (key === 'ma_ky_hieu') val = it.ma_ky_hieu || buildPaperSymbol(it)
-        else if (key === 'so_luong') val = `${new Intl.NumberFormat('vi-VN').format(it.so_luong)} ${it.dvt}`
-        else if (key === 'dvt') val = it.dvt
-        else if (key === 'don_gia' || key === 'gia_ban') val = vnd(it.gia_ban)
-        else if (key === 'thanh_tien') val = vnd(Math.round((it.gia_ban || 0) * (it.so_luong || 0)))
-        else if (key === 'ghi_chu') val = it.ghi_chu
-        
-        const align = (key === 'so_luong' || key === 'don_gia' || key === 'gia_ban' || key === 'thanh_tien') ? 'right' : (key === 'stt' ? 'center' : 'left')
-        return `<td style="border: 1px solid #ddd; padding: 4px 6px; text-align: ${align}">${val || '—'}</td>`
-      }).join('')
-      return `<tr>${cells}</tr>`
+function buildQuoteRowsHtml(quote: Quote, templateColumns: any[] = []): string {
+  return quote.items.map((it, i) => {
+    const cells = templateColumns.map(c => {
+      const key = String(c.key || '')
+      const align = ['so_luong', 'don_gia', 'gia_ban', 'thanh_tien'].includes(key)
+        ? 'right'
+        : key === 'stt' ? 'center' : 'left'
+      return `<td style="border:1px solid #ddd;padding:6px;text-align:${align}">${quoteCellValue(quote, it, i, key) || '&nbsp;'}</td>`
     }).join('')
-
-    return `${tableStyle}
-      <table class="quote-table"><thead>${headerHtml}</thead><tbody>${rowsHtml}</tbody></table>
-      ${buildSummaryHtml(quote)}
-    `
-  }
-
-  // Fallback to DEFAULT layout
-  const itemRows = quote.items.map((it, i) => {
-    const kichthuoc = it.dai && it.rong && it.cao ? `${it.dai}×${it.rong}×${it.cao}` : '—'
-    const cauTruc = [it.mat, it.song_1 ? `~${it.song_1}` : null, it.mat_1, it.song_2 ? `~${it.song_2}` : null, it.mat_2]
-      .filter(Boolean).join(' | ') || '—'
-    const thanh_tien = Math.round((it.gia_ban || 0) * (it.so_luong || 0))
-    return `
-      <tr>
-        <td style="text-align:center">${i + 1}</td>
-        <td>${it.ten_hang || '—'}</td>
-        <td style="text-align:center">${kichthuoc}</td>
-        <td style="text-align:center">${it.so_lop}L</td>
-        <td style="text-align:center">${it.ma_ky_hieu || buildPaperSymbol(it) || '—'}</td>
-        <td style="font-size:10px;color:#555">${cauTruc}</td>
-        <td style="text-align:right">${new Intl.NumberFormat('vi-VN').format(it.so_luong)} ${it.dvt}</td>
-        <td style="text-align:right">${vnd(it.gia_ban)}</td>
-        <td style="text-align:right;font-weight:700">${vnd(thanh_tien)}</td>
-      </tr>`
+    return `<tr>${cells}</tr>`
   }).join('')
-
-  return `${tableStyle}
-    <table class="quote-table">
-      <thead><tr>
-        <th style="width:32px">STT</th>
-        <th>Tên hàng</th>
-        <th style="width:90px">Kích thước (cm)</th>
-        <th style="width:40px">Lớp</th>
-        <th style="width:110px">Mã Ký Hiệu</th>
-        <th style="width:140px">Cấu trúc giấy</th>
-        <th style="width:80px">Số lượng</th>
-        <th style="width:90px">Đơn giá (đ)</th>
-        <th style="width:100px">Thành tiền (đ)</th>
-      </tr></thead>
-      <tbody>${itemRows}</tbody>
-    </table>
-    ${buildSummaryHtml(quote)}`
 }
 
 function buildSummaryHtml(quote: Quote): string {
@@ -449,15 +406,10 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   const [previewItem, setPreviewItem] = useState<QuoteItem | null>(null)
   const [giaHanModal, setGiaHanModal] = useState(false)
   const [giaHanDate, setGiaHanDate] = useState<Dayjs | null>(null)
+  const [isPdfLoading, setIsPdfLoading] = useState(false)
   const role = useAuthStore(s => s.user?.role)
   const hideCostDetails = role === 'SALE_ADMIN' || role === 'TRUONG_PHONG_SALE_ADMIN'
   const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
-
-  const { data: templates = [] } = useQuery({
-    queryKey: ['print-templates'],
-    queryFn: systemApi.getTemplates,
-    staleTime: 0,
-  })
 
   const { data: quote, isLoading } = useQuery({
     queryKey: ['quote', id],
@@ -465,12 +417,15 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
     enabled: !!id,
   })
 
+  const invalidateCounts = () => queryClient.invalidateQueries({ queryKey: ['quotes-counts'] })
+
   const submitMutation = useMutation({
     mutationFn: () => quotesApi.submit(Number(id)),
     onSuccess: () => {
       message.success('Đã gửi báo giá để duyệt')
       queryClient.invalidateQueries({ queryKey: ['quote', id] })
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Gửi duyệt thất bại'),
   })
@@ -481,6 +436,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       message.success('Đã duyệt báo giá')
       queryClient.invalidateQueries({ queryKey: ['quote', id] })
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Duyệt thất bại'),
   })
@@ -491,6 +447,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       message.success('Đã huỷ báo giá')
       queryClient.invalidateQueries({ queryKey: ['quote', id] })
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Huỷ thất bại'),
   })
@@ -513,6 +470,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       setGiaHanDate(null)
       queryClient.invalidateQueries({ queryKey: ['quote', id] })
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
     },
     onError: (e: unknown) => {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -534,34 +492,49 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
 
   const companyInfo = usePhapNhanForPrint(quote?.phap_nhan_id ?? null)
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!quote) return
+    if (!quote.phap_nhan_id) {
+      message.error('Báo giá chưa có pháp nhân. Vui lòng chọn pháp nhân trước khi in.')
+      return
+    }
 
     // Tìm mẫu in phù hợp: Ưu tiên mẫu của pháp nhân, sau đó là mẫu mặc định
-    const quotationTemplates = templates.filter(t => ['SALES_QUOTE', 'QUOTATION'].includes(t.ma_mau?.toUpperCase()))
-    const template = quotationTemplates.find(t => t.phap_nhan_id === quote.phap_nhan_id)
-                  || quotationTemplates.find(t => !t.phap_nhan_id)
-
-    if (!template) {
-      console.log('No custom template found for QUOTATION, using default layout.')
+    let template
+    try {
+      template = await systemApi.getTemplate('SALES_QUOTE', quote.phap_nhan_id, true)
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || `Chưa cấu hình mẫu in SALES_QUOTE cho pháp nhân ${quote.ten_phap_nhan || quote.phap_nhan_id}`)
+      return
     }
-    
-    // Get columns from template metadata. If no template, pass undefined to use default table.
-    const templateCols = template ? ((template?.variables_meta as any)?.columns || []) : undefined
+
+    const templateCols = ((template.variables_meta as any)?.columns || []) as any[]
+    if (!templateCols.length) {
+      message.error('Mẫu in SALES_QUOTE chưa cấu hình cột hàng hóa.')
+      return
+    }
     
     printDocument({
       title: 'BÁO GIÁ',
       subtitle: `Báo giá ${quote.so_bao_gia}`,
       documentNumber: quote.so_bao_gia,
       documentDate: dayjs(quote.ngay_bao_gia).format('DD/MM/YYYY'),
-      companyName: quote.ten_phap_nhan || 'CÔNG TY TNHH SX TM NAM PHƯƠNG',
-      bodyHtml: buildQuoteHtml(quote, '', companyInfo, templateCols), 
-      customHtml: template?.html_content,
+      companyInfo,
+      bodyHtml: buildQuoteRowsHtml(quote, templateCols),
+      customHtml: template.html_content,
       fields: [
         { label: 'Khách hàng', value: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—' },
       ],
       vars: {
         customer_name: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—',
+        delivery_address: quote.ngay_het_han ? dayjs(quote.ngay_het_han).format('DD/MM/YYYY') : '',
+        document_day: dayjs(quote.ngay_bao_gia).format('DD'),
+        document_month: dayjs(quote.ngay_bao_gia).format('MM'),
+        document_year: dayjs(quote.ngay_bao_gia).format('YYYY'),
+        ngay_het_han: quote.ngay_het_han ? dayjs(quote.ngay_het_han).format('DD/MM/YYYY') : '',
+        nguoi_lap: quote.created_by_name || '',
+        nguoi_duyet: quote.ten_nguoi_duyet || '',
+        phap_nhan: quote.ten_phap_nhan || '',
         tong_tien_hang: vnd(quote.tong_tien_hang),
         chi_phi_bang_in: vnd(quote.chi_phi_bang_in),
         chi_phi_khuon: vnd(quote.chi_phi_khuon),
@@ -583,6 +556,79 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
         dieu_khoan: quote.dieu_khoan || '',
       }
     })
+  }
+
+  const handleDownloadPdf = async () => {
+    if (!quote) return
+    if (!quote.phap_nhan_id) {
+      message.error('Báo giá chưa có pháp nhân. Vui lòng chọn pháp nhân trước khi tải PDF.')
+      return
+    }
+
+    setIsPdfLoading(true)
+    try {
+      let template
+      try {
+        template = await systemApi.getTemplate('SALES_QUOTE', quote.phap_nhan_id, true)
+      } catch (e: any) {
+        message.error(e?.response?.data?.detail || `Chưa cấu hình mẫu in SALES_QUOTE cho pháp nhân ${quote.ten_phap_nhan || quote.phap_nhan_id}`)
+        return
+      }
+
+      const templateCols = ((template.variables_meta as any)?.columns || []) as any[]
+      if (!templateCols.length) {
+        message.error('Mẫu in SALES_QUOTE chưa cấu hình cột hàng hóa.')
+        return
+      }
+
+      const opts = {
+        title: 'BÁO GIÁ',
+        subtitle: `Báo giá ${quote.so_bao_gia}`,
+        documentNumber: quote.so_bao_gia,
+        documentDate: dayjs(quote.ngay_bao_gia).format('DD/MM/YYYY'),
+        companyInfo,
+        bodyHtml: buildQuoteRowsHtml(quote, templateCols),
+        customHtml: template.html_content,
+        fields: [
+          { label: 'Khách hàng', value: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—' },
+        ],
+        vars: {
+          customer_name: quote.customer?.ten_viet_tat || quote.customer?.ten_don_vi || '—',
+          delivery_address: quote.ngay_het_han ? dayjs(quote.ngay_het_han).format('DD/MM/YYYY') : '',
+          document_day: dayjs(quote.ngay_bao_gia).format('DD'),
+          document_month: dayjs(quote.ngay_bao_gia).format('MM'),
+          document_year: dayjs(quote.ngay_bao_gia).format('YYYY'),
+          ngay_het_han: quote.ngay_het_han ? dayjs(quote.ngay_het_han).format('DD/MM/YYYY') : '',
+          nguoi_lap: quote.created_by_name || '',
+          nguoi_duyet: quote.ten_nguoi_duyet || '',
+          phap_nhan: quote.ten_phap_nhan || '',
+          tong_tien_hang: vnd(quote.tong_tien_hang),
+          chi_phi_bang_in: vnd(quote.chi_phi_bang_in),
+          chi_phi_khuon: vnd(quote.chi_phi_khuon),
+          chi_phi_van_chuyen: vnd(quote.chi_phi_van_chuyen),
+          chi_phi_hang_hoa_dv: vnd(quote.chi_phi_hang_hoa_dv),
+          chi_phi_khac_1: vnd(quote.chi_phi_khac_1),
+          chi_phi_khac_1_ten: quote.chi_phi_khac_1_ten || 'Chi phí khác 1',
+          chi_phi_khac_2: vnd(quote.chi_phi_khac_2),
+          chi_phi_khac_2_ten: quote.chi_phi_khac_2_ten || 'Chi phí khác 2',
+          chi_phi_bang_in_vis: quote.chi_phi_bang_in > 0 ? 'table-row' : 'none',
+          chi_phi_khuon_vis: quote.chi_phi_khuon > 0 ? 'table-row' : 'none',
+          chi_phi_van_chuyen_vis: quote.chi_phi_van_chuyen > 0 ? 'table-row' : 'none',
+          chi_phi_khac_1_vis: quote.chi_phi_khac_1 > 0 ? 'table-row' : 'none',
+          chi_phi_khac_2_vis: quote.chi_phi_khac_2 > 0 ? 'table-row' : 'none',
+          ty_le_vat: String(quote.ty_le_vat),
+          tien_vat: vnd(quote.tien_vat),
+          tong_cong: vnd(quote.tong_cong),
+          ghi_chu: quote.ghi_chu || '',
+          dieu_khoan: quote.dieu_khoan || '',
+        },
+      }
+
+      const html = buildDocumentHtml(opts)
+      await downloadAsPdf(html, `BaoGia_${quote.so_bao_gia}`, false, companyInfo ?? undefined)
+    } finally {
+      setIsPdfLoading(false)
+    }
   }
 
   const columns: any[] = [
@@ -684,6 +730,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   if (!quote) return <Text type="secondary" style={{ padding: 24, display: 'block' }}>Không tìm thấy báo giá</Text>
 
   const trangThai = quote.trang_thai
+  const hetHanDaysLeft = quote.ngay_het_han ? dayjs(quote.ngay_het_han).diff(dayjs(), 'day') : null
 
   return (
     <div>
@@ -755,14 +802,21 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
               </Popconfirm>
             )}
             {trangThai === 'da_duyet' && (
-              <Button
-                size={embedded ? 'small' : 'middle'}
-                icon={<CopyOutlined />}
-                loading={copyMutation.isPending}
-                onClick={() => copyMutation.mutate()}
+              <Popconfirm
+                title="Tạo bản sao để chỉnh sửa?"
+                description="Một báo giá mới sẽ được tạo từ báo giá này."
+                onConfirm={() => copyMutation.mutate()}
+                okText="Copy"
+                cancelText="Huỷ"
               >
-                Copy chỉnh sửa
-              </Button>
+                <Button
+                  size={embedded ? 'small' : 'middle'}
+                  icon={<CopyOutlined />}
+                  loading={copyMutation.isPending}
+                >
+                  Copy chỉnh sửa
+                </Button>
+              </Popconfirm>
             )}
             {trangThai === 'da_duyet' && (
               <Popconfirm
@@ -790,6 +844,9 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
               </Button>
             )}
             {trangThai !== 'huy' && trangThai !== 'het_han' && (
+              <Divider type="vertical" style={{ height: 24 }} />
+            )}
+            {trangThai !== 'huy' && trangThai !== 'het_han' && (
               <Popconfirm
                 title="Huỷ báo giá này?"
                 onConfirm={() => cancelMutation.mutate()}
@@ -809,9 +866,21 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
             <Button icon={<PrinterOutlined />} onClick={handlePrint}>
               In báo giá
             </Button>
+            <Button icon={<DownloadOutlined />} loading={isPdfLoading} onClick={handleDownloadPdf}>
+              Tải PDF
+            </Button>
           </Space>
         </Col>
       </Row>
+
+      {trangThai === 'da_duyet' && hetHanDaysLeft !== null && hetHanDaysLeft >= 0 && hetHanDaysLeft <= 7 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={`Báo giá sẽ hết hạn trong ${hetHanDaysLeft} ngày (${dayjs(quote.ngay_het_han).format('DD/MM/YYYY')}) — cần gia hạn trước khi hết hiệu lực.`}
+        />
+      )}
 
       <Card style={{ marginBottom: 16 }}>
         <Descriptions column={{ xs: 1, sm: 2, lg: embedded ? 2 : 3 }} bordered size="small">
@@ -820,7 +889,14 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
             {dayjs(quote.ngay_bao_gia).format('DD/MM/YYYY')}
           </Descriptions.Item>
           <Descriptions.Item label="Ngày hết hạn">
-            {quote.ngay_het_han ? dayjs(quote.ngay_het_han).format('DD/MM/YYYY') : '—'}
+            {quote.ngay_het_han ? (() => {
+              const fmt = dayjs(quote.ngay_het_han).format('DD/MM/YYYY')
+              if (hetHanDaysLeft === null) return fmt
+              if (hetHanDaysLeft < 0) return <span style={{ color: '#f5222d' }}>{fmt}</span>
+              if (hetHanDaysLeft <= 3) return <span style={{ color: '#f5222d' }}><WarningOutlined style={{ marginRight: 4 }} />{fmt}</span>
+              if (hetHanDaysLeft <= 7) return <span style={{ color: '#fa8c16' }}>{fmt}</span>
+              return fmt
+            })() : '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Khách hàng" span={2}>
             {quote.customer ? (
@@ -884,6 +960,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
           pagination={false}
           size="small"
           scroll={{ x: 1200 }}
+          locale={{ emptyText: 'Báo giá chưa có mặt hàng nào' }}
           onRow={(r) => ({
             onClick: () => setPreviewItem(r),
             style: { cursor: 'pointer' },

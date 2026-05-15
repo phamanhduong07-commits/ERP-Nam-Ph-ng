@@ -2,6 +2,8 @@ import * as XLSX from 'xlsx'
 import QRCode from 'qrcode'
 
 import { saveAs } from 'file-saver'
+import { systemApi } from '../api/system'
+import { phapNhanApi } from '../api/phap_nhan'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,54 @@ export function exportToExcel(filename: string, sheets: ExcelSheet[]) {
   }
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
   saveAs(new Blob([buf], { type: 'application/octet-stream' }), `${filename}.xlsx`)
+}
+
+/** 
+ * Export data using a template configuration.
+ * @param filename Name of the file
+ * @param sheetName Name of the sheet
+ * @param data Array of objects containing raw data
+ * @param config Array of column configurations [{key, label, width}]
+ */
+export function exportExcelWithTemplate(filename: string, sheetName: string, data: any[], config: { key: string, label: string, width?: number }[]) {
+  const headers = config.map(c => c.label)
+  const rows = data.map(item => config.map(c => item[c.key]))
+  const colWidths = config.map(c => c.width || 12)
+
+  exportToExcel(filename, [{
+    name: sheetName,
+    headers,
+    rows,
+    colWidths
+  }])
+}
+
+/**
+ * Smart Export Excel: Tự động lấy template từ DB và xuất dữ liệu.
+ */
+export async function smartExportExcel(
+  ma_mau: string, 
+  data: any[], 
+  defaultConfig: { key: string, label: string, width?: number }[],
+  filename?: string,
+  phapNhanId?: number
+) {
+  let config = defaultConfig
+  try {
+    const tpl = await systemApi.getExcelTemplate(ma_mau, phapNhanId)
+    if (tpl && tpl.column_config && tpl.column_config.length > 0) {
+      config = tpl.column_config
+    }
+  } catch (e) {
+    console.warn(`[ExcelExport] Không tìm thấy template cho ${ma_mau}, dùng mặc định.`, e)
+  }
+
+  exportExcelWithTemplate(
+    filename || `${ma_mau}_${new Date().getTime()}`,
+    "Data",
+    data,
+    config
+  )
 }
 
 // ─── PDF (print-window) Export ────────────────────────────────────────────────
@@ -354,6 +404,56 @@ export function renderTemplateAndPrint(
 export const fmtVND = (v: number | null | undefined): string =>
   v != null ? new Intl.NumberFormat('vi-VN').format(Math.round(Number(v))) : '—'
 
+export function numberToVietnameseWords(value: number | null | undefined): string {
+  const amount = Math.round(Number(value || 0))
+  if (amount === 0) return 'Không đồng'
+
+  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín']
+  const units = ['', 'nghìn', 'triệu', 'tỷ']
+
+  function readTriple(num: number, full = false) {
+    const hundred = Math.floor(num / 100)
+    const ten = Math.floor((num % 100) / 10)
+    const one = num % 10
+    const parts: string[] = []
+
+    if (hundred > 0 || full) {
+      parts.push(`${digits[hundred]} trăm`)
+    }
+    if (ten > 1) {
+      parts.push(`${digits[ten]} mươi`)
+      if (one === 1) parts.push('mốt')
+      else if (one === 5) parts.push('lăm')
+      else if (one > 0) parts.push(digits[one])
+    } else if (ten === 1) {
+      parts.push('mười')
+      if (one === 5) parts.push('lăm')
+      else if (one > 0) parts.push(digits[one])
+    } else if (one > 0) {
+      if (hundred > 0 || full) parts.push('lẻ')
+      parts.push(one === 5 && (hundred > 0 || full) ? 'năm' : digits[one])
+    }
+    return parts.join(' ')
+  }
+
+  const groups: number[] = []
+  let n = amount
+  while (n > 0) {
+    groups.push(n % 1000)
+    n = Math.floor(n / 1000)
+  }
+
+  const words: string[] = []
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const group = groups[i]
+    if (group === 0) continue
+    const full = i < groups.length - 1 && group < 100
+    words.push(`${readTriple(group, full)} ${units[i]}`.trim())
+  }
+  const result = words.join(' ').replace(/\s+/g, ' ').trim()
+  return `${result.charAt(0).toUpperCase()}${result.slice(1)} đồng`
+}
+
 export const fmtDate = (v: string | null | undefined): string => {
   if (!v) return '—'
   const d = new Date(v)
@@ -571,7 +671,164 @@ export async function printProductionTag(data: any) {
 
   const win = window.open('', '_blank')
   if (!win) return
-  win.document.write(html)
+  win.document.write(`<html><head><title>Tem nhan dang</title></head><body>${html}</body></html>`)
   win.document.close()
-  setTimeout(() => win.print(), 500)
+  win.focus()
+  setTimeout(() => {
+    win.print()
+    win.close()
+  }, 250)
+}
+
+/**
+ * Smart Print PDF: Lấy template HTML từ DB và render dữ liệu.
+ * @param ma_mau Mã mẫu in
+ * @param data Object chứa các biến mapping {{key}} -> value
+ * @param phapNhanId ID pháp nhân
+ */
+export async function smartPrintPdf(ma_mau: string, data: Record<string, any>, phapNhanId?: number) {
+  try {
+    const tpl = await systemApi.getTemplate(ma_mau, phapNhanId)
+    if (!tpl || !tpl.html_content) throw new Error("Template empty")
+
+    let html = tpl.html_content
+    
+    // Tự động bổ sung thông tin pháp nhân nếu chưa có trong data
+    const finalData = { ...data }
+    if (!finalData.company_name || !finalData.logo_img) {
+      // Tìm config pháp nhân
+      let config: PrintCompanyInfo | undefined
+      if (phapNhanId) {
+        try {
+          const res = await phapNhanApi.list({ active_only: false })
+          const pn = res.data.find(p => p.id === phapNhanId)
+          if (pn) {
+            const fallback = COMPANY_CONFIGS["NAM PHUONG"]
+            config = {
+              ...fallback,
+              ten: pn.ten_phap_nhan || fallback.ten,
+              dia_chi: pn.dia_chi ?? fallback.dia_chi,
+              ma_so_thue: pn.ma_so_thue ?? fallback.ma_so_thue,
+              so_dien_thoai: pn.so_dien_thoai ?? fallback.so_dien_thoai,
+              tai_khoan: pn.tai_khoan ?? fallback.tai_khoan,
+              ngan_hang: pn.ngan_hang ?? fallback.ngan_hang,
+              logo: pn.logo_path ? `/${pn.logo_path.replace(/^\//, '')}` : fallback.logo,
+              primary_color: pn.mau_sac_chinh ?? fallback.primary_color,
+              accent_color: pn.mau_sac_chinh ?? fallback.accent_color,
+              footer_accent_color: pn.mau_sac_chinh ?? fallback.footer_accent_color,
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      
+      if (!config) {
+        // Fallback to default Nam Phuong
+        config = COMPANY_CONFIGS["NAM PHUONG"]
+      }
+
+      if (!finalData.company_name) finalData.company_name = config.ten
+      if (!finalData.logo_img) {
+        const logoSrc = config.logo || '/logo_namphuong.png'
+        finalData.logo_img = `<img src="${logoSrc}" alt="Logo" style="max-height: 70px; object-fit: contain;" />`
+      }
+      if (!finalData.company_details) {
+        finalData.company_details = [
+          config.dia_chi ? `Địa chỉ: ${config.dia_chi}` : '',
+          config.so_dien_thoai ? `SĐT: ${config.so_dien_thoai}` : '',
+          config.ma_so_thue ? `MST: ${config.ma_so_thue}` : '',
+        ].filter(Boolean).join(' - ')
+      }
+    }
+
+    // Thay thế các biến
+    Object.entries(finalData).forEach(([k, v]) => {
+      html = html.replace(new RegExp(`{{${k}}}`, 'g'), v === null || v === undefined ? '' : String(v))
+    })
+
+    printToPdf(tpl.ten_mau || ma_mau, html, false) // Mặc định portrait cho chuyên nghiệp
+  } catch (e) {
+    console.error(`[PrintPdf] Lỗi khi in mẫu ${ma_mau}`, e)
+    // Fallback UI alert
+    alert("Không thể tải mẫu in. Vui lòng kiểm tra cấu hình biểu mẫu trong hệ thống.")
+  }
+}
+
+/**
+ * Tải xuống file PDF trực tiếp (không qua dialog in).
+ * Dùng html2canvas + jsPDF — render HTML trong DOM ẩn rồi export.
+ * @param html   Content HTML (cùng định dạng với printToPdf)
+ * @param filename  Tên file xuất (không có .pdf)
+ */
+export async function downloadAsPdf(
+  html: string,
+  filename: string,
+  landscape = false,
+  companyInfo?: PrintCompanyInfo,
+) {
+  const { default: html2canvas } = await import('html2canvas')
+  const { jsPDF } = await import('jspdf')
+
+  const theme = getPrintThemeVars(companyInfo)
+  const pageW = landscape ? 297 : 210
+  const pageH = landscape ? 210 : 297
+  const margin = 12
+
+  const container = document.createElement('div')
+  container.style.cssText = [
+    'position:fixed',
+    'left:-9999px',
+    'top:0',
+    `width:${pageW}mm`,
+    'background:#fff',
+    `padding:${margin}mm`,
+    'box-sizing:border-box',
+  ].join(';')
+
+  container.innerHTML = `
+    <style>
+      :root{--primary:${theme.primary};--accent:${theme.accent};--footer-accent:${theme.footer};}
+      *{box-sizing:border-box;margin:0;padding:0;}
+      div{font-family:Arial,"Helvetica Neue",sans-serif;font-size:11px;color:#222;}
+      table{width:100%;border-collapse:collapse;}
+      thead{background:var(--primary);color:#fff;}
+      th{padding:4px 5px;font-size:9px;font-weight:700;text-align:left;white-space:nowrap;}
+      td{padding:3px 5px;font-size:9px;border-bottom:1px solid #eee;vertical-align:top;}
+      tr:nth-child(even) td{background:#f9f9f9;}
+      .right{text-align:right;}.center{text-align:center;}
+      .total-row td{font-weight:700;background:#e6f4ff!important;border-top:2px solid var(--primary);}
+      .footer-row td{font-weight:600;background:#fffbe6!important;border-top:2px solid var(--footer-accent);font-style:italic;}
+    </style>
+    ${html}
+  `
+  document.body.appendChild(container)
+
+  try {
+    const canvas = await html2canvas(container, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    })
+
+    const renderW = pageW
+    const renderH = (canvas.height / canvas.width) * pageW
+    const totalPages = Math.ceil(renderH / pageH)
+    const imgData = canvas.toDataURL('image/jpeg', 0.92)
+
+    const pdf = new jsPDF({
+      orientation: landscape ? 'landscape' : 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    })
+
+    for (let i = 0; i < totalPages; i++) {
+      if (i > 0) pdf.addPage()
+      // Shift image upward per page — jsPDF clips at page boundary
+      pdf.addImage(imgData, 'JPEG', 0, -i * pageH, renderW, renderH)
+    }
+
+    pdf.save(`${filename}.pdf`)
+  } finally {
+    document.body.removeChild(container)
+  }
 }
