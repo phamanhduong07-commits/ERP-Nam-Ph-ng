@@ -47,7 +47,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
   const [dateRange, setDateRange] = useState<[string, string] | null>(savedFilters.dateRange ?? null)
   const [page, setPage] = useState<number>(savedFilters.page ?? 1)
   const [importVisible, setImportVisible] = useState(false)
-  const [myOnly, setMyOnly] = useState(false)
+  const [myOnly, setMyOnly] = useState(savedFilters.myOnly ?? false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Debounce search 400ms ──
@@ -61,8 +61,8 @@ export default function OrderList({ selectedId, onSelect }: Props) {
   // ── Persist filters vào sessionStorage ──
   useEffect(() => {
     if (isEmbedded) return
-    sessionStorage.setItem(SS_KEY, JSON.stringify({ search, trangThai, phapNhanId, dateRange, page }))
-  }, [search, trangThai, phapNhanId, dateRange, page, isEmbedded])
+    sessionStorage.setItem(SS_KEY, JSON.stringify({ search, trangThai, phapNhanId, dateRange, page, myOnly }))
+  }, [search, trangThai, phapNhanId, dateRange, page, myOnly, isEmbedded])
 
   const { data: phapNhanList = [] } = useQuery({
     queryKey: ['phap-nhan-list'],
@@ -97,6 +97,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
       const soDon = data?.items.find(r => r.id === id)?.so_don ?? ''
       message.success(`Đã duyệt đơn hàng ${soDon}`)
       qc.invalidateQueries({ queryKey: ['sales-orders'] })
+      qc.invalidateQueries({ queryKey: ['sales-orders-counts'] })
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Duyệt đơn thất bại'),
   })
@@ -107,6 +108,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
       const soDon = data?.items.find(r => r.id === id)?.so_don ?? ''
       message.success(`Đã huỷ đơn hàng ${soDon}`)
       qc.invalidateQueries({ queryKey: ['sales-orders'] })
+      qc.invalidateQueries({ queryKey: ['sales-orders-counts'] })
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Huỷ đơn thất bại'),
   })
@@ -272,6 +274,13 @@ export default function OrderList({ selectedId, onSelect }: Props) {
       render: (v) => (
         <Tag color={TRANG_THAI_COLORS[v]}>{TRANG_THAI_LABELS[v] || v}</Tag>
       ),
+    },
+    {
+      title: 'Người lập',
+      dataIndex: 'created_by_name',
+      width: 120,
+      ellipsis: true,
+      render: (v: string | null) => v || <Text type="secondary">—</Text>,
     },
     {
       title: 'Thao tác',

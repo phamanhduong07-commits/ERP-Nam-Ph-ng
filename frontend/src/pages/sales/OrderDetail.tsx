@@ -484,6 +484,9 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           <Descriptions.Item label="Địa chỉ giao hàng" span={3}>
             {order.dia_chi_giao || '—'}
           </Descriptions.Item>
+          {order.created_by_name && (
+            <Descriptions.Item label="Người lập">{order.created_by_name}</Descriptions.Item>
+          )}
           {order.ghi_chu && (
             <Descriptions.Item label="Ghi chú" span={3}>{order.ghi_chu}</Descriptions.Item>
           )}
@@ -619,6 +622,14 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                   <Col span={12}>
                     <Text type="secondary" style={{ fontSize: 11 }}>Số lượng</Text>
                     <div><Text strong>{fmtVND(Number(item.so_luong))} {item.dvt}</Text></div>
+                  </Col>
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>Đã xuất kho</Text>
+                    <div>
+                      <Text strong style={{ color: Number(item.so_luong_da_xuat) > 0 ? '#52c41a' : undefined }}>
+                        {fmtVND(Number(item.so_luong_da_xuat))} / {fmtVND(Number(item.so_luong))} {item.dvt}
+                      </Text>
+                    </div>
                   </Col>
                   {item.ghi_chu_san_pham && (
                     <Col span={12}>

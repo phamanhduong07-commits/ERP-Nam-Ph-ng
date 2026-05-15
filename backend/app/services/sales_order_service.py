@@ -104,6 +104,7 @@ class SalesOrderService:
                 joinedload(SalesOrder.phap_nhan),
                 joinedload(SalesOrder.phap_nhan_sx),
                 joinedload(SalesOrder.phan_xuong),
+                joinedload(SalesOrder.creator),
                 joinedload(SalesOrder.items).joinedload(SalesOrderItem.product),
                 joinedload(SalesOrder.items).joinedload(SalesOrderItem.quote_item).joinedload(QuoteItem.quote),
             )
@@ -117,7 +118,9 @@ class SalesOrderService:
         for item in order.items:
             self._apply_spec_fallback(item)
 
-        return SalesOrderResponse.model_validate(order)
+        resp = SalesOrderResponse.model_validate(order)
+        resp.created_by_name = order.creator.ho_ten if order.creator else None
+        return resp
 
     def _apply_spec_fallback(self, item: SalesOrderItem):
         """Apply spec fallback from QuoteItem if SOItem fields are NULL."""
