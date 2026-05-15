@@ -318,7 +318,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
       dataIndex: 'tong_cong',
       width: 140,
       align: 'right',
-      render: (v) => v ? v.toLocaleString('vi-VN') + ' ₫' : '—',
+      render: (v) => v ? fmtVND(v) : '—',
     },
     {
       title: 'Trạng thái',

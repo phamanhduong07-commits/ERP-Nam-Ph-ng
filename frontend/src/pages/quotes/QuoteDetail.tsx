@@ -66,45 +66,6 @@ function buildQuoteRowsHtml(quote: Quote, templateColumns: any[] = []): string {
   }).join('')
 }
 
-function buildSummaryHtml(quote: Quote): string {
-  const costs = [
-    { label: 'Tiền hàng', value: quote.tong_tien_hang, isStrong: true },
-    { label: 'CP Bảng in', value: quote.chi_phi_bang_in },
-    { label: 'CP Khuôn', value: quote.chi_phi_khuon },
-    { label: 'CP Vận chuyển', value: quote.chi_phi_van_chuyen },
-    { label: 'CP Hàng hóa DV', value: quote.chi_phi_hang_hoa_dv },
-    { label: quote.chi_phi_khac_1_ten || 'Chi phí khác 1', value: quote.chi_phi_khac_1 },
-    { label: quote.chi_phi_khac_2_ten || 'Chi phí khác 2', value: quote.chi_phi_khac_2 },
-  ].filter(c => c.value > 0 || c.label === 'Tiền hàng')
-
-  const vatRow = quote.tien_vat > 0 ? `
-    <tr>
-      <td style="padding: 4px 10px; text-align: right; color: #666;">Thuế VAT (${quote.ty_le_vat}%):</td>
-      <td style="padding: 4px 10px; text-align: right; width: 140px; font-weight: 600; border-bottom: 1px solid #eee;">${vnd(quote.tien_vat)} đ</td>
-    </tr>
-  ` : ''
-
-  const rowsHtml = costs.map(c => `
-    <tr>
-      <td style="padding: 4px 10px; text-align: right; color: #666;">${c.label}:</td>
-      <td style="padding: 4px 10px; text-align: right; width: 140px; ${c.isStrong ? 'font-weight: 700;' : 'font-weight: 600;'} border-bottom: 1px solid #eee;">${vnd(c.value)} đ</td>
-    </tr>
-  `).join('')
-
-  return `
-    <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
-      <table style="border-collapse: collapse; min-width: 300px; font-size: 11pt;">
-        ${rowsHtml}
-        ${vatRow}
-        <tr>
-          <td style="padding: 8px 10px; text-align: right; font-weight: 700; font-size: 13pt; color: #d32f2f;">TỔNG CỘNG:</td>
-          <td style="padding: 8px 10px; text-align: right; font-weight: 700; font-size: 13pt; color: #d32f2f; border-bottom: 2px double #d32f2f;">${vnd(quote.tong_cong)} đ</td>
-        </tr>
-      </table>
-    </div>
-  `
-}
-
 const GIAN_TIEP_M2: Record<number, number> = { 3: 898, 5: 1178.2, 7: 1800.2 }
 
 const paperSummary = (item: QuoteItem) => {
@@ -122,14 +83,12 @@ const paperSummary = (item: QuoteItem) => {
 // ─── Item Detail Drawer ────────────────────────────────────────────────────────
 function ItemDetailDrawer({
   item,
-  quoteId,
   canEdit,
   hideCostDetails,
   onClose,
   onEditClick,
 }: {
   item: QuoteItem | null
-  quoteId: number | undefined
   canEdit: boolean
   hideCostDetails: boolean
   onClose: () => void
@@ -191,7 +150,7 @@ function ItemDetailDrawer({
           </Button>
         ) : null
       }
-      destroyOnClose
+      destroyOnHidden
     >
       {/* ── Thông tin chung ── */}
       <div style={{ ...PANEL, background: '#f8f9fa', border: '1px solid #e8e8e8' }}>
@@ -920,7 +879,6 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
 
       <ItemDetailDrawer
         item={previewItem}
-        quoteId={id}
         canEdit={trangThai === 'moi' || (trangThai === 'cho_duyet' && canApprove)}
         hideCostDetails={hideCostDetails}
         onClose={() => setPreviewItem(null)}
