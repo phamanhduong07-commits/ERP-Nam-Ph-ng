@@ -84,9 +84,12 @@ export interface SalesOrderListItem {
   ngay_don: string
   customer_id: number
   ten_khach_hang: string | null
+  phap_nhan_id: number | null
+  ten_phap_nhan: string | null
   trang_thai: string
   ngay_giao_hang: string | null
   tong_tien: number
+  tong_tien_sau_giam: number
   so_dong: number
   created_at: string
 }
@@ -142,6 +145,7 @@ export const salesOrdersApi = {
     search?: string
     trang_thai?: string
     customer_id?: number
+    phap_nhan_id?: number
     tu_ngay?: string
     den_ngay?: string
     page?: number

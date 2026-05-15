@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -14,11 +14,14 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
 import type { SalesOrderListItem } from '../../api/salesOrders'
-import { exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
+import { phapNhanApi } from '../../api/phap_nhan'
+import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
+
+const SS_KEY = 'order-list-filters'
 
 interface Props {
   selectedId?: number | null
@@ -27,54 +30,38 @@ interface Props {
 
 export default function OrderList({ selectedId, onSelect }: Props) {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
-  const [trangThai, setTrangThai] = useState<string | undefined>()
-  const [dateRange, setDateRange] = useState<[string, string] | null>(null)
-  const [page, setPage] = useState(1)
-  const [importVisible, setImportVisible] = useState(false)
-
   const isEmbedded = !!onSelect
 
-  const handleExportExcel = () => {
-    const items = data?.items ?? []
-    exportToExcel(`DonHang_${dayjs().format('YYYYMMDD')}`, [{
-      name: 'Đơn hàng',
-      headers: ['STT', 'Số đơn hàng', 'Ngày đơn', 'Khách hàng', 'Ngày giao', 'Số dòng', 'Tổng tiền (đ)', 'Trạng thái'],
-      rows: items.map((r, i) => [
-        i + 1, r.so_don, fmtDate(r.ngay_don), r.ten_khach_hang ?? '',
-        fmtDate(r.ngay_giao_hang), r.so_dong, Number(r.tong_tien), TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
-      ]),
-      colWidths: [5, 18, 12, 30, 12, 8, 16, 14],
-    }])
-  }
+  // ── Restore filters từ sessionStorage (chỉ khi không embedded) ──
+  const savedFilters = !isEmbedded
+    ? (() => { try { return JSON.parse(sessionStorage.getItem(SS_KEY) ?? '{}') } catch { return {} } })()
+    : {}
 
-  const handleExportPdf = () => {
-    const items = data?.items ?? []
-    const cols = [
-      { header: 'STT', align: 'center' as const },
-      { header: 'Số đơn hàng' }, { header: 'Ngày đơn' }, { header: 'Khách hàng' },
-      { header: 'Ngày giao' }, { header: 'Số dòng', align: 'center' as const },
-      { header: 'Tổng tiền (đ)', align: 'right' as const }, { header: 'Trạng thái' },
-    ]
-    const rows = items.map((r, i) => [
-      i + 1, r.so_don, fmtDate(r.ngay_don), r.ten_khach_hang ?? '',
-      fmtDate(r.ngay_giao_hang), r.so_dong, fmtVND(r.tong_tien), TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
-    ])
-    const table = buildHtmlTable(cols, rows)
-    printToPdf(
-      `Danh sách đơn hàng`,
-      `<h2>DANH SÁCH ĐƠN HÀNG</h2>
-       <p class="meta">Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')} — ${items.length} đơn hàng</p>
-       ${table}`,
-      true,
-    )
-  }
+  const [search, setSearch] = useState<string>(savedFilters.search ?? '')
+  const [trangThai, setTrangThai] = useState<string | undefined>(savedFilters.trangThai)
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>(savedFilters.phapNhanId)
+  const [dateRange, setDateRange] = useState<[string, string] | null>(savedFilters.dateRange ?? null)
+  const [page, setPage] = useState<number>(savedFilters.page ?? 1)
+  const [importVisible, setImportVisible] = useState(false)
+
+  // ── Persist filters vào sessionStorage ──
+  useEffect(() => {
+    if (isEmbedded) return
+    sessionStorage.setItem(SS_KEY, JSON.stringify({ search, trangThai, phapNhanId, dateRange, page }))
+  }, [search, trangThai, phapNhanId, dateRange, page, isEmbedded])
+
+  const { data: phapNhanList = [] } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['sales-orders', search, trangThai, dateRange, page],
+    queryKey: ['sales-orders', search, trangThai, phapNhanId, dateRange, page],
     queryFn: () => salesOrdersApi.list({
       search,
       trang_thai: trangThai,
+      phap_nhan_id: phapNhanId,
       tu_ngay: dateRange?.[0],
       den_ngay: dateRange?.[1],
       page,
@@ -100,6 +87,70 @@ export default function OrderList({ selectedId, onSelect }: Props) {
     } catch {
       message.error('Huỷ đơn thất bại')
     }
+  }
+
+  const handleExportExcel = () => {
+    const items = data?.items ?? []
+    const defaultConfig = [
+      { key: 'stt', label: 'STT', width: 5 },
+      { key: 'so_don', label: 'Số đơn hàng', width: 18 },
+      { key: 'ngay_don', label: 'Ngày đơn', width: 12 },
+      { key: 'ten_khach_hang', label: 'Khách hàng', width: 30 },
+      { key: 'ten_phap_nhan', label: 'Pháp nhân', width: 20 },
+      { key: 'ngay_giao_hang', label: 'Ngày giao', width: 12 },
+      { key: 'so_dong', label: 'Số dòng', width: 8 },
+      { key: 'tong_tien', label: 'Tổng tiền (đ)', width: 16 },
+      { key: 'trang_thai_lbl', label: 'Trạng thái', width: 14 },
+    ]
+
+    const exportData = items.map((r, i) => ({
+      ...r,
+      stt: i + 1,
+      ngay_don: fmtDate(r.ngay_don),
+      ngay_giao_hang: fmtDate(r.ngay_giao_hang),
+      tong_tien: Number(r.tong_tien),
+      trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
+    }))
+
+    smartExportExcel('SALES_ORDER', exportData, defaultConfig, `DonHang_${dayjs().format('YYYYMMDD')}`)
+  }
+
+  const handleExportPdf = () => {
+    const items = data?.items ?? []
+    const cols = [
+      { header: 'STT', key: 'stt', align: 'center' as const },
+      { header: 'Số đơn hàng', key: 'so_don' },
+      { header: 'Ngày đơn', key: 'ngay_don' },
+      { header: 'Khách hàng', key: 'ten_khach_hang' },
+      { header: 'Pháp nhân', key: 'ten_phap_nhan' },
+      { header: 'Ngày giao', key: 'ngay_giao_hang' },
+      { header: 'Số dòng', key: 'so_dong', align: 'center' as const },
+      { header: 'Tổng tiền (đ)', key: 'tong_tien', align: 'right' as const },
+      { header: 'Trạng thái', key: 'trang_thai_lbl' },
+    ]
+
+    const rows = items.map((r, i) => ({
+      stt: i + 1,
+      so_don: r.so_don,
+      ngay_don: fmtDate(r.ngay_don),
+      ten_khach_hang: r.ten_khach_hang ?? '',
+      ten_phap_nhan: r.ten_phap_nhan ?? '—',
+      ngay_giao_hang: fmtDate(r.ngay_giao_hang),
+      so_dong: r.so_dong,
+      tong_tien: fmtVND(r.tong_tien),
+      trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
+    }))
+
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => r[c.key as keyof typeof r])))
+
+    const printData = {
+      subtitle: 'DANH SÁCH ĐƠN HÀNG',
+      document_date: dayjs().format('DD/MM/YYYY HH:mm'),
+      document_number: `${items.length} đơn hàng`,
+      body_html: table,
+    }
+
+    smartPrintPdf('SALES_ORDER', printData)
   }
 
   const compactColumns: ColumnsType<SalesOrderListItem> = [
@@ -131,7 +182,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
     {
       title: 'Số đơn',
       dataIndex: 'so_don',
-      width: 140,
+      width: 150,
       render: (v, r) => (
         <Button type="link" onClick={() => navigate(`/sales/orders/${r.id}`)} style={{ padding: 0 }}>
           {v}
@@ -147,44 +198,52 @@ export default function OrderList({ selectedId, onSelect }: Props) {
     {
       title: 'Ngày đơn',
       dataIndex: 'ngay_don',
-      width: 110,
+      width: 100,
       render: (v) => dayjs(v).format('DD/MM/YYYY'),
     },
     {
       title: 'Khách hàng',
       dataIndex: 'ten_khach_hang',
       ellipsis: true,
+      minWidth: 160,
+    },
+    {
+      title: 'Pháp nhân',
+      dataIndex: 'ten_phap_nhan',
+      width: 130,
+      ellipsis: true,
+      render: (v) => v ? <Tag>{v}</Tag> : <Text type="secondary">—</Text>,
     },
     {
       title: 'Ngày giao',
       dataIndex: 'ngay_giao_hang',
-      width: 110,
+      width: 100,
       render: (v) => v ? dayjs(v).format('DD/MM/YYYY') : '—',
     },
     {
       title: 'Số dòng',
       dataIndex: 'so_dong',
-      width: 80,
+      width: 75,
       align: 'center',
     },
     {
       title: 'Tổng tiền',
-      dataIndex: 'tong_tien',
+      dataIndex: 'tong_tien_sau_giam',
       width: 130,
       align: 'right',
-      render: (v) => new Intl.NumberFormat('vi-VN').format(v),
+      render: (v) => fmtVND(v),
     },
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
-      width: 130,
+      width: 120,
       render: (v) => (
         <Tag color={TRANG_THAI_COLORS[v]}>{TRANG_THAI_LABELS[v] || v}</Tag>
       ),
     },
     {
       title: 'Thao tác',
-      width: 120,
+      width: 110,
       align: 'center',
       render: (_, r) => (
         <Space size={4}>
@@ -218,6 +277,8 @@ export default function OrderList({ selectedId, onSelect }: Props) {
       ),
     },
   ]
+
+  const hasFilter = !!(search || trangThai || phapNhanId || dateRange)
 
   return (
     <div>
@@ -272,13 +333,31 @@ export default function OrderList({ selectedId, onSelect }: Props) {
           </Col>
           <Col>
             <Select
-              placeholder="TT"
+              placeholder="Trạng thái"
               size="small"
-              style={{ width: 110 }}
+              style={{ width: 120 }}
               allowClear
               value={trangThai}
               onChange={(v) => { setTrangThai(v); setPage(1) }}
               options={Object.entries(TRANG_THAI_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+            />
+          </Col>
+          <Col>
+            <Select
+              placeholder="Pháp nhân"
+              size="small"
+              style={{ width: 150 }}
+              allowClear
+              showSearch
+              value={phapNhanId}
+              onChange={(v) => { setPhapNhanId(v); setPage(1) }}
+              filterOption={(input, option) =>
+                String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={phapNhanList.map((p: any) => ({
+                value: p.id,
+                label: p.ten_phap_nhan,
+              }))}
             />
           </Col>
         </Row>
@@ -287,8 +366,10 @@ export default function OrderList({ selectedId, onSelect }: Props) {
           <Col span={24}>
             <RangePicker
               style={{ width: '100%' }}
+              size="small"
               format="DD/MM/YYYY"
               placeholder={['Ngày đơn từ', 'Đến ngày']}
+              value={dateRange ? [dayjs(dateRange[0], 'YYYY-MM-DD'), dayjs(dateRange[1], 'YYYY-MM-DD')] : null}
               onChange={(_, s) => {
                 setDateRange(s[0] && s[1] ? [
                   dayjs(s[0], 'DD/MM/YYYY').format('YYYY-MM-DD'),
@@ -306,6 +387,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
         dataSource={data?.items || []}
         rowKey="id"
         loading={isLoading}
+        locale={{ emptyText: hasFilter ? 'Không tìm thấy đơn hàng nào' : 'Chưa có đơn hàng nào' }}
         rowClassName={(r) => r.id === selectedId ? 'md-selected-row' : ''}
         onRow={(r) => ({
           onClick: isEmbedded ? () => onSelect!(r.id) : undefined,
@@ -321,7 +403,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
           size: 'small',
         }}
         size="small"
-        scroll={isEmbedded ? undefined : { x: 900 }}
+        scroll={isEmbedded ? undefined : { x: 1200 }}
       />
 
       <ImportExcelDialog

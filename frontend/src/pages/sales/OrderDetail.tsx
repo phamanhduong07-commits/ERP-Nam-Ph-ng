@@ -9,7 +9,7 @@ import {
 import {
   ArrowLeftOutlined, CheckOutlined, CloseOutlined,
   PrinterOutlined, ThunderboltOutlined, CalculatorOutlined,
-  FileExcelOutlined, FilePdfOutlined, EyeOutlined, PercentageOutlined,
+  FileExcelOutlined, PercentageOutlined, EyeOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -20,7 +20,7 @@ import { billingApi } from '../../api/billing'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import BomCalculatorPanel from '../production/BomCalculatorPanel'
-import { exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
+import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 
@@ -49,11 +49,13 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
   const { data: phapNhanList } = useQuery({
     queryKey: ['phap-nhan-all'],
     queryFn: () => phapNhanApi.list({ active_only: true }).then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: phanXuongRaw } = useQuery({
     queryKey: ['phan-xuong'],
     queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 5 * 60 * 1000,
   })
   const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
 
@@ -105,7 +107,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       navigate('/production/orders')
     } catch (err: any) {
       if (err?.errorFields) {
-        // Ant Design validateFields lỗi — inline error tự hiển thị, không cần message
+        // Ant Design validateFields lỗi — inline error tự hiển thị
       } else if (err?.response?.data?.detail) {
         message.error(err.response.data.detail)
       } else if (err?.response) {
@@ -122,93 +124,92 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
 
   const handleExportExcel = () => {
     if (!order) return
-    const tongTienEx = order.items.reduce((s, i) => s + Number(i.thanh_tien), 0)
-    exportToExcel(`${order.so_don}_${new Date().toISOString().slice(0,10)}`, [
-      {
-        name: 'Thông tin đơn hàng',
-        headers: ['Thông tin', 'Giá trị'],
-        rows: [
-          ['Số đơn hàng', order.so_don],
-          ['Ngày đặt hàng', fmtDate(order.ngay_don)],
-          ['Ngày giao hàng', fmtDate(order.ngay_giao_hang)],
-          ['Khách hàng', `[${order.customer?.ma_kh}] ${order.customer?.ten_viet_tat}`],
-          ['Đơn vị', order.customer?.ten_don_vi ?? ''],
-          ['Điện thoại', order.customer?.dien_thoai ?? ''],
-          ['Địa chỉ giao hàng', order.dia_chi_giao ?? ''],
-          ['Ghi chú', order.ghi_chu ?? ''],
-          ['Trạng thái', order.trang_thai],
-          ['Tổng tiền (đ)', tongTienEx],
-        ],
-        colWidths: [24, 40],
-      },
-      {
-        name: 'Chi tiết sản phẩm',
-        headers: ['STT', 'Mã SP', 'Tên hàng hoá', 'Loại thùng', 'Kích thước', 'Lớp', 'Số lượng', 'ĐVT', 'Đơn giá', 'Thành tiền', 'Ngày giao', 'Ghi chú'],
-        rows: order.items.map((r, i) => {
-          const d = r.dai ?? r.product?.dai
-          const rw = r.rong ?? r.product?.rong
-          const c = r.cao ?? r.product?.cao
-          return [
-            i + 1,
-            r.product?.ma_amis ?? '',
-            r.ten_hang || r.product?.ten_hang || '',
-            r.loai_thung ?? '',
-            d ? `${d}×${rw}×${c} cm` : '',
-            r.so_lop ?? r.product?.so_lop ?? '',
-            Number(r.so_luong),
-            r.dvt,
-            Number(r.don_gia),
-            Number(r.thanh_tien),
-            fmtDate(r.ngay_giao_hang),
-            r.ghi_chu_san_pham ?? '',
-          ]
-        }),
-        colWidths: [5, 14, 30, 12, 18, 6, 10, 8, 12, 14, 12, 20],
-      },
-    ])
+    const defaultConfig = [
+      { key: 'stt', label: 'STT', width: 5 },
+      { key: 'ma_amis', label: 'Mã SP', width: 14 },
+      { key: 'ten_hang', label: 'Tên hàng hoá', width: 30 },
+      { key: 'loai_thung', label: 'Loại thùng', width: 12 },
+      { key: 'kich_thuoc', label: 'Kích thước', width: 18 },
+      { key: 'so_lop', label: 'Lớp', width: 6 },
+      { key: 'so_luong', label: 'Số lượng', width: 10 },
+      { key: 'dvt', label: 'ĐVT', width: 8 },
+      { key: 'don_gia', label: 'Đơn giá', width: 12 },
+      { key: 'thanh_tien', label: 'Thành tiền', width: 14 },
+      { key: 'ngay_giao', label: 'Ngày giao', width: 12 },
+      { key: 'ghi_chu', label: 'Ghi chú', width: 20 },
+    ]
+
+    const exportData = order.items.map((r, i) => {
+      const d = r.dai ?? r.product?.dai
+      const rw = r.rong ?? r.product?.rong
+      const c = r.cao ?? r.product?.cao
+      return {
+        ...r,
+        stt: i + 1,
+        ma_amis: r.product?.ma_amis ?? '',
+        ten_hang: r.ten_hang || r.product?.ten_hang || '',
+        kich_thuoc: d ? `${d}×${rw}×${c} cm` : '',
+        so_lop: r.so_lop ?? r.product?.so_lop ?? '',
+        so_luong: Number(r.so_luong),
+        don_gia: Number(r.don_gia),
+        thanh_tien: Number(r.thanh_tien),
+        ngay_giao: fmtDate(r.ngay_giao_hang),
+        ghi_chu: r.ghi_chu_san_pham ?? '',
+      }
+    })
+
+    smartExportExcel('SALES_ORDER_DETAIL', exportData, defaultConfig, `DonHang_${order.so_don}`)
   }
 
-  const handleExportPdf = () => {
+  const handlePrint = () => {
     if (!order) return
-    const tongTienEx = order.items.reduce((s, i) => s + Number(i.thanh_tien), 0)
+    const tongTienVal = order.items.reduce((s, i) => s + Number(i.thanh_tien), 0)
     const cols = [
-      { header: 'STT', align: 'center' as const }, { header: 'Mã SP' }, { header: 'Tên hàng hoá' },
-      { header: 'Loại thùng' }, { header: 'Kích thước' }, { header: 'L', align: 'center' as const },
-      { header: 'Số lượng', align: 'right' as const }, { header: 'ĐVT' },
-      { header: 'Đơn giá', align: 'right' as const }, { header: 'Thành tiền', align: 'right' as const },
-      { header: 'Ngày giao' },
+      { header: 'STT', key: 'stt', align: 'center' as const },
+      { header: 'Mã SP', key: 'ma_amis' },
+      { header: 'Tên hàng hoá', key: 'ten_hang' },
+      { header: 'Loại thùng', key: 'loai_thung' },
+      { header: 'Kích thước', key: 'kich_thuoc' },
+      { header: 'L', key: 'so_lop', align: 'center' as const },
+      { header: 'Số lượng', key: 'so_luong', align: 'right' as const },
+      { header: 'ĐVT', key: 'dvt' },
+      { header: 'Đơn giá', key: 'don_gia', align: 'right' as const },
+      { header: 'Thành tiền', key: 'thanh_tien', align: 'right' as const },
     ]
+
     const rows = order.items.map((r, i) => {
       const d = r.dai ?? r.product?.dai
       const rw = r.rong ?? r.product?.rong
       const c = r.cao ?? r.product?.cao
-      return [
-        i + 1, r.product?.ma_amis ?? '—', r.ten_hang || r.product?.ten_hang || '—',
-        r.loai_thung ?? '—', d ? `${d}×${rw}×${c}` : '—',
-        r.so_lop ?? r.product?.so_lop ?? '—',
-        fmt(Number(r.so_luong)), r.dvt,
-        fmtVND(r.don_gia), fmtVND(r.thanh_tien),
-        fmtDate(r.ngay_giao_hang),
-      ]
+      return {
+        stt: i + 1,
+        ma_amis: r.product?.ma_amis ?? '—',
+        ten_hang: r.ten_hang || r.product?.ten_hang || '—',
+        loai_thung: r.loai_thung ?? '—',
+        kich_thuoc: d ? `${d}×${rw}×${c}` : '—',
+        so_lop: r.so_lop ?? r.product?.so_lop ?? '—',
+        so_luong: fmt(Number(r.so_luong)),
+        dvt: r.dvt,
+        don_gia: fmtVND(r.don_gia),
+        thanh_tien: fmtVND(r.thanh_tien),
+      }
     })
-    const totalRow = ['', '', '', '', '', '', '', '', '<strong>Tổng tiền:</strong>', `<strong>${fmtVND(tongTienEx)} đ</strong>`, '']
-    const table = buildHtmlTable(cols, rows, { totalRow })
-    const infoHtml = `
-      <div class="info-grid">
-        <div><div class="info-label">Số đơn hàng</div><div class="info-value">${order.so_don}</div></div>
-        <div><div class="info-label">Ngày đặt hàng</div><div class="info-value">${fmtDate(order.ngay_don)}</div></div>
-        <div><div class="info-label">Ngày giao hàng</div><div class="info-value">${fmtDate(order.ngay_giao_hang)}</div></div>
-        <div><div class="info-label">Khách hàng</div><div class="info-value">[${order.customer?.ma_kh}] ${order.customer?.ten_viet_tat}</div></div>
-        <div><div class="info-label">Địa chỉ giao</div><div class="info-value">${order.dia_chi_giao ?? '—'}</div></div>
-        <div><div class="info-label">Điện thoại</div><div class="info-value">${order.customer?.dien_thoai ?? '—'}</div></div>
-      </div>`
-    printToPdf(
-      `Đơn hàng ${order.so_don}`,
-      `<h2>ĐƠN HÀNG: ${order.so_don}</h2>
-       <p class="meta">Xuất ngày: ${new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
-       ${infoHtml}${table}`,
-      true,
-    )
+
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as any)[c.key])))
+
+    const printData = {
+      subtitle: 'ĐƠN BÁN HÀNG',
+      document_number: order.so_don,
+      document_date: fmtDate(order.ngay_don),
+      customer_name: order.customer?.ten_viet_tat || '',
+      company_name: order.ten_phap_nhan || '',
+      delivery_address: order.dia_chi_giao || '',
+      body_html: table,
+      tong_tien_hang: fmtVND(tongTienVal),
+      tong_cong: fmtVND(Number(order.tong_tien_sau_giam)),
+    }
+
+    smartPrintPdf('SALES_ORDER', printData, order.phap_nhan_id ?? undefined)
   }
 
   const columns: ColumnsType<SalesOrderItem> = [
@@ -265,14 +266,14 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       dataIndex: 'don_gia',
       width: 110,
       align: 'right',
-      render: (v) => fmt(v),
+      render: (v) => fmtVND(v),
     },
     {
       title: 'Thành tiền',
       dataIndex: 'thanh_tien',
       width: 120,
       align: 'right',
-      render: (v) => <Text strong>{fmt(v)}</Text>,
+      render: (v) => <Text strong>{fmtVND(v)}</Text>,
     },
     {
       title: 'Ngày giao',
@@ -354,7 +355,9 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
   if (isLoading) return <Skeleton active />
   if (!order) return <Text type="secondary" style={{ padding: 24, display: 'block' }}>Không tìm thấy đơn hàng</Text>
 
-  const tongTien = order.items.reduce((s, i) => s + Number(i.thanh_tien), 0)
+  const tongTienHang = order.items.reduce((s, i) => s + Number(i.thanh_tien), 0)
+  const hasDiscount = Number(order.ty_le_giam_gia) > 0 || Number(order.so_tien_giam_gia) > 0
+  const tongSauGiam = Number(order.tong_tien_sau_giam)
 
   return (
     <div>
@@ -375,11 +378,11 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           </Space>
         </Col>
         <Col>
-          <Space>
+          <Space wrap>
             <Button
               size={embedded ? 'small' : 'middle'}
               icon={<PrinterOutlined />}
-              onClick={() => window.print()}
+              onClick={handlePrint}
             >
               In đơn
             </Button>
@@ -389,14 +392,6 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 icon={<FileExcelOutlined />}
                 style={{ color: '#217346', borderColor: '#217346' }}
                 onClick={handleExportExcel}
-              />
-            </Tooltip>
-            <Tooltip title="Xuất PDF">
-              <Button
-                size={embedded ? 'small' : 'middle'}
-                icon={<FilePdfOutlined />}
-                style={{ color: '#e53935', borderColor: '#e53935' }}
-                onClick={handleExportPdf}
               />
             </Tooltip>
             {order.trang_thai === 'moi' && (
@@ -497,7 +492,6 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           scroll={{ x: 1200 }}
           onRow={(r) => ({
             onClick: (e) => {
-              // Không mở drawer nếu click vào nút BOM
               const target = e.target as HTMLElement
               if (target.closest('button') || target.closest('.ant-btn')) return
               setPreviewItem(r)
@@ -516,12 +510,51 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                   <Text strong>Tổng tiền hàng:</Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={1} align="right">
-                  <Text strong style={{ fontSize: 16, color: '#1677ff' }}>
-                    {new Intl.NumberFormat('vi-VN').format(tongTien)} đ
+                  <Text strong style={{ fontSize: 15 }}>
+                    {fmtVND(tongTienHang)} đ
                   </Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={2} colSpan={4} />
               </Table.Summary.Row>
+              {hasDiscount && (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={7} align="right">
+                    <Text type="secondary">
+                      Giảm giá{Number(order.ty_le_giam_gia) > 0 ? ` (${order.ty_le_giam_gia}%)` : ''}:
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <Text type="danger">
+                      -{fmtVND(tongTienHang - tongSauGiam)} đ
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} colSpan={4} />
+                </Table.Summary.Row>
+              )}
+              {hasDiscount && (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={7} align="right">
+                    <Text strong>Tổng cộng:</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <Text strong style={{ fontSize: 16, color: '#1677ff' }}>
+                      {fmtVND(tongSauGiam)} đ
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} colSpan={4} />
+                </Table.Summary.Row>
+              )}
+              {!hasDiscount && (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={7} />
+                  <Table.Summary.Cell index={1} align="right">
+                    <Text strong style={{ fontSize: 16, color: '#1677ff' }}>
+                      {fmtVND(tongTienHang)} đ
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} colSpan={4} />
+                </Table.Summary.Row>
+              )}
             </Table.Summary>
           )}
         />
@@ -549,8 +582,8 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
               </Space>
             : 'Chi tiết sản phẩm'
         }
-        destroyOnClose
-        bodyStyle={{ padding: 0 }}
+        destroyOnHidden
+        styles={{ body: { padding: 0 } }}
       >
         {previewItem && (() => {
           const item = previewItem
@@ -570,7 +603,6 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
             : 'Kỹ thuật số'
           return (
             <div>
-              {/* Panel 1: Thông tin chung */}
               <div style={{ background: '#f5f5f5', padding: '12px 16px', marginBottom: 12 }}>
                 <Row gutter={[16, 8]}>
                   <Col span={12}>
@@ -586,7 +618,6 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 </Row>
               </div>
 
-              {/* Panel 2: Loại giấy / kết cấu */}
               {layers.length > 0 && (
                 <div style={{ background: '#f0f5ff', padding: '12px 16px', marginBottom: 12 }}>
                   <Text strong style={{ color: '#1d3869', fontSize: 12 }}>LOẠI GIẤY</Text>
@@ -610,7 +641,6 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 </div>
               )}
 
-              {/* Panel 3: Kích thước & In ấn */}
               <div style={{ background: '#f6ffed', padding: '12px 16px', marginBottom: 12 }}>
                 <Text strong style={{ color: '#237804', fontSize: 12 }}>KÍCH THƯỚC & IN ẤN</Text>
                 <Divider style={{ margin: '8px 0' }} />
@@ -677,20 +707,19 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 </Row>
               </div>
 
-              {/* Panel 4: Tài chính */}
               <div style={{ background: '#fff7e6', padding: '12px 16px', marginBottom: 12 }}>
                 <Text strong style={{ color: '#ad4e00', fontSize: 12 }}>TÀI CHÍNH</Text>
                 <Divider style={{ margin: '8px 0' }} />
                 <Row gutter={[16, 8]}>
                   <Col span={12}>
                     <Text type="secondary" style={{ fontSize: 11 }}>Đơn giá</Text>
-                    <div><Text strong>{fmt(Number(item.don_gia))} đ</Text></div>
+                    <div><Text strong>{fmtVND(Number(item.don_gia))} đ</Text></div>
                   </Col>
                   <Col span={12}>
                     <Text type="secondary" style={{ fontSize: 11 }}>Thành tiền</Text>
                     <div>
                       <Text strong style={{ color: '#0050b3', fontSize: 15 }}>
-                        {fmt(Number(item.thanh_tien))} đ
+                        {fmtVND(Number(item.thanh_tien))} đ
                       </Text>
                     </div>
                   </Col>
@@ -711,8 +740,8 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
             ? `Định mức BOM — ${order.items.find(i => i.production_order_item_id === bomItemId)?.ten_hang ?? ''}`
             : 'Định mức BOM'
         }
-        destroyOnClose
-        bodyStyle={{ padding: 0 }}
+        destroyOnHidden
+        styles={{ body: { padding: 0 } }}
       >
         {bomItemId && (
           <BomCalculatorPanel
@@ -751,10 +780,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           >
             <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item
-            name="phap_nhan_id"
-            label="Pháp nhân"
-          >
+          <Form.Item name="phap_nhan_id" label="Pháp nhân">
             <Select
               showSearch allowClear placeholder="Chọn pháp nhân..."
               filterOption={(input, option) =>
@@ -766,10 +792,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
               }))}
             />
           </Form.Item>
-          <Form.Item
-            name="phan_xuong_id"
-            label="Xưởng sản xuất"
-          >
+          <Form.Item name="phan_xuong_id" label="Xưởng sản xuất">
             <Select
               allowClear placeholder="Chọn xưởng sản xuất..."
               options={phanXuongList

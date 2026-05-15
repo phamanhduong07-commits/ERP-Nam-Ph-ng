@@ -146,9 +146,12 @@ class SalesOrderListItem(BaseModel):
     ngay_don: date
     customer_id: int
     ten_khach_hang: str | None = None
+    phap_nhan_id: int | None = None
+    ten_phap_nhan: str | None = None
     trang_thai: str
     ngay_giao_hang: date | None
     tong_tien: Decimal
+    tong_tien_sau_giam: Decimal = Decimal(0)
     so_dong: int = 0
     created_at: datetime
 

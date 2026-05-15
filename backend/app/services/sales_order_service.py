@@ -1,6 +1,6 @@
 from datetime import date
 from fastapi import HTTPException
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, subqueryload
 from app.models.sales import QuoteItem, SalesOrder, SalesOrderItem
 from app.models.master import Customer
 from app.schemas.sales import (
@@ -33,12 +33,17 @@ class SalesOrderService:
         search: str = "",
         trang_thai: str = "",
         customer_id: int = None,
+        phap_nhan_id: int = None,
         tu_ngay: str = None,
         den_ngay: str = None,
         page: int = 1,
         page_size: int = 20,
     ) -> PagedResponse:
-        q = self.db.query(SalesOrder).options(joinedload(SalesOrder.customer))
+        q = self.db.query(SalesOrder).options(
+            joinedload(SalesOrder.customer),
+            joinedload(SalesOrder.phap_nhan),
+            subqueryload(SalesOrder.items),
+        )
 
         if search:
             like = f"%{search}%"
@@ -49,6 +54,8 @@ class SalesOrderService:
             q = q.filter(SalesOrder.trang_thai == trang_thai)
         if customer_id:
             q = q.filter(SalesOrder.customer_id == customer_id)
+        if phap_nhan_id:
+            q = q.filter(SalesOrder.phap_nhan_id == phap_nhan_id)
         if tu_ngay:
             q = q.filter(SalesOrder.ngay_don >= tu_ngay)
         if den_ngay:
@@ -65,9 +72,12 @@ class SalesOrderService:
                 ngay_don=o.ngay_don,
                 customer_id=o.customer_id,
                 ten_khach_hang=o.customer.ten_viet_tat if o.customer else None,
+                phap_nhan_id=o.phap_nhan_id,
+                ten_phap_nhan=o.phap_nhan.ten_phap_nhan if o.phap_nhan else None,
                 trang_thai=o.trang_thai,
                 ngay_giao_hang=o.ngay_giao_hang,
                 tong_tien=o.tong_tien,
+                tong_tien_sau_giam=o.tong_tien_sau_giam,
                 so_dong=len(o.items),
                 created_at=o.created_at,
             ))
