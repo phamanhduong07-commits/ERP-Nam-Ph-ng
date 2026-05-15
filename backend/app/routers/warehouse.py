@@ -798,19 +798,42 @@ def list_goods_receipts(
     warehouse_id: Optional[int] = Query(None),
     supplier_id: Optional[int] = Query(None),
     po_id: Optional[int] = Query(None),
+    trang_thai: Optional[str] = Query(None),
+    phan_xuong_id: Optional[int] = Query(None),
+    phap_nhan_id: Optional[int] = Query(None),
     tu_ngay: Optional[date] = Query(None),
     den_ngay: Optional[date] = Query(None),
     loai_hang: Optional[str] = Query(None),  # 'giay' | 'nvl'
+    search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     q = db.query(GoodsReceipt)
+    if search:
+        like = f"%{search}%"
+        q = (q
+             .outerjoin(GoodsReceipt.supplier)
+             .filter(or_(
+                 GoodsReceipt.so_phieu.ilike(like),
+                 Supplier.ten_viet_tat.ilike(like),
+                 Supplier.ten_don_vi.ilike(like),
+             ))
+             .distinct())
     if warehouse_id:
         q = q.filter(GoodsReceipt.warehouse_id == warehouse_id)
     if supplier_id:
         q = q.filter(GoodsReceipt.supplier_id == supplier_id)
     if po_id:
         q = q.filter(GoodsReceipt.po_id == po_id)
+    if trang_thai:
+        q = q.filter(GoodsReceipt.trang_thai == trang_thai)
+    if phan_xuong_id or phap_nhan_id:
+        q = q.outerjoin(Warehouse, GoodsReceipt.warehouse_id == Warehouse.id)
+    if phan_xuong_id:
+        q = q.filter(Warehouse.phan_xuong_id == phan_xuong_id)
+    if phap_nhan_id:
+        q = q.outerjoin(PhanXuong, Warehouse.phan_xuong_id == PhanXuong.id)
+        q = q.filter(or_(GoodsReceipt.phap_nhan_id == phap_nhan_id, PhanXuong.phap_nhan_id == phap_nhan_id))
     if tu_ngay:
         q = q.filter(GoodsReceipt.ngay_nhap >= tu_ngay)
     if den_ngay:
@@ -863,6 +886,7 @@ def create_goods_receipt(
     _phap_nhan_id = getattr(body, 'phap_nhan_id', None)
     if not _phap_nhan_id and wh_obj and wh_obj.phan_xuong_obj:
         _phap_nhan_id = wh_obj.phan_xuong_obj.phap_nhan_id
+    _phan_xuong_id = body.phan_xuong_id or wh_obj.phan_xuong_id
 
     for it in body.items:
         if not it.po_item_id:
@@ -888,6 +912,7 @@ def create_goods_receipt(
         po_id=body.po_id,
         supplier_id=body.supplier_id,
         warehouse_id=wh_id,
+        phan_xuong_id=_phan_xuong_id,
         loai_nhap=body.loai_nhap,
         phap_nhan_id=_phap_nhan_id,
         bo_qua_hach_toan=body.bo_qua_hach_toan,
@@ -970,20 +995,6 @@ def create_goods_receipt(
     gr.tong_gia_tri = tong
 
     # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
-    acc_service = AccountingService(db)
-    wh = db.get(Warehouse, wh_id)
-    phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
-    if not gr.bo_qua_hach_toan:
-        acc_service.post_inventory_journal(
-            ngay=body.ngay_nhap,
-            loai="NHAP_MUA",
-            chung_tu_loai="goods_receipts",
-            chung_tu_id=gr.id,
-            phap_nhan_id=phap_nhan_id,
-            phan_xuong_id=wh.phan_xuong_id if wh else None,
-            items=journal_lines_cgr,
-        )
-
     db.commit()
     db.refresh(gr)
     return _gr_to_dict(gr, db)
@@ -1008,8 +1019,9 @@ def quick_capture_goods_receipt(
         ngay_nhap=body.ngay_nhap,
         supplier_id=body.supplier_id,
         warehouse_id=wh.id,
+        phan_xuong_id=body.phan_xuong_id,
         loai_nhap=loai_nhap,
-        phap_nhan_id=body.phap_nhan_id,
+        phap_nhan_id=body.phap_nhan_id or (wh.phan_xuong_obj.phap_nhan_id if wh.phan_xuong_obj else None),
         trang_thai="nhap_nhanh",
         so_xe=body.so_xe,
         invoice_image=body.invoice_image,
@@ -1040,7 +1052,8 @@ def complete_goods_receipt(
         raise HTTPException(400, "Phải có ít nhất 1 dòng hàng")
 
     wh_id = body.warehouse_id or gr.warehouse_id
-    if not db.get(Warehouse, wh_id):
+    wh = db.get(Warehouse, wh_id)
+    if not wh:
         raise HTTPException(404, "Không tìm thấy kho")
 
     if body.ghi_chu is not None:
@@ -1048,6 +1061,9 @@ def complete_goods_receipt(
     if body.hd_tong_kg is not None:
         gr.hd_tong_kg = body.hd_tong_kg
     gr.warehouse_id = wh_id
+    gr.phan_xuong_id = wh.phan_xuong_id
+    if not gr.phap_nhan_id and wh.phan_xuong_obj:
+        gr.phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id
 
     tong = Decimal("0")
     journal_lines_gr: list[dict] = []
@@ -1094,20 +1110,6 @@ def complete_goods_receipt(
     gr.tong_gia_tri = tong
     gr.trang_thai = "nhap"
 
-    acc_service = AccountingService(db)
-    wh = db.get(Warehouse, wh_id)
-    phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
-    if not gr.bo_qua_hach_toan:
-        acc_service.post_inventory_journal(
-            ngay=gr.ngay_nhap,
-            loai="NHAP_MUA",
-            chung_tu_loai="goods_receipts",
-            chung_tu_id=gr.id,
-            phap_nhan_id=phap_nhan_id,
-            phan_xuong_id=wh.phan_xuong_id if wh else None,
-            items=journal_lines_gr,
-        )
-
     db.commit()
     db.refresh(gr)
     return _gr_to_dict(gr, db)
@@ -1129,6 +1131,8 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(404, "Không tìm thấy phiếu nhập")
     if gr.trang_thai == "da_duyet":
         raise HTTPException(400, "Phiếu đã được duyệt")
+    if gr.trang_thai != "nhap":
+        raise HTTPException(400, "Chỉ duyệt phiếu nhập đã hoàn thiện")
     gr.trang_thai = "da_duyet"
 
     # Auto-sync gia_mua từ don_gia trên PNK khi duyệt
@@ -1142,10 +1146,20 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_use
     if not gr.bo_qua_hach_toan and gr.loai_nhap == "MUA_HANG" and gr.tong_gia_tri > 0:
         wh = db.get(Warehouse, gr.warehouse_id)
         phan_xuong_id = wh.phan_xuong_id if wh else None
+        if not gr.phan_xuong_id and phan_xuong_id:
+            gr.phan_xuong_id = phan_xuong_id
         phap_nhan_id = gr.phap_nhan_id
         if not phap_nhan_id and phan_xuong_id:
             px = db.get(PhanXuong, phan_xuong_id)
             phap_nhan_id = px.phap_nhan_id if px else None
+
+        po_invoice = None
+        if gr.po_id:
+            po_invoice = db.query(PurchaseInvoice).filter(
+                PurchaseInvoice.po_id == gr.po_id,
+                PurchaseInvoice.gr_id.is_(None),
+                PurchaseInvoice.trang_thai != "huy",
+            ).first()
 
         # Gom thanh_tien theo TK (1521 giấy cuộn, 1522 NVL khác)
         by_tk: dict[str, Decimal] = {}
@@ -1157,7 +1171,8 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_use
         for tk, so_tien in sorted(by_tk.items()):
             lines.append({"so_tk": tk, "so_tien_no": so_tien, "so_tien_co": Decimal("0"),
                           "dien_giai": f"Nhập kho NVL — {gr.so_phieu}"})
-        lines.append({"so_tk": "331", "so_tien_no": Decimal("0"), "so_tien_co": gr.tong_gia_tri,
+        tk_co_gr = "151" if po_invoice else "331"
+        lines.append({"so_tk": tk_co_gr, "so_tien_no": Decimal("0"), "so_tien_co": gr.tong_gia_tri,
                       "dien_giai": f"Phải trả NCC — {gr.so_phieu}"})
 
         entry = JournalEntry(
@@ -1188,19 +1203,20 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_use
             ))
 
         # Ghi sổ công nợ phải trả NCC (tăng nợ)
-        db.add(DebtLedgerEntry(
-            ngay=gr.ngay_nhap,
-            loai="tang_no",
-            doi_tuong="nha_cung_cap",
-            supplier_id=gr.supplier_id,
-            phap_nhan_id=phap_nhan_id,
-            chung_tu_loai="goods_receipt",
-            chung_tu_id=gr.id,
-            so_tien=gr.tong_gia_tri,
-            ghi_chu=f"Nhập kho — {gr.so_phieu}",
-        ))
-
-    db.commit()
+        if po_invoice:
+            po_invoice.gr_id = gr.id
+        else:
+            db.add(DebtLedgerEntry(
+                ngay=gr.ngay_nhap,
+                loai="tang_no",
+                doi_tuong="nha_cung_cap",
+                supplier_id=gr.supplier_id,
+                phap_nhan_id=phap_nhan_id,
+                chung_tu_loai="goods_receipt",
+                chung_tu_id=gr.id,
+                so_tien=gr.tong_gia_tri,
+                ghi_chu=f"Nhap kho - {gr.so_phieu}",
+            ))
     return {"ok": True, "trang_thai": "da_duyet"}
 
 
@@ -1283,6 +1299,8 @@ def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user
 def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True) -> dict:
     wh = db.get(Warehouse, gr.warehouse_id) if gr.warehouse_id else None
     sup = db.get(Supplier, gr.supplier_id)
+    px_id = gr.phan_xuong_id or (wh.phan_xuong_id if wh else None)
+    px = db.get(PhanXuong, px_id) if px_id else None
     return {
         "id": gr.id,
         "so_phieu": gr.so_phieu,
@@ -1292,6 +1310,8 @@ def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True) -> di
         "ten_ncc": sup.ten_viet_tat if sup else "",
         "warehouse_id": gr.warehouse_id,
         "ten_kho": wh.ten_kho if wh else "",
+        "phan_xuong_id": px_id,
+        "ten_phan_xuong": px.ten_xuong if px else None,
         "loai_nhap": gr.loai_nhap,
         "tong_gia_tri": float(gr.tong_gia_tri),
         "trang_thai": gr.trang_thai,
@@ -1498,6 +1518,7 @@ def delete_material_issue(mi_id: int, db: Session = Depends(get_db), current_use
 def _mi_to_dict(mi: MaterialIssue, db: Session) -> dict:
     wh = db.get(Warehouse, mi.warehouse_id)
     lsx = db.get(ProductionOrder, mi.production_order_id)
+    phap_nhan_id = lsx.phap_nhan_id if lsx and lsx.phap_nhan_id else (wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None)
     return {
         "id": mi.id,
         "so_phieu": mi.so_phieu,
@@ -1506,6 +1527,7 @@ def _mi_to_dict(mi: MaterialIssue, db: Session) -> dict:
         "so_lenh": lsx.so_lenh if lsx else "",
         "warehouse_id": mi.warehouse_id,
         "ten_kho": wh.ten_kho if wh else "",
+        "phap_nhan_id": phap_nhan_id,
         "trang_thai": mi.trang_thai,
         "ghi_chu": mi.ghi_chu,
         "created_at": mi.created_at.isoformat() if mi.created_at else None,
@@ -1690,6 +1712,7 @@ def delete_production_output(out_id: int, db: Session = Depends(get_db), _: User
 def _po_out_to_dict(out: ProductionOutput, db: Session) -> dict:
     wh = db.get(Warehouse, out.warehouse_id)
     lsx = db.get(ProductionOrder, out.production_order_id)
+    phap_nhan_id = lsx.phap_nhan_id if lsx and lsx.phap_nhan_id else (wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None)
     return {
         "id": out.id,
         "so_phieu": out.so_phieu,
@@ -1698,6 +1721,7 @@ def _po_out_to_dict(out: ProductionOutput, db: Session) -> dict:
         "so_lenh": lsx.so_lenh if lsx else "",
         "warehouse_id": out.warehouse_id,
         "ten_kho": wh.ten_kho if wh else "",
+        "phap_nhan_id": phap_nhan_id,
         "product_id": out.product_id,
         "ten_hang": out.ten_hang,
         "so_luong_nhap": float(out.so_luong_nhap),
@@ -3032,11 +3056,13 @@ def _balance_item_unit(db: Session, bal: InventoryBalance) -> str:
 
 def _adj_to_dict(adj: StockAdjustment, db: Session) -> dict:
     wh = db.get(Warehouse, adj.warehouse_id)
+    phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
     return {
         "id": adj.id,
         "so_phieu": adj.so_phieu,
         "warehouse_id": adj.warehouse_id,
         "ten_kho": wh.ten_kho if wh else "",
+        "phap_nhan_id": phap_nhan_id,
         "ngay": str(adj.ngay),
         "ly_do": adj.ly_do,
         "ghi_chu": adj.ghi_chu,

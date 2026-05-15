@@ -64,6 +64,7 @@ export interface PhieuNhapKho {
   so_phieu: string
   warehouse_id: number
   ten_kho: string
+  phap_nhan_id: number | null
   ngay: string
   loai_nhap: string
   nha_cung_cap_id: number | null
@@ -132,6 +133,7 @@ export interface StockAdjustment {
   so_phieu: string
   warehouse_id: number
   ten_kho: string
+  phap_nhan_id: number | null
   ngay: string
   ly_do: string | null
   ghi_chu: string | null
@@ -192,12 +194,15 @@ export interface GoodsReceipt {
   ten_ncc: string
   warehouse_id: number | null
   ten_kho: string
+  phan_xuong_id?: number | null
+  ten_phan_xuong?: string | null
   loai_nhap: string
   tong_gia_tri: number
   trang_thai: 'nhap_nhanh' | 'nhap' | 'da_duyet'
   ghi_chu: string | null
   so_xe: string | null
   phap_nhan_id: number | null
+  phap_nhan_id_for_print?: number | null
   invoice_image: string | null   // null trong list, có giá trị trong detail
   has_invoice_image: boolean
   hd_tong_kg: number | null
@@ -209,7 +214,11 @@ export interface CreateGoodsReceiptPayload {
   ngay_nhap: string
   po_id?: number | null
   supplier_id: number
-  warehouse_id: number
+  warehouse_id?: number | null
+  phan_xuong_id?: number | null
+  loai_kho_auto?: string
+  phap_nhan_id?: number | null
+  bo_qua_hach_toan?: boolean
   loai_nhap?: string
   ghi_chu?: string | null
   so_xe?: string | null
@@ -256,6 +265,7 @@ export interface MaterialIssue {
   so_lenh: string
   warehouse_id: number
   ten_kho: string
+  phap_nhan_id: number | null
   trang_thai: string
   ghi_chu: string | null
   created_at: string | null
@@ -279,6 +289,7 @@ export interface ProductionOutput {
   so_lenh: string
   warehouse_id: number
   ten_kho: string
+  phap_nhan_id: number | null
   product_id: number | null
   ten_hang: string | null
   so_luong_nhap: number
@@ -665,7 +676,18 @@ export const warehouseApi = {
     client.get<GiaoDich[]>('/warehouse/giao-dich', { params }),
 
   // Phiếu nhập kho (GoodsReceipt — linked to PO)
-  listGoodsReceipts: (params?: { warehouse_id?: number; supplier_id?: number; po_id?: number; tu_ngay?: string; den_ngay?: string; loai_hang?: string }) =>
+  listGoodsReceipts: (params?: {
+    warehouse_id?: number
+    supplier_id?: number
+    po_id?: number
+    trang_thai?: string
+    phan_xuong_id?: number
+    phap_nhan_id?: number
+    tu_ngay?: string
+    den_ngay?: string
+    loai_hang?: string
+    search?: string
+  }) =>
     client.get<GoodsReceipt[]>('/warehouse/goods-receipts', { params }),
   getGoodsReceipt: (id: number) => client.get<GoodsReceipt>(`/warehouse/goods-receipts/${id}`),
   createGoodsReceipt: (data: CreateGoodsReceiptPayload) => client.post<GoodsReceipt>('/warehouse/goods-receipts', data),

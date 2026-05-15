@@ -24,6 +24,7 @@ export interface PurchaseOrder {
   ten_ncc: string
   trang_thai: string
   phan_xuong_id: number | null
+  phap_nhan_id: number | null
   ten_phan_xuong: string | null
   ten_phap_nhan: string | null
   loai_po: string
@@ -41,6 +42,7 @@ export interface CreatePOPayload {
   supplier_id: number
   ngay_po: string
   phan_xuong_id?: number | null
+  phap_nhan_id?: number | null
   loai_po?: string
   ngay_du_kien_nhan?: string | null
   dieu_khoan_tt?: string | null
@@ -50,6 +52,7 @@ export interface CreatePOPayload {
 
 export interface UpdatePOPayload {
   phan_xuong_id?: number | null
+  phap_nhan_id?: number | null
   loai_po?: string
   ngay_du_kien_nhan?: string | null
   dieu_khoan_tt?: string | null
@@ -164,6 +167,7 @@ export const purchaseApi = {
     den_ngay?: string
     phan_xuong_id?: number
     loai_po?: string
+    search?: string
   }) => client.get<PurchaseOrder[]>('/purchase-orders', { params }),
 
   get: (id: number) => client.get<PurchaseOrder>(`/purchase-orders/${id}`),

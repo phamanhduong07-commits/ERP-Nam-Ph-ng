@@ -85,6 +85,7 @@ export const ymhApi = {
     nguoi_yeu_cau_id?: number
     tu_ngay?: string
     den_ngay?: string
+    search?: string
   }) => client.get<PurchaseRequisition[]>('/purchase-requisitions', { params }),
 
   get: (id: number) => client.get<PurchaseRequisition>(`/purchase-requisitions/${id}`),

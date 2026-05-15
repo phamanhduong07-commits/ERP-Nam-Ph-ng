@@ -212,10 +212,21 @@ def list_ymh(
     nguoi_yeu_cau_id: Optional[int] = None,
     tu_ngay: Optional[date] = None,
     den_ngay: Optional[date] = None,
+    search: Optional[str] = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    from sqlalchemy import or_
     q = db.query(PurchaseRequisition).order_by(PurchaseRequisition.created_at.desc())
+    if search:
+        like = f"%{search}%"
+        q = (q
+             .outerjoin(PurchaseRequisition.items)
+             .filter(or_(
+                 PurchaseRequisition.so_ymh.ilike(like),
+                 PurchaseRequisitionItem.ten_hang.ilike(like),
+             ))
+             .distinct())
     if trang_thai:
         q = q.filter(PurchaseRequisition.trang_thai == trang_thai)
     if phan_xuong_id:
@@ -374,6 +385,7 @@ def tao_po_tu_ymh(
         ngay_po=body.ngay_po,
         supplier_id=body.supplier_id,
         phan_xuong_id=ymh.phan_xuong_id,
+        phap_nhan_id=ymh.phap_nhan_id,
         loai_po=loai_po,
         ngay_du_kien_nhan=body.ngay_du_kien_nhan,
         dieu_khoan_tt=body.dieu_khoan_tt,

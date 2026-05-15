@@ -55,6 +55,7 @@ class POCreate(BaseModel):
     supplier_id: int
     ngay_po: date
     phan_xuong_id: Optional[int] = None
+    phap_nhan_id: Optional[int] = None
     loai_po: str = "chung"
     ngay_du_kien_nhan: Optional[date] = None
     dieu_khoan_tt: Optional[str] = None
@@ -64,6 +65,7 @@ class POCreate(BaseModel):
 
 class POUpdate(BaseModel):
     phan_xuong_id: Optional[int] = None
+    phap_nhan_id: Optional[int] = None
     loai_po: Optional[str] = None
     ngay_du_kien_nhan: Optional[date] = None
     dieu_khoan_tt: Optional[str] = None
@@ -103,12 +105,26 @@ def _resolve_ten_hang(item: POItemCreate, db: Session) -> str:
 def _px_info(po: PurchaseOrder, db: Session) -> tuple[int | None, str | None, str | None]:
     """Returns (phan_xuong_id, ten_phan_xuong, ten_phap_nhan)."""
     if not po.phan_xuong_id:
-        return None, None, None
+        pn = db.get(PhapNhan, po.phap_nhan_id) if getattr(po, "phap_nhan_id", None) else None
+        return None, None, pn.ten_phap_nhan if pn else None
     px = db.get(PhanXuong, po.phan_xuong_id)
     if not px:
         return po.phan_xuong_id, None, None
     ten_phap_nhan = px.phap_nhan.ten_phap_nhan if px.phap_nhan else None
     return px.id, px.ten_xuong, ten_phap_nhan
+
+
+def _resolve_phap_nhan_id(db: Session, phan_xuong_id: int | None, phap_nhan_id: int | None) -> int | None:
+    if phap_nhan_id:
+        if not db.get(PhapNhan, phap_nhan_id):
+            raise HTTPException(400, "Pháp nhân không tồn tại")
+        return phap_nhan_id
+    if phan_xuong_id:
+        px = db.get(PhanXuong, phan_xuong_id)
+        if not px:
+            raise HTTPException(400, "Xưởng không tồn tại")
+        return px.phap_nhan_id
+    return None
 
 
 def _po_to_dict(po: PurchaseOrder, db: Session) -> dict:
@@ -148,6 +164,7 @@ def _po_to_dict(po: PurchaseOrder, db: Session) -> dict:
         "ten_ncc": sup.ten_viet_tat if sup else "",
         "trang_thai": po.trang_thai,
         "phan_xuong_id": px_id,
+        "phap_nhan_id": po.phap_nhan_id,
         "ten_phan_xuong": ten_px,
         "ten_phap_nhan": ten_pn,
         "loai_po": po.loai_po or "chung",
@@ -171,9 +188,21 @@ def list_pos(
     den_ngay: Optional[date] = None,
     phan_xuong_id: Optional[int] = None,
     loai_po: Optional[str] = None,
+    search: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    from sqlalchemy import or_
     q = db.query(PurchaseOrder).order_by(PurchaseOrder.created_at.desc())
+    if search:
+        like = f"%{search}%"
+        q = (q
+             .outerjoin(PurchaseOrder.supplier)
+             .filter(or_(
+                 PurchaseOrder.so_po.ilike(like),
+                 Supplier.ten_viet_tat.ilike(like),
+                 Supplier.ten_don_vi.ilike(like),
+             ))
+             .distinct())
     if supplier_id:
         q = q.filter(PurchaseOrder.supplier_id == supplier_id)
     if trang_thai:
@@ -202,6 +231,7 @@ def list_pos(
             "ten_ncc": sup.ten_viet_tat if sup else "",
             "trang_thai": po.trang_thai,
             "phan_xuong_id": px_id,
+            "phap_nhan_id": po.phap_nhan_id,
             "ten_phan_xuong": ten_px,
             "ten_phap_nhan": ten_pn,
             "loai_po": po.loai_po or "chung",
@@ -221,11 +251,13 @@ def create_po(body: POCreate, db: Session = Depends(get_db)):
         raise HTTPException(400, "Phải có ít nhất 1 dòng hàng")
 
     so_po = _gen_so_po(db)
+    phap_nhan_id = _resolve_phap_nhan_id(db, body.phan_xuong_id, body.phap_nhan_id)
     po = PurchaseOrder(
         so_po=so_po,
         ngay_po=body.ngay_po,
         supplier_id=body.supplier_id,
         phan_xuong_id=body.phan_xuong_id,
+        phap_nhan_id=phap_nhan_id,
         loai_po=body.loai_po or "chung",
         ngay_du_kien_nhan=body.ngay_du_kien_nhan,
         dieu_khoan_tt=body.dieu_khoan_tt,
@@ -280,6 +312,8 @@ def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db)):
 
     if body.phan_xuong_id is not None:
         po.phan_xuong_id = body.phan_xuong_id
+    if body.phap_nhan_id is not None or body.phan_xuong_id is not None:
+        po.phap_nhan_id = _resolve_phap_nhan_id(db, po.phan_xuong_id, body.phap_nhan_id)
     if body.loai_po is not None:
         po.loai_po = body.loai_po
     if body.ngay_du_kien_nhan is not None:
@@ -746,4 +780,3 @@ async def import_purchase_orders(
 ):
     """Import đơn mua hàng từ Excel."""
     return await import_purchase_orders_excel(db, file, current_user, commit)
-
