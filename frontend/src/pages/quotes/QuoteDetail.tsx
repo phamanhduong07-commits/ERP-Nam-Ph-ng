@@ -17,7 +17,6 @@ import type { Quote, QuoteItem } from '../../api/quotes'
 import { printDocument, buildDocumentHtml, downloadAsPdf, fmtVND } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { systemApi } from '../../api/system'
-import type { PrintCompanyInfo } from '../../utils/exportUtils'
 import { useAuthStore } from '../../store/auth'
 
 const { Title, Text } = Typography
