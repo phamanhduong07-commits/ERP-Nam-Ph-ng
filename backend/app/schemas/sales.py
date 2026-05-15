@@ -134,6 +134,8 @@ class SalesOrderResponse(BaseModel):
     tong_tien_sau_giam: Decimal
     items: list[SalesOrderItemResponse] = []
     created_by_name: str | None = None
+    ten_nguoi_duyet: str | None = None
+    approved_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

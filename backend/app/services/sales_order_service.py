@@ -105,6 +105,7 @@ class SalesOrderService:
                 joinedload(SalesOrder.phap_nhan_sx),
                 joinedload(SalesOrder.phan_xuong),
                 joinedload(SalesOrder.creator),
+                joinedload(SalesOrder.approver),
                 joinedload(SalesOrder.items).joinedload(SalesOrderItem.product),
                 joinedload(SalesOrder.items).joinedload(SalesOrderItem.quote_item).joinedload(QuoteItem.quote),
             )
@@ -120,6 +121,7 @@ class SalesOrderService:
 
         resp = SalesOrderResponse.model_validate(order)
         resp.created_by_name = order.creator.ho_ten if order.creator else None
+        resp.ten_nguoi_duyet = order.approver.ho_ten if order.approver else None
         return resp
 
     def _apply_spec_fallback(self, item: SalesOrderItem):

@@ -75,6 +75,8 @@ export interface SalesOrder {
   tong_tien_sau_giam: number
   items: SalesOrderItem[]
   created_by_name: string | null
+  ten_nguoi_duyet: string | null
+  approved_at: string | null
   created_at: string
   updated_at: string
 }

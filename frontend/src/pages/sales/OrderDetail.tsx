@@ -76,6 +76,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       message.success('Đã duyệt đơn hàng')
       qc.invalidateQueries({ queryKey: ['sales-order', id] })
       qc.invalidateQueries({ queryKey: ['sales-orders'] })
+      qc.invalidateQueries({ queryKey: ['sales-orders-counts'] })
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Duyệt thất bại'),
   })
@@ -86,6 +87,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       message.success('Đã huỷ đơn hàng')
       qc.invalidateQueries({ queryKey: ['sales-order', id] })
       qc.invalidateQueries({ queryKey: ['sales-orders'] })
+      qc.invalidateQueries({ queryKey: ['sales-orders-counts'] })
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Huỷ thất bại'),
   })
@@ -486,6 +488,17 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           </Descriptions.Item>
           {order.created_by_name && (
             <Descriptions.Item label="Người lập">{order.created_by_name}</Descriptions.Item>
+          )}
+          {order.trang_thai !== 'moi' && order.ten_nguoi_duyet && (
+            <Descriptions.Item label="Người duyệt">
+              <Space size={4}>
+                <CheckOutlined style={{ color: '#52c41a' }} />
+                <Text strong>{order.ten_nguoi_duyet}</Text>
+                {order.approved_at && (
+                  <Text type="secondary">— {dayjs(order.approved_at).format('DD/MM/YYYY HH:mm')}</Text>
+                )}
+              </Space>
+            </Descriptions.Item>
           )}
           {order.ghi_chu && (
             <Descriptions.Item label="Ghi chú" span={3}>{order.ghi_chu}</Descriptions.Item>
