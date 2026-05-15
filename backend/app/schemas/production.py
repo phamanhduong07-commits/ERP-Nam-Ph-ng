@@ -135,6 +135,8 @@ class ProductionOrderResponse(BaseModel):
     ten_phan_xuong: str | None = None
     nv_theo_doi_id: int | None = None
     ten_nv_theo_doi: str | None = None
+    created_by_name: str | None = None
+    so_po_kh: str | None = None
     trang_thai: str
     ngay_bat_dau_ke_hoach: date | None
     ngay_hoan_thanh_ke_hoach: date | None
@@ -162,6 +164,7 @@ class ProductionOrderListItem(BaseModel):
     ten_kho_sx: str | None = None
     phan_xuong_id: int | None = None
     gia_ban_muc_tieu: Decimal | None = None
+    created_by_name: str | None = None
     trang_thai: str
     ngay_hoan_thanh_ke_hoach: date | None
     so_dong: int = 0

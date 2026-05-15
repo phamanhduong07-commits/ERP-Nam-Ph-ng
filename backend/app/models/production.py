@@ -21,6 +21,7 @@ class ProductionOrder(Base):
     ngay_hoan_thanh_thuc_te: Mapped[date | None] = mapped_column(Date)
 
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    so_po_kh: Mapped[str | None] = mapped_column(String(100))
     don_gia_noi_bo: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))

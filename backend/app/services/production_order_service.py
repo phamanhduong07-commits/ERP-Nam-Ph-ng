@@ -2,9 +2,10 @@ from datetime import date
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.sales import SalesOrderItem, SalesOrder
-from app.models.master import Product
+from app.models.master import Product, Customer
 from app.schemas.production import (
     ProductionOrderCreate, ProductionOrderUpdate,
     ProductionOrderResponse, ProductionOrderListItem,
@@ -46,11 +47,23 @@ class ProductionOrderService:
             joinedload(ProductionOrder.phap_nhan),
             joinedload(ProductionOrder.kho_sx),
             joinedload(ProductionOrder.items),
+            joinedload(ProductionOrder.creator),
         )
 
         if search:
             like = f"%{search}%"
-            q = q.filter(ProductionOrder.so_lenh.ilike(like))
+            q = (q
+                 .outerjoin(ProductionOrder.sales_order)
+                 .outerjoin(SalesOrder.customer)
+                 .outerjoin(ProductionOrder.items)
+                 .filter(or_(
+                     ProductionOrder.so_lenh.ilike(like),
+                     SalesOrder.so_don.ilike(like),
+                     Customer.ten_viet_tat.ilike(like),
+                     ProductionOrderItem.ten_hang.ilike(like),
+                 ))
+                 .distinct()
+                 )
         if trang_thai:
             q = q.filter(ProductionOrder.trang_thai == trang_thai)
         if sales_order_id:
@@ -78,10 +91,12 @@ class ProductionOrderService:
                 so_don=o.sales_order.so_don if o.sales_order else None,
                 ten_khach_hang=o.sales_order.customer.ten_viet_tat if o.sales_order and o.sales_order.customer else None,
                 ten_hang=first_item.ten_hang if first_item else None,
+                phap_nhan_id=o.phap_nhan_id,
                 ten_phap_nhan=o.phap_nhan.ten_phap_nhan if o.phap_nhan else None,
                 ten_kho_sx=o.kho_sx.ten_kho if o.kho_sx else None,
                 phan_xuong_id=o.phan_xuong_id,
                 gia_ban_muc_tieu=getattr(first_item, 'gia_ban', None) if first_item else None,
+                created_by_name=o.creator.ho_ten if o.creator else None,
                 ngay_hoan_thanh_ke_hoach=o.ngay_hoan_thanh_ke_hoach,
                 trang_thai=o.trang_thai,
                 tong_sl_ke_hoach=sum(i.so_luong_ke_hoach for i in o.items),

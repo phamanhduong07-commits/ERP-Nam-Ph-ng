@@ -121,6 +121,8 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
         ten_phan_xuong=order.phan_xuong.ten_xuong if order.phan_xuong else (order.sales_order.phan_xuong.ten_xuong if order.sales_order and order.sales_order.phan_xuong else None),
         nv_theo_doi_id=order.nv_theo_doi_id,
         ten_nv_theo_doi=order.nv_theo_doi.ho_ten if order.nv_theo_doi else None,
+        created_by_name=order.creator.ho_ten if order.creator else None,
+        so_po_kh=order.so_po_kh,
         trang_thai=order.trang_thai,
         ngay_bat_dau_ke_hoach=order.ngay_bat_dau_ke_hoach,
         ngay_hoan_thanh_ke_hoach=order.ngay_hoan_thanh_ke_hoach,
@@ -149,6 +151,7 @@ def _load_order(order_id: int, db: Session) -> ProductionOrder:
             joinedload(ProductionOrder.kho_sx),
             joinedload(ProductionOrder.phan_xuong),
             joinedload(ProductionOrder.nv_theo_doi),
+            joinedload(ProductionOrder.creator),
         )
         .filter(ProductionOrder.id == order_id)
         .first()
