@@ -16,7 +16,7 @@ import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS } from '../../api/quotes'
 import type { QuoteListItem } from '../../api/quotes'
 import { phapNhanApi } from '../../api/phap_nhan'
-import { exportExcelWithTemplate, exportToExcel, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
+import { exportExcelWithTemplate, printToPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
 import { systemApi } from '../../api/system'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import { useAuthStore } from '../../store/auth'
@@ -67,7 +67,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
   useEffect(() => {
     if (isEmbedded) return
     sessionStorage.setItem(FILTER_KEY, JSON.stringify({ search, trangThai, phapNhanId, dateRange, page, myOnly }))
-  }, [search, trangThai, dateRange, page, myOnly, isEmbedded])
+  }, [search, trangThai, phapNhanId, dateRange, page, myOnly, isEmbedded])
 
   const { data: counts } = useQuery({
     queryKey: ['quotes-counts'],
@@ -541,7 +541,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
         loading={isLoading}
         columns={isEmbedded ? compactColumns : fullColumns}
         dataSource={data?.items || []}
-        locale={{ emptyText: search || trangThai || dateRange.length ? 'Không tìm thấy báo giá nào' : 'Chưa có báo giá nào' }}
+        locale={{ emptyText: search || trangThai || phapNhanId || dateRange.length ? 'Không tìm thấy báo giá nào' : 'Chưa có báo giá nào' }}
         rowClassName={(r) => r.id === selectedId ? 'md-selected-row' : ''}
         onRow={(r) => ({
           onClick: isEmbedded ? () => onSelect!(r.id) : undefined,
@@ -557,7 +557,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
           size: 'small',
         }}
         size="small"
-        scroll={isEmbedded ? undefined : { x: 900 }}
+        scroll={isEmbedded ? undefined : { x: 1300 }}
       />
 
       <Modal

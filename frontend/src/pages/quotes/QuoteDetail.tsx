@@ -14,7 +14,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, LOAI_IN_OPTIONS, getSongType, buildPaperSymbol } from '../../api/quotes'
 import type { Quote, QuoteItem } from '../../api/quotes'
-import { printDocument, buildDocumentHtml, downloadAsPdf, fmtVND } from '../../utils/exportUtils'
+import { printDocument, buildDocumentHtml, downloadAsPdf } from '../../utils/exportUtils'
 import type { PrintDocumentOptions } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { systemApi } from '../../api/system'
@@ -406,6 +406,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   const [previewItem, setPreviewItem] = useState<QuoteItem | null>(null)
   const [giaHanModal, setGiaHanModal] = useState(false)
   const [giaHanDate, setGiaHanDate] = useState<Dayjs | null>(null)
+  const [isPrintLoading, setIsPrintLoading] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
   const role = useAuthStore(s => s.user?.role)
   const hideCostDetails = role === 'SALE_ADMIN' || role === 'TRUONG_PHONG_SALE_ADMIN'
@@ -557,9 +558,14 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   }
 
   const handlePrint = async () => {
-    const result = await fetchTemplate('in')
-    if (!result) return
-    printDocument(buildQuotePrintOpts(result.templateCols, result.template))
+    setIsPrintLoading(true)
+    try {
+      const result = await fetchTemplate('in')
+      if (!result) return
+      printDocument(buildQuotePrintOpts(result.templateCols, result.template))
+    } finally {
+      setIsPrintLoading(false)
+    }
   }
 
   const handleDownloadPdf = async () => {
@@ -660,6 +666,16 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       width: 110,
       align: 'right',
       render: (v: number) => `${vnd(v)} đ`,
+    },
+    {
+      title: 'Thành tiền',
+      width: 120,
+      align: 'right',
+      render: (_: unknown, r: QuoteItem) => (
+        <Text strong style={{ color: '#1677ff' }}>
+          {vnd((r.gia_ban || 0) * (r.so_luong || 0))} đ
+        </Text>
+      ),
     },
     {
       title: 'Ghi chú',
@@ -797,7 +813,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
                 </Button>
               </Popconfirm>
             )}
-            <Button icon={<PrinterOutlined />} onClick={handlePrint}>
+            <Button icon={<PrinterOutlined />} loading={isPrintLoading} onClick={handlePrint}>
               In báo giá
             </Button>
             <Button icon={<DownloadOutlined />} loading={isPdfLoading} onClick={handleDownloadPdf}>
@@ -905,7 +921,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       <ItemDetailDrawer
         item={previewItem}
         quoteId={id}
-        canEdit={trangThai === 'moi'}
+        canEdit={trangThai === 'moi' || (trangThai === 'cho_duyet' && canApprove)}
         hideCostDetails={hideCostDetails}
         onClose={() => setPreviewItem(null)}
         onEditClick={() => { setPreviewItem(null); navigate(`/quotes/${id}/edit`) }}
@@ -943,47 +959,40 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
             <Text strong>{vnd(quote.tong_tien_hang)} đ</Text>
           </Col>
 
-          <Col span={14}><Text>CP Bảng in</Text></Col>
-          <Col span={10} style={{ textAlign: 'right' }}>
-            <Text>{vnd(quote.chi_phi_bang_in)} đ</Text>
-          </Col>
+          {quote.chi_phi_bang_in > 0 && <>
+            <Col span={14}><Text>CP Bảng in</Text></Col>
+            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_bang_in)} đ</Text></Col>
+          </>}
 
-          <Col span={14}><Text>CP Khuôn</Text></Col>
-          <Col span={10} style={{ textAlign: 'right' }}>
-            <Text>{vnd(quote.chi_phi_khuon)} đ</Text>
-          </Col>
+          {quote.chi_phi_khuon > 0 && <>
+            <Col span={14}><Text>CP Khuôn</Text></Col>
+            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_khuon)} đ</Text></Col>
+          </>}
 
-          <Col span={14}><Text>CP Vận chuyển</Text></Col>
-          <Col span={10} style={{ textAlign: 'right' }}>
-            <Text>{vnd(quote.chi_phi_van_chuyen)} đ</Text>
-          </Col>
+          {quote.chi_phi_van_chuyen > 0 && <>
+            <Col span={14}><Text>CP Vận chuyển</Text></Col>
+            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_van_chuyen)} đ</Text></Col>
+          </>}
 
-          <Col span={14}><Text>CP Hàng hóa DV</Text></Col>
-          <Col span={10} style={{ textAlign: 'right' }}>
-            <Text>{vnd(quote.chi_phi_hang_hoa_dv)} đ</Text>
-          </Col>
+          {quote.chi_phi_hang_hoa_dv > 0 && <>
+            <Col span={14}><Text>CP Hàng hóa DV</Text></Col>
+            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_hang_hoa_dv)} đ</Text></Col>
+          </>}
 
-          {quote.chi_phi_khac_1 > 0 && (
-            <>
-              <Col span={14}>
-                <Text>{quote.chi_phi_khac_1_ten || 'CP Khác 1'}</Text>
-              </Col>
-              <Col span={10} style={{ textAlign: 'right' }}>
-                <Text>{vnd(quote.chi_phi_khac_1)} đ</Text>
-              </Col>
-            </>
-          )}
+          {quote.chi_phi_khac_1 > 0 && <>
+            <Col span={14}><Text>{quote.chi_phi_khac_1_ten || 'CP Khác 1'}</Text></Col>
+            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_khac_1)} đ</Text></Col>
+          </>}
 
-          {quote.chi_phi_khac_2 > 0 && (
-            <>
-              <Col span={14}>
-                <Text>{quote.chi_phi_khac_2_ten || 'CP Khác 2'}</Text>
-              </Col>
-              <Col span={10} style={{ textAlign: 'right' }}>
-                <Text>{vnd(quote.chi_phi_khac_2)} đ</Text>
-              </Col>
-            </>
-          )}
+          {quote.chi_phi_khac_2 > 0 && <>
+            <Col span={14}><Text>{quote.chi_phi_khac_2_ten || 'CP Khác 2'}</Text></Col>
+            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_khac_2)} đ</Text></Col>
+          </>}
+
+          {quote.tien_vat > 0 && <>
+            <Col span={14}><Text type="secondary">Thuế VAT ({quote.ty_le_vat}%)</Text></Col>
+            <Col span={10} style={{ textAlign: 'right' }}><Text type="secondary">{vnd(quote.tien_vat)} đ</Text></Col>
+          </>}
 
           <Col span={24}><Divider style={{ margin: '8px 0' }} /></Col>
 
