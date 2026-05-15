@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Table, Space, Button, Typography,
   Divider, Popconfirm, message, Skeleton, Row, Col, Modal, DatePicker, Form, Select,
-  Drawer, Tooltip,
+  Drawer, Tooltip, Alert,
 } from 'antd'
 import {
   ArrowLeftOutlined, CheckOutlined, CloseOutlined,
@@ -40,7 +40,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
   const [bomItemId, setBomItemId] = useState<number | null>(null)
   const [previewItem, setPreviewItem] = useState<SalesOrderItem | null>(null)
 
-  const { data: order, isLoading, refetch } = useQuery({
+  const { data: order, isLoading } = useQuery({
     queryKey: ['sales-order', id],
     queryFn: () => salesOrdersApi.get(Number(id)).then((r) => r.data),
     enabled: !!id,
@@ -70,25 +70,25 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn'),
   })
 
-  const handleApprove = async () => {
-    try {
-      await salesOrdersApi.approve(Number(id))
+  const approveMutation = useMutation({
+    mutationFn: () => salesOrdersApi.approve(Number(id)),
+    onSuccess: () => {
       message.success('Đã duyệt đơn hàng')
-      refetch()
-    } catch {
-      message.error('Duyệt thất bại')
-    }
-  }
+      qc.invalidateQueries({ queryKey: ['sales-order', id] })
+      qc.invalidateQueries({ queryKey: ['sales-orders'] })
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Duyệt thất bại'),
+  })
 
-  const handleCancel = async () => {
-    try {
-      await salesOrdersApi.cancel(Number(id))
+  const cancelMutation = useMutation({
+    mutationFn: () => salesOrdersApi.cancel(Number(id)),
+    onSuccess: () => {
       message.success('Đã huỷ đơn hàng')
-      refetch()
-    } catch {
-      message.error('Huỷ thất bại')
-    }
-  }
+      qc.invalidateQueries({ queryKey: ['sales-order', id] })
+      qc.invalidateQueries({ queryKey: ['sales-orders'] })
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Huỷ thất bại'),
+  })
 
   const handleTaoLenh = async () => {
     try {
@@ -103,7 +103,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       const orders = res.data
       message.success(`Đã tạo ${orders.length} lệnh sản xuất (1 lệnh / mã hàng)`)
       setLenhModal(false)
-      refetch()
+      qc.invalidateQueries({ queryKey: ['sales-order', id] })
       navigate('/production/orders')
     } catch (err: any) {
       if (err?.errorFields) {
@@ -119,8 +119,6 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       setLenhLoading(false)
     }
   }
-
-  const fmt = (v: number) => new Intl.NumberFormat('vi-VN').format(v)
 
   const handleExportExcel = () => {
     if (!order) return
@@ -188,7 +186,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
         loai_thung: r.loai_thung ?? '—',
         kich_thuoc: d ? `${d}×${rw}×${c}` : '—',
         so_lop: r.so_lop ?? r.product?.so_lop ?? '—',
-        so_luong: fmt(Number(r.so_luong)),
+        so_luong: fmtVND(Number(r.so_luong)),
         dvt: r.dvt,
         don_gia: fmtVND(r.don_gia),
         thanh_tien: fmtVND(r.thanh_tien),
@@ -259,7 +257,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       dataIndex: 'so_luong',
       width: 90,
       align: 'right',
-      render: (v, r) => `${fmt(v)} ${r.dvt}`,
+      render: (v, r) => `${fmtVND(v)} ${r.dvt}`,
     },
     {
       title: 'Đơn giá',
@@ -395,13 +393,13 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
               />
             </Tooltip>
             {order.trang_thai === 'moi' && (
-              <Popconfirm title="Duyệt đơn hàng này?" onConfirm={handleApprove} okText="Duyệt">
-                <Button size={embedded ? 'small' : 'middle'} type="primary" icon={<CheckOutlined />}>
+              <Popconfirm title="Duyệt đơn hàng này?" onConfirm={() => approveMutation.mutate()} okText="Duyệt">
+                <Button size={embedded ? 'small' : 'middle'} type="primary" icon={<CheckOutlined />} loading={approveMutation.isPending}>
                   Duyệt đơn
                 </Button>
               </Popconfirm>
             )}
-            {['da_duyet', 'dang_sx', 'da_giao'].includes(order.trang_thai) && (
+            {['da_duyet', 'dang_sx', 'da_xuat'].includes(order.trang_thai) && (
               <Button
                 size={embedded ? 'small' : 'middle'}
                 type="default"
@@ -439,8 +437,8 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
               </Button>
             )}
             {['moi', 'da_duyet'].includes(order.trang_thai) && (
-              <Popconfirm title="Huỷ đơn hàng này?" onConfirm={handleCancel} okText="Huỷ" okButtonProps={{ danger: true }}>
-                <Button size={embedded ? 'small' : 'middle'} danger icon={<CloseOutlined />}>
+              <Popconfirm title="Huỷ đơn hàng này?" onConfirm={() => cancelMutation.mutate()} okText="Huỷ" okButtonProps={{ danger: true }}>
+                <Button size={embedded ? 'small' : 'middle'} danger icon={<CloseOutlined />} loading={cancelMutation.isPending}>
                   Huỷ đơn
                 </Button>
               </Popconfirm>
@@ -448,6 +446,16 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
           </Space>
         </Col>
       </Row>
+
+      {(() => {
+        if (order.trang_thai !== 'da_duyet' || !order.ngay_giao_hang) return null
+        const daysLeft = dayjs(order.ngay_giao_hang).diff(dayjs(), 'day')
+        if (daysLeft > 3) return null
+        const fmt = dayjs(order.ngay_giao_hang).format('DD/MM/YYYY')
+        if (daysLeft < 0)
+          return <Alert type="error" showIcon style={{ marginBottom: 12 }} message={`Đã quá hạn giao hàng ${Math.abs(daysLeft)} ngày (${fmt}) — cần xử lý ngay.`} />
+        return <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={`Ngày giao hàng còn ${daysLeft} ngày (${fmt}) — cần đảm bảo tiến độ sản xuất.`} />
+      })()}
 
       <Card style={{ marginBottom: 16 }}>
         <Descriptions column={{ xs: 1, sm: 2, lg: embedded ? 2 : 3 }} bordered size="small">
@@ -607,7 +615,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 <Row gutter={[16, 8]}>
                   <Col span={12}>
                     <Text type="secondary" style={{ fontSize: 11 }}>Số lượng</Text>
-                    <div><Text strong>{fmt(Number(item.so_luong))} {item.dvt}</Text></div>
+                    <div><Text strong>{fmtVND(Number(item.so_luong))} {item.dvt}</Text></div>
                   </Col>
                   {item.ghi_chu_san_pham && (
                     <Col span={12}>
@@ -651,14 +659,17 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                       <div><Text strong>{item.loai_thung}</Text></div>
                     </Col>
                   )}
-                  <Col span={12}>
-                    <Text type="secondary" style={{ fontSize: 11 }}>Kích thước (D×R×C)</Text>
-                    <div>
-                      <Text strong>
-                        {item.dai ?? item.product?.dai}×{item.rong ?? item.product?.rong}×{item.cao ?? item.product?.cao} cm
-                      </Text>
-                    </div>
-                  </Col>
+                  {(() => {
+                    const d = item.dai ?? item.product?.dai
+                    const rw = item.rong ?? item.product?.rong
+                    const c = item.cao ?? item.product?.cao
+                    return d && rw && c ? (
+                      <Col span={12}>
+                        <Text type="secondary" style={{ fontSize: 11 }}>Kích thước (D×R×C)</Text>
+                        <div><Text strong>{d}×{rw}×{c} cm</Text></div>
+                      </Col>
+                    ) : null
+                  })()}
                   {item.kho_tt != null && (
                     <Col span={12}>
                       <Text type="secondary" style={{ fontSize: 11 }}>Khổ thực tế</Text>

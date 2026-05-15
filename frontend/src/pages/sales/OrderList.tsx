@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Table, Button, Input, Select, Space, Tag, Card, Typography,
   DatePicker, Row, Col, Tooltip, Popconfirm, message,
@@ -30,6 +30,7 @@ interface Props {
 
 export default function OrderList({ selectedId, onSelect }: Props) {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const isEmbedded = !!onSelect
 
   // ── Restore filters từ sessionStorage (chỉ khi không embedded) ──
@@ -37,12 +38,22 @@ export default function OrderList({ selectedId, onSelect }: Props) {
     ? (() => { try { return JSON.parse(sessionStorage.getItem(SS_KEY) ?? '{}') } catch { return {} } })()
     : {}
 
+  const [inputText, setInputText] = useState<string>(savedFilters.search ?? '')
   const [search, setSearch] = useState<string>(savedFilters.search ?? '')
   const [trangThai, setTrangThai] = useState<string | undefined>(savedFilters.trangThai)
   const [phapNhanId, setPhapNhanId] = useState<number | undefined>(savedFilters.phapNhanId)
   const [dateRange, setDateRange] = useState<[string, string] | null>(savedFilters.dateRange ?? null)
   const [page, setPage] = useState<number>(savedFilters.page ?? 1)
   const [importVisible, setImportVisible] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Debounce search 400ms ──
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!inputText) { setSearch(''); setPage(1); return }
+    debounceRef.current = setTimeout(() => { setSearch(inputText); setPage(1) }, 400)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [inputText])
 
   // ── Persist filters vào sessionStorage ──
   useEffect(() => {
@@ -56,7 +67,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
     staleTime: 5 * 60 * 1000,
   })
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['sales-orders', search, trangThai, phapNhanId, dateRange, page],
     queryFn: () => salesOrdersApi.list({
       search,
@@ -69,25 +80,25 @@ export default function OrderList({ selectedId, onSelect }: Props) {
     }).then((r) => r.data),
   })
 
-  const handleApprove = async (id: number, soDon: string) => {
-    try {
-      await salesOrdersApi.approve(id)
+  const approveMutation = useMutation({
+    mutationFn: (id: number) => salesOrdersApi.approve(id),
+    onSuccess: (_, id) => {
+      const soDon = data?.items.find(r => r.id === id)?.so_don ?? ''
       message.success(`Đã duyệt đơn hàng ${soDon}`)
-      refetch()
-    } catch {
-      message.error('Duyệt đơn thất bại')
-    }
-  }
+      qc.invalidateQueries({ queryKey: ['sales-orders'] })
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Duyệt đơn thất bại'),
+  })
 
-  const handleCancel = async (id: number, soDon: string) => {
-    try {
-      await salesOrdersApi.cancel(id)
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => salesOrdersApi.cancel(id),
+    onSuccess: (_, id) => {
+      const soDon = data?.items.find(r => r.id === id)?.so_don ?? ''
       message.success(`Đã huỷ đơn hàng ${soDon}`)
-      refetch()
-    } catch {
-      message.error('Huỷ đơn thất bại')
-    }
-  }
+      qc.invalidateQueries({ queryKey: ['sales-orders'] })
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Huỷ đơn thất bại'),
+  })
 
   const handleExportExcel = () => {
     const items = data?.items ?? []
@@ -108,7 +119,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
       stt: i + 1,
       ngay_don: fmtDate(r.ngay_don),
       ngay_giao_hang: fmtDate(r.ngay_giao_hang),
-      tong_tien: Number(r.tong_tien),
+      tong_tien: Number(r.tong_tien_sau_giam),
       trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
     }))
 
@@ -254,10 +265,10 @@ export default function OrderList({ selectedId, onSelect }: Props) {
             <Tooltip title="Duyệt đơn">
               <Popconfirm
                 title={`Duyệt đơn hàng ${r.so_don}?`}
-                onConfirm={() => handleApprove(r.id, r.so_don)}
+                onConfirm={() => approveMutation.mutate(r.id)}
                 okText="Duyệt"
               >
-                <Button size="small" type="primary" icon={<CheckOutlined />} />
+                <Button size="small" type="primary" icon={<CheckOutlined />} loading={approveMutation.isPending} />
               </Popconfirm>
             </Tooltip>
           )}
@@ -265,11 +276,11 @@ export default function OrderList({ selectedId, onSelect }: Props) {
             <Tooltip title="Huỷ đơn">
               <Popconfirm
                 title={`Huỷ đơn hàng ${r.so_don}?`}
-                onConfirm={() => handleCancel(r.id, r.so_don)}
+                onConfirm={() => cancelMutation.mutate(r.id)}
                 okText="Huỷ"
                 okButtonProps={{ danger: true }}
               >
-                <Button size="small" danger icon={<CloseOutlined />} />
+                <Button size="small" danger icon={<CloseOutlined />} loading={cancelMutation.isPending} />
               </Popconfirm>
             </Tooltip>
           )}
@@ -326,8 +337,8 @@ export default function OrderList({ selectedId, onSelect }: Props) {
               placeholder="Tìm số đơn, khách hàng..."
               prefix={<SearchOutlined />}
               size="small"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
               allowClear
             />
           </Col>
@@ -410,7 +421,7 @@ export default function OrderList({ selectedId, onSelect }: Props) {
         title="Import đơn hàng từ Excel"
         visible={importVisible}
         onCancel={() => setImportVisible(false)}
-        onSuccess={() => refetch()}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ['sales-orders'] })}
         importFn={(file, commit) => salesOrdersApi.importOrders(file, commit)}
         templateUrl="/api/sales-orders/import-template"
       />
