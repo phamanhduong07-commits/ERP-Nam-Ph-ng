@@ -88,6 +88,8 @@ export interface PlanListItem {
   so_dong: number
   tong_sl: number
   created_at: string
+  created_by_name: string | null
+  noi_sx: string | null
 }
 
 export interface PlanResponse {
@@ -99,6 +101,8 @@ export interface PlanResponse {
   lines: PlanLineResponse[]
   created_at: string
   updated_at: string
+  created_by_name: string | null
+  noi_sx: string | null
 }
 
 export interface PlanPagedResponse {

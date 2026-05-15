@@ -127,6 +127,7 @@ def _load_plan(plan_id: int, db: Session) -> ProductionPlan:
     plan = (
         db.query(ProductionPlan)
         .options(
+            joinedload(ProductionPlan.creator),
             joinedload(ProductionPlan.lines)
             .joinedload(ProductionPlanLine.production_order_item)
             .joinedload(ProductionOrderItem.production_order)
@@ -154,6 +155,7 @@ def _load_plan(plan_id: int, db: Session) -> ProductionPlan:
 
 
 def _build_plan_response(plan: ProductionPlan) -> ProductionPlanResponse:
+    creator = getattr(plan, "creator", None)
     return ProductionPlanResponse(
         id=plan.id,
         so_ke_hoach=plan.so_ke_hoach,
@@ -163,6 +165,8 @@ def _build_plan_response(plan: ProductionPlan) -> ProductionPlanResponse:
         lines=[_build_line_response(ln) for ln in plan.lines],
         created_at=plan.created_at,
         updated_at=plan.updated_at,
+        created_by_name=creator.ho_ten if creator else None,
+        noi_sx=creator.phan_xuong if creator else None,
     )
 
 
@@ -253,7 +257,7 @@ def list_plans(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = db.query(ProductionPlan)
+    q = db.query(ProductionPlan).options(joinedload(ProductionPlan.creator))
 
     if search:
         q = q.filter(ProductionPlan.so_ke_hoach.ilike(f"%{search}%"))
@@ -276,6 +280,7 @@ def list_plans(
     for p in plans:
         lines = db.query(ProductionPlanLine).filter(ProductionPlanLine.plan_id == p.id).all()
         tong_sl = sum(ln.so_luong_ke_hoach for ln in lines)
+        creator = getattr(p, "creator", None)
         items_resp.append(ProductionPlanListItem(
             id=p.id,
             so_ke_hoach=p.so_ke_hoach,
@@ -284,6 +289,8 @@ def list_plans(
             so_dong=len(lines),
             tong_sl=tong_sl,
             created_at=p.created_at,
+            created_by_name=creator.ho_ten if creator else None,
+            noi_sx=creator.phan_xuong if creator else None,
         ))
 
     return PagedPlanResponse(

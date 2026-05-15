@@ -99,6 +99,8 @@ class ProductionPlanListItem(BaseModel):
     so_dong: int = 0
     tong_sl: Decimal = Decimal("0")
     created_at: datetime
+    created_by_name: str | None = None
+    noi_sx: str | None = None
 
     class Config:
         from_attributes = True
@@ -113,6 +115,8 @@ class ProductionPlanResponse(BaseModel):
     lines: list[ProductionPlanLineResponse] = []
     created_at: datetime
     updated_at: datetime
+    created_by_name: str | None = None
+    noi_sx: str | None = None
 
     class Config:
         from_attributes = True

@@ -285,7 +285,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
   })
   const completeLineMut = useMutation({
     mutationFn: (lineId: number) => productionPlansApi.completeLine(planId, lineId),
-    onSuccess: () => { message.success('Hoàn thành'); qc.invalidateQueries({ queryKey: ['production-plan', planId] }) },
+    onSuccess: () => {
+      message.success('Hoàn thành')
+      qc.invalidateQueries({ queryKey: ['production-plan', planId] })
+      qc.invalidateQueries({ queryKey: ['production-plans'] })
+    },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
   })
   const togglePhoiNgoaiMut = useMutation({
@@ -451,7 +455,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       return `<tr>
         <td class="center" style="color:#888">${r.thu_tu}</td>
         <td style="font-weight:600;white-space:nowrap">${r.ma_kh ?? '—'}</td>
-        <td style="font-family:monospace;font-size:8px;font-weight:700">${r.so_lenh ?? '—'}</td>
+        <td style="font-family:monospace;font-size:8px;font-weight:700">${r.so_lenh ?? '—'}${r.ngay_chay ? `<br><span style="color:#1677ff;font-size:7px">${dayjs(r.ngay_chay).format('DD/MM')}</span>` : ''}</td>
         <td>${paperCell(r.mat,          r.mat_dl,        kgMatC,  false)}</td>
         <td>${paperCell(slots.songC.ma, slots.songC.dl,  kgSongC, true)}</td>
         <td>${soLop >= 5 ? paperCell(r.mat_1, r.mat_1_dl, kgMatB, false) : '<span style="color:#ccc">—</span>'}</td>
@@ -503,15 +507,27 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         </tbody>
       </table>`
 
+    const headerMeta = [
+      `Ngày: <b>${dayjs(plan.ngay_ke_hoach).format('DD/MM/YYYY')}</b>`,
+      plan.noi_sx ? `Nơi SX: <b>${plan.noi_sx}</b>` : '',
+      plan.created_by_name ? `Người lập: <b>${plan.created_by_name}</b>` : '',
+      `${plan.lines.length} lệnh`,
+      `Tổng MT: <b>${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</b>`,
+    ].filter(Boolean).join(' &nbsp;·&nbsp; ')
+
     printToPdf(
       `Kế hoạch SX ${plan.so_ke_hoach}`,
       `<style>
-        .tag-ct { background:#e6fffb; color:#08979c; border:1px solid #87e8de; border-radius:3px; padding:0 3px; font-size:8px; }
-        .tag-cm { background:#f9f0ff; color:#531dab; border:1px solid #d3adf7; border-radius:3px; padding:0 3px; font-size:8px; }
-        .tag-lan{ background:#fff2e8; color:#d4380d; border:1px solid #ffbb96; border-radius:3px; padding:0 3px; font-size:8px; }
+        @page { size: A4 landscape; margin: 8mm; }
+        body { font-size: 8px; }
+        table { font-size: 8px !important; }
+        th, td { padding: 2px 3px !important; font-size: 8px !important; }
+        .tag-ct { background:#e6fffb; color:#08979c; border:1px solid #87e8de; border-radius:3px; padding:0 3px; font-size:7px; }
+        .tag-cm { background:#f9f0ff; color:#531dab; border:1px solid #d3adf7; border-radius:3px; padding:0 3px; font-size:7px; }
+        .tag-lan{ background:#fff2e8; color:#d4380d; border:1px solid #ffbb96; border-radius:3px; padding:0 3px; font-size:7px; }
       </style>
-      <h2>KẾ HOẠCH SẢN XUẤT: ${plan.so_ke_hoach}</h2>
-      <p class="meta">Ngày: ${dayjs(plan.ngay_ke_hoach).format('DD/MM/YYYY')} &nbsp;·&nbsp; ${plan.lines.length} lệnh &nbsp;·&nbsp; Tổng MT: <strong>${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></p>
+      <h2 style="margin:0 0 4px;font-size:14px">KẾ HOẠCH SẢN XUẤT: ${plan.so_ke_hoach}</h2>
+      <p class="meta" style="margin:0 0 6px;font-size:9px">${headerMeta}</p>
       ${tableHtml}`,
       true,
     )
@@ -524,11 +540,14 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
     <div style={{ padding: embedded ? 0 : 24 }}>
       {/* ── Print styles ── */}
       <style>{`
+        @page { size: A4 landscape; margin: 8mm; }
         @media print {
           .no-print { display: none !important; }
-          .ant-table-cell { padding: 2px 4px !important; font-size: 10px !important; }
-          body { margin: 0; }
-          .plan-header { margin-bottom: 8px; }
+          body { margin: 0; font-size: 8px; }
+          table { font-size: 8px !important; border-collapse: collapse; }
+          th, td { padding: 2px 3px !important; font-size: 8px !important; }
+          .plan-header { margin-bottom: 6px; }
+          .ant-tag { font-size: 7px !important; padding: 0 3px !important; }
         }
       `}</style>
 
@@ -569,14 +588,16 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{ fontSize: 12 }}>
             <div><b>Ngày:</b> {dayjs(plan.ngay_ke_hoach).format('DD/MM/YYYY')}</div>
-            <div><b>Nơi SX:</b></div>
+            {plan.noi_sx && <div><b>Nơi SX:</b> {plan.noi_sx}</div>}
             <div><b>Số phiếu:</b> {plan.so_ke_hoach}</div>
+            {plan.created_by_name && <div><b>Người lập:</b> {plan.created_by_name}</div>}
           </div>
           <div style={{ textAlign: 'center', flex: 1 }}>
             <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: 1 }}>KẾ HOẠCH SẢN XUẤT</div>
           </div>
           <div style={{ fontSize: 12, textAlign: 'right' }}>
             <div>Tổng số MT: <b style={{ color: '#1677ff', fontSize: 14 }}>{totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</b></div>
+            <div style={{ color: '#888' }}>{plan.lines.length} lệnh</div>
           </div>
         </div>
       </div>
@@ -683,9 +704,14 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                   {/* Mã KH */}
                   <td style={{ ...TD, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.ma_kh || '—'}</td>
 
-                  {/* Số LSX */}
+                  {/* Số LSX + ngày chạy */}
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.so_lenh || '—'}</span>
+                    <div style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.so_lenh || '—'}</div>
+                    {r.ngay_chay && (
+                      <div style={{ fontSize: 9, color: '#1677ff', marginTop: 1 }}>
+                        📅 {dayjs(r.ngay_chay).format('DD/MM')}
+                      </div>
+                    )}
                   </td>
 
                   {/* Mặt C */}

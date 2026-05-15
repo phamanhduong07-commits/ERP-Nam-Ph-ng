@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Button, Input, Select, Space, Table, Tag, Typography, DatePicker,
@@ -14,6 +14,15 @@ import {
 const { Text } = Typography
 const { RangePicker } = DatePicker
 
+const SS_KEY = 'production_plan_filters'
+
+function readFilter() {
+  try { return JSON.parse(sessionStorage.getItem(SS_KEY) || '{}') } catch { return {} }
+}
+function writeFilter(v: object) {
+  sessionStorage.setItem(SS_KEY, JSON.stringify(v))
+}
+
 interface Props {
   selectedId: number | null
   onSelect: (id: number) => void
@@ -21,10 +30,38 @@ interface Props {
 
 export default function ProductionPlanList({ selectedId, onSelect }: Props) {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
-  const [trangThai, setTrangThai] = useState<string | undefined>(undefined)
-  const [dateRange, setDateRange] = useState<[string, string] | null>(null)
-  const [page, setPage] = useState(1)
+  const saved = readFilter()
+
+  const [inputSearch, setInputSearch] = useState<string>(saved.search ?? '')
+  const [search, setSearch] = useState<string>(saved.search ?? '')
+  const [trangThai, setTrangThai] = useState<string | undefined>(saved.trangThai ?? undefined)
+  const [dateRange, setDateRange] = useState<[string, string] | null>(saved.dateRange ?? null)
+  const [page, setPage] = useState<number>(saved.page ?? 1)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Persist filters to sessionStorage
+  useEffect(() => {
+    writeFilter({ search, trangThai, dateRange, page })
+  }, [search, trangThai, dateRange, page])
+
+  const handleSearchChange = (val: string) => {
+    setInputSearch(val)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (val === '') {
+      setSearch('')
+      setPage(1)
+      return
+    }
+    debounceRef.current = setTimeout(() => {
+      setSearch(val)
+      setPage(1)
+    }, 400)
+  }
+
+  const handleShortcut = (value: string) => {
+    setTrangThai(prev => prev === value ? undefined : value)
+    setPage(1)
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['production-plans', search, trangThai, dateRange, page],
@@ -39,6 +76,15 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
       }).then(r => r.data),
   })
 
+  // Màu ngày kế hoạch: plan cũ chưa hoàn thành → cảnh báo
+  const ngayColor = (item: PlanListItem): React.CSSProperties => {
+    if (item.trang_thai === 'hoan_thanh') return {}
+    const diff = dayjs(item.ngay_ke_hoach).diff(dayjs().startOf('day'), 'day')
+    if (diff < -3) return { color: '#cf1322', fontWeight: 700 }
+    if (diff < 0) return { color: '#d46b08', fontWeight: 600 }
+    return {}
+  }
+
   const cols: ColumnsType<PlanListItem> = [
     {
       title: 'Số KH',
@@ -49,8 +95,10 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
     {
       title: 'Ngày',
       dataIndex: 'ngay_ke_hoach',
-      width: 100,
-      render: (v: string) => dayjs(v).format('DD/MM/YYYY'),
+      width: 95,
+      render: (v: string, r: PlanListItem) => (
+        <span style={ngayColor(r)}>{dayjs(v).format('DD/MM/YYYY')}</span>
+      ),
     },
     {
       title: 'Trạng thái',
@@ -74,16 +122,43 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
         </Text>
       ),
     },
+    {
+      title: 'Người lập',
+      dataIndex: 'created_by_name',
+      width: 100,
+      ellipsis: true,
+      render: (v: string | null) => (
+        <Text type="secondary" style={{ fontSize: 11 }}>{v || '—'}</Text>
+      ),
+    },
   ]
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={8}>
+      {/* Shortcut buttons */}
+      <Space size={6} wrap>
+        <Button
+          size="small"
+          type={trangThai === 'nhap' ? 'primary' : 'default'}
+          onClick={() => handleShortcut('nhap')}
+        >
+          Nháp
+        </Button>
+        <Button
+          size="small"
+          type={trangThai === 'da_xuat' ? 'primary' : 'default'}
+          onClick={() => handleShortcut('da_xuat')}
+        >
+          Đã xuất KH
+        </Button>
+      </Space>
+
       <Space wrap size={6} style={{ width: '100%' }}>
         <Input
           placeholder="Tìm số kế hoạch..."
           prefix={<SearchOutlined />}
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1) }}
+          value={inputSearch}
+          onChange={e => handleSearchChange(e.target.value)}
           style={{ width: 170 }}
           allowClear
         />
@@ -100,6 +175,7 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
         <RangePicker
           format="DD/MM/YYYY"
           style={{ width: 210 }}
+          value={dateRange ? [dayjs(dateRange[0]), dayjs(dateRange[1])] : null}
           onChange={(dates) => {
             setDateRange(
               dates && dates[0] && dates[1]
@@ -139,7 +215,7 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
         }}
         rowClassName={r => r.id === selectedId ? 'ant-table-row-selected' : ''}
         onRow={r => ({ onClick: () => onSelect(r.id), style: { cursor: 'pointer' } })}
-        scroll={{ x: 440 }}
+        scroll={{ x: 540 }}
       />
     </Space>
   )
