@@ -274,7 +274,7 @@ export default function QuoteList({ selectedId, onSelect }: Props) {
               <Button size="small" icon={<CopyOutlined />} onClick={() => copyMutation.mutate(row.id)} />
             </Tooltip>
           )}
-          {(row.trang_thai === 'moi' || row.trang_thai === 'da_duyet') && (
+          {row.trang_thai === 'da_duyet' && (
             <Tooltip title="Lập đơn hàng">
               <Popconfirm title="Tạo đơn hàng từ báo giá này?" onConfirm={() => taoDonMutation.mutate(row.id)}>
                 <Button size="small" icon={<FileAddOutlined />} type="primary" />

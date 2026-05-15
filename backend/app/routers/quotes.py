@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import BytesIO
 import unicodedata
@@ -312,7 +312,7 @@ def _build_response(quote: Quote) -> QuoteResponse:
         ten_nv_phu_trach=quote.nv_phu_trach.ho_ten if quote.nv_phu_trach else None,
         nv_theo_doi_id=quote.nv_theo_doi_id,
         ten_nv_theo_doi=quote.nv_theo_doi.ho_ten if quote.nv_theo_doi else None,
-        nguoi_duyet_id=quote.nguoi_duyet_id,
+        nguoi_duyet_id=quote.approved_by,
         ten_nguoi_duyet=quote.approver.ho_ten if quote.approver else None,
         approved_at=quote.approved_at,
         created_by=quote.created_by,
@@ -370,7 +370,7 @@ def _auto_expire_quotes(db: Session) -> None:
     (
         db.query(Quote)
         .filter(
-            Quote.trang_thai.in_(["moi", "cho_duyet"]),
+            Quote.trang_thai.in_(["moi", "cho_duyet", "da_duyet"]),
             Quote.ngay_het_han < today,
             Quote.ngay_het_han.isnot(None),
         )
@@ -612,7 +612,7 @@ async def import_quotes(
                 db.add(quote)
             quote.ngay_bao_gia = header["ngay_bao_gia"]
             quote.customer_id = group["customer"].id
-            quote.ngay_het_han = header.get("ngay_het_han")
+            quote.ngay_het_han = header.get("ngay_het_han") or (header["ngay_bao_gia"] + timedelta(days=30))
             quote.so_bg_copy = header.get("so_bg_copy")
             quote.ghi_chu = header.get("ghi_chu_bao_gia")
             quote.dieu_khoan = header.get("dieu_khoan")
@@ -778,7 +778,6 @@ def approve_quote(
     if quote.trang_thai not in ("moi", "cho_duyet"):
         raise HTTPException(status_code=400, detail="Chỉ duyệt được báo giá ở trạng thái Mới hoặc Chờ duyệt")
     quote.trang_thai = "da_duyet"
-    quote.nguoi_duyet_id = current_user.id
     quote.approved_by = current_user.id
     quote.approved_at = datetime.utcnow()
     db.commit()
@@ -821,7 +820,7 @@ def gia_han_quote(
     if body.ngay_het_han <= date.today():
         raise HTTPException(status_code=400, detail="Ngày hết hạn mới phải sau hôm nay")
     quote.ngay_het_han = body.ngay_het_han
-    quote.trang_thai = "moi"
+    quote.trang_thai = "da_duyet" if quote.approved_by else "moi"
     db.commit()
     return _build_response(_load_quote(quote_id, db))
 
@@ -846,7 +845,7 @@ def copy_quote(
         phan_xuong_id=source.phan_xuong_id,
         nv_phu_trach_id=current_user.id,
         nv_theo_doi_id=source.nv_theo_doi_id,
-        ngay_het_han=source.ngay_het_han,
+        ngay_het_han=date.today() + timedelta(days=30),
         chi_phi_bang_in=source.chi_phi_bang_in,
         chi_phi_khuon=source.chi_phi_khuon,
         chi_phi_van_chuyen=source.chi_phi_van_chuyen,
