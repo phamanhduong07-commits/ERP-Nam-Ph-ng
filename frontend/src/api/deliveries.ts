@@ -170,6 +170,7 @@ export interface DeliveryOrder {
   has_issued_invoice: boolean
   invoice_id: number | null
   invoice_status: string | null
+  created_by_name?: string | null
 }
 
 export interface CreateDeliveryItemPayload {
@@ -232,6 +233,7 @@ export const deliveriesApi = {
     tu_ngay?: string
     den_ngay?: string
     so_phieu?: string
+    phap_nhan_id?: number
   }) =>
     client.get<DeliveryOrder[]>('/warehouse/deliveries', { params }),
   get: (id: number) => client.get<DeliveryOrder>(`/warehouse/deliveries/${id}`),
