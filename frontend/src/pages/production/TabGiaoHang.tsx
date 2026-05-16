@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert, Badge, Button, Card, Col, DatePicker, Descriptions, Divider, Drawer, Empty, Form, Input, InputNumber,
@@ -19,7 +19,7 @@ import { warehousesApi } from '../../api/warehouses'
 import { customersApi } from '../../api/customers'
 import { billingApi } from '../../api/billing'
 import { usePhapNhanForPrint, usePhapNhanList } from '../../hooks/usePhapNhan'
-import { COMPANY_CONFIGS, exportExcelWithTemplate, printDocument } from '../../utils/exportUtils'
+import { COMPANY_CONFIGS, exportExcelWithTemplate } from '../../utils/exportUtils'
 import { systemApi } from '../../api/system'
 
 const GH_FILTER_KEY = 'gh-do-filter'
@@ -753,6 +753,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
         ...vals,
         ngay_xuat: vals.ngay_xuat.format('YYYY-MM-DD'),
         yeu_cau_id: selectedYC?.id,
+        tien_van_chuyen: estimatedTripMoney || undefined,
         items: doItems.map(it => ({
           ...it,
           production_order_id: it.production_order_id || undefined,
@@ -772,6 +773,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
       { key: 'ten_khach', label: 'Khách hàng', width: 28 },
       { key: 'ten_tai_xe', label: 'Tài xế', width: 18 },
       { key: 'ten_lo_xe', label: 'Lơ xe', width: 18 },
+      { key: 'ten_lo_xe_2', label: 'Lơ xe 2', width: 18 },
       { key: 'tong_thanh_toan', label: 'Tổng thanh toán', width: 16 },
       { key: 'trang_thai_cong_no_label', label: 'Công nợ', width: 14 },
       { key: 'trang_thai_label', label: 'Trạng thái', width: 12 },
@@ -812,11 +814,11 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
       render: (v: number | null) => <span style={{ fontSize: 12 }}>{v != null ? v : '—'}</span> },
     { title: 'Cắt', dataIndex: 'dai_tt', width: 60, align: 'right' as const,
       render: (v: number | null) => <span style={{ fontSize: 12 }}>{v != null ? v : '—'}</span> },
-    { title: 'Nhập (tấm)', dataIndex: 'tong_nhap', width: 88, align: 'right' as const,
+    { title: 'Nhập (thùng)', dataIndex: 'tong_nhap', width: 95, align: 'right' as const,
       render: (v: number) => <span style={{ fontSize: 12 }}>{fmtN(v)}</span> },
-    { title: 'Xuất (tấm)', dataIndex: 'tong_xuat', width: 88, align: 'right' as const,
+    { title: 'Xuất (thùng)', dataIndex: 'tong_xuat', width: 95, align: 'right' as const,
       render: (v: number) => <span style={{ fontSize: 12 }}>{fmtN(v)}</span> },
-    { title: 'Tồn (tấm)', dataIndex: 'ton_kho', width: 88, align: 'right' as const,
+    { title: 'Tồn (thùng)', dataIndex: 'ton_kho', width: 95, align: 'right' as const,
       render: (v: number) => (
         <Text strong style={{ fontSize: 12, color: v > 0 ? '#389e0d' : '#cf1322' }}>{fmtN(v)}</Text>
       ) },
@@ -897,6 +899,8 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
     { title: 'Khách hàng', dataIndex: 'ten_khach', ellipsis: true },
     { title: 'Tài xế', dataIndex: 'ten_tai_xe', width: 110 },
     { title: 'Lơ xe', dataIndex: 'ten_lo_xe', width: 110 },
+    { title: 'Lơ xe 2', dataIndex: 'ten_lo_xe_2', width: 110,
+      render: (v: string | null) => v || <Text type="secondary">—</Text> },
     { title: 'Tổng TT', dataIndex: 'tong_thanh_toan', width: 120, align: 'right' as const,
       render: (v: number) => <Text strong>{fmtMoney(v)}đ</Text> },
     { title: 'Công nợ', dataIndex: 'trang_thai_cong_no', width: 120,
@@ -1442,6 +1446,27 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
               <Col span={12}>
                 <Form.Item name="gui_kem_theo" label="Gửi kèm theo">
                   <Input placeholder="Chứng từ gửi kèm..." />
+                </Form.Item>
+              </Col>
+            )}
+            {!isRequest && (
+              <Col span={12}>
+                <Form.Item name="dia_chi_giao" label="Địa chỉ giao">
+                  <Input placeholder="Địa chỉ giao hàng..." />
+                </Form.Item>
+              </Col>
+            )}
+            {!isRequest && (
+              <Col span={12}>
+                <Form.Item name="nguoi_nhan" label="Người nhận">
+                  <Input placeholder="Tên người nhận tại điểm giao..." />
+                </Form.Item>
+              </Col>
+            )}
+            {!isRequest && (
+              <Col span={24}>
+                <Form.Item name="ghi_chu" label="Ghi chú">
+                  <Input.TextArea rows={2} placeholder="Ghi chú cho phiếu bán hàng..." />
                 </Form.Item>
               </Col>
             )}

@@ -1747,12 +1747,15 @@ def list_deliveries(
     tu_ngay: Optional[date] = Query(None),
     den_ngay: Optional[date] = Query(None),
     so_phieu: Optional[str] = Query(None),
+    phap_nhan_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     q = db.query(DeliveryOrder)
     if so_phieu:
         q = q.filter(DeliveryOrder.so_phieu.ilike(f"%{so_phieu}%"))
+    if phap_nhan_id:
+        q = q.filter(DeliveryOrder.phap_nhan_id == phap_nhan_id)
     if warehouse_id:
         q = q.filter(DeliveryOrder.warehouse_id == warehouse_id)
     if sales_order_id:
@@ -1801,6 +1804,7 @@ def list_deliveries(
             joinedload(DeliveryOrder.lo_xe_rel),
             joinedload(DeliveryOrder.lo_xe_rel_2),
             joinedload(DeliveryOrder.don_gia_vc),
+            joinedload(DeliveryOrder.creator),
         )
         .order_by(DeliveryOrder.created_at.desc()).limit(200).all()
     )
@@ -2462,6 +2466,7 @@ def _do_to_dict(do: DeliveryOrder, db: Session, include_print_data: bool = False
         "has_issued_invoice": db.query(SalesInvoice.id).filter(SalesInvoice.delivery_id == do.id, SalesInvoice.trang_thai != "huy").first() is not None,
         "invoice_id": db.query(SalesInvoice.id).filter(SalesInvoice.delivery_id == do.id, SalesInvoice.trang_thai != "huy").order_by(SalesInvoice.id.desc()).limit(1).scalar(),
         "invoice_status": db.query(SalesInvoice.trang_thai).filter(SalesInvoice.delivery_id == do.id, SalesInvoice.trang_thai != "huy").order_by(SalesInvoice.id.desc()).limit(1).scalar(),
+        "created_by_name": (do.creator.ho_ten if do.creator else None) if hasattr(do, "creator") else None,
     }
 
 
