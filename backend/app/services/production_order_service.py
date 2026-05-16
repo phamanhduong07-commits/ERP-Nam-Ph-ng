@@ -37,6 +37,7 @@ class ProductionOrderService:
         search: str = "",
         trang_thai: str = "",
         sales_order_id: int = None,
+        phan_xuong_id: int = None,
         tu_ngay: date = None,
         den_ngay: date = None,
         page: int = 1,
@@ -68,6 +69,8 @@ class ProductionOrderService:
             q = q.filter(ProductionOrder.trang_thai == trang_thai)
         if sales_order_id:
             q = q.filter(ProductionOrder.sales_order_id == sales_order_id)
+        if phan_xuong_id:
+            q = q.filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
         if tu_ngay:
             q = q.filter(ProductionOrder.ngay_lenh >= tu_ngay)
         if den_ngay:
@@ -103,6 +106,10 @@ class ProductionOrderService:
                 so_dong=len(o.items),
                 kho_tt_max=kho_tt_max,
                 de_xuat_mua_ngoai=(kho_tt_max or 0) >= _KHO_DE_XUAT,
+                kho_tt=float(first_item.kho_tt) if first_item and first_item.kho_tt is not None else None,
+                dai_tt=float(first_item.dai_tt) if first_item and first_item.dai_tt is not None else None,
+                so_lop=first_item.so_lop if first_item else None,
+                to_hop_song=first_item.to_hop_song if first_item else None,
                 created_at=o.created_at,
             ))
 

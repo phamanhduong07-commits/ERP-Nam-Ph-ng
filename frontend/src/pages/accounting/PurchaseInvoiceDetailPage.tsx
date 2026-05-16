@@ -1,28 +1,46 @@
-import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
-  Button, Card, Col, Descriptions, Form, DatePicker, InputNumber, Input,
-  Modal, Row, Select, Space, Spin, Table, Tag, Typography, message,
+  Button, Card, Col, Descriptions, Row, Space, Spin, Table, Tag, Typography,
 } from 'antd'
-import { ArrowLeftOutlined, PrinterOutlined, PlusOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, PrinterOutlined, WalletOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { fmtVND, printToPdf } from '../../utils/exportUtils'
 import {
-  purchaseInvoiceApi, paymentApi, PurchaseInvoice,
-  CashPaymentShort, TRANG_THAI_PO_INVOICE, HINH_THUC_TT,
+  purchaseInvoiceApi, PurchaseInvoice, CashPaymentShort,
 } from '../../api/accounting'
 
 const { Title, Text } = Typography
+
+const HINH_THUC_TT_LABEL: Record<string, string> = {
+  tien_mat: 'Tiền mặt',
+  TM: 'Tiền mặt',
+  chuyen_khoan: 'Chuyển khoản',
+  CK: 'Chuyển khoản',
+  bu_tru_cong_no: 'Bù trừ công nợ',
+  khac: 'Khác',
+}
+
+const INVOICE_STATUS: Record<string, { label: string; color: string }> = {
+  nhap: { label: 'Nháp', color: 'default' },
+  da_tt_mot_phan: { label: 'TT một phần', color: 'orange' },
+  da_tt_du: { label: 'Đã thanh toán đủ', color: 'green' },
+  qua_han: { label: 'Quá hạn', color: 'red' },
+  huy: { label: 'Đã hủy', color: 'default' },
+}
+
+const PAYMENT_STATUS: Record<string, { label: string; color: string }> = {
+  cho_chot: { label: 'Chờ chốt', color: 'default' },
+  da_chot: { label: 'Đã chốt', color: 'orange' },
+  da_duyet: { label: 'Đã duyệt', color: 'green' },
+  huy: { label: 'Đã hủy', color: 'default' },
+}
 
 export default function PurchaseInvoiceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const invId = Number(id)
   const navigate = useNavigate()
-  const qc = useQueryClient()
-  const [showPayModal, setShowPayModal] = useState(false)
-  const [form] = Form.useForm()
 
   const { data: invoice, isLoading } = useQuery<PurchaseInvoice>({
     queryKey: ['purchase-invoice', invId],
@@ -30,36 +48,22 @@ export default function PurchaseInvoiceDetailPage() {
     enabled: !!invId,
   })
 
-  const payMut = useMutation({
-    mutationFn: (values: any) =>
-      paymentApi.create({
-        supplier_id: invoice!.supplier_id,
-        purchase_invoice_id: invId,
-        ngay_phieu: values.ngay_phieu.format('YYYY-MM-DD'),
-        hinh_thuc_tt: values.hinh_thuc_tt,
-        so_tai_khoan: values.so_tai_khoan || undefined,
-        so_tham_chieu: values.so_tham_chieu || undefined,
-        dien_giai: values.dien_giai || undefined,
-        so_tien: values.so_tien,
-      }),
-    onSuccess: () => {
-      message.success('Ghi nhận thanh toán thành công')
-      setShowPayModal(false)
-      form.resetFields()
-      qc.invalidateQueries({ queryKey: ['purchase-invoice', invId] })
-    },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi ghi nhận'),
-  })
-
   if (isLoading) return <Spin style={{ margin: 40 }} />
-  if (!invoice) return <div style={{ padding: 24 }}>Không tìm thấy hóa đơn</div>
+  if (!invoice) return <div style={{ padding: 24 }}>Không tìm thấy hóa đơn mua</div>
 
-  const status = TRANG_THAI_PO_INVOICE[invoice.trang_thai]
+  const status = INVOICE_STATUS[invoice.trang_thai]
   const conLai = invoice.con_lai ?? 0
-  const canPay = ['nhap', 'da_tt_mot_phan', 'qua_han'].includes(invoice.trang_thai)
+  const canCreatePayment = ['nhap', 'da_tt_mot_phan', 'qua_han'].includes(invoice.trang_thai) && conLai > 0
 
   const paymentCols: ColumnsType<CashPaymentShort> = [
-    { title: 'Số phiếu', dataIndex: 'so_phieu', width: 160 },
+    {
+      title: 'Số phiếu',
+      dataIndex: 'so_phieu',
+      width: 160,
+      render: (value, row) => (
+        <a onClick={() => navigate(`/accounting/payments/${row.id}`)}>{value}</a>
+      ),
+    },
     {
       title: 'Ngày phiếu',
       dataIndex: 'ngay_phieu',
@@ -69,32 +73,60 @@ export default function PurchaseInvoiceDetailPage() {
     {
       title: 'Hình thức',
       dataIndex: 'hinh_thuc_tt',
-      width: 120,
-      render: v => HINH_THUC_TT[v] ?? v,
+      width: 140,
+      render: v => HINH_THUC_TT_LABEL[v] ?? v,
     },
     {
       title: 'Số tiền',
       dataIndex: 'so_tien',
       align: 'right',
-      width: 140,
+      width: 150,
       render: v => fmtVND(v),
     },
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
-      width: 120,
+      width: 130,
       render: v => {
-        const map: Record<string, { label: string; color: string }> = {
-          cho_chot: { label: 'Chờ chốt',  color: 'default' },
-          da_chot:  { label: 'Đã chốt',   color: 'orange' },
-          da_duyet: { label: 'Đã duyệt',  color: 'green' },
-          huy:      { label: 'Đã hủy',    color: 'default' },
-        }
-        const s = map[v]
+        const s = PAYMENT_STATUS[v]
         return <Tag color={s?.color}>{s?.label ?? v}</Tag>
       },
     },
   ]
+
+  const handlePrint = () => {
+    const payRows = (invoice.payments ?? []).map((p: CashPaymentShort) => [
+      p.so_phieu,
+      dayjs(p.ngay_phieu).format('DD/MM/YYYY'),
+      HINH_THUC_TT_LABEL[p.hinh_thuc_tt] ?? p.hinh_thuc_tt,
+      `<span style="text-align:right;display:block">${fmtVND(p.so_tien)}</span>`,
+    ])
+
+    printToPdf(
+      `HoaDonMua_${invoice.so_hoa_don ?? invoice.id}`,
+      `<h2 style="text-align:center">HÓA ĐƠN MUA HÀNG</h2>
+       <p><strong>Số HĐ:</strong> ${invoice.so_hoa_don ?? '-'} &nbsp;&nbsp;
+          <strong>Mẫu số:</strong> ${invoice.mau_so ?? '-'} &nbsp;&nbsp;
+          <strong>Ký hiệu:</strong> ${invoice.ky_hieu ?? '-'}</p>
+       <p><strong>Ngày lập:</strong> ${dayjs(invoice.ngay_lap).format('DD/MM/YYYY')}
+          &nbsp;&nbsp; <strong>Hạn TT:</strong> ${invoice.han_tt ? dayjs(invoice.han_tt).format('DD/MM/YYYY') : '-'}</p>
+       <p><strong>Nhà cung cấp:</strong> ${invoice.ten_don_vi ?? '-'}
+          &nbsp;&nbsp; <strong>MST:</strong> ${invoice.ma_so_thue ?? '-'}</p>
+       <hr/>
+       <p><strong>Tiền hàng:</strong> ${fmtVND(invoice.tong_tien_hang)}</p>
+       <p><strong>Thuế (${invoice.thue_suat}%):</strong> ${fmtVND(invoice.tien_thue)}</p>
+       <p><strong>Tổng thanh toán:</strong> <span style="font-size:1.1em;color:#1677ff">${fmtVND(invoice.tong_thanh_toan)}</span></p>
+       <p><strong>Đã thanh toán:</strong> ${fmtVND(invoice.da_thanh_toan)} &nbsp;&nbsp; <strong>Còn lại:</strong> ${fmtVND(conLai)}</p>
+       ${payRows.length > 0 ? `
+       <h4>Phiếu chi đã tạo</h4>
+       <table border="1" cellpadding="4" style="border-collapse:collapse;width:100%;font-size:11px">
+         <thead><tr><th>Số phiếu</th><th>Ngày</th><th>Hình thức</th><th>Số tiền</th></tr></thead>
+         <tbody>${payRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+       </table>` : ''}
+       <p><strong>Ghi chú:</strong> ${invoice.ghi_chu ?? '-'}</p>`,
+      false,
+    )
+  }
 
   return (
     <div style={{ padding: 24, maxWidth: 960, margin: '0 auto' }}>
@@ -107,49 +139,16 @@ export default function PurchaseInvoiceDetailPage() {
           <Tag color={status?.color}>{status?.label ?? invoice.trang_thai}</Tag>
         </Space>
         <Space>
-          <Button
-            icon={<PrinterOutlined />}
-            onClick={() => {
-              const payRows = (invoice.payments ?? []).map((p: CashPaymentShort) => [
-                p.so_phieu,
-                dayjs(p.ngay_phieu).format('DD/MM/YYYY'),
-                HINH_THUC_TT[p.hinh_thuc_tt] ?? p.hinh_thuc_tt,
-                `<span style="text-align:right;display:block">${fmtVND(p.so_tien)}</span>`,
-              ])
-              printToPdf(
-                `HoaDonMua_${invoice.so_hoa_don ?? invoice.id}`,
-                `<h2 style="text-align:center">HÓA ĐƠN MUA HÀNG</h2>
-                 <p><strong>Số HĐ:</strong> ${invoice.so_hoa_don ?? '—'} &nbsp;&nbsp;
-                    <strong>Mẫu số:</strong> ${invoice.mau_so ?? '—'} &nbsp;&nbsp;
-                    <strong>Ký hiệu:</strong> ${invoice.ky_hieu ?? '—'}</p>
-                 <p><strong>Ngày lập:</strong> ${dayjs(invoice.ngay_lap).format('DD/MM/YYYY')}
-                    &nbsp;&nbsp; <strong>Hạn TT:</strong> ${invoice.han_tt ? dayjs(invoice.han_tt).format('DD/MM/YYYY') : '—'}</p>
-                 <p><strong>Nhà cung cấp:</strong> ${invoice.ten_don_vi ?? '—'}
-                    &nbsp;&nbsp; <strong>MST:</strong> ${invoice.ma_so_thue ?? '—'}</p>
-                 <hr/>
-                 <p><strong>Tiền hàng:</strong> ${fmtVND(invoice.tong_tien_hang)}</p>
-                 <p><strong>Thuế (${invoice.thue_suat}%):</strong> ${fmtVND(invoice.tien_thue)}</p>
-                 <p><strong>Tổng thanh toán:</strong> <span style="font-size:1.1em;color:#1677ff">${fmtVND(invoice.tong_thanh_toan)}</span></p>
-                 <p><strong>Đã thanh toán:</strong> ${fmtVND(invoice.da_thanh_toan)} &nbsp;&nbsp; <strong>Còn lại:</strong> ${fmtVND(invoice.con_lai ?? 0)}</p>
-                 ${payRows.length > 0 ? `
-                 <h4>Phiếu chi đã ghi</h4>
-                 <table border="1" cellpadding="4" style="border-collapse:collapse;width:100%;font-size:11px">
-                   <thead><tr><th>Số phiếu</th><th>Ngày</th><th>Hình thức</th><th>Số tiền</th></tr></thead>
-                   <tbody>${payRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
-                 </table>` : ''}
-                 <p><strong>Ghi chú:</strong> ${invoice.ghi_chu ?? '—'}</p>`,
-                false,
-              )
-            }}
-          >
+          <Button icon={<PrinterOutlined />} onClick={handlePrint}>
             In PDF
           </Button>
-          {canPay && (
+          {canCreatePayment && (
             <Button
-              type="primary" icon={<PlusOutlined />}
-              onClick={() => { form.resetFields(); setShowPayModal(true) }}
+              type="primary"
+              icon={<WalletOutlined />}
+              onClick={() => navigate(`/accounting/payments/new?invoice_id=${invoice.id}`)}
             >
-              Ghi nhận thanh toán
+              Tạo phiếu chi
             </Button>
           )}
         </Space>
@@ -157,19 +156,19 @@ export default function PurchaseInvoiceDetailPage() {
 
       <Card size="small" style={{ marginBottom: 16 }}>
         <Descriptions column={2} size="small" bordered>
-          <Descriptions.Item label="Số hóa đơn">{invoice.so_hoa_don ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="Số hóa đơn">{invoice.so_hoa_don ?? '-'}</Descriptions.Item>
           <Descriptions.Item label="Ngày lập">
             {dayjs(invoice.ngay_lap).format('DD/MM/YYYY')}
           </Descriptions.Item>
-          <Descriptions.Item label="Mẫu số">{invoice.mau_so ?? '—'}</Descriptions.Item>
-          <Descriptions.Item label="Ký hiệu">{invoice.ky_hieu ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="Mẫu số">{invoice.mau_so ?? '-'}</Descriptions.Item>
+          <Descriptions.Item label="Ký hiệu">{invoice.ky_hieu ?? '-'}</Descriptions.Item>
           <Descriptions.Item label="Hạn thanh toán">
-            {invoice.han_tt ? dayjs(invoice.han_tt).format('DD/MM/YYYY') : '—'}
+            {invoice.han_tt ? dayjs(invoice.han_tt).format('DD/MM/YYYY') : '-'}
           </Descriptions.Item>
           <Descriptions.Item label="Thuế suất">{invoice.thue_suat}%</Descriptions.Item>
-          <Descriptions.Item label="Nhà cung cấp" span={2}>{invoice.ten_don_vi ?? '—'}</Descriptions.Item>
-          <Descriptions.Item label="Mã số thuế">{invoice.ma_so_thue ?? '—'}</Descriptions.Item>
-          <Descriptions.Item label="Ghi chú">{invoice.ghi_chu ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="Nhà cung cấp" span={2}>{invoice.ten_don_vi ?? '-'}</Descriptions.Item>
+          <Descriptions.Item label="Mã số thuế">{invoice.ma_so_thue ?? '-'}</Descriptions.Item>
+          <Descriptions.Item label="Ghi chú">{invoice.ghi_chu ?? '-'}</Descriptions.Item>
         </Descriptions>
       </Card>
 
@@ -202,7 +201,7 @@ export default function PurchaseInvoiceDetailPage() {
         </Row>
       </Card>
 
-      <Card size="small" title="Phiếu chi đã ghi">
+      <Card size="small" title="Phiếu chi đã tạo">
         <Table
           columns={paymentCols}
           dataSource={invoice.payments ?? []}
@@ -212,45 +211,6 @@ export default function PurchaseInvoiceDetailPage() {
           locale={{ emptyText: 'Chưa có phiếu chi' }}
         />
       </Card>
-
-      <Modal
-        title="Ghi nhận thanh toán NCC"
-        open={showPayModal}
-        onCancel={() => setShowPayModal(false)}
-        onOk={() => form.submit()}
-        okText="Ghi nhận"
-        confirmLoading={payMut.isPending}
-        destroyOnClose
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          initialValues={{ ngay_phieu: dayjs(), hinh_thuc_tt: 'CK', so_tien: conLai }}
-          onFinish={payMut.mutate}
-        >
-          <Form.Item name="ngay_phieu" label="Ngày phiếu" rules={[{ required: true }]}>
-            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="hinh_thuc_tt" label="Hình thức TT" rules={[{ required: true }]}>
-            <Select options={Object.entries(HINH_THUC_TT).map(([k, v]) => ({ value: k, label: v }))} />
-          </Form.Item>
-          <Form.Item name="so_tien" label="Số tiền" rules={[{ required: true, type: 'number', min: 1 }]}>
-            <InputNumber
-              style={{ width: '100%' }}
-              min={1}
-              max={conLai}
-              formatter={v => v ? Number(v).toLocaleString('vi-VN') : ''}
-              parser={v => Number((v ?? '').replace(/\D/g, '')) as any}
-            />
-          </Form.Item>
-          <Form.Item name="so_tham_chieu" label="Số tham chiếu">
-            <Input />
-          </Form.Item>
-          <Form.Item name="dien_giai" label="Diễn giải">
-            <Input />
-          </Form.Item>
-        </Form>
-      </Modal>
     </div>
   )
 }

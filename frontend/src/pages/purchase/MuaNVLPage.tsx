@@ -24,6 +24,8 @@ const { Title, Text } = Typography
 const fmtVND = (v: number) =>
   new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(v)
 
+const VAT_OPTIONS = [0, 5, 8, 10].map(v => ({ value: v, label: `${v}%` }))
+
 const TRANG_THAI_COLOR: Record<string, string> = {
   moi: 'default', da_duyet: 'blue', da_gui_ncc: 'cyan',
   dang_giao: 'orange', hoan_thanh: 'green', huy: 'red',
@@ -130,10 +132,36 @@ function TabDonMuaNVL() {
   })
 
   const createInvoiceMut = useMutation({
-    mutationFn: (id: number) => purchaseInvoiceApi.fromPO(id),
+    mutationFn: (data: { poId: number; thue_suat: number; co_vat: boolean }) =>
+      purchaseInvoiceApi.fromPO(data.poId, { thue_suat: data.thue_suat, co_vat: data.co_vat }),
     onSuccess: () => message.success('Đã tạo hóa đơn'),
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo HĐ'),
   })
+
+  function openCreateInvoice(poId: number) {
+    let coVat = true
+    let thueSuat = 8
+    Modal.confirm({
+      title: 'Tạo hóa đơn mua',
+      okText: 'Tạo hóa đơn',
+      cancelText: 'Hủy',
+      content: (
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Select
+            defaultValue={true}
+            style={{ width: '100%' }}
+            options={[
+              { value: true, label: 'V: Có VAT' },
+              { value: false, label: 'V: Không VAT' },
+            ]}
+            onChange={v => { coVat = v }}
+          />
+          <Select defaultValue={8} style={{ width: '100%' }} options={VAT_OPTIONS} onChange={v => { thueSuat = v }} />
+        </Space>
+      ),
+      onOk: () => createInvoiceMut.mutate({ poId, thue_suat: thueSuat, co_vat: coVat }),
+    })
+  }
 
   const handleMatSearch = async (idx: number, q: string) => {
     if (!q || q.length < 1) return
@@ -228,7 +256,7 @@ function TabDonMuaNVL() {
           {['da_duyet', 'hoan_thanh'].includes(r.trang_thai) && (
             <Tooltip title="Tạo hóa đơn">
               <Button size="small" type="link" loading={createInvoiceMut.isPending}
-                onClick={() => createInvoiceMut.mutate(r.id)}>HĐ</Button>
+                onClick={() => openCreateInvoice(r.id)}>HĐ</Button>
             </Tooltip>
           )}
         </Space>

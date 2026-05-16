@@ -14,7 +14,7 @@ import { warehousesApi } from '../../api/warehouses'
 import { purchaseApi } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
 import { phapNhanApi } from '../../api/phap_nhan'
-import { exportToExcel, printDocument, buildHtmlTable } from '../../utils/exportUtils'
+import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
@@ -239,50 +239,72 @@ export default function NhapPhoiNgoaiPage() {
 
   const handlePrintReceipt = (r: GoodsReceipt) => {
     const cols = [
-      { header: 'Tên phôi' },
-      { header: 'Lớp', align: 'center' as const },
-      { header: 'Rộng (mm)', align: 'right' as const },
-      { header: 'Dài (mm)', align: 'right' as const },
-      { header: 'Số tấm', align: 'right' as const },
-      { header: 'Đơn giá', align: 'right' as const },
-      { header: 'Thành tiền (đ)', align: 'right' as const },
+      { header: 'Tên phôi', key: 'ten_hang' },
+      { header: 'Lớp', key: 'so_lop', align: 'center' as const },
+      { header: 'Rộng (mm)', key: 'kho_mm', align: 'right' as const },
+      { header: 'Dài (mm)', key: 'dai_mm', align: 'right' as const },
+      { header: 'Số tấm', key: 'so_tam', align: 'right' as const },
+      { header: 'Đơn giá', key: 'don_gia', align: 'right' as const },
+      { header: 'Thành tiền (đ)', key: 'thanh_tien', align: 'right' as const },
     ]
-    const rowData = (r.items || []).map((it: any) => [
-      it.ten_hang,
-      it.so_lop ? `${it.so_lop}L` : '—',
-      it.kho_mm ? `${it.kho_mm}` : '—',
-      it.dai_mm ? `${it.dai_mm}` : '—',
-      it.so_cuon ? `${it.so_cuon}` : Number(it.so_luong).toLocaleString('vi-VN'),
-      Number(it.don_gia) > 0 ? Number(it.don_gia).toLocaleString('vi-VN') : '—',
-      (Number(it.thanh_tien) || 0).toLocaleString('vi-VN'),
-    ])
+    
+    const itemRows = (r.items || []).map((it: any) => ({
+      ten_hang: it.ten_hang,
+      so_lop: it.so_lop ? `${it.so_lop}L` : '—',
+      kho_mm: it.kho_mm ? `${it.kho_mm}` : '—',
+      dai_mm: it.dai_mm ? `${it.dai_mm}` : '—',
+      so_tam: it.so_cuon ? `${it.so_cuon}` : Number(it.so_luong).toLocaleString('vi-VN'),
+      don_gia: Number(it.don_gia) > 0 ? Number(it.don_gia).toLocaleString('vi-VN') : '—',
+      thanh_tien: (Number(it.thanh_tien) || 0).toLocaleString('vi-VN'),
+    }))
+
     const tong = (r.items || []).reduce((s: number, it: any) => s + (Number(it.thanh_tien) || 0), 0)
-    printDocument({
-      title: `Phiếu nhập phôi ${r.so_phieu}`,
-      subtitle: 'PHIẾU NHẬP KHO PHÔI SÓNG',
-      companyInfo,
-      documentNumber: r.so_phieu,
-      documentDate: r.ngay_nhap ?? '',
-      fields: [
-        { label: 'Số xe', value: r.so_xe ?? '—' },
-        { label: 'Kho phôi', value: r.ten_kho ?? '—' },
-        { label: 'Nhà cung cấp', value: r.ten_ncc ?? '—' },
-      ],
-      bodyHtml: buildHtmlTable(cols, rowData, { totalRow: ['TỔNG CỘNG', '', '', '', '', '', tong.toLocaleString('vi-VN') + ' đ'] }),
-    })
+    const table = buildHtmlTable(
+      cols.map(c => ({ header: c.header, align: c.align })), 
+      itemRows.map(row => cols.map(c => (row as any)[c.key])),
+      { totalRow: ['TỔNG CỘNG', '', '', '', '', '', tong.toLocaleString('vi-VN') + ' đ'] }
+    )
+
+    const printData = {
+      subtitle: 'PHIẾU NHẬP KHO PHÔI SÓNG (MUA NGOÀI)',
+      document_number: r.so_phieu,
+      document_date: r.ngay_nhap ?? '',
+      so_xe: r.so_xe ?? '—',
+      warehouse_name: r.ten_kho ?? '—',
+      supplier_name: r.ten_ncc ?? '—',
+      body_html: table,
+      tong_tien_chu: `Tổng cộng: ${tong.toLocaleString('vi-VN')} đ`,
+    }
+
+    smartPrintPdf('GOODS_RECEIPT', printData, r.phap_nhan_id || undefined)
   }
 
   const handleExportExcel = () => {
-    exportToExcel(`NhapPhoiNgoai_${dayjs().format('YYYYMMDD')}`, [{
-      name: 'Nhập phôi ngoài',
-      headers: ['Số phiếu', 'Ngày nhập', 'Số xe', 'Kho phôi', 'Nhà CC', 'Tổng tiền', 'Trạng thái'],
-      rows: receiptList.map((r: GoodsReceipt) => [
-        r.so_phieu, r.ngay_nhap, r.so_xe ?? '', r.ten_kho ?? '', r.ten_ncc ?? '',
-        r.tong_gia_tri,
-        r.trang_thai === 'da_duyet' ? 'Đã duyệt' : r.trang_thai === 'nhap_nhanh' ? 'Chờ nhập' : 'Đã nhập',
-      ]),
-      colWidths: [18, 12, 12, 20, 22, 16, 12],
-    }])
+    const resolvedPhapNhanId = resolveSinglePhapNhanId(receiptList)
+    if (!receiptList.length) {
+      message.warning('Không có dữ liệu để xuất Excel')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ xuất Excel nhập phôi ngoài khi danh sách thuộc một pháp nhân. Vui lòng lọc dữ liệu trước.')
+      return
+    }
+    const defaultConfig = [
+      { key: 'so_phieu', label: 'Số phiếu', width: 18 },
+      { key: 'ngay_nhap', label: 'Ngày nhập', width: 12 },
+      { key: 'so_xe', label: 'Số xe', width: 12 },
+      { key: 'ten_kho', label: 'Kho phôi', width: 20 },
+      { key: 'ten_ncc', label: 'Nhà CC', width: 22 },
+      { key: 'tong_gia_tri', label: 'Tổng tiền', width: 16 },
+      { key: 'trang_thai_lbl', label: 'Trạng thái', width: 12 },
+    ]
+
+    const exportData = receiptList.map((r: GoodsReceipt) => ({
+      ...r,
+      trang_thai_lbl: r.trang_thai === 'da_duyet' ? 'Đã duyệt' : r.trang_thai === 'nhap_nhanh' ? 'Chờ nhập' : 'Đã nhập',
+    }))
+
+    smartExportExcel('GOODS_RECEIPT', exportData, defaultConfig, `NhapPhoiNgoai_${dayjs().format('YYYYMMDD')}`, resolvedPhapNhanId)
   }
 
   const columns = [

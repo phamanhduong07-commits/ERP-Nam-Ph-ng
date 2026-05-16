@@ -13,6 +13,7 @@ from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSong
 from app.models.phieu_xuat_phoi import PhieuXuatPhoiItem
 from app.models.cd2 import PhieuIn
 from app.models.warehouse_doc import PhieuChuyenKhoItem
+from app.services.carton_metrics import production_item_metrics
 
 router = APIRouter(prefix="/api/theo-doi", tags=["theo-doi"])
 
@@ -52,6 +53,10 @@ def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None):
     so = po.sales_order
     kh = so.customer if so else None
 
+    so_luong_ke_hoach = float(first_item.so_luong_ke_hoach) if first_item else 0
+    metrics = production_item_metrics(first_item, first_item.so_luong_ke_hoach if first_item else 0)
+    so_khoi = float(metrics["the_tich"])
+
     return {
         "production_order_id": po.id,
         "so_lenh": po.so_lenh,
@@ -59,13 +64,16 @@ def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None):
         "trang_thai_po": po.trang_thai,
         "phan_xuong_id": po.phan_xuong_id,
         "ten_phan_xuong": po.phan_xuong.ten_xuong if po.phan_xuong else None,
+        "phap_nhan_id": po.phap_nhan_id,
+        "ten_phap_nhan": po.phap_nhan.ten_viet_tat if po.phap_nhan else None,
+        "ten_kho_sx": po.kho_sx.ten_kho if po.kho_sx else None,
         "sales_order_id": po.sales_order_id,
         "so_don": so.so_don if so else None,
         "customer_id": kh.id if kh else None,
         "ten_khach_hang": kh.ten_viet_tat if kh else None,
         "ngay_giao_hang": str(po.ngay_hoan_thanh_ke_hoach) if po.ngay_hoan_thanh_ke_hoach else None,
         "ten_hang": first_item.ten_hang if first_item else None,
-        "so_luong_ke_hoach": float(first_item.so_luong_ke_hoach) if first_item else 0,
+        "so_luong_ke_hoach": so_luong_ke_hoach,
         "nv_theo_doi_id": po.nv_theo_doi_id,
         "ten_nv_theo_doi": po.nv_theo_doi.ho_ten if po.nv_theo_doi else None,
         "tong_nhap_phoi": tong_nhap,
@@ -78,6 +86,7 @@ def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None):
         "ten_may_in": (pi.may_in_obj.ten_may if pi.may_in_obj else None) if pi else None,
         "ngay_in": str(pi.ngay_in) if pi and pi.ngay_in else None,
         "so_luong_in_ok": float(pi.so_luong_in_ok or 0) if pi else None,
+        "so_khoi": so_khoi,
         "stage": stage,
         "stage_label": STAGE_LABELS.get(stage, stage),
     }
@@ -126,6 +135,7 @@ def _query_rows(
     db: Session,
     phan_xuong_id: Optional[int],
     nv_theo_doi_id: Optional[int],
+    phap_nhan_id: Optional[int],
     tu_ngay: Optional[str],
     den_ngay: Optional[str],
     include_hoan_thanh: bool,
@@ -137,6 +147,8 @@ def _query_rows(
         joinedload(ProductionOrder.items),
         joinedload(ProductionOrder.phan_xuong),
         joinedload(ProductionOrder.nv_theo_doi),
+        joinedload(ProductionOrder.phap_nhan),
+        joinedload(ProductionOrder.kho_sx),
     )
 
     if not include_hoan_thanh:
@@ -145,6 +157,8 @@ def _query_rows(
         q = q.filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
     if nv_theo_doi_id:
         q = q.filter(ProductionOrder.nv_theo_doi_id == nv_theo_doi_id)
+    if phap_nhan_id:
+        q = q.filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
     if tu_ngay:
         q = q.filter(ProductionOrder.ngay_lenh >= tu_ngay)
     if den_ngay:
@@ -228,8 +242,8 @@ def _query_rows(
 
     result = [_build_row(o, nhap_map, xuat_map, pi_map, plan_set, chuyen_map) for o in orders]
 
-    # SOs đã duyệt, chưa có lệnh SX — chỉ hiển thị khi không filter theo xưởng/NV
-    if not phan_xuong_id and not nv_theo_doi_id and not include_hoan_thanh:
+    # SOs đã duyệt, chưa có lệnh SX — chỉ hiển thị khi không filter theo xưởng/NV/pháp nhân
+    if not phan_xuong_id and not nv_theo_doi_id and not phap_nhan_id and not include_hoan_thanh:
         so_q = (
             db.query(SalesOrder)
             .options(
@@ -250,6 +264,7 @@ def _query_rows(
 def theo_doi_don_hang(
     phan_xuong_id: Optional[int] = Query(default=None),
     nv_theo_doi_id: Optional[int] = Query(default=None),
+    phap_nhan_id: Optional[int] = Query(default=None),
     tu_ngay: Optional[str] = Query(default=None),
     den_ngay: Optional[str] = Query(default=None),
     include_hoan_thanh: bool = Query(default=False),
@@ -259,7 +274,7 @@ def theo_doi_don_hang(
     _: User = Depends(get_current_user),
 ):
     return _query_rows(
-        db, phan_xuong_id, nv_theo_doi_id,
+        db, phan_xuong_id, nv_theo_doi_id, phap_nhan_id,
         tu_ngay, den_ngay, include_hoan_thanh,
         so_lenh, so_don,
     )
@@ -277,7 +292,7 @@ def bot_query(
         return {"error": "Cần cung cấp so_lenh hoặc so_don"}
     return _query_rows(
         db,
-        phan_xuong_id=None, nv_theo_doi_id=None,
+        phan_xuong_id=None, nv_theo_doi_id=None, phap_nhan_id=None,
         tu_ngay=None, den_ngay=None,
         include_hoan_thanh=True,
         so_lenh=so_lenh, so_don=so_don,

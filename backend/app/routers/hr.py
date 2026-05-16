@@ -1,13 +1,15 @@
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import List, Optional
+import re
+import unicodedata
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.hr import Department, Position, Employee, AttendanceLog, LeaveRequest, PayrollConfig, EmployeeHistory, EmployeeDocument, LaborContract
+from app.models.hr import Department, Position, Employee, AttendanceLog, LeaveRequest, PayrollConfig, PayrollHoliday, EmployeeHistory, EmployeeDocument, LaborContract
 from app.services.hr_service import PayrollService
 from app.schemas import hr as schemas
 
@@ -33,6 +35,84 @@ def _sync_leave_to_attendance(req: LeaveRequest, db: Session):
         log.so_cong = Decimal("1")
         log.ghi_chu = req.ly_do or "Tu dong cap nhat tu don nghi phep da duyet"
         current += timedelta(days=1)
+
+def _normalize_attendance_key(value: object) -> str:
+    text = unicodedata.normalize("NFD", str(value or "").strip().lower())
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    text = text.replace("đ", "d")
+    return re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+
+def _attendance_value(row: dict, *keys: str):
+    normalized = {_normalize_attendance_key(k): v for k, v in row.items()}
+    for key in keys:
+        value = normalized.get(_normalize_attendance_key(key))
+        if value not in (None, ""):
+            return value
+    return None
+
+def _parse_attendance_date(value: object) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError("empty date")
+    try:
+        return date.fromisoformat(text[:10])
+    except Exception:
+        pass
+
+    match = re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", text)
+    if match:
+        first = int(match.group(1))
+        second = int(match.group(2))
+        year = int(match.group(3))
+        if year < 100:
+            year += 2000
+        day = first if first > 12 or second <= 12 else second
+        month = second if first > 12 or second <= 12 else first
+        return date(year, month, day)
+    raise ValueError("invalid date")
+
+def _parse_attendance_datetime(value: object, ngay: date) -> datetime | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except Exception:
+        pass
+    match = re.search(r"(\d{1,2}):(\d{2})(?::(\d{2}))?", text)
+    if match:
+        return datetime(
+            ngay.year,
+            ngay.month,
+            ngay.day,
+            int(match.group(1)),
+            int(match.group(2)),
+            int(match.group(3) or 0),
+        )
+    return None
+
+def _decimal_value(row: dict, *keys: str) -> Decimal:
+    value = _attendance_value(row, *keys)
+    if value in (None, ""):
+        return Decimal("0")
+    return Decimal(str(value).replace(",", "."))
+
+def _contract_allowance_total(contract: LaborContract) -> Decimal:
+    detailed = sum((
+        contract.phu_cap_chuyen_can or Decimal("0"),
+        contract.phu_cap_trach_nhiem or Decimal("0"),
+        contract.phu_cap_nha_o_com or Decimal("0"),
+        contract.phu_cap_dien_thoai or Decimal("0"),
+        contract.phu_cap_khac or Decimal("0"),
+    ), Decimal("0"))
+    legacy = contract.phu_cap or Decimal("0")
+    return detailed if detailed > 0 else legacy
 
 # --- Departments ---
 @router.get("/departments", response_model=List[schemas.Department])
@@ -285,15 +365,18 @@ def import_attendance(rows: List[dict], db: Session = Depends(get_db)):
     saved = 0
     errors = []
     for idx, row in enumerate(rows, start=1):
-        ma_nv = row.get("ma_nv") or row.get("MA_NV")
-        emp = db.query(Employee).filter(Employee.ma_nv == ma_nv).first() if ma_nv else None
+        ma_nv = _attendance_value(row, "ma_nv", "MA_NV", "Mã Nhân Viên", "Ma Nhan Vien", "ma_van_tay")
+        ma_nv = str(ma_nv).strip() if ma_nv is not None else None
+        emp = db.query(Employee).filter(
+            or_(Employee.ma_nv == ma_nv, Employee.ma_van_tay == ma_nv)
+        ).first() if ma_nv else None
         if not emp:
             errors.append({"row": idx, "ma_nv": ma_nv, "error": "Khong tim thay ma NV"})
             continue
 
-        ngay_raw = row.get("ngay")
+        ngay_raw = _attendance_value(row, "ngay", "Ngày")
         try:
-            ngay = date.fromisoformat(str(ngay_raw)[:10])
+            ngay = _parse_attendance_date(ngay_raw)
         except Exception:
             errors.append({"row": idx, "ngay": ngay_raw, "error": "Ngay khong hop le"})
             continue
@@ -306,18 +389,25 @@ def import_attendance(rows: List[dict], db: Session = Depends(get_db)):
             log = AttendanceLog(employee_id=emp.id, ngay=ngay)
             db.add(log)
 
-        for field in ("gio_vao", "gio_ra"):
-            value = row.get(field)
-            if value:
-                try:
-                    setattr(log, field, datetime.fromisoformat(str(value).replace("Z", "+00:00")))
-                except Exception:
-                    pass
-        for field in ("so_cong", "so_gio_ot"):
-            if row.get(field) not in (None, ""):
-                setattr(log, field, Decimal(str(row.get(field))))
-        log.trang_thai = row.get("trang_thai") or log.trang_thai or "hop_le"
-        log.ghi_chu = row.get("ghi_chu") or log.ghi_chu
+        gio_vao = _parse_attendance_datetime(_attendance_value(row, "gio_vao", "Giờ vào", "Gio vao"), ngay)
+        gio_ra = _parse_attendance_datetime(_attendance_value(row, "gio_ra", "Giờ ra", "Gio ra"), ngay)
+        if gio_vao:
+            log.gio_vao = gio_vao
+        if gio_ra:
+            log.gio_ra = gio_ra
+
+        numeric_fields = {
+            "so_cong": ("so_cong", "Công", "Cong"),
+            "so_gio_ot": ("so_gio_ot", "Tăng ca", "Tang ca"),
+            "tong_gio_thuc": ("tong_gio_thuc", "Tổng giờ", "Tong gio"),
+        }
+        for field, aliases in numeric_fields.items():
+            value = _attendance_value(row, *aliases)
+            if value not in (None, ""):
+                setattr(log, field, Decimal(str(value).replace(",", ".")))
+
+        log.trang_thai = _attendance_value(row, "trang_thai", "Trạng thái") or log.trang_thai or "hop_le"
+        log.ghi_chu = _attendance_value(row, "ghi_chu", "Ghi chú") or log.ghi_chu
         saved += 1
 
     if errors:
@@ -467,6 +557,86 @@ def bulk_create_payroll_configs(body: schemas.PayrollConfigBulkCreate, db: Sessi
         else:
             db.add(PayrollConfig(**item.model_dump()))
             created += 1
+    db.commit()
+    return {"ok": True, "created": created, "updated": updated}
+
+@router.get("/payroll-holidays", response_model=List[schemas.PayrollHoliday])
+def list_payroll_holidays(
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    db: Session = Depends(get_db),
+):
+    q = db.query(PayrollHoliday)
+    if from_date:
+        q = q.filter(PayrollHoliday.ngay >= from_date)
+    if to_date:
+        q = q.filter(PayrollHoliday.ngay <= to_date)
+    return q.order_by(PayrollHoliday.ngay).all()
+
+@router.post("/payroll-holidays", response_model=schemas.PayrollHoliday)
+def create_payroll_holiday(body: schemas.PayrollHolidayCreate, db: Session = Depends(get_db)):
+    holiday = db.query(PayrollHoliday).filter(PayrollHoliday.ngay == body.ngay).first()
+    if holiday:
+        for k, v in body.model_dump().items():
+            setattr(holiday, k, v)
+    else:
+        holiday = PayrollHoliday(**body.model_dump())
+        db.add(holiday)
+    db.commit()
+    db.refresh(holiday)
+    return holiday
+
+@router.delete("/payroll-holidays/{id}")
+def delete_payroll_holiday(id: int, db: Session = Depends(get_db)):
+    holiday = db.get(PayrollHoliday, id)
+    if not holiday:
+        raise HTTPException(404, "Khong tim thay ngay le")
+    db.delete(holiday)
+    db.commit()
+    return {"ok": True}
+
+@router.post("/contracts/import-allowances")
+def import_contract_allowances(rows: List[dict], db: Session = Depends(get_db)):
+    updated = 0
+    created = 0
+    errors = []
+    for idx, row in enumerate(rows, start=1):
+        ma_nv = _attendance_value(row, "ma_nv", "Mã NV", "Mã Nhân Viên", "Ma Nhan Vien")
+        ma_nv = str(ma_nv).strip() if ma_nv is not None else None
+        emp = db.query(Employee).filter(Employee.ma_nv == ma_nv).first() if ma_nv else None
+        if not emp:
+            errors.append({"row": idx, "ma_nv": ma_nv, "error": "Khong tim thay ma NV"})
+            continue
+
+        contract = sorted(emp.contracts, key=lambda x: x.ngay_hieu_luc or x.ngay_ky, reverse=True)
+        current = contract[0] if contract else None
+        if not current:
+            current = LaborContract(
+                employee_id=emp.id,
+                so_hop_dong=f"AUTO-{emp.ma_nv}",
+                loai_hop_dong="khong_thoi_han",
+                ngay_ky=date.today(),
+                ngay_hieu_luc=emp.ngay_vao_lam or date.today(),
+                trang_thai="hieu_luc",
+            )
+            db.add(current)
+            created += 1
+        else:
+            updated += 1
+
+        base_salary = _attendance_value(row, "luong_co_ban", "Lương cơ bản", "Luong co ban")
+        if base_salary not in (None, ""):
+            current.luong_co_ban = Decimal(str(base_salary).replace(",", "."))
+        current.phu_cap_chuyen_can = _decimal_value(row, "phu_cap_chuyen_can", "Chuyên cần", "Chuyen can")
+        current.phu_cap_trach_nhiem = _decimal_value(row, "phu_cap_trach_nhiem", "Trách nhiệm", "Trach nhiem")
+        current.phu_cap_nha_o_com = _decimal_value(row, "phu_cap_nha_o_com", "Nhà ở/Cơm", "Nha o/Com")
+        current.phu_cap_dien_thoai = _decimal_value(row, "phu_cap_dien_thoai", "Điện thoại", "Dien thoai")
+        current.phu_cap_khac = _decimal_value(row, "phu_cap_khac", "Hỗ trợ khác", "Ho tro khac")
+        current.phu_cap = _contract_allowance_total(current)
+
+    if errors:
+        db.rollback()
+        raise HTTPException(400, {"message": "Import phu cap co loi", "errors": errors})
     db.commit()
     return {"ok": True, "created": created, "updated": updated}
 

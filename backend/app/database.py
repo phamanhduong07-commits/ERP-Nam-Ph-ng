@@ -144,6 +144,7 @@ def ensure_schema() -> None:
         conn.execute(text(
             "UPDATE purchase_orders SET loai_po = 'chung' WHERE loai_po IS NULL"
         ))
+        conn.execute(text("ALTER TABLE purchase_invoices ADD COLUMN IF NOT EXISTS co_vat BOOLEAN NOT NULL DEFAULT TRUE"))
 
         conn.execute(text("ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS kho_mm NUMERIC(7,1)"))
         conn.execute(text("ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS so_cuon INTEGER"))

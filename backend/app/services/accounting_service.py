@@ -1,4 +1,4 @@
-import calendar
+﻿import calendar
 from datetime import date, datetime
 from decimal import Decimal
 from fastapi import HTTPException
@@ -12,7 +12,7 @@ from app.models.accounting import (
     DebtLedgerEntry, OpeningBalance, JournalEntry, JournalEntryLine,
     CustomerRefundVoucher, WorkshopPayroll, FixedAsset,
 )
-from app.models.master import Customer, Supplier
+from app.models.master import Customer, Supplier, PhanXuong
 from app.models.purchase import PurchaseOrder
 from app.models.warehouse_doc import GoodsReceipt, DeliveryOrder
 from app.schemas.accounting import (
@@ -37,6 +37,32 @@ class AccountingService:
         ("331", "nha_cung_cap"),
         ("141", "tam_ung"),
     ]
+
+    def _phap_nhan_from_phan_xuong(self, phan_xuong_id: int | None) -> int | None:
+        if not phan_xuong_id:
+            return None
+        px = self.db.get(PhanXuong, phan_xuong_id)
+        return px.phap_nhan_id if px else None
+
+    def _purchase_invoice_dimensions(
+        self,
+        data: PurchaseInvoiceCreate,
+    ) -> tuple[int | None, int | None]:
+        phan_xuong_id = data.phan_xuong_id
+        phap_nhan_id = data.phap_nhan_id
+
+        if data.gr_id:
+            gr = self.db.get(GoodsReceipt, data.gr_id)
+            if gr:
+                phan_xuong_id = phan_xuong_id or getattr(gr, "phan_xuong_id", None)
+                phap_nhan_id = phap_nhan_id or gr.phap_nhan_id
+        if data.po_id:
+            po = self.db.get(PurchaseOrder, data.po_id)
+            if po:
+                phan_xuong_id = phan_xuong_id or po.phan_xuong_id
+                phap_nhan_id = phap_nhan_id or getattr(po, "phap_nhan_id", None)
+        phap_nhan_id = phap_nhan_id or self._phap_nhan_from_phan_xuong(phan_xuong_id)
+        return phap_nhan_id, phan_xuong_id
 
     def __init__(self, db: Session):
         self.db = db
@@ -226,37 +252,46 @@ class AccountingService:
             chung_tu_id=payment.id,
             lines=lines,
             phap_nhan_id=payment.phap_nhan_id,
+            phan_xuong_id=payment.phan_xuong_id,
         )
+
+    def _purchase_invoice_expense_account(self, inv: PurchaseInvoice) -> str:
+        if not inv.po_id:
+            return "154"
+        po = self.db.get(PurchaseOrder, inv.po_id)
+        if po and po.loai_po in {"giay_cuon", "nvl_khac", "giay_tam"}:
+            return "151"
+        return "154"
 
     def _post_purchase_invoice_journal(self, inv: PurchaseInvoice) -> None:
         if inv.bo_qua_hach_toan:
             return
-        if inv.tien_thue > 0:
-            # Nếu có GR, tiền hàng đã hạch toán ở GR (Nợ 152 / Có 331)
-            # Hóa đơn chỉ hạch toán bổ sung Thuế: Nợ 1331 / Có 331
-            if inv.gr_id:
-                lines = [
-                    {"so_tk": "1331", "dien_giai": f"Thuế GTGT đầu vào - {inv.so_hoa_don}", "so_tien_no": float(inv.tien_thue), "so_tien_co": 0},
-                    {"so_tk": "331", "dien_giai": f"Thuế GTGT đầu vào - {inv.so_hoa_don}", "so_tien_no": 0, "so_tien_co": float(inv.tien_thue)},
-                ]
-            else:
-                # Nếu không có GR, hạch toán cả tiền hàng và thuế
-                lines = [
-                    {"so_tk": "154", "dien_giai": f"Mua hàng dịch vụ - {inv.so_hoa_don}", "so_tien_no": float(inv.tong_tien_hang), "so_tien_co": 0},
-                    {"so_tk": "1331", "dien_giai": f"Thuế GTGT đầu vào - {inv.so_hoa_don}", "so_tien_no": float(inv.tien_thue), "so_tien_co": 0},
-                    {"so_tk": "331", "dien_giai": f"Phải trả NCC - {inv.so_hoa_don}", "so_tien_no": 0, "so_tien_co": float(inv.tong_thanh_toan)},
-                ]
+        if inv.gr_id:
+            if not inv.co_vat or inv.tien_thue <= 0:
+                return
+            lines = [
+                {"so_tk": "1331", "dien_giai": f"Thuế GTGT đầu vào - {inv.so_hoa_don}", "so_tien_no": float(inv.tien_thue), "so_tien_co": 0},
+                {"so_tk": "331", "dien_giai": f"Thuế GTGT đầu vào - {inv.so_hoa_don}", "so_tien_no": 0, "so_tien_co": float(inv.tien_thue)},
+            ]
+        else:
+            tk_no_hang = self._purchase_invoice_expense_account(inv)
+            lines = [
+                {"so_tk": tk_no_hang, "dien_giai": f"Mua hàng/dịch vụ - {inv.so_hoa_don}", "so_tien_no": float(inv.tong_tien_hang), "so_tien_co": 0},
+            ]
+            if inv.co_vat and inv.tien_thue > 0:
+                lines.append({"so_tk": "1331", "dien_giai": f"Thuế GTGT đầu vào - {inv.so_hoa_don}", "so_tien_no": float(inv.tien_thue), "so_tien_co": 0})
+            lines.append({"so_tk": "331", "dien_giai": f"Phải trả NCC - {inv.so_hoa_don}", "so_tien_no": 0, "so_tien_co": float(inv.tong_thanh_toan)})
 
-            self._create_journal_entry(
-                ngay=inv.ngay_lap,
-                dien_giai=f"Hóa đơn mua hàng: {inv.so_hoa_don}",
-                loai_but_toan="purchase_invoice",
-                chung_tu_loai="purchase_invoices",
-                chung_tu_id=inv.id,
-                lines=lines,
-                phap_nhan_id=inv.phap_nhan_id,
-                phan_xuong_id=inv.phan_xuong_id
-            )
+        self._create_journal_entry(
+            ngay=inv.ngay_lap,
+            dien_giai=f"Hóa đơn mua hàng: {inv.so_hoa_don}",
+            loai_but_toan="purchase_invoice",
+            chung_tu_loai="purchase_invoices",
+            chung_tu_id=inv.id,
+            lines=lines,
+            phap_nhan_id=inv.phap_nhan_id,
+            phan_xuong_id=inv.phan_xuong_id
+        )
 
     def _reverse_journal_entries(self, chung_tu_loai: str, chung_tu_id: int) -> None:
         originals = (
@@ -465,6 +500,7 @@ class AccountingService:
 
         ten_don_vi = data.ten_don_vi or getattr(supplier, "ten_don_vi", supplier.ten_viet_tat)
         ma_so_thue = data.ma_so_thue or getattr(supplier, "ma_so_thue", None)
+        phap_nhan_id, phan_xuong_id = self._purchase_invoice_dimensions(data)
 
         inv = PurchaseInvoice(
             so_hoa_don=data.so_hoa_don,
@@ -478,40 +514,47 @@ class AccountingService:
             gr_id=data.gr_id,
             ten_don_vi=ten_don_vi,
             ma_so_thue=ma_so_thue,
+            co_vat=data.co_vat,
             thue_suat=data.thue_suat,
             tong_tien_hang=data.tong_tien_hang,
             tien_thue=data.tien_thue,
             tong_thanh_toan=data.tong_thanh_toan,
             da_thanh_toan=Decimal("0"),
             ghi_chu=data.ghi_chu,
-            phap_nhan_id=data.phap_nhan_id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=phan_xuong_id,
             created_by=user_id,
         )
         self.db.add(inv)
         self.db.flush()
 
-        # Ghi sổ công nợ phải trả
-        entry = DebtLedgerEntry(
-            ngay=data.ngay_lap,
-            loai="tang_no",
-            doi_tuong="nha_cung_cap",
-            supplier_id=data.supplier_id,
-            chung_tu_loai="hoa_don_mua",
-            chung_tu_id=inv.id,
-            so_tien=data.tong_thanh_toan,
-            ghi_chu=f"HĐ mua hàng {data.so_hoa_don or ''}",
-            phap_nhan_id=data.phap_nhan_id,
-        )
-        self.db.add(entry)
-        
-        # Bút toán kế toán (GL)
+        debt_amount = inv.tien_thue if inv.gr_id else inv.tong_thanh_toan
+        if debt_amount and debt_amount > 0:
+            self.db.add(DebtLedgerEntry(
+                ngay=data.ngay_lap,
+                loai="tang_no",
+                doi_tuong="nha_cung_cap",
+                supplier_id=data.supplier_id,
+                chung_tu_loai="hoa_don_mua",
+                chung_tu_id=inv.id,
+                so_tien=debt_amount,
+                ghi_chu=f"HĐ mua hàng {data.so_hoa_don or ''}".strip(),
+                phap_nhan_id=phap_nhan_id,
+            ))
+
         self._post_purchase_invoice_journal(inv)
-        
+
         self.db.commit()
         self.db.refresh(inv)
         return inv
 
-    def create_purchase_invoice_from_po(self, po_id: int, user_id: int, thue_suat: Decimal = Decimal("8")) -> PurchaseInvoice:
+    def create_purchase_invoice_from_po(
+        self,
+        po_id: int,
+        user_id: int,
+        thue_suat: Decimal = Decimal("8"),
+        co_vat: bool = True,
+    ) -> PurchaseInvoice:
         po = self.db.query(PurchaseOrder).options(joinedload(PurchaseOrder.items)).get(po_id)
         if not po:
             raise HTTPException(404, "Không tìm thấy đơn mua hàng")
@@ -520,12 +563,15 @@ class AccountingService:
             (item.thanh_tien for item in po.items if item.thanh_tien), Decimal("0")
         )
         ts = Decimal(str(thue_suat))
-        tien_thue = round(tong_tien_hang * ts / 100, 0)
+        if not co_vat:
+            ts = Decimal("0")
+        tien_thue = round(tong_tien_hang * ts / 100, 0) if co_vat else Decimal("0")
 
         data = PurchaseInvoiceCreate(
             supplier_id=po.supplier_id,
             po_id=po.id,
             ngay_lap=date.today(),
+            co_vat=co_vat,
             thue_suat=ts,
             tong_tien_hang=tong_tien_hang,
             tien_thue=tien_thue,
@@ -535,20 +581,29 @@ class AccountingService:
         )
         return self.create_purchase_invoice(data, user_id)
 
-    def create_purchase_invoice_from_gr(self, gr_id: int, user_id: int, thue_suat: Decimal = Decimal("8")) -> PurchaseInvoice:
+    def create_purchase_invoice_from_gr(
+        self,
+        gr_id: int,
+        user_id: int,
+        thue_suat: Decimal = Decimal("8"),
+        co_vat: bool = True,
+    ) -> PurchaseInvoice:
         gr = self.db.query(GoodsReceipt).options(joinedload(GoodsReceipt.items)).get(gr_id)
         if not gr:
             raise HTTPException(404, "Không tìm thấy phiếu nhập")
 
         tong_tien_hang = gr.tong_gia_tri or Decimal("0")
         ts = Decimal(str(thue_suat))
-        tien_thue = round(tong_tien_hang * ts / 100, 0)
+        if not co_vat:
+            ts = Decimal("0")
+        tien_thue = round(tong_tien_hang * ts / 100, 0) if co_vat else Decimal("0")
 
         data = PurchaseInvoiceCreate(
             supplier_id=gr.supplier_id,
             po_id=gr.po_id,
             gr_id=gr.id,
             ngay_lap=date.today(),
+            co_vat=co_vat,
             thue_suat=ts,
             tong_tien_hang=tong_tien_hang,
             tien_thue=tien_thue,
@@ -602,14 +657,46 @@ class AccountingService:
     # ─────────────────────────────────────────────
     # PHIẾU CHI
     # ─────────────────────────────────────────────
+    def _apply_cash_payment_to_invoice_and_debt(self, payment: CashPayment) -> None:
+        if payment.purchase_invoice_id:
+            inv = self.db.query(PurchaseInvoice).get(payment.purchase_invoice_id)
+            if not inv:
+                raise HTTPException(404, "Không tìm thấy hóa đơn mua")
+            remaining = inv.tong_thanh_toan - inv.da_thanh_toan
+            if payment.so_tien > remaining:
+                raise HTTPException(400, f"Số tiền vượt quá còn lại ({float(remaining):,.0f})")
+            new_paid = inv.da_thanh_toan + payment.so_tien
+            remaining_after = inv.tong_thanh_toan - new_paid
+            inv.da_thanh_toan = new_paid
+            inv.trang_thai = "da_tt_du" if remaining_after <= Decimal("0.001") else "da_tt_mot_phan"
+            inv.updated_at = datetime.utcnow()
+
+        self.db.add(DebtLedgerEntry(
+            ngay=payment.ngay_phieu,
+            loai="giam_no",
+            doi_tuong="nha_cung_cap",
+            supplier_id=payment.supplier_id,
+            chung_tu_loai="phieu_chi",
+            chung_tu_id=payment.id,
+            so_tien=payment.so_tien,
+            ghi_chu=payment.dien_giai or f"Phiếu chi {payment.so_phieu}",
+            phap_nhan_id=payment.phap_nhan_id,
+        ))
+
     def create_cash_payment(self, data: CashPaymentCreate, user_id: int) -> CashPayment:
+        inv = None
         if data.purchase_invoice_id:
             inv = self.db.query(PurchaseInvoice).get(data.purchase_invoice_id)
             if not inv:
                 raise HTTPException(404, "Không tìm thấy hóa đơn mua")
+            if inv.supplier_id != data.supplier_id:
+                raise HTTPException(400, "Nhà cung cấp phiếu chi không khớp hóa đơn mua")
             remaining = float(inv.tong_thanh_toan) - float(inv.da_thanh_toan)
             if float(data.so_tien) > remaining + 0.001:
                 raise HTTPException(400, f"Số tiền vượt quá còn lại ({remaining:,.0f})")
+
+        phap_nhan_id = data.phap_nhan_id or (inv.phap_nhan_id if inv else None)
+        phan_xuong_id = data.phan_xuong_id or (inv.phan_xuong_id if inv else None)
 
         payment = CashPayment(
             so_phieu=self._gen_so_phieu("PC", CashPayment),
@@ -623,37 +710,11 @@ class AccountingService:
             so_tien=data.so_tien,
             tk_no=data.tk_no,
             tk_co=data.tk_co,
-            phap_nhan_id=data.phap_nhan_id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=phan_xuong_id,
             created_by=user_id,
         )
         self.db.add(payment)
-        self.db.flush()
-
-        # Cập nhật hóa đơn mua
-        if data.purchase_invoice_id:
-            inv = self.db.query(PurchaseInvoice).get(data.purchase_invoice_id)
-            new_da_tt = float(inv.da_thanh_toan) + float(data.so_tien)
-            new_remaining = float(inv.tong_thanh_toan) - new_da_tt
-            inv.da_thanh_toan = Decimal(str(round(new_da_tt, 2)))
-            if new_remaining <= 0.001:
-                inv.trang_thai = "da_tt_du"
-            elif new_da_tt > 0:
-                inv.trang_thai = "da_tt_mot_phan"
-            inv.updated_at = datetime.utcnow()
-
-        # Ghi sổ công nợ
-        entry = DebtLedgerEntry(
-            ngay=data.ngay_phieu,
-            loai="giam_no",
-            doi_tuong="nha_cung_cap",
-            supplier_id=data.supplier_id,
-            chung_tu_loai="phieu_chi",
-            chung_tu_id=payment.id,
-            so_tien=data.so_tien,
-            ghi_chu=data.dien_giai or f"Phiếu chi {payment.so_phieu}",
-            phap_nhan_id=payment.phap_nhan_id,
-        )
-        self.db.add(entry)
         self.db.commit()
         self.db.refresh(payment)
         return payment
@@ -668,6 +729,7 @@ class AccountingService:
             raise HTTPException(400, f"Không thể chuyển trạng thái từ {p.trang_thai}")
         p.trang_thai = next_state
         if next_state == "da_duyet":
+            self._apply_cash_payment_to_invoice_and_debt(p)
             p.nguoi_duyet_id = user_id
             p.ngay_duyet = datetime.utcnow()
             self._post_cash_payment_journal(p)
@@ -684,9 +746,13 @@ class AccountingService:
         was_approved = p.trang_thai == "da_duyet"
         if was_approved:
             self._reverse_journal_entries("phieu_chi", p.id)
+        applied_debt = self.db.query(DebtLedgerEntry).filter(
+            DebtLedgerEntry.chung_tu_loai == "phieu_chi",
+            DebtLedgerEntry.chung_tu_id == payment_id,
+        ).first()
         if p.purchase_invoice_id:
             inv = self.db.query(PurchaseInvoice).get(p.purchase_invoice_id)
-            if inv:
+            if inv and applied_debt:
                 inv.da_thanh_toan = max(Decimal("0"), inv.da_thanh_toan - p.so_tien)
                 inv.trang_thai = "nhap" if inv.da_thanh_toan == 0 else "da_tt_mot_phan"
                 inv.updated_at = datetime.utcnow()
@@ -2723,6 +2789,7 @@ class AccountingService:
                 PurchaseInvoice.ngay_lap >= first_day,
                 PurchaseInvoice.ngay_lap <= last_day,
                 PurchaseInvoice.trang_thai != "huy",
+                PurchaseInvoice.co_vat.is_(True),
             )
         )
         if phap_nhan_id:

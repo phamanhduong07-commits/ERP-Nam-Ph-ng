@@ -6,7 +6,7 @@ import {
 import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, PrinterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
-import { fmtVND, printDocument } from '../../utils/exportUtils'
+import { fmtVND, numberToVietnameseWords, smartPrintPdf } from '../../utils/exportUtils'
 import { receiptApi, CashReceipt, TRANG_THAI_PHIEU_THU, HINH_THUC_TT } from '../../api/accounting'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { systemApi } from '../../api/system'
@@ -27,7 +27,7 @@ export default function CashReceiptDetailPage() {
 
   const { data: template } = useQuery({
     queryKey: ['print-template', 'CASH_RECEIPT', receipt?.phap_nhan_id],
-    queryFn: () => systemApi.getTemplate('CASH_RECEIPT', receipt?.phap_nhan_id ?? undefined),
+    queryFn: () => systemApi.getTemplate('CASH_RECEIPT', receipt?.phap_nhan_id ?? undefined, true),
     staleTime: 5 * 60 * 1000,
     enabled: !!receipt,
   })
@@ -67,30 +67,26 @@ export default function CashReceiptDetailPage() {
   const canCancel = receipt.trang_thai !== 'huy'
 
   const handlePrint = () => {
-    printDocument({
-      companyInfo,
-      title: `Phiếu thu ${receipt.so_phieu}`,
+    const customerName = receipt.ten_don_vi ?? `KH #${receipt.customer_id}`
+    const payMethodLabel = HINH_THUC_TT[receipt.hinh_thuc_tt] ?? receipt.hinh_thuc_tt
+    
+    const printData = {
+      document_number: receipt.so_phieu || '-',
+      document_date: dayjs(receipt.ngay_phieu).format('DD/MM/YYYY'),
+      nguoi_nop: customerName,
+      khach_hang: customerName,
+      ly_do_thu: receipt.dien_giai ?? '—',
+      so_tien: `${fmtVND(receipt.so_tien)} đ`,
+      so_tien_bang_chu: numberToVietnameseWords(receipt.so_tien),
+      // Phụ trợ
+      hinh_thuc_tt: payMethodLabel,
+      so_tai_khoan: receipt.so_tai_khoan ?? '-',
+      so_tham_chieu: receipt.so_tham_chieu ?? '-',
+      sales_invoice_id: receipt.sales_invoice_id ?? '-',
       subtitle: 'PHIẾU THU',
-      logoUrl: companyInfo?.logo || '/logo_namphuong.png',
-      documentNumber: receipt.so_phieu || '—',
-      documentDate: dayjs(receipt.ngay_phieu).format('DD/MM/YYYY'),
-      status: status?.label ?? receipt.trang_thai,
-      fields: [
-        { label: 'Hình thức TT', value: HINH_THUC_TT[receipt.hinh_thuc_tt] ?? receipt.hinh_thuc_tt },
-        { label: 'Số tiền', value: fmtVND(receipt.so_tien) },
-        { label: 'Số tài khoản', value: receipt.so_tai_khoan ?? '—' },
-        { label: 'Số tham chiếu', value: receipt.so_tham_chieu ?? '—' },
-        { label: 'TK Nợ', value: receipt.tk_no ?? '—' },
-        { label: 'TK Có', value: receipt.tk_co ?? '—' },
-      ],
-      bodyHtml: `<div style="margin-bottom: 14px;"><strong>Diễn giải:</strong><div style="margin-top: 6px; font-size: 12px;">${receipt.dien_giai ? receipt.dien_giai.replace(/\n/g, '<br/>') : '—'}</div></div>
-        ${receipt.sales_invoice_id ? `<div style="font-size: 12px; color: #1b168e;">Hóa đơn liên kết: ${receipt.sales_invoice_id}</div>` : ''}`,
-      footerHtml: `
-        <div><strong>Ngày tạo:</strong> ${dayjs(receipt.created_at).format('DD/MM/YYYY HH:mm')}</div>
-        ${receipt.ngay_duyet ? `<div><strong>Ngày duyệt:</strong> ${dayjs(receipt.ngay_duyet).format('DD/MM/YYYY HH:mm')}</div>` : ''}
-      `,
-      customHtml: template?.html_content,
-    })
+    }
+
+    smartPrintPdf('CASH_RECEIPT', printData, receipt.phap_nhan_id ?? undefined)
   }
 
   return (

@@ -56,6 +56,49 @@ export function exportExcelWithTemplate(filename: string, sheetName: string, dat
   }])
 }
 
+export function resolveSinglePhapNhanId(items: any[], keys: string[] = ['phap_nhan_id_for_print', 'phap_nhan_id']): number | null {
+  const result = analyzeSinglePhapNhanId(items, keys)
+  return result.ok ? result.phapNhanId : null
+}
+
+export type SinglePhapNhanResult =
+  | { ok: true; phapNhanId: number }
+  | { ok: false; reason: 'empty' | 'missing' | 'multiple'; ids: number[] }
+
+export function analyzeSinglePhapNhanId(items: any[], keys: string[] = ['phap_nhan_id_for_print', 'phap_nhan_id']): SinglePhapNhanResult {
+  if (!items.length) return { ok: false, reason: 'empty', ids: [] }
+  const ids = new Set<number>()
+  let missingCount = 0
+  for (const item of items) {
+    let found = false
+    for (const key of keys) {
+      const value = item?.[key]
+      if (value != null) {
+        ids.add(Number(value))
+        found = true
+        break
+      }
+    }
+    if (!found) missingCount += 1
+  }
+  const values = Array.from(ids)
+  if (values.length === 1 && missingCount === 0) return { ok: true, phapNhanId: values[0] }
+  if (values.length > 1) return { ok: false, reason: 'multiple', ids: values }
+  return { ok: false, reason: 'missing', ids: values }
+}
+
+export function singlePhapNhanError(result: SinglePhapNhanResult, label = 'du lieu'): string {
+  if (result.ok) return ''
+  if (result.reason === 'empty') return `Khong co ${label} de in/xuat.`
+  if (result.reason === 'multiple') return `${label} dang co nhieu phap nhan (${result.ids.join(', ')}). Vui long loc ve mot phap nhan truoc khi in/xuat.`
+  return `${label} chua co du phap nhan. Vui long cap nhat chung tu hoac loc theo phap nhan truoc khi in/xuat.`
+}
+
+type StrictTemplateOptions = {
+  throwOnError?: boolean
+  landscape?: boolean
+}
+
 /**
  * Smart Export Excel: Tự động lấy template từ DB và xuất dữ liệu.
  */
@@ -64,16 +107,28 @@ export async function smartExportExcel(
   data: any[], 
   defaultConfig: { key: string, label: string, width?: number }[],
   filename?: string,
-  phapNhanId?: number
+  phapNhanId?: number,
+  options: StrictTemplateOptions = {},
 ) {
-  let config = defaultConfig
+  let config: { key: string, label: string, width?: number }[] = []
   try {
-    const tpl = await systemApi.getExcelTemplate(ma_mau, phapNhanId)
+    const tpl = await systemApi.getExcelTemplate(ma_mau, phapNhanId, true)
     if (tpl && tpl.column_config && tpl.column_config.length > 0) {
       config = tpl.column_config
     }
-  } catch (e) {
-    console.warn(`[ExcelExport] Không tìm thấy template cho ${ma_mau}, dùng mặc định.`, e)
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail || e?.message || `Không tìm thấy mẫu Excel ${ma_mau}`
+    console.error(`[ExcelExport] ${detail}`, e)
+    if (options.throwOnError) throw new Error(detail)
+    alert(detail)
+    return
+  }
+
+  if (!config.length) {
+    const detail = `Mau Excel ${ma_mau} chua cau hinh cot. Vui long kiem tra cau hinh bieu mau.`
+    if (options.throwOnError) throw new Error(detail)
+    alert(detail)
+    return
   }
 
   exportExcelWithTemplate(
@@ -266,7 +321,7 @@ export function buildDocumentHtml(opts: PrintDocumentOptions): string {
     `).join('') ?? ''
 
   let co = opts.companyInfo
-  const coName = co?.ten ?? opts.companyName ?? 'CÔNG TY TNHH SX TM NAM PHƯƠNG'
+  const coName = co?.ten ?? opts.companyName ?? ''
   
   // Tự động lấy config chuẩn từ tên nếu không truyền companyInfo đầy đủ
   let configKey = ""
@@ -294,7 +349,7 @@ export function buildDocumentHtml(opts: PrintDocumentOptions): string {
     co?.ma_so_thue ? `<div class="co-line">MST: ${co.ma_so_thue}</div>` : '',
   ].filter(Boolean).join('')
 
-  const logoSrc = opts.logoUrl || config?.logo || '/logo_namphuong.png'
+  const logoSrc = opts.logoUrl || co?.logo || config?.logo || ''
 
   if (opts.customHtml) {
     // Replace variables in customHtml
@@ -382,7 +437,7 @@ export function renderTemplateAndPrint(
     co?.so_dien_thoai ? `<div class="co-line">ĐT: ${co.so_dien_thoai}</div>` : '',
     co?.ma_so_thue ? `<div class="co-line">MST: ${co.ma_so_thue}</div>` : '',
   ].filter(Boolean).join('')
-  const logoSrc = co?.logo || '/logo_namphuong.png'
+  const logoSrc = co?.logo || ''
 
   const allVars: Record<string, string> = {
     company_name: coName,
@@ -686,9 +741,9 @@ export async function printProductionTag(data: any) {
  * @param data Object chứa các biến mapping {{key}} -> value
  * @param phapNhanId ID pháp nhân
  */
-export async function smartPrintPdf(ma_mau: string, data: Record<string, any>, phapNhanId?: number) {
+export async function smartPrintPdf(ma_mau: string, data: Record<string, any>, phapNhanId?: number, options: StrictTemplateOptions = {}) {
   try {
-    const tpl = await systemApi.getTemplate(ma_mau, phapNhanId)
+    const tpl = await systemApi.getTemplate(ma_mau, phapNhanId, true)
     if (!tpl || !tpl.html_content) throw new Error("Template empty")
 
     let html = tpl.html_content
@@ -703,33 +758,32 @@ export async function smartPrintPdf(ma_mau: string, data: Record<string, any>, p
           const res = await phapNhanApi.list({ active_only: false })
           const pn = res.data.find(p => p.id === phapNhanId)
           if (pn) {
-            const fallback = COMPANY_CONFIGS["NAM PHUONG"]
             config = {
-              ...fallback,
-              ten: pn.ten_phap_nhan || fallback.ten,
-              dia_chi: pn.dia_chi ?? fallback.dia_chi,
-              ma_so_thue: pn.ma_so_thue ?? fallback.ma_so_thue,
-              so_dien_thoai: pn.so_dien_thoai ?? fallback.so_dien_thoai,
-              tai_khoan: pn.tai_khoan ?? fallback.tai_khoan,
-              ngan_hang: pn.ngan_hang ?? fallback.ngan_hang,
-              logo: pn.logo_path ? `/${pn.logo_path.replace(/^\//, '')}` : fallback.logo,
-              primary_color: pn.mau_sac_chinh ?? fallback.primary_color,
-              accent_color: pn.mau_sac_chinh ?? fallback.accent_color,
-              footer_accent_color: pn.mau_sac_chinh ?? fallback.footer_accent_color,
+              ten: pn.ten_phap_nhan || '',
+              dia_chi: pn.dia_chi ?? '',
+              ma_so_thue: pn.ma_so_thue ?? '',
+              so_dien_thoai: pn.so_dien_thoai ?? '',
+              tai_khoan: pn.tai_khoan ?? '',
+              ngan_hang: pn.ngan_hang ?? '',
+              logo: pn.logo_path ? `/${pn.logo_path.replace(/^\//, '')}` : '',
+              primary_color: pn.mau_sac_chinh ?? undefined,
+              accent_color: pn.mau_sac_chinh ?? undefined,
+              footer_accent_color: pn.mau_sac_chinh ?? undefined,
             }
+          } else {
+            throw new Error(`Khong tim thay phap nhan ID ${phapNhanId}`)
           }
-        } catch { /* ignore */ }
+        } catch (e) { throw e }
       }
       
       if (!config) {
-        // Fallback to default Nam Phuong
-        config = COMPANY_CONFIGS["NAM PHUONG"]
+        throw new Error(`Chung tu ${ma_mau} chua co phap nhan de in`)
       }
 
       if (!finalData.company_name) finalData.company_name = config.ten
       if (!finalData.logo_img) {
-        const logoSrc = config.logo || '/logo_namphuong.png'
-        finalData.logo_img = `<img src="${logoSrc}" alt="Logo" style="max-height: 70px; object-fit: contain;" />`
+        const logoSrc = config.logo || ''
+        finalData.logo_img = logoSrc ? `<img src="${logoSrc}" alt="Logo" style="max-height: 70px; object-fit: contain;" />` : ''
       }
       if (!finalData.company_details) {
         finalData.company_details = [
@@ -745,11 +799,13 @@ export async function smartPrintPdf(ma_mau: string, data: Record<string, any>, p
       html = html.replace(new RegExp(`{{${k}}}`, 'g'), v === null || v === undefined ? '' : String(v))
     })
 
-    printToPdf(tpl.ten_mau || ma_mau, html, false) // Mặc định portrait cho chuyên nghiệp
-  } catch (e) {
-    console.error(`[PrintPdf] Lỗi khi in mẫu ${ma_mau}`, e)
-    // Fallback UI alert
-    alert("Không thể tải mẫu in. Vui lòng kiểm tra cấu hình biểu mẫu trong hệ thống.")
+    printToPdf(tpl.ten_mau || ma_mau, html, Boolean(options.landscape)) // Mặc định portrait cho chuyên nghiệp
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail || e?.message || `Không thể tải mẫu in ${ma_mau}`
+    console.error(`[PrintPdf] ${detail}`, e)
+    if (options.throwOnError) throw new Error(detail)
+    alert(detail)
+    return
   }
 }
 

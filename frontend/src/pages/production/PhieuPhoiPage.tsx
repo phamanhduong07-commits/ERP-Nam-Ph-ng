@@ -319,18 +319,27 @@ function TabNhap() {
   const handlePrint = async (phieu: PhieuNhapPhoiSong, soLenh: string, phapNhanId?: number | null) => {
     const pn = phapNhanId
       ? phapNhanList.find(p => p.id === phapNhanId)
-      : phapNhanList[0]
+      : undefined
+    if (!pn?.id) {
+      message.error('Phiếu chưa có pháp nhân nên không thể in')
+      return
+    }
     const tenCty = pn?.ten_phap_nhan ?? 'CÔNG TY CP BAO BÌ NAM PHƯƠNG'
 
-    // Thử lấy template từ hệ thống — fallback inline nếu không có
+    // Lấy template đúng pháp nhân; thiếu template thì báo lỗi và dừng.
     try {
-      const tpl = await systemApi.getTemplate('delivery_order', pn?.id)
+      const tpl = await systemApi.getTemplate('delivery_order', pn.id, true)
       if (tpl?.html_content) {
         const w = window.open('', '_blank')
         if (w) { w.document.write(tpl.html_content); w.document.close() }
         return
       }
-    } catch { /* không có template → dùng HTML inline bên dưới */ }
+      message.error('Mẫu in delivery_order chưa có nội dung')
+      return
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || e?.message || 'Không tìm thấy mẫu in đúng pháp nhân')
+      return
+    }
     const ngayFmt = fmtDate(phieu.ngay)
     const duration = calcDuration(phieu.gio_bat_dau, phieu.gio_ket_thuc)
     const tong_tt = phieu.items.reduce((s, it) => s + (it.so_luong_thuc_te ?? 0), 0)
@@ -400,8 +409,9 @@ function TabNhap() {
       <div><div class="sig-label">Quản lý sản xuất</div><div style="font-size:10px;color:#777">(Ký, ghi rõ họ tên)</div></div>
     </div>
     <script>window.onload=()=>{window.print()}</script></body></html>`
-    const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+    const printWindow = window.open('', '_blank')
+    printWindow?.document.write(html)
+    printWindow?.document.close()
   }
 
   // ── Hàm chung: tải phiếu nhập theo đúng bộ lọc đang active ─────────────

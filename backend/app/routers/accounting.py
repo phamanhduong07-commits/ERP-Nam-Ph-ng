@@ -141,21 +141,27 @@ def get_purchase_invoice(
 @router.post("/purchase-invoices/from-po/{po_id}", response_model=PurchaseInvoiceResponse)
 def create_purchase_invoice_from_po(
     po_id: int,
-    thue_suat: Decimal = Query(Decimal("8"), description="Thuế suất VAT: 0, 5, 8, 10"),
+    thue_suat: Decimal = Query(Decimal("8"), description="VAT: 0, 5, 8, 10"),
+    co_vat: bool = Query(True, description="Co hoa don VAT hay khong"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
-    return AccountingService(db).create_purchase_invoice_from_po(po_id, current_user.id, thue_suat=thue_suat)
+    return AccountingService(db).create_purchase_invoice_from_po(
+        po_id, current_user.id, thue_suat=thue_suat, co_vat=co_vat
+    )
 
 
 @router.post("/purchase-invoices/from-gr/{gr_id}", response_model=PurchaseInvoiceResponse)
 def create_purchase_invoice_from_gr(
     gr_id: int,
-    thue_suat: Decimal = Query(Decimal("8"), description="Thuế suất VAT: 0, 5, 8, 10"),
+    thue_suat: Decimal = Query(Decimal("8"), description="VAT: 0, 5, 8, 10"),
+    co_vat: bool = Query(True, description="Co hoa don VAT hay khong"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
-    return AccountingService(db).create_purchase_invoice_from_gr(gr_id, current_user.id, thue_suat=thue_suat)
+    return AccountingService(db).create_purchase_invoice_from_gr(
+        gr_id, current_user.id, thue_suat=thue_suat, co_vat=co_vat
+    )
 
 
 # ─────────────────────────────────────────────
@@ -1341,3 +1347,4 @@ async def import_workshop_payroll(
         commit=commit, resolver=workshop_payroll_resolver,
         user=user, loai_du_lieu="luong_xuong"
     )
+

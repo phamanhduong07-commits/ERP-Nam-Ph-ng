@@ -29,7 +29,8 @@ function _fallbackConfig(pn: PhapNhan): PrintCompanyInfo {
 export function usePhapNhanForPrint(id?: number | null): PrintCompanyInfo | undefined {
   const { data: list } = usePhapNhanList()
   if (!list || list.length === 0) return undefined
-  const pn = id ? (list.find(p => p.id === id) ?? list[0]) : list[0]
+  const pn = id ? list.find(p => p.id === id) : list[0]
+  if (!pn) return undefined
 
   const fallback = _fallbackConfig(pn)
 

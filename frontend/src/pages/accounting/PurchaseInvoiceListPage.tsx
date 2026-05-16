@@ -4,15 +4,23 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Row, Select, Space, Switch, Table, Tag, Typography,
 } from 'antd'
-import { PlusOutlined, FileExcelOutlined } from '@ant-design/icons'
+import { FileExcelOutlined, WalletOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
-import { purchaseInvoiceApi, TRANG_THAI_PO_INVOICE } from '../../api/accounting'
+import { purchaseInvoiceApi } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
+
+const INVOICE_STATUS: Record<string, { label: string; color: string }> = {
+  nhap: { label: 'Nháp', color: 'default' },
+  da_tt_mot_phan: { label: 'TT một phần', color: 'orange' },
+  da_tt_du: { label: 'Đã thanh toán đủ', color: 'green' },
+  qua_han: { label: 'Quá hạn', color: 'red' },
+  huy: { label: 'Đã hủy', color: 'default' },
+}
 
 export default function PurchaseInvoiceListPage() {
   const navigate = useNavigate()
@@ -28,11 +36,13 @@ export default function PurchaseInvoiceListPage() {
     queryKey: ['purchase-invoices', tuNgay, denNgay, filterTrangThai, filterPhapNhan, quaHanOnly, page],
     queryFn: () =>
       purchaseInvoiceApi.list({
-        tu_ngay: tuNgay, den_ngay: denNgay,
+        tu_ngay: tuNgay,
+        den_ngay: denNgay,
         trang_thai: filterTrangThai,
         phap_nhan_id: filterPhapNhan,
         qua_han_only: quaHanOnly || undefined,
-        page, page_size: 20,
+        page,
+        page_size: 20,
       }),
   })
 
@@ -49,7 +59,7 @@ export default function PurchaseInvoiceListPage() {
       'Tổng tiền': i.tong_thanh_toan,
       'Đã TT': i.da_thanh_toan,
       'Còn lại': i.con_lai,
-      'Trạng thái': TRANG_THAI_PO_INVOICE[i.trang_thai]?.label ?? i.trang_thai,
+      'Trạng thái': INVOICE_STATUS[i.trang_thai]?.label ?? i.trang_thai,
     }))
     exportToExcel(`hoa-don-mua-${dayjs().format('YYYYMMDD')}`, [{
       name: 'Hoa don mua',
@@ -57,6 +67,9 @@ export default function PurchaseInvoiceListPage() {
       rows: rows.map((r: Record<string, string | number>) => Object.values(r)),
     }])
   }
+
+  const canPayInvoice = (r: any) =>
+    ['nhap', 'da_tt_mot_phan', 'qua_han'].includes(r.trang_thai) && Number(r.con_lai || 0) > 0
 
   const columns: ColumnsType<any> = [
     {
@@ -78,7 +91,7 @@ export default function PurchaseInvoiceListPage() {
       dataIndex: 'han_tt',
       width: 110,
       render: (v, r) => {
-        if (!v) return '—'
+        if (!v) return '-'
         const overdue = r.trang_thai === 'qua_han'
         return <span style={{ color: overdue ? '#f5222d' : undefined }}>{dayjs(v).format('DD/MM/YYYY')}</span>
       },
@@ -114,9 +127,20 @@ export default function PurchaseInvoiceListPage() {
       dataIndex: 'trang_thai',
       width: 150,
       render: v => {
-        const s = TRANG_THAI_PO_INVOICE[v]
+        const s = INVOICE_STATUS[v]
         return <Tag color={s?.color}>{s?.label ?? v}</Tag>
       },
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 120,
+      align: 'right',
+      render: (_, r) => canPayInvoice(r) ? (
+        <Button size="small" icon={<WalletOutlined />} onClick={() => navigate(`/accounting/payments/new?invoice_id=${r.id}`)}>
+          Chi tiền
+        </Button>
+      ) : null,
     },
   ]
 
@@ -126,8 +150,8 @@ export default function PurchaseInvoiceListPage() {
         <Title level={4} style={{ margin: 0 }}>Hóa đơn mua hàng</Title>
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/accounting/purchase-invoices/new')}>
-            Tạo hóa đơn
+          <Button icon={<WalletOutlined />} onClick={() => navigate('/accounting/payments')}>
+            Phiếu chi
           </Button>
         </Space>
       </div>
@@ -147,14 +171,18 @@ export default function PurchaseInvoiceListPage() {
           </Col>
           <Col>
             <Select
-              style={{ width: 180 }} allowClear placeholder="Trạng thái"
+              style={{ width: 180 }}
+              allowClear
+              placeholder="Trạng thái"
               onChange={v => { setFilterTrangThai(v); setPage(1) }}
-              options={Object.entries(TRANG_THAI_PO_INVOICE).map(([k, v]) => ({ value: k, label: v.label }))}
+              options={Object.entries(INVOICE_STATUS).map(([k, v]) => ({ value: k, label: v.label }))}
             />
           </Col>
           <Col>
             <Select
-              style={{ width: 180 }} allowClear placeholder="Pháp nhân"
+              style={{ width: 180 }}
+              allowClear
+              placeholder="Pháp nhân"
               onChange={v => { setFilterPhapNhan(v); setPage(1) }}
               options={phapNhanList.map((p: any) => ({ value: p.id, label: p.ten_phap_nhan }))}
             />

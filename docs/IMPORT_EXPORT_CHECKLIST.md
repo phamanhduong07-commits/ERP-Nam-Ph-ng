@@ -10,6 +10,9 @@ Muc tieu: moi man quan trong co import/export/in thong nhat, de go-live va doi s
 - Export dung bo loc dang xem.
 - File export co ten nghiep vu va ngay xuat.
 - Mau in/PDF co logo, phap nhan, so chung tu, ngay, noi dung, nguoi lap/duyet, chu ky.
+- In/PDF va export Excel khong duoc fallback khi thieu template; thieu mau dung phap nhan thi bao loi va dung.
+- Chung tu co phap nhan phai truyen phap nhan vao ham in/xuat, khong tu lay phap nhan dau tien.
+- Danh sach chung tu neu co nhieu phap nhan phai bao loi yeu cau loc, khong tu chon phap nhan.
 
 ## Nen tang da co
 
@@ -77,4 +80,9 @@ Muc tieu: moi man quan trong co import/export/in thong nhat, de go-live va doi s
 - Import xong xem duoc o man danh sach.
 - Export dung bo loc.
 - PDF khong tran bang va co phap nhan.
+- Thieu template dung phap nhan thi hien loi ro va khong tao file.
+- Danh sach nhieu phap nhan khong duoc tao file chung tu phap ly.
+- Loi phap nhan can noi ro: khong co du lieu, thieu phap nhan, hay co nhieu phap nhan.
+- Cac man bao gia/don mua/phieu nhap mua hang phai di qua template strict, khong dung export/print truc tiep cho chung tu nghiep vu.
+- Truoc go-live can kiem tra du template theo tung phap nhan cho cac ma: SALES_QUOTE, SALES_QUOTE_LIST, PURCHASE_ORDER, PURCHASE_ORDER_LIST, GOODS_RECEIPT_PURCHASE.
 - Khong loi khi danh sach rong.

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Checkbox, Popconfirm, Space, Tag, Tooltip, Typography, message,
+  Alert, Button, Card, Checkbox, Popconfirm, Space, Tag, Tooltip, Typography, message,
 } from 'antd'
 import {
   CheckCircleOutlined, DeleteOutlined, ExportOutlined,
@@ -116,17 +116,26 @@ type LayerKgSummary = {
   inner: LayerEntry[]   // Mặt trong
 }
 
+type GroupHeader = {
+  _type: 'header'
+  id: string
+  kho: number
+  soLenh: number
+}
 type GroupFooter = {
   _type: 'footer'
   id: string
   kho: number
   soLenh: number
+  soTam: number
+  soLuong: number
   soMT: number
   layers: LayerKgSummary
 }
 type LineRow = PlanLineResponse & { _type: 'line' }
-type TableRow = LineRow | GroupFooter
+type TableRow = LineRow | GroupHeader | GroupFooter
 
+function isHeader(r: TableRow): r is GroupHeader { return r._type === 'header' }
 function isFooter(r: TableRow): r is GroupFooter { return r._type === 'footer' }
 
 /** Tích luỹ kg vào map {mã → entry}. Cùng mã → cộng, khác mã → thêm mới */
@@ -188,68 +197,79 @@ function buildTableRows(lines: PlanLineResponse[]): { rows: TableRow[]; totalMT:
     return ka !== kb ? ka - kb : a.thu_tu - b.thu_tu
   })
 
+  // Gom nhóm theo kho_giay trước — để biết soLenh trước khi emit header
+  const groups: { kho: number; groupLines: PlanLineResponse[] }[] = []
+  for (const line of sorted) {
+    const kho = Number(line.kho_giay) || 0
+    const last = groups[groups.length - 1]
+    if (!last || last.kho !== kho) groups.push({ kho, groupLines: [line] })
+    else last.groupLines.push(line)
+  }
+
   const rows: TableRow[] = []
   let totalMT = 0
-  let curKho: number | null = null
-  let groupRows: PlanLineResponse[] = []
 
-  const pushFooter = (kho: number, group: PlanLineResponse[]) => {
-    const soMT = group.reduce((s, r) => {
-      const soTam = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
-      return s + calcMetToi(soTam, r.dai_tt)
-    }, 0)
+  for (const { kho, groupLines } of groups) {
+    // Header row — thanh xanh navy trước mỗi nhóm
+    rows.push({ _type: 'header', id: `header-${kho}`, kho, soLenh: groupLines.length })
+
+    // Các dòng lệnh
+    for (const line of groupLines) {
+      rows.push({ ...line, _type: 'line' })
+    }
+
+    // Footer row — tổng kết nhóm
+    let soMT = 0
+    let soTam = 0
+    let soLuong = 0
+    for (const r of groupLines) {
+      const tam = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
+      soTam += tam
+      soMT  += calcMetToi(tam, r.dai_tt)
+      soLuong += Number(r.so_luong_ke_hoach)
+    }
     totalMT += soMT
     rows.push({
       _type: 'footer',
       id: `footer-${kho}`,
       kho,
-      soLenh: group.length,
+      soLenh: groupLines.length,
+      soTam,
+      soLuong,
       soMT: Math.round(soMT * 10) / 10,
-      layers: calcGroupLayers(group),
+      layers: calcGroupLayers(groupLines),
     })
   }
-
-  for (const line of sorted) {
-    const kho = Number(line.kho_giay) || 0
-    if (curKho !== null && kho !== curKho) {
-      pushFooter(curKho, groupRows)
-      groupRows = []
-    }
-    curKho = kho
-    groupRows.push(line)
-    rows.push({ ...line, _type: 'line' })
-  }
-  if (groupRows.length > 0 && curKho !== null) pushFooter(curKho, groupRows)
 
   return { rows, totalMT: Math.round(totalMT * 10) / 10 }
 }
 
-// ─── Cell giấy (mã + kg) ──────────────────────────────────────────────────────
+// ─── Cell giấy (mã/ĐL + kg) — format: "54/140\n191 kg" (khớp báo giá) ────────
 function PaperCell({ ma, dl, kg, isSong }: { ma: string | null; dl: number | null; kg: number; isSong: boolean }) {
   if (!ma) return <span style={{ color: '#d9d9d9' }}>—</span>
   return (
     <div style={{ lineHeight: 1.4 }}>
-      <div style={{ fontWeight: 600, fontSize: 11, color: isSong ? '#1677ff' : '#389e0d', whiteSpace: 'nowrap' }}>
-        {ma}{dl != null ? ` - ${fmtN(dl, 1)}` : ''}
+      <div style={{ fontWeight: 600, fontSize: 13, color: isSong ? '#1677ff' : '#389e0d', whiteSpace: 'nowrap' }}>
+        {ma}{dl != null ? `/${Math.round(dl)}` : ''}
       </div>
-      {kg > 0 && <div style={{ fontSize: 10, color: '#fa8c16', fontWeight: 600 }}>{fmtN(kg, 1)} kg</div>}
+      {kg > 0 && <div style={{ fontSize: 11, color: '#fa8c16', fontWeight: 600 }}>{Math.round(kg).toLocaleString('vi-VN')} kg</div>}
     </div>
   )
 }
 
-/** Cell hiển thị danh sách mã giấy + kg trong dòng tổng kết khổ — compact 1 dòng/mã */
+/** Cell hiển thị danh sách mã giấy + ĐL + kg trong dòng tổng kết khổ */
 function LayerEntriesCell({ entries, isSong, bold }: { entries: LayerEntry[]; isSong: boolean; bold?: boolean }) {
-  if (!entries.length) return <span style={{ color: '#d9d9d9', fontSize: 11 }}>—</span>
+  if (!entries.length) return <span style={{ color: '#d9d9d9', fontSize: 13 }}>—</span>
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {entries.map(e => (
         <span key={e.ma} style={{
-          fontSize: bold ? 12 : 11,
+          fontSize: bold ? 14 : 13,
           fontWeight: 700,
           color: isSong ? '#0958d9' : '#237804',
           whiteSpace: 'nowrap',
         }}>
-          {e.ma}: <span style={{ color: '#ad4e00' }}>{e.kg.toLocaleString('vi-VN')}kg</span>
+          {e.ma}{e.dl != null ? `/${Math.round(e.dl)}` : ''}: <span style={{ color: '#ad4e00' }}>{Math.round(e.kg).toLocaleString('vi-VN')}kg</span>
         </span>
       ))}
     </div>
@@ -306,6 +326,8 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
   const canExport = plan.trang_thai === 'nhap'
 
   const { rows, totalMT } = buildTableRows(plan.lines)
+  const missingKhoGiayCount = plan.lines.filter(l => !l.kho_giay || Number(l.kho_giay) === 0).length
+  const totalSLThung = plan.lines.reduce((s, l) => s + Number(l.so_luong_ke_hoach), 0)
 
   // Tổng kg toàn bộ kế hoạch — cộng từng mã riêng qua tất cả GroupFooter
   const grandMaps: Record<keyof LayerKgSummary, Map<string, LayerEntry>> = {
@@ -334,16 +356,22 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
   const handleExportExcel = () => {
     const dataRows: (string | number | null | undefined)[][] = []
     for (const row of rows) {
+      if (isHeader(row)) {
+        dataRows.push([`▶ KHỔ GIẤY: ${row.kho} cm — ${row.soLenh} lệnh`, ...Array(20).fill('')])
+        continue
+      }
       if (isFooter(row)) {
         const layerStr = (entries: LayerEntry[]) =>
-          entries.map(e => `${e.ma}: ${e.kg}kg`).join(' / ') || '—'
+          entries.map(e => `${e.ma}${e.dl != null ? `/${Math.round(e.dl)}` : ''}: ${Math.round(e.kg)}kg`).join(' / ') || '—'
         dataRows.push([
-          `⬛ Khổ ${row.kho} cm — ${row.soLenh} lệnh`,
+          `${row.soLenh} lệnh`,
           layerStr(row.layers.matC), layerStr(row.layers.songC),
           layerStr(row.layers.matB), layerStr(row.layers.songB),
           layerStr(row.layers.inner),
-          '', '', '', '', '', '', '', '', '', '', '', '', '', '',
-          `Tổng MT khổ ${row.kho} cm: ${row.soMT}`,
+          '', '', '', '', '', '', '', '', '', '',
+          `Tổng: ${row.soTam.toLocaleString('vi-VN')} tấm`,
+          '', '',
+          `MT: ${row.soMT}`,
         ])
       } else {
         const r = row as LineRow
@@ -358,11 +386,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         dataRows.push([
           r.ten_khach_hang ?? '',
           r.so_lenh ?? '',
-          r.mat ? `${r.mat} ${r.mat_dl ?? ''}g` : '',
-          r.song_1 ? `${r.song_1} ${r.song_1_dl ?? ''}g` : '',
-          soLop >= 5 ? (r.mat_1 ? `${r.mat_1} ${r.mat_1_dl ?? ''}g` : '') : '',
-          soLop >= 5 ? (r.song_2 ? `${r.song_2} ${r.song_2_dl ?? ''}g` : '') : '',
-          inner.ma ? `${inner.ma} ${inner.dl ?? ''}g` : '',
+          r.mat ? `${r.mat}${r.mat_dl != null ? `/${Math.round(r.mat_dl)}` : ''}` : '',
+          r.song_1 ? `${r.song_1}${r.song_1_dl != null ? `/${Math.round(r.song_1_dl)}` : ''}` : '',
+          soLop >= 5 ? (r.mat_1 ? `${r.mat_1}${r.mat_1_dl != null ? `/${Math.round(r.mat_1_dl)}` : ''}` : '') : '',
+          soLop >= 5 ? (r.song_2 ? `${r.song_2}${r.song_2_dl != null ? `/${Math.round(r.song_2_dl)}` : ''}` : '') : '',
+          inner.ma ? `${inner.ma}${inner.dl != null ? `/${Math.round(inner.dl)}` : ''}` : '',
           calcQuyCache(r),
           r.to_hop_song ?? '',
           r.kho_giay != null ? Number(r.kho_giay) : '',
@@ -370,7 +398,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
           soTam,
           r.so_dao ?? '',
           qccl,
-          kho1 ?? '',
+          kho1 != null && r.kho_tt != null ? `${fmtN(kho1, 1)}/${fmtN(r.kho_tt, 1)}` : (kho1 ?? ''),
           Number(r.so_luong_ke_hoach),
           r.loai_lan ? (LOAI_LAN_LABELS[r.loai_lan] ?? r.loai_lan) : '',
           r.loai_in ?? '',
@@ -383,9 +411,9 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       name: 'Kế hoạch SX',
       headers: [
         'Mã KH', 'Số LSX',
-        'Mặt C', 'Sóng C', 'Mặt B', 'Sóng B', 'Mặt trong',
+        'Mặt C', 'Sóng C', 'Mặt B', 'Sóng B', 'Mặt T',
         'Quy cách SP', 'Sóng', 'Khổ (cm)', 'Dài (cm)',
-        'Số tấm', 'Dao', 'QCCL', 'Khổ xả', 'SL thùng',
+        'Số tấm', 'Dao', 'QCCL', 'Kho1/TT', 'SL thùng',
         'Loại lằn', 'Loại in', 'Ghi chú', 'Mét tới',
       ],
       rows: dataRows,
@@ -394,12 +422,12 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
   }
 
   const handleExportPdf = () => {
-    // Helper: render ô giấy dạng "54 - 140\n191 kg"
+    // Helper: render ô giấy dạng "54/140\n191 kg" (khớp báo giá)
     const paperCell = (ma: string | null, dl: number | null, kg: number, isSong: boolean) => {
       if (!ma) return '<span style="color:#ccc">—</span>'
       const color = isSong ? '#1677ff' : '#237804'
-      const label = dl != null ? `${ma} - ${dl}` : ma
-      const kgLine = kg > 0 ? `<br><span style="color:#fa8c16;font-weight:600">${kg.toFixed(0)} kg</span>` : ''
+      const label = dl != null ? `${ma}/${Math.round(dl)}` : ma
+      const kgLine = kg > 0 ? `<br><span style="color:#fa8c16;font-weight:600">${Math.round(kg).toLocaleString('vi-VN')} kg</span>` : ''
       return `<span style="color:${color};font-weight:700">${label}</span>${kgLine}`
     }
 
@@ -407,7 +435,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
     const inCell = (r: PlanLineResponse) => {
       const loaiIn = r.loai_in && r.loai_in !== 'khong_in'
         ? (r.loai_in === 'flexo' ? 'Flexo' : r.loai_in === 'ky_thuat_so' ? 'KTS' : r.loai_in) + (r.so_mau ? ` ${r.so_mau}M` : '')
-        : '<span style="color:#ccc">Không in</span>'
+        : '<span style="color:#ccc">—</span>'
       const ct = r.c_tham && r.c_tham !== 'Không'
         ? `<br><span class="tag-ct">CT ${r.c_tham.replace('mặt','m').replace(/\s+/g,'')}</span>` : ''
       const cm = r.can_man && r.can_man !== 'Không'
@@ -416,20 +444,28 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
     }
 
     const bodyRows = rows.map((row, i) => {
+      // Dòng header nhóm (thanh navy)
+      if (isHeader(row)) {
+        return `<tr style="page-break-inside:avoid;page-break-after:avoid">
+          <td colspan="20" style="background:#1a1a1a;color:#fff;font-weight:700;font-size:10px;padding:4px 6px;letter-spacing:0.5px;border:1px solid #000 !important">
+            ▶ KHỔ GIẤY: ${row.kho} cm — ${row.soLenh} lệnh
+          </td>
+        </tr>`
+      }
+
       if (isFooter(row)) {
-        // Dòng tổng kết khổ (group footer)
         const { layers } = row
-        const fmtGroup = (entries: { ma: string; dl: number | null; kg: number }[]) =>
-          entries.map(e => `<span style="color:#237804;font-weight:700">${e.ma} - ${e.dl ?? ''}</span><br><span style="color:#fa8c16">${e.kg.toFixed(0)} kg</span>`).join('<br>') || '—'
+        const fmtGroup = (entries: { ma: string; dl: number | null; kg: number }[], isSong = false) =>
+          entries.map(e => `<span style="color:${isSong ? '#1677ff' : '#237804'};font-weight:700">${e.ma}${e.dl != null ? `/${Math.round(e.dl)}` : ''}</span><br><span style="color:#fa8c16">${Math.round(e.kg).toLocaleString('vi-VN')} kg</span>`).join('<br>') || '—'
         return `<tr class="footer-row">
-          <td colspan="2" style="font-weight:700;color:#614700">${row.id.replace('footer-','Khổ ')}</td>
-          <td></td>
-          <td>${fmtGroup(layers.matC)}</td>
-          <td>${fmtGroup(layers.songC)}</td>
-          <td>${fmtGroup(layers.matB)}</td>
-          <td>${fmtGroup(layers.songB)}</td>
-          <td>${fmtGroup(layers.inner)}</td>
-          <td colspan="13"></td>
+          <td colspan="2" style="font-weight:700;color:#614700">${row.soLenh} lệnh</td>
+          <td>${fmtGroup(layers.matC, false)}</td>
+          <td>${fmtGroup(layers.songC, true)}</td>
+          <td>${fmtGroup(layers.matB, false)}</td>
+          <td>${fmtGroup(layers.songB, true)}</td>
+          <td>${fmtGroup(layers.inner, false)}</td>
+          <td colspan="11" style="text-align:right;color:#614700">Tổng nhóm: <b style="color:#262626">${row.soTam.toLocaleString('vi-VN')} tấm</b> &nbsp;·&nbsp; MT:</td>
+          <td style="text-align:right;font-weight:700;color:#fa8c16">${row.soMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</td>
         </tr>`
       }
 
@@ -453,9 +489,8 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       const loaiLan = r.loai_lan ? (LOAI_LAN_LABELS[r.loai_lan] ?? r.loai_lan) : '—'
 
       return `<tr>
-        <td class="center" style="color:#888">${r.thu_tu}</td>
         <td style="font-weight:600;white-space:nowrap">${r.ma_kh ?? '—'}</td>
-        <td style="font-family:monospace;font-size:8px;font-weight:700">${r.so_lenh ?? '—'}${r.ngay_chay ? `<br><span style="color:#1677ff;font-size:7px">${dayjs(r.ngay_chay).format('DD/MM')}</span>` : ''}</td>
+        <td style="font-family:monospace;font-size:8px;font-weight:700"><span style="font-size:7px;color:#888;display:block;line-height:1">${r.thu_tu}</span>${r.so_lenh ?? '—'}${r.ngay_chay ? `<br><span style="color:#1677ff;font-size:7px">${dayjs(r.ngay_chay).format('DD/MM')}</span>` : ''}</td>
         <td>${paperCell(r.mat,          r.mat_dl,        kgMatC,  false)}</td>
         <td>${paperCell(slots.songC.ma, slots.songC.dl,  kgSongC, true)}</td>
         <td>${soLop >= 5 ? paperCell(r.mat_1, r.mat_1_dl, kgMatB, false) : '<span style="color:#ccc">—</span>'}</td>
@@ -463,12 +498,12 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         <td>${paperCell(inner.ma, inner.dl, kgInner, false)}</td>
         <td style="white-space:nowrap">${calcQuyCache(r)}</td>
         <td class="center" style="font-weight:700;color:#531dab">${r.to_hop_song ?? '—'}</td>
-        <td class="right" style="color:#1677ff;font-weight:700">${r.kho_giay ? fmtN(r.kho_giay, 1) : '—'}</td>
+        <td class="right" style="color:${!r.kho_giay || Number(r.kho_giay) === 0 ? '#ff4d4f' : '#1677ff'};font-weight:700;font-size:13px">${!r.kho_giay || Number(r.kho_giay) === 0 ? '⚠ —' : fmtN(r.kho_giay, 1)}</td>
         <td class="right">${daiTt != null ? fmtN(daiTt, 1) : '—'}</td>
-        <td class="right" style="font-weight:600">${soTam.toLocaleString('vi-VN')}</td>
+        <td class="right" style="font-weight:800;font-size:15px">${soTam.toLocaleString('vi-VN')}</td>
         <td class="center" style="color:#1677ff;font-weight:700">${r.so_dao ?? '—'}</td>
         <td style="font-size:8px;font-family:monospace">${qccl || '—'}</td>
-        <td class="center" style="font-weight:600">${kho1 != null ? fmtN(kho1, 1) : '—'}</td>
+        <td class="center">${kho1 != null ? `<div style="font-size:7px;color:#8c8c8c">${fmtN(kho1, 1)}</div><div style="font-weight:700;color:#1677ff">${r.kho_tt != null ? fmtN(r.kho_tt, 1) : '—'}</div>` : '—'}</td>
         <td class="right" style="font-weight:600">${Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')}</td>
         <td class="center"><span class="tag-lan">${loaiLan}</span></td>
         <td class="center">${inCell(r)}</td>
@@ -480,10 +515,9 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
     const tableHtml = `
       <table>
         <thead><tr>
-          <th class="center">#</th>
           <th>Mã KH</th>
           <th>Số LSX</th>
-          <th>Mặt C</th><th>Sóng C</th><th>Mặt B</th><th>Sóng B</th><th>Mặt</th>
+          <th>Mặt C</th><th>Sóng C</th><th>Mặt B</th><th>Sóng B</th><th>Mặt T</th>
           <th>Quy cách SP</th>
           <th class="center">Sóng</th>
           <th class="right">Khổ (cm)</th>
@@ -491,7 +525,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
           <th class="right">Số tấm</th>
           <th class="center">Dao</th>
           <th>QCCL</th>
-          <th class="center">Khổ xả</th>
+          <th class="center">Kho1/TT</th>
           <th class="right">SL thùng</th>
           <th class="center">Loại lằn</th>
           <th class="center">In / GC</th>
@@ -501,7 +535,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         <tbody>
           ${bodyRows}
           <tr class="total-row">
-            <td colspan="20" class="right"><strong>TỔNG SỐ MÉT TỚI:</strong></td>
+            <td colspan="19" class="right"><strong>TỔNG SỐ MÉT TỚI:</strong></td>
             <td class="right"><strong>${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></td>
           </tr>
         </tbody>
@@ -519,9 +553,13 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       `Kế hoạch SX ${plan.so_ke_hoach}`,
       `<style>
         @page { size: A4 landscape; margin: 8mm; }
-        body { font-size: 8px; }
-        table { font-size: 8px !important; }
-        th, td { padding: 2px 3px !important; font-size: 8px !important; }
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        body { font-size: 10px; }
+        table { font-size: 10px !important; border-collapse: collapse !important; }
+        th { padding: 3px 4px !important; font-size: 10px !important; border: 1px solid #333 !important; background: #2c2c2c !important; color: #fff !important; }
+        td { padding: 3px 4px !important; font-size: 10px; border: 1px solid #555 !important; }
+        .footer-row td { border-top: 2px solid #333 !important; border-bottom: 2px solid #333 !important; background: #e8e8e8 !important; color: #000 !important; }
+        .total-row td { border-top: 3px solid #000 !important; background: #ccc !important; color: #000 !important; }
         .tag-ct { background:#e6fffb; color:#08979c; border:1px solid #87e8de; border-radius:3px; padding:0 3px; font-size:7px; }
         .tag-cm { background:#f9f0ff; color:#531dab; border:1px solid #d3adf7; border-radius:3px; padding:0 3px; font-size:7px; }
         .tag-lan{ background:#fff2e8; color:#d4380d; border:1px solid #ffbb96; border-radius:3px; padding:0 3px; font-size:7px; }
@@ -534,7 +572,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
   }
 
   // Tổng số cột trong bảng
-  const TOTAL_COLS = 22  // 21 cột dữ liệu + 1 cột hành động
+  const TOTAL_COLS = 22  // 20 cột dữ liệu + 2 cột no-print (Mua phôi + Hành động)
 
   return (
     <div style={{ padding: embedded ? 0 : 24 }}>
@@ -543,11 +581,20 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         @page { size: A4 landscape; margin: 8mm; }
         @media print {
           .no-print { display: none !important; }
-          body { margin: 0; font-size: 8px; }
-          table { font-size: 8px !important; border-collapse: collapse; }
-          th, td { padding: 2px 3px !important; font-size: 8px !important; }
+          body { margin: 0; font-size: 11px; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          table { font-size: 11px !important; border-collapse: collapse !important; }
+          th, td { padding: 3px 4px !important; font-size: 11px !important; border: 1px solid #555 !important; }
+          th { background: #2c2c2c !important; color: #fff !important; }
+          .group-header-row td { background: #1a1a1a !important; color: #fff !important; font-size: 13px !important; }
+          .group-header-row { page-break-after: avoid; break-after: avoid; }
+          .group-footer-row td { border-top: 2px solid #333 !important; border-bottom: 2px solid #333 !important; background: #e8e8e8 !important; color: #000 !important; }
+          .grand-total-row td { border-top: 3px solid #000 !important; background: #ccc !important; color: #000 !important; }
+          .ant-tag { background: #e0e0e0 !important; color: #000 !important; border: 1px solid #555 !important; font-size: 7px !important; padding: 0 3px !important; }
           .plan-header { margin-bottom: 6px; }
-          .ant-tag { font-size: 7px !important; padding: 0 3px !important; }
+          .cell-tam { font-size: 18px !important; font-weight: 800 !important; }
+          .cell-kho { font-size: 15px !important; font-weight: 800 !important; }
+          .cell-mt  { font-size: 13px !important; }
         }
       `}</style>
 
@@ -583,20 +630,32 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         {plan.ghi_chu && <Text type="secondary" style={{ fontSize: 12 }}>Ghi chú: {plan.ghi_chu}</Text>}
       </Card>
 
+      {/* ── Cảnh báo thiếu khổ giấy ── */}
+      {missingKhoGiayCount > 0 && (
+        <Alert
+          className="no-print"
+          type="warning"
+          showIcon
+          style={{ marginBottom: 10 }}
+          message={`${missingKhoGiayCount} dòng chưa có khổ giấy — cần bổ sung trước khi in phiếu cho xưởng`}
+        />
+      )}
+
       {/* ── PDF-style header ── */}
       <div className="plan-header" style={{ marginBottom: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ fontSize: 12 }}>
+          <div style={{ fontSize: 14 }}>
             <div><b>Ngày:</b> {dayjs(plan.ngay_ke_hoach).format('DD/MM/YYYY')}</div>
             {plan.noi_sx && <div><b>Nơi SX:</b> {plan.noi_sx}</div>}
             <div><b>Số phiếu:</b> {plan.so_ke_hoach}</div>
             {plan.created_by_name && <div><b>Người lập:</b> {plan.created_by_name}</div>}
           </div>
           <div style={{ textAlign: 'center', flex: 1 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: 1 }}>KẾ HOẠCH SẢN XUẤT</div>
+            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 1 }}>KẾ HOẠCH SẢN XUẤT</div>
           </div>
-          <div style={{ fontSize: 12, textAlign: 'right' }}>
-            <div>Tổng số MT: <b style={{ color: '#1677ff', fontSize: 14 }}>{totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</b></div>
+          <div style={{ fontSize: 14, textAlign: 'right' }}>
+            <div>Tổng SL: <b style={{ color: '#1677ff', fontSize: 16 }}>{totalSLThung.toLocaleString('vi-VN')} thùng</b></div>
+            <div>Tổng MT: <b style={{ color: '#fa8c16', fontSize: 16 }}>{totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</b></div>
             <div style={{ color: '#888' }}>{plan.lines.length} lệnh</div>
           </div>
         </div>
@@ -604,11 +663,9 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
 
       {/* ── Bảng kế hoạch ── */}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: '#f0f5ff' }}>
-              {/* Cột 1: STT — spans all when footer */}
-              <th style={TH}>#</th>
               <th style={TH}>Mã KH</th>
               <th style={TH}>Số LSX</th>
               {/* Kết cấu giấy: 5 lớp */}
@@ -616,7 +673,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
               <th style={{ ...TH, background: '#e6f4ff', color: '#1677ff' }}>Sóng C</th>
               <th style={{ ...TH, background: '#f6ffed', color: '#389e0d' }}>Mặt B</th>
               <th style={{ ...TH, background: '#e6f4ff', color: '#1677ff' }}>Sóng B</th>
-              <th style={{ ...TH, background: '#f6ffed', color: '#389e0d' }}>Mặt</th>
+              <th style={{ ...TH, background: '#f6ffed', color: '#389e0d' }}>Mặt T</th>
               {/* Thông số */}
               <th style={TH}>Quy Cách Sản Phẩm</th>
               <th style={TH}>Sóng</th>
@@ -625,7 +682,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
               <th style={TH}>Số Tấm</th>
               <th style={TH}>Dao</th>
               <th style={TH}>QCCL</th>
-              <th style={TH}>Khổ Xả</th>
+              <th style={TH}>Kho1/TT</th>
               <th style={TH}>SL Thùng</th>
               <th style={TH}>Loại Lằn</th>
               <th style={TH}>Loại In</th>
@@ -641,35 +698,48 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
           </thead>
           <tbody>
             {rows.map((row, idx) => {
+              // ── GroupHeader row ─────────────────────────────────────────
+              if (isHeader(row)) {
+                return (
+                  <tr key={row.id} className="group-header-row" style={{ pageBreakInside: 'avoid' }}>
+                    <td colSpan={22} style={{
+                      ...TD,
+                      background: '#003a8c',
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: 15,
+                      letterSpacing: 0.5,
+                      padding: '6px 10px',
+                    }}>
+                      ▶ KHỔ GIẤY: <b style={{ fontSize: 19 }}>{row.kho} cm</b> — {row.soLenh} lệnh
+                    </td>
+                  </tr>
+                )
+              }
+
+              // ── GroupFooter row ─────────────────────────────────────────
               if (isFooter(row)) {
                 const { layers } = row
                 return (
-                  <tr key={row.id} style={{ background: '#fff7e6', borderTop: '2px solid #ffa940', borderBottom: '2px solid #ffa940' }}>
-                    {/* STT + Mã KH + Số LSX → label */}
-                    <td colSpan={3} style={{ ...TD, background: '#fff1b8', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', color: '#614700' }}>
-                      ⬛ Khổ <b style={{ color: '#1677ff' }}>{row.kho} cm</b> — {row.soLenh} lệnh
+                  <tr key={row.id} className="group-footer-row" style={{ background: '#fff7e6', borderTop: '2px solid #ffa940', borderBottom: '2px solid #ffa940' }}>
+                    <td colSpan={2} style={{ ...TD, background: '#fff1b8', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', color: '#614700' }}>
+                      {row.soLenh} lệnh
                     </td>
-                    {/* Mặt C */}
                     <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={layers.matC} isSong={false} /></td>
-                    {/* Sóng C */}
                     <td style={{ ...TD, background: '#e6f4ff' }}><LayerEntriesCell entries={layers.songC} isSong={true} /></td>
-                    {/* Mặt B */}
                     <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={layers.matB} isSong={false} /></td>
-                    {/* Sóng B */}
                     <td style={{ ...TD, background: '#e6f4ff' }}><LayerEntriesCell entries={layers.songB} isSong={true} /></td>
-                    {/* Mặt trong */}
                     <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={layers.inner} isSong={false} /></td>
-                    {/* Quy Cách → Ghi Chú (12 cột) */}
-                    <td colSpan={12} style={{ ...TD, textAlign: 'right', color: '#8c8c8c', fontSize: 11 }}>
-                      Tổng số MT khổ {row.kho} cm:
+                    {/* Quy Cách → Ghi Chú: hiện soTam + soLuong */}
+                    <td colSpan={12} style={{ ...TD, textAlign: 'right', color: '#614700', fontSize: 13 }}>
+                      <b style={{ color: '#262626', fontSize: 15 }}>{row.soTam.toLocaleString('vi-VN')} tấm</b>
+                      &nbsp;·&nbsp;<b style={{ color: '#1677ff', fontSize: 15 }}>{row.soLuong.toLocaleString('vi-VN')} thùng</b>
+                      &nbsp;·&nbsp;MT:
                     </td>
-                    {/* Mét Tới */}
-                    <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#fa8c16', fontSize: 13, background: '#fff1b8' }}>
+                    <td className="cell-mt" style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#fa8c16', fontSize: 16, background: '#fff1b8' }}>
                       {row.soMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}
                     </td>
-                    {/* Mua phôi (footer rỗng) */}
                     <td style={TD} className="no-print" />
-                    {/* Hành động */}
                     <td style={TD} className="no-print" />
                   </tr>
                 )
@@ -693,25 +763,36 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
               const kgSongB  = calcLayerKg(soTam, kho1, daiTt, slots.songB.dl,  true,  slots.songB.flute)
               const kgInner  = calcLayerKg(soTam, kho1, daiTt, inner.dl, false, null)
 
+              const hasNoKho = !r.kho_giay || Number(r.kho_giay) === 0
+              const isDangChay = r.trang_thai === 'dang_chay'
               const isOdd = idx % 2 === 0
-              const rowBg = r.trang_thai === 'hoan_thanh' ? '#f6ffed' : isOdd ? '#fff' : '#fafafa'
+              const rowBg = hasNoKho ? '#fff1f0'
+                : r.trang_thai === 'hoan_thanh' ? '#f6ffed'
+                : isDangChay ? '#fffbe6'
+                : isOdd ? '#fff' : '#fafafa'
+              const rowBorderLeft = hasNoKho ? '3px solid #ff4d4f'
+                : isDangChay ? '3px solid #faad14'
+                : undefined
 
               return (
-                <tr key={r.id} style={{ background: rowBg }}>
-                  {/* STT */}
-                  <td style={{ ...TD, textAlign: 'center', color: '#8c8c8c' }}>{r.thu_tu}</td>
-
+                <tr key={r.id} style={{ background: rowBg, ...(rowBorderLeft ? { borderLeft: rowBorderLeft } : {}) }}>
                   {/* Mã KH */}
                   <td style={{ ...TD, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.ma_kh || '—'}</td>
 
-                  {/* Số LSX + ngày chạy */}
+                  {/* Số LSX + STT nhỏ + ngày chạy */}
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>
-                    <div style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.so_lenh || '—'}</div>
-                    {r.ngay_chay && (
-                      <div style={{ fontSize: 9, color: '#1677ff', marginTop: 1 }}>
-                        📅 {dayjs(r.ngay_chay).format('DD/MM')}
-                      </div>
-                    )}
+                    <div style={{ fontSize: 10, color: '#8c8c8c', lineHeight: 1 }}>{r.thu_tu}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 13 }}>{r.so_lenh || '—'}</div>
+                    {r.ngay_chay && (() => {
+                      const today = dayjs().startOf('day')
+                      const nc = dayjs(r.ngay_chay).startOf('day')
+                      const ngayColor = nc.isBefore(today) ? '#ff4d4f' : nc.isSame(today) ? '#fa8c16' : '#1677ff'
+                      return (
+                        <div style={{ fontSize: 11, color: ngayColor, marginTop: 1, fontWeight: nc.isBefore(today) || nc.isSame(today) ? 700 : 400 }}>
+                          📅 {dayjs(r.ngay_chay).format('DD/MM')}
+                        </div>
+                      )
+                    })()}
                   </td>
 
                   {/* Mặt C */}
@@ -753,13 +834,13 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                   {/* Sóng */}
                   <td style={{ ...TD, textAlign: 'center' }}>
                     {r.to_hop_song
-                      ? <Tag color="purple" style={{ margin: 0, fontWeight: 700, fontSize: 12 }}>{r.to_hop_song}</Tag>
+                      ? <Tag color="purple" style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{r.to_hop_song}</Tag>
                       : '—'}
                   </td>
 
                   {/* Khổ */}
-                  <td style={{ ...TD, textAlign: 'center', fontWeight: 700, color: '#1677ff', fontSize: 13 }}>
-                    {r.kho_giay ? fmtN(r.kho_giay, 1) : '—'}
+                  <td className="cell-kho" style={{ ...TD, textAlign: 'center', fontWeight: 700, color: hasNoKho ? '#ff4d4f' : '#1677ff', fontSize: 20 }}>
+                    {hasNoKho ? '⚠ —' : fmtN(r.kho_giay, 1)}
                   </td>
 
                   {/* Dài */}
@@ -767,8 +848,8 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                     {daiTt != null ? fmtN(daiTt, 1) : '—'}
                   </td>
 
-                  {/* Số Tấm */}
-                  <td style={{ ...TD, textAlign: 'center', fontWeight: 600 }}>
+                  {/* Số Tấm — to hơn, công nhân nhìn chính */}
+                  <td className="cell-tam" style={{ ...TD, textAlign: 'center', fontWeight: 700, fontSize: 24 }}>
                     {soTam.toLocaleString('vi-VN')}
                   </td>
 
@@ -778,24 +859,31 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                   </td>
 
                   {/* QCCL */}
-                  <td style={{ ...TD, textAlign: 'center', fontFamily: 'monospace', fontSize: 10 }}>
+                  <td style={{ ...TD, textAlign: 'center', fontFamily: 'monospace', fontSize: 12 }}>
                     {qccl || '—'}
                   </td>
 
-                  {/* Khổ Xả (kho1) */}
-                  <td style={{ ...TD, textAlign: 'center', fontWeight: 600 }}>
-                    {kho1 != null ? fmtN(kho1, 1) : '—'}
+                  {/* Kho1/TT: kho1 (nhỏ, xám) + kho_tt (to, xanh) */}
+                  <td style={{ ...TD, textAlign: 'center' }}>
+                    {kho1 != null ? (
+                      <>
+                        <div style={{ fontSize: 10, color: '#8c8c8c' }}>{fmtN(kho1, 1)}</div>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: '#1677ff' }}>
+                          {r.kho_tt != null ? fmtN(r.kho_tt, 1) : '—'}
+                        </div>
+                      </>
+                    ) : <span style={{ color: '#d9d9d9' }}>—</span>}
                   </td>
 
-                  {/* SL Thùng */}
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 600 }}>
+                  {/* SL Thùng — nhỏ hơn, tham khảo */}
+                  <td style={{ ...TD, textAlign: 'right', fontWeight: 400, fontSize: 12, color: '#595959' }}>
                     {Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')}
                   </td>
 
                   {/* Loại Lằn */}
                   <td style={{ ...TD, textAlign: 'center' }}>
                     {r.loai_lan
-                      ? <Tag color="volcano" style={{ margin: 0, fontSize: 10 }}>
+                      ? <Tag color="volcano" style={{ margin: 0, fontSize: 12 }}>
                           {LOAI_LAN_LABELS[r.loai_lan] ?? r.loai_lan}
                         </Tag>
                       : <span style={{ color: '#d9d9d9' }}>—</span>}
@@ -805,28 +893,30 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                   <td style={{ ...TD, textAlign: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                       {r.loai_in && r.loai_in !== 'khong_in'
-                        ? <span style={{ fontSize: 10 }}>{r.loai_in === 'flexo' ? 'Flexo' : r.loai_in === 'ky_thuat_so' ? 'KTS' : r.loai_in}{r.so_mau ? ` ${r.so_mau}M` : ''}</span>
-                        : <span style={{ color: '#d9d9d9', fontSize: 10 }}>Không</span>}
+                        ? <span style={{ fontSize: 12 }}>{r.loai_in === 'flexo' ? 'Flexo' : r.loai_in === 'ky_thuat_so' ? 'KTS' : r.loai_in}{r.so_mau ? ` ${r.so_mau}M` : ''}</span>
+                        : <span style={{ color: '#d9d9d9', fontSize: 12 }}>—</span>}
                       {r.c_tham && r.c_tham !== 'Không' && (
-                        <Tag color="cyan" style={{ margin: 0, fontSize: 9, lineHeight: '14px', padding: '0 4px' }}>
+                        <Tag color="cyan" style={{ margin: 0, fontSize: 11, lineHeight: '16px', padding: '0 5px' }}>
                           CT {r.c_tham.replace('mặt', 'm').replace(/\s+/g, '')}
                         </Tag>
                       )}
                       {r.can_man && r.can_man !== 'Không' && (
-                        <Tag color="purple" style={{ margin: 0, fontSize: 9, lineHeight: '14px', padding: '0 4px' }}>
+                        <Tag color="purple" style={{ margin: 0, fontSize: 11, lineHeight: '16px', padding: '0 5px' }}>
                           CM {r.can_man.replace('mặt', 'm').replace(/\s+/g, '')}
                         </Tag>
                       )}
                     </div>
                   </td>
 
-                  {/* Ghi Chú */}
-                  <td style={{ ...TD, maxWidth: 160 }}>
-                    <span style={{ fontSize: 10, color: '#595959' }}>{r.ghi_chu || ''}</span>
+                  {/* Ghi Chú — nổi bật khi có nội dung */}
+                  <td style={{ ...TD, maxWidth: 200, background: r.ghi_chu ? '#fffbe6' : undefined }}>
+                    {r.ghi_chu
+                      ? <span style={{ fontSize: 13, fontWeight: 600, color: '#262626' }}>📌 {r.ghi_chu}</span>
+                      : <span style={{ fontSize: 11, color: '#d9d9d9' }}>—</span>}
                   </td>
 
                   {/* Mét Tới */}
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#fa8c16', fontSize: 12 }}>
+                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#fa8c16', fontSize: 14 }}>
                     {metToi > 0 ? metToi.toLocaleString('vi-VN', { maximumFractionDigits: 1 }) : '—'}
                   </td>
 
@@ -868,8 +958,8 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
             })}
 
             {/* ── Dòng tổng cộng toàn kế hoạch ── */}
-            <tr style={{ background: '#fffbe6', fontWeight: 700, borderTop: '3px solid #faad14' }}>
-              <td colSpan={3} style={{ ...TD, background: '#ffe58f', fontSize: 12, fontWeight: 700, color: '#614700', whiteSpace: 'nowrap' }}>
+            <tr className="grand-total-row" style={{ background: '#fffbe6', fontWeight: 700, borderTop: '3px solid #faad14' }}>
+              <td colSpan={2} style={{ ...TD, background: '#ffe58f', fontSize: 14, fontWeight: 700, color: '#614700', whiteSpace: 'nowrap' }}>
                 TỔNG KẾ HOẠCH · {plan.lines.length} lệnh
               </td>
               {/* Kg từng lớp tổng (cùng mã gộp, khác mã tách) */}
@@ -878,12 +968,13 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
               <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={grandLayers.matB}  isSong={false} bold /></td>
               <td style={{ ...TD, background: '#e6f4ff' }}><LayerEntriesCell entries={grandLayers.songB} isSong={true}  bold /></td>
               <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={grandLayers.inner} isSong={false} bold /></td>
-              {/* Placeholder cho các cột giữa */}
-              <td colSpan={12} style={{ ...TD, textAlign: 'right', color: '#8c8c8c', fontSize: 11 }}>
-                Tổng số MT toàn kế hoạch:
+              {/* Tổng SL thùng + MT toàn kế hoạch */}
+              <td colSpan={12} style={{ ...TD, textAlign: 'right', color: '#8c8c8c', fontSize: 13 }}>
+                <b style={{ color: '#1677ff', fontSize: 15 }}>{totalSLThung.toLocaleString('vi-VN')} thùng</b>
+                &nbsp;·&nbsp;Tổng MT:
               </td>
               {/* Tổng MT */}
-              <td style={{ ...TD, textAlign: 'right', fontWeight: 800, color: '#fa8c16', fontSize: 15, background: '#ffe58f' }}>
+              <td className="cell-mt" style={{ ...TD, textAlign: 'right', fontWeight: 800, color: '#fa8c16', fontSize: 18, background: '#ffe58f' }}>
                 {totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}
               </td>
               <td style={TD} className="no-print" />
@@ -907,18 +998,18 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
 const TH: React.CSSProperties = {
-  padding: '5px 6px',
-  border: '1px solid #d9d9d9',
+  padding: '6px 10px',
+  border: '1px solid #b0b0b0',
   textAlign: 'center',
-  fontSize: 11,
+  fontSize: 13,
   fontWeight: 600,
   whiteSpace: 'nowrap',
   background: '#f0f5ff',
 }
 
 const TD: React.CSSProperties = {
-  padding: '4px 6px',
-  border: '1px solid #f0f0f0',
+  padding: '6px 8px',
+  border: '1px solid #d0d0d0',
   verticalAlign: 'middle',
-  fontSize: 11,
+  fontSize: 13,
 }

@@ -9,6 +9,8 @@ import dayjs from 'dayjs'
 import { warehouseApi, CreateProductionOutputPayload, ProductionOutput } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { productionOrdersApi, type ProductionOrderListItem } from '../../api/productionOrders'
+import { PrinterOutlined, FileExcelOutlined } from '@ant-design/icons'
+import { smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 
@@ -78,6 +80,63 @@ export default function ProductionOutputPage() {
       })
     } catch { /* validation shown inline */ }
   }
+  const handlePrintReceipt = (r: ProductionOutput) => {
+    if (!r.phap_nhan_id) {
+      message.error('Phiếu nhập thành phẩm chưa có pháp nhân nên không thể in')
+      return
+    }
+    const cols = [
+      { header: 'Tên hàng', key: 'ten_hang' },
+      { header: 'Lệnh SX', key: 'so_lenh', align: 'center' as const },
+      { header: 'Số lượng', key: 'so_luong_nhap', align: 'right' as const },
+      { header: 'ĐVT', key: 'dvt', align: 'center' as const },
+      { header: 'Ghi chú', key: 'ghi_chu' },
+    ]
+    
+    const rowData = [[
+      r.ten_hang,
+      r.so_lenh || '—',
+      r.so_luong_nhap.toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
+      r.dvt || 'Thùng',
+      r.ghi_chu || '—',
+    ]]
+
+    const table = buildHtmlTable(cols, rowData)
+
+    const printData = {
+      subtitle: 'PHIẾU NHẬP KHO THÀNH PHẨM',
+      document_number: r.so_phieu,
+      document_date: r.ngay_nhap ?? '',
+      warehouse_name: r.ten_kho ?? '—',
+      body_html: table,
+    }
+
+    smartPrintPdf('GOODS_RECEIPT', printData, r.phap_nhan_id)
+  }
+
+  const handleExportExcel = () => {
+    const resolvedPhapNhanId = resolveSinglePhapNhanId(outputList)
+    if (!outputList.length) {
+      message.warning('Không có dữ liệu để xuất Excel')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ xuất Excel phiếu nhập thành phẩm khi danh sách thuộc một pháp nhân. Vui lòng lọc dữ liệu trước.')
+      return
+    }
+    const defaultConfig = [
+      { key: 'so_phieu', label: 'Số phiếu', width: 18 },
+      { key: 'ngay_nhap', label: 'Ngày nhập', width: 12 },
+      { key: 'so_lenh', label: 'LSX', width: 18 },
+      { key: 'ten_kho', label: 'Kho TP', width: 18 },
+      { key: 'ten_hang', label: 'Tên hàng', width: 30 },
+      { key: 'so_luong_nhap', label: 'SL nhập', width: 12 },
+      { key: 'so_luong_loi', label: 'SL lỗi', width: 12 },
+      { key: 'dvt', label: 'ĐVT', width: 10 },
+    ]
+
+    smartExportExcel('GOODS_RECEIPT', outputList, defaultConfig, `NhapThanhPham_${dayjs().format('YYYYMMDD')}`, resolvedPhapNhanId)
+  }
 
   const columns = [
     { title: 'Số phiếu', dataIndex: 'so_phieu', width: 160,
@@ -94,11 +153,14 @@ export default function ProductionOutputPage() {
     { title: 'Đơn giá XX', dataIndex: 'don_gia_xuat_xuong', width: 120, align: 'right' as const,
       render: (v: number) => v > 0 ? v.toLocaleString('vi-VN') + 'đ' : '—' },
     {
-      title: '', width: 50,
+      title: '', width: 90,
       render: (_: unknown, r: ProductionOutput) => (
-        <Popconfirm title="Xoá phiếu nhập TP?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}>
-          <Button danger size="small" icon={<DeleteOutlined />} />
-        </Popconfirm>
+        <Space size={4}>
+          <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintReceipt(r)} />
+          <Popconfirm title="Xoá phiếu nhập TP?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}>
+            <Button danger size="small" icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ]
@@ -110,9 +172,14 @@ export default function ProductionOutputPage() {
           <Title level={4} style={{ margin: 0 }}>Nhập thành phẩm từ sản xuất</Title>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setFormPxId(null); setOpen(true) }}>
-            Tạo phiếu nhập TP
-          </Button>
+          <Space>
+            <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
+              Xuất Excel
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setFormPxId(null); setOpen(true) }}>
+              Tạo phiếu nhập TP
+            </Button>
+          </Space>
         </Col>
       </Row>
 

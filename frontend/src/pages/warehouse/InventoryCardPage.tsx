@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag, Typography,
+  Button, Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag, Typography, message,
 } from 'antd'
 import { FileExcelOutlined, FilePdfOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { warehousesApi, type Warehouse } from '../../api/warehouses'
 import { warehouseApi, type GiaoDich } from '../../api/warehouse'
-import { exportToExcel, printToPdf, buildHtmlTable } from '../../utils/exportUtils'
+import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -53,6 +53,16 @@ export default function InventoryCardPage() {
     queryFn: () => warehousesApi.list().then(r => r.data),
   })
 
+  const { data: phanXuongs = [] } = useQuery({
+    queryKey: ['phan-xuong'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+  })
+
+  const selectedWarehouse = warehouseId ? whs?.find(w => w.id === warehouseId) : undefined
+  const selectedPhapNhanId = selectedWarehouse?.phan_xuong_id
+    ? phanXuongs.find(px => px.id === selectedWarehouse.phan_xuong_id)?.phap_nhan_id
+    : null
+
   const { data: rows = [], isLoading, refetch } = useQuery<GiaoDich[]>({
     queryKey: ['giao-dich', range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD'), warehouseId],
     queryFn: () =>
@@ -79,48 +89,91 @@ export default function InventoryCardPage() {
   }
 
   const handleExcel = () => {
-    exportToExcel(`the_kho_${range[0].format('YYYYMMDD')}_${range[1].format('YYYYMMDD')}`, [{
-      name: 'Thẻ kho',
-      headers: ['Ngày', 'Mã hàng', 'Tên hàng', 'Kho', 'Loại GD', 'SL nhập', 'SL xuất', 'Tồn kho', 'Đơn giá', 'Giá trị', 'Ghi chú'],
-      rows: filtered.map(r => [
-        r.ngay_giao_dich ? dayjs(r.ngay_giao_dich).format('DD/MM/YYYY') : '',
-        r.ma_hang,
-        r.ten_hang,
-        r.ten_kho,
-        LOAI_GD_LABEL[r.loai_giao_dich] ?? r.loai_giao_dich,
-        NHAP_TYPES.has(r.loai_giao_dich) ? r.so_luong : '',
-        XUAT_TYPES.has(r.loai_giao_dich) ? r.so_luong : '',
-        r.ton_sau_giao_dich,
-        r.don_gia,
-        r.gia_tri,
-        r.ghi_chu ?? '',
-      ]),
-      colWidths: [12, 14, 28, 14, 18, 12, 12, 12, 14, 16, 20],
-    }])
+    if (!filtered.length) {
+      message.warning('Không có dữ liệu để xuất Excel')
+      return
+    }
+    if (!selectedPhapNhanId) {
+      message.error('Chỉ xuất Excel thẻ kho khi đã chọn một kho thuộc pháp nhân.')
+      return
+    }
+    const defaultConfig = [
+      { key: 'ngay', label: 'Ngày', width: 12 },
+      { key: 'ma_hang', label: 'Mã hàng', width: 14 },
+      { key: 'ten_hang', label: 'Tên hàng', width: 28 },
+      { key: 'ten_kho', label: 'Kho', width: 14 },
+      { key: 'loai_gd_lbl', label: 'Loại GD', width: 18 },
+      { key: 'sl_nhap', label: 'SL nhập', width: 12 },
+      { key: 'sl_xuat', label: 'SL xuất', width: 12 },
+      { key: 'ton_sau', label: 'Tồn kho', width: 12 },
+      { key: 'don_gia', label: 'Đơn giá', width: 14 },
+      { key: 'gia_tri', label: 'Giá trị', width: 16 },
+      { key: 'ghi_chu', label: 'Ghi chú', width: 20 },
+    ]
+
+    const exportData = filtered.map(r => ({
+      ...r,
+      ngay: r.ngay_giao_dich ? dayjs(r.ngay_giao_dich).format('DD/MM/YYYY') : '',
+      loai_gd_lbl: LOAI_GD_LABEL[r.loai_giao_dich] ?? r.loai_giao_dich,
+      sl_nhap: NHAP_TYPES.has(r.loai_giao_dich) ? r.so_luong : '',
+      sl_xuat: XUAT_TYPES.has(r.loai_giao_dich) ? r.so_luong : '',
+      ton_sau: r.ton_sau_giao_dich,
+      ghi_chu: r.ghi_chu ?? '',
+    }))
+
+    smartExportExcel('STOCK_CARD', exportData, defaultConfig, `the_kho_${range[0].format('YYYYMMDD')}_${range[1].format('YYYYMMDD')}`, selectedPhapNhanId)
   }
 
   const handlePrint = () => {
-    const body = buildHtmlTable(
-      [
-        { header: 'Ngày' }, { header: 'Mã hàng' }, { header: 'Tên hàng' }, { header: 'Kho' },
-        { header: 'Loại GD' }, { header: 'Nhập' }, { header: 'Xuất' }, { header: 'Tồn kho' },
-      ],
-      filtered.map(r => [
-        r.ngay_giao_dich ? dayjs(r.ngay_giao_dich).format('DD/MM/YYYY') : '',
-        r.ma_hang,
-        r.ten_hang,
-        r.ten_kho,
-        LOAI_GD_LABEL[r.loai_giao_dich] ?? r.loai_giao_dich,
-        NHAP_TYPES.has(r.loai_giao_dich) ? fmtQ(r.so_luong) : '',
-        XUAT_TYPES.has(r.loai_giao_dich) ? fmtQ(r.so_luong) : '',
-        fmtQ(r.ton_sau_giao_dich),
-      ]),
+    if (!filtered.length) {
+      message.warning('Không có dữ liệu để in')
+      return
+    }
+    if (!selectedPhapNhanId) {
+      message.error('Chỉ in thẻ kho khi đã chọn một kho thuộc pháp nhân.')
+      return
+    }
+    const cols = [
+      { header: 'Ngày', key: 'ngay' }, 
+      { header: 'Mã hàng', key: 'ma_hang' }, 
+      { header: 'Tên hàng', key: 'ten_hang' }, 
+      { header: 'Kho', key: 'ten_kho' },
+      { header: 'Loại GD', key: 'loai_gd' }, 
+      { header: 'Nhập', key: 'nhap', align: 'right' as const }, 
+      { header: 'Xuất', key: 'xuat', align: 'right' as const }, 
+      { header: 'Tồn kho', key: 'ton', align: 'right' as const },
+    ]
+
+    const itemRows = filtered.map(r => ({
+      ngay: r.ngay_giao_dich ? dayjs(r.ngay_giao_dich).format('DD/MM/YYYY') : '',
+      ma_hang: r.ma_hang,
+      ten_hang: r.ten_hang,
+      ten_kho: r.ten_kho,
+      loai_gd: LOAI_GD_LABEL[r.loai_giao_dich] ?? r.loai_giao_dich,
+      nhap: NHAP_TYPES.has(r.loai_giao_dich) ? fmtQ(r.so_luong) : '',
+      xuat: XUAT_TYPES.has(r.loai_giao_dich) ? fmtQ(r.so_luong) : '',
+      ton: fmtQ(r.ton_sau_giao_dich),
+    }))
+
+    const table = buildHtmlTable(
+      cols.map(c => ({ header: c.header, align: c.align })), 
+      itemRows.map(row => cols.map(c => (row as any)[c.key]))
     )
-    printToPdf(
-      `Thẻ kho / Lịch sử XNT — ${range[0].format('DD/MM/YYYY')} đến ${range[1].format('DD/MM/YYYY')}`,
-      body,
-      false,
-    )
+
+    const printData = {
+      subtitle: 'THẺ KHO / LỊCH SỬ NHẬP XUẤT TỒN',
+      document_date: `${range[0].format('DD/MM/YYYY')} - ${range[1].format('DD/MM/YYYY')}`,
+      document_number: `${filtered.length} giao dịch`,
+      body_html: table,
+      footer_html: `
+        <div style="display: flex; justify-content: flex-end; gap: 40px; margin-top: 15px; font-weight: bold;">
+          <div>Tổng nhập: ${fmtQ(totalNhap)}</div>
+          <div>Tổng xuất: ${fmtQ(totalXuat)}</div>
+        </div>
+      `
+    }
+
+    smartPrintPdf('STOCK_CARD', printData, selectedPhapNhanId)
   }
 
   const columns: ColumnsType<GiaoDich> = [

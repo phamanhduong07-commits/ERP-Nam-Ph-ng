@@ -87,6 +87,7 @@ export const hrApi = {
   updateEmployee: (id: number, data: Partial<Employee>) => client.put<Employee>(`/hr/employees/${id}`, data),
   bulkCreateEmployees: (items: Partial<Employee>[]) => client.post('/hr/employees/bulk', { items }),
   listExpiringContracts: (days: number = 30) => client.get<any[]>('/hr/contracts/expiring', { params: { days } }),
+  importContractAllowances: (rows: any[]) => client.post('/hr/contracts/import-allowances', rows),
   issueAccount: (id: number) => client.post(`/hr/employees/${id}/issue-account`),
   toggleAccountStatus: (id: number) => client.post(`/hr/employees/${id}/toggle-account-status`),
 
@@ -108,4 +109,8 @@ export const hrApi = {
   createPayrollConfig: (data: Partial<PayrollConfig>) => client.post<PayrollConfig>('/hr/payroll-configs', data),
   updatePayrollConfig: (id: number, data: Partial<PayrollConfig>) => client.put<PayrollConfig>(`/hr/payroll-configs/${id}`, data),
   bulkCreatePayrollConfigs: (items: Partial<PayrollConfig>[]) => client.post('/hr/payroll-configs/bulk', { items }),
+  listPayrollHolidays: (params?: { from_date?: string; to_date?: string }) =>
+    client.get<any[]>('/hr/payroll-holidays', { params }),
+  createPayrollHoliday: (data: any) => client.post('/hr/payroll-holidays', data),
+  deletePayrollHoliday: (id: number) => client.delete(`/hr/payroll-holidays/${id}`),
 }

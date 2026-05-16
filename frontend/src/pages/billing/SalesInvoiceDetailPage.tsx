@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import { fmtVND } from '../../utils/exportUtils'
+import { buildHtmlTable, fmtVND, smartPrintPdf } from '../../utils/exportUtils'
 import {
   billingApi, SalesInvoice, CashReceiptShort,
   TRANG_THAI_INVOICE, HINH_THUC_TT, VAT_OPTIONS,
@@ -220,147 +220,65 @@ export default function SalesInvoiceDetailPage() {
   })
 
   const handlePrintInvoice = async () => {
-    try {
-      const pnId = invoice!.phap_nhan_id || undefined
-      const tpl = await systemApi.getTemplate('SALES_INVOICE', pnId)
-      if (!tpl || !tpl.html_content) {
-        message.error('Chưa cấu hình biểu mẫu in hóa đơn cho pháp nhân này. Vui lòng vào Cấu hình hệ thống để thiết lập.')
-        return
-      }
+    if (!invoice) return
 
-      let currentPnList = phapNhanList
-      if (currentPnList.length === 0) {
-        const res = await phapNhanApi.list({ active_only: true })
-        currentPnList = res.data
-      }
-      
-      const pn = currentPnList.find(p => p.id === invoice!.phap_nhan_id)
-      const logoSrc = pn?.ma_phap_nhan 
-        ? `/api/phap-nhan/logo/${encodeURIComponent(pn.ma_phap_nhan)}?t=${Date.now()}` 
-        : '/logo_namphuong.png'
+    const cols = [
+      { header: 'STT', key: 'stt', align: 'center' as const },
+      { header: 'Tên hàng hóa', key: 'ten_hang' },
+      { header: 'ĐVT', key: 'dvt', align: 'center' as const },
+      { header: 'Số lượng', key: 'so_luong', align: 'right' as const },
+      { header: 'Đơn giá', key: 'don_gia', align: 'right' as const },
+      { header: 'Thành tiền', key: 'thanh_tien', align: 'right' as const },
+    ]
 
-      const ngayDate = invoice!.ngay_hoa_don ? new Date(invoice!.ngay_hoa_don) : null
-      const vi = new Intl.NumberFormat('vi-VN')
-
-      // Cấu hình bảng
-      const metaAny = (tpl.variables_meta as any) || {}
-      let tplCols = metaAny.columns as Array<{key:string}> | undefined
-      if (!tplCols?.length && metaAny.easy_config) {
-        try { const cfg = JSON.parse(metaAny.easy_config); if (cfg?.selectedColumns?.length) tplCols = cfg.selectedColumns } catch { /* ignore */ }
-      }
-
-      let itemsToPrint: any[] = []
-      if (deliveryOrder?.items && deliveryOrder.items.length > 0) {
-        itemsToPrint = deliveryOrder.items
-      } else {
-        itemsToPrint = [{
-           stt: 1,
-           ten_hang: 'Thùng carton (theo hợp đồng / đơn hàng)',
-           dvt: 'Thùng',
-           so_luong: null,
-           don_gia: null,
-           thanh_tien: invoice!.tong_tien_hang
-        }]
-      }
-
-      let sumSoLuong = 0
-      let sumThanhTien = 0
-      let sumDonGia = 0
-      
-      const bodyRows = tplCols?.length ? itemsToPrint.map((item, index) => {
-        sumSoLuong += Number(item.so_luong || 0)
-        sumThanhTien += Number(item.thanh_tien || 0)
-        sumDonGia += Number(item.don_gia || 0)
-        
-        return `<tr>${tplCols!.map(col => {
-          let val: any = ''
-          switch (col.key) {
-            case 'stt': val = index + 1; break
-            case 'ten_hang': val = item.ten_hang; break
-            case 'dvt': val = item.dvt; break
-            case 'so_luong': val = item.so_luong ? vi.format(item.so_luong) : ''; break
-            case 'don_gia': val = item.don_gia ? vi.format(item.don_gia) : ''; break
-            case 'thanh_tien': val = item.thanh_tien ? vi.format(item.thanh_tien) : ''; break
-          }
-          const isNum = ['so_luong','don_gia','thanh_tien'].includes(col.key)
-          return `<td${isNum ? ' style="text-align:right"' : ''}>${val}</td>`
-        }).join('')}</tr>`
-      }).join('') : ''
-
-      const vars: Record<string, string> = {
-        logo_img: `<img src="${logoSrc}" style="height:60px;max-width:100%;object-fit:contain;" />`,
-        company_name: pn?.ten_phap_nhan || 'CÔNG TY TNHH NAM PHƯƠNG BAO BÌ',
-        company_details: [
-            pn?.dia_chi ? `Địa chỉ: ${pn.dia_chi}` : '',
-            (pn as any)?.ma_so_thue ? `MST: ${(pn as any).ma_so_thue}` : '',
-            pn?.so_dien_thoai ? `SĐT: ${pn.so_dien_thoai}` : '',
-        ].filter(Boolean).join(' - '),
-        subtitle: invoice!.mau_so ? `Mẫu số: ${invoice!.mau_so}<br/>Ký hiệu: ${invoice!.ky_hieu}` : 'HÓA ĐƠN BÁN HÀNG',
-        document_number: invoice!.so_hoa_don || '',
-        document_date: invoice!.ngay_hoa_don ? dayjs(invoice!.ngay_hoa_don).format('DD/MM/YYYY') : '',
-        document_day: ngayDate ? String(ngayDate.getDate()).padStart(2,'0') : '',
-        document_month: ngayDate ? String(ngayDate.getMonth()+1).padStart(2,'0') : '',
-        document_year: ngayDate ? String(ngayDate.getFullYear()) : '',
-        status: invoice!.trang_thai || '',
-        customer_name: invoice!.ten_don_vi || '',
-        delivery_address: invoice!.dia_chi || '',
-        total_thanh_tien: vi.format(invoice!.tong_tien_hang as any),
-        total_so_luong: sumSoLuong ? vi.format(sumSoLuong) : '',
-        total_don_gia: sumDonGia ? vi.format(sumDonGia) : '',
-        warehouse_name: (deliveryOrder as any)?.ten_kho || '',
-        driver_name: (deliveryOrder as any)?.ten_tai_xe || '',
-        body_html: bodyRows,
-        footer_html: ''
-      }
-
-      let filledHtml = Object.entries(vars).reduce(
-        (html, [k, v]) => html.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v),
-        tpl.html_content
-      )
-      
-      // Xóa sạch các biến chưa được replace (như {{total_don_gia}}, {{assistant_1}}...)
-      filledHtml = filledHtml.replace(/\{\{[^}]+\}\}/g, '')
-
-      const finalHtml = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <style>
-              * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-              }
-              body { margin: 0; padding: 0; background: #fff; font-family: sans-serif; }
-              table { border-collapse: collapse; width: 100%; }
-            </style>
-          </head>
-          <body>
-            ${filledHtml}
-          </body>
-        </html>
-      `
-
-      const iframe = document.createElement('iframe')
-      iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:0;visibility:hidden'
-      document.body.appendChild(iframe)
-      const doc = iframe.contentDocument || iframe.contentWindow?.document
-      if (!doc) { message.error('Không thể tạo khung in'); return }
-      doc.open(); doc.write(finalHtml); doc.close()
-      iframe.contentWindow?.addEventListener('load', () => {
-        iframe.contentWindow?.focus()
-        iframe.contentWindow?.print()
-        setTimeout(() => document.body.removeChild(iframe), 1000)
-      })
-
-    } catch (e: any) {
-      if (e?.response?.status === 404) {
-        message.error('Chưa cấu hình biểu mẫu in hóa đơn cho pháp nhân này. Vui lòng vào Cấu hình hệ thống để thiết lập.')
-      } else {
-        message.error('Lỗi khi tải mẫu in')
-      }
+    let itemsToPrint: any[] = []
+    if (deliveryOrder?.items && deliveryOrder.items.length > 0) {
+      itemsToPrint = deliveryOrder.items
+    } else {
+      itemsToPrint = [{
+        ten_hang: 'Thùng carton (theo hợp đồng / đơn hàng)',
+        dvt: 'Thùng',
+        so_luong: 1,
+        don_gia: invoice.tong_tien_hang,
+        thanh_tien: invoice.tong_tien_hang
+      }]
     }
+
+    let sumSoLuong = 0
+    let sumThanhTien = 0
+    let sumDonGia = 0
+    
+    const rowData = itemsToPrint.map((it, idx) => {
+      sumSoLuong += Number(it.so_luong || 0)
+      sumThanhTien += Number(it.thanh_tien || 0)
+      sumDonGia += Number(it.don_gia || 0)
+      return {
+        stt: idx + 1,
+        ten_hang: it.ten_hang,
+        dvt: it.dvt,
+        so_luong: it.so_luong ? Number(it.so_luong).toLocaleString('vi-VN') : '—',
+        don_gia: it.don_gia ? Number(it.don_gia).toLocaleString('vi-VN') : '—',
+        thanh_tien: it.thanh_tien ? Number(it.thanh_tien).toLocaleString('vi-VN') : '—',
+      }
+    })
+
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rowData.map(r => cols.map(c => (r as any)[c.key])))
+
+    const printData = {
+      subtitle: invoice.mau_so ? `Mẫu số: ${invoice.mau_so}<br/>Ký hiệu: ${invoice.ky_hieu}` : 'HÓA ĐƠN BÁN HÀNG',
+      document_number: invoice.so_hoa_don || '-',
+      document_date: invoice.ngay_hoa_don ? dayjs(invoice.ngay_hoa_don).format('DD/MM/YYYY') : '—',
+      customer_name: invoice.ten_don_vi || '—',
+      delivery_address: invoice.dia_chi || '—',
+      body_html: table,
+      total_thanh_tien: Number(invoice.tong_tien_hang).toLocaleString('vi-VN'),
+      total_so_luong: sumSoLuong ? sumSoLuong.toLocaleString('vi-VN') : '—',
+      total_don_gia: sumDonGia ? sumDonGia.toLocaleString('vi-VN') : '—',
+      warehouse_name: (deliveryOrder as any)?.ten_kho || '—',
+      driver_name: (deliveryOrder as any)?.ten_tai_xe || '—',
+    }
+
+    smartPrintPdf('SALES_INVOICE', printData, invoice.phap_nhan_id ?? undefined)
   }
 
   if (isLoading) return <Spin style={{ margin: 40 }} />

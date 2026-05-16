@@ -18,6 +18,7 @@ from app.services.production_order_service import ProductionOrderService
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.production_plan import ProductionPlanLine
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
+from app.models.production import MayDungLog
 from app.models.inventory import InventoryBalance, InventoryTransaction
 from app.schemas.master import ProductShort
 from app.schemas.production import (
@@ -166,6 +167,7 @@ def list_orders(
     search: str = Query(default=""),
     trang_thai: str | None = Query(default=None),
     sales_order_id: int | None = Query(default=None),
+    phan_xuong_id: int | None = Query(default=None),
     tu_ngay: date | None = Query(default=None),
     den_ngay: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -178,6 +180,7 @@ def list_orders(
         search=search,
         trang_thai=trang_thai,
         sales_order_id=sales_order_id,
+        phan_xuong_id=phan_xuong_id,
         tu_ngay=tu_ngay,
         den_ngay=den_ngay,
         page=page,
@@ -357,6 +360,80 @@ def complete_order(
 
     order.trang_thai = "hoan_thanh"
     order.ngay_hoan_thanh_thuc_te = date.today()
+    db.commit()
+    return _build_response(_load_order(order_id, db))
+
+
+class PauseOrderBody(BaseModel):
+    gio_bat_dau_dung: str           # HH:MM
+    ly_do: str = "khac"             # hong_may | het_nguyen_lieu | nghi_giai_lao | giao_ca | khac
+    ghi_chu: str | None = None
+
+
+class ResumeOrderBody(BaseModel):
+    gio_tiep_tuc: str               # HH:MM
+
+
+@router.patch("/{order_id:int}/pause", response_model=ProductionOrderResponse)
+def pause_order(
+    order_id: int,
+    data: PauseOrderBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
+    if order.trang_thai != "dang_chay":
+        raise HTTPException(status_code=400, detail=f"Lệnh đang ở '{order.trang_thai}', không thể tạm dừng")
+
+    from datetime import time as dt_time
+    h, m = map(int, data.gio_bat_dau_dung.split(":"))
+    log = MayDungLog(
+        production_order_id=order_id,
+        phan_xuong_id=order.phan_xuong_id,
+        ngay=date.today(),
+        gio_bat_dau_dung=dt_time(h, m),
+        ly_do=data.ly_do,
+        ghi_chu=data.ghi_chu,
+        created_by=user.id,
+    )
+    db.add(log)
+    order.trang_thai = "tam_dung"
+    db.commit()
+    return _build_response(_load_order(order_id, db))
+
+
+@router.patch("/{order_id:int}/resume", response_model=ProductionOrderResponse)
+def resume_order(
+    order_id: int,
+    data: ResumeOrderBody,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
+    if order.trang_thai != "tam_dung":
+        raise HTTPException(status_code=400, detail=f"Lệnh đang ở '{order.trang_thai}', không thể tiếp tục")
+
+    from datetime import time as dt_time
+    h, m = map(int, data.gio_tiep_tuc.split(":"))
+    tiep_tuc = dt_time(h, m)
+
+    log = (
+        db.query(MayDungLog)
+        .filter(MayDungLog.production_order_id == order_id, MayDungLog.gio_tiep_tuc.is_(None))
+        .order_by(MayDungLog.id.desc())
+        .first()
+    )
+    if log:
+        log.gio_tiep_tuc = tiep_tuc
+        bat_dau = log.gio_bat_dau_dung
+        phut = (tiep_tuc.hour * 60 + tiep_tuc.minute) - (bat_dau.hour * 60 + bat_dau.minute)
+        log.thoi_gian_dung = max(phut, 0)
+
+    order.trang_thai = "dang_chay"
     db.commit()
     return _build_response(_load_order(order_id, db))
 

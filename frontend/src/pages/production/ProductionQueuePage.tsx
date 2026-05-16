@@ -116,6 +116,51 @@ function calcKgSummary(rows: QueueLine[]): LayerKgEntry[] {
   )
 }
 
+// ─── Mét tới theo khổ ─────────────────────────────────────────────────────────
+
+interface MtByKhoEntry { kho: number; soLenh: number; totalMT: number }
+
+function calcSoTam(slKeHoach: number, soDao: number | null): number {
+  return soDao && soDao > 0 ? Math.ceil(slKeHoach / soDao) : Math.ceil(slKeHoach)
+}
+
+function calcMetToi(soTam: number, daiTt: number | null): number {
+  if (!daiTt) return 0
+  return Math.round(soTam * daiTt) / 100
+}
+
+function calcMtByKho(rows: QueueLine[]): MtByKhoEntry[] {
+  const map = new Map<number, MtByKhoEntry>()
+  for (const r of rows) {
+    const kho = Number(r.kho_giay) || 0
+    if (!kho) continue
+    const soTam = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
+    const mt    = calcMetToi(soTam, r.dai_tt)
+    const ex    = map.get(kho)
+    if (ex) { ex.soLenh++; ex.totalMT = Math.round((ex.totalMT + mt) * 10) / 10 }
+    else    { map.set(kho, { kho, soLenh: 1, totalMT: Math.round(mt * 10) / 10 }) }
+  }
+  return Array.from(map.values()).sort((a, b) => a.kho - b.kho)
+}
+
+// ─── Kg theo mã giấy (gộp tất cả lớp) ────────────────────────────────────────
+
+interface KgByMaEntry { ma: string; dl: number | null; totalKg: number }
+
+function calcKgByMa(rows: QueueLine[]): KgByMaEntry[] {
+  const map = new Map<string, KgByMaEntry>()
+  for (const r of rows) {
+    for (const l of calcLayerKgs(r)) {
+      if (!l.ma || l.kg <= 0) continue
+      const key = `${l.ma}||${l.dl ?? ''}`
+      const ex  = map.get(key)
+      if (ex) ex.totalKg = Math.round((ex.totalKg + l.kg) * 10) / 10
+      else    map.set(key, { ma: l.ma, dl: l.dl, totalKg: Math.round(l.kg * 10) / 10 })
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.ma.localeCompare(b.ma))
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ProductionQueuePage() {
@@ -189,9 +234,12 @@ export default function ProductionQueuePage() {
     })
   }, [allLines, filteredInfo])
 
-  const planningRows = selectedRows.length > 0 ? selectedRows : hasFilter ? filteredLines : []
+  const planningRows = selectedRows.length > 0 ? selectedRows : hasFilter ? filteredLines : allLines
   const kgSummary    = useMemo(() => calcKgSummary(planningRows), [planningRows])
   const totalKg      = kgSummary.reduce((s, p) => s + p.totalKg, 0)
+  const mtByKho      = useMemo(() => calcMtByKho(planningRows), [planningRows])
+  const kgByMa       = useMemo(() => calcKgByMa(planningRows), [planningRows])
+  const totalMT      = mtByKho.reduce((s, e) => s + e.totalMT, 0)
   const showPanel    = planningRows.length > 0
 
   // ── mutations ─────────────────────────────────────────────────────────────
@@ -623,7 +671,7 @@ export default function ProductionQueuePage() {
 
         {/* ── Planning panel ── */}
         {showPanel && (
-          <div style={{ width: 330, flexShrink: 0 }}>
+          <div style={{ width: 400, flexShrink: 0 }}>
             <Card
               size="small"
               style={{ position: 'sticky', top: 16 }}
@@ -633,73 +681,122 @@ export default function ProductionQueuePage() {
                   <span style={{ fontSize: 13, fontWeight: 600 }}>
                     {selectedRows.length > 0
                       ? `${selectedRows.length} lệnh đã chọn`
-                      : `${planningRows.length} lệnh đang lọc`}
+                      : hasFilter
+                        ? `${planningRows.length} lệnh đang lọc`
+                        : `Toàn bộ ${planningRows.length} lệnh`}
                   </span>
                 </Space>
               }
             >
-              <Row gutter={8} style={{ marginBottom: 8 }}>
-                <Col span={12}>
+              <Row gutter={12} style={{ marginBottom: 14 }}>
+                <Col span={8}>
                   <Statistic title="Số lệnh SX" value={planningRows.length} valueStyle={{ fontSize: 20 }} />
                 </Col>
-                <Col span={12}>
-                  <Statistic title="Tổng kg" value={totalKg.toFixed(1)} suffix="kg"
+                <Col span={8}>
+                  <Statistic title="Tổng MT" value={totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} suffix="m"
+                    valueStyle={{ fontSize: 20, color: '#1677ff' }} />
+                </Col>
+                <Col span={8}>
+                  <Statistic title="Tổng kg" value={Math.round(totalKg).toLocaleString('vi-VN')} suffix="kg"
                     valueStyle={{ fontSize: 20, color: '#fa8c16' }} />
                 </Col>
               </Row>
 
-              <Divider style={{ margin: '8px 0' }} />
+              <Divider style={{ margin: '10px 0 12px' }} />
 
-              {/* Bảng vật liệu — mỗi lớp là 1 dòng riêng */}
-              {kgSummary.length === 0 ? (
-                <div style={{ padding: '12px 0', textAlign: 'center', color: '#aaa', fontSize: 12 }}>
-                  Chưa có dữ liệu kết cấu giấy
+              {/* ── Mét tới theo khổ ── */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ width: 4, height: 16, background: '#1677ff', borderRadius: 2 }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#1677ff' }}>Mét tới theo khổ</span>
+              </div>
+              {mtByKho.length === 0 ? (
+                <div style={{ padding: '10px 0', textAlign: 'center', color: '#aaa', fontSize: 13 }}>
+                  Chưa có dữ liệu khổ giấy
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
-                    <tr style={{ background: '#f5f5f5' }}>
-                      <th style={{ padding: '4px 6px', border: '1px solid #f0f0f0', textAlign: 'center' }}>Lớp</th>
-                      <th style={{ padding: '4px 6px', border: '1px solid #f0f0f0' }}>Mã giấy</th>
-                      <th style={{ padding: '4px 6px', border: '1px solid #f0f0f0', textAlign: 'center' }}>ĐL</th>
-                      <th style={{ padding: '4px 6px', border: '1px solid #f0f0f0', textAlign: 'right' }}>Kg</th>
+                    <tr style={{ background: '#e6f4ff' }}>
+                      <th style={{ padding: '7px 10px', border: '1px solid #bae0ff', textAlign: 'center' }}>Khổ (cm)</th>
+                      <th style={{ padding: '7px 10px', border: '1px solid #bae0ff', textAlign: 'center' }}>Lệnh</th>
+                      <th style={{ padding: '7px 10px', border: '1px solid #bae0ff', textAlign: 'right' }}>Mét tới (m)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {kgSummary.map((p, i) => (
-                      <tr key={i} style={{ background: p.isSong ? '#f0f5ff' : '#f6ffed' }}>
-                        <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'center' }}>
-                          <Tag
-                            color={p.isSong ? 'blue' : 'green'}
-                            style={{ fontSize: 10, padding: '0 4px', margin: 0, lineHeight: '16px' }}
-                          >
-                            {p.lbl}
-                          </Tag>
+                    {mtByKho.map(e => (
+                      <tr key={e.kho}>
+                        <td style={{ padding: '7px 10px', border: '1px solid #bae0ff', textAlign: 'center', fontWeight: 700, color: '#1677ff', fontSize: 15 }}>
+                          {e.kho}
                         </td>
-                        <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', fontWeight: 600 }}>{p.ma}</td>
-                        <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'center', color: '#8c8c8c' }}>
-                          {p.dl != null ? `${p.dl}g` : '—'}
+                        <td style={{ padding: '7px 10px', border: '1px solid #bae0ff', textAlign: 'center', color: '#595959' }}>
+                          {e.soLenh}
                         </td>
-                        <td style={{ padding: '3px 6px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 700, color: '#1677ff' }}>
-                          {p.totalKg.toFixed(1)}
+                        <td style={{ padding: '7px 10px', border: '1px solid #bae0ff', textAlign: 'right', fontWeight: 700, color: '#1677ff', fontSize: 15 }}>
+                          {e.totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr style={{ background: '#fffbe6' }}>
-                      <td colSpan={3} style={{ padding: '4px 6px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 700 }}>
-                        Tổng cộng
+                    <tr style={{ background: '#e6f4ff' }}>
+                      <td colSpan={2} style={{ padding: '7px 10px', border: '1px solid #bae0ff', textAlign: 'right', fontWeight: 700 }}>
+                        Tổng
                       </td>
-                      <td style={{ padding: '4px 6px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 700, color: '#fa8c16' }}>
-                        {totalKg.toFixed(1)} kg
+                      <td style={{ padding: '7px 10px', border: '1px solid #bae0ff', textAlign: 'right', fontWeight: 800, color: '#1677ff', fontSize: 15 }}>
+                        {totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m
                       </td>
                     </tr>
                   </tfoot>
                 </table>
               )}
 
-              <Divider style={{ margin: '10px 0 8px' }} />
+              <Divider style={{ margin: '14px 0' }} />
+
+              {/* ── Kg theo mã giấy (gộp tất cả lớp) ── */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ width: 4, height: 16, background: '#52c41a', borderRadius: 2 }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#389e0d' }}>Kg theo mã giấy</span>
+              </div>
+              {kgByMa.length === 0 ? (
+                <div style={{ padding: '10px 0', textAlign: 'center', color: '#aaa', fontSize: 13 }}>
+                  Chưa có dữ liệu kết cấu giấy
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: '#f6ffed' }}>
+                      <th style={{ padding: '7px 10px', border: '1px solid #b7eb8f' }}>Mã giấy</th>
+                      <th style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'center' }}>ĐL (g/m²)</th>
+                      <th style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'right' }}>Kg</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kgByMa.map((p, i) => (
+                      <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#f9f9f9' }}>
+                        <td style={{ padding: '7px 10px', border: '1px solid #b7eb8f', fontWeight: 600, fontSize: 14 }}>{p.ma}</td>
+                        <td style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'center', color: '#8c8c8c' }}>
+                          {p.dl != null ? p.dl : '—'}
+                        </td>
+                        <td style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700, color: '#389e0d', fontSize: 14 }}>
+                          {Math.round(p.totalKg).toLocaleString('vi-VN')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: '#f6ffed' }}>
+                      <td colSpan={2} style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700 }}>
+                        Tổng cộng
+                      </td>
+                      <td style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 800, color: '#fa8c16', fontSize: 15 }}>
+                        {Math.round(totalKg).toLocaleString('vi-VN')} kg
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+
+              <Divider style={{ margin: '14px 0 10px' }} />
 
               {/* Nút xem kế hoạch — điều hướng đến Plan chứa các dòng này */}
               {(() => {
@@ -737,22 +834,12 @@ export default function ProductionQueuePage() {
                 )
               })()}
 
-              <Alert
-                type="info"
-                icon={<InfoCircleOutlined />}
-                showIcon
-                style={{ fontSize: 11, padding: '4px 8px' }}
-                message={
-                  <span style={{ fontSize: 11 }}>
-                    Dữ liệu <b>không mất</b> khỏi hàng chờ. Dòng chỉ rời hàng chờ khi được đánh dấu <b>Hoàn thành</b>.
-                  </span>
-                }
-              />
-
-              <Text type="secondary" style={{ fontSize: 11, display: 'block', textAlign: 'center', marginTop: 6 }}>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', textAlign: 'center', marginBottom: 10 }}>
                 {selectedRows.length > 0
-                  ? 'Tính theo dòng đã tích chọn'
-                  : 'Tính theo tất cả dòng đang lọc'}
+                  ? `Tính theo ${selectedRows.length} dòng đã tích chọn`
+                  : hasFilter
+                    ? `Tính theo ${planningRows.length} dòng đang lọc`
+                    : 'Tính theo toàn bộ hàng chờ'}
               </Text>
             </Card>
           </div>

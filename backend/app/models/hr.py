@@ -138,6 +138,11 @@ class LaborContract(Base):
     
     luong_co_ban: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     phu_cap: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phu_cap_chuyen_can: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phu_cap_trach_nhiem: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phu_cap_nha_o_com: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phu_cap_dien_thoai: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phu_cap_khac: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     
     trang_thai: Mapped[str] = mapped_column(String(20), default="hieu_luc") # hieu_luc | het_han | tam_dung
@@ -306,8 +311,27 @@ class PayrollRun(Base):
     luong_co_ban: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     luong_san_pham: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     luong_chuyen: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    luong_co_ban_phu_cap: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ngay_cong_nguyen_luong: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=0)
+    gio_cong_thuc_te: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=0)
+    luong_theo_ngay_cong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ot_gio_ngay_thuong: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=0)
+    ot_gio_chu_nhat: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=0)
+    ot_gio_chu_nhat_tang_ca: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=0)
+    ot_gio_ngay_le: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=0)
+    ot_tien_ngay_thuong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ot_tien_chu_nhat: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ot_tien_chu_nhat_tang_ca: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ot_tien_ngay_le: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     
     phu_cap: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phu_cap_chuyen_can: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phu_cap_trach_nhiem: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phu_cap_nha_o_com: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phu_cap_dien_thoai: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    phu_cap_khac: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    tien_chuyen_hqcv_thanh_tich: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    tong_thu_nhap: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     thuong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     
     # Các khoản trừ
@@ -322,6 +346,17 @@ class PayrollRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     
     employee: Mapped["Employee"] = relationship("Employee")
+
+class PayrollHoliday(Base):
+    """Ngay le dung de phan loai tang ca he so 3.0"""
+    __tablename__ = "hr_payroll_holidays"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ngay: Mapped[date] = mapped_column(Date, unique=True, nullable=False)
+    ten_ngay_le: Mapped[str] = mapped_column(String(150), nullable=False)
+    trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 class RewardDiscipline(Base):
     """Khen thưởng và Kỷ luật"""

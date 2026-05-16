@@ -98,6 +98,10 @@ export interface ProductionOrderListItem {
   tong_sl_ke_hoach: number
   kho_tt_max: number | null      // kho lớn nhất trong các items (mm)
   de_xuat_mua_ngoai: boolean     // kho >= 2000mm → đề xuất mua phôi ngoài
+  kho_tt: number | null          // kho item đầu tiên (mm)
+  dai_tt: number | null          // cắt item đầu tiên (mm)
+  so_lop: number | null
+  to_hop_song: string | null
   created_at: string
 }
 
@@ -140,6 +144,7 @@ export interface CreateProductionOrderPayload {
 export const TRANG_THAI_LABELS: Record<string, string> = {
   moi: 'Mới',
   dang_chay: 'Đang SX',
+  tam_dung: 'Tạm dừng',
   hoan_thanh: 'Hoàn thành',
   huy: 'Huỷ',
   mua_ngoai: 'Mua phôi ngoài',
@@ -147,10 +152,21 @@ export const TRANG_THAI_LABELS: Record<string, string> = {
 
 export const TRANG_THAI_COLORS: Record<string, string> = {
   moi: 'blue',
-  dang_chay: 'orange',
-  hoan_thanh: 'green',
+  dang_chay: 'green',
+  tam_dung: 'orange',
+  hoan_thanh: 'default',
   huy: 'red',
   mua_ngoai: 'purple',
+}
+
+export interface PauseOrderPayload {
+  gio_bat_dau_dung: string   // HH:MM
+  ly_do: string
+  ghi_chu?: string | null
+}
+
+export interface ResumeOrderPayload {
+  gio_tiep_tuc: string       // HH:MM
 }
 
 export interface PhieuNhapPhoiSongItemPayload {
@@ -215,6 +231,7 @@ export const productionOrdersApi = {
     search?: string
     trang_thai?: string
     sales_order_id?: number
+    phan_xuong_id?: number
     tu_ngay?: string
     den_ngay?: string
     page?: number
@@ -243,6 +260,8 @@ export const productionOrdersApi = {
   update: (id: number, data: Partial<CreateProductionOrderPayload>) =>
     client.put<ProductionOrder>(`/production-orders/${id}`, data),
   start: (id: number) => client.patch<ProductionOrder>(`/production-orders/${id}/start`),
+  pause: (id: number, data: PauseOrderPayload) => client.patch<ProductionOrder>(`/production-orders/${id}/pause`, data),
+  resume: (id: number, data: ResumeOrderPayload) => client.patch<ProductionOrder>(`/production-orders/${id}/resume`, data),
   complete: (id: number) => client.patch<ProductionOrder>(`/production-orders/${id}/complete`),
   cancel: (id: number) => client.patch(`/production-orders/${id}/cancel`),
   updateItemProgress: (orderId: number, itemId: number, so_luong_hoan_thanh: number) =>

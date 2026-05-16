@@ -49,6 +49,7 @@ export default function POListPage() {
   const [tuNgay, setTuNgay] = useState<string | undefined>(_pf.tuNgay)
   const [denNgay, setDenNgay] = useState<string | undefined>(_pf.denNgay)
   const [importVisible, setImportVisible] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   const { data: suppliers = [] } = useQuery({
     queryKey: ['suppliers-all'],
@@ -291,61 +292,75 @@ export default function POListPage() {
     />
   )
 
-  const handleExportExcel = () => {
-    const phapNhanResult = analyzeSinglePhapNhanId(poList)
-    if (!phapNhanResult.ok) {
-      message.error(singlePhapNhanError(phapNhanResult, 'danh sach don mua hang'))
-      return
+  const handleExportExcel = async () => {
+    setIsExporting(true)
+    try {
+      const phapNhanResult = analyzeSinglePhapNhanId(poList)
+      if (!phapNhanResult.ok) {
+        message.error(singlePhapNhanError(phapNhanResult, 'danh sach don mua hang'))
+        return
+      }
+      const rows = poList.map((r, i) => ({
+        stt: i + 1,
+        so_po: r.so_po,
+        ngay_po: r.ngay_po,
+        ten_ncc: r.ten_ncc ?? '',
+        trang_thai: TRANG_THAI_PO[r.trang_thai] ?? r.trang_thai,
+        tong_tien: Number(r.tong_tien || 0),
+        tien_do_nhan: r.tien_do_nhan != null ? r.tien_do_nhan : '',
+      }))
+      await smartExportExcel('PURCHASE_ORDER', rows, [
+        { key: 'stt', label: 'STT', width: 6 },
+        { key: 'so_po', label: 'So PO', width: 18 },
+        { key: 'ngay_po', label: 'Ngay PO', width: 12 },
+        { key: 'ten_ncc', label: 'Nha cung cap', width: 30 },
+        { key: 'trang_thai', label: 'Trang thai', width: 18 },
+        { key: 'tong_tien', label: 'Tong tien', width: 16 },
+        { key: 'tien_do_nhan', label: 'Tien do nhan', width: 16 },
+      ], `DonMuaHang_${dayjs().format('YYYYMMDD')}`, phapNhanResult.phapNhanId, { throwOnError: true })
+    } catch (e: any) {
+      message.error(e?.message || e?.response?.data?.detail || 'Xuat Excel don mua hang that bai')
+    } finally {
+      setIsExporting(false)
     }
-    const rows = poList.map((r, i) => ({
-      stt: i + 1,
-      so_po: r.so_po,
-      ngay_po: r.ngay_po,
-      ten_ncc: r.ten_ncc ?? '',
-      trang_thai: TRANG_THAI_PO[r.trang_thai] ?? r.trang_thai,
-      tong_tien: Number(r.tong_tien || 0),
-      tien_do_nhan: r.tien_do_nhan != null ? r.tien_do_nhan : '',
-    }))
-    smartExportExcel('PURCHASE_ORDER', rows, [
-      { key: 'stt', label: 'STT', width: 6 },
-      { key: 'so_po', label: 'So PO', width: 18 },
-      { key: 'ngay_po', label: 'Ngay PO', width: 12 },
-      { key: 'ten_ncc', label: 'Nha cung cap', width: 30 },
-      { key: 'trang_thai', label: 'Trang thai', width: 18 },
-      { key: 'tong_tien', label: 'Tong tien', width: 16 },
-      { key: 'tien_do_nhan', label: 'Tien do nhan', width: 16 },
-    ], `DonMuaHang_${dayjs().format('YYYYMMDD')}`, phapNhanResult.phapNhanId)
   }
 
-  const handleExportPdf = () => {
-    const phapNhanResult = analyzeSinglePhapNhanId(poList)
-    if (!phapNhanResult.ok) {
-      message.error(singlePhapNhanError(phapNhanResult, 'danh sach don mua hang'))
-      return
+  const handleExportPdf = async () => {
+    setIsExporting(true)
+    try {
+      const phapNhanResult = analyzeSinglePhapNhanId(poList)
+      if (!phapNhanResult.ok) {
+        message.error(singlePhapNhanError(phapNhanResult, 'danh sach don mua hang'))
+        return
+      }
+      const cols = [
+        { header: 'STT', align: 'center' as const },
+        { header: 'So PO' }, { header: 'Ngay PO' }, { header: 'Nha cung cap' },
+        { header: 'Trang thai' },
+        { header: 'Tong tien', align: 'right' as const },
+        { header: 'Tien do', align: 'center' as const },
+      ]
+      const rows = poList.map((r, i) => [
+        i + 1, r.so_po, r.ngay_po, r.ten_ncc ?? '',
+        TRANG_THAI_PO[r.trang_thai] ?? r.trang_thai,
+        fmtVND(r.tong_tien),
+        r.tien_do_nhan != null ? `${r.tien_do_nhan}%` : '-',
+      ])
+      const tongTien = poList.reduce((s, r) => s + Number(r.tong_tien || 0), 0)
+      await smartPrintPdf('PURCHASE_ORDER_LIST', {
+        title: 'DANH SACH DON MUA HANG',
+        exported_at: dayjs().format('DD/MM/YYYY HH:mm'),
+        total_count: String(poList.length),
+        tong_tien: fmtVND(tongTien),
+        body_html: buildHtmlTable(cols, rows, {
+          totalRow: ['', 'TONG CONG', '', '', '', fmtVND(tongTien), ''],
+        }),
+      }, phapNhanResult.phapNhanId, { throwOnError: true, landscape: true })
+    } catch (e: any) {
+      message.error(e?.message || e?.response?.data?.detail || 'Xuat PDF don mua hang that bai')
+    } finally {
+      setIsExporting(false)
     }
-    const cols = [
-      { header: 'STT', align: 'center' as const },
-      { header: 'So PO' }, { header: 'Ngay PO' }, { header: 'Nha cung cap' },
-      { header: 'Trang thai' },
-      { header: 'Tong tien', align: 'right' as const },
-      { header: 'Tien do', align: 'center' as const },
-    ]
-    const rows = poList.map((r, i) => [
-      i + 1, r.so_po, r.ngay_po, r.ten_ncc ?? '',
-      TRANG_THAI_PO[r.trang_thai] ?? r.trang_thai,
-      fmtVND(r.tong_tien),
-      r.tien_do_nhan != null ? `${r.tien_do_nhan}%` : '-',
-    ])
-    const tongTien = poList.reduce((s, r) => s + Number(r.tong_tien || 0), 0)
-    smartPrintPdf('PURCHASE_ORDER_LIST', {
-      title: 'DANH SACH DON MUA HANG',
-      exported_at: dayjs().format('DD/MM/YYYY HH:mm'),
-      total_count: String(poList.length),
-      tong_tien: fmtVND(tongTien),
-      body_html: buildHtmlTable(cols, rows, {
-        totalRow: ['', 'TONG CONG', '', '', '', fmtVND(tongTien), ''],
-      }),
-    }, phapNhanResult.phapNhanId)
   }
 
   return (
@@ -359,10 +374,10 @@ export default function POListPage() {
         <Col>
           <Space size={4}>
             <Tooltip title="Xuất Excel">
-              <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
+              <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} loading={isExporting} disabled={isExporting} />
             </Tooltip>
             <Tooltip title="Xuất PDF">
-              <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
+              <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} loading={isExporting} disabled={isExporting} />
             </Tooltip>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true) }}>
               Tạo đơn mua

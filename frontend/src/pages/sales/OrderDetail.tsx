@@ -158,7 +158,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       }
     })
 
-    smartExportExcel('SALES_ORDER_DETAIL', exportData, defaultConfig, `DonHang_${order.so_don}`)
+    smartExportExcel('SALES_ORDER_DETAIL', exportData, defaultConfig, `DonHang_${order.so_don}`, order.phap_nhan_id ?? undefined)
   }
 
   const handlePrint = () => {

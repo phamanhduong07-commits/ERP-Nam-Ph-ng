@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Layout, Menu, Avatar, Dropdown, Typography, Space, theme, Badge,
+  Layout, Menu, Avatar, Dropdown, Typography, Space, theme, Badge, Button, message,
 } from 'antd'
 import {
   DashboardOutlined, ShoppingCartOutlined, ShoppingOutlined, DatabaseOutlined,
@@ -9,10 +9,11 @@ import {
   MenuFoldOutlined, MenuUnfoldOutlined, ToolOutlined, ClockCircleOutlined,
   AccountBookOutlined, RobotOutlined, BarChartOutlined, ShopOutlined, BankOutlined,
   ThunderboltOutlined, FileTextOutlined, MobileOutlined, CarOutlined,
-  SolutionOutlined, TrophyOutlined,
+  SolutionOutlined, TrophyOutlined, CrownOutlined, DollarOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
+import { authApi } from '../api/auth'
 import { productionPlansApi } from '../api/productionPlans'
 const namPhuongLogo = '/logo_namphuong.png'
 
@@ -25,16 +26,32 @@ type RawMenuItem = {
   icon?: React.ReactNode
   label: React.ReactNode
   roles?: string[]
+  permissions?: string[]
   children?: RawMenuItem[]
 }
 
-function filterByRole(items: RawMenuItem[], role: string): object[] {
+function filterByRole(items: RawMenuItem[], role: string, userPermissions: string[] = []): object[] {
   return items
-    .filter(item => !item.roles || item.roles.includes(role))
-    .map(({ roles: _roles, children, ...rest }) => ({
+    .filter(item => {
+      // Admin luôn thấy toàn bộ menu
+      if (role === 'ADMIN' || role === 'admin') return true
+
+      const hasRoleMatch = !item.roles || item.roles.includes(role)
+
+      // Nếu menu định nghĩa permissions VÀ user đã có permissions từ Ma trận
+      // → kiểm tra ĐỒNG THỜI roles và permissions
+      // Nếu user chưa có permissions (Ma trận chưa cấu hình) → chỉ lọc theo roles
+      if (item.permissions && item.permissions.length > 0 && userPermissions.length > 0) {
+        const hasPermMatch = item.permissions.some(p => userPermissions.includes(p))
+        return hasRoleMatch && hasPermMatch
+      }
+
+      return hasRoleMatch
+    })
+    .map(({ roles: _roles, permissions: _perms, children, ...rest }) => ({
       ...rest,
       ...(children
-        ? { children: filterByRole(children, role) }
+        ? { children: filterByRole(children, role, userPermissions) }
         : {}),
     }))
     .filter(item => {
@@ -47,8 +64,9 @@ const ADMIN_GD = ['ADMIN', 'GIAM_DOC']
 const BAN_HANG = ['ADMIN', 'GIAM_DOC', 'KINH_DOANH', 'KE_TOAN', 'SALE_ADMIN', 'TRUONG_PHONG_SALE_ADMIN']
 const SAN_XUAT_FULL = ['ADMIN', 'GIAM_DOC', 'SAN_XUAT', 'KINH_DOANH']
 const SAN_XUAT_ALL = ['ADMIN', 'GIAM_DOC', 'SAN_XUAT', 'KINH_DOANH', 'CONG_NHAN']
-const KHO_ROLES = ['ADMIN', 'GIAM_DOC', 'KHO', 'SAN_XUAT', 'KE_TOAN', 'MUA_HANG']
-const MUA_HANG = ['ADMIN', 'GIAM_DOC', 'MUA_HANG', 'KE_TOAN']
+const KHO_ROLES = ['ADMIN', 'GIAM_DOC', 'KHO', 'SAN_XUAT', 'KE_TOAN', 'MUA_HANG', 'KHO_TO_TRUONG', 'KHO_NHAN_VIEN']
+const MUA_HANG = ['ADMIN', 'GIAM_DOC', 'MUA_HANG', 'KE_TOAN', 'KE_TOAN_TRUONG']
+const KE_TOAN_ROLES = ['ADMIN', 'GIAM_DOC', 'KE_TOAN', 'KE_TOAN_TRUONG', 'KETOAN_TO_TRUONG', 'KE_TOAN_CONG_NO', 'KETOAN_NHAN_VIEN']
 
 function buildMenuItems(queueCount: number): RawMenuItem[] {
   return [
@@ -62,6 +80,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       icon: <ShoppingCartOutlined />,
       label: 'Bán hàng',
       roles: BAN_HANG,
+      permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve'],
       children: [
         { key: '/quotes', label: <Link to="/quotes">Báo giá</Link> },
         { key: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link> },
@@ -76,6 +95,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       icon: <ShopOutlined />,
       label: 'Sản xuất',
       roles: SAN_XUAT_ALL,
+      permissions: ['production_order.view', 'production_order.create', 'production_order.edit'],
       children: [
         { key: '/production/orders', label: <Link to="/production/orders">Lệnh sản xuất</Link>, roles: SAN_XUAT_FULL },
         { key: '/production/plans', label: <Link to="/production/plans">Kế hoạch sản xuất</Link>, roles: SAN_XUAT_FULL },
@@ -95,6 +115,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         },
         { key: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link>, roles: SAN_XUAT_FULL },
         { key: '/production/phieu-phoi', label: <Link to="/production/phieu-phoi">Phiếu phôi sóng</Link>, roles: SAN_XUAT_FULL },
+        { key: '/production/may-song', label: <Link to="/production/may-song">🌊 Máy Sóng</Link>, roles: SAN_XUAT_FULL },
         {
           key: 'cd2-group',
           label: '🖨 Công đoạn 2 (CD2)',
@@ -120,6 +141,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       icon: <FileTextOutlined />,
       label: 'Kho',
       roles: KHO_ROLES,
+      permissions: ['inventory.view', 'inventory.import', 'inventory.export', 'inventory.transfer', 'inventory.adjust'],
       children: [
         { key: '/warehouse/theo-xuong', label: <Link to="/warehouse/theo-xuong">Kho theo xưởng</Link> },
         { key: '/production/kho-phoi', label: <Link to="/production/kho-phoi">Kho phôi sóng</Link>, roles: SAN_XUAT_FULL },
@@ -162,6 +184,8 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       key: 'ke-toan-tai-chinh',
       icon: <AccountBookOutlined />,
       label: 'Kế toán - Tài chính',
+      roles: KE_TOAN_ROLES,
+      permissions: ['accounting.import'],
       children: [
         {
           key: 'cash-bank',
@@ -212,6 +236,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       key: 'reporting-hub-group',
       icon: <BarChartOutlined />,
       label: 'Trung tâm Báo cáo',
+      permissions: ['report.view', 'report.export'],
       children: [
         { key: '/reports/hub', label: <Link to="/reports/hub"><Space><ThunderboltOutlined />Tổng quan báo cáo</Space></Link> },
         {
@@ -241,7 +266,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       key: 'danh-muc',
       icon: <TeamOutlined />,
       label: 'Danh mục',
-      roles: ADMIN_GD,
+      permissions: ['master.users.view', 'master.products.view', 'master.customers.view', 'master.suppliers.view', 'master.materials.view', 'master.other.view', 'customer.view', 'customer.create'],
       children: [
         { key: '/master/users', label: <Link to="/master/users">Tài khoản hệ thống</Link> },
         { key: '/master/customers', label: <Link to="/master/customers">Danh mục khách hàng</Link> },
@@ -281,8 +306,57 @@ export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
+  const { user, logout, setAuth } = useAuthStore()
   const { token: tk } = theme.useToken()
+
+  const handleSwitchRole = async (u: string, p: string) => {
+    try {
+      const res = await authApi.login(u, p)
+      setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
+      window.location.href = '/dashboard'
+    } catch (err: any) {
+      console.error('Lỗi chuyển role:', err?.response?.data || err)
+      message.error('Không thể chuyển đổi tài khoản test. Bạn hãy kiểm tra lại username/password trong AppLayout.tsx có đúng với DB chưa.')
+    }
+  }
+
+  const roleTestMenu = {
+    items: [
+      { key: 'admin_group', type: 'group', label: 'Hệ thống & BGD', children: [
+        { key: 'ADMIN', label: 'Administrator', onClick: () => handleSwitchRole('ADMIN', '123456') },
+        { key: 'BGD_GIAM_DOC', label: 'Giám đốc - Ban Giám Đốc', onClick: () => handleSwitchRole('BGD_GIAM_DOC', '123456') },
+        { key: 'BGD_TO_TRUONG', label: 'Tổ trưởng - Ban Giám Đốc', onClick: () => handleSwitchRole('BGD_TO_TRUONG', '123456') },
+        { key: 'BGD_NHAN_VIEN', label: 'Nhân viên - Ban Giám Đốc', onClick: () => handleSwitchRole('BGD_NHAN_VIEN', '123456') },
+      ]},
+      { key: 'sales_group', type: 'group', label: 'Kinh Doanh & Sale Admin', children: [
+        { key: 'KINH_DOANH_TO_TRUONG', label: 'Tổ trưởng - Phòng Kinh Doanh', onClick: () => handleSwitchRole('KINH_DOANH_TO_TRUONG', '123456') },
+        { key: 'KINH_DOANH_NHAN_VIEN', label: 'Nhân viên - Phòng Kinh Doanh', onClick: () => handleSwitchRole('KINH_DOANH_NHAN_VIEN', '123456') },
+        { key: 'TRUONG_PHONG_SALE_ADMIN', label: 'Trưởng phòng Sale Admin', onClick: () => handleSwitchRole('TRUONG_PHONG_SALE_ADMIN', '123456') },
+        { key: 'SALE_ADMIN_TO_TRUONG', label: 'Tổ trưởng - Sale Admin', onClick: () => handleSwitchRole('SALE_ADMIN_TO_TRUONG', '123456') },
+        { key: 'SALE_ADMIN_NHAN_VIEN', label: 'Nhân viên - Sale Admin', onClick: () => handleSwitchRole('SALE_ADMIN_NHAN_VIEN', '123456') },
+        { key: 'SALE_ADMIN', label: 'Sale Admin', onClick: () => handleSwitchRole('SALE_ADMIN', '123456') },
+      ]},
+      { key: 'ketoan_group', type: 'group', label: 'Kế Toán', children: [
+        { key: 'KE_TOAN_TRUONG', label: 'Kế toán trưởng', onClick: () => handleSwitchRole('KE_TOAN_TRUONG', '123456') },
+        { key: 'KETOAN_TO_TRUONG', label: 'Tổ trưởng - Phòng Kế Toán', onClick: () => handleSwitchRole('KETOAN_TO_TRUONG', '123456') },
+        { key: 'KE_TOAN_CONG_NO', label: 'Kế toán công nợ', onClick: () => handleSwitchRole('KE_TOAN_CONG_NO', '123456') },
+        { key: 'KETOAN_NHAN_VIEN', label: 'Nhân viên - Phòng Kế Toán', onClick: () => handleSwitchRole('KETOAN_NHAN_VIEN', '123456') },
+      ]},
+      { key: 'sanxuat_group', type: 'group', label: 'Sản Xuất & Kho', children: [
+        { key: 'SAN_XUAT_GIAM_SAT', label: 'Giám sát - Khối Sản Xuất', onClick: () => handleSwitchRole('SAN_XUAT_GIAM_SAT', '123456') },
+        { key: 'SAN_XUAT_TO_TRUONG', label: 'Tổ trưởng - Khối Sản Xuất', onClick: () => handleSwitchRole('SAN_XUAT_TO_TRUONG', '123456') },
+        { key: 'SAN_XUAT_THO', label: 'Thợ - Khối Sản Xuất', onClick: () => handleSwitchRole('SAN_XUAT_THO', '123456') },
+        { key: 'KHO_TO_TRUONG', label: 'Tổ trưởng - Kho', onClick: () => handleSwitchRole('KHO_TO_TRUONG', '123456') },
+        { key: 'KHO_NHAN_VIEN', label: 'Nhân viên - Kho', onClick: () => handleSwitchRole('KHO_NHAN_VIEN', '123456') },
+      ]},
+      { key: 'other_group', type: 'group', label: 'Nhân Sự & Thiết Kế', children: [
+        { key: 'NHAN_SU_TO_TRUONG', label: 'Tổ trưởng - Phòng Nhân Sự', onClick: () => handleSwitchRole('NHAN_SU_TO_TRUONG', '123456') },
+        { key: 'NHAN_SU_NHAN_VIEN', label: 'Nhân viên - Phòng Nhân Sự', onClick: () => handleSwitchRole('NHAN_SU_NHAN_VIEN', '123456') },
+        { key: 'THIET_KE_TO_TRUONG', label: 'Tổ trưởng - Phòng Thiết Kế', onClick: () => handleSwitchRole('THIET_KE_TO_TRUONG', '123456') },
+        { key: 'THIET_KE_NHAN_VIEN', label: 'Nhân viên - Phòng Thiết Kế', onClick: () => handleSwitchRole('THIET_KE_NHAN_VIEN', '123456') },
+      ]}
+    ]
+  }
 
   const { data: queueLines = [] } = useQuery({
     queryKey: ['production-queue', 'cho'],
@@ -293,7 +367,8 @@ export default function AppLayout() {
   const queueCount = queueLines.length
 
   const role = user?.role ?? 'ADMIN'
-  const menuItems = filterByRole(buildMenuItems(queueCount), role)
+  const userPermissions = user?.permissions || []
+  const menuItems = filterByRole(buildMenuItems(queueCount), role, userPermissions)
 
   const selectedKeys = [location.pathname + location.search]
 
@@ -398,15 +473,23 @@ export default function AppLayout() {
             </Text>
           </Space>
 
-          <Dropdown menu={{ items: userMenu, onClick: handleUserMenu }}>
-            <Space style={{ cursor: 'pointer' }}>
-              <Avatar style={{ background: '#ff8200' }} icon={<UserOutlined />} />
-              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
-                <Text strong>{user?.ho_ten}</Text>
-                <Text type="secondary" style={{ fontSize: 11 }}>{user?.role}</Text>
-              </div>
-            </Space>
-          </Dropdown>
+          <Space size={20}>
+            <Dropdown menu={roleTestMenu}>
+              <Button type="dashed" icon={<ThunderboltOutlined />} danger>
+                🧪 Đổi Role Test
+              </Button>
+            </Dropdown>
+
+            <Dropdown menu={{ items: userMenu, onClick: handleUserMenu }}>
+              <Space style={{ cursor: 'pointer' }}>
+                <Avatar style={{ background: '#ff8200' }} icon={<UserOutlined />} />
+                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
+                  <Text strong>{user?.ho_ten}</Text>
+                  <Text type="secondary" style={{ fontSize: 11 }}>{user?.role}</Text>
+                </div>
+              </Space>
+            </Dropdown>
+          </Space>
         </Header>
 
         <Content style={{ margin: 16, background: tk.colorBgLayout, overflow: 'initial' }}>

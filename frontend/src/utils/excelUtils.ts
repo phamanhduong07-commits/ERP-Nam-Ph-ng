@@ -26,7 +26,13 @@ export const downloadTemplate = (type: 'employee' | 'attendance' | 'payroll_conf
         bo_phan: 'Tổ In 1',
         chuc_vu: 'Thợ chính',
         he_so_ca_nhan: 2.0,
-        ma_van_tay: '101'
+        ma_van_tay: '101',
+        luong_co_ban: 7000000,
+        phu_cap_chuyen_can: 500000,
+        phu_cap_trach_nhiem: 300000,
+        phu_cap_nha_o_com: 650000,
+        phu_cap_dien_thoai: 200000,
+        phu_cap_khac: 0
       }
     ];
   } else if (type === 'attendance') {

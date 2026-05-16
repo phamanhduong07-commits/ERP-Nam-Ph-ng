@@ -16,6 +16,18 @@ class PrintTemplate(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class ExcelTemplate(Base):
+    """Lưu trữ cấu hình cột cho việc xuất file Excel"""
+    __tablename__ = "excel_templates"
+
+    id = Column(Integer, primary_key=True)
+    ma_mau = Column(String(50), nullable=False) # ví dụ: 'delivery_order', 'inventory'
+    phap_nhan_id = Column(Integer, nullable=True) # ID của pháp nhân (NULL nếu dùng chung)
+    ten_mau = Column(String(100), nullable=False)
+    column_config = Column(JSON, nullable=False) # [{ "key": "field", "label": "Header", "width": 15 }]
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class SystemSetting(Base):
     """Cấu hình hệ thống chung"""
     __tablename__ = "system_settings"

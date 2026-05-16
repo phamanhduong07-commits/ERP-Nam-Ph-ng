@@ -11,7 +11,7 @@ import { warehousesApi } from '../../api/warehouses'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { productionOrdersApi } from '../../api/productionOrders'
-import { exportToExcel, printDocument, buildHtmlTable } from '../../utils/exportUtils'
+import { exportToExcel, printDocument, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
@@ -115,46 +115,62 @@ export default function IssuesPage() {
   }
 
   const handlePrintIssue = (r: MaterialIssue) => {
+    if (!r.phap_nhan_id) {
+      message.error('Phiếu xuất NVL chưa có pháp nhân nên không thể in')
+      return
+    }
     const cols = [
-      { header: 'Tên hàng' },
-      { header: 'ĐVT', align: 'center' as const },
-      { header: 'SL kế hoạch', align: 'right' as const },
-      { header: 'SL thực xuất', align: 'right' as const },
+      { header: 'Tên hàng', key: 'ten_hang' },
+      { header: 'ĐVT', key: 'dvt', align: 'center' as const },
+      { header: 'SL kế hoạch', key: 'so_luong_ke_hoach', align: 'right' as const },
+      { header: 'SL thực xuất', key: 'so_luong_thuc_xuat', align: 'right' as const },
     ]
-    const rowData = (r.items || []).map((it: any) => [
-      it.ten_hang,
-      it.dvt,
-      it.so_luong_ke_hoach > 0 ? Number(it.so_luong_ke_hoach).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—',
-      Number(it.so_luong_thuc_xuat).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
-    ])
-    printDocument({
-      title: `Phiếu xuất NVL ${r.so_phieu}`,
-      subtitle: 'PHIẾU XUẤT NVL SẢN XUẤT',
-      companyInfo,
-      documentNumber: r.so_phieu,
-      documentDate: r.ngay_xuat ?? '',
-      fields: [
-        { label: 'Kho xuất', value: r.ten_kho ?? '—' },
-        { label: 'Lệnh SX', value: (r as any).so_lenh ?? '—' },
-        { label: 'Ghi chú', value: (r as any).ghi_chu ?? '—' },
-      ],
-      bodyHtml: buildHtmlTable(cols, rowData),
-    })
+    const rowData = (r.items || []).map((it: any) => ({
+      ten_hang: it.ten_hang,
+      dvt: it.dvt,
+      so_luong_ke_hoach: it.so_luong_ke_hoach > 0 ? Number(it.so_luong_ke_hoach).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—',
+      so_luong_thuc_xuat: Number(it.so_luong_thuc_xuat).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
+    }))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rowData.map(row => cols.map(c => (row as any)[c.key])))
+    
+    const printData = {
+      subtitle: 'PHIẾU XUẤT NGUYÊN VẬT LIỆU',
+      document_number: r.so_phieu,
+      document_date: r.ngay_xuat ?? '',
+      warehouse_name: r.ten_kho ?? '—',
+      so_lenh: (r as any).so_lenh ?? '—',
+      ghi_chu: (r as any).ghi_chu ?? '—',
+      body_html: table,
+    }
+
+    smartPrintPdf('MATERIAL_ISSUE', printData, r.phap_nhan_id)
   }
 
   const handleExportExcel = () => {
-    exportToExcel(`XuatNVL_${dayjs().format('YYYYMMDD')}`, [{
-      name: 'Xuất NVL',
-      headers: ['Số phiếu', 'Ngày xuất', 'Kho', 'Lệnh SX', 'Trạng thái'],
-      rows: issueList.map((r: MaterialIssue) => [
-        r.so_phieu,
-        r.ngay_xuat,
-        r.ten_kho ?? '',
-        (r as any).so_lenh ?? '',
-        r.trang_thai === 'da_xuat' ? 'Đã xuất' : r.trang_thai === 'huy' ? 'Huỷ' : 'Nhập',
-      ]),
-      colWidths: [18, 12, 18, 16, 12],
-    }])
+    const resolvedPhapNhanId = resolveSinglePhapNhanId(issueList)
+    if (!issueList.length) {
+      message.warning('Không có dữ liệu để xuất Excel')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ xuất Excel phiếu xuất NVL khi danh sách thuộc một pháp nhân. Vui lòng lọc dữ liệu trước.')
+      return
+    }
+    const defaultConfig = [
+      { key: 'so_phieu', label: 'Số phiếu', width: 18 },
+      { key: 'ngay_xuat', label: 'Ngày xuất', width: 12 },
+      { key: 'ten_kho', label: 'Kho', width: 18 },
+      { key: 'so_lenh', label: 'Lệnh SX', width: 16 },
+      { key: 'trang_thai_lbl', label: 'Trạng thái', width: 12 },
+    ]
+
+    const exportData = issueList.map((r: MaterialIssue) => ({
+      ...r,
+      so_lenh: (r as any).so_lenh ?? '',
+      trang_thai_lbl: r.trang_thai === 'da_xuat' ? 'Đã xuất' : r.trang_thai === 'huy' ? 'Huỷ' : 'Nhập',
+    }))
+
+    smartExportExcel('MATERIAL_ISSUE', exportData, defaultConfig, `XuatNVL_${dayjs().format('YYYYMMDD')}`, resolvedPhapNhanId)
   }
 
   const columns = [

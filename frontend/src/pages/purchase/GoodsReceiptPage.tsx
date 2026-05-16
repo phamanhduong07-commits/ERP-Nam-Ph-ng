@@ -75,6 +75,7 @@ export default function GoodsReceiptPage() {
   const [selectedPOId, setSelectedPOId] = useState<number | undefined>()
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
   const [detailDrawer, setDetailDrawer] = useState<GoodsReceipt | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
 
   const { data: suppliers = [] } = useQuery({
     queryKey: ['suppliers-all'],
@@ -417,30 +418,37 @@ export default function GoodsReceiptPage() {
     { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true, render: (v: string | null) => v ?? '-' },
   ]
 
-  const handleExportExcel = () => {
-    const phapNhanResult = analyzeSinglePhapNhanId(grList)
-    if (!phapNhanResult.ok) {
-      message.error(singlePhapNhanError(phapNhanResult, 'danh sach phieu nhap mua hang'))
-      return
+  const handleExportExcel = async () => {
+    setIsExporting(true)
+    try {
+      const phapNhanResult = analyzeSinglePhapNhanId(grList)
+      if (!phapNhanResult.ok) {
+        message.error(singlePhapNhanError(phapNhanResult, 'danh sach phieu nhap mua hang'))
+        return
+      }
+      const rows = grList.map(g => ({
+        so_phieu: g.so_phieu,
+        ngay_nhap: g.ngay_nhap,
+        ten_ncc: g.ten_ncc,
+        ten_phan_xuong: g.ten_phan_xuong ?? '',
+        ten_kho: g.ten_kho,
+        tong_gia_tri: g.tong_gia_tri,
+        trang_thai: TRANG_THAI_GR[g.trang_thai] ?? g.trang_thai,
+      }))
+      await smartExportExcel('GOODS_RECEIPT_PURCHASE', rows, [
+        { key: 'so_phieu', label: 'So phieu', width: 18 },
+        { key: 'ngay_nhap', label: 'Ngay nhap', width: 12 },
+        { key: 'ten_ncc', label: 'Nha cung cap', width: 28 },
+        { key: 'ten_phan_xuong', label: 'Xuong', width: 18 },
+        { key: 'ten_kho', label: 'Kho', width: 20 },
+        { key: 'tong_gia_tri', label: 'Tong gia tri', width: 16 },
+        { key: 'trang_thai', label: 'Trang thai', width: 16 },
+      ], `phieu_nhap_kho_mua_hang_${dayjs().format('YYYYMMDD')}`, phapNhanResult.phapNhanId, { throwOnError: true })
+    } catch (e: any) {
+      message.error(e?.message || e?.response?.data?.detail || 'Xuat Excel phieu nhap mua hang that bai')
+    } finally {
+      setIsExporting(false)
     }
-    const rows = grList.map(g => ({
-      so_phieu: g.so_phieu,
-      ngay_nhap: g.ngay_nhap,
-      ten_ncc: g.ten_ncc,
-      ten_phan_xuong: g.ten_phan_xuong ?? '',
-      ten_kho: g.ten_kho,
-      tong_gia_tri: g.tong_gia_tri,
-      trang_thai: TRANG_THAI_GR[g.trang_thai] ?? g.trang_thai,
-    }))
-    smartExportExcel('GOODS_RECEIPT_PURCHASE', rows, [
-      { key: 'so_phieu', label: 'So phieu', width: 18 },
-      { key: 'ngay_nhap', label: 'Ngay nhap', width: 12 },
-      { key: 'ten_ncc', label: 'Nha cung cap', width: 28 },
-      { key: 'ten_phan_xuong', label: 'Xuong', width: 18 },
-      { key: 'ten_kho', label: 'Kho', width: 20 },
-      { key: 'tong_gia_tri', label: 'Tong gia tri', width: 16 },
-      { key: 'trang_thai', label: 'Trang thai', width: 16 },
-    ], `phieu_nhap_kho_mua_hang_${dayjs().format('YYYYMMDD')}`, phapNhanResult.phapNhanId)
   }
 
   return (
@@ -457,6 +465,8 @@ export default function GoodsReceiptPage() {
             <Button
               icon={<FileTextOutlined />}
               onClick={handleExportExcel}
+              loading={isExporting}
+              disabled={isExporting}
             >
               Xuất Excel
             </Button>

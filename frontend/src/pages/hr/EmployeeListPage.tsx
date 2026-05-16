@@ -448,6 +448,9 @@ export default function EmployeeListPage() {
                 // Giả lập gửi lên API
                 try {
                   await hrApi.bulkCreateEmployees(validData)
+                  if (validData.some((row: any) => row.luong_co_ban || row.phu_cap_chuyen_can || row.phu_cap_trach_nhiem || row.phu_cap_nha_o_com || row.phu_cap_dien_thoai || row.phu_cap_khac)) {
+                    await hrApi.importContractAllowances(validData)
+                  }
                   message.success(`Đã import thành công ${validData.length} nhân viên`)
                   setImportOpen(false)
                   setImportData([])
@@ -513,6 +516,9 @@ export default function EmployeeListPage() {
             { title: 'Hệ số', dataIndex: 'he_so_ca_nhan', align: 'center' },
             { title: 'Xưởng', dataIndex: 'phan_xuong' },
             { title: 'Chức vụ', dataIndex: 'chuc_vu' },
+            { title: 'Lương CB', dataIndex: 'luong_co_ban', align: 'right' as const, render: (v: number) => v?.toLocaleString?.() },
+            { title: 'PC chuyên cần', dataIndex: 'phu_cap_chuyen_can', align: 'right' as const, render: (v: number) => v?.toLocaleString?.() },
+            { title: 'PC trách nhiệm', dataIndex: 'phu_cap_trach_nhiem', align: 'right' as const, render: (v: number) => v?.toLocaleString?.() },
           ]}
         />
       </Drawer>

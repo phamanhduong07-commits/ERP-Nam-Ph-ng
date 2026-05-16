@@ -96,7 +96,9 @@ class PurchaseInvoice(Base):
     )
     trang_thai: Mapped[str] = mapped_column(String(30), default="nhap")
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
+    co_vat: Mapped[bool] = mapped_column(Boolean, default=True)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     # nhap | da_tt_mot_phan | da_tt_du | qua_han | huy
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -108,6 +110,8 @@ class PurchaseInvoice(Base):
     supplier = relationship("Supplier")
     po = relationship("PurchaseOrder")
     gr = relationship("GoodsReceipt")
+    phap_nhan = relationship("PhapNhan")
+    phan_xuong = relationship("PhanXuong")
     creator = relationship("User", foreign_keys=[created_by])
     payments: Mapped[list["CashPayment"]] = relationship(
         "CashPayment", back_populates="purchase_invoice"
@@ -165,12 +169,15 @@ class CashPayment(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="cho_chot")
     # cho_chot | da_chot | da_duyet | huy
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     supplier = relationship("Supplier")
+    phap_nhan = relationship("PhapNhan")
+    phan_xuong = relationship("PhanXuong")
     purchase_invoice: Mapped["PurchaseInvoice | None"] = relationship(
         "PurchaseInvoice", back_populates="payments"
     )

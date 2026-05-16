@@ -11,7 +11,7 @@ import {
   warehouseApi, PhieuChuyenKho, CreatePhieuChuyenPayload, TonKho,
 } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
-import { exportToExcel, renderTemplateAndPrint } from '../../utils/exportUtils'
+import { buildHtmlTable, exportToExcel, renderTemplateAndPrint, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
@@ -51,7 +51,7 @@ export default function TransfersPage() {
   const phapNhanIdForPrint = detailPhieu?.phap_nhan_id_for_print ?? undefined
   const { data: printTemplate } = useQuery({
     queryKey: ['print-template', 'WAREHOUSE_TRANSFER', phapNhanIdForPrint],
-    queryFn: () => systemApi.getTemplate('WAREHOUSE_TRANSFER', phapNhanIdForPrint),
+    queryFn: () => systemApi.getTemplate('WAREHOUSE_TRANSFER', phapNhanIdForPrint, true),
     staleTime: 5 * 60 * 1000,
     enabled: !!detailPhieu,
   })
@@ -155,107 +155,71 @@ export default function TransfersPage() {
 
   const handlePrintDetail = () => {
     if (!detailPhieu) return
-    if (!printTemplate?.html_content) {
-      message.error('Chưa có mẫu in phiếu chuyển kho. Vào Cài đặt → Mẫu in để tạo mẫu WAREHOUSE_TRANSFER.')
-      return
-    }
-    // Đọc selectedColumns từ metadata template (giống TabGiaoHang)
-    const metaAny = printTemplate.variables_meta as any
-    let tplCols: { key: string; label: string }[] = metaAny?.columns || []
-    if (!tplCols.length && metaAny?.easy_config) {
-      try { const cfg = JSON.parse(metaAny.easy_config); if (cfg?.selectedColumns?.length) tplCols = cfg.selectedColumns } catch { /* ignore */ }
-    }
+    
+    const cols = [
+      { header: 'STT', key: 'stt', align: 'center' as const },
+      { header: 'Tên hàng', key: 'ten_hang' },
+      { header: 'ĐVT', key: 'don_vi', align: 'center' as const },
+      { header: 'Số lượng', key: 'so_luong', align: 'right' as const },
+      { header: 'Đơn giá', key: 'don_gia', align: 'right' as const },
+      { header: 'Ghi chú', key: 'ghi_chu' },
+    ]
 
-    const vi = new Intl.NumberFormat('vi-VN')
-    const viDec = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 })
-    const numKeys = ['so_luong', 'don_gia', 'don_vi']
+    const itemRows = (detailPhieu.items || []).map((it: any, i: number) => ({
+      stt: i + 1,
+      ten_hang: it.ten_hang ?? '',
+      don_vi: it.don_vi ?? '',
+      so_luong: Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
+      don_gia: Number(it.don_gia) > 0 ? Number(it.don_gia).toLocaleString('vi-VN') + 'đ' : '—',
+      ghi_chu: it.ghi_chu ?? '',
+    }))
 
-    const itemsHtml = (detailPhieu.items || []).map((it: any, i: number) => {
-      if (tplCols.length) {
-        const cells = tplCols.map((col: any) => {
-          let val = ''
-          switch (col.key) {
-            case 'stt':          val = String(i + 1); break
-            case 'ten_hang':     val = it.ten_hang ?? ''; break
-            case 'don_vi': case 'dvt': val = it.don_vi ?? ''; break
-            case 'so_luong':     val = viDec.format(Number(it.so_luong)); break
-            case 'don_gia': case 'gia_ban': val = it.don_gia > 0 ? vi.format(Number(it.don_gia)) : '—'; break
-            case 'ghi_chu':      val = it.ghi_chu ?? ''; break
-            // LSX-enriched columns (phôi)
-            case 'so_lsx':       val = it.so_lsx ?? ''; break
-            case 'ma_sp': case 'ma_amis': val = it.ma_sp ?? ''; break
-            case 'so_lop':       val = it.so_lop != null ? String(it.so_lop) : ''; break
-            case 'to_hop_song':  val = it.to_hop_song ?? ''; break
-            case 'quy_cach': case 'kich_thuoc': val = it.quy_cach ?? ''; break
-            case 'kho_cat':      val = it.kho_cat ?? ''; break
-            default:             val = ''
-          }
-          const isNum = ['so_luong', 'don_gia'].includes(col.key)
-          return `<td${isNum ? ' style="text-align:right"' : ''}>${val}</td>`
-        }).join('')
-        return `<tr>${cells}</tr>`
-      }
-      // fallback nếu template không có selectedColumns
-      return `<tr>
-        <td style="text-align:center">${i + 1}</td>
-        <td>${it.ten_hang ?? ''}</td>
-        <td style="text-align:center">${it.don_vi ?? ''}</td>
-        <td style="text-align:right">${viDec.format(Number(it.so_luong))}</td>
-        <td style="text-align:right">${it.don_gia > 0 ? vi.format(Number(it.don_gia)) + 'đ' : '—'}</td>
-        <td>${it.ghi_chu ?? ''}</td>
-      </tr>`
-    }).join('')
+    const table = buildHtmlTable(
+      cols.map(c => ({ header: c.header, align: c.align })), 
+      itemRows.map(row => cols.map(c => (row as any)[c.key]))
+    )
 
     const ngay = detailPhieu.ngay ?? ''
     const [yyyy, mm, dd] = ngay.split('-')
-    renderTemplateAndPrint(
-      `Phiếu chuyển kho ${detailPhieu.so_phieu}`,
-      printTemplate.html_content,
-      {
-        // biến chuẩn easy-mode template
-        subtitle: 'PHIẾU CHUYỂN KHO',
-        document_number: detailPhieu.so_phieu,
-        document_date: ngay ? `${dd}/${mm}/${yyyy}` : '—',
-        document_day: dd ?? '', document_month: mm ?? '', document_year: yyyy ?? '',
-        customer_name: `${detailPhieu.ten_kho_xuat ?? '—'}${detailPhieu.ten_phan_xuong_xuat ? ` (${detailPhieu.ten_phan_xuong_xuat})` : ''}`,
-        delivery_address: `${detailPhieu.ten_kho_nhap ?? '—'}${detailPhieu.ten_phan_xuong_nhap ? ` (${detailPhieu.ten_phan_xuong_nhap})` : ''}`,
-        warehouse_name: detailPhieu.ten_phap_nhan_xuat ?? '',
-        body_html: itemsHtml,
-        footer_html: detailPhieu.ghi_chu ?? '',
-        // biến tường minh cho template tự viết
-        so_phieu: detailPhieu.so_phieu,
-        ngay: ngay ? `${dd}/${mm}/${yyyy}` : '—',
-        kho_xuat: detailPhieu.ten_kho_xuat ?? '—',
-        ten_phan_xuong_xuat: detailPhieu.ten_phan_xuong_xuat ?? '',
-        phap_nhan_xuat: detailPhieu.ten_phap_nhan_xuat ?? '',
-        kho_nhap: detailPhieu.ten_kho_nhap ?? '—',
-        ten_phan_xuong_nhap: detailPhieu.ten_phan_xuong_nhap ?? '',
-        phap_nhan_nhap: detailPhieu.ten_phap_nhan_nhap ?? '',
-        ghi_chu: detailPhieu.ghi_chu ?? '',
-        items_html: itemsHtml,
-        // biến giao hàng — không dùng trong phiếu chuyển kho, xóa khỏi output
-        driver_name: '', assistant_1: '', assistant_2: '',
-        total_m2: '', total_so_luong: '', trong_luong: '', the_tich: '',
-        customer_name_2: '', delivery_address_2: '',
-      },
-      companyInfo,
-    )
+    
+    const printData = {
+      subtitle: 'PHIẾU CHUYỂN KHO',
+      document_number: detailPhieu.so_phieu,
+      document_date: ngay ? `${dd}/${mm}/${yyyy}` : '—',
+      customer_name: `${detailPhieu.ten_kho_xuat ?? '—'}${detailPhieu.ten_phan_xuong_xuat ? ` (${detailPhieu.ten_phan_xuong_xuat})` : ''}`,
+      delivery_address: `${detailPhieu.ten_kho_nhap ?? '—'}${detailPhieu.ten_phan_xuong_nhap ? ` (${detailPhieu.ten_phan_xuong_nhap})` : ''}`,
+      body_html: table,
+      footer_html: detailPhieu.ghi_chu ?? '',
+    }
+
+    smartPrintPdf('WAREHOUSE_TRANSFER', printData, detailPhieu.phap_nhan_id_for_print ?? undefined)
   }
 
   const handleExportExcel = () => {
-    exportToExcel(`ChuyenKho_${dayjs().format('YYYYMMDD')}`, [{
-      name: 'Chuyển kho',
-      headers: ['Số phiếu', 'Ngày', 'Kho xuất', 'Kho nhận', 'Trạng thái', 'Ghi chú'],
-      rows: phieuList.map((r: PhieuChuyenKho) => [
-        r.so_phieu,
-        r.ngay,
-        r.ten_kho_xuat ?? '',
-        r.ten_kho_nhap ?? '',
-        r.trang_thai === 'da_duyet' ? 'Đã duyệt' : 'Nhập',
-        r.ghi_chu ?? '',
-      ]),
-      colWidths: [18, 12, 20, 20, 12, 25],
-    }])
+    const resolvedPhapNhanId = resolveSinglePhapNhanId(phieuList)
+    if (!phieuList.length) {
+      message.warning('Không có dữ liệu để xuất Excel')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ xuất Excel phiếu chuyển kho khi danh sách thuộc một pháp nhân. Vui lòng lọc dữ liệu trước.')
+      return
+    }
+    const defaultConfig = [
+      { key: 'so_phieu', label: 'Số phiếu', width: 18 },
+      { key: 'ngay', label: 'Ngày', width: 12 },
+      { key: 'ten_kho_xuat', label: 'Kho xuất', width: 20 },
+      { key: 'ten_kho_nhap', label: 'Kho nhận', width: 20 },
+      { key: 'trang_thai_lbl', label: 'Trạng thái', width: 12 },
+      { key: 'ghi_chu', label: 'Ghi chú', width: 25 },
+    ]
+
+    const exportData = phieuList.map((r: PhieuChuyenKho) => ({
+      ...r,
+      trang_thai_lbl: r.trang_thai === 'da_duyet' ? 'Đã duyệt' : 'Nhập',
+    }))
+
+    smartExportExcel('WAREHOUSE_TRANSFER', exportData, defaultConfig, `ChuyenKho_${dayjs().format('YYYYMMDD')}`, resolvedPhapNhanId)
   }
 
   const columns = [

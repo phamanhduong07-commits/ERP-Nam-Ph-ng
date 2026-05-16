@@ -7,6 +7,9 @@ export interface DonHangTheoDoiRow {
   trang_thai_po: string
   phan_xuong_id: number | null
   ten_phan_xuong: string | null
+  phap_nhan_id: number | null
+  ten_phap_nhan: string | null
+  ten_kho_sx: string | null
   sales_order_id: number | null
   so_don: string | null
   customer_id: number | null
@@ -29,6 +32,7 @@ export interface DonHangTheoDoiRow {
   ten_may_in: string | null
   ngay_in: string | null
   so_luong_in_ok: number | null
+  so_khoi: number
   // Summary
   stage: string
   stage_label: string
@@ -44,6 +48,7 @@ export interface PhanXuongItem {
 export interface TheoDoiParams {
   phan_xuong_id?: number
   nv_theo_doi_id?: number
+  phap_nhan_id?: number
   tu_ngay?: string
   den_ngay?: string
   include_hoan_thanh?: boolean

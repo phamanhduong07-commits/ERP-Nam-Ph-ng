@@ -206,6 +206,58 @@ const DOC_TYPE_SCHEMAS: Record<string, { label: string, defaultColumns: any[], s
   }
 }
 
+DOC_TYPE_SCHEMAS.GOODS_RECEIPT = {
+  ...DOC_TYPE_SCHEMAS.WAREHOUSE_IN,
+  label: 'Phiếu nhập kho',
+}
+DOC_TYPE_SCHEMAS.MATERIAL_ISSUE = {
+  ...DOC_TYPE_SCHEMAS.WAREHOUSE_OUT,
+  label: 'Phiếu xuất NVL',
+}
+DOC_TYPE_SCHEMAS.PRODUCTION_ORDER = {
+  ...DOC_TYPE_SCHEMAS.SALES_ORDER,
+  label: 'Lệnh sản xuất',
+}
+DOC_TYPE_SCHEMAS.PRODUCTION_ORDER_DETAIL = {
+  ...DOC_TYPE_SCHEMAS.PRODUCTION_ORDER,
+  label: 'Chi tiết lệnh sản xuất',
+}
+DOC_TYPE_SCHEMAS.PRODUCTION_PHOI_RECEIPT = {
+  ...DOC_TYPE_SCHEMAS.WAREHOUSE_IN,
+  label: 'Phiếu nhập phôi sóng',
+}
+DOC_TYPE_SCHEMAS.INVENTORY = {
+  ...DOC_TYPE_SCHEMAS.WAREHOUSE_IN,
+  label: 'Báo cáo tồn kho',
+}
+DOC_TYPE_SCHEMAS.STOCK_CARD = {
+  ...DOC_TYPE_SCHEMAS.WAREHOUSE_IN,
+  label: 'Thẻ kho',
+}
+DOC_TYPE_SCHEMAS.STOCK_ADJUSTMENT = {
+  ...DOC_TYPE_SCHEMAS.WAREHOUSE_IN,
+  label: 'Biên bản kiểm kê',
+}
+DOC_TYPE_SCHEMAS.SALES_ORDER_DETAIL = {
+  ...DOC_TYPE_SCHEMAS.SALES_ORDER,
+  label: 'Chi tiết đơn bán hàng',
+}
+DOC_TYPE_SCHEMAS.SALES_QUOTE_LIST = {
+  ...DOC_TYPE_SCHEMAS.SALES_ORDER,
+  label: 'Danh sách báo giá',
+}
+DOC_TYPE_SCHEMAS.PURCHASE_ORDER = {
+  ...DOC_TYPE_SCHEMAS.WAREHOUSE_IN,
+  label: 'Đơn mua hàng',
+}
+DOC_TYPE_SCHEMAS.PURCHASE_ORDER_LIST = {
+  ...DOC_TYPE_SCHEMAS.WAREHOUSE_IN,
+  label: 'Danh sách đơn mua hàng',
+}
+DOC_TYPE_SCHEMAS.GOODS_RECEIPT_PURCHASE = {
+  ...DOC_TYPE_SCHEMAS.WAREHOUSE_IN,
+  label: 'Phiếu nhập kho mua hàng',
+}
 
 const DEFAULT_CONFIG = {
   logoPos: 'left',
@@ -520,16 +572,18 @@ export default function PrintTemplatePage() {
   useEffect(() => {
     const ma = form.getFieldValue('ma_mau')
     if (editModal && ma && selectedPhapNhanId) {
-      systemApi.getTemplate(ma, selectedPhapNhanId).then(tpl => {
+      systemApi.getTemplate(ma, selectedPhapNhanId, true).then(tpl => {
         if (tpl && tpl.phap_nhan_id === selectedPhapNhanId) {
           form.setFieldsValue(tpl)
           if (tpl.variables_meta?.easy_config) {
             try { setEasyConfig(JSON.parse(tpl.variables_meta.easy_config)) } catch(e) {}
           }
         } else {
-          message.info(`Dùng mẫu mặc định cho pháp nhân này. Nhấn Lưu để tạo bản riêng.`)
+          message.info(`Mẫu hiện tại không khớp pháp nhân đang chọn.`)
         }
-      }).catch(() => {})
+      }).catch((e: any) => {
+        message.error(e?.response?.data?.detail ?? 'Không tìm thấy mẫu đúng pháp nhân')
+      })
     }
   }, [selectedPhapNhanId])
 
@@ -645,6 +699,10 @@ export default function PrintTemplatePage() {
     let finalHtml = vals.html_content
     let meta = vals.variables_meta || {}
     if (activeTab === 'easy') {
+      if (!easyConfig.selectedColumns?.length) {
+        message.error('Biểu mẫu cần có ít nhất một cột chi tiết')
+        return
+      }
       finalHtml = buildHtmlFromConfig()
       meta = { ...meta, columns: easyConfig.selectedColumns }
     }
@@ -905,15 +963,21 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
   })
 
   const saveMut = useMutation({
-    mutationFn: (vals: any) => systemApi.updateExcelTemplate(vals.ma_mau, {
-      ...vals,
-      phap_nhan_id: selectedPhapNhanId ?? undefined
-    }),
+    mutationFn: (vals: any) => {
+      if (!vals.column_config?.length) {
+        throw new Error('Mẫu Excel cần có ít nhất một cột')
+      }
+      return systemApi.updateExcelTemplate(vals.ma_mau, {
+        ...vals,
+        phap_nhan_id: selectedPhapNhanId ?? undefined
+      })
+    },
     onSuccess: () => {
       message.success('Đã lưu mẫu Excel')
       setEditModal(null)
       qc.invalidateQueries({ queryKey: ['excel-templates'] })
-    }
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail ?? e?.message ?? 'Lỗi lưu mẫu Excel')
   })
 
   const deleteMut = useMutation({

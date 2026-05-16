@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
-    from app.models.master import PhanXuong
+    from app.models.master import PhanXuong, PhapNhan
 
 
 class PurchaseReturn(Base):
@@ -78,6 +78,7 @@ class PurchaseOrder(Base):
     trang_thai: Mapped[str] = mapped_column(String(30), default="moi")
     # moi | da_duyet | da_gui_ncc | dang_giao | hoan_thanh | huy
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     loai_po: Mapped[str] = mapped_column(String(20), default="chung")
     # chung | giay_cuon | nvl_khac
     ngay_du_kien_nhan: Mapped[date | None] = mapped_column(Date)
@@ -113,6 +114,9 @@ class PurchaseOrder(Base):
     approver = relationship("User", foreign_keys=[approved_by])
     phan_xuong: Mapped["PhanXuong | None"] = relationship(
         "PhanXuong", foreign_keys=[phan_xuong_id]
+    )
+    phap_nhan: Mapped["PhapNhan | None"] = relationship(
+        "PhapNhan", foreign_keys=[phap_nhan_id]
     )
     items: Mapped[list["PurchaseOrderItem"]] = relationship(
         "PurchaseOrderItem", back_populates="po", cascade="all, delete-orphan"

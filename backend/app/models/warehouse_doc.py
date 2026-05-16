@@ -15,6 +15,7 @@ class GoodsReceipt(Base):
     po_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id"))
     supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     loai_nhap: Mapped[str] = mapped_column(String(30), default="MUA_HANG")
     # MUA_HANG | TRA_SX | DIEU_CHINH | CHUYEN_KHO
     tong_gia_tri: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
@@ -31,6 +32,7 @@ class GoodsReceipt(Base):
     po = relationship("PurchaseOrder")
     supplier = relationship("Supplier")
     warehouse = relationship("Warehouse")
+    phan_xuong = relationship("PhanXuong")
     phap_nhan = relationship("PhapNhan")
     creator = relationship("User")
     items: Mapped[list["GoodsReceiptItem"]] = relationship(

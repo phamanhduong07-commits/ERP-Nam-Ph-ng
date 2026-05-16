@@ -43,6 +43,7 @@ export interface CashReceipt {
   so_phieu: string
   ngay_phieu: string
   customer_id: number
+  ten_don_vi?: string | null
   sales_invoice_id: number | null
   hinh_thuc_tt: string
   so_tai_khoan: string | null
@@ -96,8 +97,11 @@ export interface PurchaseInvoice {
   supplier_id: number
   po_id: number | null
   gr_id: number | null
+  phap_nhan_id?: number | null
+  phan_xuong_id?: number | null
   ten_don_vi: string | null
   ma_so_thue: string | null
+  co_vat: boolean
   thue_suat: number
   tong_tien_hang: number
   tien_thue: number
@@ -121,6 +125,7 @@ export interface PurchaseInvoiceCreate {
   ngay_lap: string
   ngay_hoa_don?: string
   han_tt?: string
+  co_vat?: boolean
   thue_suat?: number
   tong_tien_hang: number
   ghi_chu?: string
@@ -135,7 +140,9 @@ export interface CashPayment {
   so_phieu: string
   ngay_phieu: string
   supplier_id: number
+  ten_don_vi?: string | null
   purchase_invoice_id: number | null
+  so_hoa_don?: string | null
   hinh_thuc_tt: string
   so_tai_khoan: string | null
   so_tham_chieu: string | null
@@ -145,6 +152,7 @@ export interface CashPayment {
   tk_co: string
   trang_thai: string
   phap_nhan_id: number | null
+  phan_xuong_id?: number | null
   nguoi_duyet_id: number | null
   ngay_duyet: string | null
   created_at: string
@@ -154,6 +162,7 @@ export interface CashPaymentCreate {
   supplier_id: number
   purchase_invoice_id?: number
   phap_nhan_id?: number | null
+  phan_xuong_id?: number | null
   ngay_phieu: string
   hinh_thuc_tt?: string
   so_tai_khoan?: string
@@ -285,11 +294,11 @@ export const purchaseInvoiceApi = {
   create: (data: PurchaseInvoiceCreate): Promise<PurchaseInvoice> =>
     client.post('/accounting/purchase-invoices', data).then(r => r.data),
 
-  fromPO: (poId: number): Promise<PurchaseInvoice> =>
-    client.post(`/accounting/purchase-invoices/from-po/${poId}`).then(r => r.data),
+  fromPO: (poId: number, params?: { thue_suat?: number; co_vat?: boolean }): Promise<PurchaseInvoice> =>
+    client.post(`/accounting/purchase-invoices/from-po/${poId}`, null, { params }).then(r => r.data),
 
-  fromGR: (grId: number): Promise<PurchaseInvoice> =>
-    client.post(`/accounting/purchase-invoices/from-gr/${grId}`).then(r => r.data),
+  fromGR: (grId: number, params?: { thue_suat?: number; co_vat?: boolean }): Promise<PurchaseInvoice> =>
+    client.post(`/accounting/purchase-invoices/from-gr/${grId}`, null, { params }).then(r => r.data),
 }
 
 // ──────────────────────────────────────────────────────

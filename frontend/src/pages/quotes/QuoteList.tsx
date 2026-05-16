@@ -16,8 +16,7 @@ import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS } from '../../api/quotes'
 import type { QuoteListItem } from '../../api/quotes'
 import { phapNhanApi } from '../../api/phap_nhan'
-import { analyzeSinglePhapNhanId, singlePhapNhanError, smartPrintPdf, exportExcelWithTemplate, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
-import { systemApi } from '../../api/system'
+import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, smartPrintPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import { useAuthStore } from '../../store/auth'
 
@@ -88,28 +87,12 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
     setIsExporting(true)
     try {
       const itemsForTemplate = data?.items ?? []
-      if (!itemsForTemplate.length) {
-        message.warning('Không có báo giá để xuất Excel')
+      const phapNhanResult = analyzeSinglePhapNhanId(itemsForTemplate)
+      if (!phapNhanResult.ok) {
+        message.error(singlePhapNhanError(phapNhanResult, 'danh sach bao gia'))
         return
       }
       const detailsForTemplate = await Promise.all(itemsForTemplate.map(r => quotesApi.get(r.id).then(res => res.data)))
-      let resolvedPhapNhanId: number
-      if (phapNhanId) {
-        resolvedPhapNhanId = phapNhanId
-      } else {
-        const phapNhanIds = Array.from(new Set(detailsForTemplate.map(q => q.phap_nhan_id).filter(Boolean)))
-        if (phapNhanIds.length !== 1) {
-          message.error('Chỉ xuất Excel báo giá khi danh sách cùng một pháp nhân. Vui lòng lọc theo pháp nhân trước.')
-          return
-        }
-        resolvedPhapNhanId = phapNhanIds[0] as number
-      }
-      const template = await systemApi.getExcelTemplate('SALES_QUOTE', resolvedPhapNhanId, true)
-      const config = template.column_config || []
-      if (!config.length) {
-        message.error('Mẫu Excel SALES_QUOTE chưa cấu hình cột.')
-        return
-      }
       const rows = detailsForTemplate.flatMap(q => q.items.map((it, idx) => ({
         stt: idx + 1,
         so_bao_gia: q.so_bao_gia,
@@ -130,9 +113,19 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
         trang_thai: QUOTE_STATUS_LABELS[q.trang_thai] ?? q.trang_thai,
         ghi_chu: it.ghi_chu || '',
       })))
-      exportExcelWithTemplate(`BaoGia_${dayjs().format('YYYYMMDD')}`, 'Bao gia', rows, config)
+      await smartExportExcel('SALES_QUOTE', rows, [
+        { key: 'stt', label: 'STT', width: 6 },
+        { key: 'so_bao_gia', label: 'So bao gia', width: 16 },
+        { key: 'ngay_bao_gia', label: 'Ngay bao gia', width: 12 },
+        { key: 'customer_name', label: 'Khach hang', width: 30 },
+        { key: 'ten_hang', label: 'Ten hang', width: 32 },
+        { key: 'so_luong', label: 'So luong', width: 12 },
+        { key: 'dvt', label: 'DVT', width: 8 },
+        { key: 'gia_ban', label: 'Gia ban', width: 14 },
+        { key: 'thanh_tien', label: 'Thanh tien', width: 16 },
+      ], `BaoGia_${dayjs().format('YYYYMMDD')}`, phapNhanResult.phapNhanId, { throwOnError: true })
     } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Xuat Excel bao gia that bai')
+      message.error(e?.message || e?.response?.data?.detail || 'Xuat Excel bao gia that bai')
     } finally {
       setIsExporting(false)
     }
@@ -141,28 +134,30 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
   const handleExportPdf = async () => {
     setIsExporting(true)
     try {
-    const items = data?.items ?? []
-    const phapNhanResult = analyzeSinglePhapNhanId(items)
-    if (!phapNhanResult.ok) {
-      message.error(singlePhapNhanError(phapNhanResult, 'danh sach bao gia'))
-      return
-    }
-    const cols = [
-      { header: 'STT', align: 'center' as const },
-      { header: 'Số BG' }, { header: 'Ngày BG' }, { header: 'Khách hàng' },
-      { header: 'Ngày HH' }, { header: 'Số dòng', align: 'center' as const },
-      { header: 'Tổng cộng (đ)', align: 'right' as const }, { header: 'Trạng thái' },
-    ]
-    const rows = items.map((r, i) => [
-      i + 1, r.so_bao_gia, fmtDate(r.ngay_bao_gia), r.ten_khach_hang ?? '',
-      fmtDate(r.ngay_het_han ?? null), r.so_dong, fmtVND(r.tong_cong), QUOTE_STATUS_LABELS[r.trang_thai] ?? r.trang_thai,
-    ])
-    await smartPrintPdf('SALES_QUOTE_LIST', {
-      title: 'DANH SACH BAO GIA',
-      exported_at: dayjs().format('DD/MM/YYYY HH:mm'),
-      total_count: String(items.length),
-      body_html: buildHtmlTable(cols, rows),
-    }, phapNhanResult.phapNhanId)
+      const items = data?.items ?? []
+      const phapNhanResult = analyzeSinglePhapNhanId(items)
+      if (!phapNhanResult.ok) {
+        message.error(singlePhapNhanError(phapNhanResult, 'danh sach bao gia'))
+        return
+      }
+      const cols = [
+        { header: 'STT', align: 'center' as const },
+        { header: 'So BG' }, { header: 'Ngay BG' }, { header: 'Khach hang' },
+        { header: 'Ngay HH' }, { header: 'So dong', align: 'center' as const },
+        { header: 'Tong cong', align: 'right' as const }, { header: 'Trang thai' },
+      ]
+      const rows = items.map((r, i) => [
+        i + 1, r.so_bao_gia, fmtDate(r.ngay_bao_gia), r.ten_khach_hang ?? '',
+        fmtDate(r.ngay_het_han ?? null), r.so_dong, fmtVND(r.tong_cong), QUOTE_STATUS_LABELS[r.trang_thai] ?? r.trang_thai,
+      ])
+      await smartPrintPdf('SALES_QUOTE_LIST', {
+        title: 'DANH SACH BAO GIA',
+        exported_at: dayjs().format('DD/MM/YYYY HH:mm'),
+        total_count: String(items.length),
+        body_html: buildHtmlTable(cols, rows),
+      }, phapNhanResult.phapNhanId, { throwOnError: true, landscape: true })
+    } catch (e: any) {
+      message.error(e?.message || e?.response?.data?.detail || 'Xuat PDF bao gia that bai')
     } finally {
       setIsExporting(false)
     }

@@ -64,6 +64,11 @@ class LaborContractBase(BaseModel):
     ngay_het_han: Optional[date] = None
     luong_co_ban: Decimal = Decimal(0)
     phu_cap: Decimal = Decimal(0)
+    phu_cap_chuyen_can: Decimal = Decimal(0)
+    phu_cap_trach_nhiem: Decimal = Decimal(0)
+    phu_cap_nha_o_com: Decimal = Decimal(0)
+    phu_cap_dien_thoai: Decimal = Decimal(0)
+    phu_cap_khac: Decimal = Decimal(0)
     ghi_chu: Optional[str] = None
     trang_thai: str = "hieu_luc"
 
@@ -78,6 +83,11 @@ class LaborContractUpdate(BaseModel):
     ngay_het_han: Optional[date] = None
     luong_co_ban: Optional[Decimal] = None
     phu_cap: Optional[Decimal] = None
+    phu_cap_chuyen_can: Optional[Decimal] = None
+    phu_cap_trach_nhiem: Optional[Decimal] = None
+    phu_cap_nha_o_com: Optional[Decimal] = None
+    phu_cap_dien_thoai: Optional[Decimal] = None
+    phu_cap_khac: Optional[Decimal] = None
     ghi_chu: Optional[str] = None
     trang_thai: Optional[str] = None
 
@@ -280,6 +290,22 @@ class EmployeeDocumentBase(BaseModel):
     ngay_het_han: Optional[date] = None
 
 class EmployeeDocument(EmployeeDocumentBase):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Payroll Holiday Schemas ---
+class PayrollHolidayBase(BaseModel):
+    ngay: date
+    ten_ngay_le: str
+    trang_thai: bool = True
+    ghi_chu: Optional[str] = None
+
+class PayrollHolidayCreate(PayrollHolidayBase):
+    pass
+
+class PayrollHoliday(PayrollHolidayBase):
     id: int
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)

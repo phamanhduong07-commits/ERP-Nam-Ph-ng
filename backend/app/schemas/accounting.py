@@ -19,6 +19,7 @@ class PurchaseInvoiceCreate(BaseModel):
     han_tt: date | None = None
     ten_don_vi: str | None = None
     ma_so_thue: str | None = None
+    co_vat: bool = True
     thue_suat: Decimal = Decimal("8")
     tong_tien_hang: Decimal
     tien_thue: Decimal | None = None      # nếu None → tự tính
@@ -26,6 +27,13 @@ class PurchaseInvoiceCreate(BaseModel):
     ghi_chu: str | None = None
     phap_nhan_id: int | None = None
     phan_xuong_id: int | None = None
+
+    @field_validator("thue_suat")
+    @classmethod
+    def thue_suat_hop_le(cls, v: Decimal) -> Decimal:
+        if Decimal(str(v)) not in {Decimal("0"), Decimal("5"), Decimal("8"), Decimal("10")}:
+            raise ValueError("VAT chi duoc chon 0%, 5%, 8% hoac 10%")
+        return v
 
     @field_validator("tong_tien_hang")
     @classmethod
@@ -36,6 +44,9 @@ class PurchaseInvoiceCreate(BaseModel):
 
     @model_validator(mode="after")
     def tinh_thue_va_tong(self) -> "PurchaseInvoiceCreate":
+        if not self.co_vat:
+            self.thue_suat = Decimal("0")
+            self.tien_thue = Decimal("0")
         if self.tien_thue is None:
             self.tien_thue = round(self.tong_tien_hang * self.thue_suat / 100, 0)
         if self.tong_thanh_toan is None:
@@ -76,6 +87,7 @@ class PurchaseInvoiceResponse(PurchaseInvoiceListItem):
     ky_hieu: str | None
     ngay_hoa_don: date | None
     ma_so_thue: str | None
+    co_vat: bool
     thue_suat: Decimal
     tong_tien_hang: Decimal
     tien_thue: Decimal

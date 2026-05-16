@@ -171,6 +171,10 @@ class ProductionOrderListItem(BaseModel):
     tong_sl_ke_hoach: Decimal = Decimal("0")
     kho_tt_max: float | None = None       # kho lớn nhất trong các items (mm)
     de_xuat_mua_ngoai: bool = False       # kho >= 2000mm → đề xuất mua phôi ngoài
+    kho_tt: float | None = None           # kho item đầu tiên (mm)
+    dai_tt: float | None = None           # cắt item đầu tiên (mm)
+    so_lop: int | None = None
+    to_hop_song: str | None = None
     created_at: datetime
 
     class Config:

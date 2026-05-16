@@ -10,7 +10,7 @@ import {
   CreateStockAdjustmentPayload, StockAdjustment, TonKho, warehouseApi,
 } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
-import { exportToExcel, printDocument, buildHtmlTable } from '../../utils/exportUtils'
+import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 
 const { Title, Text } = Typography
@@ -133,48 +133,80 @@ export default function StockAdjustmentsPage() {
   }
 
   const handlePrintAdjustment = (r: StockAdjustment) => {
+    if (!r.phap_nhan_id) {
+      message.error('Phiếu kiểm kê chưa có pháp nhân nên không thể in')
+      return
+    }
     const cols = [
-      { header: 'Tên hàng' },
-      { header: 'ĐVT', align: 'center' as const },
-      { header: 'Sổ sách', align: 'right' as const },
-      { header: 'Thực tế', align: 'right' as const },
-      { header: 'Chênh lệch', align: 'right' as const },
+      { header: 'Tên hàng', key: 'ten_hang' },
+      { header: 'ĐVT', key: 'don_vi', align: 'center' as const },
+      { header: 'Sổ sách', key: 'so_luong_so_sach', align: 'right' as const },
+      { header: 'Thực tế', key: 'so_luong_thuc_te', align: 'right' as const },
+      { header: 'Chênh lệch', key: 'chenhlech', align: 'right' as const },
     ]
-    const rowData = r.items.map((it: any) => [
-      it.ten_hang,
-      it.don_vi,
-      fmtNum(it.so_luong_so_sach),
-      fmtNum(it.so_luong_thuc_te),
-      fmtNum(it.chenhlech),
-    ])
-    printDocument({
-      title: `Biên bản kiểm kê ${r.so_phieu}`,
+    
+    const itemRows = r.items.map((it: any) => ({
+      ten_hang: it.ten_hang,
+      don_vi: it.don_vi,
+      so_luong_so_sach: fmtNum(it.so_luong_so_sach),
+      so_luong_thuc_te: fmtNum(it.so_luong_thuc_te),
+      chenhlech: fmtNum(it.chenhlech),
+    }))
+
+    const table = buildHtmlTable(
+      cols.map(c => ({ header: c.header, align: c.align })), 
+      itemRows.map(row => cols.map(c => (row as any)[c.key]))
+    )
+
+    const printData = {
       subtitle: 'BIÊN BẢN KIỂM KÊ TỒN KHO',
-      companyInfo,
-      documentNumber: r.so_phieu,
-      documentDate: r.ngay ?? '',
-      fields: [
-        { label: 'Kho kiểm kê', value: r.ten_kho ?? '—' },
-        { label: 'Lý do', value: r.ly_do ?? '—' },
-        { label: 'Ghi chú', value: r.ghi_chu ?? '—' },
-      ],
-      bodyHtml: buildHtmlTable(cols, rowData),
-    })
+      document_number: r.so_phieu,
+      document_date: r.ngay ?? '',
+      warehouse_name: r.ten_kho ?? '—',
+      ly_do: r.ly_do ?? '—',
+      ghi_chu: r.ghi_chu ?? '—',
+      body_html: table,
+    }
+
+    smartPrintPdf('STOCK_ADJUSTMENT', printData, r.phap_nhan_id)
   }
 
   const handleExportExcel = () => {
+    const resolvedPhapNhanId = resolveSinglePhapNhanId(phieuList)
+    if (!phieuList.length) {
+      message.warning('Không có dữ liệu để xuất Excel')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ xuất Excel kiểm kê khi danh sách thuộc một pháp nhân. Vui lòng lọc dữ liệu trước.')
+      return
+    }
+    const defaultConfig = [
+      { key: 'so_phieu', label: 'Số phiếu', width: 18 },
+      { key: 'ngay', label: 'Ngày', width: 12 },
+      { key: 'ten_kho', label: 'Kho', width: 18 },
+      { key: 'ten_hang', label: 'Tên hàng', width: 28 },
+      { key: 'don_vi', label: 'ĐVT', width: 8 },
+      { key: 'so_luong_so_sach', label: 'Sổ sách', width: 12 },
+      { key: 'so_luong_thuc_te', label: 'Thực tế', width: 12 },
+      { key: 'chenhlech', label: 'Chênh lệch', width: 12 },
+      { key: 'ly_do', label: 'Lý do', width: 20 },
+    ]
+
     const allRows: any[] = []
     phieuList.forEach((r: StockAdjustment) => {
       r.items.forEach((it: any) => {
-        allRows.push([r.so_phieu, r.ngay, r.ten_kho ?? '', it.ten_hang, it.don_vi, it.so_luong_so_sach, it.so_luong_thuc_te, it.chenhlech, r.ly_do ?? ''])
+        allRows.push({
+          ...it,
+          so_phieu: r.so_phieu,
+          ngay: r.ngay,
+          ten_kho: r.ten_kho,
+          ly_do: r.ly_do,
+        })
       })
     })
-    exportToExcel(`KiemKe_${dayjs().format('YYYYMMDD')}`, [{
-      name: 'Kiểm kê',
-      headers: ['Số phiếu', 'Ngày', 'Kho', 'Tên hàng', 'ĐVT', 'Sổ sách', 'Thực tế', 'Chênh lệch', 'Lý do'],
-      rows: allRows,
-      colWidths: [18, 12, 18, 28, 8, 12, 12, 12, 20],
-    }])
+
+    smartExportExcel('STOCK_ADJUSTMENT', allRows, defaultConfig, `KiemKe_${dayjs().format('YYYYMMDD')}`, resolvedPhapNhanId)
   }
 
   const columns = [

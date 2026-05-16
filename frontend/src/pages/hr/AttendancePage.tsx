@@ -19,6 +19,115 @@ import dayjs from 'dayjs'
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
+const normalizeHeader = (value: unknown) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+
+const attendanceColumnMap: Record<string, string> = {
+  ma_nhan_vien: 'ma_nv',
+  ma_nv: 'ma_nv',
+  manv: 'ma_nv',
+  ma_van_tay: 'ma_nv',
+  ten_nhan_vien: 'ho_ten',
+  ho_ten: 'ho_ten',
+  phong_ban: 'phong_ban',
+  ngay: 'ngay',
+  gio_vao: 'gio_vao',
+  gio_ra: 'gio_ra',
+  tre: 'tre',
+  som: 'som',
+  cong: 'so_cong',
+  so_cong: 'so_cong',
+  tong_gio: 'tong_gio_thuc',
+  tong_gio_thuc: 'tong_gio_thuc',
+  tang_ca: 'so_gio_ot',
+  so_gio_ot: 'so_gio_ot',
+  tong_toan_bo: 'tong_toan_bo',
+  ca: 'ca',
+}
+
+const parseExcelDate = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return ''
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return dayjs(value).format('YYYY-MM-DD')
+  }
+  if (typeof value === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(value)
+    if (parsed) return dayjs(new Date(parsed.y, parsed.m - 1, parsed.d)).format('YYYY-MM-DD')
+  }
+  const text = String(value).trim()
+  const iso = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`
+  const slash = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/)
+  if (slash) {
+    const a = Number(slash[1])
+    const b = Number(slash[2])
+    const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3]
+    const day = a > 12 ? a : b > 12 ? b : a
+    const month = a > 12 ? b : b > 12 ? a : b
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  }
+  return text
+}
+
+const parseExcelTime = (value: unknown, dateValue: string) => {
+  if (value === null || value === undefined || value === '') return ''
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return dayjs(value).format('YYYY-MM-DDTHH:mm:ss')
+  }
+  if (typeof value === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(value)
+    if (parsed?.H !== undefined) {
+      return `${dateValue}T${String(parsed.H).padStart(2, '0')}:${String(parsed.M).padStart(2, '0')}:00`
+    }
+  }
+  const text = String(value).trim()
+  const timePart = text.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/)
+  if (timePart && dateValue) {
+    return `${dateValue}T${timePart[1].padStart(2, '0')}:${timePart[2]}:${timePart[3] || '00'}`
+  }
+  return text
+}
+
+const parseNumber = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return undefined
+  const parsed = Number(String(value).replace(',', '.'))
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const buildAttendanceRows = (ws: XLSX.WorkSheet) => {
+  const matrix = XLSX.utils.sheet_to_json<(string | number | Date)[]>(ws, { header: 1, defval: '', raw: false })
+  const headerIndex = matrix.findIndex(row =>
+    row.some(cell => ['ma_nhan_vien', 'ma_nv'].includes(normalizeHeader(cell))) &&
+    row.some(cell => normalizeHeader(cell) === 'ngay')
+  )
+  if (headerIndex < 0) return []
+
+  const headers = matrix[headerIndex].map(cell => attendanceColumnMap[normalizeHeader(cell)] || normalizeHeader(cell))
+  return matrix.slice(headerIndex + 1)
+    .filter(row => row.some(cell => String(cell ?? '').trim() !== ''))
+    .map(row => {
+      const record: any = {}
+      headers.forEach((key, idx) => {
+        if (key) record[key] = row[idx]
+      })
+      record.ma_nv = String(record.ma_nv ?? '').trim()
+      record.ngay = parseExcelDate(record.ngay)
+      record.gio_vao = parseExcelTime(record.gio_vao, record.ngay)
+      record.gio_ra = parseExcelTime(record.gio_ra, record.ngay)
+      record.so_cong = parseNumber(record.so_cong)
+      record.so_gio_ot = parseNumber(record.so_gio_ot)
+      record.tong_gio_thuc = parseNumber(record.tong_gio_thuc)
+      return record
+    })
+}
+
 export default function AttendancePage() {
   const qc = useQueryClient()
   const [activeTab, setActiveTab] = useState('1')
@@ -258,7 +367,7 @@ export default function AttendancePage() {
                   const bstr = evt.target?.result
                   const wb = XLSX.read(bstr, { type: 'binary' })
                   const ws = wb.Sheets[wb.SheetNames[0]]
-                  const data = XLSX.utils.sheet_to_json(ws)
+                  const data = buildAttendanceRows(ws)
                   
                   const validated = data.map((row: any) => {
                     let error = ''

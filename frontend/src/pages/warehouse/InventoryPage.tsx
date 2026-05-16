@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, Row, Select, Input, Spin, Table, Tag, Tooltip, Typography, Space, Statistic, Tabs, message,
 } from 'antd'
-import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, fmtNum } from '../../utils/exportUtils'
+import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, fmtNum, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import { PlusOutlined, DatabaseOutlined, FileExcelOutlined, FilePdfOutlined, WarningOutlined, UploadOutlined } from '@ant-design/icons'
 import { warehouseApi, PhanXuongWithWarehouses, WarehouseSlot, TonKho } from '../../api/warehouse'
@@ -70,45 +70,76 @@ export default function InventoryPage() {
   const tongGiaTri = filtered.reduce((s, r) => s + r.gia_tri_ton, 0)
 
   const handleExportExcel = () => {
-    exportToExcel(`TonKho_${dayjs().format('YYYYMMDD')}`, [{
-      name: 'Tồn kho',
-      headers: ['STT', 'Tên hàng', 'Kho', 'Tồn kho', 'ĐVT', 'Tồn tối thiểu', 'Đơn giá BQ', 'Giá trị tồn'],
-      rows: filtered.map((r, i) => [
-        i + 1, r.ten_hang, r.ten_kho,
-        Number(r.ton_luong), r.don_vi,
-        r.ton_toi_thieu > 0 ? Number(r.ton_toi_thieu) : '',
-        r.don_gia_binh_quan > 0 ? Number(r.don_gia_binh_quan) : '',
-        Number(r.gia_tri_ton),
-      ]),
-      colWidths: [5, 35, 18, 12, 8, 14, 14, 16],
-    }])
+    const resolvedPhapNhanId = phanXuongId ? phanXuongs.find(px => px.id === phanXuongId)?.phap_nhan_id : null
+    if (!filtered.length) {
+      message.warning('Không có dữ liệu để xuất Excel')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ xuất Excel tồn kho khi đã lọc một phân xưởng có pháp nhân.')
+      return
+    }
+    const defaultConfig = [
+      { key: 'stt', label: 'STT', width: 5 },
+      { key: 'ten_hang', label: 'Tên hàng', width: 35 },
+      { key: 'ten_kho', label: 'Kho', width: 18 },
+      { key: 'ton_luong', label: 'Tồn kho', width: 12 },
+      { key: 'don_vi', label: 'ĐVT', width: 8 },
+      { key: 'ton_toi_thieu', label: 'Tồn tối thiểu', width: 14 },
+      { key: 'don_gia_binh_quan', label: 'Đơn giá BQ', width: 14 },
+      { key: 'gia_tri_ton', label: 'Giá trị tồn', width: 16 },
+    ]
+
+    const exportData = filtered.map((r, i) => ({
+      ...r,
+      stt: i + 1,
+      ton_toi_thieu: r.ton_toi_thieu > 0 ? r.ton_toi_thieu : '',
+      don_gia_binh_quan: r.don_gia_binh_quan > 0 ? r.don_gia_binh_quan : '',
+    }))
+
+    smartExportExcel('INVENTORY', exportData, defaultConfig, `TonKho_${dayjs().format('YYYYMMDD')}`, resolvedPhapNhanId)
   }
 
   const handleExportPdf = () => {
+    const resolvedPhapNhanId = phanXuongId ? phanXuongs.find(px => px.id === phanXuongId)?.phap_nhan_id : null
+    if (!filtered.length) {
+      message.warning('Không có dữ liệu để in')
+      return
+    }
+    if (!resolvedPhapNhanId) {
+      message.error('Chỉ in tồn kho khi đã lọc một phân xưởng có pháp nhân.')
+      return
+    }
     const cols = [
-      { header: 'STT', align: 'center' as const },
-      { header: 'Tên hàng' },
-      { header: 'Kho' },
-      { header: 'Tồn kho', align: 'right' as const },
-      { header: 'ĐVT', align: 'center' as const },
-      { header: 'Đơn giá BQ', align: 'right' as const },
-      { header: 'Giá trị tồn', align: 'right' as const },
+      { header: 'STT', key: 'stt', align: 'center' as const },
+      { header: 'Tên hàng', key: 'ten_hang' },
+      { header: 'Kho', key: 'ten_kho' },
+      { header: 'Tồn kho', key: 'ton_luong', align: 'right' as const },
+      { header: 'ĐVT', key: 'don_vi', align: 'center' as const },
+      { header: 'Đơn giá BQ', key: 'don_gia_binh_quan', align: 'right' as const },
+      { header: 'Giá trị tồn', key: 'gia_tri_ton', align: 'right' as const },
     ]
-    const rows = filtered.map((r, i) => [
-      i + 1, r.ten_hang, r.ten_kho,
-      fmtNum(r.ton_luong), r.don_vi,
-      r.don_gia_binh_quan > 0 ? fmtVND(r.don_gia_binh_quan) : '—',
-      fmtVND(r.gia_tri_ton),
-    ])
-    printToPdf(
-      'Báo cáo tồn kho',
-      `<h2>BÁO CÁO TỒN KHO</h2>
-       <p class="meta">Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')} — ${filtered.length} mặt hàng | Tổng giá trị: ${fmtVND(tongGiaTri)}đ</p>
-       ${buildHtmlTable(cols, rows, {
-         totalRow: ['', 'TỔNG CỘNG', '', '', '', '', fmtVND(tongGiaTri) + 'đ'],
-       })}`,
-      true,
-    )
+    const rows = filtered.map((r, i) => ({
+      stt: i + 1,
+      ten_hang: r.ten_hang,
+      ten_kho: r.ten_kho,
+      ton_luong: fmtNum(r.ton_luong),
+      don_vi: r.don_vi,
+      don_gia_binh_quan: r.don_gia_binh_quan > 0 ? fmtVND(r.don_gia_binh_quan) : '—',
+      gia_tri_ton: fmtVND(r.gia_tri_ton),
+    }))
+
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as any)[c.key])))
+    
+    const printData = {
+      subtitle: 'BÁO CÁO TỒN KHO',
+      document_date: dayjs().format('DD/MM/YYYY HH:mm'),
+      document_number: `${filtered.length} mặt hàng`,
+      body_html: table,
+      footer_html: `<div style="text-align: right; font-weight: bold; margin-top: 10px;">TỔNG GIÁ TRỊ TỒN: ${fmtVND(tongGiaTri)}đ</div>`
+    }
+
+    smartPrintPdf('INVENTORY', printData, resolvedPhapNhanId)
   }
 
   const columns = [

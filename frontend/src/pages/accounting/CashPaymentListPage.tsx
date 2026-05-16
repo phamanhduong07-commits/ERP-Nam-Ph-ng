@@ -4,15 +4,31 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Row, Select, Space, Table, Tag, Typography,
 } from 'antd'
-import { PlusOutlined, FileExcelOutlined } from '@ant-design/icons'
+import { FileExcelOutlined, PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
-import { paymentApi, TRANG_THAI_PHIEU_CHI, HINH_THUC_TT } from '../../api/accounting'
+import { paymentApi } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
+
+const HINH_THUC_TT_LABEL: Record<string, string> = {
+  tien_mat: 'Tiền mặt',
+  TM: 'Tiền mặt',
+  chuyen_khoan: 'Chuyển khoản',
+  CK: 'Chuyển khoản',
+  bu_tru_cong_no: 'Bù trừ công nợ',
+  khac: 'Khác',
+}
+
+const PAYMENT_STATUS: Record<string, { label: string; color: string }> = {
+  cho_chot: { label: 'Chờ chốt', color: 'default' },
+  da_chot: { label: 'Đã chốt', color: 'orange' },
+  da_duyet: { label: 'Đã duyệt', color: 'green' },
+  huy: { label: 'Đã hủy', color: 'default' },
+}
 
 export default function CashPaymentListPage() {
   const navigate = useNavigate()
@@ -26,7 +42,14 @@ export default function CashPaymentListPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['payments', tuNgay, denNgay, filterTrangThai, filterPhapNhan, page],
     queryFn: () =>
-      paymentApi.list({ tu_ngay: tuNgay, den_ngay: denNgay, trang_thai: filterTrangThai, phap_nhan_id: filterPhapNhan, page, page_size: 20 }),
+      paymentApi.list({
+        tu_ngay: tuNgay,
+        den_ngay: denNgay,
+        trang_thai: filterTrangThai,
+        phap_nhan_id: filterPhapNhan,
+        page,
+        page_size: 20,
+      }),
   })
 
   const payments = data?.items ?? data ?? []
@@ -38,9 +61,10 @@ export default function CashPaymentListPage() {
       'Số phiếu': r.so_phieu,
       'Ngày phiếu': r.ngay_phieu,
       'Nhà cung cấp': r.ten_don_vi ?? r.supplier_id,
-      'Hình thức TT': HINH_THUC_TT[r.hinh_thuc_tt] ?? r.hinh_thuc_tt,
+      'Hóa đơn mua': r.so_hoa_don ?? r.purchase_invoice_id ?? '',
+      'Hình thức TT': HINH_THUC_TT_LABEL[r.hinh_thuc_tt] ?? r.hinh_thuc_tt,
       'Số tiền': r.so_tien,
-      'Trạng thái': TRANG_THAI_PHIEU_CHI[r.trang_thai]?.label ?? r.trang_thai,
+      'Trạng thái': PAYMENT_STATUS[r.trang_thai]?.label ?? r.trang_thai,
     }))
     exportToExcel(`phieu-chi-${dayjs().format('YYYYMMDD')}`, [{
       name: 'Phieu chi',
@@ -66,30 +90,30 @@ export default function CashPaymentListPage() {
       title: 'Nhà cung cấp',
       dataIndex: 'ten_don_vi',
       ellipsis: true,
-      render: (v, r) => v ?? `NCC#${r.supplier_id}`,
+      render: (v, r) => v ?? `NCC #${r.supplier_id}`,
     },
     {
-      title: 'HĐ liên kết',
+      title: 'HĐ mua',
       dataIndex: 'so_hoa_don',
-      width: 140,
+      width: 150,
       render: (v, r) =>
         r.purchase_invoice_id ? (
           <a onClick={() => navigate(`/accounting/purchase-invoices/${r.purchase_invoice_id}`)}>
-            {v ?? `HĐ#${r.purchase_invoice_id}`}
+            {v ?? `HĐ #${r.purchase_invoice_id}`}
           </a>
-        ) : '—',
+        ) : '-',
     },
     {
       title: 'Hình thức TT',
       dataIndex: 'hinh_thuc_tt',
-      width: 120,
-      render: v => HINH_THUC_TT[v] ?? v,
+      width: 130,
+      render: v => HINH_THUC_TT_LABEL[v] ?? v,
     },
     {
       title: 'Số tiền',
       dataIndex: 'so_tien',
       align: 'right',
-      width: 140,
+      width: 150,
       render: v => fmtVND(v),
     },
     {
@@ -97,7 +121,7 @@ export default function CashPaymentListPage() {
       dataIndex: 'trang_thai',
       width: 130,
       render: v => {
-        const s = TRANG_THAI_PHIEU_CHI[v]
+        const s = PAYMENT_STATUS[v]
         return <Tag color={s?.color}>{s?.label ?? v}</Tag>
       },
     },
@@ -106,7 +130,7 @@ export default function CashPaymentListPage() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Phiếu chi</Title>
+        <Title level={4} style={{ margin: 0 }}>Phiếu chi nhà cung cấp</Title>
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/accounting/payments/new')}>
@@ -130,14 +154,18 @@ export default function CashPaymentListPage() {
           </Col>
           <Col>
             <Select
-              style={{ width: 160 }} allowClear placeholder="Trạng thái"
+              style={{ width: 160 }}
+              allowClear
+              placeholder="Trạng thái"
               onChange={v => { setFilterTrangThai(v); setPage(1) }}
-              options={Object.entries(TRANG_THAI_PHIEU_CHI).map(([k, v]) => ({ value: k, label: v.label }))}
+              options={Object.entries(PAYMENT_STATUS).map(([k, v]) => ({ value: k, label: v.label }))}
             />
           </Col>
           <Col>
             <Select
-              style={{ width: 180 }} allowClear placeholder="Pháp nhân"
+              style={{ width: 180 }}
+              allowClear
+              placeholder="Pháp nhân"
               onChange={v => { setFilterPhapNhan(v); setPage(1) }}
               options={phapNhanList.map((p: any) => ({ value: p.id, label: p.ten_phap_nhan }))}
             />
