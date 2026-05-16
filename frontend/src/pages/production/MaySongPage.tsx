@@ -1,9 +1,8 @@
 import { useState, useCallback } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Col, DatePicker, Divider, Form, Input, InputNumber,
-  message, Modal, Row, Select, Space, Spin, Table, Tabs, Tag,
+  message, Modal, Row, Segmented, Select, Space, Spin, Table, Tabs, Tag,
   TimePicker, Typography,
 } from 'antd'
 import { CaretRightOutlined, PauseOutlined, PrinterOutlined, ReloadOutlined } from '@ant-design/icons'
@@ -90,16 +89,20 @@ function calcSoTamFromListItem(lsx: ProductionOrderListItem): number | null {
   return Math.ceil(qty / dims.so_dao)
 }
 
-function InfoRow({
-  label, value, valueStyle,
-}: { label: string; value: ReactNode; valueStyle?: CSSProperties }) {
-  return (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 5 }}>
-      <Text type="secondary" style={{ minWidth: 90, fontSize: 12, flexShrink: 0 }}>{label}</Text>
-      <Text style={valueStyle}>{value ?? '—'}</Text>
-    </div>
-  )
+// Detect ca làm việc từ giờ hiện tại
+function detectCa(): string {
+  const h = dayjs().hour()
+  if (h >= 6 && h < 14) return 'Ca 1'
+  if (h >= 14 && h < 22) return 'Ca 2'
+  return 'Ca đêm'
 }
+
+function detectGioBD(ca: string): dayjs.Dayjs {
+  const starts: Record<string, number> = { 'Ca 1': 6, 'Ca 2': 14, 'Ca 3': 22, 'Ca đêm': 22 }
+  return dayjs().hour(starts[ca] ?? 6).minute(0).second(0).millisecond(0)
+}
+
+const STATUS_ORDER: Record<string, number> = { dang_chay: 0, tam_dung: 1, moi: 2, hoan_thanh: 3 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface InTemState {
@@ -123,6 +126,7 @@ export default function MaySongPage() {
   const [filterPxId, setFilterPxId]     = useState<number | undefined>()
   const [filterKhId, setFilterKhId]     = useState<number | undefined>()
   const [searchLenh, setSearchLenh]     = useState('')
+  const [filterStatus, setFilterStatus]  = useState<string>('all')
   const [hoanthanhId, setHoanthanhId]   = useState<number | null>(null)
   const [pauseTarget, setPauseTarget]   = useState<StatusTarget | null>(null)
   const [inTemState, setInTemState]     = useState<InTemState | null>(null)
@@ -169,14 +173,30 @@ export default function MaySongPage() {
     : null
 
   // Lọc và hiển thị Tab 1
-  // Khi chọn KH cụ thể: hiện tất cả LSX trong KH đó (kể cả hoan_thanh) để có thể nhập phôi bổ sung
-  // Khi không chọn KH: chỉ hiện LSX đang hoạt động (bỏ hoan_thanh/huy/mua_ngoai)
-  const lsxItems = (lsxRes?.items ?? []).filter(o => {
+  const lsxBase = (lsxRes?.items ?? []).filter(o => {
     if (['huy', 'mua_ngoai'].includes(o.trang_thai)) return false
     if (!khSoLenhSet && o.trang_thai === 'hoan_thanh') return false
     if (khSoLenhSet && !khSoLenhSet.has(o.so_lenh)) return false
     if (searchLenh && !o.so_lenh.toLowerCase().includes(searchLenh.toLowerCase())) return false
     return true
+  })
+
+  // Stats (tính trước khi apply filter trạng thái)
+  const statsMoi        = lsxBase.filter(o => o.trang_thai === 'moi').length
+  const statsDangChay   = lsxBase.filter(o => o.trang_thai === 'dang_chay').length
+  const statsTamDung    = lsxBase.filter(o => o.trang_thai === 'tam_dung').length
+  const statsHoanThanh  = lsxBase.filter(o => o.trang_thai === 'hoan_thanh').length
+
+  const lsxItems = (filterStatus === 'all'
+    ? lsxBase
+    : lsxBase.filter(o => o.trang_thai === filterStatus)
+  ).slice().sort((a, b) => {
+    const sa = STATUS_ORDER[a.trang_thai] ?? 9
+    const sb = STATUS_ORDER[b.trang_thai] ?? 9
+    if (sa !== sb) return sa - sb
+    const da = a.ngay_hoan_thanh_ke_hoach ? dayjs(a.ngay_hoan_thanh_ke_hoach).valueOf() : Infinity
+    const db = b.ngay_hoan_thanh_ke_hoach ? dayjs(b.ngay_hoan_thanh_ke_hoach).valueOf() : Infinity
+    return da - db
   })
 
   const { data: hoanthanhOrder, isLoading: orderLoading } = useQuery({
@@ -427,6 +447,11 @@ export default function MaySongPage() {
       render: (_, r) => <Text style={{ fontSize: 12 }}>{r.ten_khach_hang ?? '—'}</Text>,
     },
     {
+      title: 'Kho SX',
+      width: 100,
+      render: (_, r) => <Text style={{ fontSize: 12 }}>{r.ten_kho_sx ?? '—'}</Text>,
+    },
+    {
       title: 'Khổ × Cắt',
       width: 105,
       align: 'center',
@@ -489,11 +514,26 @@ export default function MaySongPage() {
     },
     {
       title: 'Ngày giao',
-      width: 85,
+      width: 90,
       align: 'center',
-      render: (_, r) => r.ngay_hoan_thanh_ke_hoach
-        ? <Text style={{ fontSize: 12 }}>{dayjs(r.ngay_hoan_thanh_ke_hoach).format('DD/MM/YY')}</Text>
-        : '—',
+      render: (_, r) => {
+        if (!r.ngay_hoan_thanh_ke_hoach) return <Text type="secondary">—</Text>
+        const days = dayjs(r.ngay_hoan_thanh_ke_hoach).startOf('day').diff(dayjs().startOf('day'), 'day')
+        return (
+          <div>
+            <Text style={{ fontSize: 12 }}>{dayjs(r.ngay_hoan_thanh_ke_hoach).format('DD/MM/YY')}</Text>
+            <br />
+            {days < 0
+              ? <Text type="danger" style={{ fontSize: 10 }}>⚠ trễ {-days}n</Text>
+              : days === 0
+                ? <Text style={{ fontSize: 10, color: '#fa541c', fontWeight: 600 }}>Hôm nay!</Text>
+                : days <= 2
+                  ? <Text style={{ fontSize: 10, color: '#fa8c16' }}>còn {days}n</Text>
+                  : <Text type="secondary" style={{ fontSize: 10 }}>còn {days}n</Text>
+            }
+          </div>
+        )
+      },
     },
     {
       title: 'Hành động',
@@ -512,6 +552,7 @@ export default function MaySongPage() {
             )}
             {st === 'dang_chay' && (
               <Button size="small" danger icon={<PauseOutlined />}
+                loading={pauseMut.isPending}
                 onClick={() => setPauseTarget({ id: r.id, so_lenh: r.so_lenh })}>
                 Dừng
               </Button>
@@ -601,15 +642,32 @@ export default function MaySongPage() {
             label: `Đang sản xuất (${lsxItems.length})`,
             children: (
               <>
+                {/* Stats bar */}
+                <Row gutter={6} style={{ marginBottom: 10 }}>
+                  {[
+                    { label: 'Mới', count: statsMoi,       color: '#1677ff', bg: '#e6f4ff' },
+                    { label: 'Đang SX', count: statsDangChay, color: '#52c41a', bg: '#f6ffed' },
+                    { label: 'Tạm dừng', count: statsTamDung,  color: '#fa8c16', bg: '#fff7e6' },
+                    ...(statsHoanThanh > 0 ? [{ label: 'Xong', count: statsHoanThanh, color: '#8c8c8c', bg: '#f5f5f5' }] : []),
+                  ].map(s => (
+                    <Col key={s.label}>
+                      <div style={{ padding: '4px 12px', background: s.bg, border: `1px solid ${s.color}30`, borderRadius: 6, textAlign: 'center', minWidth: 72 }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: s.color, lineHeight: 1.2 }}>{s.count}</div>
+                        <div style={{ fontSize: 11, color: s.color }}>{s.label}</div>
+                      </div>
+                    </Col>
+                  ))}
+                </Row>
+
                 {/* Filter bar */}
-                <Row gutter={8} style={{ marginBottom: 12 }} align="middle" wrap>
+                <Row gutter={8} style={{ marginBottom: 8 }} align="middle" wrap>
                   <Col>
                     <Select
                       placeholder="— Chọn kế hoạch SX —"
                       allowClear
                       showSearch
                       optionFilterProp="label"
-                      style={{ width: 210, borderColor: !filterKhId ? '#faad14' : undefined }}
+                      style={{ width: 210 }}
                       value={filterKhId}
                       onChange={v => setFilterKhId(v)}
                       options={khList.map(k => ({ value: k.id, label: k.so_ke_hoach }))}
@@ -637,6 +695,24 @@ export default function MaySongPage() {
                   </Col>
                   <Col>
                     <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
+                  </Col>
+                </Row>
+
+                {/* Filter nhanh theo trạng thái */}
+                <Row style={{ marginBottom: 8 }}>
+                  <Col>
+                    <Segmented
+                      value={filterStatus}
+                      onChange={v => setFilterStatus(v as string)}
+                      size="small"
+                      options={[
+                        { value: 'all',        label: `Tất cả (${lsxBase.length})` },
+                        { value: 'moi',        label: `Mới (${statsMoi})` },
+                        { value: 'dang_chay',  label: `Đang SX (${statsDangChay})` },
+                        { value: 'tam_dung',   label: `Dừng (${statsTamDung})` },
+                        ...(statsHoanThanh > 0 ? [{ value: 'hoan_thanh', label: `Xong (${statsHoanThanh})` }] : []),
+                      ]}
+                    />
                   </Col>
                 </Row>
 
@@ -676,43 +752,69 @@ export default function MaySongPage() {
           // ══════════════════════════════════════════════════════════════
           {
             key: 'lich_su',
-            label: 'Lịch sử phiếu nhập',
-            children: (
-              <>
-                <Row gutter={8} style={{ marginBottom: 12 }} align="middle">
-                  <Col>
-                    <DatePicker
-                      value={dayjs(histTuNgay)}
-                      onChange={d => d && setHistTuNgay(d.format('YYYY-MM-DD'))}
-                      placeholder="Từ ngày"
-                      format="DD/MM/YYYY"
-                    />
-                  </Col>
-                  <Col><Text type="secondary">—</Text></Col>
-                  <Col>
-                    <DatePicker
-                      value={dayjs(histDenNgay)}
-                      onChange={d => d && setHistDenNgay(d.format('YYYY-MM-DD'))}
-                      placeholder="Đến ngày"
-                      format="DD/MM/YYYY"
-                    />
-                  </Col>
-                  <Col>
-                    <Button icon={<ReloadOutlined />} onClick={() => refetchPhieu()}>Tải lại</Button>
-                  </Col>
-                </Row>
-                <Table
-                  dataSource={allPhieu}
-                  columns={allPhieuCols}
-                  rowKey="id"
-                  loading={phieuLoading}
-                  pagination={{ pageSize: 50, showTotal: t => `${t} phiếu` }}
-                  size="small"
-                  scroll={{ x: 900 }}
-                  locale={{ emptyText: 'Chưa có phiếu nhập nào trong khoảng ngày này' }}
-                />
-              </>
-            ),
+            label: activeTab === 'lich_su' && allPhieu.length > 0
+              ? `Lịch sử phiếu nhập (${allPhieu.length})`
+              : 'Lịch sử phiếu nhập',
+            children: (() => {
+              const totalTT  = allPhieu.reduce((s, p) => s + Number(p.tong_so_luong_thuc_te), 0)
+              const totalTam = allPhieu.reduce((s, p) => s + Number(p.tong_so_tam), 0)
+              const totalLoi = allPhieu.reduce((s, p) => s + Number(p.tong_so_luong_loi), 0)
+              return (
+                <>
+                  <Row gutter={8} style={{ marginBottom: 12 }} align="middle">
+                    <Col>
+                      <DatePicker
+                        value={dayjs(histTuNgay)}
+                        onChange={d => d && setHistTuNgay(d.format('YYYY-MM-DD'))}
+                        placeholder="Từ ngày"
+                        format="DD/MM/YYYY"
+                      />
+                    </Col>
+                    <Col><Text type="secondary">—</Text></Col>
+                    <Col>
+                      <DatePicker
+                        value={dayjs(histDenNgay)}
+                        onChange={d => d && setHistDenNgay(d.format('YYYY-MM-DD'))}
+                        placeholder="Đến ngày"
+                        format="DD/MM/YYYY"
+                      />
+                    </Col>
+                    <Col>
+                      <Button icon={<ReloadOutlined />} onClick={() => refetchPhieu()}>Tải lại</Button>
+                    </Col>
+                  </Row>
+
+                  {/* Summary bar */}
+                  {allPhieu.length > 0 && (
+                    <Row gutter={8} style={{ marginBottom: 10 }}>
+                      {[
+                        { label: 'SL thực tế', value: totalTT.toLocaleString(),  unit: 'thùng', color: '#52c41a' },
+                        { label: 'Tổng tấm',   value: totalTam.toLocaleString(), unit: 'tấm',   color: '#722ed1' },
+                        { label: 'Phôi lỗi',   value: totalLoi.toLocaleString(), unit: 'cái',   color: totalLoi > 0 ? '#cf1322' : '#8c8c8c' },
+                      ].map(s => (
+                        <Col key={s.label}>
+                          <div style={{ padding: '4px 14px', background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 6, textAlign: 'center' }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: s.color }}>{s.value}</div>
+                            <div style={{ fontSize: 10, color: '#8c8c8c' }}>{s.label} ({s.unit})</div>
+                          </div>
+                        </Col>
+                      ))}
+                    </Row>
+                  )}
+
+                  <Table
+                    dataSource={allPhieu}
+                    columns={allPhieuCols}
+                    rowKey="id"
+                    loading={phieuLoading}
+                    pagination={{ pageSize: 50, showTotal: t => `${t} phiếu` }}
+                    size="small"
+                    scroll={{ x: 950 }}
+                    locale={{ emptyText: 'Chưa có phiếu nhập nào trong khoảng ngày này' }}
+                  />
+                </>
+              )
+            })(),
           },
         ]}
       />
@@ -792,24 +894,28 @@ export default function MaySongPage() {
             </div>
             <Form form={hoanthanhForm} layout="vertical" onFinish={handleHoanthanhSubmit} size="middle">
               <Row gutter={10}>
-                <Col span={8}>
+                <Col span={6}>
                   <Form.Item name="ngay" label="Ngày" initialValue={dayjs()}>
-                    <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+                    <DatePicker style={{ width: '100%' }} format="DD/MM" />
                   </Form.Item>
                 </Col>
-                <Col span={8}>
-                  <Form.Item name="ca" label="Ca" rules={[{ required: true, message: 'Chọn ca' }]}>
-                    <Select options={['Ca 1', 'Ca 2', 'Ca 3', 'Ca đêm'].map(c => ({ value: c, label: c }))} />
+                <Col span={6}>
+                  <Form.Item name="ca" label="Ca"
+                    initialValue={detectCa()}
+                    rules={[{ required: true, message: 'Chọn ca' }]}
+                  >
+                    <Select
+                      options={['Ca 1', 'Ca 2', 'Ca 3', 'Ca đêm'].map(c => ({ value: c, label: c }))}
+                      onChange={(v: string) => hoanthanhForm.setFieldValue('gio_bat_dau', detectGioBD(v))}
+                    />
                   </Form.Item>
                 </Col>
-                <Col span={8}>
-                  <Form.Item name="gio_bat_dau" label="Giờ BĐ">
+                <Col span={6}>
+                  <Form.Item name="gio_bat_dau" label="Giờ BĐ" initialValue={detectGioBD(detectCa())}>
                     <TimePicker format="HH:mm" style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
-              </Row>
-              <Row gutter={10}>
-                <Col span={8}>
+                <Col span={6}>
                   <Form.Item name="gio_ket_thuc" label="Giờ KT" initialValue={dayjs()}>
                     <TimePicker format="HH:mm" style={{ width: '100%' }} />
                   </Form.Item>
