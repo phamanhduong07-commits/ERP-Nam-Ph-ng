@@ -127,6 +127,10 @@ class ProductionOrderService:
                 dai_tt=float(first_item.dai_tt) if first_item and first_item.dai_tt is not None else None,
                 so_lop=first_item.so_lop if first_item else None,
                 to_hop_song=first_item.to_hop_song if first_item else None,
+                loai_thung=first_item.loai_thung if first_item else None,
+                dai=first_item.dai if first_item else None,
+                rong=first_item.rong if first_item else None,
+                cao=first_item.cao if first_item else None,
                 tong_sl_thuc_te=sl_thuc_te_map.get(o.id, Decimal("0")),
                 created_at=o.created_at,
             ))

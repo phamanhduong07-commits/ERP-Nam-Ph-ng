@@ -102,6 +102,10 @@ export interface ProductionOrderListItem {
   dai_tt: number | null          // cắt item đầu tiên (mm)
   so_lop: number | null
   to_hop_song: string | null
+  loai_thung: string | null
+  dai: number | null
+  rong: number | null
+  cao: number | null
   tong_sl_thuc_te: number        // tổng SL thực tế đã nhập qua phiếu
   created_at: string
 }
