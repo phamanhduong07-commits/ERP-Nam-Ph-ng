@@ -63,26 +63,6 @@ function getCatMm(oi: ProductionOrderItem): number | null {
   return dims?.dai_tt ? Math.round(dims.dai_tt * 10) : null
 }
 
-// QCCL: lấy trực tiếp, hoặc ghép từ mat_dl / song_dl (đơn vị g/m² ÷ 10)
-function buildQccl(oi: ProductionOrderItem): string | null {
-  if (oi.qccl) return oi.qccl
-  const addDl = (dl: number | null | undefined) => {
-    if (dl == null) return null
-    const v = Number(dl) / 10
-    return v % 1 === 0 ? String(Math.round(v)) : v.toFixed(1)
-  }
-  const parts = [
-    addDl(oi.mat_dl),
-    addDl(oi.song_1_dl),
-    addDl(oi.mat_1_dl),
-    addDl(oi.song_2_dl),
-    addDl(oi.mat_2_dl),
-    addDl(oi.song_3_dl),
-    addDl(oi.mat_3_dl),
-  ].filter((v): v is string => v !== null)
-  return parts.length > 0 ? parts.join('+') : null
-}
-
 // mm → chuỗi cm hiển thị
 function mmToDisplayCm(mm: number | null | undefined): string {
   if (mm == null) return '?'
@@ -145,13 +125,11 @@ export default function MaySongPage() {
   const [searchLenh, setSearchLenh]     = useState('')
   const [hoanthanhId, setHoanthanhId]   = useState<number | null>(null)
   const [pauseTarget, setPauseTarget]   = useState<StatusTarget | null>(null)
-  const [resumeTarget, setResumeTarget] = useState<StatusTarget | null>(null)
   const [inTemState, setInTemState]     = useState<InTemState | null>(null)
   const [inTemLoading, setInTemLoading] = useState(false)
   const [histTuNgay, setHistTuNgay]     = useState(dayjs().subtract(7, 'day').format('YYYY-MM-DD'))
   const [histDenNgay, setHistDenNgay]   = useState(dayjs().format('YYYY-MM-DD'))
   const [pauseForm]       = Form.useForm()
-  const [resumeForm]      = Form.useForm()
   const [hoanthanhForm]   = Form.useForm()
   const qc = useQueryClient()
 
@@ -176,6 +154,7 @@ export default function MaySongPage() {
     queryKey: ['may-song-list', filterPxId],
     queryFn: () =>
       productionOrdersApi.list({ page_size: 200, phan_xuong_id: filterPxId }).then(r => r.data),
+    refetchInterval: 60_000,
   })
 
   // Khi chọn KH: lấy set so_lenh trong KH đó để filter
@@ -250,8 +229,6 @@ export default function MaySongPage() {
     onSuccess: () => {
       message.success('Đã tiếp tục sản xuất')
       invalidateList()
-      setResumeTarget(null)
-      resumeForm.resetFields()
     },
     onError: () => message.error('Lỗi khi tiếp tục'),
   })
@@ -285,14 +262,7 @@ export default function MaySongPage() {
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
   const handleStart = (r: ProductionOrderListItem) => {
-    Modal.confirm({
-      title: `Bắt đầu sản xuất ${r.so_lenh}?`,
-      content: `Xác nhận bắt đầu lúc ${dayjs().format('HH:mm')} — ${dayjs().format('DD/MM/YYYY')}`,
-      okText: '▶ Bắt đầu',
-      okType: 'primary',
-      cancelText: 'Huỷ',
-      onOk: () => startMut.mutate(r.id),
-    })
+    startMut.mutate(r.id)
   }
 
   const handleComplete = (r: ProductionOrderListItem) => {
@@ -365,7 +335,7 @@ export default function MaySongPage() {
     createPhieu.mutate({
       orderId: hoanthanhOrder.id,
       data: {
-        ngay:         dayjs().format('YYYY-MM-DD'),
+        ngay: (values.ngay as dayjs.Dayjs)?.format('YYYY-MM-DD') ?? dayjs().format('YYYY-MM-DD'),
         ca:           values.ca as string,
         ghi_chu:      (values.ghi_chu as string | null) ?? null,
         gio_bat_dau:  values.gio_bat_dau  ? (values.gio_bat_dau  as dayjs.Dayjs).format('HH:mm') : null,
@@ -439,6 +409,8 @@ export default function MaySongPage() {
         <div>
           <Text strong style={{ fontSize: 13 }}>{r.so_lenh}</Text>
           <br />
+          <Text type="secondary" style={{ fontSize: 11 }}>{dayjs(r.ngay_lenh).format('DD/MM/YY')}</Text>
+          {'  '}
           <Tag color={TRANG_THAI_COLORS[r.trang_thai]} style={{ margin: '2px 0 0', fontSize: 11, lineHeight: '16px' }}>
             {TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai}
           </Tag>
@@ -546,7 +518,8 @@ export default function MaySongPage() {
             )}
             {st === 'tam_dung' && (
               <Button size="small" type="primary" icon={<CaretRightOutlined />}
-                onClick={() => setResumeTarget({ id: r.id, so_lenh: r.so_lenh })}>
+                loading={resumeMut.isPending}
+                onClick={() => resumeMut.mutate({ id: r.id, data: { gio_tiep_tuc: dayjs().format('HH:mm') } })}>
                 Tiếp tục
               </Button>
             )}
@@ -575,6 +548,7 @@ export default function MaySongPage() {
   const allPhieuCols: ColumnsType<PhieuNhapPhoiSongListItem> = [
     { title: 'Số phiếu',   dataIndex: 'so_phieu',           width: 155 },
     { title: 'Số lệnh',    dataIndex: 'so_lenh',            width: 130, render: (v: string | null) => v ?? '—' },
+    { title: 'Kho',        dataIndex: 'ten_kho',            width: 110, render: (v: string | null) => v ?? '—' },
     { title: 'Ngày',       dataIndex: 'ngay',               width: 90  },
     { title: 'Ca',         dataIndex: 'ca',                 width: 60  },
     {
@@ -670,7 +644,7 @@ export default function MaySongPage() {
                 {!filterKhId && (
                   <div style={{ marginBottom: 8, padding: '6px 12px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 6 }}>
                     <Text style={{ fontSize: 12, color: '#ad6800' }}>
-                      Chọn kế hoạch sản xuất để bật nút Nhập phôi — thông số kỹ thuật sẽ tự điền từ kế hoạch
+                      Chọn kế hoạch sản xuất để thông số kỹ thuật (khổ, cắt, QCCL) tự điền khi Hoàn thành
                     </Text>
                   </div>
                 )}
@@ -685,6 +659,13 @@ export default function MaySongPage() {
                   size="small"
                   scroll={{ x: 1200 }}
                   locale={{ emptyText: filterKhId ? 'Không có lệnh SX nào trong kế hoạch này' : 'Không có lệnh SX đang hoạt động' }}
+                  onRow={(r) => {
+                    if (!r.ngay_hoan_thanh_ke_hoach) return {}
+                    const days = dayjs(r.ngay_hoan_thanh_ke_hoach).diff(dayjs(), 'day')
+                    if (days < 0) return { style: { background: '#fff1f0' } }
+                    if (days <= 2) return { style: { background: '#fffbe6' } }
+                    return {}
+                  }}
                 />
               </>
             ),
@@ -781,38 +762,6 @@ export default function MaySongPage() {
       </Modal>
 
       {/* ══════════════════════════════════════════════════════════════
-          Modal: Tiếp tục — ghi giờ tiếp tục
-         ══════════════════════════════════════════════════════════════ */}
-      <Modal
-        title={`Tiếp tục sản xuất — ${resumeTarget?.so_lenh ?? ''}`}
-        open={resumeTarget !== null}
-        onCancel={() => { setResumeTarget(null); resumeForm.resetFields() }}
-        onOk={() => resumeForm.submit()}
-        okText="▶ Tiếp tục"
-        okButtonProps={{ type: 'primary' }}
-        confirmLoading={resumeMut.isPending}
-        destroyOnHidden
-        width={360}
-      >
-        <Form form={resumeForm} layout="vertical"
-          onFinish={(values) => {
-            if (!resumeTarget) return
-            resumeMut.mutate({
-              id: resumeTarget.id,
-              data: { gio_tiep_tuc: (values.gio_tiep_tuc as dayjs.Dayjs).format('HH:mm') },
-            })
-          }}
-        >
-          <Form.Item name="gio_tiep_tuc" label="Giờ tiếp tục"
-            rules={[{ required: true, message: 'Nhập giờ tiếp tục' }]}
-            initialValue={dayjs()}
-          >
-            <TimePicker format="HH:mm" style={{ width: '100%' }} />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* ══════════════════════════════════════════════════════════════
           Modal: Hoàn thành — ghi giờ + SL thực tế → tự tạo phiếu
          ══════════════════════════════════════════════════════════════ */}
       <Modal
@@ -844,6 +793,11 @@ export default function MaySongPage() {
             <Form form={hoanthanhForm} layout="vertical" onFinish={handleHoanthanhSubmit} size="middle">
               <Row gutter={10}>
                 <Col span={8}>
+                  <Form.Item name="ngay" label="Ngày" initialValue={dayjs()}>
+                    <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
                   <Form.Item name="ca" label="Ca" rules={[{ required: true, message: 'Chọn ca' }]}>
                     <Select options={['Ca 1', 'Ca 2', 'Ca 3', 'Ca đêm'].map(c => ({ value: c, label: c }))} />
                   </Form.Item>
@@ -853,6 +807,8 @@ export default function MaySongPage() {
                     <TimePicker format="HH:mm" style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
+              </Row>
+              <Row gutter={10}>
                 <Col span={8}>
                   <Form.Item name="gio_ket_thuc" label="Giờ KT" initialValue={dayjs()}>
                     <TimePicker format="HH:mm" style={{ width: '100%' }} />
