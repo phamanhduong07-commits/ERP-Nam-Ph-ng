@@ -2,8 +2,9 @@ from datetime import date
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from app.models.production import ProductionOrder, ProductionOrderItem
+from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.sales import SalesOrderItem, SalesOrder
 from app.models.master import Product, Customer
 from app.schemas.production import (
@@ -81,6 +82,22 @@ class ProductionOrderService:
 
         _KHO_DE_XUAT = 2000  # mm — kho 1 con >= 2m → đề xuất mua phôi ngoài
 
+        # Batch query: tổng SL thực tế đã nhập theo từng lệnh SX (tránh N+1)
+        order_ids = [o.id for o in orders]
+        sl_thuc_te_map: dict[int, Decimal] = {}
+        if order_ids:
+            rows = (
+                self.db.query(
+                    PhieuNhapPhoiSong.production_order_id,
+                    func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te), 0).label("total"),
+                )
+                .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id)
+                .filter(PhieuNhapPhoiSong.production_order_id.in_(order_ids))
+                .group_by(PhieuNhapPhoiSong.production_order_id)
+                .all()
+            )
+            sl_thuc_te_map = {r.production_order_id: Decimal(str(r.total)) for r in rows}
+
         items = []
         for o in orders:
             first_item = o.items[0] if o.items else None
@@ -110,6 +127,7 @@ class ProductionOrderService:
                 dai_tt=float(first_item.dai_tt) if first_item and first_item.dai_tt is not None else None,
                 so_lop=first_item.so_lop if first_item else None,
                 to_hop_song=first_item.to_hop_song if first_item else None,
+                tong_sl_thuc_te=sl_thuc_te_map.get(o.id, Decimal("0")),
                 created_at=o.created_at,
             ))
 

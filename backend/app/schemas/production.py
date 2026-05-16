@@ -175,6 +175,7 @@ class ProductionOrderListItem(BaseModel):
     dai_tt: float | None = None           # cắt item đầu tiên (mm)
     so_lop: int | None = None
     to_hop_song: str | None = None
+    tong_sl_thuc_te: Decimal = Decimal("0")   # tổng SL thực tế đã nhập qua phiếu
     created_at: datetime
 
     class Config:

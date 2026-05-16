@@ -432,6 +432,23 @@ export default function MaySongPage() {
       render: (v: number) => v?.toLocaleString() ?? '—',
     },
     {
+      title: 'Còn lại',
+      width: 100,
+      align: 'right' as const,
+      render: (_: unknown, r: ProductionOrderListItem) => {
+        const conLai = Number(r.tong_sl_ke_hoach) - Number(r.tong_sl_thuc_te)
+        if (r.tong_sl_thuc_te === 0)
+          return <Text type="secondary" style={{ fontSize: 12 }}>chưa nhập</Text>
+        if (conLai <= 0)
+          return <Tag color="green" style={{ fontWeight: 700 }}>Đủ ✓</Tag>
+        return (
+          <Text strong style={{ color: '#cf1322', fontSize: 15 }}>
+            {conLai.toLocaleString()}
+          </Text>
+        )
+      },
+    },
+    {
       title: 'Ngày giao',
       dataIndex: 'ngay_hoan_thanh_ke_hoach',
       width: 85,
