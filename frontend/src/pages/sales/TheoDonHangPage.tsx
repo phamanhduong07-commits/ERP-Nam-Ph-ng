@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Descriptions, Drawer, Input, Row,
+  Button, Card, Col, DatePicker, Descriptions, Drawer, Empty, Input, Row,
   Select, Space, Statistic, Table, Tag, Tooltip, Typography,
 } from 'antd'
 import {
@@ -17,6 +17,15 @@ import { usePhapNhanList } from '../../hooks/usePhapNhan'
 import { exportToExcel } from '../../utils/exportUtils'
 
 const { Text, Title } = Typography
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState<T>(value)
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(id)
+  }, [value, delay])
+  return debounced
+}
 
 const FILTER_STORAGE_KEY = 'theo-doi-filters'
 
@@ -90,6 +99,8 @@ export default function TheoDonHangPage() {
   // Row selection for summary panel
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
 
+  const debouncedSearch = useDebounce(search, 300)
+
   useEffect(() => {
     saveFilters({ phanXuongId, nvTheodoiId, phapNhanId, includeHoanThanh })
   }, [phanXuongId, nvTheodoiId, phapNhanId, includeHoanThanh])
@@ -157,8 +168,8 @@ export default function TheoDonHangPage() {
     if (filterKhach) data = data.filter(r => r.ten_khach_hang === filterKhach)
     if (filterStage) data = data.filter(r => r.stage === filterStage)
     if (filterQuaHan) data = data.filter(r => r.ngay_giao_hang && r.ngay_giao_hang < today && r.stage !== 'hoan_thanh')
-    if (search.trim()) {
-      const s = search.toLowerCase()
+    if (debouncedSearch.trim()) {
+      const s = debouncedSearch.toLowerCase()
       data = data.filter(r =>
         (r.so_lenh ?? '').toLowerCase().includes(s) ||
         (r.ten_khach_hang ?? '').toLowerCase().includes(s) ||
@@ -169,10 +180,22 @@ export default function TheoDonHangPage() {
       )
     }
     return data
-  }, [rows, search, filterKhach, filterStage, filterQuaHan, today])
+  }, [rows, debouncedSearch, filterKhach, filterStage, filterQuaHan, today])
 
   // Drawer row derived from index — stable reference into filtered
   const drawerRow = drawerIdx >= 0 && drawerIdx < filtered.length ? filtered[drawerIdx] : null
+
+  // Keyboard navigation: ←/→ khi drawer mở, Esc để đóng
+  useEffect(() => {
+    if (drawerIdx < 0) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && drawerIdx > 0) setDrawerIdx(i => i - 1)
+      else if (e.key === 'ArrowRight' && drawerIdx < filtered.length - 1) setDrawerIdx(i => i + 1)
+      else if (e.key === 'Escape') setDrawerIdx(-1)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [drawerIdx, filtered.length])
 
   const selectedRows = useMemo(
     () => filtered.filter(r => {
@@ -525,6 +548,36 @@ export default function TheoDonHangPage() {
               selectedRowKeys: selectedKeys,
               onChange: setSelectedKeys,
               preserveSelectedRowKeys: true,
+            }}
+            locale={{
+              emptyText: (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={
+                    <span>
+                      Không có lệnh nào
+                      {(filterKhach || filterStage || filterQuaHan || debouncedSearch) && (
+                        <>
+                          {' — '}
+                          <Button
+                            type="link"
+                            size="small"
+                            style={{ padding: 0 }}
+                            onClick={() => {
+                              setFilterKhach(undefined)
+                              setFilterStage(undefined)
+                              setFilterQuaHan(false)
+                              setSearch('')
+                            }}
+                          >
+                            Bỏ bộ lọc
+                          </Button>
+                        </>
+                      )}
+                    </span>
+                  }
+                />
+              ),
             }}
           />
 
