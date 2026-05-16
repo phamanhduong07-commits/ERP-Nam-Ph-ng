@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Divider, Form, Input, InputNumber,
-  message, Modal, Popconfirm, Row, Select, Space, Spin, Switch, Table, Tag,
-  TimePicker, Typography,
+  message, Modal, Popconfirm, Row, Segmented, Select, Space, Spin,
+  Table, Tag, TimePicker, Typography,
 } from 'antd'
 import {
   HistoryOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined,
@@ -23,42 +23,56 @@ import { printProductionTagBatch } from '../../utils/exportUtils'
 
 const { Text, Title } = Typography
 
-// Pallet tiêu chuẩn (cm)
-const PALLET_W = 100
-const PALLET_L = 120
-const PALLET_H = 200
+// ─── Pallet tiêu chuẩn (mm) ─────────────────────────────────────────────────
+const PALLET_W_MM = 1000
+const PALLET_L_MM = 1200
+const PALLET_H_MM = 2000
 
-// Độ dày tờ phôi theo số lớp (mm → /10 = cm)
+// Độ dày tờ phôi theo số lớp (mm)
 const MM_PER_SHEET: Record<number, number> = { 3: 4, 5: 7, 7: 12 }
 
-function calcTamPerPallet(soLop: number, khoCm: number | null, catCm: number | null): number {
-  const cmSheet = (MM_PER_SHEET[soLop] ?? 7) / 10
-  const layers = Math.floor(PALLET_H / cmSheet)
-  if (!khoCm || !catCm || khoCm <= 0 || catCm <= 0) return layers
-  const optA = Math.floor(PALLET_W / khoCm) * Math.floor(PALLET_L / catCm)
-  const optB = Math.floor(PALLET_W / catCm) * Math.floor(PALLET_L / khoCm)
+/**
+ * Tính số tấm/pallet theo công thức chuẩn (mm units):
+ *   sheets_per_layer = max(floor(W/kho)×floor(L/cat), floor(W/cat)×floor(L/kho))
+ *   layers           = floor(H / mm_per_sheet)
+ *   tam_per_pallet   = sheets_per_layer × layers
+ */
+function calcTamPerPallet(soLop: number, khoMm: number | null, catMm: number | null): number {
+  const mmSheet = MM_PER_SHEET[soLop] ?? 7
+  const layers = Math.floor(PALLET_H_MM / mmSheet)
+  if (!khoMm || !catMm || khoMm <= 0 || catMm <= 0) return layers
+  const optA = Math.floor(PALLET_W_MM / khoMm) * Math.floor(PALLET_L_MM / catMm)
+  const optB = Math.floor(PALLET_W_MM / catMm) * Math.floor(PALLET_L_MM / khoMm)
   return Math.max(optA, optB, 1) * layers
 }
 
-// Trả về cm — kho_tt trong ProductionOrderItem lưu mm, chia 10 để ra cm
-function getKhoCm(oi: ProductionOrderItem): number | null {
-  if (oi.kho_tt != null) return Math.round(Number(oi.kho_tt) / 10 * 10) / 10
+// ─── Unit helpers ────────────────────────────────────────────────────────────
+
+/** kho_tt trong ProductionOrderItem lưu mm → trả mm */
+function getKhoMm(oi: ProductionOrderItem): number | null {
+  if (oi.kho_tt != null) return Number(oi.kho_tt)
   if (!oi.loai_thung || !oi.dai || !oi.rong || !oi.cao) return null
   const soLop = oi.so_lop ?? oi.product?.so_lop ?? 3
   const dims = calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), soLop)
-  // calcBoxDimensions trả mm → chia 10 + làm tròn lên 5cm
-  return dims?.kho_tt ? Math.ceil(dims.kho_tt / 10 / 5) * 5 : null
+  return dims?.kho_tt ? Math.ceil(dims.kho_tt / 5) * 5 * 10 : null  // cm→mm, round up 5
 }
 
-// Trả về cm
-function getCatCm(oi: ProductionOrderItem): number | null {
-  if (oi.dai_tt != null) return Math.round(Number(oi.dai_tt) / 10 * 10) / 10
+/** dai_tt trong ProductionOrderItem lưu mm → trả mm */
+function getCatMm(oi: ProductionOrderItem): number | null {
+  if (oi.dai_tt != null) return Number(oi.dai_tt)
   if (!oi.loai_thung || !oi.dai || !oi.rong || !oi.cao) return null
   const soLop = oi.so_lop ?? oi.product?.so_lop ?? 3
   const dims = calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), soLop)
-  return dims?.dai_tt ? Math.round(dims.dai_tt / 10 * 10) / 10 : null
+  return dims?.dai_tt ? Math.round(dims.dai_tt * 10) : null  // cm→mm
 }
 
+/** Hiển thị mm → chuỗi cm (e.g. 450 → "45") */
+function mmToDisplayCm(mm: number | null | undefined): string {
+  if (mm == null) return '?'
+  return (mm / 10).toFixed(1).replace(/\.0$/, '')
+}
+
+/** Tính số tấm từ số thùng — cần loại thùng + kích thước */
 function calcSoTam(oi: ProductionOrderItem, soThung: number): number | null {
   if (!oi.loai_thung || !oi.dai || !oi.rong || !oi.cao) return null
   const soLop = oi.so_lop ?? oi.product?.so_lop ?? 3
@@ -67,11 +81,7 @@ function calcSoTam(oi: ProductionOrderItem, soThung: number): number | null {
   return Math.ceil(soThung / dims.so_dao)
 }
 
-// Hiển thị kho_tt (mm) từ list item thành cm
-function mmToCm(mm: number | null | undefined): string {
-  if (mm == null) return '?'
-  return (mm / 10).toFixed(1).replace(/\.0$/, '')
-}
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface InTemState {
   order: ProductionOrder
@@ -79,7 +89,11 @@ interface InTemState {
   soTam: number
   soPallet: number
   tamPerPallet: number
+  khoMm: number | null
+  catMm: number | null
 }
+
+interface HistoryTarget { id: number; so_lenh: string }
 
 const LY_DO_OPTIONS = [
   { value: 'hong_may', label: 'Hỏng máy' },
@@ -89,19 +103,31 @@ const LY_DO_OPTIONS = [
   { value: 'khac', label: 'Khác' },
 ]
 
+type TrangThaiFilter = 'tat_ca' | 'moi' | 'dang_chay' | 'tam_dung' | 'hoan_thanh'
+
+const FILTER_OPTIONS: { label: string; value: TrangThaiFilter }[] = [
+  { label: 'Tất cả', value: 'tat_ca' },
+  { label: 'Mới', value: 'moi' },
+  { label: 'Đang SX', value: 'dang_chay' },
+  { label: 'Tạm dừng', value: 'tam_dung' },
+  { label: 'Hoàn thành', value: 'hoan_thanh' },
+]
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
 export default function MaySongPage() {
-  const [showHoanThanh, setShowHoanThanh] = useState(false)
   const [filterPxId, setFilterPxId] = useState<number | undefined>(undefined)
+  const [filterTrangThai, setFilterTrangThai] = useState<TrangThaiFilter>('tat_ca')
   const [nhapLsxId, setNhapLsxId] = useState<number | null>(null)
   const [inTemState, setInTemState] = useState<InTemState | null>(null)
   const [inTemLoading, setInTemLoading] = useState(false)
   const [pauseTarget, setPauseTarget] = useState<ProductionOrderListItem | null>(null)
-  const [historyLsxId, setHistoryLsxId] = useState<number | null>(null)
+  const [historyTarget, setHistoryTarget] = useState<HistoryTarget | null>(null)
   const [nhapForm] = Form.useForm()
   const [pauseForm] = Form.useForm()
   const qc = useQueryClient()
 
-  // Chỉ hiện 2 xưởng có máy sóng
+  // Chỉ 2 xưởng có máy sóng
   const { data: pxList = [] } = useQuery({
     queryKey: ['phan-xuong-list'],
     queryFn: () =>
@@ -111,22 +137,33 @@ export default function MaySongPage() {
     staleTime: 60_000,
   })
 
-  // Danh sách LSX
+  // Danh sách LSX — lấy cả tất cả, filter client-side
   const { data: lsxRes, isLoading, refetch } = useQuery({
-    queryKey: ['may-song-list', filterPxId, showHoanThanh],
+    queryKey: ['may-song-list', filterPxId],
     queryFn: () =>
-      productionOrdersApi
-        .list({
-          page_size: 200,
-          phan_xuong_id: filterPxId,
-          trang_thai: showHoanThanh ? undefined : undefined,
-        })
-        .then(r => r.data),
+      productionOrdersApi.list({ page_size: 200, phan_xuong_id: filterPxId }).then(r => r.data),
   })
 
-  const lsxItems = (lsxRes?.items ?? []).filter(o =>
-    showHoanThanh ? true : !['hoan_thanh', 'huy'].includes(o.trang_thai)
-  )
+  const lsxItems = (lsxRes?.items ?? []).filter(o => {
+    if (filterTrangThai === 'tat_ca') return !['huy'].includes(o.trang_thai)
+    return o.trang_thai === filterTrangThai
+  })
+
+  // Count theo trang_thai cho badge
+  const counts = (lsxRes?.items ?? []).reduce<Record<string, number>>((acc, o) => {
+    if (!['huy'].includes(o.trang_thai)) acc[o.trang_thai] = (acc[o.trang_thai] ?? 0) + 1
+    return acc
+  }, {})
+  const totalActive = Object.values(counts).reduce((s, n) => s + n, 0)
+
+  const filterOptionsWithCount = FILTER_OPTIONS.map(opt => ({
+    ...opt,
+    label: opt.value === 'tat_ca'
+      ? `Tất cả (${totalActive})`
+      : counts[opt.value]
+        ? `${opt.label} (${counts[opt.value]})`
+        : opt.label,
+  }))
 
   // Full order khi mở nhập modal
   const { data: fullOrder, isLoading: orderLoading } = useQuery({
@@ -137,13 +174,17 @@ export default function MaySongPage() {
 
   // Lịch sử phiếu
   const { data: historyPhieu = [], isLoading: historyLoading } = useQuery({
-    queryKey: ['may-song-history', historyLsxId],
-    queryFn: () => productionOrdersApi.listPhieu(historyLsxId!).then(r => r.data),
-    enabled: historyLsxId !== null,
+    queryKey: ['may-song-history', historyTarget?.id],
+    queryFn: () => productionOrdersApi.listPhieu(historyTarget!.id).then(r => r.data),
+    enabled: historyTarget !== null,
   })
 
-  // Mutations trạng thái
-  const invalidateList = () => qc.invalidateQueries({ queryKey: ['may-song-list'] })
+  // ─── Mutations trạng thái ──────────────────────────────────────────────────
+
+  const invalidateList = useCallback(
+    () => qc.invalidateQueries({ queryKey: ['may-song-list'] }),
+    [qc],
+  )
 
   const startMutation = useMutation({
     mutationFn: (id: number) => productionOrdersApi.start(id),
@@ -176,7 +217,8 @@ export default function MaySongPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi khi hoàn thành'),
   })
 
-  // Tạo phiếu nhập
+  // ─── Tạo phiếu nhập ───────────────────────────────────────────────────────
+
   const createPhieu = useMutation({
     mutationFn: (vars: { orderId: number; data: PhieuNhapPhoiSongPayload }) =>
       productionOrdersApi.createPhieu(vars.orderId, vars.data).then(r => r.data),
@@ -190,16 +232,42 @@ export default function MaySongPage() {
     onError: () => message.error('Lỗi khi lưu phiếu, vui lòng thử lại'),
   })
 
+  // ─── openInTem: tính soTam với fallback ───────────────────────────────────
+
   const openInTem = (order: ProductionOrder, phieu: PhieuNhapPhoiSong | null) => {
-    const soTam = phieu ? phieu.items.reduce((s, it) => s + (it.so_tam ?? 0), 0) : 0
     const oi = order.items[0]
     const soLop = oi?.so_lop ?? oi?.product?.so_lop ?? 5
-    const khoCm = phieu?.items[0]?.chieu_kho ?? getKhoCm(oi)
-    const catCm = phieu?.items[0]?.chieu_cat ?? getCatCm(oi)
-    const tamPerPallet = calcTamPerPallet(soLop, khoCm, catCm)
+
+    // Kho/cắt: ưu tiên phiếu thực tế (cm → mm), fallback kho_tt/dai_tt từ LSX item (mm)
+    const khoMm = phieu?.items[0]?.chieu_kho != null
+      ? phieu.items[0].chieu_kho * 10          // cm → mm
+      : getKhoMm(oi)
+
+    const catMm = phieu?.items[0]?.chieu_cat != null
+      ? phieu.items[0].chieu_cat * 10          // cm → mm
+      : getCatMm(oi)
+
+    const tamPerPallet = calcTamPerPallet(soLop, khoMm, catMm)
+
+    // soTam: từ so_tam đã lưu, fallback tính từ so_luong_thuc_te nếu so_tam null
+    const soTam = phieu
+      ? phieu.items.reduce((s, it, idx) => {
+          if (it.so_tam != null) return s + it.so_tam
+          // fallback: tính từ so_luong_thuc_te và dims của order item
+          const orderItem = order.items.find(oi2 => oi2.id === it.production_order_item_id)
+            ?? order.items[idx]
+          const computed = orderItem && it.so_luong_thuc_te != null
+            ? (calcSoTam(orderItem, it.so_luong_thuc_te) ?? 0)
+            : 0
+          return s + computed
+        }, 0)
+      : 0
+
     const soPallet = soTam > 0 ? Math.ceil(soTam / tamPerPallet) : 1
-    setInTemState({ order, phieu, soTam, soPallet, tamPerPallet })
+    setInTemState({ order, phieu, soTam, soPallet, tamPerPallet, khoMm, catMm })
   }
+
+  // ─── handleInTemBo (từ nút "In tem" trong bảng) ───────────────────────────
 
   const handleInTemBo = async (lsx: ProductionOrderListItem) => {
     setInTemLoading(true)
@@ -208,7 +276,9 @@ export default function MaySongPage() {
         productionOrdersApi.get(lsx.id),
         productionOrdersApi.listPhieu(lsx.id),
       ])
-      const latest = phieuListRes.data.length > 0 ? phieuListRes.data[phieuListRes.data.length - 1] : null
+      const latest = phieuListRes.data.length > 0
+        ? phieuListRes.data[phieuListRes.data.length - 1]
+        : null
       openInTem(orderRes.data, latest)
     } catch {
       message.error('Lỗi khi tải dữ liệu')
@@ -217,6 +287,8 @@ export default function MaySongPage() {
     }
   }
 
+  // ─── handleNhapSubmit ─────────────────────────────────────────────────────
+
   const handleNhapSubmit = (values: any) => {
     if (!fullOrder) return
     const ngay = values.ngay
@@ -224,8 +296,11 @@ export default function MaySongPage() {
       : dayjs().format('YYYY-MM-DD')
     const items: PhieuNhapPhoiSongPayload['items'] = fullOrder.items.map((oi, idx) => {
       const slTT: number | null = values.items?.[idx]?.so_luong_thuc_te ?? null
-      const khoCm: number | null = values.items?.[idx]?.chieu_kho ?? getKhoCm(oi)
-      const catCm: number | null = values.items?.[idx]?.chieu_cat ?? getCatCm(oi)
+      const khoCm: number | null = values.items?.[idx]?.chieu_kho ?? null
+      const catCm: number | null = values.items?.[idx]?.chieu_cat ?? null
+      // so_tam: dùng giá trị manual nếu có, nếu không thì tính từ slTT
+      const soTamManual: number | null = values.items?.[idx]?.so_tam ?? null
+      const soTamComputed = slTT != null ? (calcSoTam(oi, slTT) ?? null) : null
       return {
         production_order_item_id: oi.id,
         so_luong_ke_hoach: oi.so_luong_ke_hoach,
@@ -233,7 +308,7 @@ export default function MaySongPage() {
         so_luong_loi: values.items?.[idx]?.so_luong_loi ?? null,
         chieu_kho: khoCm,
         chieu_cat: catCm,
-        so_tam: slTT != null ? calcSoTam(oi, slTT) : null,
+        so_tam: soTamManual ?? soTamComputed,
       }
     })
     createPhieu.mutate({
@@ -249,11 +324,17 @@ export default function MaySongPage() {
     })
   }
 
+  // ─── handlePrint ──────────────────────────────────────────────────────────
+
   const handlePrint = async () => {
     if (!inTemState) return
-    const { order, phieu, soPallet } = inTemState
+    const { order, phieu, soPallet, soTam, tamPerPallet, khoMm, catMm } = inTemState
     const oi = order.items[0]
     const phieuItem = phieu?.items[0]
+
+    const khoCmStr = khoMm != null ? mmToDisplayCm(khoMm) : (phieuItem?.chieu_kho?.toString() ?? '?')
+    const catCmStr = catMm != null ? mmToDisplayCm(catMm) : (phieuItem?.chieu_cat?.toString() ?? '?')
+
     const tagData = {
       so_lenh: order.so_lenh,
       ten_khach_hang: order.ten_khach_hang ?? '',
@@ -268,9 +349,9 @@ export default function MaySongPage() {
       ngay_giao_kh: order.ngay_hoan_thanh_ke_hoach ?? '',
       cong_doan: oi?.cong_doan ?? '',
       ten_san_pham: oi?.ten_hang ?? '',
-      sl_tam_lon: phieuItem
-        ? `${phieuItem.chieu_kho ?? '?'} × ${phieuItem.chieu_cat ?? '?'} cm × ${phieuItem.so_tam ?? '?'} tấm`
-        : `${getKhoCm(oi) ?? '?'} × ${getCatCm(oi) ?? '?'} cm`,
+      sl_tam_lon: soTam > 0
+        ? `${khoCmStr} × ${catCmStr} cm | ${soTam.toLocaleString()} tấm | ${soPallet} pallet`
+        : `${khoCmStr} × ${catCmStr} cm | ${tamPerPallet} tấm/pallet`,
       sl_tam_nho: '',
       sl_thung: phieu
         ? `${phieu.items.reduce((s, it) => s + (it.so_luong_thuc_te ?? 0), 0)} ${oi?.dvt ?? 'thùng'}`
@@ -296,13 +377,22 @@ export default function MaySongPage() {
     })
   }
 
-  // Cột bảng
+  // ─── Cột bảng ─────────────────────────────────────────────────────────────
+
   const columns: ColumnsType<ProductionOrderListItem> = [
     {
       title: 'Lệnh SX',
       dataIndex: 'so_lenh',
-      width: 150,
-      render: (v: string) => <Text strong style={{ fontSize: 15 }}>{v}</Text>,
+      width: 145,
+      render: (v: string) => <Text strong style={{ fontSize: 14 }}>{v}</Text>,
+    },
+    {
+      title: 'Đơn hàng',
+      dataIndex: 'so_don',
+      width: 120,
+      render: (v: string | null) => v
+        ? <Text type="secondary" style={{ fontSize: 12 }}>{v}</Text>
+        : '—',
     },
     {
       title: 'Khách hàng',
@@ -316,45 +406,50 @@ export default function MaySongPage() {
     },
     {
       title: 'Khổ × Cắt (cm)',
-      width: 130,
+      width: 120,
       align: 'center' as const,
-      render: (_: unknown, r: ProductionOrderListItem) => {
-        const kho = mmToCm(r.kho_tt)
-        const cat = mmToCm(r.dai_tt)
-        return <Text type="secondary">{kho} × {cat}</Text>
-      },
+      render: (_: unknown, r: ProductionOrderListItem) => (
+        <Text type="secondary">{mmToDisplayCm(r.kho_tt)} × {mmToDisplayCm(r.dai_tt)}</Text>
+      ),
     },
     {
-      title: 'Số lớp',
-      dataIndex: 'so_lop',
-      width: 70,
+      title: 'Lớp / Sóng',
+      width: 90,
       align: 'center' as const,
-      render: (v: number | null) => v ? <Tag>{v}L</Tag> : '—',
-    },
-    {
-      title: 'Sóng',
-      dataIndex: 'to_hop_song',
-      width: 70,
-      align: 'center' as const,
-      render: (v: string | null) => v ?? '—',
+      render: (_: unknown, r: ProductionOrderListItem) => (
+        <Space size={2} direction="vertical" style={{ lineHeight: 1.2 }}>
+          {r.so_lop ? <Tag>{r.so_lop}L</Tag> : null}
+          {r.to_hop_song ? <Text type="secondary" style={{ fontSize: 11 }}>{r.to_hop_song}</Text> : null}
+          {!r.so_lop && !r.to_hop_song ? '—' : null}
+        </Space>
+      ),
     },
     {
       title: 'SL KH',
       dataIndex: 'tong_sl_ke_hoach',
-      width: 80,
+      width: 75,
       align: 'right' as const,
       render: (v: number) => v?.toLocaleString() ?? '—',
     },
     {
+      title: 'Ngày giao',
+      dataIndex: 'ngay_hoan_thanh_ke_hoach',
+      width: 85,
+      align: 'center' as const,
+      render: (v: string | null) => v
+        ? <Text type="secondary">{dayjs(v).format('DD/MM')}</Text>
+        : '—',
+    },
+    {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
-      width: 120,
+      width: 110,
       render: (v: string) => <Tag color={TRANG_THAI_COLORS[v]}>{TRANG_THAI_LABELS[v] ?? v}</Tag>,
     },
     {
       title: 'Hành động',
       key: 'actions',
-      width: 340,
+      width: 330,
       render: (_: unknown, record: ProductionOrderListItem) => (
         <Space wrap>
           {record.trang_thai === 'moi' && (
@@ -400,7 +495,6 @@ export default function MaySongPage() {
           )}
           <Button
             icon={<PlusOutlined />}
-            type={['dang_chay', 'moi'].includes(record.trang_thai) ? 'default' : 'default'}
             size="small"
             onClick={() => setNhapLsxId(record.id)}
           >
@@ -417,7 +511,7 @@ export default function MaySongPage() {
           <Button
             icon={<HistoryOutlined />}
             size="small"
-            onClick={() => setHistoryLsxId(record.id)}
+            onClick={() => setHistoryTarget({ id: record.id, so_lenh: record.so_lenh })}
           >
             Lịch sử
           </Button>
@@ -426,11 +520,10 @@ export default function MaySongPage() {
     },
   ]
 
-  // Cột bảng lịch sử phiếu
   const historyColumns: ColumnsType<PhieuNhapPhoiSong> = [
     { title: 'Số phiếu', dataIndex: 'so_phieu', width: 160 },
-    { title: 'Ngày', dataIndex: 'ngay', width: 110 },
-    { title: 'Ca', dataIndex: 'ca', width: 80 },
+    { title: 'Ngày', dataIndex: 'ngay', width: 100 },
+    { title: 'Ca', dataIndex: 'ca', width: 70 },
     {
       title: 'Giờ',
       width: 100,
@@ -446,6 +539,14 @@ export default function MaySongPage() {
         r.items.reduce((s, it) => s + (it.so_luong_thuc_te ?? 0), 0).toLocaleString(),
     },
     {
+      title: 'Tổng tấm',
+      align: 'right' as const,
+      render: (_: unknown, r: PhieuNhapPhoiSong) => {
+        const total = r.items.reduce((s, it) => s + (it.so_tam ?? 0), 0)
+        return total > 0 ? total.toLocaleString() : '—'
+      },
+    },
+    {
       title: 'Phôi lỗi',
       align: 'right' as const,
       render: (_: unknown, r: PhieuNhapPhoiSong) =>
@@ -454,9 +555,11 @@ export default function MaySongPage() {
     { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v ?? '—' },
   ]
 
+  // ─── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div style={{ padding: 16 }}>
-      <Row align="middle" justify="space-between" style={{ marginBottom: 16 }}>
+      <Row align="middle" justify="space-between" style={{ marginBottom: 12 }}>
         <Title level={3} style={{ margin: 0 }}>🌊 Máy Sóng — Nhập Phôi & In Tem</Title>
         <Space>
           <Select
@@ -467,15 +570,17 @@ export default function MaySongPage() {
             onChange={v => setFilterPxId(v)}
             options={pxList.map(px => ({ value: px.id, label: px.ten_xuong }))}
           />
-          <Switch
-            checked={showHoanThanh}
-            onChange={setShowHoanThanh}
-            checkedChildren="Có HT"
-            unCheckedChildren="Ẩn HT"
-          />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
         </Space>
       </Row>
+
+      {/* Bộ 9: Filter tab trạng thái */}
+      <Segmented
+        options={filterOptionsWithCount}
+        value={filterTrangThai}
+        onChange={v => setFilterTrangThai(v as TrangThaiFilter)}
+        style={{ marginBottom: 12 }}
+      />
 
       <Table
         dataSource={lsxItems}
@@ -496,7 +601,7 @@ export default function MaySongPage() {
         onOk={() => nhapForm.submit()}
         okText="Lưu & In tem"
         confirmLoading={createPhieu.isPending}
-        width={620}
+        width={660}
         destroyOnHidden
       >
         {orderLoading ? (
@@ -509,9 +614,10 @@ export default function MaySongPage() {
                   <Select options={['Ca 1', 'Ca 2', 'Ca 3', 'Ca đêm'].map(c => ({ value: c, label: c }))} />
                 </Form.Item>
               </Col>
+              {/* Bước 3: dùng initialValue thay defaultValue để form luôn có giá trị */}
               <Col span={8}>
-                <Form.Item name="ngay" label="Ngày">
-                  <DatePicker defaultValue={dayjs()} style={{ width: '100%' }} />
+                <Form.Item name="ngay" label="Ngày" initialValue={dayjs()}>
+                  <DatePicker style={{ width: '100%' }} />
                 </Form.Item>
               </Col>
               <Col span={4}>
@@ -554,24 +660,57 @@ export default function MaySongPage() {
                       <InputNumber min={0} style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
+                  <Col span={8}>
                     <Form.Item
                       name={['items', idx, 'chieu_kho']}
-                      label="Khổ thực tế (cm)"
-                      initialValue={getKhoCm(oi)}
-                      style={{ marginBottom: 0 }}
+                      label="Khổ TT (cm)"
+                      initialValue={getKhoMm(oi) != null ? getKhoMm(oi)! / 10 : null}
+                      style={{ marginBottom: 8 }}
                     >
                       <InputNumber min={0} step={0.5} style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
+                  <Col span={8}>
                     <Form.Item
                       name={['items', idx, 'chieu_cat']}
-                      label="Cắt thực tế (cm)"
-                      initialValue={getCatCm(oi)}
-                      style={{ marginBottom: 0 }}
+                      label="Cắt TT (cm)"
+                      initialValue={getCatMm(oi) != null ? getCatMm(oi)! / 10 : null}
+                      style={{ marginBottom: 8 }}
                     >
                       <InputNumber min={0} step={0.5} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                  {/* Bước 1: So tấm — auto-compute từ SL thực tế, editable */}
+                  <Col span={8}>
+                    <Form.Item noStyle shouldUpdate={(prev, cur) =>
+                      prev.items?.[idx]?.so_luong_thuc_te !== cur.items?.[idx]?.so_luong_thuc_te
+                    }>
+                      {({ getFieldValue }) => {
+                        const slTT = getFieldValue(['items', idx, 'so_luong_thuc_te']) as number | null
+                        const computed = slTT != null ? (calcSoTam(oi, slTT) ?? null) : null
+                        return (
+                          <Form.Item
+                            name={['items', idx, 'so_tam']}
+                            label={
+                              <span>
+                                Số tấm{' '}
+                                {computed != null && (
+                                  <Text type="secondary" style={{ fontSize: 11 }}>
+                                    (tính: {computed.toLocaleString()})
+                                  </Text>
+                                )}
+                              </span>
+                            }
+                            style={{ marginBottom: 8 }}
+                          >
+                            <InputNumber
+                              min={0}
+                              placeholder={computed != null ? String(computed) : 'Tự động'}
+                              style={{ width: '100%' }}
+                            />
+                          </Form.Item>
+                        )
+                      }}
                     </Form.Item>
                   </Col>
                 </Row>
@@ -604,12 +743,7 @@ export default function MaySongPage() {
           >
             <TimePicker format="HH:mm" style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item
-            name="ly_do"
-            label="Lý do"
-            initialValue="khac"
-            rules={[{ required: true }]}
-          >
+          <Form.Item name="ly_do" label="Lý do" initialValue="khac" rules={[{ required: true }]}>
             <Select options={LY_DO_OPTIONS} />
           </Form.Item>
           <Form.Item name="ghi_chu" label="Ghi chú">
@@ -618,13 +752,13 @@ export default function MaySongPage() {
         </Form>
       </Modal>
 
-      {/* ── Modal Lịch Sử Phiếu ── */}
+      {/* ── Modal Lịch Sử Phiếu (Bước 4: hiện so_lenh) ── */}
       <Modal
-        title={`Lịch sử nhập phôi — LSX ${historyLsxId ?? ''}`}
-        open={historyLsxId !== null}
-        onCancel={() => setHistoryLsxId(null)}
-        footer={<Button onClick={() => setHistoryLsxId(null)}>Đóng</Button>}
-        width={760}
+        title={`Lịch sử nhập phôi — ${historyTarget?.so_lenh ?? ''}`}
+        open={historyTarget !== null}
+        onCancel={() => setHistoryTarget(null)}
+        footer={<Button onClick={() => setHistoryTarget(null)}>Đóng</Button>}
+        width={820}
         destroyOnHidden
       >
         <Table
@@ -638,7 +772,7 @@ export default function MaySongPage() {
         />
       </Modal>
 
-      {/* ── Dialog In Tem ── */}
+      {/* ── Dialog In Tem (Bước 7: tamPerPallet editable + breakdown) ── */}
       <Modal
         title={`In tem nhận dạng — ${inTemState?.order.so_lenh ?? ''}`}
         open={inTemState !== null}
@@ -655,34 +789,68 @@ export default function MaySongPage() {
             In {inTemState?.soPallet ?? 1} tem
           </Button>,
         ]}
-        width={420}
+        width={440}
         destroyOnHidden
       >
         {inTemState && (
           <>
             <Row style={{ marginBottom: 8 }}>
-              <Col span={10}><Text type="secondary">Lệnh SX</Text></Col>
-              <Col span={14}><Text strong>{inTemState.order.so_lenh}</Text></Col>
+              <Col span={12}><Text type="secondary">Lệnh SX</Text></Col>
+              <Col span={12}><Text strong>{inTemState.order.so_lenh}</Text></Col>
             </Row>
             <Row style={{ marginBottom: 8 }}>
-              <Col span={10}><Text type="secondary">Khách hàng</Text></Col>
-              <Col span={14}><Text>{inTemState.order.ten_khach_hang ?? '—'}</Text></Col>
+              <Col span={12}><Text type="secondary">Khách hàng</Text></Col>
+              <Col span={12}><Text>{inTemState.order.ten_khach_hang ?? '—'}</Text></Col>
             </Row>
             <Row style={{ marginBottom: 8 }}>
-              <Col span={10}><Text type="secondary">Tổng số tấm</Text></Col>
-              <Col span={14}>
-                <Text strong style={{ fontSize: 20 }}>
-                  {inTemState.soTam > 0 ? inTemState.soTam : '—'} tấm
+              <Col span={12}><Text type="secondary">Khổ × Cắt</Text></Col>
+              <Col span={12}>
+                <Text>
+                  {mmToDisplayCm(inTemState.khoMm)} × {mmToDisplayCm(inTemState.catMm)} cm
                 </Text>
               </Col>
             </Row>
             <Row style={{ marginBottom: 8 }}>
-              <Col span={10}><Text type="secondary">Tấm/pallet</Text></Col>
-              <Col span={14}><Text type="secondary">{inTemState.tamPerPallet} tấm</Text></Col>
+              <Col span={12}><Text type="secondary">Tổng số tấm</Text></Col>
+              <Col span={12}>
+                <Text strong style={{ fontSize: 20 }}>
+                  {inTemState.soTam > 0 ? inTemState.soTam.toLocaleString() : '—'} tấm
+                </Text>
+              </Col>
             </Row>
+            {/* Bước 7: tamPerPallet editable */}
+            <Row style={{ marginBottom: 4 }} align="middle">
+              <Col span={12}><Text type="secondary">Tấm/pallet</Text></Col>
+              <Col span={12}>
+                <InputNumber
+                  min={1}
+                  value={inTemState.tamPerPallet}
+                  onChange={v => {
+                    if (!v) return
+                    const newTpp = Math.max(1, v)
+                    const newSoPallet = inTemState.soTam > 0
+                      ? Math.ceil(inTemState.soTam / newTpp)
+                      : 1
+                    setInTemState(s => s ? { ...s, tamPerPallet: newTpp, soPallet: newSoPallet } : null)
+                  }}
+                  style={{ width: '100%' }}
+                  addonAfter="tấm"
+                />
+              </Col>
+            </Row>
+            {inTemState.soTam > 0 && (
+              <Row style={{ marginBottom: 8 }}>
+                <Col span={24}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {inTemState.soTam.toLocaleString()} tấm ÷ {inTemState.tamPerPallet} tấm/pallet
+                    {' = '}<Text strong>{inTemState.soPallet} pallet</Text>
+                  </Text>
+                </Col>
+              </Row>
+            )}
             {inTemState.phieu === null && (
               <Text type="warning" style={{ display: 'block', marginBottom: 8 }}>
-                Chưa có phiếu nhập — số tấm tính theo kế hoạch
+                Chưa có phiếu nhập — tấm/pallet tính theo kích thước kế hoạch
               </Text>
             )}
             <Divider style={{ margin: '12px 0' }} />
