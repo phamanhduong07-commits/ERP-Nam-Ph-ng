@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Divider, Form, Input, InputNumber,
+  Button, Col, DatePicker, Divider, Form, Input, InputNumber,
   message, Modal, Row, Select, Space, Spin, Table, Tabs, Tag,
   TimePicker, Typography,
 } from 'antd'
@@ -18,29 +18,37 @@ import type {
   PauseOrderPayload, ResumeOrderPayload,
 } from '../../api/productionOrders'
 import { productionPlansApi } from '../../api/productionPlans'
+import type { PlanLineResponse } from '../../api/productionPlans'
 import { warehouseApi } from '../../api/warehouse'
 import { calcBoxDimensions } from '../../api/quotes'
 import { printProductionTagBatch } from '../../utils/exportUtils'
 
 const { Text, Title } = Typography
 
-// ─── Pallet constants (mm) ───────────────────────────────────────────────────
-const PALLET_W_MM = 1000
-const PALLET_L_MM = 1200
-const PALLET_H_MM = 2000
-const MM_PER_SHEET: Record<number, number> = { 3: 4, 5: 7, 7: 12 }
+// ─── Pallet constants ────────────────────────────────────────────────────────
+const STACK_H_MM = 2000   // chiều cao xếp tối đa 1 cây (mm)
+const MM_PER_SHEET: Record<number, number> = { 3: 6, 5: 9, 7: 15 }
 
-function calcTamPerPallet(soLop: number, khoMm: number | null, catMm: number | null): number {
+/**
+ * Số tấm/thùng trên 1 pallet:
+ *   perCay = floor(2000 / dày_tấm)
+ *   soCay  = dựa vào khổ (cm): ≥60→1 | <60→2 | <40→3 | <30→4 | <24→5
+ */
+function calcTamPerPallet(soLop: number, khoMm: number | null): number {
   const mmSheet = MM_PER_SHEET[soLop] ?? 7
-  const layers = Math.floor(PALLET_H_MM / mmSheet)
-  if (!khoMm || !catMm || khoMm <= 0 || catMm <= 0) return layers
-  const optA = Math.floor(PALLET_W_MM / khoMm) * Math.floor(PALLET_L_MM / catMm)
-  const optB = Math.floor(PALLET_W_MM / catMm) * Math.floor(PALLET_L_MM / khoMm)
-  return Math.max(optA, optB, 1) * layers
+  const perCay  = Math.floor(STACK_H_MM / mmSheet)
+  const khoCm   = khoMm != null ? khoMm / 10 : 60
+  const soCay   = khoCm < 24 ? 5
+                : khoCm < 30 ? 4
+                : khoCm < 40 ? 3
+                : khoCm < 60 ? 2
+                : 1
+  return perCay * soCay
 }
 
+// kho_tt / dai_tt lưu đơn vị cm → *10 để ra mm dùng cho các tính toán
 function getKhoMm(oi: ProductionOrderItem): number | null {
-  if (oi.kho_tt != null) return Number(oi.kho_tt)
+  if (oi.kho_tt != null) return Number(oi.kho_tt) * 10
   if (!oi.loai_thung || !oi.dai || !oi.rong || !oi.cao) return null
   const soLop = oi.so_lop ?? oi.product?.so_lop ?? 3
   const dims = calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), soLop)
@@ -48,11 +56,31 @@ function getKhoMm(oi: ProductionOrderItem): number | null {
 }
 
 function getCatMm(oi: ProductionOrderItem): number | null {
-  if (oi.dai_tt != null) return Number(oi.dai_tt)
+  if (oi.dai_tt != null) return Number(oi.dai_tt) * 10
   if (!oi.loai_thung || !oi.dai || !oi.rong || !oi.cao) return null
   const soLop = oi.so_lop ?? oi.product?.so_lop ?? 3
   const dims = calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), soLop)
   return dims?.dai_tt ? Math.round(dims.dai_tt * 10) : null
+}
+
+// QCCL: lấy trực tiếp, hoặc ghép từ mat_dl / song_dl (đơn vị g/m² ÷ 10)
+function buildQccl(oi: ProductionOrderItem): string | null {
+  if (oi.qccl) return oi.qccl
+  const addDl = (dl: number | null | undefined) => {
+    if (dl == null) return null
+    const v = Number(dl) / 10
+    return v % 1 === 0 ? String(Math.round(v)) : v.toFixed(1)
+  }
+  const parts = [
+    addDl(oi.mat_dl),
+    addDl(oi.song_1_dl),
+    addDl(oi.mat_1_dl),
+    addDl(oi.song_2_dl),
+    addDl(oi.mat_2_dl),
+    addDl(oi.song_3_dl),
+    addDl(oi.mat_3_dl),
+  ].filter((v): v is string => v !== null)
+  return parts.length > 0 ? parts.join('+') : null
 }
 
 // mm → chuỗi cm hiển thị
@@ -69,14 +97,17 @@ function calcSoTam(oi: ProductionOrderItem, soThung: number): number | null {
   return Math.ceil(soThung / dims.so_dao)
 }
 
-// Tính số tấm từ list item (không cần fetch full order)
+// Tính số tấm từ list item — ưu tiên TT, fallback KH khi chưa nhập phiếu
 function calcSoTamFromListItem(lsx: ProductionOrderListItem): number | null {
-  const tt = Number(lsx.tong_sl_thuc_te)
-  if (tt === 0 || !lsx.loai_thung || !lsx.dai || !lsx.rong || !lsx.cao) return null
+  const qty = Number(lsx.tong_sl_thuc_te) > 0
+    ? Number(lsx.tong_sl_thuc_te)
+    : Number(lsx.tong_sl_ke_hoach)
+  if (qty === 0) return null
+  if (!lsx.loai_thung || !lsx.dai || !lsx.rong || !lsx.cao) return qty
   const soLop = lsx.so_lop ?? 5
   const dims = calcBoxDimensions(lsx.loai_thung, Number(lsx.dai), Number(lsx.rong), Number(lsx.cao), soLop)
-  if (!dims || dims.so_dao < 1) return null
-  return Math.ceil(tt / dims.so_dao)
+  if (!dims || dims.so_dao < 1) return qty
+  return Math.ceil(qty / dims.so_dao)
 }
 
 function InfoRow({
@@ -100,6 +131,8 @@ interface InTemState {
   tamPerPallet: number
   khoMm: number | null
   catMm: number | null
+  ke_hoach_qccl: string
+  ke_hoach_ghi_chu: string
 }
 
 interface StatusTarget { id: number; so_lenh: string }
@@ -110,16 +143,16 @@ export default function MaySongPage() {
   const [filterPxId, setFilterPxId]     = useState<number | undefined>()
   const [filterKhId, setFilterKhId]     = useState<number | undefined>()
   const [searchLenh, setSearchLenh]     = useState('')
-  const [nhapLsxId, setNhapLsxId]       = useState<number | null>(null)
+  const [hoanthanhId, setHoanthanhId]   = useState<number | null>(null)
   const [pauseTarget, setPauseTarget]   = useState<StatusTarget | null>(null)
   const [resumeTarget, setResumeTarget] = useState<StatusTarget | null>(null)
   const [inTemState, setInTemState]     = useState<InTemState | null>(null)
   const [inTemLoading, setInTemLoading] = useState(false)
   const [histTuNgay, setHistTuNgay]     = useState(dayjs().subtract(7, 'day').format('YYYY-MM-DD'))
   const [histDenNgay, setHistDenNgay]   = useState(dayjs().format('YYYY-MM-DD'))
-  const [pauseForm]  = Form.useForm()
-  const [resumeForm] = Form.useForm()
-  const [nhapForm]   = Form.useForm()
+  const [pauseForm]       = Form.useForm()
+  const [resumeForm]      = Form.useForm()
+  const [hoanthanhForm]   = Form.useForm()
   const qc = useQueryClient()
 
   // ─── Queries ───────────────────────────────────────────────────────────────
@@ -157,20 +190,26 @@ export default function MaySongPage() {
     : null
 
   // Lọc và hiển thị Tab 1
+  // Khi chọn KH cụ thể: hiện tất cả LSX trong KH đó (kể cả hoan_thanh) để có thể nhập phôi bổ sung
+  // Khi không chọn KH: chỉ hiện LSX đang hoạt động (bỏ hoan_thanh/huy/mua_ngoai)
   const lsxItems = (lsxRes?.items ?? []).filter(o => {
-    if (['hoan_thanh', 'huy', 'mua_ngoai'].includes(o.trang_thai)) return false
+    if (['huy', 'mua_ngoai'].includes(o.trang_thai)) return false
+    if (!khSoLenhSet && o.trang_thai === 'hoan_thanh') return false
     if (khSoLenhSet && !khSoLenhSet.has(o.so_lenh)) return false
     if (searchLenh && !o.so_lenh.toLowerCase().includes(searchLenh.toLowerCase())) return false
     return true
   })
 
-  const currentLsx = lsxItems.find(l => l.id === nhapLsxId) ?? null
-
-  const { data: fullOrder, isLoading: orderLoading } = useQuery({
-    queryKey: ['may-song-order', nhapLsxId],
-    queryFn: () => productionOrdersApi.get(nhapLsxId!).then(r => r.data),
-    enabled: nhapLsxId !== null,
+  const { data: hoanthanhOrder, isLoading: orderLoading } = useQuery({
+    queryKey: ['may-song-order', hoanthanhId],
+    queryFn: () => productionOrdersApi.get(hoanthanhId!).then(r => r.data),
+    enabled: hoanthanhId !== null,
   })
+
+  // Plan line tương ứng với LSX đang hoàn thành (để pre-fill khổ/cắt/QCCL)
+  const hoanthanhPlanLine: PlanLineResponse | null = hoanthanhOrder
+    ? (khDetail?.lines.find(l => l.so_lenh === hoanthanhOrder.so_lenh) ?? null)
+    : null
 
   const { data: allPhieu = [], isLoading: phieuLoading, refetch: refetchPhieu } = useQuery({
     queryKey: ['all-phieu', histTuNgay, histDenNgay],
@@ -230,25 +269,15 @@ export default function MaySongPage() {
     mutationFn: (vars: { orderId: number; data: PhieuNhapPhoiSongPayload }) =>
       productionOrdersApi.createPhieu(vars.orderId, vars.data).then(r => r.data),
     onSuccess: (phieu, vars) => {
-      message.success('Đã lưu phiếu nhập phôi!')
+      message.success('Đã lưu phiếu — lệnh SX hoàn thành!')
       invalidateList()
-      if (fullOrder) openInTem(fullOrder, phieu)
-      setNhapLsxId(null)
-      nhapForm.resetFields()
-      // Hỏi hoàn thành nếu đã nhập đủ
-      const kh = fullOrder
-        ? fullOrder.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
-        : 0
-      const tt = phieu.items.reduce((s, it) => s + Number(it.so_luong_thuc_te ?? 0), 0)
-      if (kh > 0 && tt >= kh) {
-        Modal.confirm({
-          title: 'Đã nhập đủ số lượng kế hoạch!',
-          content: `${tt.toLocaleString()} / ${kh.toLocaleString()} thùng. Đánh dấu lệnh SX này là Hoàn thành?`,
-          okText: '✓ Hoàn thành',
-          cancelText: 'Để sau',
-          onOk: () => completeMut.mutate(vars.orderId),
-        })
+      if (hoanthanhOrder) {
+        const planLine = khDetail?.lines.find(l => l.so_lenh === hoanthanhOrder.so_lenh) ?? null
+        openInTem(hoanthanhOrder, phieu, planLine?.qccl ?? '', planLine?.ghi_chu ?? '')
       }
+      completeMut.mutate(vars.orderId)
+      setHoanthanhId(null)
+      hoanthanhForm.resetFields()
     },
     onError: () => message.error('Lỗi khi lưu phiếu, vui lòng thử lại'),
   })
@@ -267,18 +296,10 @@ export default function MaySongPage() {
   }
 
   const handleComplete = (r: ProductionOrderListItem) => {
-    const kh = Number(r.tong_sl_ke_hoach)
-    const tt = Number(r.tong_sl_thuc_te)
-    Modal.confirm({
-      title: `Hoàn thành lệnh SX ${r.so_lenh}?`,
-      content: `Đã nhập: ${tt.toLocaleString()} / ${kh.toLocaleString()} thùng`,
-      okText: '✓ Hoàn thành',
-      cancelText: 'Huỷ',
-      onOk: () => completeMut.mutate(r.id),
-    })
+    setHoanthanhId(r.id)
   }
 
-  const openInTem = (order: ProductionOrder, phieu: PhieuNhapPhoiSong | null) => {
+  const openInTem = (order: ProductionOrder, phieu: PhieuNhapPhoiSong | null, keHoachQccl = '', keHoachGhiChu = '') => {
     const oi    = order.items[0]
     const soLop = oi?.so_lop ?? oi?.product?.so_lop ?? 5
     const khoMm = phieu?.items[0]?.chieu_kho != null
@@ -287,22 +308,31 @@ export default function MaySongPage() {
     const catMm = phieu?.items[0]?.chieu_cat != null
       ? phieu.items[0].chieu_cat * 10
       : getCatMm(oi)
-    const tamPerPallet = calcTamPerPallet(soLop, khoMm, catMm)
+    const tamPerPallet = calcTamPerPallet(soLop, khoMm)
+
+    // Số thùng: lấy từ phiếu (thực tế) hoặc fallback = KH
     const soThung = phieu
       ? phieu.items.reduce((s, it) => s + Number(it.so_luong_thuc_te ?? 0), 0)
-      : 0
+      : order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
+
+    // Số tấm: lấy so_tam đã lưu → tính từ SL TT → fallback 1 tấm = 1 thùng
     const soTam = phieu
       ? phieu.items.reduce((s, it, idx) => {
           if (it.so_tam != null) return s + it.so_tam
           const oi2 = order.items.find(x => x.id === it.production_order_item_id) ?? order.items[idx]
-          const computed = oi2 && it.so_luong_thuc_te != null
-            ? (calcSoTam(oi2, Number(it.so_luong_thuc_te)) ?? 0)
+          const slTT = Number(it.so_luong_thuc_te ?? 0)
+          const computed = oi2 && slTT > 0
+            ? (calcSoTam(oi2, slTT) ?? slTT)
             : 0
           return s + computed
         }, 0)
-      : 0
+      : order.items.reduce((s, i) => {
+          const kh = Number(i.so_luong_ke_hoach)
+          return s + (calcSoTam(i, kh) ?? kh)
+        }, 0)
+
     const soPallet = soTam > 0 ? Math.ceil(soTam / tamPerPallet) : 1
-    setInTemState({ order, phieu, soTam, soThung, soPallet, tamPerPallet, khoMm, catMm })
+    setInTemState({ order, phieu, soTam, soThung, soPallet, tamPerPallet, khoMm, catMm, ke_hoach_qccl: keHoachQccl, ke_hoach_ghi_chu: keHoachGhiChu })
   }
 
   const handleInTemBo = async (lsx: ProductionOrderListItem) => {
@@ -315,7 +345,8 @@ export default function MaySongPage() {
       const latest = phieuListRes.data.length > 0
         ? phieuListRes.data[phieuListRes.data.length - 1]
         : null
-      openInTem(orderRes.data, latest)
+      const planLine = khDetail?.lines.find(l => l.so_lenh === lsx.so_lenh) ?? null
+      openInTem(orderRes.data, latest, planLine?.qccl ?? '', planLine?.ghi_chu ?? '')
     } catch {
       message.error('Lỗi khi tải dữ liệu')
     } finally {
@@ -323,44 +354,52 @@ export default function MaySongPage() {
     }
   }
 
-  const handleNhapSubmit = (values: Record<string, unknown>) => {
-    if (!fullOrder) return
-    const ngay = (values.ngay as dayjs.Dayjs)?.format('YYYY-MM-DD') ?? dayjs().format('YYYY-MM-DD')
-    const items: PhieuNhapPhoiSongPayload['items'] = fullOrder.items.map((oi, idx) => {
-      const slTT: number | null  = (values.items as Record<number, Record<string, number | null>>)?.[idx]?.so_luong_thuc_te ?? null
-      const khoCm: number | null = (values.items as Record<number, Record<string, number | null>>)?.[idx]?.chieu_kho ?? null
-      const catCm: number | null = (values.items as Record<number, Record<string, number | null>>)?.[idx]?.chieu_cat ?? null
-      const soTamManual          = (values.items as Record<number, Record<string, number | null>>)?.[idx]?.so_tam ?? null
-      const soTamComputed        = slTT != null ? (calcSoTam(oi, slTT) ?? null) : null
-      return {
-        production_order_item_id: oi.id,
-        so_luong_ke_hoach: oi.so_luong_ke_hoach,
-        so_luong_thuc_te:  slTT,
-        so_luong_loi:      (values.items as Record<number, Record<string, number | null>>)?.[idx]?.so_luong_loi ?? null,
-        chieu_kho:  khoCm,
-        chieu_cat:  catCm,
-        so_tam:     soTamManual ?? soTamComputed,
-      }
-    })
+  const handleHoanthanhSubmit = (values: Record<string, unknown>) => {
+    if (!hoanthanhOrder) return
+    const oi    = hoanthanhOrder.items[0]
+    const khoCm = hoanthanhPlanLine?.kho1   ?? (getKhoMm(oi) != null ? getKhoMm(oi)! / 10 : null)
+    const catCm = hoanthanhPlanLine?.dai_tt ?? (getCatMm(oi) != null ? getCatMm(oi)! / 10 : null)
+    const soDao = hoanthanhPlanLine?.so_dao ?? null
+    const slTT  = values.so_luong_thuc_te as number
+    const soTam = soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi, slTT) ?? null)
     createPhieu.mutate({
-      orderId: fullOrder.id,
+      orderId: hoanthanhOrder.id,
       data: {
-        ngay,
+        ngay:         dayjs().format('YYYY-MM-DD'),
         ca:           values.ca as string,
         ghi_chu:      (values.ghi_chu as string | null) ?? null,
         gio_bat_dau:  values.gio_bat_dau  ? (values.gio_bat_dau  as dayjs.Dayjs).format('HH:mm') : null,
         gio_ket_thuc: values.gio_ket_thuc ? (values.gio_ket_thuc as dayjs.Dayjs).format('HH:mm') : null,
-        items,
+        items: hoanthanhOrder.items.map((orderItem, idx) => ({
+          production_order_item_id: orderItem.id,
+          so_luong_ke_hoach: Number(orderItem.so_luong_ke_hoach),
+          so_luong_thuc_te:  idx === 0 ? slTT : 0,
+          so_luong_loi:      idx === 0 ? ((values.so_luong_loi as number | null) ?? null) : null,
+          chieu_kho:         idx === 0 ? khoCm : null,
+          chieu_cat:         idx === 0 ? catCm : null,
+          so_tam:            idx === 0 ? soTam : null,
+        })),
       },
     })
   }
 
   const handlePrint = async () => {
     if (!inTemState) return
-    const { order, soTam, soThung, soPallet, khoMm, catMm } = inTemState
-    const oi        = order.items[0]
-    const khoCmStr  = khoMm != null ? mmToDisplayCm(khoMm) : '?'
-    const catCmStr  = catMm != null ? mmToDisplayCm(catMm) : '?'
+    const { order, phieu, soTam, soThung, soPallet, khoMm, catMm, ke_hoach_qccl, ke_hoach_ghi_chu } = inTemState
+    const oi       = order.items[0]
+    const khoCmStr = khoMm != null ? mmToDisplayCm(khoMm) : '?'
+    const catCmStr = catMm != null ? mmToDisplayCm(catMm) : '?'
+
+    // sl_tam_nho = soTam / so_dao (số phôi chia cho số dao)
+    const dims = oi?.loai_thung && oi?.dai && oi?.rong && oi?.cao
+      ? calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), oi.so_lop ?? 3)
+      : null
+    const so_dao = Math.max(1, dims?.so_dao ?? 1)
+    const tamNho = soTam > 0 ? Math.round(soTam / so_dao) : 0
+
+    // Ngày SX máy sóng: ngày nhập phôi thực tế, fallback ngày kế hoạch bắt đầu
+    const ngaySxMaySong = phieu?.ngay ?? order.ngay_bat_dau_ke_hoach ?? ''
+
     await printProductionTagBatch({
       so_lenh:          order.so_lenh,
       ten_khach_hang:   order.ten_khach_hang ?? '',
@@ -369,8 +408,8 @@ export default function MaySongPage() {
       loai_sp:          oi?.loai_thung ?? '',
       song:             oi?.to_hop_song ?? '',
       phan_xuong:       order.ten_phan_xuong ?? 'Nam Phương',
-      qccl:             oi?.qccl ?? '',
-      ngay_chay_song:   order.ngay_bat_dau_ke_hoach ?? '',
+      qccl:             ke_hoach_qccl,
+      ngay_chay_song:   ngaySxMaySong,
       ngay_giao_cu_chi: oi?.ngay_giao_hang ?? '',
       ngay_giao_kh:     order.ngay_hoan_thanh_ke_hoach ?? '',
       cong_doan:        oi?.cong_doan ?? '',
@@ -378,14 +417,14 @@ export default function MaySongPage() {
       sl_tam_lon: soTam > 0
         ? `${khoCmStr} × ${catCmStr} cm | ${soTam.toLocaleString()} tấm | ${soPallet} pallet`
         : `${khoCmStr} × ${catCmStr} cm`,
-      sl_tam_nho: '',
+      sl_tam_nho: tamNho > 0 ? `${tamNho.toLocaleString()} tấm` : '',
       sl_thung: soThung > 0
         ? `${soThung.toLocaleString()} ${oi?.dvt ?? 'thùng'}`
         : `${oi?.so_luong_ke_hoach ?? ''} ${oi?.dvt ?? 'thùng'}`,
       can_mang:   oi?.loai_in ? 'Có' : 'Không',
       chong_tham: 'Không',
       bo_phan:    'Máy Sóng',
-      ghi_chu:    order.ghi_chu ?? '',
+      ghi_chu:    ke_hoach_ghi_chu,
     }, soPallet)
     setInTemState(null)
   }
@@ -417,13 +456,14 @@ export default function MaySongPage() {
     },
     {
       title: 'Khổ × Cắt',
-      width: 95,
+      width: 105,
       align: 'center',
-      render: (_, r) => (
-        <Text style={{ fontWeight: 600 }}>
-          {mmToDisplayCm(r.kho_tt)} × {mmToDisplayCm(r.dai_tt)}
-        </Text>
-      ),
+      render: (_, r) => {
+        if (!r.kho_tt && !r.dai_tt) return <Text type="secondary">—</Text>
+        const kho = r.kho_tt != null ? Number(r.kho_tt) : '?'
+        const cat = r.dai_tt != null ? Number(r.dai_tt) : '?'
+        return <Text style={{ fontWeight: 600 }}>{kho} × {cat} cm</Text>
+      },
     },
     {
       title: 'Lớp · Sóng',
@@ -448,9 +488,10 @@ export default function MaySongPage() {
       align: 'right',
       render: (_, r) => {
         const tt = Number(r.tong_sl_thuc_te)
+        const kh = Number(r.tong_sl_ke_hoach)
         return tt > 0
           ? <Text strong>{tt.toLocaleString()}</Text>
-          : <Text type="secondary">0</Text>
+          : <Text type="secondary">{kh.toLocaleString()}</Text>
       },
     },
     {
@@ -500,7 +541,7 @@ export default function MaySongPage() {
             {st === 'dang_chay' && (
               <Button size="small" danger icon={<PauseOutlined />}
                 onClick={() => setPauseTarget({ id: r.id, so_lenh: r.so_lenh })}>
-                Tạm dừng
+                Dừng
               </Button>
             )}
             {st === 'tam_dung' && (
@@ -509,16 +550,8 @@ export default function MaySongPage() {
                 Tiếp tục
               </Button>
             )}
-            <Button
-              size="small"
-              type={st === 'dang_chay' ? 'primary' : 'default'}
-              onClick={() => setNhapLsxId(r.id)}
-            >
-              Nhập phôi
-            </Button>
             {(st === 'dang_chay' || st === 'tam_dung') && (
-              <Button size="small"
-                loading={completeMut.isPending}
+              <Button size="small" type="primary"
                 onClick={() => handleComplete(r)}>
                 Hoàn thành
               </Button>
@@ -527,9 +560,10 @@ export default function MaySongPage() {
               size="small"
               icon={<PrinterOutlined />}
               loading={inTemLoading}
-              title="In tem"
               onClick={() => handleInTemBo(r)}
-            />
+            >
+              In tem
+            </Button>
           </Space>
         )
       },
@@ -597,14 +631,15 @@ export default function MaySongPage() {
                 <Row gutter={8} style={{ marginBottom: 12 }} align="middle" wrap>
                   <Col>
                     <Select
-                      placeholder="Tất cả kế hoạch"
+                      placeholder="— Chọn kế hoạch SX —"
                       allowClear
                       showSearch
                       optionFilterProp="label"
-                      style={{ width: 190 }}
+                      style={{ width: 210, borderColor: !filterKhId ? '#faad14' : undefined }}
                       value={filterKhId}
                       onChange={v => setFilterKhId(v)}
                       options={khList.map(k => ({ value: k.id, label: k.so_ke_hoach }))}
+                      status={!filterKhId ? 'warning' : undefined}
                     />
                   </Col>
                   <Col>
@@ -631,16 +666,25 @@ export default function MaySongPage() {
                   </Col>
                 </Row>
 
+                {/* Ghi chú khi chưa chọn KH */}
+                {!filterKhId && (
+                  <div style={{ marginBottom: 8, padding: '6px 12px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 6 }}>
+                    <Text style={{ fontSize: 12, color: '#ad6800' }}>
+                      Chọn kế hoạch sản xuất để bật nút Nhập phôi — thông số kỹ thuật sẽ tự điền từ kế hoạch
+                    </Text>
+                  </div>
+                )}
+
                 {/* Bảng LSX */}
                 <Table
                   dataSource={lsxItems}
                   columns={columns}
                   rowKey="id"
-                  loading={isLoading}
+                  loading={isLoading || (filterKhId != null && !khDetail)}
                   pagination={{ pageSize: 50, showTotal: t => `${t} lệnh SX` }}
                   size="small"
                   scroll={{ x: 1200 }}
-                  locale={{ emptyText: 'Không có lệnh SX đang hoạt động' }}
+                  locale={{ emptyText: filterKhId ? 'Không có lệnh SX nào trong kế hoạch này' : 'Không có lệnh SX đang hoạt động' }}
                 />
               </>
             ),
@@ -769,206 +813,72 @@ export default function MaySongPage() {
       </Modal>
 
       {/* ══════════════════════════════════════════════════════════════
-          Modal: Nhập Phôi — 2 cột (Thông tin LSX | Form nhập)
+          Modal: Hoàn thành — ghi giờ + SL thực tế → tự tạo phiếu
          ══════════════════════════════════════════════════════════════ */}
       <Modal
-        title={`Nhập phôi — ${fullOrder?.so_lenh ?? '...'}`}
-        open={nhapLsxId !== null}
-        onCancel={() => { setNhapLsxId(null); nhapForm.resetFields() }}
-        onOk={() => nhapForm.submit()}
-        okText="Lưu & Kiểm tra ▶"
-        confirmLoading={createPhieu.isPending}
-        width={900}
+        title={`Hoàn thành — ${hoanthanhOrder?.so_lenh ?? '...'}`}
+        open={hoanthanhId !== null}
+        onCancel={() => { setHoanthanhId(null); hoanthanhForm.resetFields() }}
+        onOk={() => hoanthanhForm.submit()}
+        okText="✓ Hoàn thành"
+        okButtonProps={{ type: 'primary' }}
+        confirmLoading={createPhieu.isPending || completeMut.isPending}
+        width={480}
         destroyOnHidden
       >
         {orderLoading ? (
           <div style={{ textAlign: 'center', padding: 32 }}><Spin size="large" /></div>
-        ) : fullOrder ? (
-          <Row gutter={24}>
-
-            {/* ── LEFT: Thông tin lệnh SX ── */}
-            <Col span={9} style={{ borderRight: '1px solid #f0f0f0', paddingRight: 16 }}>
-              <Text style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: '#999' }}>
-                Thông tin lệnh SX
-              </Text>
-              <Divider style={{ margin: '6px 0 10px' }} />
-              <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8, lineHeight: 1.3 }}>
-                {fullOrder.items[0]?.ten_hang ?? '—'}
-              </Text>
-              <InfoRow label="Lệnh SX"    value={<Text strong>{fullOrder.so_lenh}</Text>} />
-              <InfoRow label="Khách hàng" value={fullOrder.ten_khach_hang} />
-              {fullOrder.so_don && <InfoRow label="Số đơn" value={fullOrder.so_don} />}
-              <Divider style={{ margin: '8px 0' }} />
-              {(() => {
-                const oi    = fullOrder.items[0]
-                const khoMm = getKhoMm(oi)
-                const catMm = getCatMm(oi)
-                return (
-                  <>
-                    {oi.dai && oi.rong && oi.cao && (
-                      <InfoRow label="D × R × C" value={`${oi.dai} × ${oi.rong} × ${oi.cao} cm`} />
-                    )}
-                    {oi.loai_thung && <InfoRow label="Loại thùng" value={oi.loai_thung} />}
-                    <InfoRow
-                      label="Khổ × Cắt"
-                      value={`${mmToDisplayCm(khoMm)} × ${mmToDisplayCm(catMm)} cm`}
-                      valueStyle={{ fontWeight: 700, fontSize: 14 }}
-                    />
-                    {oi.so_lop      && <InfoRow label="Số lớp"      value={`${oi.so_lop} lớp`} />}
-                    {oi.to_hop_song && <InfoRow label="Tổ hợp sóng" value={oi.to_hop_song} />}
-                    {oi.qccl        && <InfoRow label="QCCL"         value={oi.qccl} />}
-                    {oi.cong_doan   && <InfoRow label="Công đoạn"    value={oi.cong_doan} />}
-                    {oi.ngay_giao_hang && (
-                      <InfoRow
-                        label="Ngày giao KH"
-                        value={oi.ngay_giao_hang}
-                        valueStyle={{ color: '#d4380d', fontWeight: 600 }}
-                      />
-                    )}
-                  </>
-                )
-              })()}
-              <Divider style={{ margin: '8px 0' }} />
-              {(() => {
-                const kh     = Number(currentLsx?.tong_sl_ke_hoach ?? fullOrder.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0))
-                const tt     = Number(currentLsx?.tong_sl_thuc_te ?? 0)
-                const conLai = kh - tt
-                return (
-                  <>
-                    <InfoRow label="Kế hoạch" value={`${kh.toLocaleString()} thùng`} />
-                    {tt > 0 && <InfoRow label="Đã nhập" value={`${tt.toLocaleString()} thùng`} />}
-                    {conLai > 0 ? (
-                      <InfoRow
-                        label="Còn lại"
-                        value={`${conLai.toLocaleString()} thùng`}
-                        valueStyle={{ color: '#cf1322', fontWeight: 700, fontSize: 14 }}
-                      />
-                    ) : tt > 0 ? (
-                      <InfoRow label="Tiến độ" value={<Tag color="green">Đã nhập đủ ✓</Tag>} />
-                    ) : null}
-                  </>
-                )
-              })()}
-            </Col>
-
-            {/* ── RIGHT: Form nhập ── */}
-            <Col span={15}>
-              <Form form={nhapForm} layout="vertical" onFinish={handleNhapSubmit} size="middle">
-                <Row gutter={10}>
-                  <Col span={6}>
-                    <Form.Item name="ca" label="Ca" rules={[{ required: true, message: 'Chọn ca' }]}>
-                      <Select options={['Ca 1', 'Ca 2', 'Ca 3', 'Ca đêm'].map(c => ({ value: c, label: c }))} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={7}>
-                    <Form.Item name="ngay" label="Ngày" initialValue={dayjs()}>
-                      <DatePicker style={{ width: '100%' }} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={5}>
-                    <Form.Item name="gio_bat_dau" label="Giờ BĐ">
-                      <TimePicker format="HH:mm" style={{ width: '100%' }} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={6}>
-                    <Form.Item name="gio_ket_thuc" label="Giờ KT">
-                      <TimePicker format="HH:mm" style={{ width: '100%' }} />
-                    </Form.Item>
-                  </Col>
-                </Row>
-
-                {fullOrder.items.map((oi, idx) => (
-                  <Card
-                    key={oi.id}
-                    size="small"
-                    style={{ marginBottom: 8, background: '#fafafa' }}
-                    title={fullOrder.items.length > 1
-                      ? <Text style={{ fontSize: 13 }}>{oi.ten_hang}</Text>
-                      : null
-                    }
-                  >
-                    <Row gutter={10}>
-                      <Col span={12}>
-                        <Form.Item
-                          name={['items', idx, 'so_luong_thuc_te']}
-                          label="SL thực tế (thùng)"
-                          rules={[{ required: true, message: 'Nhập SL' }]}
-                          style={{ marginBottom: 8 }}
-                        >
-                          <InputNumber min={0} style={{ width: '100%', fontSize: 22, fontWeight: 700 }} size="large" />
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item
-                          name={['items', idx, 'so_luong_loi']}
-                          label="Phôi lỗi"
-                          style={{ marginBottom: 8 }}
-                        >
-                          <InputNumber min={0} style={{ width: '100%' }} />
-                        </Form.Item>
-                      </Col>
-                      <Col span={8}>
-                        <Form.Item
-                          name={['items', idx, 'chieu_kho']}
-                          label="Khổ TT (cm)"
-                          initialValue={getKhoMm(oi) != null ? getKhoMm(oi)! / 10 : null}
-                          style={{ marginBottom: 8 }}
-                        >
-                          <InputNumber min={0} step={0.5} style={{ width: '100%' }} />
-                        </Form.Item>
-                      </Col>
-                      <Col span={8}>
-                        <Form.Item
-                          name={['items', idx, 'chieu_cat']}
-                          label="Cắt TT (cm)"
-                          initialValue={getCatMm(oi) != null ? getCatMm(oi)! / 10 : null}
-                          style={{ marginBottom: 8 }}
-                        >
-                          <InputNumber min={0} step={0.5} style={{ width: '100%' }} />
-                        </Form.Item>
-                      </Col>
-                      <Col span={8}>
-                        <Form.Item noStyle shouldUpdate={(prev, cur) =>
-                          prev.items?.[idx]?.so_luong_thuc_te !== cur.items?.[idx]?.so_luong_thuc_te
-                        }>
-                          {({ getFieldValue }) => {
-                            const slTT    = getFieldValue(['items', idx, 'so_luong_thuc_te']) as number | null
-                            const computed = slTT != null ? (calcSoTam(oi, slTT) ?? null) : null
-                            return (
-                              <Form.Item
-                                name={['items', idx, 'so_tam']}
-                                label={
-                                  <span>
-                                    Số tấm
-                                    {computed != null && (
-                                      <Text type="secondary" style={{ fontSize: 11, marginLeft: 4 }}>
-                                        (≈{computed.toLocaleString()})
-                                      </Text>
-                                    )}
-                                  </span>
-                                }
-                                style={{ marginBottom: 8 }}
-                              >
-                                <InputNumber
-                                  min={0}
-                                  placeholder={computed != null ? String(computed) : 'Tự động'}
-                                  style={{ width: '100%' }}
-                                />
-                              </Form.Item>
-                            )
-                          }}
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                  </Card>
-                ))}
-
-                <Form.Item name="ghi_chu" label="Ghi chú" style={{ marginBottom: 0 }}>
-                  <Input.TextArea rows={2} />
-                </Form.Item>
-              </Form>
-            </Col>
-          </Row>
+        ) : hoanthanhOrder ? (
+          <>
+            <div style={{ marginBottom: 14, padding: '8px 12px', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
+              <Text strong style={{ fontSize: 14 }}>{hoanthanhOrder.items[0]?.ten_hang ?? '—'}</Text>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  KH: {hoanthanhOrder.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0).toLocaleString()} thùng
+                  {hoanthanhPlanLine?.kho1 ? ` | Khổ: ${hoanthanhPlanLine.kho1} cm` : ''}
+                  {hoanthanhPlanLine?.dai_tt ? ` | Cắt: ${hoanthanhPlanLine.dai_tt} cm` : ''}
+                  {hoanthanhPlanLine?.qccl ? ` | ${hoanthanhPlanLine.qccl}` : ''}
+                </Text>
+              </div>
+            </div>
+            <Form form={hoanthanhForm} layout="vertical" onFinish={handleHoanthanhSubmit} size="middle">
+              <Row gutter={10}>
+                <Col span={8}>
+                  <Form.Item name="ca" label="Ca" rules={[{ required: true, message: 'Chọn ca' }]}>
+                    <Select options={['Ca 1', 'Ca 2', 'Ca 3', 'Ca đêm'].map(c => ({ value: c, label: c }))} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="gio_bat_dau" label="Giờ BĐ">
+                    <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item name="gio_ket_thuc" label="Giờ KT" initialValue={dayjs()}>
+                    <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item
+                name="so_luong_thuc_te"
+                label="Số lượng thực tế (thùng)"
+                rules={[{ required: true, message: 'Nhập SL thực tế' }]}
+                initialValue={hoanthanhOrder.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)}
+              >
+                <InputNumber min={0} style={{ width: '100%' }} size="large" />
+              </Form.Item>
+              <Row gutter={10}>
+                <Col span={12}>
+                  <Form.Item name="so_luong_loi" label="Phôi lỗi (nếu có)">
+                    <InputNumber min={0} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item name="ghi_chu" label="Ghi chú" style={{ marginBottom: 0 }}>
+                <Input.TextArea rows={2} />
+              </Form.Item>
+            </Form>
+          </>
         ) : null}
       </Modal>
 
@@ -1025,7 +935,7 @@ export default function MaySongPage() {
                   </Col>
                   <Col span={10}>
                     <Text type="secondary" style={{ fontSize: 10 }}>QCCL / CÁN LẰN</Text>
-                    <div><Text style={{ fontSize: 12 }}>{oi?.qccl ?? '—'}</Text></div>
+                    <div><Text style={{ fontSize: 12 }}>{inTemState.ke_hoach_qccl || '—'}</Text></div>
                   </Col>
                 </Row>
                 {/* 3 ô số liệu chính */}
