@@ -736,6 +736,128 @@ export async function printProductionTag(data: any) {
 }
 
 /**
+ * In Tem nhận dạng theo lô (N pallet) — mỗi pallet 1 tờ A5, in 1 lần.
+ */
+export async function printProductionTagBatch(data: any, totalPallets: number) {
+  if (totalPallets < 1) return
+  const qrDataUrl = await QRCode.toDataURL(data.so_lenh || 'N/A', { margin: 1 })
+
+  const makeTable = (ghiChu: string) => `<table>
+  <colgroup>
+    <col style="width:12%"><col style="width:17%"><col style="width:12%">
+    <col style="width:17%"><col style="width:13%"><col style="width:29%">
+  </colgroup>
+  <tr>
+    <td colspan="5" class="hdr">TEM NHẬN DẠNG</td>
+    <td rowspan="4" class="qr"><img src="${qrDataUrl}"><div class="qr-num">${data.so_lenh || ''}</div></td>
+  </tr>
+  <tr>
+    <td class="lbl" style="height:38px">KHÁCH<br>HÀNG</td>
+    <td colspan="2" class="vxl">${data.ten_khach_hang || ''}</td>
+    <td class="lbl">NGÀY GIAO<br>VỀ CỦ CHI</td>
+    <td class="vmd">${data.ngay_giao_cu_chi || ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">SỐ ĐH</td>
+    <td class="val">${data.so_don_hang || ''}</td>
+    <td rowspan="2" class="lbl">LOẠI /<br>SÓNG</td>
+    <td rowspan="2" class="vlg">${data.loai_sp || ''}</td>
+    <td class="vxl">${data.song || ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">SỐ PO KH</td>
+    <td class="val">${data.so_po_kh || ''}</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td class="lbl">XƯỞNG<br>SX</td>
+    <td class="vlg">${data.phan_xuong || 'Nam Phương'}</td>
+    <td class="lbl">CÁN LẰN<br>(QCCL)</td>
+    <td class="vmd" style="font-size:13px;line-height:1.6">${(data.qccl || '').split('+').join('<br>')}</td>
+    <td class="lbl">Cán<br>màng</td>
+    <td class="lbl">Chống<br>thấm</td>
+  </tr>
+  <tr>
+    <td class="lbl">NSX MÁY<br>SÓNG</td>
+    <td class="val" style="text-align:center">${data.ngay_chay_song || ''}</td>
+    <td class="lbl">NGÀY GIAO<br>CHO KH</td>
+    <td class="vlg" style="font-size:20px">${data.ngay_giao_kh || ''}</td>
+    <td class="val" style="text-align:center">${data.can_mang || 'Không'}</td>
+    <td class="val" style="text-align:center">${data.chong_tham || 'Không'}</td>
+  </tr>
+  <tr>
+    <td class="lbl">CÔNG<br>ĐOẠN SX</td>
+    <td colspan="3" class="vlg">${data.cong_doan || ''}</td>
+    <td colspan="2" class="vmd">+ 0</td>
+  </tr>
+  <tr>
+    <td class="lbl">TÊN SẢN<br>PHẨM</td>
+    <td colspan="5" class="vxl" style="font-size:${
+      (data.ten_san_pham || '').length > 60 ? 11 :
+      (data.ten_san_pham || '').length > 40 ? 13 :
+      (data.ten_san_pham || '').length > 25 ? 15 : 18
+    }px;height:52px;line-height:1.4;white-space:normal;word-break:break-word">${data.ten_san_pham || ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">SL TẤM<br>LỚN</td>
+    <td colspan="5" class="vxl">${data.sl_tam_lon || ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">SL TẤM<br>NHỎ</td>
+    <td colspan="5" class="vxl">${data.sl_tam_nho || ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">SL THÙNG</td>
+    <td colspan="5" class="v2xl" style="font-size:28px">${data.sl_thung || ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">BỘ PHẬN</td>
+    <td colspan="5" class="vmd" style="height:32px">${data.bo_phan || ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">GHI CHÚ</td>
+    <td colspan="5" class="val">${ghiChu}</td>
+  </tr>
+</table>`
+
+  const css = `
+    @page { size: A5 portrait; margin: 5mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    .pg { page-break-after: always; }
+    .pg:last-child { page-break-after: auto; }
+    table { width: 100%; border-collapse: collapse; border: 2px solid #000; table-layout: fixed; }
+    td { border: 1px solid #000; padding: 3px 5px; vertical-align: middle; word-break: break-word; }
+    .hdr  { font-size: 26px; font-weight: bold; letter-spacing: 3px; text-align: center;
+            background: #dcdcdc; padding: 7px 4px; }
+    .lbl  { font-size: 9px; font-weight: bold; text-transform: uppercase; text-align: center;
+            background: #f0f0f0; line-height: 1.4; color: #000; }
+    .val  { font-size: 13px; }
+    .vmd  { font-size: 15px; font-weight: bold; text-align: center; }
+    .vlg  { font-size: 19px; font-weight: bold; text-align: center; }
+    .vxl  { font-size: 22px; font-weight: bold; text-align: center; }
+    .v2xl { font-size: 26px; font-weight: bold; text-align: center; }
+    .qr   { text-align: center; vertical-align: middle; padding: 4px; }
+    .qr img { width: 108px; height: 108px; display: block; margin: 0 auto 3px; }
+    .qr-num { font-size: 10px; font-weight: bold; }
+  `
+
+  const pages = Array.from({ length: totalPallets }, (_, i) => {
+    const ghiChu = `Pallet ${i + 1}/${totalPallets}${data.ghi_chu ? ' | ' + data.ghi_chu : ''}`
+    return `<div class="pg">${makeTable(ghiChu)}</div>`
+  }).join('\n')
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Tem nhan dang</title><style>${css}</style></head><body>${pages}</body></html>`
+
+  const win = window.open('', '_blank')
+  if (!win) return
+  win.document.write(html)
+  win.document.close()
+  win.focus()
+  setTimeout(() => { win.print(); win.close() }, 300)
+}
+
+/**
  * Smart Print PDF: Lấy template HTML từ DB và render dữ liệu.
  * @param ma_mau Mã mẫu in
  * @param data Object chứa các biến mapping {{key}} -> value

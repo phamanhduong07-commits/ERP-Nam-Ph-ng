@@ -8,6 +8,7 @@ export interface UserInfo {
   role: string
   phan_xuong: string | null
   machine_id: number | null
+  permissions?: string[]
 }
 
 export interface TokenResponse {

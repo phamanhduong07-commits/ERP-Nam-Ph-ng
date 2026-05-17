@@ -182,6 +182,7 @@ export default function MobileTrackingPage() {
     trackMutation.mutate({
       production_order_id: currentOrder?.production_order_id ?? 0,
       machine_id: selectedMachine.id,
+      phieu_in_id: currentOrder?.id ?? undefined,
       event_type: eventType,
       printer_user_id: workerSession?.printer_user_id ?? undefined,
       ...extraData
@@ -192,6 +193,7 @@ export default function MobileTrackingPage() {
     trackMutation.mutate({
       production_order_id: currentOrder?.production_order_id ?? 0,
       machine_id: selectedMachine!.id,
+      phieu_in_id: currentOrder?.id ?? undefined,
       event_type: 'stop',
       ghi_chu: reason
     })
@@ -202,6 +204,7 @@ export default function MobileTrackingPage() {
     trackMutation.mutate({
       production_order_id: currentOrder?.production_order_id ?? 0,
       machine_id: selectedMachine!.id,
+      phieu_in_id: currentOrder?.id ?? undefined,
       event_type: 'complete',
       ...values
     })

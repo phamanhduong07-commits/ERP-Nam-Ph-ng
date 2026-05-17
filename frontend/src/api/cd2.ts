@@ -28,6 +28,7 @@ export interface TrackPayload {
   production_order_id: number
   so_lsx?: string
   machine_id: number
+  phieu_in_id?: number
   event_type: 'start' | 'stop' | 'resume' | 'complete' | 'error'
   quantity_ok?: number
   quantity_loi?: number

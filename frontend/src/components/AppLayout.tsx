@@ -33,26 +33,20 @@ type RawMenuItem = {
 function filterByRole(items: RawMenuItem[], role: string, userPermissions: string[] = []): object[] {
   return items
     .filter(item => {
-      // Admin luôn thấy toàn bộ menu
+      // Admin luôn thấy tất cả
       if (role === 'ADMIN' || role === 'admin') return true
 
-      const hasRoleMatch = !item.roles || item.roles.includes(role)
-
-      // Nếu menu định nghĩa permissions VÀ user đã có permissions từ Ma trận
-      // → kiểm tra ĐỒNG THỜI roles và permissions
-      // Nếu user chưa có permissions (Ma trận chưa cấu hình) → chỉ lọc theo roles
-      if (item.permissions && item.permissions.length > 0 && userPermissions.length > 0) {
-        const hasPermMatch = item.permissions.some(p => userPermissions.includes(p))
-        return hasRoleMatch && hasPermMatch
+      // 1 rule duy nhất: nếu menu có permissions → phải có trong Ma trận mới hiện
+      if (item.permissions && item.permissions.length > 0) {
+        return item.permissions.some(p => userPermissions.includes(p))
       }
 
-      return hasRoleMatch
+      // Không định nghĩa permissions (VD: Dashboard, Trợ lý AI) → hiện
+      return true
     })
     .map(({ roles: _roles, permissions: _perms, children, ...rest }) => ({
       ...rest,
-      ...(children
-        ? { children: filterByRole(children, role, userPermissions) }
-        : {}),
+      ...(children ? { children: filterByRole(children, role, userPermissions) } : {}),
     }))
     .filter(item => {
       const c = (item as any).children
@@ -79,7 +73,6 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       key: 'ban-hang',
       icon: <ShoppingCartOutlined />,
       label: 'Bán hàng',
-      roles: BAN_HANG,
       permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve'],
       children: [
         { key: '/quotes', label: <Link to="/quotes">Báo giá</Link> },
@@ -94,7 +87,6 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       key: 'san-xuat',
       icon: <ShopOutlined />,
       label: 'Sản xuất',
-      roles: SAN_XUAT_ALL,
       permissions: ['production_order.view', 'production_order.create', 'production_order.edit'],
       children: [
         { key: '/production/orders', label: <Link to="/production/orders">Lệnh sản xuất</Link>, roles: SAN_XUAT_FULL },
@@ -120,18 +112,21 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
           key: 'cd2-group',
           label: '🖨 Công đoạn 2 (CD2)',
           children: [
-            { key: '/production/cd2/dashboard', label: <Link to="/production/cd2/dashboard">📈 Dashboard</Link>, roles: SAN_XUAT_FULL },
-            { key: '/production/cd2', label: <Link to="/production/cd2">🗂 Kanban máy in</Link> },
-            { key: '/production/cd2/may-in', label: <Link to="/production/cd2/may-in">🖨 Queue máy in</Link> },
-            { key: '/production/cd2/scan', label: <Link to="/production/cd2/scan">📊 Scan sản lượng</Link> },
-            { key: '/production/cd2/mobile-tracking', label: <Link to="/production/cd2/mobile-tracking">📱 Báo cáo máy (Mobile)</Link> },
-            { key: '/cd2/machine-login', label: <Link to="/cd2/machine-login">🔑 Đăng nhập máy (Công nhân)</Link> },
-            { key: '/production/cd2/scan-history', label: <Link to="/production/cd2/scan-history">📋 Lịch sử scan</Link> },
-            { key: '/production/cd2/history', label: <Link to="/production/cd2/history">📑 Lịch sử phiếu in</Link> },
-            { key: '/production/cd2/dhcho2', label: <Link to="/production/cd2/dhcho2">🔧 Chờ định hình</Link> },
-            { key: '/production/cd2/sauin-kanban', label: <Link to="/production/cd2/sauin-kanban">🏭 Kanban sau in</Link> },
-            { key: '/production/cd2/shift', label: <Link to="/production/cd2/shift">⏰ Quản lý ca</Link>, roles: SAN_XUAT_FULL },
-            { key: '/production/cd2/config', label: <Link to="/production/cd2/config">⚙ Cấu hình CD2</Link>, roles: ADMIN_GD },
+            // ── Tổ trưởng ───────────────────────────────────────────────────
+            { key: '/production/cd2/dashboard',   label: <Link to="/production/cd2/dashboard">📈 Dashboard</Link>, roles: SAN_XUAT_FULL },
+            { key: '/production/cd2',             label: <Link to="/production/cd2">🗂 Kanban máy in</Link> },
+            { key: '/production/cd2/sauin-kanban',label: <Link to="/production/cd2/sauin-kanban">🏭 Kanban sau in</Link> },
+            { key: '/production/cd2/may-in',      label: <Link to="/production/cd2/may-in">📋 Queue máy in</Link> },
+            { key: '/production/cd2/history',     label: <Link to="/production/cd2/history">📑 Lịch sử phiếu in</Link> },
+            // ── Công nhân ───────────────────────────────────────────────────
+            { key: '/production/cd2/worker',      label: <Link to="/production/cd2/worker">👷 Máy in của tôi</Link> },
+            { key: '/cd2/machine-login',          label: <Link to="/cd2/machine-login">🔑 Đăng nhập máy</Link> },
+            { key: '/production/cd2/scan',        label: <Link to="/production/cd2/scan">📊 Scan sản lượng</Link> },
+            { key: '/production/cd2/mobile-tracking', label: <Link to="/production/cd2/mobile-tracking">📱 Mobile (kiosk)</Link> },
+            { key: '/production/cd2/scan-history',label: <Link to="/production/cd2/scan-history">🔍 Lịch sử scan</Link> },
+            // ── Quản trị ────────────────────────────────────────────────────
+            { key: '/production/cd2/shift',       label: <Link to="/production/cd2/shift">⏰ Quản lý ca</Link>, roles: SAN_XUAT_FULL },
+            { key: '/production/cd2/config',      label: <Link to="/production/cd2/config">⚙ Cấu hình CD2</Link>, roles: ADMIN_GD },
           ],
         },
       ],
@@ -140,7 +135,6 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       key: 'kho',
       icon: <FileTextOutlined />,
       label: 'Kho',
-      roles: KHO_ROLES,
       permissions: ['inventory.view', 'inventory.import', 'inventory.export', 'inventory.transfer', 'inventory.adjust'],
       children: [
         { key: '/warehouse/theo-xuong', label: <Link to="/warehouse/theo-xuong">Kho theo xưởng</Link> },
@@ -165,7 +159,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       key: 'mua-hang',
       icon: <ShopOutlined />,
       label: 'Mua hàng',
-      roles: MUA_HANG,
+      permissions: ['purchase.import', 'inventory.import'],
       children: [
         { key: '/purchasing/du-bao-nhu-cau', label: <Link to="/purchasing/du-bao-nhu-cau">Dự báo nhu cầu</Link> },
         { key: '/purchasing/ymh', label: <Link to="/purchasing/ymh">Yêu cầu mua hàng (YMH)</Link> },
@@ -184,7 +178,6 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       key: 'ke-toan-tai-chinh',
       icon: <AccountBookOutlined />,
       label: 'Kế toán - Tài chính',
-      roles: KE_TOAN_ROLES,
       permissions: ['accounting.import'],
       children: [
         {
@@ -218,7 +211,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       key: 'hrm-group',
       icon: <TeamOutlined />,
       label: 'Nhân sự (HRM)',
-      roles: ADMIN_GD,
+      permissions: ['user.view', 'user.create', 'user.edit', 'permission.view', 'permission.manage'],
       children: [
         { key: '/hr/employees', label: <Link to="/hr/employees">Hồ sơ nhân viên</Link> },
         { key: '/hr/departments', label: <Link to="/hr/departments">Cơ cấu tổ chức</Link> },
@@ -268,30 +261,30 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       label: 'Danh mục',
       permissions: ['master.users.view', 'master.products.view', 'master.customers.view', 'master.suppliers.view', 'master.materials.view', 'master.other.view', 'customer.view', 'customer.create'],
       children: [
-        { key: '/master/users', label: <Link to="/master/users">Tài khoản hệ thống</Link> },
-        { key: '/master/customers', label: <Link to="/master/customers">Danh mục khách hàng</Link> },
-        { key: '/danhmuc/phap-nhan', label: <Link to="/danhmuc/phap-nhan">Danh mục pháp nhân</Link> },
-        { key: '/master/phan-xuong', label: <Link to="/master/phan-xuong">Nơi sản xuất (Phân xưởng)</Link> },
-        { key: '/master/material-groups', label: <Link to="/master/material-groups">Danh mục nhóm nguyên liệu</Link> },
-        { key: '/master/products', label: <Link to="/master/products">Danh mục hàng hóa</Link> },
-        { key: '/danhmuc/cau-truc', label: <Link to="/danhmuc/cau-truc">Kết cấu thông dụng</Link> },
-        { key: '/master/suppliers', label: <Link to="/master/suppliers">Danh mục nhà cung cấp</Link> },
-        { key: '/master/paper-materials', label: <Link to="/master/paper-materials">Danh mục nguyên liệu giấy</Link> },
-        { key: '/master/vi-tri', label: <Link to="/master/vi-tri">Danh mục vị trí</Link> },
-        { key: '/master/other-materials', label: <Link to="/master/other-materials">Danh mục nguyên liệu khác</Link> },
-        { key: '/master/xe', label: <Link to="/master/xe">Danh mục xe</Link> },
-        { key: '/master/tai-xe', label: <Link to="/master/tai-xe">Danh mục tài xế</Link> },
-        { key: '/master/lo-xe', label: <Link to="/master/lo-xe">Danh mục lơ xe</Link> },
-        { key: '/master/warehouses', label: <Link to="/master/warehouses">Danh mục kho</Link> },
-        { key: '/master/bank-accounts', label: <Link to="/master/bank-accounts">Tài khoản ngân hàng</Link> },
-        { key: '/master/don-gia-van-chuyen', label: <Link to="/master/don-gia-van-chuyen">Đơn giá vận chuyển</Link> },
-        { key: '/master/don-vi-tinh', label: <Link to="/master/don-vi-tinh">Đơn vị tính</Link> },
-        { key: '/master/phuong-xa', label: <Link to="/master/phuong-xa">Danh mục phường xã</Link> },
-        { key: '/master/tinh-thanh', label: <Link to="/master/tinh-thanh">Danh mục tỉnh thành phố</Link> },
-        { key: '/master/indirect-costs', label: <Link to="/master/indirect-costs">Chi phí gián tiếp</Link> },
-        { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công / Tỷ lệ lãi</Link> },
-        { key: '/reports/import-history', label: <Link to="/reports/import-history">Lịch sử Import</Link> },
-        { key: '/master/print-templates', label: <Link to="/master/print-templates">⚙ Cấu hình biểu mẫu in</Link> },
+        { key: '/master/users', label: <Link to="/master/users">Tài khoản hệ thống</Link>, permissions: ['master.users.view', 'master.users.manage', 'user.view'] },
+        { key: '/master/customers', label: <Link to="/master/customers">Danh mục khách hàng</Link>, permissions: ['master.customers.view', 'master.customers.manage', 'customer.view', 'customer.create'] },
+        { key: '/danhmuc/phap-nhan', label: <Link to="/danhmuc/phap-nhan">Danh mục pháp nhân</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/phan-xuong', label: <Link to="/master/phan-xuong">Nơi sản xuất (Phân xưởng)</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/material-groups', label: <Link to="/master/material-groups">Danh mục nhóm nguyên liệu</Link>, permissions: ['master.materials.view', 'master.materials.manage'] },
+        { key: '/master/products', label: <Link to="/master/products">Danh mục hàng hóa</Link>, permissions: ['master.products.view', 'master.products.manage', 'product.view', 'product.create'] },
+        { key: '/danhmuc/cau-truc', label: <Link to="/danhmuc/cau-truc">Kết cấu thông dụng</Link>, permissions: ['master.products.view', 'master.products.manage'] },
+        { key: '/master/suppliers', label: <Link to="/master/suppliers">Danh mục nhà cung cấp</Link>, permissions: ['master.suppliers.view', 'master.suppliers.manage'] },
+        { key: '/master/paper-materials', label: <Link to="/master/paper-materials">Danh mục nguyên liệu giấy</Link>, permissions: ['master.materials.view', 'master.materials.manage'] },
+        { key: '/master/vi-tri', label: <Link to="/master/vi-tri">Danh mục vị trí</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/other-materials', label: <Link to="/master/other-materials">Danh mục nguyên liệu khác</Link>, permissions: ['master.materials.view', 'master.materials.manage'] },
+        { key: '/master/xe', label: <Link to="/master/xe">Danh mục xe</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/tai-xe', label: <Link to="/master/tai-xe">Danh mục tài xế</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/lo-xe', label: <Link to="/master/lo-xe">Danh mục lơ xe</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/warehouses', label: <Link to="/master/warehouses">Danh mục kho</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/bank-accounts', label: <Link to="/master/bank-accounts">Tài khoản ngân hàng</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/don-gia-van-chuyen', label: <Link to="/master/don-gia-van-chuyen">Đơn giá vận chuyển</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/don-vi-tinh', label: <Link to="/master/don-vi-tinh">Đơn vị tính</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/phuong-xa', label: <Link to="/master/phuong-xa">Danh mục phường xã</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/tinh-thanh', label: <Link to="/master/tinh-thanh">Danh mục tỉnh thành phố</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/indirect-costs', label: <Link to="/master/indirect-costs">Chi phí gián tiếp</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công / Tỷ lệ lãi</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/reports/import-history', label: <Link to="/reports/import-history">Lịch sử Import</Link>, permissions: ['master.import', 'master.other.manage'] },
+        { key: '/master/print-templates', label: <Link to="/master/print-templates">⚙ Cấu hình biểu mẫu in</Link>, permissions: ['master.other.manage'] },
       ],
     },
     {

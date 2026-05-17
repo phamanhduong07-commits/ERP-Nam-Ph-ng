@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Form, Input, Button, Card, Typography, Alert, Space, Modal, Divider } from 'antd'
-import { UserOutlined, LockOutlined, ScanOutlined } from '@ant-design/icons'
+import { Form, Input, Button, Card, Typography, Alert, Space, Modal, Divider, Select } from 'antd'
+import { UserOutlined, LockOutlined, ScanOutlined, CrownOutlined, DollarOutlined, DatabaseOutlined, SettingOutlined } from '@ant-design/icons'
 import { authApi } from '../api/auth'
 import { useAuthStore } from '../store/auth'
 import namPhuongLogo from '../assets/nam-phuong-logo-cropped.png'
@@ -13,6 +13,12 @@ export default function Login() {
   const { setAuth } = useAuthStore()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [form] = Form.useForm()
+
+  const handleQuickLogin = (u: string, p: string) => {
+    form.setFieldsValue({ username: u, password: p })
+    form.submit()
+  }
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true)
@@ -57,6 +63,7 @@ export default function Login() {
         </Space>
 
         <Form
+          form={form}
           name="login"
           onFinish={onFinish}
           style={{ marginTop: 24 }}
@@ -128,6 +135,51 @@ export default function Login() {
           >
             Tải App về điện thoại
           </Button>
+        </div>
+
+        <Divider style={{ margin: '12px 0' }}>Đăng nhập nhanh (Test)</Divider>
+        <div style={{ paddingBottom: 10 }}>
+          <Select 
+            showSearch
+            placeholder="Chọn chức vụ / phòng ban để test..." 
+            style={{ width: '100%', height: 40 }}
+            onChange={(val) => handleQuickLogin(val, '123456')}
+            options={[
+              { label: 'Hệ thống & BGD', options: [
+                { label: 'Administrator', value: 'ADMIN' },
+                { label: 'Giám đốc - Ban Giám Đốc', value: 'BGD_GIAM_DOC' },
+                { label: 'Tổ trưởng - Ban Giám Đốc', value: 'BGD_TO_TRUONG' },
+                { label: 'Nhân viên - Ban Giám Đốc', value: 'BGD_NHAN_VIEN' },
+              ]},
+              { label: 'Kinh Doanh & Sale Admin', options: [
+                { label: 'Trưởng phòng Sale Admin', value: 'TRUONG_PHONG_SALE_ADMIN' },
+                { label: 'Tổ trưởng - Sale Admin', value: 'SALE_ADMIN_TO_TRUONG' },
+                { label: 'Sale Admin', value: 'SALE_ADMIN' },
+                { label: 'Nhân viên - Sale Admin', value: 'SALE_ADMIN_NHAN_VIEN' },
+                { label: 'Tổ trưởng - Phòng Kinh Doanh', value: 'KINH_DOANH_TO_TRUONG' },
+                { label: 'Nhân viên - Phòng Kinh Doanh', value: 'KINH_DOANH_NHAN_VIEN' },
+              ]},
+              { label: 'Kế Toán', options: [
+                { label: 'Kế toán trưởng', value: 'KE_TOAN_TRUONG' },
+                { label: 'Kế toán công nợ', value: 'KE_TOAN_CONG_NO' },
+                { label: 'Tổ trưởng - Phòng Kế Toán', value: 'KETOAN_TO_TRUONG' },
+                { label: 'Nhân viên - Phòng Kế Toán', value: 'KETOAN_NHAN_VIEN' },
+              ]},
+              { label: 'Sản Xuất & Kho', options: [
+                { label: 'Giám sát - Khối Sản Xuất', value: 'SAN_XUAT_GIAM_SAT' },
+                { label: 'Tổ trưởng - Khối Sản Xuất', value: 'SAN_XUAT_TO_TRUONG' },
+                { label: 'Thợ - Khối Sản Xuất', value: 'SAN_XUAT_THO' },
+                { label: 'Tổ trưởng - Kho', value: 'KHO_TO_TRUONG' },
+                { label: 'Nhân viên - Kho', value: 'KHO_NHAN_VIEN' },
+              ]},
+              { label: 'Nhân Sự & Thiết Kế', options: [
+                { label: 'Tổ trưởng - Phòng Nhân Sự', value: 'NHAN_SU_TO_TRUONG' },
+                { label: 'Nhân viên - Phòng Nhân Sự', value: 'NHAN_SU_NHAN_VIEN' },
+                { label: 'Tổ trưởng - Phòng Thiết Kế', value: 'THIET_KE_TO_TRUONG' },
+                { label: 'Nhân viên - Phòng Thiết Kế', value: 'THIET_KE_NHAN_VIEN' },
+              ]}
+            ]}
+          />
         </div>
 
         <Text type="secondary" style={{ display: 'block', textAlign: 'center', fontSize: 12 }}>

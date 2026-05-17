@@ -58,6 +58,8 @@ const ShiftPage = lazy(() => import('./pages/production/ShiftPage'))
 const ConfigPage = lazy(() => import('./pages/production/ConfigPage'))
 const MobileTrackingPage = lazy(() => import('./pages/production/MobileTrackingPage'))
 const MachineLoginPage = lazy(() => import('./pages/production/MachineLoginPage'))
+const CD2WorkerPage = lazy(() => import('./pages/production/CD2WorkerPage'))
+const MaySongPage = lazy(() => import('./pages/production/MaySongPage'))
 const InventoryPage = lazy(() => import('./pages/warehouse/InventoryPage'))
 const KhoNVLPage = lazy(() => import('./pages/warehouse/KhoNVLPage'))
 const KhoTheoXuongPage = lazy(() => import('./pages/warehouse/KhoTheoXuongPage'))
@@ -141,6 +143,7 @@ const RewardDisciplinePage = lazy(() => import('./pages/hr/RewardDisciplinePage'
 const EmployeeMobilePortal = lazy(() => import('./pages/hr/EmployeeMobilePortal'))
 const PermissionMatrixPage = lazy(() => import('./pages/hr/PermissionMatrixPage'))
 const PrintTemplatePage = lazy(() => import('./pages/master/PrintTemplatePage'))
+const DocsPage = lazy(() => import('./pages/docs/DocsPage'))
 
 // Reports - Workshop
 const WorkshopPNLPage = lazy(() => import('./pages/reports/WorkshopPNLPage'))
@@ -206,6 +209,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/production/cd2/mobile-tracking" element={<WorkerOrPrivateRoute><ErrorBoundary><MobileTrackingPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
+          <Route path="/production/may-song" element={<WorkerOrPrivateRoute><ErrorBoundary><MaySongPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
           <Route path="/cd2/machine-login" element={<ErrorBoundary><MachineLoginPage /></ErrorBoundary>} />
           <Route
             path="/"
@@ -267,6 +271,7 @@ export default function App() {
             <Route path="production/cd2/history" element={<PhieuInHistoryPage />} />
             <Route path="production/cd2/dhcho2" element={<DinhHinhPage />} />
             <Route path="production/cd2/sauin-kanban" element={<SauInKanbanPage />} />
+            <Route path="production/cd2/worker" element={<CD2WorkerPage />} />
             <Route path="production/cd2/shift" element={<ShiftPage />} />
             <Route path="production/cd2/config" element={<ConfigPage />} />
             <Route path="warehouse/kho-nvl" element={<ErrorBoundary><KhoNVLPage /></ErrorBoundary>} />
@@ -351,6 +356,7 @@ export default function App() {
             <Route path="hr/permission-matrix" element={<ErrorBoundary><PermissionMatrixPage /></ErrorBoundary>} />
             <Route path="agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
             <Route path="master/print-templates" element={<ErrorBoundary><PrintTemplatePage /></ErrorBoundary>} />
+            <Route path="docs" element={<ErrorBoundary><DocsPage /></ErrorBoundary>} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

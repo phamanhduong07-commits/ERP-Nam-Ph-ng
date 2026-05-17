@@ -27,6 +27,7 @@ class UserInfo(BaseModel):
     role: str
     phan_xuong: str | None
     machine_id: int | None
+    permissions: list[str] = []
 
     class Config:
         from_attributes = True

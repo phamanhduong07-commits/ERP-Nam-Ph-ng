@@ -1321,7 +1321,6 @@ export default function PhieuPhoiPage() {
           items={[
             { key: 'nhap', label: <span>📝 Phiếu nhập phôi</span>, children: <TabNhap /> },
             { key: 'xuat', label: <span>📤 Phiếu xuất phôi</span>, children: <TabXuat /> },
-            { key: 'theo-doi', label: <span>📊 Theo dõi đơn hàng</span>, children: <TabTheoDoi /> },
           ]}
         />
       </Card>

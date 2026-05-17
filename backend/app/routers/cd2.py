@@ -513,6 +513,7 @@ def list_phieu_in(
     search: str = Query(default=""),
     trang_thai: Optional[str] = Query(default=None),
     phan_xuong_id: Optional[int] = Query(default=None),
+    may_in_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -526,6 +527,8 @@ def list_phieu_in(
         q = q.filter(PhieuIn.trang_thai == trang_thai)
     if phan_xuong_id is not None:
         q = q.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
+    if may_in_id is not None:
+        q = q.filter(PhieuIn.may_in_id == may_in_id)
     return [_to_dict(p) for p in q.order_by(PhieuIn.created_at.desc()).limit(200).all()]
 
 
@@ -774,7 +777,7 @@ async def move_phieu(
     phieu_id: int,
     body: MoveBody,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Drag-drop: cập nhật cột (trang_thai + may_in_id) và sort_order."""
     if body.trang_thai not in VALID_STATES:
@@ -792,6 +795,7 @@ async def move_phieu(
         p.gio_bat_dau_in = datetime.utcnow()
     if body.trang_thai == 'hoan_thanh' and prev_state != 'hoan_thanh':
         p.gio_hoan_thanh = datetime.utcnow()
+        _auto_nhap_thanh_pham(db, p, current_user.id)
     db.commit()
     # Phat tin hieu WebSocket cho Dashboard
     await sio.emit("machine_status_update", {
@@ -1539,29 +1543,20 @@ async def track_production(data: TrackPayload, db: Session = Depends(get_db), cu
                 if not p.gio_bat_dau_in: p.gio_bat_dau_in = datetime.utcnow()
                 p.trang_thai = 'dang_in'
             elif data.event_type == 'complete':
-                p.gio_hoan_thanh = datetime.utcnow()
-                p.trang_thai = 'hoan_thanh'
+                # Kết thúc in → chờ định hình (KHÔNG nhảy thẳng hoan_thanh)
+                p.trang_thai = 'cho_dinh_hinh'
+                p.may_in_id = None
                 p.so_luong_in_ok = (p.so_luong_in_ok or 0) + (data.quantity_ok or 0)
                 p.so_luong_loi = (p.so_luong_loi or 0) + (data.quantity_loi or 0)
     
     db.commit()
-    # Phat tin hieu WebSocket cho Dashboard cap nhat tuc thi
-    await sio.emit("machine_status_update", {
-        "machine_id": data.machine_id,
-        "event_type": data.event_type,
-        "production_order_id": data.production_order_id,
-        "operator": current_user.ho_ten if current_user else "N/A"
-    })
     db.refresh(log)
-    
-    # Phát tín hiệu WebSocket cho Dashboard cập nhật tức thì
     await sio.emit("machine_status_update", {
         "machine_id": data.machine_id,
         "event_type": data.event_type,
         "production_order_id": data.production_order_id,
         "operator": current_user.ho_ten if current_user else "N/A"
     })
-    
     return {"ok": True, "log_id": log.id}
 
 

@@ -1,0 +1,21 @@
+import { useState } from 'react'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import {
+  Layout, Menu, Avatar, Dropdown, Typography, Space, theme, Badge, Button,
+} from 'antd'
+import {
+  DashboardOutlined, ShoppingCartOutlined, ShoppingOutlined, DatabaseOutlined,
+  TeamOutlined, UserOutlined, LogoutOutlined, SettingOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, ToolOutlined, ClockCircleOutlined,
+  AccountBookOutlined, RobotOutlined, BarChartOutlined, ShopOutlined, BankOutlined,
+  ThunderboltOutlined, FileTextOutlined, MobileOutlined, CarOutlined,
+  SolutionOutlined, TrophyOutlined, CrownOutlined, DollarOutlined,
+} from '@ant-design/icons'
+import { useQuery } from '@tanstack/react-query'
+import { useAuthStore } from '../store/auth'
+import { authApi } from '../api/auth'
+import { message } from 'antd'
+import { productionPlansApi } from '../api/productionPlans'
+const namPhuongLogo = '/logo_namphuong.png'
+
+const { Header, Sider, Content } = Layout

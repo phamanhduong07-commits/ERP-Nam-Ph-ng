@@ -159,6 +159,11 @@ class SalesOrderListItem(BaseModel):
     created_by_name: str | None = None
     created_at: datetime
 
+    @field_validator('tong_tien_sau_giam', 'tong_tien', mode='before')
+    @classmethod
+    def coerce_none_decimal(cls, v: object) -> object:
+        return Decimal(0) if v is None else v
+
     class Config:
         from_attributes = True
 

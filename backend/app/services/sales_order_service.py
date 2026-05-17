@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload, subqueryload
 from app.models.sales import QuoteItem, SalesOrder, SalesOrderItem
@@ -82,7 +83,7 @@ class SalesOrderService:
                 trang_thai=o.trang_thai,
                 ngay_giao_hang=o.ngay_giao_hang,
                 tong_tien=o.tong_tien,
-                tong_tien_sau_giam=o.tong_tien_sau_giam,
+                tong_tien_sau_giam=o.tong_tien_sau_giam or Decimal(0),
                 so_dong=len(o.items),
                 created_by_name=o.creator.ho_ten if o.creator else None,
                 created_at=o.created_at,

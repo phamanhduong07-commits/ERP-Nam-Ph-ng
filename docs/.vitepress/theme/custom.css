@@ -1,0 +1,72 @@
+/* CSS Chia cột tùy chỉnh cho Hướng dẫn sử dụng */
+
+/* 1. ÉP VITEPRESS SỬ DỤNG 100% DIỆN TÍCH MÀN HÌNH */
+.VPDoc {
+  width: 100% !important;
+  padding: 32px 32px !important; /* Chỉ chừa một chút viền 32px cho đẹp */
+}
+
+.VPDoc .container,
+.VPDoc .content,
+.VPDoc .content-container,
+.vp-doc {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+/* 2. Cấu trúc chia 2 cột */
+.split-layout {
+  display: grid;
+  /* Vì đã ra full màn hình, cột ảnh sẽ cực kỳ to, ta có thể dùng tỉ lệ 35 - 65 */
+  grid-template-columns: 35% 65%; 
+  gap: 48px; /* Tăng khoảng cách 2 cột cho thoáng */
+  margin-top: 32px;
+  margin-bottom: 48px;
+  align-items: flex-start;
+}
+
+.split-layout .text-col {
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.split-layout .img-col {
+  position: sticky;
+  top: 100px; /* Cố định ảnh khi cuộn chữ */
+}
+
+.split-layout .img-col img {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  border: 1px solid #e2e2e3;
+  transition: transform 0.3s ease;
+}
+
+.split-layout .img-col img:hover {
+  transform: scale(1.02);
+  cursor: zoom-in;
+  z-index: 10;
+}
+
+.split-layout .img-caption {
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+  margin-top: 12px;
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* 3. Responsive Mobile/Tablet */
+@media (max-width: 960px) {
+  .split-layout {
+    grid-template-columns: 1fr; /* Gộp thành 1 cột */
+  }
+  .split-layout .img-col {
+    position: static;
+    margin-top: 20px;
+  }
+}

@@ -30,6 +30,7 @@ def _make_user_info(user: User) -> UserInfo:
         role=user.role.ma_vai_tro,
         phan_xuong=user.phan_xuong,
         machine_id=user.machine_id,
+        permissions=[rp.permission.ma_quyen for rp in user.role.role_permissions] if user.role and hasattr(user.role, 'role_permissions') else []
     )
 
 
