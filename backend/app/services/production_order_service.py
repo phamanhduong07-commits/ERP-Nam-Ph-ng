@@ -115,6 +115,7 @@ class ProductionOrderService:
                 ten_phap_nhan=o.phap_nhan.ten_phap_nhan if o.phap_nhan else None,
                 ten_kho_sx=o.kho_sx.ten_kho if o.kho_sx else None,
                 phan_xuong_id=o.phan_xuong_id,
+                ten_phan_xuong=o.phan_xuong.ten_xuong if o.phan_xuong else None,
                 gia_ban_muc_tieu=getattr(first_item, 'gia_ban', None) if first_item else None,
                 created_by_name=o.creator.ho_ten if o.creator else None,
                 ngay_hoan_thanh_ke_hoach=o.ngay_hoan_thanh_ke_hoach,

@@ -163,6 +163,7 @@ class ProductionOrderListItem(BaseModel):
     ten_phap_nhan: str | None = None
     ten_kho_sx: str | None = None
     phan_xuong_id: int | None = None
+    ten_phan_xuong: str | None = None
     gia_ban_muc_tieu: Decimal | None = None
     created_by_name: str | None = None
     trang_thai: str
