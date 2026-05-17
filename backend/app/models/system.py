@@ -1,5 +1,7 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON
+from sqlalchemy import Column, ForeignKey, Integer, String, Text, DateTime, JSON
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 class PrintTemplate(Base):
@@ -37,3 +39,15 @@ class SystemSetting(Base):
     value = Column(Text)
     description = Column(String(255))
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AgentSession(Base):
+    """Lịch sử chat AI — chuyển từ SQLite sang PostgreSQL"""
+    __tablename__ = "agent_sessions"
+
+    session_id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    history_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    last_active: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+    )

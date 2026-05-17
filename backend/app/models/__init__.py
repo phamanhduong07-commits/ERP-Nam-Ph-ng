@@ -3,6 +3,9 @@ from app.models.master import (
     PhanXuong, Warehouse, MaterialGroup, Supplier, Customer,
     PaperMaterial, OtherMaterial, CauTrucThongDung, Product, PhapNhan,
     BankAccount,
+    # Thêm: các model trong master.py trước đây không được import → Alembic không track
+    LoXe, TaiXe, Xe, DonGiaVanChuyen,
+    DonViTinh, ViTri, TinhThanh, PhuongXa,
 )
 from app.models.ccdc import NhomCCDC, CongCuDungCu, PhieuXuatCCDC, PhieuXuatCCDCItem
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
@@ -24,7 +27,12 @@ from app.models.indirect_cost import IndirectCostItem
 from app.models.addon_rate import AddonRate
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
-from app.models.cd2 import MayIn, PhieuIn
+from app.models.cd2 import (
+    MayIn, PhieuIn,
+    # Thêm: các model cd2 trước đây không được import → Alembic không track
+    Machine, ProductionLog, PrinterUser,
+    MayScan, ScanLog, MaySauIn, ShiftCa, ShiftConfig,
+)
 from app.models.billing import SalesInvoice
 from app.models.accounting import (
     ChartOfAccounts, JournalEntry, JournalEntryLine,
@@ -37,4 +45,4 @@ from app.models.hr import (
     PayrollConfig, PayrollRun, RewardDiscipline,
 )
 from app.models.import_log import ImportLog
-from app.models.system import SystemSetting, PrintTemplate
+from app.models.system import SystemSetting, PrintTemplate, AgentSession
