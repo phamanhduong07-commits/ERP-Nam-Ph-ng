@@ -96,9 +96,16 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
   })
 
   const noiSxOptions = useMemo(() => {
-    // Lấy tất cả xưởng từ API
-    const fromApi = (phanXuongList as any[]).map((x: any) => x.ten_xuong).filter(Boolean) as string[]
-    // Bổ sung giá trị thực tế từ data (phòng khi seed chưa đủ)
+    // Ưu tiên xưởng có CD1 (KHSX chỉ thuộc về xưởng có CD1)
+    const cd1 = (phanXuongList as any[])
+      .filter((x: any) => x.cong_doan === 'cd1_cd2')
+      .map((x: any) => x.ten_xuong as string)
+      .filter(Boolean)
+    // Nếu API chưa có cong_doan → lấy tất cả
+    const fromApi = cd1.length > 0
+      ? cd1
+      : (phanXuongList as any[]).map((x: any) => x.ten_xuong).filter(Boolean) as string[]
+    // Bổ sung giá trị thực tế từ data (phòng khi DB cũ chưa có cong_doan)
     const fromData = (data?.items ?? []).map(i => i.noi_sx).filter(Boolean) as string[]
     const all = Array.from(new Set([...fromApi, ...fromData])).sort()
     return all.map(v => ({ value: v, label: v }))

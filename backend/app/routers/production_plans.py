@@ -2,7 +2,8 @@ import math
 from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, aliased
+from sqlalchemy import case
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
@@ -265,12 +266,21 @@ def list_plans(
     if trang_thai:
         q = q.filter(ProductionPlan.trang_thai == trang_thai)
     if noi_sx:
+        # PhanXuong của LSX có thể là CD2 (HM, CC) → follow phoi_tu_phan_xuong_id để ra CD1
+        _PX  = aliased(PhanXuong)   # xưởng trực tiếp của LSX
+        _PX1 = aliased(PhanXuong)   # xưởng CD1 nguồn (nếu LSX là CD2)
         matched_plan_ids = (
             db.query(ProductionPlanLine.plan_id)
             .join(ProductionOrderItem, ProductionOrderItem.id == ProductionPlanLine.production_order_item_id)
             .join(ProductionOrder, ProductionOrder.id == ProductionOrderItem.production_order_id)
-            .join(PhanXuong, PhanXuong.id == ProductionOrder.phan_xuong_id)
-            .filter(PhanXuong.ten_xuong == noi_sx)
+            .join(_PX, _PX.id == ProductionOrder.phan_xuong_id)
+            .outerjoin(_PX1, _PX1.id == _PX.phoi_tu_phan_xuong_id)
+            .filter(
+                case(
+                    (_PX.cong_doan == 'cd1_cd2', _PX.ten_xuong),
+                    else_=_PX1.ten_xuong,
+                ) == noi_sx
+            )
             .subquery()
         )
         q = q.filter(ProductionPlan.id.in_(matched_plan_ids))
@@ -287,20 +297,29 @@ def list_plans(
         .all()
     )
 
-    # Batch-query noi_sx từ phan_xuong của LSX trong plan (tránh N+1)
+    # Batch-query noi_sx: resolve CD1 xưởng (HM/CC → follow phoi_tu_phan_xuong → NT/HG)
     plan_ids = [p.id for p in plans]
     noi_sx_map: dict[int, str] = {}
     if plan_ids:
+        _PX  = aliased(PhanXuong)   # xưởng trực tiếp của LSX
+        _PX1 = aliased(PhanXuong)   # xưởng CD1 nguồn (nếu LSX là CD2)
         rows = (
-            db.query(ProductionPlanLine.plan_id, PhanXuong.ten_xuong)
+            db.query(
+                ProductionPlanLine.plan_id,
+                case(
+                    (_PX.cong_doan == 'cd1_cd2', _PX.ten_xuong),
+                    else_=_PX1.ten_xuong,
+                ).label("cd1_xuong"),
+            )
             .join(ProductionOrderItem, ProductionOrderItem.id == ProductionPlanLine.production_order_item_id)
             .join(ProductionOrder, ProductionOrder.id == ProductionOrderItem.production_order_id)
-            .join(PhanXuong, PhanXuong.id == ProductionOrder.phan_xuong_id)
+            .join(_PX, _PX.id == ProductionOrder.phan_xuong_id)
+            .outerjoin(_PX1, _PX1.id == _PX.phoi_tu_phan_xuong_id)
             .filter(ProductionPlanLine.plan_id.in_(plan_ids))
             .all()
         )
         for plan_id, xuong in rows:
-            if plan_id not in noi_sx_map:  # lấy xưởng của dòng đầu tiên
+            if plan_id not in noi_sx_map and xuong:
                 noi_sx_map[plan_id] = xuong
 
     items_resp: list[ProductionPlanListItem] = []
