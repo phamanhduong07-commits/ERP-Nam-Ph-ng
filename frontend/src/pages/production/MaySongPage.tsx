@@ -1109,11 +1109,33 @@ export default function MaySongPage() {
                   {/* Bảng tiêu thụ giấy */}
                   {paperRows.length > 0 && (
                     <div style={{ marginTop: 16, padding: '12px 16px', background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 6 }}>
-                      <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 13 }}>
-                        Tiêu thụ giấy{' '}
-                        <Text type="secondary" style={{ fontWeight: 400, fontSize: 12 }}>
-                          (tổng: <Text strong style={{ color: '#1677ff' }}>{Math.round(totalKgGiay).toLocaleString('vi-VN')} kg</Text>)
-                        </Text>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>
+                          Tiêu thụ giấy{' '}
+                          <Text type="secondary" style={{ fontWeight: 400, fontSize: 12 }}>
+                            (tổng: <Text strong style={{ color: '#1677ff' }}>{Math.round(totalKgGiay).toLocaleString('vi-VN')} kg</Text>)
+                          </Text>
+                        </span>
+                        <Button
+                          size="small"
+                          icon={<PrinterOutlined />}
+                          onClick={() => exportExcelWithTemplate(
+                            `tieu-thu-giay-${histTuNgay}-${histDenNgay}`,
+                            'Tiêu thụ giấy',
+                            [
+                              ...paperRows.map(r => ({ loai_giay: r.ten, dl_gsm: r.dl, tieu_thu_kg: Math.round(r.kg), phan_tram: totalKgGiay > 0 ? +(r.kg / totalKgGiay * 100).toFixed(1) : 0 })),
+                              { loai_giay: 'TỔNG CỘNG', dl_gsm: null, tieu_thu_kg: Math.round(totalKgGiay), phan_tram: 100 },
+                            ],
+                            [
+                              { key: 'loai_giay', label: 'Loại giấy',      width: 20 },
+                              { key: 'dl_gsm',    label: 'ĐL (g/m²)',       width: 12 },
+                              { key: 'tieu_thu_kg', label: 'Tiêu thụ (kg)', width: 14 },
+                              { key: 'phan_tram',  label: '%',               width: 8  },
+                            ],
+                          )}
+                        >
+                          Tải Excel
+                        </Button>
                       </div>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                         <thead>
