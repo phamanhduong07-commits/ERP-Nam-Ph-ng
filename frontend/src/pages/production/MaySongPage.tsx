@@ -655,10 +655,10 @@ export default function MaySongPage() {
           : '—',
     },
     {
-      title: 'SL thực tế',
+      title: 'Số thùng',
       dataIndex: 'tong_so_luong_thuc_te',
       align: 'right',
-      width: 95,
+      width: 90,
       render: (v: number) => v?.toLocaleString() ?? '—',
     },
     {
@@ -913,7 +913,7 @@ export default function MaySongPage() {
                             { key: 'ca',                      label: 'Ca',            width: 10 },
                             { key: 'gio_bat_dau',             label: 'Giờ BĐ',        width: 10 },
                             { key: 'gio_ket_thuc',            label: 'Giờ KT',        width: 10 },
-                            { key: 'tong_so_luong_thuc_te',   label: 'SL thực tế',    width: 14 },
+                            { key: 'tong_so_luong_thuc_te',   label: 'Số thùng',      width: 14 },
                             { key: 'tong_so_tam',             label: 'Tổng tấm',      width: 14 },
                             { key: 'tong_so_luong_loi',       label: 'Phôi lỗi',      width: 12 },
                             { key: 'created_by_name',         label: 'Người tạo',     width: 18 },
