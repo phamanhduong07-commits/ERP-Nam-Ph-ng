@@ -142,7 +142,7 @@ export default function CD2DashboardPage() {
           columns={[
             { title: 'Tên máy', dataIndex: 'ten_may', render: (v, r) => (
               <Space>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: r.status === 'running' ? '#52c41a' : r.status === 'stopped' ? '#f5222d' : '#d9d9d9' }} />
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: r.status === 'RUNNING' ? '#52c41a' : r.status === 'STOPPED' ? '#f5222d' : '#d9d9d9' }} />
                 <Text strong>{v}</Text>
               </Space>
             )},
@@ -151,14 +151,10 @@ export default function CD2DashboardPage() {
                 {v === 'RUNNING' ? 'ĐANG CHẠY' : v === 'STOPPED' ? 'TẠM DỪNG' : v === 'ERROR' ? 'MÁY LỖI' : 'ĐANG NGHỈ'}
               </Tag>
             )},
-            { title: 'Lệnh sản xuất', dataIndex: 'current_lsx', render: (v, r) => v ? (
-              <div>
-                <Text code>{v}</Text> <br />
-                <Text type="secondary" style={{fontSize: 11}}>{r.current_order_name}</Text>
-              </div>
+            { title: 'Lệnh sản xuất', dataIndex: 'current_order', render: v => v ? (
+              <Text code style={{ fontSize: 11 }}>{v}</Text>
             ) : '—' },
-            { title: 'Vận hành', dataIndex: 'worker' },
-            { title: 'Lý do / Ghi chú', dataIndex: 'reason', render: v => v ? <Text type="danger">{v}</Text> : '—' },
+            { title: 'Vận hành', dataIndex: 'operator', render: v => v || '—' },
             { title: 'Cập nhật cuối', dataIndex: 'last_event_time', render: v => v ? dayjs(v).fromNow() : '—' },
           ]}
         />

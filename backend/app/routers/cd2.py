@@ -849,7 +849,7 @@ def complete_printing(
 
 
 @router.post("/phieu-in/{phieu_id}/sau-in")
-def start_sau_in(
+async def start_sau_in(
     phieu_id: int,
     body: SauInBody,
     db: Session = Depends(get_db),
@@ -859,17 +859,20 @@ def start_sau_in(
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai != "cho_dinh_hinh":
+        raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'cho_dinh_hinh', hiện tại: '{p.trang_thai}'")
     p.trang_thai = "sau_in"
     if not p.gio_bat_dau_dinh_hinh:
         p.gio_bat_dau_dinh_hinh = datetime.utcnow()
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(p, k, v)
     db.commit()
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "start_sau_in", "trang_thai": "sau_in"})
     return _to_dict(_load(phieu_id, db))
 
 
 @router.post("/phieu-in/{phieu_id}/hoan-thanh")
-def finish_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def finish_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
@@ -880,6 +883,7 @@ def finish_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: Us
     p.gio_hoan_thanh_dinh_hinh = datetime.utcnow()
     _auto_nhap_thanh_pham(db, p, current_user.id)
     db.commit()
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "finish_sau_in", "trang_thai": "hoan_thanh"})
     return _to_dict(_load(phieu_id, db))
 
 
@@ -900,18 +904,21 @@ async def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depe
 
 
 @router.post("/phieu-in/{phieu_id}/bat-dau-sau-in")
-def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+async def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Bắt đầu sau in → dang_sau_in."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai != "sau_in":
+        raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'sau_in', hiện tại: '{p.trang_thai}'")
     p.trang_thai = "dang_sau_in"
     db.commit()
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "bat_dau_sau_in", "trang_thai": "dang_sau_in"})
     return _to_dict(_load(phieu_id, db))
 
 
 @router.post("/phieu-in/{phieu_id}/tra-ve-sau-in")
-def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+async def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Trả về chờ gán máy — xoá may_sau_in_id và reset về sau_in."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
@@ -919,6 +926,7 @@ def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depend
     p.may_sau_in_id = None
     p.trang_thai = "sau_in"
     db.commit()
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "tra_ve_sau_in", "trang_thai": "sau_in"})
     return _to_dict(_load(phieu_id, db))
 
 
@@ -1099,7 +1107,7 @@ def scan_history(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    print("DEBUG: API scan-logs/history-list called")
+
     from datetime import timedelta
     cutoff = datetime.utcnow() - timedelta(days=days)
     q = (
@@ -1136,7 +1144,7 @@ def get_dashboard(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    print("DEBUG: API scan-logs/history-list called")
+
     from datetime import timedelta, date as date_type
     today = date_type.today()
 
@@ -1219,7 +1227,7 @@ def history_phieu_in(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    print("DEBUG: API scan-logs/history-list called")
+
     from datetime import timedelta
     cutoff = datetime.utcnow() - timedelta(days=days)
     q = (
@@ -1337,7 +1345,7 @@ def list_shift_config(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    print("DEBUG: API scan-logs/history-list called")
+
     from datetime import timedelta, date as date_type
     cutoff = date_type.today() - timedelta(days=days)
     q = (
@@ -1684,7 +1692,7 @@ def scan_lookup(code: str, db: Session = Depends(get_db)):
     p = db.query(PhieuIn).filter(PhieuIn.so_phieu == code).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
-    return p
+    return _to_dict(_load(p.id, db))
 
 
 @router.get("/progress/{order_id}")
