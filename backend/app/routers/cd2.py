@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 import bcrypt as _bcrypt
@@ -16,8 +16,8 @@ from app.models.cd2 import (
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
-from app.models.inventory import InventoryBalance, InventoryTransaction
-from app.models.warehouse_doc import ProductionOutput, PhieuChuyenKho, PhieuChuyenKhoItem
+from app.models.inventory import InventoryBalance
+from app.models.warehouse_doc import ProductionOutput, PhieuChuyenKhoItem
 from app.models.master import Warehouse
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
@@ -190,9 +190,6 @@ def _to_dict(p: PhieuIn) -> dict:
 def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Optional[ProductionOutput]:
     """Tự động tạo phiếu nhập thành phẩm khi hoàn thành định hình.
     Trả về ProductionOutput nếu tạo thành công."""
-    import logging
-    _log = logging.getLogger("erp")
-
     if not p.production_order_id:
         raise HTTPException(400, "Phiếu in chưa gắn LSX nên không thể nhập kho thành phẩm")
 
@@ -289,6 +286,7 @@ def _gen_so_phieu(db: Session) -> str:
         db.query(PhieuIn)
         .filter(PhieuIn.so_phieu.like(f"{prefix}%"))
         .order_by(PhieuIn.so_phieu.desc())
+        .with_for_update()
         .first()
     )
     seq = (int(last.so_phieu[-4:]) + 1) if last else 1
@@ -426,7 +424,8 @@ def get_sauin_kanban(
     q_phieu = (
         db.query(PhieuIn)
         .options(joinedload(PhieuIn.may_sau_in_obj))
-        .filter(PhieuIn.trang_thai.in_(["sau_in", "dang_sau_in"]))
+        # cho_dinh_hinh: vừa xong in, chờ tổ trưởng gán máy định hình
+        .filter(PhieuIn.trang_thai.in_(["cho_dinh_hinh", "sau_in", "dang_sau_in"]))
     )
     if phan_xuong_id is not None:
         q_phieu = q_phieu.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
@@ -437,7 +436,8 @@ def get_sauin_kanban(
 
     for p in phieus:
         d = _to_dict(p)
-        if not p.may_sau_in_id:
+        # cho_dinh_hinh luôn vào "chờ gán máy" vì chưa có máy sau in
+        if p.trang_thai == "cho_dinh_hinh" or not p.may_sau_in_id:
             cho_gang_may.append(d)
         else:
             key = str(p.may_sau_in_id)
@@ -464,10 +464,17 @@ def get_kanban(
         q_may = q_may.filter(MayIn.phan_xuong_id == phan_xuong_id)
     may_ins = q_may.order_by(MayIn.sort_order).all()
 
+    cutoff_7d = datetime.utcnow() - timedelta(days=7)
+
     q_phieu = (
         db.query(PhieuIn)
         .options(joinedload(PhieuIn.may_in_obj), joinedload(PhieuIn.may_sau_in_obj))
         .filter(PhieuIn.trang_thai != "huy")
+        # hoan_thanh chỉ lấy 7 ngày gần nhất để tránh tích lũy vô hạn
+        .filter(
+            (PhieuIn.trang_thai != "hoan_thanh") |
+            (PhieuIn.updated_at >= cutoff_7d)
+        )
     )
     if phan_xuong_id is not None:
         q_phieu = q_phieu.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
@@ -514,6 +521,7 @@ def list_phieu_in(
     trang_thai: Optional[str] = Query(default=None),
     phan_xuong_id: Optional[int] = Query(default=None),
     may_in_id: Optional[int] = Query(default=None),
+    tu_ngay: Optional[date] = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -529,6 +537,8 @@ def list_phieu_in(
         q = q.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
     if may_in_id is not None:
         q = q.filter(PhieuIn.may_in_id == may_in_id)
+    if tu_ngay is not None:
+        q = q.filter(PhieuIn.created_at >= datetime.combine(tu_ngay, datetime.min.time()))
     return [_to_dict(p) for p in q.order_by(PhieuIn.created_at.desc()).limit(200).all()]
 
 

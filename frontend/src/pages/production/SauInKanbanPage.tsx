@@ -399,6 +399,13 @@ export default function SauInKanbanPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi trả về'),
   })
 
+  // Bắt đầu định hình — chuyển cho_dinh_hinh → sau_in
+  const startDinhHinhMut = useMutation({
+    mutationFn: (id: number) => cd2Api.startSauIn(id, {}),
+    onSuccess: () => { invalidate(); message.success('Đã chuyển sang định hình') },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi bắt đầu định hình'),
+  })
+
   const deleteMut = useMutation({
     mutationFn: (id: number) => cd2Api.deletePhieuIn(id),
     onSuccess: () => { invalidate(); message.success('Đã xoá') },
@@ -442,14 +449,29 @@ export default function SauInKanbanPage() {
                 phieu={p}
                 actions={
                   <>
-                    <Button
-                      type="primary"
-                      size="small"
-                      onClick={() => setAssignPhieu(p)}
-                      style={{ background: '#13c2c2', borderColor: '#13c2c2' }}
-                    >
-                      Gán máy
-                    </Button>
+                    {p.trang_thai === 'cho_dinh_hinh' ? (
+                      // Vừa xong in, chưa bắt đầu định hình
+                      <Button
+                        type="primary"
+                        size="small"
+                        icon={<PlayCircleOutlined />}
+                        loading={startDinhHinhMut.isPending}
+                        onClick={() => startDinhHinhMut.mutate(p.id)}
+                        style={{ background: '#722ed1', borderColor: '#722ed1' }}
+                      >
+                        Bắt đầu ĐH
+                      </Button>
+                    ) : (
+                      // sau_in chưa có máy → gán máy
+                      <Button
+                        type="primary"
+                        size="small"
+                        onClick={() => setAssignPhieu(p)}
+                        style={{ background: '#13c2c2', borderColor: '#13c2c2' }}
+                      >
+                        Gán máy
+                      </Button>
+                    )}
                     <Popconfirm
                       title="Xoá phiếu?"
                       onConfirm={() => { setDeletingId(p.id); deleteMut.mutate(p.id) }}

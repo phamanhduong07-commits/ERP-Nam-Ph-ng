@@ -60,9 +60,8 @@ export default function CD2DashboardPage() {
 
   // Lắng nghe tín hiệu từ WebSockets để cập nhật tức thì
   useEffect(() => {
-    const handleMachineUpdate = (data: any) => {
-      console.log('📡 Received real-time machine update:', data)
-      invalidate() // Làm mới tất cả dữ liệu liên quan
+    const handleMachineUpdate = () => {
+      invalidate()
     }
 
     socket.on('machine_status_update', handleMachineUpdate)
