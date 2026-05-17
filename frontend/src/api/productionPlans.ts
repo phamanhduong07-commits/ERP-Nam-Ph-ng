@@ -186,6 +186,7 @@ export const productionPlansApi = {
   list: (params?: {
     search?: string
     trang_thai?: string
+    noi_sx?: string
     tu_ngay?: string
     den_ngay?: string
     page?: number

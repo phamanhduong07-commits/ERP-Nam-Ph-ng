@@ -250,6 +250,7 @@ def get_available_items(
 def list_plans(
     search: str = Query(default=""),
     trang_thai: str | None = Query(default=None),
+    noi_sx: str | None = Query(default=None),
     tu_ngay: date | None = Query(default=None),
     den_ngay: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -263,6 +264,8 @@ def list_plans(
         q = q.filter(ProductionPlan.so_ke_hoach.ilike(f"%{search}%"))
     if trang_thai:
         q = q.filter(ProductionPlan.trang_thai == trang_thai)
+    if noi_sx:
+        q = q.join(User, ProductionPlan.created_by == User.id).filter(User.phan_xuong == noi_sx)
     if tu_ngay:
         q = q.filter(ProductionPlan.ngay_ke_hoach >= tu_ngay)
     if den_ngay:
