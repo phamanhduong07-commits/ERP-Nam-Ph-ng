@@ -597,11 +597,11 @@ export default function MaySongPage() {
       width: 90,
       align: 'right',
       render: (_, r) => {
-        const soLuong = Number(r.tong_sl_thuc_te) > 0 ? Number(r.tong_sl_thuc_te) : Number(r.tong_sl_ke_hoach)
-        const m2 = calcSoM2Luong(r.kho_tt, r.dai_tt, soLuong, r.so_lop)
+        const soTam = calcSoTamFromListItem(r) ?? 0
+        const m2 = calcSoM2Luong(r.kho_tt, r.dai_tt, soTam, r.so_lop)
         if (m2 == null) return <Text type="secondary">—</Text>
         return (
-          <Tooltip title={`Tính lương: ${r.kho_tt}×${r.dai_tt}cm × ${soLuong.toLocaleString()} × hệ số ${r.so_lop === 7 ? 3 : r.so_lop === 5 ? 2 : 1}`}>
+          <Tooltip title={`Tính lương: ${r.kho_tt}×${r.dai_tt}cm × ${soTam.toLocaleString()} tấm × hệ số ${r.so_lop === 7 ? 3 : r.so_lop === 5 ? 2 : 1}`}>
             <Text strong style={{ color: '#531dab' }}>{m2.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</Text>
           </Tooltip>
         )
@@ -693,10 +693,10 @@ export default function MaySongPage() {
       align: 'right' as const,
       render: (_: unknown, r: PhieuNhapPhoiSongListItem) => {
         const it = r.items[0]
-        const m2 = calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, r.tong_so_luong_thuc_te, it?.so_lop ?? null)
+        const m2 = calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, r.tong_so_tam, it?.so_lop ?? null)
         if (m2 == null) return <Text type="secondary">—</Text>
         return (
-          <Tooltip title={`Tính lương: ${it?.chieu_kho}×${it?.chieu_cat}cm × ${r.tong_so_luong_thuc_te.toLocaleString()} × hệ số ${it?.so_lop === 7 ? 3 : it?.so_lop === 5 ? 2 : 1}`}>
+          <Tooltip title={`Tính lương: ${it?.chieu_kho}×${it?.chieu_cat}cm × ${r.tong_so_tam.toLocaleString()} tấm × hệ số ${it?.so_lop === 7 ? 3 : it?.so_lop === 5 ? 2 : 1}`}>
             <Text strong style={{ color: '#531dab' }}>{m2.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</Text>
           </Tooltip>
         )
@@ -918,7 +918,7 @@ export default function MaySongPage() {
               const totalLoi = filteredPhieu.reduce((s, p) => s + Number(p.tong_so_luong_loi), 0)
               const totalM2Luong = filteredPhieu.reduce((s, p) => {
                 const it = p.items[0]
-                const m2 = calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, p.tong_so_luong_thuc_te, it?.so_lop ?? null)
+                const m2 = calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, p.tong_so_tam, it?.so_lop ?? null)
                 return s + (m2 ?? 0)
               }, 0)
               return (
@@ -975,7 +975,7 @@ export default function MaySongPage() {
                               ten_hang:   it?.ten_hang  ?? '',
                               chieu_kho:  it?.chieu_kho ?? '',
                               chieu_cat:  it?.chieu_cat ?? '',
-                              m2_luong:   calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, p.tong_so_luong_thuc_te, it?.so_lop ?? null) ?? '',
+                              m2_luong:   calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, p.tong_so_tam, it?.so_lop ?? null) ?? '',
                             }
                           }),
                           [
