@@ -265,13 +265,15 @@ def list_plans(
     if trang_thai:
         q = q.filter(ProductionPlan.trang_thai == trang_thai)
     if noi_sx:
-        q = (q
-             .join(ProductionPlanLine, ProductionPlanLine.plan_id == ProductionPlan.id)
-             .join(ProductionOrderItem, ProductionOrderItem.id == ProductionPlanLine.production_order_item_id)
-             .join(ProductionOrder, ProductionOrder.id == ProductionOrderItem.production_order_id)
-             .join(PhanXuong, PhanXuong.id == ProductionOrder.phan_xuong_id)
-             .filter(PhanXuong.ten_xuong == noi_sx)
-             .distinct())
+        matched_plan_ids = (
+            db.query(ProductionPlanLine.plan_id)
+            .join(ProductionOrderItem, ProductionOrderItem.id == ProductionPlanLine.production_order_item_id)
+            .join(ProductionOrder, ProductionOrder.id == ProductionOrderItem.production_order_id)
+            .join(PhanXuong, PhanXuong.id == ProductionOrder.phan_xuong_id)
+            .filter(PhanXuong.ten_xuong == noi_sx)
+            .subquery()
+        )
+        q = q.filter(ProductionPlan.id.in_(matched_plan_ids))
     if tu_ngay:
         q = q.filter(ProductionPlan.ngay_ke_hoach >= tu_ngay)
     if den_ngay:
