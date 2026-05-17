@@ -55,8 +55,8 @@ class TrackPayload(BaseModel):
     machine_id: int
     event_type: str  # start | stop | resume | complete
     phieu_in_id: Optional[int] = None
-    quantity_ok: Optional[Decimal] = 0
-    quantity_loi: Optional[Decimal] = 0
+    quantity_ok: Optional[Decimal] = None
+    quantity_loi: Optional[Decimal] = None
     quantity_setup: Optional[Decimal] = 0
     ghi_chu: Optional[str] = None
     printer_user_id: Optional[int] = None  # kiosk mode: từ cd2_worker_session
@@ -410,7 +410,7 @@ def delete_may_sau_in(may_id: int, db: Session = Depends(get_db), _: User = Depe
 
 # ── Sau in kanban ──────────────────────────────────────────────────────────────
 
-@router.get("/sauin/kanban")
+@router.get("/sau-in-kanban")
 def get_sauin_kanban(
     phan_xuong_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
@@ -473,7 +473,7 @@ def get_kanban(
         # hoan_thanh chỉ lấy 7 ngày gần nhất để tránh tích lũy vô hạn
         .filter(
             (PhieuIn.trang_thai != "hoan_thanh") |
-            (PhieuIn.updated_at >= cutoff_7d)
+            (PhieuIn.gio_hoan_thanh >= cutoff_7d)
         )
     )
     if phan_xuong_id is not None:
@@ -873,6 +873,8 @@ def finish_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: Us
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai != "dang_sau_in":
+        raise HTTPException(status_code=400, detail=f"Phiếu đang ở trạng thái '{p.trang_thai}', phải là 'dang_sau_in' để hoàn thành")
     p.trang_thai = "hoan_thanh"
     p.gio_hoan_thanh = datetime.utcnow()
     p.gio_hoan_thanh_dinh_hinh = datetime.utcnow()
@@ -885,18 +887,19 @@ class AssignSauInBody(BaseModel):
     may_sau_in_id: Optional[int] = None
 
 
-@router.post("/phieu-in/{phieu_id}/assign-sauin")
-def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+@router.post("/phieu-in/{phieu_id}/assign-sau-in")
+async def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Gán máy sau in (hoặc bỏ gán nếu may_sau_in_id=null)."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
     p.may_sau_in_id = body.may_sau_in_id
     db.commit()
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "assign_sau_in"})
     return _to_dict(_load(phieu_id, db))
 
 
-@router.post("/phieu-in/{phieu_id}/bat-dau-sauin")
+@router.post("/phieu-in/{phieu_id}/bat-dau-sau-in")
 def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Bắt đầu sau in → dang_sau_in."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
@@ -907,7 +910,7 @@ def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depen
     return _to_dict(_load(phieu_id, db))
 
 
-@router.post("/phieu-in/{phieu_id}/tra-ve-sauin")
+@router.post("/phieu-in/{phieu_id}/tra-ve-sau-in")
 def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Trả về chờ gán máy — xoá may_sau_in_id và reset về sau_in."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
@@ -937,6 +940,8 @@ def huy_phieu(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(ge
     p.may_sau_in_id = None
     p.gio_bat_dau_in = None
     p.gio_hoan_thanh = None
+    p.gio_bat_dau_dinh_hinh = None
+    p.gio_hoan_thanh_dinh_hinh = None
     db.commit()
     return _to_dict(_load(phieu_id, db))
 

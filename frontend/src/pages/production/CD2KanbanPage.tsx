@@ -154,11 +154,25 @@ function KanbanCard({
     cursor: 'grab',
   }
 
-  const borderColor =
+  const isOverdue = phieu.ngay_giao_hang
+    ? dayjs(phieu.ngay_giao_hang).isBefore(dayjs(), 'day') || dayjs(phieu.ngay_giao_hang).isSame(dayjs(), 'day')
+    : false
+
+  const borderColor = isOverdue ? '#ff4d4f' :
     phieu.trang_thai === 'dang_in' ? '#fa8c16' :
     phieu.trang_thai === 'ke_hoach' ? '#1677ff' :
     phieu.trang_thai === 'cho_dinh_hinh' ? '#722ed1' :
-    phieu.trang_thai === 'sau_in' ? '#13c2c2' : '#d9d9d9'
+    phieu.trang_thai === 'sau_in' ? '#13c2c2' :
+    phieu.trang_thai === 'dang_sau_in' ? '#52c41a' : '#d9d9d9'
+
+  const STATE_TAG: Record<string, { label: string; color: string }> = {
+    dang_in:        { label: 'Đang in',  color: 'orange' },
+    ke_hoach:       { label: 'KH',       color: 'blue' },
+    cho_dinh_hinh:  { label: 'Chờ ĐH',  color: 'purple' },
+    sau_in:         { label: 'Sau in',   color: 'cyan' },
+    dang_sau_in:    { label: 'Đang ĐH', color: 'green' },
+  }
+  const stateTag = STATE_TAG[phieu.trang_thai]
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
@@ -172,14 +186,16 @@ function KanbanCard({
         styles={{ body: { padding: '8px 10px' } }}
         onClick={onClick}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
           <Text style={{ fontSize: 11, color: '#888' }}>{phieu.so_phieu}</Text>
-          {phieu.trang_thai === 'dang_in' && (
-            <Tag color="orange" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>Đang in</Tag>
-          )}
-          {phieu.trang_thai === 'ke_hoach' && (
-            <Tag color="blue" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>KH</Tag>
-          )}
+          <Space size={2}>
+            {isOverdue && (
+              <Tag color="error" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>Hết hạn!</Tag>
+            )}
+            {stateTag && (
+              <Tag color={stateTag.color} style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>{stateTag.label}</Tag>
+            )}
+          </Space>
         </div>
 
         <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2, lineHeight: 1.3 }}>
@@ -212,7 +228,7 @@ function KanbanCard({
         </div>
 
         {phieu.ngay_giao_hang && (
-          <div style={{ fontSize: 10, color: '#aaa', marginTop: 4 }}>
+          <div style={{ fontSize: 10, color: isOverdue ? '#ff4d4f' : '#aaa', marginTop: 4, fontWeight: isOverdue ? 600 : 400 }}>
             Giao: {dayjs(phieu.ngay_giao_hang).format('DD/MM/YY')}
           </div>
         )}

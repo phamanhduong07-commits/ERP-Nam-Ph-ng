@@ -24,7 +24,10 @@ function PhieuCard({ phieu, actions }: { phieu: PhieuIn; actions: React.ReactNod
   return (
     <Card
       size="small"
-      style={{ marginBottom: 8, borderLeft: `4px solid ${phieu.trang_thai === 'dang_sau_in' ? '#fa8c16' : '#13c2c2'}` }}
+      style={{ marginBottom: 8, borderLeft: `4px solid ${
+        phieu.trang_thai === 'dang_sau_in' ? '#fa8c16' :
+        phieu.trang_thai === 'cho_dinh_hinh' ? '#722ed1' : '#13c2c2'
+      }` }}
     >
       <Row justify="space-between" align="top" wrap={false}>
         <Col flex="auto">
@@ -32,6 +35,12 @@ function PhieuCard({ phieu, actions }: { phieu: PhieuIn; actions: React.ReactNod
             <Text style={{ fontSize: 11, color: '#888' }}>{phieu.so_phieu}</Text>
             {phieu.trang_thai === 'dang_sau_in' && (
               <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>Đang làm</Tag>
+            )}
+            {phieu.trang_thai === 'cho_dinh_hinh' && (
+              <Tag color="purple" style={{ fontSize: 10, margin: 0 }}>Chờ ĐH</Tag>
+            )}
+            {phieu.trang_thai === 'sau_in' && (
+              <Tag color="cyan" style={{ fontSize: 10, margin: 0 }}>Sau in</Tag>
             )}
             {phieu.ths && <Tag color="geekblue" style={{ fontSize: 10, margin: 0 }}>{phieu.ths}</Tag>}
             {phieu.loai && <Tag style={{ fontSize: 10, margin: 0 }}>{phieu.loai}</Tag>}
@@ -537,7 +546,7 @@ export default function SauInKanbanPage() {
             <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)}>
               Máy sau in
             </Button>
-            <Text type="secondary" style={{ fontSize: 11 }}>Tự cập nhật 15 giây</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>Cập nhật real-time</Text>
             <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
           </Space>
         </Col>
