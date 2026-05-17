@@ -200,10 +200,13 @@ export interface PhieuNhapPhoiSongItem {
   production_order_item_id: number
   ten_hang: string | null
   so_lop: number | null
-  mat_dl: number | null;    song_1_dl: number | null
-  mat_1_dl: number | null;  song_2_dl: number | null
-  mat_2_dl: number | null;  song_3_dl: number | null
-  mat_3_dl: number | null
+  mat: string | null;      mat_dl: number | null
+  song_1: string | null;   song_1_dl: number | null
+  mat_1: string | null;    mat_1_dl: number | null
+  song_2: string | null;   song_2_dl: number | null
+  mat_2: string | null;    mat_2_dl: number | null
+  song_3: string | null;   song_3_dl: number | null
+  mat_3: string | null;    mat_3_dl: number | null
   so_luong_ke_hoach: number
   so_luong_thuc_te: number | null
   so_luong_loi: number | null

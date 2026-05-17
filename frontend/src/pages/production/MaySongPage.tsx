@@ -969,6 +969,30 @@ export default function MaySongPage() {
                 )
                 return s + (kg ?? 0)
               }, 0)
+
+              // Tiêu thụ giấy: group by (tên giấy + ĐL), tính kg = area × ĐL/1000 × so_tam
+              const paperUsage: Record<string, { ten: string; dl: number; kg: number }> = {}
+              const addPaperLayer = (ten: string | null | undefined, dl: number | null | undefined, areM2: number, soTam: number) => {
+                if (!ten || !dl || dl <= 0 || soTam <= 0 || areM2 <= 0) return
+                const key = `${ten}__${dl}`
+                if (!paperUsage[key]) paperUsage[key] = { ten, dl, kg: 0 }
+                paperUsage[key].kg += areM2 * dl / 1000 * soTam
+              }
+              for (const p of filteredPhieu) {
+                for (const it of p.items) {
+                  const areM2 = (it.chieu_kho ?? 0) * (it.chieu_cat ?? 0) / 10000
+                  const soTam = it.so_tam ?? 0
+                  addPaperLayer(it.mat,    it.mat_dl,    areM2, soTam)
+                  addPaperLayer(it.song_1, it.song_1_dl, areM2, soTam)
+                  addPaperLayer(it.mat_1,  it.mat_1_dl,  areM2, soTam)
+                  addPaperLayer(it.song_2, it.song_2_dl, areM2, soTam)
+                  addPaperLayer(it.mat_2,  it.mat_2_dl,  areM2, soTam)
+                  addPaperLayer(it.song_3, it.song_3_dl, areM2, soTam)
+                  addPaperLayer(it.mat_3,  it.mat_3_dl,  areM2, soTam)
+                }
+              }
+              const paperRows = Object.values(paperUsage).sort((a, b) => b.kg - a.kg)
+              const totalKgGiay = paperRows.reduce((s, r) => s + r.kg, 0)
               return (
                 <>
                   <Row gutter={8} style={{ marginBottom: 12 }} align="middle">
@@ -1081,6 +1105,49 @@ export default function MaySongPage() {
                     scroll={{ x: 950 }}
                     locale={{ emptyText: 'Chưa có phiếu nhập nào trong khoảng ngày này' }}
                   />
+
+                  {/* Bảng tiêu thụ giấy */}
+                  {paperRows.length > 0 && (
+                    <div style={{ marginTop: 16, padding: '12px 16px', background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 6 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 13 }}>
+                        Tiêu thụ giấy{' '}
+                        <Text type="secondary" style={{ fontWeight: 400, fontSize: 12 }}>
+                          (tổng: <Text strong style={{ color: '#1677ff' }}>{Math.round(totalKgGiay).toLocaleString('vi-VN')} kg</Text>)
+                        </Text>
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ background: '#f5f5f5' }}>
+                            <th style={{ padding: '4px 8px', textAlign: 'left',  border: '1px solid #e8e8e8' }}>Loại giấy</th>
+                            <th style={{ padding: '4px 8px', textAlign: 'right', border: '1px solid #e8e8e8', width: 80 }}>ĐL (g/m²)</th>
+                            <th style={{ padding: '4px 8px', textAlign: 'right', border: '1px solid #e8e8e8', width: 100 }}>Tiêu thụ (kg)</th>
+                            <th style={{ padding: '4px 8px', textAlign: 'right', border: '1px solid #e8e8e8', width: 60 }}>%</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paperRows.map(row => (
+                            <tr key={`${row.ten}__${row.dl}`}>
+                              <td style={{ padding: '4px 8px', border: '1px solid #f0f0f0', fontWeight: 500 }}>{row.ten}</td>
+                              <td style={{ padding: '4px 8px', border: '1px solid #f0f0f0', textAlign: 'right', color: '#8c8c8c' }}>{row.dl}</td>
+                              <td style={{ padding: '4px 8px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 600 }}>
+                                {Math.round(row.kg).toLocaleString('vi-VN')}
+                              </td>
+                              <td style={{ padding: '4px 8px', border: '1px solid #f0f0f0', textAlign: 'right', color: '#8c8c8c' }}>
+                                {totalKgGiay > 0 ? (row.kg / totalKgGiay * 100).toFixed(1) : '0'}%
+                              </td>
+                            </tr>
+                          ))}
+                          <tr style={{ background: '#e6f4ff', fontWeight: 700 }}>
+                            <td colSpan={2} style={{ padding: '4px 8px', border: '1px solid #e8e8e8' }}>Tổng cộng</td>
+                            <td style={{ padding: '4px 8px', border: '1px solid #e8e8e8', textAlign: 'right', color: '#1677ff' }}>
+                              {Math.round(totalKgGiay).toLocaleString('vi-VN')}
+                            </td>
+                            <td style={{ padding: '4px 8px', border: '1px solid #e8e8e8', textAlign: 'right' }}>100%</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </>
               )
             })(),
