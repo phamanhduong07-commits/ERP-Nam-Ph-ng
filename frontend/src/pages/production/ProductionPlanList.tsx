@@ -88,18 +88,22 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
       }).then(r => r.data),
   })
 
-  // ── Danh sách nơi SX (từ warehouseApi) ───────────────────────────────────
+  // ── Nơi SX: chỉ lấy xưởng có CD1 (Hoàng Gia + Nam Thuận) ────────────────
   const { data: phanXuongList = [] } = useQuery({
     queryKey: ['phan-xuong'],
     queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
     staleTime: 300_000,
   })
 
-  // ── Unique noi_sx từ data hiện tại (bổ sung cho options) ─────────────────
   const noiSxOptions = useMemo(() => {
-    const fromApi = (phanXuongList as any[]).map((x: any) => x.ten_xuong ?? x.ten).filter(Boolean)
+    // Chỉ hiện xưởng có CD1 (cong_doan = 'cd1_cd2')
+    const cd1Xuong = (phanXuongList as any[])
+      .filter((x: any) => x.cong_doan === 'cd1_cd2')
+      .map((x: any) => x.ten_xuong)
+      .filter(Boolean)
+    // Bổ sung từ data thực tế (phòng khi seed chưa đủ)
     const fromData = (data?.items ?? []).map(i => i.noi_sx).filter(Boolean) as string[]
-    const all = Array.from(new Set([...fromApi, ...fromData])).sort()
+    const all = Array.from(new Set([...cd1Xuong, ...fromData])).sort()
     return all.map(v => ({ value: v, label: v }))
   }, [phanXuongList, data?.items])
 

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import Customer
+from app.models.master import Customer, PhanXuong
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.production_plan import ProductionPlan, ProductionPlanLine
 from app.models.bom import ProductionBOM
@@ -265,7 +265,13 @@ def list_plans(
     if trang_thai:
         q = q.filter(ProductionPlan.trang_thai == trang_thai)
     if noi_sx:
-        q = q.join(User, ProductionPlan.created_by == User.id).filter(User.phan_xuong == noi_sx)
+        q = (q
+             .join(ProductionPlanLine, ProductionPlanLine.plan_id == ProductionPlan.id)
+             .join(ProductionOrderItem, ProductionOrderItem.id == ProductionPlanLine.production_order_item_id)
+             .join(ProductionOrder, ProductionOrder.id == ProductionOrderItem.production_order_id)
+             .join(PhanXuong, PhanXuong.id == ProductionOrder.phan_xuong_id)
+             .filter(PhanXuong.ten_xuong == noi_sx)
+             .distinct())
     if tu_ngay:
         q = q.filter(ProductionPlan.ngay_ke_hoach >= tu_ngay)
     if den_ngay:
@@ -278,6 +284,22 @@ def list_plans(
         .limit(page_size)
         .all()
     )
+
+    # Batch-query noi_sx từ phan_xuong của LSX trong plan (tránh N+1)
+    plan_ids = [p.id for p in plans]
+    noi_sx_map: dict[int, str] = {}
+    if plan_ids:
+        rows = (
+            db.query(ProductionPlanLine.plan_id, PhanXuong.ten_xuong)
+            .join(ProductionOrderItem, ProductionOrderItem.id == ProductionPlanLine.production_order_item_id)
+            .join(ProductionOrder, ProductionOrder.id == ProductionOrderItem.production_order_id)
+            .join(PhanXuong, PhanXuong.id == ProductionOrder.phan_xuong_id)
+            .filter(ProductionPlanLine.plan_id.in_(plan_ids))
+            .all()
+        )
+        for plan_id, xuong in rows:
+            if plan_id not in noi_sx_map:  # lấy xưởng của dòng đầu tiên
+                noi_sx_map[plan_id] = xuong
 
     items_resp: list[ProductionPlanListItem] = []
     for p in plans:
@@ -293,7 +315,7 @@ def list_plans(
             tong_sl=tong_sl,
             created_at=p.created_at,
             created_by_name=creator.ho_ten if creator else None,
-            noi_sx=creator.phan_xuong if creator else None,
+            noi_sx=noi_sx_map.get(p.id),  # từ LSX, không phải creator
         ))
 
     return PagedPlanResponse(
