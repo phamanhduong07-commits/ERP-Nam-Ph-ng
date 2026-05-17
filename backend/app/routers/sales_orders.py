@@ -3,7 +3,48 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import cast, Date, text
 from sqlalchemy.orm import Session, joinedload
-from app.database import get_db, _BACKFILL_QI_PG, _BACKFILL_SPEC_PG
+from app.database import get_db
+
+# SQL backfill cho admin endpoint /admin/backfill-spec
+_BACKFILL_QI_PG = """
+    UPDATE sales_order_items soi
+    SET quote_item_id = qi.id
+    FROM quote_items qi
+    JOIN quotes q ON q.id = qi.quote_id
+    JOIN sales_orders so ON so.customer_id = q.customer_id
+    WHERE soi.order_id = so.id
+      AND soi.product_id = qi.product_id
+      AND soi.quote_item_id IS NULL
+      AND qi.product_id IS NOT NULL
+"""
+
+_BACKFILL_SPEC_PG = """
+    UPDATE sales_order_items soi
+    SET
+        loai_thung   = qi.loai_thung,
+        dai          = qi.dai,
+        rong         = qi.rong,
+        cao          = qi.cao,
+        so_lop       = qi.so_lop,
+        to_hop_song  = qi.to_hop_song,
+        mat          = qi.mat,   mat_dl   = qi.mat_dl,
+        song_1       = qi.song_1, song_1_dl = qi.song_1_dl,
+        mat_1        = qi.mat_1,  mat_1_dl  = qi.mat_1_dl,
+        song_2       = qi.song_2, song_2_dl = qi.song_2_dl,
+        mat_2        = qi.mat_2,  mat_2_dl  = qi.mat_2_dl,
+        song_3       = qi.song_3, song_3_dl = qi.song_3_dl,
+        mat_3        = qi.mat_3,  mat_3_dl  = qi.mat_3_dl,
+        loai_in      = qi.loai_in,
+        so_mau       = qi.so_mau,
+        loai_lan     = qi.loai_lan,
+        kho_tt       = qi.kho_tt,
+        dai_tt       = qi.dai_tt,
+        dien_tich    = qi.dien_tich,
+        c_tham       = qi.c_tham,
+        can_man      = qi.can_man
+    FROM quote_items qi
+    WHERE soi.quote_item_id = qi.id
+"""
 from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.master import Customer, Product

@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import IntegrityError
 from app.socket_manager import socket_app
 from app.config import settings
 from app.database import Base, engine, ensure_schema
@@ -140,6 +141,21 @@ app.include_router(logistics_hr.router)
 app.include_router(hr_payroll_calc.router)
 app.include_router(hr_reward.router)
 app.include_router(hr_self_service.router)
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    db_msg = str(exc.orig) if exc.orig else str(exc)
+    if "unique" in db_msg.lower() or "duplicate" in db_msg.lower():
+        detail = "Dữ liệu đã tồn tại (vi phạm ràng buộc duy nhất)"
+    elif "foreign key" in db_msg.lower() or "violates foreign" in db_msg.lower():
+        detail = "Dữ liệu tham chiếu không hợp lệ (FK không tồn tại)"
+    elif "not null" in db_msg.lower():
+        detail = "Thiếu dữ liệu bắt buộc (NOT NULL)"
+    else:
+        detail = "Lỗi dữ liệu: vi phạm ràng buộc cơ sở dữ liệu"
+    logger.warning("IntegrityError %s %s: %s", request.method, request.url.path, db_msg)
+    return JSONResponse({"detail": detail}, status_code=400)
 
 
 @app.get("/api/health")
