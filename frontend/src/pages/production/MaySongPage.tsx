@@ -104,6 +104,15 @@ function detectGioBD(ca: string): dayjs.Dayjs {
 
 const STATUS_ORDER: Record<string, number> = { dang_chay: 0, tam_dung: 1, moi: 2, hoan_thanh: 3 }
 
+// m² TÍNH LƯƠNG SẢN PHẨM (≠ m² nguyên liệu bên phiếu giao hàng)
+// Công thức: khổ(cm) × cắt(cm) × SL × hệ_số / 10000
+// Hệ số theo số lớp: 3L=1 | 5L=2 | 7L=3  (số mặt tấm phôi qua máy sóng)
+function calcSoM2Luong(khoCm: number | null, catCm: number | null, soLuong: number, soLop: number | null): number | null {
+  if (!khoCm || !catCm || soLuong <= 0) return null
+  const heSo = soLop === 7 ? 3 : soLop === 5 ? 2 : 1
+  return Math.round(khoCm * catCm * soLuong * heSo / 10000 * 100) / 100
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface InTemState {
   order: ProductionOrder
@@ -584,6 +593,21 @@ export default function MaySongPage() {
       },
     },
     {
+      title: 'm² lương',
+      width: 90,
+      align: 'right',
+      render: (_, r) => {
+        const soLuong = Number(r.tong_sl_thuc_te) > 0 ? Number(r.tong_sl_thuc_te) : Number(r.tong_sl_ke_hoach)
+        const m2 = calcSoM2Luong(r.kho_tt, r.dai_tt, soLuong, r.so_lop)
+        if (m2 == null) return <Text type="secondary">—</Text>
+        return (
+          <Tooltip title={`Tính lương: ${r.kho_tt}×${r.dai_tt}cm × ${soLuong.toLocaleString()} × hệ số ${r.so_lop === 7 ? 3 : r.so_lop === 5 ? 2 : 1}`}>
+            <Text strong style={{ color: '#531dab' }}>{m2.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</Text>
+          </Tooltip>
+        )
+      },
+    },
+    {
       title: 'Hành động',
       width: 220,
       fixed: 'right',
@@ -662,6 +686,21 @@ export default function MaySongPage() {
       align: 'center' as const,
       render: (_: unknown, r: PhieuNhapPhoiSongListItem) =>
         r.items[0]?.chieu_cat != null ? <Text strong>{r.items[0].chieu_cat}</Text> : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'm² lương',
+      width: 90,
+      align: 'right' as const,
+      render: (_: unknown, r: PhieuNhapPhoiSongListItem) => {
+        const it = r.items[0]
+        const m2 = calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, r.tong_so_luong_thuc_te, it?.so_lop ?? null)
+        if (m2 == null) return <Text type="secondary">—</Text>
+        return (
+          <Tooltip title={`Tính lương: ${it?.chieu_kho}×${it?.chieu_cat}cm × ${r.tong_so_luong_thuc_te.toLocaleString()} × hệ số ${it?.so_lop === 7 ? 3 : it?.so_lop === 5 ? 2 : 1}`}>
+            <Text strong style={{ color: '#531dab' }}>{m2.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</Text>
+          </Tooltip>
+        )
+      },
     },
     { title: 'Kho',        dataIndex: 'ten_kho',            width: 110, render: (v: string | null) => v ?? '—' },
     { title: 'Ngày', dataIndex: 'ngay', width: 100, render: (v: string | null) => v ? dayjs(v).format('DD/MM/YYYY') : '—' },
@@ -877,6 +916,11 @@ export default function MaySongPage() {
               const totalTT  = filteredPhieu.reduce((s, p) => s + Number(p.tong_so_luong_thuc_te), 0)
               const totalTam = filteredPhieu.reduce((s, p) => s + Number(p.tong_so_tam), 0)
               const totalLoi = filteredPhieu.reduce((s, p) => s + Number(p.tong_so_luong_loi), 0)
+              const totalM2Luong = filteredPhieu.reduce((s, p) => {
+                const it = p.items[0]
+                const m2 = calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, p.tong_so_luong_thuc_te, it?.so_lop ?? null)
+                return s + (m2 ?? 0)
+              }, 0)
               return (
                 <>
                   <Row gutter={8} style={{ marginBottom: 12 }} align="middle">
@@ -924,18 +968,23 @@ export default function MaySongPage() {
                         onClick={() => exportExcelWithTemplate(
                           `lich-su-phieu-nhap-${histTuNgay}-${histDenNgay}.xlsx`,
                           'Lịch sử phiếu nhập',
-                          filteredPhieu.map(p => ({
-                            ...p,
-                            ten_hang:  p.items[0]?.ten_hang  ?? '',
-                            chieu_kho: p.items[0]?.chieu_kho ?? '',
-                            chieu_cat: p.items[0]?.chieu_cat ?? '',
-                          })),
+                          filteredPhieu.map(p => {
+                            const it = p.items[0]
+                            return {
+                              ...p,
+                              ten_hang:   it?.ten_hang  ?? '',
+                              chieu_kho:  it?.chieu_kho ?? '',
+                              chieu_cat:  it?.chieu_cat ?? '',
+                              m2_luong:   calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, p.tong_so_luong_thuc_te, it?.so_lop ?? null) ?? '',
+                            }
+                          }),
                           [
                             { key: 'so_phieu',               label: 'Số phiếu',      width: 20 },
                             { key: 'so_lenh',                 label: 'Số lệnh',       width: 18 },
                             { key: 'ten_hang',                label: 'Tên hàng',      width: 28 },
                             { key: 'chieu_kho',               label: 'Khổ (cm)',      width: 12 },
                             { key: 'chieu_cat',               label: 'Cắt (cm)',      width: 12 },
+                            { key: 'm2_luong',                label: 'm² lương',      width: 14 },
                             { key: 'ten_kho',                 label: 'Kho',           width: 18 },
                             { key: 'ngay',                    label: 'Ngày',          width: 14 },
                             { key: 'ca',                      label: 'Ca',            width: 10 },
@@ -960,6 +1009,7 @@ export default function MaySongPage() {
                       {[
                         { label: 'SL thực tế', value: totalTT.toLocaleString(),  unit: 'thùng', color: '#52c41a' },
                         { label: 'Tổng tấm',   value: totalTam.toLocaleString(), unit: 'tấm',   color: '#722ed1' },
+                        { label: 'm² lương',   value: totalM2Luong.toLocaleString('vi-VN', { maximumFractionDigits: 1 }), unit: 'm²', color: '#531dab' },
                         { label: 'Phôi lỗi',   value: totalLoi.toLocaleString(), unit: 'cái',   color: totalLoi > 0 ? '#cf1322' : '#8c8c8c' },
                       ].map(s => (
                         <Col key={s.label}>

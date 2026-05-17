@@ -355,7 +355,7 @@ def complete_order(
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
-    if order.trang_thai not in ("moi", "dang_chay"):
+    if order.trang_thai not in ("moi", "dang_chay", "tam_dung"):
         raise HTTPException(status_code=400, detail=f"Không thể hoàn thành lệnh ở trạng thái '{order.trang_thai}'")
 
     order.trang_thai = "hoan_thanh"
@@ -585,6 +585,7 @@ def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
                 "id": it.id,
                 "production_order_item_id": it.production_order_item_id,
                 "ten_hang": getattr(getattr(it, "production_order_item", None), "ten_hang", None),
+                "so_lop": getattr(getattr(it, "production_order_item", None), "so_lop", None),
                 "so_luong_ke_hoach": float(it.so_luong_ke_hoach),
                 "so_luong_thuc_te": float(it.so_luong_thuc_te) if it.so_luong_thuc_te is not None else None,
                 "so_luong_loi": float(it.so_luong_loi) if it.so_luong_loi is not None else None,
