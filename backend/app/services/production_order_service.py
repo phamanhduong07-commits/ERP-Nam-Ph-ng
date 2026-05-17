@@ -39,6 +39,7 @@ class ProductionOrderService:
         trang_thai: str = "",
         sales_order_id: int = None,
         phan_xuong_id: int = None,
+        phap_nhan_id: int = None,
         tu_ngay: date = None,
         den_ngay: date = None,
         page: int = 1,
@@ -72,6 +73,8 @@ class ProductionOrderService:
             q = q.filter(ProductionOrder.sales_order_id == sales_order_id)
         if phan_xuong_id:
             q = q.filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
+        if phap_nhan_id:
+            q = q.filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
         if tu_ngay:
             q = q.filter(ProductionOrder.ngay_lenh >= tu_ngay)
         if den_ngay:

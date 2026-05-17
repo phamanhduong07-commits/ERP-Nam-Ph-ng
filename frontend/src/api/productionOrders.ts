@@ -90,6 +90,7 @@ export interface ProductionOrderListItem {
   ten_phap_nhan: string | null
   ten_kho_sx: string | null
   phan_xuong_id: number | null
+  ten_phan_xuong: string | null
   gia_ban_muc_tieu: number | null
   created_by_name: string | null
   trang_thai: string
@@ -245,6 +246,7 @@ export const productionOrdersApi = {
     trang_thai?: string
     sales_order_id?: number
     phan_xuong_id?: number
+    phap_nhan_id?: number
     tu_ngay?: string
     den_ngay?: string
     page?: number

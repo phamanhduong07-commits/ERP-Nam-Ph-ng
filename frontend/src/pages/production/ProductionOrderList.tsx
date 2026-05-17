@@ -4,12 +4,13 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Table, Button, Input, Select, Space, Tag, Card, Typography,
   DatePicker, Row, Col, Tooltip, Popconfirm, message, Pagination,
+  Progress, Statistic,
 } from 'antd'
 import {
   PlusOutlined, SearchOutlined, EyeOutlined,
   PlayCircleOutlined, CheckCircleOutlined, CloseOutlined,
   FileExcelOutlined, FilePdfOutlined, ShoppingCartOutlined,
-  WarningOutlined,
+  WarningOutlined, ClockCircleOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -19,6 +20,8 @@ import {
   TRANG_THAI_COLORS,
 } from '../../api/productionOrders'
 import type { ProductionOrderListItem } from '../../api/productionOrders'
+import { warehouseApi } from '../../api/warehouse'
+import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel, printToPdf, fmtDate, fmtNum, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
@@ -38,6 +41,15 @@ interface Props {
   onSelect?: (id: number) => void
 }
 
+// ── Màu xưởng SX (deterministic từ tên) ──────────────────────────────────────
+const XUONG_COLORS = ['geekblue', 'green', 'purple', 'cyan', 'magenta', 'volcano', 'gold']
+function xuongColor(ten: string | null | undefined): string {
+  if (!ten) return 'default'
+  let h = 0
+  for (let i = 0; i < ten.length; i++) h = (h * 31 + ten.charCodeAt(i)) & 0xffff
+  return XUONG_COLORS[h % XUONG_COLORS.length]
+}
+
 // ── Gom nhóm lệnh SX theo đơn hàng ──────────────────────────────────────────
 
 interface DonHangGroup {
@@ -48,6 +60,7 @@ interface DonHangGroup {
   so_lenh_count: number
   tong_sl: number
   trang_thai_list: string[]
+  xuong_list: string[]           // danh sách xưởng unique trong nhóm
   orders: ProductionOrderListItem[]
 }
 
@@ -66,6 +79,7 @@ function groupOrders(orders: ProductionOrderListItem[]): DonHangGroup[] {
         so_lenh_count: 0,
         tong_sl: 0,
         trang_thai_list: [],
+        xuong_list: [],
         orders: [],
       })
     }
@@ -73,6 +87,8 @@ function groupOrders(orders: ProductionOrderListItem[]): DonHangGroup[] {
     g.so_lenh_count += 1
     g.tong_sl += Number(o.tong_sl_ke_hoach)
     if (!g.trang_thai_list.includes(o.trang_thai)) g.trang_thai_list.push(o.trang_thai)
+    const xuong = o.ten_phan_xuong ?? o.ten_kho_sx
+    if (xuong && !g.xuong_list.includes(xuong)) g.xuong_list.push(xuong)
     g.orders.push(o)
   })
   return Array.from(map.values())
@@ -87,6 +103,8 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
   const [inputSearch, setInputSearch] = useState<string>(saved.search ?? '')
   const [search, setSearch] = useState<string>(saved.search ?? '')
   const [trangThai, setTrangThai] = useState<string | undefined>(saved.trangThai)
+  const [phanXuongId, setPhanXuongId] = useState<number | undefined>(saved.phanXuongId ?? undefined)
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>(saved.phapNhanId ?? undefined)
   const [shortcutFilter, setShortcutFilter] = useState<string | null>(saved.shortcutFilter ?? null)
   const [dateRange, setDateRange] = useState<[string, string] | null>(saved.dateRange ?? null)
   const [page, setPage] = useState<number>(saved.page ?? 1)
@@ -105,14 +123,30 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
   // Persist filters to sessionStorage
   useEffect(() => {
     try {
-      sessionStorage.setItem(FILTER_KEY, JSON.stringify({ search, trangThai, shortcutFilter, dateRange, page }))
+      sessionStorage.setItem(FILTER_KEY, JSON.stringify({
+        search, trangThai, phanXuongId, phapNhanId, shortcutFilter, dateRange, page,
+      }))
     } catch {}
-  }, [search, trangThai, shortcutFilter, dateRange, page])
+  }, [search, trangThai, phanXuongId, phapNhanId, shortcutFilter, dateRange, page])
 
-  // Effective trangThai for API: shortcut overrides Select (except 'qua_han')
-  const effectiveTrangThai = shortcutFilter === 'moi' || shortcutFilter === 'dang_chay'
-    ? shortcutFilter
-    : trangThai
+  // Effective trangThai for API: shortcut overrides Select (except 'qua_han', 'sap_den_han')
+  const effectiveTrangThai =
+    shortcutFilter === 'moi' || shortcutFilter === 'dang_chay'
+      ? shortcutFilter
+      : trangThai
+
+  // ── Fetch danh mục xưởng + pháp nhân cho filter ──────────────────────────
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 300_000,
+  })
+
+  const { data: phapNhanList = [] } = useQuery({
+    queryKey: ['phap-nhan-all'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+    staleTime: 300_000,
+  })
 
   const handleExportExcel = () => {
     const items = data?.items ?? []
@@ -132,9 +166,11 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       { key: 'so_don', label: 'Đơn hàng', width: 16 },
       { key: 'ten_khach_hang', label: 'Khách hàng', width: 20 },
       { key: 'ten_hang', label: 'Mã/Tên hàng', width: 28 },
+      { key: 'ten_phan_xuong', label: 'Xưởng SX', width: 16 },
       { key: 'ngay_hoan_thanh_ke_hoach', label: 'Hoàn thành DK', width: 18 },
       { key: 'so_dong', label: 'Số dòng', width: 8 },
       { key: 'tong_sl_ke_hoach', label: 'SL kế hoạch', width: 14 },
+      { key: 'tong_sl_thuc_te', label: 'SL thực tế', width: 14 },
       { key: 'trang_thai_lbl', label: 'Trạng thái', width: 14 },
     ]
 
@@ -143,7 +179,9 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       stt: i + 1,
       ngay_lenh: fmtDate(r.ngay_lenh),
       ngay_hoan_thanh_ke_hoach: fmtDate(r.ngay_hoan_thanh_ke_hoach),
+      ten_phan_xuong: r.ten_phan_xuong ?? r.ten_kho_sx ?? '',
       tong_sl_ke_hoach: Number(r.tong_sl_ke_hoach),
+      tong_sl_thuc_te: Number(r.tong_sl_thuc_te),
       trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
     }))
 
@@ -168,8 +206,8 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       { header: 'Đơn hàng', key: 'so_don' },
       { header: 'Khách hàng', key: 'ten_khach_hang' },
       { header: 'Mã/Tên hàng', key: 'ten_hang' },
+      { header: 'Xưởng SX', key: 'ten_phan_xuong' },
       { header: 'Hoàn thành DK', key: 'ngay_hoan_thanh_ke_hoach' },
-      { header: 'Số dòng', key: 'so_dong', align: 'center' as const },
       { header: 'SL kế hoạch', key: 'tong_sl_ke_hoach', align: 'right' as const },
       { header: 'Trạng thái', key: 'trang_thai_lbl' },
     ]
@@ -181,8 +219,8 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       so_don: r.so_don ?? '',
       ten_khach_hang: r.ten_khach_hang ?? '',
       ten_hang: r.ten_hang ?? '',
+      ten_phan_xuong: r.ten_phan_xuong ?? r.ten_kho_sx ?? '—',
       ngay_hoan_thanh_ke_hoach: fmtDate(r.ngay_hoan_thanh_ke_hoach),
-      so_dong: r.so_dong,
       tong_sl_ke_hoach: fmtNum(r.tong_sl_ke_hoach),
       trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
     }))
@@ -200,12 +238,14 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
   }
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['production-orders', search, effectiveTrangThai, dateRange, page],
+    queryKey: ['production-orders', search, effectiveTrangThai, phanXuongId, phapNhanId, dateRange, page],
     queryFn: () =>
       productionOrdersApi
         .list({
           search,
           trang_thai: effectiveTrangThai,
+          phan_xuong_id: phanXuongId,
+          phap_nhan_id: phapNhanId,
           tu_ngay: dateRange?.[0],
           den_ngay: dateRange?.[1],
           page,
@@ -214,19 +254,47 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
         .then((r) => r.data),
   })
 
-  // Quá hạn: filter on frontend (active orders past deadline)
+  // Quá hạn & Sắp đến hạn: filter on frontend
   const today = dayjs().startOf('day')
   const displayItems = useMemo(() => {
     const items = data?.items ?? []
-    if (shortcutFilter !== 'qua_han') return items
-    return items.filter(o =>
+    if (shortcutFilter === 'qua_han') {
+      return items.filter(o =>
+        ['moi', 'dang_chay'].includes(o.trang_thai) &&
+        o.ngay_hoan_thanh_ke_hoach != null &&
+        dayjs(o.ngay_hoan_thanh_ke_hoach).isBefore(today)
+      )
+    }
+    if (shortcutFilter === 'sap_den_han') {
+      return items.filter(o =>
+        ['moi', 'dang_chay'].includes(o.trang_thai) &&
+        o.ngay_hoan_thanh_ke_hoach != null &&
+        !dayjs(o.ngay_hoan_thanh_ke_hoach).isBefore(today) &&
+        dayjs(o.ngay_hoan_thanh_ke_hoach).diff(today, 'day') <= 3
+      )
+    }
+    return items
+  }, [data?.items, shortcutFilter])
+
+  // ── Summary stats (tính từ toàn bộ displayItems) ─────────────────────────
+  const stats = useMemo(() => {
+    const all = data?.items ?? []
+    const dangSx = all.filter(o => o.trang_thai === 'dang_chay').length
+    const quaHan = all.filter(o =>
       ['moi', 'dang_chay'].includes(o.trang_thai) &&
       o.ngay_hoan_thanh_ke_hoach != null &&
       dayjs(o.ngay_hoan_thanh_ke_hoach).isBefore(today)
-    )
-  }, [data?.items, shortcutFilter])
+    ).length
+    const sapDenHan = all.filter(o =>
+      ['moi', 'dang_chay'].includes(o.trang_thai) &&
+      o.ngay_hoan_thanh_ke_hoach != null &&
+      !dayjs(o.ngay_hoan_thanh_ke_hoach).isBefore(today) &&
+      dayjs(o.ngay_hoan_thanh_ke_hoach).diff(today, 'day') <= 3
+    ).length
+    return { total: data?.total ?? 0, dangSx, quaHan, sapDenHan }
+  }, [data])
 
-  // Gom nhóm theo đơn hàng (chỉ dùng cho chế độ full)
+  // Gom nhóm theo đơn hàng
   const groups = useMemo(() => groupOrders(displayItems), [displayItems])
 
   const handleStart = async (id: number, soLenh: string) => {
@@ -277,6 +345,12 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
         <Space direction="vertical" size={0}>
           <Text style={{ color: '#1677ff', fontWeight: 500, fontSize: 12 }}>{v}</Text>
           {r.ten_hang && <Text style={{ fontSize: 11 }}>{r.ten_hang}</Text>}
+          {(r.ten_phan_xuong ?? r.ten_kho_sx) && (
+            <Tag color={xuongColor(r.ten_phan_xuong ?? r.ten_kho_sx)}
+              style={{ fontSize: 10, marginTop: 1, padding: '0 4px' }}>
+              {r.ten_phan_xuong ?? r.ten_kho_sx}
+            </Tag>
+          )}
         </Space>
       ),
     },
@@ -300,7 +374,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
         <Space direction="vertical" size={1}>
           <Space size={4}>
             <Button type="link" style={{ padding: 0, height: 'auto', fontSize: 13 }}
-              onClick={() => navigate(`/production/orders/${r.id}`)}>
+              onClick={(e) => { e.stopPropagation(); navigate(`/production/orders/${r.id}`) }}>
               {r.so_lenh}
             </Button>
             {r.de_xuat_mua_ngoai && r.trang_thai !== 'mua_ngoai' && (
@@ -314,10 +388,14 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       ),
     },
     {
-      title: 'Ngày lập',
-      dataIndex: 'created_at',
-      width: 130,
-      render: (v) => dayjs(v).format('DD/MM/YYYY HH:mm'),
+      title: 'Xưởng SX',
+      width: 120,
+      render: (_, r) => {
+        const ten = r.ten_phan_xuong ?? r.ten_kho_sx
+        return ten
+          ? <Tag color={xuongColor(ten)} style={{ fontSize: 11 }}>{ten}</Tag>
+          : <Text type="secondary">—</Text>
+      },
     },
     {
       title: 'Ngày lệnh',
@@ -326,17 +404,29 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       render: (v) => dayjs(v).format('DD/MM/YYYY'),
     },
     {
-      title: 'Số dòng',
-      dataIndex: 'so_dong',
-      width: 80,
-      align: 'center' as const,
-    },
-    {
-      title: 'SL kế hoạch',
-      dataIndex: 'tong_sl_ke_hoach',
-      width: 120,
-      align: 'right' as const,
-      render: (v) => new Intl.NumberFormat('vi-VN').format(v),
+      title: 'Tiến độ SL',
+      width: 160,
+      render: (_, r) => {
+        const kh = Number(r.tong_sl_ke_hoach)
+        const tt = Number(r.tong_sl_thuc_te)
+        if (kh <= 0) return <Text type="secondary">—</Text>
+        const pct = Math.round((tt / kh) * 100)
+        const color = pct >= 100 ? '#52c41a' : pct > 0 ? '#faad14' : '#d9d9d9'
+        return (
+          <Space direction="vertical" size={0} style={{ width: '100%' }}>
+            <Progress
+              percent={Math.min(pct, 100)}
+              size="small"
+              strokeColor={color}
+              showInfo={false}
+              style={{ margin: 0 }}
+            />
+            <Text style={{ fontSize: 11, color: pct >= 100 ? '#52c41a' : '#595959' }}>
+              {new Intl.NumberFormat('vi-VN').format(tt)}/{new Intl.NumberFormat('vi-VN').format(kh)}
+            </Text>
+          </Space>
+        )
+      },
     },
     {
       title: 'Hoàn thành DK',
@@ -356,7 +446,12 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
           )
         }
         if (isActive && diffDays <= 3) {
-          return <span style={{ color: '#d46b08', fontWeight: 500 }}>{d.format('DD/MM/YYYY')}</span>
+          return (
+            <Space size={4}>
+              <ClockCircleOutlined style={{ color: '#d46b08' }} />
+              <span style={{ color: '#d46b08', fontWeight: 500 }}>{d.format('DD/MM/YYYY')}</span>
+            </Space>
+          )
         }
         return d.format('DD/MM/YYYY')
       },
@@ -370,13 +465,13 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
     {
       title: 'Pháp nhân',
       dataIndex: 'ten_phap_nhan',
-      width: 120,
+      width: 110,
       render: (v) => v ?? '—',
     },
     {
       title: 'Người lập',
       dataIndex: 'created_by_name',
-      width: 120,
+      width: 110,
       render: (v) => v ?? '—',
     },
     {
@@ -384,7 +479,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       width: 150,
       align: 'center' as const,
       render: (_, r) => (
-        <Space size={4}>
+        <Space size={4} onClick={(e) => e.stopPropagation()}>
           <Tooltip title="Xem chi tiết">
             <Button size="small" icon={<EyeOutlined />}
               onClick={() => navigate(`/production/orders/${r.id}`)} />
@@ -449,6 +544,20 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       ),
     },
     {
+      title: 'Xưởng SX',
+      width: 200,
+      render: (_, g) => (
+        <Space size={4} wrap>
+          {g.xuong_list.length > 0
+            ? g.xuong_list.map(x => (
+                <Tag key={x} color={xuongColor(x)} style={{ fontSize: 11 }}>{x}</Tag>
+              ))
+            : <Text type="secondary" style={{ fontSize: 11 }}>—</Text>
+          }
+        </Space>
+      ),
+    },
+    {
       title: 'Số lệnh SX',
       width: 100,
       align: 'center' as const,
@@ -481,7 +590,11 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
 
   return (
     <div>
-      <style>{`.md-selected-row > td { background-color: #e6f4ff !important; }`}</style>
+      <style>{`
+        .md-selected-row > td { background-color: #e6f4ff !important; }
+        .order-row-clickable { cursor: pointer; }
+        .order-row-clickable:hover > td { background-color: #f5f5f5 !important; }
+      `}</style>
 
       <Card style={{ marginBottom: 8 }} styles={{ body: { padding: '12px 16px' } }}>
         <Row justify="space-between" align="middle">
@@ -512,6 +625,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
           </Col>
         </Row>
 
+        {/* ── Tìm kiếm ── */}
         <Row gutter={8} style={{ marginTop: 8 }}>
           <Col flex="auto">
             <Input
@@ -525,7 +639,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
           </Col>
           <Col>
             <Select
-              placeholder="TT"
+              placeholder="Trạng thái"
               size="small"
               style={{ width: 110 }}
               allowClear
@@ -536,10 +650,43 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
           </Col>
         </Row>
 
+        {/* ── Filter xưởng + pháp nhân + ngày ── */}
+        <Row gutter={8} style={{ marginTop: 8 }}>
+          <Col flex="auto">
+            <Select
+              placeholder="Xưởng sản xuất"
+              size="small"
+              style={{ width: '100%' }}
+              allowClear
+              value={phanXuongId}
+              onChange={(v) => { setPhanXuongId(v); setPage(1) }}
+              options={(phanXuongList as any[]).map((x: any) => ({
+                value: x.id,
+                label: x.ten_xuong ?? x.ten,
+              }))}
+            />
+          </Col>
+          <Col flex="auto">
+            <Select
+              placeholder="Pháp nhân"
+              size="small"
+              style={{ width: '100%' }}
+              allowClear
+              value={phapNhanId}
+              onChange={(v) => { setPhapNhanId(v); setPage(1) }}
+              options={(phapNhanList as any[]).map((p: any) => ({
+                value: p.id,
+                label: p.ten_phap_nhan ?? p.ten,
+              }))}
+            />
+          </Col>
+        </Row>
+
         <Row style={{ marginTop: 8 }}>
           <Col span={24}>
             <RangePicker
               style={{ width: '100%' }}
+              size="small"
               format="DD/MM/YYYY"
               placeholder={['Ngày lệnh từ', 'Đến ngày']}
               value={dateRange
@@ -560,50 +707,68 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
           </Col>
         </Row>
 
-        {/* ── Shortcut filter buttons ── */}
+        {/* ── Shortcut buttons ── */}
         <Row style={{ marginTop: 8 }} gutter={6}>
-          <Col>
-            <Button
-              size="small"
-              type={shortcutFilter === 'moi' ? 'primary' : 'default'}
-              onClick={() => {
-                setShortcutFilter(shortcutFilter === 'moi' ? null : 'moi')
-                setTrangThai(undefined)
-                setPage(1)
-              }}
-            >
-              Mới
-            </Button>
-          </Col>
-          <Col>
-            <Button
-              size="small"
-              type={shortcutFilter === 'dang_chay' ? 'primary' : 'default'}
-              onClick={() => {
-                setShortcutFilter(shortcutFilter === 'dang_chay' ? null : 'dang_chay')
-                setTrangThai(undefined)
-                setPage(1)
-              }}
-            >
-              Đang SX
-            </Button>
-          </Col>
-          <Col>
-            <Button
-              size="small"
-              danger={shortcutFilter === 'qua_han'}
-              type={shortcutFilter === 'qua_han' ? 'primary' : 'default'}
-              icon={shortcutFilter === 'qua_han' ? <WarningOutlined /> : undefined}
-              onClick={() => {
-                setShortcutFilter(shortcutFilter === 'qua_han' ? null : 'qua_han')
-                setTrangThai(undefined)
-                setPage(1)
-              }}
-            >
-              Quá hạn
-            </Button>
-          </Col>
+          {[
+            { key: 'moi',         label: 'Mới',          danger: false },
+            { key: 'dang_chay',   label: 'Đang SX',      danger: false },
+            { key: 'qua_han',     label: 'Quá hạn',      danger: true  },
+            { key: 'sap_den_han', label: 'Sắp đến hạn',  danger: false },
+          ].map(({ key, label, danger }) => (
+            <Col key={key}>
+              <Button
+                size="small"
+                danger={danger && shortcutFilter === key}
+                type={shortcutFilter === key ? 'primary' : 'default'}
+                icon={key === 'qua_han' && shortcutFilter === key ? <WarningOutlined /> :
+                      key === 'sap_den_han' && shortcutFilter === key ? <ClockCircleOutlined /> : undefined}
+                style={key === 'sap_den_han' && shortcutFilter === key
+                  ? { borderColor: '#d46b08', color: '#fff', background: '#d46b08' }
+                  : key === 'sap_den_han'
+                  ? { borderColor: '#d46b08', color: '#d46b08' }
+                  : {}}
+                onClick={() => {
+                  setShortcutFilter(shortcutFilter === key ? null : key)
+                  setTrangThai(undefined)
+                  setPage(1)
+                }}
+              >
+                {label}
+                {key === 'qua_han' && stats.quaHan > 0 && (
+                  <span style={{ marginLeft: 4, background: '#ff4d4f', color: '#fff', borderRadius: 8, padding: '0 5px', fontSize: 10 }}>
+                    {stats.quaHan}
+                  </span>
+                )}
+                {key === 'sap_den_han' && stats.sapDenHan > 0 && (
+                  <span style={{ marginLeft: 4, background: '#d46b08', color: '#fff', borderRadius: 8, padding: '0 5px', fontSize: 10 }}>
+                    {stats.sapDenHan}
+                  </span>
+                )}
+              </Button>
+            </Col>
+          ))}
         </Row>
+
+        {/* ── Summary stats ── */}
+        {!isEmbedded && (
+          <Row gutter={16} style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f0f0f0' }}>
+            <Col>
+              <Statistic title="Tổng lệnh" value={stats.total} valueStyle={{ fontSize: 16 }} />
+            </Col>
+            <Col>
+              <Statistic title="Đang SX" value={stats.dangSx}
+                valueStyle={{ fontSize: 16, color: '#52c41a' }} />
+            </Col>
+            <Col>
+              <Statistic title="Quá hạn" value={stats.quaHan}
+                valueStyle={{ fontSize: 16, color: stats.quaHan > 0 ? '#cf1322' : '#595959' }} />
+            </Col>
+            <Col>
+              <Statistic title="Sắp đến hạn (≤3 ngày)" value={stats.sapDenHan}
+                valueStyle={{ fontSize: 16, color: stats.sapDenHan > 0 ? '#d46b08' : '#595959' }} />
+            </Col>
+          </Row>
+        )}
       </Card>
 
       {/* ── Chế độ embedded (sidebar): 2 cấp compact ── */}
@@ -692,7 +857,11 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
                     dataSource={g.orders}
                     columns={orderColumns}
                     pagination={false}
-                    scroll={{ x: 1000 }}
+                    scroll={{ x: 1100 }}
+                    rowClassName={() => 'order-row-clickable'}
+                    onRow={(r) => ({
+                      onClick: () => navigate(`/production/orders/${r.id}`),
+                    })}
                   />
                 </div>
               ),
