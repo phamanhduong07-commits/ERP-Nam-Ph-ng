@@ -17,6 +17,7 @@ class Machine(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     phan_xuong_obj = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
     logs: Mapped[list["ProductionLog"]] = relationship("ProductionLog", back_populates="machine_obj")

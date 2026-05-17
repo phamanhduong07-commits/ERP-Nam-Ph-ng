@@ -2,7 +2,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
-from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -145,7 +146,7 @@ class PurchaseOrderItem(Base):
     production_plan_line_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("production_plan_lines.id"), nullable=True
     )
-    phoi_spec: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    phoi_spec: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     po: Mapped["PurchaseOrder"] = relationship("PurchaseOrder", back_populates="items")
     paper_material = relationship("PaperMaterial")

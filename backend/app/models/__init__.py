@@ -8,7 +8,8 @@ from app.models.master import (
     DonViTinh, ViTri, TinhThanh, PhuongXa,
 )
 from app.models.ccdc import NhomCCDC, CongCuDungCu, PhieuXuatCCDC, PhieuXuatCCDCItem
-from app.models.purchase import PurchaseOrder, PurchaseOrderItem
+from app.models.purchase import PurchaseOrder, PurchaseOrderItem, PurchaseReturn, PurchaseReturnItem
+from app.models.yeu_cau_giao_hang import YeuCauGiaoHang, YeuCauGiaoHangItem
 from app.models.purchase_requisition import PurchaseRequisition, PurchaseRequisitionItem
 from app.models.warehouse_doc import (
     GoodsReceipt, GoodsReceiptItem,
