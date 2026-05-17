@@ -113,6 +113,20 @@ function calcSoM2Luong(khoCm: number | null, catCm: number | null, soLuong: numb
   return Math.round(khoCm * catCm * soLuong * heSo / 10000 * 100) / 100
 }
 
+// kg lỗi = số tấm lỗi × diện tích/tấm(m²) × tổng định lượng(g/m²) / 1000
+// Tổng định lượng lấy từ kế hoạch SX: mat_dl + song_1_dl + mat_1_dl + ...
+function calcKgLoi(
+  khoCm: number | null, catCm: number | null, soLuongLoi: number | null,
+  matDl: number | null, song1Dl: number | null, mat1Dl: number | null,
+  song2Dl: number | null, mat2Dl: number | null, song3Dl: number | null, mat3Dl: number | null,
+): number | null {
+  if (!khoCm || !catCm || !soLuongLoi || soLuongLoi <= 0) return null
+  const tongDl = (matDl ?? 0) + (song1Dl ?? 0) + (mat1Dl ?? 0)
+              + (song2Dl ?? 0) + (mat2Dl ?? 0) + (song3Dl ?? 0) + (mat3Dl ?? 0)
+  if (tongDl <= 0) return null
+  return Math.round(khoCm * catCm / 10000 * tongDl / 1000 * soLuongLoi * 100) / 100
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface InTemState {
   order: ProductionOrder
@@ -734,6 +748,22 @@ export default function MaySongPage() {
       width: 80,
       render: (v: number) => v > 0 ? <Text type="danger">{v.toLocaleString()}</Text> : '—',
     },
+    {
+      title: 'kg lỗi',
+      key: 'kg_loi',
+      align: 'right',
+      width: 80,
+      render: (_: unknown, r: PhieuNhapPhoiSongListItem) => {
+        const it = r.items[0]
+        const kg = calcKgLoi(
+          it?.chieu_kho ?? null, it?.chieu_cat ?? null, r.tong_so_luong_loi,
+          it?.mat_dl ?? null, it?.song_1_dl ?? null, it?.mat_1_dl ?? null,
+          it?.song_2_dl ?? null, it?.mat_2_dl ?? null, it?.song_3_dl ?? null, it?.mat_3_dl ?? null,
+        )
+        if (kg == null) return <Text type="secondary">—</Text>
+        return <Text type="danger">{kg.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</Text>
+      },
+    },
     { title: 'Người tạo', dataIndex: 'created_by_name', render: (v: string | null) => v ?? '—' },
   ]
 
@@ -884,6 +914,10 @@ export default function MaySongPage() {
                   const totalKH = lsxItems.reduce((s, r) => s + Number(r.tong_sl_ke_hoach), 0)
                   const totalTT = lsxItems.reduce((s, r) => s + Number(r.tong_sl_thuc_te), 0)
                   const totalCon = totalKH - totalTT
+                  const totalM2Tab1 = lsxItems.reduce((s, r) => {
+                    const soTam = calcSoTamFromListItem(r) ?? 0
+                    return s + (calcSoM2Luong(r.kho_tt, r.dai_tt, soTam, r.so_lop) ?? 0)
+                  }, 0)
                   return (
                     <div style={{ padding: '6px 12px', background: '#fafafa', border: '1px solid #f0f0f0', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
                       <Space size={16}>
@@ -893,6 +927,11 @@ export default function MaySongPage() {
                         <Text strong style={{ fontSize: 12, color: totalCon > 0 ? '#cf1322' : '#52c41a' }}>
                           {totalCon > 0 ? `Còn: ${totalCon.toLocaleString()}` : 'Đủ SL ✓'}
                         </Text>
+                        {totalM2Tab1 > 0 && (
+                          <Text style={{ fontSize: 12, color: '#531dab' }}>
+                            m² lương: <Text strong style={{ color: '#531dab' }}>{totalM2Tab1.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</Text>
+                          </Text>
+                        )}
                       </Space>
                     </div>
                   )
@@ -920,6 +959,15 @@ export default function MaySongPage() {
                 const it = p.items[0]
                 const m2 = calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, p.tong_so_tam, it?.so_lop ?? null)
                 return s + (m2 ?? 0)
+              }, 0)
+              const totalKgLoi = filteredPhieu.reduce((s, p) => {
+                const it = p.items[0]
+                const kg = calcKgLoi(
+                  it?.chieu_kho ?? null, it?.chieu_cat ?? null, p.tong_so_luong_loi,
+                  it?.mat_dl ?? null, it?.song_1_dl ?? null, it?.mat_1_dl ?? null,
+                  it?.song_2_dl ?? null, it?.mat_2_dl ?? null, it?.song_3_dl ?? null, it?.mat_3_dl ?? null,
+                )
+                return s + (kg ?? 0)
               }, 0)
               return (
                 <>
@@ -1011,6 +1059,7 @@ export default function MaySongPage() {
                         { label: 'Tổng tấm',   value: totalTam.toLocaleString(), unit: 'tấm',   color: '#722ed1' },
                         { label: 'm² lương',   value: totalM2Luong.toLocaleString('vi-VN', { maximumFractionDigits: 1 }), unit: 'm²', color: '#531dab' },
                         { label: 'Phôi lỗi',   value: totalLoi.toLocaleString(), unit: 'cái',   color: totalLoi > 0 ? '#cf1322' : '#8c8c8c' },
+                        ...(totalKgLoi > 0 ? [{ label: 'kg lỗi', value: totalKgLoi.toLocaleString('vi-VN', { maximumFractionDigits: 1 }), unit: 'kg', color: '#cf1322' }] : []),
                       ].map(s => (
                         <Col key={s.label}>
                           <div style={{ padding: '4px 14px', background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 6, textAlign: 'center' }}>
