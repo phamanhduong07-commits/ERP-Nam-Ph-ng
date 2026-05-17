@@ -60,7 +60,7 @@ def _parse_attendance_date(value: object) -> date:
         raise ValueError("empty date")
     try:
         return date.fromisoformat(text[:10])
-    except Exception:
+    except ValueError:
         pass
 
     match = re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", text)
@@ -83,7 +83,7 @@ def _parse_attendance_datetime(value: object, ngay: date) -> datetime | None:
     text = str(value).strip()
     try:
         return datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except Exception:
+    except ValueError:
         pass
     match = re.search(r"(\d{1,2}):(\d{2})(?::(\d{2}))?", text)
     if match:

@@ -10,9 +10,12 @@ GET  /api/bom/by-item/{production_order_item_id} — lấy BOM của dòng LSX
 PATCH /api/bom/{bom_id}/confirm              — xác nhận BOM (draft → confirmed)
 """
 
+import logging
 import math
 import re
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import text as sql_text
@@ -919,8 +922,8 @@ def _load_addon_qi(qi, poi: "ProductionOrderItem", db: Session):
                 qitem = db.query(QuoteItem).filter(QuoteItem.id == row.quote_item_id).first()
                 if qitem:
                     return qitem
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("_find_quote_item: SOI lookup failed for poi=%s: %s", poi.id if poi else None, e)
 
     return None   # không tìm được QuoteItem thực → addon đều = 0
 
