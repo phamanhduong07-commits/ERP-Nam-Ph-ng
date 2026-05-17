@@ -143,6 +143,381 @@ interface InTemState {
 
 interface StatusTarget { id: number; so_lenh: string }
 
+// ─── Modal: Tạm dừng ─────────────────────────────────────────────────────────
+interface ModalTamDungProps {
+  target: StatusTarget | null
+  loading: boolean
+  onClose: () => void
+  onSubmit: (id: number, data: PauseOrderPayload) => void
+}
+function ModalTamDung({ target, loading, onClose, onSubmit }: ModalTamDungProps) {
+  const [form] = Form.useForm()
+  return (
+    <Modal
+      title={`Tạm dừng — ${target?.so_lenh ?? ''}`}
+      open={target !== null}
+      onCancel={() => { onClose(); form.resetFields() }}
+      onOk={() => form.submit()}
+      okText="⏸ Tạm dừng"
+      okButtonProps={{ danger: true }}
+      confirmLoading={loading}
+      destroyOnHidden
+      width={420}
+    >
+      <Form form={form} layout="vertical"
+        onFinish={(values) => {
+          if (!target) return
+          onSubmit(target.id, {
+            gio_bat_dau_dung: (values.gio_bat_dau_dung as dayjs.Dayjs).format('HH:mm'),
+            ly_do: values.ly_do as string,
+            ghi_chu: (values.ghi_chu as string | null) ?? null,
+          })
+        }}
+      >
+        <Form.Item name="gio_bat_dau_dung" label="Giờ dừng"
+          rules={[{ required: true, message: 'Nhập giờ dừng' }]}
+          initialValue={dayjs()}
+        >
+          <TimePicker format="HH:mm" style={{ width: '100%' }} />
+        </Form.Item>
+        <div style={{ marginBottom: 8 }}>
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>Chọn nhanh:</Text>
+          <Space wrap size={4}>
+            {['Hết giấy', 'Sửa máy', 'Nghỉ cơm', 'Đổi ca'].map(reason => (
+              <Button key={reason} size="small" onClick={() => form.setFieldValue('ly_do', reason)}>
+                {reason}
+              </Button>
+            ))}
+          </Space>
+        </div>
+        <Form.Item name="ly_do" label="Lý do dừng" rules={[{ required: true, message: 'Nhập lý do' }]}>
+          <Input placeholder="VD: Hết giấy, Sửa máy, Nghỉ cơm..." />
+        </Form.Item>
+        <Form.Item name="ghi_chu" label="Ghi chú (tuỳ chọn)">
+          <Input.TextArea rows={2} />
+        </Form.Item>
+      </Form>
+    </Modal>
+  )
+}
+
+// ─── Modal: Hoàn thành ────────────────────────────────────────────────────────
+interface ModalHoanThanhProps {
+  orderId: number | null
+  order: ProductionOrder | null
+  orderLoading: boolean
+  planLine: PlanLineResponse | null
+  submitting: boolean
+  onClose: () => void
+  onSubmit: (orderId: number, data: PhieuNhapPhoiSongPayload) => void
+}
+function ModalHoanThanh({ orderId, order, orderLoading, planLine, submitting, onClose, onSubmit }: ModalHoanThanhProps) {
+  const [form] = Form.useForm()
+  const slTTWatch = Form.useWatch<number>('so_luong_thuc_te', form)
+  return (
+    <Modal
+      title={`Hoàn thành — ${order?.so_lenh ?? '...'}`}
+      open={orderId !== null}
+      onCancel={() => { onClose(); form.resetFields() }}
+      onOk={() => form.submit()}
+      okText="✓ Hoàn thành"
+      okButtonProps={{ type: 'primary' }}
+      confirmLoading={submitting}
+      width={480}
+      destroyOnHidden
+    >
+      {orderLoading ? (
+        <div style={{ textAlign: 'center', padding: 32 }}><Spin size="large" /></div>
+      ) : order ? (
+        <>
+          <div style={{ marginBottom: 14, padding: '8px 12px', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
+            <Text strong style={{ fontSize: 14 }}>{order.items[0]?.ten_hang ?? '—'}</Text>
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                KH: {order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0).toLocaleString()} thùng
+                {planLine?.kho1 ? ` | Khổ: ${planLine.kho1} cm` : ''}
+                {planLine?.dai_tt ? ` | Cắt: ${planLine.dai_tt} cm` : ''}
+                {planLine?.qccl ? ` | ${planLine.qccl}` : ''}
+              </Text>
+            </div>
+          </div>
+          <Form form={form} layout="vertical" size="middle"
+            onFinish={(values) => {
+              if (!order || !orderId) return
+              const oi = order.items[0]
+              const khoCm = planLine?.kho1 ?? (getKhoMm(oi) != null ? getKhoMm(oi)! / 10 : null)
+              const catCm = planLine?.dai_tt ?? (getCatMm(oi) != null ? getCatMm(oi)! / 10 : null)
+              const soDao = planLine?.so_dao ?? null
+              const slTT = values.so_luong_thuc_te as number
+              const soTam = soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi, slTT) ?? null)
+              onSubmit(orderId, {
+                ngay: (values.ngay as dayjs.Dayjs)?.format('YYYY-MM-DD') ?? dayjs().format('YYYY-MM-DD'),
+                ca: values.ca as string,
+                ghi_chu: (values.ghi_chu as string | null) ?? null,
+                gio_bat_dau: values.gio_bat_dau ? (values.gio_bat_dau as dayjs.Dayjs).format('HH:mm') : null,
+                gio_ket_thuc: values.gio_ket_thuc ? (values.gio_ket_thuc as dayjs.Dayjs).format('HH:mm') : null,
+                items: order.items.map((orderItem, idx) => ({
+                  production_order_item_id: orderItem.id,
+                  so_luong_ke_hoach: Number(orderItem.so_luong_ke_hoach),
+                  so_luong_thuc_te: idx === 0 ? slTT : 0,
+                  so_luong_loi: idx === 0 ? ((values.so_luong_loi as number | null) ?? null) : null,
+                  chieu_kho: idx === 0 ? khoCm : null,
+                  chieu_cat: idx === 0 ? catCm : null,
+                  so_tam: idx === 0 ? soTam : null,
+                })),
+              })
+            }}
+          >
+            <Row gutter={10}>
+              <Col span={6}>
+                <Form.Item name="ngay" label="Ngày" initialValue={dayjs()}>
+                  <DatePicker style={{ width: '100%' }} format="DD/MM" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="ca" label="Ca" initialValue={detectCa()} rules={[{ required: true, message: 'Chọn ca' }]}>
+                  <Select
+                    options={['Ca 1', 'Ca 2', 'Ca 3', 'Ca đêm'].map(c => ({ value: c, label: c }))}
+                    onChange={(v: string) => form.setFieldValue('gio_bat_dau', detectGioBD(v))}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="gio_bat_dau" label="Giờ BĐ" initialValue={detectGioBD(detectCa())}>
+                  <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="gio_ket_thuc" label="Giờ KT" initialValue={dayjs()}>
+                  <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item name="so_luong_thuc_te" label="Số lượng thực tế (thùng)"
+              rules={[{ required: true, message: 'Nhập SL thực tế' }]}
+              initialValue={order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)}
+            >
+              <InputNumber min={0} style={{ width: '100%' }} size="large" />
+            </Form.Item>
+            {(() => {
+              const slKH = order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
+              const slTT = slTTWatch ?? 0
+              const pct = slKH > 0 ? Math.min(100, Math.round((slTT / slKH) * 100)) : 0
+              const oi0 = order.items[0]
+              const soDao = planLine?.so_dao ?? null
+              const estTam = slTT > 0
+                ? (soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi0, slTT) ?? null))
+                : null
+              return slKH > 0 ? (
+                <>
+                  <Progress percent={pct} size="small" style={{ marginBottom: 4 }}
+                    strokeColor={pct >= 100 ? '#52c41a' : pct >= 80 ? '#fa8c16' : '#1677ff'}
+                    format={p => `${p}% (${slTT.toLocaleString()}/${slKH.toLocaleString()})`}
+                  />
+                  {estTam != null && (
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                      Ước tính: <Text strong>{estTam.toLocaleString()} tấm</Text>
+                    </Text>
+                  )}
+                </>
+              ) : null
+            })()}
+            <Row gutter={10}>
+              <Col span={12}>
+                <Form.Item name="so_luong_loi" label="Phôi lỗi (nếu có)">
+                  <InputNumber min={0} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item name="ghi_chu" label="Ghi chú" style={{ marginBottom: 0 }}>
+              <Input.TextArea rows={2} />
+            </Form.Item>
+          </Form>
+        </>
+      ) : null}
+    </Modal>
+  )
+}
+
+// ─── Modal: Kiểm tra & In tem ─────────────────────────────────────────────────
+interface ModalInTemProps {
+  state: InTemState | null
+  onClose: () => void
+  onUpdateTamPerPallet: (n: number) => void
+  onUpdateSoPallet: (n: number) => void
+}
+function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: ModalInTemProps) {
+  const handlePrint = async () => {
+    if (!state) return
+    const { order, phieu, soTam, soThung, soPallet, khoMm, catMm, ke_hoach_qccl, ke_hoach_ghi_chu } = state
+    const oi       = order.items[0]
+    const khoCmStr = khoMm != null ? mmToDisplayCm(khoMm) : '?'
+    const catCmStr = catMm != null ? mmToDisplayCm(catMm) : '?'
+    const dims = oi?.loai_thung && oi?.dai && oi?.rong && oi?.cao
+      ? calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), oi.so_lop ?? 3)
+      : null
+    const so_dao    = Math.max(1, dims?.so_dao ?? 1)
+    const tamNho    = soTam > 0 ? Math.round(soTam / so_dao) : 0
+    const ngaySxMaySong = phieu?.ngay ?? order.ngay_bat_dau_ke_hoach ?? ''
+    await printProductionTagBatch({
+      so_lenh:          order.so_lenh,
+      ten_khach_hang:   order.ten_khach_hang ?? '',
+      so_don_hang:      order.so_don ?? '',
+      so_po_kh:         order.so_po_kh ?? '',
+      loai_sp:          oi?.loai_thung ?? '',
+      song:             oi?.to_hop_song ?? '',
+      phan_xuong:       order.ten_phan_xuong ?? 'Nam Phương',
+      qccl:             ke_hoach_qccl,
+      ngay_chay_song:   ngaySxMaySong,
+      ngay_giao_cu_chi: oi?.ngay_giao_hang ?? '',
+      ngay_giao_kh:     order.ngay_hoan_thanh_ke_hoach ?? '',
+      cong_doan:        oi?.cong_doan ?? '',
+      ten_san_pham:     oi?.ten_hang ?? '',
+      sl_tam_lon: soTam > 0
+        ? `${khoCmStr} × ${catCmStr} cm | ${soTam.toLocaleString()} tấm | ${soPallet} pallet`
+        : `${khoCmStr} × ${catCmStr} cm`,
+      sl_tam_nho: tamNho > 0 ? `${tamNho.toLocaleString()} tấm` : '',
+      sl_thung: soThung > 0
+        ? `${soThung.toLocaleString()} ${oi?.dvt ?? 'thùng'}`
+        : `${oi?.so_luong_ke_hoach ?? ''} ${oi?.dvt ?? 'thùng'}`,
+      can_mang:   oi?.loai_in ? 'Có' : 'Không',
+      chong_tham: 'Không',
+      bo_phan:    'Máy Sóng',
+      ghi_chu:    ke_hoach_ghi_chu,
+    }, soPallet)
+    onClose()
+  }
+  return (
+    <Modal
+      title={`Kiểm tra & In tem — ${state?.order.so_lenh ?? ''}`}
+      open={state !== null}
+      onCancel={onClose}
+      footer={[
+        <Button key="cancel" onClick={onClose}>Đóng</Button>,
+        <Button key="print" type="primary" size="large" icon={<PrinterOutlined />} onClick={handlePrint}>
+          In {state?.soPallet ?? 1} tem
+        </Button>,
+      ]}
+      width={540}
+      destroyOnHidden
+    >
+      {state && (() => {
+        const { order, soTam, soThung, tamPerPallet, khoMm, catMm } = state
+        const oi       = order.items[0]
+        const khoCmStr = khoMm != null ? mmToDisplayCm(khoMm) : '?'
+        const catCmStr = catMm != null ? mmToDisplayCm(catMm) : '?'
+        return (
+          <>
+            <div style={{ border: '2px solid #333', borderRadius: 6, padding: 12, marginBottom: 16, background: '#fafafa' }}>
+              <Row gutter={8} style={{ marginBottom: 8 }}>
+                <Col span={14}>
+                  <Text type="secondary" style={{ fontSize: 10 }}>KHÁCH HÀNG</Text>
+                  <div><Text strong style={{ fontSize: 13 }}>{order.ten_khach_hang ?? '—'}</Text></div>
+                </Col>
+                <Col span={10}>
+                  <Text type="secondary" style={{ fontSize: 10 }}>SỐ ĐH / PO KH</Text>
+                  <div>
+                    <Text style={{ fontSize: 12 }}>
+                      {order.so_don ?? '—'}{order.so_po_kh ? ` / ${order.so_po_kh}` : ''}
+                    </Text>
+                  </div>
+                </Col>
+              </Row>
+              <div style={{ padding: '6px 0', borderTop: '1px solid #ddd', borderBottom: '1px solid #ddd', marginBottom: 8 }}>
+                <Text type="secondary" style={{ fontSize: 10 }}>TÊN SẢN PHẨM</Text>
+                <div><Text strong style={{ fontSize: 15 }}>{oi?.ten_hang ?? '—'}</Text></div>
+              </div>
+              <Row gutter={6} style={{ marginBottom: 10 }}>
+                <Col span={7}>
+                  <Text type="secondary" style={{ fontSize: 10 }}>LOẠI THÙNG</Text>
+                  <div><Text>{oi?.loai_thung ?? '—'}</Text></div>
+                </Col>
+                <Col span={7}>
+                  <Text type="secondary" style={{ fontSize: 10 }}>SÓNG</Text>
+                  <div><Text strong>{oi?.to_hop_song ?? '—'}</Text></div>
+                </Col>
+                <Col span={10}>
+                  <Text type="secondary" style={{ fontSize: 10 }}>QCCL / CÁN LẰN</Text>
+                  <div><Text style={{ fontSize: 12 }}>{state.ke_hoach_qccl || '—'}</Text></div>
+                </Col>
+              </Row>
+              <Row gutter={8} style={{ marginBottom: 10 }}>
+                <Col span={8}>
+                  <div style={{ border: '2px solid #1677ff', borderRadius: 6, textAlign: 'center', padding: '8px 4px', background: '#e6f4ff' }}>
+                    <div style={{ fontSize: 10, color: '#1677ff', fontWeight: 600, marginBottom: 2 }}>KHỔ × CẮT</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2 }}>{khoCmStr} × {catCmStr}</div>
+                    <div style={{ fontSize: 11, color: '#888' }}>cm</div>
+                  </div>
+                </Col>
+                <Col span={8}>
+                  <div style={{ border: '2px solid #722ed1', borderRadius: 6, textAlign: 'center', padding: '8px 4px', background: '#f9f0ff' }}>
+                    <div style={{ fontSize: 10, color: '#722ed1', fontWeight: 600, marginBottom: 2 }}>SỐ TẤM</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>{soTam > 0 ? soTam.toLocaleString() : '—'}</div>
+                    <div style={{ fontSize: 11, color: '#888' }}>tấm</div>
+                  </div>
+                </Col>
+                <Col span={8}>
+                  <div style={{ border: '2px solid #52c41a', borderRadius: 6, textAlign: 'center', padding: '8px 4px', background: '#f6ffed' }}>
+                    <div style={{ fontSize: 10, color: '#52c41a', fontWeight: 600, marginBottom: 2 }}>SỐ THÙNG</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>{soThung > 0 ? soThung.toLocaleString() : '—'}</div>
+                    <div style={{ fontSize: 11, color: '#888' }}>{oi?.dvt ?? 'thùng'}</div>
+                  </div>
+                </Col>
+              </Row>
+              <Row gutter={8}>
+                {order.ngay_bat_dau_ke_hoach && (
+                  <Col span={8}>
+                    <Text type="secondary" style={{ fontSize: 10 }}>NSX MÁY SÓNG</Text>
+                    <div><Text style={{ fontSize: 12 }}>{order.ngay_bat_dau_ke_hoach}</Text></div>
+                  </Col>
+                )}
+                {oi?.ngay_giao_hang && (
+                  <Col span={8}>
+                    <Text type="secondary" style={{ fontSize: 10 }}>GIAO VỀ CỦ CHI</Text>
+                    <div><Text strong style={{ color: '#d4380d', fontSize: 12 }}>{oi.ngay_giao_hang}</Text></div>
+                  </Col>
+                )}
+                {order.ngay_hoan_thanh_ke_hoach && (
+                  <Col span={8}>
+                    <Text type="secondary" style={{ fontSize: 10 }}>GIAO CHO KH</Text>
+                    <div><Text strong style={{ color: '#d4380d', fontSize: 12 }}>{order.ngay_hoan_thanh_ke_hoach}</Text></div>
+                  </Col>
+                )}
+              </Row>
+            </div>
+            <Divider style={{ margin: '10px 0' }} />
+            <Row align="middle" gutter={12} style={{ marginBottom: 6 }}>
+              <Col span={12}><Text>Tấm / pallet:</Text></Col>
+              <Col span={12}>
+                <InputNumber
+                  min={1} value={tamPerPallet}
+                  onChange={v => v && onUpdateTamPerPallet(Math.max(1, v))}
+                  addonAfter="tấm" style={{ width: '100%' }}
+                />
+              </Col>
+            </Row>
+            {soTam > 0 && (
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 10 }}>
+                {soTam.toLocaleString()} tấm ÷ {tamPerPallet} tấm/pallet
+                {' = '}<Text strong>{state.soPallet} pallet</Text>
+              </Text>
+            )}
+            <Row align="middle" gutter={12}>
+              <Col span={12}><Text strong>Số pallet cần in tem:</Text></Col>
+              <Col span={12}>
+                <InputNumber min={1} max={99} value={state.soPallet}
+                  onChange={v => onUpdateSoPallet(v ?? 1)}
+                  size="large" style={{ width: '100%' }}
+                />
+              </Col>
+            </Row>
+          </>
+        )
+      })()}
+    </Modal>
+  )
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function MaySongPage() {
   const [activeTab, setActiveTab]       = useState('dang_sx')
@@ -159,10 +534,7 @@ export default function MaySongPage() {
   const [histDenNgay, setHistDenNgay]   = useState(dayjs().format('YYYY-MM-DD'))
   const [histFilterCa, setHistFilterCa]   = useState<string | undefined>()
   const [histSearchLenh, setHistSearchLenh] = useState('')
-  const [pauseForm]       = Form.useForm()
-  const [hoanthanhForm]   = Form.useForm()
   const qc = useQueryClient()
-  const slTTWatch = Form.useWatch<number>('so_luong_thuc_te', hoanthanhForm)
 
   // ─── Queries ───────────────────────────────────────────────────────────────
 
@@ -186,6 +558,7 @@ export default function MaySongPage() {
     queryFn: () =>
       productionOrdersApi.list({ page_size: 200, phan_xuong_id: filterPxId }).then(r => r.data),
     refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   })
 
   // Khi chọn KH: lấy set so_lenh trong KH đó để filter
@@ -272,7 +645,6 @@ export default function MaySongPage() {
       message.success('Đã tạm dừng')
       invalidateList()
       setPauseTarget(null)
-      pauseForm.resetFields()
     },
     onError: () => message.error('Lỗi khi tạm dừng'),
   })
@@ -308,7 +680,6 @@ export default function MaySongPage() {
       }
       completeMut.mutate(vars.orderId)
       setHoanthanhId(null)
-      hoanthanhForm.resetFields()
     },
     onError: () => message.error('Lỗi khi lưu phiếu, vui lòng thử lại'),
   })
@@ -376,81 +747,6 @@ export default function MaySongPage() {
     } finally {
       setInTemLoading(false)
     }
-  }
-
-  const handleHoanthanhSubmit = (values: Record<string, unknown>) => {
-    if (!hoanthanhOrder) return
-    const oi    = hoanthanhOrder.items[0]
-    const khoCm = hoanthanhPlanLine?.kho1   ?? (getKhoMm(oi) != null ? getKhoMm(oi)! / 10 : null)
-    const catCm = hoanthanhPlanLine?.dai_tt ?? (getCatMm(oi) != null ? getCatMm(oi)! / 10 : null)
-    const soDao = hoanthanhPlanLine?.so_dao ?? null
-    const slTT  = values.so_luong_thuc_te as number
-    const soTam = soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi, slTT) ?? null)
-    createPhieu.mutate({
-      orderId: hoanthanhOrder.id,
-      data: {
-        ngay: (values.ngay as dayjs.Dayjs)?.format('YYYY-MM-DD') ?? dayjs().format('YYYY-MM-DD'),
-        ca:           values.ca as string,
-        ghi_chu:      (values.ghi_chu as string | null) ?? null,
-        gio_bat_dau:  values.gio_bat_dau  ? (values.gio_bat_dau  as dayjs.Dayjs).format('HH:mm') : null,
-        gio_ket_thuc: values.gio_ket_thuc ? (values.gio_ket_thuc as dayjs.Dayjs).format('HH:mm') : null,
-        items: hoanthanhOrder.items.map((orderItem, idx) => ({
-          production_order_item_id: orderItem.id,
-          so_luong_ke_hoach: Number(orderItem.so_luong_ke_hoach),
-          so_luong_thuc_te:  idx === 0 ? slTT : 0,
-          so_luong_loi:      idx === 0 ? ((values.so_luong_loi as number | null) ?? null) : null,
-          chieu_kho:         idx === 0 ? khoCm : null,
-          chieu_cat:         idx === 0 ? catCm : null,
-          so_tam:            idx === 0 ? soTam : null,
-        })),
-      },
-    })
-  }
-
-  const handlePrint = async () => {
-    if (!inTemState) return
-    const { order, phieu, soTam, soThung, soPallet, khoMm, catMm, ke_hoach_qccl, ke_hoach_ghi_chu } = inTemState
-    const oi       = order.items[0]
-    const khoCmStr = khoMm != null ? mmToDisplayCm(khoMm) : '?'
-    const catCmStr = catMm != null ? mmToDisplayCm(catMm) : '?'
-
-    // sl_tam_nho = soTam / so_dao (số phôi chia cho số dao)
-    const dims = oi?.loai_thung && oi?.dai && oi?.rong && oi?.cao
-      ? calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), oi.so_lop ?? 3)
-      : null
-    const so_dao = Math.max(1, dims?.so_dao ?? 1)
-    const tamNho = soTam > 0 ? Math.round(soTam / so_dao) : 0
-
-    // Ngày SX máy sóng: ngày nhập phôi thực tế, fallback ngày kế hoạch bắt đầu
-    const ngaySxMaySong = phieu?.ngay ?? order.ngay_bat_dau_ke_hoach ?? ''
-
-    await printProductionTagBatch({
-      so_lenh:          order.so_lenh,
-      ten_khach_hang:   order.ten_khach_hang ?? '',
-      so_don_hang:      order.so_don ?? '',
-      so_po_kh:         order.so_po_kh ?? '',
-      loai_sp:          oi?.loai_thung ?? '',
-      song:             oi?.to_hop_song ?? '',
-      phan_xuong:       order.ten_phan_xuong ?? 'Nam Phương',
-      qccl:             ke_hoach_qccl,
-      ngay_chay_song:   ngaySxMaySong,
-      ngay_giao_cu_chi: oi?.ngay_giao_hang ?? '',
-      ngay_giao_kh:     order.ngay_hoan_thanh_ke_hoach ?? '',
-      cong_doan:        oi?.cong_doan ?? '',
-      ten_san_pham:     oi?.ten_hang ?? '',
-      sl_tam_lon: soTam > 0
-        ? `${khoCmStr} × ${catCmStr} cm | ${soTam.toLocaleString()} tấm | ${soPallet} pallet`
-        : `${khoCmStr} × ${catCmStr} cm`,
-      sl_tam_nho: tamNho > 0 ? `${tamNho.toLocaleString()} tấm` : '',
-      sl_thung: soThung > 0
-        ? `${soThung.toLocaleString()} ${oi?.dvt ?? 'thùng'}`
-        : `${oi?.so_luong_ke_hoach ?? ''} ${oi?.dvt ?? 'thùng'}`,
-      can_mang:   oi?.loai_in ? 'Có' : 'Không',
-      chong_tham: 'Không',
-      bo_phan:    'Máy Sóng',
-      ghi_chu:    ke_hoach_ghi_chu,
-    }, soPallet)
-    setInTemState(null)
   }
 
   // ─── Cột bảng Tab 1 ────────────────────────────────────────────────────────
@@ -706,13 +1002,11 @@ export default function MaySongPage() {
       width: 90,
       align: 'right' as const,
       render: (_: unknown, r: PhieuNhapPhoiSongListItem) => {
-        const it = r.items[0]
-        const m2 = calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, r.tong_so_tam, it?.so_lop ?? null)
-        if (m2 == null) return <Text type="secondary">—</Text>
+        const m2 = r.items.reduce((s, it) =>
+          s + (calcSoM2Luong(it.chieu_kho, it.chieu_cat, it.so_tam ?? 0, it.so_lop) ?? 0), 0)
+        if (m2 <= 0) return <Text type="secondary">—</Text>
         return (
-          <Tooltip title={`Tính lương: ${it?.chieu_kho}×${it?.chieu_cat}cm × ${r.tong_so_tam.toLocaleString()} tấm × hệ số ${it?.so_lop === 7 ? 3 : it?.so_lop === 5 ? 2 : 1}`}>
-            <Text strong style={{ color: '#531dab' }}>{m2.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</Text>
-          </Tooltip>
+          <Text strong style={{ color: '#531dab' }}>{m2.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</Text>
         )
       },
     },
@@ -754,13 +1048,11 @@ export default function MaySongPage() {
       align: 'right',
       width: 80,
       render: (_: unknown, r: PhieuNhapPhoiSongListItem) => {
-        const it = r.items[0]
-        const kg = calcKgLoi(
-          it?.chieu_kho ?? null, it?.chieu_cat ?? null, r.tong_so_luong_loi,
-          it?.mat_dl ?? null, it?.song_1_dl ?? null, it?.mat_1_dl ?? null,
-          it?.song_2_dl ?? null, it?.mat_2_dl ?? null, it?.song_3_dl ?? null, it?.mat_3_dl ?? null,
-        )
-        if (kg == null) return <Text type="secondary">—</Text>
+        const kg = r.items.reduce((s, it) =>
+          s + (calcKgLoi(it.chieu_kho, it.chieu_cat, it.so_luong_loi,
+            it.mat_dl, it.song_1_dl, it.mat_1_dl,
+            it.song_2_dl, it.mat_2_dl, it.song_3_dl, it.mat_3_dl) ?? 0), 0)
+        if (kg <= 0) return <Text type="secondary">—</Text>
         return <Text type="danger">{kg.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</Text>
       },
     },
@@ -951,24 +1243,23 @@ export default function MaySongPage() {
             children: (() => {
               const filteredPhieu = allPhieu
                 .filter(p => !histFilterCa || p.ca === histFilterCa)
-                .filter(p => !histSearchLenh || (p.so_lenh ?? '').toLowerCase().includes(histSearchLenh.toLowerCase()))
+                .filter(p => {
+                  if (!histSearchLenh) return true
+                  const term = histSearchLenh.toLowerCase()
+                  return (p.so_lenh ?? '').toLowerCase().includes(term)
+                      || (p.items[0]?.ten_hang ?? '').toLowerCase().includes(term)
+                })
               const totalTT  = filteredPhieu.reduce((s, p) => s + Number(p.tong_so_luong_thuc_te), 0)
               const totalTam = filteredPhieu.reduce((s, p) => s + Number(p.tong_so_tam), 0)
               const totalLoi = filteredPhieu.reduce((s, p) => s + Number(p.tong_so_luong_loi), 0)
-              const totalM2Luong = filteredPhieu.reduce((s, p) => {
-                const it = p.items[0]
-                const m2 = calcSoM2Luong(it?.chieu_kho ?? null, it?.chieu_cat ?? null, p.tong_so_tam, it?.so_lop ?? null)
-                return s + (m2 ?? 0)
-              }, 0)
-              const totalKgLoi = filteredPhieu.reduce((s, p) => {
-                const it = p.items[0]
-                const kg = calcKgLoi(
-                  it?.chieu_kho ?? null, it?.chieu_cat ?? null, p.tong_so_luong_loi,
-                  it?.mat_dl ?? null, it?.song_1_dl ?? null, it?.mat_1_dl ?? null,
-                  it?.song_2_dl ?? null, it?.mat_2_dl ?? null, it?.song_3_dl ?? null, it?.mat_3_dl ?? null,
-                )
-                return s + (kg ?? 0)
-              }, 0)
+              const totalM2Luong = filteredPhieu.reduce((s, p) =>
+                s + p.items.reduce((s2, it) =>
+                  s2 + (calcSoM2Luong(it.chieu_kho, it.chieu_cat, it.so_tam ?? 0, it.so_lop) ?? 0), 0), 0)
+              const totalKgLoi = filteredPhieu.reduce((s, p) =>
+                s + p.items.reduce((s2, it) =>
+                  s2 + (calcKgLoi(it.chieu_kho, it.chieu_cat, it.so_luong_loi,
+                    it.mat_dl, it.song_1_dl, it.mat_1_dl,
+                    it.song_2_dl, it.mat_2_dl, it.song_3_dl, it.mat_3_dl) ?? 0), 0), 0)
 
               // Tiêu thụ giấy: group by (tên giấy + ĐL), tính kg = area × ĐL/1000 × so_tam
               const paperUsage: Record<string, { ten: string; dl: number; kg: number }> = {}
@@ -1177,309 +1468,29 @@ export default function MaySongPage() {
         ]}
       />
 
-      {/* ══════════════════════════════════════════════════════════════
-          Modal: Tạm dừng — ghi giờ + lý do
-         ══════════════════════════════════════════════════════════════ */}
-      <Modal
-        title={`Tạm dừng — ${pauseTarget?.so_lenh ?? ''}`}
-        open={pauseTarget !== null}
-        onCancel={() => { setPauseTarget(null); pauseForm.resetFields() }}
-        onOk={() => pauseForm.submit()}
-        okText="⏸ Tạm dừng"
-        okButtonProps={{ danger: true }}
-        confirmLoading={pauseMut.isPending}
-        destroyOnHidden
-        width={420}
-      >
-        <Form form={pauseForm} layout="vertical"
-          onFinish={(values) => {
-            if (!pauseTarget) return
-            pauseMut.mutate({
-              id: pauseTarget.id,
-              data: {
-                gio_bat_dau_dung: (values.gio_bat_dau_dung as dayjs.Dayjs).format('HH:mm'),
-                ly_do:   values.ly_do as string,
-                ghi_chu: (values.ghi_chu as string | null) ?? null,
-              },
-            })
-          }}
-        >
-          <Form.Item name="gio_bat_dau_dung" label="Giờ dừng"
-            rules={[{ required: true, message: 'Nhập giờ dừng' }]}
-            initialValue={dayjs()}
-          >
-            <TimePicker format="HH:mm" style={{ width: '100%' }} />
-          </Form.Item>
-          <div style={{ marginBottom: 8 }}>
-            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>Chọn nhanh:</Text>
-            <Space wrap size={4}>
-              {['Hết giấy', 'Sửa máy', 'Nghỉ cơm', 'Đổi ca'].map(reason => (
-                <Button key={reason} size="small" onClick={() => pauseForm.setFieldValue('ly_do', reason)}>
-                  {reason}
-                </Button>
-              ))}
-            </Space>
-          </div>
-          <Form.Item name="ly_do" label="Lý do dừng"
-            rules={[{ required: true, message: 'Nhập lý do' }]}
-          >
-            <Input placeholder="VD: Hết giấy, Sửa máy, Nghỉ cơm..." />
-          </Form.Item>
-          <Form.Item name="ghi_chu" label="Ghi chú (tuỳ chọn)">
-            <Input.TextArea rows={2} />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <ModalTamDung
+        target={pauseTarget}
+        loading={pauseMut.isPending}
+        onClose={() => setPauseTarget(null)}
+        onSubmit={(id, data) => pauseMut.mutate({ id, data })}
+      />
 
-      {/* ══════════════════════════════════════════════════════════════
-          Modal: Hoàn thành — ghi giờ + SL thực tế → tự tạo phiếu
-         ══════════════════════════════════════════════════════════════ */}
-      <Modal
-        title={`Hoàn thành — ${hoanthanhOrder?.so_lenh ?? '...'}`}
-        open={hoanthanhId !== null}
-        onCancel={() => { setHoanthanhId(null); hoanthanhForm.resetFields() }}
-        onOk={() => hoanthanhForm.submit()}
-        okText="✓ Hoàn thành"
-        okButtonProps={{ type: 'primary' }}
-        confirmLoading={createPhieu.isPending || completeMut.isPending}
-        width={480}
-        destroyOnHidden
-      >
-        {orderLoading ? (
-          <div style={{ textAlign: 'center', padding: 32 }}><Spin size="large" /></div>
-        ) : hoanthanhOrder ? (
-          <>
-            <div style={{ marginBottom: 14, padding: '8px 12px', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
-              <Text strong style={{ fontSize: 14 }}>{hoanthanhOrder.items[0]?.ten_hang ?? '—'}</Text>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  KH: {hoanthanhOrder.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0).toLocaleString()} thùng
-                  {hoanthanhPlanLine?.kho1 ? ` | Khổ: ${hoanthanhPlanLine.kho1} cm` : ''}
-                  {hoanthanhPlanLine?.dai_tt ? ` | Cắt: ${hoanthanhPlanLine.dai_tt} cm` : ''}
-                  {hoanthanhPlanLine?.qccl ? ` | ${hoanthanhPlanLine.qccl}` : ''}
-                </Text>
-              </div>
-            </div>
-            <Form form={hoanthanhForm} layout="vertical" onFinish={handleHoanthanhSubmit} size="middle">
-              <Row gutter={10}>
-                <Col span={6}>
-                  <Form.Item name="ngay" label="Ngày" initialValue={dayjs()}>
-                    <DatePicker style={{ width: '100%' }} format="DD/MM" />
-                  </Form.Item>
-                </Col>
-                <Col span={6}>
-                  <Form.Item name="ca" label="Ca"
-                    initialValue={detectCa()}
-                    rules={[{ required: true, message: 'Chọn ca' }]}
-                  >
-                    <Select
-                      options={['Ca 1', 'Ca 2', 'Ca 3', 'Ca đêm'].map(c => ({ value: c, label: c }))}
-                      onChange={(v: string) => hoanthanhForm.setFieldValue('gio_bat_dau', detectGioBD(v))}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={6}>
-                  <Form.Item name="gio_bat_dau" label="Giờ BĐ" initialValue={detectGioBD(detectCa())}>
-                    <TimePicker format="HH:mm" style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-                <Col span={6}>
-                  <Form.Item name="gio_ket_thuc" label="Giờ KT" initialValue={dayjs()}>
-                    <TimePicker format="HH:mm" style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Form.Item
-                name="so_luong_thuc_te"
-                label="Số lượng thực tế (thùng)"
-                rules={[{ required: true, message: 'Nhập SL thực tế' }]}
-                initialValue={hoanthanhOrder.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)}
-              >
-                <InputNumber min={0} style={{ width: '100%' }} size="large" />
-              </Form.Item>
-              {(() => {
-                const slKH = hoanthanhOrder.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
-                const slTT = slTTWatch ?? 0
-                const pct = slKH > 0 ? Math.min(100, Math.round((slTT / slKH) * 100)) : 0
-                const oi0 = hoanthanhOrder.items[0]
-                const soDao = hoanthanhPlanLine?.so_dao ?? null
-                const estTam = slTT > 0
-                  ? (soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi0, slTT) ?? null))
-                  : null
-                return slKH > 0 ? (
-                  <>
-                    <Progress
-                      percent={pct}
-                      size="small"
-                      style={{ marginBottom: 4 }}
-                      strokeColor={pct >= 100 ? '#52c41a' : pct >= 80 ? '#fa8c16' : '#1677ff'}
-                      format={p => `${p}% (${slTT.toLocaleString()}/${slKH.toLocaleString()})`}
-                    />
-                    {estTam != null && (
-                      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
-                        Ước tính: <Text strong>{estTam.toLocaleString()} tấm</Text>
-                      </Text>
-                    )}
-                  </>
-                ) : null
-              })()}
-              <Row gutter={10}>
-                <Col span={12}>
-                  <Form.Item name="so_luong_loi" label="Phôi lỗi (nếu có)">
-                    <InputNumber min={0} style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Form.Item name="ghi_chu" label="Ghi chú" style={{ marginBottom: 0 }}>
-                <Input.TextArea rows={2} />
-              </Form.Item>
-            </Form>
-          </>
-        ) : null}
-      </Modal>
+      <ModalHoanThanh
+        orderId={hoanthanhId}
+        order={hoanthanhOrder ?? null}
+        orderLoading={orderLoading}
+        planLine={hoanthanhPlanLine}
+        submitting={createPhieu.isPending || completeMut.isPending}
+        onClose={() => setHoanthanhId(null)}
+        onSubmit={(orderId, data) => createPhieu.mutate({ orderId, data })}
+      />
 
-      {/* ══════════════════════════════════════════════════════════════
-          Modal: Kiểm tra & In tem — xem trước đầy đủ
-         ══════════════════════════════════════════════════════════════ */}
-      <Modal
-        title={`Kiểm tra & In tem — ${inTemState?.order.so_lenh ?? ''}`}
-        open={inTemState !== null}
-        onCancel={() => setInTemState(null)}
-        footer={[
-          <Button key="cancel" onClick={() => setInTemState(null)}>Đóng</Button>,
-          <Button key="print" type="primary" size="large" icon={<PrinterOutlined />} onClick={handlePrint}>
-            In {inTemState?.soPallet ?? 1} tem
-          </Button>,
-        ]}
-        width={540}
-        destroyOnHidden
-      >
-        {inTemState && (() => {
-          const { order, soTam, soThung, tamPerPallet, khoMm, catMm } = inTemState
-          const oi       = order.items[0]
-          const khoCmStr = khoMm != null ? mmToDisplayCm(khoMm) : '?'
-          const catCmStr = catMm != null ? mmToDisplayCm(catMm) : '?'
-          return (
-            <>
-              <div style={{ border: '2px solid #333', borderRadius: 6, padding: 12, marginBottom: 16, background: '#fafafa' }}>
-                <Row gutter={8} style={{ marginBottom: 8 }}>
-                  <Col span={14}>
-                    <Text type="secondary" style={{ fontSize: 10 }}>KHÁCH HÀNG</Text>
-                    <div><Text strong style={{ fontSize: 13 }}>{order.ten_khach_hang ?? '—'}</Text></div>
-                  </Col>
-                  <Col span={10}>
-                    <Text type="secondary" style={{ fontSize: 10 }}>SỐ ĐH / PO KH</Text>
-                    <div>
-                      <Text style={{ fontSize: 12 }}>
-                        {order.so_don ?? '—'}{order.so_po_kh ? ` / ${order.so_po_kh}` : ''}
-                      </Text>
-                    </div>
-                  </Col>
-                </Row>
-                <div style={{ padding: '6px 0', borderTop: '1px solid #ddd', borderBottom: '1px solid #ddd', marginBottom: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 10 }}>TÊN SẢN PHẨM</Text>
-                  <div><Text strong style={{ fontSize: 15 }}>{oi?.ten_hang ?? '—'}</Text></div>
-                </div>
-                <Row gutter={6} style={{ marginBottom: 10 }}>
-                  <Col span={7}>
-                    <Text type="secondary" style={{ fontSize: 10 }}>LOẠI THÙNG</Text>
-                    <div><Text>{oi?.loai_thung ?? '—'}</Text></div>
-                  </Col>
-                  <Col span={7}>
-                    <Text type="secondary" style={{ fontSize: 10 }}>SÓNG</Text>
-                    <div><Text strong>{oi?.to_hop_song ?? '—'}</Text></div>
-                  </Col>
-                  <Col span={10}>
-                    <Text type="secondary" style={{ fontSize: 10 }}>QCCL / CÁN LẰN</Text>
-                    <div><Text style={{ fontSize: 12 }}>{inTemState.ke_hoach_qccl || '—'}</Text></div>
-                  </Col>
-                </Row>
-                {/* 3 ô số liệu chính */}
-                <Row gutter={8} style={{ marginBottom: 10 }}>
-                  <Col span={8}>
-                    <div style={{ border: '2px solid #1677ff', borderRadius: 6, textAlign: 'center', padding: '8px 4px', background: '#e6f4ff' }}>
-                      <div style={{ fontSize: 10, color: '#1677ff', fontWeight: 600, marginBottom: 2 }}>KHỔ × CẮT</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2 }}>{khoCmStr} × {catCmStr}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>cm</div>
-                    </div>
-                  </Col>
-                  <Col span={8}>
-                    <div style={{ border: '2px solid #722ed1', borderRadius: 6, textAlign: 'center', padding: '8px 4px', background: '#f9f0ff' }}>
-                      <div style={{ fontSize: 10, color: '#722ed1', fontWeight: 600, marginBottom: 2 }}>SỐ TẤM</div>
-                      <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>{soTam > 0 ? soTam.toLocaleString() : '—'}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>tấm</div>
-                    </div>
-                  </Col>
-                  <Col span={8}>
-                    <div style={{ border: '2px solid #52c41a', borderRadius: 6, textAlign: 'center', padding: '8px 4px', background: '#f6ffed' }}>
-                      <div style={{ fontSize: 10, color: '#52c41a', fontWeight: 600, marginBottom: 2 }}>SỐ THÙNG</div>
-                      <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>{soThung > 0 ? soThung.toLocaleString() : '—'}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>{oi?.dvt ?? 'thùng'}</div>
-                    </div>
-                  </Col>
-                </Row>
-                <Row gutter={8}>
-                  {order.ngay_bat_dau_ke_hoach && (
-                    <Col span={8}>
-                      <Text type="secondary" style={{ fontSize: 10 }}>NSX MÁY SÓNG</Text>
-                      <div><Text style={{ fontSize: 12 }}>{order.ngay_bat_dau_ke_hoach}</Text></div>
-                    </Col>
-                  )}
-                  {oi?.ngay_giao_hang && (
-                    <Col span={8}>
-                      <Text type="secondary" style={{ fontSize: 10 }}>GIAO VỀ CỦ CHI</Text>
-                      <div><Text strong style={{ color: '#d4380d', fontSize: 12 }}>{oi.ngay_giao_hang}</Text></div>
-                    </Col>
-                  )}
-                  {order.ngay_hoan_thanh_ke_hoach && (
-                    <Col span={8}>
-                      <Text type="secondary" style={{ fontSize: 10 }}>GIAO CHO KH</Text>
-                      <div><Text strong style={{ color: '#d4380d', fontSize: 12 }}>{order.ngay_hoan_thanh_ke_hoach}</Text></div>
-                    </Col>
-                  )}
-                </Row>
-              </div>
-
-              {/* Thiết lập pallet */}
-              <Divider style={{ margin: '10px 0' }} />
-              <Row align="middle" gutter={12} style={{ marginBottom: 6 }}>
-                <Col span={12}><Text>Tấm / pallet:</Text></Col>
-                <Col span={12}>
-                  <InputNumber
-                    min={1}
-                    value={tamPerPallet}
-                    onChange={v => {
-                      if (!v) return
-                      const nTpp = Math.max(1, v)
-                      setInTemState(s => s ? { ...s, tamPerPallet: nTpp, soPallet: s.soTam > 0 ? Math.ceil(s.soTam / nTpp) : 1 } : null)
-                    }}
-                    addonAfter="tấm"
-                    style={{ width: '100%' }}
-                  />
-                </Col>
-              </Row>
-              {soTam > 0 && (
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 10 }}>
-                  {soTam.toLocaleString()} tấm ÷ {tamPerPallet} tấm/pallet
-                  {' = '}<Text strong>{inTemState.soPallet} pallet</Text>
-                </Text>
-              )}
-              <Row align="middle" gutter={12}>
-                <Col span={12}><Text strong>Số pallet cần in tem:</Text></Col>
-                <Col span={12}>
-                  <InputNumber
-                    min={1} max={99}
-                    value={inTemState.soPallet}
-                    onChange={v => setInTemState(s => s ? { ...s, soPallet: v ?? 1 } : null)}
-                    size="large"
-                    style={{ width: '100%' }}
-                  />
-                </Col>
-              </Row>
-            </>
-          )
-        })()}
-      </Modal>
+      <ModalInTem
+        state={inTemState}
+        onClose={() => setInTemState(null)}
+        onUpdateTamPerPallet={nTpp => setInTemState(s => s ? { ...s, tamPerPallet: nTpp, soPallet: s.soTam > 0 ? Math.ceil(s.soTam / nTpp) : 1 } : null)}
+        onUpdateSoPallet={n => setInTemState(s => s ? { ...s, soPallet: n } : null)}
+      />
     </div>
   )
 }
