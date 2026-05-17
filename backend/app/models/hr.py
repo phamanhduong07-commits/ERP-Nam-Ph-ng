@@ -281,15 +281,21 @@ class PayrollConfig(Base):
     __tablename__ = "hr_payroll_configs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    ma_hang: Mapped[str] = mapped_column(String(50), unique=True, nullable=False) # VD: IN, MAYSONG_A
-    ten_hang: Mapped[str] = mapped_column(String(150), nullable=False)
+
+    # loai = 'san_pham' | 'phu_cap' | 'khac': dùng các cột bên dưới
+    ma_hang: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True)
+    ten_hang: Mapped[str | None] = mapped_column(String(150), nullable=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     cong_doan: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    
-    phan_tram_luong_sp: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=100) # % lương SP
-    don_gia: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0) # Đơn giá sản phẩm
-    
-    # loai: san_pham | phu_cap | khac
+    phan_tram_luong_sp: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), default=100)
+    don_gia: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), default=0)
+
+    # loai = 'so_lop_giay': hệ số nhân máy sóng → tính lương sản phẩm
+    # VD: HS_3_LOP=1.0, HS_5_LOP=2.0, HS_7_LOP=3.0
+    ma_cau_hinh: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ten_cau_hinh: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    gia_tri: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+
     loai: Mapped[str] = mapped_column(String(50), nullable=False, default="san_pham")
     
     ghi_chu: Mapped[str | None] = mapped_column(Text)

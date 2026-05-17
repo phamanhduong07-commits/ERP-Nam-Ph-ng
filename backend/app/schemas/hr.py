@@ -235,13 +235,18 @@ class LeaveRequest(LeaveRequestBase):
 
 # --- PayrollConfig Schemas ---
 class PayrollConfigBase(BaseModel):
-    ma_hang: str
-    ten_hang: str
+    loai: str = "san_pham"
+    # loai = 'san_pham' | 'phu_cap' | 'khac'
+    ma_hang: Optional[str] = None
+    ten_hang: Optional[str] = None
     phan_xuong_id: Optional[int] = None
     cong_doan: Optional[str] = None
-    phan_tram_luong_sp: Decimal = Decimal("100")
-    don_gia: Decimal = Decimal("0")
-    loai: str = "san_pham"
+    phan_tram_luong_sp: Optional[Decimal] = Decimal("100")
+    don_gia: Optional[Decimal] = Decimal("0")
+    # loai = 'so_lop_giay' — hệ số nhân máy sóng → tính lương sản phẩm
+    ma_cau_hinh: Optional[str] = None
+    ten_cau_hinh: Optional[str] = None
+    gia_tri: Optional[Decimal] = None
     ghi_chu: Optional[str] = None
     trang_thai: bool = True
 
@@ -252,9 +257,15 @@ class PayrollConfigBulkCreate(BaseModel):
     items: List[PayrollConfigCreate]
 
 class PayrollConfigUpdate(BaseModel):
+    loai: Optional[str] = None
+    ma_hang: Optional[str] = None
+    ten_hang: Optional[str] = None
+    phan_xuong_id: Optional[int] = None
+    cong_doan: Optional[str] = None
+    phan_tram_luong_sp: Optional[Decimal] = None
+    don_gia: Optional[Decimal] = None
     ma_cau_hinh: Optional[str] = None
     ten_cau_hinh: Optional[str] = None
-    loai: Optional[str] = None
     gia_tri: Optional[Decimal] = None
     ghi_chu: Optional[str] = None
     trang_thai: Optional[bool] = None
