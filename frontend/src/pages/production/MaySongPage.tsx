@@ -1262,28 +1262,35 @@ export default function MaySongPage() {
                     it.song_2_dl, it.mat_2_dl, it.song_3_dl, it.mat_3_dl) ?? 0), 0), 0)
 
               // Tiêu thụ giấy: group by (tên giấy + ĐL), tính kg = area × ĐL/1000 × so_tam
-              const paperUsage: Record<string, { ten: string; dl: number; kg: number }> = {}
-              const addPaperLayer = (ten: string | null | undefined, dl: number | null | undefined, areM2: number, soTam: number) => {
-                if (!ten || !dl || dl <= 0 || soTam <= 0 || areM2 <= 0) return
+              const paperUsage: Record<string, { ten: string; dl: number; kg: number; kg_loi: number }> = {}
+              const addPaperLayer = (
+                ten: string | null | undefined, dl: number | null | undefined,
+                areM2: number, soTam: number, soLoi: number,
+              ) => {
+                if (!ten || !dl || dl <= 0 || areM2 <= 0) return
                 const key = `${ten}__${dl}`
-                if (!paperUsage[key]) paperUsage[key] = { ten, dl, kg: 0 }
-                paperUsage[key].kg += areM2 * dl / 1000 * soTam
+                if (!paperUsage[key]) paperUsage[key] = { ten, dl, kg: 0, kg_loi: 0 }
+                const kgPerSheet = areM2 * dl / 1000
+                if (soTam > 0) paperUsage[key].kg += kgPerSheet * soTam
+                if (soLoi > 0) paperUsage[key].kg_loi += kgPerSheet * soLoi
               }
               for (const p of filteredPhieu) {
                 for (const it of p.items) {
                   const areM2 = (it.chieu_kho ?? 0) * (it.chieu_cat ?? 0) / 10000
                   const soTam = it.so_tam ?? 0
-                  addPaperLayer(it.mat,    it.mat_dl,    areM2, soTam)
-                  addPaperLayer(it.song_1, it.song_1_dl, areM2, soTam)
-                  addPaperLayer(it.mat_1,  it.mat_1_dl,  areM2, soTam)
-                  addPaperLayer(it.song_2, it.song_2_dl, areM2, soTam)
-                  addPaperLayer(it.mat_2,  it.mat_2_dl,  areM2, soTam)
-                  addPaperLayer(it.song_3, it.song_3_dl, areM2, soTam)
-                  addPaperLayer(it.mat_3,  it.mat_3_dl,  areM2, soTam)
+                  const soLoi = it.so_luong_loi ?? 0
+                  addPaperLayer(it.mat,    it.mat_dl,    areM2, soTam, soLoi)
+                  addPaperLayer(it.song_1, it.song_1_dl, areM2, soTam, soLoi)
+                  addPaperLayer(it.mat_1,  it.mat_1_dl,  areM2, soTam, soLoi)
+                  addPaperLayer(it.song_2, it.song_2_dl, areM2, soTam, soLoi)
+                  addPaperLayer(it.mat_2,  it.mat_2_dl,  areM2, soTam, soLoi)
+                  addPaperLayer(it.song_3, it.song_3_dl, areM2, soTam, soLoi)
+                  addPaperLayer(it.mat_3,  it.mat_3_dl,  areM2, soTam, soLoi)
                 }
               }
               const paperRows = Object.values(paperUsage).sort((a, b) => b.kg - a.kg)
               const totalKgGiay = paperRows.reduce((s, r) => s + r.kg, 0)
+              const totalKgLoiGiay = paperRows.reduce((s, r) => s + r.kg_loi, 0)
               return (
                 <>
                   <Row gutter={8} style={{ marginBottom: 12 }} align="middle">
@@ -1414,14 +1421,21 @@ export default function MaySongPage() {
                             `tieu-thu-giay-${histTuNgay}-${histDenNgay}`,
                             'Tiêu thụ giấy',
                             [
-                              ...paperRows.map(r => ({ loai_giay: r.ten, dl_gsm: r.dl, tieu_thu_kg: Math.round(r.kg), phan_tram: totalKgGiay > 0 ? +(r.kg / totalKgGiay * 100).toFixed(1) : 0 })),
-                              { loai_giay: 'TỔNG CỘNG', dl_gsm: null, tieu_thu_kg: Math.round(totalKgGiay), phan_tram: 100 },
+                              ...paperRows.map(r => ({
+                                loai_giay:   r.ten,
+                                dl_gsm:      r.dl,
+                                tieu_thu_kg: Math.round(r.kg),
+                                kg_loi:      r.kg_loi > 0 ? Math.round(r.kg_loi) : '',
+                                phan_tram:   totalKgGiay > 0 ? +(r.kg / totalKgGiay * 100).toFixed(1) : 0,
+                              })),
+                              { loai_giay: 'TỔNG CỘNG', dl_gsm: null, tieu_thu_kg: Math.round(totalKgGiay), kg_loi: Math.round(totalKgLoiGiay) || '', phan_tram: 100 },
                             ],
                             [
-                              { key: 'loai_giay', label: 'Loại giấy',      width: 20 },
-                              { key: 'dl_gsm',    label: 'ĐL (g/m²)',       width: 12 },
-                              { key: 'tieu_thu_kg', label: 'Tiêu thụ (kg)', width: 14 },
-                              { key: 'phan_tram',  label: '%',               width: 8  },
+                              { key: 'loai_giay',   label: 'Loại giấy',      width: 20 },
+                              { key: 'dl_gsm',      label: 'ĐL (g/m²)',       width: 12 },
+                              { key: 'tieu_thu_kg', label: 'Tiêu thụ (kg)',   width: 14 },
+                              { key: 'kg_loi',      label: 'kg lỗi',          width: 12 },
+                              { key: 'phan_tram',   label: '%',                width: 8  },
                             ],
                           )}
                         >
@@ -1434,6 +1448,7 @@ export default function MaySongPage() {
                             <th style={{ padding: '4px 8px', textAlign: 'left',  border: '1px solid #e8e8e8' }}>Loại giấy</th>
                             <th style={{ padding: '4px 8px', textAlign: 'right', border: '1px solid #e8e8e8', width: 80 }}>ĐL (g/m²)</th>
                             <th style={{ padding: '4px 8px', textAlign: 'right', border: '1px solid #e8e8e8', width: 100 }}>Tiêu thụ (kg)</th>
+                            <th style={{ padding: '4px 8px', textAlign: 'right', border: '1px solid #e8e8e8', width: 85 }}>kg lỗi</th>
                             <th style={{ padding: '4px 8px', textAlign: 'right', border: '1px solid #e8e8e8', width: 60 }}>%</th>
                           </tr>
                         </thead>
@@ -1445,6 +1460,9 @@ export default function MaySongPage() {
                               <td style={{ padding: '4px 8px', border: '1px solid #f0f0f0', textAlign: 'right', fontWeight: 600 }}>
                                 {Math.round(row.kg).toLocaleString('vi-VN')}
                               </td>
+                              <td style={{ padding: '4px 8px', border: '1px solid #f0f0f0', textAlign: 'right', color: row.kg_loi > 0 ? '#cf1322' : '#d9d9d9' }}>
+                                {row.kg_loi > 0 ? Math.round(row.kg_loi).toLocaleString('vi-VN') : '—'}
+                              </td>
                               <td style={{ padding: '4px 8px', border: '1px solid #f0f0f0', textAlign: 'right', color: '#8c8c8c' }}>
                                 {totalKgGiay > 0 ? (row.kg / totalKgGiay * 100).toFixed(1) : '0'}%
                               </td>
@@ -1454,6 +1472,9 @@ export default function MaySongPage() {
                             <td colSpan={2} style={{ padding: '4px 8px', border: '1px solid #e8e8e8' }}>Tổng cộng</td>
                             <td style={{ padding: '4px 8px', border: '1px solid #e8e8e8', textAlign: 'right', color: '#1677ff' }}>
                               {Math.round(totalKgGiay).toLocaleString('vi-VN')}
+                            </td>
+                            <td style={{ padding: '4px 8px', border: '1px solid #e8e8e8', textAlign: 'right', color: totalKgLoiGiay > 0 ? '#cf1322' : '#8c8c8c' }}>
+                              {totalKgLoiGiay > 0 ? Math.round(totalKgLoiGiay).toLocaleString('vi-VN') : '—'}
                             </td>
                             <td style={{ padding: '4px 8px', border: '1px solid #e8e8e8', textAlign: 'right' }}>100%</td>
                           </tr>
