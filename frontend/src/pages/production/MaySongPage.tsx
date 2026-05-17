@@ -643,6 +643,26 @@ export default function MaySongPage() {
   const allPhieuCols: ColumnsType<PhieuNhapPhoiSongListItem> = [
     { title: 'Số phiếu',   dataIndex: 'so_phieu',           width: 155 },
     { title: 'Số lệnh',    dataIndex: 'so_lenh',            width: 130, render: (v: string | null) => v ?? '—' },
+    {
+      title: 'Tên hàng',
+      width: 160,
+      render: (_: unknown, r: PhieuNhapPhoiSongListItem) =>
+        <Text style={{ fontSize: 12 }}>{r.items[0]?.ten_hang ?? '—'}</Text>,
+    },
+    {
+      title: 'Khổ (cm)',
+      width: 80,
+      align: 'center' as const,
+      render: (_: unknown, r: PhieuNhapPhoiSongListItem) =>
+        r.items[0]?.chieu_kho != null ? <Text strong>{r.items[0].chieu_kho}</Text> : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Cắt (cm)',
+      width: 80,
+      align: 'center' as const,
+      render: (_: unknown, r: PhieuNhapPhoiSongListItem) =>
+        r.items[0]?.chieu_cat != null ? <Text strong>{r.items[0].chieu_cat}</Text> : <Text type="secondary">—</Text>,
+    },
     { title: 'Kho',        dataIndex: 'ten_kho',            width: 110, render: (v: string | null) => v ?? '—' },
     { title: 'Ngày', dataIndex: 'ngay', width: 100, render: (v: string | null) => v ? dayjs(v).format('DD/MM/YYYY') : '—' },
     { title: 'Ca',         dataIndex: 'ca',                 width: 60  },
@@ -904,10 +924,18 @@ export default function MaySongPage() {
                         onClick={() => exportExcelWithTemplate(
                           `lich-su-phieu-nhap-${histTuNgay}-${histDenNgay}.xlsx`,
                           'Lịch sử phiếu nhập',
-                          filteredPhieu,
+                          filteredPhieu.map(p => ({
+                            ...p,
+                            ten_hang:  p.items[0]?.ten_hang  ?? '',
+                            chieu_kho: p.items[0]?.chieu_kho ?? '',
+                            chieu_cat: p.items[0]?.chieu_cat ?? '',
+                          })),
                           [
                             { key: 'so_phieu',               label: 'Số phiếu',      width: 20 },
                             { key: 'so_lenh',                 label: 'Số lệnh',       width: 18 },
+                            { key: 'ten_hang',                label: 'Tên hàng',      width: 28 },
+                            { key: 'chieu_kho',               label: 'Khổ (cm)',      width: 12 },
+                            { key: 'chieu_cat',               label: 'Cắt (cm)',      width: 12 },
                             { key: 'ten_kho',                 label: 'Kho',           width: 18 },
                             { key: 'ngay',                    label: 'Ngày',          width: 14 },
                             { key: 'ca',                      label: 'Ca',            width: 10 },
