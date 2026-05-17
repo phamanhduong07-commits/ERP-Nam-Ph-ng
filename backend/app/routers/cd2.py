@@ -57,7 +57,7 @@ class TrackPayload(BaseModel):
     phieu_in_id: Optional[int] = None
     quantity_ok: Optional[Decimal] = None
     quantity_loi: Optional[Decimal] = None
-    quantity_setup: Optional[Decimal] = 0
+    quantity_setup: Optional[Decimal] = None
     ghi_chu: Optional[str] = None
     printer_user_id: Optional[int] = None  # kiosk mode: từ cd2_worker_session
 
@@ -821,6 +821,8 @@ def start_printing(phieu_id: int, db: Session = Depends(get_db), _: User = Depen
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai not in ("cho_in", "ke_hoach"):
+        raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'cho_in' hoặc 'ke_hoach', hiện tại: '{p.trang_thai}'")
     if not p.gio_bat_dau_in:
         p.gio_bat_dau_in = datetime.utcnow()
     p.trang_thai = "dang_in"
@@ -840,6 +842,8 @@ def complete_printing(
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai != "dang_in":
+        raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'dang_in', hiện tại: '{p.trang_thai}'")
     p.trang_thai = "cho_dinh_hinh"
     p.may_in_id = None
     for k, v in body.model_dump(exclude_none=True).items():
@@ -873,7 +877,7 @@ async def start_sau_in(
 
 @router.post("/phieu-in/{phieu_id}/hoan-thanh")
 async def finish_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
     if p.trang_thai != "dang_sau_in":
@@ -897,6 +901,8 @@ async def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depe
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai not in ("cho_dinh_hinh", "sau_in"):
+        raise HTTPException(status_code=400, detail=f"Chỉ gán máy khi phiếu ở 'cho_dinh_hinh' hoặc 'sau_in', hiện tại: '{p.trang_thai}'")
     p.may_sau_in_id = body.may_sau_in_id
     db.commit()
     await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "assign_sau_in"})
@@ -923,6 +929,8 @@ async def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = 
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai not in ("sau_in", "dang_sau_in"):
+        raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'sau_in' hoặc 'dang_sau_in', hiện tại: '{p.trang_thai}'")
     p.may_sau_in_id = None
     p.trang_thai = "sau_in"
     db.commit()

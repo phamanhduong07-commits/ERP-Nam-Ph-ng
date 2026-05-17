@@ -543,6 +543,7 @@ export default function MobileTrackingPage() {
                 trackMutation.mutate({
                   production_order_id: currentOrder?.production_order_id ?? 0,
                   machine_id: selectedMachine!.id,
+                  phieu_in_id: currentOrder?.id ?? undefined,
                   event_type: 'error',
                   ghi_chu: item.label,
                 })

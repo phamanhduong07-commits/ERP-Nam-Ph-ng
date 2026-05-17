@@ -286,14 +286,21 @@ function MachineTab({
                         Hoàn thành
                       </Button>
                     </Popconfirm>
-                    <Button
-                      size="small"
-                      icon={<RollbackOutlined />}
-                      onClick={() => onReturn(p)}
-                      block
+                    <Popconfirm
+                      title="Trả phiếu về chờ gán máy?"
+                      description="Tiến độ đang làm sẽ bị reset."
+                      onConfirm={() => onReturn(p)}
+                      okText="Trả về"
+                      cancelText="Huỷ"
                     >
-                      Trả về
-                    </Button>
+                      <Button
+                        size="small"
+                        icon={<RollbackOutlined />}
+                        block
+                      >
+                        Trả về
+                      </Button>
+                    </Popconfirm>
                     <Popconfirm
                       title="Xoá phiếu?"
                       onConfirm={() => onDelete(p)}
@@ -332,14 +339,21 @@ function MachineTab({
                     >
                       Bắt đầu
                     </Button>
-                    <Button
-                      size="small"
-                      icon={<RollbackOutlined />}
-                      onClick={() => onReturn(p)}
-                      block
+                    <Popconfirm
+                      title="Trả phiếu về chờ gán máy?"
+                      description="Tiến độ đang làm sẽ bị reset."
+                      onConfirm={() => onReturn(p)}
+                      okText="Trả về"
+                      cancelText="Huỷ"
                     >
-                      Trả về
-                    </Button>
+                      <Button
+                        size="small"
+                        icon={<RollbackOutlined />}
+                        block
+                      >
+                        Trả về
+                      </Button>
+                    </Popconfirm>
                     <Popconfirm
                       title="Xoá phiếu?"
                       onConfirm={() => onDelete(p)}
