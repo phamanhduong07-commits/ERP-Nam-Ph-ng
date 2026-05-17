@@ -2,10 +2,10 @@ import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Col, DatePicker, Divider, Form, Input, InputNumber,
-  message, Modal, Progress, Row, Segmented, Select, Space, Spin, Table, Tabs, Tag,
+  message, Modal, Popconfirm, Progress, Row, Segmented, Select, Space, Spin, Table, Tabs, Tag,
   TimePicker, Tooltip, Typography,
 } from 'antd'
-import { CaretRightOutlined, PauseOutlined, PrinterOutlined, ReloadOutlined } from '@ant-design/icons'
+import { CaretRightOutlined, CopyOutlined, PauseOutlined, PrinterOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
@@ -20,7 +20,7 @@ import { productionPlansApi } from '../../api/productionPlans'
 import type { PlanLineResponse } from '../../api/productionPlans'
 import { warehouseApi } from '../../api/warehouse'
 import { calcBoxDimensions } from '../../api/quotes'
-import { printProductionTagBatch } from '../../utils/exportUtils'
+import { printProductionTagBatch, exportExcelWithTemplate } from '../../utils/exportUtils'
 
 const { Text, Title } = Typography
 
@@ -126,6 +126,7 @@ export default function MaySongPage() {
   const [filterPxId, setFilterPxId]     = useState<number | undefined>()
   const [filterKhId, setFilterKhId]     = useState<number | undefined>()
   const [searchLenh, setSearchLenh]     = useState('')
+  const [searchHang, setSearchHang]     = useState('')
   const [filterStatus, setFilterStatus]  = useState<string>('all')
   const [hoanthanhId, setHoanthanhId]   = useState<number | null>(null)
   const [pauseTarget, setPauseTarget]   = useState<StatusTarget | null>(null)
@@ -133,7 +134,8 @@ export default function MaySongPage() {
   const [inTemLoading, setInTemLoading] = useState(false)
   const [histTuNgay, setHistTuNgay]     = useState(dayjs().subtract(7, 'day').format('YYYY-MM-DD'))
   const [histDenNgay, setHistDenNgay]   = useState(dayjs().format('YYYY-MM-DD'))
-  const [histFilterCa, setHistFilterCa] = useState<string | undefined>()
+  const [histFilterCa, setHistFilterCa]   = useState<string | undefined>()
+  const [histSearchLenh, setHistSearchLenh] = useState('')
   const [pauseForm]       = Form.useForm()
   const [hoanthanhForm]   = Form.useForm()
   const qc = useQueryClient()
@@ -180,6 +182,7 @@ export default function MaySongPage() {
     if (!khSoLenhSet && o.trang_thai === 'hoan_thanh') return false
     if (khSoLenhSet && !khSoLenhSet.has(o.so_lenh)) return false
     if (searchLenh && !o.so_lenh.toLowerCase().includes(searchLenh.toLowerCase())) return false
+    if (searchHang && !(o.ten_hang ?? '').toLowerCase().includes(searchHang.toLowerCase())) return false
     return true
   })
 
@@ -435,7 +438,16 @@ export default function MaySongPage() {
       width: 145,
       render: (_, r) => (
         <div>
-          <Text strong style={{ fontSize: 13 }}>{r.so_lenh}</Text>
+          <Space size={4} align="center">
+            <Text strong style={{ fontSize: 13 }}>{r.so_lenh}</Text>
+            <CopyOutlined
+              style={{ fontSize: 11, color: '#bbb', cursor: 'pointer' }}
+              onClick={() => {
+                navigator.clipboard.writeText(r.so_lenh)
+                message.success(`Đã copy: ${r.so_lenh}`, 1.5)
+              }}
+            />
+          </Space>
           {r.so_don && (
             <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>ĐH: {r.so_don}</Text>
           )}
@@ -458,6 +470,11 @@ export default function MaySongPage() {
               {r.so_dong > 1 && (
                 <Tag color="blue" style={{ marginLeft: 4, fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>
                   +{r.so_dong - 1} mã
+                </Tag>
+              )}
+              {r.de_xuat_mua_ngoai && (
+                <Tag color="orange" style={{ marginLeft: 4, fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>
+                  ⚠ Mua ngoài
                 </Tag>
               )}
             </div>
@@ -522,6 +539,7 @@ export default function MaySongPage() {
         const kh  = Number(r.tong_sl_ke_hoach)
         const tt  = Number(r.tong_sl_thuc_te)
         const con = kh - tt
+        const pct = kh > 0 ? Math.min(100, Math.round((tt / kh) * 100)) : 0
         return (
           <div style={{ lineHeight: 1.5, fontSize: 12 }}>
             <div><Text type="secondary">KH: {kh.toLocaleString()}</Text></div>
@@ -532,6 +550,12 @@ export default function MaySongPage() {
                 ? <Tag color="green" style={{ fontSize: 11, padding: '0 4px' }}>Đủ ✓</Tag>
                 : null
             }
+            {tt > 0 && (
+              <Progress percent={pct} size="small" showInfo={false}
+                strokeColor={pct >= 100 ? '#52c41a' : '#1677ff'}
+                style={{ marginTop: 2, marginBottom: 0 }}
+              />
+            )}
           </div>
         )
       },
@@ -568,11 +592,17 @@ export default function MaySongPage() {
         return (
           <Space size={4} wrap>
             {st === 'moi' && (
-              <Button size="small" type="primary" icon={<CaretRightOutlined />}
-                loading={startMut.isPending}
-                onClick={() => handleStart(r)}>
-                Bắt đầu
-              </Button>
+              <Popconfirm
+                title={`Bắt đầu ${r.so_lenh}?`}
+                okText="Bắt đầu"
+                cancelText="Huỷ"
+                onConfirm={() => handleStart(r)}
+              >
+                <Button size="small" type="primary" icon={<CaretRightOutlined />}
+                  loading={startMut.isPending}>
+                  Bắt đầu
+                </Button>
+              </Popconfirm>
             )}
             {st === 'dang_chay' && (
               <Button size="small" danger icon={<PauseOutlined />}
@@ -705,9 +735,18 @@ export default function MaySongPage() {
                     <Input
                       placeholder="Tìm số lệnh..."
                       allowClear
-                      style={{ width: 150 }}
+                      style={{ width: 140 }}
                       value={searchLenh}
                       onChange={e => setSearchLenh(e.target.value)}
+                    />
+                  </Col>
+                  <Col>
+                    <Input
+                      placeholder="Tìm tên hàng..."
+                      allowClear
+                      style={{ width: 150 }}
+                      value={searchHang}
+                      onChange={e => setSearchHang(e.target.value)}
                     />
                   </Col>
                   <Col>
@@ -723,6 +762,17 @@ export default function MaySongPage() {
                   <Col>
                     <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
                   </Col>
+                  {(filterKhId || filterPxId || searchLenh || searchHang || filterStatus !== 'all') && (
+                    <Col>
+                      <Button danger size="small" onClick={() => {
+                        setFilterKhId(undefined)
+                        setFilterPxId(undefined)
+                        setSearchLenh('')
+                        setSearchHang('')
+                        setFilterStatus('all')
+                      }}>Xóa lọc</Button>
+                    </Col>
+                  )}
                 </Row>
 
                 {/* Filter nhanh theo trạng thái */}
@@ -763,6 +813,7 @@ export default function MaySongPage() {
                   scroll={{ x: 1200 }}
                   locale={{ emptyText: filterKhId ? 'Không có lệnh SX nào trong kế hoạch này' : 'Không có lệnh SX đang hoạt động' }}
                   onRow={(r) => {
+                    if (r.trang_thai === 'dang_chay') return { style: { background: '#f6ffed' } }
                     if (!r.ngay_hoan_thanh_ke_hoach) return {}
                     const days = dayjs(r.ngay_hoan_thanh_ke_hoach).diff(dayjs(), 'day')
                     if (days < 0) return { style: { background: '#fff1f0' } }
@@ -800,7 +851,9 @@ export default function MaySongPage() {
               ? `Lịch sử phiếu nhập (${allPhieu.length})`
               : 'Lịch sử phiếu nhập',
             children: (() => {
-              const filteredPhieu = histFilterCa ? allPhieu.filter(p => p.ca === histFilterCa) : allPhieu
+              const filteredPhieu = allPhieu
+                .filter(p => !histFilterCa || p.ca === histFilterCa)
+                .filter(p => !histSearchLenh || (p.so_lenh ?? '').toLowerCase().includes(histSearchLenh.toLowerCase()))
               const totalTT  = filteredPhieu.reduce((s, p) => s + Number(p.tong_so_luong_thuc_te), 0)
               const totalTam = filteredPhieu.reduce((s, p) => s + Number(p.tong_so_tam), 0)
               const totalLoi = filteredPhieu.reduce((s, p) => s + Number(p.tong_so_luong_loi), 0)
@@ -825,6 +878,15 @@ export default function MaySongPage() {
                       />
                     </Col>
                     <Col>
+                      <Input
+                        placeholder="Tìm số lệnh..."
+                        allowClear
+                        style={{ width: 140 }}
+                        value={histSearchLenh}
+                        onChange={e => setHistSearchLenh(e.target.value)}
+                      />
+                    </Col>
+                    <Col>
                       <Select
                         placeholder="Tất cả ca"
                         allowClear
@@ -836,6 +898,31 @@ export default function MaySongPage() {
                     </Col>
                     <Col>
                       <Button icon={<ReloadOutlined />} onClick={() => refetchPhieu()}>Tải lại</Button>
+                    </Col>
+                    <Col>
+                      <Button
+                        onClick={() => exportExcelWithTemplate(
+                          `lich-su-phieu-nhap-${histTuNgay}-${histDenNgay}.xlsx`,
+                          'Lịch sử phiếu nhập',
+                          filteredPhieu,
+                          [
+                            { key: 'so_phieu',               label: 'Số phiếu',      width: 20 },
+                            { key: 'so_lenh',                 label: 'Số lệnh',       width: 18 },
+                            { key: 'ten_kho',                 label: 'Kho',           width: 18 },
+                            { key: 'ngay',                    label: 'Ngày',          width: 14 },
+                            { key: 'ca',                      label: 'Ca',            width: 10 },
+                            { key: 'gio_bat_dau',             label: 'Giờ BĐ',        width: 10 },
+                            { key: 'gio_ket_thuc',            label: 'Giờ KT',        width: 10 },
+                            { key: 'tong_so_luong_thuc_te',   label: 'SL thực tế',    width: 14 },
+                            { key: 'tong_so_tam',             label: 'Tổng tấm',      width: 14 },
+                            { key: 'tong_so_luong_loi',       label: 'Phôi lỗi',      width: 12 },
+                            { key: 'created_by_name',         label: 'Người tạo',     width: 18 },
+                          ],
+                        )}
+                        disabled={filteredPhieu.length === 0}
+                      >
+                        Xuất Excel
+                      </Button>
                     </Col>
                   </Row>
 
@@ -996,15 +1083,28 @@ export default function MaySongPage() {
               </Form.Item>
               {(() => {
                 const slKH = hoanthanhOrder.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
-                const pct = slKH > 0 ? Math.min(100, Math.round(((slTTWatch ?? 0) / slKH) * 100)) : 0
+                const slTT = slTTWatch ?? 0
+                const pct = slKH > 0 ? Math.min(100, Math.round((slTT / slKH) * 100)) : 0
+                const oi0 = hoanthanhOrder.items[0]
+                const soDao = hoanthanhPlanLine?.so_dao ?? null
+                const estTam = slTT > 0
+                  ? (soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi0, slTT) ?? null))
+                  : null
                 return slKH > 0 ? (
-                  <Progress
-                    percent={pct}
-                    size="small"
-                    style={{ marginBottom: 8 }}
-                    strokeColor={pct >= 100 ? '#52c41a' : pct >= 80 ? '#fa8c16' : '#1677ff'}
-                    format={p => `${p}% (${(slTTWatch ?? 0).toLocaleString()}/${slKH.toLocaleString()})`}
-                  />
+                  <>
+                    <Progress
+                      percent={pct}
+                      size="small"
+                      style={{ marginBottom: 4 }}
+                      strokeColor={pct >= 100 ? '#52c41a' : pct >= 80 ? '#fa8c16' : '#1677ff'}
+                      format={p => `${p}% (${slTT.toLocaleString()}/${slKH.toLocaleString()})`}
+                    />
+                    {estTam != null && (
+                      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                        Ước tính: <Text strong>{estTam.toLocaleString()} tấm</Text>
+                      </Text>
+                    )}
+                  </>
                 ) : null
               })()}
               <Row gutter={10}>
