@@ -36,26 +36,25 @@ export default function PhieuInHistoryPage() {
     : 30
 
   const { data: rows = [], isLoading, refetch } = useQuery({
-    queryKey: ['cd2-history-phieu-in', days, search, trangThai, phanXuongId],
+    queryKey: ['cd2-history-phieu-in', days, search, trangThai, phanXuongId, mayInId],
     queryFn: () =>
       cd2Api.getHistoryPhieuIn({
         days,
         search: search.trim() || undefined,
         trang_thai: trangThai ?? undefined,
         phan_xuong_id: phanXuongId,
+        may_in_id: mayInId ?? undefined,
       }).then(r => r.data),
   })
 
-  const filtered = rows
-    .filter((r: PhieuIn) => {
-      if (!dateRange) return true
-      const d = dayjs(r.created_at)
-      return (
-        d.isAfter(dateRange[0].startOf('day').subtract(1, 'ms')) &&
-        d.isBefore(dateRange[1].endOf('day').add(1, 'ms'))
-      )
-    })
-    .filter((r: PhieuIn) => !mayInId || r.may_in_id === mayInId)
+  const filtered = rows.filter((r: PhieuIn) => {
+    if (!dateRange) return true
+    const d = dayjs(r.created_at)
+    return (
+      d.isAfter(dateRange[0].startOf('day').subtract(1, 'ms')) &&
+      d.isBefore(dateRange[1].endOf('day').add(1, 'ms'))
+    )
+  })
 
   const handleExport = () => {
     exportToExcel(`lich-su-phieu-in-${dayjs().format('YYYYMMDD')}`, [{

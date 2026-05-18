@@ -1276,6 +1276,7 @@ def history_phieu_in(
     search: str = Query(default=""),
     trang_thai: Optional[str] = Query(default=None),
     phan_xuong_id: Optional[int] = Query(default=None),
+    may_in_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -1298,6 +1299,8 @@ def history_phieu_in(
         )
     if phan_xuong_id is not None:
         q = q.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
+    if may_in_id is not None:
+        q = q.filter(PhieuIn.may_in_id == may_in_id)
     return [_to_dict(p) for p in q.order_by(PhieuIn.created_at.desc()).limit(500).all()]
 
 
