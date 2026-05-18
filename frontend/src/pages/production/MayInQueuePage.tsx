@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Badge, Button, Card, Col, DatePicker, Divider, Empty, Form, Input,
@@ -13,6 +13,7 @@ import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, KanbanData, CompletePayload } from '../../api/cd2'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
+import { socket } from '../../utils/socket'
 
 const { Text, Title } = Typography
 
@@ -606,10 +607,17 @@ export default function MayInQueuePage() {
   const { data: kanban, isLoading } = useQuery({
     queryKey: ['cd2-kanban', phanXuongId],
     queryFn: () => cd2Api.getKanban(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
-    refetchInterval: 15_000,
   })
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
+  const invalidate = useCallback(
+    () => qc.invalidateQueries({ queryKey: ['cd2-kanban'] }),
+    [qc],
+  )
+
+  useEffect(() => {
+    socket.on('machine_status_update', invalidate)
+    return () => { socket.off('machine_status_update', invalidate) }
+  }, [invalidate])
 
   const machines = kanban?.may_ins ?? []
 
@@ -638,7 +646,7 @@ export default function MayInQueuePage() {
         </Col>
         <Col>
           <Space>
-            <Text type="secondary" style={{ fontSize: 11 }}>Tự cập nhật 15 giây</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>Cập nhật tức thì qua WebSocket</Text>
             <Button icon={<ReloadOutlined />} onClick={invalidate}>Làm mới</Button>
           </Space>
         </Col>
