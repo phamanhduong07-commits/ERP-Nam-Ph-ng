@@ -860,6 +860,8 @@ def complete_printing(
         raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'dang_in', hiện tại: '{p.trang_thai}'")
     p.trang_thai = "cho_dinh_hinh"
     p.may_in_id = None
+    p.tam_dung_luc = None
+    p.tam_dung_ly_do = None
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(p, k, v)
     db.commit()
@@ -1002,6 +1004,8 @@ def huy_phieu(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(ge
     p.gio_hoan_thanh = None
     p.gio_bat_dau_dinh_hinh = None
     p.gio_hoan_thanh_dinh_hinh = None
+    p.tam_dung_luc = None
+    p.tam_dung_ly_do = None
     db.commit()
     return _to_dict(_load(phieu_id, db))
 
