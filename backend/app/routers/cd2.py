@@ -347,6 +347,12 @@ def delete_may_in(may_id: int, db: Session = Depends(get_db), _: User = Depends(
     m = db.query(MayIn).filter(MayIn.id == may_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Không tìm thấy máy in")
+    active = db.query(PhieuIn).filter(PhieuIn.may_in_id == may_id, PhieuIn.trang_thai == "dang_in").count()
+    if active:
+        raise HTTPException(status_code=400, detail=f"Không thể xoá: có {active} phiếu đang in trên máy này")
+    db.query(PhieuIn).filter(PhieuIn.may_in_id == may_id, PhieuIn.trang_thai == "ke_hoach").update(
+        {"may_in_id": None, "trang_thai": "cho_in"}, synchronize_session=False
+    )
     db.delete(m)
     db.commit()
     return {"ok": True}
@@ -405,6 +411,12 @@ def delete_may_sau_in(may_id: int, db: Session = Depends(get_db), _: User = Depe
     m = db.query(MaySauIn).filter(MaySauIn.id == may_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Không tìm thấy máy sau in")
+    active = db.query(PhieuIn).filter(PhieuIn.may_sau_in_id == may_id, PhieuIn.trang_thai == "dang_sau_in").count()
+    if active:
+        raise HTTPException(status_code=400, detail=f"Không thể xoá: có {active} phiếu đang định hình trên máy này")
+    db.query(PhieuIn).filter(PhieuIn.may_sau_in_id == may_id, PhieuIn.trang_thai == "sau_in").update(
+        {"may_sau_in_id": None, "trang_thai": "cho_dinh_hinh"}, synchronize_session=False
+    )
     db.delete(m)
     db.commit()
     return {"ok": True}
