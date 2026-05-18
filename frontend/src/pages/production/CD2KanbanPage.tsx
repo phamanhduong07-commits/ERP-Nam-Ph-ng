@@ -9,10 +9,11 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  Badge, Button, Card, Col, message, Row, Space, Tag, Tooltip, Typography,
+  Alert, Badge, Button, Card, Col, Input, message, Modal, Row, Space, Tag, Tooltip, Typography,
 } from 'antd'
 import {
   PlusOutlined, PrinterOutlined, ReloadOutlined, SettingOutlined,
+  PlayCircleOutlined, PauseOutlined, CheckCircleOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, KanbanData } from '../../api/cd2'
@@ -23,6 +24,51 @@ import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { socket } from '../../utils/socket'
 
 const { Text } = Typography
+
+// ── Pause session (localStorage) ─────────────────────────────────────────────
+type PauseInfo = { time: string; ly_do: string }
+
+const PAUSE_KEY = (id: number) => `cd2-in-pause-${id}`
+
+function readPauses(): Record<number, PauseInfo> {
+  const result: Record<number, PauseInfo> = {}
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key?.startsWith('cd2-in-pause-')) {
+      const id = parseInt(key.replace('cd2-in-pause-', ''))
+      try {
+        const val = JSON.parse(localStorage.getItem(key) || 'null')
+        if (!isNaN(id) && val) result[id] = val
+      } catch { /* ignore */ }
+    }
+  }
+  return result
+}
+
+// ── Elapsed time live display ────────────────────────────────────────────────
+
+function formatElapsed(start: string): { text: string; isStuck: boolean } {
+  const mins = dayjs().diff(dayjs(start), 'minute')
+  const isStuck = mins >= 240
+  if (mins < 60) return { text: `${mins}p`, isStuck }
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return { text: m > 0 ? `${h}g${m}p` : `${h}g`, isStuck }
+}
+
+function ElapsedTime({ start }: { start: string }) {
+  const [info, setInfo] = useState(() => formatElapsed(start))
+  useEffect(() => {
+    const id = setInterval(() => setInfo(formatElapsed(start)), 30_000)
+    return () => clearInterval(id)
+  }, [start])
+  return (
+    <span style={{ color: info.isStuck ? '#ff4d4f' : '#fa8c16', fontWeight: 600 }}>
+      {info.isStuck ? '⚠️' : '🕐'} {info.text}
+      {info.isStuck && <span style={{ fontSize: 10, marginLeft: 4 }}>Kẹt lâu!</span>}
+    </span>
+  )
+}
 
 // ── StatCards ─────────────────────────────────────────────────────────────────
 
@@ -136,10 +182,20 @@ function KanbanCard({
   phieu,
   onClick,
   overlay = false,
+  isPaused = false,
+  pauseInfo,
+  onBatDau,
+  onTamDung,
+  onTiepTuc,
 }: {
   phieu: PhieuIn
   onClick?: () => void
   overlay?: boolean
+  isPaused?: boolean
+  pauseInfo?: PauseInfo
+  onBatDau?: (p: PhieuIn) => void
+  onTamDung?: (p: PhieuIn) => void
+  onTiepTuc?: (p: PhieuIn) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: phieu.id,
@@ -158,7 +214,11 @@ function KanbanCard({
     ? dayjs(phieu.ngay_giao_hang).isBefore(dayjs(), 'day') || dayjs(phieu.ngay_giao_hang).isSame(dayjs(), 'day')
     : false
 
-  const borderColor = isOverdue ? '#ff4d4f' :
+  const isStuck = phieu.trang_thai === 'dang_in' && !!phieu.gio_bat_dau_in
+    && dayjs().diff(dayjs(phieu.gio_bat_dau_in), 'minute') >= 240
+
+  const borderColor = isStuck ? '#ff4d4f' :
+    isOverdue ? '#ff7a45' :
     phieu.trang_thai === 'dang_in' ? '#fa8c16' :
     phieu.trang_thai === 'ke_hoach' ? '#1677ff' :
     phieu.trang_thai === 'cho_dinh_hinh' ? '#722ed1' :
@@ -234,8 +294,8 @@ function KanbanCard({
         )}
 
         {phieu.trang_thai === 'dang_in' && phieu.gio_bat_dau_in && (
-          <div style={{ fontSize: 10, color: '#fa8c16', marginTop: 4, fontWeight: 600 }}>
-            ▶ Bắt đầu: {dayjs(phieu.gio_bat_dau_in).format('HH:mm')}
+          <div style={{ fontSize: 10, marginTop: 4 }}>
+            <ElapsedTime start={phieu.gio_bat_dau_in} />
           </div>
         )}
 
@@ -249,6 +309,76 @@ function KanbanCard({
             </div>
           )
         })()}
+
+        {/* ── Quick action buttons ── */}
+        {!overlay && (phieu.trang_thai === 'cho_in' || phieu.trang_thai === 'ke_hoach') && (
+          <div
+            style={{ marginTop: 8, borderTop: '1px solid #f0f0f0', paddingTop: 6 }}
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
+          >
+            <Button
+              size="small"
+              type="primary"
+              icon={<PlayCircleOutlined />}
+              block
+              style={{ background: '#52c41a', borderColor: '#52c41a', fontSize: 12 }}
+              onClick={() => onBatDau?.(phieu)}
+            >
+              Bắt đầu in
+            </Button>
+          </div>
+        )}
+
+        {!overlay && phieu.trang_thai === 'dang_in' && (
+          <div
+            style={{ marginTop: 8, borderTop: '1px solid #f0f0f0', paddingTop: 6 }}
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
+          >
+            {isPaused ? (
+              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                <div style={{ fontSize: 10, color: '#faad14', fontWeight: 600 }}>
+                  ⏸ Tạm dừng{pauseInfo ? ` lúc ${pauseInfo.time}` : ''}
+                </div>
+                {pauseInfo?.ly_do && (
+                  <div style={{ fontSize: 10, color: '#8c8c8c', fontStyle: 'italic' }}>
+                    Lý do: {pauseInfo.ly_do}
+                  </div>
+                )}
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<PlayCircleOutlined />}
+                  block
+                  onClick={() => onTiepTuc?.(phieu)}
+                >
+                  Tiếp tục in
+                </Button>
+              </Space>
+            ) : (
+              <Space.Compact block>
+                <Button
+                  size="small"
+                  icon={<PauseOutlined />}
+                  style={{ flex: 1 }}
+                  onClick={() => onTamDung?.(phieu)}
+                >
+                  Tạm dừng
+                </Button>
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  style={{ flex: 1 }}
+                  onClick={onClick}
+                >
+                  Kết thúc
+                </Button>
+              </Space.Compact>
+            )}
+          </div>
+        )}
       </Card>
     </div>
   )
@@ -257,13 +387,17 @@ function KanbanCard({
 // ── Column ────────────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  colId, title, cards, color, onCardClick,
+  colId, title, cards, color, onCardClick, pauses, onBatDau, onTamDung, onTiepTuc,
 }: {
   colId: string
   title: string
   cards: PhieuIn[]
   color?: string
   onCardClick: (p: PhieuIn) => void
+  pauses: Record<number, PauseInfo>
+  onBatDau: (p: PhieuIn) => void
+  onTamDung: (p: PhieuIn) => void
+  onTiepTuc: (p: PhieuIn) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: colId })
 
@@ -291,9 +425,25 @@ function KanbanColumn({
         }}
       >
         <SortableContext items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
-          {cards.map(card => (
-            <KanbanCard key={card.id} phieu={card} onClick={() => onCardClick(card)} />
-          ))}
+          {cards.map(card => {
+            const localPause = pauses[card.id]
+            const backendPaused = !localPause && !!card.tam_dung_luc
+            const isPaused = !!localPause || backendPaused
+            const pauseInfo: PauseInfo | undefined = localPause
+              ?? (card.tam_dung_luc ? { time: dayjs(card.tam_dung_luc).format('HH:mm'), ly_do: card.tam_dung_ly_do || '' } : undefined)
+            return (
+              <KanbanCard
+                key={card.id}
+                phieu={card}
+                onClick={() => onCardClick(card)}
+                isPaused={isPaused}
+                pauseInfo={pauseInfo}
+                onBatDau={onBatDau}
+                onTamDung={onTamDung}
+                onTiepTuc={onTiepTuc}
+              />
+            )
+          })}
         </SortableContext>
         {cards.length === 0 && (
           <div style={{ textAlign: 'center', padding: '16px 0', color: '#bbb', fontSize: 12 }}>
@@ -346,10 +496,14 @@ export default function CD2KanbanPage() {
   const [showSettings, setShowSettings] = useState(false)
 
   const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
+  const [pauses, setPauses] = useState<Record<number, PauseInfo>>(readPauses)
+  const [pausingPhieu, setPausingPhieu] = useState<PhieuIn | null>(null)
+  const [pauseReason, setPauseReason] = useState('')
 
-  const { data: kanban, isLoading } = useQuery({
+  const { data: kanban, isLoading, isError, error } = useQuery({
     queryKey: ['cd2-kanban', phanXuongId],
     queryFn: () => cd2Api.getKanban(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
+    retry: 1,
     // refetchInterval removed in favor of WebSockets
   })
 
@@ -366,6 +520,54 @@ export default function CD2KanbanPage() {
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
   }, [qc])
+
+  const handleBatDau = useCallback(async (phieu: PhieuIn) => {
+    try {
+      await cd2Api.startPrinting(phieu.id)
+      message.success(`Bắt đầu in — ${phieu.so_phieu}`)
+      invalidate()
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi bắt đầu in')
+    }
+  }, [invalidate])
+
+  const handleTamDung = useCallback((phieu: PhieuIn) => {
+    setPauseReason('')
+    setPausingPhieu(phieu)
+  }, [])
+
+  const handleConfirmPause = useCallback(async () => {
+    if (!pausingPhieu) return
+    if (!pauseReason.trim()) { message.warning('Vui lòng nhập lý do tạm dừng'); return }
+    const info: PauseInfo = { time: dayjs().format('HH:mm'), ly_do: pauseReason.trim() }
+    const id = pausingPhieu.id
+    localStorage.setItem(PAUSE_KEY(id), JSON.stringify(info))
+    setPauses(prev => ({ ...prev, [id]: info }))
+    setPausingPhieu(null)
+    setPauseReason('')
+    try {
+      await cd2Api.tamDungIn(id, { ly_do: info.ly_do })
+      message.info(`Tạm dừng lúc ${info.time} — ${info.ly_do}`)
+      invalidate()
+    } catch (e: any) {
+      localStorage.removeItem(PAUSE_KEY(id))
+      setPauses(prev => { const next = { ...prev }; delete next[id]; return next })
+      message.error(e?.response?.data?.detail || 'Lỗi tạm dừng in')
+    }
+  }, [pausingPhieu, pauseReason, invalidate])
+
+  const handleTiepTuc = useCallback(async (phieu: PhieuIn) => {
+    localStorage.removeItem(PAUSE_KEY(phieu.id))
+    setPauses(prev => { const next = { ...prev }; delete next[phieu.id]; return next })
+    try {
+      await cd2Api.tiepTucIn(phieu.id)
+      message.success('Tiếp tục in')
+      invalidate()
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi tiếp tục in')
+      invalidate()
+    }
+  }, [invalidate])
 
   // Lắng nghe tín hiệu từ WebSockets
   useEffect(() => {
@@ -488,6 +690,22 @@ export default function CD2KanbanPage() {
     return <Card loading style={{ margin: 24 }} />
   }
 
+  if (isError) {
+    const errMsg = (error as any)?.response?.data?.detail
+      || (error as any)?.message
+      || 'Không thể kết nối server'
+    return (
+      <Alert
+        type="error"
+        message="Không thể tải Kanban máy in"
+        description={errMsg}
+        action={<Button onClick={invalidate}>Thử lại</Button>}
+        style={{ margin: 24 }}
+        showIcon
+      />
+    )
+  }
+
   return (
     <div style={{ paddingBottom: 24 }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
@@ -519,6 +737,21 @@ export default function CD2KanbanPage() {
 
       {kanban && <StatCards kanban={kanban} />}
 
+      {kanban && kanban.may_ins.length === 0 && phanXuongId && (
+        <Alert
+          type="warning"
+          message="Xưởng này chưa có máy in"
+          description="Không có máy in nào được gán cho xưởng đang chọn. Hãy chọn 'Tất cả xưởng' hoặc vào Cấu hình máy in để gán xưởng."
+          style={{ marginBottom: 12 }}
+          showIcon
+          action={
+            <Button size="small" onClick={() => handleXuongChange(undefined)}>
+              Xem tất cả xưởng
+            </Button>
+          }
+        />
+      )}
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -539,6 +772,10 @@ export default function CD2KanbanPage() {
               color={col.color}
               cards={currentColumns[col.id] || []}
               onCardClick={p => setSelectedPhieu(p)}
+              pauses={pauses}
+              onBatDau={handleBatDau}
+              onTamDung={handleTamDung}
+              onTiepTuc={handleTiepTuc}
             />
           ))}
         </div>
@@ -564,6 +801,30 @@ export default function CD2KanbanPage() {
           onSaved={invalidate}
         />
       )}
+
+      <Modal
+        open={!!pausingPhieu}
+        title={`Tạm dừng in — ${pausingPhieu?.so_phieu ?? ''}`}
+        onCancel={() => setPausingPhieu(null)}
+        onOk={handleConfirmPause}
+        okText="Xác nhận tạm dừng"
+        cancelText="Huỷ"
+        okButtonProps={{ danger: true, icon: <PauseOutlined /> }}
+        width={400}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 8, color: '#595959' }}>
+          Nhập lý do tạm dừng <span style={{ color: '#ff4d4f' }}>*</span>
+        </div>
+        <Input.TextArea
+          rows={3}
+          placeholder="Vd: Hết mực in, máy hỏng, nghỉ giải lao..."
+          value={pauseReason}
+          onChange={e => setPauseReason(e.target.value)}
+          onPressEnter={e => { if (!e.shiftKey) { e.preventDefault(); handleConfirmPause() } }}
+          autoFocus
+        />
+      </Modal>
     </div>
   )
 }

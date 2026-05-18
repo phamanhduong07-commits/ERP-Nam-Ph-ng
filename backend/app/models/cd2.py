@@ -164,6 +164,10 @@ class PhieuIn(Base):
     gio_bat_dau_dinh_hinh: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     gio_hoan_thanh_dinh_hinh: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Tạm dừng / tiếp tục
+    tam_dung_luc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    tam_dung_ly_do: Mapped[str | None] = mapped_column(Text)
+
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))

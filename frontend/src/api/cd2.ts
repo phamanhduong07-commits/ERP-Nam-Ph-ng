@@ -130,6 +130,9 @@ export interface PhieuIn {
   gio_bat_dau_in?: string
   gio_hoan_thanh?: string
   gio_bat_dau_dinh_hinh?: string
+  // Tạm dừng
+  tam_dung_luc?: string | null
+  tam_dung_ly_do?: string | null
 }
 
 export interface CompletePayload {
@@ -279,6 +282,8 @@ export const cd2Api = {
   startSauIn: (id: number, data: SauInPayload) => client.post(`/cd2/phieu-in/${id}/sau-in`, data),
   hoanThanh: (id: number) => client.post(`/cd2/phieu-in/${id}/hoan-thanh`),
   huyPhieu: (id: number) => client.post(`/cd2/phieu-in/${id}/huy`),
+  tamDungIn: (id: number, data: { ly_do: string }) => client.post(`/cd2/phieu-in/${id}/tam-dung`, data),
+  tiepTucIn: (id: number) => client.post(`/cd2/phieu-in/${id}/tiep-tuc`),
   assignSauIn: (id: number, maySauInId: number) =>
     client.post(`/cd2/phieu-in/${id}/assign-sau-in`, { may_sau_in_id: maySauInId }),
   batDauSauIn: (id: number) => client.post(`/cd2/phieu-in/${id}/bat-dau-sau-in`),

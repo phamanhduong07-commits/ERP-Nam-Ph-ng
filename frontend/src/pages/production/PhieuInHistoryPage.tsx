@@ -4,11 +4,12 @@ import {
   Button, Card, Col, DatePicker, Input, Row,
   Select, Space, Statistic, Table, Tag, Typography,
 } from 'antd'
-import { HistoryOutlined, ReloadOutlined } from '@ant-design/icons'
+import { DownloadOutlined, HistoryOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs, { Dayjs } from 'dayjs'
-import { cd2Api, PhieuIn, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/cd2'
+import { cd2Api, PhieuIn, MayIn, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/cd2'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
+import { exportToExcel } from '../../utils/exportUtils'
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -21,7 +22,14 @@ export default function PhieuInHistoryPage() {
   const [search, setSearch] = useState('')
   const [trangThai, setTrangThai] = useState<string | null>(null)
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null)
+  const [mayInId, setMayInId] = useState<number | null>(null)
   const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
+
+  const { data: mayIns = [] } = useQuery<MayIn[]>({
+    queryKey: ['may-in-list'],
+    queryFn: () => cd2Api.listMayIn().then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
 
   const days = dateRange
     ? Math.max(1, dateRange[1].diff(dateRange[0], 'day') + 1)
@@ -38,16 +46,39 @@ export default function PhieuInHistoryPage() {
       }).then(r => r.data),
   })
 
-  // Lọc thêm nếu có date range
-  const filtered = dateRange
-    ? rows.filter((r: PhieuIn) => {
-        const d = dayjs(r.created_at)
-        return (
-          d.isAfter(dateRange[0].startOf('day').subtract(1, 'ms')) &&
-          d.isBefore(dateRange[1].endOf('day').add(1, 'ms'))
-        )
-      })
-    : rows
+  const filtered = rows
+    .filter((r: PhieuIn) => {
+      if (!dateRange) return true
+      const d = dayjs(r.created_at)
+      return (
+        d.isAfter(dateRange[0].startOf('day').subtract(1, 'ms')) &&
+        d.isBefore(dateRange[1].endOf('day').add(1, 'ms'))
+      )
+    })
+    .filter((r: PhieuIn) => !mayInId || r.may_in_id === mayInId)
+
+  const handleExport = () => {
+    exportToExcel(`lich-su-phieu-in-${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Lịch sử phiếu in',
+      headers: ['Ngày tạo', 'Số phiếu', 'Trạng thái', 'Tên hàng', 'Mã KH', 'SL phôi', 'Ngày in', 'SL in OK', 'SL lỗi', 'Ca', 'Ngày sau in', 'SL sau in OK', 'Ghi chú'],
+      rows: filtered.map((r: PhieuIn) => [
+        dayjs(r.created_at).format('DD/MM/YYYY'),
+        r.so_phieu,
+        TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
+        r.ten_hang ?? '',
+        r.ma_kh ?? '',
+        r.so_luong_phoi ?? '',
+        r.ngay_in ? dayjs(r.ngay_in).format('DD/MM/YYYY') : '',
+        r.so_luong_in_ok ?? '',
+        r.so_luong_loi ?? '',
+        r.ca ?? '',
+        r.ngay_sau_in ? dayjs(r.ngay_sau_in).format('DD/MM/YYYY') : '',
+        r.so_luong_sau_in_ok ?? '',
+        r.ghi_chu ?? '',
+      ]),
+      colWidths: [12, 14, 14, 30, 10, 10, 12, 10, 10, 8, 12, 10, 25],
+    }])
+  }
 
   const totalPhoi = filtered.reduce((s: number, r: PhieuIn) => s + (r.so_luong_phoi ?? 0), 0)
   const totalOk = filtered.reduce((s: number, r: PhieuIn) => s + (r.so_luong_in_ok ?? 0), 0)
@@ -142,7 +173,10 @@ export default function PhieuInHistoryPage() {
           </Space>
         </Col>
         <Col>
-          <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
+          <Space>
+            <Button icon={<DownloadOutlined />} onClick={handleExport}>Xuất Excel</Button>
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
+          </Space>
         </Col>
       </Row>
 
@@ -164,6 +198,14 @@ export default function PhieuInHistoryPage() {
             value={trangThai}
             onChange={v => setTrangThai(v ?? null)}
             options={TRANG_THAI_OPTIONS}
+          />
+          <Select
+            style={{ width: 160 }}
+            placeholder="Tất cả máy in"
+            allowClear
+            value={mayInId}
+            onChange={v => setMayInId(v ?? null)}
+            options={mayIns.map(m => ({ value: m.id, label: m.ten_may }))}
           />
           <RangePicker
             value={dateRange}

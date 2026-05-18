@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
-  Badge, Button, Card, Col, DatePicker, Divider, Form, Input,
+  Badge, Button, Card, Col, DatePicker, Divider, Empty, Form, Input,
   InputNumber, Modal, Popconfirm, Row, Select, Space, Spin,
   Tabs, Tag, Tooltip, Typography, message,
 } from 'antd'
 import {
-  ArrowRightOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  PlayCircleOutlined, PrinterOutlined, ReloadOutlined, SwapOutlined,
+  ArrowRightOutlined, CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined,
+  PauseOutlined, PlayCircleOutlined, PrinterOutlined, ReloadOutlined, SwapOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, KanbanData, CompletePayload } from '../../api/cd2'
@@ -15,6 +15,45 @@ import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 
 const { Text, Title } = Typography
+
+type PauseInfo = { time: string; ly_do: string }
+const PAUSE_KEY = (id: number) => `cd2-in-pause-${id}`
+function readPauses(): Record<number, PauseInfo> {
+  const result: Record<number, PauseInfo> = {}
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key?.startsWith('cd2-in-pause-')) {
+      const id = parseInt(key.replace('cd2-in-pause-', ''))
+      try {
+        const val = JSON.parse(localStorage.getItem(key) || 'null')
+        if (!isNaN(id) && val) result[id] = val
+      } catch { /* ignore */ }
+    }
+  }
+  return result
+}
+
+function formatElapsed(start: string): { text: string; isStuck: boolean } {
+  const mins = dayjs().diff(dayjs(start), 'minute')
+  const isStuck = mins >= 240
+  if (mins < 60) return { text: `${mins}p`, isStuck }
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return { text: m > 0 ? `${h}g${m}p` : `${h}g`, isStuck }
+}
+
+function ElapsedTime({ start }: { start: string }) {
+  const [info, setInfo] = useState(() => formatElapsed(start))
+  useEffect(() => {
+    const id = setInterval(() => setInfo(formatElapsed(start)), 30_000)
+    return () => clearInterval(id)
+  }, [start])
+  return (
+    <span style={{ color: info.isStuck ? '#ff4d4f' : '#fa8c16', fontWeight: 600, fontSize: 11 }}>
+      {info.isStuck ? '⚠️' : '🕐'} {info.text}{info.isStuck ? ' — Kẹt lâu!' : ''}
+    </span>
+  )
+}
 
 const CA_OPTIONS = [
   { value: 'Ca 1', label: 'Ca 1' },
@@ -40,6 +79,13 @@ function CompleteModal({
 
   const handleOk = async () => {
     const v = await form.validateFields()
+    const total = (v.so_luong_in_ok ?? 0) + (v.so_luong_loi ?? 0) + (v.so_luong_setup ?? 0)
+    if (phieu.so_luong_phoi && total > phieu.so_luong_phoi * 1.15) {
+      message.warning(
+        `Tổng SL ghi (${total.toLocaleString('vi-VN')}) vượt quá SL phôi (${phieu.so_luong_phoi.toLocaleString('vi-VN')}) hơn 15% — vui lòng kiểm tra lại.`,
+        5,
+      )
+    }
     setSaving(true)
     try {
       const payload: CompletePayload = {
@@ -50,8 +96,8 @@ function CompleteModal({
       message.success('Đã hoàn thành in — chuyển sang Chờ định hình')
       form.resetFields()
       onDone()
-    } catch {
-      message.error('Lỗi, thử lại')
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi hoàn thành in')
     } finally {
       setSaving(false)
     }
@@ -202,7 +248,11 @@ function QueueCard({
   onComplete,
   onTransfer,
   onRemove,
+  onPause,
+  onResume,
   isActing,
+  isPaused,
+  pauseInfo,
 }: {
   phieu: PhieuIn
   machines: { id: number; ten_may: string }[]
@@ -210,18 +260,24 @@ function QueueCard({
   onComplete: () => void
   onTransfer: () => void
   onRemove: () => void
+  onPause: () => void
+  onResume: () => void
   isActing: boolean
+  isPaused: boolean
+  pauseInfo?: PauseInfo
 }) {
   const isRunning = phieu.trang_thai === 'dang_in'
+  const isStuck = isRunning && !!phieu.gio_bat_dau_in
+    && dayjs().diff(dayjs(phieu.gio_bat_dau_in), 'minute') >= 240
 
   return (
     <Card
       size="small"
       style={{
         marginBottom: 10,
-        borderLeft: `4px solid ${isRunning ? '#fa8c16' : '#1677ff'}`,
-        background: isRunning ? '#fffbe6' : '#fff',
-        boxShadow: isRunning ? '0 2px 12px rgba(250,140,22,0.18)' : undefined,
+        borderLeft: `4px solid ${isStuck ? '#ff4d4f' : isPaused ? '#faad14' : isRunning ? '#fa8c16' : '#1677ff'}`,
+        background: isPaused ? '#fffef0' : isRunning ? '#fffbe6' : '#fff',
+        boxShadow: isRunning ? `0 2px 12px rgba(${isStuck ? '255,77,79' : '250,140,22'},0.18)` : undefined,
       }}
     >
       <Row justify="space-between" align="top" wrap={false}>
@@ -229,7 +285,9 @@ function QueueCard({
         <Col flex="auto">
           <Space size={6} style={{ marginBottom: 4 }} wrap>
             <Text style={{ fontSize: 11, color: '#888' }}>{phieu.so_phieu}</Text>
-            {isRunning && <Tag color="orange" style={{ margin: 0 }}>▶ Đang in</Tag>}
+            {isRunning && !isPaused && !isStuck && <Tag color="orange" style={{ margin: 0 }}>▶ Đang in</Tag>}
+            {isRunning && isStuck && <Tag color="error" style={{ margin: 0 }}>⚠️ Kẹt lâu</Tag>}
+            {isPaused && <Tag color="gold" style={{ margin: 0 }}>⏸ Tạm dừng</Tag>}
             {phieu.loai && <Tag style={{ margin: 0, fontSize: 10 }}>{phieu.loai}</Tag>}
             {phieu.ths && <Tag color="geekblue" style={{ margin: 0, fontSize: 10 }}>{phieu.ths}</Tag>}
           </Space>
@@ -257,6 +315,16 @@ function QueueCard({
               </Text>
             )}
           </Space>
+          {isPaused && pauseInfo && (
+            <div style={{ fontSize: 11, color: '#d4b106', marginTop: 4, fontStyle: 'italic' }}>
+              ⏸ {pauseInfo.time} — {pauseInfo.ly_do}
+            </div>
+          )}
+          {isRunning && phieu.gio_bat_dau_in && !isPaused && (
+            <div style={{ marginTop: 4 }}>
+              <ElapsedTime start={phieu.gio_bat_dau_in} />
+            </div>
+          )}
           {phieu.ghi_chu_printer && (
             <div style={{ fontSize: 11, color: '#d46b08', marginTop: 4 }}>
               📝 {phieu.ghi_chu_printer}
@@ -280,6 +348,22 @@ function QueueCard({
                   Bắt đầu
                 </Button>
               </Tooltip>
+            )}
+            {isRunning && !isPaused && (
+              <Button icon={<PauseOutlined />} size="small" onClick={onPause}>
+                Tạm dừng
+              </Button>
+            )}
+            {isRunning && isPaused && (
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                size="small"
+                style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                onClick={onResume}
+              >
+                Tiếp tục
+              </Button>
             )}
             {isRunning && (
               <Button
@@ -322,10 +406,12 @@ function MachineTab({
   kanban: KanbanData
   onRefresh: () => void
 }) {
-  const qc = useQueryClient()
   const [completePhieu, setCompletePhieu] = useState<PhieuIn | null>(null)
   const [transferPhieu, setTransferPhieu] = useState<PhieuIn | null>(null)
   const [actingId, setActingId] = useState<number | null>(null)
+  const [pauses, setPauses] = useState<Record<number, PauseInfo>>(() => readPauses())
+  const [pausingPhieu, setPausingPhieu] = useState<PhieuIn | null>(null)
+  const [pauseReason, setPauseReason] = useState('')
 
   const cards: PhieuIn[] = kanban.columns[`may_${mayId}`] ?? []
   const running = cards.filter(p => p.trang_thai === 'dang_in')
@@ -345,14 +431,59 @@ function MachineTab({
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
   })
 
+  const handleTamDung = (phieu: PhieuIn) => {
+    setPauseReason('')
+    setPausingPhieu(phieu)
+  }
+
+  const handleConfirmPause = async () => {
+    if (!pausingPhieu) return
+    if (!pauseReason.trim()) { message.warning('Vui lòng nhập lý do tạm dừng'); return }
+    const info: PauseInfo = { time: dayjs().format('HH:mm'), ly_do: pauseReason.trim() }
+    const id = pausingPhieu.id
+    localStorage.setItem(PAUSE_KEY(id), JSON.stringify(info))
+    setPauses(prev => ({ ...prev, [id]: info }))
+    setPausingPhieu(null)
+    setPauseReason('')
+    try {
+      await cd2Api.tamDungIn(id, { ly_do: info.ly_do })
+      message.info(`Tạm dừng lúc ${info.time} — ${info.ly_do}`)
+      onRefresh()
+    } catch (e: any) {
+      localStorage.removeItem(PAUSE_KEY(id))
+      setPauses(prev => { const next = { ...prev }; delete next[id]; return next })
+      message.error(e?.response?.data?.detail || 'Lỗi tạm dừng in')
+    }
+  }
+
+  const handleTiepTuc = async (phieu: PhieuIn) => {
+    localStorage.removeItem(PAUSE_KEY(phieu.id))
+    setPauses(prev => { const next = { ...prev }; delete next[phieu.id]; return next })
+    try {
+      await cd2Api.tiepTucIn(phieu.id)
+      message.success('Tiếp tục in')
+      onRefresh()
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi tiếp tục in')
+      onRefresh()
+    }
+  }
+
   const machines = kanban.may_ins
 
   if (cards.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '48px 0', color: '#bbb' }}>
-        <PrinterOutlined style={{ fontSize: 40 }} />
-        <div style={{ marginTop: 12, fontSize: 14 }}>Hàng chờ trống</div>
-      </div>
+      <Empty
+        image={<PrinterOutlined style={{ fontSize: 40, color: '#d9d9d9' }} />}
+        imageStyle={{ height: 48 }}
+        description={
+          <span style={{ color: '#bbb', fontSize: 13 }}>
+            Máy này chưa có phiếu nào.<br />
+            <span style={{ fontSize: 11 }}>Kéo thả phiếu từ Kanban hoặc phân công ở trang Kế hoạch in.</span>
+          </span>
+        }
+        style={{ padding: '32px 0' }}
+      />
     )
   }
 
@@ -367,18 +498,28 @@ function MachineTab({
           }}>
             ▶ Đang in ({running.length})
           </div>
-          {running.map(p => (
-            <QueueCard
-              key={p.id}
-              phieu={p}
-              machines={machines}
-              isActing={actingId === p.id}
-              onStart={() => { setActingId(p.id); startMutation.mutate(p.id) }}
-              onComplete={() => setCompletePhieu(p)}
-              onTransfer={() => setTransferPhieu(p)}
-              onRemove={() => removeMutation.mutate(p.id)}
-            />
-          ))}
+          {running.map(p => {
+            const localPause = pauses[p.id]
+            const isPaused = !!localPause || !!p.tam_dung_luc
+            const pauseInfo: PauseInfo | undefined = localPause
+              ?? (p.tam_dung_luc ? { time: dayjs(p.tam_dung_luc).format('HH:mm'), ly_do: p.tam_dung_ly_do || '' } : undefined)
+            return (
+              <QueueCard
+                key={p.id}
+                phieu={p}
+                machines={machines}
+                isActing={actingId === p.id}
+                isPaused={isPaused}
+                pauseInfo={pauseInfo}
+                onStart={() => { setActingId(p.id); startMutation.mutate(p.id) }}
+                onComplete={() => setCompletePhieu(p)}
+                onTransfer={() => setTransferPhieu(p)}
+                onRemove={() => removeMutation.mutate(p.id)}
+                onPause={() => handleTamDung(p)}
+                onResume={() => handleTiepTuc(p)}
+              />
+            )
+          })}
           {waiting.length > 0 && <Divider style={{ margin: '12px 0' }} />}
         </>
       )}
@@ -398,10 +539,13 @@ function MachineTab({
               phieu={p}
               machines={machines}
               isActing={actingId === p.id}
+              isPaused={false}
               onStart={() => { setActingId(p.id); startMutation.mutate(p.id) }}
               onComplete={() => setCompletePhieu(p)}
               onTransfer={() => setTransferPhieu(p)}
               onRemove={() => removeMutation.mutate(p.id)}
+              onPause={() => handleTamDung(p)}
+              onResume={() => handleTiepTuc(p)}
             />
           ))}
         </>
@@ -424,6 +568,30 @@ function MachineTab({
           onDone={() => { setTransferPhieu(null); onRefresh() }}
         />
       )}
+
+      <Modal
+        open={!!pausingPhieu}
+        title={`Tạm dừng in — ${pausingPhieu?.so_phieu ?? ''}`}
+        onCancel={() => setPausingPhieu(null)}
+        onOk={handleConfirmPause}
+        okText="Xác nhận tạm dừng"
+        cancelText="Huỷ"
+        okButtonProps={{ danger: true, icon: <PauseOutlined /> }}
+        width={400}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 8, color: '#595959' }}>
+          Nhập lý do tạm dừng <span style={{ color: '#ff4d4f' }}>*</span>
+        </div>
+        <Input.TextArea
+          rows={3}
+          placeholder="Vd: Hết mực in, máy hỏng, nghỉ giải lao..."
+          value={pauseReason}
+          onChange={e => setPauseReason(e.target.value)}
+          onPressEnter={e => { if (!e.shiftKey) { e.preventDefault(); handleConfirmPause() } }}
+          autoFocus
+        />
+      </Modal>
     </>
   )
 }

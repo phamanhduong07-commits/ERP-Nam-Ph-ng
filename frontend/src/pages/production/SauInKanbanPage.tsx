@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import {
   AppstoreOutlined, CheckCircleOutlined, DeleteOutlined,
-  PlayCircleOutlined, PlusOutlined, ReloadOutlined,
+  PauseOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined,
   RollbackOutlined, SettingOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -17,6 +17,26 @@ import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { socket } from '../../utils/socket'
 
 const { Title, Text } = Typography
+
+// ── Pause session (localStorage) ─────────────────────────────────────────────
+type PauseInfo = { time: string; ly_do: string }
+
+const PAUSE_KEY = (id: number) => `cd2-sauin-pause-${id}`
+
+function readPauses(): Record<number, PauseInfo> {
+  const result: Record<number, PauseInfo> = {}
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key?.startsWith('cd2-sauin-pause-')) {
+      const id = parseInt(key.replace('cd2-sauin-pause-', ''))
+      try {
+        const val = JSON.parse(localStorage.getItem(key) || 'null')
+        if (!isNaN(id) && val) result[id] = val
+      } catch { /* ignore */ }
+    }
+  }
+  return result
+}
 
 // ── Phiếu card ────────────────────────────────────────────────────────────────
 
@@ -242,6 +262,9 @@ function MachineTab({
   onReturn,
   onDelete,
   deletingId,
+  pauses,
+  onTamDung,
+  onTiepTuc,
 }: {
   items: PhieuIn[]
   onStart: (p: PhieuIn) => void
@@ -249,6 +272,9 @@ function MachineTab({
   onReturn: (p: PhieuIn) => void
   onDelete: (p: PhieuIn) => void
   deletingId: number | null
+  pauses: Record<number, PauseInfo>
+  onTamDung: (p: PhieuIn) => void
+  onTiepTuc: (p: PhieuIn) => void
 }) {
   const active = items.filter(p => p.trang_thai === 'dang_sau_in')
   const queue = items.filter(p => p.trang_thai === 'sau_in')
@@ -265,54 +291,78 @@ function MachineTab({
             Đang làm ({active.length})
           </Text>
           <div style={{ marginTop: 8 }}>
-            {active.map(p => (
-              <PhieuCard
-                key={p.id}
-                phieu={p}
-                actions={
-                  <>
-                    <Popconfirm
-                      title="Xác nhận hoàn thành?"
-                      onConfirm={() => onComplete(p)}
-                      okText="Hoàn thành"
-                      cancelText="Huỷ"
-                    >
-                      <Button
-                        type="primary"
-                        icon={<CheckCircleOutlined />}
-                        size="small"
-                        style={{ background: '#13c2c2', borderColor: '#13c2c2' }}
+            {active.map(p => {
+              const info = pauses[p.id]
+              return (
+                <PhieuCard
+                  key={p.id}
+                  phieu={p}
+                  actions={
+                    <>
+                      {info ? (
+                        <>
+                          <div style={{ fontSize: 10, color: '#faad14', fontWeight: 600 }}>
+                            ⏸ {info.time}
+                          </div>
+                          <div style={{ fontSize: 10, color: '#8c8c8c', fontStyle: 'italic', maxWidth: 120 }}>
+                            {info.ly_do}
+                          </div>
+                          <Button
+                            type="primary"
+                            icon={<PlayCircleOutlined />}
+                            size="small"
+                            style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                            onClick={() => onTiepTuc(p)}
+                          >
+                            Tiếp tục
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="small"
+                          icon={<PauseOutlined />}
+                          onClick={() => onTamDung(p)}
+                        >
+                          Tạm dừng
+                        </Button>
+                      )}
+                      <Popconfirm
+                        title="Xác nhận hoàn thành?"
+                        onConfirm={() => onComplete(p)}
+                        okText="Hoàn thành"
+                        cancelText="Huỷ"
                       >
-                        Hoàn thành
-                      </Button>
-                    </Popconfirm>
-                    <Popconfirm
-                      title="Trả phiếu về chờ gán máy?"
-                      description="Tiến độ đang làm sẽ bị reset."
-                      onConfirm={() => onReturn(p)}
-                      okText="Trả về"
-                      cancelText="Huỷ"
-                    >
-                      <Button
-                        size="small"
-                        icon={<RollbackOutlined />}
-                        block
+                        <Button
+                          type="primary"
+                          icon={<CheckCircleOutlined />}
+                          size="small"
+                          style={{ background: '#13c2c2', borderColor: '#13c2c2' }}
+                        >
+                          Hoàn thành
+                        </Button>
+                      </Popconfirm>
+                      <Popconfirm
+                        title="Trả phiếu về chờ gán máy?"
+                        description="Tiến độ đang làm sẽ bị reset."
+                        onConfirm={() => onReturn(p)}
+                        okText="Trả về"
+                        cancelText="Huỷ"
                       >
-                        Trả về
-                      </Button>
-                    </Popconfirm>
-                    <Popconfirm
-                      title="Xoá phiếu?"
-                      onConfirm={() => onDelete(p)}
-                      okText="Xoá"
-                      cancelText="Không"
-                    >
-                      <Button danger size="small" icon={<DeleteOutlined />} loading={deletingId === p.id} block />
-                    </Popconfirm>
-                  </>
-                }
-              />
-            ))}
+                        <Button size="small" icon={<RollbackOutlined />} block>Trả về</Button>
+                      </Popconfirm>
+                      <Popconfirm
+                        title="Xoá phiếu?"
+                        onConfirm={() => onDelete(p)}
+                        okText="Xoá"
+                        cancelText="Không"
+                      >
+                        <Button danger size="small" icon={<DeleteOutlined />} loading={deletingId === p.id} block />
+                      </Popconfirm>
+                    </>
+                  }
+                />
+              )
+            })}
           </div>
           {queue.length > 0 && <Divider style={{ margin: '12px 0' }} />}
         </>
@@ -381,6 +431,9 @@ export default function SauInKanbanPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
+  const [pauses, setPauses] = useState<Record<number, PauseInfo>>(readPauses)
+  const [pausingPhieu, setPausingPhieu] = useState<PhieuIn | null>(null)
+  const [pauseReason, setPauseReason] = useState('')
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['cd2-sauin-kanban', phanXuongId],
@@ -412,9 +465,22 @@ export default function SauInKanbanPage() {
 
   const completeMut = useMutation({
     mutationFn: (id: number) => cd2Api.hoanThanh(id),
-    onSuccess: () => { invalidate(); message.success('Hoàn thành!') },
+    onSuccess: () => { invalidate(); message.success('Hoàn thành định hình!') },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi hoàn thành'),
   })
+
+  const handleComplete = (phieu: PhieuIn) => {
+    const sauOk = phieu.so_luong_sau_in_ok ?? 0
+    const sauLoi = phieu.so_luong_sau_in_loi ?? 0
+    const inOk = phieu.so_luong_in_ok ?? 0
+    if (inOk > 0 && (sauOk + sauLoi) > inOk * 1.1) {
+      message.warning(
+        `SL sau in (${(sauOk + sauLoi).toLocaleString('vi-VN')}) lớn hơn SL in OK (${inOk.toLocaleString('vi-VN')}) 10% — vui lòng kiểm tra lại.`,
+        5,
+      )
+    }
+    completeMut.mutate(phieu.id)
+  }
 
   const returnMut = useMutation({
     mutationFn: (id: number) => cd2Api.traVeSauIn(id),
@@ -435,6 +501,28 @@ export default function SauInKanbanPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
     onSettled: () => setDeletingId(null),
   })
+
+  const handleTamDung = (phieu: PhieuIn) => {
+    setPauseReason('')
+    setPausingPhieu(phieu)
+  }
+
+  const handleConfirmPause = () => {
+    if (!pausingPhieu) return
+    if (!pauseReason.trim()) { message.warning('Vui lòng nhập lý do tạm dừng'); return }
+    const info: PauseInfo = { time: dayjs().format('HH:mm'), ly_do: pauseReason.trim() }
+    localStorage.setItem(PAUSE_KEY(pausingPhieu.id), JSON.stringify(info))
+    setPauses(prev => ({ ...prev, [pausingPhieu.id]: info }))
+    message.info(`Tạm dừng lúc ${info.time} — ${info.ly_do}`)
+    setPausingPhieu(null)
+    setPauseReason('')
+  }
+
+  const handleTiepTuc = (phieu: PhieuIn) => {
+    localStorage.removeItem(PAUSE_KEY(phieu.id))
+    setPauses(prev => { const next = { ...prev }; delete next[phieu.id]; return next })
+    message.success('Tiếp tục định hình')
+  }
 
   const maySauIns = data?.may_sau_ins ?? []
   const choGanMay = data?.cho_gang_may ?? []
@@ -533,10 +621,13 @@ export default function SauInKanbanPage() {
           <MachineTab
             items={items}
             onStart={p => startMut.mutate(p.id)}
-            onComplete={p => completeMut.mutate(p.id)}
+            onComplete={handleComplete}
             onReturn={p => returnMut.mutate(p.id)}
             onDelete={p => { setDeletingId(p.id); deleteMut.mutate(p.id) }}
             deletingId={deletingId}
+            pauses={pauses}
+            onTamDung={handleTamDung}
+            onTiepTuc={handleTiepTuc}
           />
         ),
       }
@@ -621,6 +712,30 @@ export default function SauInKanbanPage() {
       )}
 
       <MaySauInSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      <Modal
+        open={!!pausingPhieu}
+        title={`Tạm dừng định hình — ${pausingPhieu?.so_phieu ?? ''}`}
+        onCancel={() => setPausingPhieu(null)}
+        onOk={handleConfirmPause}
+        okText="Xác nhận tạm dừng"
+        cancelText="Huỷ"
+        okButtonProps={{ danger: true, icon: <PauseOutlined /> }}
+        width={400}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 8, color: '#595959' }}>
+          Nhập lý do tạm dừng <span style={{ color: '#ff4d4f' }}>*</span>
+        </div>
+        <Input.TextArea
+          rows={3}
+          placeholder="Vd: Hết vật liệu, máy trục trặc, nghỉ giải lao..."
+          value={pauseReason}
+          onChange={e => setPauseReason(e.target.value)}
+          onPressEnter={e => { if (!e.shiftKey) { e.preventDefault(); handleConfirmPause() } }}
+          autoFocus
+        />
+      </Modal>
     </div>
   )
 }

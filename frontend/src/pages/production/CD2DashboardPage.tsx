@@ -45,6 +45,17 @@ export default function CD2DashboardPage() {
     // refetchInterval removed in favor of WebSockets
   })
 
+  const { data: todayHistory = [] } = useQuery<PhieuIn[]>({
+    queryKey: ['cd2-today-history', phanXuongId],
+    queryFn: () =>
+      cd2Api.getHistoryPhieuIn({
+        days: 1,
+        trang_thai: 'hoan_thanh',
+        ...(phanXuongId ? { phan_xuong_id: phanXuongId } : {}),
+      }).then(r => r.data),
+    staleTime: 60_000,
+  })
+
   const { data: machineStatus = [], isLoading: loadingMachines } = useQuery({
     queryKey: ['cd2-machine-status', phanXuongId],
     queryFn: () => cd2Api.getMachinesStatus(phanXuongId).then(r => r.data),
@@ -56,7 +67,17 @@ export default function CD2DashboardPage() {
     qc.invalidateQueries({ queryKey: ['cd2-phieu-dang-in'] })
     qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
     qc.invalidateQueries({ queryKey: ['cd2-machine-status'] })
+    qc.invalidateQueries({ queryKey: ['cd2-today-history'] })
   }
+
+  const todaySlInOk = todayHistory.reduce((s, r) => s + (r.so_luong_in_ok ?? 0), 0)
+  const todaySlLoi = todayHistory.reduce((s, r) => s + (r.so_luong_loi ?? 0), 0)
+  const todayTyLeLoi = todaySlInOk + todaySlLoi > 0
+    ? (todaySlLoi / (todaySlInOk + todaySlLoi) * 100).toFixed(1)
+    : '0.0'
+  const stuckCount = dangInList.filter(p =>
+    p.gio_bat_dau_in && dayjs().diff(dayjs(p.gio_bat_dau_in), 'minute') >= 240
+  ).length
 
   // Lắng nghe tín hiệu từ WebSockets để cập nhật tức thì
   useEffect(() => {
@@ -236,6 +257,49 @@ export default function CD2DashboardPage() {
           </Card>
         </Col>
       </Row>
+
+      {/* Thống kê hôm nay */}
+      <Card
+        size="small"
+        title={<span style={{ color: '#1a337e', fontWeight: 600 }}>📊 Thống kê hôm nay</span>}
+        style={{ marginBottom: 20, border: '1px solid #adc6ff', borderRadius: 10 }}
+        styles={{ header: { background: '#f0f5ff' } }}
+      >
+        <Row gutter={[12, 8]}>
+          <Col xs={12} sm={6}>
+            <Statistic
+              title="SL in đạt"
+              value={todaySlInOk}
+              valueStyle={{ color: '#52c41a', fontSize: 22 }}
+              formatter={v => Number(v).toLocaleString('vi-VN')}
+            />
+          </Col>
+          <Col xs={12} sm={6}>
+            <Statistic
+              title="SL lỗi"
+              value={todaySlLoi}
+              valueStyle={{ color: todaySlLoi > 0 ? '#ff4d4f' : '#aaa', fontSize: 22 }}
+              formatter={v => Number(v).toLocaleString('vi-VN')}
+            />
+          </Col>
+          <Col xs={12} sm={6}>
+            <Statistic
+              title="Tỷ lệ lỗi"
+              value={todayTyLeLoi}
+              suffix="%"
+              valueStyle={{ color: parseFloat(todayTyLeLoi) > 5 ? '#ff4d4f' : '#52c41a', fontSize: 22 }}
+            />
+          </Col>
+          <Col xs={12} sm={6}>
+            <Statistic
+              title="Phiếu kẹt >4h"
+              value={stuckCount}
+              valueStyle={{ color: stuckCount > 0 ? '#ff4d4f' : '#52c41a', fontSize: 22 }}
+              suffix={stuckCount > 0 ? ' ⚠️' : ''}
+            />
+          </Col>
+        </Row>
+      </Card>
 
       {/* Scan 24 giờ qua */}
       <Row justify="space-between" align="middle" style={{ marginBottom: 10 }}>

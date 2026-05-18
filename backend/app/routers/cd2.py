@@ -183,6 +183,8 @@ def _to_dict(p: PhieuIn) -> dict:
         "gio_bat_dau_dinh_hinh": p.gio_bat_dau_dinh_hinh.isoformat() if p.gio_bat_dau_dinh_hinh else None,
         "gio_hoan_thanh_dinh_hinh": p.gio_hoan_thanh_dinh_hinh.isoformat() if p.gio_hoan_thanh_dinh_hinh else None,
         "phan_xuong_id": p.phan_xuong_id,
+        "tam_dung_luc": p.tam_dung_luc.isoformat() if p.tam_dung_luc else None,
+        "tam_dung_ly_do": p.tam_dung_ly_do,
         "created_at": p.created_at.isoformat() if p.created_at else None,
     }
 
@@ -935,6 +937,36 @@ async def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = 
     p.trang_thai = "sau_in"
     db.commit()
     await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "tra_ve_sau_in", "trang_thai": "sau_in"})
+    return _to_dict(_load(phieu_id, db))
+
+
+class TamDungBody(BaseModel):
+    ly_do: str
+
+
+@router.post("/phieu-in/{phieu_id}/tam-dung")
+def tam_dung_in(phieu_id: int, body: TamDungBody, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Ghi nhận tạm dừng in — lưu thời điểm + lý do vào DB."""
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai != "dang_in":
+        raise HTTPException(status_code=400, detail=f"Phiếu phải đang in để tạm dừng, hiện tại: '{p.trang_thai}'")
+    p.tam_dung_luc = datetime.utcnow()
+    p.tam_dung_ly_do = body.ly_do.strip()
+    db.commit()
+    return _to_dict(_load(phieu_id, db))
+
+
+@router.post("/phieu-in/{phieu_id}/tiep-tuc")
+def tiep_tuc_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Xoá trạng thái tạm dừng — tiếp tục in."""
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    p.tam_dung_luc = None
+    p.tam_dung_ly_do = None
+    db.commit()
     return _to_dict(_load(phieu_id, db))
 
 
