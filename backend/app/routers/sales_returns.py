@@ -11,6 +11,7 @@ from app.models.sales import SalesOrder, SalesOrderItem, SalesReturn, SalesRetur
 from app.models.production import ProductionOrderItem
 from app.models.warehouse_doc import DeliveryOrder, DeliveryOrderItem
 from app.models.accounting import CustomerRefundVoucher, DebtLedgerEntry
+from app.models.billing import SalesInvoice
 from app.services.accounting_service import AccountingService
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
@@ -287,7 +288,34 @@ def get_return(
     if not return_obj:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu trả hàng")
 
-    return return_obj
+    # Compute phuong_an_can_tru on-the-fly
+    voucher = db.query(CustomerRefundVoucher).filter(
+        CustomerRefundVoucher.sales_return_id == return_obj.id
+    ).first()
+
+    phuong_an: str | None = None
+    invoice_id: int | None = None
+    so_hoa_don: str | None = None
+
+    if return_obj.trang_thai == "da_duyet":
+        if voucher and voucher.sales_invoice_id:
+            invoice = db.get(SalesInvoice, voucher.sales_invoice_id)
+            invoice_id = voucher.sales_invoice_id
+            so_hoa_don = invoice.so_hoa_don if invoice else None
+            if invoice and invoice.da_thanh_toan >= invoice.tong_cong:
+                phuong_an = "da_thu_tien"
+            else:
+                phuong_an = "da_xuat_hd"
+        else:
+            phuong_an = "chua_xuat_hd"
+
+    response = SalesReturnResponse.model_validate(return_obj)
+    response.ten_nguoi_tao = return_obj.creator.ho_ten if return_obj.creator else None
+    response.ten_nguoi_duyet = return_obj.approver.ho_ten if return_obj.approver else None
+    response.phuong_an_can_tru = phuong_an
+    response.sales_invoice_id = invoice_id
+    response.so_hoa_don = so_hoa_don
+    return response
 
 
 @router.post("", response_model=SalesReturnResponse, status_code=201)
@@ -336,19 +364,15 @@ def create_return(
         data.sales_order_id,
         data.items,
     )
-    return_qty_by_item = {}
 
-    for sales_order_item_id, return_qty in return_qty_by_item.items():
-        delivered_qty = delivered_qty_by_item.get(sales_order_item_id, 0)
-        returned_qty = float(returned_qty_by_item.get(sales_order_item_id, 0))
-        remaining_qty = delivered_qty - returned_qty
-        if delivered_qty <= 0:
-            raise HTTPException(status_code=400, detail=f"Item đơn hàng ID {sales_order_item_id} không có trong phiếu giao hàng đã chọn")
-        if return_qty > remaining_qty:
-            raise HTTPException(status_code=400, detail=f"Số lượng trả không được vượt quá số lượng còn có thể trả ({remaining_qty})")
-
-    # Generate return number
-    so_phieu_tra = f"PT{datetime.now().strftime('%Y%m%d')}{str(db.query(SalesReturn).count() + 1).zfill(3)}"
+    today_str = datetime.now().strftime('%Y%m%d')
+    prefix = f"PT{today_str}"
+    last = (db.query(SalesReturn)
+            .filter(SalesReturn.so_phieu_tra.like(f"{prefix}%"))
+            .order_by(SalesReturn.so_phieu_tra.desc())
+            .first())
+    seq = int(last.so_phieu_tra[len(prefix):]) + 1 if last else 1
+    so_phieu_tra = f"{prefix}{seq:03d}"
 
     return_obj = SalesReturn(
         so_phieu_tra=so_phieu_tra,
@@ -362,43 +386,10 @@ def create_return(
         created_by=current_user.id,
     )
 
-    data.items = []
-    tong_tien_tra = 0
-    for item_data in data.items:
-        delivery_item = _resolve_delivery_order_item(
-            db,
-            data.delivery_order_id,
-            item_data.sales_order_item_id,
-            item_data.delivery_order_item_id,
-        )
-        # Validate sales order item exists
-        sales_order_item = db.query(SalesOrderItem).filter(
-            SalesOrderItem.id == item_data.sales_order_item_id,
-            SalesOrderItem.order_id == data.sales_order_id
-        ).first()
-        if not sales_order_item:
-            raise HTTPException(status_code=404, detail=f"Không tìm thấy item đơn hàng ID {item_data.sales_order_item_id}")
-
-        # Validate return quantity doesn't exceed sold quantity
-        if item_data.so_luong_tra > sales_order_item.so_luong:
-            raise HTTPException(status_code=400, detail=f"Số lượng trả không được vượt quá số lượng đã bán ({sales_order_item.so_luong})")
-
-        return_item = SalesReturnItem(
-            delivery_order_item_id=delivery_item.id,
-            sales_order_item_id=item_data.sales_order_item_id,
-            so_luong_tra=item_data.so_luong_tra,
-            don_gia_tra=item_data.don_gia_tra or sales_order_item.don_gia,
-            ly_do_tra=item_data.ly_do_tra,
-            tinh_trang_hang=item_data.tinh_trang_hang,
-            ghi_chu=item_data.ghi_chu,
-        )
-        return_obj.items.append(return_item)
-        tong_tien_tra += float(item_data.so_luong_tra) * float(return_item.don_gia_tra)
-
-    return_obj.tong_tien_tra = round(tong_tien_tra, 2)
     for return_item, _qty in prepared_items:
         return_obj.items.append(return_item)
     return_obj.tong_tien_tra = tong_tien_tra
+
     db.add(return_obj)
     db.commit()
     db.refresh(return_obj)
@@ -547,7 +538,7 @@ def approve_return(
             ghi_chu=f"Nhập lại hàng trả: {item.ly_do_tra or 'Không có lý do'}"
         )
 
-    # Ghi bút toán kế toán: Nợ 155 / Có 632 (đảo chiều entry xuất giao hàng)
+    # Ghi bút toán kế toán: Nợ 155 / Có 632 (đảo chiều entry xuất giao hàng — giá vốn)
     wh = db.get(Warehouse, warehouse_id)
     phap_nhan_id_acc = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
     phan_xuong_id_acc = wh.phan_xuong_id if wh else None
@@ -573,6 +564,24 @@ def approve_return(
             phan_xuong_id=phan_xuong_id_acc,
         )
 
+    # Ghi bút toán doanh thu: Nợ 5213 / Có 131 (đảo chiều doanh thu bán hàng)
+    if return_obj.tong_tien_tra:
+        AccountingService(db).post_inventory_journal(
+            ngay=return_obj.ngay_tra,
+            loai="TRA_HANG_DOANH_THU",
+            chung_tu_loai="sales_returns",
+            chung_tu_id=return_obj.id,
+            items=[{
+                "ten_hang": f"Hàng bán bị trả lại ({return_obj.so_phieu_tra})",
+                "so_luong": 1,
+                "don_gia": float(return_obj.tong_tien_tra),
+                "tk_no": "5213",
+                "tk_co": "131",
+            }],
+            phap_nhan_id=phap_nhan_id_acc,
+            phan_xuong_id=phan_xuong_id_acc,
+        )
+
     return_obj.trang_thai = "da_duyet"
     return_obj.approved_by = current_user.id
     return_obj.approved_at = datetime.utcnow()
@@ -592,6 +601,23 @@ def approve_return(
 
     db.flush()
 
+    # Detect SalesInvoice để phân loại trường hợp cấn trừ
+    linked_invoice: SalesInvoice | None = None
+    if return_obj.delivery_order_id:
+        linked_invoice = (
+            db.query(SalesInvoice)
+            .filter(SalesInvoice.delivery_id == return_obj.delivery_order_id)
+            .order_by(SalesInvoice.created_at.desc())
+            .first()
+        )
+    if not linked_invoice and return_obj.sales_order_id:
+        linked_invoice = (
+            db.query(SalesInvoice)
+            .filter(SalesInvoice.sales_order_id == return_obj.sales_order_id)
+            .order_by(SalesInvoice.created_at.desc())
+            .first()
+        )
+
     # Auto-tạo phiếu hoàn tiền (nháp) nếu chưa có
     existing_voucher = db.query(CustomerRefundVoucher).filter(
         CustomerRefundVoucher.sales_return_id == return_obj.id
@@ -610,11 +636,14 @@ def approve_return(
             ngay=date.today(),
             customer_id=return_obj.customer_id,
             sales_return_id=return_obj.id,
+            sales_invoice_id=linked_invoice.id if linked_invoice else None,
             so_tien=return_obj.tong_tien_tra,
             trang_thai="nhap",
             phap_nhan_id=phap_nhan_id_acc,
             created_by=current_user.id,
         ))
+    elif existing_voucher and linked_invoice and not existing_voucher.sales_invoice_id:
+        existing_voucher.sales_invoice_id = linked_invoice.id
 
     db.commit()
     return get_return(return_id, db, current_user)
