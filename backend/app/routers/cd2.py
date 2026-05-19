@@ -3,15 +3,15 @@ from decimal import Decimal
 from typing import Optional
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user, get_optional_user
 from app.models.auth import User
 from app.models.cd2 import (
-    MayIn, MaySauIn, PhieuIn, MayScan, ScanLog, ShiftCa, ShiftConfig, PrinterUser,
-    Machine, ProductionLog
+    MayIn, MaySauIn, MayScan, PhieuIn, PhieuInStateLog, ScanLog, ShiftCa, ShiftConfig,
+    PrinterUser, Machine, ProductionLog
 )
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
@@ -30,6 +30,7 @@ from app.socket_manager import sio
 router = APIRouter(prefix="/api/cd2", tags=["cd2"])
 
 VALID_STATES = {"cho_in", "ke_hoach", "dang_in", "cho_dinh_hinh", "sau_in", "dang_sau_in", "hoan_thanh"}
+SL_MAX_RATIO = Decimal("1.1")  # Số lượng đạt tối đa = 110% số lượng kế hoạch
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ class MachineUpdate(BaseModel):
 
 class TrackPayload(BaseModel):
     production_order_id: int
-    machine_id: int
+    machine_id: Optional[int] = None   # FK → machines; None khi gọi từ kiosk CD2 (may_in)
     event_type: str  # start | stop | resume | complete
     phieu_in_id: Optional[int] = None
     quantity_ok: Optional[Decimal] = None
@@ -120,22 +121,40 @@ class MoveBody(BaseModel):
     sort_order: int = 0
 
 
+class ReorderItem(BaseModel):
+    id: int
+    sort_order: int
+
+
+class ReorderBody(BaseModel):
+    items: list[ReorderItem]
+
+
 class CompleteBody(BaseModel):
     ngay_in: Optional[date] = None
     ca: Optional[str] = None
-    so_luong_in_ok: Optional[Decimal] = None
-    so_luong_loi: Optional[Decimal] = None
-    so_luong_setup: Optional[Decimal] = None
-    so_lan_setup: Optional[int] = None
+    so_luong_in_ok: Optional[Decimal] = Field(default=None, ge=0)
+    so_luong_loi: Optional[Decimal] = Field(default=None, ge=0)
+    so_luong_setup: Optional[Decimal] = Field(default=None, ge=0)
+    so_lan_setup: Optional[int] = Field(default=None, ge=0)
     ghi_chu_ket_qua: Optional[str] = None
 
 
 class SauInBody(BaseModel):
     ngay_sau_in: Optional[date] = None
     ca_sau_in: Optional[str] = None
-    so_luong_sau_in_ok: Optional[Decimal] = None
-    so_luong_sau_in_loi: Optional[Decimal] = None
+    so_luong_sau_in_ok: Optional[Decimal] = Field(default=None, ge=0)
+    so_luong_sau_in_loi: Optional[Decimal] = Field(default=None, ge=0)
     ghi_chu_sau_in: Optional[str] = None
+    may_sau_in_id: Optional[int] = None      # kiosk: gán máy khi bắt đầu
+    printer_user_id: Optional[int] = None    # kiosk: resolve may_sau_in_id từ PrinterUser
+
+
+class HoanThanhBody(BaseModel):
+    so_luong_sau_in_ok: Optional[Decimal] = Field(default=None, ge=0)
+    so_luong_sau_in_loi: Optional[Decimal] = Field(default=None, ge=0)
+    ghi_chu_sau_in: Optional[str] = None
+    printer_user_id: Optional[int] = None    # kiosk mode
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -185,8 +204,32 @@ def _to_dict(p: PhieuIn) -> dict:
         "phan_xuong_id": p.phan_xuong_id,
         "tam_dung_luc": p.tam_dung_luc.isoformat() if p.tam_dung_luc else None,
         "tam_dung_ly_do": p.tam_dung_ly_do,
+        "phieu_goc_id": p.phieu_goc_id,
         "created_at": p.created_at.isoformat() if p.created_at else None,
+        "so_lsx": p.production_order.so_lenh if p.production_order else None,
     }
+
+
+def _log_state_change(
+    db: Session,
+    p: PhieuIn,
+    tu_trang_thai: Optional[str],
+    den_trang_thai: str,
+    hanh_dong: str,
+    user_id: Optional[int],
+    ghi_chu: Optional[str] = None,
+) -> None:
+    """Ghi một dòng audit log mỗi khi trạng thái PhieuIn thay đổi."""
+    entry = PhieuInStateLog(
+        phieu_in_id=p.id,
+        tu_trang_thai=tu_trang_thai,
+        den_trang_thai=den_trang_thai,
+        hanh_dong=hanh_dong,
+        changed_by=user_id,
+        changed_at=datetime.now(),
+        ghi_chu=ghi_chu,
+    )
+    db.add(entry)
 
 
 def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Optional[ProductionOutput]:
@@ -202,11 +245,16 @@ def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Op
     if existing:
         return existing
 
-    # Resolve phan_xuong_id: ưu tiên xưởng của PhieuIn (nơi định hình),
-    # fallback sang ProductionOrder nếu PhieuIn không có xưởng
+    # Resolve phan_xuong_id: PhieuIn → may_sau_in → ProductionOrder
     po: Optional[ProductionOrder] = None
     phan_xuong_id: Optional[int] = p.phan_xuong_id
     don_gia = Decimal("0")
+
+    # Fallback 1: lấy từ máy sau in (khosk định hình không có phan_xuong trên phiếu)
+    if not phan_xuong_id and p.may_sau_in_id:
+        sau_in_obj = db.get(MaySauIn, p.may_sau_in_id)
+        if sau_in_obj and sau_in_obj.phan_xuong_id:
+            phan_xuong_id = sau_in_obj.phan_xuong_id
 
     if p.production_order_id:
         po = db.query(ProductionOrder).filter(ProductionOrder.id == p.production_order_id).first()
@@ -267,17 +315,22 @@ def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Op
         ghi_chu=f"Tự động từ phiếu in {p.so_phieu}",
         created_by=user_id,
     )
-    db.add(out)
-    db.flush()
-
-    bal = _get_or_create_balance(db, kho.id, product_id=product_id, ten_hang=ten_hang, don_vi="Thùng")
-    _nhap_balance(bal, sl, don_gia)
-    _log_tx(
-        db, kho.id, "NHAP_SX", sl, don_gia, bal.ton_luong,
-        "production_outputs", out.id, user_id,
-        product_id=product_id,
-        ghi_chu=f"Hoàn thành định hình — {p.so_phieu}",
-    )
+    try:
+        db.add(out)
+        db.flush()
+        bal = _get_or_create_balance(db, kho.id, product_id=product_id, ten_hang=ten_hang, don_vi="Thùng")
+        _nhap_balance(bal, sl, don_gia)
+        _log_tx(
+            db, kho.id, "NHAP_SX", sl, don_gia, bal.ton_luong,
+            "production_outputs", out.id, user_id,
+            product_id=product_id,
+            ghi_chu=f"Hoàn thành định hình — {p.so_phieu}",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(500, f"Lỗi nhập kho thành phẩm: {exc}") from exc
     return out
 
 
@@ -295,10 +348,29 @@ def _gen_so_phieu(db: Session) -> str:
     return f"{prefix}{seq:04d}"
 
 
+def _gen_so_phieu_bu(db: Session) -> str:
+    """Phiếu bù dùng prefix PIB- để phân biệt với phiếu gốc PIN-."""
+    today = date.today()
+    prefix = f"PIB-{today.strftime('%Y%m')}-"
+    last = (
+        db.query(PhieuIn)
+        .filter(PhieuIn.so_phieu.like(f"{prefix}%"))
+        .order_by(PhieuIn.so_phieu.desc())
+        .with_for_update()
+        .first()
+    )
+    seq = (int(last.so_phieu[-4:]) + 1) if last else 1
+    return f"{prefix}{seq:04d}"
+
+
 def _load(phieu_id: int, db: Session) -> PhieuIn:
     p = (
         db.query(PhieuIn)
-        .options(joinedload(PhieuIn.may_in_obj), joinedload(PhieuIn.may_sau_in_obj))
+        .options(
+            joinedload(PhieuIn.may_in_obj),
+            joinedload(PhieuIn.may_sau_in_obj),
+            joinedload(PhieuIn.production_order),
+        )
         .filter(PhieuIn.id == phieu_id)
         .first()
     )
@@ -313,7 +385,6 @@ def _load(phieu_id: int, db: Session) -> PhieuIn:
 def list_may_in(
     phan_xuong_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
 ):
     q = db.query(MayIn)
     if phan_xuong_id is not None:
@@ -478,7 +549,7 @@ def get_kanban(
         q_may = q_may.filter(MayIn.phan_xuong_id == phan_xuong_id)
     may_ins = q_may.order_by(MayIn.sort_order).all()
 
-    cutoff_7d = datetime.utcnow() - timedelta(days=7)
+    cutoff_7d = datetime.now() - timedelta(days=7)
 
     q_phieu = (
         db.query(PhieuIn)
@@ -535,15 +606,31 @@ def list_phieu_in(
     trang_thai: Optional[str] = Query(default=None),
     phan_xuong_id: Optional[int] = Query(default=None),
     may_in_id: Optional[int] = Query(default=None),
+    may_sau_in_id: Optional[int] = Query(default=None),
     tu_ngay: Optional[date] = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    q = db.query(PhieuIn).options(joinedload(PhieuIn.may_in_obj), joinedload(PhieuIn.may_sau_in_obj))
+    # Kiosk mode (không có JWT): phải cung cấp may_in_id hoặc may_sau_in_id
+    if current_user is None and may_in_id is None and may_sau_in_id is None:
+        raise HTTPException(status_code=401, detail="Cần đăng nhập hoặc cung cấp may_in_id / may_sau_in_id")
+    q = db.query(PhieuIn).options(
+        joinedload(PhieuIn.may_in_obj),
+        joinedload(PhieuIn.may_sau_in_obj),
+        joinedload(PhieuIn.production_order),
+    )
     if search:
         like = f"%{search}%"
+        from sqlalchemy.orm import aliased
+        from app.models.production import ProductionOrder as PO
+        lsx_ids = db.query(PhieuIn.id).join(PO, PhieuIn.production_order_id == PO.id).filter(PO.so_lenh.ilike(like))
         q = q.filter(
-            PhieuIn.so_phieu.ilike(like) | PhieuIn.ten_hang.ilike(like) | PhieuIn.ma_kh.ilike(like)
+            PhieuIn.so_phieu.ilike(like)
+            | PhieuIn.ten_hang.ilike(like)
+            | PhieuIn.ma_kh.ilike(like)
+            | PhieuIn.id.in_(lsx_ids)
         )
     if trang_thai:
         q = q.filter(PhieuIn.trang_thai == trang_thai)
@@ -551,9 +638,27 @@ def list_phieu_in(
         q = q.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
     if may_in_id is not None:
         q = q.filter(PhieuIn.may_in_id == may_in_id)
+    if may_sau_in_id is not None:
+        # Pool model: thấy toàn bộ phiếu chưa gán máy + phiếu đang/đã xử lý của máy này
+        if not trang_thai:
+            from sqlalchemy import or_, and_
+            q = q.filter(
+                or_(
+                    # Phiếu chưa gán máy — bao gồm cho_dinh_hinh, sau_in, dang_sau_in không có may_sau_in
+                    and_(
+                        PhieuIn.trang_thai.in_(["cho_dinh_hinh", "sau_in", "dang_sau_in"]),
+                        PhieuIn.may_sau_in_id == None,
+                    ),
+                    # Phiếu đã gán đúng máy này
+                    and_(
+                        PhieuIn.may_sau_in_id == may_sau_in_id,
+                        PhieuIn.trang_thai.in_(["sau_in", "dang_sau_in", "hoan_thanh"]),
+                    ),
+                )
+            )
     if tu_ngay is not None:
         q = q.filter(PhieuIn.created_at >= datetime.combine(tu_ngay, datetime.min.time()))
-    return [_to_dict(p) for p in q.order_by(PhieuIn.created_at.desc()).limit(200).all()]
+    return [_to_dict(p) for p in q.order_by(PhieuIn.created_at.desc()).offset(skip).limit(limit).all()]
 
 
 @router.post("/phieu-in", status_code=201)
@@ -768,8 +873,26 @@ def create_from_lenh_sx(
 
 
 @router.get("/phieu-in/{phieu_id}")
-def get_phieu_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_phieu_in(phieu_id: int, db: Session = Depends(get_db), _: Optional[User] = Depends(get_optional_user)):
+    # Không yêu cầu JWT để kiosk worker có thể đọc trạng thái phiếu sau mỗi thao tác
     return _to_dict(_load(phieu_id, db))
+
+
+@router.put("/phieu-in/reorder")
+def reorder_phieu(
+    body: ReorderBody,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Batch-update sort_order cho nhiều phiếu sau khi kéo thả."""
+    ids = [item.id for item in body.items]
+    phieus = db.query(PhieuIn).filter(PhieuIn.id.in_(ids)).all()
+    phieu_map = {p.id: p for p in phieus}
+    for item in body.items:
+        if item.id in phieu_map:
+            phieu_map[item.id].sort_order = item.sort_order
+    db.commit()
+    return {"ok": True}
 
 
 @router.put("/phieu-in/{phieu_id}")
@@ -796,6 +919,48 @@ def delete_phieu_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depe
     return {"ok": True}
 
 
+@router.get("/phieu-in/{phieu_id}/history")
+def get_phieu_in_history(
+    phieu_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Trả về audit log các lần thay đổi trạng thái của một phiếu in."""
+    if not db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first():
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    logs = (
+        db.query(PhieuInStateLog)
+        .filter(PhieuInStateLog.phieu_in_id == phieu_id)
+        .order_by(PhieuInStateLog.changed_at)
+        .all()
+    )
+    return [
+        {
+            "id": lg.id,
+            "tu_trang_thai": lg.tu_trang_thai,
+            "den_trang_thai": lg.den_trang_thai,
+            "hanh_dong": lg.hanh_dong,
+            "changed_by": lg.changed_by,
+            "changed_at": lg.changed_at.isoformat() if lg.changed_at else None,
+            "ghi_chu": lg.ghi_chu,
+        }
+        for lg in logs
+    ]
+
+
+# Drag-drop chỉ được phép trong giai đoạn lập kế hoạch (trước khi bấm Start).
+# Sau in: admin có thể kéo giữa cho_dinh_hinh ↔ sau_in trên kanban.
+_DRAG_ALLOWED: dict[str, set[str]] = {
+    "cho_in":        {"cho_in", "ke_hoach"},
+    "ke_hoach":      {"cho_in", "ke_hoach"},
+    "dang_in":       {"dang_in"},
+    "cho_dinh_hinh": {"cho_dinh_hinh", "sau_in"},
+    "sau_in":        {"sau_in", "cho_dinh_hinh"},
+    "dang_sau_in":   {"dang_sau_in"},
+    "hoan_thanh":    set(),
+}
+
+
 @router.put("/phieu-in/{phieu_id}/move")
 async def move_phieu(
     phieu_id: int,
@@ -812,13 +977,19 @@ async def move_phieu(
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
 
     prev_state = p.trang_thai
+    allowed = _DRAG_ALLOWED.get(prev_state, set())
+    if body.trang_thai not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Phiếu đã qua '{prev_state}' — không thể kéo về '{body.trang_thai}'. Dùng nút thao tác.",
+        )
     p.trang_thai = body.trang_thai
     p.may_in_id = body.may_in_id
     p.sort_order = body.sort_order
     if body.trang_thai == 'dang_in' and prev_state != 'dang_in' and not p.gio_bat_dau_in:
-        p.gio_bat_dau_in = datetime.utcnow()
+        p.gio_bat_dau_in = datetime.now()
     if body.trang_thai == 'hoan_thanh' and prev_state != 'hoan_thanh':
-        p.gio_hoan_thanh = datetime.utcnow()
+        p.gio_hoan_thanh = datetime.now()
         _auto_nhap_thanh_pham(db, p, current_user.id)
     db.commit()
     # Phat tin hieu WebSocket cho Dashboard
@@ -831,41 +1002,140 @@ async def move_phieu(
 
 
 @router.post("/phieu-in/{phieu_id}/start")
-def start_printing(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+async def start_printing(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
     if p.trang_thai not in ("cho_in", "ke_hoach"):
         raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'cho_in' hoặc 'ke_hoach', hiện tại: '{p.trang_thai}'")
+    prev_state = p.trang_thai
     if not p.gio_bat_dau_in:
-        p.gio_bat_dau_in = datetime.utcnow()
+        p.gio_bat_dau_in = datetime.now()
     p.trang_thai = "dang_in"
     p.ngay_in = date.today()
+    _log_state_change(db, p, prev_state, "dang_in", "start_printing", current_user.id)
     db.commit()
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "start_printing", "trang_thai": "dang_in"})
     return _to_dict(_load(phieu_id, db))
 
 
+def _validate_so_luong_in_ok(so_luong_in_ok: Optional[Decimal], so_luong_phoi: Optional[Decimal]) -> None:
+    """Validate số lượng in OK không vượt quá 110% số lượng phôi."""
+    if so_luong_in_ok is None or so_luong_phoi is None:
+        return
+    limit = so_luong_phoi * SL_MAX_RATIO
+    if so_luong_in_ok > limit:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Số lượng đạt ({so_luong_in_ok}) vượt quá 110% số lượng phôi ({so_luong_phoi}). Tối đa cho phép: {limit:.0f}"
+        )
+
+
+def _validate_so_luong_sau_in_ok(so_luong_sau_in_ok: Optional[Decimal], so_luong_ref: Optional[Decimal]) -> None:
+    """Validate số lượng sau in OK không vượt quá 110% tham chiếu (so_luong_in_ok ?? so_luong_phoi)."""
+    if so_luong_sau_in_ok is None or so_luong_ref is None:
+        return
+    limit = so_luong_ref * SL_MAX_RATIO
+    if so_luong_sau_in_ok > limit:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Số lượng đạt ({so_luong_sau_in_ok}) vượt quá 110% tham chiếu ({so_luong_ref}). Tối đa cho phép: {limit:.0f}"
+        )
+
+
 @router.post("/phieu-in/{phieu_id}/complete")
-def complete_printing(
+async def complete_printing(
     phieu_id: int,
     body: CompleteBody,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Kết thúc in → chuyển sang Chờ định hình."""
-    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+    """Kết thúc in → chuyển sang Chờ định hình (chấp nhận thiếu/đủ số lượng)."""
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
     if p.trang_thai != "dang_in":
         raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'dang_in', hiện tại: '{p.trang_thai}'")
+    _validate_so_luong_in_ok(body.so_luong_in_ok, p.so_luong_phoi)
     p.trang_thai = "cho_dinh_hinh"
     p.may_in_id = None
     p.tam_dung_luc = None
     p.tam_dung_ly_do = None
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(p, k, v)
+    _log_state_change(db, p, "dang_in", "cho_dinh_hinh", "complete_printing", current_user.id)
     db.commit()
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "complete_printing", "trang_thai": "cho_dinh_hinh"})
     return _to_dict(_load(phieu_id, db))
+
+
+@router.post("/phieu-in/{phieu_id}/ngung-in")
+async def ngung_in_tao_phieu_bu(
+    phieu_id: int,
+    body: CompleteBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ngưng in sớm → lưu kết quả thực tế, tự động tạo Phiếu in bù cho số lượng còn thiếu."""
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai != "dang_in":
+        raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'dang_in', hiện tại: '{p.trang_thai}'")
+    if not body.so_luong_in_ok or body.so_luong_in_ok <= 0:
+        raise HTTPException(status_code=400, detail="Phải nhập số lượng đạt (> 0) trước khi ngưng in")
+    _validate_so_luong_in_ok(body.so_luong_in_ok, p.so_luong_phoi)
+    if p.so_luong_phoi and body.so_luong_in_ok >= p.so_luong_phoi:
+        raise HTTPException(
+            status_code=400,
+            detail="Số lượng đạt đã bằng hoặc vượt số lượng phôi — không cần tạo phiếu bù, hãy dùng Kết thúc"
+        )
+
+    con_lai = (p.so_luong_phoi or Decimal(0)) - body.so_luong_in_ok
+
+    # Cập nhật phiếu gốc
+    p.trang_thai = "cho_dinh_hinh"
+    p.may_in_id = None
+    p.tam_dung_luc = None
+    p.tam_dung_ly_do = None
+    for k, v in body.model_dump(exclude_none=True).items():
+        setattr(p, k, v)
+
+    # Tạo phiếu bù
+    phieu_bu = PhieuIn(
+        so_phieu=_gen_so_phieu_bu(db),
+        production_order_id=p.production_order_id,
+        phan_xuong_id=p.phan_xuong_id,
+        trang_thai="cho_in",
+        sort_order=0,
+        ten_hang=p.ten_hang,
+        ma_kh=p.ma_kh,
+        ten_khach_hang=p.ten_khach_hang,
+        quy_cach=p.quy_cach,
+        loai_in=p.loai_in,
+        loai=p.loai,
+        ths=p.ths,
+        pp_ghep=p.pp_ghep,
+        so_don=p.so_don,
+        ngay_giao_hang=p.ngay_giao_hang,
+        ngay_lenh=p.ngay_lenh,
+        ghi_chu_printer=p.ghi_chu_printer,
+        ghi_chu_prepare=p.ghi_chu_prepare,
+        so_luong_phoi=con_lai,
+        phieu_goc_id=p.id,
+        created_by=current_user.id,
+    )
+    _log_state_change(db, p, "dang_in", "cho_dinh_hinh", "ngung_in", current_user.id,
+                      ghi_chu=f"Tạo phiếu bù {phieu_bu.so_phieu}, còn lại: {con_lai}")
+    db.add(phieu_bu)
+    db.commit()
+    db.refresh(phieu_bu)
+
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "ngung_in"})
+    return {
+        "phieu_goc": _to_dict(_load(phieu_id, db)),
+        "phieu_bu": _to_dict(_load(phieu_bu.id, db)),
+    }
 
 
 @router.post("/phieu-in/{phieu_id}/sau-in")
@@ -873,38 +1143,147 @@ async def start_sau_in(
     phieu_id: int,
     body: SauInBody,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    """Bắt đầu định hình → trạng thái sau_in, ghi giờ bắt đầu."""
-    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+    """Bắt đầu định hình → trạng thái sau_in, ghi giờ bắt đầu, gán may_sau_in_id."""
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
     if p.trang_thai != "cho_dinh_hinh":
         raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'cho_dinh_hinh', hiện tại: '{p.trang_thai}'")
+
+    # Resolve may_sau_in_id: body > PrinterUser > giữ nguyên
+    msi_id = body.may_sau_in_id
+    if msi_id is None and body.printer_user_id:
+        pu = db.get(PrinterUser, body.printer_user_id)
+        if pu and pu.may_sau_in_id:
+            msi_id = pu.may_sau_in_id
+    if msi_id is not None:
+        p.may_sau_in_id = msi_id
+
     p.trang_thai = "sau_in"
     if not p.gio_bat_dau_dinh_hinh:
-        p.gio_bat_dau_dinh_hinh = datetime.utcnow()
-    for k, v in body.model_dump(exclude_none=True).items():
+        p.gio_bat_dau_dinh_hinh = datetime.now()
+    for k, v in body.model_dump(exclude_none=True, exclude={"may_sau_in_id", "printer_user_id"}).items():
         setattr(p, k, v)
+    user_id = current_user.id if current_user else None
+    _log_state_change(db, p, "cho_dinh_hinh", "sau_in", "start_sau_in", user_id)
     db.commit()
     await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "start_sau_in", "trang_thai": "sau_in"})
     return _to_dict(_load(phieu_id, db))
 
 
 @router.post("/phieu-in/{phieu_id}/hoan-thanh")
-async def finish_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def finish_sau_in(
+    phieu_id: int,
+    body: Optional[HoanThanhBody] = None,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
-    if p.trang_thai != "dang_sau_in":
-        raise HTTPException(status_code=400, detail=f"Phiếu đang ở trạng thái '{p.trang_thai}', phải là 'dang_sau_in' để hoàn thành")
+    if p.trang_thai not in ("sau_in", "dang_sau_in"):
+        raise HTTPException(status_code=400, detail=f"Phiếu đang ở trạng thái '{p.trang_thai}', phải là 'sau_in' hoặc 'dang_sau_in' để hoàn thành")
+    if body:
+        ref = p.so_luong_in_ok or p.so_luong_phoi
+        if body.so_luong_sau_in_ok is not None:
+            _validate_so_luong_sau_in_ok(body.so_luong_sau_in_ok, ref)
+            p.so_luong_sau_in_ok = body.so_luong_sau_in_ok
+        if body.so_luong_sau_in_loi is not None:
+            p.so_luong_sau_in_loi = body.so_luong_sau_in_loi
+        if body.ghi_chu_sau_in is not None:
+            p.ghi_chu_sau_in = body.ghi_chu_sau_in
+    prev_finish_state = p.trang_thai
+    if not p.gio_bat_dau_dinh_hinh:
+        p.gio_bat_dau_dinh_hinh = datetime.now()
     p.trang_thai = "hoan_thanh"
-    p.gio_hoan_thanh = datetime.utcnow()
-    p.gio_hoan_thanh_dinh_hinh = datetime.utcnow()
-    _auto_nhap_thanh_pham(db, p, current_user.id)
+    p.gio_hoan_thanh = datetime.now()
+    p.gio_hoan_thanh_dinh_hinh = datetime.now()
+    user_id = current_user.id if current_user else None
+    _auto_nhap_thanh_pham(db, p, user_id)
+    _log_state_change(db, p, prev_finish_state, "hoan_thanh", "finish_sau_in", user_id)
     db.commit()
     await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "finish_sau_in", "trang_thai": "hoan_thanh"})
     return _to_dict(_load(phieu_id, db))
+
+
+@router.post("/phieu-in/{phieu_id}/ngung-dinh-hinh")
+async def ngung_dinh_hinh_tao_phieu_bu(
+    phieu_id: int,
+    body: HoanThanhBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ngưng định hình sớm → lưu kết quả thực tế, tạo phiếu bù cho số lượng còn thiếu."""
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai not in ("sau_in", "dang_sau_in"):
+        raise HTTPException(status_code=400, detail=f"Phiếu phải ở 'sau_in' hoặc 'dang_sau_in', hiện tại: '{p.trang_thai}'")
+    if not body.so_luong_sau_in_ok or body.so_luong_sau_in_ok <= 0:
+        raise HTTPException(status_code=400, detail="Phải nhập số lượng đạt (> 0) trước khi ngưng định hình")
+
+    so_luong_sau_in_ok = Decimal(str(body.so_luong_sau_in_ok))
+    ref = Decimal(str(p.so_luong_in_ok or p.so_luong_phoi or 0))
+    _validate_so_luong_sau_in_ok(so_luong_sau_in_ok, ref)
+    if ref > 0 and so_luong_sau_in_ok >= ref:
+        raise HTTPException(status_code=400, detail="SL đạt đã đủ số lượng tham chiếu — dùng 'Kết thúc' thay vì 'Ngưng'")
+
+    con_lai = ref - so_luong_sau_in_ok
+
+    # Cập nhật phiếu gốc → hoàn thành với số lượng thực tế
+    p.so_luong_sau_in_ok = so_luong_sau_in_ok
+    if body.so_luong_sau_in_loi is not None:
+        p.so_luong_sau_in_loi = body.so_luong_sau_in_loi
+    if body.ghi_chu_sau_in:
+        p.ghi_chu_sau_in = body.ghi_chu_sau_in
+    if not p.gio_bat_dau_dinh_hinh:
+        p.gio_bat_dau_dinh_hinh = datetime.now()
+    prev_ngung_state = p.trang_thai
+    p.trang_thai = "hoan_thanh"
+    p.gio_hoan_thanh = datetime.now()
+    p.gio_hoan_thanh_dinh_hinh = datetime.now()
+    _auto_nhap_thanh_pham(db, p, current_user.id)
+    _log_state_change(db, p, prev_ngung_state, "hoan_thanh", "ngung_dinh_hinh", current_user.id,
+                      ghi_chu=f"Còn lại: {con_lai}")
+
+    # Tạo phiếu bù — đã in rồi, chỉ cần định hình thêm
+    phieu_bu = PhieuIn(
+        so_phieu=_gen_so_phieu_bu(db),
+        production_order_id=p.production_order_id,
+        phan_xuong_id=p.phan_xuong_id,
+        trang_thai="cho_dinh_hinh",
+        sort_order=0,
+        so_luong_phoi=con_lai,
+        so_luong_in_ok=con_lai,
+        ngay_in=p.ngay_in,
+        ca=p.ca,
+        ten_hang=p.ten_hang,
+        ma_kh=p.ma_kh,
+        ten_khach_hang=p.ten_khach_hang,
+        quy_cach=p.quy_cach,
+        loai_in=p.loai_in,
+        loai=p.loai,
+        ths=p.ths,
+        pp_ghep=p.pp_ghep,
+        so_don=p.so_don,
+        ngay_giao_hang=p.ngay_giao_hang,
+        ngay_lenh=p.ngay_lenh,
+        ghi_chu_printer=p.ghi_chu_printer,
+        ghi_chu_prepare=p.ghi_chu_prepare,
+        phieu_goc_id=p.id,
+        created_by=current_user.id,
+    )
+    db.add(phieu_bu)
+    db.commit()
+    db.refresh(phieu_bu)
+
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "ngung_dinh_hinh"})
+    return {
+        "phieu_goc": _to_dict(_load(p.id, db)),
+        "phieu_bu": _to_dict(_load(phieu_bu.id, db)),
+    }
 
 
 class AssignSauInBody(BaseModel):
@@ -914,7 +1293,7 @@ class AssignSauInBody(BaseModel):
 @router.post("/phieu-in/{phieu_id}/assign-sau-in")
 async def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Gán máy sau in (hoặc bỏ gán nếu may_sau_in_id=null)."""
-    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
     if p.trang_thai not in ("cho_dinh_hinh", "sau_in"):
@@ -926,29 +1305,35 @@ async def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depe
 
 
 @router.post("/phieu-in/{phieu_id}/bat-dau-sau-in")
-async def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+async def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Bắt đầu sau in → dang_sau_in."""
-    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
     if p.trang_thai != "sau_in":
         raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'sau_in', hiện tại: '{p.trang_thai}'")
+    if not p.may_sau_in_id:
+        raise HTTPException(status_code=400, detail="Phải gán máy sau in trước khi bắt đầu định hình")
     p.trang_thai = "dang_sau_in"
+    _log_state_change(db, p, "sau_in", "dang_sau_in", "bat_dau_sau_in", current_user.id)
     db.commit()
     await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "bat_dau_sau_in", "trang_thai": "dang_sau_in"})
     return _to_dict(_load(phieu_id, db))
 
 
 @router.post("/phieu-in/{phieu_id}/tra-ve-sau-in")
-async def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+async def tra_ve_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Trả về chờ gán máy — xoá may_sau_in_id và reset về sau_in."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
     if p.trang_thai not in ("sau_in", "dang_sau_in"):
         raise HTTPException(status_code=400, detail=f"Phiếu phải ở trạng thái 'sau_in' hoặc 'dang_sau_in', hiện tại: '{p.trang_thai}'")
+    prev_tra_ve_state = p.trang_thai
     p.may_sau_in_id = None
     p.trang_thai = "sau_in"
+    p.gio_bat_dau_dinh_hinh = None
+    _log_state_change(db, p, prev_tra_ve_state, "sau_in", "tra_ve_sau_in", current_user.id)
     db.commit()
     await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "tra_ve_sau_in", "trang_thai": "sau_in"})
     return _to_dict(_load(phieu_id, db))
@@ -959,21 +1344,22 @@ class TamDungBody(BaseModel):
 
 
 @router.post("/phieu-in/{phieu_id}/tam-dung")
-def tam_dung_in(phieu_id: int, body: TamDungBody, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    """Ghi nhận tạm dừng in — lưu thời điểm + lý do vào DB."""
+async def tam_dung_in(phieu_id: int, body: TamDungBody, db: Session = Depends(get_db), _: Optional[User] = Depends(get_optional_user)):
+    """Ghi nhận tạm dừng in/sau_in — lưu thời điểm + lý do vào DB."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
-    if p.trang_thai != "dang_in":
-        raise HTTPException(status_code=400, detail=f"Phiếu phải đang in để tạm dừng, hiện tại: '{p.trang_thai}'")
-    p.tam_dung_luc = datetime.utcnow()
+    if p.trang_thai not in ("dang_in", "sau_in", "dang_sau_in"):
+        raise HTTPException(status_code=400, detail=f"Phiếu phải đang in hoặc đang làm thành phẩm để tạm dừng, hiện tại: '{p.trang_thai}'")
+    p.tam_dung_luc = datetime.now()
     p.tam_dung_ly_do = body.ly_do.strip()
     db.commit()
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "tam_dung"})
     return _to_dict(_load(phieu_id, db))
 
 
 @router.post("/phieu-in/{phieu_id}/tiep-tuc")
-def tiep_tuc_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+async def tiep_tuc_in(phieu_id: int, db: Session = Depends(get_db), _: Optional[User] = Depends(get_optional_user)):
     """Xoá trạng thái tạm dừng — tiếp tục in."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
     if not p:
@@ -981,18 +1367,20 @@ def tiep_tuc_in(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(
     p.tam_dung_luc = None
     p.tam_dung_ly_do = None
     db.commit()
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "tiep_tuc"})
     return _to_dict(_load(phieu_id, db))
 
 
 @router.post("/phieu-in/{phieu_id}/huy")
-def huy_phieu(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+async def huy_phieu(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Trả phiếu về máy in: ke_hoach (nếu đang trên máy) hoặc cho_in (nếu chưa gán máy).
     Reset tiến độ thời gian. Không thể hoàn tác nếu đã hoàn thành."""
-    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).first()
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
     if p.trang_thai == "hoan_thanh":
         raise HTTPException(status_code=400, detail="Không thể huỷ phiếu đã hoàn thành")
+    prev_huy_state = p.trang_thai
     # Nếu đang gán cho máy in → trả về ke_hoach trên cùng máy
     # Nếu chưa gán máy → trả về cho_in
     if p.may_in_id:
@@ -1006,7 +1394,9 @@ def huy_phieu(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(ge
     p.gio_hoan_thanh_dinh_hinh = None
     p.tam_dung_luc = None
     p.tam_dung_ly_do = None
+    _log_state_change(db, p, prev_huy_state, p.trang_thai, "huy_phieu", current_user.id)
     db.commit()
+    await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "huy_phieu", "trang_thai": p.trang_thai})
     return _to_dict(_load(phieu_id, db))
 
 
@@ -1014,6 +1404,7 @@ def huy_phieu(phieu_id: int, db: Session = Depends(get_db), _: User = Depends(ge
 
 class MayScanCreate(BaseModel):
     ten_may: str
+    loai: str = "khac"  # can_mang | xa | khac
     sort_order: int = 0
     don_gia: Optional[Decimal] = None
     phan_xuong_id: Optional[int] = None
@@ -1021,6 +1412,7 @@ class MayScanCreate(BaseModel):
 
 class MayScanUpdate(BaseModel):
     ten_may: Optional[str] = None
+    loai: Optional[str] = None
     sort_order: Optional[int] = None
     active: Optional[bool] = None
     don_gia: Optional[Decimal] = None
@@ -1029,7 +1421,7 @@ class MayScanUpdate(BaseModel):
 
 class ScanLogCreate(BaseModel):
     may_scan_id: int
-    so_lsx: str
+    so_lsx: str = Field(min_length=1, max_length=50)
     ten_hang: Optional[str] = None
     dai: Optional[Decimal] = None
     rong: Optional[Decimal] = None
@@ -1040,6 +1432,8 @@ class ScanLogCreate(BaseModel):
     don_gia: Optional[Decimal] = None
     nguoi_sx: Optional[str] = None
     ghi_chu: Optional[str] = None
+    gio_bat_dau: Optional[datetime] = None
+    gio_ket_thuc: Optional[datetime] = None
 
 
 def _scan_log_to_dict(s: ScanLog) -> dict:
@@ -1047,6 +1441,7 @@ def _scan_log_to_dict(s: ScanLog) -> dict:
         "id": s.id,
         "may_scan_id": s.may_scan_id,
         "ten_may": s.may_scan_obj.ten_may if s.may_scan_obj else None,
+        "loai_may": s.may_scan_obj.loai if s.may_scan_obj else None,
         "so_lsx": s.so_lsx,
         "ten_hang": s.ten_hang,
         "dai": float(s.dai) if s.dai is not None else None,
@@ -1059,6 +1454,8 @@ def _scan_log_to_dict(s: ScanLog) -> dict:
         "tien_luong": float(s.tien_luong) if s.tien_luong is not None else None,
         "nguoi_sx": s.nguoi_sx,
         "ghi_chu": s.ghi_chu,
+        "gio_bat_dau": s.gio_bat_dau.isoformat() if s.gio_bat_dau else None,
+        "gio_ket_thuc": s.gio_ket_thuc.isoformat() if s.gio_ket_thuc else None,
         "created_at": s.created_at.isoformat() if s.created_at else None,
     }
 
@@ -1067,7 +1464,7 @@ def _scan_log_to_dict(s: ScanLog) -> dict:
 def list_may_scan(
     phan_xuong_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: Optional[User] = Depends(get_optional_user),
 ):
     q = db.query(MayScan)
     if phan_xuong_id is not None:
@@ -1109,7 +1506,7 @@ def delete_may_scan(may_id: int, db: Session = Depends(get_db), _: User = Depend
 # ── Scan lookup + log ──────────────────────────────────────────────────────────
 
 @router.get("/scan/lookup/{so_lsx}")
-def scan_lookup(so_lsx: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def scan_lookup(so_lsx: str, db: Session = Depends(get_db), _: Optional[User] = Depends(get_optional_user)):
     """Tra cứu thông tin LSX để điền tự động vào form scan."""
     order = (
         db.query(ProductionOrder)
@@ -1133,10 +1530,10 @@ def scan_lookup(so_lsx: str, db: Session = Depends(get_db), _: User = Depends(ge
 
 
 @router.post("/scan-logs/submit", status_code=201)
-def create_scan_log(
+async def create_scan_log(
     data: ScanLogCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     tien_luong = None
     if data.don_gia is not None and data.dien_tich is not None:
@@ -1145,27 +1542,32 @@ def create_scan_log(
     log = ScanLog(
         **data.model_dump(exclude_none=True),
         tien_luong=tien_luong,
-        created_by=current_user.id,
+        created_by=current_user.id if current_user else None,
     )
     db.add(log)
     db.commit()
     log = db.query(ScanLog).options(joinedload(ScanLog.may_scan_obj)).filter(ScanLog.id == log.id).first()
+    await sio.emit("machine_status_update", {
+        "event_type": "scan_log_created",
+        "may_scan_id": data.may_scan_id,
+        "so_lsx": data.so_lsx,
+        "operator": current_user.ho_ten if current_user else "N/A",
+    })
     return _scan_log_to_dict(log)
 
 
 @router.get("/scan-logs/history-list")
 def scan_history(
-
     may_scan_id: Optional[int] = Query(default=None),
     days: int = Query(default=30),
     so_lsx: Optional[str] = Query(default=None),
     phan_xuong_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: Optional[User] = Depends(get_optional_user),
 ):
 
     from datetime import timedelta
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now() - timedelta(days=days)
     q = (
         db.query(ScanLog)
         .options(joinedload(ScanLog.may_scan_obj))
@@ -1214,7 +1616,7 @@ def get_dashboard(
         counts[s] = q_cnt.scalar() or 0
 
     # Scan trong 24 giờ qua
-    cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+    cutoff_24h = datetime.now() - timedelta(hours=24)
     q_scan = db.query(
         func.count(ScanLog.id),
         func.coalesce(func.sum(ScanLog.so_luong_tp), 0),
@@ -1286,7 +1688,7 @@ def history_phieu_in(
 ):
 
     from datetime import timedelta
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now() - timedelta(days=days)
     q = (
         db.query(PhieuIn)
         .options(joinedload(PhieuIn.may_in_obj), joinedload(PhieuIn.may_sau_in_obj))
@@ -1462,6 +1864,8 @@ class PrinterUserCreate(BaseModel):
     rfid_key: Optional[str] = None
     shift: Optional[int] = None
     machine_id: Optional[int] = None
+    may_sau_in_id: Optional[int] = None
+    may_scan_id: Optional[int] = None
 
 
 class PrinterUserUpdate(BaseModel):
@@ -1471,6 +1875,8 @@ class PrinterUserUpdate(BaseModel):
     shift: Optional[int] = None
     active: Optional[bool] = None
     machine_id: Optional[int] = None
+    may_sau_in_id: Optional[int] = None
+    may_scan_id: Optional[int] = None
 
 
 class MachineLoginBody(BaseModel):
@@ -1480,9 +1886,6 @@ class MachineLoginBody(BaseModel):
 
 
 def _printer_user_to_dict(u: PrinterUser) -> dict:
-    machine_name = None
-    if u.machine:
-        machine_name = u.machine.ten_may
     return {
         "id": u.id,
         "rfid_key": u.rfid_key,
@@ -1490,7 +1893,11 @@ def _printer_user_to_dict(u: PrinterUser) -> dict:
         "shift": u.shift,
         "active": u.active,
         "machine_id": u.machine_id,
-        "machine_name": machine_name,
+        "machine_name": u.may_in_obj.ten_may if u.may_in_obj else None,
+        "may_sau_in_id": u.may_sau_in_id,
+        "may_sau_in_name": u.may_sau_in_obj.ten_may if u.may_sau_in_obj else None,
+        "may_scan_id": u.may_scan_id,
+        "may_scan_name": u.may_scan_obj.ten_may if u.may_scan_obj else None,
         "created_at": u.created_at.isoformat() if u.created_at else None,
     }
 
@@ -1498,9 +1905,9 @@ def _printer_user_to_dict(u: PrinterUser) -> dict:
 @router.post("/machine-login")
 def machine_login(body: MachineLoginBody, db: Session = Depends(get_db)):
     pu: Optional[PrinterUser] = None
+    opts = [joinedload(PrinterUser.may_in_obj), joinedload(PrinterUser.may_sau_in_obj), joinedload(PrinterUser.may_scan_obj)]
     if body.rfid_key:
-        pu = (db.query(PrinterUser)
-              .options(joinedload(PrinterUser.machine))
+        pu = (db.query(PrinterUser).options(*opts)
               .filter(PrinterUser.rfid_key == body.rfid_key, PrinterUser.active == True)
               .first())
         if not pu:
@@ -1508,28 +1915,51 @@ def machine_login(body: MachineLoginBody, db: Session = Depends(get_db)):
     else:
         if not body.token_user or not body.token_password:
             raise HTTPException(status_code=400, detail="Cần nhập tên đăng nhập và mật khẩu")
-        pu = (db.query(PrinterUser)
-              .options(joinedload(PrinterUser.machine))
+        pu = (db.query(PrinterUser).options(*opts)
               .filter(PrinterUser.token_user == body.token_user, PrinterUser.active == True)
               .first())
         if not pu or not _pw_verify(body.token_password, pu.token_password):
             raise HTTPException(status_code=401, detail="Sai tên hoặc mật khẩu")
-    if not pu.machine_id or not pu.machine:
-        raise HTTPException(status_code=400, detail="Tài khoản chưa được gán máy")
-    return {
-        "ok": True,
-        "printer_user_id": pu.id,
-        "worker_name": pu.token_user,
-        "shift": pu.shift,
-        "machine_id": pu.machine.id,
-        "machine_name": pu.machine.ten_may,
-        "loai_may": pu.machine.loai_may,
-    }
+
+    # Ưu tiên máy in; nếu không có thì dùng máy sau in
+    if pu.machine_id and pu.may_in_obj:
+        return {
+            "ok": True,
+            "printer_user_id": pu.id,
+            "worker_name": pu.token_user,
+            "shift": pu.shift,
+            "machine_id": pu.may_in_obj.id,
+            "machine_name": pu.may_in_obj.ten_may,
+            "loai_may": "in",
+        }
+    if pu.may_sau_in_id and pu.may_sau_in_obj:
+        return {
+            "ok": True,
+            "printer_user_id": pu.id,
+            "worker_name": pu.token_user,
+            "shift": pu.shift,
+            "machine_id": pu.may_sau_in_obj.id,
+            "machine_name": pu.may_sau_in_obj.ten_may,
+            "loai_may": "sau_in",
+        }
+    if pu.may_scan_id and pu.may_scan_obj:
+        return {
+            "ok": True,
+            "printer_user_id": pu.id,
+            "worker_name": pu.token_user,
+            "shift": pu.shift,
+            "machine_id": pu.may_scan_obj.id,
+            "machine_name": pu.may_scan_obj.ten_may,
+            "loai_may": "scan",
+        }
+    raise HTTPException(status_code=400, detail="Tài khoản chưa được gán máy")
 
 
 @router.get("/config/printer-user")
 def list_printer_user(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    users = db.query(PrinterUser).options(joinedload(PrinterUser.machine)).order_by(PrinterUser.id).all()
+    users = (db.query(PrinterUser)
+             .options(joinedload(PrinterUser.may_in_obj), joinedload(PrinterUser.may_sau_in_obj), joinedload(PrinterUser.may_scan_obj))
+             .order_by(PrinterUser.id).all())
     return [_printer_user_to_dict(u) for u in users]
 
 
@@ -1541,23 +1971,25 @@ def create_printer_user(data: PrinterUserCreate, db: Session = Depends(get_db), 
     db.add(u)
     db.commit()
     db.refresh(u)
-    db.refresh(u, ["machine"])
+    db.refresh(u, ["may_in_obj", "may_sau_in_obj", "may_scan_obj"])
     return _printer_user_to_dict(u)
 
 
 @router.put("/config/printer-user/{user_id}")
 def update_printer_user(user_id: int, data: PrinterUserUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    u = db.query(PrinterUser).options(joinedload(PrinterUser.machine)).filter(PrinterUser.id == user_id).first()
+    u = (db.query(PrinterUser)
+         .options(joinedload(PrinterUser.may_in_obj), joinedload(PrinterUser.may_sau_in_obj), joinedload(PrinterUser.may_scan_obj))
+         .filter(PrinterUser.id == user_id).first())
     if not u:
         raise HTTPException(status_code=404, detail="Không tìm thấy")
-    updates = data.model_dump(exclude_none=True)
+    updates = data.model_dump(exclude_unset=True)
     if "token_password" in updates:
         updates["token_password"] = _pw_hash(updates["token_password"])
     for k, v in updates.items():
         setattr(u, k, v)
     db.commit()
     db.refresh(u)
-    db.refresh(u, ["machine"])
+    db.refresh(u, ["may_in_obj", "may_sau_in_obj", "may_scan_obj"])
     return _printer_user_to_dict(u)
 
 
@@ -1604,42 +2036,57 @@ def update_machine(machine_id: int, data: MachineUpdate, db: Session = Depends(g
 
 @router.post("/track")
 async def track_production(data: TrackPayload, db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
-    log = ProductionLog(
-        production_order_id=data.production_order_id,
-        phieu_in_id=data.phieu_in_id,
-        machine_id=data.machine_id,
-        event_type=data.event_type,
-        quantity_ok=data.quantity_ok,
-        quantity_loi=data.quantity_loi,
-        quantity_setup=data.quantity_setup,
-        ghi_chu=data.ghi_chu,
-        created_by=current_user.id if current_user else None
-    )
-    db.add(log)
-    
+    log_id = None
+
+    # Chỉ tạo ProductionLog khi có machine_id hợp lệ (FK → machines)
+    if data.machine_id is not None:
+        log = ProductionLog(
+            production_order_id=data.production_order_id,
+            phieu_in_id=data.phieu_in_id,
+            machine_id=data.machine_id,
+            event_type=data.event_type,
+            quantity_ok=data.quantity_ok,
+            quantity_loi=data.quantity_loi,
+            quantity_setup=data.quantity_setup,
+            ghi_chu=data.ghi_chu,
+            created_by=current_user.id if current_user else None
+        )
+        db.add(log)
+
     # Đồng bộ trạng thái vào PhieuIn nếu có
     if data.phieu_in_id:
         p = db.get(PhieuIn, data.phieu_in_id)
         if p:
             if data.event_type == 'start':
-                if not p.gio_bat_dau_in: p.gio_bat_dau_in = datetime.utcnow()
+                p.gio_bat_dau_in = datetime.now()
                 p.trang_thai = 'dang_in'
+                p.tam_dung_luc = None
+                p.tam_dung_ly_do = None
+            elif data.event_type == 'stop':
+                p.tam_dung_luc = datetime.now()
+                if data.ghi_chu:
+                    p.tam_dung_ly_do = data.ghi_chu
+            elif data.event_type == 'resume':
+                p.tam_dung_luc = None
+                p.tam_dung_ly_do = None
             elif data.event_type == 'complete':
                 # Kết thúc in → chờ định hình (KHÔNG nhảy thẳng hoan_thanh)
                 p.trang_thai = 'cho_dinh_hinh'
                 p.may_in_id = None
                 p.so_luong_in_ok = (p.so_luong_in_ok or 0) + (data.quantity_ok or 0)
                 p.so_luong_loi = (p.so_luong_loi or 0) + (data.quantity_loi or 0)
-    
+
     db.commit()
-    db.refresh(log)
+    if data.machine_id is not None:
+        db.refresh(log)
+        log_id = log.id
     await sio.emit("machine_status_update", {
         "machine_id": data.machine_id,
         "event_type": data.event_type,
         "production_order_id": data.production_order_id,
         "operator": current_user.ho_ten if current_user else "N/A"
     })
-    return {"ok": True, "log_id": log.id}
+    return {"ok": True, "log_id": log_id}
 
 
 @router.get("/monitor/machines")
@@ -1704,7 +2151,7 @@ def get_machines_status(phan_xuong_id: Optional[int] = None, db: Session = Depen
         if last_scan:
             last_event_time = last_scan.created_at
             # Giả định: Nếu có scan trong 30p qua thì coi là đang chạy
-            if (datetime.utcnow() - last_scan.created_at).total_seconds() < 1800:
+            if (datetime.now() - last_scan.created_at).total_seconds() < 1800:
                 status = "RUNNING"
             current_order = last_scan.so_lsx
             operator = last_scan.nguoi_sx
@@ -1747,8 +2194,21 @@ def get_machine_logs(machine_id: int, limit: int = 10, db: Session = Depends(get
 
 
 @router.get("/scan-lookup/{code}")
-def scan_lookup(code: str, db: Session = Depends(get_db)):
+def phieu_scan_lookup(code: str, db: Session = Depends(get_db)):
+    """Tra cứu phiếu in theo số phiếu (PI-...) hoặc số LSX (so_lenh).
+    Không yêu cầu JWT — dành cho màn hình công nhân."""
+    code = code.strip().upper()
+    # Tìm theo số phiếu trước
     p = db.query(PhieuIn).filter(PhieuIn.so_phieu == code).first()
+    # Nếu không có, tìm theo số LSX (ProductionOrder.so_lenh)
+    if not p:
+        from app.models.production import ProductionOrder as PO
+        order = db.query(PO).filter(PO.so_lenh == code).first()
+        if order:
+            p = db.query(PhieuIn).filter(
+                PhieuIn.production_order_id == order.id,
+                PhieuIn.trang_thai.notin_(["hoan_thanh"]),
+            ).order_by(PhieuIn.id.desc()).first()
     if not p:
         raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
     return _to_dict(_load(p.id, db))

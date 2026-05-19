@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Input, Popconfirm, Row,
@@ -9,6 +9,7 @@ import dayjs, { Dayjs } from 'dayjs'
 import { cd2Api, MayScan, ScanLog } from '../../api/cd2'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
+import { socket } from '../../utils/socket'
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -48,6 +49,15 @@ export default function ScanHistoryPage() {
       qc.invalidateQueries({ queryKey: ['scan-history-all'] })
     },
   })
+
+  // Socket: tự động refresh khi có sản lượng scan mới được nộp
+  useEffect(() => {
+    const handleUpdate = () => {
+      qc.invalidateQueries({ queryKey: ['scan-history-all'] })
+    }
+    socket.on('machine_status_update', handleUpdate)
+    return () => { socket.off('machine_status_update', handleUpdate) }
+  }, [qc])
 
   // Lọc theo ngày nếu có range picker
   const filtered = dateRange
