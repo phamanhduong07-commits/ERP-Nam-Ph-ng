@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models.master import Supplier, PaperMaterial, OtherMaterial, PhanXuong, PhapNhan
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
@@ -151,6 +151,7 @@ def _po_to_dict(po: PurchaseOrder, db: Session) -> dict:
             "don_gia": float(it.don_gia),
             "thanh_tien": float(it.thanh_tien),
             "so_luong_da_nhan": float(it.so_luong_da_nhan),
+            "so_cuon_da_nhan": getattr(it, "so_cuon_da_nhan", 0) or 0,
             "ghi_chu": it.ghi_chu,
             "kho_mm": float(it.kho_mm) if it.kho_mm else None,
             "so_cuon": it.so_cuon,
@@ -192,7 +193,14 @@ def list_pos(
     db: Session = Depends(get_db),
 ):
     from sqlalchemy import or_
-    q = db.query(PurchaseOrder).order_by(PurchaseOrder.created_at.desc())
+    q = (db.query(PurchaseOrder)
+         .options(
+             joinedload(PurchaseOrder.items),
+             joinedload(PurchaseOrder.supplier),
+             joinedload(PurchaseOrder.phan_xuong).joinedload(PhanXuong.phap_nhan),
+             joinedload(PurchaseOrder.phap_nhan),
+         )
+         .order_by(PurchaseOrder.created_at.desc()))
     if search:
         like = f"%{search}%"
         q = (q
@@ -218,33 +226,16 @@ def list_pos(
     pos = q.limit(500).all()
     result = []
     for po in pos:
-        sup = db.get(Supplier, po.supplier_id)
-        px_id, ten_px, ten_pn = _px_info(po, db)
-        tong = sum(float(it.thanh_tien) for it in po.items)
-        da_nhan = sum(float(it.so_luong_da_nhan) for it in po.items)
-        tong_dat = sum(float(it.so_luong) for it in po.items)
-        result.append({
-            "id": po.id,
-            "so_po": po.so_po,
-            "ngay_po": po.ngay_po.isoformat() if po.ngay_po else None,
-            "supplier_id": po.supplier_id,
-            "ten_ncc": sup.ten_viet_tat if sup else "",
-            "trang_thai": po.trang_thai,
-            "phan_xuong_id": px_id,
-            "phap_nhan_id": po.phap_nhan_id,
-            "ten_phan_xuong": ten_px,
-            "ten_phap_nhan": ten_pn,
-            "loai_po": po.loai_po or "chung",
-            "ngay_du_kien_nhan": po.ngay_du_kien_nhan.isoformat() if po.ngay_du_kien_nhan else None,
-            "tong_tien": tong,
-            "tien_do_nhan": round(da_nhan / tong_dat * 100, 1) if tong_dat else 0,
-            "created_at": po.created_at.isoformat() if po.created_at else None,
-        })
+        row = _po_to_dict(po, db)
+        tong_dat = sum(it["so_luong"] for it in row["items"])
+        da_nhan = sum(it["so_luong_da_nhan"] for it in row["items"])
+        row["tien_do_nhan"] = round(da_nhan / tong_dat * 100, 1) if tong_dat else 0
+        result.append(row)
     return result
 
 
 @router.post("")
-def create_po(body: POCreate, db: Session = Depends(get_db)):
+def create_po(body: POCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not db.get(Supplier, body.supplier_id):
         raise HTTPException(404, "Nhà cung cấp không tồn tại")
     if not body.items:
@@ -262,6 +253,7 @@ def create_po(body: POCreate, db: Session = Depends(get_db)):
         ngay_du_kien_nhan=body.ngay_du_kien_nhan,
         dieu_khoan_tt=body.dieu_khoan_tt,
         ghi_chu=body.ghi_chu,
+        created_by=current_user.id,
     )
     db.add(po)
     db.flush()
@@ -303,7 +295,7 @@ def get_po(po_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{po_id}")
-def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db)):
+def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
         raise HTTPException(404, "Không tìm thấy PO")
@@ -344,6 +336,9 @@ def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db)):
                 don_gia=it.don_gia,
                 thanh_tien=thanh_tien,
                 ghi_chu=it.ghi_chu,
+                kho_mm=it.kho_mm,
+                so_cuon=it.so_cuon,
+                ky_hieu_cuon=it.ky_hieu_cuon,
             ))
         po.tong_tien = tong
 
@@ -353,7 +348,7 @@ def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db)):
 
 
 @router.post("/{po_id}/duyet")
-def duyet_po(po_id: int, db: Session = Depends(get_db)):
+def duyet_po(po_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
         raise HTTPException(404, "Không tìm thấy PO")
@@ -361,12 +356,45 @@ def duyet_po(po_id: int, db: Session = Depends(get_db)):
         raise HTTPException(400, "Chỉ duyệt PO ở trạng thái Mới")
     po.trang_thai = "da_duyet"
     po.approved_at = datetime.utcnow()
+    po.approved_by = current_user.id
+    db.commit()
+    return {"ok": True, "trang_thai": po.trang_thai}
+
+
+@router.post("/{po_id}/gui-ncc")
+def gui_ncc_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    po = db.get(PurchaseOrder, po_id)
+    if not po:
+        raise HTTPException(404, "Không tìm thấy PO")
+    if po.trang_thai != "da_duyet":
+        raise HTTPException(400, "Chỉ gửi NCC khi PO đã được duyệt")
+    po.trang_thai = "da_gui_ncc"
+    db.commit()
+    return {"ok": True, "trang_thai": po.trang_thai}
+
+
+@router.post("/{po_id}/huy")
+def huy_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    po = db.get(PurchaseOrder, po_id)
+    if not po:
+        raise HTTPException(404, "Không tìm thấy PO")
+    if po.trang_thai == "huy":
+        return {"ok": True, "trang_thai": po.trang_thai}
+    if po.trang_thai == "hoan_thanh":
+        raise HTTPException(400, "Không thể hủy PO đã hoàn thành")
+    has_gr = db.query(GoodsReceipt).filter(
+        GoodsReceipt.po_id == po_id,
+        GoodsReceipt.trang_thai == "da_duyet",
+    ).first()
+    if has_gr:
+        raise HTTPException(400, "Không thể hủy PO đã có phiếu nhập được duyệt")
+    po.trang_thai = "huy"
     db.commit()
     return {"ok": True, "trang_thai": po.trang_thai}
 
 
 @router.delete("/{po_id}")
-def delete_po(po_id: int, db: Session = Depends(get_db)):
+def delete_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
         raise HTTPException(404, "Không tìm thấy PO")
@@ -403,18 +431,38 @@ def doi_soat_kho(
     if den_ngay:
         q = q.filter(PurchaseOrder.ngay_po <= den_ngay)
 
-    pos = q.limit(500).all()
+    pos = (q.options(
+        joinedload(PurchaseOrder.items),
+        joinedload(PurchaseOrder.supplier),
+        joinedload(PurchaseOrder.phan_xuong).joinedload(PhanXuong.phap_nhan),
+        joinedload(PurchaseOrder.phap_nhan),
+    ).limit(500).all())
+
+    # Pre-aggregate GR totals per POItem — tránh N+1 query per dòng
+    all_poi_ids = [poi.id for po in pos for poi in po.items]
+    gr_totals_map: dict[int, Decimal] = {}
+    if all_poi_ids:
+        agg = (
+            db.query(GoodsReceiptItem.po_item_id, func.sum(GoodsReceiptItem.so_luong))
+            .filter(GoodsReceiptItem.po_item_id.in_(all_poi_ids))
+            .group_by(GoodsReceiptItem.po_item_id)
+            .all()
+        )
+        gr_totals_map = {row[0]: row[1] or Decimal("0") for row in agg}
+
     rows = []
     for po in pos:
-        sup = db.get(Supplier, po.supplier_id)
-        px_id, ten_px, ten_pn = _px_info(po, db)
+        sup = po.supplier
+        px = po.phan_xuong
+        pn = po.phap_nhan
+        if px:
+            px_id, ten_px = px.id, px.ten_xuong
+            ten_pn = px.phap_nhan.ten_phap_nhan if px.phap_nhan else None
+        else:
+            px_id, ten_px = None, None
+            ten_pn = pn.ten_phap_nhan if pn else None
         for poi in po.items:
-            # Tính tổng số lượng đã nhận từ GR items liên kết với poi này
-            gr_total = (
-                db.query(func.coalesce(func.sum(GoodsReceiptItem.so_luong), 0))
-                .filter(GoodsReceiptItem.po_item_id == poi.id)
-                .scalar()
-            ) or Decimal("0")
+            gr_total = gr_totals_map.get(poi.id, Decimal("0"))
 
             so_luong_dat = float(poi.so_luong)
             so_luong_da_nhan = float(gr_total)
@@ -473,12 +521,28 @@ def doi_soat_kho_summary(
     if den_ngay:
         q = q.filter(PurchaseOrder.ngay_po <= den_ngay)
 
-    pos = q.all()
+    pos = q.options(
+        joinedload(PurchaseOrder.items),
+        joinedload(PurchaseOrder.supplier),
+    ).all()
+
+    # Pre-aggregate GR totals — tránh N+1 query per dòng PO item
+    all_poi_ids = [poi.id for po in pos for poi in po.items]
+    gr_totals_map: dict[int, Decimal] = {}
+    if all_poi_ids:
+        agg = (
+            db.query(GoodsReceiptItem.po_item_id, func.sum(GoodsReceiptItem.so_luong))
+            .filter(GoodsReceiptItem.po_item_id.in_(all_poi_ids))
+            .group_by(GoodsReceiptItem.po_item_id)
+            .all()
+        )
+        gr_totals_map = {row[0]: row[1] or Decimal("0") for row in agg}
+
     by_supplier: dict[int, dict] = {}
     for po in pos:
         sid = po.supplier_id
         if sid not in by_supplier:
-            sup = db.get(Supplier, sid)
+            sup = po.supplier
             by_supplier[sid] = {
                 "supplier_id": sid,
                 "ten_ncc": sup.ten_viet_tat if sup else "",
@@ -490,11 +554,7 @@ def doi_soat_kho_summary(
             }
         by_supplier[sid]["so_po_count"] += 1
         for poi in po.items:
-            gr_total = (
-                db.query(func.coalesce(func.sum(GoodsReceiptItem.so_luong), 0))
-                .filter(GoodsReceiptItem.po_item_id == poi.id)
-                .scalar()
-            ) or Decimal("0")
+            gr_total = gr_totals_map.get(poi.id, Decimal("0"))
             by_supplier[sid]["tong_dat"] += float(poi.so_luong)
             by_supplier[sid]["tong_da_nhan"] += float(gr_total)
             by_supplier[sid]["tong_tien_dat"] += float(poi.thanh_tien)
@@ -669,12 +729,16 @@ def purchase_dashboard(
     _: User = Depends(get_current_user),
 ):
     """Báo cáo quản trị mua hàng: KPI tổng hợp theo pháp nhân và theo NCC."""
+    today = date.today()
+
     # ── Tổng PO ──────────────────────────────────────────────────────
     po_q = db.query(PurchaseOrder)
     if tu_ngay:
         po_q = po_q.filter(PurchaseOrder.ngay_po >= tu_ngay)
     if den_ngay:
         po_q = po_q.filter(PurchaseOrder.ngay_po <= den_ngay)
+    if phap_nhan_id:
+        po_q = po_q.filter(PurchaseOrder.phap_nhan_id == phap_nhan_id)
 
     # ── Tổng GR (da_duyet) ────────────────────────────────────────────
     gr_q = db.query(GoodsReceipt).filter(GoodsReceipt.trang_thai == "da_duyet")
@@ -707,6 +771,30 @@ def purchase_dashboard(
     tong_gia_tri_hd = sum(float(i.tong_thanh_toan) for i in all_invs)
     tong_da_tt = sum(float(i.da_thanh_toan) for i in all_invs)
     tong_con_no = sum(float(i.con_lai) for i in all_invs)
+
+    # ── Cảnh báo ─────────────────────────────────────────────────────
+    # PO quá hạn: đã gửi/đang giao nhưng ngày giao dự kiến đã qua
+    po_qua_han = sum(
+        1 for p in all_pos
+        if p.trang_thai in {"da_gui_ncc", "dang_giao"}
+        and p.ngay_du_kien_nhan
+        and p.ngay_du_kien_nhan < today
+    )
+    # GR chờ duyệt (không lọc theo ngày — lấy tất cả)
+    gr_cho_duyet_q = db.query(func.count(GoodsReceipt.id)).filter(
+        GoodsReceipt.trang_thai.in_(["nhap", "nhap_nhanh"])
+    )
+    if phap_nhan_id:
+        gr_cho_duyet_q = gr_cho_duyet_q.filter(GoodsReceipt.phap_nhan_id == phap_nhan_id)
+    gr_cho_nhap = gr_cho_duyet_q.scalar() or 0
+
+    # HĐ quá hạn thanh toán
+    hd_qua_han = sum(
+        1 for i in all_invs
+        if i.trang_thai in {"chua_tt", "da_tt_mot_phan", "qua_han"}
+        and getattr(i, "han_tt", None)
+        and i.han_tt < today
+    )
 
     # ── KPI theo pháp nhân ────────────────────────────────────────────
     phap_nhan_list = db.query(PhapNhan).all()
@@ -756,6 +844,9 @@ def purchase_dashboard(
             "tong_gia_tri_hd": tong_gia_tri_hd,
             "tong_da_tt": tong_da_tt,
             "tong_con_no": tong_con_no,
+            "po_qua_han": po_qua_han,
+            "gr_cho_nhap": gr_cho_nhap,
+            "hd_qua_han": hd_qua_han,
         },
         "by_phap_nhan": by_phap_nhan,
         "top_ncc": top_ncc,

@@ -71,7 +71,7 @@ class GoodsReceiptItemIn(BaseModel):
     paper_material_id: Optional[int] = None
     other_material_id: Optional[int] = None
     ten_hang: str = ""
-    so_luong: Decimal
+    so_luong: Optional[Decimal] = Decimal("0")
     dvt: str = "Kg"
     don_gia: Decimal = Decimal("0")
     dinh_luong_thuc_te: Optional[Decimal] = None
@@ -322,8 +322,13 @@ def _recalc_purchase_order_receipt_status(db: Session, po_id: Optional[int]) -> 
     any_received = False
     all_received = True
     for item in po.items:
-        ordered_qty = item.so_luong or Decimal("0")
-        received_qty = item.so_luong_da_nhan or Decimal("0")
+        # Giấy cuộn: theo dõi hoàn thành bằng số cuộn
+        if item.so_cuon and item.so_cuon > 0:
+            ordered_qty = item.so_cuon
+            received_qty = item.so_cuon_da_nhan or 0
+        else:
+            ordered_qty = item.so_luong or Decimal("0")
+            received_qty = item.so_luong_da_nhan or Decimal("0")
         if received_qty > 0:
             any_received = True
         if ordered_qty <= 0 or received_qty < ordered_qty:
@@ -846,6 +851,7 @@ def list_goods_receipts(
     den_ngay: Optional[date] = Query(None),
     loai_hang: Optional[str] = Query(None),  # 'giay' | 'nvl'
     search: Optional[str] = Query(None),
+    limit: int = Query(500, ge=1, le=2000),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -886,7 +892,7 @@ def list_goods_receipts(
         q = q.filter(~GoodsReceipt.items.any(GoodsReceiptItem.paper_material_id.isnot(None)))
     elif loai_hang == 'phoi':
         q = q.filter(GoodsReceipt.loai_nhap == 'PHOI_NGOAI')
-    rows = q.order_by(GoodsReceipt.created_at.desc()).limit(200).all()
+    rows = q.order_by(GoodsReceipt.created_at.desc()).limit(limit).all()
     return [_gr_to_dict(r, db, include_image=False) for r in rows]
 
 
@@ -906,6 +912,17 @@ def create_goods_receipt(
 ):
     if not body.items:
         raise HTTPException(400, "Phiếu nhập phải có ít nhất 1 dòng hàng")
+
+    # Validate: giấy cuộn cần so_cuon > 0; NVL cần so_luong > 0
+    for it in body.items:
+        it.so_luong = it.so_luong or Decimal("0")
+        is_paper_roll = bool(it.paper_material_id and it.so_cuon and it.so_cuon > 0)
+        if is_paper_roll:
+            if it.so_cuon <= 0:
+                raise HTTPException(400, "Giấy cuộn phải nhập số cuộn > 0")
+        else:
+            if it.so_luong <= 0:
+                raise HTTPException(400, "Số lượng nhập phải > 0")
 
     # Resolve warehouse: ưu tiên warehouse_id tường minh, fallback auto-find từ xưởng
     wh_id = body.warehouse_id
@@ -944,12 +961,25 @@ def create_goods_receipt(
         po_ref = db.get(PurchaseOrder, poi.po_id)
         if po_ref and po_ref.supplier_id != body.supplier_id:
             raise HTTPException(400, "Nha cung cap phieu nhap khong khop PO")
-        remaining_qty = (poi.so_luong or Decimal("0")) - (poi.so_luong_da_nhan or Decimal("0"))
-        if it.so_luong > remaining_qty:
-            raise HTTPException(
-                400,
-                f"So luong nhap vuot PO: can nhap {float(it.so_luong):g}, con {float(remaining_qty):g}",
-            )
+        # Giấy cuộn: validate theo số cuộn (kg thực không biết trước)
+        # NVL khác: validate theo kg như cũ
+        if poi.so_cuon and poi.so_cuon > 0:
+            item_so_cuon = it.so_cuon or 0
+            remaining_cuon = (poi.so_cuon or 0) - (poi.so_cuon_da_nhan or 0)
+            if remaining_cuon <= 0:
+                raise HTTPException(400, "Da nhan du so cuon theo PO")
+            if item_so_cuon > remaining_cuon:
+                raise HTTPException(
+                    400,
+                    f"So cuon nhap vuot PO: can nhap {item_so_cuon} cuon, con {remaining_cuon} cuon",
+                )
+        else:
+            remaining_qty = (poi.so_luong or Decimal("0")) - (poi.so_luong_da_nhan or Decimal("0"))
+            if it.so_luong > remaining_qty:
+                raise HTTPException(
+                    400,
+                    f"So luong nhap vuot PO: can nhap {float(it.so_luong):g}, con {float(remaining_qty):g}",
+                )
 
     gr = GoodsReceipt(
         so_phieu=_gen_so(db, "GR", GoodsReceipt),
@@ -971,7 +1001,6 @@ def create_goods_receipt(
     db.flush()
 
     tong = Decimal("0")
-    journal_lines_cgr: list[dict] = []
     for it in body.items:
         ten_hang, dvt = _resolve_nvl_name(db, it.paper_material_id, it.other_material_id, it.ten_hang)
         if not ten_hang:
@@ -1002,44 +1031,9 @@ def create_goods_receipt(
             ghi_chu=it.ghi_chu,
         ))
 
-        bal = _get_or_create_balance(db, wh_id,
-                                     it.paper_material_id, it.other_material_id,
-                                     ten_hang=ten_hang, don_vi=dvt)
-        _nhap_balance(bal, it.so_luong, it.don_gia)
-        _log_tx(db, wh_id, "NHAP_MUA",
-                it.so_luong, it.don_gia, bal.ton_luong,
-                "goods_receipts", gr.id, current_user.id,
-                paper_material_id=it.paper_material_id,
-                other_material_id=it.other_material_id,
-                ghi_chu=it.ghi_chu)
-
-        # TK phân loại: giấy cuộn → 1521, NVL khác → 1522, phôi/TP nhập ngoài → 155
-        if it.paper_material_id:
-            tk_no_gr = "1521"
-        elif it.other_material_id:
-            tk_no_gr = "1522"
-        elif getattr(body, "loai_kho_auto", None) in ("THANH_PHAM", "PHOI"):
-            tk_no_gr = "155"
-        else:
-            tk_no_gr = "1522"
-        journal_lines_cgr.append({
-            "ten_hang": ten_hang,
-            "so_luong": it.so_luong,
-            "don_gia": it.don_gia,
-            "tk_no": tk_no_gr,
-            "tk_co": "331",
-        })
-
-        if it.po_item_id:
-            poi = db.get(PurchaseOrderItem, it.po_item_id)
-            if poi:
-                poi.so_luong_da_nhan = (poi.so_luong_da_nhan or Decimal("0")) + it.so_luong
-
-    _recalc_purchase_order_receipt_status(db, body.po_id)
-
     gr.tong_gia_tri = tong
 
-    # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
+    # Tồn kho và PO tracking chỉ cập nhật khi duyệt (approve), không tại bước tạo draft
     db.commit()
     db.refresh(gr)
     return _gr_to_dict(gr, db)
@@ -1085,7 +1079,7 @@ def complete_goods_receipt(
     gr_id: int,
     body: GoodsReceiptCompleteIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ):
     """Bước 2: data entry hoàn thiện phiếu nháp — thêm hàng hoá, cập nhật tồn kho."""
     gr = db.get(GoodsReceipt, gr_id)
@@ -1111,7 +1105,6 @@ def complete_goods_receipt(
         gr.phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id
 
     tong = Decimal("0")
-    journal_lines_gr: list[dict] = []
     for it in body.items:
         ten_hang, dvt = _resolve_nvl_name(db, it.paper_material_id, it.other_material_id, it.ten_hang)
         if not ten_hang:
@@ -1138,19 +1131,6 @@ def complete_goods_receipt(
             so_lop=it.so_lop,
             ghi_chu=it.ghi_chu,
         ))
-        bal = _get_or_create_balance(db, wh_id, it.paper_material_id, it.other_material_id, ten_hang=ten_hang, don_vi=dvt)
-        _nhap_balance(bal, it.so_luong, it.don_gia)
-        _log_tx(db, wh_id, "NHAP_MUA", it.so_luong, it.don_gia, bal.ton_luong,
-                "goods_receipts", gr.id, current_user.id,
-                paper_material_id=it.paper_material_id,
-                other_material_id=it.other_material_id)
-        journal_lines_gr.append({
-            "ten_hang": ten_hang,
-            "so_luong": it.so_luong,
-            "don_gia": it.don_gia,
-            "tk_no": _tk_nvl(it.paper_material_id),
-            "tk_co": "331",
-        })
 
     gr.tong_gia_tri = tong
     gr.trang_thai = "nhap"
@@ -1242,7 +1222,7 @@ def _gen_so_bt_gr(db: Session) -> str:
 
 
 @router.patch("/goods-receipts/{gr_id}/approve")
-def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
         raise HTTPException(404, "Không tìm thấy phiếu nhập")
@@ -1251,6 +1231,29 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = D
     if gr.trang_thai != "nhap":
         raise HTTPException(400, "Chỉ duyệt phiếu nhập đã hoàn thiện")
     gr.trang_thai = "da_duyet"
+
+    # Cập nhật tồn kho + theo dõi PO khi duyệt (không tại bước tạo draft)
+    for item in gr.items:
+        if gr.warehouse_id:
+            bal = _get_or_create_balance(
+                db, gr.warehouse_id,
+                item.paper_material_id, item.other_material_id,
+                ten_hang=item.ten_hang, don_vi=item.dvt,
+            )
+            _nhap_balance(bal, item.so_luong, item.don_gia)
+            _log_tx(db, gr.warehouse_id, "NHAP_MUA",
+                    item.so_luong, item.don_gia, bal.ton_luong,
+                    "goods_receipts", gr.id, current_user.id,
+                    paper_material_id=item.paper_material_id,
+                    other_material_id=item.other_material_id,
+                    ghi_chu=item.ghi_chu)
+        if item.po_item_id:
+            poi = db.get(PurchaseOrderItem, item.po_item_id)
+            if poi:
+                poi.so_luong_da_nhan = (poi.so_luong_da_nhan or Decimal("0")) + item.so_luong
+                if item.so_cuon and poi.so_cuon:
+                    poi.so_cuon_da_nhan = (poi.so_cuon_da_nhan or 0) + item.so_cuon
+    _recalc_purchase_order_receipt_status(db, gr.po_id)
 
     # Auto-sync gia_mua từ don_gia trên PNK khi duyệt
     for item in gr.items:
@@ -1302,7 +1305,7 @@ def sync_gia_ban(gr_id: int, db: Session = Depends(get_db), _: User = Depends(ge
 
 
 @router.delete("/goods-receipts/{gr_id}")
-def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
         raise HTTPException(404, "Không tìm thấy phiếu nhập")
@@ -1323,30 +1326,8 @@ def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user
     if active_return:
         raise HTTPException(400, "Khong the xoa phieu nhap da co phieu tra hang mua")
 
-    for it in gr.items:
-        bal = _get_or_create_balance(db, gr.warehouse_id,
-                                     it.paper_material_id, it.other_material_id,
-                                     ten_hang=it.ten_hang, don_vi=it.dvt)
-        bal.ton_luong = max(Decimal("0"), bal.ton_luong - it.so_luong)
-        bal.gia_tri_ton = bal.ton_luong * bal.don_gia_binh_quan
-        bal.cap_nhat_luc = datetime.utcnow()
-        _log_tx(db, gr.warehouse_id, "XOA_NHAP_MUA",
-                it.so_luong, it.don_gia, bal.ton_luong,
-                "goods_receipts", gr.id, current_user.id,
-                paper_material_id=it.paper_material_id,
-                other_material_id=it.other_material_id,
-                ghi_chu=f"Xóa {gr.so_phieu}")
-
-        if it.po_item_id:
-            poi = db.get(PurchaseOrderItem, it.po_item_id)
-            if poi:
-                poi.so_luong_da_nhan = max(Decimal("0"), (poi.so_luong_da_nhan or Decimal("0")) - it.so_luong)
-
-    _recalc_purchase_order_receipt_status(db, gr.po_id)
-
-    # Đảo ngược bút toán kế toán
-    acc_service = AccountingService(db)
-    acc_service._reverse_journal_entries("goods_receipts", gr_id)
+    # GR bị xóa ở trạng thái nhap (draft) — tồn kho và PO tracking
+    # chưa được cập nhật (chỉ cập nhật khi approve) nên không cần đảo ngược
 
     db.delete(gr)
     db.commit()

@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = 'push001'
-down_revision = None
+down_revision = 'sl001_scan_log_times'
 branch_labels = None
 depends_on = None
 

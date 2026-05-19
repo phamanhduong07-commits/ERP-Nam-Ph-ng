@@ -300,7 +300,7 @@ function TabDonMuaGiay() {
   const expandedRowRender = (r: PurchaseOrder) => {
     if (r.loai_po === 'giay_tam') {
       return (
-        <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false} scroll={{ x: 900 }}
+        <Table dataSource={r.items} rowKey={(item: POItem) => String(item.id ?? `${r.id}-${item.ten_hang}`)} size="small" pagination={false} scroll={{ x: 900 }}
           columns={[
             { title: 'Sản phẩm', dataIndex: 'ten_hang', ellipsis: true,
               render: (_: string, row: POItem) => {
@@ -358,7 +358,7 @@ function TabDonMuaGiay() {
       )
     }
     return (
-      <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}
+      <Table dataSource={r.items} rowKey={(item: POItem) => String(item.id ?? `${r.id}-${item.ten_hang}`)} size="small" pagination={false}
         columns={[
           { title: 'Tên giấy', dataIndex: 'ten_hang' },
           { title: 'ĐVT', dataIndex: 'dvt', width: 60 },
@@ -848,7 +848,7 @@ function TabLichSuNCC() {
 
   // Flatten PO items thành history rows
   const historyRows = allPOs.flatMap(po =>
-    po.items.map((it, i) => ({
+    (po.items ?? []).map((it, i) => ({
       key: `${po.id}-${i}`,
       ngay_po: po.ngay_po,
       ten_ncc: po.ten_ncc,
@@ -865,7 +865,7 @@ function TabLichSuNCC() {
     return true
   }).sort((a, b) => b.ngay_po.localeCompare(a.ngay_po))
 
-  const maGiayOptions = Array.from(new Set(allPOs.flatMap(po => po.items.map(it => it.ten_hang))))
+  const maGiayOptions = Array.from(new Set(allPOs.flatMap(po => (po.items ?? []).map(it => it.ten_hang))))
     .filter(Boolean).map(v => ({ value: v, label: v }))
 
   return (
