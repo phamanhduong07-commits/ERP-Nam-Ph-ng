@@ -54,6 +54,8 @@ class MayScan(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ten_may: Mapped[str] = mapped_column(String(50), nullable=False)
+    # can_mang | xa | khac
+    loai: Mapped[str] = mapped_column(String(50), default="khac", nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     don_gia: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
@@ -80,6 +82,8 @@ class ScanLog(Base):
     tien_luong: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))  # = dien_tich * don_gia
     nguoi_sx: Mapped[str | None] = mapped_column(String(100))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    gio_bat_dau: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    gio_ket_thuc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
 
@@ -168,6 +172,9 @@ class PhieuIn(Base):
     tam_dung_luc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     tam_dung_ly_do: Mapped[str | None] = mapped_column(Text)
 
+    # Phiếu bù — lưu id phiếu gốc (không FK constraint để tránh circular)
+    phieu_goc_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -177,6 +184,23 @@ class PhieuIn(Base):
     production_order = relationship("ProductionOrder")  # type: ignore[assignment]
     creator = relationship("User")  # type: ignore[assignment]
     phan_xuong_obj = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
+
+
+class PhieuInStateLog(Base):
+    """Audit log: mỗi lần trạng thái PhieuIn thay đổi → ghi 1 dòng."""
+    __tablename__ = "phieu_in_state_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    phieu_in_id: Mapped[int] = mapped_column(Integer, ForeignKey("phieu_in.id", ondelete="CASCADE"), nullable=False)
+    tu_trang_thai: Mapped[str | None] = mapped_column(String(30))
+    den_trang_thai: Mapped[str] = mapped_column(String(30), nullable=False)
+    hanh_dong: Mapped[str] = mapped_column(String(50), nullable=False)
+    changed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+
+    phieu_in = relationship("PhieuIn", foreign_keys=[phieu_in_id])
+    changer = relationship("User", foreign_keys=[changed_by])
 
 
 class ShiftCa(Base):
@@ -219,7 +243,11 @@ class PrinterUser(Base):
     token_password: Mapped[str] = mapped_column(String(255), nullable=False)
     shift: Mapped[int | None] = mapped_column(Integer)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    machine_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("machines.id"), nullable=True)
+    machine_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("may_in.id"), nullable=True)
+    may_sau_in_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("may_sau_in.id"), nullable=True)
+    may_scan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("may_scan.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
-    machine: Mapped["Machine"] = relationship("Machine", foreign_keys=[machine_id])
+    may_in_obj: Mapped["MayIn | None"] = relationship("MayIn", foreign_keys=[machine_id])
+    may_sau_in_obj: Mapped["MaySauIn | None"] = relationship("MaySauIn", foreign_keys=[may_sau_in_id])
+    may_scan_obj: Mapped["MayScan | None"] = relationship("MayScan", foreign_keys=[may_scan_id])

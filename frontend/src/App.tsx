@@ -209,6 +209,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/production/cd2/mobile-tracking" element={<WorkerOrPrivateRoute><ErrorBoundary><MobileTrackingPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
+          <Route path="/production/cd2/scan" element={<WorkerOrPrivateRoute><ErrorBoundary><ScanMayPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
           <Route path="/production/may-song" element={<WorkerOrPrivateRoute><ErrorBoundary><MaySongPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
           <Route path="/cd2/machine-login" element={<ErrorBoundary><MachineLoginPage /></ErrorBoundary>} />
           <Route
@@ -266,7 +267,6 @@ export default function App() {
             <Route path="production/cd2" element={<CD2KanbanPage />} />
             <Route path="production/cd2/dashboard" element={<CD2DashboardPage />} />
             <Route path="production/cd2/may-in" element={<MayInQueuePage />} />
-            <Route path="production/cd2/scan" element={<ScanMayPage />} />
             <Route path="production/cd2/scan-history" element={<ScanHistoryPage />} />
             <Route path="production/cd2/history" element={<PhieuInHistoryPage />} />
             <Route path="production/cd2/dhcho2" element={<DinhHinhPage />} />

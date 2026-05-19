@@ -57,7 +57,7 @@ export default function MayInSettingsModal({ open, onClose, onSaved }: Props) {
     try {
       await cd2Api.updateMayIn(id, {
         ten_may: editValues.ten_may,
-        phan_xuong_id: editValues.phan_xuong_id ?? null,
+        phan_xuong_id: editValues.phan_xuong_id ?? undefined,
       })
       message.success('Đã cập nhật')
       setEditingId(null)

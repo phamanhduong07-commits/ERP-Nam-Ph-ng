@@ -44,6 +44,12 @@ client.interceptors.response.use(
       if (originalRequest?.url?.includes('/auth/login')) {
         return Promise.reject(err)
       }
+
+      // Kiosk mode: worker dùng session riêng, không có JWT → để request fail bình thường
+      if (!localStorage.getItem('token') && localStorage.getItem('cd2_worker_session')) {
+        return Promise.reject(err)
+      }
+
       // Tránh vòng lặp vô hạn khi endpoint /auth/refresh cũng trả 401
       if (originalRequest?.url?.includes('/auth/refresh') || originalRequest?._retry) {
         _doLogout()

@@ -20,9 +20,9 @@ const STATE_TAG: Record<string, { label: string; color: string }> = {
   cho_in:        { label: 'Chờ in',       color: 'default' },
   ke_hoach:      { label: 'Kế hoạch',     color: 'blue' },
   dang_in:       { label: 'Đang in',      color: 'green' },
-  cho_dinh_hinh: { label: 'Chờ ĐH',       color: 'orange' },
-  sau_in:        { label: 'Định hình',    color: 'purple' },
-  dang_sau_in:   { label: 'Đang ĐH',      color: 'purple' },
+  cho_dinh_hinh: { label: 'Chờ TP',       color: 'orange' },
+  sau_in:        { label: 'Thành phẩm',  color: 'purple' },
+  dang_sau_in:   { label: 'Đang TP',     color: 'purple' },
   hoan_thanh:    { label: 'Hoàn thành',   color: 'default' },
 }
 
@@ -179,7 +179,8 @@ export default function CD2WorkerPage() {
             style={{ marginBottom: 10, borderLeft: `4px solid ${borderColor}` }}
             title={
               <Space>
-                <Text strong>{phieu.so_phieu}</Text>
+                <Text strong>{phieu.so_lsx || phieu.so_phieu}</Text>
+                {phieu.so_lsx && <Text type="secondary" style={{ fontSize: 11 }}> ({phieu.so_phieu})</Text>}
                 <Tag color={isPaused ? 'warning' : state.color}>
                   {isPaused ? '⏸ Tạm dừng' : state.label}
                 </Tag>

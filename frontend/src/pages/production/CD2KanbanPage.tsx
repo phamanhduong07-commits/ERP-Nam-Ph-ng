@@ -9,14 +9,15 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  Alert, Badge, Button, Card, Col, Input, message, Modal, Row, Space, Tag, Tooltip, Typography,
+  Alert, Badge, Button, Card, Col, DatePicker, Form, Input, InputNumber,
+  message, Modal, Row, Select, Space, Tag, Tooltip, Typography,
 } from 'antd'
 import {
   PlusOutlined, PrinterOutlined, ReloadOutlined, SettingOutlined,
   PlayCircleOutlined, PauseOutlined, CheckCircleOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { cd2Api, PhieuIn, KanbanData } from '../../api/cd2'
+import { cd2Api, PhieuIn, KanbanData, CompletePayload } from '../../api/cd2'
 import PhieuInModal from './PhieuInModal'
 import MayInSettingsModal from './MayInSettingsModal'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
@@ -70,6 +71,158 @@ function ElapsedTime({ start }: { start: string }) {
   )
 }
 
+const CA_OPTIONS = [
+  { value: 'Ca 1', label: 'Ca 1' },
+  { value: 'Ca 2', label: 'Ca 2' },
+  { value: 'Ca 3', label: 'Ca 3' },
+]
+
+// ── Complete Modal (dùng chung cho Kết thúc + Ngưng & tạo in bù) ─────────────
+
+function CompleteModal({
+  phieu,
+  open,
+  onClose,
+  onDone,
+}: {
+  phieu: PhieuIn
+  open: boolean
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [form] = Form.useForm()
+  const [saving, setSaving] = useState(false)
+  const [ngungSaving, setNgungSaving] = useState(false)
+
+  const buildPayload = async (): Promise<CompletePayload> => {
+    const v = await form.validateFields()
+    return { ...v, ngay_in: v.ngay_in ? v.ngay_in.format('YYYY-MM-DD') : undefined }
+  }
+
+  const handleKetThuc = async () => {
+    const payload = await buildPayload()
+    setSaving(true)
+    try {
+      await cd2Api.completePrinting(phieu.id, payload)
+      message.success('Đã hoàn thành in — chuyển sang Chờ định hình')
+      form.resetFields()
+      onDone()
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi hoàn thành in')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleNgungIn = async () => {
+    const payload = await buildPayload()
+    setNgungSaving(true)
+    try {
+      const res = await cd2Api.ngungIn(phieu.id, payload)
+      message.success(`Đã ngưng in — tạo phiếu bù ${res.data.phieu_bu.so_phieu} (${res.data.phieu_bu.so_luong_phoi} tấm)`, 5)
+      form.resetFields()
+      onDone()
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi ngưng in')
+    } finally {
+      setNgungSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      title={
+        <Space>
+          <CheckCircleOutlined style={{ color: '#52c41a' }} />
+          Kết thúc in — {phieu.so_phieu}
+        </Space>
+      }
+      onCancel={onClose}
+      footer={[
+        <Button key="cancel" onClick={onClose} disabled={saving || ngungSaving}>
+          Huỷ
+        </Button>,
+        <Button
+          key="ngung"
+          onClick={handleNgungIn}
+          loading={ngungSaving}
+          disabled={saving}
+          style={{ background: '#fa8c16', borderColor: '#fa8c16', color: '#fff' }}
+        >
+          Ngưng & tạo in bù
+        </Button>,
+        <Button
+          key="ketthuc"
+          type="primary"
+          onClick={handleKetThuc}
+          loading={saving}
+          disabled={ngungSaving}
+        >
+          Kết thúc
+        </Button>,
+      ]}
+      width={520}
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{
+          ngay_in: dayjs(),
+          so_luong_in_ok: phieu.so_luong_phoi ?? undefined,
+          so_luong_loi: 0,
+          so_luong_setup: 0,
+          so_lan_setup: 0,
+        }}
+      >
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="ngay_in" label="Ngày in">
+              <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="ca" label="Ca">
+              <Select options={CA_OPTIONS} placeholder="Chọn ca" allowClear />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item
+              name="so_luong_in_ok"
+              label="SL in đạt"
+              rules={[{ required: true, message: 'Nhập SL' }]}
+            >
+              <InputNumber style={{ width: '100%' }} min={0} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="so_luong_loi" label="SL lỗi">
+              <InputNumber style={{ width: '100%' }} min={0} />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="so_luong_setup" label="SL setup">
+              <InputNumber style={{ width: '100%' }} min={0} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="so_lan_setup" label="Số lần setup">
+              <InputNumber style={{ width: '100%' }} min={0} />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item name="ghi_chu_ket_qua" label="Ghi chú">
+          <Input.TextArea rows={2} />
+        </Form.Item>
+      </Form>
+    </Modal>
+  )
+}
+
 // ── StatCards ─────────────────────────────────────────────────────────────────
 
 function StatCards({ kanban }: { kanban: KanbanData }) {
@@ -104,14 +257,14 @@ function StatCards({ kanban }: { kanban: KanbanData }) {
       sub: dangInCount > 0 ? `${dangInCount} đang in` : undefined,
     },
     {
-      label: 'Chờ định hình',
+      label: 'Chờ TP',
       count: cols['cho_dinh_hinh']?.length ?? 0,
       color: '#531dab',
       bg: '#f9f0ff',
       border: '#d3adf7',
     },
     {
-      label: 'Sau in',
+      label: 'Thành phẩm',
       count: cols['sau_in']?.length ?? 0,
       color: '#08979c',
       bg: '#e6fffb',
@@ -187,6 +340,7 @@ function KanbanCard({
   onBatDau,
   onTamDung,
   onTiepTuc,
+  onKetThuc,
 }: {
   phieu: PhieuIn
   onClick?: () => void
@@ -196,6 +350,7 @@ function KanbanCard({
   onBatDau?: (p: PhieuIn) => void
   onTamDung?: (p: PhieuIn) => void
   onTiepTuc?: (p: PhieuIn) => void
+  onKetThuc?: (p: PhieuIn) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: phieu.id,
@@ -228,9 +383,9 @@ function KanbanCard({
   const STATE_TAG: Record<string, { label: string; color: string }> = {
     dang_in:        { label: 'Đang in',  color: 'orange' },
     ke_hoach:       { label: 'KH',       color: 'blue' },
-    cho_dinh_hinh:  { label: 'Chờ ĐH',  color: 'purple' },
-    sau_in:         { label: 'Sau in',   color: 'cyan' },
-    dang_sau_in:    { label: 'Đang ĐH', color: 'green' },
+    cho_dinh_hinh:  { label: 'Chờ TP',   color: 'purple' },
+    sau_in:         { label: 'Đang TP',  color: 'cyan' },
+    dang_sau_in:    { label: 'Đang TP',  color: 'green' },
   }
   const stateTag = STATE_TAG[phieu.trang_thai]
 
@@ -247,7 +402,10 @@ function KanbanCard({
         onClick={onClick}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
-          <Text style={{ fontSize: 11, color: '#888' }}>{phieu.so_phieu}</Text>
+          <Text style={{ fontSize: 11, color: '#888' }}>
+            {phieu.so_lsx || phieu.so_phieu}
+            {phieu.so_lsx && <span style={{ color: '#bbb', marginLeft: 4 }}>({phieu.so_phieu})</span>}
+          </Text>
           <Space size={2}>
             {isOverdue && (
               <Tag color="error" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>Hết hạn!</Tag>
@@ -267,12 +425,16 @@ function KanbanCard({
         )}
 
         <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          {phieu.so_luong_phoi != null && (
-            <Text style={{ fontSize: 11 }}>
-              <span style={{ color: '#888' }}>SL: </span>
-              <strong>{phieu.so_luong_phoi.toLocaleString('vi-VN')}</strong>
-            </Text>
-          )}
+          {(() => {
+            const isTP = ['cho_dinh_hinh', 'sau_in', 'dang_sau_in'].includes(phieu.trang_thai)
+            const slVal = isTP ? phieu.so_luong_in_ok : phieu.so_luong_phoi
+            return slVal != null ? (
+              <Text style={{ fontSize: 11 }}>
+                <span style={{ color: '#888' }}>{isTP ? 'In OK: ' : 'SL: '}</span>
+                <strong style={isTP ? { color: '#52c41a' } : undefined}>{slVal.toLocaleString('vi-VN')}</strong>
+              </Text>
+            ) : null
+          })()}
           {phieu.quy_cach && (
             <Text style={{ fontSize: 11, color: '#888' }}>{phieu.quy_cach}</Text>
           )}
@@ -371,7 +533,7 @@ function KanbanCard({
                   type="primary"
                   icon={<CheckCircleOutlined />}
                   style={{ flex: 1 }}
-                  onClick={onClick}
+                  onClick={() => onKetThuc ? onKetThuc(phieu) : onClick?.()}
                 >
                   Kết thúc
                 </Button>
@@ -387,7 +549,7 @@ function KanbanCard({
 // ── Column ────────────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  colId, title, cards, color, onCardClick, pauses, onBatDau, onTamDung, onTiepTuc,
+  colId, title, cards, color, onCardClick, pauses, onBatDau, onTamDung, onTiepTuc, onKetThuc,
 }: {
   colId: string
   title: string
@@ -398,6 +560,7 @@ function KanbanColumn({
   onBatDau: (p: PhieuIn) => void
   onTamDung: (p: PhieuIn) => void
   onTiepTuc: (p: PhieuIn) => void
+  onKetThuc: (p: PhieuIn) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: colId })
 
@@ -441,6 +604,7 @@ function KanbanColumn({
                 onBatDau={onBatDau}
                 onTamDung={onTamDung}
                 onTiepTuc={onTiepTuc}
+                onKetThuc={onKetThuc}
               />
             )
           })}
@@ -499,6 +663,7 @@ export default function CD2KanbanPage() {
   const [pauses, setPauses] = useState<Record<number, PauseInfo>>(readPauses)
   const [pausingPhieu, setPausingPhieu] = useState<PhieuIn | null>(null)
   const [pauseReason, setPauseReason] = useState('')
+  const [completingPhieu, setCompletingPhieu] = useState<PhieuIn | null>(null)
 
   const { data: kanban, isLoading, isError, error } = useQuery({
     queryKey: ['cd2-kanban', phanXuongId],
@@ -556,6 +721,10 @@ export default function CD2KanbanPage() {
     }
   }, [pausingPhieu, pauseReason, invalidate])
 
+  const handleKetThuc = useCallback((phieu: PhieuIn) => {
+    setCompletingPhieu(phieu)
+  }, [])
+
   const handleTiepTuc = useCallback(async (phieu: PhieuIn) => {
     localStorage.removeItem(PAUSE_KEY(phieu.id))
     setPauses(prev => { const next = { ...prev }; delete next[phieu.id]; return next })
@@ -593,8 +762,8 @@ export default function CD2KanbanPage() {
       title: m.ten_may,
       color: '#e6f4ff',
     })),
-    { id: 'cho_dinh_hinh', title: 'Chờ định hình', color: '#f9f0ff' },
-    { id: 'sau_in',        title: 'Sau in',         color: '#e6fffb' },
+    { id: 'cho_dinh_hinh', title: 'Chờ TP',       color: '#f9f0ff' },
+    { id: 'sau_in',        title: 'Thành phẩm',   color: '#e6fffb' },
     { id: 'hoan_thanh',    title: 'Hoàn thành',     color: '#f6ffed' },
   ] : []
 
@@ -677,7 +846,27 @@ export default function CD2KanbanPage() {
       ? targetCards.findIndex(p => p.id === overId)
       : targetCards.length
 
-    cd2Api.movePhieuIn(activeId, { trang_thai, may_in_id, sort_order: newSortOrder })
+    // Batch-update sort_order toàn bộ các column bị ảnh hưởng để thứ tự không bị nhảy
+    const sourceColId = getCardColumn(originalCard)
+    const affectedCols = new Set([sourceColId, targetColId])
+    const reorderItems: { id: number; sort_order: number }[] = []
+    for (const colId of affectedCols) {
+      ;(localColumns[colId] || []).forEach((p, idx) =>
+        reorderItems.push({ id: p.id, sort_order: idx })
+      )
+    }
+
+    const isSameCol = sourceColId === targetColId
+    const calls = isSameCol
+      // Cùng cột: chỉ cần reorder, không gọi move (tránh race condition)
+      ? [cd2Api.reorderPhieuIn(reorderItems)]
+      // Khác cột: move trước (đổi trang_thai/may_in_id), rồi reorder cả 2 cột
+      : [
+          cd2Api.movePhieuIn(activeId, { trang_thai, may_in_id, sort_order: newSortOrder }),
+          cd2Api.reorderPhieuIn(reorderItems),
+        ]
+
+    Promise.all(calls)
       .then(() => invalidate())
       .catch(() => {
         message.error('Cập nhật thất bại')
@@ -776,6 +965,7 @@ export default function CD2KanbanPage() {
               onBatDau={handleBatDau}
               onTamDung={handleTamDung}
               onTiepTuc={handleTiepTuc}
+              onKetThuc={handleKetThuc}
             />
           ))}
         </div>
@@ -799,6 +989,15 @@ export default function CD2KanbanPage() {
           open
           onClose={() => setShowSettings(false)}
           onSaved={invalidate}
+        />
+      )}
+
+      {completingPhieu && (
+        <CompleteModal
+          phieu={completingPhieu}
+          open
+          onClose={() => setCompletingPhieu(null)}
+          onDone={() => { setCompletingPhieu(null); invalidate() }}
         />
       )}
 

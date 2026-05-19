@@ -14,7 +14,11 @@ export default function MachineLoginPage() {
 
   function saveSession(session: WorkerSession) {
     localStorage.setItem('cd2_worker_session', JSON.stringify(session))
-    navigate('/production/cd2/mobile-tracking')
+    if (session.loai_may === 'scan') {
+      navigate(`/production/cd2/scan?machine_id=${session.machine_id}`)
+    } else {
+      navigate('/production/cd2/mobile-tracking')
+    }
   }
 
   async function handlePasswordLogin(values: { token_user: string; token_password: string }) {

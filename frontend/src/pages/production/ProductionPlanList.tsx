@@ -143,19 +143,20 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
   const handleExport = () => {
     const items = displayItems
     if (!items.length) return
-    exportToExcel(
-      items.map((r, i) => ({
-        STT: i + 1,
-        'Số KH': r.so_ke_hoach,
-        'Ngày KH': dayjs(r.ngay_ke_hoach).format('DD/MM/YYYY'),
-        'Nơi SX': r.noi_sx ?? '',
-        'Trạng thái': PLAN_TRANG_THAI[r.trang_thai]?.label ?? r.trang_thai,
-        'Số dòng': r.so_dong,
-        'Tổng SL': Number(r.tong_sl),
-        'Người lập': r.created_by_name ?? '',
-      })),
-      `KHSX_${dayjs().format('YYYYMMDD')}`
-    )
+    exportToExcel(`KHSX_${dayjs().format('YYYYMMDD')}`, [{
+      name: 'Kế hoạch SX',
+      headers: ['STT', 'Số KH', 'Ngày KH', 'Nơi SX', 'Trạng thái', 'Số dòng', 'Tổng SL', 'Người lập'],
+      rows: items.map((r, i) => [
+        i + 1,
+        r.so_ke_hoach,
+        dayjs(r.ngay_ke_hoach).format('DD/MM/YYYY'),
+        r.noi_sx ?? '',
+        PLAN_TRANG_THAI[r.trang_thai]?.label ?? r.trang_thai,
+        r.so_dong,
+        Number(r.tong_sl),
+        r.created_by_name ?? '',
+      ]),
+    }])
   }
 
   // ── Màu ngày: plan chưa hoàn thành mà quá hạn → cảnh báo ─────────────────

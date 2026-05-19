@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
@@ -252,10 +252,16 @@ function TabNhap() {
   const qc = useQueryClient()
   const { data: phapNhanList = [] } = usePhapNhanList()
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [trangThai, setTrangThai] = useState<string | undefined>(undefined)
   const [dateRange, setDateRange] = useState<[string, string] | null>(null)
   const [page, setPage] = useState(1)
   const [exportLoading, setExportLoading] = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
 
   // Sessions: lưu giờ bắt đầu từng lệnh SX
   const [sessions, setSessions] = useState<Sessions>(readAllSessions)
@@ -265,10 +271,10 @@ function TabNhap() {
   const [loadingOrderId, setLoadingOrderId] = useState<number | null>(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['prod-orders-phoi-tab', search, trangThai, dateRange, page],
+    queryKey: ['prod-orders-phoi-tab', debouncedSearch, trangThai, dateRange, page],
     queryFn: () =>
       productionOrdersApi.list({
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         trang_thai: trangThai,
         tu_ngay: dateRange?.[0],
         den_ngay: dateRange?.[1],
@@ -418,7 +424,7 @@ function TabNhap() {
   const fetchFilteredPhieu = async () => {
     // 1. Lấy tất cả lệnh SX theo filter hiện tại (không phân trang)
     const ordersRes = await productionOrdersApi.list({
-      search: search || undefined,
+      search: debouncedSearch || undefined,
       trang_thai: trangThai,
       tu_ngay: dateRange?.[0],
       den_ngay: dateRange?.[1],

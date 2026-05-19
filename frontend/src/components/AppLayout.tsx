@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Layout, Menu, Avatar, Dropdown, Typography, Space, theme, Badge, Button, message,
 } from 'antd'
+import type { MenuProps } from 'antd'
 import {
   DashboardOutlined, ShoppingCartOutlined, ShoppingOutlined, DatabaseOutlined,
   TeamOutlined, UserOutlined, LogoutOutlined, SettingOutlined,
@@ -115,15 +116,14 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
             // ── Tổ trưởng ───────────────────────────────────────────────────
             { key: '/production/cd2/dashboard',   label: <Link to="/production/cd2/dashboard">📈 Dashboard</Link>, roles: SAN_XUAT_FULL },
             { key: '/production/cd2',             label: <Link to="/production/cd2">🗂 Kanban máy in</Link> },
-            { key: '/production/cd2/sauin-kanban',label: <Link to="/production/cd2/sauin-kanban">🏭 Kanban sau in</Link> },
+            { key: '/production/cd2/sauin-kanban',label: <Link to="/production/cd2/sauin-kanban">🏭 Kanban TP</Link> },
             { key: '/production/cd2/may-in',      label: <Link to="/production/cd2/may-in">📋 Queue máy in</Link> },
-            { key: '/production/cd2/history',     label: <Link to="/production/cd2/history">📑 Lịch sử phiếu in</Link> },
+            { key: '/production/cd2/history',     label: <Link to="/production/cd2/history">📊 Thống kê sản lượng</Link> },
             // ── Công nhân ───────────────────────────────────────────────────
             { key: '/production/cd2/worker',      label: <Link to="/production/cd2/worker">👷 Máy in của tôi</Link> },
             { key: '/cd2/machine-login',          label: <Link to="/cd2/machine-login">🔑 Đăng nhập máy</Link> },
             { key: '/production/cd2/scan',        label: <Link to="/production/cd2/scan">📊 Scan sản lượng</Link> },
             { key: '/production/cd2/mobile-tracking', label: <Link to="/production/cd2/mobile-tracking">📱 Mobile (kiosk)</Link> },
-            { key: '/production/cd2/scan-history',label: <Link to="/production/cd2/scan-history">🔍 Lịch sử scan</Link> },
             // ── Quản trị ────────────────────────────────────────────────────
             { key: '/production/cd2/shift',       label: <Link to="/production/cd2/shift">⏰ Quản lý ca</Link>, roles: SAN_XUAT_FULL },
             { key: '/production/cd2/config',      label: <Link to="/production/cd2/config">⚙ Cấu hình CD2</Link>, roles: ADMIN_GD },
@@ -313,7 +313,7 @@ export default function AppLayout() {
     }
   }
 
-  const roleTestMenu = {
+  const roleTestMenu: MenuProps = {
     items: [
       { key: 'admin_group', type: 'group', label: 'Hệ thống & BGD', children: [
         { key: 'ADMIN', label: 'Administrator', onClick: () => handleSwitchRole('ADMIN', '123456') },

@@ -24,7 +24,7 @@ const MAIN_STATES = [
   { key: 'cho_in',        label: 'Chờ in',        color: '#d46b08', bg: '#fff7e6', border: '#ffd591' },
   { key: 'ke_hoach',      label: 'Kế hoạch',      color: '#0958d9', bg: '#e6f4ff', border: '#91caff' },
   { key: 'dang_in',       label: 'Đang in',        color: '#d4380d', bg: '#fff2e8', border: '#ffbb96' },
-  { key: 'cho_dinh_hinh', label: 'Chờ định hình', color: '#531dab', bg: '#f9f0ff', border: '#d3adf7' },
+  { key: 'cho_dinh_hinh', label: 'Chờ TP', color: '#531dab', bg: '#f9f0ff', border: '#d3adf7' },
 ]
 
 export default function CD2DashboardPage() {
@@ -241,7 +241,7 @@ export default function CD2DashboardPage() {
         <Col xs={12} sm={6} md={4}>
           <Card size="small" style={{ borderRadius: 10 }} styles={{ body: { padding: '14px 16px' } }}>
             <Statistic
-              title="Sau in"
+              title="Thành phẩm"
               value={counts['sau_in'] ?? 0}
               valueStyle={{ color: '#08979c', fontSize: 28 }}
             />
@@ -419,7 +419,7 @@ export default function CD2DashboardPage() {
           { to: '/production/cd2/mobile-tracking', icon: <MobileOutlined />, label: 'Báo cáo máy (Mobile)', color: '#52c41a' },
           { to: '/production/cd2/scan',         icon: <BarcodeOutlined />,  label: 'Scan sản lượng',   color: '#722ed1' },
           { to: '/production/cd2/scan-history', icon: <HistoryOutlined />,  label: 'Lịch sử scan',     color: '#08979c' },
-          { to: '/production/cd2/history',      icon: <HistoryOutlined />,  label: 'Lịch sử phiếu in', color: '#d46b08' },
+          { to: '/production/cd2/history',      icon: <HistoryOutlined />,  label: 'Thống kê sản lượng', color: '#d46b08' },
         ].map(item => (
           <Col xs={12} sm={6} key={item.to}>
             <Link to={item.to}>

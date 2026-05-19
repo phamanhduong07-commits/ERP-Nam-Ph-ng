@@ -516,7 +516,11 @@ def get_sauin_kanban(
 
     q_phieu = (
         db.query(PhieuIn)
-        .options(joinedload(PhieuIn.may_sau_in_obj))
+        .options(
+            joinedload(PhieuIn.may_in_obj),
+            joinedload(PhieuIn.may_sau_in_obj),
+            joinedload(PhieuIn.production_order),
+        )
         # cho_dinh_hinh: vừa xong in, chờ tổ trưởng gán máy định hình
         .filter(PhieuIn.trang_thai.in_(["cho_dinh_hinh", "sau_in", "dang_sau_in"]))
     )
@@ -561,7 +565,11 @@ def get_kanban(
 
     q_phieu = (
         db.query(PhieuIn)
-        .options(joinedload(PhieuIn.may_in_obj), joinedload(PhieuIn.may_sau_in_obj))
+        .options(
+            joinedload(PhieuIn.may_in_obj),
+            joinedload(PhieuIn.may_sau_in_obj),
+            joinedload(PhieuIn.production_order),
+        )
         .filter(PhieuIn.trang_thai != "huy")
         # hoan_thanh chỉ lấy 7 ngày gần nhất để tránh tích lũy vô hạn
         .filter(
@@ -1699,7 +1707,11 @@ def history_phieu_in(
     cutoff = datetime.now() - timedelta(days=days)
     q = (
         db.query(PhieuIn)
-        .options(joinedload(PhieuIn.may_in_obj), joinedload(PhieuIn.may_sau_in_obj))
+        .options(
+            joinedload(PhieuIn.may_in_obj),
+            joinedload(PhieuIn.may_sau_in_obj),
+            joinedload(PhieuIn.production_order),
+        )
         .filter(PhieuIn.created_at >= cutoff)
     )
     if trang_thai:

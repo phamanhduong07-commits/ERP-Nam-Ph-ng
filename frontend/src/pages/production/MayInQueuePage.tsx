@@ -77,22 +77,17 @@ function CompleteModal({
 }) {
   const [form] = Form.useForm()
   const [saving, setSaving] = useState(false)
+  const [ngungSaving, setNgungSaving] = useState(false)
 
-  const handleOk = async () => {
+  const buildPayload = async (): Promise<CompletePayload> => {
     const v = await form.validateFields()
-    const total = (v.so_luong_in_ok ?? 0) + (v.so_luong_loi ?? 0) + (v.so_luong_setup ?? 0)
-    if (phieu.so_luong_phoi && total > phieu.so_luong_phoi * 1.15) {
-      message.warning(
-        `Tổng SL ghi (${total.toLocaleString('vi-VN')}) vượt quá SL phôi (${phieu.so_luong_phoi.toLocaleString('vi-VN')}) hơn 15% — vui lòng kiểm tra lại.`,
-        5,
-      )
-    }
+    return { ...v, ngay_in: v.ngay_in ? v.ngay_in.format('YYYY-MM-DD') : undefined }
+  }
+
+  const handleKetThuc = async () => {
+    const payload = await buildPayload()
     setSaving(true)
     try {
-      const payload: CompletePayload = {
-        ...v,
-        ngay_in: v.ngay_in ? v.ngay_in.format('YYYY-MM-DD') : undefined,
-      }
       await cd2Api.completePrinting(phieu.id, payload)
       message.success('Đã hoàn thành in — chuyển sang Chờ định hình')
       form.resetFields()
@@ -104,20 +99,54 @@ function CompleteModal({
     }
   }
 
+  const handleNgungIn = async () => {
+    const payload = await buildPayload()
+    setNgungSaving(true)
+    try {
+      const res = await cd2Api.ngungIn(phieu.id, payload)
+      message.success(`Đã ngưng in — tạo phiếu bù ${res.data.phieu_bu.so_phieu} (${res.data.phieu_bu.so_luong_phoi} tấm)`, 5)
+      form.resetFields()
+      onDone()
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi ngưng in')
+    } finally {
+      setNgungSaving(false)
+    }
+  }
+
   return (
     <Modal
       open={open}
       title={
         <Space>
           <CheckCircleOutlined style={{ color: '#52c41a' }} />
-          Hoàn thành in — {phieu.so_phieu}
+          Kết thúc in — {phieu.so_phieu}
         </Space>
       }
       onCancel={onClose}
-      onOk={handleOk}
-      okText="Xác nhận hoàn thành"
-      cancelText="Huỷ"
-      okButtonProps={{ loading: saving, type: 'primary' }}
+      footer={[
+        <Button key="cancel" onClick={onClose} disabled={saving || ngungSaving}>
+          Huỷ
+        </Button>,
+        <Button
+          key="ngung"
+          onClick={handleNgungIn}
+          loading={ngungSaving}
+          disabled={saving}
+          style={{ background: '#fa8c16', borderColor: '#fa8c16', color: '#fff' }}
+        >
+          Ngưng & tạo in bù
+        </Button>,
+        <Button
+          key="ketthuc"
+          type="primary"
+          onClick={handleKetThuc}
+          loading={saving}
+          disabled={ngungSaving}
+        >
+          Kết thúc
+        </Button>,
+      ]}
       width={520}
     >
       <Form
@@ -285,7 +314,10 @@ function QueueCard({
         {/* Thông tin */}
         <Col flex="auto">
           <Space size={6} style={{ marginBottom: 4 }} wrap>
-            <Text style={{ fontSize: 11, color: '#888' }}>{phieu.so_phieu}</Text>
+            <Text style={{ fontSize: 11, color: '#888' }}>
+              {phieu.so_lsx || phieu.so_phieu}
+              {phieu.so_lsx && <span style={{ color: '#bbb', marginLeft: 4 }}>({phieu.so_phieu})</span>}
+            </Text>
             {isRunning && !isPaused && !isStuck && <Tag color="orange" style={{ margin: 0 }}>▶ Đang in</Tag>}
             {isRunning && isStuck && <Tag color="error" style={{ margin: 0 }}>⚠️ Kẹt lâu</Tag>}
             {isPaused && <Tag color="gold" style={{ margin: 0 }}>⏸ Tạm dừng</Tag>}

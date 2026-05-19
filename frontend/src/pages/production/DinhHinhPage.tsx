@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Badge, Button, Card, Col, DatePicker, Empty,
@@ -13,6 +13,7 @@ import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, SauInPayload } from '../../api/cd2'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
+import { socket } from '../../utils/socket'
 
 const { Title, Text } = Typography
 
@@ -45,16 +46,13 @@ function DinhHinhModal({
       const payload: SauInPayload = {
         ngay_sau_in: v.ngay_sau_in ? v.ngay_sau_in.format('YYYY-MM-DD') : undefined,
         ca_sau_in: v.ca_sau_in,
-        so_luong_sau_in_ok: v.so_luong_sau_in_ok,
-        so_luong_sau_in_loi: v.so_luong_sau_in_loi ?? 0,
-        ghi_chu_sau_in: v.ghi_chu_sau_in,
       }
       await cd2Api.startSauIn(phieu.id, payload)
       message.success('Đã chuyển sang Sau in')
       form.resetFields()
       onDone()
-    } catch {
-      message.error('Lỗi, thử lại')
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi, thử lại')
     } finally {
       setSaving(false)
     }
@@ -99,11 +97,7 @@ function DinhHinhModal({
       <Form
         form={form}
         layout="vertical"
-        initialValues={{
-          ngay_sau_in: dayjs(),
-          so_luong_sau_in_ok: phieu.so_luong_in_ok ?? phieu.so_luong_phoi ?? undefined,
-          so_luong_sau_in_loi: 0,
-        }}
+        initialValues={{ ngay_sau_in: dayjs() }}
       >
         <Row gutter={12}>
           <Col span={12}>
@@ -117,28 +111,6 @@ function DinhHinhModal({
             </Form.Item>
           </Col>
         </Row>
-        <Row gutter={12}>
-          <Col span={12}>
-            <Form.Item
-              name="so_luong_sau_in_ok"
-              label="SL đạt"
-              rules={[
-                { required: true, message: 'Nhập số lượng đạt để nhập kho TP' },
-                { type: 'number', min: 1, message: 'SL đạt phải lớn hơn 0' },
-              ]}
-            >
-              <InputNumber style={{ width: '100%' }} min={0} />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item name="so_luong_sau_in_loi" label="SL lỗi">
-              <InputNumber style={{ width: '100%' }} min={0} />
-            </Form.Item>
-          </Col>
-        </Row>
-        <Form.Item name="ghi_chu_sau_in" label="Ghi chú">
-          <Input.TextArea rows={2} />
-        </Form.Item>
       </Form>
     </Modal>
   )
@@ -172,7 +144,13 @@ function PhieuCard({
         <Col flex="auto">
           {/* Header row */}
           <Space size={6} wrap style={{ marginBottom: 4 }}>
-            <Text style={{ fontSize: 11, color: '#888' }}>{phieu.so_phieu}</Text>
+            <Text style={{ fontSize: 11, color: '#888' }}>
+              {phieu.so_lsx || phieu.so_phieu}
+              {phieu.so_lsx && <span style={{ color: '#bbb', marginLeft: 4 }}>({phieu.so_phieu})</span>}
+            </Text>
+            {phieu.phieu_goc_id && (
+              <Tag color="gold" style={{ margin: 0, fontSize: 10 }}>Phiếu bù</Tag>
+            )}
             {phieu.loai && <Tag style={{ margin: 0, fontSize: 10 }}>{phieu.loai}</Tag>}
             {phieu.ths && <Tag color="geekblue" style={{ margin: 0, fontSize: 10 }}>{phieu.ths}</Tag>}
             {phieu.pp_ghep && <Tag style={{ margin: 0, fontSize: 10 }}>{phieu.pp_ghep}</Tag>}
@@ -288,7 +266,11 @@ function PhieuCard({
 function HoanThanhModal({
   phieu, open, onClose, onDone,
 }: { phieu: PhieuIn; open: boolean; onClose: () => void; onDone: () => void }) {
+  const [form] = Form.useForm()
   const [saving, setSaving] = useState(false)
+  const [ngungSaving, setNgungSaving] = useState(false)
+
+  const ref = phieu.so_luong_in_ok ?? phieu.so_luong_phoi ?? 0
 
   const mins = phieu.gio_bat_dau_dinh_hinh
     ? dayjs().diff(dayjs(phieu.gio_bat_dau_dinh_hinh), 'minute')
@@ -297,11 +279,17 @@ function HoanThanhModal({
     ? (mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`)
     : null
 
-  const handleOk = async () => {
+  const handleKetThuc = async () => {
+    const v = await form.validateFields()
     setSaving(true)
     try {
-      await cd2Api.hoanThanh(phieu.id)
+      await cd2Api.hoanThanh(phieu.id, {
+        so_luong_sau_in_ok: v.so_luong_sau_in_ok,
+        so_luong_sau_in_loi: v.so_luong_sau_in_loi ?? 0,
+        ghi_chu_sau_in: v.ghi_chu_sau_in,
+      })
       message.success('Hoàn thành — đã nhập kho thành phẩm')
+      form.resetFields()
       onDone()
     } catch (e: any) {
       message.error(e?.response?.data?.detail || 'Lỗi')
@@ -310,29 +298,75 @@ function HoanThanhModal({
     }
   }
 
+  const handleNgung = async () => {
+    const v = await form.validateFields()
+    Modal.confirm({
+      title: 'Ngưng & tạo phiếu bù?',
+      content: `Hành động này không thể hoàn tác. Phiếu gốc sẽ được đóng với SL đạt: ${v.so_luong_sau_in_ok?.toLocaleString('vi-VN') ?? '?'}, một phiếu bù mới sẽ được tạo cho số còn lại.`,
+      okText: 'Xác nhận Ngưng',
+      okButtonProps: { danger: true },
+      cancelText: 'Huỷ',
+      onOk: async () => {
+        setNgungSaving(true)
+        try {
+          const res = await cd2Api.ngungDinhHinh(phieu.id, {
+            so_luong_sau_in_ok: v.so_luong_sau_in_ok,
+            so_luong_sau_in_loi: v.so_luong_sau_in_loi ?? 0,
+            ghi_chu_sau_in: v.ghi_chu_sau_in,
+          })
+          message.success(`Đã ngưng — phiếu bù: ${res.data.phieu_bu.so_phieu}`)
+          form.resetFields()
+          onDone()
+        } catch (e: any) {
+          message.error(e?.response?.data?.detail || 'Lỗi')
+        } finally {
+          setNgungSaving(false)
+        }
+      },
+    })
+  }
+
   return (
     <Modal
       open={open}
       title={<Space><CheckCircleOutlined style={{ color: '#52c41a' }} />Hoàn thành định hình — {phieu.so_phieu}</Space>}
       onCancel={onClose}
-      onOk={handleOk}
-      okText="Xác nhận hoàn thành"
-      cancelText="Huỷ"
-      okButtonProps={{ loading: saving, style: { background: '#52c41a', borderColor: '#52c41a' } }}
-      width={420}
+      footer={[
+        <Button key="cancel" onClick={onClose} disabled={saving || ngungSaving}>Huỷ</Button>,
+        <Button
+          key="ngung"
+          onClick={handleNgung}
+          loading={ngungSaving}
+          disabled={saving}
+          style={{ background: '#fa8c16', borderColor: '#fa8c16', color: '#fff' }}
+        >
+          Ngưng & tạo phiếu bù
+        </Button>,
+        <Button
+          key="ketthuc"
+          type="primary"
+          onClick={handleKetThuc}
+          loading={saving}
+          disabled={ngungSaving}
+          style={{ background: '#52c41a', borderColor: '#52c41a' }}
+        >
+          Kết thúc
+        </Button>,
+      ]}
+      width={480}
     >
       <Card size="small" style={{ background: '#f6ffed', borderColor: '#b7eb8f', marginBottom: 12 }}>
         <div style={{ fontWeight: 700, fontSize: 15 }}>{phieu.ten_hang}</div>
         {phieu.ten_khach_hang && <div style={{ fontSize: 12, color: '#595959' }}>{phieu.ten_khach_hang}</div>}
         <Space size={16} style={{ marginTop: 8 }}>
-          {phieu.so_luong_sau_in_ok != null && (
+          {ref > 0 && (
             <span style={{ fontSize: 13 }}>
-              SL đạt: <strong style={{ color: '#52c41a' }}>{phieu.so_luong_sau_in_ok.toLocaleString('vi-VN')}</strong>
+              Tham chiếu: <strong style={{ color: '#1890ff' }}>{ref.toLocaleString('vi-VN')}</strong>
             </span>
           )}
-          {phieu.so_luong_sau_in_loi != null && phieu.so_luong_sau_in_loi > 0 && (
+          {phieu.so_luong_sau_in_ok != null && (
             <span style={{ fontSize: 13 }}>
-              Lỗi: <strong style={{ color: '#ff4d4f' }}>{phieu.so_luong_sau_in_loi.toLocaleString('vi-VN')}</strong>
+              SL định hình trước: <strong style={{ color: '#52c41a' }}>{phieu.so_luong_sau_in_ok.toLocaleString('vi-VN')}</strong>
             </span>
           )}
         </Space>
@@ -342,8 +376,42 @@ function HoanThanhModal({
           </div>
         )}
       </Card>
-      <div style={{ fontSize: 13, color: '#595959' }}>
-        Xác nhận sẽ <strong>nhập thành phẩm vào kho</strong> của xưởng sản xuất tương ứng. Nếu thiếu LSX, xưởng, kho thành phẩm hoặc số lượng đạt, hệ thống sẽ báo lỗi và không cho hoàn thành.
+
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{
+          so_luong_sau_in_ok: phieu.so_luong_sau_in_ok ?? ref ?? undefined,
+          so_luong_sau_in_loi: phieu.so_luong_sau_in_loi ?? 0,
+        }}
+      >
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item
+              name="so_luong_sau_in_ok"
+              label="SL đạt"
+              rules={[
+                { required: true, message: 'Nhập SL đạt' },
+                { type: 'number', min: 1, message: 'SL đạt phải > 0' },
+              ]}
+            >
+              <InputNumber style={{ width: '100%' }} min={0} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="so_luong_sau_in_loi" label="SL lỗi">
+              <InputNumber style={{ width: '100%' }} min={0} />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item name="ghi_chu_sau_in" label="Ghi chú">
+          <Input.TextArea rows={2} />
+        </Form.Item>
+      </Form>
+
+      <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+        <strong>Kết thúc:</strong> chấp nhận số lượng thực tế, nhập kho TP. &nbsp;
+        <strong style={{ color: '#fa8c16' }}>Ngưng & tạo phiếu bù:</strong> hoàn thành một phần, tự tạo phiếu bù cho số còn lại.
       </div>
     </Modal>
   )
@@ -361,13 +429,11 @@ export default function DinhHinhPage() {
   const { data: choPhieus = [], isLoading, refetch } = useQuery({
     queryKey: ['cd2-cho-dinh-hinh', phanXuongId],
     queryFn: () => cd2Api.listPhieuIn({ trang_thai: 'cho_dinh_hinh', ...(phanXuongId ? { phan_xuong_id: phanXuongId } : {}) }).then(r => r.data),
-    refetchInterval: 20_000,
   })
 
   const { data: dangPhieus = [], isLoading: loadingDang, refetch: refetchDang } = useQuery({
     queryKey: ['cd2-dang-dinh-hinh', phanXuongId],
     queryFn: () => cd2Api.listPhieuIn({ trang_thai: 'sau_in', ...(phanXuongId ? { phan_xuong_id: phanXuongId } : {}) }).then(r => r.data),
-    refetchInterval: 20_000,
   })
 
   const deleteMutation = useMutation({
@@ -384,11 +450,18 @@ export default function DinhHinhPage() {
     qc.invalidateQueries({ queryKey: ['cd2-cho-dinh-hinh'] })
     qc.invalidateQueries({ queryKey: ['cd2-dang-dinh-hinh'] })
     qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
+    qc.invalidateQueries({ queryKey: ['cd2-sauin-kanban'] })
     qc.invalidateQueries({ queryKey: ['cd2-dashboard'] })
     qc.invalidateQueries({ queryKey: ['production-outputs'] })
     qc.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
     qc.invalidateQueries({ queryKey: ['ton-kho'] })
   }
+
+  useEffect(() => {
+    const handleUpdate = () => { invalidate() }
+    socket.on('machine_status_update', handleUpdate)
+    return () => { socket.off('machine_status_update', handleUpdate) }
+  }, [qc])
 
   const phieus = [...dangPhieus, ...choPhieus]
   const totalPhoi = phieus.reduce((s: number, p: PhieuIn) => s + (p.so_luong_phoi ?? 0), 0)
@@ -412,7 +485,7 @@ export default function DinhHinhPage() {
         </Col>
         <Col>
           <Space>
-            <Text type="secondary" style={{ fontSize: 11 }}>Tự cập nhật 20 giây</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>Tự cập nhật qua WebSocket</Text>
             <Button icon={<ReloadOutlined />} onClick={() => { refetch(); refetchDang() }}>Làm mới</Button>
           </Space>
         </Col>
@@ -459,7 +532,13 @@ export default function DinhHinhPage() {
                 <Row justify="space-between" align="top" wrap={false}>
                   <Col flex="auto">
                     <Space size={6} style={{ marginBottom: 4 }} wrap>
-                      <Text style={{ fontSize: 11, color: '#888' }}>{p.so_phieu}</Text>
+                      <Text style={{ fontSize: 11, color: '#888' }}>
+                        {p.so_lsx || p.so_phieu}
+                        {p.so_lsx && <span style={{ color: '#bbb', marginLeft: 4 }}>({p.so_phieu})</span>}
+                      </Text>
+                      {p.phieu_goc_id && (
+                        <Tag color="gold" style={{ margin: 0, fontSize: 10 }}>Phiếu bù</Tag>
+                      )}
                       {p.ths && <Tag color="geekblue" style={{ margin: 0, fontSize: 10 }}>{p.ths}</Tag>}
                     </Space>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>{p.ten_hang || '—'}</div>

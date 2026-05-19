@@ -292,8 +292,18 @@ function PrinterUserTab() {
   })
 
   const { data: machines = [] } = useQuery({
-    queryKey: ['cd2-machines'],
-    queryFn: () => cd2Api.listMachines().then(r => r.data),
+    queryKey: ['cd2-may-in'],
+    queryFn: () => cd2Api.listMayIn().then(r => r.data),
+  })
+
+  const { data: maySauInList = [] } = useQuery({
+    queryKey: ['cd2-may-sau-in'],
+    queryFn: () => cd2Api.listMaySauIn().then(r => r.data),
+  })
+
+  const { data: mayScanList = [] } = useQuery({
+    queryKey: ['cd2-may-scan'],
+    queryFn: () => cd2Api.listMayScan().then(r => r.data),
   })
 
   const createMut = useMutation({
@@ -316,7 +326,12 @@ function PrinterUserTab() {
   })
 
   const openEdit = (u: PrinterUser) => {
-    form.setFieldsValue({ token_user: u.token_user, rfid_key: u.rfid_key, shift: u.shift, active: u.active, machine_id: u.machine_id ?? null })
+    form.setFieldsValue({
+      token_user: u.token_user, rfid_key: u.rfid_key, shift: u.shift, active: u.active,
+      machine_id: u.machine_id ?? null,
+      may_sau_in_id: u.may_sau_in_id ?? null,
+      may_scan_id: u.may_scan_id ?? null,
+    })
     setEditing(u)
   }
 
@@ -335,8 +350,16 @@ function PrinterUserTab() {
   const columns = [
     { title: 'Token User', dataIndex: 'token_user', render: (v: string) => <Text strong>{v}</Text> },
     {
-      title: 'Máy được gán', dataIndex: 'machine_name',
+      title: 'Máy in', dataIndex: 'machine_name',
       render: (v: string | undefined) => v ? <Tag color="geekblue">{v}</Tag> : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Máy sau in', dataIndex: 'may_sau_in_name',
+      render: (v: string | undefined) => v ? <Tag color="purple">{v}</Tag> : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Máy scan', dataIndex: 'may_scan_name',
+      render: (v: string | undefined) => v ? <Tag color="cyan">{v}</Tag> : <Text type="secondary">—</Text>,
     },
     {
       title: 'RFID Key', dataIndex: 'rfid_key',
@@ -403,11 +426,25 @@ function PrinterUserTab() {
           <Form.Item name="token_password" label={editing === 'new' ? 'Mật khẩu' : 'Mật khẩu mới (để trống nếu không đổi)'}>
             <Input.Password placeholder="Mật khẩu" />
           </Form.Item>
-          <Form.Item name="machine_id" label="Máy được gán">
+          <Form.Item name="machine_id" label="Máy in">
             <Select
-              placeholder="Chọn máy..."
+              placeholder="Chọn máy in..."
               allowClear
-              options={machines.map(m => ({ value: m.id, label: `${m.ten_may} (${m.loai_may})` }))}
+              options={machines.map(m => ({ value: m.id, label: m.ten_may }))}
+            />
+          </Form.Item>
+          <Form.Item name="may_sau_in_id" label="Máy sau in (định hình)">
+            <Select
+              placeholder="Chọn máy sau in..."
+              allowClear
+              options={maySauInList.map(m => ({ value: m.id, label: m.ten_may }))}
+            />
+          </Form.Item>
+          <Form.Item name="may_scan_id" label="Máy scan (tính lương)">
+            <Select
+              placeholder="Chọn máy scan..."
+              allowClear
+              options={mayScanList.map(m => ({ value: m.id, label: m.ten_may }))}
             />
           </Form.Item>
           <Form.Item name="rfid_key" label="RFID Key">
