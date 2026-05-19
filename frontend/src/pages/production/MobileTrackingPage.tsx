@@ -117,9 +117,14 @@ function PhieuDetailDrawer({
       ) : '—'} />
 
       <SectionHeader title="Kỹ thuật" />
-      <Row label="Loại in" value={phieu.loai_in || '—'} />
+      {(phieu.dai || phieu.rong || phieu.cao) && (
+        <Row label="Kích thước" value={`${phieu.dai ?? '—'} × ${phieu.rong ?? '—'} × ${phieu.cao ?? '—'} mm`} />
+      )}
+      {phieu.so_lop != null && <Row label="Số lớp" value={`${phieu.so_lop} lớp`} />}
+      {phieu.to_hop_song && <Row label="Tổ hợp sóng" value={phieu.to_hop_song} />}
       {phieu.kho_tt != null && <Row label="Khổ TT" value={`${phieu.kho_tt} mm`} />}
       {phieu.dai_tt != null && <Row label="Dài TT" value={`${phieu.dai_tt} mm`} />}
+      <Row label="Loại in" value={phieu.loai_in || '—'} />
 
       <SectionHeader title="Trạng thái" />
       <Row label="Bắt đầu in" value={phieu.gio_bat_dau_in ? dayjs(phieu.gio_bat_dau_in).format('HH:mm DD/MM') : '—'} />

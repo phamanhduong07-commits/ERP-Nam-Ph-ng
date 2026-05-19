@@ -27,13 +27,14 @@ export interface ProductionLog {
 export interface TrackPayload {
   production_order_id: number
   so_lsx?: string
-  machine_id: number
+  machine_id?: number | null
   phieu_in_id?: number
   event_type: 'start' | 'stop' | 'resume' | 'complete' | 'error'
   quantity_ok?: number
   quantity_loi?: number
   quantity_setup?: number
   ghi_chu?: string
+  printer_user_id?: number
 }
 
 export interface MayIn {
@@ -56,6 +57,7 @@ export interface MaySauIn {
 export interface MayScan {
   id: number
   ten_may: string
+  loai: string  // can_mang | xa | khac
   active: boolean
   sort_order: number
   phan_xuong_id?: number
@@ -71,6 +73,10 @@ export interface PrinterUser {
   active: boolean
   machine_id?: number | null
   machine_name?: string
+  may_sau_in_id?: number | null
+  may_sau_in_name?: string
+  may_scan_id?: number | null
+  may_scan_name?: string
 }
 
 export interface WorkerSession {
@@ -103,6 +109,7 @@ export interface PhieuIn {
   so_luong_phoi: number
   trang_thai: string
   may_in_id?: number | null
+  may_sau_in_id?: number | null
   ten_may?: string
   nguoi_in_id?: number
   ten_nguoi_in?: string
@@ -111,6 +118,11 @@ export interface PhieuIn {
   updated_at: string
   kho_tt?: number
   dai_tt?: number
+  dai?: number
+  rong?: number
+  cao?: number
+  so_lop?: number
+  to_hop_song?: string
   ths?: string
   // Kết quả in
   so_luong_in_ok?: number
@@ -133,6 +145,8 @@ export interface PhieuIn {
   // Tạm dừng
   tam_dung_luc?: string | null
   tam_dung_ly_do?: string | null
+  // Phiếu bù
+  phieu_goc_id?: number | null
 }
 
 export interface CompletePayload {
@@ -151,6 +165,8 @@ export interface SauInPayload {
   so_luong_sau_in_ok?: number
   so_luong_sau_in_loi?: number
   ghi_chu_sau_in?: string
+  may_sau_in_id?: number
+  printer_user_id?: number
 }
 
 export interface KanbanData {
@@ -167,6 +183,8 @@ export interface SauInKanbanData {
 export interface ScanLog {
   id: number
   may_scan_id: number
+  ten_may?: string
+  loai_may?: string  // can_mang | xa | khac
   so_lsx: string
   ten_hang?: string
   dai?: number
@@ -178,6 +196,8 @@ export interface ScanLog {
   don_gia?: number
   tien_luong?: number
   nguoi_sx?: string
+  gio_bat_dau?: string | null
+  gio_ket_thuc?: string | null
   created_at: string
 }
 
@@ -228,9 +248,9 @@ export const TRANG_THAI_LABELS: Record<string, string> = {
   cho_in: 'Chờ in',
   ke_hoach: 'Kế hoạch',
   dang_in: 'Đang in',
-  cho_dinh_hinh: 'Chờ định hình',
-  sau_in: 'Sau in',
-  dang_sau_in: 'Đang sau in',
+  cho_dinh_hinh: 'Chờ làm TP',
+  sau_in: 'Đang làm TP',
+  dang_sau_in: 'Đang làm TP',
   hoan_thanh: 'Hoàn thành',
 }
 
@@ -277,10 +297,16 @@ export const cd2Api = {
   deletePhieuIn: (id: number) => client.delete(`/cd2/phieu-in/${id}`),
   movePhieuIn: (id: number, data: { trang_thai?: string; may_in_id?: number | null; sort_order?: number }) =>
     client.put(`/cd2/phieu-in/${id}/move`, data),
+  reorderPhieuIn: (items: { id: number; sort_order: number }[]) =>
+    client.put('/cd2/phieu-in/reorder', { items }),
   startPrinting: (id: number) => client.post(`/cd2/phieu-in/${id}/start`),
   completePrinting: (id: number, data: CompletePayload) => client.post(`/cd2/phieu-in/${id}/complete`, data),
+  ngungIn: (id: number, data: CompletePayload) =>
+    client.post<{ phieu_goc: PhieuIn; phieu_bu: PhieuIn }>(`/cd2/phieu-in/${id}/ngung-in`, data),
   startSauIn: (id: number, data: SauInPayload) => client.post(`/cd2/phieu-in/${id}/sau-in`, data),
-  hoanThanh: (id: number) => client.post(`/cd2/phieu-in/${id}/hoan-thanh`),
+  hoanThanh: (id: number, data?: Partial<SauInPayload>) => client.post(`/cd2/phieu-in/${id}/hoan-thanh`, data ?? {}),
+  ngungDinhHinh: (id: number, data: { so_luong_sau_in_ok: number; so_luong_sau_in_loi?: number; ghi_chu_sau_in?: string }) =>
+    client.post<{ phieu_goc: PhieuIn; phieu_bu: PhieuIn }>(`/cd2/phieu-in/${id}/ngung-dinh-hinh`, data),
   huyPhieu: (id: number) => client.post(`/cd2/phieu-in/${id}/huy`),
   tamDungIn: (id: number, data: { ly_do: string }) => client.post(`/cd2/phieu-in/${id}/tam-dung`, data),
   tiepTucIn: (id: number) => client.post(`/cd2/phieu-in/${id}/tiep-tuc`),
@@ -326,6 +352,8 @@ export const cd2Api = {
     so_luong_tp: number
     don_gia?: number
     nguoi_sx?: string
+    gio_bat_dau?: string
+    gio_ket_thuc?: string
   }) => client.post<ScanLog>('/cd2/scan-logs/submit', data),
   deleteScanLog: (id: number) => client.delete(`/cd2/scan-logs/delete/${id}`),
   // Tra cứu theo Số lệnh (Production Order) - Dành cho trang Scan Máy

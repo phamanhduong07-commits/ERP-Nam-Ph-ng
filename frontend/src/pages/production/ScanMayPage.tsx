@@ -2,17 +2,18 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import {
-  Button, Card, Col, Form, Input, InputNumber, message,
-  Popconfirm, Row, Space, Spin, Tag, Typography, Empty, Badge,
+  Button, Card, Col, Drawer, Form, Input, InputNumber, message,
+  Popconfirm, Row, Space, Spin, Tag, Typography, Empty, Badge, Divider,
 } from 'antd'
 import type { InputRef } from 'antd'
 import type { InputNumberRef } from 'rc-input-number'
 import {
   BarcodeOutlined, CameraOutlined, CheckCircleFilled, DeleteOutlined,
   LogoutOutlined, ArrowLeftOutlined, SettingOutlined, HistoryOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { cd2Api, MayScan, ScanLog, ScanLookupResult, WorkerSession, TRANG_THAI_COLORS, TRANG_THAI_LABELS } from '../../api/cd2'
+import { cd2Api, MayScan, PhieuIn, ScanLog, ScanLookupResult, WorkerSession, TRANG_THAI_COLORS, TRANG_THAI_LABELS } from '../../api/cd2'
 import MayScanSettingsModal from './MayScanSettingsModal'
 import QrScannerModal from '../../components/QrScannerModal'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
@@ -47,7 +48,8 @@ export default function ScanMayPage() {
   const [selectedMachine, setSelectedMachine] = useState<number | null>(machineIdFromUrl)
   const [soLsx, setSoLsx] = useState('')
   const [lookup, setLookup] = useState<LookupState>({ loading: false, result: null, error: null })
-  const [phieuStatus, setPhieuStatus] = useState<{ trang_thai: string; so_phieu: string } | null>(null)
+  const [phieuDetail, setPhieuDetail] = useState<PhieuIn | null>(null)
+  const [showPhieuDrawer, setShowPhieuDrawer] = useState(false)
   const [soLuong, setSoLuong] = useState<number | null>(null)
   const [nguoiSx, setNguoiSx] = useState(workerSession?.worker_name ?? '')
   const [gioBatDau, setGioBatDau] = useState<string | null>(null)
@@ -108,7 +110,7 @@ export default function ScanMayPage() {
       setSoLsx('')
       setSoLuong(null)
       setLookup({ loading: false, result: null, error: null })
-      setPhieuStatus(null)
+      setPhieuDetail(null)
       setGioBatDau(null)
       qc.invalidateQueries({ queryKey: ['scan-history', selectedMachine] })
       setTimeout(() => lsxRef.current?.focus(), 100)
@@ -138,7 +140,7 @@ export default function ScanMayPage() {
     if (!code) return
     setSoLsx(code)
     setLookup({ loading: true, result: null, error: null })
-    setPhieuStatus(null)
+    setPhieuDetail(null)
     setSoLuong(null)
     setGioBatDau(null)
     try {
@@ -146,11 +148,9 @@ export default function ScanMayPage() {
       setLookup({ loading: false, result: res.data, error: null })
       setGioBatDau(new Date().toISOString())
       setTimeout(() => slRef.current?.focus?.(), 100)
-      // Lấy thêm trạng thái phiếu in (nếu có)
+      // Lấy thêm thông tin phiếu in đầy đủ (nếu có)
       cd2Api.phieuLookup(code).then(r => {
-        if (r.data?.trang_thai) {
-          setPhieuStatus({ trang_thai: r.data.trang_thai, so_phieu: r.data.so_phieu ?? '' })
-        }
+        if (r.data) setPhieuDetail(r.data as PhieuIn)
       }).catch(() => { /* không có phiếu in thì bỏ qua */ })
     } catch {
       setLookup({ loading: false, result: null, error: 'Không tìm thấy lệnh sản xuất' })
@@ -389,15 +389,25 @@ export default function ScanMayPage() {
                       {lookup.result.dien_tich_don_vi.toFixed(4)} m²/cái
                     </Tag>
                   )}
-                  {phieuStatus && (
+                  {phieuDetail?.trang_thai && (
                     <Tag
-                      color={TRANG_THAI_COLORS[phieuStatus.trang_thai] ?? 'default'}
+                      color={TRANG_THAI_COLORS[phieuDetail.trang_thai] ?? 'default'}
                       style={{ borderRadius: 8, fontSize: 12, fontWeight: 600 }}
                     >
-                      {TRANG_THAI_LABELS[phieuStatus.trang_thai] ?? phieuStatus.trang_thai}
+                      {TRANG_THAI_LABELS[phieuDetail.trang_thai] ?? phieuDetail.trang_thai}
                     </Tag>
                   )}
                 </div>
+                {phieuDetail && (
+                  <Button
+                    type="link" size="small"
+                    icon={<InfoCircleOutlined />}
+                    style={{ marginTop: 6, fontSize: 13 }}
+                    onClick={() => setShowPhieuDrawer(true)}
+                  >
+                    Xem chi tiết LSX
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -597,6 +607,83 @@ export default function ScanMayPage() {
         }}
         onClose={() => setIsScannerOpen(false)}
       />
+
+      {/* ── Drawer chi tiết LSX ── */}
+      <Drawer
+        open={showPhieuDrawer}
+        onClose={() => setShowPhieuDrawer(false)}
+        placement="bottom"
+        height="82vh"
+        title={null}
+        styles={{ body: { padding: '0 16px 24px', overflowY: 'auto' } }}
+      >
+        {phieuDetail && (() => {
+          const p = phieuDetail
+          const isOverdue = p.ngay_giao_hang ? dayjs(p.ngay_giao_hang).isBefore(dayjs(), 'day') : false
+          const DetailRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '9px 0', borderBottom: '1px solid #f5f5f5' }}>
+              <span style={{ fontSize: 13, color: '#888', minWidth: 110, flexShrink: 0 }}>{label}</span>
+              <div style={{ fontSize: 14, textAlign: 'right', flex: 1, paddingLeft: 8 }}>{value}</div>
+            </div>
+          )
+          return (
+            <>
+              <div style={{ background: SCAN_COLOR, margin: '0 -16px', padding: '20px 20px 16px', marginBottom: 4 }}>
+                <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', display: 'block', lineHeight: 1.3 }}>
+                  {p.ten_hang || p.so_phieu}
+                </span>
+                {p.quy_cach && (
+                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', display: 'block', marginTop: 4 }}>
+                    {p.quy_cach}
+                  </span>
+                )}
+                <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                  {p.trang_thai && (
+                    <Tag color={TRANG_THAI_COLORS[p.trang_thai] ?? 'default'} style={{ fontWeight: 600, borderRadius: 6 }}>
+                      {TRANG_THAI_LABELS[p.trang_thai] ?? p.trang_thai}
+                    </Tag>
+                  )}
+                  {p.ths && <Tag color="blue" style={{ borderRadius: 6 }}>{p.ths}</Tag>}
+                  {p.loai && <Tag style={{ borderRadius: 6 }}>{p.loai}</Tag>}
+                  {p.pp_ghep && <Tag color="purple" style={{ borderRadius: 6 }}>{p.pp_ghep}</Tag>}
+                </div>
+              </div>
+
+              <Divider orientation="left" style={{ fontSize: 11, color: '#aaa', margin: '10px 0 2px' }}>ĐƠN HÀNG</Divider>
+              <DetailRow label="Khách hàng" value={p.ten_khach_hang || '—'} />
+              {p.ma_kh && <DetailRow label="Mã KH" value={<code style={{ fontSize: 13 }}>{p.ma_kh}</code>} />}
+              <DetailRow label="LSX" value={<code style={{ fontSize: 13 }}>{p.so_lsx}</code>} />
+              {p.so_don && <DetailRow label="Số đơn" value={p.so_don} />}
+              <DetailRow label="SL phôi" value={
+                <strong style={{ fontSize: 16, color: '#1a337e' }}>{p.so_luong_phoi?.toLocaleString()} tờ</strong>
+              } />
+              <DetailRow label="Ngày giao" value={p.ngay_giao_hang ? (
+                <span style={{ color: isOverdue ? '#f5222d' : '#333' }}>
+                  {dayjs(p.ngay_giao_hang).format('DD/MM/YYYY')}{isOverdue && ' ⚠️ Trễ'}
+                </span>
+              ) : '—'} />
+
+              <Divider orientation="left" style={{ fontSize: 11, color: '#aaa', margin: '10px 0 2px' }}>KỸ THUẬT</Divider>
+              {(p.dai || p.rong || p.cao) && (
+                <DetailRow label="Kích thước" value={`${p.dai ?? '—'} × ${p.rong ?? '—'} × ${p.cao ?? '—'} mm`} />
+              )}
+              {p.so_lop != null && <DetailRow label="Số lớp" value={`${p.so_lop} lớp`} />}
+              {p.to_hop_song && <DetailRow label="Tổ hợp sóng" value={p.to_hop_song} />}
+              {p.kho_tt != null && <DetailRow label="Khổ TT" value={`${p.kho_tt} mm`} />}
+              {p.dai_tt != null && <DetailRow label="Dài TT" value={`${p.dai_tt} mm`} />}
+              {p.loai_in && <DetailRow label="Loại in" value={p.loai_in} />}
+
+              {(p.ghi_chu_printer || p.ghi_chu) && (
+                <>
+                  <Divider orientation="left" style={{ fontSize: 11, color: '#aaa', margin: '10px 0 2px' }}>GHI CHÚ</Divider>
+                  {p.ghi_chu_printer && <DetailRow label="Ghi chú in" value={<span style={{ color: '#fa8c16' }}>{p.ghi_chu_printer}</span>} />}
+                  {p.ghi_chu && <DetailRow label="Ghi chú" value={p.ghi_chu} />}
+                </>
+              )}
+            </>
+          )
+        })()}
+      </Drawer>
     </div>
   )
 }

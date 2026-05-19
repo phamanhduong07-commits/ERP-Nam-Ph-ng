@@ -207,6 +207,14 @@ def _to_dict(p: PhieuIn) -> dict:
         "phieu_goc_id": p.phieu_goc_id,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "so_lsx": p.production_order.so_lenh if p.production_order else None,
+        # Thông tin kỹ thuật từ ProductionOrder
+        "kho_tt": float(p.production_order.kho_tt) if p.production_order and p.production_order.kho_tt is not None else None,
+        "dai_tt": float(p.production_order.dai_tt) if p.production_order and p.production_order.dai_tt is not None else None,
+        "dai": float(p.production_order.dai) if p.production_order and p.production_order.dai is not None else None,
+        "rong": float(p.production_order.rong) if p.production_order and p.production_order.rong is not None else None,
+        "cao": float(p.production_order.cao) if p.production_order and p.production_order.cao is not None else None,
+        "so_lop": p.production_order.so_lop if p.production_order else None,
+        "to_hop_song": p.production_order.to_hop_song if p.production_order else None,
     }
 
 
