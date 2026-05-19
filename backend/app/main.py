@@ -30,6 +30,7 @@ from app.routers import media as media_router
 from app.agent import router as agent_router
 from app.routers import quality_control as quality_control_router
 from app.routers import maintenance as maintenance_router
+from app.routers import crm as crm_router
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -147,6 +148,7 @@ app.include_router(hr_reward.router)
 app.include_router(hr_self_service.router)
 app.include_router(quality_control_router.router)
 app.include_router(maintenance_router.router)
+app.include_router(crm_router.router)
 
 
 @app.exception_handler(IntegrityError)

@@ -49,3 +49,4 @@ from app.models.import_log import ImportLog
 from app.models.system import SystemSetting, PrintTemplate, AgentSession
 from app.models.quality import QCSheet, QCDefect
 from app.models.maintenance import MaintenanceMachine, MaintenanceSchedule, MaintenanceLog
+from app.models.crm import CustomerInteraction

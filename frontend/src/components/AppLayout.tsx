@@ -306,6 +306,14 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       ],
     },
     {
+      key: 'crm',
+      icon: <TeamOutlined />,
+      label: 'CRM',
+      children: [
+        { key: '/crm/interactions', label: <Link to="/crm/interactions">Tương tác khách hàng</Link> },
+      ],
+    },
+    {
       key: '/agent',
       icon: <RobotOutlined />,
       label: <Link to="/agent">Trợ lý AI</Link>,

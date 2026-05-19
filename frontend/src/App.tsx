@@ -114,6 +114,8 @@ const QCListPage = lazy(() => import('./pages/quality/QCListPage'))
 // Maintenance
 const MaintenanceSchedulePage = lazy(() => import('./pages/maintenance/MaintenanceSchedulePage'))
 const MaintenanceLogPage = lazy(() => import('./pages/maintenance/MaintenanceLogPage'))
+// CRM
+const CustomerInteractionPage = lazy(() => import('./pages/crm/CustomerInteractionPage'))
 // Reports
 const DebtSummaryPage = lazy(() => import('./pages/reports/DebtSummaryPage'))
 const RevenueReportPage = lazy(() => import('./pages/reports/RevenueReportPage'))
@@ -362,6 +364,7 @@ export default function App() {
             <Route path="quality/qc-sheets" element={<ErrorBoundary><QCListPage /></ErrorBoundary>} />
             <Route path="maintenance/schedules" element={<ErrorBoundary><MaintenanceSchedulePage /></ErrorBoundary>} />
             <Route path="maintenance/logs" element={<ErrorBoundary><MaintenanceLogPage /></ErrorBoundary>} />
+            <Route path="crm/interactions" element={<ErrorBoundary><CustomerInteractionPage /></ErrorBoundary>} />
             <Route path="agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
             <Route path="master/print-templates" element={<ErrorBoundary><PrintTemplatePage /></ErrorBoundary>} />
             <Route path="docs" element={<ErrorBoundary><DocsPage /></ErrorBoundary>} />
