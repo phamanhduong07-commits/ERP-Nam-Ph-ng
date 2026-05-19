@@ -297,6 +297,15 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       ],
     },
     {
+      key: 'maintenance',
+      icon: <ToolOutlined />,
+      label: 'Bảo trì máy',
+      children: [
+        { key: '/maintenance/schedules', label: <Link to="/maintenance/schedules">Lịch bảo trì</Link> },
+        { key: '/maintenance/logs', label: <Link to="/maintenance/logs">Nhật ký bảo trì</Link> },
+      ],
+    },
+    {
       key: '/agent',
       icon: <RobotOutlined />,
       label: <Link to="/agent">Trợ lý AI</Link>,
