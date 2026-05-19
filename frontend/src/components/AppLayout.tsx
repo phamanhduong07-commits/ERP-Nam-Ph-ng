@@ -314,6 +314,11 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       ],
     },
     {
+      key: '/fixed-assets',
+      icon: <BankOutlined />,
+      label: <Link to="/fixed-assets">Tài sản cố định</Link>,
+    },
+    {
       key: '/agent',
       icon: <RobotOutlined />,
       label: <Link to="/agent">Trợ lý AI</Link>,
