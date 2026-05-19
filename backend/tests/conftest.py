@@ -22,22 +22,21 @@ TEST_DB_URL = "sqlite:///./test_cd2.db"
 
 def _create_cd2_tables(engine):
     """
-    SQLite không hỗ trợ JSONB. Chỉ tạo các bảng không dùng type PostgreSQL-specific.
+    SQLite không hỗ trợ JSONB/ARRAY/UUID. Thay thế bằng JSON/Text để tạo được tất cả bảng.
     SQLite không enforce FK nên không cần tạo các bảng tham chiếu.
     """
+    from sqlalchemy import JSON, Text
     from sqlalchemy.dialects.postgresql import JSONB, ARRAY, UUID as PG_UUID
 
-    safe_tables = []
+    # Thay thế PG-specific types thành SQLite-compatible types (chỉ cho test)
     for table in Base.metadata.sorted_tables:
-        has_pg_only_type = False
         for col in table.columns:
-            if isinstance(col.type, (JSONB, ARRAY, PG_UUID)):
-                has_pg_only_type = True
-                break
-        if not has_pg_only_type:
-            safe_tables.append(table)
+            if isinstance(col.type, JSONB):
+                col.type = JSON()
+            elif isinstance(col.type, (ARRAY, PG_UUID)):
+                col.type = Text()
 
-    Base.metadata.create_all(engine, tables=safe_tables, checkfirst=True)
+    Base.metadata.create_all(engine, checkfirst=True)
 
 
 @pytest.fixture(scope="function")
@@ -69,7 +68,8 @@ def client(db_session):
         yield db_session
 
     def override_get_current_user():
-        return SimpleNamespace(id=1, username="testuser", trang_thai=True)
+        _role = SimpleNamespace(ma_vai_tro="ADMIN")
+        return SimpleNamespace(id=1, username="testuser", trang_thai=True, role=_role)
 
     with patch("app.socket_manager.sio.emit", new=AsyncMock(return_value=None)):
         app.dependency_overrides[get_db] = override_get_db

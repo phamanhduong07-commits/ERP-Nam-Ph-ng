@@ -562,7 +562,7 @@ def _quote_item_from_import(values: dict, stt: int, paper_codes: dict[tuple[str,
     item["ma_ky_hieu"] = item["ma_ky_hieu"] or _build_ma_ky_hieu(item, paper_codes)
     if not item["gia_ban"]:
         try:
-            item["gia_ban"] = _quote_item_price(item, db)
+            item["gia_ban"] = _quote_item_price(item, db)["gia_ban"]
         except Exception:
             item["gia_ban"] = Decimal("0")
     return item
@@ -732,7 +732,7 @@ def create_quote(
         item_values["ma_ky_hieu"] = item_values.get("ma_ky_hieu") or _build_ma_ky_hieu(item_values, paper_codes)
         if not item_values.get("gia_ban"):
             try:
-                item_values["gia_ban"] = _quote_item_price(item_values, db)
+                item_values["gia_ban"] = _quote_item_price(item_values, db)["gia_ban"]
             except Exception:
                 item_values["gia_ban"] = Decimal("0")
         quote.items.append(QuoteItem(**item_values))
@@ -768,7 +768,7 @@ def update_quote(
             item_values["ma_ky_hieu"] = item_values.get("ma_ky_hieu") or _build_ma_ky_hieu(item_values, paper_codes)
             if not item_values.get("gia_ban"):
                 try:
-                    item_values["gia_ban"] = _quote_item_price(item_values, db)
+                    item_values["gia_ban"] = _quote_item_price(item_values, db)["gia_ban"]
                 except Exception:
                     item_values["gia_ban"] = Decimal("0")
             quote.items.append(QuoteItem(**item_values))
