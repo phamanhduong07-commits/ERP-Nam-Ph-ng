@@ -627,13 +627,13 @@ function MaySauInTab() {
 
 // ── Tab: Máy Scan ─────────────────────────────────────────────────────────────
 
-interface ScanEditState { ten_may: string; don_gia: number | null; phan_xuong_id: number | null }
+interface ScanEditState { ten_may: string; don_gia: number | null; phan_xuong_id: number | null; loai: string }
 
 function MayScanTab() {
   const qc = useQueryClient()
   const [form] = Form.useForm()
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [editState, setEditState] = useState<ScanEditState>({ ten_may: '', don_gia: null, phan_xuong_id: null })
+  const [editState, setEditState] = useState<ScanEditState>({ ten_may: '', don_gia: null, phan_xuong_id: null, loai: 'khac' })
 
   const { data: list = [], isLoading } = useQuery({
     queryKey: ['cd2-may-scan'],
@@ -653,7 +653,7 @@ function MayScanTab() {
   const handleAdd = async () => {
     try {
       const values = await form.validateFields()
-      await cd2Api.createMayScan({ ten_may: values.ten_may, sort_order: values.sort_order ?? 0, don_gia: values.don_gia ?? undefined, phan_xuong_id: values.phan_xuong_id ?? undefined })
+      await cd2Api.createMayScan({ ten_may: values.ten_may, sort_order: values.sort_order ?? 0, don_gia: values.don_gia ?? undefined, phan_xuong_id: values.phan_xuong_id ?? undefined, loai: values.loai ?? 'khac' })
       message.success('Đã thêm máy scan')
       form.resetFields()
       invalidate()
@@ -665,7 +665,7 @@ function MayScanTab() {
   const handleSaveEdit = async (id: number) => {
     if (!editState.ten_may.trim()) return
     try {
-      await cd2Api.updateMayScan(id, { ten_may: editState.ten_may, don_gia: editState.don_gia ?? undefined, phan_xuong_id: editState.phan_xuong_id ?? undefined })
+      await cd2Api.updateMayScan(id, { ten_may: editState.ten_may, don_gia: editState.don_gia ?? undefined, phan_xuong_id: editState.phan_xuong_id ?? undefined, loai: editState.loai })
       message.success('Đã cập nhật')
       setEditingId(null)
       invalidate()
@@ -706,6 +706,29 @@ function MayScanTab() {
             size="small" autoFocus style={{ width: 140 }}
           />
         ) : <Text strong>{v}</Text>,
+    },
+    {
+      title: 'Loại',
+      dataIndex: 'loai',
+      width: 120,
+      render: (v: string, r: MayScan) =>
+        editingId === r.id ? (
+          <Select
+            value={editState.loai}
+            onChange={val => setEditState(s => ({ ...s, loai: val }))}
+            size="small"
+            style={{ width: 110 }}
+            options={[
+              { value: 'can_mang', label: 'Cán màng' },
+              { value: 'xa',       label: 'Xả' },
+              { value: 'khac',     label: 'Khác' },
+            ]}
+          />
+        ) : (
+          <Tag color={v === 'can_mang' ? 'purple' : v === 'xa' ? 'blue' : 'default'}>
+            {v === 'can_mang' ? 'Cán màng' : v === 'xa' ? 'Xả' : 'Khác'}
+          </Tag>
+        ),
     },
     {
       title: 'Xưởng',
@@ -756,7 +779,7 @@ function MayScanTab() {
         ) : (
           <Space size={4}>
             <Button size="small" icon={<EditOutlined />}
-              onClick={() => { setEditingId(r.id); setEditState({ ten_may: r.ten_may, don_gia: r.don_gia, phan_xuong_id: r.phan_xuong_id ?? null }) }} />
+              onClick={() => { setEditingId(r.id); setEditState({ ten_may: r.ten_may, don_gia: r.don_gia, phan_xuong_id: r.phan_xuong_id ?? null, loai: r.loai ?? 'khac' }) }} />
             <Popconfirm title="Xoá máy scan này?" onConfirm={() => handleDelete(r.id)} okText="Xoá" cancelText="Không">
               <Button size="small" danger icon={<DeleteOutlined />} />
             </Popconfirm>
@@ -775,6 +798,13 @@ function MayScanTab() {
       <Form form={form} layout="inline">
         <Form.Item name="ten_may" rules={[{ required: true, message: 'Nhập tên máy' }]}>
           <Input placeholder="Tên máy scan..." size="small" style={{ width: 160 }} />
+        </Form.Item>
+        <Form.Item name="loai" initialValue="khac">
+          <Select size="small" style={{ width: 110 }} options={[
+            { value: 'can_mang', label: 'Cán màng' },
+            { value: 'xa',       label: 'Xả' },
+            { value: 'khac',     label: 'Khác' },
+          ]} />
         </Form.Item>
         <Form.Item name="phan_xuong_id">
           <Select placeholder="Chọn xưởng" size="small" style={{ width: 140 }} options={xuongOptions} allowClear />

@@ -433,8 +433,9 @@ function MachineTab({
   onTamDung: (p: PhieuIn) => void
   onTiepTuc: (p: PhieuIn) => void
 }) {
-  const active = items.filter(p => p.trang_thai === 'dang_sau_in')
-  const queue = items.filter(p => p.trang_thai === 'sau_in')
+  // sau_in + tam_dung_luc = mobile paused before reaching dang_sau_in → treat as paused active
+  const active = items.filter(p => p.trang_thai === 'dang_sau_in' || (p.trang_thai === 'sau_in' && !!p.tam_dung_luc))
+  const queue = items.filter(p => p.trang_thai === 'sau_in' && !p.tam_dung_luc)
 
   if (items.length === 0) {
     return <Empty description="Không có phiếu nào" image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 32 }} />
@@ -798,20 +799,23 @@ export default function SauInKanbanPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạm dừng'),
   })
 
-  const tiepTucMut = useMutation({
-    mutationFn: (id: number) => cd2Api.tiepTucIn(id),
-    onSuccess: invalidate,
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tiếp tục'),
-  })
-
   const handleConfirmPause = () => {
     if (!pausingPhieu) return
     if (!pauseReason.trim()) { message.warning('Vui lòng nhập lý do tạm dừng'); return }
     tamDungMut.mutate({ id: pausingPhieu.id, ly_do: pauseReason.trim() })
   }
 
-  const handleTiepTuc = (phieu: PhieuIn) => {
-    tiepTucMut.mutate(phieu.id)
+  const handleTiepTuc = async (phieu: PhieuIn) => {
+    try {
+      await cd2Api.tiepTucIn(phieu.id)
+      // sau_in + may_sau_in_id: advance to dang_sau_in so web stays in sync
+      if (phieu.trang_thai === 'sau_in' && phieu.may_sau_in_id) {
+        await cd2Api.batDauSauIn(phieu.id)
+      }
+      invalidate()
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'Lỗi tiếp tục')
+    }
   }
 
   const maySauIns = data?.may_sau_ins ?? []

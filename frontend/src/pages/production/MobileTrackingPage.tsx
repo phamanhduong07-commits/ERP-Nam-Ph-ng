@@ -373,17 +373,26 @@ export default function MobileTrackingPage() {
   // ── Định hình mutations (sau_in mode) ─────────────────────────────────────
 
   const dinhHinhStartMutation = useMutation({
-    mutationFn: (phieu_id: number) => cd2Api.startSauIn(phieu_id, {
-      may_sau_in_id: selectedMachine?.id,
-      printer_user_id: workerSession?.printer_user_id,
-    }),
+    mutationFn: async (phieu_id: number) => {
+      // Nếu phiếu chưa được gán máy (cho_dinh_hinh hoặc sau_in chưa có máy), gọi sau-in trước
+      if (
+        currentOrder?.trang_thai === 'cho_dinh_hinh' ||
+        (currentOrder?.trang_thai === 'sau_in' && !currentOrder?.may_sau_in_id)
+      ) {
+        await cd2Api.startSauIn(phieu_id, {
+          may_sau_in_id: selectedMachine?.id,
+          printer_user_id: workerSession?.printer_user_id,
+        })
+      }
+      return cd2Api.batDauSauIn(phieu_id)
+    },
     onSuccess: () => {
       message.success('Đã bắt đầu làm thành phẩm!')
       setCurrentOrder(prev => prev ? {
         ...prev,
-        trang_thai: 'sau_in',
-        may_sau_in_id: selectedMachine?.id ?? null,
-        gio_bat_dau_dinh_hinh: new Date().toISOString(),
+        trang_thai: 'dang_sau_in',
+        may_sau_in_id: selectedMachine?.id ?? prev.may_sau_in_id ?? null,
+        gio_bat_dau_dinh_hinh: prev.gio_bat_dau_dinh_hinh ?? new Date().toISOString(),
       } : prev)
       invalidate()
     },
@@ -455,7 +464,13 @@ export default function MobileTrackingPage() {
   })
 
   const sauInTiepTucMutation = useMutation({
-    mutationFn: () => cd2Api.tiepTucIn(currentOrder!.id),
+    mutationFn: async () => {
+      const res = await cd2Api.tiepTucIn(currentOrder!.id)
+      if (currentOrder?.trang_thai === 'sau_in' && currentOrder?.may_sau_in_id) {
+        return cd2Api.batDauSauIn(currentOrder.id)
+      }
+      return res
+    },
     onSuccess: (res) => {
       message.success('Tiếp tục làm thành phẩm')
       setCurrentOrder(res.data)
@@ -556,6 +571,25 @@ export default function MobileTrackingPage() {
   const handleLookup = async (val: string) => {
     const code = val.trim().toUpperCase()
     if (!code) return
+
+    // Tìm trong danh sách máy đã load — không cần mạng
+    const localMatch = machinePhieuList.find(
+      p => (p.so_lsx || '').toUpperCase() === code ||
+           (p.so_phieu || '').toUpperCase() === code
+    )
+    if (localMatch) {
+      setCurrentOrder(localMatch)
+      setShowSearch(false)
+      setTimeout(() => window.scrollTo({ top: 400, behavior: 'smooth' }), 100)
+      return
+    }
+
+    // Không có trong danh sách máy — cần mạng
+    if (!isOnline) {
+      message.warning('Mất kết nối — không tìm thấy trong danh sách máy. Vui lòng kết nối mạng để tra cứu.')
+      return
+    }
+
     try {
       const res = await cd2Api.phieuLookup(code)
       setCurrentOrder(res.data)
@@ -790,7 +824,11 @@ export default function MobileTrackingPage() {
                     )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                    <Text type="secondary" style={{ fontSize: 11 }}>{phieu.so_luong_phoi?.toLocaleString()} tờ</Text>
+                    {(() => {
+                      const isTP = ['cho_dinh_hinh', 'sau_in', 'dang_sau_in'].includes(phieu.trang_thai)
+                      const slVal = isTP ? (phieu.so_luong_in_ok ?? phieu.so_luong_phoi) : phieu.so_luong_phoi
+                      return <Text type="secondary" style={{ fontSize: 11 }}>{slVal?.toLocaleString()} tờ</Text>
+                    })()}
                     {phieu.ngay_giao_hang && (
                       <Text style={{ fontSize: 11, color: dayjs(phieu.ngay_giao_hang).isBefore(dayjs(), 'day') ? '#f5222d' : '#888' }}>
                         Giao: {dayjs(phieu.ngay_giao_hang).format('DD/MM')}
@@ -918,7 +956,12 @@ export default function MobileTrackingPage() {
                 )}
                 <div>
                   <Text type="secondary">SL:</Text>{' '}
-                  <Text strong style={{ color: '#1a337e' }}>{currentOrder.so_luong_phoi?.toLocaleString()} tờ</Text>
+                  <Text strong style={{ color: '#1a337e' }}>
+                    {(isSauInMode
+                      ? (currentOrder.so_luong_in_ok ?? currentOrder.so_luong_phoi)
+                      : currentOrder.so_luong_phoi
+                    )?.toLocaleString()} tờ
+                  </Text>
                 </div>
                 {currentOrder.quy_cach && <div><Text type="secondary">Quy cách:</Text> <Text>{currentOrder.quy_cach}</Text></div>}
                 {currentOrder.loai_in && <div><Text type="secondary">Loại in:</Text> <Text>{currentOrder.loai_in}</Text></div>}
@@ -1602,7 +1645,7 @@ export default function MobileTrackingPage() {
         >
           <div style={{ background: '#fff7e6', padding: 16, borderRadius: 16, marginBottom: 16, border: '1px solid #ffd591' }}>
             <div style={{ fontSize: 13, color: '#8c6400', marginBottom: 8 }}>
-              Tổng phôi cần làm TP: <strong>{currentOrder?.so_luong_phoi?.toLocaleString()} tờ</strong>
+              Tổng cần làm TP: <strong>{(currentOrder?.so_luong_in_ok ?? currentOrder?.so_luong_phoi)?.toLocaleString()} tờ</strong>
             </div>
             <Form.Item
               name="so_luong_sau_in_ok"
@@ -1610,7 +1653,7 @@ export default function MobileTrackingPage() {
               rules={[{ required: true, message: 'Nhập số lượng đã làm' }]}
             >
               <InputNumber style={{ width: '100%' }} size="large" autoFocus min={0}
-                max={currentOrder?.so_luong_phoi} placeholder="0" />
+                max={currentOrder?.so_luong_in_ok ?? currentOrder?.so_luong_phoi} placeholder="0" />
             </Form.Item>
           </div>
           <Row gutter={12}>

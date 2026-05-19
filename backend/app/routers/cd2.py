@@ -1098,7 +1098,7 @@ async def ngung_in_tao_phieu_bu(
     phieu_id: int,
     body: CompleteBody,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     """Ngưng in sớm → lưu kết quả thực tế, tự động tạo Phiếu in bù cho số lượng còn thiếu."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
@@ -1147,9 +1147,9 @@ async def ngung_in_tao_phieu_bu(
         ghi_chu_prepare=p.ghi_chu_prepare,
         so_luong_phoi=con_lai,
         phieu_goc_id=p.id,
-        created_by=current_user.id,
+        created_by=current_user.id if current_user else None,
     )
-    _log_state_change(db, p, "dang_in", "cho_dinh_hinh", "ngung_in", current_user.id,
+    _log_state_change(db, p, "dang_in", "cho_dinh_hinh", "ngung_in", current_user.id if current_user else None,
                       ghi_chu=f"Tạo phiếu bù {phieu_bu.so_phieu}, còn lại: {con_lai}")
     db.add(phieu_bu)
     db.commit()
@@ -1237,7 +1237,7 @@ async def ngung_dinh_hinh_tao_phieu_bu(
     phieu_id: int,
     body: HoanThanhBody,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     """Ngưng định hình sớm → lưu kết quả thực tế, tạo phiếu bù cho số lượng còn thiếu."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
@@ -1268,8 +1268,8 @@ async def ngung_dinh_hinh_tao_phieu_bu(
     p.trang_thai = "hoan_thanh"
     p.gio_hoan_thanh = datetime.now()
     p.gio_hoan_thanh_dinh_hinh = datetime.now()
-    _auto_nhap_thanh_pham(db, p, current_user.id)
-    _log_state_change(db, p, prev_ngung_state, "hoan_thanh", "ngung_dinh_hinh", current_user.id,
+    _auto_nhap_thanh_pham(db, p, current_user.id if current_user else None)
+    _log_state_change(db, p, prev_ngung_state, "hoan_thanh", "ngung_dinh_hinh", current_user.id if current_user else None,
                       ghi_chu=f"Còn lại: {con_lai}")
 
     # Tạo phiếu bù — đã in rồi, chỉ cần định hình thêm
@@ -1297,7 +1297,7 @@ async def ngung_dinh_hinh_tao_phieu_bu(
         ghi_chu_printer=p.ghi_chu_printer,
         ghi_chu_prepare=p.ghi_chu_prepare,
         phieu_goc_id=p.id,
-        created_by=current_user.id,
+        created_by=current_user.id if current_user else None,
     )
     db.add(phieu_bu)
     db.commit()
@@ -1329,7 +1329,7 @@ async def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depe
 
 
 @router.post("/phieu-in/{phieu_id}/bat-dau-sau-in")
-async def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_optional_user)):
     """Bắt đầu sau in → dang_sau_in."""
     p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
     if not p:
@@ -1339,7 +1339,7 @@ async def bat_dau_sau_in(phieu_id: int, db: Session = Depends(get_db), current_u
     if not p.may_sau_in_id:
         raise HTTPException(status_code=400, detail="Phải gán máy sau in trước khi bắt đầu định hình")
     p.trang_thai = "dang_sau_in"
-    _log_state_change(db, p, "sau_in", "dang_sau_in", "bat_dau_sau_in", current_user.id)
+    _log_state_change(db, p, "sau_in", "dang_sau_in", "bat_dau_sau_in", current_user.id if current_user else None)
     db.commit()
     await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "bat_dau_sau_in", "trang_thai": "dang_sau_in"})
     return _to_dict(_load(phieu_id, db))
@@ -1530,7 +1530,12 @@ def delete_may_scan(may_id: int, db: Session = Depends(get_db), _: User = Depend
 # ── Scan lookup + log ──────────────────────────────────────────────────────────
 
 @router.get("/scan/lookup/{so_lsx}")
-def scan_lookup(so_lsx: str, db: Session = Depends(get_db), _: Optional[User] = Depends(get_optional_user)):
+def scan_lookup(
+    so_lsx: str,
+    may_scan_id: Optional[int] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: Optional[User] = Depends(get_optional_user),
+):
     """Tra cứu thông tin LSX để điền tự động vào form scan."""
     order = (
         db.query(ProductionOrder)
@@ -1541,6 +1546,27 @@ def scan_lookup(so_lsx: str, db: Session = Depends(get_db), _: Optional[User] = 
     if not order:
         raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
     first = order.items[0] if order.items else None
+
+    # da_scan per máy (nếu có may_scan_id) — mỗi máy có quota độc lập
+    da_scan_q = db.query(func.coalesce(func.sum(ScanLog.so_luong_tp), 0)).filter(
+        ScanLog.so_lsx == so_lsx
+    )
+    if may_scan_id:
+        da_scan_q = da_scan_q.filter(ScanLog.may_scan_id == may_scan_id)
+    da_scan = float(da_scan_q.scalar())
+
+    # Lịch sử 20 lần scan gần nhất
+    lich_su = (
+        db.query(ScanLog)
+        .options(joinedload(ScanLog.may_scan_obj))
+        .filter(ScanLog.so_lsx == so_lsx)
+        .order_by(ScanLog.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    ke_hoach = float(first.so_luong_ke_hoach) if first and first.so_luong_ke_hoach is not None else None
+
     return {
         "so_lsx": so_lsx,
         "ten_hang": first.ten_hang if first else None,
@@ -1550,6 +1576,9 @@ def scan_lookup(so_lsx: str, db: Session = Depends(get_db), _: Optional[User] = 
         "kho_tt": float(first.kho_tt) if first and first.kho_tt is not None else None,
         "dai_tt": float(first.dai_tt) if first and first.dai_tt is not None else None,
         "dien_tich_don_vi": float(first.dien_tich) if first and first.dien_tich is not None else None,
+        "so_luong_ke_hoach": ke_hoach,
+        "da_scan": da_scan,
+        "lich_su_scan": [_scan_log_to_dict(s) for s in lich_su],
     }
 
 
@@ -1559,6 +1588,29 @@ async def create_scan_log(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    # Validation: tổng scan không vượt 110% số lượng kế hoạch
+    order = (
+        db.query(ProductionOrder)
+        .options(joinedload(ProductionOrder.items))
+        .filter(ProductionOrder.so_lenh == data.so_lsx)
+        .first()
+    )
+    if order and order.items and order.items[0].so_luong_ke_hoach is not None:
+        ke_hoach = Decimal(str(order.items[0].so_luong_ke_hoach))
+        # Tính da_scan per máy — mỗi máy có quota 110% độc lập
+        da_scan = db.query(func.coalesce(func.sum(ScanLog.so_luong_tp), 0)).filter(
+            ScanLog.so_lsx == data.so_lsx,
+            ScanLog.may_scan_id == data.may_scan_id,
+        ).scalar()
+        da_scan = Decimal(str(da_scan))
+        new_qty = Decimal(str(data.so_luong_tp))
+        if da_scan + new_qty > ke_hoach * SL_MAX_RATIO:
+            con_lai = max(Decimal("0"), ke_hoach * SL_MAX_RATIO - da_scan)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Vượt giới hạn 110%: đã scan {float(da_scan):,.0f} / {float(ke_hoach):,.0f} kế hoạch. Còn có thể nhập: {float(con_lai):,.0f}",
+            )
+
     tien_luong = None
     if data.don_gia is not None and data.dien_tich is not None:
         tien_luong = Decimal(str(data.don_gia)) * Decimal(str(data.dien_tich))

@@ -107,13 +107,17 @@ export default function ScanMayPage() {
     mutationFn: (data: Parameters<typeof cd2Api.createScanLog>[0]) => cd2Api.createScanLog(data),
     onSuccess: () => {
       message.success('Đã lưu sản lượng!')
-      setSoLsx('')
+      const savedSoLsx = soLsx
       setSoLuong(null)
-      setLookup({ loading: false, result: null, error: null })
-      setPhieuDetail(null)
       setGioBatDau(null)
       qc.invalidateQueries({ queryKey: ['scan-history', selectedMachine] })
-      setTimeout(() => lsxRef.current?.focus(), 100)
+      qc.invalidateQueries({ queryKey: ['scan-history-all'] })
+      qc.invalidateQueries({ queryKey: ['cd2-dashboard'] })
+      // Re-lookup lại để cập nhật lich_su_scan và tiến độ ngay sau khi lưu
+      setTimeout(() => {
+        handleLookup(savedSoLsx)
+        lsxRef.current?.focus()
+      }, 300)
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lưu thất bại, vui lòng thử lại'),
   })
@@ -144,7 +148,7 @@ export default function ScanMayPage() {
     setSoLuong(null)
     setGioBatDau(null)
     try {
-      const res = await cd2Api.scanLookup(code)
+      const res = await cd2Api.scanLookup(code, selectedMachine ?? undefined)
       setLookup({ loading: false, result: res.data, error: null })
       setGioBatDau(new Date().toISOString())
       setTimeout(() => slRef.current?.focus?.(), 100)
@@ -161,6 +165,15 @@ export default function ScanMayPage() {
     if (!selectedMachine) { message.warning('Chọn máy scan'); return }
     if (!soLsx.trim()) { message.warning('Nhập số lệnh SX'); return }
     if (!soLuong || soLuong <= 0) { message.warning('Nhập số lượng TP'); return }
+
+    // Validate client-side: không vượt 110% kế hoạch
+    const kh = lookup.result?.so_luong_ke_hoach
+    const da = lookup.result?.da_scan ?? 0
+    if (kh != null && (da + soLuong) > kh * 1.1) {
+      const conLai = Math.max(0, kh * 1.1 - da)
+      message.error(`Vượt giới hạn 110%: đã scan ${da.toLocaleString('vi-VN')} / ${kh.toLocaleString('vi-VN')} kế hoạch. Còn có thể nhập: ${conLai.toLocaleString('vi-VN', { maximumFractionDigits: 0 })}`)
+      return
+    }
 
     const dtPerUnit = lookup.result?.dien_tich_don_vi ?? null
     const dienTich = dtPerUnit != null ? parseFloat((dtPerUnit * soLuong).toFixed(4)) : undefined
@@ -407,6 +420,62 @@ export default function ScanMayPage() {
                   >
                     Xem chi tiết LSX
                   </Button>
+                )}
+
+                {/* Tiến độ scan so với kế hoạch */}
+                {(() => {
+                  const kh = lookup.result!.so_luong_ke_hoach
+                  const da = lookup.result!.da_scan ?? 0
+                  if (kh == null || kh === 0) return null
+                  const pct = (da / kh) * 100
+                  const barColor = pct >= 110 ? '#ff4d4f' : pct >= 100 ? '#fa8c16' : pct >= 80 ? '#fadb14' : '#52c41a'
+                  const conLai = Math.max(0, kh * 1.1 - da)
+                  return (
+                    <div style={{ marginTop: 10, padding: '8px 10px', background: '#f5f5f5', borderRadius: 8, textAlign: 'left' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <Text style={{ fontSize: 12 }}>
+                          Đã scan: <strong style={{ color: barColor }}>{da.toLocaleString('vi-VN')}</strong>
+                          <Text type="secondary" style={{ fontSize: 11 }}> / {kh.toLocaleString('vi-VN')} KH</Text>
+                        </Text>
+                        <Text style={{ fontSize: 12, color: barColor, fontWeight: 600 }}>{pct.toFixed(0)}%</Text>
+                      </div>
+                      <div style={{ height: 6, background: '#e0e0e0', borderRadius: 3 }}>
+                        <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: barColor, borderRadius: 3 }} />
+                      </div>
+                      {pct >= 110 ? (
+                        <Text style={{ fontSize: 11, color: '#ff4d4f', marginTop: 3, display: 'block', fontWeight: 600 }}>
+                          ❌ Đã đạt giới hạn 110% — không thể nhập thêm
+                        </Text>
+                      ) : pct >= 100 ? (
+                        <Text style={{ fontSize: 11, color: '#fa8c16', marginTop: 3, display: 'block' }}>
+                          ⚠️ Vượt kế hoạch — còn có thể nhập: {conLai.toLocaleString('vi-VN', { maximumFractionDigits: 0 })}
+                        </Text>
+                      ) : null}
+                    </div>
+                  )
+                })()}
+
+                {/* Lịch sử scan gần đây cho LSX này */}
+                {lookup.result!.lich_su_scan && lookup.result!.lich_su_scan.length > 0 && (
+                  <div style={{ marginTop: 10, textAlign: 'left' }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      <HistoryOutlined style={{ marginRight: 4 }} />
+                      Lịch sử ({lookup.result!.lich_su_scan.length} lần)
+                    </Text>
+                    <div style={{ marginTop: 5, maxHeight: 130, overflowY: 'auto' }}>
+                      {lookup.result!.lich_su_scan.slice(0, 7).map((s: ScanLog) => (
+                        <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', borderBottom: '1px solid #f0f0f0' }}>
+                          <Text type="secondary" style={{ fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {s.ten_may}{s.nguoi_sx ? ` · ${s.nguoi_sx}` : ''}
+                          </Text>
+                          <div style={{ flexShrink: 0, marginLeft: 8 }}>
+                            <Text strong style={{ color: SCAN_COLOR, fontSize: 12 }}>{s.so_luong_tp.toLocaleString('vi-VN')}</Text>
+                            <Text type="secondary" style={{ fontSize: 10, marginLeft: 5 }}>{dayjs(s.created_at).format('HH:mm DD/MM')}</Text>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </>
             )}

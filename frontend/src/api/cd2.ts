@@ -210,6 +210,9 @@ export interface ScanLookupResult {
   dai?: number
   rong?: number
   cao?: number
+  so_luong_ke_hoach?: number
+  da_scan?: number
+  lich_su_scan?: ScanLog[]
 }
 
 export interface ShiftCa {
@@ -357,7 +360,8 @@ export const cd2Api = {
   }) => client.post<ScanLog>('/cd2/scan-logs/submit', data),
   deleteScanLog: (id: number) => client.delete(`/cd2/scan-logs/delete/${id}`),
   // Tra cứu theo Số lệnh (Production Order) - Dành cho trang Scan Máy
-  scanLookup: (code: string) => client.get<ScanLookupResult>(`/cd2/scan/lookup/${code}`),
+  scanLookup: (code: string, mayScanId?: number) =>
+    client.get<ScanLookupResult>(`/cd2/scan/lookup/${code}`, { params: mayScanId ? { may_scan_id: mayScanId } : undefined }),
   // Tra cứu theo Số phiếu (Phieu In) - Dành cho Mobile Tracking QR
   phieuLookup: (code: string) => client.get<any>(`/cd2/scan-lookup/${code}`),
 

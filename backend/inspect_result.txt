@@ -1,0 +1,122 @@
+Excel File: C:\Users\TUF\Downloads\DTDONHANG.xlsx
+Total Rows read for inspection: 100
+Total Columns: 101
+
+Columns list:
+MTDHID, Loai, Lop, TenHang, DVT, SoLuong, SoMau, Dai, Rong, Cao, KhoMax, KhoTT, DoKho, DoPhu, Ghim, SLBG, Dan, Dao, DienTich, Mat_Giay, SB_Giay, MB_Giay, SC_Giay, MC_Giay, SE_Giay, ME_Giay, Mat_DL, SB_DL, MB_DL, SC_DL, MC_DL, SE_DL, ME_DL, Mat_DG, SB_DG, MB_DG, SC_DG, MC_DG, SE_DG, ME_DG, CPK, CPK_GC, CK, CK_GC, GiaBan, BanVeFile, ThanhTien, KCT, NgayGH, GhiChu, DTDHID, Stt, KetCau, SL2, LoaiThung, DaSX, THS, Lan, TinhTrang, isXa, SoPOKH, SoLietKe, CD2, MaBangIn, isGhim, isDan, CPDH, CPDH_GC, GBCB, SLPOTon, QCLan, DTBGID, is_1_Ghim, CHAPXA, isChongTham, LoaiIn, isBoi, isBe, isCanMan, is_Dan, DaiTT, MaAMIS, MayIn, isDGM2, DonGiaM2, isBeLo, ChonAMIS, GiaCost, NgayGHXN, GhiChuGH, SoXeGH, TienVC, TienBangIn, TienKhuon, TongTienHangDV, VATHangVaDV, TongCongALL, VATDH, VATDHN, TongCong2, TongTienHang
+
+Non-null counts & Sample values for each column:
+Column Name               | Type         | Non-Null | Sample Value
+--------------------------------------------------------------------------------
+MTDHID                    | object       | 100      | c115170d-dc99-4a9a-98d7-1b469c4e3d63
+Loai                      | object       | 100      | Thùng
+Lop                       | int64        | 100      | 5
+TenHang                   | object       | 100      | Thùng sầu riêng 12kg âm dương trường thịnh phát nền xanh_nắp 45x36.5x21.5
+DVT                       | object       | 100      | THÙNG
+SoLuong                   | int64        | 100      | 2000
+SoMau                     | float64      | 39       | 5.0
+Dai                       | float64      | 100      | 45.0
+Rong                      | float64      | 100      | 36.5
+Cao                       | float64      | 78       | 21.5
+KhoMax                    | float64      | 0        | 
+KhoTT                     | float64      | 100      | 34.5
+DoKho                     | bool         | 100      | False
+DoPhu                     | bool         | 100      | False
+Ghim                      | bool         | 100      | True
+SLBG                      | int64        | 100      | 2000
+Dan                       | bool         | 100      | False
+Dao                       | float64      | 0        | 
+DienTich                  | float64      | 100      | 0.0
+Mat_Giay                  | object       | 97       | LM.TW.TWLM.170.130
+SB_Giay                   | object       | 100      | KOA.X.XKOA.185.100
+MB_Giay                   | object       | 100      | KOA.X.XKOA.140.115
+SC_Giay                   | object       | 53       | KOA.X.XKOA.185.100
+MC_Giay                   | object       | 53       | CLO.NE.NECLO.170.105
+SE_Giay                   | object       | 3        | CLO.X.XCLO.180.130
+ME_Giay                   | object       | 3        | KOA.NL.NLKOA.170.115
+Mat_DL                    | float64      | 97       | 170.0
+SB_DL                     | int64        | 100      | 185
+MB_DL                     | int64        | 100      | 140
+SC_DL                     | float64      | 54       | 185.0
+MC_DL                     | float64      | 54       | 170.0
+SE_DL                     | float64      | 3        | 180.0
+ME_DL                     | float64      | 3        | 170.0
+Mat_DG                    | float64      | 97       | 16400.0
+SB_DG                     | int64        | 100      | 9100
+MB_DG                     | int64        | 100      | 9100
+SC_DG                     | float64      | 54       | 9100.0
+MC_DG                     | float64      | 54       | 9300.0
+SE_DG                     | float64      | 3        | 9000.0
+ME_DG                     | float64      | 3        | 9500.0
+CPK                       | float64      | 36       | 807.0
+CPK_GC                    | float64      | 0        | 
+CK                        | float64      | 20       | 345.0
+CK_GC                     | float64      | 0        | 
+GiaBan                    | float64      | 100      | 24556.0
+BanVeFile                 | float64      | 0        | 
+ThanhTien                 | float64      | 89       | 51000000.0
+KCT                       | bool         | 100      | True
+NgayGH                    | datetime64[ns] | 100      | 2025-10-28 00:00:00
+GhiChu                    | object       | 50       | CÁN 13/21.5_x000D_
+LẰN BẰNG -MẶT LÁNG _x000D_
+ k34.5x167
+DTDHID                    | object       | 100      | 44f472d6-3a38-4661-ba0d-00012aa05bad
+Stt                       | int64        | 100      | 666443
+KetCau                    | object       | 100      | 1TW+3X+1NE
+SL2                       | float64      | 0        | 
+LoaiThung                 | object       | 100      | Thùng bế
+DaSX                      | bool         | 100      | False
+THS                       | object       | 100      | C-B
+Lan                       | object       | 100      | + 0
+TinhTrang                 | object       | 97       | Hoàn thành
+isXa                      | bool         | 100      | False
+SoPOKH                    | object       | 2        | ĐH Khay Mận 1kg, chanh dây 2kg
+SoLietKe                  | float64      | 0        | 
+CD2                       | int64        | 100      | 0
+MaBangIn                  | float64      | 0        | 
+isGhim                    | float64      | 0        | 
+isDan                     | float64      | 0        | 
+CPDH                      | float64      | 0        | 
+CPDH_GC                   | float64      | 0        | 
+GBCB                      | float64      | 100      | 24556.0
+SLPOTon                   | float64      | 0        | 
+QCLan                     | float64      | 0        | 
+DTBGID                    | object       | 100      | 47c8c931-961b-4339-a5b1-ec7007ff0336
+is_1_Ghim                 | bool         | 100      | False
+CHAPXA                    | bool         | 100      | True
+isChongTham               | object       | 100      | 2 Mặt
+LoaiIn                    | int64        | 100      | 0
+isBoi                     | bool         | 100      | False
+isBe                      | int64        | 100      | 1
+isCanMan                  | object       | 100      | Không
+is_Dan                    | bool         | 100      | False
+DaiTT                     | float64      | 100      | 167.0
+MaAMIS                    | object       | 5        | MKC-0001
+MayIn                     | object       | 42       | In Ngang
+isDGM2                    | float64      | 97       | 0.0
+DonGiaM2                  | float64      | 1        | 5400.0
+isBeLo                    | float64      | 94       | 1.0
+ChonAMIS                  | float64      | 93       | 12742.0
+GiaCost                   | float64      | 98       | 0.0
+NgayGHXN                  | datetime64[ns] | 14       | 2024-04-10 00:00:00
+GhiChuGH                  | float64      | 0        | 
+SoXeGH                    | float64      | 0        | 
+TienVC                    | float64      | 7        | 0.0
+TienBangIn                | float64      | 9        | 1800000.0
+TienKhuon                 | float64      | 1        | 1900000.0
+TongTienHangDV            | float64      | 13       | 20565174.0
+VATHangVaDV               | float64      | 0        | 
+TongCongALL               | float64      | 0        | 
+VATDH                     | float64      | 0        | 
+VATDHN                    | float64      | 12       | 1645213.92
+TongCong2                 | float64      | 12       | 22210387.92
+TongTienHang              | float64      | 12       | 20565174.0
+
+==================================================
+First 5 rows of data:
+                                 MTDHID   Loai  Lop                                                                    TenHang    DVT  SoLuong  SoMau   Dai  Rong   Cao  KhoMax  KhoTT  DoKho  DoPhu   Ghim  SLBG    Dan  Dao  DienTich             Mat_Giay              SB_Giay              MB_Giay             SC_Giay               MC_Giay             SE_Giay               ME_Giay  Mat_DL  SB_DL  MB_DL  SC_DL  MC_DL  SE_DL  ME_DL   Mat_DG  SB_DG  MB_DG   SC_DG   MC_DG   SE_DG   ME_DG    CPK  CPK_GC     CK  CK_GC        GiaBan  BanVeFile    ThanhTien    KCT     NgayGH                                                      GhiChu                                DTDHID     Stt      KetCau  SL2 LoaiThung   DaSX    THS  Lan   TinhTrang   isXa SoPOKH  SoLietKe  CD2  MaBangIn  isGhim  isDan  CPDH  CPDH_GC          GBCB  SLPOTon  QCLan                                DTBGID  is_1_Ghim  CHAPXA isChongTham  LoaiIn  isBoi  isBe isCanMan  is_Dan  DaiTT MaAMIS     MayIn  isDGM2  DonGiaM2  isBeLo  ChonAMIS       GiaCost   NgayGHXN  GhiChuGH  SoXeGH  TienVC  TienBangIn  TienKhuon  TongTienHangDV  VATHangVaDV  TongCongALL  VATDH      VATDHN    TongCong2  TongTienHang
+0  c115170d-dc99-4a9a-98d7-1b469c4e3d63  Thùng    5  Thùng sầu riêng 12kg âm dương trường thịnh phát nền xanh_nắp 45x36.5x21.5  THÙNG     2000    5.0  45.0  36.5  21.5     NaN   34.5  False  False   True  2000  False  NaN    0.0000   LM.TW.TWLM.170.130   KOA.X.XKOA.185.100   KOA.X.XKOA.140.115  KOA.X.XKOA.185.100  CLO.NE.NECLO.170.105                 NaN                   NaN   170.0    185    140  185.0  170.0    NaN    NaN  16400.0   9100   9100  9100.0  9300.0     NaN     NaN    NaN     NaN    NaN    NaN  24556.000000        NaN   51000000.0   True 2025-10-28  CÁN 13/21.5_x000D_\nLẰN BẰNG -MẶT LÁNG _x000D_\n k34.5x167  44f472d6-3a38-4661-ba0d-00012aa05bad  666443  1TW+3X+1NE  NaN  Thùng bế  False    C-B  + 0  Hoàn thành  False    NaN       NaN    0       NaN     NaN    NaN   NaN      NaN  24556.000000      NaN    NaN  47c8c931-961b-4339-a5b1-ec7007ff0336      False    True       2 Mặt       0  False     1    Không   False  167.0    NaN  In Ngang     0.0       NaN     1.0   12742.0      0.000000        NaT       NaN     NaN     NaN         NaN        NaN             NaN          NaN          NaN    NaN         NaN          NaN           NaN
+1  d521026a-16bb-40ee-9d32-84f838d965c9  Thùng    3                                                      Tấm lót 3 lớp (56x36)    TẤM     1372    NaN  36.0  56.0   NaN     NaN   56.0  False  False  False  1372  False  NaN    0.2016  DOT.XK.XDOT.100.100  DOT.XK.XDOT.100.105  DOT.XK.XDOT.100.100                 NaN                   NaN                 NaN                   NaN   100.0    100    100    NaN    NaN    NaN    NaN   8200.0   8200   8200     NaN     NaN     NaN     NaN  807.0     NaN  345.0    NaN   1599.894052        NaN    2195200.0  False 2026-04-25                                                         NaN  5a667d04-4a48-4d76-a5e2-0004a61dc290  673930         3XK  NaN   Tấm lót  False      C  + -  Hoàn thành  False    NaN       NaN    0       NaN     NaN    NaN   NaN      NaN   1599.894052      NaN    NaN  6fe378e1-2de0-45a1-9445-f70f35ffa275      False    True       Không       2  False     0    Không   False   36.0    NaN       NaN     0.0       NaN     0.0    7718.0    865.976832        NaT       NaN     NaN     NaN         NaN        NaN      20565174.0          NaN          NaN    NaN  1645213.92  22210387.92    20565174.0
+2  500b732b-e626-4028-8ecd-e670e9187b09  Thùng    7          Thùng sầu riêng phổ thông 9kg nền vàng, giấy trắng (44.5x36.5x20)  THÙNG     5000    5.0  44.5  36.5  20.0     NaN   44.0  False  False   True  5000  False  NaN    0.0000   LM.TW.TWLM.170.130   CLO.X.XCLO.120.120   CLO.X.XCLO.120.180  CLO.X.XCLO.180.130    KOA.X.XKOA.140.115  CLO.X.XCLO.180.130  KOA.NL.NLKOA.170.115   170.0    120    120  180.0  140.0  180.0  170.0  16400.0   9000   9000  9000.0  9100.0  9000.0  9500.0    NaN     NaN    NaN    NaN  21875.000000        NaN  118125000.0   True 2025-10-21           k44x166 khuôn 1 con_x000D_\nCÁN 12/20/12_x000D_\n  b0adfdfc-91ee-4cd6-8027-0008abd875c4  666079  1TW+5X+1NL  NaN  Thùng bế  False  C-B-E  + 0  Hoàn thành  False    NaN       NaN    0       NaN     NaN    NaN   NaN      NaN  21875.000000      NaN    NaN  fc2cb23a-caff-46fa-9fa1-66b95d9ae7ec      False    True       2 Mặt       0  False     1    Không   False  166.0    NaN  In Ngang     0.0       NaN     1.0   11821.0  21098.246669        NaT       NaN     NaN     NaN         NaN        NaN             NaN          NaN          NaN    NaN         NaN          NaN           NaN
+3  86b43269-8800-4c37-abbb-12bca12d469a  Thùng    2                                                     Giấy tấm 2 lớp (57x56)    Tấm      650    NaN  56.0  57.0   NaN     NaN   57.0  False  False  False   650  False  NaN    0.3192                  NaN  DOT.XK.XDOT.100.105   GSA.T.TGSA.150.150                 NaN                   NaN                 NaN                   NaN     NaN    100    150    NaN    NaN    NaN    NaN      NaN   8200  14400     NaN     NaN     NaN     NaN    NaN     NaN    NaN    NaN   1284.654874        NaN     835250.0  False 2024-04-13                                                tận dụng rồi  450109e2-717a-4b64-9826-0008ec16c5e8  641237      1XK+1T  NaN   Tấm lót  False      E  + 0         NaN  False    NaN       NaN    0       NaN     NaN    NaN   NaN      NaN   1284.654874      NaN    NaN  1d0d06f0-1195-4f39-9765-d748bd6d38ce      False   False       Không       2  False     0    Không   False   56.0    NaN       NaN     0.0       NaN     0.0    1526.0   1147.013280        NaT       NaN     NaN     NaN         NaN        NaN             NaN          NaN          NaN    NaN         NaN          NaN           NaN
+4  3d40f15f-e019-4b3b-8f79-b47e2b79e75e  Thùng    3                                                    Tấm lót 3 lớp (60 x 50)    Tấm       52    NaN  60.0  50.0   NaN     NaN   50.0  False  False  False    52  False  NaN    0.3000  DOT.XK.XDOT.100.105  DOT.XK.XDOT.100.105  DOT.XK.XDOT.100.110                 NaN                   NaN                 NaN                   NaN   100.0    100    100    NaN    NaN    NaN    NaN   8200.0   8200   8200     NaN     NaN     NaN     NaN    NaN     NaN    NaN    NaN   1531.918080        NaN      79664.0  False 2024-04-10                                                         NaN  7f682dcf-fa32-4701-8302-000bc26bf199  640852         3XK  NaN   Tấm lót  False      C  + 0  Hoàn thành  False    NaN       NaN    0       NaN     NaN    NaN   NaN      NaN   1531.918080      NaN    NaN  5af95066-5db2-4a96-9e7f-1ec257367db6      False   False       Không       2  False     0    Không   False   60.0    NaN       NaN     0.0       NaN     0.0      36.0   1367.784000 2024-04-10       NaN     NaN     NaN         NaN        NaN             NaN          NaN          NaN    NaN         NaN          NaN           NaN

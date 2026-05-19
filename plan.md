@@ -1,59 +1,36 @@
-# Plan: Hoàn thiện giao diện điện thoại công nhân — Mobile + Scan sync
+# Plan: Rà soát toàn diện Mobile Sau In — Gap sót
 Date: 2026-05-19
-Status: APPROVED
+Status: PENDING_APPROVAL
+
+## Tổng kết yêu cầu session này (đã hoàn thành)
+
+| Yêu cầu | Fix | File |
+|---|---|---|
+| Không ngưng tạo phiếu bù trên mobile | `/ngung-in`, `/ngung-dinh-hinh`, `/bat-dau-sau-in` → `get_optional_user` | cd2.py |
+| Nút web không đồng bộ | `dinhHinhStartMutation` chain `/sau-in`+`/bat-dau-sau-in` → `dang_sau_in` | MobileTrackingPage.tsx |
+| Mobile tạm dừng, web nút "Bắt đầu" | `MachineTab` treat `sau_in+tam_dung_luc` as active; `handleTiepTuc` chain `batDauSauIn` | SauInKanbanPage.tsx |
+| Số lượng mobile/web không khớp | SL ref → `so_luong_in_ok ?? so_luong_phoi` cho sau-in mode | MobileTrackingPage.tsx |
+| Mất mạng quét được không | `handleLookup` tìm local list trước, thông báo rõ khi offline | MobileTrackingPage.tsx |
 
 ## Mục tiêu
-Đồng bộ real-time giữa mobile và desktop cho tất cả 3 loại máy (in/sau in/scan),
-cải thiện UX list items và PhieuDetailDrawer để công nhân dễ kiểm tra thông tin.
+
+Đóng nốt gap còn sót: khi mobile bấm TIẾP TỤC trên phiếu `sau_in + tam_dung_luc`,
+phiếu phải reach `dang_sau_in` để web đồng bộ đúng.
 
 ## Các bước thực thi
 
-- [ ] Bước 1: Header live clock + trạng thái máy
-  - Hiện giờ thực HH:mm (useEffect interval 1 phút)
-  - Khi isRunning → header pill xanh "🟢 ĐANG IN" + tên hàng rút gọn
-  - Khi isPaused  → header pill vàng "⏸ TẠM DỪNG"
-  - Khi isPending → header pill xám "⏳ CHỜ BẮT ĐẦU"
-
-- [ ] Bước 2: Confirm dialog trước BẮT ĐẦU
-  - Modal.confirm nhỏ: "Bắt đầu in [ten_hang]?"
-  - Nút xác nhận màu xanh lớn, nút huỷ nhỏ
-  - Chỉ gọi trackMutation sau khi confirm
-
-- [ ] Bước 3: Fix form HOÀN THÀNH reset đúng
-  - Thêm `key={currentOrder?.id}` vào <Modal> để destroy + re-create khi đổi lệnh
-  - `initialValues` sẽ lấy đúng `so_luong_phoi` của lệnh mới
-
-- [ ] Bước 4: Thu gọn ô tìm kiếm khi đã chọn lệnh
-  - Khi `currentOrder != null`: ô tìm kiếm collapse thành 1 nút nhỏ "Đổi lệnh / Quét mã"
-  - Nhấn nút → expand ô tìm kiếm (state `showSearch`)
-  - Khi `currentOrder == null`: ô tìm kiếm luôn expand
-
-- [ ] Bước 5: Tiến độ in trên card phiếu
-  - Khi `so_luong_in_ok > 0`: hiện progress bar
-    "Đã in: X / Y tờ — Z% hoàn thành"
-  - Tính phần trăm = so_luong_in_ok / so_luong_phoi × 100
-  - Dùng Ant Design Progress (line, strokeColor theo %)
-
-- [ ] Bước 6: Nút "Chọn lệnh tiếp" khi post-print
-  - Khi isPostPrint: dưới banner xanh, thêm nút "Chọn lệnh khác"
-  - Click → setCurrentOrder(null), scroll lên đầu trang
-  - Giúp công nhân không phải scroll tay
-
-- [ ] Bước 7: Fallback worker name trong nhật ký
-  - Khi `log.worker` là null/empty → hiện "Công nhân" hoặc `workerSession.worker_name`
-  - Nhật ký cũng hiện giờ rõ hơn: "14:35 · STOP · Thay dao"
+- [ ] Bước 1: Fix `sauInTiepTucMutation` trong MobileTrackingPage.tsx
+  - `mutationFn`: sau khi gọi `tiepTucIn`, nếu phiếu đang ở `sau_in + may_sau_in_id` thì gọi thêm `batDauSauIn`
+  - `onSuccess`: `setCurrentOrder` với response của lần gọi cuối (đã là `dang_sau_in`)
+  - File: `frontend/src/pages/production/MobileTrackingPage.tsx`
 
 ## Done Criteria
-- [ ] Header hiện giờ thực tế HH:mm, cập nhật mỗi phút
-- [ ] Header pill trạng thái thay đổi theo isRunning / isPaused / isPending
-- [ ] Bấm BẮT ĐẦU → confirm dialog xuất hiện trước khi gọi API
-- [ ] Đổi sang lệnh mới → modal HOÀN THÀNH hiện đúng so_luong_phoi của lệnh mới
-- [ ] Khi đã chọn lệnh → ô tìm kiếm thu gọn thành nút "Đổi lệnh"
-- [ ] Khi so_luong_in_ok > 0 → progress bar hiện trên card
-- [ ] Khi isPostPrint → nút "Chọn lệnh khác" hiện
-- [ ] TypeScript: PASS
-- [ ] Build: SUCCESS
+
+- [ ] Mobile TIẾP TỤC từ `sau_in+tam_dung_luc` → phiếu đạt `dang_sau_in` trên server
+- [ ] Web nhận WebSocket → phiếu vào `active` section → hiện "Tạm dừng" + "Hoàn thành" (không còn "Bắt đầu")
+- [ ] Mobile TIẾP TỤC từ `dang_sau_in+tam_dung_luc` → vẫn hoạt động bình thường (không gọi `batDauSauIn` thừa)
+- [ ] TypeScript: không có lỗi mới
 
 ## Rủi ro
-- Modal.confirm sẽ thêm 1 tap extra cho BẮT ĐẦU — chấp nhận được vì sai giờ bắt đầu không sửa lại được
-- Progress bar chỉ có dữ liệu nếu backend đã cập nhật so_luong_in_ok
+
+- Không có: `batDauSauIn` idempotent với `sau_in + may_sau_in_id`, backend trả lỗi rõ nếu state sai
