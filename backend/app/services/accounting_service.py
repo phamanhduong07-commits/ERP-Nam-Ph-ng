@@ -256,12 +256,99 @@ class AccountingService:
         )
 
     def _purchase_invoice_expense_account(self, inv: PurchaseInvoice) -> str:
+        # Standalone invoice (no PO): default NVL giấy cuộn
         if not inv.po_id:
-            return "154"
+            return "1521"
         po = self.db.get(PurchaseOrder, inv.po_id)
-        if po and po.loai_po in {"giay_cuon", "nvl_khac", "giay_tam"}:
-            return "151"
+        if po and po.loai_po in {"giay_cuon", "giay_tam"}:
+            return "151"   # Hàng mua đang đi đường (TK transit, clear khi GR duyệt)
+        if po and po.loai_po == "nvl_khac":
+            return "151"   # NVL khác, tương tự
         return "154"
+
+    def post_goods_receipt_journal(
+        self,
+        gr,
+        phap_nhan_id: int | None,
+        phan_xuong_id: int | None,
+    ) -> "JournalEntry | None":
+        """Bút toán nhập kho mua hàng: Nợ 1521/1522 / Có 331 (hoặc 151 khi invoice đã tồn tại).
+        Idempotent — bỏ qua nếu đã có bút toán cho GR này."""
+        existing = self.db.query(JournalEntry).filter(
+            JournalEntry.chung_tu_loai == "goods_receipt",
+            JournalEntry.chung_tu_id == gr.id,
+            JournalEntry.loai_but_toan == "goods_receipt",
+        ).first()
+        if existing:
+            return existing
+
+        by_tk: dict[str, Decimal] = {}
+        for it in gr.items:
+            tk = "1521" if it.paper_material_id else "1522"
+            by_tk[tk] = by_tk.get(tk, Decimal("0")) + it.thanh_tien
+
+        if not any(v > 0 for v in by_tk.values()):
+            return None
+
+        sup = self.db.get(Supplier, gr.supplier_id)
+        ten_ncc = sup.ten_viet_tat if sup else f"NCC #{gr.supplier_id}"
+
+        po_invoice = None
+        if gr.po_id:
+            po_invoice = self.db.query(PurchaseInvoice).filter(
+                PurchaseInvoice.po_id == gr.po_id,
+                PurchaseInvoice.gr_id.is_(None),
+                PurchaseInvoice.trang_thai != "huy",
+            ).first()
+
+        tk_co = "151" if po_invoice else "331"
+        lines = []
+        for tk, so_tien in sorted(by_tk.items()):
+            if so_tien <= 0:
+                continue
+            lines.append({
+                "so_tk": tk,
+                "so_tien_no": float(so_tien),
+                "so_tien_co": 0,
+                "dien_giai": f"Nhập kho NVL — {gr.so_phieu} — {ten_ncc}",
+                "phap_nhan_id": phap_nhan_id,
+                "phan_xuong_id": phan_xuong_id,
+            })
+        lines.append({
+            "so_tk": tk_co,
+            "so_tien_no": 0,
+            "so_tien_co": float(gr.tong_gia_tri),
+            "dien_giai": f"Phải trả {ten_ncc} — {gr.so_phieu}",
+            "phap_nhan_id": phap_nhan_id,
+            "phan_xuong_id": phan_xuong_id,
+        })
+
+        entry = self._create_journal_entry(
+            ngay=gr.ngay_nhap,
+            dien_giai=f"Nhập kho mua hàng — {gr.so_phieu} — {ten_ncc}",
+            loai_but_toan="goods_receipt",
+            chung_tu_loai="goods_receipt",
+            chung_tu_id=gr.id,
+            lines=lines,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=phan_xuong_id,
+        )
+
+        if po_invoice:
+            po_invoice.gr_id = gr.id
+        else:
+            self.db.add(DebtLedgerEntry(
+                ngay=gr.ngay_nhap,
+                loai="tang_no",
+                doi_tuong="nha_cung_cap",
+                supplier_id=gr.supplier_id,
+                phap_nhan_id=phap_nhan_id,
+                chung_tu_loai="goods_receipt",
+                chung_tu_id=gr.id,
+                so_tien=gr.tong_gia_tri,
+                ghi_chu=f"Nhập kho — {gr.so_phieu} — {ten_ncc}",
+            ))
+        return entry
 
     def _post_purchase_invoice_journal(self, inv: PurchaseInvoice) -> None:
         if inv.bo_qua_hach_toan:
@@ -310,6 +397,8 @@ class AccountingService:
                     'dien_giai': f"Đảo ngược: {line.dien_giai or ''}",
                     'so_tien_no': float(line.so_tien_co),
                     'so_tien_co': float(line.so_tien_no),
+                    'phap_nhan_id': line.phap_nhan_id,
+                    'phan_xuong_id': line.phan_xuong_id,
                 }
                 for line in orig.lines
             ]
@@ -1498,6 +1587,7 @@ class AccountingService:
                     "id": i.id,
                     "so_hoa_don": i.so_hoa_don,
                     "ngay": i.ngay_lap.isoformat(),
+                    "han_tt": i.han_tt.isoformat() if i.han_tt else None,
                     "tong_thanh_toan": float(i.tong_thanh_toan),
                     "da_thanh_toan": float(i.da_thanh_toan),
                     "con_lai": float(i.con_lai),

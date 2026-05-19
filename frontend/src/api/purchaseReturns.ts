@@ -173,7 +173,7 @@ export const purchaseReturnsApi = {
   delete: (id: number) => client.delete(`/purchase-returns/${id}`),
 
   // Báo cáo
-  getSoChiTiet: (params: { supplier_id?: number; tu_ngay: string; den_ngay: string }) =>
+  getSoChiTiet: (params: { supplier_id?: number; tu_ngay: string; den_ngay: string; phap_nhan_id?: number }) =>
     client.get<SoChiTietMuaHang>('/accounting/purchase/so-chi-tiet', { params }),
 
   getDoiChieu: (supplier_id: number, params: { tu_ngay: string; den_ngay: string }) =>

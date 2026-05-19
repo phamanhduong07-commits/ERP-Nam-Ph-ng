@@ -122,6 +122,9 @@ export interface PurchaseDashboard {
     tong_gia_tri_hd: number
     tong_da_tt: number
     tong_con_no: number
+    po_qua_han: number
+    gr_cho_nhap: number
+    hd_qua_han: number
   }
   by_phap_nhan: {
     phap_nhan_id: number

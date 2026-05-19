@@ -391,8 +391,8 @@ export const apApi = {
   getLedger: (params?: Record<string, unknown>): Promise<APLedgerRow[]> =>
     client.get('/accounting/ap/ledger', { params }).then(r => r.data),
 
-  getAging: (asOfDate?: string): Promise<APAgingRow[]> =>
-    client.get('/accounting/ap/aging', { params: asOfDate ? { as_of_date: asOfDate } : {} }).then(r => r.data),
+  getAging: (asOfDate?: string, phapNhanId?: number): Promise<APAgingRow[]> =>
+    client.get('/accounting/ap/aging', { params: { ...(asOfDate ? { as_of_date: asOfDate } : {}), ...(phapNhanId ? { phap_nhan_id: phapNhanId } : {}) } }).then(r => r.data),
 
   getBalance: (params: { supplier_id?: number; tu_ngay: string; den_ngay: string }): Promise<BalanceByPeriod> =>
     client.get('/accounting/ap/balance', { params }).then(r => r.data),

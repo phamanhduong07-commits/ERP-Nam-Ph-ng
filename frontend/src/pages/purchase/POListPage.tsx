@@ -20,7 +20,7 @@ import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { suppliersApi } from '../../api/suppliers'
 import { purchaseInvoiceApi } from '../../api/accounting'
-import { warehouseApi } from '../../api/warehouse'
+import { warehouseApi, TonKhoGiayRow, TonKhoNVLRow } from '../../api/warehouse'
 
 const { Title, Text } = Typography
 
@@ -76,6 +76,37 @@ export default function POListPage() {
     staleTime: 300_000,
   })
   const otherMats = otherPage?.items ?? []
+
+  // Tồn kho — chỉ fetch khi mở form tạo PO
+  const { data: giayStockRows = [] } = useQuery<TonKhoGiayRow[]>({
+    queryKey: ['ton-kho-giay-po-form'],
+    queryFn: () => warehouseApi.getTonKhoGiay().then(r => r.data),
+    enabled: open,
+    staleTime: 60_000,
+  })
+  const { data: nvlStockRows = [] } = useQuery<TonKhoNVLRow[]>({
+    queryKey: ['ton-kho-nvl-po-form'],
+    queryFn: () => warehouseApi.getTonKhoNVL().then(r => r.data),
+    enabled: open,
+    staleTime: 60_000,
+  })
+  // Aggregate tổng tồn theo material_id
+  const paperTonMap = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const r of giayStockRows) {
+      m.set(r.paper_material_id, (m.get(r.paper_material_id) ?? 0) + r.ton_luong)
+    }
+    return m
+  }, [giayStockRows])
+  const nvlTonMap = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const r of nvlStockRows) {
+      if (r.other_material_id != null) {
+        m.set(r.other_material_id, (m.get(r.other_material_id) ?? 0) + r.ton_luong)
+      }
+    }
+    return m
+  }, [nvlStockRows])
 
   const effectivePOTrangThai = shortcutFilter === 'qua_han' ? undefined
     : shortcutFilter === 'chua_giao' ? undefined
@@ -554,7 +585,14 @@ export default function POListPage() {
                               <Form.Item name={[name, 'mat_id']} label="Nguyên liệu giấy" style={{ marginBottom: 4 }}>
                                 <Select size="small" showSearch placeholder="Chọn NL giấy..."
                                   filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                                  options={paperMats.filter(m => m.su_dung).map(m => ({ value: m.id, label: `${m.ten} (${m.dvt})` }))}
+                                  options={paperMats.filter(m => m.su_dung).map(m => {
+                                    const ton = paperTonMap.get(m.id) ?? 0
+                                    const low = ton < (m.ton_toi_thieu ?? 0) || ton === 0
+                                    return {
+                                      value: m.id,
+                                      label: `${m.ten} (${m.dvt}) — Tồn: ${ton.toLocaleString('vi-VN', { maximumFractionDigits: 0 })}${low ? ' ⚠' : ''}`,
+                                    }
+                                  })}
                                   onChange={id => handleMatSelect(name, 'giay', id)} />
                               </Form.Item>
                             )
@@ -562,7 +600,14 @@ export default function POListPage() {
                               <Form.Item name={[name, 'mat_id']} label="Nguyên liệu khác" style={{ marginBottom: 4 }}>
                                 <Select size="small" showSearch placeholder="Chọn NL khác..."
                                   filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                                  options={otherMats.filter(m => m.trang_thai).map(m => ({ value: m.id, label: `${m.ten} (${m.dvt})` }))}
+                                  options={otherMats.filter(m => m.trang_thai).map(m => {
+                                    const ton = nvlTonMap.get(m.id) ?? 0
+                                    const low = ton < (m.ton_toi_thieu ?? 0) || ton === 0
+                                    return {
+                                      value: m.id,
+                                      label: `${m.ten} (${m.dvt}) — Tồn: ${ton.toLocaleString('vi-VN', { maximumFractionDigits: 0 })}${low ? ' ⚠' : ''}`,
+                                    }
+                                  })}
                                   onChange={id => handleMatSelect(name, 'khac', id)} />
                               </Form.Item>
                             )

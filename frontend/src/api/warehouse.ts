@@ -216,6 +216,7 @@ export interface GoodsReceipt {
   phap_nhan_id_for_print?: number | null
   invoice_image: string | null   // null trong list, có giá trị trong detail
   has_invoice_image: boolean
+  co_hoa_don: boolean
   hd_tong_kg: number | null
   created_at: string | null
   items: GoodsReceiptItem[]
@@ -516,6 +517,7 @@ export interface PhanXuongWithWarehouses {
   ten_xuong: string
   cong_doan: string
   trang_thai: boolean
+  phap_nhan_id: number | null
   warehouses: {
     GIAY_CUON: WarehouseSlot | WarehouseSlotNA | null
     NVL_PHU: WarehouseSlot | null
@@ -669,14 +671,14 @@ export const warehouseApi = {
   deletePhieuXuat: (id: number) => client.delete(`/warehouse/phieu-xuat/${id}`),
 
   // Phiếu chuyển kho
-  listPhieuChuyen: (params?: { warehouse_xuat_id?: number; warehouse_nhap_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+  listPhieuChuyen: (params?: { warehouse_xuat_id?: number; warehouse_nhap_id?: number; phan_xuong_xuat_id?: number; phan_xuong_nhap_id?: number; phap_nhan_xuat_id?: number; phap_nhan_nhap_id?: number; phap_nhan_id?: number; tu_ngay?: string; den_ngay?: string }) =>
     client.get<PhieuChuyenKho[]>('/warehouse/phieu-chuyen', { params }),
   getPhieuChuyen: (id: number) => client.get<PhieuChuyenKho>(`/warehouse/phieu-chuyen/${id}`),
   createPhieuChuyen: (data: CreatePhieuChuyenPayload) => client.post<PhieuChuyenKho>('/warehouse/phieu-chuyen', data),
   deletePhieuChuyen: (id: number) => client.delete(`/warehouse/phieu-chuyen/${id}`),
 
   // Kiem ke / dieu chinh ton kho
-  listStockAdjustments: (params?: { warehouse_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+  listStockAdjustments: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; tu_ngay?: string; den_ngay?: string }) =>
     client.get<StockAdjustment[]>('/warehouse/stock-adjustments', { params }),
   getStockAdjustment: (id: number) => client.get<StockAdjustment>(`/warehouse/stock-adjustments/${id}`),
   createStockAdjustment: (data: CreateStockAdjustmentPayload) => client.post<StockAdjustment>('/warehouse/stock-adjustments', data),
@@ -706,17 +708,25 @@ export const warehouseApi = {
   completeGoodsReceipt: (id: number, data: CompleteGoodsReceiptPayload) => client.post<GoodsReceipt>(`/warehouse/goods-receipts/${id}/complete`, data),
   deleteGoodsReceipt: (id: number) => client.delete(`/warehouse/goods-receipts/${id}`),
   approveGoodsReceipt: (id: number) => client.patch(`/warehouse/goods-receipts/${id}/approve`),
+  getGRMatchingStatus: (id: number) => client.get<{
+    gr_id: number; so_phieu_gr: string; so_po: string | null; so_hoa_don: string | null
+    gia_tri_gr: number; gia_tri_po: number | null; gia_tri_hd: number | null
+    lenh_gia_po_pct: number | null; lenh_hd_pct: number | null; co_invoice: boolean
+    lines: { ten_hang: string; gr_so_luong: number; gr_don_gia: number; gr_thanh_tien: number
+              po_so_luong: number | null; po_don_gia: number | null
+              don_gia_ok: boolean | null; so_luong_ok: boolean | null }[]
+  }>(`/warehouse/goods-receipts/${id}/matching-status`),
   syncGiaBan: (id: number) => client.post<{ ok: boolean; updated: { ma_chinh: string; ten: string; gia_mua: number; gia_ban: number }[] }>(`/warehouse/goods-receipts/${id}/sync-gia-ban`),
 
   // Phiếu xuất NVL (MaterialIssue — linked to LSX)
-  listMaterialIssues: (params?: { warehouse_id?: number; production_order_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+  listMaterialIssues: (params?: { warehouse_id?: number; production_order_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; tu_ngay?: string; den_ngay?: string }) =>
     client.get<MaterialIssue[]>('/warehouse/material-issues', { params }),
   getMaterialIssue: (id: number) => client.get<MaterialIssue>(`/warehouse/material-issues/${id}`),
   createMaterialIssue: (data: CreateMaterialIssuePayload) => client.post<MaterialIssue>('/warehouse/material-issues', data),
   deleteMaterialIssue: (id: number) => client.delete(`/warehouse/material-issues/${id}`),
 
   // Nhập thành phẩm từ sản xuất (ProductionOutput)
-  listProductionOutputs: (params?: { warehouse_id?: number; production_order_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+  listProductionOutputs: (params?: { warehouse_id?: number; production_order_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; tu_ngay?: string; den_ngay?: string }) =>
     client.get<ProductionOutput[]>('/warehouse/production-outputs', { params }),
   getProductionOutput: (id: number) => client.get<ProductionOutput>(`/warehouse/production-outputs/${id}`),
   createProductionOutput: (data: CreateProductionOutputPayload) => client.post<ProductionOutput>('/warehouse/production-outputs', data),

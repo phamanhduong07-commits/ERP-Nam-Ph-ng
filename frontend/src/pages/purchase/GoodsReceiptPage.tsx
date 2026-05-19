@@ -6,7 +6,8 @@ import {
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, CheckCircleOutlined, EyeOutlined,
-  FileTextOutlined, InboxOutlined, FileDoneOutlined,
+  FileTextOutlined, InboxOutlined, FileDoneOutlined, AuditOutlined,
+  CheckOutlined, CloseOutlined, WarningOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, GoodsReceipt, CreateGoodsReceiptPayload } from '../../api/warehouse'
@@ -76,6 +77,7 @@ export default function GoodsReceiptPage() {
   const [selectedPOId, setSelectedPOId] = useState<number | undefined>()
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
   const [detailDrawer, setDetailDrawer] = useState<GoodsReceipt | null>(null)
+  const [matchingGrId, setMatchingGrId] = useState<number | null>(null)
   const [isExporting, setIsExporting] = useState(false)
 
   const { data: suppliers = [] } = useQuery({
@@ -128,6 +130,7 @@ export default function GoodsReceiptPage() {
 
   const effectiveGRTrangThai = shortcutFilter === 'cho_duyet' ? 'nhap'
     : shortcutFilter === 'da_duyet' ? 'da_duyet'
+    : shortcutFilter === 'chua_hd' ? 'da_duyet'
       : filterTrangThai
 
   useEffect(() => {
@@ -136,6 +139,8 @@ export default function GoodsReceiptPage() {
       filterXuong, filterKho, tuNgay, denNgay,
     }))
   }, [search, shortcutFilter, filterNCC, filterTrangThai, filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay])
+
+  const today = dayjs().format('YYYY-MM-DD')
 
   const { data: rawGrList = [], isLoading } = useQuery({
     queryKey: ['goods-receipts', search, shortcutFilter, filterNCC, filterTrangThai, filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay],
@@ -146,15 +151,18 @@ export default function GoodsReceiptPage() {
       phap_nhan_id: filterPhapNhan,
       phan_xuong_id: filterXuong,
       warehouse_id: filterKho,
-      tu_ngay: tuNgay,
-      den_ngay: denNgay,
+      tu_ngay: shortcutFilter === 'hom_nay' ? today : tuNgay,
+      den_ngay: shortcutFilter === 'hom_nay' ? today : denNgay,
     }).then(r => r.data),
   })
 
-  // "Chờ duyệt" shortcut bao gồm cả nhap_nhanh (backend chỉ filter nhap), thêm nhap_nhanh ở frontend
+  // "Chờ duyệt" bao gồm nhap_nhanh; "Chưa HĐ" chỉ lấy da_duyet chưa có hóa đơn
   const grList = useMemo(() => {
     if (shortcutFilter === 'cho_duyet') {
       return rawGrList.filter(r => r.trang_thai === 'nhap' || r.trang_thai === 'nhap_nhanh')
+    }
+    if (shortcutFilter === 'chua_hd') {
+      return rawGrList.filter(r => r.trang_thai === 'da_duyet' && !r.co_hoa_don)
     }
     return rawGrList
   }, [rawGrList, shortcutFilter])
@@ -190,6 +198,13 @@ export default function GoodsReceiptPage() {
       form.resetFields()
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu nhập kho'),
+  })
+
+  const { data: matchingData, isFetching: matchingFetching } = useQuery({
+    queryKey: ['gr-matching', matchingGrId],
+    queryFn: () => warehouseApi.getGRMatchingStatus(matchingGrId!).then(r => r.data),
+    enabled: !!matchingGrId,
+    staleTime: 30_000,
   })
 
   const createInvoiceMut = useMutation({
@@ -381,6 +396,15 @@ export default function GoodsReceiptPage() {
               />
             </Tooltip>
           )}
+          {r.trang_thai === 'da_duyet' && r.po_id && (
+            <Tooltip title="Kiểm tra khớp PO–GR–HĐ">
+              <Button
+                size="small"
+                icon={<AuditOutlined />}
+                onClick={() => setMatchingGrId(r.id)}
+              />
+            </Tooltip>
+          )}
           {(r.trang_thai === 'nhap' || r.trang_thai === 'nhap_nhanh') && (
             <Tooltip title="Duyệt và cập nhật tồn kho">
               <Popconfirm
@@ -566,11 +590,14 @@ export default function GoodsReceiptPage() {
               {[
                 { key: 'cho_duyet', label: 'Chờ duyệt' },
                 { key: 'da_duyet', label: 'Đã duyệt' },
+                { key: 'hom_nay', label: 'Hôm nay' },
+                { key: 'chua_hd', label: 'Chưa HĐ' },
               ].map(s => (
                 <Button
                   key={s.key}
                   size="small"
                   type={shortcutFilter === s.key ? 'primary' : 'default'}
+                  danger={s.key === 'chua_hd' && shortcutFilter === s.key}
                   onClick={() => setShortcutFilter(shortcutFilter === s.key ? null : s.key)}
                 >
                   {s.label}
@@ -822,6 +849,75 @@ export default function GoodsReceiptPage() {
           </Form.List>
         </Form>
       </Drawer>
+
+      {/* Modal 3-way matching PO ↔ GR ↔ Hóa đơn */}
+      <Modal
+        open={!!matchingGrId}
+        onCancel={() => setMatchingGrId(null)}
+        footer={null}
+        width={760}
+        title={<Space><AuditOutlined /> Kiểm tra khớp PO – GR – Hóa đơn</Space>}
+      >
+        {matchingFetching ? (
+          <div style={{ textAlign: 'center', padding: 32 }}>Đang tải...</div>
+        ) : matchingData ? (
+          <>
+            <Descriptions size="small" bordered column={3} style={{ marginBottom: 16 }}>
+              <Descriptions.Item label="Phiếu nhập">{matchingData.so_phieu_gr}</Descriptions.Item>
+              <Descriptions.Item label="Đơn mua">{matchingData.so_po ?? '—'}</Descriptions.Item>
+              <Descriptions.Item label="Hóa đơn">
+                {matchingData.so_hoa_don
+                  ? <Tag color="green"><CheckOutlined /> {matchingData.so_hoa_don}</Tag>
+                  : <Tag color="orange"><WarningOutlined /> Chưa có HĐ</Tag>}
+              </Descriptions.Item>
+              <Descriptions.Item label="Giá trị GR">{fmtVND(matchingData.gia_tri_gr)}</Descriptions.Item>
+              <Descriptions.Item label="Giá trị PO">
+                {matchingData.gia_tri_po != null
+                  ? <span style={{ color: matchingData.lenh_gia_po_pct != null && matchingData.lenh_gia_po_pct > 1 ? '#ff4d4f' : '#52c41a' }}>
+                      {fmtVND(matchingData.gia_tri_po)}
+                      {matchingData.lenh_gia_po_pct != null && ` (±${matchingData.lenh_gia_po_pct}%)`}
+                    </span>
+                  : '—'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Giá trị HĐ">
+                {matchingData.gia_tri_hd != null
+                  ? <span style={{ color: matchingData.lenh_hd_pct != null && matchingData.lenh_hd_pct > 1 ? '#ff4d4f' : '#52c41a' }}>
+                      {fmtVND(matchingData.gia_tri_hd)}
+                      {matchingData.lenh_hd_pct != null && ` (±${matchingData.lenh_hd_pct}%)`}
+                    </span>
+                  : '—'}
+              </Descriptions.Item>
+            </Descriptions>
+            <Table
+              size="small"
+              dataSource={matchingData.lines}
+              rowKey="ten_hang"
+              pagination={false}
+              columns={[
+                { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+                { title: 'SL GR', dataIndex: 'gr_so_luong', width: 90, align: 'right' as const, render: (v: number) => v.toLocaleString('vi-VN') },
+                { title: 'SL PO', dataIndex: 'po_so_luong', width: 90, align: 'right' as const, render: (v: number | null) => v != null ? v.toLocaleString('vi-VN') : '—' },
+                {
+                  title: 'SL OK?', width: 70, align: 'center' as const,
+                  render: (_: unknown, r: typeof matchingData.lines[0]) =>
+                    r.so_luong_ok == null ? <Text type="secondary">—</Text>
+                    : r.so_luong_ok ? <CheckOutlined style={{ color: '#52c41a' }} />
+                    : <CloseOutlined style={{ color: '#ff4d4f' }} />,
+                },
+                { title: 'Đơn giá GR', dataIndex: 'gr_don_gia', width: 110, align: 'right' as const, render: (v: number) => fmtVND(v) },
+                { title: 'Đơn giá PO', dataIndex: 'po_don_gia', width: 110, align: 'right' as const, render: (v: number | null) => v != null ? fmtVND(v) : '—' },
+                {
+                  title: 'Giá OK?', width: 70, align: 'center' as const,
+                  render: (_: unknown, r: typeof matchingData.lines[0]) =>
+                    r.don_gia_ok == null ? <Text type="secondary">—</Text>
+                    : r.don_gia_ok ? <CheckOutlined style={{ color: '#52c41a' }} />
+                    : <CloseOutlined style={{ color: '#ff4d4f' }} />,
+                },
+              ]}
+            />
+          </>
+        ) : null}
+      </Modal>
     </div>
   )
 }

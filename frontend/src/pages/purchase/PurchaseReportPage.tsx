@@ -8,13 +8,14 @@ import { useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
   Alert, Button, Card, Col, DatePicker, Descriptions, Divider,
-  Row, Select, Space, Spin, Statistic, Table, Tabs, Tag, Typography,
+  Row, Select, Space, Spin, Statistic, Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd'
-import { FileExcelOutlined, FileTextOutlined, PrinterOutlined } from '@ant-design/icons'
+import { FileExcelOutlined, FileTextOutlined, PrinterOutlined, WarningOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { purchaseReturnsApi } from '../../api/purchaseReturns'
 import type { SoChiTietRow } from '../../api/purchaseReturns'
 import client from '../../api/client'
+import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
@@ -41,6 +42,7 @@ const HINH_THUC_LABELS: Record<string, string> = {
 
 function SoChiTietTab() {
   const [supplierId, setSupplierId] = useState<number | undefined>()
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
   const [dates, setDates] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
     dayjs().startOf('month'),
     dayjs(),
@@ -52,10 +54,17 @@ function SoChiTietTab() {
     staleTime: 5 * 60_000,
   })
 
+  const { data: listPhapNhan = [] } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list().then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['so-chi-tiet-mua', supplierId, dates[0].format('YYYY-MM-DD'), dates[1].format('YYYY-MM-DD')],
+    queryKey: ['so-chi-tiet-mua', supplierId, phapNhanId, dates[0].format('YYYY-MM-DD'), dates[1].format('YYYY-MM-DD')],
     queryFn: () => purchaseReturnsApi.getSoChiTiet({
       supplier_id: supplierId,
+      phap_nhan_id: phapNhanId,
       tu_ngay: dates[0].format('YYYY-MM-DD'),
       den_ngay: dates[1].format('YYYY-MM-DD'),
     }).then(r => r.data),
@@ -134,12 +143,22 @@ function SoChiTietTab() {
       <Row gutter={[8, 8]} align="middle">
         <Col>
           <Select
-            style={{ width: 240 }}
+            style={{ width: 200 }}
             placeholder="Tất cả nhà cung cấp"
             allowClear showSearch optionFilterProp="label"
             value={supplierId}
             onChange={v => setSupplierId(v)}
             options={(suppliers as any[]).map(s => ({ value: s.id, label: s.ten_viet_tat }))}
+          />
+        </Col>
+        <Col>
+          <Select
+            style={{ width: 160 }}
+            placeholder="Tất cả pháp nhân"
+            allowClear showSearch optionFilterProp="label"
+            value={phapNhanId}
+            onChange={v => setPhapNhanId(v)}
+            options={(listPhapNhan as any[]).map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
           />
         </Col>
         <Col>
@@ -357,12 +376,31 @@ function DoiChieuTab() {
             size="small"
             dataSource={data.hoa_don}
             pagination={false}
-            scroll={{ x: 700 }}
+            scroll={{ x: 820 }}
+            rowClassName={(r: any) => {
+              if (!r.han_tt || r.trang_thai === 'da_tt_du') return ''
+              return dayjs(r.han_tt).isBefore(dayjs(), 'day') ? 'row-overdue' : ''
+            }}
             columns={[
               { title: 'Số HĐ', dataIndex: 'so_hoa_don', width: 130 },
               {
                 title: 'Ngày', dataIndex: 'ngay', width: 100,
                 render: (v: string) => dayjs(v).format('DD/MM/YYYY'),
+              },
+              {
+                title: 'Hạn TT', dataIndex: 'han_tt', width: 105,
+                render: (v: string | null) => {
+                  if (!v) return <Text type="secondary">—</Text>
+                  const isOver = dayjs(v).isBefore(dayjs(), 'day')
+                  return (
+                    <Tooltip title={isOver ? 'Quá hạn thanh toán' : undefined}>
+                      <span style={{ color: isOver ? '#f5222d' : undefined, fontWeight: isOver ? 600 : undefined }}>
+                        {isOver && <WarningOutlined style={{ marginRight: 4 }} />}
+                        {dayjs(v).format('DD/MM/YYYY')}
+                      </span>
+                    </Tooltip>
+                  )
+                },
               },
               {
                 title: 'Tổng TT', dataIndex: 'tong_thanh_toan', width: 130, align: 'right',
@@ -491,6 +529,7 @@ function DoiChieuTab() {
           </Row>
         </Card>
       )}
+      <style>{`.row-overdue td { background: #fff1f0 !important; }`}</style>
     </Space>
   )
 }

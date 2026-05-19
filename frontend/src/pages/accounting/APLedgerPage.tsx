@@ -233,10 +233,17 @@ function LedgerTab() {
 
 function AgingTab() {
   const [asOfDate, setAsOfDate] = useState<string | undefined>()
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
+
+  const { data: listPhapNhan = [] } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list().then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
 
   const { data: rows = [], isLoading } = useQuery<APAgingRow[]>({
-    queryKey: ['ap-aging', asOfDate],
-    queryFn: () => apApi.getAging(asOfDate),
+    queryKey: ['ap-aging', asOfDate, phapNhanId],
+    queryFn: () => apApi.getAging(asOfDate, phapNhanId),
   })
 
   const totals = rows.reduce(
@@ -318,6 +325,14 @@ function AgingTab() {
                 onChange={v => setAsOfDate(v?.format('YYYY-MM-DD'))}
               />
             </Space>
+          </Col>
+          <Col>
+            <Select
+              allowClear placeholder="Tất cả pháp nhân" style={{ width: 180 }}
+              options={(listPhapNhan as any[]).map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              value={phapNhanId}
+              onChange={setPhapNhanId}
+            />
           </Col>
           <Col style={{ marginLeft: 'auto' }}>
             <Button size="small" icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>

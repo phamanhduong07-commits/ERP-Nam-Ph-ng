@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Card, Col, DatePicker, Progress, Row, Select, Statistic, Table, Tag,
+  Alert, Card, Col, DatePicker, Progress, Row, Select, Statistic, Table, Tag, Tooltip,
 } from 'antd'
+import { WarningOutlined, ClockCircleOutlined, DollarOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { purchaseApi, TRANG_THAI_PO, TRANG_THAI_PO_COLOR } from '../../api/purchase'
@@ -78,6 +79,60 @@ export default function PurchaseDashboardPage() {
           </Col>
         </Row>
       </Card>
+
+      {/* Warning alerts */}
+      {!isFetching && ((kpi?.po_qua_han ?? 0) > 0 || (kpi?.gr_cho_nhap ?? 0) > 0 || (kpi?.hd_qua_han ?? 0) > 0) && (
+        <Row gutter={[10, 10]} style={{ marginBottom: 12 }}>
+          {(kpi?.po_qua_han ?? 0) > 0 && (
+            <Col xs={24} sm={8}>
+              <Alert
+                type="warning"
+                showIcon
+                icon={<ClockCircleOutlined />}
+                message={
+                  <span>
+                    <strong>{kpi!.po_qua_han}</strong> đơn mua&nbsp;
+                    <Tooltip title="PO đã gửi NCC nhưng ngày giao dự kiến đã qua"><span style={{ borderBottom: '1px dashed #d48806', cursor: 'help' }}>quá hạn giao</span></Tooltip>
+                  </span>
+                }
+                style={{ padding: '6px 12px' }}
+              />
+            </Col>
+          )}
+          {(kpi?.gr_cho_nhap ?? 0) > 0 && (
+            <Col xs={24} sm={8}>
+              <Alert
+                type="info"
+                showIcon
+                icon={<WarningOutlined />}
+                message={
+                  <span>
+                    <strong>{kpi!.gr_cho_nhap}</strong> phiếu nhập kho&nbsp;
+                    <Tooltip title="Phiếu nhập trạng thái Chờ duyệt, chưa cập nhật tồn"><span style={{ borderBottom: '1px dashed #0958d9', cursor: 'help' }}>chờ duyệt</span></Tooltip>
+                  </span>
+                }
+                style={{ padding: '6px 12px' }}
+              />
+            </Col>
+          )}
+          {(kpi?.hd_qua_han ?? 0) > 0 && (
+            <Col xs={24} sm={8}>
+              <Alert
+                type="error"
+                showIcon
+                icon={<DollarOutlined />}
+                message={
+                  <span>
+                    <strong>{kpi!.hd_qua_han}</strong> hóa đơn&nbsp;
+                    <Tooltip title="Hóa đơn mua hàng đã quá hạn thanh toán"><span style={{ borderBottom: '1px dashed #a8071a', cursor: 'help' }}>quá hạn thanh toán</span></Tooltip>
+                  </span>
+                }
+                style={{ padding: '6px 12px' }}
+              />
+            </Col>
+          )}
+        </Row>
+      )}
 
       {/* KPI Cards — Row 1 */}
       <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
