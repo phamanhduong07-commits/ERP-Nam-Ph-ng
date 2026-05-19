@@ -8,6 +8,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { warehousesApi, type Warehouse } from '../../api/warehouses'
 import { warehouseApi, type GiaoDich } from '../../api/warehouse'
+import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
@@ -44,6 +45,8 @@ function fmtVND(v: number) {
 export default function InventoryCardPage() {
   const today = dayjs()
   const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([today.startOf('month'), today])
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
+  const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
   const [warehouseId, setWarehouseId] = useState<number | undefined>()
   const [search, setSearch] = useState('')
   const [fetched, setFetched] = useState(false)
@@ -58,18 +61,32 @@ export default function InventoryCardPage() {
     queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
   })
 
+  const { data: phapNhans = [] } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+    staleTime: 300_000,
+  })
+
+  const phanXuongsByPn = phapNhanId ? phanXuongs.filter((px: any) => px.phap_nhan_id === phapNhanId) : phanXuongs
+  const allowedPxIds = new Set(phanXuongsByPn.map((px: any) => px.id))
+  const filteredWarehouses = (whs ?? []).filter(w =>
+    (!phapNhanId || allowedPxIds.has(w.phan_xuong_id)) &&
+    (!phanXuongId || w.phan_xuong_id === phanXuongId)
+  )
   const selectedWarehouse = warehouseId ? whs?.find(w => w.id === warehouseId) : undefined
-  const selectedPhapNhanId = selectedWarehouse?.phan_xuong_id
+  const selectedPhapNhanId = phapNhanId || (selectedWarehouse?.phan_xuong_id
     ? phanXuongs.find(px => px.id === selectedWarehouse.phan_xuong_id)?.phap_nhan_id
-    : null
+    : null)
 
   const { data: rows = [], isLoading, refetch } = useQuery<GiaoDich[]>({
-    queryKey: ['giao-dich', range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD'), warehouseId],
+    queryKey: ['giao-dich', range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD'), phapNhanId, phanXuongId, warehouseId],
     queryFn: () =>
       warehouseApi.getGiaoDich({
         tu_ngay: range[0].format('YYYY-MM-DD'),
         den_ngay: range[1].format('YYYY-MM-DD'),
         warehouse_id: warehouseId,
+        phan_xuong_id: phanXuongId,
+        phap_nhan_id: phapNhanId,
         limit: 1000,
       }).then(r => r.data),
     enabled: fetched,
@@ -263,12 +280,28 @@ export default function InventoryCardPage() {
             onChange={v => v && setRange([v[0]!, v[1]!])}
           />
           <Select
+            style={{ width: 190 }}
+            placeholder="Tat ca phap nhan"
+            allowClear
+            value={phapNhanId}
+            onChange={v => { setPhapNhanId(v); setPhanXuongId(undefined); setWarehouseId(undefined) }}
+            options={phapNhans.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+          />
+          <Select
+            style={{ width: 180 }}
+            placeholder="Tat ca xuong"
+            allowClear
+            value={phanXuongId}
+            onChange={v => { setPhanXuongId(v); setWarehouseId(undefined) }}
+            options={phanXuongsByPn.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
+          />
+          <Select
             style={{ width: 200 }}
             placeholder="Tất cả kho"
             allowClear
             value={warehouseId}
             onChange={v => setWarehouseId(v)}
-            options={(whs ?? []).map((w: Warehouse) => ({ value: w.id, label: `${w.ma_kho} — ${w.ten_kho}` }))}
+            options={filteredWarehouses.map((w: Warehouse) => ({ value: w.id, label: `${w.ma_kho} - ${w.ten_kho}` }))}
           />
           <Input
             style={{ width: 220 }}

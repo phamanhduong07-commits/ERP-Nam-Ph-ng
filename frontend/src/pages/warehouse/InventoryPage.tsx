@@ -8,6 +8,7 @@ import ImportExcelDialog from '../../components/ImportExcelDialog'
 import { PlusOutlined, DatabaseOutlined, FileExcelOutlined, FilePdfOutlined, WarningOutlined, UploadOutlined } from '@ant-design/icons'
 import { warehouseApi, PhanXuongWithWarehouses, WarehouseSlot, TonKho } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
+import { phapNhanApi } from '../../api/phap_nhan'
 import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
@@ -30,6 +31,7 @@ function getSlot(px: PhanXuongWithWarehouses, loai: string): WarehouseSlot | nul
 export default function InventoryPage() {
   const qc = useQueryClient()
   const [activeTab, setActiveTab] = useState('tong-hop')
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
   const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
   const [warehouseId, setWarehouseId] = useState<number | undefined>()
   const [loai, setLoai] = useState<string | undefined>()
@@ -39,6 +41,12 @@ export default function InventoryPage() {
   const { data: phanXuongs = [] } = useQuery({
     queryKey: ['phan-xuong'],
     queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+  })
+
+  const { data: phapNhans = [] } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+    staleTime: 300_000,
   })
 
   const { data: warehouses = [] } = useQuery({
@@ -53,14 +61,17 @@ export default function InventoryPage() {
   })
 
   const { data: tonKho = [], isLoading } = useQuery({
-    queryKey: ['ton-kho', phanXuongId, warehouseId, loai],
-    queryFn: () => warehouseApi.getTonKho({ phan_xuong_id: phanXuongId, warehouse_id: warehouseId, loai }).then(r => r.data),
+    queryKey: ['ton-kho', phapNhanId, phanXuongId, warehouseId, loai],
+    queryFn: () => warehouseApi.getTonKho({ phap_nhan_id: phapNhanId, phan_xuong_id: phanXuongId, warehouse_id: warehouseId, loai }).then(r => r.data),
     refetchInterval: 60_000,
   })
 
-  const filteredWarehouses = phanXuongId
-    ? warehouses.filter((w: any) => w.phan_xuong_id === phanXuongId)
-    : warehouses
+  const phanXuongsByPn = phapNhanId ? phanXuongs.filter((x: any) => x.phap_nhan_id === phapNhanId) : phanXuongs
+  const allowedPxIds = new Set(phanXuongsByPn.map((x: any) => x.id))
+  const filteredWarehouses = warehouses.filter((w: any) =>
+    (!phapNhanId || allowedPxIds.has(w.phan_xuong_id)) &&
+    (!phanXuongId || w.phan_xuong_id === phanXuongId)
+  )
 
   const filtered = search
     ? tonKho.filter(r => r.ten_hang.toLowerCase().includes(search.toLowerCase()))
@@ -70,7 +81,7 @@ export default function InventoryPage() {
   const tongGiaTri = filtered.reduce((s, r) => s + r.gia_tri_ton, 0)
 
   const handleExportExcel = () => {
-    const resolvedPhapNhanId = phanXuongId ? phanXuongs.find(px => px.id === phanXuongId)?.phap_nhan_id : null
+    const resolvedPhapNhanId = phapNhanId || (phanXuongId ? phanXuongs.find(px => px.id === phanXuongId)?.phap_nhan_id : null)
     if (!filtered.length) {
       message.warning('Không có dữ liệu để xuất Excel')
       return
@@ -101,7 +112,7 @@ export default function InventoryPage() {
   }
 
   const handleExportPdf = () => {
-    const resolvedPhapNhanId = phanXuongId ? phanXuongs.find(px => px.id === phanXuongId)?.phap_nhan_id : null
+    const resolvedPhapNhanId = phapNhanId || (phanXuongId ? phanXuongs.find(px => px.id === phanXuongId)?.phap_nhan_id : null)
     if (!filtered.length) {
       message.warning('Không có dữ liệu để in')
       return
@@ -312,12 +323,22 @@ export default function InventoryPage() {
         <Row gutter={[8, 8]}>
           <Col xs={24} sm={6}>
             <Select
+              placeholder="Tat ca phap nhan"
+              style={{ width: '100%' }}
+              allowClear
+              value={phapNhanId}
+              onChange={v => { setPhapNhanId(v); setPhanXuongId(undefined); setWarehouseId(undefined) }}
+              options={phapNhans.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+            />
+          </Col>
+          <Col xs={24} sm={6}>
+            <Select
               placeholder="Tất cả xưởng"
               style={{ width: '100%' }}
               allowClear
               value={phanXuongId}
               onChange={v => { setPhanXuongId(v); setWarehouseId(undefined) }}
-              options={phanXuongs.map((x: any) => ({ value: x.id, label: x.ten_xuong }))}
+              options={phanXuongsByPn.map((x: any) => ({ value: x.id, label: x.ten_xuong }))}
             />
           </Col>
           <Col xs={24} sm={6}>

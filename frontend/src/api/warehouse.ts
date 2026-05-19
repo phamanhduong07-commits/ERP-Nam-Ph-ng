@@ -25,7 +25,11 @@ export interface TonKho {
   id: number
   warehouse_id: number
   ten_kho: string
+  loai_kho?: string | null
   phan_xuong_id: number | null
+  ten_phan_xuong?: string | null
+  phap_nhan_id?: number | null
+  ten_phap_nhan?: string | null
   paper_material_id: number | null
   other_material_id: number | null
   product_id: number | null
@@ -147,6 +151,11 @@ export interface GiaoDich {
   ngay_giao_dich: string | null
   warehouse_id: number
   ten_kho: string
+  loai_kho?: string | null
+  phan_xuong_id?: number | null
+  ten_phan_xuong?: string | null
+  phap_nhan_id?: number | null
+  ten_phap_nhan?: string | null
   paper_material_id: number | null
   other_material_id: number | null
   product_id: number | null
@@ -194,6 +203,7 @@ export interface GoodsReceipt {
   ten_ncc: string
   warehouse_id: number | null
   ten_kho: string
+  loai_kho?: string | null
   phan_xuong_id?: number | null
   ten_phan_xuong?: string | null
   loai_nhap: string
@@ -202,6 +212,7 @@ export interface GoodsReceipt {
   ghi_chu: string | null
   so_xe: string | null
   phap_nhan_id: number | null
+  ten_phap_nhan?: string | null
   phap_nhan_id_for_print?: number | null
   invoice_image: string | null   // null trong list, có giá trị trong detail
   has_invoice_image: boolean
@@ -640,7 +651,7 @@ export const warehouseApi = {
   deletePhanXuong: (id: number) => client.delete(`/warehouse/phan-xuong/${id}`),
 
   // Tồn kho
-  getTonKho: (params?: { warehouse_id?: number; phan_xuong_id?: number; loai?: string; search?: string }) =>
+  getTonKho: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; loai?: string; search?: string }) =>
     client.get<TonKho[]>('/warehouse/ton-kho', { params }),
 
   // Phiếu nhập kho
@@ -672,7 +683,7 @@ export const warehouseApi = {
   deleteStockAdjustment: (id: number) => client.delete(`/warehouse/stock-adjustments/${id}`),
 
   // Lịch sử giao dịch
-  getGiaoDich: (params?: { warehouse_id?: number; paper_material_id?: number; other_material_id?: number; product_id?: number; loai_giao_dich?: string; tu_ngay?: string; den_ngay?: string; limit?: number }) =>
+  getGiaoDich: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; paper_material_id?: number; other_material_id?: number; product_id?: number; loai_giao_dich?: string; tu_ngay?: string; den_ngay?: string; limit?: number }) =>
     client.get<GiaoDich[]>('/warehouse/giao-dich', { params }),
 
   // Phiếu nhập kho (GoodsReceipt — linked to PO)
@@ -749,7 +760,7 @@ export const warehouseApi = {
     client.get<KHSXCanPhoiNgoaiRow[]>('/warehouse/khsx-can-phoi-ngoai', { params }),
 
   // Tồn kho NVL khác (reuse ton-kho?loai=khac)
-  getTonKhoNVL: (params?: { phan_xuong_id?: number; search?: string }) =>
+  getTonKhoNVL: (params?: { phan_xuong_id?: number; phap_nhan_id?: number; search?: string }) =>
     client.get<TonKhoNVLRow[]>('/warehouse/ton-kho', {
       params: { loai: 'khac', ...params }
     }),

@@ -273,6 +273,39 @@ def _tk_nvl(paper_material_id: Optional[int]) -> str:
     return "1521" if paper_material_id else "1522"
 
 
+def _tk_inventory(
+    paper_material_id: Optional[int] = None,
+    other_material_id: Optional[int] = None,
+    product_id: Optional[int] = None,
+    loai_kho: Optional[str] = None,
+) -> str:
+    if product_id or loai_kho in {"THANH_PHAM", "PHOI"}:
+        return "155"
+    if paper_material_id:
+        return "1521"
+    if other_material_id:
+        return "1522"
+    return "152"
+
+
+def _warehouse_dimensions(db: Session, warehouse_id: Optional[int]) -> tuple[Optional[Warehouse], Optional[int], Optional[int], str]:
+    wh = db.get(Warehouse, warehouse_id) if warehouse_id else None
+    px = wh.phan_xuong_obj if wh and wh.phan_xuong_obj else None
+    pn = px.phap_nhan if px and px.phap_nhan else None
+    return wh, (px.id if px else None), (pn.id if pn else None), (pn.ten_viet_tat or pn.ten_phap_nhan if pn else "")
+
+
+def _ensure_active_warehouse(db: Session, warehouse_id: Optional[int], allowed_types: Optional[set[str]] = None) -> Warehouse:
+    wh = db.get(Warehouse, warehouse_id) if warehouse_id else None
+    if not wh:
+        raise HTTPException(404, "Khong tim thay kho")
+    if not wh.trang_thai:
+        raise HTTPException(400, "Kho da ngung hoat dong")
+    if allowed_types and wh.loai_kho not in allowed_types:
+        raise HTTPException(400, f"Kho '{wh.ten_kho}' khong dung loai nghiep vu")
+    return wh
+
+
 def _recalc_purchase_order_receipt_status(db: Session, po_id: Optional[int]) -> None:
     if not po_id:
         return
@@ -568,6 +601,7 @@ def list_theo_phan_xuong(
 def get_ton_kho(
     warehouse_id: Optional[int] = Query(None),
     phan_xuong_id: Optional[int] = Query(None),
+    phap_nhan_id: Optional[int] = Query(None),
     loai: Optional[str] = Query(None),  # "nvl" | "tp" | "giay" | "khac"
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -581,6 +615,8 @@ def get_ton_kho(
         q = q.filter(InventoryBalance.warehouse_id == warehouse_id)
     if phan_xuong_id:
         q = q.filter(Warehouse.phan_xuong_id == phan_xuong_id)
+    if phap_nhan_id:
+        q = q.join(PhanXuong, Warehouse.phan_xuong_id == PhanXuong.id).filter(PhanXuong.phap_nhan_id == phap_nhan_id)
     if loai == "tp":
         q = q.filter(InventoryBalance.product_id.isnot(None))
     elif loai in ("nvl", "giay"):
@@ -619,12 +655,16 @@ def get_ton_kho(
         if search and search.lower() not in ten_hang.lower():
             continue
 
-        wh = db.get(Warehouse, r.warehouse_id)
+        wh, wh_px_id, wh_pn_id, ten_phap_nhan = _warehouse_dimensions(db, r.warehouse_id)
         result.append({
             "id": r.id,
             "warehouse_id": r.warehouse_id,
             "ten_kho": wh.ten_kho if wh else "",
-            "phan_xuong_id": wh.phan_xuong_id if wh else None,
+            "loai_kho": wh.loai_kho if wh else None,
+            "phan_xuong_id": wh_px_id,
+            "ten_phan_xuong": wh.phan_xuong_obj.ten_xuong if wh and wh.phan_xuong_obj else None,
+            "phap_nhan_id": wh_pn_id,
+            "ten_phap_nhan": ten_phap_nhan or None,
             "paper_material_id": r.paper_material_id,
             "other_material_id": r.other_material_id,
             "product_id": r.product_id,
@@ -876,7 +916,11 @@ def create_goods_receipt(
             wh_id = wh.id
     if not wh_id:
         raise HTTPException(400, "Chọn kho nhập hoặc cung cấp phan_xuong_id để tự tìm kho")
-    wh_obj = db.get(Warehouse, wh_id)
+    wh_obj = _ensure_active_warehouse(
+        db,
+        wh_id,
+        {"PHOI"} if body.loai_nhap == "PHOI_NGOAI" else None,
+    )
     if not wh_obj:
         raise HTTPException(404, "Không tìm thấy kho")
     if not db.get(Supplier, body.supplier_id):
@@ -1301,6 +1345,7 @@ def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True) -> di
     sup = db.get(Supplier, gr.supplier_id)
     px_id = gr.phan_xuong_id or (wh.phan_xuong_id if wh else None)
     px = db.get(PhanXuong, px_id) if px_id else None
+    pn = db.get(PhapNhan, gr.phap_nhan_id) if gr.phap_nhan_id else (px.phap_nhan if px and px.phap_nhan else None)
     return {
         "id": gr.id,
         "so_phieu": gr.so_phieu,
@@ -1310,6 +1355,7 @@ def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True) -> di
         "ten_ncc": sup.ten_viet_tat if sup else "",
         "warehouse_id": gr.warehouse_id,
         "ten_kho": wh.ten_kho if wh else "",
+        "loai_kho": wh.loai_kho if wh else None,
         "phan_xuong_id": px_id,
         "ten_phan_xuong": px.ten_xuong if px else None,
         "loai_nhap": gr.loai_nhap,
@@ -1321,6 +1367,8 @@ def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True) -> di
         "has_invoice_image": bool(gr.invoice_image),
         "hd_tong_kg": float(gr.hd_tong_kg) if gr.hd_tong_kg else None,
         "phap_nhan_id": gr.phap_nhan_id,
+        "ten_phap_nhan": (pn.ten_viet_tat or pn.ten_phap_nhan) if pn else None,
+        "phap_nhan_id_for_print": gr.phap_nhan_id or (px.phap_nhan_id if px else None),
         "created_at": gr.created_at.isoformat() if gr.created_at else None,
         "items": [{
             "id": it.id,
@@ -1398,7 +1446,7 @@ def create_material_issue(
         warehouse_id = wh.id if wh else None
     if not warehouse_id:
         raise HTTPException(400, "Cần truyền warehouse_id hoặc lệnh SX phải có xưởng có kho NVL")
-    if not db.get(Warehouse, warehouse_id):
+    if not _ensure_active_warehouse(db, warehouse_id, {"GIAY_CUON", "NVL_PHU"}):
         raise HTTPException(404, "Không tìm thấy kho")
 
     # Validate tồn trước
@@ -1595,7 +1643,7 @@ def create_production_output(
         warehouse_id = wh.id if wh else None
     if not warehouse_id:
         raise HTTPException(400, "Cần truyền warehouse_id hoặc lệnh SX phải có xưởng có kho THANH_PHAM")
-    if not db.get(Warehouse, warehouse_id):
+    if not _ensure_active_warehouse(db, warehouse_id, {"THANH_PHAM"}):
         raise HTTPException(404, "Không tìm thấy kho")
 
     ten_hang = body.ten_hang
@@ -1637,7 +1685,7 @@ def create_production_output(
     acc_service = AccountingService(db)
     
     # Lấy thông tin pháp nhân và xưởng
-    wh = db.get(Warehouse, body.warehouse_id)
+    wh = db.get(Warehouse, warehouse_id)
     phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
     
     # Nhập kho thành phẩm: Nợ 155 (tại kho) / Có 154 (tại xưởng SX)
@@ -2513,7 +2561,7 @@ def create_phieu_chuyen(
     if body.warehouse_xuat_id == body.warehouse_nhap_id:
         raise HTTPException(400, "Kho xuất và kho nhận phải khác nhau")
 
-    if not db.get(Warehouse, body.warehouse_xuat_id) or not db.get(Warehouse, body.warehouse_nhap_id):
+    if not _ensure_active_warehouse(db, body.warehouse_xuat_id) or not _ensure_active_warehouse(db, body.warehouse_nhap_id):
         raise HTTPException(404, "Không tìm thấy kho")
 
     for it in body.items:
@@ -2925,6 +2973,8 @@ def create_stock_adjustment(
     db.add(adj)
     db.flush()
 
+    wh = _ensure_active_warehouse(db, body.warehouse_id)
+    journal_items_adj = []
     for it, bal, diff in balances:
         ten_hang = _balance_item_name(db, bal)
         don_vi = bal.don_vi or _balance_item_unit(db, bal)
@@ -2961,10 +3011,16 @@ def create_stock_adjustment(
                 other_material_id=bal.other_material_id,
                 product_id=bal.product_id,
                 ghi_chu=it.ghi_chu or body.ly_do)
+        journal_items_adj.append({
+            "ten_hang": ten_hang,
+            "so_luong": abs(diff),
+            "don_gia": don_gia,
+            "tk_no": _tk_inventory(bal.paper_material_id, bal.other_material_id, bal.product_id, wh.loai_kho) if diff > 0 else "811",
+            "tk_co": _tk_inventory(bal.paper_material_id, bal.other_material_id, bal.product_id, wh.loai_kho) if diff < 0 else "711",
+        })
 
     # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
     acc_service = AccountingService(db)
-    wh = db.get(Warehouse, body.warehouse_id)
     phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
     
     if not adj.bo_qua_hach_toan:
@@ -2975,13 +3031,7 @@ def create_stock_adjustment(
             chung_tu_id=adj.id,
             phap_nhan_id=phap_nhan_id,
             phan_xuong_id=wh.phan_xuong_id if wh else None,
-            items=[{
-                "ten_hang": it.ten_hang,
-                "so_luong": abs(it.chenhlech),
-                "don_gia": it.don_gia,
-                "tk_no": (it.inventory_balance.tk_kho or ("155" if it.product_id else "152")) if it.chenhlech > 0 else "811",
-                "tk_co": (it.inventory_balance.tk_kho or ("155" if it.product_id else "152")) if it.chenhlech < 0 else "711"
-            } for it in adj.items]
+            items=journal_items_adj,
         )
 
     db.commit()
@@ -3093,6 +3143,8 @@ def _adj_to_dict(adj: StockAdjustment, db: Session) -> dict:
 @router.get("/giao-dich")
 def get_giao_dich(
     warehouse_id: Optional[int] = Query(None),
+    phan_xuong_id: Optional[int] = Query(None),
+    phap_nhan_id: Optional[int] = Query(None),
     paper_material_id: Optional[int] = Query(None),
     other_material_id: Optional[int] = Query(None),
     product_id: Optional[int] = Query(None),
@@ -3104,8 +3156,14 @@ def get_giao_dich(
     _: User = Depends(get_current_user),
 ):
     q = db.query(InventoryTransaction)
+    if phan_xuong_id or phap_nhan_id:
+        q = q.join(Warehouse, Warehouse.id == InventoryTransaction.warehouse_id)
     if warehouse_id:
         q = q.filter(InventoryTransaction.warehouse_id == warehouse_id)
+    if phan_xuong_id:
+        q = q.filter(Warehouse.phan_xuong_id == phan_xuong_id)
+    if phap_nhan_id:
+        q = q.join(PhanXuong, Warehouse.phan_xuong_id == PhanXuong.id).filter(PhanXuong.phap_nhan_id == phap_nhan_id)
     if paper_material_id:
         q = q.filter(InventoryTransaction.paper_material_id == paper_material_id)
     if other_material_id:
@@ -3124,7 +3182,8 @@ def get_giao_dich(
     pm_ids = {r.paper_material_id for r in rows if r.paper_material_id}
     om_ids = {r.other_material_id for r in rows if r.other_material_id}
     pd_ids = {r.product_id for r in rows if r.product_id}
-    wh_map = {w.id: w.ma_kho for w in db.query(Warehouse).filter(Warehouse.id.in_(wh_ids)).all()} if wh_ids else {}
+    wh_rows = db.query(Warehouse).filter(Warehouse.id.in_(wh_ids)).all() if wh_ids else []
+    wh_map = {w.id: w for w in wh_rows}
     pm_map = {p.id: (p.ma_chinh, p.ten) for p in db.query(PaperMaterial).filter(PaperMaterial.id.in_(pm_ids)).all()} if pm_ids else {}
     om_map = {p.id: (p.ma_chinh, p.ten) for p in db.query(OtherMaterial).filter(OtherMaterial.id.in_(om_ids)).all()} if om_ids else {}
     pd_map = {p.id: (p.ma_hang or p.ma_amis, p.ten_hang) for p in db.query(Product).filter(Product.id.in_(pd_ids)).all()} if pd_ids else {}
@@ -3142,7 +3201,15 @@ def get_giao_dich(
         "id": r.id,
         "ngay_giao_dich": r.ngay_giao_dich.isoformat() if r.ngay_giao_dich else None,
         "warehouse_id": r.warehouse_id,
-        "ten_kho": wh_map.get(r.warehouse_id, ""),
+        "ten_kho": wh_map.get(r.warehouse_id).ten_kho if wh_map.get(r.warehouse_id) else "",
+        "loai_kho": wh_map.get(r.warehouse_id).loai_kho if wh_map.get(r.warehouse_id) else None,
+        "phan_xuong_id": wh_map.get(r.warehouse_id).phan_xuong_id if wh_map.get(r.warehouse_id) else None,
+        "ten_phan_xuong": wh_map.get(r.warehouse_id).phan_xuong_obj.ten_xuong if wh_map.get(r.warehouse_id) and wh_map.get(r.warehouse_id).phan_xuong_obj else None,
+        "phap_nhan_id": wh_map.get(r.warehouse_id).phan_xuong_obj.phap_nhan_id if wh_map.get(r.warehouse_id) and wh_map.get(r.warehouse_id).phan_xuong_obj else None,
+        "ten_phap_nhan": (
+            wh_map.get(r.warehouse_id).phan_xuong_obj.phap_nhan.ten_viet_tat
+            or wh_map.get(r.warehouse_id).phan_xuong_obj.phap_nhan.ten_phap_nhan
+        ) if wh_map.get(r.warehouse_id) and wh_map.get(r.warehouse_id).phan_xuong_obj and wh_map.get(r.warehouse_id).phan_xuong_obj.phap_nhan else None,
         "paper_material_id": r.paper_material_id,
         "other_material_id": r.other_material_id,
         "product_id": r.product_id,
