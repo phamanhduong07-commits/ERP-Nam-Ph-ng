@@ -47,3 +47,4 @@ from app.models.hr import (
 )
 from app.models.import_log import ImportLog
 from app.models.system import SystemSetting, PrintTemplate, AgentSession
+from app.models.quality import QCSheet, QCDefect

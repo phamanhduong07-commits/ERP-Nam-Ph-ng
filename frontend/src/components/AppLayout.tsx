@@ -11,6 +11,7 @@ import {
   AccountBookOutlined, RobotOutlined, BarChartOutlined, ShopOutlined, BankOutlined,
   ThunderboltOutlined, FileTextOutlined, MobileOutlined, CarOutlined,
   SolutionOutlined, TrophyOutlined, CrownOutlined, DollarOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
@@ -285,6 +286,14 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công / Tỷ lệ lãi</Link>, permissions: ['master.other.view', 'master.other.manage'] },
         { key: '/reports/import-history', label: <Link to="/reports/import-history">Lịch sử Import</Link>, permissions: ['master.import', 'master.other.manage'] },
         { key: '/master/print-templates', label: <Link to="/master/print-templates">⚙ Cấu hình biểu mẫu in</Link>, permissions: ['master.other.manage'] },
+      ],
+    },
+    {
+      key: 'quality',
+      icon: <CheckCircleOutlined />,
+      label: 'Chất lượng',
+      children: [
+        { key: '/quality/qc-sheets', label: <Link to="/quality/qc-sheets">Phiếu kiểm tra QC</Link> },
       ],
     },
     {

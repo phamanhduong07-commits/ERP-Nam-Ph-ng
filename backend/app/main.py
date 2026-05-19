@@ -28,6 +28,7 @@ from app.routers import import_logs as import_logs_router
 from app.routers import system as system_router
 from app.routers import media as media_router
 from app.agent import router as agent_router
+from app.routers import quality_control as quality_control_router
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -143,6 +144,7 @@ app.include_router(logistics_hr.router)
 app.include_router(hr_payroll_calc.router)
 app.include_router(hr_reward.router)
 app.include_router(hr_self_service.router)
+app.include_router(quality_control_router.router)
 
 
 @app.exception_handler(IntegrityError)

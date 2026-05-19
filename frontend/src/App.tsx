@@ -109,6 +109,8 @@ const CashBookPage = lazy(() => import('./pages/accounting/CashBookPage'))
 const BankLedgerPage = lazy(() => import('./pages/accounting/BankLedgerPage'))
 const CCDCListPage = lazy(() => import('./pages/accounting/CCDCListPage'))
 const BankAccountList = lazy(() => import('./pages/danhmuc/BankAccountList'))
+// Quality
+const QCListPage = lazy(() => import('./pages/quality/QCListPage'))
 // Reports
 const DebtSummaryPage = lazy(() => import('./pages/reports/DebtSummaryPage'))
 const RevenueReportPage = lazy(() => import('./pages/reports/RevenueReportPage'))
@@ -354,6 +356,7 @@ export default function App() {
             <Route path="hr/rewards" element={<ErrorBoundary><RewardDisciplinePage /></ErrorBoundary>} />
             <Route path="hr/me" element={<ErrorBoundary><EmployeeMobilePortal /></ErrorBoundary>} />
             <Route path="hr/permission-matrix" element={<ErrorBoundary><PermissionMatrixPage /></ErrorBoundary>} />
+            <Route path="quality/qc-sheets" element={<ErrorBoundary><QCListPage /></ErrorBoundary>} />
             <Route path="agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
             <Route path="master/print-templates" element={<ErrorBoundary><PrintTemplatePage /></ErrorBoundary>} />
             <Route path="docs" element={<ErrorBoundary><DocsPage /></ErrorBoundary>} />
