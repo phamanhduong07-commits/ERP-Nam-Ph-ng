@@ -60,7 +60,7 @@ function TabLichSuIn() {
   const handleExport = () => {
     exportToExcel(`lich-su-in-${dayjs().format('YYYYMMDD')}`, [{
       name: 'Lịch sử in',
-      headers: ['Ngày tạo', 'LSX', 'Số phiếu', 'Trạng thái', 'Tên hàng', 'Mã KH', 'SL phôi', 'Ngày in', 'SL in OK', 'SL lỗi', 'Ca', 'Ghi chú'],
+      headers: ['Ngày tạo', 'LSX', 'Số phiếu', 'Trạng thái', 'Tên hàng', 'Mã KH', 'Khổ cắt (cm)', 'm²/c', 'SL phôi', 'Ngày in', 'SL in OK', 'SL lỗi', 'Ca', 'Ghi chú'],
       rows: filtered.map(r => [
         dayjs(r.created_at).format('DD/MM/YYYY'),
         r.so_lsx ?? '',
@@ -68,6 +68,8 @@ function TabLichSuIn() {
         TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
         r.ten_hang ?? '',
         r.ma_kh ?? '',
+        r.kho_tt ?? '',
+        (r.kho_tt != null && r.dai_tt != null) ? (r.kho_tt * r.dai_tt / 10000).toFixed(3) : '',
         r.so_luong_phoi ?? '',
         r.ngay_in ? dayjs(r.ngay_in).format('DD/MM/YYYY') : '',
         r.so_luong_in_ok ?? '',
@@ -75,7 +77,7 @@ function TabLichSuIn() {
         r.ca ?? '',
         r.ghi_chu ?? '',
       ]),
-      colWidths: [12, 14, 14, 14, 30, 10, 10, 12, 10, 10, 8, 25],
+      colWidths: [12, 14, 14, 14, 30, 10, 10, 9, 10, 12, 10, 10, 8, 25],
     }])
   }
 
@@ -86,6 +88,8 @@ function TabLichSuIn() {
     { title: 'Trạng thái', dataIndex: 'trang_thai', width: 115, render: (v: string) => <Tag color={TRANG_THAI_COLORS[v]}>{TRANG_THAI_LABELS[v] ?? v}</Tag> },
     { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
     { title: 'KH', dataIndex: 'ma_kh', width: 80 },
+    { title: 'Khổ cắt (cm)', dataIndex: 'kho_tt', width: 100, align: 'right' as const, render: (v: number | undefined) => v != null ? v : '—' },
+    { title: 'm²/c', width: 80, align: 'right' as const, render: (_: unknown, r: PhieuIn) => (r.kho_tt != null && r.dai_tt != null) ? (r.kho_tt * r.dai_tt / 10000).toFixed(3) : '—' },
     { title: 'SL phôi', dataIndex: 'so_luong_phoi', width: 90, align: 'right' as const, render: (v: number | null) => v != null ? v.toLocaleString('vi-VN') : '—' },
     { title: 'Ngày in', dataIndex: 'ngay_in', width: 90, render: (v: string | null) => v ? dayjs(v).format('DD/MM/YY') : '—' },
     { title: 'SL in OK', dataIndex: 'so_luong_in_ok', width: 90, align: 'right' as const, render: (v: number | null) => v != null ? <span style={{ color: '#52c41a' }}>{v.toLocaleString('vi-VN')}</span> : '—' },
@@ -118,7 +122,7 @@ function TabLichSuIn() {
       <Card>
         <Table dataSource={filtered} columns={columns} rowKey="id" size="small" loading={isLoading}
           pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `${t} phiếu` }}
-          scroll={{ x: 1100 }} />
+          scroll={{ x: 1280 }} />
       </Card>
     </>
   )
@@ -154,19 +158,21 @@ function TabLichSuTP() {
   const handleExport = () => {
     exportToExcel(`lich-su-tp-${dayjs().format('YYYYMMDD')}`, [{
       name: 'Lịch sử TP',
-      headers: ['LSX', 'Số phiếu', 'Tên hàng', 'Mã KH', 'Ngày TP', 'Ca', 'SL TP OK', 'SL lỗi', 'Ghi chú'],
+      headers: ['LSX', 'Số phiếu', 'Tên hàng', 'Mã KH', 'Khổ cắt (cm)', 'm²/c', 'Ngày TP', 'Ca', 'SL TP OK', 'SL lỗi', 'Ghi chú'],
       rows: filtered.map(r => [
         r.so_lsx ?? '',
         r.so_phieu,
         r.ten_hang ?? '',
         r.ma_kh ?? '',
+        r.kho_tt ?? '',
+        (r.kho_tt != null && r.dai_tt != null) ? (r.kho_tt * r.dai_tt / 10000).toFixed(3) : '',
         r.ngay_sau_in ? dayjs(r.ngay_sau_in).format('DD/MM/YYYY') : '',
         r.ca_sau_in ?? '',
         r.so_luong_sau_in_ok ?? '',
         r.so_luong_sau_in_loi ?? '',
         r.ghi_chu_sau_in ?? '',
       ]),
-      colWidths: [14, 14, 30, 10, 12, 8, 10, 10, 25],
+      colWidths: [14, 14, 30, 10, 10, 9, 12, 8, 10, 10, 25],
     }])
   }
 
@@ -176,6 +182,8 @@ function TabLichSuTP() {
     { title: 'Phiếu', dataIndex: 'so_phieu', width: 120 },
     { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
     { title: 'KH', dataIndex: 'ma_kh', width: 80 },
+    { title: 'Khổ cắt (cm)', dataIndex: 'kho_tt', width: 100, align: 'right' as const, render: (v: number | undefined) => v != null ? v : '—' },
+    { title: 'm²/c', width: 80, align: 'right' as const, render: (_: unknown, r: PhieuIn) => (r.kho_tt != null && r.dai_tt != null) ? (r.kho_tt * r.dai_tt / 10000).toFixed(3) : '—' },
     { title: 'Ca', dataIndex: 'ca_sau_in', width: 55, render: (v: string | null) => v ?? '—' },
     { title: 'SL TP OK', dataIndex: 'so_luong_sau_in_ok', width: 100, align: 'right' as const, render: (v: number | null) => v != null ? <span style={{ color: '#722ed1', fontWeight: 600 }}>{v.toLocaleString('vi-VN')}</span> : '—' },
     { title: 'SL lỗi', dataIndex: 'so_luong_sau_in_loi', width: 80, align: 'right' as const, render: (v: number | null) => v != null && v > 0 ? <span style={{ color: '#ff4d4f' }}>{v.toLocaleString('vi-VN')}</span> : (v != null ? '0' : '—') },
@@ -203,7 +211,7 @@ function TabLichSuTP() {
       <Card>
         <Table dataSource={filtered} columns={columns} rowKey="id" size="small" loading={isLoading}
           pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `${t} phiếu` }}
-          scroll={{ x: 900 }} />
+          scroll={{ x: 1060 }} />
       </Card>
     </>
   )
@@ -251,7 +259,7 @@ function TabScanByLoai({ loai, label }: { loai: 'can_mang' | 'xa', label: string
   const handleExport = () => {
     exportToExcel(`lich-su-${loai}-${dayjs().format('YYYYMMDD')}`, [{
       name: label,
-      headers: ['Ngày giờ', 'LSX', 'Tên hàng', 'Máy scan', 'Người SX', 'SL TP', 'Khổ (mm)', 'Dài (mm)', 'Diện tích', 'Đơn giá', 'Tiền lương'],
+      headers: ['Ngày giờ', 'LSX', 'Tên hàng', 'Máy scan', 'Người SX', 'SL TP', 'Khổ cắt (mm)', 'Dài (mm)', 'm²', 'Đơn giá', 'Tiền lương'],
       rows: filtered.map(r => [
         dayjs(r.created_at).format('DD/MM/YYYY HH:mm'),
         r.so_lsx,
@@ -276,9 +284,9 @@ function TabScanByLoai({ loai, label }: { loai: 'can_mang' | 'xa', label: string
     { title: 'Máy scan', dataIndex: 'may_scan_id', width: 120, render: (_: number, row: ScanLog) => row.ten_may ?? allMay.find(m => m.id === row.may_scan_id)?.ten_may ?? `Máy #${row.may_scan_id}` },
     { title: 'Người SX', dataIndex: 'nguoi_sx', width: 120, render: (v: string | undefined) => v ?? '—' },
     { title: 'SL TP', dataIndex: 'so_luong_tp', width: 90, align: 'right' as const, render: (v: number) => <span style={{ color: '#1677ff', fontWeight: 600 }}>{v.toLocaleString('vi-VN')}</span> },
-    { title: 'Khổ (mm)', dataIndex: 'kho_tt', width: 90, align: 'right' as const, render: (v: number | undefined) => v ?? '—' },
+    { title: 'Khổ cắt (mm)', dataIndex: 'kho_tt', width: 100, align: 'right' as const, render: (v: number | undefined) => v ?? '—' },
     { title: 'Dài (mm)', dataIndex: 'dai', width: 90, align: 'right' as const, render: (v: number | undefined) => v ?? '—' },
-    { title: 'Diện tích', dataIndex: 'dien_tich', width: 90, align: 'right' as const, render: (v: number | undefined) => v != null ? v.toFixed(4) : '—' },
+    { title: 'm²', dataIndex: 'dien_tich', width: 90, align: 'right' as const, render: (v: number | undefined) => v != null ? v.toFixed(4) : '—' },
     { title: 'Đơn giá', dataIndex: 'don_gia', width: 90, align: 'right' as const, render: (v: number | undefined) => v != null ? v.toLocaleString('vi-VN') : '—' },
     { title: 'Tiền lương', dataIndex: 'tien_luong', width: 110, align: 'right' as const, render: (v: number | undefined) => v != null ? <span style={{ color: '#52c41a' }}>{v.toLocaleString('vi-VN')}</span> : '—' },
   ]

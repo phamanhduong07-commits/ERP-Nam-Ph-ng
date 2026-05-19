@@ -414,6 +414,12 @@ export const cd2Api = {
   // Worker stats
   getWorkerStats: (printer_user_id: number, date?: string) =>
     client.get<{ today: WorkerDayStats; week: WorkerDayStats[] }>('/cd2/worker-stats', { params: { printer_user_id, date } }),
+
+  // Production wage summary
+  getProductionWageSummary: (from_date: string, to_date: string, phan_xuong_id?: number) =>
+    client.get<ProductionWageSummaryItem[]>('/cd2/production-wage-summary', {
+      params: { from_date, to_date, phan_xuong_id },
+    }),
 }
 
 export interface WorkerDayStats {
@@ -421,4 +427,13 @@ export interface WorkerDayStats {
   so_lenh: number
   tong_sl: number
   gio_lam_viec_phut: number
+}
+
+export interface ProductionWageSummaryItem {
+  nguoi_sx: string
+  so_lan_scan: number
+  tong_sl_tp: number
+  tong_m2: number
+  tong_tien_luong: number
+  chi_tiet: { loai_may: string; so_lan: number; tong_m2: number; tien_luong: number }[]
 }

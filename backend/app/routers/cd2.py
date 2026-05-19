@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Optional
 import bcrypt as _bcrypt
@@ -2590,3 +2590,76 @@ def get_worker_stats(
     week_stats = [stats_for_day(target_date - timedelta(days=i)) for i in range(6, -1, -1)]
 
     return {"today": today_stats, "week": week_stats}
+
+
+# ── Tổng hợp lương sản phẩm ───────────────────────────────────────────────────
+
+@router.get("/production-wage-summary")
+def production_wage_summary(
+    from_date: date = Query(...),
+    to_date: date = Query(...),
+    phan_xuong_id: Optional[int] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Tổng hợp lương sản phẩm theo người SX từ ScanLog, dùng để xét lương tháng."""
+    from_dt = datetime.combine(from_date, time.min)
+    to_dt = datetime.combine(to_date, time.max)
+
+    q = (
+        db.query(ScanLog)
+        .options(joinedload(ScanLog.may_scan_obj))
+        .filter(ScanLog.created_at >= from_dt, ScanLog.created_at <= to_dt)
+    )
+    if phan_xuong_id is not None:
+        q = q.join(MayScan, ScanLog.may_scan_id == MayScan.id).filter(
+            MayScan.phan_xuong_id == phan_xuong_id
+        )
+
+    logs = q.order_by(ScanLog.created_at).all()
+
+    groups: dict[str, dict] = {}
+    for log in logs:
+        key = log.nguoi_sx or "Không xác định"
+        if key not in groups:
+            groups[key] = {
+                "nguoi_sx": key,
+                "so_lan_scan": 0,
+                "tong_sl_tp": Decimal("0"),
+                "tong_m2": Decimal("0"),
+                "tong_tien_luong": Decimal("0"),
+                "by_loai": {},
+            }
+        g = groups[key]
+        g["so_lan_scan"] += 1
+        g["tong_sl_tp"] += Decimal(str(log.so_luong_tp or 0))
+        g["tong_m2"] += Decimal(str(log.dien_tich or 0))
+        g["tong_tien_luong"] += Decimal(str(log.tien_luong or 0))
+
+        loai = (getattr(log.may_scan_obj, "loai", None) or "unknown") if log.may_scan_obj else "unknown"
+        if loai not in g["by_loai"]:
+            g["by_loai"][loai] = {"so_lan": 0, "tong_m2": Decimal("0"), "tien_luong": Decimal("0")}
+        g["by_loai"][loai]["so_lan"] += 1
+        g["by_loai"][loai]["tong_m2"] += Decimal(str(log.dien_tich or 0))
+        g["by_loai"][loai]["tien_luong"] += Decimal(str(log.tien_luong or 0))
+
+    result = []
+    for g in sorted(groups.values(), key=lambda x: x["tong_tien_luong"], reverse=True):
+        result.append({
+            "nguoi_sx": g["nguoi_sx"],
+            "so_lan_scan": g["so_lan_scan"],
+            "tong_sl_tp": float(g["tong_sl_tp"]),
+            "tong_m2": round(float(g["tong_m2"]), 4),
+            "tong_tien_luong": round(float(g["tong_tien_luong"]), 2),
+            "chi_tiet": [
+                {
+                    "loai_may": loai,
+                    "so_lan": d["so_lan"],
+                    "tong_m2": round(float(d["tong_m2"]), 4),
+                    "tien_luong": round(float(d["tien_luong"]), 2),
+                }
+                for loai, d in g["by_loai"].items()
+            ],
+        })
+
+    return result
