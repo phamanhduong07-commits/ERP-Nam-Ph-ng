@@ -1667,7 +1667,42 @@ def scan_history(
     if phan_xuong_id is not None:
         q = q.filter(MayScan.phan_xuong_id == phan_xuong_id)
     logs = q.order_by(ScanLog.created_at.desc()).limit(500).all()
-    return [_scan_log_to_dict(s) for s in logs]
+
+    # Enrich with kho1 (cm, per-box) + dai_tt (cm) via so_lsx → ProductionPlanLine
+    from app.models.production import ProductionOrder as _PO, ProductionOrderItem as _POI
+    from app.models.production_plan import ProductionPlanLine as _PPL
+    so_lsx_values: set[str] = {s.so_lsx for s in logs if s.so_lsx}
+    tech_map: dict[str, dict] = {}
+    if so_lsx_values:
+        poi_rows = (
+            db.query(_PO.so_lenh, _POI.id, _POI.dai_tt)
+            .join(_POI, _POI.production_order_id == _PO.id)
+            .filter(_PO.so_lenh.in_(so_lsx_values))
+            .order_by(_PO.so_lenh, _POI.id)
+            .all()
+        )
+        poi_by_lsx: dict[str, tuple] = {}
+        for so_lenh, poi_id, dai_tt in poi_rows:
+            if so_lenh not in poi_by_lsx:
+                poi_by_lsx[so_lenh] = (poi_id, float(dai_tt) if dai_tt is not None else None)
+        if poi_by_lsx:
+            all_poi_ids = {t[0] for t in poi_by_lsx.values()}
+            kho1_map: dict[int, Optional[float]] = {
+                r.production_order_item_id: float(r.kho1) if r.kho1 is not None else None
+                for r in db.query(_PPL.production_order_item_id, _PPL.kho1)
+                    .filter(_PPL.production_order_item_id.in_(all_poi_ids)).all()
+            }
+            for so_lenh, (poi_id, dai_tt) in poi_by_lsx.items():
+                tech_map[so_lenh] = {"kho1": kho1_map.get(poi_id), "dai_tt": dai_tt}
+
+    result = []
+    for s in logs:
+        d = _scan_log_to_dict(s)
+        tech = tech_map.get(s.so_lsx, {})
+        d["kho1"] = tech.get("kho1")
+        d["dai_tt"] = tech.get("dai_tt")
+        result.append(d)
+    return result
 
 
 @router.delete("/scan-logs/delete/{log_id}")
@@ -1797,7 +1832,33 @@ def history_phieu_in(
         q = q.filter(PhieuIn.phan_xuong_id == phan_xuong_id)
     if may_in_id is not None:
         q = q.filter(PhieuIn.may_in_id == may_in_id)
-    return [_to_dict(p) for p in q.order_by(PhieuIn.created_at.desc()).limit(500).all()]
+    records = q.order_by(PhieuIn.created_at.desc()).limit(500).all()
+
+    # Enrich with kho1 from ProductionPlanLine (per-box cutting width, cm)
+    from app.models.production_plan import ProductionPlanLine
+    poi_ids: set[int] = set()
+    for p in records:
+        if p.production_order and p.production_order.items:
+            poi_ids.add(p.production_order.items[0].id)
+    kho1_map: dict[int, Optional[float]] = {}
+    if poi_ids:
+        for row in db.query(
+            ProductionPlanLine.production_order_item_id, ProductionPlanLine.kho1
+        ).filter(ProductionPlanLine.production_order_item_id.in_(poi_ids)).all():
+            kho1_map[row.production_order_item_id] = (
+                float(row.kho1) if row.kho1 is not None else None
+            )
+
+    result = []
+    for p in records:
+        d = _to_dict(p)
+        d["kho1"] = (
+            kho1_map.get(p.production_order.items[0].id)
+            if (p.production_order and p.production_order.items)
+            else None
+        )
+        result.append(d)
+    return result
 
 
 # ── Shift: Ca làm việc ────────────────────────────────────────────────────────

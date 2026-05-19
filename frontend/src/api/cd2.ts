@@ -117,6 +117,7 @@ export interface PhieuIn {
   created_at: string
   updated_at: string
   kho_tt?: number
+  kho1?: number
   dai_tt?: number
   dai?: number
   rong?: number
@@ -191,6 +192,8 @@ export interface ScanLog {
   rong?: number
   cao?: number
   kho_tt?: number
+  kho1?: number
+  dai_tt?: number
   dien_tich?: number
   so_luong_tp: number
   don_gia?: number
