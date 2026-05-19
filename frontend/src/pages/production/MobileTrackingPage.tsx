@@ -34,6 +34,71 @@ function fmtElapsed(seconds: number): string {
   return `${s}s`
 }
 
+function fmtElapsedCompact(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function beep(type: 'success' | 'error' | 'warn') {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const play = (freq: number, dur: number, delay = 0) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.frequency.value = freq; osc.type = 'sine'
+      gain.gain.setValueAtTime(0.25, ctx.currentTime + delay)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + dur / 1000)
+      osc.start(ctx.currentTime + delay)
+      osc.stop(ctx.currentTime + delay + dur / 1000 + 0.01)
+    }
+    if (type === 'success') { play(880, 80) }
+    else if (type === 'error') { play(330, 120); play(330, 120, 0.27) }
+    else { play(550, 200) }
+  } catch { /* ignore */ }
+}
+
+function usePullToRefresh(onRefresh: () => void) {
+  const [isPulling, setIsPulling] = useState(false)
+  const startYRef = useRef(0)
+  const pulledRef = useRef(false)
+  const callbackRef = useRef(onRefresh)
+  callbackRef.current = onRefresh
+
+  useEffect(() => {
+    const onStart = (e: TouchEvent) => {
+      if (window.scrollY === 0) startYRef.current = e.touches[0].clientY
+    }
+    const onMove = (e: TouchEvent) => {
+      if (window.scrollY > 0) return
+      const dy = e.touches[0].clientY - startYRef.current
+      if (dy > 80 && !pulledRef.current) { pulledRef.current = true; setIsPulling(true) }
+    }
+    const onEnd = () => {
+      if (pulledRef.current) {
+        if ('vibrate' in navigator) navigator.vibrate(30)
+        callbackRef.current()
+      }
+      pulledRef.current = false; setIsPulling(false)
+    }
+    window.addEventListener('touchstart', onStart, { passive: true })
+    window.addEventListener('touchmove', onMove, { passive: true })
+    window.addEventListener('touchend', onEnd)
+    return () => {
+      window.removeEventListener('touchstart', onStart)
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onEnd)
+    }
+  }, [])
+
+  return isPulling
+}
+
 // ── PhieuDetailDrawer ──────────────────────────────────────────────────────────
 
 function PhieuDetailDrawer({
@@ -171,6 +236,7 @@ export default function MobileTrackingPage() {
   const [isScannerOpen, setIsScannerOpen] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [sauInElapsedSeconds, setSauInElapsedSeconds] = useState(0)
   const [clockTime, setClockTime] = useState(dayjs().format('HH:mm'))
   const isOnline = useOnlineStatus()
   const [offlineQueue, setOfflineQueue] = useState<any[]>([])
@@ -179,6 +245,7 @@ export default function MobileTrackingPage() {
   const [ngungInForm] = Form.useForm()
   const [ngungDinhHinhForm] = Form.useForm()
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const sauInTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lsxInputRef = useRef<any>(null)
 
   // ── Trạng thái logic ──────────────────────────────────────────────────────
@@ -305,6 +372,21 @@ export default function MobileTrackingPage() {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [isRunning, currentOrder?.gio_bat_dau_in])
 
+  // ── Timer sau in (gio_bat_dau_dinh_hinh) ────────────────────────────────
+
+  useEffect(() => {
+    if (sauInTimerRef.current) clearInterval(sauInTimerRef.current)
+    if (isSauInRunning && currentOrder?.gio_bat_dau_dinh_hinh) {
+      const start = dayjs(currentOrder.gio_bat_dau_dinh_hinh)
+      const update = () => setSauInElapsedSeconds(dayjs().diff(start, 'second'))
+      update()
+      sauInTimerRef.current = setInterval(update, 1000)
+    } else {
+      setSauInElapsedSeconds(0)
+    }
+    return () => { if (sauInTimerRef.current) clearInterval(sauInTimerRef.current) }
+  }, [isSauInRunning, currentOrder?.gio_bat_dau_dinh_hinh])
+
   // ── Live clock (cập nhật mỗi 30 giây) ───────────────────────────────────
 
   useEffect(() => {
@@ -369,6 +451,8 @@ export default function MobileTrackingPage() {
     if (currentOrder?.so_lsx)
       qc.invalidateQueries({ queryKey: ['order-progress', currentOrder.so_lsx] })
   }
+
+  const isPullingRefresh = usePullToRefresh(invalidate)
 
   // ── Định hình mutations (sau_in mode) ─────────────────────────────────────
 
@@ -578,6 +662,8 @@ export default function MobileTrackingPage() {
            (p.so_phieu || '').toUpperCase() === code
     )
     if (localMatch) {
+      beep('success')
+      if ('vibrate' in navigator) navigator.vibrate(60)
       setCurrentOrder(localMatch)
       setShowSearch(false)
       setTimeout(() => window.scrollTo({ top: 400, behavior: 'smooth' }), 100)
@@ -586,16 +672,22 @@ export default function MobileTrackingPage() {
 
     // Không có trong danh sách máy — cần mạng
     if (!isOnline) {
+      beep('error')
+      if ('vibrate' in navigator) navigator.vibrate([100, 50, 100])
       message.warning('Mất kết nối — không tìm thấy trong danh sách máy. Vui lòng kết nối mạng để tra cứu.')
       return
     }
 
     try {
       const res = await cd2Api.phieuLookup(code)
+      beep('success')
+      if ('vibrate' in navigator) navigator.vibrate(60)
       setCurrentOrder(res.data)
       setShowSearch(false)
       setTimeout(() => window.scrollTo({ top: 400, behavior: 'smooth' }), 100)
     } catch {
+      beep('error')
+      if ('vibrate' in navigator) navigator.vibrate([100, 50, 100])
       message.error('Không tìm thấy Lệnh sản xuất!')
     }
   }
@@ -619,7 +711,7 @@ export default function MobileTrackingPage() {
     const loadingDisplay  = isSauInMode ? loadingMaySauIns : loadingMachines
 
     return (
-      <div style={{ padding: '24px 16px', background: '#f0f2f5', minHeight: '100vh' }}>
+      <div style={{ padding: '24px 16px', background: '#f0f2f5', minHeight: '100vh', overflowX: 'hidden' }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <DesktopOutlined style={{ fontSize: 40, color: isSauInMode ? '#722ed1' : '#1a337e', marginBottom: 12 }} />
           <Title level={3} style={{ margin: 0, color: isSauInMode ? '#722ed1' : '#1a337e' }}>
@@ -695,7 +787,19 @@ export default function MobileTrackingPage() {
     : null
 
   return (
-    <div style={{ background: '#f0f2f5', minHeight: '100vh', paddingBottom: 60 }}>
+    <div style={{ background: '#f0f2f5', minHeight: '100vh', paddingBottom: 60, overflowX: 'hidden' }}>
+
+      {/* ── Pull-to-refresh indicator ── */}
+      {isPullingRefresh && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+          display: 'flex', justifyContent: 'center', padding: '6px 0',
+          background: 'rgba(255,255,255,0.9)', pointerEvents: 'none',
+        }}>
+          <Spin size="small" />
+          <span style={{ marginLeft: 8, fontSize: 12, color: '#888' }}>Đang làm mới...</span>
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div style={{
@@ -988,7 +1092,7 @@ export default function MobileTrackingPage() {
                 </div>
               )}
 
-              {/* Đồng hồ đang chạy */}
+              {/* Đồng hồ đang chạy — in mode */}
               {isRunning && (
                 <div style={{
                   marginTop: 12, background: '#f6ffed', borderRadius: 12,
@@ -998,6 +1102,23 @@ export default function MobileTrackingPage() {
                   <Text strong style={{ color: '#52c41a', fontSize: 16 }}>
                     Đang chạy: {fmtElapsed(elapsedSeconds)}
                   </Text>
+                </div>
+              )}
+
+              {/* Đồng hồ đang chạy — sau in mode */}
+              {isSauInMode && isSauInRunning && (
+                <div style={{
+                  marginTop: 12, background: '#f9f0ff', borderRadius: 12,
+                  padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12,
+                  border: '1px solid #d3adf7',
+                }}>
+                  <ClockCircleOutlined style={{ color: '#722ed1', fontSize: 20 }} />
+                  <div>
+                    <div style={{ color: '#722ed1', fontSize: 22, fontWeight: 700, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtElapsedCompact(sauInElapsedSeconds)}
+                    </div>
+                    <div style={{ color: '#9254de', fontSize: 11, marginTop: 2 }}>Thời gian làm thành phẩm</div>
+                  </div>
                 </div>
               )}
 

@@ -265,6 +265,19 @@ body,
 ::-webkit-scrollbar-thumb { background: #c0c0c0; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #999; }
 
+/* ── Chặn scroll ngang toàn bộ app ── */
+html {
+  overflow-x: hidden;
+}
+body {
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+#root {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 /* ── Print reset ── */
 @media print {
   body { background: #fff; color: #000; font-size: 11px; }
