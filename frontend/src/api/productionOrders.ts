@@ -19,7 +19,6 @@ export interface ProductionOrderItem {
     dai_phoi: number | null
     rong_phoi: number | null
   } | null
-  cong_doan: string | null
   so_luong_ke_hoach: number
   so_luong_hoan_thanh: number
   dvt: string
@@ -41,11 +40,13 @@ export interface ProductionOrderItem {
   mat_3: string | null;   mat_3_dl: number | null
   loai_in: string | null
   so_mau: number | null
+  loai_lan: string | null
   kho_tt: number | null
   dai_tt: number | null
   qccl: string | null
   dien_tich: number | null
   gia_ban_muc_tieu: number | null
+  cong_doan: string | null
 }
 
 export interface ProductionOrder {
@@ -72,6 +73,7 @@ export interface ProductionOrder {
   ngay_bat_dau_thuc_te: string | null
   ngay_hoan_thanh_thuc_te: string | null
   ghi_chu: string | null
+  ghi_chu_don_hang: string | null
   don_gia_noi_bo: number | null
   items: ProductionOrderItem[]
   created_at: string
@@ -115,6 +117,7 @@ export interface UpdateItemSxParamsPayload {
   kho_tt?: number | null
   dai_tt?: number | null
   qccl?: string | null
+  ghi_chu?: string | null
   to_hop_song?: string | null
   mat?: string | null;     mat_dl?: number | null
   song_1?: string | null;  song_1_dl?: number | null

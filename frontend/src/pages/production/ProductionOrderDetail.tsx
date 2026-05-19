@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
+import type { PhanXuongWithWarehouses } from '../../api/warehouse'
 import PhieuNhapPhoiSongModal, { phoiSessionKey } from './PhieuNhapPhoiSongModal'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -28,6 +29,7 @@ import BomResultView from './BomResultView'
 import SxParamsTab from './SxParamsTab'
 import { bomApi } from '../../api/bom'
 import { exportToExcel, printToPdf, fmtVND, fmtDate, fmtNum, fmtDim, buildHtmlTable, printProductionTag, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
+import PhotoCapture from '../../components/PhotoCapture'
 
 
 const { Title, Text } = Typography
@@ -247,6 +249,16 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
     queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
   })
   const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
+
+  const { data: phanXuongWithWh = [] } = useQuery<PhanXuongWithWarehouses[]>({
+    queryKey: ['phan-xuong-with-warehouses'],
+    queryFn: () => warehouseApi.listTheoPhanXuong().then(r => r.data),
+    staleTime: 300_000,
+  })
+  // Kho nhập phôi = kho PHOI của phan_xuong_id lệnh SX
+  const khoNhapPhoiDuKien = order
+    ? phanXuongWithWh.find(px => px.id === order.phan_xuong_id)?.warehouses?.PHOI ?? null
+    : null
 
   const updateSxMutation = useMutation({
     mutationFn: (vals: { phap_nhan_id?: number | null; phan_xuong_id?: number | null }) =>
@@ -870,6 +882,8 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
               <Descriptions.Item label="Kho nhập phôi">
                 {khoNhapPhoiGanNhat
                   ? <Tag color="orange">{khoNhapPhoiGanNhat}</Tag>
+                  : khoNhapPhoiDuKien
+                  ? <Tag color="default">{khoNhapPhoiDuKien.ten_kho}</Tag>
                   : <Typography.Text type="secondary">—</Typography.Text>}
               </Descriptions.Item>
               <Descriptions.Item label="Giá nội bộ (đ/tấm)">
@@ -904,8 +918,13 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   {dayjs(order.ngay_hoan_thanh_thuc_te).format('DD/MM/YYYY')}
                 </Descriptions.Item>
               )}
+              {order.ghi_chu_don_hang && (
+                <Descriptions.Item label="Ghi chú đơn hàng" span={embedded ? 1 : 2}>
+                  {order.ghi_chu_don_hang}
+                </Descriptions.Item>
+              )}
               {order.ghi_chu && (
-                <Descriptions.Item label="Ghi chú" span={2}>
+                <Descriptions.Item label="Ghi chú lệnh SX" span={embedded ? 1 : 2}>
                   {order.ghi_chu}
                 </Descriptions.Item>
               )}
@@ -1316,6 +1335,20 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
               </Space>
             ),
             children: <PhieuNhapPhoiSongTab orderId={order.id} order={order} onOpenModal={() => setShowPhieuModal(true)} />,
+          },
+          {
+            key: 'hinh-anh',
+            label: '📷 Ảnh SX',
+            children: (
+              <Card>
+                <PhotoCapture
+                  module="production_orders"
+                  recordId={order.id}
+                  label="Ảnh lệnh sản xuất / chất lượng"
+                  maxPhotos={30}
+                />
+              </Card>
+            ),
           },
         ]}
       />

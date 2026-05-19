@@ -11,7 +11,7 @@ from app.models.master import Customer, PhanXuong
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.production_plan import ProductionPlan, ProductionPlanLine
 from app.models.bom import ProductionBOM
-from app.models.sales import SalesOrder
+from app.models.sales import SalesOrder, SalesOrderItem, QuoteItem
 from app.schemas.production_plan import (
     ProductionPlanCreate, ProductionPlanUpdate,
     ProductionPlanResponse, ProductionPlanListItem,
@@ -62,6 +62,41 @@ def _get_kho1_from_bom(bom: ProductionBOM | None) -> Decimal | None:
         return None
 
 
+def _build_cong_doan(
+    item: ProductionOrderItem | None,
+    bom: "ProductionBOM | None",
+    qi: "QuoteItem | None" = None,
+) -> str | None:
+    parts: list[str] = []
+
+    # Loại in + số màu: POI → QuoteItem fallback
+    loai_in = (item.loai_in if item else None) or (qi.loai_in if qi else None)
+    so_mau  = (item.so_mau  if item else None) or (qi.so_mau  if qi else None)
+    if loai_in and loai_in != "khong_in":
+        label = "Flexo" if loai_in == "flexo" else "Kỹ thuật số"
+        if so_mau and so_mau > 0:
+            label += f" {so_mau} màu"
+        parts.append(label)
+
+    # Công đoạn phụ — QuoteItem có đầy đủ nhất, fallback BOM
+    if qi:
+        if qi.do_kho:  parts.append("Độ khó")
+        if qi.ghim:    parts.append("Ghim")
+        if qi.chap_xa: parts.append("Chạp Xã")
+        if qi.do_phu:  parts.append("Độ phủ")
+        if qi.dan:     parts.append("Dán")
+        if qi.boi:     parts.append("Bồi")
+        if qi.be_lo:   parts.append("Bế Lỗ")
+    elif bom:
+        if getattr(bom, "ghim",    False): parts.append("Ghim")
+        if getattr(bom, "chap_xa", False): parts.append("Chạp Xã")
+        if getattr(bom, "dan",     False): parts.append("Dán")
+        if getattr(bom, "boi",     False): parts.append("Bồi")
+        if getattr(bom, "be_so_con", 0):   parts.append("Bế Lỗ")
+
+    return " | ".join(parts) if parts else None
+
+
 def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse:
     item = line.production_order_item
     order = item.production_order if item else None
@@ -72,12 +107,26 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
     # Lấy thông tin BOM để hiển thị loai_thung, kích thước
     bom: ProductionBOM | None = getattr(item, "_bom_cache", None)
 
-    # Derive c_tham / can_man từ BOM nếu item chưa có
+    # SOI + QuoteItem (đã joinedload) — dùng làm fallback cho field chưa lưu vào POI
+    soi: SalesOrderItem | None = getattr(item, "sales_order_item", None) if item else None
+    qi:  QuoteItem       | None = soi.quote_item if soi else None
+
     def _bom_mat_str(val: int | None) -> str | None:
         return f"{val} mặt" if val else None
 
-    c_tham  = (item.c_tham  if item else None) or _bom_mat_str(bom.chong_tham if bom else None)
-    can_man = (item.can_man if item else None) or _bom_mat_str(bom.can_mang   if bom else None)
+    def _f(field: str, bom_val=None):
+        """Fallback: POI → QuoteItem → BOM value."""
+        return ((getattr(item, field, None) if item else None)
+                or (getattr(qi, field, None) if qi else None)
+                or bom_val)
+
+    # Fallback: POI → QuoteItem → BOM
+    ghi_chu_val = (line.ghi_chu
+                   or (item.ghi_chu if item else None)
+                   or (soi.ghi_chu_san_pham if soi else None)
+                   or (qi.ghi_chu if qi else None))
+    c_tham  = _f("c_tham",  _bom_mat_str(bom.chong_tham if bom else None))
+    can_man = _f("can_man", _bom_mat_str(bom.can_mang   if bom else None))
 
     return ProductionPlanLineResponse(
         id=line.id,
@@ -93,7 +142,8 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         so_luong_hoan_thanh=line.so_luong_hoan_thanh,
         trang_thai=line.trang_thai,
         mua_phoi_ngoai=getattr(line, "mua_phoi_ngoai", False),
-        ghi_chu=line.ghi_chu,
+        ghi_chu=ghi_chu_val,
+        cong_doan=_build_cong_doan(item, bom, qi),
         # Joined fields
         so_lenh=order.so_lenh if order else None,
         ma_kh=customer.ma_kh if customer else None,
@@ -116,8 +166,8 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         mat_2=item.mat_2 if item else None,     mat_2_dl=item.mat_2_dl if item else None,
         song_3=item.song_3 if item else None,   song_3_dl=item.song_3_dl if item else None,
         mat_3=item.mat_3 if item else None,     mat_3_dl=item.mat_3_dl if item else None,
-        loai_in=item.loai_in if item else None,
-        so_mau=item.so_mau if item else None,
+        loai_in=_f("loai_in"),
+        so_mau=_f("so_mau"),
         c_tham=c_tham,
         can_man=can_man,
         qccl=item.qccl if item else None,
@@ -134,6 +184,10 @@ def _load_plan(plan_id: int, db: Session) -> ProductionPlan:
             .joinedload(ProductionOrderItem.production_order)
             .joinedload(ProductionOrder.sales_order)
             .joinedload(SalesOrder.customer),
+            joinedload(ProductionPlan.lines)
+            .joinedload(ProductionPlanLine.production_order_item)
+            .joinedload(ProductionOrderItem.sales_order_item)
+            .joinedload(SalesOrderItem.quote_item),
         )
         .filter(ProductionPlan.id == plan_id)
         .first()
@@ -488,6 +542,7 @@ def push_to_queue(
         if so_dao is not None:          existing.so_dao = so_dao
         if kho_tt is not None:          existing.kho_tt = kho_tt
         existing.so_luong_ke_hoach = data.so_luong_ke_hoach
+        if poi.ghi_chu:                 existing.ghi_chu = poi.ghi_chu
         db.commit()
         line_id = existing.id
     else:
@@ -519,6 +574,7 @@ def push_to_queue(
             so_dao=so_dao,
             kho_tt=kho_tt,
             so_luong_ke_hoach=data.so_luong_ke_hoach,
+            ghi_chu=poi.ghi_chu,
             trang_thai="cho",
         )
         db.add(new_line)
@@ -751,7 +807,7 @@ def _build_queue_line(line: ProductionPlanLine, plan: ProductionPlan) -> QueueLi
         so_luong_hoan_thanh=line.so_luong_hoan_thanh,
         trang_thai=line.trang_thai,
         mua_phoi_ngoai=getattr(line, "mua_phoi_ngoai", False),
-        ghi_chu=line.ghi_chu,
+        ghi_chu=line.ghi_chu or (item.ghi_chu if item else None),
         so_lenh=order.so_lenh if order else None,
         ma_kh=customer.ma_kh if customer else None,
         ten_khach_hang=customer.ten_viet_tat if customer else None,

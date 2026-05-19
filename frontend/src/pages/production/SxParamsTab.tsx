@@ -93,7 +93,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
     [loaiThung, dai, rong, cao, soLop],
   )
 
-  // Chiều khổ sản xuất — làm tròn lên bội số 5
+  // Chiều khổ sản xuất = kho_tt lý thuyết (kho1 × soDao + 1.8), không làm tròn
   const initKho = Number(item.kho_tt) || baseDims?.kho_tt || 0
   const [khoTt, setKhoTt] = useState<number>(initKho > 0 ? roundUpTo5(initKho) : 0)
   // Kết cấu giấy (có thể chỉnh sửa)
@@ -114,6 +114,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
     return `${side}+${cao}+${side}`
   }, [rong, cao, soLop])
   const [qccl, setQccl] = useState<string>(item.qccl ?? computedQccl)
+  const [ghiChu, setGhiChu] = useState<string>(item.ghi_chu ?? '')
 
   const [saving, setSaving] = useState(false)
   // Đã lưu nếu item có kho_tt (chứng tỏ đã từng bấm Lưu)
@@ -122,24 +123,25 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   const layerDefs = useMemo(() => getLayerDefs(soLop, toHopSong), [soLop, toHopSong])
   const haoHut    = getHaoHutRate(soLuong)
 
-  // Số dao từ chiều khổ thực tế (đã làm tròn bội số 5)
   const kho1         = baseDims?.kho1 ?? 0
-  const soDaoCurrent = kho1 > 0 ? Math.max(1, Math.floor((khoTt - 1.8) / kho1)) : baseDims?.so_dao ?? 1
+  // Khổ kế hoạch mỗi con (theo tài liệu hệ thống giai đoạn 1)
+  const khoKeHoach   = baseDims?.kho_ke_hoach ?? 0
+  // Số dao = floor((khoTt - 1.8) / kho_ke_hoach) — nhất quán với cách tính kho_tt
+  const soDaoCurrent = khoKeHoach > 0 ? Math.max(1, Math.floor((khoTt - 1.8) / khoKeHoach)) : baseDims?.so_dao ?? 1
   const daiTt        = baseDims?.dai_tt ?? Number(item.dai_tt) ?? 0
 
-  // Chiều rộng thực tế phân cho mỗi con (bao gồm hao phí viền)
-  // = khoTt / soDaoCurrent  (khác kho1 vì đã làm tròn bội số 5)
+  // Khổ thực tế phân cho mỗi con (dùng cho tính KG)
   const khoMoiCon = soDaoCurrent > 0 && khoTt > 0 ? khoTt / soDaoCurrent : kho1
 
-  // Tính rows — dùng khoMoiCon * daiTt làm diện tích thực tế
+  // Tính rows — dùng kho1 (quy cách tấm thực tế) * daiTt làm diện tích
   const tableRows: LayerRow[] = useMemo(() =>
     layerDefs.map(def => {
       const ls   = layers[def.key]
       const dl   = ls.dinh_luong ?? 0
       const take = def.isSong ? (TAKE_UP_FACTORS[def.songType ?? ''] ?? 1.0) : 1.0
-      // Diện tích giấy thực tế mỗi lớp = chiều rộng thực / con × chiều cắt × hệ số sóng
-      const area = daiTt > 0 && khoMoiCon > 0
-        ? (khoMoiCon * daiTt * take) / 10000
+      // Diện tích mỗi lớp = khổ tấm (kho1, gồm nắp gài) × chiều cắt × hệ số sóng
+      const area = daiTt > 0 && kho1 > 0
+        ? (kho1 * daiTt * take) / 10000
         : 0
       const kg1  = (dl * area) / 1000
       return {
@@ -178,6 +180,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
         kho_tt: khoTt,
         dai_tt: daiTt,
         qccl:   qccl || null,
+        ghi_chu: ghiChu || null,
         mat:    layers.mat.ma_ky_hieu,    mat_dl:    layers.mat.dinh_luong,
         song_1: layers.song_1.ma_ky_hieu, song_1_dl: layers.song_1.dinh_luong,
         mat_1:  layers.mat_1.ma_ky_hieu,  mat_1_dl:  layers.mat_1.dinh_luong,
@@ -373,13 +376,31 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                   <Text strong>{kho1 > 0 ? `${kho1} cm` : '—'}</Text>
                 </div>
                 <div>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Khổ thực tế/con</Text>
-                  <Text strong style={{ color: khoMoiCon > kho1 ? '#fa8c16' : undefined }}>
-                    {khoMoiCon > 0 ? `${khoMoiCon.toFixed(1)} cm` : '—'}
-                  </Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Khổ kế hoạch/con</Text>
+                  {khoKeHoach > 250
+                    ? <Tag color="error" style={{ marginTop: 2 }}>Không sản xuất được ({khoKeHoach.toFixed(1)} cm &gt; 250)</Tag>
+                    : khoKeHoach > 180
+                    ? <Tag color="orange" style={{ marginTop: 2 }}>Mua phôi ngoài ({khoKeHoach.toFixed(1)} cm)</Tag>
+                    : <Text strong style={{ color: '#389e0d' }}>
+                        {khoKeHoach > 0 ? `${khoKeHoach.toFixed(1)} cm` : '—'}
+                      </Text>
+                  }
                 </div>
               </Col>
             </Row>
+            {/* Ghi chú — tự sinh từ báo giá, nhân viên kế hoạch có thể sửa */}
+            <div style={{ marginTop: 8, padding: '5px 8px', background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Ghi chú:</Text>
+                <Input
+                  size="small"
+                  value={ghiChu}
+                  onChange={e => { markDirty(); setGhiChu(e.target.value) }}
+                  placeholder={item.ghi_chu || 'Nhập ghi chú...'}
+                  style={{ flex: 1 }}
+                />
+              </div>
+            </div>
             {/* QCCL — editable */}
             <div style={{ marginTop: 8, padding: '6px 8px', background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -415,29 +436,29 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                 <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
                   Chiều khổ (chỉnh sửa để tối ưu)
                 </Text>
-                <Space>
+                <Space size={4}>
                   <InputNumber
                     value={khoTt}
                     min={5}
                     max={300}
                     step={5}
                     precision={0}
-                    style={{ width: 110 }}
-                    addonAfter="cm"
+                    style={{ width: 100 }}
                     onChange={v => {
                       markDirty()
                       if (v && v > 0) setKhoTt(roundUpTo5(v))
                     }}
                   />
+                  <Text type="secondary">cm</Text>
                 </Space>
                 <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
-                  {baseDims && roundUpTo5(baseDims.kho_tt) !== khoTt
-                    ? `Mặc định: ${roundUpTo5(baseDims.kho_tt)} cm`
+                  {baseDims && Math.round(baseDims.kho_tt * 10) / 10 !== khoTt
+                    ? `Mặc định: ${Math.round(baseDims.kho_tt * 10) / 10} cm`
                     : '\u00a0'}
                 </Text>
-                {kho1 > 0 && khoMoiCon > kho1 && (
-                  <Text type="warning" style={{ fontSize: 11, display: 'block' }}>
-                    Hao phí viền: +{(khoMoiCon - kho1).toFixed(1)} cm/con
+                {soDaoCurrent > 0 && (
+                  <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
+                    Hao phí viền: +{(1.8 / soDaoCurrent).toFixed(1)} cm/con
                   </Text>
                 )}
               </Col>

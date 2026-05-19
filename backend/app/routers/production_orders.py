@@ -78,6 +78,25 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
         so_lop = _f('so_lop') or 3
         to_hop_song = _f('to_hop_song') or _DEFAULT_TO_HOP_SONG.get(so_lop)
 
+        # Tính cong_doan từ loai_in + các checkbox (POI → SOI → QI)
+        _cd: list[str] = []
+        _loai_in = _f('loai_in')
+        _so_mau  = _f('so_mau')
+        if _loai_in and _loai_in != 'khong_in':
+            _lbl = 'Flexo' if _loai_in == 'flexo' else 'Kỹ thuật số'
+            if _so_mau and _so_mau > 0:
+                _lbl += f' {_so_mau} màu'
+            _cd.append(_lbl)
+        if qi:
+            if qi.do_kho:  _cd.append('Độ khó')
+            if qi.ghim:    _cd.append('Ghim')
+            if qi.chap_xa: _cd.append('Chạp Xã')
+            if qi.do_phu:  _cd.append('Độ phủ')
+            if qi.dan:     _cd.append('Dán')
+            if qi.boi:     _cd.append('Bồi')
+            if qi.be_lo:   _cd.append('Bế Lỗ')
+        cong_doan = ' | '.join(_cd) if _cd else None
+
         return ProductionOrderItemResponse(
             id=item.id,
             product_id=item.product_id,
@@ -88,7 +107,7 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
             so_luong_hoan_thanh=item.so_luong_hoan_thanh,
             dvt=item.dvt,
             ngay_giao_hang=item.ngay_giao_hang,
-            ghi_chu=item.ghi_chu,
+            ghi_chu=_f('ghi_chu'),
             loai_thung=_f('loai_thung'),
             dai=_f('dai'), rong=_f('rong'), cao=_f('cao'),
             so_lop=so_lop, to_hop_song=to_hop_song,
@@ -103,6 +122,7 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
             kho_tt=item.kho_tt,   dai_tt=item.dai_tt,   qccl=item.qccl,
             dien_tich=item.dien_tich,
             gia_ban_muc_tieu=item.gia_ban_muc_tieu,
+            cong_doan=cong_doan,
         )
 
     items = [_build_item(item) for item in order.items]
@@ -130,6 +150,7 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
         ngay_bat_dau_thuc_te=order.ngay_bat_dau_thuc_te,
         ngay_hoan_thanh_thuc_te=order.ngay_hoan_thanh_thuc_te,
         ghi_chu=order.ghi_chu,
+        ghi_chu_don_hang=order.sales_order.ghi_chu if order.sales_order else None,
         don_gia_noi_bo=getattr(order, "don_gia_noi_bo", None),
         items=items,
         created_at=order.created_at,

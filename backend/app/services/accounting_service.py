@@ -347,6 +347,14 @@ class AccountingService:
         if not items:
             return None
 
+        existing = self.db.query(JournalEntry).filter(
+            JournalEntry.chung_tu_loai == chung_tu_loai,
+            JournalEntry.chung_tu_id == chung_tu_id,
+            JournalEntry.loai_but_toan == loai.lower(),
+        ).first()
+        if existing:
+            return existing
+
         lines = []
         tong_tien = 0
         for it in items:

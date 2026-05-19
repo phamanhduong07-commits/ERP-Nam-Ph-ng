@@ -16,6 +16,7 @@ import { suppliersApi } from '../../api/suppliers'
 import { warehousesApi, Warehouse } from '../../api/warehouses'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, fmtVND } from '../../utils/exportUtils'
+import PhotoCapture from '../../components/PhotoCapture'
 
 const { Title, Text } = Typography
 
@@ -127,7 +128,7 @@ export default function GoodsReceiptPage() {
 
   const effectiveGRTrangThai = shortcutFilter === 'cho_duyet' ? 'nhap'
     : shortcutFilter === 'da_duyet' ? 'da_duyet'
-    : filterTrangThai
+      : filterTrangThai
 
   useEffect(() => {
     sessionStorage.setItem(GR_FILTER_KEY, JSON.stringify({
@@ -631,6 +632,14 @@ export default function GoodsReceiptPage() {
 
             <Divider orientation="left" orientationMargin={0}>Chi tiết hàng nhập</Divider>
             <Table size="small" dataSource={detailDrawer.items} columns={itemColumns} rowKey="id" pagination={false} />
+
+            <Divider orientation="left" orientationMargin={0} style={{ marginTop: 16 }}>Ảnh đính kèm</Divider>
+            <PhotoCapture
+              module="goods_receipts"
+              recordId={detailDrawer.id}
+              label="Ảnh phiếu giao / hàng nhập"
+              readOnly={detailDrawer.trang_thai === 'da_duyet'}
+            />
 
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>

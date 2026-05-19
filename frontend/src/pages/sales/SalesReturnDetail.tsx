@@ -21,6 +21,7 @@ import { customerRefundApi, journalApi, TRANG_THAI_HOAN_TIEN } from '../../api/a
 import type { CustomerRefundVoucher } from '../../api/accounting'
 import { printDocument, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import PhotoCapture from '../../components/PhotoCapture'
 
 const { Title, Text } = Typography
 const { confirm } = Modal
@@ -829,6 +830,20 @@ export default function SalesReturnDetail() {
               ))}
             </Card>
           )}
+
+          {/* Ảnh đính kèm */}
+          <Card
+            size="small"
+            style={{ marginBottom: 16 }}
+            styles={{ body: { padding: '12px 16px' } }}
+          >
+            <PhotoCapture
+              module="sales_returns"
+              recordId={returnId}
+              label="Ảnh hàng trả / biên bản"
+              readOnly={returnData.trang_thai === 'huy'}
+            />
+          </Card>
 
           {returnData.trang_thai === 'huy' && (
             <Alert

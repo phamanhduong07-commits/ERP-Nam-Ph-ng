@@ -266,6 +266,9 @@ class SalesReturnResponse(BaseModel):
     approved_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    phuong_an_can_tru: str | None = None
+    sales_invoice_id: int | None = None
+    so_hoa_don: str | None = None
 
     class Config:
         from_attributes = True

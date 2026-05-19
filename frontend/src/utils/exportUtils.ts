@@ -678,7 +678,7 @@ export async function printProductionTag(data: any) {
   <tr>
     <td class="lbl">CÔNG<br>ĐOẠN SX</td>
     <td colspan="3" class="vlg">${data.cong_doan || ''}</td>
-    <td colspan="2" class="vmd">+ 0</td>
+    <td colspan="2" class="vmd">${data.loai_lan || '+ 0'}</td>
   </tr>
 
   <!-- R8: Tên sản phẩm -->
@@ -788,7 +788,7 @@ export async function printProductionTagBatch(data: any, totalPallets: number) {
   <tr>
     <td class="lbl">CÔNG<br>ĐOẠN SX</td>
     <td colspan="3" class="vlg">${data.cong_doan || ''}</td>
-    <td colspan="2" class="vmd">+ 0</td>
+    <td colspan="2" class="vmd">${data.loai_lan || '+ 0'}</td>
   </tr>
   <tr>
     <td class="lbl">TÊN SẢN<br>PHẨM</td>

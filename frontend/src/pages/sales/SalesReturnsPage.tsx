@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Table, Button, Input, Select, DatePicker, Space, Tag, Typography,
-  Card, Row, Col, message, Modal, Descriptions, List, Divider,
+  Card, Row, Col, message, Modal, Tooltip,
 } from 'antd'
 import { FileExcelOutlined, PlusOutlined, EyeOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -12,7 +12,7 @@ import { salesReturnsApi, type SalesReturnListItem, SALES_RETURN_TRANG_THAI_LABE
 import { customersApi } from '../../api/customers'
 import { exportToExcel } from '../../utils/exportUtils'
 
-const { Title } = Typography
+const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 const { confirm } = Modal
 
@@ -122,43 +122,53 @@ export default function SalesReturnsPage() {
       ),
     },
     {
-      title: 'Tổng tiền',
-      dataIndex: 'tong_tien_tra',
-      width: 120,
-      align: 'right',
-      render: (v) => new Intl.NumberFormat('vi-VN').format(v) + 'đ',
-    },
-    {
       title: 'SL trả',
       dataIndex: 'tong_so_luong_tra',
-      width: 90,
+      width: 80,
       align: 'right',
       render: (v: number) => new Intl.NumberFormat('vi-VN').format(v || 0),
     },
     {
+      title: 'Tổng tiền trả',
+      dataIndex: 'tong_tien_tra',
+      width: 130,
+      align: 'right',
+      render: (v) => (
+        <Text strong style={{ color: '#cf1322' }}>
+          {new Intl.NumberFormat('vi-VN').format(v)}đ
+        </Text>
+      ),
+    },
+    {
       title: 'Thao tác',
-      width: 120,
+      width: 110,
       render: (_, r) => (
         <Space size="small">
-          <Button
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => navigate(`/sales/returns/${r.id}`)}
-          />
+          <Tooltip title="Xem chi tiết">
+            <Button
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => navigate(`/sales/returns/${r.id}`)}
+            />
+          </Tooltip>
           {r.trang_thai === 'moi' && (
             <>
-              <Button
-                size="small"
-                type="primary"
-                icon={<CheckCircleOutlined />}
-                onClick={() => handleApprove(r)}
-              />
-              <Button
-                size="small"
-                danger
-                icon={<CloseCircleOutlined />}
-                onClick={() => handleCancel(r)}
-              />
+              <Tooltip title="Duyệt phiếu">
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  onClick={() => handleApprove(r)}
+                />
+              </Tooltip>
+              <Tooltip title="Hủy phiếu">
+                <Button
+                  size="small"
+                  danger
+                  icon={<CloseCircleOutlined />}
+                  onClick={() => handleCancel(r)}
+                />
+              </Tooltip>
             </>
           )}
         </Space>

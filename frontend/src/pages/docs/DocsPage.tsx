@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout, Menu, Button, Typography, Space, Input, message } from 'antd';
 import { EditOutlined, SaveOutlined, PlusOutlined, BookOutlined } from '@ant-design/icons';
 import ReactQuill from 'react-quill';
@@ -88,36 +88,208 @@ const initialDocs = [
   { 
     id: '3', 
     category: 'Phân hệ Bán Hàng', 
-    title: '3. Chuyển đổi SO và Theo dõi Giao Hàng', 
-    content: `<p>Khi khách hàng chính thức "chốt deal", bạn bắt buộc phải chuyển Báo giá thành <strong>Đơn Bán Hàng (SO)</strong>. SO là tờ lệnh kích hoạt toàn bộ quy trình Sản xuất.</p>
+    title: '3. Chuyển đổi SO và Lập Lệnh Sản Xuất', 
+    content: `<p>Khi khách hàng đồng ý báo giá, Sales chuyển Báo giá thành <strong>Đơn Bán Hàng (SO)</strong>. SO là chứng từ pháp lý và là tờ lệnh kích hoạt toàn bộ chuỗi cung ứng sản xuất tại nhà máy Nam Phương.</p>
 
-<h2>1. Chuyển Đổi Sang Đơn SO</h2>
-<p><img src="/so_tracking.png" /></p>
-<ol>
-  <li>Vào Báo giá đã chốt, nhấn <strong>[Tạo Đơn Hàng SO]</strong>.</li>
-  <li><strong>Ngày yêu cầu giao hàng:</strong> Rất quan trọng để hệ thống Dàn máy Sản xuất ưu tiên chạy lệnh.</li>
-  <li><strong>Ghi chú sản xuất:</strong> Dặn dò quản đốc (VD: <em>Dán kỹ mép</em>).</li>
-  <li>Bấm <strong>[Duyệt SO & Chuyển Sản Xuất]</strong>. Thông tin lập tức bắn sang màn hình Quản Đốc Phân Xưởng.</li>
-</ol>
-
-<h2>2. Theo Dõi Tiến Độ Thời Gian Thực (Tracking)</h2>
-<p><img src="/so_tracking.png" /></p>
-<p>Truy cập <strong>Bán Hàng > Tiến độ Đơn hàng</strong>. Màn hình sẽ hiển thị thanh tiến độ:</p>
+<h2>1. Logic Hệ Thống & Lưu Ý Nghiệp Vụ</h2>
 <ul>
-  <li>🟩 <strong>CĐ1 - Chạy sóng:</strong> 100% (Đã nhập phôi xong).</li>
-  <li>🟨 <strong>CĐ2 - In Flexo:</strong> 50% (Đang in dở dang).</li>
-  <li>⬜ <strong>Thành phẩm:</strong> 0% (Chưa đóng gói).</li>
+  <li><strong>Duyệt Đơn SO:</strong> Chỉ cấp Quản lý (Admin, Giám đốc, Trưởng phòng) mới có quyền Duyệt đơn SO. Đơn ở trạng thái <code>Mới</code> sẽ không được phép sản xuất hoặc giao hàng.</li>
+  <li><strong>Tự Động Sinh Lệnh SX (1 Lệnh / 1 Mã Hàng):</strong> Một đơn SO có thể chứa nhiều mặt hàng (thùng carton kích thước khác nhau). Khi nhấn <strong>[Lập Lệnh SX]</strong>, hệ thống tự động tách ra mỗi dòng sản phẩm thành một Lệnh Sản Xuất riêng biệt để dễ dàng theo dõi Kanban và scan thẻ máy ở xưởng.</li>
+  <li><strong>Cảnh báo thời gian thực:</strong> Nếu ngày giao hàng còn dưới 3 ngày, hệ thống sẽ hiện cảnh báo màu cam (Sắp đến hạn) hoặc đỏ (Quá hạn) ngay đầu trang chi tiết đơn hàng.</li>
 </ul>
 
-<h2>3. Xử Lý Hàng Bán Trả Lại</h2>
+<h2>2. Hướng Dẫn Thao Tác (Step-by-step)</h2>
+<h3>Bước 1: Duyệt Đơn Hàng (Quản lý)</h3>
+<ul>
+  <li>Vào <strong>Bán Hàng &gt; Đơn hàng</strong>, tìm đơn hàng có trạng thái <code>Mới</code>.</li>
+  <li>Nhấn <strong>[Duyệt đơn]</strong> ở góc phải. Trạng thái chuyển sang <code>Đã duyệt</code>.</li>
+</ul>
+
+<h3>Bước 2: Lập Lệnh Sản Xuất (Kế hoạch / Quản đốc)</h3>
+<p><img src='https://placehold.co/600x350/e6f7ff/1890ff?text=Lap+Lenh+San+Xuat+Tu+SO' /></p>
 <ol>
-  <li>Vào <strong>Bán hàng > Hàng bán trả lại</strong>, chọn SO gốc và mặt hàng.</li>
-  <li>Nhập số lượng trả lại là <code>200</code>. Bắt buộc chọn Lý do (Ví dụ: <code>Lỗi in ấn CĐ2</code>).</li>
-  <li>Hệ thống sẽ tự động báo Kế toán trừ công nợ và trừ điểm KPI Xưởng.</li>
+  <li>Tại màn hình chi tiết đơn hàng đã duyệt, nhấn nút <strong>[Lập lệnh SX]</strong>.</li>
+  <li>Điền các thông tin trong Modal xuất hiện:
+    <ul>
+      <li><strong>Ngày lệnh:</strong> Ngày bắt đầu triển khai sản xuất.</li>
+      <li><strong>Ngày hoàn thành kế hoạch:</strong> Hạn chót máy in/sóng phải hoàn thành (thường trước ngày giao hàng 1-2 ngày).</li>
+      <li><strong>Pháp nhân & Nơi sản xuất:</strong> Chọn xưởng sẽ trực tiếp chạy đơn hàng này.</li>
+    </ul>
+  </li>
+  <li>Bấm <strong>[Xác nhận]</strong> → Hệ thống tự động bắn các Lệnh SX sang màn hình <strong>Lập kế hoạch sản xuất</strong> của phân xưởng được chọn.</li>
 </ol>
+
+<h3>Bước 3: Xem & Kiểm Tra Định Mức Vật Tư (BOM)</h3>
+<p><img src='https://placehold.co/600x350/f6ffed/52c41a?text=Xem+Dinh+Muc+Vat+Tu+BOM' /></p>
+<ul>
+  <li>Khi dòng hàng đã được lập lệnh, cột <strong>BOM</strong> trên bảng chi tiết sản phẩm sẽ hiện nút <strong>[BOM]</strong> màu xanh.</li>
+  <li>Bấm vào nút <strong>[BOM]</strong> để mở Drawer tính toán chi tiết: Định lượng giấy cuộn cần dùng cho CĐ1, Lượng mực, lượng keo dán, và các chi phí gia công phụ trợ.</li>
+</ul>
+
 <div class="doc-alert doc-warning">
-  <strong>KHÔNG ĐƯỢC THỎA THUẬN MIỆNG:</strong> Bắt buộc phải làm phiếu Hàng Bán Trả Lại để Kế toán có chứng từ hợp lệ xử lý công nợ.
+  <strong>Lỗi: "Nút Lập lệnh SX bị mờ hoặc không hiển thị"</strong><br/>
+  - <em>Nguyên nhân:</em> Đơn hàng đang ở trạng thái <code>Mới</code> (chưa duyệt) hoặc đơn hàng đã hoàn thành / đã được lập lệnh trước đó.<br/>
+  - <em>Khắc phục:</em> Kiểm tra trạng thái đơn hàng. Nếu chưa duyệt, hãy báo Quản lý duyệt đơn.
+</div>
+
+<div class="doc-alert doc-tip">
+  <strong>In Đơn Nhanh Chóng:</strong> Sử dụng nút <strong>[In đơn]</strong> ở góc phải để xuất file PDF mẫu chuẩn gửi tài xế đi giao hàng, hoặc bấm nút **[Excel]** để xuất danh mục hàng hóa phục vụ đối soát công nợ.
 </div>` 
+  },
+  {
+    id: '4',
+    category: 'Phân hệ Bán Hàng',
+    title: '4. Trả Hàng Bán',
+    content: `<p>Khi khách hàng trả lại hàng (lỗi in, sai quy cách, vỡ góc...), bắt buộc phải tạo <strong>Phiếu Trả Hàng Bán</strong> trong hệ thống. Tuyệt đối không thỏa thuận miệng — Kế toán cần chứng từ để xử lý công nợ.</p>
+
+<h2>1. Logic Hệ Thống</h2>
+<ul>
+  <li><strong>Luồng duyệt:</strong> Tạo mới (Chờ duyệt) → Duyệt → Đã duyệt. Chỉ phiếu <code>moi</code> mới được duyệt hoặc hủy.</li>
+  <li><strong>Sau khi duyệt:</strong> Tồn kho Thành Phẩm tự động <strong>cộng lại</strong> số lượng trả, công nợ KH tự động <strong>giảm</strong>.</li>
+  <li><strong>Bắt buộc link Đơn Hàng gốc:</strong> Hệ thống cần SO để biết giá bán gốc tính tiền hoàn trả.</li>
+</ul>
+
+<h2>2. Hướng Dẫn Thao Tác</h2>
+<h3>Bước 1: Tạo Phiếu Trả Hàng</h3>
+<p><img src='https://placehold.co/600x350/fff1f0/cf1322?text=Man+Hinh+Tao+Phieu+Tra+Hang' /></p>
+<ol>
+  <li>Vào <strong>Bán Hàng &gt; Trả hàng bán</strong>, bấm <strong>[+ Tạo phiếu trả hàng]</strong>.</li>
+  <li>Chọn <strong>Khách hàng</strong> và <strong>Đơn Hàng gốc</strong> (SO).</li>
+  <li>Chọn mặt hàng cần trả, nhập <strong>Số lượng trả</strong> và <strong>Lý do</strong> (VD: Lỗi in ấn CĐ2, Vỡ góc, Sai kích thước).</li>
+  <li>Lưu → Phiếu ở trạng thái <strong>Chờ duyệt</strong>.</li>
+</ol>
+
+<h3>Bước 2: Duyệt Phiếu (Quản lý)</h3>
+<ul>
+  <li>Trong danh sách, bấm nút <strong>✓ (xanh)</strong> để duyệt hoặc <strong>✕ (đỏ)</strong> để hủy.</li>
+  <li>Sau khi duyệt: tồn kho cộng lên, Kế toán nhận thông báo xử lý công nợ.</li>
+</ul>
+
+<div class='doc-alert doc-warning'>
+  <strong>KHÔNG ĐƯỢC THỎA THUẬN MIỆNG:</strong> Mọi trường hợp trả hàng đều phải có Phiếu Trả Hàng được duyệt. Nếu không, Kế toán không có cơ sở xử lý và tồn kho sẽ sai lệch.
+</div>
+
+<div class='doc-alert doc-tip'>
+  <strong>Mẹo lọc nhanh:</strong> Dùng bộ lọc Khách hàng + Ngày để tìm phiếu trả của 1 KH trong tháng cụ thể, rồi bấm <strong>Xuất Excel</strong> để gửi báo cáo cho Kế toán.
+</div>`
+  },
+  {
+    id: '5',
+    category: 'Phân hệ Bán Hàng',
+    title: '5. Theo Dõi Đơn Hàng (Realtime)',
+    content: `<p>Đây là màn hình <strong>trung tâm điều phối</strong> của cả nhà máy — Sales, Quản đốc và Ban Giám Đốc đều dùng màn hình này để biết đơn hàng nào đang ở giai đoạn nào, đơn nào sắp trễ.</p>
+
+<h2>1. Logic Hệ Thống</h2>
+<ul>
+  <li><strong>Tự động làm mới:</strong> Dữ liệu cập nhật mỗi 2 phút từ server — không cần F5.</li>
+  <li><strong>Màu hàng cảnh báo:</strong>
+    <ul>
+      <li>🟡 Vàng: Đơn chưa có Lệnh Sản Xuất (Chờ phát lệnh)</li>
+      <li>🔴 Đỏ: Đã quá hạn giao hàng</li>
+      <li>🟠 Cam: Còn ≤ 3 ngày đến hạn giao</li>
+    </ul>
+  </li>
+  <li><strong>Cột Tiến Độ In:</strong> Hiển thị thanh progress (số thùng đã in OK / số thùng kế hoạch).</li>
+</ul>
+
+<h2>2. Hướng Dẫn Thao Tác</h2>
+<h3>Bước 1: Lọc và Tìm Kiếm</h3>
+<p><img src='https://placehold.co/600x350/e6f7ff/0050b3?text=Man+Hinh+Theo+Doi+Don+Hang' /></p>
+<ul>
+  <li>Lọc theo <strong>Pháp nhân</strong>, <strong>Xưởng SX</strong>, <strong>Nhân viên theo dõi</strong>.</li>
+  <li>Gõ từ khóa vào ô tìm kiếm: tìm theo LSX, tên khách, mã đơn hàng, tên hàng.</li>
+  <li>Bấm nút <strong>[Quá hạn]</strong> (màu đỏ) để lọc ngay các đơn đã trễ deadline.</li>
+</ul>
+
+<h3>Bước 2: Xem Chi Tiết Từng Lệnh</h3>
+<ul>
+  <li>Bấm vào <strong>Số LSX</strong> trên bảng → Panel bên phải hiện ra toàn bộ thông tin.</li>
+  <li>Dùng phím <strong>← →</strong> để chuyển qua lại giữa các lệnh, <strong>Esc</strong> để đóng.</li>
+</ul>
+
+<h3>Bước 3: Chọn Nhiều Lệnh để Tổng Hợp</h3>
+<ul>
+  <li>Tick vào checkbox nhiều dòng → Phần dưới hiện <strong>Tổng số thùng</strong> và <strong>Tổng số khối (m³)</strong>.</li>
+  <li>Dùng để báo cáo nhanh với tài xế hoặc kế hoạch xuất hàng.</li>
+</ul>
+
+<div class='doc-alert doc-info'>
+  <strong>Bộ lọc Giai Đoạn:</strong> Bấm vào các Tag màu sắc ở thanh tóm tắt (CĐ1, CĐ2, Thành phẩm...) để lọc nhanh tất cả đơn đang ở giai đoạn đó. Bấm lại để bỏ lọc.
+</div>`
+  },
+  {
+    id: '6',
+    category: 'Phân hệ Bán Hàng',
+    title: '6. Giao Hàng',
+    content: `<p>Module <strong>Giao Hàng</strong> quản lý toàn bộ việc xuất thành phẩm từ kho ra xe, từ xe đến khách hàng. Đây là bước cuối cùng trước khi Kế toán xuất Hóa Đơn.</p>
+
+<h2>1. Logic Hệ Thống</h2>
+<ul>
+  <li>Thành phẩm phải có trong <strong>Kho Thành Phẩm</strong> trước khi tạo phiếu giao hàng.</li>
+  <li>Mỗi chuyến giao = 1 Phiếu Giao Hàng gồm nhiều dòng hàng (có thể giao nhiều đơn cùng 1 xe).</li>
+  <li>Sau khi xác nhận giao hàng → Tồn kho Thành Phẩm <strong>tự động trừ</strong>, trạng thái SO cập nhật → <code>da_xuat</code>.</li>
+</ul>
+
+<h2>2. Hướng Dẫn Thao Tác</h2>
+<h3>Bước 1: Chuẩn Bị Chuyến Hàng</h3>
+<p><img src='https://placehold.co/600x350/f6ffed/135200?text=Man+Hinh+Giao+Hang' /></p>
+<ol>
+  <li>Vào <strong>Bán Hàng &gt; Giao hàng</strong>.</li>
+  <li>Chọn các dòng hàng cần giao (lọc theo khách, theo ngày giao).</li>
+  <li>Chọn xe và tài xế cho chuyến.</li>
+</ol>
+
+<h3>Bước 2: Xác Nhận Xuất Kho</h3>
+<ol>
+  <li>Kiểm tra số lượng thực xuất (có thể xuất một phần — partial delivery).</li>
+  <li>In <strong>Phiếu Giao Hàng</strong> để tài xế mang theo.</li>
+  <li>Bấm <strong>[Xác Nhận Giao]</strong> → hệ thống trừ kho và cập nhật trạng thái.</li>
+</ol>
+
+<div class='doc-alert doc-warning'>
+  <strong>Giao một phần:</strong> Nếu xe không đủ tải, có thể giao một phần SL. Phần còn lại vẫn ở trạng thái <code>Chờ giao</code> và xuất hiện lại trong danh sách lần sau.
+</div>`
+  },
+  {
+    id: '7',
+    category: 'Phân hệ Bán Hàng',
+    title: '7. Hóa Đơn VAT',
+    content: `<p>Sau khi giao hàng xong, Kế toán cần xuất <strong>Hóa Đơn VAT (GTGT)</strong> để gửi khách hàng và hạch toán doanh thu. Hệ thống hỗ trợ tạo HĐ từ Đơn Hàng hoặc tạo thủ công.</p>
+
+<h2>1. Logic Hệ Thống</h2>
+<ul>
+  <li><strong>Trạng thái HĐ:</strong> Nháp → Đã xuất → Đã thanh toán / Quá hạn.</li>
+  <li><strong>Công nợ tự động:</strong> Sau khi xuất HĐ, hệ thống tạo bản ghi công nợ trong Sổ AR (Accounts Receivable).</li>
+  <li><strong>Cảnh báo quá hạn:</strong> Hàng trong bảng tô màu đỏ khi đã quá hạn thanh toán. Bật toggle <strong>[Chỉ quá hạn]</strong> để xem ngay.</li>
+</ul>
+
+<h2>2. Hướng Dẫn Thao Tác</h2>
+<h3>Cách 1: Tạo HĐ từ Đơn Hàng (Nhanh nhất)</h3>
+<p><img src='https://placehold.co/600x350/fff7e6/ad4e00?text=Tao+Hoa+Don+Tu+Don+Hang' /></p>
+<ol>
+  <li>Vào <strong>Bán Hàng &gt; Hóa đơn VAT</strong>, bấm <strong>[Từ đơn hàng]</strong>.</li>
+  <li>Tìm và chọn Đơn Hàng đã duyệt (<code>da_duyet</code>) cần xuất HĐ.</li>
+  <li>Bấm <strong>[Tạo hóa đơn]</strong> → Hệ thống tự điền thông tin KH, MST, danh sách hàng, tổng tiền.</li>
+  <li>Kiểm tra lại thông tin và bấm <strong>[Phát Hành]</strong>.</li>
+</ol>
+
+<h3>Cách 2: Tạo HĐ Thủ Công</h3>
+<ul>
+  <li>Bấm <strong>[+ Tạo hóa đơn]</strong>, điền đầy đủ thông tin KH, hàng hóa, đơn giá, VAT.</li>
+  <li>Dùng khi HĐ không link trực tiếp với SO (VD: HĐ tạm ứng, HĐ điều chỉnh).</li>
+</ul>
+
+<h3>Theo Dõi Công Nợ</h3>
+<p><img src='https://placehold.co/600x350/f9f0ff/531dab?text=Bang+Theo+Doi+Cong+No' /></p>
+<ul>
+  <li>Cột <strong>Còn lại</strong>: màu vàng = còn nợ, màu đỏ = quá hạn, màu xanh = đã thanh toán đủ.</li>
+  <li>Dòng tóm tắt ở trên bảng hiện <strong>Tổng còn lại</strong> và <strong>Đã thu</strong> cho toàn bộ trang.</li>
+  <li>Bấm <strong>[Xuất Excel]</strong> để làm báo cáo công nợ gửi BGĐ.</li>
+</ul>
+
+<div class='doc-alert doc-info'>
+  <strong>Lưu ý VAT:</strong> Thuế suất thường là 8% hoặc 10% tùy loại hàng. Kế toán xác nhận với BGĐ trước khi phát hành hàng loạt.
+</div>`
   }
 ];
 
@@ -133,7 +305,7 @@ export default function DocsPage() {
 
   useEffect(() => {
     // Đổi key để ép tải lại dữ liệu mới nhất
-    const saved = localStorage.getItem('erp_docs_v4');
+    const saved = localStorage.getItem('erp_docs_v6');
     if (saved) {
       setDocs(JSON.parse(saved));
       if(JSON.parse(saved).length > 0) setActiveDoc(JSON.parse(saved)[0]);
@@ -213,7 +385,7 @@ export default function DocsPage() {
 
   const saveToLocal = (newDocs: any[]) => {
     setDocs(newDocs);
-    localStorage.setItem('erp_docs_v4', JSON.stringify(newDocs));
+    localStorage.setItem('erp_docs_v6', JSON.stringify(newDocs));
   };
 
   const handlePreviewClick = (e: React.MouseEvent) => {

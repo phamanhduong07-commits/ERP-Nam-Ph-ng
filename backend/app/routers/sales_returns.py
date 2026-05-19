@@ -335,16 +335,6 @@ def create_return(
     if sales_order.customer_id != data.customer_id:
         raise HTTPException(status_code=400, detail="Khách hàng không khớp với đơn hàng")
 
-    # Validate delivery order if provided
-    if False and data.delivery_order_id:
-        from app.models.warehouse_doc import DeliveryOrder
-        delivery_order = db.query(DeliveryOrder).filter(
-            DeliveryOrder.id == data.delivery_order_id,
-            DeliveryOrder.sales_order_id == data.sales_order_id
-        ).first()
-        if not delivery_order:
-            raise HTTPException(status_code=404, detail="Không tìm thấy phiếu xuất kho tương ứng với đơn hàng này")
-
     if not data.delivery_order_id:
         raise HTTPException(status_code=400, detail="Phiếu trả hàng phải lấy từ một phiếu giao hàng")
 

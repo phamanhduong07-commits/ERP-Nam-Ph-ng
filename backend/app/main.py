@@ -26,6 +26,7 @@ from app.routers import reports as reports_router
 from app.routers import customer_refunds as customer_refunds_router
 from app.routers import import_logs as import_logs_router
 from app.routers import system as system_router
+from app.routers import media as media_router
 from app.agent import router as agent_router
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
@@ -76,7 +77,7 @@ async def log_requests(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault("Permissions-Policy", "camera=self, microphone=(), geolocation=()")
     duration_ms = round((time.time() - start) * 1000)
     # Bỏ qua static assets để log không bị nhiễu
     if not request.url.path.startswith("/assets"):
@@ -135,6 +136,7 @@ app.include_router(customer_refunds_router.router)
 app.include_router(import_logs_router.router)
 app.include_router(system_router.router)
 app.include_router(agent_router.router)
+app.include_router(media_router.router)
 app.include_router(mst_lookup.router)
 app.include_router(hr.router)
 app.include_router(logistics_hr.router)
@@ -167,6 +169,7 @@ def health():
 # Dùng catch-all route thay vì StaticFiles mount tại "/" để tránh StaticFiles
 # chặn POST request (StaticFiles trả 405 với mọi non-GET request).
 os.makedirs("uploads/invoices", exist_ok=True)
+os.makedirs("uploads/media", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 if os.path.exists("dist"):

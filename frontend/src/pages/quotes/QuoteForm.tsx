@@ -38,9 +38,6 @@ function buildGhiChu(ci: QuoteItem): string {
     parts.push('PN')
   }
 
-  // Máy in (giữ nguyên vì đã ngắn: "4 màu", "in dọc"…)
-  if (ci.may_in) parts.push(ci.may_in)
-
   // Dịch vụ checkbox
   if (ci.boi)     parts.push('Bồi')
   if (ci.ghim)    parts.push('Ghim')
@@ -354,9 +351,10 @@ export default function QuoteForm() {
       const res = await quotesApi.calculateItemPrice(item)
       if (seq !== priceCalcSeq.current) return
       const giaBan = Number(res.data.gia_ban || 0)
+      const giaNB = Number(res.data.gia_noi_bo || 0)
       if (giaBan > 0 && (force || !giaBanManualRef.current)) {
         setCurrentItem(prev => ({ ...prev, gia_ban: giaBan }))
-        setFinance(prev => recalcFinance({ ...prev, gia_ban: giaBan }))
+        setFinance(prev => recalcFinance({ ...prev, gia_ban: giaBan, gia_xuat_phoi_vsp: giaNB }))
       } else if (force) {
         message.warning('Công thức trả về giá bán bằng 0. Kiểm tra giá mua giấy và định mức chi phí.')
       }
@@ -601,11 +599,9 @@ export default function QuoteForm() {
       newItems = [...items, { ...itemToSave, stt: items.length + 1 }]
       setItems(newItems)
     }
-    // Auto-update tong_tien_hang = Σ (gia_ban * so_luong)
+    // Auto-update tong_tien_hang = Σ (gia_ban * so_luong); gia_ban giữ nguyên gia_ban_cuoi từ công thức
     const tongTienHang = newItems.reduce((sum, it) => sum + (it.gia_ban || 0) * (it.so_luong || 0), 0)
-    const tongSoLuong = newItems.reduce((sum, it) => sum + (Number(it.so_luong) || 0), 0)
-    const giaBanBinhQuan = tongSoLuong ? Math.round(tongTienHang / tongSoLuong) : 0
-    updateFinance({ tong_tien_hang: tongTienHang, gia_ban: giaBanBinhQuan })
+    updateFinance({ tong_tien_hang: tongTienHang })
     setCurrentItem(emptyItem())
     giaBanManualRef.current = false
     setProductOptions([])
@@ -633,9 +629,7 @@ export default function QuoteForm() {
     if (editingIdx === idx) { setCurrentItem(emptyItem()); setEditingIdx(null) }
     else if (editingIdx !== null && idx < editingIdx) setEditingIdx(editingIdx - 1)
     const tongTienHang = newItems.reduce((sum, it) => sum + (it.gia_ban || 0) * (it.so_luong || 0), 0)
-    const tongSoLuong = newItems.reduce((sum, it) => sum + (Number(it.so_luong) || 0), 0)
-    const giaBanBinhQuan = tongSoLuong ? Math.round(tongTienHang / tongSoLuong) : 0
-    updateFinance({ tong_tien_hang: tongTienHang, gia_ban: giaBanBinhQuan })
+    updateFinance({ tong_tien_hang: tongTienHang })
   }
 
   // Sao chép dòng → load vào editor để chỉnh sửa trước khi thêm

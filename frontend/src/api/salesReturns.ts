@@ -46,6 +46,9 @@ export interface SalesReturn {
   approved_at: string | null
   created_at: string
   updated_at: string
+  phuong_an_can_tru?: 'chua_xuat_hd' | 'da_xuat_hd' | 'da_thu_tien' | null
+  sales_invoice_id?: number | null
+  so_hoa_don?: string | null
 }
 
 export interface SalesReturnListItem {

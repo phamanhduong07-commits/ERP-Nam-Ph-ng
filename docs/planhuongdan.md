@@ -9,8 +9,12 @@
 ## ✅ CHẶNG 1: Module Bán Hàng & Báo Giá (Sales) — HOÀN THÀNH
 
 - [x] `1.1` Tạo và quản lý Khách Hàng mới (CustomerList.tsx)
-- [x] `1.2` Lập Báo Giá thùng Carton — Costing Engine (QuotePage.tsx)
-- [x] `1.3` Chuyển đổi SO và Theo dõi Giao Hàng (SalesOrderPage.tsx)
+- [x] `1.2` Lập Báo Giá thùng Carton — Costing Engine (QuoteForm.tsx)
+- [x] `1.3` Chuyển đổi SO và Lập Lệnh Sản Xuất (OrderDetail.tsx)
+- [x] `1.4` Trả Hàng Bán (SalesReturnsPage.tsx)
+- [x] `1.5` Theo Dõi Đơn Hàng Realtime (TheoDonHangPage.tsx)
+- [x] `1.6` Giao Hàng (GiaoHangPage + TabGiaoHang.tsx)
+- [x] `1.7` Hóa Đơn VAT (SalesInvoiceListPage.tsx)
 
 ---
 

@@ -75,6 +75,7 @@ class ProductionPlanLineResponse(BaseModel):
     c_tham: str | None = None
     can_man: str | None = None
     qccl: str | None = None
+    cong_doan: str | None = None
 
     class Config:
         from_attributes = True

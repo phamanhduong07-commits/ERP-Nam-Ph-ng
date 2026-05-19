@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Col, DatePicker, Divider, Form, Input, InputNumber,
@@ -139,6 +139,9 @@ interface InTemState {
   catMm: number | null
   ke_hoach_qccl: string
   ke_hoach_ghi_chu: string
+  ke_hoach_cong_doan: string
+  ke_hoach_can_man: string | null
+  ke_hoach_c_tham: string | null
 }
 
 interface StatusTarget { id: number; so_lenh: string }
@@ -347,9 +350,13 @@ interface ModalInTemProps {
   onUpdateSoPallet: (n: number) => void
 }
 function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: ModalInTemProps) {
+  const [localCongDoan, setLocalCongDoan] = useState(state?.ke_hoach_cong_doan ?? '')
+  // sync khi mở modal cho đơn hàng mới (state thay đổi)
+  useEffect(() => { setLocalCongDoan(state?.ke_hoach_cong_doan ?? '') }, [state])
+
   const handlePrint = async () => {
     if (!state) return
-    const { order, phieu, soTam, soThung, soPallet, khoMm, catMm, ke_hoach_qccl, ke_hoach_ghi_chu } = state
+    const { order, phieu, soTam, soThung, soPallet, khoMm, catMm, ke_hoach_qccl, ke_hoach_ghi_chu, ke_hoach_can_man, ke_hoach_c_tham } = state
     const oi       = order.items[0]
     const khoCmStr = khoMm != null ? mmToDisplayCm(khoMm) : '?'
     const catCmStr = catMm != null ? mmToDisplayCm(catMm) : '?'
@@ -359,6 +366,9 @@ function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: 
     const so_dao    = Math.max(1, dims?.so_dao ?? 1)
     const tamNho    = soTam > 0 ? Math.round(soTam / so_dao) : 0
     const ngaySxMaySong = phieu?.ngay ?? order.ngay_bat_dau_ke_hoach ?? ''
+    const loaiLanLabel = oi?.loai_lan === 'lan_bang' ? 'Lằn Bằng'
+                       : oi?.loai_lan === 'lan_am_duong' ? 'Lằn Âm Dương'
+                       : oi?.loai_lan ? oi.loai_lan : null
     await printProductionTagBatch({
       so_lenh:          order.so_lenh,
       ten_khach_hang:   order.ten_khach_hang ?? '',
@@ -371,7 +381,8 @@ function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: 
       ngay_chay_song:   ngaySxMaySong,
       ngay_giao_cu_chi: oi?.ngay_giao_hang ?? '',
       ngay_giao_kh:     order.ngay_hoan_thanh_ke_hoach ?? '',
-      cong_doan:        oi?.cong_doan ?? '',
+      cong_doan:        localCongDoan,
+      loai_lan:         loaiLanLabel,
       ten_san_pham:     oi?.ten_hang ?? '',
       sl_tam_lon: soTam > 0
         ? `${khoCmStr} × ${catCmStr} cm | ${soTam.toLocaleString()} tấm | ${soPallet} pallet`
@@ -380,8 +391,8 @@ function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: 
       sl_thung: soThung > 0
         ? `${soThung.toLocaleString()} ${oi?.dvt ?? 'thùng'}`
         : `${oi?.so_luong_ke_hoach ?? ''} ${oi?.dvt ?? 'thùng'}`,
-      can_mang:   oi?.loai_in ? 'Có' : 'Không',
-      chong_tham: 'Không',
+      can_mang:   ke_hoach_can_man || 'Không',
+      chong_tham: ke_hoach_c_tham  || 'Không',
       bo_phan:    'Máy Sóng',
       ghi_chu:    ke_hoach_ghi_chu,
     }, soPallet)
@@ -486,6 +497,17 @@ function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: 
               </Row>
             </div>
             <Divider style={{ margin: '10px 0' }} />
+            <Row align="middle" gutter={12} style={{ marginBottom: 10 }}>
+              <Col span={10}><Text>Công đoạn SX:</Text></Col>
+              <Col span={14}>
+                <Input
+                  value={localCongDoan}
+                  onChange={e => setLocalCongDoan(e.target.value)}
+                  placeholder="VD: Ghim | Dán | Flexo 2 màu"
+                  allowClear
+                />
+              </Col>
+            </Row>
             <Row align="middle" gutter={12} style={{ marginBottom: 6 }}>
               <Col span={12}><Text>Tấm / pallet:</Text></Col>
               <Col span={12}>
@@ -676,7 +698,8 @@ export default function MaySongPage() {
       invalidateList()
       if (hoanthanhOrder) {
         const planLine = khDetail?.lines.find(l => l.so_lenh === hoanthanhOrder.so_lenh) ?? null
-        openInTem(hoanthanhOrder, phieu, planLine?.qccl ?? '', planLine?.ghi_chu ?? '')
+        const oi0 = hoanthanhOrder.items[0]
+        openInTem(hoanthanhOrder, phieu, planLine?.qccl ?? oi0?.qccl ?? '', planLine?.ghi_chu ?? oi0?.ghi_chu ?? '', planLine?.cong_doan ?? oi0?.cong_doan ?? '', planLine?.can_man ?? null, planLine?.c_tham ?? null)
       }
       completeMut.mutate(vars.orderId)
       setHoanthanhId(null)
@@ -694,7 +717,7 @@ export default function MaySongPage() {
     setHoanthanhId(r.id)
   }
 
-  const openInTem = (order: ProductionOrder, phieu: PhieuNhapPhoiSong | null, keHoachQccl = '', keHoachGhiChu = '') => {
+  const openInTem = (order: ProductionOrder, phieu: PhieuNhapPhoiSong | null, keHoachQccl = '', keHoachGhiChu = '', keHoachCongDoan = '', keHoachCanMan: string | null = null, keHoachCTham: string | null = null) => {
     const oi    = order.items[0]
     const soLop = oi?.so_lop ?? oi?.product?.so_lop ?? 5
     const khoMm = phieu?.items[0]?.chieu_kho != null
@@ -727,7 +750,7 @@ export default function MaySongPage() {
         }, 0)
 
     const soPallet = soTam > 0 ? Math.ceil(soTam / tamPerPallet) : 1
-    setInTemState({ order, phieu, soTam, soThung, soPallet, tamPerPallet, khoMm, catMm, ke_hoach_qccl: keHoachQccl, ke_hoach_ghi_chu: keHoachGhiChu })
+    setInTemState({ order, phieu, soTam, soThung, soPallet, tamPerPallet, khoMm, catMm, ke_hoach_qccl: keHoachQccl, ke_hoach_ghi_chu: keHoachGhiChu, ke_hoach_cong_doan: keHoachCongDoan, ke_hoach_can_man: keHoachCanMan, ke_hoach_c_tham: keHoachCTham })
   }
 
   const handleInTemBo = async (lsx: ProductionOrderListItem) => {
@@ -741,7 +764,8 @@ export default function MaySongPage() {
         ? phieuListRes.data[phieuListRes.data.length - 1]
         : null
       const planLine = khDetail?.lines.find(l => l.so_lenh === lsx.so_lenh) ?? null
-      openInTem(orderRes.data, latest, planLine?.qccl ?? '', planLine?.ghi_chu ?? '')
+      const oi0 = orderRes.data.items[0]
+      openInTem(orderRes.data, latest, planLine?.qccl ?? oi0?.qccl ?? '', planLine?.ghi_chu ?? oi0?.ghi_chu ?? '', planLine?.cong_doan ?? oi0?.cong_doan ?? '', planLine?.can_man ?? null, planLine?.c_tham ?? null)
     } catch {
       message.error('Lỗi khi tải dữ liệu')
     } finally {

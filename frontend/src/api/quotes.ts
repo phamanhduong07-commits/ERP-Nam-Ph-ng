@@ -243,41 +243,57 @@ export function calcBoxDimensions(
   rong: number | null | undefined,  // cm
   cao: number | null | undefined,   // cm
   so_lop: number,
-): { kho1: number; dai1: number; so_dao: number; kho_tt: number; dai_tt: number; dien_tich: number } | null {
+): { kho1: number; dai1: number; so_dao: number; kho_tt: number; dai_tt: number; dien_tich: number; kho_ke_hoach: number; dai_ke_hoach: number } | null {
   if (!loai_thung || !dai || !rong || !cao) return null
   const D = dai, R = rong, C = cao
   let kho1 = 0, dai1 = 0, dai_tt = 0
+  let kho_ke_hoach = 0, dai_ke_hoach = 0
+
+  // Offset kế hoạch theo số lớp (Tài liệu 02 — Giai đoạn 1)
+  const off = so_lop <= 3 ? 0.2 : so_lop <= 5 ? 0.4 : 0.8
 
   switch (loai_thung) {
     case 'A1': // Thùng thường
       kho1 = R + C + 3
       dai1 = (D + R) * 2 + 5
       dai_tt = so_lop === 7 ? (D + R) * 2 + 5 : (D + R) * 2 + 4
+      kho_ke_hoach = R + C + off
+      dai_ke_hoach = (D + R) * 2 + 3
       break
     case 'A3': // Nắp chồm
       kho1 = 2 * R + C + 3
       dai1 = (D + R) * 2 + 5
       dai_tt = (D + R) * 2 + 5
+      kho_ke_hoach = R + C + off
+      dai_ke_hoach = (D + R) * 2 + 3
       break
     case 'A5': // Âm dương (Nắp/Đáy)
       kho1 = 2 * C + R + 3
       dai1 = 2 * C + D + 3
       dai_tt = 2 * C + D
+      kho_ke_hoach = 2 * C + R
+      dai_ke_hoach = 2 * C + D
       break
     case 'A7': // Thùng 1 nắp
       kho1 = R / 2 + C + 3
       dai1 = (D + R) * 2 + 5
       dai_tt = so_lop === 7 ? (D + R) * 2 + 5 : (D + R) * 2 + 4
+      kho_ke_hoach = R / 2 + C + off / 2
+      dai_ke_hoach = (D + R) * 2 + 3
       break
     case 'GOI_GIUA': // Gói giữa
       kho1 = 2 * R + C + 3
       dai1 = (D + R) * 2 + 5
       dai_tt = so_lop === 7 ? (D + R) * 2 + 5 : (D + R) * 2 + 4
+      kho_ke_hoach = 2 * R + C
+      dai_ke_hoach = (D + R) * 2
       break
     case 'GOI_SUON': // Gói sườn
       kho1 = 2 * R + C + 3
       dai1 = 2 * D + 3 * R + 5
       dai_tt = so_lop === 7 ? D + 2 * C + 3 : D + 2 * C + 3
+      kho_ke_hoach = 2 * R + C
+      dai_ke_hoach = 2 * D + 3 * R
       break
     default:
       return null
@@ -285,10 +301,10 @@ export function calcBoxDimensions(
 
   if (kho1 <= 0 || dai1 <= 0) return null
 
-  // Số dao = floor(180 / kho1)
-  const so_dao = Math.max(1, Math.floor(180 / kho1))
-  // Khổ thực tế
-  const kho_tt = kho1 * so_dao + 1.8
+  // Số dao = floor(180 / kho_ke_hoach) — dùng kích thước kế hoạch (không có tab dán)
+  const so_dao = Math.max(1, Math.floor(180 / kho_ke_hoach))
+  // Khổ thực tế = làm tròn lên bội số 5 của (kho_ke_hoach × soDao + 1.8)
+  const kho_tt = Math.ceil((kho_ke_hoach * so_dao + 1.8) / 5) * 5
   // Diện tích 1 con (m²) - dùng kho1 và dai1
   const dien_tich = kho1 >= 180
     ? (kho1 + 5) * dai1 / 10000
@@ -301,6 +317,8 @@ export function calcBoxDimensions(
     kho_tt: Math.round(kho_tt * 10) / 10,
     dai_tt: Math.round(dai_tt * 10) / 10,
     dien_tich: Math.round(dien_tich * 10000) / 10000,
+    kho_ke_hoach: Math.round(kho_ke_hoach * 10) / 10,
+    dai_ke_hoach: Math.round(dai_ke_hoach * 10) / 10,
   }
 }
 
@@ -368,7 +386,7 @@ export const quotesApi = {
   copy: (id: number) => client.post<Quote>(`/quotes/${id}/copy`),
 
   calculateItemPrice: (item: QuoteItem) =>
-    client.post<{ gia_ban: number }>('/quotes/calculate-item-price', { item }),
+    client.post<{ gia_ban: number; gia_noi_bo: number }>('/quotes/calculate-item-price', { item }),
 
   taoDonHang: (id: number, item_ids?: number[]) =>
     client.post<{ so_don: string; order_id: number; message: string }>(

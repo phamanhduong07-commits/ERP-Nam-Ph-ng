@@ -54,6 +54,7 @@ class ProductionOrderItemResponse(BaseModel):
     qccl: str | None = None
     dien_tich: Decimal | None = None
     gia_ban_muc_tieu: Decimal | None = None
+    cong_doan: str | None = None
 
     class Config:
         from_attributes = True
@@ -143,6 +144,7 @@ class ProductionOrderResponse(BaseModel):
     ngay_bat_dau_thuc_te: date | None
     ngay_hoan_thanh_thuc_te: date | None
     ghi_chu: str | None
+    ghi_chu_don_hang: str | None = None
     don_gia_noi_bo: Decimal | None = None
     items: list[ProductionOrderItemResponse] = []
     created_at: datetime
@@ -192,6 +194,7 @@ class UpdateItemSxParams(BaseModel):
     kho_tt: Decimal | None = None
     dai_tt: Decimal | None = None
     qccl: str | None = None
+    ghi_chu: str | None = None
     to_hop_song: str | None = None
     mat: str | None = None;     mat_dl: Decimal | None = None
     song_1: str | None = None;  song_1_dl: Decimal | None = None

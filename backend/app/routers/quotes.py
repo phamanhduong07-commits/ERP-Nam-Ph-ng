@@ -41,6 +41,7 @@ class QuoteItemPriceRequest(BaseModel):
 
 class QuoteItemPriceResponse(BaseModel):
     gia_ban: Decimal
+    gia_noi_bo: Decimal
 
 
 QUOTE_IMPORT_FIELDS = [
@@ -250,16 +251,17 @@ def _quote_layers(item: QuoteItem | dict, db: Session) -> list[dict]:
 
 
 def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
+    _zero = {"gia_ban": Decimal("0"), "gia_noi_bo": Decimal("0")}
     so_lop = int(_item_get(item, "so_lop") or 0)
     if so_lop not in (3, 5, 7):
-        return Decimal("0")
+        return _zero
     loai_thung = (_item_get(item, "loai_thung") or "A1").upper()
     if loai_thung == "LOT":
         loai_thung = "TAM"
     if loai_thung == "KHAC":
-        return Decimal("0")
+        return _zero
     if not (_item_get(item, "dai") and _item_get(item, "rong") and _item_get(item, "to_hop_song")):
-        return Decimal("0")
+        return _zero
 
     loai_in = _item_get(item, "loai_in")
     calc_input = {
@@ -291,7 +293,11 @@ def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
     indirect_bd = get_indirect_breakdown_from_db(so_lop, db)
     addon_rates_db = get_addon_rates_from_db(db)
     result = calculate_price(calc_input, indirect_breakdown=indirect_bd, addon_rates=addon_rates_db)
-    return Decimal(str(result["gia_ban_cuoi"])).quantize(Decimal("1"))
+    gia_noi_bo = result["chi_phi_giay"] + result["chi_phi_gian_tiep"] + result["loi_nhuan"]
+    return {
+        "gia_ban": Decimal(str(result["gia_ban_cuoi"])).quantize(Decimal("1")),
+        "gia_noi_bo": Decimal(str(gia_noi_bo)).quantize(Decimal("1")),
+    }
 
 
 def _build_response(quote: Quote) -> QuoteResponse:
@@ -452,10 +458,10 @@ def calculate_quote_item_price(
     _: User = Depends(get_current_user),
 ):
     try:
-        gia_ban = _quote_item_price(payload.item, db)
+        result = _quote_item_price(payload.item, db)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return QuoteItemPriceResponse(gia_ban=gia_ban)
+    return QuoteItemPriceResponse(**result)
 
 
 @router.get("/counts")
