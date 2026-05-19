@@ -11,7 +11,7 @@ import {
   AccountBookOutlined, RobotOutlined, BarChartOutlined, ShopOutlined, BankOutlined,
   ThunderboltOutlined, FileTextOutlined, MobileOutlined, CarOutlined,
   SolutionOutlined, TrophyOutlined, CrownOutlined, DollarOutlined,
-  CheckCircleOutlined,
+  CheckCircleOutlined, CalculatorOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
@@ -317,6 +317,11 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       key: '/fixed-assets',
       icon: <BankOutlined />,
       label: <Link to="/fixed-assets">Tài sản cố định</Link>,
+    },
+    {
+      key: '/mrp',
+      icon: <CalculatorOutlined />,
+      label: <Link to="/mrp">MRP Lite</Link>,
     },
     {
       key: '/agent',

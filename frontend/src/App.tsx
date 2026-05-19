@@ -118,6 +118,8 @@ const MaintenanceLogPage = lazy(() => import('./pages/maintenance/MaintenanceLog
 const CustomerInteractionPage = lazy(() => import('./pages/crm/CustomerInteractionPage'))
 // Fixed Assets
 const FixedAssetPage = lazy(() => import('./pages/fixed_assets/FixedAssetPage'))
+// MRP
+const MRPPage = lazy(() => import('./pages/mrp/MRPPage'))
 // Reports
 const DebtSummaryPage = lazy(() => import('./pages/reports/DebtSummaryPage'))
 const RevenueReportPage = lazy(() => import('./pages/reports/RevenueReportPage'))
@@ -368,6 +370,7 @@ export default function App() {
             <Route path="maintenance/logs" element={<ErrorBoundary><MaintenanceLogPage /></ErrorBoundary>} />
             <Route path="crm/interactions" element={<ErrorBoundary><CustomerInteractionPage /></ErrorBoundary>} />
             <Route path="fixed-assets" element={<ErrorBoundary><FixedAssetPage /></ErrorBoundary>} />
+            <Route path="mrp" element={<ErrorBoundary><MRPPage /></ErrorBoundary>} />
             <Route path="agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
             <Route path="master/print-templates" element={<ErrorBoundary><PrintTemplatePage /></ErrorBoundary>} />
             <Route path="docs" element={<ErrorBoundary><DocsPage /></ErrorBoundary>} />
