@@ -17,7 +17,7 @@ import {
   salesReturnsApi, type SalesReturn,
   SALES_RETURN_TRANG_THAI_LABELS, SALES_RETURN_TRANG_THAI_COLORS, TINH_TRANG_HANG_LABELS,
 } from '../../api/salesReturns'
-import { customerRefundApi, TRANG_THAI_HOAN_TIEN } from '../../api/accounting'
+import { customerRefundApi, journalApi, TRANG_THAI_HOAN_TIEN } from '../../api/accounting'
 import type { CustomerRefundVoucher } from '../../api/accounting'
 import { printDocument, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
@@ -68,6 +68,12 @@ export default function SalesReturnDetail() {
     queryKey: ['customer-refund-for-return', returnId],
     queryFn: () => customerRefundApi.list({ sales_return_id: returnId, page_size: 1 })
       .then((d: any) => d.items?.[0] ?? null),
+    enabled: hasValidReturnId && returnData?.trang_thai === 'da_duyet',
+  })
+
+  const { data: journalData } = useQuery({
+    queryKey: ['journal-for-return', returnId],
+    queryFn: () => journalApi.list({ chung_tu_loai: 'sales_returns', chung_tu_id: returnId, page_size: 20 }),
     enabled: hasValidReturnId && returnData?.trang_thai === 'da_duyet',
   })
 
@@ -780,6 +786,47 @@ export default function SalesReturnDetail() {
                   </Text>
                 </div>
               </Space>
+            </Card>
+          )}
+
+          {/* Bút toán đã ghi */}
+          {returnData.trang_thai === 'da_duyet' && journalData?.items?.length > 0 && (
+            <Card
+              title={<Space><BankOutlined style={{ color: '#722ed1' }} /> Bút toán đã ghi</Space>}
+              size="small"
+              style={{ marginBottom: 16 }}
+              styles={{ body: { padding: '8px 12px' } }}
+            >
+              {journalData.items.map((je: any) => (
+                <div key={je.id} style={{ marginBottom: 10 }}>
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    {je.loai_but_toan === 'NHAP_TRA_HANG' ? 'Giá vốn' : 'Doanh thu'}
+                    {' — '}{je.dien_giai}
+                  </Text>
+                  <div style={{ marginTop: 4 }}>
+                    {(je.lines || []).map((line: any, i: number) => (
+                      <div key={i} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: 12,
+                        padding: '2px 0',
+                        borderBottom: i < je.lines.length - 1 ? '1px dashed #f0f0f0' : undefined,
+                      }}>
+                        <Space size={4}>
+                          {line.so_tien_no > 0
+                            ? <Tag color="blue" style={{ fontSize: 11, padding: '0 4px' }}>Nợ {line.so_tk}</Tag>
+                            : <Tag color="green" style={{ fontSize: 11, padding: '0 4px' }}>Có {line.so_tk}</Tag>
+                          }
+                          <Text type="secondary" style={{ fontSize: 11 }}>{line.dien_giai}</Text>
+                        </Space>
+                        <Text strong style={{ fontSize: 12, color: line.so_tien_no > 0 ? '#1677ff' : '#389e0d' }}>
+                          {Number(line.so_tien_no || line.so_tien_co).toLocaleString('vi-VN')}đ
+                        </Text>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </Card>
           )}
 

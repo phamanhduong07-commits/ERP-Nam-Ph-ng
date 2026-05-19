@@ -1176,6 +1176,8 @@ def list_journal_entries(
     loai_but_toan: str | None = Query(None),
     phap_nhan_id: int | None = Query(None),
     phan_xuong_id: int | None = Query(None),
+    chung_tu_loai: str | None = Query(None),
+    chung_tu_id: int | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -1189,7 +1191,9 @@ def list_journal_entries(
     if loai_but_toan: q = q.filter(JournalEntry.loai_but_toan == loai_but_toan)
     if phap_nhan_id: q = q.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
     if phan_xuong_id: q = q.filter(JournalEntry.phan_xuong_id == phan_xuong_id)
-    
+    if chung_tu_loai: q = q.filter(JournalEntry.chung_tu_loai == chung_tu_loai)
+    if chung_tu_id: q = q.filter(JournalEntry.chung_tu_id == chung_tu_id)
+
     total = q.count()
     items = q.order_by(desc(JournalEntry.ngay_but_toan), desc(JournalEntry.id))\
              .offset((page - 1) * page_size).limit(page_size).all()

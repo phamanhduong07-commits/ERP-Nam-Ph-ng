@@ -304,11 +304,11 @@ export default function SalesReturnCreate() {
           <Card title="Thông tin phiếu trả" style={{ marginBottom: 16 }}>
             <Form form={form} layout="vertical">
               <Row gutter={16}>
-                <Col xs={24} md={10}>
+                <Col xs={24} md={9}>
                   <Form.Item
                     name="sales_order_id"
-                    label="Phiếu bán hàng"
-                    rules={[{ required: true, message: 'Chọn phiếu bán hàng' }]}
+                    label="Đơn bán hàng"
+                    rules={[{ required: true, message: 'Chọn đơn bán hàng' }]}
                   >
                     <Select
                       showSearch
@@ -329,20 +329,20 @@ export default function SalesReturnCreate() {
                     >
                       {salesOrders?.map((order) => (
                         <Select.Option key={order.id} value={order.id}>
-                          {order.so_don} - {order.ten_khach_hang || ''} ({dayjs(order.ngay_don).format('DD/MM/YYYY')})
+                          {order.so_don} — {order.ten_khach_hang || ''} ({dayjs(order.ngay_don).format('DD/MM/YYYY')})
                         </Select.Option>
                       ))}
                     </Select>
                   </Form.Item>
                 </Col>
-                <Col xs={24} md={8}>
+                <Col xs={24} md={7}>
                   <Form.Item
                     name="delivery_order_id"
-                    label="Lọc phiếu giao hàng"
+                    label="Lọc theo phiếu giao"
                   >
                     <Select
                       showSearch
-                      placeholder="Tìm theo số phiếu (ví dụ: DO-2026...)"
+                      placeholder="Chọn phiếu giao để lọc..."
                       optionFilterProp="children"
                       filterOption={false}
                       onSearch={(val) => setSearchDO(val)}
@@ -355,13 +355,13 @@ export default function SalesReturnCreate() {
                     >
                       {deliveryOrders?.filter((delivery) => delivery.sales_order_id).map((delivery) => (
                         <Select.Option key={delivery.id} value={delivery.id}>
-                          {delivery.so_phieu} - {delivery.so_don || 'Chưa có số đơn'} - {delivery.ten_khach || ''} ({dayjs(delivery.ngay_xuat).format('DD/MM/YYYY')})
+                          {delivery.so_phieu} ({dayjs(delivery.ngay_xuat).format('DD/MM/YYYY')})
                         </Select.Option>
                       ))}
                     </Select>
                   </Form.Item>
                 </Col>
-                <Col xs={12} md={3}>
+                <Col xs={12} md={4}>
                   <Form.Item
                     name="ngay_tra"
                     label="Ngày trả"
@@ -371,18 +371,18 @@ export default function SalesReturnCreate() {
                     <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
-                <Col xs={12} md={3}>
+                <Col xs={24} md={4}>
                   <Form.Item
                     name="ly_do_tra"
                     label="Lý do trả"
-                    rules={[{ required: true, message: 'Nhập lý do trả hàng' }]}
+                    rules={[{ required: true, message: 'Nhập lý do' }]}
                   >
                     <Input placeholder="Lý do trả hàng..." />
                   </Form.Item>
                 </Col>
                 <Col span={24}>
                   <Form.Item name="ghi_chu" label="Ghi chú">
-                    <Input.TextArea rows={2} placeholder="Ghi chú..." />
+                    <Input.TextArea rows={1} placeholder="Ghi chú thêm..." />
                   </Form.Item>
                 </Col>
               </Row>

@@ -426,47 +426,7 @@ def update_return(
             data.items,
             exclude_return_id=return_obj.id,
         )
-        data.items = []
-        # Clear existing items
         return_obj.items.clear()
-
-        # Add updated items
-        tong_tien_tra = 0
-        tong_tien_tra = sum(
-            (ri.so_luong_tra or Decimal("0")) * (ri.don_gia_tra or Decimal("0"))
-            for ri, _qty in prepared_items
-        )
-        for item_data in data.items:
-            delivery_item = None
-            if return_obj.delivery_order_id:
-                delivery_item = _resolve_delivery_order_item(
-                    db,
-                    return_obj.delivery_order_id,
-                    item_data.sales_order_item_id,
-                    item_data.delivery_order_item_id,
-                )
-            sales_order_item = db.query(SalesOrderItem).filter(
-                SalesOrderItem.id == item_data.sales_order_item_id,
-                SalesOrderItem.order_id == return_obj.sales_order_id
-            ).first()
-            if not sales_order_item:
-                raise HTTPException(status_code=404, detail=f"Không tìm thấy item đơn hàng ID {item_data.sales_order_item_id}")
-
-            if item_data.so_luong_tra > sales_order_item.so_luong:
-                raise HTTPException(status_code=400, detail=f"Số lượng trả không được vượt quá số lượng đã bán ({sales_order_item.so_luong})")
-
-            return_item = SalesReturnItem(
-                delivery_order_item_id=delivery_item.id if delivery_item else None,
-                sales_order_item_id=item_data.sales_order_item_id,
-                so_luong_tra=item_data.so_luong_tra,
-                don_gia_tra=item_data.don_gia_tra or sales_order_item.don_gia,
-                ly_do_tra=item_data.ly_do_tra,
-                tinh_trang_hang=item_data.tinh_trang_hang,
-                ghi_chu=item_data.ghi_chu,
-            )
-            return_obj.items.append(return_item)
-            tong_tien_tra += float(item_data.so_luong_tra) * float(return_item.don_gia_tra)
-
         for return_item, _qty in prepared_items:
             return_obj.items.append(return_item)
         return_obj.tong_tien_tra = round(float(tong_tien_tra), 2)
