@@ -14,7 +14,7 @@ import {
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { useAuthStore } from '../../store/auth'
-import { cd2Api, MayIn, MaySauIn, PhieuIn, WorkerSession, TRANG_THAI_COLORS, TRANG_THAI_LABELS } from '../../api/cd2'
+import { cd2Api, MayIn, MaySauIn, PhieuIn, WorkerSession, WorkerDayStats, TRANG_THAI_COLORS, TRANG_THAI_LABELS } from '../../api/cd2'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import QrScannerModal from '../../components/QrScannerModal'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
@@ -97,6 +97,58 @@ function usePullToRefresh(onRefresh: () => void) {
   }, [])
 
   return isPulling
+}
+
+// ── WorkerStatsCard ────────────────────────────────────────────────────────────
+
+function WorkerStatsCard({ stats, week }: { stats: WorkerDayStats; week: WorkerDayStats[] }) {
+  const maxSl = Math.max(...week.map(d => d.tong_sl), 1)
+  const fmtGio = (phut: number) => {
+    if (phut < 60) return `${phut}p`
+    return `${Math.floor(phut / 60)}h${phut % 60 > 0 ? String(phut % 60).padStart(2, '0') + 'm' : ''}`
+  }
+  return (
+    <Card
+      style={{ borderRadius: 20, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', marginBottom: 20 }}
+      styles={{ body: { padding: '14px 16px' } }}
+    >
+      <Text strong style={{ fontSize: 13, color: '#555' }}>Năng suất hôm nay</Text>
+      <div style={{ display: 'flex', gap: 12, marginTop: 10, marginBottom: 14 }}>
+        <div style={{ flex: 1, background: '#f6ffed', borderRadius: 12, padding: '10px 12px', textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#389e0d', lineHeight: 1 }}>{stats.so_lenh}</div>
+          <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 3 }}>lệnh xong</div>
+        </div>
+        <div style={{ flex: 1, background: '#e6f4ff', borderRadius: 12, padding: '10px 12px', textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#1677ff', lineHeight: 1 }}>{stats.tong_sl.toLocaleString()}</div>
+          <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 3 }}>tổng SL</div>
+        </div>
+        <div style={{ flex: 1, background: '#fff7e6', borderRadius: 12, padding: '10px 12px', textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#d46b08', lineHeight: 1 }}>{fmtGio(stats.gio_lam_viec_phut)}</div>
+          <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 3 }}>giờ làm</div>
+        </div>
+      </div>
+      {/* Bar chart 7 ngày — inline SVG */}
+      <Text type="secondary" style={{ fontSize: 11 }}>7 ngày gần nhất</Text>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 6, height: 40 }}>
+        {week.map((d, i) => {
+          const pct = maxSl > 0 ? (d.tong_sl / maxSl) : 0
+          const isToday = i === week.length - 1
+          return (
+            <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <div style={{
+                width: '100%', height: Math.max(4, pct * 32),
+                background: isToday ? '#1677ff' : '#d6e4ff',
+                borderRadius: 3,
+              }} />
+              <span style={{ fontSize: 9, color: isToday ? '#1677ff' : '#bbb' }}>
+                {dayjs(d.date).format('D/M')}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </Card>
+  )
 }
 
 // ── PhieuDetailDrawer ──────────────────────────────────────────────────────────
@@ -320,6 +372,14 @@ export default function MobileTrackingPage() {
     refetchInterval: 60000,
   })
 
+  const printerUserId = workerSession?.printer_user_id
+  const { data: workerStats } = useQuery({
+    queryKey: ['worker-stats', printerUserId],
+    queryFn: () => cd2Api.getWorkerStats(printerUserId!).then(r => r.data),
+    enabled: !!printerUserId && !!selectedMachine,
+    refetchInterval: 60000,
+  })
+
   const { data: progress = [], isLoading: loadingProgress } = useQuery({
     queryKey: ['order-progress', currentOrder?.so_lsx],
     queryFn: () => cd2Api.getOrderProgress(currentOrder?.production_order_id ?? 0).then(r => r.data),
@@ -356,6 +416,58 @@ export default function MobileTrackingPage() {
     const updated = machinePhieuList.find(p => p.id === currentOrder.id)
     if (updated) setCurrentOrder(updated)
   }, [machinePhieuList]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Push notification subscribe khi đã chọn máy ─────────────────────────
+
+  useEffect(() => {
+    if (!selectedMachine || !('serviceWorker' in navigator) || !('PushManager' in window)) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const keyRes = await cd2Api.getVapidPublicKey()
+        const vapidKey = keyRes.data.public_key
+        const reg = await navigator.serviceWorker.ready
+        const existing = await reg.pushManager.getSubscription()
+        if (existing && !cancelled) {
+          const k = existing.getKey('p256dh')
+          const a = existing.getKey('auth')
+          if (k && a) {
+            await cd2Api.pushSubscribe({
+              endpoint: existing.endpoint,
+              p256dh: btoa(String.fromCharCode(...new Uint8Array(k))),
+              auth: btoa(String.fromCharCode(...new Uint8Array(a))),
+              may_in_id: !isSauInMode ? selectedMachine.id : undefined,
+              may_sau_in_id: isSauInMode ? selectedMachine.id : undefined,
+            })
+          }
+          return
+        }
+        const permission = await Notification.requestPermission()
+        if (permission !== 'granted' || cancelled) return
+        const urlB64 = vapidKey
+        const padding = '='.repeat((4 - urlB64.length % 4) % 4)
+        const base64 = (urlB64 + padding).replace(/-/g, '+').replace(/_/g, '/')
+        const raw = atob(base64)
+        const output = new Uint8Array(raw.length)
+        for (let i = 0; i < raw.length; i++) output[i] = raw.charCodeAt(i)
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: output,
+        })
+        if (cancelled) return
+        const k = sub.getKey('p256dh')!
+        const a = sub.getKey('auth')!
+        await cd2Api.pushSubscribe({
+          endpoint: sub.endpoint,
+          p256dh: btoa(String.fromCharCode(...new Uint8Array(k))),
+          auth: btoa(String.fromCharCode(...new Uint8Array(a))),
+          may_in_id: !isSauInMode ? selectedMachine.id : undefined,
+          may_sau_in_id: isSauInMode ? selectedMachine.id : undefined,
+        })
+      } catch { /* push optional */ }
+    })()
+    return () => { cancelled = true }
+  }, [selectedMachine?.id, isSauInMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Timer đếm giờ chạy ───────────────────────────────────────────────────
 
@@ -1528,6 +1640,11 @@ export default function MobileTrackingPage() {
                 </div>
               )}
             </Card>
+
+            {/* ── Năng suất hôm nay ── */}
+            {workerStats && printerUserId && (
+              <WorkerStatsCard stats={workerStats.today} week={workerStats.week} />
+            )}
           </>
         )}
       </div>

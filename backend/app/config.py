@@ -34,4 +34,9 @@ class Settings(BaseSettings):
     CD2_USERNAME: str = ""
     CD2_PASSWORD: str = ""
 
+    # Web Push (VAPID) — generate keys once, store in .env
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_EMAIL: str = "mailto:visunpack@namphuongbaobi.com"
+
 settings = Settings()

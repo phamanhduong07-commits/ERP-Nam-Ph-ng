@@ -404,4 +404,21 @@ export const cd2Api = {
   getMachineLogs: (machineId: number) => client.get<any[]>(`/cd2/machines/${machineId}/logs`),
   trackProduction: (data: TrackPayload) => client.post<{ ok: boolean; log_id: number }>('/cd2/track', data),
   getOrderProgress: (orderId: number) => client.get<ProductionLog[]>(`/cd2/progress/${orderId}`),
+
+  // Web Push
+  getVapidPublicKey: () => client.get<{ public_key: string }>('/cd2/push-vapid-key'),
+  pushSubscribe: (data: { endpoint: string; p256dh: string; auth: string; may_in_id?: number; may_sau_in_id?: number }) =>
+    client.post('/cd2/push-subscribe', data),
+  pushUnsubscribe: (endpoint: string) => client.delete('/cd2/push-subscribe', { params: { endpoint } }),
+
+  // Worker stats
+  getWorkerStats: (printer_user_id: number, date?: string) =>
+    client.get<{ today: WorkerDayStats; week: WorkerDayStats[] }>('/cd2/worker-stats', { params: { printer_user_id, date } }),
+}
+
+export interface WorkerDayStats {
+  date: string
+  so_lenh: number
+  tong_sl: number
+  gio_lam_viec_phut: number
 }

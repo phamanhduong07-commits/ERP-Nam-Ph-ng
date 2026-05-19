@@ -11,7 +11,7 @@ from app.deps import get_current_user, get_optional_user
 from app.models.auth import User
 from app.models.cd2 import (
     MayIn, MaySauIn, MayScan, PhieuIn, PhieuInStateLog, ScanLog, ShiftCa, ShiftConfig,
-    PrinterUser, Machine, ProductionLog
+    PrinterUser, Machine, ProductionLog, PushSubscription
 )
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
@@ -1007,6 +1007,7 @@ async def move_phieu(
             status_code=400,
             detail=f"Phiếu đã qua '{prev_state}' — không thể kéo về '{body.trang_thai}'. Dùng nút thao tác.",
         )
+    prev_may_in_id = p.may_in_id
     p.trang_thai = body.trang_thai
     p.may_in_id = body.may_in_id
     p.sort_order = body.sort_order
@@ -1016,6 +1017,11 @@ async def move_phieu(
         p.gio_hoan_thanh = datetime.now()
         _auto_nhap_thanh_pham(db, p, current_user.id)
     db.commit()
+    # Push notification khi vừa gán máy in lần đầu
+    if body.may_in_id and body.may_in_id != prev_may_in_id:
+        ten_hang = p.ten_hang or p.so_phieu or "Lệnh mới"
+        _send_push_to_machine(db, body.may_in_id, None,
+                              "Có lệnh mới!", f"{ten_hang} — {p.so_lsx or p.so_phieu}")
     # Phat tin hieu WebSocket cho Dashboard
     await sio.emit("machine_status_update", {
         "machine_id": p.may_in_id,
@@ -1325,6 +1331,10 @@ async def assign_sau_in(phieu_id: int, body: AssignSauInBody, db: Session = Depe
     p.may_sau_in_id = body.may_sau_in_id
     db.commit()
     await sio.emit("machine_status_update", {"phieu_in_id": phieu_id, "event": "assign_sau_in"})
+    if body.may_sau_in_id:
+        ten_hang = p.ten_hang or p.so_phieu or "Lệnh mới"
+        _send_push_to_machine(db, None, body.may_sau_in_id,
+                              "Có lệnh mới!", f"{ten_hang} — {p.so_lsx or p.so_phieu}")
     return _to_dict(_load(phieu_id, db))
 
 
@@ -2435,3 +2445,148 @@ def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current
         })
 
     return sorted(results, key=lambda r: r["so_lenh"])
+
+
+# ── Push Notification ─────────────────────────────────────────────────────────
+
+class PushSubscribeBody(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+    may_in_id: Optional[int] = None
+    may_sau_in_id: Optional[int] = None
+
+
+@router.post("/push-subscribe")
+def push_subscribe(body: PushSubscribeBody, db: Session = Depends(get_db)):
+    """Lưu hoặc cập nhật Web Push subscription từ browser worker."""
+    sub = db.query(PushSubscription).filter(PushSubscription.endpoint == body.endpoint).first()
+    if sub:
+        sub.p256dh = body.p256dh
+        sub.auth = body.auth
+        sub.may_in_id = body.may_in_id
+        sub.may_sau_in_id = body.may_sau_in_id
+    else:
+        sub = PushSubscription(
+            endpoint=body.endpoint,
+            p256dh=body.p256dh,
+            auth=body.auth,
+            may_in_id=body.may_in_id,
+            may_sau_in_id=body.may_sau_in_id,
+        )
+        db.add(sub)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/push-subscribe")
+def push_unsubscribe(endpoint: str, db: Session = Depends(get_db)):
+    db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).delete()
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/push-vapid-key")
+def get_vapid_public_key():
+    """Trả VAPID public key cho frontend subscribe."""
+    from app.config import settings
+    if not settings.VAPID_PUBLIC_KEY:
+        raise HTTPException(503, "Push notifications chưa được cấu hình")
+    return {"public_key": settings.VAPID_PUBLIC_KEY}
+
+
+def _send_push_to_machine(db: Session, may_in_id: Optional[int], may_sau_in_id: Optional[int],
+                           title: str, body: str):
+    """Gửi Web Push đến tất cả subscriber của máy đó. Fire-and-forget, không raise."""
+    from app.config import settings
+    if not settings.VAPID_PRIVATE_KEY:
+        return
+    try:
+        from pywebpush import webpush, WebPushException
+        import json
+
+        subs = db.query(PushSubscription)
+        if may_in_id:
+            subs = subs.filter(PushSubscription.may_in_id == may_in_id)
+        elif may_sau_in_id:
+            subs = subs.filter(PushSubscription.may_sau_in_id == may_sau_in_id)
+        else:
+            return
+
+        private_key_pem = settings.VAPID_PRIVATE_KEY.replace("\\n", "\n")
+        payload = json.dumps({"title": title, "body": body})
+
+        for sub in subs.all():
+            try:
+                webpush(
+                    subscription_info={
+                        "endpoint": sub.endpoint,
+                        "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                    },
+                    data=payload,
+                    vapid_private_key=private_key_pem,
+                    vapid_claims={"sub": settings.VAPID_EMAIL},
+                )
+            except WebPushException as e:
+                if e.response and e.response.status_code in (404, 410):
+                    db.delete(sub)
+                    db.commit()
+    except Exception:
+        pass  # push không critical — không block luồng chính
+
+
+# ── Worker stats ──────────────────────────────────────────────────────────────
+
+@router.get("/worker-stats")
+def get_worker_stats(
+    printer_user_id: int,
+    date_str: Optional[str] = Query(None, alias="date"),
+    db: Session = Depends(get_db),
+    _: Optional[User] = Depends(get_optional_user),
+):
+    """Thống kê năng suất cá nhân worker: hôm nay + 7 ngày gần nhất."""
+    target_date = date.fromisoformat(date_str) if date_str else date.today()
+
+    def stats_for_day(d: date) -> dict:
+        start = datetime.combine(d, datetime.min.time())
+        end = datetime.combine(d, datetime.max.time())
+
+        # Phiếu hoàn thành trong ngày bởi worker này
+        logs = (
+            db.query(PhieuInStateLog)
+            .filter(
+                PhieuInStateLog.printer_user_id == printer_user_id,
+                PhieuInStateLog.new_state == "hoan_thanh",
+                PhieuInStateLog.created_at >= start,
+                PhieuInStateLog.created_at <= end,
+            )
+            .all()
+        )
+        phieu_ids = [l.phieu_in_id for l in logs]
+        so_lenh = len(phieu_ids)
+
+        tong_sl = 0
+        if phieu_ids:
+            phieus = db.query(PhieuIn).filter(PhieuIn.id.in_(phieu_ids)).all()
+            tong_sl = sum((p.so_luong_in_ok or p.so_luong_phoi or 0) for p in phieus)
+
+        # Thời gian làm việc (phút): tổng khoảng bat_dau → hoan_thanh
+        gio_lam = 0
+        for l in logs:
+            phieu = db.query(PhieuIn).filter(PhieuIn.id == l.phieu_in_id).first()
+            if phieu and phieu.gio_bat_dau_in:
+                delta = (l.created_at - phieu.gio_bat_dau_in).total_seconds() / 60
+                if 0 < delta < 600:  # tối đa 10h
+                    gio_lam += delta
+
+        return {
+            "date": d.isoformat(),
+            "so_lenh": so_lenh,
+            "tong_sl": int(tong_sl),
+            "gio_lam_viec_phut": round(gio_lam),
+        }
+
+    today_stats = stats_for_day(target_date)
+    week_stats = [stats_for_day(target_date - timedelta(days=i)) for i in range(6, -1, -1)]
+
+    return {"today": today_stats, "week": week_stats}

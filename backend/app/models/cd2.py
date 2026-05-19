@@ -251,3 +251,17 @@ class PrinterUser(Base):
     may_in_obj: Mapped["MayIn | None"] = relationship("MayIn", foreign_keys=[machine_id])
     may_sau_in_obj: Mapped["MaySauIn | None"] = relationship("MaySauIn", foreign_keys=[may_sau_in_id])
     may_scan_obj: Mapped["MayScan | None"] = relationship("MayScan", foreign_keys=[may_scan_id])
+
+
+class PushSubscription(Base):
+    """Web Push subscription của từng worker kiosk theo máy."""
+    __tablename__ = "push_subscription"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    p256dh: Mapped[str] = mapped_column(Text, nullable=False)
+    auth: Mapped[str] = mapped_column(String(255), nullable=False)
+    # máy đang dùng (may_in hoặc may_sau_in, không FK cứng để linh hoạt)
+    may_in_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    may_sau_in_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

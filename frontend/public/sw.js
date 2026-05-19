@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nam-phuong-erp-v14';
+const CACHE_NAME = 'nam-phuong-erp-v15';
 
 // Install: skip waiting immediately, no pre-caching (assets change every build)
 self.addEventListener('install', () => {
@@ -11,6 +11,34 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
+  );
+});
+
+// Push: hiện notification khi server gửi lệnh mới
+self.addEventListener('push', (event) => {
+  let data = { title: 'Nam Phương ERP', body: 'Có thông báo mới' };
+  try { data = JSON.parse(event.data.text()); } catch {}
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/logo_namphuong.png',
+      badge: '/logo_namphuong.png',
+      tag: 'erp-push',
+      renotify: true,
+      vibrate: [100, 50, 100],
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if (client.url.includes('/production') && 'focus' in client) return client.focus();
+      }
+      if (clients.openWindow) return clients.openWindow('/');
+    })
   );
 });
 
