@@ -5,7 +5,7 @@ import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, desc
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
 from app.deps import get_current_user, get_optional_user
 from app.models.auth import User
@@ -159,6 +159,20 @@ class HoanThanhBody(BaseModel):
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+def _poi_fields(po: "ProductionOrder | None") -> dict:
+    """Lấy thông tin kỹ thuật từ item đầu tiên của ProductionOrder."""
+    poi = po.items[0] if (po and po.items) else None
+    return {
+        "kho_tt": float(poi.kho_tt) if poi and poi.kho_tt is not None else None,
+        "dai_tt": float(poi.dai_tt) if poi and poi.dai_tt is not None else None,
+        "dai":    float(poi.dai)    if poi and poi.dai    is not None else None,
+        "rong":   float(poi.rong)   if poi and poi.rong   is not None else None,
+        "cao":    float(poi.cao)    if poi and poi.cao    is not None else None,
+        "so_lop":     poi.so_lop     if poi else None,
+        "to_hop_song": poi.to_hop_song if poi else None,
+    }
+
+
 def _to_dict(p: PhieuIn) -> dict:
     return {
         "id": p.id,
@@ -207,14 +221,8 @@ def _to_dict(p: PhieuIn) -> dict:
         "phieu_goc_id": p.phieu_goc_id,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "so_lsx": p.production_order.so_lenh if p.production_order else None,
-        # Thông tin kỹ thuật từ ProductionOrder
-        "kho_tt": float(p.production_order.kho_tt) if p.production_order and p.production_order.kho_tt is not None else None,
-        "dai_tt": float(p.production_order.dai_tt) if p.production_order and p.production_order.dai_tt is not None else None,
-        "dai": float(p.production_order.dai) if p.production_order and p.production_order.dai is not None else None,
-        "rong": float(p.production_order.rong) if p.production_order and p.production_order.rong is not None else None,
-        "cao": float(p.production_order.cao) if p.production_order and p.production_order.cao is not None else None,
-        "so_lop": p.production_order.so_lop if p.production_order else None,
-        "to_hop_song": p.production_order.to_hop_song if p.production_order else None,
+        # Thông tin kỹ thuật từ ProductionOrderItem (item đầu tiên của LSX)
+        **_poi_fields(p.production_order),
     }
 
 
@@ -377,7 +385,7 @@ def _load(phieu_id: int, db: Session) -> PhieuIn:
         .options(
             joinedload(PhieuIn.may_in_obj),
             joinedload(PhieuIn.may_sau_in_obj),
-            joinedload(PhieuIn.production_order),
+            joinedload(PhieuIn.production_order).selectinload(ProductionOrder.items),
         )
         .filter(PhieuIn.id == phieu_id)
         .first()
@@ -519,7 +527,7 @@ def get_sauin_kanban(
         .options(
             joinedload(PhieuIn.may_in_obj),
             joinedload(PhieuIn.may_sau_in_obj),
-            joinedload(PhieuIn.production_order),
+            joinedload(PhieuIn.production_order).selectinload(ProductionOrder.items),
         )
         # cho_dinh_hinh: vừa xong in, chờ tổ trưởng gán máy định hình
         .filter(PhieuIn.trang_thai.in_(["cho_dinh_hinh", "sau_in", "dang_sau_in"]))
@@ -568,7 +576,7 @@ def get_kanban(
         .options(
             joinedload(PhieuIn.may_in_obj),
             joinedload(PhieuIn.may_sau_in_obj),
-            joinedload(PhieuIn.production_order),
+            joinedload(PhieuIn.production_order).selectinload(ProductionOrder.items),
         )
         .filter(PhieuIn.trang_thai != "huy")
         # hoan_thanh chỉ lấy 7 ngày gần nhất để tránh tích lũy vô hạn
@@ -1710,7 +1718,7 @@ def history_phieu_in(
         .options(
             joinedload(PhieuIn.may_in_obj),
             joinedload(PhieuIn.may_sau_in_obj),
-            joinedload(PhieuIn.production_order),
+            joinedload(PhieuIn.production_order).selectinload(ProductionOrder.items),
         )
         .filter(PhieuIn.created_at >= cutoff)
     )
