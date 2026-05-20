@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Badge, Button, Card, Col, Progress, Row, Space, Statistic, Table, Tag, Tooltip, Typography,
+  Alert, Badge, Button, Card, Col, Progress, Row, Space, Statistic, Table, Tag, Tooltip, Typography,
 } from 'antd'
 import {
   CarOutlined, EnvironmentOutlined, ReloadOutlined, ThunderboltOutlined,
 } from '@ant-design/icons'
-import axios from 'axios'
+import client from '../../api/client'
 
 const { Text, Title } = Typography
 
@@ -57,17 +57,22 @@ export default function GpsTrackingPage() {
   const [loading, setLoading] = useState(false)
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL)
   const [lastFetch, setLastFetch] = useState<Date | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const res = await axios.get<GpsResponse>('/api/gps/vehicles')
+      const res = await client.get<GpsResponse>('/gps/vehicles')
       setData(res.data)
+      setError(null)
       setLastFetch(new Date())
       setCountdown(REFRESH_INTERVAL)
-    } catch (err) {
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        ?? 'Không kết nối được GPS API'
+      setError(msg)
       console.error('GPS fetch error', err)
     } finally {
       setLoading(false)
@@ -89,7 +94,7 @@ export default function GpsTrackingPage() {
   }, [])
 
   const handleManualRefresh = async () => {
-    await axios.get('/api/gps/vehicles/refresh')
+    try { await client.get('/gps/vehicles/refresh') } catch { /* ignore */ }
     await fetchData()
   }
 
@@ -161,17 +166,18 @@ export default function GpsTrackingPage() {
       width: 120,
       sorter: (a: GpsVehicle, b: GpsVehicle) => a.fuel_pct - b.fuel_pct,
       render: (fuel: number) => {
-        const color = fuel > 50 ? '#52c41a' : fuel > 20 ? '#faad14' : '#ff4d4f'
+        const pct = fuel ?? 0
+        const color = pct > 50 ? '#52c41a' : pct > 20 ? '#faad14' : '#ff4d4f'
         return (
           <Space direction="vertical" size={2} style={{ width: '100%' }}>
             <Progress
-              percent={fuel}
+              percent={pct}
               size="small"
               strokeColor={color}
               showInfo={false}
               style={{ marginBottom: 0 }}
             />
-            <Text style={{ fontSize: 12, color }}>{fuel}%</Text>
+            <Text style={{ fontSize: 12, color }}>{pct}%</Text>
           </Space>
         )
       },
@@ -240,6 +246,15 @@ export default function GpsTrackingPage() {
 
   return (
     <div style={{ padding: '16px 24px' }}>
+      {error && (
+        <Alert
+          type="error"
+          message={`Lỗi GPS: ${error}`}
+          showIcon
+          style={{ marginBottom: 12 }}
+          action={<Button size="small" onClick={handleManualRefresh}>Thử lại</Button>}
+        />
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>
           <CarOutlined style={{ marginRight: 8, color: '#1677ff' }} />

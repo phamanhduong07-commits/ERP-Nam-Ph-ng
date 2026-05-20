@@ -45,7 +45,8 @@ async def _fetch_gps_raw() -> list[dict]:
             return _cache["data"]
         raise HTTPException(503, "Không kết nối được GPS API")
 
-    result = data if isinstance(data, list) else data.get("data", [])
+    # GPS Bình Minh trả về {"Data": [...]}
+    result = data if isinstance(data, list) else data.get("Data", data.get("data", []))
     _cache["data"] = result
     _cache["ts"] = now
     return result
