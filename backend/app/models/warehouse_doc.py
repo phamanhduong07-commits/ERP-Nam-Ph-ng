@@ -172,6 +172,7 @@ class DeliveryOrder(Base):
     ngay_giao_thuc_te: Mapped[date | None] = mapped_column(Date, nullable=True)
     ten_nguoi_nhan_thuc_te: Mapped[str | None] = mapped_column(String(150), nullable=True)
     da_xac_nhan_giao: Mapped[bool] = mapped_column(Boolean, default=False)
+    co_hang_ve: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

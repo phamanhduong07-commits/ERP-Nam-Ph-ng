@@ -34,33 +34,49 @@ def _trip_fund(delivery: DeliveryOrder, db: Session) -> tuple[Decimal, Decimal, 
     tong_m2 = sum((item.dien_tich or Decimal("0")) for item in delivery.items)
     don_gia_m2 = _default_trip_rate(db)
     tien_chuyen = tong_m2 * don_gia_m2
+    # Xe chở hàng về: tối đa 50% tiền vận chuyển được phân chia
+    if getattr(delivery, "co_hang_ve", False):
+        tien_chuyen = tien_chuyen * Decimal("0.5")
     return tong_m2, don_gia_m2, tien_chuyen
 
 
+# Tỷ lệ chia cố định theo số lơ (bảng quy định công ty)
+_TRIP_RATIOS = {
+    0: {"tai_xe": Decimal("1.0")},
+    1: {"tai_xe": Decimal("0.6"), "lo_xe_1": Decimal("0.4")},
+    2: {"tai_xe": Decimal("0.4"), "lo_xe_1": Decimal("0.3"), "lo_xe_2": Decimal("0.3")},
+}
+
+
 def _trip_participants(delivery: DeliveryOrder) -> list[dict]:
+    has_lo1 = bool(delivery.lo_xe_rel and delivery.lo_xe_rel.employee_id)
+    has_lo2 = bool(delivery.lo_xe_rel_2 and delivery.lo_xe_rel_2.employee_id)
+    n_lo = (1 if has_lo1 else 0) + (1 if has_lo2 else 0)
+    ratios = _TRIP_RATIOS[n_lo]
+
     people = []
-    if delivery.tai_xe:
+    if delivery.tai_xe and delivery.tai_xe.employee_id:
         people.append({
             "role": "tai_xe",
             "employee_id": delivery.tai_xe.employee_id,
             "name": delivery.tai_xe.ho_ten,
-            "he_so": delivery.tai_xe.he_so_chuyen or Decimal("1"),
+            "he_so": ratios["tai_xe"],
         })
-    if delivery.lo_xe_rel:
+    if has_lo1:
         people.append({
             "role": "lo_xe_1",
             "employee_id": delivery.lo_xe_rel.employee_id,
             "name": delivery.lo_xe_rel.ho_ten,
-            "he_so": delivery.lo_xe_rel.he_so_chuyen or Decimal("0.3"),
+            "he_so": ratios["lo_xe_1"],
         })
-    if delivery.lo_xe_rel_2:
+    if has_lo2:
         people.append({
             "role": "lo_xe_2",
             "employee_id": delivery.lo_xe_rel_2.employee_id,
             "name": delivery.lo_xe_rel_2.ho_ten,
-            "he_so": delivery.lo_xe_rel_2.he_so_chuyen or Decimal("0.3"),
+            "he_so": ratios["lo_xe_2"],
         })
-    return [p for p in people if p["employee_id"] and p["he_so"] > 0]
+    return people
 
 
 def calculate_trip_salary_allocations(db: Session, from_date: date, to_date: date) -> dict[int, dict]:

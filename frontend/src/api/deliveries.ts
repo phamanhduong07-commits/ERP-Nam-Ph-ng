@@ -164,6 +164,7 @@ export interface DeliveryOrder {
   tong_the_tich: number
   trang_thai: string
   da_xac_nhan_giao: boolean
+  co_hang_ve: boolean
   ngay_giao_thuc_te: string | null
   ten_nguoi_nhan_thuc_te: string | null
   items: DeliveryOrderItem[]
@@ -209,6 +210,7 @@ export interface CreateDeliveryPayload {
   gui_kem_theo?: string
   don_gia_vc_id?: number
   tien_van_chuyen?: number
+  co_hang_ve?: boolean
   ghi_chu?: string
   items: CreateDeliveryItemPayload[]
 }

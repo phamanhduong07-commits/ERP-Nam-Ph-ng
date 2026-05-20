@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Alert, Badge, Button, Card, Col, DatePicker, Descriptions, Divider, Drawer, Empty, Form, Input, InputNumber,
+  Alert, Badge, Button, Card, Checkbox, Col, DatePicker, Descriptions, Divider, Drawer, Empty, Form, Input, InputNumber,
   message as antdMessage, Modal, Row, Select, Space, Spin, Statistic, Table, Tabs, Tooltip, Typography, Tag, App
 } from 'antd'
 import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, FileTextOutlined, PrinterOutlined, ReloadOutlined, WarningOutlined } from '@ant-design/icons'
@@ -229,27 +229,34 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
   const watchedTaiXeId = Form.useWatch('tai_xe_id', doForm)
   const watchedLoXeId = Form.useWatch('lo_xe_id', doForm)
   const watchedLoXeId2 = Form.useWatch('lo_xe_id_2', doForm)
+  const watchedCoHangVe = Form.useWatch('co_hang_ve', doForm)
 
+  // Tỷ lệ cố định theo bảng quy định: 1 lơ → 60/40, 2 lơ → 40/30/30
   const tripBreakdown = useMemo(() => {
     if (!defaultTripRate || !doTotalM2) return []
-    const quy = doTotalM2 * defaultTripRate
-    const crew: { id: number; name: string; heSo: number; role: string }[] = []
+    const quyRaw = doTotalM2 * defaultTripRate
+    const quy = watchedCoHangVe ? quyRaw * 0.5 : quyRaw
+    const hasLo1 = !!watchedLoXeId
+    const hasLo2 = !!watchedLoXeId2
+    type Crew = { name: string; role: string; ratio: number; luong: number }
+    const crew: Crew[] = []
     if (watchedTaiXeId) {
       const tx = taiXeList.find(x => x.id === watchedTaiXeId)
-      if (tx) crew.push({ id: tx.id, name: tx.ho_ten, heSo: tx.he_so_chuyen ?? 1.0, role: 'Tài xế' })
+      const ratio = hasLo2 ? 0.4 : hasLo1 ? 0.6 : 1.0
+      if (tx) crew.push({ name: tx.ho_ten, role: 'Tài xế', ratio, luong: Math.round(quy * ratio) })
     }
-    if (watchedLoXeId) {
+    if (hasLo1) {
       const lx = loXeList.find(x => x.id === watchedLoXeId)
-      if (lx) crew.push({ id: lx.id, name: lx.ho_ten, heSo: lx.he_so_chuyen ?? 0.3, role: 'Lơ xe' })
+      const ratio = hasLo2 ? 0.3 : 0.4
+      if (lx) crew.push({ name: lx.ho_ten, role: 'Lơ xe', ratio, luong: Math.round(quy * ratio) })
     }
-    if (watchedLoXeId2) {
+    if (hasLo2) {
       const lx2 = loXeList.find(x => x.id === watchedLoXeId2)
-      if (lx2) crew.push({ id: lx2.id, name: lx2.ho_ten, heSo: lx2.he_so_chuyen ?? 0.3, role: 'Lơ xe 2' })
+      if (lx2) crew.push({ name: lx2.ho_ten, role: 'Lơ xe 2', ratio: 0.3, luong: Math.round(quy * 0.3) })
     }
-    if (!crew.length) return [{ name: '—', role: '', heSo: 1, luong: quy }]
-    const totalHeSo = crew.reduce((s, c) => s + c.heSo, 0)
-    return crew.map(c => ({ ...c, luong: Math.round(quy * c.heSo / totalHeSo) }))
-  }, [watchedTaiXeId, watchedLoXeId, watchedLoXeId2, doTotalM2, defaultTripRate, taiXeList, loXeList])
+    if (!crew.length) return []
+    return crew
+  }, [watchedTaiXeId, watchedLoXeId, watchedLoXeId2, watchedCoHangVe, doTotalM2, defaultTripRate, taiXeList, loXeList])
 
   const openDOModalFromTP = () => {
     const selectedRows = tonKhoTP.filter(r => selectedTPKeys.includes(r.production_order_id))
@@ -1464,6 +1471,13 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
             )}
             {!isRequest && (
               <Col span={6}>
+                <Form.Item name="co_hang_ve" valuePropName="checked" label="Chở hàng về">
+                  <Checkbox>Xe chở hàng về (tối đa 50% lương chuyến)</Checkbox>
+                </Form.Item>
+              </Col>
+            )}
+            {!isRequest && (
+              <Col span={6}>
                 <Form.Item name="so_seal" label="Số Seal">
                   <Input placeholder="Số seal..." />
                 </Form.Item>
@@ -1503,11 +1517,12 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
                 <Text strong style={{ color: '#0958d9' }}>
                   Lương chuyến: {fmtN(doTotalM2)} m² × {fmtMoney(defaultTripRate)} = {fmtMoney(estimatedTripMoney)} đ
+                  {watchedCoHangVe && <Tag color="orange" style={{ marginLeft: 8 }}>Chở hàng về — phân chia 50%</Tag>}
                 </Text>
-                {tripBreakdown.length > 0 && tripBreakdown[0].name !== '—' && (
+                {tripBreakdown.length > 0 && (
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     {tripBreakdown.map((p, i) => (
-                      <Tag key={i} color="blue">{p.role} {p.name}: {fmtMoney(p.luong)} đ</Tag>
+                      <Tag key={i} color="blue">{p.role} {p.name}: {fmtMoney(p.luong)} đ ({Math.round(p.ratio * 100)}%)</Tag>
                     ))}
                   </div>
                 )}

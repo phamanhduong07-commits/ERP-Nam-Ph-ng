@@ -186,6 +186,7 @@ class DeliveryOrderIn(BaseModel):
     gui_kem_theo: Optional[str] = None
     don_gia_vc_id: Optional[int] = None
     tien_van_chuyen: Optional[Decimal] = None
+    co_hang_ve: bool = False
     ghi_chu: Optional[str] = None
     items: list[DeliveryOrderItemIn]
 
@@ -2018,6 +2019,7 @@ def create_delivery(
         gui_kem_theo=body.gui_kem_theo,
         don_gia_vc_id=body.don_gia_vc_id,
         tien_van_chuyen=body.tien_van_chuyen,
+        co_hang_ve=body.co_hang_ve,
         ghi_chu=body.ghi_chu,
         trang_thai_cong_no="chua_thu",
         created_by=current_user.id,
@@ -2560,6 +2562,7 @@ def _do_to_dict(do: DeliveryOrder, db: Session, include_print_data: bool = False
         "tong_the_tich": sum(float(getattr(it, "the_tich", None) or 0) for it in do.items),
         "trang_thai": do.trang_thai,
         "da_xac_nhan_giao": bool(getattr(do, "da_xac_nhan_giao", False)),
+        "co_hang_ve": bool(getattr(do, "co_hang_ve", False)),
         "ngay_giao_thuc_te": str(do.ngay_giao_thuc_te) if getattr(do, "ngay_giao_thuc_te", None) else None,
         "ten_nguoi_nhan_thuc_te": getattr(do, "ten_nguoi_nhan_thuc_te", None),
         "ghi_chu": do.ghi_chu,
