@@ -65,7 +65,11 @@ export default function GpsTrackingPage() {
     setLoading(true)
     try {
       const res = await client.get<GpsResponse>('/gps/vehicles')
-      setData(res.data)
+      const payload = res.data
+      if (!payload || !Array.isArray(payload.vehicles)) {
+        throw new Error('Dữ liệu GPS không hợp lệ — thử khởi động lại backend')
+      }
+      setData(payload)
       setError(null)
       setLastFetch(new Date())
       setCountdown(REFRESH_INTERVAL)
@@ -323,7 +327,7 @@ export default function GpsTrackingPage() {
         size="small"
         title={
           <Space>
-            <span>Danh sách xe ({data?.vehicles.length ?? 0})</span>
+            <span>Danh sách xe ({data?.vehicles?.length ?? 0})</span>
             {data && data.cache_age_seconds < REFRESH_INTERVAL && (
               <Tag color="green">Live</Tag>
             )}
