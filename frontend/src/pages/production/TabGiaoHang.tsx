@@ -210,6 +210,11 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
     return list
   }, [deliveryList, doStatusFilter, doShortcut])
 
+  // ── Xác nhận giao hàng modal ─────────────────────────────────────────────
+  const [xacNhanModalOpen, setXacNhanModalOpen] = useState(false)
+  const [xacNhanOrderId, setXacNhanOrderId] = useState<number | null>(null)
+  const [xacNhanForm] = Form.useForm()
+
   // ── Modals logic ──────────────────────────────────────────────────────────
   const [showDOModal, setShowDOModal] = useState(false)
   const [isRequest, setIsRequest] = useState(false)
@@ -423,6 +428,28 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
     },
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi đổi trạng thái'),
   })
+
+  const xacNhanMutation = useMutation({
+    mutationFn: ({ id, ngay_giao, ten_nguoi_nhan, ghi_chu }: { id: number; ngay_giao: string; ten_nguoi_nhan: string; ghi_chu?: string }) =>
+      deliveriesApi.xacNhan(id, { ngay_giao, ten_nguoi_nhan, ghi_chu }),
+    onSuccess: () => {
+      message.success('Xác nhận giao hàng thành công')
+      setXacNhanModalOpen(false)
+      xacNhanForm.resetFields()
+      qc.invalidateQueries({ queryKey: ['deliveries'] })
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xác nhận giao hàng'),
+  })
+
+  const handleStatusChange = (id: number, v: string) => {
+    if (v === 'da_giao') {
+      setXacNhanOrderId(id)
+      xacNhanForm.setFieldsValue({ ngay_giao: dayjs(), ten_nguoi_nhan: '', ghi_chu: '' })
+      setXacNhanModalOpen(true)
+    } else {
+      updateStatusMutation.mutate({ id, trang_thai: v })
+    }
+  }
 
   const deleteYCMutation = useMutation({
     mutationFn: (id: number) => yeuCauApi.delete(id),
@@ -924,8 +951,8 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                   placeholder="Đổi TT"
                   style={{ width: 120 }}
                   options={nextOpts}
-                  loading={updateStatusMutation.isPending}
-                  onChange={(v: string) => updateStatusMutation.mutate({ id: row.id, trang_thai: v })}
+                  loading={updateStatusMutation.isPending || xacNhanMutation.isPending}
+                  onChange={(v: string) => handleStatusChange(row.id, v)}
                   value={null}
                   disabled={!!row.invoice_id}
                 />
@@ -1665,6 +1692,42 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
         <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 6, display: 'block' }}>
           Nếu hóa đơn đã phát hành, yêu cầu điều chỉnh sẽ được gửi chờ KT Trưởng duyệt.
         </Typography.Text>
+      </Modal>
+
+      {/* Modal xác nhận giao hàng */}
+      <Modal
+        title="Xác nhận giao hàng thực tế"
+        open={xacNhanModalOpen}
+        onCancel={() => { setXacNhanModalOpen(false); xacNhanForm.resetFields() }}
+        onOk={() => {
+          xacNhanForm.validateFields().then(vals => {
+            if (!xacNhanOrderId) return
+            xacNhanMutation.mutate({
+              id: xacNhanOrderId,
+              ngay_giao: vals.ngay_giao.format('YYYY-MM-DD'),
+              ten_nguoi_nhan: vals.ten_nguoi_nhan,
+              ghi_chu: vals.ghi_chu || undefined,
+            })
+          })
+        }}
+        confirmLoading={xacNhanMutation.isPending}
+        okText="Xác nhận đã giao"
+        cancelText="Huỷ"
+      >
+        <Form form={xacNhanForm} layout="vertical" style={{ marginTop: 12 }}>
+          <Form.Item name="ngay_giao" label="Ngày giao thực tế" rules={[{ required: true, message: 'Chọn ngày giao' }]}>
+            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+          </Form.Item>
+          <Form.Item name="ten_nguoi_nhan" label="Tên người nhận (tại khách hàng)" rules={[{ required: true, message: 'Nhập tên người nhận' }]}>
+            <Input placeholder="Ví dụ: Nguyễn Văn A" />
+          </Form.Item>
+          <Form.Item name="ghi_chu" label="Ghi chú">
+            <Input.TextArea rows={2} placeholder="Ghi chú thêm (không bắt buộc)" />
+          </Form.Item>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Ảnh biên nhận: tải lên sau qua nút <b>Media</b> trên phiếu bán hàng.
+          </Typography.Text>
+        </Form>
       </Modal>
     </Space>
   )

@@ -2191,6 +2191,35 @@ def update_delivery_status(
     return {"id": do_id, "trang_thai": do.trang_thai}
 
 
+class XacNhanGiaoIn(BaseModel):
+    ngay_giao: date
+    ten_nguoi_nhan: str
+    ghi_chu: Optional[str] = None
+
+
+@router.post("/deliveries/{do_id}/xac-nhan")
+def xac_nhan_giao_hang(
+    do_id: int,
+    body: XacNhanGiaoIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    do = db.get(DeliveryOrder, do_id)
+    if not do:
+        raise HTTPException(404, "Không tìm thấy phiếu giao hàng")
+    if do.trang_thai != "da_xuat":
+        raise HTTPException(400, "Chỉ xác nhận được phiếu đang ở trạng thái Đã xuất")
+    do.trang_thai = "da_giao"
+    do.da_xac_nhan_giao = True
+    do.ngay_giao_thuc_te = body.ngay_giao
+    do.ten_nguoi_nhan_thuc_te = body.ten_nguoi_nhan
+    if body.ghi_chu:
+        do.ghi_chu = body.ghi_chu
+    db.commit()
+    db.refresh(do)
+    return _do_to_dict(do, db)
+
+
 class DeliveryAdjustItemIn(BaseModel):
     item_id: int
     so_luong_moi: Decimal
@@ -2530,6 +2559,9 @@ def _do_to_dict(do: DeliveryOrder, db: Session, include_print_data: bool = False
         "tong_trong_luong": sum(float(it.trong_luong or 0) for it in do.items),
         "tong_the_tich": sum(float(getattr(it, "the_tich", None) or 0) for it in do.items),
         "trang_thai": do.trang_thai,
+        "da_xac_nhan_giao": bool(getattr(do, "da_xac_nhan_giao", False)),
+        "ngay_giao_thuc_te": str(do.ngay_giao_thuc_te) if getattr(do, "ngay_giao_thuc_te", None) else None,
+        "ten_nguoi_nhan_thuc_te": getattr(do, "ten_nguoi_nhan_thuc_te", None),
         "ghi_chu": do.ghi_chu,
         "created_at": do.created_at.isoformat() if do.created_at else None,
         "items": [_item_dict(it) for it in do.items],

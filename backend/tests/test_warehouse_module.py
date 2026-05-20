@@ -328,3 +328,56 @@ def test_tp_lsx_inventory_ignores_cancelled_delivery(client, db_session):
     assert row["tong_nhap"] == 10.0
     assert row["tong_xuat"] == 0.0
     assert row["ton_kho"] == 10.0
+
+
+# ---------------------------------------------------------------------------
+# Delivery xac-nhan tests (Sprint L1)
+# ---------------------------------------------------------------------------
+
+def test_xac_nhan_giao_hang_success(client, db_session):
+    pn, px, wh = _make_warehouse(db_session, ma_pn="PN_XN1", ma_px="PX_XN1", ma_kho="K_XN1", loai_kho="THANH_PHAM")
+    customer = Customer(ma_kh="KH_XN1", ten_viet_tat="Khách XN1", ten_don_vi="Cty XN1")
+    db_session.add(customer)
+    db_session.flush()
+    do = DeliveryOrder(
+        so_phieu="DO-XN-001",
+        ngay_xuat=date.today(),
+        customer_id=customer.id,
+        warehouse_id=wh.id,
+        trang_thai="da_xuat",
+    )
+    db_session.add(do)
+    db_session.commit()
+
+    res = client.post(f"/api/warehouse/deliveries/{do.id}/xac-nhan", json={
+        "ngay_giao": date.today().isoformat(),
+        "ten_nguoi_nhan": "Nguyen Van A",
+        "ghi_chu": "Giao đúng hạn",
+    })
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["trang_thai"] == "da_giao"
+    assert data["da_xac_nhan_giao"] is True
+    assert data["ten_nguoi_nhan_thuc_te"] == "Nguyen Van A"
+
+
+def test_xac_nhan_giao_hang_wrong_status_blocked(client, db_session):
+    pn, px, wh = _make_warehouse(db_session, ma_pn="PN_XN2", ma_px="PX_XN2", ma_kho="K_XN2", loai_kho="THANH_PHAM")
+    customer = Customer(ma_kh="KH_XN2", ten_viet_tat="Khách XN2", ten_don_vi="Cty XN2")
+    db_session.add(customer)
+    db_session.flush()
+    do = DeliveryOrder(
+        so_phieu="DO-XN-002",
+        ngay_xuat=date.today(),
+        customer_id=customer.id,
+        warehouse_id=wh.id,
+        trang_thai="nhap",
+    )
+    db_session.add(do)
+    db_session.commit()
+
+    res = client.post(f"/api/warehouse/deliveries/{do.id}/xac-nhan", json={
+        "ngay_giao": date.today().isoformat(),
+        "ten_nguoi_nhan": "Test",
+    })
+    assert res.status_code == 400

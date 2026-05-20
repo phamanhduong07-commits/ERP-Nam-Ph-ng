@@ -163,6 +163,9 @@ export interface DeliveryOrder {
   tong_trong_luong: number
   tong_the_tich: number
   trang_thai: string
+  da_xac_nhan_giao: boolean
+  ngay_giao_thuc_te: string | null
+  ten_nguoi_nhan_thuc_te: string | null
   items: DeliveryOrderItem[]
   ghi_chu: string | null
   created_at: string
@@ -247,4 +250,6 @@ export const deliveriesApi = {
 
   adjustItems: (id: number, items: { item_id: number; so_luong_moi: number }[], ghi_chu: string) =>
     client.post(`/warehouse/deliveries/${id}/adjust-items`, { items, ghi_chu }),
+  xacNhan: (id: number, data: { ngay_giao: string; ten_nguoi_nhan: string; ghi_chu?: string }) =>
+    client.post<DeliveryOrder>(`/warehouse/deliveries/${id}/xac-nhan`, data),
 }
