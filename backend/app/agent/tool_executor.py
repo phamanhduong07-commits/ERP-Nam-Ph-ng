@@ -1,10 +1,10 @@
-"""
+﻿"""
 Thực thi các tool của ERP Agent bằng cách query SQLAlchemy trực tiếp.
 Chạy cùng process với ERP backend — không cần HTTP round-trip.
 """
 
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 
@@ -440,7 +440,7 @@ def _update_order_status(inp: dict, db: Session, executed_by: int | None) -> str
         order.ghi_chu = (order.ghi_chu or "") + f"\n[Agent] {inp['ghi_chu']}"
     if new_status == "da_duyet" and executed_by:
         order.approved_by = executed_by
-        order.approved_at = datetime.utcnow()
+        order.approved_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(order)

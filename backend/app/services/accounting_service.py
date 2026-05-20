@@ -1,5 +1,5 @@
 ﻿import calendar
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy import desc, func, and_, or_
@@ -126,7 +126,7 @@ class AccountingService:
                 invoice.trang_thai = "da_tt_du"
             elif new_da_tt > 0:
                 invoice.trang_thai = "da_tt_mot_phan"
-            invoice.updated_at = datetime.utcnow()
+            invoice.updated_at = datetime.now(timezone.utc)
 
             # Sync DeliveryOrder.trang_thai_cong_no
             if invoice.delivery_id:
@@ -353,7 +353,11 @@ class AccountingService:
     def _post_purchase_invoice_journal(self, inv: PurchaseInvoice) -> None:
         if inv.bo_qua_hach_toan:
             return
+        gr_posted_goods = False
         if inv.gr_id:
+            gr = self.db.get(GoodsReceipt, inv.gr_id)
+            gr_posted_goods = gr is not None and not gr.bo_qua_hach_toan
+        if gr_posted_goods:
             if not inv.co_vat or inv.tien_thue <= 0:
                 return
             lines = [
@@ -379,6 +383,19 @@ class AccountingService:
             phap_nhan_id=inv.phap_nhan_id,
             phan_xuong_id=inv.phan_xuong_id
         )
+
+    def cancel_purchase_invoice(self, inv_id: int) -> "PurchaseInvoice":
+        inv = self.db.get(PurchaseInvoice, inv_id)
+        if not inv:
+            raise HTTPException(404, "Không tìm thấy hóa đơn mua")
+        if inv.trang_thai == "huy":
+            return inv
+        if float(inv.da_thanh_toan or 0) > 0:
+            raise HTTPException(400, "Không thể hủy hóa đơn đã có thanh toán")
+        inv.trang_thai = "huy"
+        self.db.commit()
+        self.db.refresh(inv)
+        return inv
 
     def _reverse_journal_entries(self, chung_tu_loai: str, chung_tu_id: int) -> None:
         originals = (
@@ -493,7 +510,7 @@ class AccountingService:
             raise HTTPException(400, "Phiếu thu không ở trạng thái Chờ duyệt")
         receipt.trang_thai = "da_duyet"
         receipt.nguoi_duyet_id = user_id
-        receipt.ngay_duyet = datetime.utcnow()
+        receipt.ngay_duyet = datetime.now(timezone.utc)
         self._post_cash_receipt_journal(receipt)
         self.db.commit()
         self.db.refresh(receipt)
@@ -518,7 +535,7 @@ class AccountingService:
                 new_da_tt = max(Decimal("0"), invoice.da_thanh_toan - receipt.so_tien)
                 invoice.da_thanh_toan = new_da_tt
                 invoice.trang_thai = "da_phat_hanh" if new_da_tt == 0 else "da_tt_mot_phan"
-                invoice.updated_at = datetime.utcnow()
+                invoice.updated_at = datetime.now(timezone.utc)
                 if invoice.delivery_id:
                     delivery = self.db.query(DeliveryOrder).get(invoice.delivery_id)
                     if delivery:
@@ -656,6 +673,14 @@ class AccountingService:
         if not po:
             raise HTTPException(404, "Không tìm thấy đơn mua hàng")
 
+        approved_gr = (
+            self.db.query(GoodsReceipt)
+            .filter(GoodsReceipt.po_id == po_id, GoodsReceipt.trang_thai == "da_duyet")
+            .first()
+        )
+        if not approved_gr:
+            raise HTTPException(400, "Chưa có phiếu nhập kho nào được duyệt cho đơn mua này")
+
         tong_tien_hang = sum(
             (item.thanh_tien for item in po.items if item.thanh_tien), Decimal("0")
         )
@@ -766,7 +791,7 @@ class AccountingService:
             remaining_after = inv.tong_thanh_toan - new_paid
             inv.da_thanh_toan = new_paid
             inv.trang_thai = "da_tt_du" if remaining_after <= Decimal("0.001") else "da_tt_mot_phan"
-            inv.updated_at = datetime.utcnow()
+            inv.updated_at = datetime.now(timezone.utc)
 
         self.db.add(DebtLedgerEntry(
             ngay=payment.ngay_phieu,
@@ -828,7 +853,7 @@ class AccountingService:
         if next_state == "da_duyet":
             self._apply_cash_payment_to_invoice_and_debt(p)
             p.nguoi_duyet_id = user_id
-            p.ngay_duyet = datetime.utcnow()
+            p.ngay_duyet = datetime.now(timezone.utc)
             self._post_cash_payment_journal(p)
         self.db.commit()
         self.db.refresh(p)
@@ -852,7 +877,7 @@ class AccountingService:
             if inv and applied_debt:
                 inv.da_thanh_toan = max(Decimal("0"), inv.da_thanh_toan - p.so_tien)
                 inv.trang_thai = "nhap" if inv.da_thanh_toan == 0 else "da_tt_mot_phan"
-                inv.updated_at = datetime.utcnow()
+                inv.updated_at = datetime.now(timezone.utc)
         self.db.query(DebtLedgerEntry).filter(
             DebtLedgerEntry.chung_tu_loai == "phieu_chi",
             DebtLedgerEntry.chung_tu_id == payment_id,
@@ -1970,7 +1995,7 @@ class AccountingService:
 
         v.trang_thai = "da_duyet"
         v.nguoi_duyet_id = user_id
-        v.ngay_duyet = datetime.utcnow()
+        v.ngay_duyet = datetime.now(timezone.utc)
         self.db.commit()
         return self.get_customer_refund(voucher_id)
 

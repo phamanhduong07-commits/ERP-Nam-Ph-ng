@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime, timezone
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -47,7 +47,7 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
             detail="Tên đăng nhập hoặc mật khẩu không đúng",
         )
 
-    user.lan_dang_nhap_cuoi = datetime.utcnow()
+    user.lan_dang_nhap_cuoi = datetime.now(timezone.utc)
     db.commit()
 
     token_data = {"sub": str(user.id)}

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+﻿from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -355,7 +355,7 @@ def duyet_po(po_id: int, db: Session = Depends(get_db), current_user: User = Dep
     if po.trang_thai != "moi":
         raise HTTPException(400, "Chỉ duyệt PO ở trạng thái Mới")
     po.trang_thai = "da_duyet"
-    po.approved_at = datetime.utcnow()
+    po.approved_at = datetime.now(timezone.utc)
     po.approved_by = current_user.id
     db.commit()
     return {"ok": True, "trang_thai": po.trang_thai}
@@ -587,7 +587,7 @@ def du_bao_nhu_cau(
 
     Gợi ý số lượng cần mua = max(0, TB tiêu thụ/tháng × thang_du_tru − tồn kho hiện tại)
     """
-    cutoff = datetime.utcnow() - timedelta(days=30 * thang_phan_tich)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30 * thang_phan_tich)
 
     # Aggregate consumption (XUAT_SX) per material in the analysis period
     xuat_q = (

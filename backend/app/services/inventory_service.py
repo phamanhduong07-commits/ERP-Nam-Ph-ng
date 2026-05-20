@@ -1,8 +1,8 @@
-"""
+﻿"""
 Shared inventory helpers — dùng chung cho warehouse.py, production_orders.py,
 phieu_phoi.py, cd2.py. Tránh circular imports giữa các routers.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -74,7 +74,7 @@ def nhap_balance(balance: InventoryBalance, so_luong: Decimal, don_gia: Decimal)
     if balance.ton_luong > 0:
         balance.don_gia_binh_quan = (gia_tri_cu + thanh_tien) / balance.ton_luong
     balance.gia_tri_ton = balance.ton_luong * balance.don_gia_binh_quan
-    balance.cap_nhat_luc = datetime.utcnow()
+    balance.cap_nhat_luc = datetime.now(timezone.utc)
 
 
 def xuat_balance(balance: InventoryBalance, so_luong: Decimal, ten_hang: str) -> None:
@@ -85,7 +85,7 @@ def xuat_balance(balance: InventoryBalance, so_luong: Decimal, ten_hang: str) ->
         )
     balance.ton_luong -= so_luong
     balance.gia_tri_ton = balance.ton_luong * balance.don_gia_binh_quan
-    balance.cap_nhat_luc = datetime.utcnow()
+    balance.cap_nhat_luc = datetime.now(timezone.utc)
 
 
 def log_tx(

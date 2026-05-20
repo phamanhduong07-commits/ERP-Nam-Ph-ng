@@ -1,5 +1,5 @@
-import json
-from datetime import date, datetime, timedelta
+﻿import json
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy import desc
@@ -399,7 +399,7 @@ class BillingService:
             inv.tien_vat = round(inv.tong_tien_hang * inv.ty_le_vat / 100, 0)
             inv.tong_cong = inv.tong_tien_hang + inv.tien_vat
 
-        inv.updated_at = datetime.utcnow()
+        inv.updated_at = datetime.now(timezone.utc)
 
         # Điều chỉnh debt ledger nếu số tiền thay đổi
         if financial_changed and inv.tong_cong != old_tong_cong:
@@ -449,7 +449,7 @@ class BillingService:
         if not inv:
             raise HTTPException(404, "Không tìm thấy hóa đơn")
         inv.anh_phieu_giao = url
-        inv.updated_at = datetime.utcnow()
+        inv.updated_at = datetime.now(timezone.utc)
         self.db.commit()
         return self.get_invoice(invoice_id)
 
@@ -505,7 +505,7 @@ class BillingService:
             raise HTTPException(400, "Yêu cầu không ở trạng thái chờ duyệt")
 
         log.approved_by_id = user_id
-        log.approved_at = datetime.utcnow()
+        log.approved_at = datetime.now(timezone.utc)
 
         if data.approved:
             log.trang_thai = "approved"
@@ -538,7 +538,7 @@ class BillingService:
             inv.ty_le_vat = Decimal(new_vals['ty_le_vat'])
             inv.tien_vat = Decimal(new_vals['tien_vat'])
             inv.tong_cong = Decimal(new_vals['tong_cong'])
-            inv.updated_at = datetime.utcnow()
+            inv.updated_at = datetime.now(timezone.utc)
 
             # 4. Debt ledger entry mới
             self.db.add(DebtLedgerEntry(
@@ -572,7 +572,7 @@ class BillingService:
         if inv.trang_thai != "nhap":
             raise HTTPException(400, "Chỉ phát hành được hóa đơn ở trạng thái Nháp")
         inv.trang_thai = "da_phat_hanh"
-        inv.updated_at = datetime.utcnow()
+        inv.updated_at = datetime.now(timezone.utc)
         self._post_sales_invoice_journal(inv)
         self.db.commit()
         self.db.refresh(inv)
@@ -586,7 +586,7 @@ class BillingService:
             raise HTTPException(400, "Khong the huy hoa don da co phieu thu")
         should_reverse = inv.trang_thai != "nhap"
         inv.trang_thai = "huy"
-        inv.updated_at = datetime.utcnow()
+        inv.updated_at = datetime.now(timezone.utc)
         self.db.add(DebtLedgerEntry(
             ngay=date.today(),
             loai="giam_no",

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+﻿from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime
@@ -68,7 +68,7 @@ def approve_leave_request(id: int, body: LeaveRequestUpdate, db: Session = Depen
     
     req.trang_thai = body.trang_thai
     req.y_kien_duyet = body.y_kien_duyet
-    req.ngay_duyet = datetime.utcnow()
+    req.ngay_duyet = datetime.now(timezone.utc)
     
     # Nếu là trưởng phòng duyệt
     if body.trang_thai == "phong_ban_duyet":

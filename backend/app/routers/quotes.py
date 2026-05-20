@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+﻿from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
 import unicodedata
@@ -808,7 +808,7 @@ def approve_quote(
         raise HTTPException(status_code=400, detail="Chỉ duyệt được báo giá ở trạng thái Mới hoặc Chờ duyệt")
     quote.trang_thai = "da_duyet"
     quote.approved_by = current_user.id
-    quote.approved_at = datetime.utcnow()
+    quote.approved_at = datetime.now(timezone.utc)
     db.commit()
     return _build_response(_load_quote(quote_id, db))
 

@@ -1,4 +1,4 @@
-from datetime import date, datetime
+﻿from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -53,7 +53,7 @@ class YMHCreatePO(BaseModel):
 
 
 def _gen_so_ymh(db: Session) -> str:
-    ym = datetime.utcnow().strftime("%Y%m")
+    ym = datetime.now(timezone.utc).strftime("%Y%m")
     prefix = f"YMH-{ym}-"
     last = (
         db.query(PurchaseRequisition)
@@ -71,7 +71,7 @@ def _gen_so_ymh(db: Session) -> str:
 
 
 def _gen_so_po(db: Session) -> str:
-    ym = datetime.utcnow().strftime("%Y%m")
+    ym = datetime.now(timezone.utc).strftime("%Y%m")
     prefix = f"PO-{ym}-"
     last = db.query(func.max(PurchaseOrder.so_po)).filter(PurchaseOrder.so_po.like(f"{prefix}%")).scalar()
     seq = 1
@@ -329,7 +329,7 @@ def duyet_pb(
         raise HTTPException(400, f"Không thể duyệt PB từ trạng thái {ymh.trang_thai}")
     ymh.trang_thai = "duyet_pb"
     ymh.nguoi_duyet_pb_id = current_user.id
-    ymh.ngay_duyet_pb = datetime.utcnow()
+    ymh.ngay_duyet_pb = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True, "trang_thai": ymh.trang_thai}
 
@@ -347,7 +347,7 @@ def duyet_gd(
         raise HTTPException(400, "Cần phê duyệt PB trước khi GĐ duyệt")
     ymh.trang_thai = "duyet_gd"
     ymh.nguoi_duyet_gd_id = current_user.id
-    ymh.ngay_duyet_gd = datetime.utcnow()
+    ymh.ngay_duyet_gd = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True, "trang_thai": ymh.trang_thai}
 

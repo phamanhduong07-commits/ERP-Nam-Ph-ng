@@ -1,4 +1,4 @@
-from datetime import date, datetime
+﻿from datetime import date, datetime, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import cast, Date, text
@@ -225,7 +225,7 @@ def approve_order(
 
     order.trang_thai = "da_duyet"
     order.approved_by = current_user.id
-    order.approved_at = datetime.utcnow()
+    order.approved_at = datetime.now(timezone.utc)
     db.commit()
     return get_order(order_id, db, current_user)
 
@@ -303,7 +303,7 @@ def update_discount(
     order.tong_tien_sau_giam = max(Decimal("0"), tong_tien_hang - tien_giam)
 
     # Cập nhật thời gian sửa đổi
-    order.updated_at = datetime.utcnow()
+    order.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     return get_order(order_id, db, current_user)

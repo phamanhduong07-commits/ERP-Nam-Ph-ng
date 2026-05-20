@@ -1,4 +1,4 @@
-from datetime import date, datetime
+﻿from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -175,7 +175,7 @@ def update_ket_qua(
                 hinh_anh_path=d.hinh_anh_path,
             ))
 
-    sheet.updated_at = datetime.utcnow()
+    sheet.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(sheet)
     return _build_response(sheet)

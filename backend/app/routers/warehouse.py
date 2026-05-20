@@ -1,5 +1,5 @@
-import io
-from datetime import date, datetime
+﻿import io
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 import pandas as pd
@@ -805,7 +805,7 @@ async def import_ton_kho_dau_ky(
             "don_gia_binh_quan": don_gia,
             "gia_tri_ton": gia_tri,
             "don_vi": resolved_don_vi,
-            "cap_nhat_luc": datetime.utcnow(),
+            "cap_nhat_luc": datetime.now(timezone.utc),
         }
         objects_to_save.append((existing, vals))
         rows.append({"row": row_no, "status": status, "errors": [], "data": {"ma_kho": ma_kho, "ma_hang": ma_hang, "so_luong": str(so_luong)}})
@@ -1552,7 +1552,7 @@ def delete_material_issue(mi_id: int, db: Session = Depends(get_db), current_use
                                      ten_hang=it.ten_hang, don_vi=it.dvt)
         bal.ton_luong += it.so_luong_thuc_xuat
         bal.gia_tri_ton = bal.ton_luong * bal.don_gia_binh_quan
-        bal.cap_nhat_luc = datetime.utcnow()
+        bal.cap_nhat_luc = datetime.now(timezone.utc)
         _log_tx(db, mi.warehouse_id, "XOA_XUAT_SX",
                 it.so_luong_thuc_xuat, it.don_gia, bal.ton_luong,
                 "material_issues", mi.id, current_user.id,
@@ -2302,7 +2302,7 @@ def adjust_delivery_items(
             active_inv.tong_tien_hang = new_tong
             active_inv.tien_vat       = new_vat
             active_inv.tong_cong      = new_total
-            active_inv.updated_at     = datetime.utcnow()
+            active_inv.updated_at     = datetime.now(timezone.utc)
             db.add(InvoiceAdjustmentLog(
                 invoice_id=active_inv.id,
                 adjusted_by_id=current_user.id,
@@ -2377,7 +2377,7 @@ def delete_delivery(do_id: int, db: Session = Depends(get_db), current_user: Use
                                      ten_hang=ten_hang, don_vi=it.dvt)
         bal.ton_luong += it.so_luong
         bal.gia_tri_ton = bal.ton_luong * bal.don_gia_binh_quan
-        bal.cap_nhat_luc = datetime.utcnow()
+        bal.cap_nhat_luc = datetime.now(timezone.utc)
         _log_tx(db, do.warehouse_id, "XOA_XUAT_BAN",
                 it.so_luong, it.don_gia or Decimal("0"), bal.ton_luong,
                 "delivery_orders", do.id, current_user.id,
@@ -2827,7 +2827,7 @@ def delete_phieu_chuyen(phieu_id: int, db: Session = Depends(get_db), current_us
                                           ten_hang=it.ten_hang, don_vi=it.don_vi)
         bal_xuat.ton_luong += it.so_luong
         bal_xuat.gia_tri_ton = bal_xuat.ton_luong * bal_xuat.don_gia_binh_quan
-        bal_xuat.cap_nhat_luc = datetime.utcnow()
+        bal_xuat.cap_nhat_luc = datetime.now(timezone.utc)
         _log_tx(db, p.warehouse_xuat_id, "XOA_CHUYEN_XUAT",
                 it.so_luong, it.don_gia, bal_xuat.ton_luong,
                 "phieu_chuyen_kho", p.id, current_user.id,
@@ -2840,7 +2840,7 @@ def delete_phieu_chuyen(phieu_id: int, db: Session = Depends(get_db), current_us
                                           ten_hang=it.ten_hang, don_vi=it.don_vi)
         bal_nhap.ton_luong = max(Decimal("0"), bal_nhap.ton_luong - it.so_luong)
         bal_nhap.gia_tri_ton = bal_nhap.ton_luong * bal_nhap.don_gia_binh_quan
-        bal_nhap.cap_nhat_luc = datetime.utcnow()
+        bal_nhap.cap_nhat_luc = datetime.now(timezone.utc)
         _log_tx(db, p.warehouse_nhap_id, "XOA_CHUYEN_NHAP",
                 it.so_luong, it.don_gia, bal_nhap.ton_luong,
                 "phieu_chuyen_kho", p.id, current_user.id,

@@ -1,4 +1,4 @@
-from datetime import date, datetime
+﻿from datetime import date, datetime, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -534,7 +534,7 @@ def approve_return(
 
     return_obj.trang_thai = "da_duyet"
     return_obj.approved_by = current_user.id
-    return_obj.approved_at = datetime.utcnow()
+    return_obj.approved_at = datetime.now(timezone.utc)
 
     # Ghi sổ công nợ phải thu (giam_no — giảm AR khi khách trả hàng)
     db.add(DebtLedgerEntry(

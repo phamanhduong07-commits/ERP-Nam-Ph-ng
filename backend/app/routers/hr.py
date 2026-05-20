@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+﻿from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 import re
@@ -485,7 +485,7 @@ def approve_leave_request(
         req.nguoi_duyet_dept_id = current_user.id
     
     req.y_kien_duyet = y_kien
-    req.ngay_duyet = datetime.utcnow()
+    req.ngay_duyet = datetime.now(timezone.utc)
     if req.trang_thai == "bgd_duyet":
         _sync_leave_to_attendance(req, db)
     db.commit()
@@ -505,7 +505,7 @@ def approve_leave_request_body(
         raise HTTPException(400, "Trang thai duyet khong hop le")
     req.trang_thai = body.trang_thai
     req.y_kien_duyet = body.y_kien_duyet
-    req.ngay_duyet = datetime.utcnow()
+    req.ngay_duyet = datetime.now(timezone.utc)
     approver_id = body.nguoi_duyet_id or current_user.id
     if req.trang_thai == "phong_ban_duyet":
         req.nguoi_duyet_dept_id = approver_id

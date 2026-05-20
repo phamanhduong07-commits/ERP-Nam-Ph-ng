@@ -1,4 +1,4 @@
-from datetime import date, datetime
+﻿from datetime import date, datetime, timezone
 from decimal import Decimal
 import io
 import pandas as pd
@@ -383,7 +383,7 @@ def update_ccdc(
         raise HTTPException(404, "Không tìm thấy CCDC")
     for k, v in data.model_dump(exclude_none=True).items():
         setattr(obj, k, v)
-    obj.updated_at = datetime.utcnow()
+    obj.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(obj)
     r = CCDCResponse.model_validate(obj)

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Module Trả hàng / Giảm giá hàng mua (PurchaseReturn)
 
 Quy trình:
@@ -9,7 +9,7 @@ Quy trình:
   3. Huỷ phiếu (chỉ được khi còn ở nhap) — xoá khỏi luồng
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -390,7 +390,7 @@ def approve_return(
 
     r.trang_thai = "da_duyet"
     r.approved_by = current_user.id
-    r.approved_at = datetime.utcnow()
+    r.approved_at = datetime.now(timezone.utc)
 
     # Lấy phan_xuong_id và phap_nhan_id từ GR → Warehouse → PhanXuong
     phan_xuong_id, _, _, phap_nhan_id = _get_px_from_return(r, db)
