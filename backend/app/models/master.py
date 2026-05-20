@@ -87,7 +87,11 @@ class Supplier(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
     @hybrid_property
     def ten_nha_cung_cap(self) -> str:
@@ -125,7 +129,11 @@ class Customer(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
     @hybrid_property
     def ten_khach_hang(self) -> str:
@@ -179,7 +187,11 @@ class PaperMaterial(Base):
     su_dung: Mapped[bool] = mapped_column(Boolean, default=True)
     khong_tinh_nxt: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
     nhom: Mapped["MaterialGroup"] = relationship("MaterialGroup", back_populates="paper_materials")
     nsx: Mapped["Supplier | None"] = relationship("Supplier", back_populates="paper_materials")
@@ -204,7 +216,11 @@ class OtherMaterial(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
     nhom: Mapped["MaterialGroup"] = relationship("MaterialGroup", back_populates="other_materials")
     ncc: Mapped["Supplier | None"] = relationship("Supplier", back_populates="other_materials")
@@ -219,25 +235,29 @@ class CauTrucThongDung(Base):
     so_lop: Mapped[int] = mapped_column(SmallInteger, nullable=False)   # 3, 5, 7
     to_hop_song: Mapped[str | None] = mapped_column(String(20))         # B, BC, BCE...
     # Mỗi lớp: mã ký hiệu đồng cấp (ma_ky_hieu) + định lượng (g/m²)
-    mat:       Mapped[str | None] = mapped_column(String(30))
-    mat_dl:    Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_1:    Mapped[str | None] = mapped_column(String(30))
+    mat: Mapped[str | None] = mapped_column(String(30))
+    mat_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_1: Mapped[str | None] = mapped_column(String(30))
     song_1_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_1:     Mapped[str | None] = mapped_column(String(30))
-    mat_1_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_2:    Mapped[str | None] = mapped_column(String(30))
+    mat_1: Mapped[str | None] = mapped_column(String(30))
+    mat_1_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_2: Mapped[str | None] = mapped_column(String(30))
     song_2_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_2:     Mapped[str | None] = mapped_column(String(30))
-    mat_2_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_3:    Mapped[str | None] = mapped_column(String(30))
+    mat_2: Mapped[str | None] = mapped_column(String(30))
+    mat_2_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_3: Mapped[str | None] = mapped_column(String(30))
     song_3_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_3:     Mapped[str | None] = mapped_column(String(30))
-    mat_3_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_3: Mapped[str | None] = mapped_column(String(30))
+    mat_3_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     thu_tu: Mapped[int] = mapped_column(Integer, default=0)   # display order
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
 
 class Product(Base):
@@ -267,7 +287,11 @@ class Product(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
     @hybrid_property
     def ten_san_pham(self) -> str:
@@ -290,6 +314,7 @@ class DonViTinh(Base):
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
+
 class ViTri(Base):
     __tablename__ = "vi_tri"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -299,6 +324,7 @@ class ViTri(Base):
     ghi_chu: Mapped[str | None] = mapped_column(String(200))
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
 
 class Xe(Base):
     __tablename__ = "xe"
@@ -310,6 +336,7 @@ class Xe(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
 
 class TaiXe(Base):
     __tablename__ = "tai_xe"
@@ -324,6 +351,7 @@ class TaiXe(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     employee = relationship("Employee")
 
+
 class LoXe(Base):
     __tablename__ = "lo_xe"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -336,12 +364,14 @@ class LoXe(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     employee = relationship("Employee")
 
+
 class TinhThanh(Base):
     __tablename__ = "tinh_thanh"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ma_tinh: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
     ten_tinh: Mapped[str] = mapped_column(String(100), nullable=False)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
+
 
 class PhuongXa(Base):
     __tablename__ = "phuong_xa"
@@ -352,6 +382,7 @@ class PhuongXa(Base):
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     tinh: Mapped["TinhThanh | None"] = relationship("TinhThanh")
 
+
 class DonGiaVanChuyen(Base):
     __tablename__ = "don_gia_van_chuyen"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -359,7 +390,7 @@ class DonGiaVanChuyen(Base):
     khu_vuc_tu: Mapped[str | None] = mapped_column(String(100))
     khu_vuc_den: Mapped[str | None] = mapped_column(String(100))
     don_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
-    don_gia_m2: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0) # Đơn giá theo m2 (Ảnh 3)
+    don_gia_m2: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)  # Đơn giá theo m2 (Ảnh 3)
     dvt: Mapped[str] = mapped_column(String(20), default="chuyến")
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -404,7 +435,7 @@ class PhapNhan(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     # Xưởng CD1+CD2 cung cấp phôi sóng cho lệnh SX của pháp nhân này
     phoi_phan_xuong_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("phan_xuong.id"), nullable=True
+        Integer, ForeignKey("phan_xuong.id", use_alter=True, name="fk_phap_nhan_phan_xuong"), nullable=True
     )
     phoi_phan_xuong: Mapped["PhanXuong | None"] = relationship(
         "PhanXuong", foreign_keys="PhapNhan.phoi_phan_xuong_id"
