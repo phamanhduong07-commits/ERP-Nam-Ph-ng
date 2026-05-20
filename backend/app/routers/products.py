@@ -112,10 +112,6 @@ def get_product(
 ):
     service = ProductService(db)
     return service.get_product_by_id(product_id)
-    result = ProductResponse.model_validate(product)
-    if product.khach_hang:
-        result.ten_khach_hang = product.khach_hang.ten_viet_tat
-    return result
 
 
 @router.post("", response_model=ProductResponse, status_code=201)

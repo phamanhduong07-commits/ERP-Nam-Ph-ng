@@ -41,10 +41,17 @@ def _create_cd2_tables(engine):
 
 @pytest.fixture(scope="function")
 def db_engine():
-    engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+    from sqlalchemy import StaticPool
+
+    # Dùng in-memory DB với shared cache để mỗi test có DB độc lập, không bị
+    # lỗi "table already exists" giữa các test.
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     _create_cd2_tables(engine)
     yield engine
-    Base.metadata.drop_all(engine)
     engine.dispose()
 
 

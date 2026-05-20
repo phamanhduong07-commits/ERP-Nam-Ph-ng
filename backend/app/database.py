@@ -44,9 +44,9 @@ def _seed_phan_xuong() -> None:
             return
         seeds = [
             PhanXuong(ma_xuong="hoang_gia", ten_xuong="Xưởng Hoàng Gia", dia_chi="Hoàng Gia", cong_doan="cd1_cd2"),
-            PhanXuong(ma_xuong="nam_thuan",  ten_xuong="Xưởng Nam Thuận",  dia_chi="Nam Thuận",  cong_doan="cd1_cd2"),
-            PhanXuong(ma_xuong="hoc_mon",    ten_xuong="Xưởng Hóc Môn",   dia_chi="Hóc Môn",   cong_doan="cd2"),
-            PhanXuong(ma_xuong="cu_chi",     ten_xuong="Xưởng Củ Chi",    dia_chi="Củ Chi",    cong_doan="cd2"),
+            PhanXuong(ma_xuong="nam_thuan", ten_xuong="Xưởng Nam Thuận", dia_chi="Nam Thuận", cong_doan="cd1_cd2"),
+            PhanXuong(ma_xuong="hoc_mon", ten_xuong="Xưởng Hóc Môn", dia_chi="Hóc Môn", cong_doan="cd2"),
+            PhanXuong(ma_xuong="cu_chi", ten_xuong="Xưởng Củ Chi", dia_chi="Củ Chi", cong_doan="cd2"),
         ]
         for s in seeds:
             db.add(s)

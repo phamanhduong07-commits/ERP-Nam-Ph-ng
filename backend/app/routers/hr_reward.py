@@ -1,22 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import date, datetime
 from app.database import get_db
-from app.models.hr import RewardDiscipline, Employee
+from app.models.hr import RewardDiscipline
 from pydantic import BaseModel
 from decimal import Decimal
 
 router = APIRouter(prefix="/api/hr", tags=["HR Reward & Discipline"])
 
+
 class RewardCreate(BaseModel):
     employee_id: int
-    loai: str # khen_thuong | ky_luat
-    hinh_thuc: str # thuong_tien | phat_tien | canh_cao
+    loai: str  # khen_thuong | ky_luat
+    hinh_thuc: str  # thuong_tien | phat_tien | canh_cao
     so_tien: Decimal
     ly_do: str
     thang_ap_dung: int
     nam_ap_dung: int
+
 
 @router.get("/rewards")
 def list_rewards(db: Session = Depends(get_db)):
@@ -37,6 +37,7 @@ def list_rewards(db: Session = Depends(get_db)):
         })
     return result
 
+
 @router.post("/rewards")
 def create_reward(body: RewardCreate, db: Session = Depends(get_db)):
     db_obj = RewardDiscipline(**body.model_dump())
@@ -44,6 +45,7 @@ def create_reward(body: RewardCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_obj)
     return {"status": "success", "id": db_obj.id}
+
 
 @router.put("/rewards/{id}/status")
 def update_reward_status(id: int, status: str, db: Session = Depends(get_db)):

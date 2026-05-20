@@ -176,7 +176,7 @@ def list_paper_materials(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = db.query(PaperMaterial).filter(PaperMaterial.su_dung == True)
+    q = db.query(PaperMaterial).filter(PaperMaterial.su_dung.is_(True))
     if search:
         like = f"%{search}%"
         q = q.filter(
@@ -293,11 +293,10 @@ def get_paper_options(
     Trả về danh sách mã ký hiệu đồng cấp và định lượng để chọn lớp giấy.
     by_mk: { "VB": [120, 125, 150], "GB": [150, 185, 200], ... }
     """
-    from sqlalchemy import distinct, func
     rows = (
         db.query(PaperMaterial.ma_ky_hieu, PaperMaterial.dinh_luong)
         .filter(
-            PaperMaterial.su_dung == True,
+            PaperMaterial.su_dung.is_(True),
             PaperMaterial.ma_ky_hieu.isnot(None),
             PaperMaterial.dinh_luong.isnot(None),
         )
@@ -311,7 +310,7 @@ def get_paper_options(
     papers = (
         db.query(PaperMaterial)
         .filter(
-            PaperMaterial.su_dung == True,
+            PaperMaterial.su_dung.is_(True),
             PaperMaterial.ma_ky_hieu.isnot(None),
         )
         .order_by(PaperMaterial.ma_ky_hieu, PaperMaterial.dinh_luong)
@@ -346,7 +345,7 @@ def search_paper_materials(
     items = (
         db.query(PaperMaterial)
         .filter(
-            PaperMaterial.su_dung == True,
+            PaperMaterial.su_dung.is_(True),
             (PaperMaterial.ma_chinh.ilike(like) | PaperMaterial.ten.ilike(like) | PaperMaterial.ma_ky_hieu.ilike(like))
         )
         .order_by(PaperMaterial.ma_chinh)

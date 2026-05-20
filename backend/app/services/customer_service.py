@@ -1,6 +1,5 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
 from app.models.master import Customer
 from app.schemas.master import CustomerCreate, CustomerUpdate, CustomerResponse, CustomerShort
 from app.schemas.sales import PagedResponse
@@ -37,7 +36,7 @@ class CustomerService:
         )
 
     def get_all_active_customers(self) -> list[CustomerShort]:
-        customers = self.db.query(Customer).filter(Customer.trang_thai == True).order_by(Customer.ten_viet_tat).all()
+        customers = self.db.query(Customer).filter(Customer.trang_thai.is_(True)).order_by(Customer.ten_viet_tat).all()
         return [CustomerShort.model_validate(c) for c in customers]
 
     def get_customer_by_id(self, customer_id: int) -> CustomerResponse:

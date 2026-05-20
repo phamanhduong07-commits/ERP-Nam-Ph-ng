@@ -39,4 +39,8 @@ class Settings(BaseSettings):
     VAPID_PUBLIC_KEY: str = ""
     VAPID_EMAIL: str = "mailto:visunpack@namphuongbaobi.com"
 
+    # SerpAPI for lead crawler
+    SERPAPI_KEY: str = ""
+
+
 settings = Settings()

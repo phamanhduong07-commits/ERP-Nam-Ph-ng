@@ -32,7 +32,11 @@ class SalesOrder(Base):
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
     customer: Mapped["Customer"] = relationship("Customer", back_populates="sales_orders", foreign_keys=[customer_id])
     items: Mapped[list["SalesOrderItem"]] = relationship(
@@ -44,7 +48,8 @@ class SalesOrder(Base):
     approver: Mapped["User | None"] = relationship("User", foreign_keys=[approved_by])
     phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
     phap_nhan_sx: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_sx_id])
-    phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
+    phan_xuong: Mapped["PhanXuong | None"] = relationship(
+        "PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
 
     @property
     def ten_phap_nhan(self) -> str | None:
@@ -65,7 +70,8 @@ class SalesOrderItem(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     order_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_orders.id", ondelete="CASCADE"), nullable=False)
     product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
-    quote_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("quote_items.id", ondelete="SET NULL"), nullable=True)
+    quote_item_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("quote_items.id", ondelete="SET NULL"), nullable=True)
     ten_hang: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     so_luong: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
@@ -80,30 +86,30 @@ class SalesOrderItem(Base):
 
     # ── Thông số kỹ thuật (kế thừa từ báo giá) ──────────────────────────────
     loai_thung: Mapped[str | None] = mapped_column(String(50))
-    dai:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    dai: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     rong: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    cao:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    so_lop:     Mapped[int | None] = mapped_column(SmallInteger)
+    cao: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    so_lop: Mapped[int | None] = mapped_column(SmallInteger)
     to_hop_song: Mapped[str | None] = mapped_column(String(20))
-    mat:     Mapped[str | None] = mapped_column(String(30))
-    mat_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_1:     Mapped[str | None] = mapped_column(String(30))
-    song_1_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_1:      Mapped[str | None] = mapped_column(String(30))
-    mat_1_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_2:     Mapped[str | None] = mapped_column(String(30))
-    song_2_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_2:      Mapped[str | None] = mapped_column(String(30))
-    mat_2_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_3:     Mapped[str | None] = mapped_column(String(30))
-    song_3_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_3:      Mapped[str | None] = mapped_column(String(30))
-    mat_3_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    loai_in:  Mapped[str | None] = mapped_column(String(30))
-    so_mau:   Mapped[int | None] = mapped_column(SmallInteger)
+    mat: Mapped[str | None] = mapped_column(String(30))
+    mat_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_1: Mapped[str | None] = mapped_column(String(30))
+    song_1_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_1: Mapped[str | None] = mapped_column(String(30))
+    mat_1_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_2: Mapped[str | None] = mapped_column(String(30))
+    song_2_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_2: Mapped[str | None] = mapped_column(String(30))
+    mat_2_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_3: Mapped[str | None] = mapped_column(String(30))
+    song_3_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_3: Mapped[str | None] = mapped_column(String(30))
+    mat_3_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    loai_in: Mapped[str | None] = mapped_column(String(30))
+    so_mau: Mapped[int | None] = mapped_column(SmallInteger)
     loai_lan: Mapped[str | None] = mapped_column(String(50))
-    kho_tt:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    dai_tt:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    kho_tt: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    dai_tt: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dien_tich: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     c_tham: Mapped[str | None] = mapped_column(String(50))
     can_man: Mapped[str | None] = mapped_column(String(50))
@@ -134,7 +140,8 @@ class SalesReturn(Base):
     so_phieu_tra: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     ngay_tra: Mapped[date] = mapped_column(Date, nullable=False)
     sales_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_orders.id"), nullable=False)
-    delivery_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("delivery_orders.id"), nullable=True)  # Phiếu xuất kho cụ thể
+    delivery_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey(
+        "delivery_orders.id"), nullable=True)  # Phiếu xuất kho cụ thể
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
     ly_do_tra: Mapped[str] = mapped_column(Text, nullable=False)
     trang_thai: Mapped[str] = mapped_column(String(20), default="moi")  # moi | da_duyet | huy
@@ -145,10 +152,15 @@ class SalesReturn(Base):
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
     sales_order: Mapped["SalesOrder"] = relationship("SalesOrder", back_populates="returns")
-    delivery_order: Mapped["DeliveryOrder | None"] = relationship("DeliveryOrder", back_populates="returns")  # type: ignore[name-defined]
+    delivery_order: Mapped["DeliveryOrder | None"] = relationship(
+        "DeliveryOrder", back_populates="returns")  # type: ignore[name-defined]
     customer: Mapped["Customer"] = relationship("Customer", back_populates="sales_returns")
     items: Mapped[list["SalesReturnItem"]] = relationship(
         "SalesReturnItem", back_populates="sales_return", cascade="all, delete-orphan"
@@ -161,8 +173,10 @@ class SalesReturnItem(Base):
     __tablename__ = "sales_return_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    sales_return_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_returns.id", ondelete="CASCADE"), nullable=False)
-    delivery_order_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("delivery_order_items.id"), nullable=True)
+    sales_return_id: Mapped[int] = mapped_column(Integer, ForeignKey(
+        "sales_returns.id", ondelete="CASCADE"), nullable=False)
+    delivery_order_item_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("delivery_order_items.id"), nullable=True)
     sales_order_item_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_order_items.id"), nullable=False)
     so_luong_tra: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     don_gia_tra: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
@@ -186,7 +200,10 @@ class SalesReturnItem(Base):
 # ─────────────────────────────────────────────
 
 SalesOrder.returns = relationship("SalesReturn", back_populates="sales_order", cascade="all, delete-orphan")
-SalesOrderItem.return_items = relationship("SalesReturnItem", back_populates="sales_order_item", cascade="all, delete-orphan")
+SalesOrderItem.return_items = relationship(
+    "SalesReturnItem",
+    back_populates="sales_order_item",
+    cascade="all, delete-orphan")
 
 
 # ─────────────────────────────────────────────
@@ -234,7 +251,11 @@ class Quote(Base):
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
     customer: Mapped["Customer"] = relationship("Customer", foreign_keys=[customer_id])
     nv_phu_trach: Mapped["User | None"] = relationship("User", foreign_keys=[nv_phu_trach_id])
@@ -269,19 +290,19 @@ class QuoteItem(Base):
     # mat/song_*: mã ký hiệu đồng cấp (ma_ky_hieu), _dl: định lượng g/m²
     so_lop: Mapped[int] = mapped_column(SmallInteger, default=3)
     to_hop_song: Mapped[str | None] = mapped_column(String(20))
-    mat:    Mapped[str | None] = mapped_column(String(30))
+    mat: Mapped[str | None] = mapped_column(String(30))
     mat_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_1:    Mapped[str | None] = mapped_column(String(30))
+    song_1: Mapped[str | None] = mapped_column(String(30))
     song_1_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_1:    Mapped[str | None] = mapped_column(String(30))
+    mat_1: Mapped[str | None] = mapped_column(String(30))
     mat_1_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_2:    Mapped[str | None] = mapped_column(String(30))
+    song_2: Mapped[str | None] = mapped_column(String(30))
     song_2_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_2:    Mapped[str | None] = mapped_column(String(30))
+    mat_2: Mapped[str | None] = mapped_column(String(30))
     mat_2_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_3:    Mapped[str | None] = mapped_column(String(30))
+    song_3: Mapped[str | None] = mapped_column(String(30))
     song_3_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_3:    Mapped[str | None] = mapped_column(String(30))
+    mat_3: Mapped[str | None] = mapped_column(String(30))
     mat_3_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     lay_gia_moi_nl: Mapped[bool] = mapped_column(Boolean, default=False)
     don_gia_m2: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))

@@ -1,5 +1,4 @@
 from datetime import date, timedelta
-from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 

@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, case
@@ -9,12 +9,12 @@ from app.deps import get_current_user
 from app.models.auth import User
 from app.models.billing import SalesInvoice
 from app.models.accounting import PurchaseInvoice
-from app.models.sales import SalesOrder, SalesOrderItem
-from app.models.master import Customer, Warehouse, Supplier
+from app.models.sales import SalesOrder
+from app.models.master import Customer, Warehouse
 from app.models.inventory import InventoryTransaction, InventoryBalance
 from app.models.master import PaperMaterial, OtherMaterial, Product
-from app.models.production import ProductionOrder, ProductionOrderItem
-from app.models.warehouse_doc import DeliveryOrder, DeliveryOrderItem
+from app.models.production import ProductionOrder
+from app.models.warehouse_doc import DeliveryOrder
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -503,4 +503,3 @@ def get_delivery_report(
             "da_giao": sum(1 for r in rows if r["trang_thai"] == "da_giao"),
         },
     }
-

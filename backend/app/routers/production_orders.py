@@ -1,14 +1,13 @@
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import cast, Date
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import Product, PhanXuong, Warehouse
+from app.models.master import PhanXuong
 from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
 from app.services.inventory_service import (
     get_workshop_warehouse as _get_workshop_warehouse,
@@ -19,13 +18,12 @@ from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.production_plan import ProductionPlanLine
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.production import MayDungLog
-from app.models.inventory import InventoryBalance, InventoryTransaction
 from app.schemas.master import ProductShort
 from app.schemas.production import (
     ProductionOrderCreate, ProductionOrderUpdate,
-    ProductionOrderResponse, ProductionOrderListItem,
-    ProductionOrderItemResponse, UpdateItemProgress, UpdateItemSxParams,
-    PagedResponse, TaoLenhBody,
+    ProductionOrderResponse, ProductionOrderItemResponse,
+    UpdateItemProgress, UpdateItemSxParams, PagedResponse,
+    TaoLenhBody,
 )
 
 router = APIRouter(prefix="/api/production-orders", tags=["production-orders"])
@@ -61,6 +59,7 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
     kh = order.sales_order.customer if order.sales_order else None
     ten_khach_hang = kh.ten_viet_tat if kh else None
     ma_khach_hang = kh.ma_kh if kh else None
+
     def _build_item(item: ProductionOrderItem) -> ProductionOrderItemResponse:
         soi = item.sales_order_item
         qi = soi.quote_item if soi else None
@@ -81,20 +80,27 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
         # Tính cong_doan từ loai_in + các checkbox (POI → SOI → QI)
         _cd: list[str] = []
         _loai_in = _f('loai_in')
-        _so_mau  = _f('so_mau')
+        _so_mau = _f('so_mau')
         if _loai_in and _loai_in != 'khong_in':
             _lbl = 'Flexo' if _loai_in == 'flexo' else 'Kỹ thuật số'
             if _so_mau and _so_mau > 0:
                 _lbl += f' {_so_mau} màu'
             _cd.append(_lbl)
         if qi:
-            if qi.do_kho:  _cd.append('Độ khó')
-            if qi.ghim:    _cd.append('Ghim')
-            if qi.chap_xa: _cd.append('Chạp Xã')
-            if qi.do_phu:  _cd.append('Độ phủ')
-            if qi.dan:     _cd.append('Dán')
-            if qi.boi:     _cd.append('Bồi')
-            if qi.be_lo:   _cd.append('Bế Lỗ')
+            if qi.do_kho:
+                _cd.append('Độ khó')
+            if qi.ghim:
+                _cd.append('Ghim')
+            if qi.chap_xa:
+                _cd.append('Chạp Xã')
+            if qi.do_phu:
+                _cd.append('Độ phủ')
+            if qi.dan:
+                _cd.append('Dán')
+            if qi.boi:
+                _cd.append('Bồi')
+            if qi.be_lo:
+                _cd.append('Bế Lỗ')
         cong_doan = ' | '.join(_cd) if _cd else None
 
         return ProductionOrderItemResponse(
@@ -111,15 +117,15 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
             loai_thung=_f('loai_thung'),
             dai=_f('dai'), rong=_f('rong'), cao=_f('cao'),
             so_lop=so_lop, to_hop_song=to_hop_song,
-            mat=_f('mat'),       mat_dl=_f('mat_dl'),
+            mat=_f('mat'), mat_dl=_f('mat_dl'),
             song_1=_f('song_1'), song_1_dl=_f('song_1_dl'),
-            mat_1=_f('mat_1'),   mat_1_dl=_f('mat_1_dl'),
+            mat_1=_f('mat_1'), mat_1_dl=_f('mat_1_dl'),
             song_2=_f('song_2'), song_2_dl=_f('song_2_dl'),
-            mat_2=_f('mat_2'),   mat_2_dl=_f('mat_2_dl'),
+            mat_2=_f('mat_2'), mat_2_dl=_f('mat_2_dl'),
             song_3=_f('song_3'), song_3_dl=_f('song_3_dl'),
-            mat_3=_f('mat_3'),   mat_3_dl=_f('mat_3_dl'),
+            mat_3=_f('mat_3'), mat_3_dl=_f('mat_3_dl'),
             loai_in=_f('loai_in'), so_mau=_f('so_mau'), loai_lan=_f('loai_lan'),
-            kho_tt=item.kho_tt,   dai_tt=item.dai_tt,   qccl=item.qccl,
+            kho_tt=item.kho_tt, dai_tt=item.dai_tt, qccl=item.qccl,
             dien_tich=item.dien_tich,
             gia_ban_muc_tieu=item.gia_ban_muc_tieu,
             cong_doan=cong_doan,
@@ -135,11 +141,13 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
         ten_khach_hang=ten_khach_hang,
         ma_khach_hang=ma_khach_hang,
         phap_nhan_id=order.phap_nhan_id,
-        ten_phap_nhan=order.phap_nhan.ten_phap_nhan if order.phap_nhan else (order.sales_order.phap_nhan.ten_phap_nhan if order.sales_order and order.sales_order.phap_nhan else None),
+        ten_phap_nhan=order.phap_nhan.ten_phap_nhan if order.phap_nhan else (
+            order.sales_order.phap_nhan.ten_phap_nhan if order.sales_order and order.sales_order.phap_nhan else None),
         kho_sx_id=order.kho_sx_id,
         ten_kho_sx=order.kho_sx.ten_kho if order.kho_sx else None,
         phan_xuong_id=order.phan_xuong_id,
-        ten_phan_xuong=order.phan_xuong.ten_xuong if order.phan_xuong else (order.sales_order.phan_xuong.ten_xuong if order.sales_order and order.sales_order.phan_xuong else None),
+        ten_phan_xuong=order.phan_xuong.ten_xuong if order.phan_xuong else (
+            order.sales_order.phan_xuong.ten_xuong if order.sales_order and order.sales_order.phan_xuong else None),
         nv_theo_doi_id=order.nv_theo_doi_id,
         ten_nv_theo_doi=order.nv_theo_doi.ho_ten if order.nv_theo_doi else None,
         created_by_name=order.creator.ho_ten if order.creator else None,
@@ -167,8 +175,8 @@ def _load_order(order_id: int, db: Session) -> ProductionOrder:
             joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.phan_xuong),
             joinedload(ProductionOrder.items).joinedload(ProductionOrderItem.product),
             joinedload(ProductionOrder.items)
-                .joinedload(ProductionOrderItem.sales_order_item)
-                .joinedload(SalesOrderItem.quote_item),
+            .joinedload(ProductionOrderItem.sales_order_item)
+            .joinedload(SalesOrderItem.quote_item),
             joinedload(ProductionOrder.phap_nhan),
             joinedload(ProductionOrder.kho_sx),
             joinedload(ProductionOrder.phan_xuong),
@@ -304,18 +312,18 @@ def tao_lenh_tu_don_hang(
             ngay_giao_hang=soi.ngay_giao_hang,
             gia_ban_muc_tieu=soi.don_gia,
             loai_thung=_s('loai_thung'),
-            dai=_s('dai'),         rong=_s('rong'),       cao=_s('cao'),
-            so_lop=_so_lop,        to_hop_song=_to_hop_song,
-            mat=_s('mat'),         mat_dl=_s('mat_dl'),
-            song_1=_s('song_1'),   song_1_dl=_s('song_1_dl'),
-            mat_1=_s('mat_1'),     mat_1_dl=_s('mat_1_dl'),
-            song_2=_s('song_2'),   song_2_dl=_s('song_2_dl'),
-            mat_2=_s('mat_2'),     mat_2_dl=_s('mat_2_dl'),
-            song_3=_s('song_3'),   song_3_dl=_s('song_3_dl'),
-            mat_3=_s('mat_3'),     mat_3_dl=_s('mat_3_dl'),
+            dai=_s('dai'), rong=_s('rong'), cao=_s('cao'),
+            so_lop=_so_lop, to_hop_song=_to_hop_song,
+            mat=_s('mat'), mat_dl=_s('mat_dl'),
+            song_1=_s('song_1'), song_1_dl=_s('song_1_dl'),
+            mat_1=_s('mat_1'), mat_1_dl=_s('mat_1_dl'),
+            song_2=_s('song_2'), song_2_dl=_s('song_2_dl'),
+            mat_2=_s('mat_2'), mat_2_dl=_s('mat_2_dl'),
+            song_3=_s('song_3'), song_3_dl=_s('song_3_dl'),
+            mat_3=_s('mat_3'), mat_3_dl=_s('mat_3_dl'),
             loai_in=_s('loai_in'), so_mau=_s('so_mau'),
             loai_lan=_s('loai_lan'),
-            c_tham=_s('c_tham'),   can_man=_s('can_man'),
+            c_tham=_s('c_tham'), can_man=_s('can_man'),
         )
         order.items.append(item)
         db.add(order)
@@ -609,20 +617,20 @@ def _phieu_to_dict(p: PhieuNhapPhoiSong) -> dict:
                 "production_order_item_id": it.production_order_item_id,
                 "ten_hang": getattr(getattr(it, "production_order_item", None), "ten_hang", None),
                 "so_lop": getattr(getattr(it, "production_order_item", None), "so_lop", None),
-                "mat":       getattr(getattr(it, "production_order_item", None), "mat", None),
-                "mat_dl":    getattr(getattr(it, "production_order_item", None), "mat_dl", None),
-                "song_1":    getattr(getattr(it, "production_order_item", None), "song_1", None),
+                "mat": getattr(getattr(it, "production_order_item", None), "mat", None),
+                "mat_dl": getattr(getattr(it, "production_order_item", None), "mat_dl", None),
+                "song_1": getattr(getattr(it, "production_order_item", None), "song_1", None),
                 "song_1_dl": getattr(getattr(it, "production_order_item", None), "song_1_dl", None),
-                "mat_1":     getattr(getattr(it, "production_order_item", None), "mat_1", None),
-                "mat_1_dl":  getattr(getattr(it, "production_order_item", None), "mat_1_dl", None),
-                "song_2":    getattr(getattr(it, "production_order_item", None), "song_2", None),
+                "mat_1": getattr(getattr(it, "production_order_item", None), "mat_1", None),
+                "mat_1_dl": getattr(getattr(it, "production_order_item", None), "mat_1_dl", None),
+                "song_2": getattr(getattr(it, "production_order_item", None), "song_2", None),
                 "song_2_dl": getattr(getattr(it, "production_order_item", None), "song_2_dl", None),
-                "mat_2":     getattr(getattr(it, "production_order_item", None), "mat_2", None),
-                "mat_2_dl":  getattr(getattr(it, "production_order_item", None), "mat_2_dl", None),
-                "song_3":    getattr(getattr(it, "production_order_item", None), "song_3", None),
+                "mat_2": getattr(getattr(it, "production_order_item", None), "mat_2", None),
+                "mat_2_dl": getattr(getattr(it, "production_order_item", None), "mat_2_dl", None),
+                "song_3": getattr(getattr(it, "production_order_item", None), "song_3", None),
                 "song_3_dl": getattr(getattr(it, "production_order_item", None), "song_3_dl", None),
-                "mat_3":     getattr(getattr(it, "production_order_item", None), "mat_3", None),
-                "mat_3_dl":  getattr(getattr(it, "production_order_item", None), "mat_3_dl", None),
+                "mat_3": getattr(getattr(it, "production_order_item", None), "mat_3", None),
+                "mat_3_dl": getattr(getattr(it, "production_order_item", None), "mat_3_dl", None),
                 "so_luong_ke_hoach": float(it.so_luong_ke_hoach),
                 "so_luong_thuc_te": float(it.so_luong_thuc_te) if it.so_luong_thuc_te is not None else None,
                 "so_luong_loi": float(it.so_luong_loi) if it.so_luong_loi is not None else None,

@@ -47,6 +47,7 @@ export default function ReceiptsPage() {
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
   const [filterKho, setFilterKho] = useState<number | undefined>()
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
   const [filterNCC, setFilterNCC] = useState<number | undefined>()
   const [filterXuong, setFilterXuong] = useState<number | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
@@ -116,12 +117,22 @@ export default function ReceiptsPage() {
   })
 
   const { data: receiptList = [], isLoading } = useQuery({
-    queryKey: ['goods-receipts-nvl', filterKho, filterNCC, tuNgay, denNgay],
+    queryKey: ['goods-receipts-nvl', filterPhapNhan, filterXuong, filterKho, filterNCC, tuNgay, denNgay],
     queryFn: () => warehouseApi.listGoodsReceipts({
-      warehouse_id: filterKho, supplier_id: filterNCC, tu_ngay: tuNgay, den_ngay: denNgay,
+      warehouse_id: filterKho, supplier_id: filterNCC, phap_nhan_id: filterPhapNhan, phan_xuong_id: filterXuong, tu_ngay: tuNgay, den_ngay: denNgay,
       loai_hang: 'nvl',
     }).then(r => r.data),
   })
+
+  const phapNhanOptions = Array.from(new Map(
+    warehouses.filter(w => w.phap_nhan_id).map(w => [w.phap_nhan_id, { value: w.phap_nhan_id!, label: w.ten_phap_nhan || `PN #${w.phap_nhan_id}` }])
+  ).values())
+  const phanXuongOptions = (phanXuongs as any[]).filter(x => !filterPhapNhan || x.phap_nhan_id === filterPhapNhan)
+  const warehouseOptions = warehouses
+    .filter(w => w.trang_thai)
+    .filter(w => !filterPhapNhan || w.phap_nhan_id === filterPhapNhan)
+    .filter(w => !filterXuong || w.phan_xuong_id === filterXuong)
+    .map(w => ({ value: w.id, label: w.ten_kho }))
 
   const materialGroups = Array.from(
     new Map(paperMats.filter(m => m.ma_nhom_id && m.ten_nhom).map(m => [m.ma_nhom_id, { id: m.ma_nhom_id, ten_nhom: m.ten_nhom }])).values()
@@ -529,15 +540,18 @@ export default function ReceiptsPage() {
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[8, 8]}>
           <Col xs={12} sm={5}>
+            <Select placeholder="Phap nhan" style={{ width: '100%' }} allowClear value={filterPhapNhan}
+              onChange={v => { setFilterPhapNhan(v); setFilterXuong(undefined); setFilterKho(undefined) }}
+              options={phapNhanOptions} />
+          </Col>
+          <Col xs={12} sm={5}>
             <Select placeholder="Tất cả xưởng" style={{ width: '100%' }} allowClear value={filterXuong}
               onChange={v => { setFilterXuong(v); setFilterKho(undefined) }}
-              options={phanXuongs.filter((p: any) => p.trang_thai).map((p: any) => ({ value: p.id, label: p.ten_xuong }))} />
+              options={phanXuongOptions.filter((p: any) => p.trang_thai).map((p: any) => ({ value: p.id, label: p.ten_xuong }))} />
           </Col>
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả kho" style={{ width: '100%' }} allowClear value={filterKho} onChange={setFilterKho}
-              options={warehouses
-                .filter(w => w.trang_thai && (!filterXuong || w.phan_xuong_id === filterXuong))
-                .map(w => ({ value: w.id, label: w.ten_kho }))} />
+              options={warehouseOptions} />
           </Col>
           <Col xs={12} sm={5}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"

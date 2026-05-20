@@ -52,27 +52,27 @@ class SalesOrderItemResponse(BaseModel):
     trang_thai_dong: str
     # Thông số kỹ thuật
     loai_thung: str | None = None
-    dai:  Decimal | None = None
+    dai: Decimal | None = None
     rong: Decimal | None = None
-    cao:  Decimal | None = None
-    so_lop:      int | None = None
+    cao: Decimal | None = None
+    so_lop: int | None = None
     to_hop_song: str | None = None
-    mat:     str | None = None
-    mat_dl:  Decimal | None = None
-    song_1:    str | None = None
+    mat: str | None = None
+    mat_dl: Decimal | None = None
+    song_1: str | None = None
     song_1_dl: Decimal | None = None
-    mat_1:     str | None = None
-    mat_1_dl:  Decimal | None = None
-    song_2:    str | None = None
+    mat_1: str | None = None
+    mat_1_dl: Decimal | None = None
+    song_2: str | None = None
     song_2_dl: Decimal | None = None
-    mat_2:     str | None = None
-    mat_2_dl:  Decimal | None = None
-    song_3:    str | None = None
+    mat_2: str | None = None
+    mat_2_dl: Decimal | None = None
+    song_3: str | None = None
     song_3_dl: Decimal | None = None
-    mat_3:     str | None = None
-    mat_3_dl:  Decimal | None = None
+    mat_3: str | None = None
+    mat_3_dl: Decimal | None = None
     loai_in: str | None = None
-    so_mau:  int | None = None
+    so_mau: int | None = None
     # Link sang lệnh SX (nếu đã lập lệnh)
     production_order_item_id: int | None = None
 

@@ -509,6 +509,7 @@ class WorkshopPayrollCreate(BaseModel):
     tong_bao_hiem: Decimal = Decimal("0")
     ghi_chu: str | None = None
 
+
 class WorkshopPayrollResponse(BaseModel):
     id: int
     so_phieu: str
@@ -531,7 +532,8 @@ class WorkshopPayrollResponse(BaseModel):
 
 class AllocationItem(BaseModel):
     phan_xuong_id: int
-    ty_le: Decimal # 0.4 = 40%
+    ty_le: Decimal  # 0.4 = 40%
+
 
 class OverheadAllocationRequest(BaseModel):
     tu_ngay: date
@@ -573,8 +575,8 @@ class ManualJournalEntryCreate(BaseModel):
     def check_balanced(self) -> "ManualJournalEntryCreate":
         if not self.lines:
             raise ValueError("Bút toán phải có ít nhất một dòng chi tiết")
-        tong_no = sum(l.so_tien_no for l in self.lines)
-        tong_co = sum(l.so_tien_co for l in self.lines)
+        tong_no = sum(line.so_tien_no for line in self.lines)
+        tong_co = sum(line.so_tien_co for line in self.lines)
         if tong_no != tong_co:
             raise ValueError(
                 f"Bút toán không cân: Tổng Nợ={tong_no}, Tổng Có={tong_co}"
@@ -595,6 +597,7 @@ class FixedAssetCreate(BaseModel):
     phan_xuong_id: int | None = None
     phap_nhan_id: int | None = None
     tk_chi_phi: str = "154"
+
 
 class FixedAssetResponse(BaseModel):
     id: int

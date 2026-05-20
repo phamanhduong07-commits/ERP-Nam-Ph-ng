@@ -127,7 +127,7 @@ def get_credit_alerts(
     tang_map = {r.customer_id: float(r.s) for r in tang}
     giam_map = {r.customer_id: float(r.s) for r in giam}
 
-    customers = db.query(Customer).filter(Customer.no_tran > 0, Customer.trang_thai == True).all()
+    customers = db.query(Customer).filter(Customer.no_tran > 0, Customer.trang_thai.is_(True)).all()
 
     alerts = []
     for c in customers:

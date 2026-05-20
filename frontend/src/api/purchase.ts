@@ -10,6 +10,7 @@ export interface POItem {
   don_gia: number
   thanh_tien?: number
   so_luong_da_nhan?: number
+  so_cuon_da_nhan?: number
   ghi_chu?: string | null
   // Phôi sóng mua ngoài
   production_plan_line_id?: number | null
@@ -182,6 +183,12 @@ export const purchaseApi = {
 
   approve: (id: number) =>
     client.post<{ ok: boolean; trang_thai: string }>(`/purchase-orders/${id}/duyet`),
+
+  guiNcc: (id: number) =>
+    client.post<{ ok: boolean; trang_thai: string }>(`/purchase-orders/${id}/gui-ncc`),
+
+  huy: (id: number) =>
+    client.post<{ ok: boolean; trang_thai: string }>(`/purchase-orders/${id}/huy`),
 
   delete: (id: number) => client.delete(`/purchase-orders/${id}`),
 

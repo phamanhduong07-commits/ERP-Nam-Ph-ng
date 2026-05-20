@@ -138,7 +138,7 @@ def get_all_suppliers(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = db.query(Supplier).filter(Supplier.trang_thai == True)
+    q = db.query(Supplier).filter(Supplier.trang_thai.is_(True))
     if loai:
         q = q.filter(Supplier.phan_loai.ilike(f"%{loai}%"))
     items = q.order_by(Supplier.ten_viet_tat).all()

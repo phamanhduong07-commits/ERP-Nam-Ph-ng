@@ -3,9 +3,8 @@ Sprint 4 — Test quotes module
 Covers: Quote (create, list, get, invalid customer).
 """
 from datetime import date
-from decimal import Decimal
 
-from app.models.master import Customer, PhapNhan
+from app.models.master import Customer
 
 
 # ─── helpers ────────────────────────────────────────────────────────────────
@@ -97,3 +96,34 @@ def test_list_quotes_filter_by_customer(client, db_session):
     items = data.get("items", data) if isinstance(data, dict) else data
     if items:
         assert all(r["customer_id"] == kh1.id for r in items)
+
+
+def test_quote_submit_changes_status(client, db_session):
+    """PATCH /{id}/submit → trang_thai = 'cho_duyet'."""
+    kh = _make_customer(db_session, "KH_BGS")
+    db_session.commit()
+
+    created = client.post("/api/quotes", json=_quote_payload(kh.id)).json()
+    quote_id = created["id"]
+
+    res = client.patch(f"/api/quotes/{quote_id}/submit")
+    assert res.status_code == 200, res.text
+    assert res.json()["trang_thai"] == "cho_duyet"
+
+
+def test_quote_approve_changes_status(client, db_session):
+    """PATCH /{id}/approve sau khi submit → trang_thai = 'da_duyet', có approved_at."""
+    kh = _make_customer(db_session, "KH_BGA")
+    db_session.commit()
+
+    created = client.post("/api/quotes", json=_quote_payload(kh.id)).json()
+    quote_id = created["id"]
+
+    # submit first
+    client.patch(f"/api/quotes/{quote_id}/submit")
+
+    res = client.patch(f"/api/quotes/{quote_id}/approve")
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["trang_thai"] == "da_duyet"
+    assert data["approved_at"] is not None

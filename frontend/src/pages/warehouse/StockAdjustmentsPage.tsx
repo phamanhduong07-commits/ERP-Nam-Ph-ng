@@ -31,6 +31,8 @@ export default function StockAdjustmentsPage() {
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
   const [filterKho, setFilterKho] = useState<number | undefined>()
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
+  const [filterXuong, setFilterXuong] = useState<number | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [selectedKho, setSelectedKho] = useState<number | undefined>()
@@ -41,9 +43,9 @@ export default function StockAdjustmentsPage() {
   })
 
   const { data: phieuList = [], isLoading } = useQuery({
-    queryKey: ['stock-adjustments', filterKho, tuNgay, denNgay],
+    queryKey: ['stock-adjustments', filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay],
     queryFn: () => warehouseApi.listStockAdjustments({
-      warehouse_id: filterKho, tu_ngay: tuNgay, den_ngay: denNgay,
+      warehouse_id: filterKho, phap_nhan_id: filterPhapNhan, phan_xuong_id: filterXuong, tu_ngay: tuNgay, den_ngay: denNgay,
     }).then(r => r.data),
   })
 
@@ -80,7 +82,18 @@ export default function StockAdjustmentsPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá phiếu'),
   })
 
-  const activeWarehouses = warehouses.filter(w => w.trang_thai)
+  const phapNhanOptions = Array.from(new Map(
+    warehouses.filter(w => w.phap_nhan_id).map(w => [w.phap_nhan_id, { value: w.phap_nhan_id!, label: w.ten_phap_nhan || `PN #${w.phap_nhan_id}` }])
+  ).values())
+  const xuongOptions = Array.from(new Map(
+    warehouses
+      .filter(w => w.phan_xuong_id && (!filterPhapNhan || w.phap_nhan_id === filterPhapNhan))
+      .map(w => [w.phan_xuong_id, { value: w.phan_xuong_id!, label: w.ten_xuong || `Xuong #${w.phan_xuong_id}` }])
+  ).values())
+  const activeWarehouses = warehouses
+    .filter(w => w.trang_thai)
+    .filter(w => !filterPhapNhan || w.phap_nhan_id === filterPhapNhan)
+    .filter(w => !filterXuong || w.phan_xuong_id === filterXuong)
 
   const handleTonKhoSelect = (rowIndex: number, balanceId: number) => {
     const t = tonKho.find(x => x.id === balanceId)
@@ -269,9 +282,19 @@ export default function StockAdjustmentsPage() {
 
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[8, 8]}>
+          <Col xs={12} sm={6}>
+            <Select placeholder="Phap nhan" style={{ width: '100%' }} allowClear value={filterPhapNhan}
+              onChange={v => { setFilterPhapNhan(v); setFilterXuong(undefined); setFilterKho(undefined) }}
+              options={phapNhanOptions} />
+          </Col>
+          <Col xs={12} sm={6}>
+            <Select placeholder="Xuong" style={{ width: '100%' }} allowClear value={filterXuong}
+              onChange={v => { setFilterXuong(v); setFilterKho(undefined) }}
+              options={xuongOptions} />
+          </Col>
           <Col xs={24} sm={8}>
             <Select placeholder="Kho" style={{ width: '100%' }} allowClear value={filterKho} onChange={setFilterKho}
-              options={warehouses.map(w => ({ value: w.id, label: w.ten_kho }))} />
+              options={activeWarehouses.map(w => ({ value: w.id, label: w.ten_kho }))} />
           </Col>
           <Col xs={12} sm={6}>
             <DatePicker placeholder="Tu ngay" style={{ width: '100%' }} format="DD/MM/YYYY"

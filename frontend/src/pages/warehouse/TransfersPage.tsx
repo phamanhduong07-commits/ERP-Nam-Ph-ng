@@ -21,6 +21,8 @@ export default function TransfersPage() {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
+  const [filterPhapNhanNguon, setFilterPhapNhanNguon] = useState<number | undefined>()
+  const [filterPhapNhanDich, setFilterPhapNhanDich] = useState<number | undefined>()
   const [filterXuongNguon, setFilterXuongNguon] = useState<number | undefined>()
   const [filterXuongDich, setFilterXuongDich] = useState<number | undefined>()
   const [filterKhoXuat, setFilterKhoXuat] = useState<number | undefined>()
@@ -42,9 +44,16 @@ export default function TransfersPage() {
   })
 
   const { data: phieuList = [], isLoading } = useQuery({
-    queryKey: ['phieu-chuyen', filterKhoXuat, filterKhoNhap, tuNgay, denNgay],
+    queryKey: ['phieu-chuyen', filterPhapNhanNguon, filterPhapNhanDich, filterXuongNguon, filterXuongDich, filterKhoXuat, filterKhoNhap, tuNgay, denNgay],
     queryFn: () => warehouseApi.listPhieuChuyen({
-      warehouse_xuat_id: filterKhoXuat, warehouse_nhap_id: filterKhoNhap, tu_ngay: tuNgay, den_ngay: denNgay,
+      warehouse_xuat_id: filterKhoXuat,
+      warehouse_nhap_id: filterKhoNhap,
+      phan_xuong_xuat_id: filterXuongNguon,
+      phan_xuong_nhap_id: filterXuongDich,
+      phap_nhan_xuat_id: filterPhapNhanNguon,
+      phap_nhan_nhap_id: filterPhapNhanDich,
+      tu_ngay: tuNgay,
+      den_ngay: denNgay,
     }).then(r => r.data),
   })
 
@@ -88,14 +97,25 @@ export default function TransfersPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá phiếu'),
   })
 
+  const phapNhanOptions = Array.from(new Map(
+    warehouses.filter(w => w.phap_nhan_id).map(w => [w.phap_nhan_id, { value: w.phap_nhan_id!, label: w.ten_phap_nhan || `PN #${w.phap_nhan_id}` }])
+  ).values())
+  const xuongNguonOptions = (phanXuongs as any[]).filter(x =>
+    !filterPhapNhanNguon || x.phap_nhan_id === filterPhapNhanNguon
+  )
+  const xuongDichOptions = (phanXuongs as any[]).filter(x =>
+    !filterPhapNhanDich || x.phap_nhan_id === filterPhapNhanDich
+  )
   const activeWarehouses = warehouses.filter(w => w.trang_thai)
   const khoXuatOptions = activeWarehouses
+    .filter(w => !filterPhapNhanNguon || w.phap_nhan_id === filterPhapNhanNguon)
     .filter(w => !filterXuongNguon || w.phan_xuong_id === filterXuongNguon)
     .map(w => {
       const px = phanXuongs.find((x: any) => x.id === w.phan_xuong_id)
       return { value: w.id, label: px ? `${w.ten_kho} (${px.ten_xuong})` : w.ten_kho }
     })
   const khoNhapOptions = activeWarehouses
+    .filter(w => !filterPhapNhanDich || w.phap_nhan_id === filterPhapNhanDich)
     .filter(w => !filterXuongDich || w.phan_xuong_id === filterXuongDich)
     .map(w => {
       const px = phanXuongs.find((x: any) => x.id === w.phan_xuong_id)
@@ -285,14 +305,24 @@ export default function TransfersPage() {
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[8, 8]}>
           <Col xs={12} sm={6}>
+            <Select placeholder="Phap nhan nguon" style={{ width: '100%' }} allowClear value={filterPhapNhanNguon}
+              onChange={v => { setFilterPhapNhanNguon(v); setFilterXuongNguon(undefined); setFilterKhoXuat(undefined) }}
+              options={phapNhanOptions} />
+          </Col>
+          <Col xs={12} sm={6}>
+            <Select placeholder="Phap nhan dich" style={{ width: '100%' }} allowClear value={filterPhapNhanDich}
+              onChange={v => { setFilterPhapNhanDich(v); setFilterXuongDich(undefined); setFilterKhoNhap(undefined) }}
+              options={phapNhanOptions} />
+          </Col>
+          <Col xs={12} sm={6}>
             <Select placeholder="Xưởng nguồn" style={{ width: '100%' }} allowClear value={filterXuongNguon}
               onChange={v => { setFilterXuongNguon(v); setFilterKhoXuat(undefined) }}
-              options={(phanXuongs as any[]).map(x => ({ value: x.id, label: x.ten_xuong }))} />
+              options={xuongNguonOptions.map(x => ({ value: x.id, label: x.ten_xuong }))} />
           </Col>
           <Col xs={12} sm={6}>
             <Select placeholder="Xưởng đích" style={{ width: '100%' }} allowClear value={filterXuongDich}
               onChange={v => { setFilterXuongDich(v); setFilterKhoNhap(undefined) }}
-              options={(phanXuongs as any[]).map(x => ({ value: x.id, label: x.ten_xuong }))} />
+              options={xuongDichOptions.map(x => ({ value: x.id, label: x.ten_xuong }))} />
           </Col>
           <Col xs={12} sm={6}>
             <Select placeholder="Kho xuất" style={{ width: '100%' }} allowClear value={filterKhoXuat} onChange={setFilterKhoXuat}

@@ -8,7 +8,7 @@ from app.models.auth import User
 from app.models.master import PhanXuong
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.production_plan import ProductionPlanLine
-from app.models.sales import SalesOrder, SalesOrderItem
+from app.models.sales import SalesOrder
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoiItem
 from app.models.cd2 import PhieuIn
@@ -18,19 +18,19 @@ from app.services.carton_metrics import production_item_metrics
 router = APIRouter(prefix="/api/theo-doi", tags=["theo-doi"])
 
 STAGE_LABELS = {
-    "da_duyet":      "Đã duyệt",
-    "lap_lenh":      "Lập lệnh SX",
-    "cho_sx":        "Chờ SX",
-    "chua_nhap":     "Chưa nhập phôi",
-    "co_phoi":       "Nhập phôi",
-    "cho_in":        "Chờ in",
-    "ke_hoach":      "Kế hoạch",
-    "dang_in":       "Đang in",
+    "da_duyet": "Đã duyệt",
+    "lap_lenh": "Lập lệnh SX",
+    "cho_sx": "Chờ SX",
+    "chua_nhap": "Chưa nhập phôi",
+    "co_phoi": "Nhập phôi",
+    "cho_in": "Chờ in",
+    "ke_hoach": "Kế hoạch",
+    "dang_in": "Đang in",
     "cho_dinh_hinh": "Chờ định hình",
-    "sau_in":        "Sau in",
-    "dang_sau_in":   "Đang sau in",
-    "hoan_thanh":    "Hoàn thành",
-    "huy":           "Huỷ",
+    "sau_in": "Sau in",
+    "dang_sau_in": "Đang sau in",
+    "hoan_thanh": "Hoàn thành",
+    "huy": "Huỷ",
 }
 
 

@@ -11,7 +11,12 @@ from app.services.excel_import_service import (
 )
 
 BANK_ACCOUNT_IMPORT_FIELDS = [
-    ImportField("ma_tk", "Ma tai khoan", required=True, parser=parse_text, help_text="Ma tai khoan ngan hang, duy nhat"),
+    ImportField(
+        "ma_tk",
+        "Ma tai khoan",
+        required=True,
+        parser=parse_text,
+        help_text="Ma tai khoan ngan hang, duy nhat"),
     ImportField("ten_ngan_hang", "Ten ngan hang", required=True, parser=parse_text),
     ImportField("so_tai_khoan", "So tai khoan", required=True, parser=parse_text),
     ImportField("chu_tai_khoan", "Chu tai khoan", parser=parse_text),
@@ -39,7 +44,10 @@ async def import_bank_accounts(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("KE_TOAN", "GIAM_DOC", "ADMIN")),
 ):
-    return await import_excel(db=db, file=file, model=BankAccount, fields=BANK_ACCOUNT_IMPORT_FIELDS, key_field="ma_tk", commit=commit)
+    return await import_excel(
+        db=db, file=file, model=BankAccount,
+        fields=BANK_ACCOUNT_IMPORT_FIELDS, key_field="ma_tk", commit=commit,
+    )
 
 
 @router.get("", response_model=list[BankAccountResponse])

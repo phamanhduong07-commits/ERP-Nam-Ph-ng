@@ -177,7 +177,7 @@ class BillingService:
     # Tạo hóa đơn bán hàng
     # ─────────────────────────────────────────
     def create_invoice(self, data: SalesInvoiceCreate, user_id: int) -> SalesInvoice:
-        customer = self.db.query(Customer).get(data.customer_id)
+        customer = self.db.get(Customer, data.customer_id)
         if not customer:
             raise HTTPException(404, "Không tìm thấy khách hàng")
 
@@ -445,7 +445,7 @@ class BillingService:
     # Upload ảnh phiếu giao
     # ─────────────────────────────────────────
     def update_anh_phieu_giao(self, invoice_id: int, url: str) -> SalesInvoice:
-        inv = self.db.query(SalesInvoice).get(invoice_id)
+        inv = self.db.get(SalesInvoice, invoice_id)
         if not inv:
             raise HTTPException(404, "Không tìm thấy hóa đơn")
         inv.anh_phieu_giao = url
@@ -498,7 +498,7 @@ class BillingService:
     def approve_adjustment(
         self, log_id: int, data: AdjustmentApprove, user_id: int
     ) -> InvoiceAdjustmentLog:
-        log = self.db.query(InvoiceAdjustmentLog).get(log_id)
+        log = self.db.get(InvoiceAdjustmentLog, log_id)
         if not log:
             raise HTTPException(404, "Không tìm thấy yêu cầu điều chỉnh")
         if log.trang_thai != "pending":
@@ -512,7 +512,7 @@ class BillingService:
             if data.ghi_chu:
                 log.ghi_chu = log.ghi_chu + f"\n[Ghi chú duyệt]: {data.ghi_chu}"
 
-            inv = self.db.query(SalesInvoice).get(log.invoice_id)
+            inv = self.db.get(SalesInvoice, log.invoice_id)
             new_vals = json.loads(log.du_lieu_sau)
 
             old_tong_cong = inv.tong_cong
@@ -601,7 +601,7 @@ class BillingService:
         if should_reverse:
             self._reverse_sales_invoice_journal(inv)
         if inv.delivery_id:
-            delivery = self.db.query(DeliveryOrder).get(inv.delivery_id)
+            delivery = self.db.get(DeliveryOrder, inv.delivery_id)
             if delivery:
                 delivery.trang_thai_cong_no = "chua_thu"
         self.db.commit()

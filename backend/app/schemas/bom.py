@@ -1,6 +1,5 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -309,9 +308,6 @@ class BomSummaryItem(BaseModel):
     trang_thai: str
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
     class Config:
         from_attributes = True

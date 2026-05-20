@@ -6,7 +6,6 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from typing import Any, Callable
 
-import json
 import pandas as pd
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
@@ -217,14 +216,14 @@ async def import_excel(
                 db.add(log)
                 db.commit()
             raise HTTPException(status_code=400, detail="File con loi, chua import. Hay sua loi va thu lai.")
-        
+
         for existing, values in objects_to_save:
             if existing:
                 for field, value in values.items():
                     setattr(existing, field, value)
             else:
                 db.add(model(**values))
-        
+
         # Ghi log thanh cong
         if user:
             log = ImportLog(
@@ -238,7 +237,7 @@ async def import_excel(
                 trang_thai='success',
             )
             db.add(log)
-        
+
         db.commit()
 
     return {

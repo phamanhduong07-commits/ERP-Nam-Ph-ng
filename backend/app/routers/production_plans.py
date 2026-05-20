@@ -1,5 +1,5 @@
 import math
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload, aliased
@@ -7,7 +7,7 @@ from sqlalchemy import case
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import Customer, PhanXuong
+from app.models.master import PhanXuong
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.production_plan import ProductionPlan, ProductionPlanLine
 from app.models.bom import ProductionBOM
@@ -71,7 +71,7 @@ def _build_cong_doan(
 
     # Loại in + số màu: POI → QuoteItem fallback
     loai_in = (item.loai_in if item else None) or (qi.loai_in if qi else None)
-    so_mau  = (item.so_mau  if item else None) or (qi.so_mau  if qi else None)
+    so_mau = (item.so_mau if item else None) or (qi.so_mau if qi else None)
     if loai_in and loai_in != "khong_in":
         label = "Flexo" if loai_in == "flexo" else "Kỹ thuật số"
         if so_mau and so_mau > 0:
@@ -80,19 +80,31 @@ def _build_cong_doan(
 
     # Công đoạn phụ — QuoteItem có đầy đủ nhất, fallback BOM
     if qi:
-        if qi.do_kho:  parts.append("Độ khó")
-        if qi.ghim:    parts.append("Ghim")
-        if qi.chap_xa: parts.append("Chạp Xã")
-        if qi.do_phu:  parts.append("Độ phủ")
-        if qi.dan:     parts.append("Dán")
-        if qi.boi:     parts.append("Bồi")
-        if qi.be_lo:   parts.append("Bế Lỗ")
+        if qi.do_kho:
+            parts.append("Độ khó")
+        if qi.ghim:
+            parts.append("Ghim")
+        if qi.chap_xa:
+            parts.append("Chạp Xã")
+        if qi.do_phu:
+            parts.append("Độ phủ")
+        if qi.dan:
+            parts.append("Dán")
+        if qi.boi:
+            parts.append("Bồi")
+        if qi.be_lo:
+            parts.append("Bế Lỗ")
     elif bom:
-        if getattr(bom, "ghim",    False): parts.append("Ghim")
-        if getattr(bom, "chap_xa", False): parts.append("Chạp Xã")
-        if getattr(bom, "dan",     False): parts.append("Dán")
-        if getattr(bom, "boi",     False): parts.append("Bồi")
-        if getattr(bom, "be_so_con", 0):   parts.append("Bế Lỗ")
+        if getattr(bom, "ghim", False):
+            parts.append("Ghim")
+        if getattr(bom, "chap_xa", False):
+            parts.append("Chạp Xã")
+        if getattr(bom, "dan", False):
+            parts.append("Dán")
+        if getattr(bom, "boi", False):
+            parts.append("Bồi")
+        if getattr(bom, "be_so_con", 0):
+            parts.append("Bế Lỗ")
 
     return " | ".join(parts) if parts else None
 
@@ -109,7 +121,7 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
 
     # SOI + QuoteItem (đã joinedload) — dùng làm fallback cho field chưa lưu vào POI
     soi: SalesOrderItem | None = getattr(item, "sales_order_item", None) if item else None
-    qi:  QuoteItem       | None = soi.quote_item if soi else None
+    qi: QuoteItem | None = soi.quote_item if soi else None
 
     def _bom_mat_str(val: int | None) -> str | None:
         return f"{val} mặt" if val else None
@@ -125,8 +137,8 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
                    or (item.ghi_chu if item else None)
                    or (soi.ghi_chu_san_pham if soi else None)
                    or (qi.ghi_chu if qi else None))
-    c_tham  = _f("c_tham",  _bom_mat_str(bom.chong_tham if bom else None))
-    can_man = _f("can_man", _bom_mat_str(bom.can_mang   if bom else None))
+    c_tham = _f("c_tham", _bom_mat_str(bom.chong_tham if bom else None))
+    can_man = _f("can_man", _bom_mat_str(bom.can_mang if bom else None))
 
     return ProductionPlanLineResponse(
         id=line.id,
@@ -159,13 +171,13 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         # Thông số kỹ thuật từ item
         dai_tt=item.dai_tt if item else None,
         loai_lan=item.loai_lan if item else None,
-        mat=item.mat if item else None,         mat_dl=item.mat_dl if item else None,
-        song_1=item.song_1 if item else None,   song_1_dl=item.song_1_dl if item else None,
-        mat_1=item.mat_1 if item else None,     mat_1_dl=item.mat_1_dl if item else None,
-        song_2=item.song_2 if item else None,   song_2_dl=item.song_2_dl if item else None,
-        mat_2=item.mat_2 if item else None,     mat_2_dl=item.mat_2_dl if item else None,
-        song_3=item.song_3 if item else None,   song_3_dl=item.song_3_dl if item else None,
-        mat_3=item.mat_3 if item else None,     mat_3_dl=item.mat_3_dl if item else None,
+        mat=item.mat if item else None, mat_dl=item.mat_dl if item else None,
+        song_1=item.song_1 if item else None, song_1_dl=item.song_1_dl if item else None,
+        mat_1=item.mat_1 if item else None, mat_1_dl=item.mat_1_dl if item else None,
+        song_2=item.song_2 if item else None, song_2_dl=item.song_2_dl if item else None,
+        mat_2=item.mat_2 if item else None, mat_2_dl=item.mat_2_dl if item else None,
+        song_3=item.song_3 if item else None, song_3_dl=item.song_3_dl if item else None,
+        mat_3=item.mat_3 if item else None, mat_3_dl=item.mat_3_dl if item else None,
         loai_in=_f("loai_in"),
         so_mau=_f("so_mau"),
         c_tham=c_tham,
@@ -321,7 +333,7 @@ def list_plans(
         q = q.filter(ProductionPlan.trang_thai == trang_thai)
     if noi_sx:
         # PhanXuong của LSX có thể là CD2 (HM, CC) → follow phoi_tu_phan_xuong_id để ra CD1
-        _PX  = aliased(PhanXuong)   # xưởng trực tiếp của LSX
+        _PX = aliased(PhanXuong)   # xưởng trực tiếp của LSX
         _PX1 = aliased(PhanXuong)   # xưởng CD1 nguồn (nếu LSX là CD2)
         matched_plan_ids = (
             db.query(ProductionPlanLine.plan_id)
@@ -355,7 +367,7 @@ def list_plans(
     plan_ids = [p.id for p in plans]
     noi_sx_map: dict[int, str] = {}
     if plan_ids:
-        _PX  = aliased(PhanXuong)   # xưởng trực tiếp của LSX
+        _PX = aliased(PhanXuong)   # xưởng trực tiếp của LSX
         _PX1 = aliased(PhanXuong)   # xưởng CD1 nguồn (nếu LSX là CD2)
         rows = (
             db.query(
@@ -537,12 +549,17 @@ def push_to_queue(
     )
 
     if existing:
-        if data.kho1 is not None:       existing.kho1 = data.kho1
-        if data.kho_giay is not None:   existing.kho_giay = data.kho_giay
-        if so_dao is not None:          existing.so_dao = so_dao
-        if kho_tt is not None:          existing.kho_tt = kho_tt
+        if data.kho1 is not None:
+            existing.kho1 = data.kho1
+        if data.kho_giay is not None:
+            existing.kho_giay = data.kho_giay
+        if so_dao is not None:
+            existing.so_dao = so_dao
+        if kho_tt is not None:
+            existing.kho_tt = kho_tt
         existing.so_luong_ke_hoach = data.so_luong_ke_hoach
-        if poi.ghi_chu:                 existing.ghi_chu = poi.ghi_chu
+        if poi.ghi_chu:
+            existing.ghi_chu = poi.ghi_chu
         db.commit()
         line_id = existing.id
     else:
@@ -789,8 +806,8 @@ def _build_queue_line(line: ProductionPlanLine, plan: ProductionPlan) -> QueueLi
     def _bom_mat_str(val: int | None) -> str | None:
         return f"{val} mặt" if val else None
 
-    q_c_tham  = (item.c_tham  if item else None) or _bom_mat_str(bom.chong_tham if bom else None)
-    q_can_man = (item.can_man if item else None) or _bom_mat_str(bom.can_mang   if bom else None)
+    q_c_tham = (item.c_tham if item else None) or _bom_mat_str(bom.chong_tham if bom else None)
+    q_can_man = (item.can_man if item else None) or _bom_mat_str(bom.can_mang if bom else None)
 
     return QueueLineResponse(
         id=line.id,
@@ -825,13 +842,13 @@ def _build_queue_line(line: ProductionPlanLine, plan: ProductionPlan) -> QueueLi
         c_tham=q_c_tham,
         can_man=q_can_man,
         dai_tt=item.dai_tt if item else None,
-        mat=item.mat if item else None,         mat_dl=item.mat_dl if item else None,
-        song_1=item.song_1 if item else None,   song_1_dl=item.song_1_dl if item else None,
-        mat_1=item.mat_1 if item else None,     mat_1_dl=item.mat_1_dl if item else None,
-        song_2=item.song_2 if item else None,   song_2_dl=item.song_2_dl if item else None,
-        mat_2=item.mat_2 if item else None,     mat_2_dl=item.mat_2_dl if item else None,
-        song_3=item.song_3 if item else None,   song_3_dl=item.song_3_dl if item else None,
-        mat_3=item.mat_3 if item else None,     mat_3_dl=item.mat_3_dl if item else None,
+        mat=item.mat if item else None, mat_dl=item.mat_dl if item else None,
+        song_1=item.song_1 if item else None, song_1_dl=item.song_1_dl if item else None,
+        mat_1=item.mat_1 if item else None, mat_1_dl=item.mat_1_dl if item else None,
+        song_2=item.song_2 if item else None, song_2_dl=item.song_2_dl if item else None,
+        mat_2=item.mat_2 if item else None, mat_2_dl=item.mat_2_dl if item else None,
+        song_3=item.song_3 if item else None, song_3_dl=item.song_3_dl if item else None,
+        mat_3=item.mat_3 if item else None, mat_3_dl=item.mat_3_dl if item else None,
     )
 
 
@@ -877,4 +894,3 @@ def toggle_mua_phoi_ngoai(
     line.mua_phoi_ngoai = bool(body.get("mua_phoi_ngoai", False))
     db.commit()
     return {"id": line.id, "mua_phoi_ngoai": line.mua_phoi_ngoai}
-

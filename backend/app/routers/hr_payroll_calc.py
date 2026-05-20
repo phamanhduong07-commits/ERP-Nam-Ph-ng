@@ -1,26 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import date, datetime
+from datetime import date
 import calendar
 from app.database import get_db
 from app.models.hr import Employee, PayrollRun, AttendanceLog, RewardDiscipline, PayrollHoliday
-from app.models.warehouse_doc import DeliveryOrder
-from app.models.master import DonGiaVanChuyen
 from app.services.hr_service import PayrollService
 from app.routers.logistics_hr import calculate_trip_salary_allocations
 from decimal import Decimal
 
 router = APIRouter(prefix="/api/hr/payroll", tags=["HR Payroll Calculation"])
 
+
 def _d(value) -> Decimal:
     return Decimal(str(value or 0))
+
 
 def _latest_contract(emp: Employee):
     contracts = [c for c in emp.contracts if c.trang_thai == "hieu_luc"]
     if not contracts:
         contracts = list(emp.contracts)
     return sorted(contracts, key=lambda x: x.ngay_hieu_luc or x.ngay_ky, reverse=True)[0] if contracts else None
+
 
 def _allowance_total(contract) -> Decimal:
     if not contract:
@@ -35,6 +35,7 @@ def _allowance_total(contract) -> Decimal:
     legacy = _d(contract.phu_cap)
     return detailed if detailed > 0 else legacy
 
+
 def _attendance_bucket() -> dict[str, Decimal]:
     return {
         "cong": Decimal("0"),
@@ -44,6 +45,7 @@ def _attendance_bucket() -> dict[str, Decimal]:
         "ot_sunday_extra": Decimal("0"),
         "ot_holiday": Decimal("0"),
     }
+
 
 def _classify_attendance(row: AttendanceLog, holidays: set[date]) -> tuple[str, Decimal, Decimal]:
     work_hours = _d(row.tong_gio_thuc)
@@ -61,6 +63,7 @@ def _classify_attendance(row: AttendanceLog, holidays: set[date]) -> tuple[str, 
         return "ot_sunday", work_days, work_hours
     return "ot_weekday", work_days, work_hours
 
+
 @router.get("/calculate-production")
 def calculate_production_salary(
     from_date: date = Query(...),
@@ -68,6 +71,7 @@ def calculate_production_salary(
     db: Session = Depends(get_db),
 ):
     return PayrollService.calculate_production_salary(db, from_date, to_date)
+
 
 @router.post("/generate")
 def generate_payroll(
@@ -86,7 +90,7 @@ def generate_payroll(
     ).delete()
 
     employees = db.query(Employee).filter(Employee.trang_thai == "dang_lam").all()
-    
+
     first_day = date(nam, thang, 1)
     last_day = date(nam, thang, calendar.monthrange(nam, thang)[1])
     production_rows = PayrollService.calculate_production_salary(db, first_day, last_day)
@@ -104,7 +108,7 @@ def generate_payroll(
         for item in db.query(PayrollHoliday).filter(
             PayrollHoliday.ngay >= first_day,
             PayrollHoliday.ngay <= last_day,
-            PayrollHoliday.trang_thai == True,
+            PayrollHoliday.trang_thai.is_(True),
         ).all()
     }
     attendance_rows = db.query(AttendanceLog).filter(
@@ -123,11 +127,11 @@ def generate_payroll(
         # 1. Lương cơ bản (từ hợp đồng mới nhất)
         contract = _latest_contract(emp)
         base_salary = _d(contract.luong_co_ban) if contract else Decimal("0")
-        
+
         # 2. Lương sản phẩm (Logic Điều 6 - Kết nối với sản lượng sản xuất)
         # Tạm thời để placeholder, sẽ link với module sản xuất sau
-        product_salary = product_salary_by_emp.get(emp.id, Decimal("0")) 
-        
+        product_salary = product_salary_by_emp.get(emp.id, Decimal("0"))
+
         # 3. Lương chuyến (Cho tài xế)
         trip_salary = trip_salary_by_emp.get(emp.id, Decimal("0"))
 
@@ -138,7 +142,7 @@ def generate_payroll(
             RewardDiscipline.nam_ap_dung == nam,
             RewardDiscipline.trang_thai == "da_duyet"
         ).all()
-        
+
         tong_thuong = sum((r.so_tien if r.loai == "khen_thuong" else 0) for r in rewards)
         tong_phat = sum((r.so_tien if r.loai == "ky_luat" else 0) for r in rewards)
 
@@ -148,17 +152,18 @@ def generate_payroll(
         luong_co_ban_phu_cap = base_salary + phu_cap
         ngay_cong_nguyen_luong = attendance["cong"]
         gio_cong_thuc_te = attendance["gio"]
-        luong_theo_ngay_cong = (base_salary / Decimal("26")) * ngay_cong_nguyen_luong if base_salary > 0 else Decimal("0")
+        luong_theo_ngay_cong = (base_salary / Decimal("26")) * \
+            ngay_cong_nguyen_luong if base_salary > 0 else Decimal("0")
         hourly_rate = (base_salary / Decimal("26") / Decimal("8")) if base_salary > 0 else Decimal("0")
         ot_tien_ngay_thuong = hourly_rate * Decimal("1.5") * attendance["ot_weekday"]
         ot_tien_chu_nhat = hourly_rate * Decimal("2.0") * attendance["ot_sunday"]
         ot_tien_chu_nhat_tang_ca = hourly_rate * Decimal("2.5") * attendance["ot_sunday_extra"]
         ot_tien_ngay_le = hourly_rate * Decimal("3.0") * attendance["ot_holiday"]
         ot_salary = ot_tien_ngay_thuong + ot_tien_chu_nhat + ot_tien_chu_nhat_tang_ca + ot_tien_ngay_le
-        
+
         # Giả định bảo hiểm 10.5% lương cơ bản
         bao_hiem = base_salary * Decimal("0.105")
-        
+
         tien_chuyen_hqcv_thanh_tich = trip_salary + tong_thuong
         thu_nhap_chung = tien_chuyen_hqcv_thanh_tich + ot_salary + phu_cap
         luong_sl = product_salary + thu_nhap_chung
@@ -204,6 +209,7 @@ def generate_payroll(
     db.commit()
     return {"status": "success", "message": f"Đã khởi tạo bảng lương tháng {thang}/{nam}"}
 
+
 @router.get("/summary")
 def get_payroll_summary(
     thang: int,
@@ -214,7 +220,7 @@ def get_payroll_summary(
         PayrollRun.thang == thang,
         PayrollRun.nam == nam
     ).all()
-    
+
     result = []
     for r in runs:
         ot_total = (

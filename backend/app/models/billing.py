@@ -44,7 +44,7 @@ class SalesInvoice(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     phap_nhan = relationship("PhapNhan")
-    
+
     @property
     def phap_nhan_ten(self) -> str | None:
         return self.phap_nhan.ten_phap_nhan if self.phap_nhan else None
@@ -70,7 +70,8 @@ class InvoiceAdjustmentLog(Base):
     __tablename__ = "invoice_adjustment_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    invoice_id: Mapped[int] = mapped_column(Integer, ForeignKey("sales_invoices.id", ondelete="CASCADE"), nullable=False)
+    invoice_id: Mapped[int] = mapped_column(Integer, ForeignKey(
+        "sales_invoices.id", ondelete="CASCADE"), nullable=False)
     adjusted_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     adjusted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     loai: Mapped[str] = mapped_column(String(30), nullable=False)

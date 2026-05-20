@@ -9,6 +9,7 @@ from app.models.master import Supplier, PaperMaterial, OtherMaterial
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.import_log import ImportLog
 
+
 async def import_purchase_orders_excel(
     db: Session,
     file: UploadFile,
@@ -24,7 +25,7 @@ async def import_purchase_orders_excel(
         raise HTTPException(status_code=400, detail="File khong co du lieu")
 
     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-    
+
     required_cols = ["so_po", "ngay_po", "ma_ncc", "ma_vt", "so_luong", "don_gia"]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
@@ -46,7 +47,7 @@ async def import_purchase_orders_excel(
             if not supplier:
                 errors.append(f"Dong {row_num}: Nha cung cap '{ma_ncc}' khong ton tai")
                 continue
-            
+
             orders_data[so_po] = {
                 "ngay_po": pd.to_datetime(row["ngay_po"]).date() if not pd.isna(row["ngay_po"]) else None,
                 "supplier_id": supplier.id,
@@ -59,7 +60,7 @@ async def import_purchase_orders_excel(
         other = None
         if not paper:
             other = db.query(OtherMaterial).filter(OtherMaterial.ma_vt == ma_vt).first()
-        
+
         if not paper and not other:
             errors.append(f"Dong {row_num}: Vat tu '{ma_vt}' khong ton tai")
             continue
@@ -68,10 +69,10 @@ async def import_purchase_orders_excel(
             orders_data[so_po]["items"].append({
                 "paper_material_id": paper.id if paper else None,
                 "other_material_id": other.id if other else None,
-                "ten_hang": str(row.get("ten_hang", "")) or (paper.ten if paper else other.ten), # type: ignore
+                "ten_hang": str(row.get("ten_hang", "")) or (paper.ten if paper else other.ten),  # type: ignore
                 "so_luong": Decimal(str(row["so_luong"])),
                 "don_gia": Decimal(str(row["don_gia"])),
-                "dvt": str(row.get("dvt", "")) or (paper.dvt if paper else other.dvt), # type: ignore
+                "dvt": str(row.get("dvt", "")) or (paper.dvt if paper else other.dvt),  # type: ignore
                 "thanh_tien": Decimal(str(row["so_luong"])) * Decimal(str(row["don_gia"])),
                 "ghi_chu": str(row.get("ghi_chu", ""))
             })
@@ -91,19 +92,19 @@ async def import_purchase_orders_excel(
                 order = PurchaseOrder(so_po=so_po)
                 db.add(order)
                 created += 1
-            
+
             order.ngay_po = data["ngay_po"]
             order.supplier_id = data["supplier_id"]
             order.trang_thai = "moi"
-            
+
             tong_tien = 0
             for item_data in data["items"]:
                 item = PurchaseOrderItem(**item_data)
                 order.items.append(item)
                 tong_tien += item_data["thanh_tien"]
-            
+
             order.tong_tien = tong_tien
-        
+
         db.commit()
 
         # Log

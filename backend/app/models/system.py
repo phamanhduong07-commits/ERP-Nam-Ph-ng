@@ -4,31 +4,34 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
+
 class PrintTemplate(Base):
     """Lưu trữ các biểu mẫu in ấn tùy chỉnh (HTML/CSS)"""
     __tablename__ = "print_templates"
 
     id = Column(Integer, primary_key=True)
-    ma_mau = Column(String(50), nullable=False) # ví dụ: 'delivery_order', 'sales_invoice'
-    phap_nhan_id = Column(Integer, nullable=True) # ID của pháp nhân (NULL nếu dùng chung)
+    ma_mau = Column(String(50), nullable=False)  # ví dụ: 'delivery_order', 'sales_invoice'
+    phap_nhan_id = Column(Integer, nullable=True)  # ID của pháp nhân (NULL nếu dùng chung)
     ten_mau = Column(String(100), nullable=False)
     html_content = Column(Text, nullable=False)
     css_content = Column(Text)
-    variables_meta = Column(JSON) # Lưu danh sách các biến khả dụng: { "so_phieu": "Số phiếu", "ngay": "Ngày" }
+    variables_meta = Column(JSON)  # Lưu danh sách các biến khả dụng: { "so_phieu": "Số phiếu", "ngay": "Ngày" }
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class ExcelTemplate(Base):
     """Lưu trữ cấu hình cột cho việc xuất file Excel"""
     __tablename__ = "excel_templates"
 
     id = Column(Integer, primary_key=True)
-    ma_mau = Column(String(50), nullable=False) # ví dụ: 'delivery_order', 'inventory'
-    phap_nhan_id = Column(Integer, nullable=True) # ID của pháp nhân (NULL nếu dùng chung)
+    ma_mau = Column(String(50), nullable=False)  # ví dụ: 'delivery_order', 'inventory'
+    phap_nhan_id = Column(Integer, nullable=True)  # ID của pháp nhân (NULL nếu dùng chung)
     ten_mau = Column(String(100), nullable=False)
-    column_config = Column(JSON, nullable=False) # [{ "key": "field", "label": "Header", "width": 15 }]
+    column_config = Column(JSON, nullable=False)  # [{ "key": "field", "label": "Header", "width": 15 }]
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class SystemSetting(Base):
     """Cấu hình hệ thống chung"""

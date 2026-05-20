@@ -63,13 +63,20 @@ class ProductionPlanLineResponse(BaseModel):
     # Thông số kỹ thuật từ ProductionOrderItem
     dai_tt: Decimal | None = None
     loai_lan: str | None = None
-    mat: str | None = None;     mat_dl: Decimal | None = None
-    song_1: str | None = None;  song_1_dl: Decimal | None = None
-    mat_1: str | None = None;   mat_1_dl: Decimal | None = None
-    song_2: str | None = None;  song_2_dl: Decimal | None = None
-    mat_2: str | None = None;   mat_2_dl: Decimal | None = None
-    song_3: str | None = None;  song_3_dl: Decimal | None = None
-    mat_3: str | None = None;   mat_3_dl: Decimal | None = None
+    mat: str | None = None
+    mat_dl: Decimal | None = None
+    song_1: str | None = None
+    song_1_dl: Decimal | None = None
+    mat_1: str | None = None
+    mat_1_dl: Decimal | None = None
+    song_2: str | None = None
+    song_2_dl: Decimal | None = None
+    mat_2: str | None = None
+    mat_2_dl: Decimal | None = None
+    song_3: str | None = None
+    song_3_dl: Decimal | None = None
+    mat_3: str | None = None
+    mat_3_dl: Decimal | None = None
     loai_in: str | None = None
     so_mau: int | None = None
     c_tham: str | None = None
@@ -192,13 +199,20 @@ class QueueLineResponse(BaseModel):
     can_man: str | None = None
     dai_tt: Decimal | None
     # Kết cấu giấy
-    mat: str | None;     mat_dl: Decimal | None
-    song_1: str | None;  song_1_dl: Decimal | None
-    mat_1: str | None;   mat_1_dl: Decimal | None
-    song_2: str | None;  song_2_dl: Decimal | None
-    mat_2: str | None;   mat_2_dl: Decimal | None
-    song_3: str | None;  song_3_dl: Decimal | None
-    mat_3: str | None;   mat_3_dl: Decimal | None
+    mat: str | None
+    mat_dl: Decimal | None
+    song_1: str | None
+    song_1_dl: Decimal | None
+    mat_1: str | None
+    mat_1_dl: Decimal | None
+    song_2: str | None
+    song_2_dl: Decimal | None
+    mat_2: str | None
+    mat_2_dl: Decimal | None
+    song_3: str | None
+    song_3_dl: Decimal | None
+    mat_3: str | None
+    mat_3_dl: Decimal | None
 
     class Config:
         from_attributes = True

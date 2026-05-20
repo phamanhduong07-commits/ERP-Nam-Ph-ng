@@ -1,4 +1,3 @@
-from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -62,7 +61,7 @@ def list_cau_truc(
 ):
     q = db.query(CauTrucThongDung)
     if active_only:
-        q = q.filter(CauTrucThongDung.trang_thai == True)
+        q = q.filter(CauTrucThongDung.trang_thai.is_(True))
     if so_lop:
         q = q.filter(CauTrucThongDung.so_lop == so_lop)
     return q.order_by(CauTrucThongDung.thu_tu, CauTrucThongDung.ten_cau_truc).all()
@@ -88,7 +87,7 @@ def update_cau_truc(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    obj = db.query(CauTrucThongDung).get(id)
+    obj = db.get(CauTrucThongDung, id)
     if not obj:
         raise HTTPException(404, "Không tìm thấy kết cấu")
     for k, v in body.model_dump().items():
@@ -150,7 +149,7 @@ def delete_cau_truc(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    obj = db.query(CauTrucThongDung).get(id)
+    obj = db.get(CauTrucThongDung, id)
     if not obj:
         raise HTTPException(404, "Không tìm thấy kết cấu")
     db.delete(obj)

@@ -11,9 +11,7 @@ Endpoint:
 import os
 import uuid
 import mimetypes
-from datetime import datetime
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -41,6 +39,7 @@ CREATE TABLE IF NOT EXISTS erp_media (
 );
 CREATE INDEX IF NOT EXISTS idx_erp_media_module_record ON erp_media(module, record_id);
 """
+
 
 def ensure_table(db: Session):
     try:

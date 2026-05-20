@@ -20,10 +20,10 @@ def get_history(session_id: str) -> list[dict]:
             text("SELECT history_json FROM agent_sessions WHERE session_id = :sid"),
             {"sid": session_id}
         ).fetchone()
-        
+
         if not result:
             return []
-            
+
         _touch(session_id)
         # SQLAlchemy returns JSONB as a dict/list directly
         history = result[0]
@@ -36,10 +36,10 @@ def add_turn(session_id: str, user_msg: str, assistant_msg: str, user_id: int | 
     history = get_history(session_id)
     history.append({"role": "user", "content": user_msg})
     history.append({"role": "assistant", "content": assistant_msg})
-    
+
     if len(history) > _MAX_TURNS * 2:
         history = history[-(_MAX_TURNS * 2):]
-        
+
     with SessionLocal() as db:
         # PostgreSQL ON CONFLICT (session_id) DO UPDATE
         db.execute(
@@ -73,17 +73,17 @@ def list_sessions(user_id: int) -> list[dict]:
     with SessionLocal() as db:
         rows = db.execute(
             text("""
-                SELECT session_id, last_active 
-                FROM agent_sessions 
-                WHERE user_id = :uid 
-                ORDER BY last_active DESC 
+                SELECT session_id, last_active
+                FROM agent_sessions
+                WHERE user_id = :uid
+                ORDER BY last_active DESC
                 LIMIT 20
             """),
             {"uid": user_id}
         ).fetchall()
-        
+
         return [
-            {"session_id": r[0], "last_active": r[1].timestamp() if r[1] else time.time()} 
+            {"session_id": r[0], "last_active": r[1].timestamp() if r[1] else time.time()}
             for r in rows
         ]
 

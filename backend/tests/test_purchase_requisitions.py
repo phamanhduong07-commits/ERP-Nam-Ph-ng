@@ -4,8 +4,6 @@ Covers: YMH (create, list, get, approve, cancel).
 """
 from datetime import date
 
-from app.models.purchase_requisition import PurchaseRequisition
-
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -86,3 +84,21 @@ def test_cancel_ymh_changes_status(client, db_session):
     cancel_res = client.post(f"/api/purchase-requisitions/{ymh_id}/huy")
     assert cancel_res.status_code == 200, cancel_res.text
     assert cancel_res.json()["ok"] is True
+
+
+def test_ymh_has_items_in_response(client, db_session):
+    """YMH tạo với 2 dòng hàng → response chứa đủ 2 items có ten_hang và so_luong."""
+    payload = {
+        "ngay_yeu_cau": date.today().isoformat(),
+        "items": [
+            {"ten_hang": "Hồ dán", "so_luong": 50, "dvt": "Kg"},
+            {"ten_hang": "Băng keo", "so_luong": 200, "dvt": "Cuộn"},
+        ],
+    }
+    res = client.post("/api/purchase-requisitions", json=payload)
+    assert res.status_code == 201, res.text
+    data = res.json()
+    assert len(data["items"]) == 2
+    names = {it["ten_hang"] for it in data["items"]}
+    assert "Hồ dán" in names
+    assert "Băng keo" in names

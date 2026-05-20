@@ -1,6 +1,6 @@
 # Plan: Hoàn thiện & Mở rộng ERP Nam Phương
 Date: 2026-05-19
-Status: PHẦN 2 COMPLETE (Sprint 6-10 DONE)
+Status: PHẦN 3 PENDING_APPROVAL (Sprint A-C — hoàn thiện kỹ thuật)
 
 ---
 
@@ -429,3 +429,215 @@ Tuần 15-16│ Sprint 10│ Module MRP Lite
 | MRP chậm khi BOM nhiều cấp | Trung bình | Giới hạn depth BOM = 3, không đệ quy vô hạn |
 | Scope creep (muốn thêm ảnh QC, barcode...) | Cao | Chỉ implement spec trong plan — ghi "Phase 2" cho yêu cầu thêm |
 | TSCĐ: chạy khấu hao 2 lần cùng tháng | Cao | Unique constraint (asset_id, thang, nam) + HTTP 409 |
+
+---
+
+## PHẦN 3 — DỌN WARNINGS (Sprint W1–W4)
+
+> Baseline: 258 tests xanh. Mục tiêu: 0 warnings khi chạy pytest.
+
+---
+
+### Sprint W1 — Circular FK `phan_xuong ↔ phap_nhan`
+
+**Vấn đề:** `PhanXuong.phap_nhan_id → phap_nhan.id` và `PhapNhan.phoi_phan_xuong_id → phan_xuong.id` tạo vòng lặp FK. SQLAlchemy không thể sort bảng khi `CREATE TABLE`, cảnh báo sẽ thành ERROR trong tương lai.
+
+**Fix:** Thêm `use_alter=True, name="fk_phap_nhan_phan_xuong"` vào FK của `PhapNhan.phoi_phan_xuong_id` (phá vòng tại điểm ít quan trọng hơn).
+
+- [ ] **W1.1** — File: `backend/app/models/master.py` dòng 437-438
+  ```python
+  # Trước:
+  ForeignKey("phan_xuong.id", nullable=True)
+  # Sau:
+  ForeignKey("phan_xuong.id", use_alter=True, name="fk_phap_nhan_phan_xuong")
+  ```
+- [ ] **W1.2** — Chạy pytest, xác nhận SAWarning biến mất
+
+---
+
+### Sprint W2 — `datetime.utcnow()` → `datetime.now(timezone.utc)`
+
+**Vấn đề:** `datetime.utcnow()` deprecated từ Python 3.12, sẽ bị xóa. 42 chỗ trên 14 files.
+
+**Files cần sửa (theo số lần nhiều nhất):**
+
+- [ ] **W2.1** — `backend/app/services/accounting_service.py` (7 chỗ: dòng 129,510,535,816,878,902,2042)
+- [ ] **W2.2** — `backend/app/routers/warehouse.py` (5 chỗ: dòng 823,1572,2331,2408,2888,2901)
+- [ ] **W2.3** — `backend/app/services/billing_service.py` (5 chỗ: dòng 402,452,508,541,575,589)
+- [ ] **W2.4** — `backend/app/services/inventory_service.py` (2 chỗ: dòng 77,88)
+- [ ] **W2.5** — `backend/app/routers/purchase_requisitions.py` (4 chỗ: dòng 56,74,332,350)
+- [ ] **W2.6** — Các file còn lại (1 chỗ mỗi file):
+  `deps.py`, `auth.py`, `ccdc.py`, `hr.py`, `hr_workflow.py`,
+  `purchase_orders.py`, `purchase_returns.py`, `quality_control.py`,
+  `quotes.py`, `sales_orders.py`, `sales_returns.py`,
+  `agent/tool_executor.py`
+
+**Pattern sửa:**
+```python
+# Thêm vào import:
+from datetime import timezone
+# Thay thế:
+datetime.utcnow()  →  datetime.now(timezone.utc)
+```
+
+---
+
+### Sprint W3 — `Query.get()` → `db.get(Model, id)`
+
+**Vấn đề:** `db.query(Model).get(id)` là legacy API SQLAlchemy 1.x. 31 chỗ trên 4 files.
+
+- [ ] **W3.1** — `backend/app/services/accounting_service.py` (22 chỗ)
+  ```python
+  # Pattern thường:
+  self.db.query(Model).get(id)  →  self.db.get(Model, id)
+  # Pattern với options (joinedload):
+  self.db.query(PurchaseOrder).options(joinedload(...)).get(po_id)
+  →  self.db.query(PurchaseOrder).options(joinedload(...)).filter_by(id=po_id).first()
+  ```
+- [ ] **W3.2** — `backend/app/services/billing_service.py` (6 chỗ)
+- [ ] **W3.3** — `backend/app/routers/billing.py` (1 chỗ: dòng 207)
+- [ ] **W3.4** — `backend/app/routers/cau_truc.py` (2 chỗ: dòng 90,152)
+
+---
+
+### Sprint W4 — Pydantic `class Config:` → `model_config = ConfigDict(...)`
+
+**Vấn đề:** Pydantic V2 deprecates `class Config:`. 55 chỗ trên ~20 files.
+
+**Pattern sửa:**
+```python
+# Thêm vào import:
+from pydantic import ConfigDict
+# Thay thế:
+class Config:
+    from_attributes = True   →   model_config = ConfigDict(from_attributes=True)
+
+class Config:
+    orm_mode = True          →   model_config = ConfigDict(from_attributes=True)
+```
+
+- [ ] **W4.1** — `backend/app/schemas/` (14 files: auth, bom, crm, fixed_asset, maintenance, master, production, production_plan, quality, quotes, sales)
+- [ ] **W4.2** — `backend/app/routers/` inline schemas (11 files: addon_rates, cau_truc, don_gia_van_chuyen, don_vi_tinh, indirect_costs, lo_xe, material_groups, other_materials, paper_materials, phuong_xa, suppliers, tai_xe, tinh_thanh, users, vi_tri, warehouses, xe)
+
+---
+
+### Done Criteria — PHẦN 3 Warnings
+
+- [ ] `pytest backend/tests/ -v` → 258 pass, **0 warnings** loại SAWarning/DeprecationWarning/LegacyAPIWarning
+- [ ] `flake8 backend/app --max-line-length=120` → 0 errors
+
+---
+
+## PHẦN 4 — HOÀN THIỆN KỸ THUẬT (Sprint A–C)
+
+> Baseline: 258 tests xanh, flake8 sạch, CI hoạt động, 5 module mới live.
+> Mục tiêu: bịt 3 lỗ hổng còn lại trước khi đánh dấu toàn bộ plan COMPLETE.
+
+---
+
+### Sprint A — Auth Guards (Tuần 1)
+
+**Phát hiện:** 6 router files (35 endpoints tổng) không có `Depends(get_current_user)`.
+Rủi ro: bất kỳ ai có network access đều gọi được billing, payroll, permissions mà không cần đăng nhập.
+
+- [ ] **Bước A.1** — `billing.py` — 14 endpoints
+  - File: `backend/app/routers/billing.py`
+  - Thêm `current_user = Depends(get_current_user)` vào tất cả 14 endpoint functions
+  - Một số endpoint như `update_invoice`, `cancel_invoice` → dùng `Depends(get_admin_user)` (chỉ kế toán/admin sửa)
+  - **⚠️ BẮT BUỘC gọi security-reviewer sau bước này**
+
+- [ ] **Bước A.2** — `hr_payroll_calc.py` — 3 endpoints
+  - File: `backend/app/routers/hr_payroll_calc.py`
+  - `calculate-production` → `get_current_user` (xem lương là quyền bình thường)
+  - `generate` → `get_admin_user` (chỉ kế toán/admin chạy bảng lương)
+  - `summary` → `get_current_user`
+  - **⚠️ BẮT BUỘC gọi security-reviewer sau bước này**
+
+- [ ] **Bước A.3** — `hr_reward.py` — 3 endpoints
+  - File: `backend/app/routers/hr_reward.py`
+  - `list_rewards` → `get_current_user`
+  - `create_reward`, `update_reward_status` → `get_admin_user`
+
+- [ ] **Bước A.4** — `hr_workflow.py` — 3 endpoints
+  - File: `backend/app/routers/hr_workflow.py`
+  - `list_leave_requests`, `create_leave_request` → `get_current_user`
+  - `approve_leave_request` → `get_admin_user`
+
+- [ ] **Bước A.5** — `logistics_hr.py` — 6 endpoints
+  - File: `backend/app/routers/logistics_hr.py`
+  - Tất cả → `get_current_user` (đọc dữ liệu nội bộ)
+  - Trừ `trip-salaries/summary` → `get_admin_user` (dữ liệu lương tổng hợp)
+
+- [ ] **Bước A.6** — `permissions.py` — 6 endpoints
+  - File: `backend/app/routers/permissions.py`
+  - Tất cả → `get_admin_user` (quản lý quyền là admin-only)
+
+- [ ] **Bước A.7** — Verify sau khi thêm auth
+  - Chạy `pytest backend/tests/ --tb=short -q` — phải vẫn 258+ pass
+  - Curl thủ công 1 endpoint không có token → HTTP 401
+
+---
+
+### Sprint B — CRM Credit Limit Frontend (Tuần 1)
+
+**Phát hiện:** Backend đã có `/api/crm/credit-limits/{customer_id}` và `/api/crm/credit-alerts`
+nhưng frontend chỉ có `CustomerInteractionPage.tsx` — thiếu trang Credit Alerts cho sales manager.
+
+- [ ] **Bước B.1** — Tạo `CreditAlertPage.tsx`
+  - File: `frontend/src/pages/crm/CreditAlertPage.tsx`
+  - Gọi `GET /api/crm/credit-alerts` → bảng danh sách KH gần/vượt hạn mức
+  - Cột: Tên KH, Hạn mức, Dư nợ hiện tại, % đã dùng, Badge đỏ/vàng
+  - Pattern: copy từ `CustomerInteractionPage.tsx` + Ant Design Table + Tag màu
+
+- [ ] **Bước B.2** — Mount route + sidebar
+  - File: `frontend/src/App.tsx`
+  - Thêm: `<Route path="crm/credit-alerts" element={<CreditAlertPage />} />`
+  - File: `frontend/src/components/AppLayout.tsx`
+  - Thêm menu item dưới nhóm CRM: `Cảnh báo hạn mức` → `/crm/credit-alerts`
+
+---
+
+### Sprint C — N+1 Queries + Đóng Plan (Tuần 2)
+
+**Phát hiện:** Memory ghi nhận N+1 queries trên các router trả list lớn.
+Tác động: production_orders, sales_orders, warehouse trả chậm khi có nhiều dữ liệu.
+
+- [ ] **Bước C.1** — Fix N+1 trên `production_orders.py`
+  - File: `backend/app/routers/production_orders.py`
+  - Thêm `joinedload` cho: `items`, `phan_xuong`, `product`
+  - Pattern: `db.query(ProductionOrder).options(joinedload(ProductionOrder.items)).all()`
+
+- [ ] **Bước C.2** — Fix N+1 trên `sales_orders.py`
+  - File: `backend/app/routers/sales_orders.py`
+  - Thêm `joinedload` cho: `items`, `customer`
+
+- [ ] **Bước C.3** — Fix N+1 trên `warehouse.py` (inventory balance list)
+  - File: `backend/app/routers/warehouse.py`
+  - Thêm `joinedload` cho: `product`, `warehouse` trên endpoint list tồn kho
+
+- [ ] **Bước C.4** — Chạy full test suite lần cuối + update plan.md
+  - `pytest backend/tests/ -v` → phải xanh hoàn toàn
+  - `flake8 backend/app --max-line-length=120` → 0 errors
+  - Tick toàn bộ Done Criteria, đổi `Status: COMPLETE`
+
+---
+
+### Done Criteria — PHẦN 3
+
+- [ ] 6 router files có `Depends(get_current_user)` hoặc `Depends(get_admin_user)` đầy đủ
+- [ ] Endpoint không có token → HTTP 401 (test bằng curl)
+- [ ] `CreditAlertPage.tsx` hoạt động, có link trong sidebar CRM
+- [ ] N+1 fix trên 3 routers — query count giảm (verify bằng `echo_sql=True`)
+- [ ] `pytest backend/tests/ -v` → xanh, 0 fail, 0 error
+- [ ] `flake8 backend/app --max-line-length=120` → 0 errors
+- [ ] `plan.md` Status → COMPLETE
+
+---
+
+### Timeline Sprint A–C
+
+```
+Tuần 1  │ Sprint A │ Auth guards 6 files + security review
+Tuần 1  │ Sprint B │ CRM CreditAlertPage + route + sidebar
+Tuần 2  │ Sprint C │ N+1 fix 3 routers + final test run + đóng plan
+```

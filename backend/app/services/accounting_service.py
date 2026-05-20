@@ -87,7 +87,7 @@ class AccountingService:
     def create_cash_receipt(self, data: CashReceiptCreate, user_id: int) -> CashReceipt:
         # Validate số tiền không vượt con_lai
         if data.sales_invoice_id:
-            invoice = self.db.query(SalesInvoice).get(data.sales_invoice_id)
+            invoice = self.db.get(SalesInvoice, data.sales_invoice_id)
             if not invoice:
                 raise HTTPException(404, "Không tìm thấy hóa đơn")
             if invoice.trang_thai == "huy":
@@ -118,7 +118,7 @@ class AccountingService:
 
         # Cập nhật hóa đơn
         if data.sales_invoice_id:
-            invoice = self.db.query(SalesInvoice).get(data.sales_invoice_id)
+            invoice = self.db.get(SalesInvoice, data.sales_invoice_id)
             new_da_tt = float(invoice.da_thanh_toan) + float(data.so_tien)
             new_remaining = float(invoice.tong_cong) - new_da_tt
             invoice.da_thanh_toan = Decimal(str(round(new_da_tt, 2)))
@@ -130,7 +130,7 @@ class AccountingService:
 
             # Sync DeliveryOrder.trang_thai_cong_no
             if invoice.delivery_id:
-                delivery = self.db.query(DeliveryOrder).get(invoice.delivery_id)
+                delivery = self.db.get(DeliveryOrder, invoice.delivery_id)
                 if delivery:
                     if invoice.trang_thai == "da_tt_du":
                         delivery.trang_thai_cong_no = "da_thu_du"
@@ -503,7 +503,7 @@ class AccountingService:
         )
 
     def approve_receipt(self, receipt_id: int, user_id: int) -> CashReceipt:
-        receipt = self.db.query(CashReceipt).get(receipt_id)
+        receipt = self.db.get(CashReceipt, receipt_id)
         if not receipt:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
         if receipt.trang_thai != "cho_duyet":
@@ -517,7 +517,7 @@ class AccountingService:
         return receipt
 
     def cancel_receipt(self, receipt_id: int) -> CashReceipt:
-        receipt = self.db.query(CashReceipt).get(receipt_id)
+        receipt = self.db.get(CashReceipt, receipt_id)
         if not receipt:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
         if receipt.trang_thai == "huy":
@@ -530,14 +530,14 @@ class AccountingService:
 
         # Hoàn lại da_thanh_toan trên HĐ
         if receipt.sales_invoice_id:
-            invoice = self.db.query(SalesInvoice).get(receipt.sales_invoice_id)
+            invoice = self.db.get(SalesInvoice, receipt.sales_invoice_id)
             if invoice:
                 new_da_tt = max(Decimal("0"), invoice.da_thanh_toan - receipt.so_tien)
                 invoice.da_thanh_toan = new_da_tt
                 invoice.trang_thai = "da_phat_hanh" if new_da_tt == 0 else "da_tt_mot_phan"
                 invoice.updated_at = datetime.now(timezone.utc)
                 if invoice.delivery_id:
-                    delivery = self.db.query(DeliveryOrder).get(invoice.delivery_id)
+                    delivery = self.db.get(DeliveryOrder, invoice.delivery_id)
                     if delivery:
                         delivery.trang_thai_cong_no = (
                             "chua_thu" if new_da_tt == 0 else "da_thu_mot_phan"
@@ -596,7 +596,7 @@ class AccountingService:
     # HÓA ĐƠN MUA HÀNG
     # ─────────────────────────────────────────────
     def create_purchase_invoice(self, data: PurchaseInvoiceCreate, user_id: int) -> PurchaseInvoice:
-        supplier = self.db.query(Supplier).get(data.supplier_id)
+        supplier = self.db.get(Supplier, data.supplier_id)
         if not supplier:
             raise HTTPException(404, "Không tìm thấy nhà cung cấp")
 
@@ -781,7 +781,7 @@ class AccountingService:
     # ─────────────────────────────────────────────
     def _apply_cash_payment_to_invoice_and_debt(self, payment: CashPayment) -> None:
         if payment.purchase_invoice_id:
-            inv = self.db.query(PurchaseInvoice).get(payment.purchase_invoice_id)
+            inv = self.db.get(PurchaseInvoice, payment.purchase_invoice_id)
             if not inv:
                 raise HTTPException(404, "Không tìm thấy hóa đơn mua")
             remaining = inv.tong_thanh_toan - inv.da_thanh_toan
@@ -808,7 +808,7 @@ class AccountingService:
     def create_cash_payment(self, data: CashPaymentCreate, user_id: int) -> CashPayment:
         inv = None
         if data.purchase_invoice_id:
-            inv = self.db.query(PurchaseInvoice).get(data.purchase_invoice_id)
+            inv = self.db.get(PurchaseInvoice, data.purchase_invoice_id)
             if not inv:
                 raise HTTPException(404, "Không tìm thấy hóa đơn mua")
             if inv.supplier_id != data.supplier_id:
@@ -842,7 +842,7 @@ class AccountingService:
         return payment
 
     def approve_payment(self, payment_id: int, user_id: int) -> CashPayment:
-        p = self.db.query(CashPayment).get(payment_id)
+        p = self.db.get(CashPayment, payment_id)
         if not p:
             raise HTTPException(404, "Không tìm thấy phiếu chi")
         transitions = {"cho_chot": "da_chot", "da_chot": "da_duyet"}
@@ -860,7 +860,7 @@ class AccountingService:
         return p
 
     def cancel_payment(self, payment_id: int) -> CashPayment:
-        p = self.db.query(CashPayment).get(payment_id)
+        p = self.db.get(CashPayment, payment_id)
         if not p:
             raise HTTPException(404, "Không tìm thấy phiếu chi")
         if p.trang_thai == "huy":
@@ -873,7 +873,7 @@ class AccountingService:
             DebtLedgerEntry.chung_tu_id == payment_id,
         ).first()
         if p.purchase_invoice_id:
-            inv = self.db.query(PurchaseInvoice).get(p.purchase_invoice_id)
+            inv = self.db.get(PurchaseInvoice, p.purchase_invoice_id)
             if inv and applied_debt:
                 inv.da_thanh_toan = max(Decimal("0"), inv.da_thanh_toan - p.so_tien)
                 inv.trang_thai = "nhap" if inv.da_thanh_toan == 0 else "da_tt_mot_phan"
@@ -1081,7 +1081,7 @@ class AccountingService:
                 # Tim don gia tu PurchaseOrderItem
                 po_item = None
                 if item.po_item_id:
-                    po_item = self.db.query(PurchaseOrderItem).get(item.po_item_id)
+                    po_item = self.db.get(PurchaseOrderItem, item.po_item_id)
                 
                 unit_price = po_item.don_gia if po_item else Decimal("0")
                 amount = item.so_luong_thuc_te * unit_price
@@ -2033,7 +2033,7 @@ class AccountingService:
             for item in do.items:
                 so_item = None
                 if item.sales_order_item_id:
-                    so_item = self.db.query(SalesOrderItem).get(item.sales_order_item_id)
+                    so_item = self.db.get(SalesOrderItem, item.sales_order_item_id)
                 unit_price = so_item.don_gia if so_item else Decimal("0")
                 amount = item.so_luong * unit_price
                 total_amount += amount
@@ -2565,7 +2565,7 @@ class AccountingService:
         return wp
 
     def approve_workshop_payroll(self, wp_id: int, user_id: int) -> WorkshopPayroll:
-        wp = self.db.query(WorkshopPayroll).get(wp_id)
+        wp = self.db.get(WorkshopPayroll, wp_id)
         if not wp:
             raise HTTPException(404, "Không tìm thấy bảng lương")
         if wp.bo_qua_hach_toan:

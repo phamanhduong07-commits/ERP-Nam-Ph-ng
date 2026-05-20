@@ -1,5 +1,4 @@
 from sqlalchemy import create_engine, text
-import os
 
 DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/namphuong_erp"
 # Note: I should check the actual DB URL in app/config.py

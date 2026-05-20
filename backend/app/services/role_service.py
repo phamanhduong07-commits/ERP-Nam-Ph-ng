@@ -6,7 +6,6 @@ from app.schemas.auth import (
     PermissionCreate, PermissionUpdate, PermissionResponse,
     RolePermissionAssignRequest, PagedResponse
 )
-from datetime import datetime
 
 
 class PermissionService:
@@ -25,7 +24,7 @@ class PermissionService:
         if search:
             like = f"%{search}%"
             q = q.filter(Permission.ma_quyen.ilike(like) | Permission.ten_quyen.ilike(like))
-        
+
         if nhom:
             q = q.filter(Permission.nhom == nhom)
 
@@ -81,7 +80,7 @@ class PermissionService:
     def get_permissions_by_group(self, nhom: str) -> list[PermissionResponse]:
         permissions = self.db.query(Permission).filter(
             Permission.nhom == nhom,
-            Permission.trang_thai == True
+            Permission.trang_thai.is_(True)
         ).all()
         return [PermissionResponse.model_validate(p) for p in permissions]
 
@@ -119,10 +118,10 @@ class RoleService:
         role = self.db.query(Role).options(
             joinedload(Role.role_permissions).joinedload(RolePermission.permission)
         ).filter(Role.id == role_id).first()
-        
+
         if not role:
             raise HTTPException(status_code=404, detail="Không tìm thấy vai trò")
-        
+
         return RoleDetailResponse.model_validate(role)
 
     def create_role(self, data: RoleCreate) -> RoleResponse:
@@ -180,7 +179,7 @@ class RoleService:
 
         self.db.commit()
         self.db.refresh(role)
-        
+
         return self.get_role_by_id(role_id)
 
     def add_permission_to_role(self, role_id: int, permission_id: int) -> RoleDetailResponse:
@@ -222,5 +221,5 @@ class RoleService:
         return self.get_role_by_id(role_id)
 
     def get_all_roles_active(self) -> list[RoleResponse]:
-        roles = self.db.query(Role).filter(Role.trang_thai == True).all()
+        roles = self.db.query(Role).filter(Role.trang_thai.is_(True)).all()
         return [RoleResponse.model_validate(r) for r in roles]

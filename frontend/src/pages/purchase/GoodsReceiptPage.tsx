@@ -54,8 +54,17 @@ function poLoaiKhoAuto(po?: PurchaseOrder | null) {
   return 'GIAY_CUON'
 }
 
-function remainingQty(item: { so_luong: number; so_luong_da_nhan?: number }) {
+function remainingQty(item: { so_luong: number; so_luong_da_nhan?: number; so_cuon?: number | null; so_cuon_da_nhan?: number }) {
+  // Giấy cuộn: theo dõi bằng số cuộn (kg thực chưa biết khi đặt hàng)
+  if (item.so_cuon && item.so_cuon > 0) {
+    return Math.max(0, (item.so_cuon || 0) - (item.so_cuon_da_nhan || 0))
+  }
+  // NVL khác: theo dõi bằng kg/dvt như cũ
   return Math.max(0, Number(item.so_luong || 0) - Number(item.so_luong_da_nhan || 0))
+}
+
+function isPaperRoll(item: { so_cuon?: number | null; paper_material_id?: number | null }) {
+  return !!(item.so_cuon && item.so_cuon > 0 && item.paper_material_id)
 }
 
 export default function GoodsReceiptPage() {
@@ -128,7 +137,8 @@ export default function GoodsReceiptPage() {
       .filter(p => (p.items ?? []).some(it => remainingQty(it) > 0))
   }, [poList])
 
-  const effectiveGRTrangThai = shortcutFilter === 'cho_duyet' ? 'nhap'
+  // cho_duyet gồm cả nhap + nhap_nhanh → không filter server-side, useMemo lọc client-side
+  const effectiveGRTrangThai = shortcutFilter === 'cho_duyet' ? undefined
     : shortcutFilter === 'da_duyet' ? 'da_duyet'
     : shortcutFilter === 'chua_hd' ? 'da_duyet'
       : filterTrangThai
@@ -289,7 +299,9 @@ export default function GoodsReceiptPage() {
             ten_hang: item.ten_hang,
             dvt: item.dvt || 'Kg',
             don_gia: Number(item.don_gia || 0),
-            so_luong: remainingQty(item),
+            // Giấy cuộn: pre-fill số cuộn còn lại, kg để trống (nhập sau khi cân)
+            so_cuon: isPaperRoll(item) ? remainingQty(item) : null,
+            so_luong: isPaperRoll(item) ? 0 : remainingQty(item),
             ket_qua_kiem_tra: 'DAT',
             ghi_chu: null,
           })),
@@ -309,6 +321,7 @@ export default function GoodsReceiptPage() {
       other_material_id: it.other_material_id ?? null,
       ten_hang: it.ten_hang ?? '',
       so_luong: Number(it.so_luong) || 0,
+      so_cuon: it.so_cuon ? Number(it.so_cuon) : null,
       dvt: it.dvt ?? 'Kg',
       don_gia: Number(it.don_gia) || 0,
       ket_qua_kiem_tra: it.ket_qua_kiem_tra ?? 'DAT',
@@ -319,8 +332,15 @@ export default function GoodsReceiptPage() {
       message.warning('Thêm ít nhất 1 dòng hàng')
       return
     }
-    if (items.some((it: any) => !it.ten_hang || it.so_luong <= 0)) {
-      message.warning('Mỗi dòng hàng cần có tên hàng và số lượng lớn hơn 0')
+    if (items.some((it: any) => !it.ten_hang)) {
+      message.warning('Mỗi dòng hàng cần có tên hàng')
+      return
+    }
+    if (items.some((it: any) => {
+      if (it.paper_material_id && it.so_cuon) return it.so_cuon <= 0 || it.so_luong <= 0
+      return it.so_luong <= 0
+    })) {
+      message.warning('Giấy cuộn: nhập cả số cuộn và kg thực cân. NVL khác: nhập số lượng > 0')
       return
     }
     if (!values.warehouse_id && !selectedPO?.phan_xuong_id) {
@@ -794,36 +814,56 @@ export default function GoodsReceiptPage() {
               <>
                 {fields.map(({ key, name }) => (
                   <Card key={key} size="small" style={{ marginBottom: 8, background: '#fafafa' }}>
-                    <Row gutter={8} align="top">
-                      <Col xs={24} md={9}>
-                        <Form.Item name={[name, 'ten_hang']} label="Tên hàng" rules={[{ required: true, message: 'Nhập tên hàng' }]}>
-                          <Input />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={8} md={3}>
-                        <Form.Item name={[name, 'dvt']} label="ĐVT">
-                          <Input placeholder="Kg" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={8} md={4}>
-                        <Form.Item name={[name, 'so_luong']} label="Số lượng" rules={[{ required: true, message: 'Nhập số lượng' }]}>
-                          <InputNumber style={{ width: '100%' }} min={0} />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={8} md={4}>
-                        <Form.Item name={[name, 'don_gia']} label="Đơn giá">
-                          <InputNumber style={{ width: '100%' }} min={0} />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={18} md={3}>
-                        <Form.Item name={[name, 'ket_qua_kiem_tra']} label="Kiểm tra" initialValue="DAT">
-                          <Select options={KET_QUA_OPTIONS} />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={6} md={1} style={{ paddingTop: 30, textAlign: 'right' }}>
-                        <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
-                      </Col>
-                    </Row>
+                    <Form.Item shouldUpdate noStyle>
+                      {({ getFieldValue }) => {
+                        const paperMatId = getFieldValue(['items', name, 'paper_material_id'])
+                        const soCuonField = getFieldValue(['items', name, 'so_cuon'])
+                        const isRoll = !!(paperMatId && soCuonField)
+                        return (
+                          <Row gutter={8} align="top">
+                            <Col xs={24} md={isRoll ? 8 : 9}>
+                              <Form.Item name={[name, 'ten_hang']} label="Tên hàng" rules={[{ required: true, message: 'Nhập tên hàng' }]}>
+                                <Input />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={8} md={isRoll ? 2 : 3}>
+                              <Form.Item name={[name, 'dvt']} label="ĐVT">
+                                <Input placeholder="Kg" />
+                              </Form.Item>
+                            </Col>
+                            {isRoll && (
+                              <Col xs={8} md={3}>
+                                <Form.Item name={[name, 'so_cuon']} label="Số cuộn" rules={[{ required: true, message: 'Nhập số cuộn' }]}>
+                                  <InputNumber style={{ width: '100%' }} min={1} precision={0} placeholder="cuộn" />
+                                </Form.Item>
+                              </Col>
+                            )}
+                            <Col xs={8} md={isRoll ? 3 : 4}>
+                              <Form.Item
+                                name={[name, 'so_luong']}
+                                label={isRoll ? 'Kg thực cân' : 'Số lượng'}
+                                rules={[{ required: true, message: 'Nhập số lượng' }]}
+                              >
+                                <InputNumber style={{ width: '100%' }} min={0} />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={8} md={4}>
+                              <Form.Item name={[name, 'don_gia']} label="Đơn giá (đ/kg)">
+                                <InputNumber style={{ width: '100%' }} min={0} />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={18} md={3}>
+                              <Form.Item name={[name, 'ket_qua_kiem_tra']} label="Kiểm tra" initialValue="DAT">
+                                <Select options={KET_QUA_OPTIONS} />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={6} md={1} style={{ paddingTop: 30, textAlign: 'right' }}>
+                              <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => remove(name)} />
+                            </Col>
+                          </Row>
+                        )
+                      }}
+                    </Form.Item>
                     <Row gutter={8}>
                       <Col span={24}>
                         <Form.Item name={[name, 'ghi_chu']} label="Ghi chú dòng">

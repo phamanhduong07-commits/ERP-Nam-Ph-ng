@@ -13,7 +13,12 @@ from app.services.excel_import_service import (
 router = APIRouter(prefix="/api/tai-xe", tags=["tai-xe"])
 
 TAI_XE_IMPORT_FIELDS = [
-    ImportField("so_dien_thoai", "So dien thoai", required=True, parser=parse_text, help_text="SDT, dung lam khoa upsert"),
+    ImportField(
+        "so_dien_thoai",
+        "So dien thoai",
+        required=True,
+        parser=parse_text,
+        help_text="SDT, dung lam khoa upsert"),
     ImportField("ho_ten", "Ho ten", required=True, parser=parse_text),
     ImportField("so_bang_lai", "So bang lai", parser=parse_text),
     ImportField("employee_id", "Employee ID", parser=parse_int),
@@ -56,7 +61,10 @@ async def import_tai_xe(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return await import_excel(db=db, file=file, model=TaiXe, fields=TAI_XE_IMPORT_FIELDS, key_field="so_dien_thoai", commit=commit)
+    return await import_excel(
+        db=db, file=file, model=TaiXe,
+        fields=TAI_XE_IMPORT_FIELDS, key_field="so_dien_thoai", commit=commit,
+    )
 
 
 @router.get("", response_model=list[TaiXeResponse])

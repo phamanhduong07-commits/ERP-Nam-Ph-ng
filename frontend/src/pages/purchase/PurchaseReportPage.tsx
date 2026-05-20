@@ -50,7 +50,7 @@ function SoChiTietTab() {
 
   const { data: suppliers = [] } = useQuery({
     queryKey: ['suppliers-list'],
-    queryFn: () => client.get<{ id: number; ten_viet_tat: string }[]>('/suppliers').then(r => r.data),
+    queryFn: () => client.get<{ id: number; ten_viet_tat: string }[]>('/suppliers/all').then(r => r.data),
     staleTime: 5 * 60_000,
   })
 
@@ -277,7 +277,7 @@ function DoiChieuTab() {
 
   const { data: suppliers = [] } = useQuery({
     queryKey: ['suppliers-list'],
-    queryFn: () => client.get<{ id: number; ten_viet_tat: string }[]>('/suppliers').then(r => r.data),
+    queryFn: () => client.get<{ id: number; ten_viet_tat: string }[]>('/suppliers/all').then(r => r.data),
     staleTime: 5 * 60_000,
   })
 

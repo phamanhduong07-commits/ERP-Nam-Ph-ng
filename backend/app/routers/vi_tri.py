@@ -51,7 +51,10 @@ async def import_vi_tri(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return await import_excel(db=db, file=file, model=ViTri, fields=VI_TRI_IMPORT_FIELDS, key_field="ma_vi_tri", commit=commit)
+    return await import_excel(
+        db=db, file=file, model=ViTri,
+        fields=VI_TRI_IMPORT_FIELDS, key_field="ma_vi_tri", commit=commit,
+    )
 
 
 @router.get("", response_model=list[ViTriResponse])

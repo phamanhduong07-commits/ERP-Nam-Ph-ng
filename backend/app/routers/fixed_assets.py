@@ -103,7 +103,7 @@ def run_depreciation(
     """Chạy khấu hao tháng cho toàn bộ TSCĐ đang dùng, bỏ qua đã KH kỳ này."""
     assets = db.query(FixedAsset).filter(
         FixedAsset.trang_thai == "dang_su_dung",
-        FixedAsset.bo_qua_hach_toan == False,
+        FixedAsset.bo_qua_hach_toan.is_(False),
         FixedAsset.da_khau_hao_thang < FixedAsset.so_thang_khau_hao,
     ).all()
 

@@ -12,7 +12,12 @@ from app.services.excel_import_service import (
 router = APIRouter(prefix="/api/phuong-xa", tags=["phuong-xa"])
 
 PHUONG_XA_IMPORT_FIELDS = [
-    ImportField("ten_phuong", "Ten phuong/xa/thi tran", required=True, parser=parse_text, help_text="Dung lam khoa upsert"),
+    ImportField(
+        "ten_phuong",
+        "Ten phuong/xa/thi tran",
+        required=True,
+        parser=parse_text,
+        help_text="Dung lam khoa upsert"),
     ImportField("ma_phuong", "Ma phuong", required=True, parser=parse_text),
     ImportField("ma_tinh", "Ma tinh", parser=parse_text, help_text="Ma tinh da co trong danh muc tinh thanh"),
     ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),

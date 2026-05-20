@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
@@ -6,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import PhapNhan, PhanXuong
+from app.models.master import PhapNhan
 from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_bool, parse_text,
 )
@@ -16,26 +15,27 @@ import os
 
 router = APIRouter(prefix="/api/phap-nhan", tags=["phap-nhan"])
 
+
 @router.get("/logo/{ma_phap_nhan}")
 async def get_phap_nhan_logo(ma_phap_nhan: str):
     # Mapping ma_phap_nhan to existing logo files
     logo_map = {
         "NAMPHUONG": "logo_namphuong.png",
         "VISUN": "logo_visunpack.png",
-        "NAMPHUONG LA": "logo_namphuong.png", # Use same logo for LA if missing
+        "NAMPHUONG LA": "logo_namphuong.png",  # Use same logo for LA if missing
     }
-    
+
     file_name = logo_map.get(ma_phap_nhan, "logo_namphuong.png")
     # Check in dist folder first (where current logos are)
     file_path = os.path.join("dist", file_name)
-    
+
     if not os.path.exists(file_path):
         # Fallback to any np-icon if logo missing
         file_path = os.path.join("dist", "np-icon-192.png")
-        
+
     if os.path.exists(file_path):
         return FileResponse(file_path)
-    
+
     raise HTTPException(status_code=404, detail="Logo not found")
 
 PHAP_NHAN_IMPORT_FIELDS = [
@@ -104,7 +104,10 @@ async def import_phap_nhan(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return await import_excel(db=db, file=file, model=PhapNhan, fields=PHAP_NHAN_IMPORT_FIELDS, key_field="ma_phap_nhan", commit=commit)
+    return await import_excel(
+        db=db, file=file, model=PhapNhan,
+        fields=PHAP_NHAN_IMPORT_FIELDS, key_field="ma_phap_nhan", commit=commit,
+    )
 
 
 @router.get("")
@@ -115,7 +118,7 @@ def list_phap_nhan(
 ):
     q = db.query(PhapNhan).order_by(PhapNhan.ma_phap_nhan)
     if active_only:
-        q = q.filter(PhapNhan.trang_thai == True)
+        q = q.filter(PhapNhan.trang_thai.is_(True))
     if search:
         like = f"%{search}%"
         from sqlalchemy import or_

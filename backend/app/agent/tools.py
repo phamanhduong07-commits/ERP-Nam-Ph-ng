@@ -41,8 +41,8 @@ TOOL_DEFINITIONS = [
                     "enum": ["moi", "da_duyet", "dang_sx", "hoan_thanh", "huy"],
                 },
                 "date_from": {"type": "string", "description": "Từ ngày YYYY-MM-DD"},
-                "date_to":   {"type": "string", "description": "Đến ngày YYYY-MM-DD"},
-                "limit":     {"type": "integer", "description": "Số kết quả tối đa (mặc định 10)", "default": 10},
+                "date_to": {"type": "string", "description": "Đến ngày YYYY-MM-DD"},
+                "limit": {"type": "integer", "description": "Số kết quả tối đa (mặc định 10)", "default": 10},
             },
         },
     },
@@ -56,15 +56,15 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "customer_name": {"type": "string", "description": "Tên khách hàng (tìm kiếm gần đúng)"},
-                "so_bao_gia":    {"type": "string", "description": "Mã báo giá, VD: BG20240101001"},
+                "so_bao_gia": {"type": "string", "description": "Mã báo giá, VD: BG20240101001"},
                 "trang_thai": {
                     "type": "string",
                     "description": "Trạng thái: moi | da_duyet | tu_choi | het_han",
                     "enum": ["moi", "da_duyet", "tu_choi", "het_han"],
                 },
                 "date_from": {"type": "string", "description": "Từ ngày YYYY-MM-DD"},
-                "date_to":   {"type": "string", "description": "Đến ngày YYYY-MM-DD"},
-                "limit":     {"type": "integer", "description": "Số kết quả tối đa (mặc định 10)", "default": 10},
+                "date_to": {"type": "string", "description": "Đến ngày YYYY-MM-DD"},
+                "limit": {"type": "integer", "description": "Số kết quả tối đa (mặc định 10)", "default": 10},
             },
         },
     },
@@ -77,7 +77,7 @@ TOOL_DEFINITIONS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "so_lenh":        {"type": "string",  "description": "Mã lệnh sản xuất"},
+                "so_lenh": {"type": "string", "description": "Mã lệnh sản xuất"},
                 "sales_order_id": {"type": "integer", "description": "ID đơn hàng liên quan"},
                 "trang_thai": {
                     "type": "string",
@@ -85,7 +85,7 @@ TOOL_DEFINITIONS = [
                     "enum": ["moi", "dang_chay", "hoan_thanh", "huy"],
                 },
                 "tre_han": {"type": "boolean", "description": "true = chỉ lấy lệnh trễ kế hoạch"},
-                "limit":   {"type": "integer", "description": "Số kết quả tối đa (mặc định 10)", "default": 10},
+                "limit": {"type": "integer", "description": "Số kết quả tối đa (mặc định 10)", "default": 10},
             },
         },
     },
@@ -115,9 +115,9 @@ TOOL_DEFINITIONS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "ten":           {"type": "string", "description": "Tên khách hàng/công ty (gần đúng)"},
+                "ten": {"type": "string", "description": "Tên khách hàng/công ty (gần đúng)"},
                 "so_dien_thoai": {"type": "string", "description": "Số điện thoại"},
-                "limit":         {"type": "integer", "description": "Số kết quả tối đa (mặc định 10)", "default": 10},
+                "limit": {"type": "integer", "description": "Số kết quả tối đa (mặc định 10)", "default": 10},
             },
         },
     },
@@ -128,14 +128,14 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "supplier_name": {"type": "string", "description": "Tên nhà cung cấp (gần đúng)"},
-                "so_don_mua":    {"type": "string", "description": "Mã đơn mua hàng"},
+                "so_don_mua": {"type": "string", "description": "Mã đơn mua hàng"},
                 "trang_thai": {
                     "type": "string",
                     "description": "moi | da_duyet | hoan_thanh | huy",
                     "enum": ["moi", "da_duyet", "hoan_thanh", "huy"],
                 },
                 "date_from": {"type": "string", "description": "Từ ngày YYYY-MM-DD"},
-                "limit":     {"type": "integer", "description": "Số kết quả tối đa (mặc định 10)", "default": 10},
+                "limit": {"type": "integer", "description": "Số kết quả tối đa (mặc định 10)", "default": 10},
             },
         },
     },
@@ -167,7 +167,7 @@ TOOL_DEFINITIONS = [
                     "enum": ["thang_nay", "thang_truoc", "quy_nay", "nam_nay", "tuy_chinh"],
                 },
                 "date_from": {"type": "string", "description": "Từ ngày YYYY-MM-DD (dùng khi ky=tuy_chinh)"},
-                "date_to":   {"type": "string", "description": "Đến ngày YYYY-MM-DD (dùng khi ky=tuy_chinh)"},
+                "date_to": {"type": "string", "description": "Đến ngày YYYY-MM-DD (dùng khi ky=tuy_chinh)"},
             },
             "required": ["loai_bao_cao", "ky"],
         },
@@ -223,6 +223,63 @@ TOOL_DEFINITIONS = [
                 },
             },
             "required": ["customer_id"],
+        },
+    },
+    {
+        "name": "create_customer",
+        "description": (
+            "Tạo mới thông tin khách hàng vào hệ thống. "
+            "QUAN TRỌNG: phải hỏi xác nhận người dùng trước khi gọi tool này."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ma_kh": {
+                    "type": "string",
+                    "description": (
+                        "Mã khách hàng duy nhất (VD: KH-DATVIET). "
+                        "Nếu người dùng không cung cấp, hãy tự sinh tự động "
+                        "viết hoa không dấu dựa trên tên viết tắt."
+                    ),
+                },
+                "ten_viet_tat": {
+                    "type": "string",
+                    "description": "Tên viết tắt / tên gọi nhanh của khách hàng (bắt buộc, VD: Bao Bì Đất Việt)",
+                },
+                "ten_don_vi": {
+                    "type": "string",
+                    "description": "Tên đầy đủ của công ty/đơn vị (VD: Công ty Cổ phần Bao Bì Đất Việt)",
+                },
+                "dia_chi": {
+                    "type": "string",
+                    "description": "Địa chỉ trụ sở chính đăng ký kinh doanh",
+                },
+                "dia_chi_giao_hang": {
+                    "type": "string",
+                    "description": "Địa chỉ nhận hàng thực tế (nếu khác địa chỉ trụ sở)",
+                },
+                "dien_thoai": {
+                    "type": "string",
+                    "description": "Số điện thoại chính của công ty/khách hàng",
+                },
+                "ma_so_thue": {
+                    "type": "string",
+                    "description": "Mã số thuế doanh nghiệp",
+                },
+                "nguoi_lien_he": {
+                    "type": "string",
+                    "description": "Họ tên người liên hệ trực tiếp đặt hàng",
+                },
+                "so_dien_thoai_lh": {
+                    "type": "string",
+                    "description": "Số điện thoại của người liên hệ trực tiếp",
+                },
+                "ghi_chu": {
+                    "type": "string",
+                    "description": "Các thông tin bổ sung khác",
+                },
+            },
+            "required": ["ten_viet_tat"],
         },
     },
 ]

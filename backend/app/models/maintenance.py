@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -32,7 +32,12 @@ class MaintenanceSchedule(Base):
     __tablename__ = "maintenance_schedules"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    machine_id: Mapped[int] = mapped_column(Integer, ForeignKey("machines_maintenance.id", ondelete="CASCADE"), nullable=False)
+    machine_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(
+            "machines_maintenance.id",
+            ondelete="CASCADE"),
+        nullable=False)
     loai_bao_tri: Mapped[str] = mapped_column(String(100), nullable=False)
     chu_ky_ngay: Mapped[int] = mapped_column(Integer, nullable=False)
     ngay_bao_tri_gan_nhat: Mapped[date | None] = mapped_column(Date)
@@ -49,8 +54,14 @@ class MaintenanceLog(Base):
     __tablename__ = "maintenance_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    machine_id: Mapped[int] = mapped_column(Integer, ForeignKey("machines_maintenance.id", ondelete="CASCADE"), nullable=False)
-    schedule_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("maintenance_schedules.id", ondelete="SET NULL"))
+    machine_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(
+            "machines_maintenance.id",
+            ondelete="CASCADE"),
+        nullable=False)
+    schedule_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("maintenance_schedules.id", ondelete="SET NULL"))
     loai: Mapped[str] = mapped_column(String(20), nullable=False)
     # dinh_ky | su_co
     ngay_bat_dau: Mapped[date] = mapped_column(Date, nullable=False)

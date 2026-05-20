@@ -29,7 +29,8 @@ class DonViTinhResponse(DonViTinhBase):
 
 
 DVT_IMPORT_FIELDS = [
-    ImportField("ten", "Ten don vi tinh", required=True, parser=parse_text, help_text="Ten don vi tinh, dung lam khoa upsert"),
+    ImportField("ten", "Ten don vi tinh", required=True, parser=parse_text,
+                help_text="Ten don vi tinh, dung lam khoa upsert"),
     ImportField("ky_hieu", "Ky hieu", parser=parse_text),
     ImportField("ghi_chu", "Ghi chu", parser=parse_text),
     ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
@@ -50,7 +51,10 @@ async def import_don_vi_tinh(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return await import_excel(db=db, file=file, model=DonViTinh, fields=DVT_IMPORT_FIELDS, key_field="ten", commit=commit)
+    return await import_excel(
+        db=db, file=file, model=DonViTinh,
+        fields=DVT_IMPORT_FIELDS, key_field="ten", commit=commit,
+    )
 
 
 @router.get("", response_model=list[DonViTinhResponse])

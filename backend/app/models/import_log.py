@@ -2,7 +2,6 @@
 Model lưu lịch sử import: người import, thời gian, loại dữ liệu,
 tên file gốc, số dòng thành công / lỗi, ghi chú.
 """
-from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Text, func
 from app.database import Base
 

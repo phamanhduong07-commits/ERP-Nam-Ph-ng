@@ -29,14 +29,23 @@ class ProductionOrder(Base):
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     nv_theo_doi_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
-    sales_order: Mapped["SalesOrder | None"] = relationship("SalesOrder", foreign_keys=[sales_order_id])  # type: ignore[name-defined]
+    sales_order: Mapped["SalesOrder | None"] = relationship(
+        "SalesOrder", foreign_keys=[sales_order_id])  # type: ignore[name-defined]
     creator: Mapped["User | None"] = relationship("User", foreign_keys=[created_by])  # type: ignore[name-defined]
-    nv_theo_doi: Mapped["User | None"] = relationship("User", foreign_keys=[nv_theo_doi_id])  # type: ignore[name-defined]
-    phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])  # type: ignore[name-defined]
-    kho_sx: Mapped["Warehouse | None"] = relationship("Warehouse", foreign_keys=[kho_sx_id])  # type: ignore[name-defined]
-    phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
+    nv_theo_doi: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[nv_theo_doi_id])  # type: ignore[name-defined]
+    phap_nhan: Mapped["PhapNhan | None"] = relationship(
+        "PhapNhan", foreign_keys=[phap_nhan_id])  # type: ignore[name-defined]
+    kho_sx: Mapped["Warehouse | None"] = relationship(
+        "Warehouse", foreign_keys=[kho_sx_id])  # type: ignore[name-defined]
+    phan_xuong: Mapped["PhanXuong | None"] = relationship(
+        "PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
     items: Mapped[list["ProductionOrderItem"]] = relationship(
         "ProductionOrderItem", back_populates="production_order",
         cascade="all, delete-orphan"
@@ -61,34 +70,34 @@ class ProductionOrderItem(Base):
 
     # ── Thông số kỹ thuật (kế thừa từ SalesOrderItem / QuoteItem) ──────────────
     loai_thung: Mapped[str | None] = mapped_column(String(50))
-    dai:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    dai: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     rong: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    cao:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    so_lop:     Mapped[int | None] = mapped_column(SmallInteger)
+    cao: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    so_lop: Mapped[int | None] = mapped_column(SmallInteger)
     to_hop_song: Mapped[str | None] = mapped_column(String(20))
-    mat:     Mapped[str | None] = mapped_column(String(30))
-    mat_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_1:     Mapped[str | None] = mapped_column(String(30))
-    song_1_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_1:      Mapped[str | None] = mapped_column(String(30))
-    mat_1_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_2:     Mapped[str | None] = mapped_column(String(30))
-    song_2_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_2:      Mapped[str | None] = mapped_column(String(30))
-    mat_2_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    song_3:     Mapped[str | None] = mapped_column(String(30))
-    song_3_dl:  Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    mat_3:      Mapped[str | None] = mapped_column(String(30))
-    mat_3_dl:   Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    loai_in:    Mapped[str | None] = mapped_column(String(30))
-    so_mau:     Mapped[int | None] = mapped_column(SmallInteger)
-    loai_lan:   Mapped[str | None] = mapped_column(String(50))
-    c_tham:     Mapped[str | None] = mapped_column(String(50))
-    can_man:    Mapped[str | None] = mapped_column(String(50))
-    kho_tt:     Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    dai_tt:     Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
-    qccl:       Mapped[str | None] = mapped_column(String(50))
-    dien_tich:  Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    mat: Mapped[str | None] = mapped_column(String(30))
+    mat_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_1: Mapped[str | None] = mapped_column(String(30))
+    song_1_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_1: Mapped[str | None] = mapped_column(String(30))
+    mat_1_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_2: Mapped[str | None] = mapped_column(String(30))
+    song_2_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_2: Mapped[str | None] = mapped_column(String(30))
+    mat_2_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_3: Mapped[str | None] = mapped_column(String(30))
+    song_3_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_3: Mapped[str | None] = mapped_column(String(30))
+    mat_3_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    loai_in: Mapped[str | None] = mapped_column(String(30))
+    so_mau: Mapped[int | None] = mapped_column(SmallInteger)
+    loai_lan: Mapped[str | None] = mapped_column(String(50))
+    c_tham: Mapped[str | None] = mapped_column(String(50))
+    can_man: Mapped[str | None] = mapped_column(String(50))
+    kho_tt: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    dai_tt: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    qccl: Mapped[str | None] = mapped_column(String(50))
+    dien_tich: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     gia_ban_muc_tieu: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     mua_phoi_ngoai: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
 
@@ -107,7 +116,8 @@ class MayDungLog(Base):
     __tablename__ = "may_dung_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    production_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_orders.id", ondelete="CASCADE"), nullable=False)
+    production_order_id: Mapped[int] = mapped_column(Integer, ForeignKey(
+        "production_orders.id", ondelete="CASCADE"), nullable=False)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     ngay: Mapped[date] = mapped_column(Date, nullable=False)
     gio_bat_dau_dung: Mapped[time] = mapped_column(Time, nullable=False)

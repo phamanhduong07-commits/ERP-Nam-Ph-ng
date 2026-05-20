@@ -7,10 +7,9 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user, require_roles
+from app.deps import require_roles
 from app.models.auth import User
 from app.models.billing import SalesInvoice, InvoiceAdjustmentLog
-from app.models.master import Customer
 from app.services.billing_service import BillingService
 from app.schemas.billing import (
     AdjustmentApprove,
@@ -19,17 +18,16 @@ from app.schemas.billing import (
     SalesInvoiceCreate,
     SalesInvoiceUpdate,
     SalesInvoiceResponse,
-    SalesInvoiceListItem,
 )
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
 # ── Role groups ──────────────────────────────────────────────────────────────
-CREATE_ROLES  = ("KE_TOAN_CONG_NO", "KE_TOAN", "KE_TOAN_TRUONG", "GIAM_DOC")
-EDIT_ROLES    = ("SALE_ADMIN", "KE_TOAN_CONG_NO", "KE_TOAN", "KE_TOAN_TRUONG", "GIAM_DOC")
-ADJUST_ROLES  = ("KE_TOAN_CONG_NO", "KE_TOAN_TRUONG", "GIAM_DOC")   # yêu cầu điều chỉnh sau KC
+CREATE_ROLES = ("KE_TOAN_CONG_NO", "KE_TOAN", "KE_TOAN_TRUONG", "GIAM_DOC")
+EDIT_ROLES = ("SALE_ADMIN", "KE_TOAN_CONG_NO", "KE_TOAN", "KE_TOAN_TRUONG", "GIAM_DOC")
+ADJUST_ROLES = ("KE_TOAN_CONG_NO", "KE_TOAN_TRUONG", "GIAM_DOC")   # yêu cầu điều chỉnh sau KC
 APPROVE_ROLES = ("KE_TOAN_TRUONG", "GIAM_DOC")                        # duyệt sau KC
-READ_ROLES    = ("SALE_ADMIN", "KE_TOAN_CONG_NO", "KE_TOAN", "KE_TOAN_TRUONG", "GIAM_DOC", "KINH_DOANH", "MUA_HANG")
+READ_ROLES = ("SALE_ADMIN", "KE_TOAN_CONG_NO", "KE_TOAN", "KE_TOAN_TRUONG", "GIAM_DOC", "KINH_DOANH", "MUA_HANG")
 
 _UPLOAD_DIR = "uploads/invoices"
 
@@ -206,7 +204,7 @@ def print_adjustment_log(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ_ROLES)),
 ):
-    lg = db.query(InvoiceAdjustmentLog).get(log_id)
+    lg = db.get(InvoiceAdjustmentLog, log_id)
     if not lg:
         raise HTTPException(404, "Không tìm thấy yêu cầu điều chỉnh")
     inv = db.get(SalesInvoice, lg.invoice_id)
@@ -215,7 +213,7 @@ def print_adjustment_log(
 
     import json
     before = json.loads(lg.du_lieu_truoc) if lg.du_lieu_truoc else {}
-    after  = json.loads(lg.du_lieu_sau)  if lg.du_lieu_sau  else {}
+    after = json.loads(lg.du_lieu_sau) if lg.du_lieu_sau else {}
 
     def fmt(v):
         try:
@@ -237,15 +235,15 @@ def print_adjustment_log(
         accent = "#0277BD"
 
     trang_thai_map = {
-        "pending":  ("Chờ duyệt",   "#fa8c16"),
-        "approved": ("Đã duyệt",    "#52c41a"),
-        "rejected": ("Từ chối",     "#ff4d4f"),
-        "na":       ("Đã áp dụng", "#1677ff"),
+        "pending": ("Chờ duyệt", "#fa8c16"),
+        "approved": ("Đã duyệt", "#52c41a"),
+        "rejected": ("Từ chối", "#ff4d4f"),
+        "na": ("Đã áp dụng", "#1677ff"),
     }
     tt_label, tt_color = trang_thai_map.get(lg.trang_thai, (lg.trang_thai, "#888"))
 
     ten_kh = inv.ten_don_vi or (inv.customer.ten_viet_tat if inv.customer else "—")
-    so_hd  = inv.so_hoa_don or f"HĐ #{inv.id}"
+    so_hd = inv.so_hoa_don or f"HĐ #{inv.id}"
 
     adjusted_by = lg.adjusted_by.ho_ten if lg.adjusted_by else f"User #{lg.adjusted_by_id}"
     approved_by = lg.approved_by.ho_ten if lg.approved_by else "—"
@@ -327,23 +325,23 @@ table.so-sanh tr.changed td {{ background: #fffbe6; font-weight: bold; }}
   <tbody>
     <tr class="{'changed' if before.get('tong_tien_hang') != after.get('tong_tien_hang') else ''}">
       <td>Tiền hàng</td>
-      <td class="right">{fmt(before.get('tong_tien_hang','0'))} đ</td>
-      <td class="right">{fmt(after.get('tong_tien_hang','0'))} đ</td>
+      <td class="right">{fmt(before.get('tong_tien_hang', '0'))} đ</td>
+      <td class="right">{fmt(after.get('tong_tien_hang', '0'))} đ</td>
     </tr>
     <tr class="{'changed' if before.get('ty_le_vat') != after.get('ty_le_vat') else ''}">
       <td>Thuế VAT</td>
-      <td class="right">{before.get('ty_le_vat','0')}%</td>
-      <td class="right">{after.get('ty_le_vat','0')}%</td>
+      <td class="right">{before.get('ty_le_vat', '0')}%</td>
+      <td class="right">{after.get('ty_le_vat', '0')}%</td>
     </tr>
     <tr class="{'changed' if before.get('tien_vat') != after.get('tien_vat') else ''}">
       <td>Tiền VAT</td>
-      <td class="right">{fmt(before.get('tien_vat','0'))} đ</td>
-      <td class="right">{fmt(after.get('tien_vat','0'))} đ</td>
+      <td class="right">{fmt(before.get('tien_vat', '0'))} đ</td>
+      <td class="right">{fmt(after.get('tien_vat', '0'))} đ</td>
     </tr>
     <tr style="font-weight:bold;background:#e6f4ff;" class="{'changed' if before.get('tong_cong') != after.get('tong_cong') else ''}">
       <td>TỔNG CỘNG</td>
-      <td class="right">{fmt(before.get('tong_cong','0'))} đ</td>
-      <td class="right">{fmt(after.get('tong_cong','0'))} đ</td>
+      <td class="right">{fmt(before.get('tong_cong', '0'))} đ</td>
+      <td class="right">{fmt(after.get('tong_cong', '0'))} đ</td>
     </tr>
   </tbody>
 </table>
@@ -480,8 +478,7 @@ table.hang-hoa td {{ border: 1px solid #ccc; padding: 4px; }}
     </div>
   </div>
   <div class="mau">
-    {f"Mẫu số: {inv.mau_so}<br>Ký hiệu: {inv.ky_hieu}" if inv.mau_so else "Hóa đơn nội bộ"}
-  </div>
+    {f"Mẫu số: {inv.mau_so}<br>Ký hiệu: {inv.ky_hieu}" if inv.mau_so else "Hóa đơn nội bộ"} </div>
 </div>
 <hr class="divider">
 <div class="title">

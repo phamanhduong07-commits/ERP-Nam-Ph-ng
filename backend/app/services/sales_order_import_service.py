@@ -1,4 +1,3 @@
-from decimal import Decimal
 from io import BytesIO
 from typing import Any
 import pandas as pd
@@ -27,14 +26,13 @@ async def import_sales_orders_excel(
 
     # Chuan hoa ten cot
     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-    
+
     required_cols = ["so_don", "ngay_don", "ma_kh", "ma_amis", "so_luong", "don_gia"]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
         raise HTTPException(status_code=400, detail=f"Thieu cot: {', '.join(missing)}")
 
-    results = []
-    orders_data = {} # {so_don: {header_info, items: []}}
+    orders_data = {}  # {so_don: {header_info, items: []}}
     errors = []
 
     # 1. Thu thap du lieu
@@ -52,12 +50,16 @@ async def import_sales_orders_excel(
             if not customer:
                 errors.append(f"Dong {row_num}: Khach hang '{ma_kh}' khong ton tai")
                 continue
-            
+
             orders_data[so_don] = {
                 "ngay_don": parse_date(row.get("ngay_don")),
                 "customer_id": customer.id,
                 "ten_khach": customer.ten_viet_tat,
-                "dia_chi_giao": str(row.get("dia_chi_giao", "")) if not pd.isna(row.get("dia_chi_giao")) else customer.dia_chi_giao_hang,
+                "dia_chi_giao": (
+                    str(row.get("dia_chi_giao", ""))
+                    if not pd.isna(row.get("dia_chi_giao"))
+                    else customer.dia_chi_giao_hang
+                ),
                 "items": []
             }
 
@@ -95,22 +97,22 @@ async def import_sales_orders_excel(
                 order = SalesOrder(so_don=so_don)
                 db.add(order)
                 created += 1
-            
+
             order.ngay_don = data["ngay_don"]
             order.customer_id = data["customer_id"]
             order.dia_chi_giao = data["dia_chi_giao"]
             order.trang_thai = "moi"
             order.created_by = user.id
-            
+
             tong_tien = 0
             for item_data in data["items"]:
                 item = SalesOrderItem(**item_data)
                 order.items.append(item)
                 tong_tien += (item_data["so_luong"] * item_data["don_gia"])
-            
+
             order.tong_tien = tong_tien
             order.tong_tien_sau_giam = tong_tien
-        
+
         db.commit()
 
         # Luu log

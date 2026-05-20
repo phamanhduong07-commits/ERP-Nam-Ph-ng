@@ -16,7 +16,10 @@ from app.routers import (
     production_orders, bom, production_plans, indirect_costs, addon_rates, permissions,
     hr, logistics_hr, hr_payroll_calc, hr_reward, hr_self_service,
 )
-from app.routers import phieu_phoi, cd2, warehouse, purchase_orders, purchase_returns, phap_nhan, dashboard, theo_doi, yeu_cau_giao_hang
+from app.routers import (
+    phieu_phoi, cd2, warehouse, purchase_orders, purchase_returns,
+    phap_nhan, dashboard, theo_doi, yeu_cau_giao_hang,
+)
 from app.routers import purchase_requisitions
 from app.routers import may_dung_log
 from app.routers import billing, accounting
@@ -75,6 +78,8 @@ app.add_middleware(
 )
 
 # ─── Request logging middleware ───────────────────────────────────────────────
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.time()

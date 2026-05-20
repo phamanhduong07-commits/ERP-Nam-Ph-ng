@@ -26,8 +26,8 @@ async def lookup_mst(mst: str, _: User = Depends(get_current_user)):
 
     d = data["data"]
     return {
-        "name":      d.get("name", ""),
+        "name": d.get("name", ""),
         "shortName": d.get("shortName", "") or "",
-        "address":   d.get("address", "") or "",
-        "status":    d.get("status", ""),
+        "address": d.get("address", "") or "",
+        "status": d.get("status", ""),
     }

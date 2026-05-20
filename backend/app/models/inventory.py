@@ -60,4 +60,8 @@ class PaperRoll(Base):
     ngay_xuat_gan_nhat: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)

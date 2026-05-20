@@ -6,12 +6,12 @@ GET  /api/phieu-phoi/xuat          — danh sách phiếu xuất
 POST /api/phieu-phoi/xuat          — tạo phiếu xuất mới
 GET  /api/phieu-phoi/xuat/{id}     — chi tiết phiếu xuất
 """
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload, contains_eager
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 import logging
@@ -21,7 +21,6 @@ from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
 from app.models.warehouse_doc import PhieuChuyenKho, PhieuChuyenKhoItem
-from app.models.inventory import InventoryBalance
 from app.services.carton_metrics import dec_or_zero, _to_hop_song, song_take_up, standard_thickness_m
 
 _log = logging.getLogger("erp")
@@ -295,18 +294,18 @@ def create_phieu_xuat(
         except HTTPException:
             _log.warning(f"PhieuXuatPhoi: không đủ tồn kho {it.ten_hang} tại {phoi_wh.ma_kho}")
             continue
-        
+
         log_tx(db, phoi_wh.id, "XUAT_PHOI", Decimal(str(it.so_luong)),
                don_gia_xuat, balance.ton_luong,
                "phieu_xuat_phoi", phieu.id, current_user.id)
-        
+
         # Chuẩn bị dữ liệu hạch toán
         journal_items.append({
             "ten_hang": it.ten_hang,
             "so_luong": it.so_luong,
             "don_gia": don_gia_xuat,
             "tk_no": "621",  # Chi phí NVL trực tiếp
-            "tk_co": "155" if it.production_order_item_id else "152" 
+            "tk_co": "155" if it.production_order_item_id else "152"
         })
 
     # Hạch toán kế toán tự động
@@ -418,35 +417,38 @@ def ton_kho_lsx(
     )
 
     # 4. Gom tất cả tổ hợp (LSX, Kho) có phát sinh
-    stats = {} # (order_id, wh_id) -> data
+    stats = {}  # (order_id, wh_id) -> data
 
     for r in nhap_rows:
         key = (r.production_order_id, r.warehouse_id)
-        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0, "chuyen_den": 0.0, "chieu_kho": r.chieu_kho, "chieu_cat": r.chieu_cat})
+        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0, "chuyen_den": 0.0,
+                         "chieu_kho": r.chieu_kho, "chieu_cat": r.chieu_cat})
         stats[key]["nhap"] += float(r.tong_nhap_sx)
 
     for r in xuat_rows:
         key = (r.production_order_id, r.warehouse_id)
-        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0, "chuyen_den": 0.0, "chieu_kho": None, "chieu_cat": None})
+        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0,
+                         "chuyen_den": 0.0, "chieu_kho": None, "chieu_cat": None})
         stats[key]["xuat"] += float(r.tong_xuat_sx)
 
     for r in chuyen_xuat_rows:
         key = (r.production_order_id, r.warehouse_id)
-        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0, "chuyen_den": 0.0, "chieu_kho": None, "chieu_cat": None})
+        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0,
+                         "chuyen_den": 0.0, "chieu_kho": None, "chieu_cat": None})
         stats[key]["chuyen_di"] += float(r.tong_chuyen_xuat)
 
     for r in chuyen_nhap_rows:
         key = (r.production_order_id, r.warehouse_id)
-        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0, "chuyen_den": 0.0, "chieu_kho": None, "chieu_cat": None})
+        stats.setdefault(key, {"nhap": 0.0, "xuat": 0.0, "chuyen_di": 0.0,
+                         "chuyen_den": 0.0, "chieu_kho": None, "chieu_cat": None})
         stats[key]["chuyen_den"] += float(r.tong_chuyen_nhap)
 
     if not stats:
         return []
 
     order_ids = list({k[0] for k in stats.keys()})
-    
+
     from app.models.sales import SalesOrder
-    from app.models.master import Customer
 
     # Lấy thông tin Lệnh SX
     orders = (
@@ -464,7 +466,10 @@ def ton_kho_lsx(
 
     # Lấy thông tin Kho
     wh_ids = list({k[1] for k in stats.keys()})
-    warehouses = db.query(Warehouse).options(joinedload(Warehouse.phan_xuong_obj)).filter(Warehouse.id.in_(wh_ids)).all()
+    warehouses = db.query(Warehouse).options(
+        joinedload(
+            Warehouse.phan_xuong_obj)).filter(
+        Warehouse.id.in_(wh_ids)).all()
     wh_map = {w.id: w for w in warehouses}
 
     # Lấy tất cả phân xưởng để tra cứu nhanh và chính xác
@@ -488,7 +493,7 @@ def ton_kho_lsx(
 
         # Tồn = (Nhập SX + Nhập Chuyển) - (Xuất SX + Xuất Chuyển)
         ton_kho = round((data["nhap"] + data["chuyen_den"]) - (data["xuat"] + data["chuyen_di"]), 3)
-        
+
         # Nếu tồn <= 0 và không có nhập thì bỏ qua
         if ton_kho <= 0 and (data["nhap"] + data["chuyen_den"]) == 0:
             continue

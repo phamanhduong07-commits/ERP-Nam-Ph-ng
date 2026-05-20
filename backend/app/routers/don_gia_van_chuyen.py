@@ -13,7 +13,8 @@ from app.services.excel_import_service import (
 router = APIRouter(prefix="/api/don-gia-van-chuyen", tags=["don-gia-van-chuyen"])
 
 DGV_IMPORT_FIELDS = [
-    ImportField("ten_tuyen", "Ten tuyen", required=True, parser=parse_text, help_text="Ten tuyen van chuyen, dung lam khoa upsert"),
+    ImportField("ten_tuyen", "Ten tuyen", required=True, parser=parse_text,
+                help_text="Ten tuyen van chuyen, dung lam khoa upsert"),
     ImportField("khu_vuc_tu", "Khu vuc tu", parser=parse_text),
     ImportField("khu_vuc_den", "Khu vuc den", parser=parse_text),
     ImportField("don_gia", "Don gia", required=True, parser=parse_decimal, default=0),
@@ -58,7 +59,10 @@ async def import_don_gia_van_chuyen(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return await import_excel(db=db, file=file, model=DonGiaVanChuyen, fields=DGV_IMPORT_FIELDS, key_field="ten_tuyen", commit=commit)
+    return await import_excel(
+        db=db, file=file, model=DonGiaVanChuyen,
+        fields=DGV_IMPORT_FIELDS, key_field="ten_tuyen", commit=commit,
+    )
 
 
 @router.get("", response_model=list[DonGiaVanChuyenResponse])

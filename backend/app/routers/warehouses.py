@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
-from app.models.master import Warehouse, PhanXuong
+from app.models.master import Warehouse, PhanXuong, PhapNhan
 from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_bool, parse_text,
 )
@@ -16,7 +16,8 @@ master_admin_required = require_roles("ADMIN", "GIAM_DOC")
 WAREHOUSE_IMPORT_FIELDS = [
     ImportField("ma_kho", "Ma kho", required=True, parser=parse_text, help_text="Ma kho, duy nhat"),
     ImportField("ten_kho", "Ten kho", required=True, parser=parse_text),
-    ImportField("loai_kho", "Loai kho", required=True, parser=parse_text, help_text="GIAY_CUON | NVL_PHU | THANH_PHAM | PHOI | BTP | KHO_KHAC"),
+    ImportField("loai_kho", "Loai kho", required=True, parser=parse_text,
+                help_text="GIAY_CUON | NVL_PHU | THANH_PHAM | PHOI | BTP | KHO_KHAC"),
     ImportField("dia_chi", "Dia chi", parser=parse_text),
     ImportField("ma_xuong", "Ma xuong", parser=parse_text, help_text="Ma phan xuong neu co"),
     ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
@@ -43,6 +44,9 @@ class WarehouseBase(BaseModel):
     loai_kho: str
     dia_chi: str | None = None
     phan_xuong_id: int | None = None
+    dien_tich: float | None = None
+    suc_chua: float | None = None
+    don_vi_suc_chua: str | None = None
     trang_thai: bool = True
 
 
@@ -50,9 +54,35 @@ class WarehouseResponse(WarehouseBase):
     id: int
     created_at: datetime
     ten_xuong: str | None = None
+    phap_nhan_id: int | None = None
+    ten_phap_nhan: str | None = None
+    dien_tich: float | None = None
+    suc_chua: float | None = None
+    don_vi_suc_chua: str | None = None
 
     class Config:
         from_attributes = True
+
+
+def _warehouse_response(db: Session, w: Warehouse) -> WarehouseResponse:
+    px = db.get(PhanXuong, w.phan_xuong_id) if w.phan_xuong_id else None
+    pn = db.get(PhapNhan, px.phap_nhan_id) if px and px.phap_nhan_id else None
+    return WarehouseResponse(
+        id=w.id,
+        ma_kho=w.ma_kho,
+        ten_kho=w.ten_kho,
+        loai_kho=w.loai_kho,
+        dia_chi=w.dia_chi,
+        phan_xuong_id=w.phan_xuong_id,
+        trang_thai=w.trang_thai,
+        created_at=w.created_at,
+        ten_xuong=px.ten_xuong if px else None,
+        phap_nhan_id=pn.id if pn else None,
+        ten_phap_nhan=(pn.ten_viet_tat or pn.ten_phap_nhan) if pn else None,
+        dien_tich=w.dien_tich,
+        suc_chua=w.suc_chua,
+        don_vi_suc_chua=w.don_vi_suc_chua,
+    )
 
 
 # ─── Endpoints: Warehouse ────────────────────────────────────────────────────
@@ -78,16 +108,7 @@ async def import_warehouses(
 @router.get("", response_model=list[WarehouseResponse])
 def list_warehouses(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     rows = db.query(Warehouse).order_by(Warehouse.ma_kho).all()
-    result = []
-    for w in rows:
-        px = db.get(PhanXuong, w.phan_xuong_id) if w.phan_xuong_id else None
-        d = WarehouseResponse(
-            id=w.id, ma_kho=w.ma_kho, ten_kho=w.ten_kho, loai_kho=w.loai_kho,
-            dia_chi=w.dia_chi, phan_xuong_id=w.phan_xuong_id, trang_thai=w.trang_thai,
-            created_at=w.created_at, ten_xuong=px.ten_xuong if px else None,
-        )
-        result.append(d)
-    return result
+    return [_warehouse_response(db, w) for w in rows]
 
 
 @router.post("", response_model=WarehouseResponse, status_code=201)
@@ -104,12 +125,7 @@ def create_warehouse(
     db.add(obj)
     db.commit()
     db.refresh(obj)
-    px = db.get(PhanXuong, obj.phan_xuong_id) if obj.phan_xuong_id else None
-    return WarehouseResponse(
-        id=obj.id, ma_kho=obj.ma_kho, ten_kho=obj.ten_kho, loai_kho=obj.loai_kho,
-        dia_chi=obj.dia_chi, phan_xuong_id=obj.phan_xuong_id, trang_thai=obj.trang_thai,
-        created_at=obj.created_at, ten_xuong=px.ten_xuong if px else None,
-    )
+    return _warehouse_response(db, obj)
 
 
 @router.put("/{id}", response_model=WarehouseResponse)
@@ -128,12 +144,7 @@ def update_warehouse(
         setattr(obj, k, v)
     db.commit()
     db.refresh(obj)
-    px = db.get(PhanXuong, obj.phan_xuong_id) if obj.phan_xuong_id else None
-    return WarehouseResponse(
-        id=obj.id, ma_kho=obj.ma_kho, ten_kho=obj.ten_kho, loai_kho=obj.loai_kho,
-        dia_chi=obj.dia_chi, phan_xuong_id=obj.phan_xuong_id, trang_thai=obj.trang_thai,
-        created_at=obj.created_at, ten_xuong=px.ten_xuong if px else None,
-    )
+    return _warehouse_response(db, obj)
 
 
 @router.delete("/{id}")

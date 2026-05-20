@@ -63,7 +63,7 @@ def _cfg_key(phan_xuong_id: int | None, cong_doan: str | None) -> str:
 class PayrollService:
     @staticmethod
     def calculate_production_salary(db: Session, from_date: date, to_date: date):
-        configs = db.query(PayrollConfig).filter(PayrollConfig.trang_thai == True).all()
+        configs = db.query(PayrollConfig).filter(PayrollConfig.trang_thai.is_(True)).all()
         config_by_scope = {
             (c.phan_xuong_id, c.cong_doan): c
             for c in configs

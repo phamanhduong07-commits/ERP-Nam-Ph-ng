@@ -24,7 +24,7 @@ class FuelLogCreate(BaseModel):
 
 def _default_trip_rate(db: Session) -> Decimal:
     cfg = db.query(DonGiaVanChuyen).filter(
-        DonGiaVanChuyen.trang_thai == True,
+        DonGiaVanChuyen.trang_thai.is_(True),
         DonGiaVanChuyen.don_gia_m2 > 0,
     ).order_by(DonGiaVanChuyen.id).first()
     return cfg.don_gia_m2 if cfg else Decimal("0")
@@ -145,7 +145,10 @@ def list_fuel_logs(
             "id": log.id,
             "ngay_do": log.ngay_do.isoformat(),
             "xe_id": log.xe_id,
-            "vehicle": {"bien_so": xe.bien_so, "dinh_muc_dau": float(getattr(xe, "dinh_muc_dau", 0) or 0)} if xe else None,
+            "vehicle": (
+                {"bien_so": xe.bien_so, "dinh_muc_dau": float(getattr(xe, "dinh_muc_dau", 0) or 0)}
+                if xe else None
+            ),
             "employee": {"ho_ten": log.employee.ho_ten},
             "so_km_dau": log.so_km_dau,
             "so_km_cuoi": log.so_km_cuoi,

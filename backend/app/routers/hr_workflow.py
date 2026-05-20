@@ -1,7 +1,7 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from app.database import get_db
 from app.models.hr import LeaveRequest, Employee, AttendanceLog
 from app.models.auth import User

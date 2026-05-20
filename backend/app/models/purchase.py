@@ -137,6 +137,7 @@ class PurchaseOrderItem(Base):
     don_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     thanh_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     so_luong_da_nhan: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0)
+    so_cuon_da_nhan: Mapped[int] = mapped_column(Integer, default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     kho_mm: Mapped[Decimal | None] = mapped_column(Numeric(7, 1))
     so_cuon: Mapped[int | None] = mapped_column(Integer)

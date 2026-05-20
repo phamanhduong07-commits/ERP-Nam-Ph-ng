@@ -83,7 +83,7 @@ def get_all_material_groups(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return db.query(MaterialGroup).filter(MaterialGroup.trang_thai == True).order_by(MaterialGroup.ten_nhom).all()
+    return db.query(MaterialGroup).filter(MaterialGroup.trang_thai.is_(True)).order_by(MaterialGroup.ten_nhom).all()
 
 
 @router.get("/import-template")

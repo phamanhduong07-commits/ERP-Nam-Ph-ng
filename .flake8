@@ -1,0 +1,8 @@
+[flake8]
+max-line-length = 120
+# F821: SQLAlchemy relationship() forward references — false positives in all model files
+per-file-ignores =
+    backend/app/models/*.py: F821
+    backend/app/seeds/seed_templates.py: E501
+    backend/app/routers/billing.py: E501
+    backend/app/routers/accounting.py: E501

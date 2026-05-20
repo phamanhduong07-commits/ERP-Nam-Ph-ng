@@ -41,7 +41,6 @@ class SalesOrderService:
         page: int = 1,
         page_size: int = 20,
     ) -> PagedResponse:
-        from app.models.auth import User as UserModel
         q = self.db.query(SalesOrder).options(
             joinedload(SalesOrder.customer),
             joinedload(SalesOrder.phap_nhan),

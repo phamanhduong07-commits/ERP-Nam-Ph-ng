@@ -22,11 +22,14 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt flake8
+
+      - name: Lint (flake8)
+        run: python -m flake8 backend/app --max-line-length=120
 
       - name: Run tests
         working-directory: backend
         env:
           DATABASE_URL: sqlite:///./test_ci.db
           SECRET_KEY: ci-test-secret-key
-        run: pytest tests/ -v --tb=short -q 2>&1 | tail -50
+        run: pytest tests/ -v --tb=short

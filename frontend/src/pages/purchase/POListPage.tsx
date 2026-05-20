@@ -175,6 +175,24 @@ export default function POListPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
   })
 
+  const guiNCCMut = useMutation({
+    mutationFn: (id: number) => purchaseApi.guiNcc(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] })
+      message.success('Đã chuyển trạng thái Đã gửi NCC')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+  })
+
+  const huyPOMut = useMutation({
+    mutationFn: (id: number) => purchaseApi.huy(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] })
+      message.success('Đã hủy đơn mua hàng')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi hủy PO'),
+  })
+
   const createPurchaseInvoiceMut = useMutation({
     mutationFn: (data: { poId: number; thue_suat: number; co_vat: boolean }) =>
       purchaseInvoiceApi.fromPO(data.poId, { thue_suat: data.thue_suat, co_vat: data.co_vat }),
@@ -274,8 +292,10 @@ export default function POListPage() {
       render: (v: number) => <Text strong>{(v || 0).toLocaleString('vi-VN', { maximumFractionDigits: 0 })}đ</Text> },
     { title: 'Tiến độ nhận', dataIndex: 'tien_do_nhan', width: 120, align: 'right' as const,
       render: (v: number) => v != null ? `${v}%` : '—' },
+    { title: 'Ngày tạo', dataIndex: 'created_at', width: 110,
+      render: (v: string | null) => v ? dayjs(v).format('DD/MM/YYYY') : '—' },
     {
-      title: '', width: 90,
+      title: '', width: 120,
       render: (_: unknown, r: PurchaseOrder) => (
         <Space>
           {r.trang_thai === 'moi' && (
@@ -283,10 +303,29 @@ export default function POListPage() {
               <Button size="small" type="primary" icon={<CheckCircleOutlined />}>Duyệt</Button>
             </Popconfirm>
           )}
+          {r.trang_thai === 'da_duyet' && (
+            <Tooltip title="Gửi NCC">
+              <Popconfirm title="Xác nhận đã gửi PO cho nhà cung cấp?" onConfirm={() => guiNCCMut.mutate(r.id)}>
+                <Button size="small" icon={<ShopOutlined />} />
+              </Popconfirm>
+            </Tooltip>
+          )}
           {r.trang_thai === 'moi' && (
             <Popconfirm title="Xoá đơn mua này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}>
               <Button danger size="small" icon={<DeleteOutlined />} />
             </Popconfirm>
+          )}
+          {['da_duyet', 'da_gui_ncc', 'dang_giao'].includes(r.trang_thai) && (
+            <Tooltip title="Hủy PO">
+              <Popconfirm
+                title="Hủy đơn mua hàng?"
+                description="Thao tác này không thể hoàn tác nếu chưa có phiếu nhập."
+                onConfirm={() => huyPOMut.mutate(r.id)}
+                okButtonProps={{ danger: true }}
+              >
+                <Button danger size="small" icon={<MinusCircleOutlined />} />
+              </Popconfirm>
+            </Tooltip>
           )}
           {['da_duyet', 'da_gui_ncc', 'dang_giao', 'hoan_thanh'].includes(r.trang_thai) && (
             <Tooltip title="Tạo hóa đơn mua hàng">

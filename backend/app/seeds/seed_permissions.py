@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models.auth import Permission
 
+
 def seed_permissions():
     db: Session = SessionLocal()
     permissions = [
@@ -12,7 +13,7 @@ def seed_permissions():
         {"ma_quyen": "accounting.import", "ten_quyen": "Import kế toán (Số dư đầu kỳ...)"},
         {"ma_quyen": "report.export", "ten_quyen": "Xuất báo cáo Excel quản trị"},
     ]
-    
+
     for p in permissions:
         existing = db.query(Permission).filter(Permission.ma_quyen == p["ma_quyen"]).first()
         if not existing:
@@ -20,9 +21,10 @@ def seed_permissions():
             print(f"Added permission: {p['ma_quyen']}")
         else:
             print(f"Permission already exists: {p['ma_quyen']}")
-    
+
     db.commit()
     db.close()
+
 
 if __name__ == "__main__":
     seed_permissions()

@@ -22,6 +22,8 @@ export default function IssuesPage() {
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
   const [filterKho, setFilterKho] = useState<number | undefined>()
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
+  const [filterXuong, setFilterXuong] = useState<number | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [formPxId, setFormPxId] = useState<number | null>(null)
@@ -53,11 +55,25 @@ export default function IssuesPage() {
   const lsxList = (lsxPaged as any)?.items ?? []
 
   const { data: issueList = [], isLoading } = useQuery({
-    queryKey: ['material-issues', filterKho, tuNgay, denNgay],
+    queryKey: ['material-issues', filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay],
     queryFn: () => warehouseApi.listMaterialIssues({
-      warehouse_id: filterKho, tu_ngay: tuNgay, den_ngay: denNgay,
+      warehouse_id: filterKho, phap_nhan_id: filterPhapNhan, phan_xuong_id: filterXuong, tu_ngay: tuNgay, den_ngay: denNgay,
     }).then(r => r.data),
   })
+
+  const phapNhanOptions = Array.from(new Map(
+    warehouses.filter(w => w.phap_nhan_id).map(w => [w.phap_nhan_id, { value: w.phap_nhan_id!, label: w.ten_phap_nhan || `PN #${w.phap_nhan_id}` }])
+  ).values())
+  const xuongOptions = Array.from(new Map(
+    warehouses
+      .filter(w => w.phan_xuong_id && (!filterPhapNhan || w.phap_nhan_id === filterPhapNhan))
+      .map(w => [w.phan_xuong_id, { value: w.phan_xuong_id!, label: w.ten_xuong || `Xuong #${w.phan_xuong_id}` }])
+  ).values())
+  const warehouseOptions = warehouses
+    .filter(w => w.trang_thai)
+    .filter(w => !filterPhapNhan || w.phap_nhan_id === filterPhapNhan)
+    .filter(w => !filterXuong || w.phan_xuong_id === filterXuong)
+    .map(w => ({ value: w.id, label: w.ten_kho }))
 
   const createMut = useMutation({
     mutationFn: (data: CreateMaterialIssuePayload) => warehouseApi.createMaterialIssue(data),
@@ -237,8 +253,18 @@ export default function IssuesPage() {
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[8, 8]}>
           <Col xs={12} sm={6}>
+            <Select placeholder="Phap nhan" style={{ width: '100%' }} allowClear value={filterPhapNhan}
+              onChange={v => { setFilterPhapNhan(v); setFilterXuong(undefined); setFilterKho(undefined) }}
+              options={phapNhanOptions} />
+          </Col>
+          <Col xs={12} sm={6}>
+            <Select placeholder="Xuong" style={{ width: '100%' }} allowClear value={filterXuong}
+              onChange={v => { setFilterXuong(v); setFilterKho(undefined) }}
+              options={xuongOptions} />
+          </Col>
+          <Col xs={12} sm={6}>
             <Select placeholder="Tất cả kho" style={{ width: '100%' }} allowClear value={filterKho} onChange={setFilterKho}
-              options={warehouses.filter(w => w.trang_thai).map(w => ({ value: w.id, label: w.ten_kho }))} />
+              options={warehouseOptions} />
           </Col>
           <Col xs={12} sm={6}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"

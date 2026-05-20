@@ -1,7 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
 from pydantic import BaseModel, field_validator, model_validator
-from typing import Optional
 
 
 class SalesInvoiceCreate(BaseModel):

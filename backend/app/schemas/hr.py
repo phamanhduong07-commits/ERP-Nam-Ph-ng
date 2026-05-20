@@ -14,8 +14,10 @@ class DepartmentBase(BaseModel):
     phap_nhan_id: Optional[int] = None
     trang_thai: bool = True
 
+
 class DepartmentCreate(DepartmentBase):
     pass
+
 
 class DepartmentUpdate(BaseModel):
     ma_bo_phan: Optional[str] = None
@@ -25,6 +27,7 @@ class DepartmentUpdate(BaseModel):
     phan_xuong_id: Optional[int] = None
     phap_nhan_id: Optional[int] = None
     trang_thai: Optional[bool] = None
+
 
 class Department(DepartmentBase):
     id: int
@@ -40,8 +43,10 @@ class PositionBase(BaseModel):
     mo_ta: Optional[str] = None
     trang_thai: bool = True
 
+
 class PositionCreate(PositionBase):
     pass
+
 
 class PositionUpdate(BaseModel):
     ma_chuc_vu: Optional[str] = None
@@ -49,6 +54,7 @@ class PositionUpdate(BaseModel):
     cap_bac: Optional[int] = None
     mo_ta: Optional[str] = None
     trang_thai: Optional[bool] = None
+
 
 class Position(PositionBase):
     id: int
@@ -72,8 +78,10 @@ class LaborContractBase(BaseModel):
     ghi_chu: Optional[str] = None
     trang_thai: str = "hieu_luc"
 
+
 class LaborContractCreate(LaborContractBase):
     employee_id: int
+
 
 class LaborContractUpdate(BaseModel):
     so_hop_dong: Optional[str] = None
@@ -90,6 +98,7 @@ class LaborContractUpdate(BaseModel):
     phu_cap_khac: Optional[Decimal] = None
     ghi_chu: Optional[str] = None
     trang_thai: Optional[str] = None
+
 
 class LaborContract(LaborContractBase):
     id: int
@@ -124,11 +133,14 @@ class EmployeeBase(BaseModel):
     he_so_ca_nhan: Decimal = Decimal("1.5")
     trang_thai: str = "dang_lam"
 
+
 class EmployeeCreate(EmployeeBase):
     pass
 
+
 class EmployeeBulkCreate(BaseModel):
     items: List[EmployeeCreate]
+
 
 class EmployeeUpdate(BaseModel):
     ho_ten: Optional[str] = None
@@ -155,6 +167,7 @@ class EmployeeUpdate(BaseModel):
     he_so_ca_nhan: Optional[Decimal] = None
     trang_thai: Optional[str] = None
 
+
 class Employee(EmployeeBase):
     id: int
     ngay_nghi_viec: Optional[date] = None
@@ -175,8 +188,10 @@ class AttendanceLogBase(BaseModel):
     trang_thai: str = "hop_le"
     ghi_chu: Optional[str] = None
 
+
 class AttendanceLogCreate(AttendanceLogBase):
     pass
+
 
 class AttendanceLogUpdate(BaseModel):
     gio_vao: Optional[datetime] = None
@@ -185,6 +200,7 @@ class AttendanceLogUpdate(BaseModel):
     so_gio_ot: Optional[Decimal] = None
     trang_thai: Optional[str] = None
     ghi_chu: Optional[str] = None
+
 
 class AttendanceLog(AttendanceLogBase):
     id: int
@@ -203,8 +219,10 @@ class LeaveRequestBase(BaseModel):
     ly_do: Optional[str] = None
     trang_thai: str = "cho_duyet"
 
+
 class LeaveRequestCreate(LeaveRequestBase):
     pass
+
 
 class LeaveRequestUpdate(BaseModel):
     loai_don: Optional[str] = None
@@ -218,10 +236,12 @@ class LeaveRequestUpdate(BaseModel):
     y_kien_duyet: Optional[str] = None
     ngay_duyet: Optional[datetime] = None
 
+
 class LeaveApprovalRequest(BaseModel):
     trang_thai: str = "bgd_duyet"
     y_kien_duyet: Optional[str] = None
     nguoi_duyet_id: Optional[int] = None
+
 
 class LeaveRequest(LeaveRequestBase):
     id: int
@@ -250,11 +270,14 @@ class PayrollConfigBase(BaseModel):
     ghi_chu: Optional[str] = None
     trang_thai: bool = True
 
+
 class PayrollConfigCreate(PayrollConfigBase):
     pass
 
+
 class PayrollConfigBulkCreate(BaseModel):
     items: List[PayrollConfigCreate]
+
 
 class PayrollConfigUpdate(BaseModel):
     loai: Optional[str] = None
@@ -269,6 +292,7 @@ class PayrollConfigUpdate(BaseModel):
     gia_tri: Optional[Decimal] = None
     ghi_chu: Optional[str] = None
     trang_thai: Optional[bool] = None
+
 
 class PayrollConfig(PayrollConfigBase):
     id: int
@@ -285,6 +309,7 @@ class EmployeeHistoryBase(BaseModel):
     ly_do: Optional[str] = None
     ngay_hieu_luc: date = date.today()
 
+
 class EmployeeHistory(EmployeeHistoryBase):
     id: int
     created_at: datetime
@@ -300,6 +325,7 @@ class EmployeeDocumentBase(BaseModel):
     file_path: str
     ngay_het_han: Optional[date] = None
 
+
 class EmployeeDocument(EmployeeDocumentBase):
     id: int
     created_at: datetime
@@ -313,8 +339,10 @@ class PayrollHolidayBase(BaseModel):
     trang_thai: bool = True
     ghi_chu: Optional[str] = None
 
+
 class PayrollHolidayCreate(PayrollHolidayBase):
     pass
+
 
 class PayrollHoliday(PayrollHolidayBase):
     id: int

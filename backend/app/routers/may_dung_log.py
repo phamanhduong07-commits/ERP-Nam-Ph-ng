@@ -17,11 +17,11 @@ from app.models.auth import User
 router = APIRouter(prefix="/may-dung-log", tags=["Máy dừng log"])
 
 LY_DO_LABELS = {
-    "hong_may":        "Hỏng máy",
+    "hong_may": "Hỏng máy",
     "het_nguyen_lieu": "Hết nguyên liệu",
-    "nghi_giai_lao":   "Nghỉ giải lao",
-    "giao_ca":         "Giao ca",
-    "khac":            "Khác",
+    "nghi_giai_lao": "Nghỉ giải lao",
+    "giao_ca": "Giao ca",
+    "khac": "Khác",
 }
 
 
@@ -43,21 +43,21 @@ def _to_dict(r: MayDungLog) -> dict:
         return t.strftime("%H:%M") if t else None
 
     return {
-        "id":                   r.id,
-        "production_order_id":  r.production_order_id,
-        "so_lenh":              r.production_order.so_lenh if r.production_order else None,
-        "phan_xuong_id":        r.phan_xuong_id,
-        "ten_phan_xuong":       r.phan_xuong.ten_xuong if r.phan_xuong else None,
-        "ngay":                 r.ngay.isoformat(),
-        "gio_bat_dau_dung":     fmt_time(r.gio_bat_dau_dung),
-        "gio_tiep_tuc":         fmt_time(r.gio_tiep_tuc),
-        "thoi_gian_dung":       r.thoi_gian_dung,
-        "ly_do":                r.ly_do,
-        "ten_ly_do":            LY_DO_LABELS.get(r.ly_do, r.ly_do),
-        "ghi_chu":              r.ghi_chu,
-        "created_by":           r.created_by,
-        "ten_created_by":       r.creator.ho_ten if r.creator else None,
-        "created_at":           r.created_at.isoformat() if r.created_at else None,
+        "id": r.id,
+        "production_order_id": r.production_order_id,
+        "so_lenh": r.production_order.so_lenh if r.production_order else None,
+        "phan_xuong_id": r.phan_xuong_id,
+        "ten_phan_xuong": r.phan_xuong.ten_xuong if r.phan_xuong else None,
+        "ngay": r.ngay.isoformat(),
+        "gio_bat_dau_dung": fmt_time(r.gio_bat_dau_dung),
+        "gio_tiep_tuc": fmt_time(r.gio_tiep_tuc),
+        "thoi_gian_dung": r.thoi_gian_dung,
+        "ly_do": r.ly_do,
+        "ten_ly_do": LY_DO_LABELS.get(r.ly_do, r.ly_do),
+        "ghi_chu": r.ghi_chu,
+        "created_by": r.created_by,
+        "ten_created_by": r.creator.ho_ten if r.creator else None,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
     }
 
 

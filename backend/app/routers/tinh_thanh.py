@@ -47,7 +47,10 @@ async def import_tinh_thanh(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return await import_excel(db=db, file=file, model=TinhThanh, fields=TINH_THANH_IMPORT_FIELDS, key_field="ma_tinh", commit=commit)
+    return await import_excel(
+        db=db, file=file, model=TinhThanh,
+        fields=TINH_THANH_IMPORT_FIELDS, key_field="ma_tinh", commit=commit,
+    )
 
 
 @router.get("", response_model=list[TinhThanhResponse])

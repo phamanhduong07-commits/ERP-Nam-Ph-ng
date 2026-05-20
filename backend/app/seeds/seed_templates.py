@@ -1,4 +1,3 @@
-from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models.system import PrintTemplate, ExcelTemplate
 
@@ -564,6 +563,7 @@ EXCEL_TEMPLATES = [
     }
 ]
 
+
 def seed():
     db = SessionLocal()
     try:
@@ -576,7 +576,7 @@ def seed():
                 # Update existing
                 for key, val in t.items():
                     setattr(exists, key, val)
-        
+
         for t in EXCEL_TEMPLATES:
             exists = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == t["ma_mau"]).first()
             if not exists:
@@ -586,11 +586,12 @@ def seed():
                 # Update existing
                 for key, val in t.items():
                     setattr(exists, key, val)
-        
+
         db.commit()
         print("Seed templates thành công!")
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     seed()

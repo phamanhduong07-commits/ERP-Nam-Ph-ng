@@ -39,7 +39,11 @@ class CongCuDungCu(Base):
     # dang_su_dung | da_thanh_ly | mat | bao_hanh
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
     nhom: Mapped["NhomCCDC | None"] = relationship("NhomCCDC", back_populates="items")
     phieu_xuat_items: Mapped[list["PhieuXuatCCDCItem"]] = relationship(

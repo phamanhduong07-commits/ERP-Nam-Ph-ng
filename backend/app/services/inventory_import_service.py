@@ -1,4 +1,3 @@
-from decimal import Decimal
 from io import BytesIO
 from typing import Any
 import pandas as pd
@@ -9,6 +8,7 @@ from app.models.master import Product, PaperMaterial, OtherMaterial, Warehouse
 from app.models.inventory import InventoryBalance, InventoryTransaction
 from app.models.import_log import ImportLog
 from app.services.excel_import_service import parse_decimal
+
 
 async def import_inventory_excel(
     db: Session,
@@ -31,15 +31,14 @@ async def import_inventory_excel(
 
     # Chuan hoa ten cot
     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-    
+
     required_cols = ["ma_hang", "ton_luong"]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
         raise HTTPException(status_code=400, detail=f"Thieu cot: {', '.join(missing)}")
 
-    results = []
     errors = []
-    
+
     # Cache mapping de tang toc
     products = {p.ma_amis: p.id for p in db.query(Product.id, Product.ma_amis).all()}
     papers = {p.ma_chinh: p.id for p in db.query(PaperMaterial.id, PaperMaterial.ma_chinh).all()}
@@ -88,7 +87,7 @@ async def import_inventory_excel(
                 query = query.filter(InventoryBalance.paper_material_id == item["paper_material_id"])
             else:
                 query = query.filter(InventoryBalance.other_material_id == item["other_material_id"])
-            
+
             balance = query.first()
             if not balance:
                 balance = InventoryBalance(
@@ -108,7 +107,7 @@ async def import_inventory_excel(
                 balance.gia_tri_ton = item["ton_luong"] * item["don_gia"]
                 balance.don_gia_binh_quan = item["don_gia"]
                 updated += 1
-            
+
             # Tao transaction de ghi vet
             tx = InventoryTransaction(
                 warehouse_id=warehouse_id,

@@ -33,7 +33,8 @@ class YeuCauGiaoHangItem(Base):
     __tablename__ = "yeu_cau_giao_hang_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    yeu_cau_id: Mapped[int] = mapped_column(Integer, ForeignKey("yeu_cau_giao_hang.id", ondelete="CASCADE"), nullable=False)
+    yeu_cau_id: Mapped[int] = mapped_column(Integer, ForeignKey(
+        "yeu_cau_giao_hang.id", ondelete="CASCADE"), nullable=False)
     production_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=False)
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
     product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)

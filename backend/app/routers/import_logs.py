@@ -3,8 +3,8 @@ Router quản lý lịch sử import.
 - GET /api/import-logs  — danh sách, lọc theo loại/ngày/người
 - POST /api/import-logs — ghi log (gọi từ các router import)
 """
-from datetime import date, datetime
-from typing import Optional, List
+from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 

@@ -8,6 +8,8 @@ export interface Warehouse {
   dia_chi: string | null
   phan_xuong_id: number | null
   ten_xuong: string | null
+  phap_nhan_id: number | null
+  ten_phap_nhan: string | null
   dien_tich: number | null
   suc_chua: number | null
   don_vi_suc_chua: string | null

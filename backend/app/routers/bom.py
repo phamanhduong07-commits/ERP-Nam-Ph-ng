@@ -10,24 +10,14 @@ GET  /api/bom/by-item/{production_order_item_id} — lấy BOM của dòng LSX
 PATCH /api/bom/{bom_id}/confirm              — xác nhận BOM (draft → confirmed)
 """
 
-import logging
-import math
-import re
-from decimal import Decimal
-
-logger = logging.getLogger(__name__)
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy import text as sql_text
-from sqlalchemy.orm import Session, joinedload
-
-from app.database import get_db
-from app.deps import get_current_user, require_permissions
-from app.models.auth import User
-from app.models.bom import ProductionBOM, ProductionBOMItem, ProductionBOMIndirectCostItem
-from app.models.master import PaperMaterial, CauTrucThongDung
-from app.models.production import ProductionOrderItem
-from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
+from fastapi import File, UploadFile
+from app.services.excel_import_service import build_template_response, ImportField, parse_decimal, parse_int
+from app.routers.addon_rates import get_addon_rates_from_db
+from app.routers.indirect_costs import get_indirect_breakdown_from_db
+from app.services.price_calculator import (
+    calculate_price, calculate_dien_tich,
+    get_spoilage_rate, _default_profit_rate, _INDIRECT_COST,
+)
 from app.schemas.bom import (
     BomCalculateRequest,
     BomCalculateResponse,
@@ -41,14 +31,23 @@ from app.schemas.bom import (
     BomLayerResult,
     IndirectCostItem,
 )
-from app.services.price_calculator import (
-    calculate_price, calculate_dien_tich,
-    get_spoilage_rate, _default_profit_rate, _INDIRECT_COST,
-)
-from app.routers.indirect_costs import get_indirect_breakdown_from_db
-from app.routers.addon_rates import get_addon_rates_from_db
-from app.services.excel_import_service import build_template_response, ImportField, parse_text, parse_decimal, parse_int, parse_bool
-from fastapi import File, UploadFile
+from app.models.sales import SalesOrder, Quote, QuoteItem
+from app.models.production import ProductionOrderItem
+from app.models.master import PaperMaterial, CauTrucThongDung
+from app.models.bom import ProductionBOM, ProductionBOMItem, ProductionBOMIndirectCostItem
+from app.models.auth import User
+from app.deps import get_current_user, require_permissions
+from app.database import get_db
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import text as sql_text
+from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+import logging
+import re
+from decimal import Decimal
+
+logger = logging.getLogger(__name__)
+
 
 router = APIRouter(prefix="/api/bom", tags=["bom"])
 
@@ -61,7 +60,7 @@ BOM_IMPORT_FIELDS = [
     ImportField("cao", "Cao", required=True, parser=parse_decimal),
     ImportField("so_lop", "So lop", required=True, parser=parse_int, help_text="3/5/7"),
     ImportField("to_hop_song", "To hop song", help_text="VD: B, BC, BCB"),
-    
+
     ImportField("mat", "Mat ngoai"),
     ImportField("mat_dl", "Mat DL", parser=parse_decimal),
     ImportField("song_1", "Song 1"),
@@ -308,13 +307,13 @@ def _sync_poi_from_bom(bom: ProductionBOM, db: Session) -> None:
     # Thông số in ấn & gia công
     if bom.in_flexo_mau and bom.in_flexo_mau > 0:
         poi.loai_in = "flexo"
-        poi.so_mau  = bom.in_flexo_mau
+        poi.so_mau = bom.in_flexo_mau
     elif bom.in_ky_thuat_so:
         poi.loai_in = "ky_thuat_so"
-        poi.so_mau  = None
+        poi.so_mau = None
     # Không ghi đè nếu BOM không có in (giữ nguyên giá trị cũ trên POI)
 
-    poi.c_tham  = _mat_int_to_str(bom.chong_tham)
+    poi.c_tham = _mat_int_to_str(bom.chong_tham)
     poi.can_man = _mat_int_to_str(bom.can_mang)
 
     db.add(poi)
@@ -594,7 +593,7 @@ def _find_quote_item(poi: "ProductionOrderItem", db: Session):
         return poi
 
     product_id = poi.product_id
-    ten_hang   = poi.ten_hang
+    ten_hang = poi.ten_hang
 
     soi_ns = None
     if poi.sales_order_item_id:
@@ -711,8 +710,8 @@ def bom_from_production_item(
             status_code=422,
             detail=(
                 f"Không tìm thấy báo giá cho mã hàng '{name}'. "
-                f"Kiểm tra: (1) Sản phẩm đã được liên kết với mã hàng trong danh mục chưa? "
-                f"(2) Có báo giá nào ở trạng thái Mới/Đã duyệt chứa mã hàng này không?"
+                "Kiểm tra: (1) Sản phẩm đã được liên kết với mã hàng trong danh mục chưa? "
+                "(2) Có báo giá nào ở trạng thái Mới/Đã duyệt chứa mã hàng này không?"
             ),
         )
 
@@ -720,8 +719,8 @@ def bom_from_production_item(
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Dòng báo giá chưa có thông tin kết cấu giấy (định lượng trống). "
-                f"Vui lòng cập nhật báo giá tương ứng."
+                "Dòng báo giá chưa có thông tin kết cấu giấy (định lượng trống). "
+                "Vui lòng cập nhật báo giá tương ứng."
             ),
         )
 
@@ -741,38 +740,38 @@ def bom_from_production_item(
     # ── Build layers từ QuoteItem ────────────────────────────────────────────
     raw_pairs = _raw_pairs_from_object(qi)
     layers_dicts = _build_layers(so_lop, to_hop_song, raw_pairs)
-    layers_dicts = [l for l in layers_dicts if l['dinh_luong'] > 0]
+    layers_dicts = [item for item in layers_dicts if item['dinh_luong'] > 0]
 
     if len(layers_dicts) < so_lop:
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Kết cấu giấy trong báo giá thiếu định lượng "
+                "Kết cấu giấy trong báo giá thiếu định lượng "
                 f"({len(layers_dicts)}/{so_lop} lớp có dữ liệu). "
-                f"Vui lòng cập nhật báo giá."
+                "Vui lòng cập nhật báo giá."
             ),
         )
 
     from app.schemas.bom import BomLayerInput as BLI
     layer_objs = [
         BLI(
-            vi_tri_lop=l['vi_tri_lop'],
-            loai_lop=l['loai_lop'],
-            flute_type=l['flute_type'],
-            ma_ky_hieu=l['ma_ky_hieu'] or '',
+            vi_tri_lop=item['vi_tri_lop'],
+            loai_lop=item['loai_lop'],
+            flute_type=item['flute_type'],
+            ma_ky_hieu=item['ma_ky_hieu'] or '',
             paper_material_id=None,
-            dinh_luong=D(str(l['dinh_luong'])),
+            dinh_luong=D(str(item['dinh_luong'])),
             don_gia_kg=D('0'),
         )
-        for l in layers_dicts
+        for item in layers_dicts
     ]
     resolved = _resolve_paper_prices(layer_objs, db)
 
     # ── Kích thước ────────────────────────────────────────────────────────────
     loai_thung = qi.loai_thung or "A1"
-    dai_val  = float(qi.dai  or (product.dai  if product else None) or 0)
+    dai_val = float(qi.dai or (product.dai if product else None) or 0)
     rong_val = float(qi.rong or (product.rong if product else None) or 0)
-    cao_val  = float(qi.cao  or (product.cao  if product else None) or 0)
+    cao_val = float(qi.cao or (product.cao if product else None) or 0)
 
     if not (dai_val and rong_val):
         raise HTTPException(
@@ -1025,13 +1024,13 @@ def _build_layers(so_lop: int, to_hop_song: str | None, raw_pairs: list[tuple]) 
 def _raw_pairs_from_object(obj) -> list[tuple]:
     """Lấy danh sách (code, dl) từ QuoteItem hoặc CauTrucThongDung."""
     return [
-        (getattr(obj, 'mat', None),    getattr(obj, 'mat_dl', None)),
+        (getattr(obj, 'mat', None), getattr(obj, 'mat_dl', None)),
         (getattr(obj, 'song_1', None), getattr(obj, 'song_1_dl', None)),
-        (getattr(obj, 'mat_1', None),  getattr(obj, 'mat_1_dl', None)),
+        (getattr(obj, 'mat_1', None), getattr(obj, 'mat_1_dl', None)),
         (getattr(obj, 'song_2', None), getattr(obj, 'song_2_dl', None)),
-        (getattr(obj, 'mat_2', None),  getattr(obj, 'mat_2_dl', None)),
+        (getattr(obj, 'mat_2', None), getattr(obj, 'mat_2_dl', None)),
         (getattr(obj, 'song_3', None), getattr(obj, 'song_3_dl', None)),
-        (getattr(obj, 'mat_3', None),  getattr(obj, 'mat_3_dl', None)),
+        (getattr(obj, 'mat_3', None), getattr(obj, 'mat_3_dl', None)),
     ]
 
 
@@ -1127,13 +1126,14 @@ def get_quote_spec(
         db.query(CauTrucThongDung)
         .filter(
             CauTrucThongDung.so_lop == so_lop,
-            CauTrucThongDung.trang_thai == True,
+            CauTrucThongDung.trang_thai.is_(True),
         )
         .order_by(CauTrucThongDung.thu_tu)
         .first()
     )
 
-    to_hop_song = (cau_truc.to_hop_song if cau_truc else None) or ("C" if so_lop == 3 else "CB" if so_lop == 5 else "CBC")
+    to_hop_song = (cau_truc.to_hop_song if cau_truc else None) or (
+        "C" if so_lop == 3 else "CB" if so_lop == 5 else "CBC")
     layers = (
         _build_layers(so_lop, to_hop_song, _raw_pairs_from_object(cau_truc))
         if cau_truc and _has_paper_data(cau_truc)
@@ -1176,7 +1176,6 @@ def list_bom_summary(
     """Danh sách BOM đã lưu kèm thông tin lệnh sản xuất — dùng cho trang Định mức BOM."""
     from app.models.production import ProductionOrder
     from app.models.sales import SalesOrder
-    from app.models.master import Customer
     q = (
         db.query(ProductionBOM)
         .options(
@@ -1192,11 +1191,11 @@ def list_bom_summary(
     result = []
     for bom in boms:
         poi = bom.production_order_item
-        po  = poi.production_order if poi else None
-        so  = po.sales_order if po else None
-        kh  = so.customer if so else None
+        po = poi.production_order if poi else None
+        so = po.sales_order if po else None
+        kh = so.customer if so else None
         ten_khach_hang = kh.ten_viet_tat if kh else None
-        ma_khach_hang  = kh.ma_kh if kh else None
+        ma_khach_hang = kh.ma_kh if kh else None
         if search:
             s = search.lower()
             hang = (poi.ten_hang if poi else '') or ''
@@ -1329,7 +1328,8 @@ def reverse_calculate(
 
     # Tỷ lệ hao hụt và lợi nhuận
     hh = get_spoilage_rate(data.so_luong, data.so_lop, data.loai_thung)
-    ln = data.ty_le_loi_nhuan if data.ty_le_loi_nhuan is not None else _default_profit_rate(data.loai_thung, data.so_lop)
+    ln = data.ty_le_loi_nhuan if data.ty_le_loi_nhuan is not None else _default_profit_rate(
+        data.loai_thung, data.so_lop)
 
     kd = data.hoa_hong_kd_pct
     kh = data.hoa_hong_kh_pct

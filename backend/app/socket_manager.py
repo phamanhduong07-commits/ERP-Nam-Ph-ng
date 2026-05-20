@@ -3,7 +3,7 @@ import socketio
 # Khởi tạo AsyncServer cho Socket.io
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins='*', # Sẽ được cấu hình chi tiết nếu cần
+    cors_allowed_origins='*',  # Sẽ được cấu hình chi tiết nếu cần
     logger=True,
     engineio_logger=True
 )

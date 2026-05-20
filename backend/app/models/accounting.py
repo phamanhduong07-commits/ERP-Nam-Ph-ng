@@ -1,8 +1,8 @@
 from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy import (
-    Boolean, CheckConstraint, Computed, Date, DateTime,
-    ForeignKey, Integer, Numeric, SmallInteger, String, Text,
+    Boolean, Computed, Date, DateTime, ForeignKey,
+    Integer, Numeric, SmallInteger, String, Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -58,7 +58,7 @@ class JournalEntryLine(Base):
     dien_giai: Mapped[str | None] = mapped_column(Text)
     so_tien_no: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     so_tien_co: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
-    
+
     # Chi tiết theo phân xưởng và pháp nhân tại từng dòng
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
@@ -262,17 +262,17 @@ class WorkshopPayroll(Base):
     __tablename__ = "workshop_payroll"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False) # BL-YYYYMM-XX
-    thang: Mapped[date] = mapped_column(Date, nullable=False) # Ngày đầu tháng hoặc cuối tháng đại diện
+    so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # BL-YYYYMM-XX
+    thang: Mapped[date] = mapped_column(Date, nullable=False)  # Ngày đầu tháng hoặc cuối tháng đại diện
     phan_xuong_id: Mapped[int] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=False)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
-    
+
     tong_luong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     tong_thuong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
-    tong_bao_hiem: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0) # CP BH công ty đóng
-    
+    tong_bao_hiem: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)  # CP BH công ty đóng
+
     ghi_chu: Mapped[str | None] = mapped_column(Text)
-    trang_thai: Mapped[str] = mapped_column(String(20), default="nhap") # nhap | da_duyet | huy
+    trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")  # nhap | da_duyet | huy
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
 
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -295,19 +295,19 @@ class FixedAsset(Base):
     ten_ts: Mapped[str] = mapped_column(String(255), nullable=False)
     ngay_mua: Mapped[date] = mapped_column(Date, nullable=False)
     nguyen_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
-    
-    so_thang_khau_hao: Mapped[int] = mapped_column(Integer, nullable=False) # Tổng số tháng KH
-    da_khau_hao_thang: Mapped[int] = mapped_column(Integer, default=0) # Số tháng đã KH
+
+    so_thang_khau_hao: Mapped[int] = mapped_column(Integer, nullable=False)  # Tổng số tháng KH
+    da_khau_hao_thang: Mapped[int] = mapped_column(Integer, default=0)  # Số tháng đã KH
     gia_tri_da_khau_hao: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
-    
+
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
-    
+
     tk_nguyen_gia: Mapped[str] = mapped_column(String(20), default="211")
     tk_khau_hao: Mapped[str] = mapped_column(String(20), default="214")
     tk_chi_phi: Mapped[str] = mapped_column(String(20), default="154")
-    
-    trang_thai: Mapped[str] = mapped_column(String(20), default="dang_su_dung") # dang_su_dung | da_kh_het | thanh_ly
+
+    trang_thai: Mapped[str] = mapped_column(String(20), default="dang_su_dung")  # dang_su_dung | da_kh_het | thanh_ly
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

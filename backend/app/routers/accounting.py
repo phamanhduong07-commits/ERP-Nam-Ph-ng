@@ -14,21 +14,19 @@ from sqlalchemy import func
 from app.services.accounting_service import AccountingService
 from app.schemas.accounting import (
     PurchaseInvoiceCreate,
-    PurchaseInvoiceResponse, PurchaseInvoiceListItem,
-    CashReceiptCreate, CashReceiptResponse,
-    CashPaymentCreate, CashPaymentResponse,
-    OpeningBalanceCreate,
-    WorkshopPayrollCreate, WorkshopPayrollResponse,
-    OverheadAllocationRequest,
-    FixedAssetCreate, FixedAssetResponse,
-    ManualJournalEntryCreate,
+    PurchaseInvoiceResponse, CashReceiptCreate,
+    CashReceiptResponse, CashPaymentCreate,
+    CashPaymentResponse, OpeningBalanceCreate,
+    WorkshopPayrollCreate,
+    WorkshopPayrollResponse, OverheadAllocationRequest,
+    FixedAssetCreate,
+    FixedAssetResponse, ManualJournalEntryCreate,
 )
 from app.services.excel_import_service import (
-    ImportField, build_template_response, parse_bool, parse_decimal, parse_text,
+    ImportField, build_template_response, parse_decimal, parse_text,
 )
-import io, pandas as pd
-from fastapi.responses import StreamingResponse
-from openpyxl import Workbook
+import io
+import pandas as pd
 
 router = APIRouter(prefix="/api/accounting", tags=["accounting"])
 
@@ -162,6 +160,15 @@ def create_purchase_invoice_from_gr(
     return AccountingService(db).create_purchase_invoice_from_gr(
         gr_id, current_user.id, thue_suat=thue_suat, co_vat=co_vat
     )
+
+
+@router.post("/purchase-invoices/{inv_id}/huy", response_model=PurchaseInvoiceResponse)
+def cancel_purchase_invoice(
+    inv_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    return AccountingService(db).cancel_purchase_invoice(inv_id)
 
 
 # ─────────────────────────────────────────────
@@ -448,17 +455,19 @@ def create_opening_balance(
 
 
 _OB_AR_FIELDS = [
-    ImportField("ma_kh",        "Ma KH",       required=True, parser=parse_text,    help_text="Ma khach hang phai ton tai trong he thong"),
-    ImportField("ky_mo_so",     "Ngay mo so",  required=True, parser=parse_text,    help_text="YYYY-MM-DD"),
+    ImportField("ma_kh", "Ma KH", required=True, parser=parse_text,
+                help_text="Ma khach hang phai ton tai trong he thong"),
+    ImportField("ky_mo_so", "Ngay mo so", required=True, parser=parse_text, help_text="YYYY-MM-DD"),
     ImportField("so_du_dau_ky", "So du (VND)", required=True, parser=parse_decimal, help_text="So no phai thu dau ky"),
-    ImportField("ghi_chu",      "Ghi chu",     parser=parse_text),
+    ImportField("ghi_chu", "Ghi chu", parser=parse_text),
 ]
 
 _OB_AP_FIELDS = [
-    ImportField("ma_ncc",       "Ma NCC",      required=True, parser=parse_text,    help_text="Ma nha cung cap phai ton tai trong he thong"),
-    ImportField("ky_mo_so",     "Ngay mo so",  required=True, parser=parse_text,    help_text="YYYY-MM-DD"),
+    ImportField("ma_ncc", "Ma NCC", required=True, parser=parse_text,
+                help_text="Ma nha cung cap phai ton tai trong he thong"),
+    ImportField("ky_mo_so", "Ngay mo so", required=True, parser=parse_text, help_text="YYYY-MM-DD"),
     ImportField("so_du_dau_ky", "So du (VND)", required=True, parser=parse_decimal, help_text="So no phai tra dau ky"),
-    ImportField("ghi_chu",      "Ghi chu",     parser=parse_text),
+    ImportField("ghi_chu", "Ghi chu", parser=parse_text),
 ]
 
 
@@ -523,7 +532,13 @@ async def import_opening_balances_ar(
             OpeningBalance.ky_mo_so == ky_mo_so,
         ).first()
         status = "update" if ob else "create"
-        objects_to_save.append((ob, {"doi_tuong": "khach_hang", "customer_id": kh.id, "ky_mo_so": ky_mo_so, "so_du_dau_ky": so_du, "ghi_chu": ghi_chu, "created_by": current_user.id}))
+        objects_to_save.append((ob,
+                                {"doi_tuong": "khach_hang",
+                                 "customer_id": kh.id,
+                                 "ky_mo_so": ky_mo_so,
+                                 "so_du_dau_ky": so_du,
+                                 "ghi_chu": ghi_chu,
+                                 "created_by": current_user.id}))
         created += 1
         rows.append({"row": row_no, "status": status, "errors": [], "data": {"ma_kh": ma_kh, "so_du": str(so_du)}})
     if commit and errors_count == 0:
@@ -534,7 +549,8 @@ async def import_opening_balances_ar(
             else:
                 db.add(OpeningBalance(**vals))
         db.commit()
-    return {"commit": commit, "total": len(rows), "created": created, "updated": 0, "skipped": 0, "errors": errors_count, "rows": rows[:200]}
+    return {"commit": commit, "total": len(rows), "created": created, "updated": 0,
+            "skipped": 0, "errors": errors_count, "rows": rows[:200]}
 
 
 @router.post("/opening-balances/import-ap")
@@ -588,7 +604,13 @@ async def import_opening_balances_ap(
             OpeningBalance.ky_mo_so == ky_mo_so,
         ).first()
         status = "update" if ob else "create"
-        objects_to_save.append((ob, {"doi_tuong": "nha_cung_cap", "supplier_id": ncc.id, "ky_mo_so": ky_mo_so, "so_du_dau_ky": so_du, "ghi_chu": ghi_chu, "created_by": current_user.id}))
+        objects_to_save.append((ob,
+                                {"doi_tuong": "nha_cung_cap",
+                                 "supplier_id": ncc.id,
+                                 "ky_mo_so": ky_mo_so,
+                                 "so_du_dau_ky": so_du,
+                                 "ghi_chu": ghi_chu,
+                                 "created_by": current_user.id}))
         created += 1
         rows.append({"row": row_no, "status": status, "errors": [], "data": {"ma_ncc": ma_ncc, "so_du": str(so_du)}})
     if commit and errors_count == 0:
@@ -599,7 +621,8 @@ async def import_opening_balances_ap(
             else:
                 db.add(OpeningBalance(**vals))
         db.commit()
-    return {"commit": commit, "total": len(rows), "created": created, "updated": 0, "skipped": 0, "errors": errors_count, "rows": rows[:200]}
+    return {"commit": commit, "total": len(rows), "created": created, "updated": 0,
+            "skipped": 0, "errors": errors_count, "rows": rows[:200]}
 
 
 # ─────────────────────────────────────────────
@@ -611,9 +634,15 @@ def download_ob_cash_template(_: User = Depends(get_current_user)):
     return build_template_response(
         "mau_import_so_du_quy_tien_mat.xlsx",
         [
-            ImportField("ky_mo_so",     "Ngay mo so",  required=True, parser=parse_text,    help_text="YYYY-MM-DD — ngay go-live (bat dau mo so quy)"),
-            ImportField("so_du_dau_ky", "So du (VND)", required=True, parser=parse_decimal, help_text="So du quy tien mat dau ky"),
-            ImportField("ghi_chu",      "Ghi chu",     parser=parse_text),
+            ImportField("ky_mo_so", "Ngay mo so", required=True, parser=parse_text,
+                        help_text="YYYY-MM-DD — ngay go-live (bat dau mo so quy)"),
+            ImportField(
+                "so_du_dau_ky",
+                "So du (VND)",
+                required=True,
+                parser=parse_decimal,
+                help_text="So du quy tien mat dau ky"),
+            ImportField("ghi_chu", "Ghi chu", parser=parse_text),
         ],
     )
 
@@ -670,7 +699,8 @@ async def import_ob_cash(
             "created_by": current_user.id,
         }))
         created += 1
-        rows.append({"row": row_no, "status": status, "errors": [], "data": {"ky_mo_so": str(ky_mo_so), "so_du": str(so_du)}})
+        rows.append({"row": row_no, "status": status, "errors": [], "data": {
+                    "ky_mo_so": str(ky_mo_so), "so_du": str(so_du)}})
     if commit and errors_count == 0:
         for ob, vals in objects_to_save:
             if ob:
@@ -679,7 +709,8 @@ async def import_ob_cash(
             else:
                 db.add(OpeningBalance(**vals))
         db.commit()
-    return {"commit": commit, "total": len(rows), "created": created, "updated": 0, "skipped": 0, "errors": errors_count, "rows": rows[:200]}
+    return {"commit": commit, "total": len(rows), "created": created, "updated": 0,
+            "skipped": 0, "errors": errors_count, "rows": rows[:200]}
 
 
 # ─────────────────────────────────────────────
@@ -875,7 +906,7 @@ def print_receipt(
 
     pn: PhapNhan | None = (
         db.get(PhapNhan, r.phap_nhan_id) if r.phap_nhan_id
-        else db.query(PhapNhan).filter(PhapNhan.trang_thai == True).first()
+        else db.query(PhapNhan).filter(PhapNhan.trang_thai.is_(True)).first()
     )
     accent = (pn.mau_sac_chinh if pn and pn.mau_sac_chinh else "#1565C0")
     ten_cty = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
@@ -904,8 +935,7 @@ def print_receipt(
   <div>
     <div class="company-name">{ten_cty}</div>
     <div class="company-info">
-      {"Địa chỉ: " + dia_chi_cty + "<br>" if dia_chi_cty else ""}{"MST: " + mst_cty + " &nbsp;|&nbsp; " if mst_cty else ""}{"ĐT: " + dt_cty if dt_cty else ""}
-    </div>
+      {"Địa chỉ: " + dia_chi_cty + "<br>" if dia_chi_cty else ""}{"MST: " + mst_cty + " &nbsp;|&nbsp; " if mst_cty else ""}{"ĐT: " + dt_cty if dt_cty else ""} </div>
   </div>
   <div class="mau">
     Mẫu số: 01-TT<br>
@@ -958,7 +988,7 @@ def print_payment(
 
     pn: PhapNhan | None = (
         db.get(PhapNhan, p.phap_nhan_id) if p.phap_nhan_id
-        else db.query(PhapNhan).filter(PhapNhan.trang_thai == True).first()
+        else db.query(PhapNhan).filter(PhapNhan.trang_thai.is_(True)).first()
     )
     accent = (pn.mau_sac_chinh if pn and pn.mau_sac_chinh else "#B71C1C")
     ten_cty = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
@@ -987,8 +1017,7 @@ def print_payment(
   <div>
     <div class="company-name">{ten_cty}</div>
     <div class="company-info">
-      {"Địa chỉ: " + dia_chi_cty + "<br>" if dia_chi_cty else ""}{"MST: " + mst_cty + " &nbsp;|&nbsp; " if mst_cty else ""}{"ĐT: " + dt_cty if dt_cty else ""}
-    </div>
+      {"Địa chỉ: " + dia_chi_cty + "<br>" if dia_chi_cty else ""}{"MST: " + mst_cty + " &nbsp;|&nbsp; " if mst_cty else ""}{"ĐT: " + dt_cty if dt_cty else ""} </div>
   </div>
   <div class="mau">
     Mẫu số: 02-TT<br>
@@ -1028,6 +1057,7 @@ def print_payment(
 </html>"""
     return HTMLResponse(content=html)
 
+
 @router.get("/ar/reconciliation/{customer_id}")
 def get_customer_reconciliation(
     customer_id: int,
@@ -1039,6 +1069,7 @@ def get_customer_reconciliation(
     """Lấy dữ liệu đối chiếu công nợ khách hàng dựa trên giao hàng và thanh toán."""
     return AccountingService(db).get_customer_reconciliation(customer_id, tu_ngay, den_ngay)
 
+
 @router.get("/ap/reconciliation/{supplier_id}")
 def get_supplier_reconciliation(
     supplier_id: int,
@@ -1049,6 +1080,7 @@ def get_supplier_reconciliation(
 ):
     """Lấy dữ liệu đối chiếu công nợ nhà cung cấp dựa trên nhập kho và phiếu chi."""
     return AccountingService(db).get_supplier_reconciliation(supplier_id, tu_ngay, den_ngay)
+
 
 @router.get("/general-ledger")
 def get_general_ledger(
@@ -1062,6 +1094,7 @@ def get_general_ledger(
 ):
     """Lấy sổ cái chi tiết tài khoản."""
     return AccountingService(db).get_general_ledger(so_tk, tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id)
+
 
 @router.get("/trial-balance")
 def get_trial_balance(
@@ -1186,18 +1219,26 @@ def list_journal_entries(
     from app.models.accounting import JournalEntry
     from sqlalchemy import desc
     q = db.query(JournalEntry)
-    if tu_ngay: q = q.filter(JournalEntry.ngay_but_toan >= tu_ngay)
-    if den_ngay: q = q.filter(JournalEntry.ngay_but_toan <= den_ngay)
-    if loai_but_toan: q = q.filter(JournalEntry.loai_but_toan == loai_but_toan)
-    if phap_nhan_id: q = q.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
-    if phan_xuong_id: q = q.filter(JournalEntry.phan_xuong_id == phan_xuong_id)
-    if chung_tu_loai: q = q.filter(JournalEntry.chung_tu_loai == chung_tu_loai)
-    if chung_tu_id: q = q.filter(JournalEntry.chung_tu_id == chung_tu_id)
+    if tu_ngay:
+        q = q.filter(JournalEntry.ngay_but_toan >= tu_ngay)
+    if den_ngay:
+        q = q.filter(JournalEntry.ngay_but_toan <= den_ngay)
+    if loai_but_toan:
+        q = q.filter(JournalEntry.loai_but_toan == loai_but_toan)
+    if phap_nhan_id:
+        q = q.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
+    if phan_xuong_id:
+        q = q.filter(JournalEntry.phan_xuong_id == phan_xuong_id)
+    if chung_tu_loai:
+        q = q.filter(JournalEntry.chung_tu_loai == chung_tu_loai)
+    if chung_tu_id:
+        q = q.filter(JournalEntry.chung_tu_id == chung_tu_id)
 
     total = q.count()
     items = q.order_by(desc(JournalEntry.ngay_but_toan), desc(JournalEntry.id))\
              .offset((page - 1) * page_size).limit(page_size).all()
     return {"total": total, "items": items}
+
 
 @router.post("/journal-entries")
 def create_manual_journal_entry(
@@ -1212,7 +1253,7 @@ def create_manual_journal_entry(
         loai_but_toan='tong_hop',
         chung_tu_loai='tong_hop',
         chung_tu_id=None,
-        lines=[l.model_dump() for l in data.lines],
+        lines=[line.model_dump() for line in data.lines],
         phap_nhan_id=data.phap_nhan_id,
         phan_xuong_id=data.phan_xuong_id,
     )
@@ -1313,6 +1354,7 @@ def get_fixed_asset_template():
     from app.services.accounting_import_service import FIXED_ASSET_FIELDS
     return build_template_response("Mau_Import_Tai_San.xlsx", FIXED_ASSET_FIELDS)
 
+
 @router.post("/fixed-assets/import")
 async def import_fixed_assets(
     file: UploadFile = File(...),
@@ -1329,11 +1371,13 @@ async def import_fixed_assets(
         user=user, loai_du_lieu="tai_san_co_dinh"
     )
 
+
 @router.get("/workshop-payroll/import-template")
 def get_workshop_payroll_template():
     from app.services.excel_import_service import build_template_response
     from app.services.accounting_import_service import WORKSHOP_PAYROLL_FIELDS
     return build_template_response("Mau_Import_Luong_Xuong.xlsx", WORKSHOP_PAYROLL_FIELDS)
+
 
 @router.post("/workshop-payroll/import")
 async def import_workshop_payroll(
@@ -1347,8 +1391,7 @@ async def import_workshop_payroll(
     from app.models.accounting import WorkshopPayroll
     return await import_excel(
         db=db, file=file, model=WorkshopPayroll, fields=WORKSHOP_PAYROLL_FIELDS,
-        key_field="id", # Payroll usually creates new records
+        key_field="id",  # Payroll usually creates new records
         commit=commit, resolver=workshop_payroll_resolver,
         user=user, loai_du_lieu="luong_xuong"
     )
-

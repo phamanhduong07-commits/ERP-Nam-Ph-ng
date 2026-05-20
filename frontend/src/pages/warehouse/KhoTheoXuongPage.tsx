@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Card, Row, Col, Button, Drawer, Menu, Table, Typography, Tag,
+  Card, Row, Col, Button, Drawer, Menu, Select, Table, Typography, Tag,
   Progress, Spin, Empty, Space, Statistic, message, Tooltip,
 } from 'antd'
 import {
   PlusOutlined, ReloadOutlined, WarningOutlined,
 } from '@ant-design/icons'
 import { warehouseApi } from '../../api/warehouse'
+import { phapNhanApi } from '../../api/phap_nhan'
 import type { WarehouseSlot, WarehouseSlotNA, PhanXuongWithWarehouses, TonKho } from '../../api/warehouse'
 
 const { Title, Text } = Typography
@@ -152,6 +153,7 @@ function WarehouseCard({
 export default function KhoTheoXuongPage() {
   const queryClient = useQueryClient()
   const [selectedPxId, setSelectedPxId] = useState<number | 'all'>('all')
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
   const [detailSlot, setDetailSlot] = useState<WarehouseSlot | null>(null)
 
   const { data: list = [], isLoading, isError, refetch } = useQuery({
@@ -160,6 +162,17 @@ export default function KhoTheoXuongPage() {
     refetchInterval: 60_000,
     retry: 3,
   })
+
+  const { data: phapNhanList = [] } = useQuery({
+    queryKey: ['phap-nhan-active'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+    staleTime: 300_000,
+  })
+
+  const filteredList = useMemo(() => {
+    if (!filterPhapNhan) return list
+    return (list as PhanXuongWithWarehouses[]).filter(px => px.phap_nhan_id === filterPhapNhan)
+  }, [list, filterPhapNhan])
 
   const { data: detailItems = [], isFetching: detailLoading } = useQuery<TonKho[]>({
     queryKey: ['ton-kho-detail', detailSlot?.id],
@@ -179,7 +192,9 @@ export default function KhoTheoXuongPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi khởi tạo kho'),
   })
 
-  const displayList = selectedPxId === 'all' ? list : list.filter(px => px.id === selectedPxId)
+  const displayList = selectedPxId === 'all'
+    ? filteredList
+    : (filteredList as PhanXuongWithWarehouses[]).filter(px => px.id === selectedPxId)
 
   const totalGiaTri = detailItems.reduce((s, r) => s + (r.gia_tri_ton ?? 0), 0)
   const totalSoLuong = detailItems.reduce((s, r) => s + (r.ton_luong ?? 0), 0)
@@ -189,7 +204,20 @@ export default function KhoTheoXuongPage() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Kho theo xưởng</Title>
+        <Space>
+          <Title level={4} style={{ margin: 0 }}>Kho theo xưởng</Title>
+          <Select
+            allowClear
+            placeholder="Tất cả pháp nhân"
+            style={{ width: 200 }}
+            value={filterPhapNhan}
+            onChange={v => { setFilterPhapNhan(v); setSelectedPxId('all') }}
+            options={phapNhanList.map((p: any) => ({
+              value: p.id,
+              label: p.ten_viet_tat || p.ten_phap_nhan,
+            }))}
+          />
+        </Space>
         <Button
           icon={<ReloadOutlined />}
           onClick={() => queryClient.invalidateQueries({ queryKey: ['kho-theo-xuong'] })}
@@ -230,12 +258,12 @@ export default function KhoTheoXuongPage() {
                       <span>
                         Tất cả
                         <Tag style={{ marginLeft: 6, fontSize: 10 }} color="default">
-                          {list.length}
+                          {filteredList.length}
                         </Tag>
                       </span>
                     ),
                   },
-                  ...list.map((px: PhanXuongWithWarehouses) => ({
+                  ...(filteredList as PhanXuongWithWarehouses[]).map((px: PhanXuongWithWarehouses) => ({
                     key: String(px.id),
                     label: (
                       <div style={{ lineHeight: '1.4' }}>

@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import Customer, Warehouse, Product
-from app.models.production import ProductionOrder, ProductionOrderItem
-from app.models.sales import SalesOrder, SalesOrderItem
+from app.models.master import Customer, Warehouse
+from app.models.production import ProductionOrder
+from app.models.sales import SalesOrder
 from app.models.yeu_cau_giao_hang import YeuCauGiaoHang, YeuCauGiaoHangItem
 from app.services.carton_metrics import production_item_metrics
 

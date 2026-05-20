@@ -15,7 +15,8 @@ class Permission(Base):
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
-    role_permissions: Mapped[list["RolePermission"]] = relationship("RolePermission", back_populates="permission", cascade="all, delete-orphan")
+    role_permissions: Mapped[list["RolePermission"]] = relationship(
+        "RolePermission", back_populates="permission", cascade="all, delete-orphan")
 
 
 class RolePermission(Base):
@@ -41,7 +42,8 @@ class Role(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     users: Mapped[list["User"]] = relationship("User", back_populates="role")
-    role_permissions: Mapped[list["RolePermission"]] = relationship("RolePermission", back_populates="role", cascade="all, delete-orphan")
+    role_permissions: Mapped[list["RolePermission"]] = relationship(
+        "RolePermission", back_populates="role", cascade="all, delete-orphan")
 
 
 class User(Base):
@@ -59,7 +61,11 @@ class User(Base):
     machine_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     lan_dang_nhap_cuoi: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(
+            timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow)
 
     role: Mapped["Role"] = relationship("Role", back_populates="users")
 

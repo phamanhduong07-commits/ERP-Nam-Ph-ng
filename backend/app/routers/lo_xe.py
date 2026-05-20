@@ -31,7 +31,7 @@ def list_lo_xe(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return db.query(LoXe).filter(LoXe.trang_thai == True).order_by(LoXe.ho_ten).all()
+    return db.query(LoXe).filter(LoXe.trang_thai.is_(True)).order_by(LoXe.ho_ten).all()
 
 
 @router.post("", response_model=LoXeResponse, status_code=201)

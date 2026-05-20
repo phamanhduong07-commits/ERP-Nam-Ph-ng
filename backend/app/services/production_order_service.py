@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
-from app.models.sales import SalesOrderItem, SalesOrder
+from app.models.sales import SalesOrder
 from app.models.master import Product, Customer
 from app.schemas.production import (
     ProductionOrderCreate, ProductionOrderUpdate,
@@ -112,7 +112,10 @@ class ProductionOrderService:
                 ngay_lenh=o.ngay_lenh,
                 sales_order_id=o.sales_order_id,
                 so_don=o.sales_order.so_don if o.sales_order else None,
-                ten_khach_hang=o.sales_order.customer.ten_viet_tat if o.sales_order and o.sales_order.customer else None,
+                ten_khach_hang=(
+                    o.sales_order.customer.ten_viet_tat
+                    if o.sales_order and o.sales_order.customer else None
+                ),
                 ten_hang=first_item.ten_hang if first_item else None,
                 phap_nhan_id=o.phap_nhan_id,
                 ten_phap_nhan=o.phap_nhan.ten_phap_nhan if o.phap_nhan else None,

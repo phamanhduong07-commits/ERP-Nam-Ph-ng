@@ -17,7 +17,7 @@ class ProductService:
         page: int = 1,
         page_size: int = 20,
     ) -> PagedResponse:
-        q = self.db.query(Product).filter(Product.trang_thai == True)
+        q = self.db.query(Product).filter(Product.trang_thai.is_(True))
         if search:
             like = f"%{search}%"
             q = q.filter(
@@ -43,7 +43,7 @@ class ProductService:
     def get_products_by_customer(self, customer_id: int) -> list[ProductShort]:
         products = self.db.query(Product).filter(
             Product.ma_kh_id == customer_id,
-            Product.trang_thai == True
+            Product.trang_thai.is_(True)
         ).order_by(Product.ten_hang).all()
         return [ProductShort.model_validate(p) for p in products]
 
