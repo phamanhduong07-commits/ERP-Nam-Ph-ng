@@ -221,6 +221,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/hr/payroll', label: <Link to="/hr/payroll">Bảng lương sản phẩm</Link> },
         { key: '/hr/payroll-config', label: <Link to="/hr/payroll-config">Cấu hình hệ số lương</Link> },
         { key: '/hr/logistics', label: <Link to="/hr/logistics">🚚 Logistics & Đội xe</Link> },
+        { key: '/logistics/gps-tracking', label: <Link to="/logistics/gps-tracking">📡 Theo dõi xe GPS</Link> },
         { key: '/hr/approvals', label: <Link to="/hr/approvals">📝 Phê duyệt đơn từ</Link> },
         { key: '/hr/rewards', label: <Link to="/hr/rewards">🏆 Khen thưởng & Kỷ luật</Link> },
         { key: '/hr/me', label: <Link to="/hr/me">📱 Cổng nhân viên (Mobile)</Link> },

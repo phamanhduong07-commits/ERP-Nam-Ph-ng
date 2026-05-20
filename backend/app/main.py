@@ -36,6 +36,7 @@ from app.routers import maintenance as maintenance_router
 from app.routers import crm as crm_router
 from app.routers import fixed_assets as fixed_assets_router
 from app.routers import mrp as mrp_router
+from app.routers import gps as gps_router
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -158,6 +159,7 @@ app.include_router(maintenance_router.router)
 app.include_router(crm_router.router)
 app.include_router(fixed_assets_router.router)
 app.include_router(mrp_router.router)
+app.include_router(gps_router.router)
 
 
 @app.exception_handler(IntegrityError)

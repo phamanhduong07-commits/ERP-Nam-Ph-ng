@@ -42,5 +42,11 @@ class Settings(BaseSettings):
     # SerpAPI for lead crawler
     SERPAPI_KEY: str = ""
 
+    # GPS Bình Minh — vehicle tracking
+    GPS_API_URL: str = "https://api.gpsbinhminh.vn/Vehicle/GpsInfos"
+    GPS_PAGE_IDS: str = "504"
+    GPS_USERNAME: str = ""
+    GPS_PASSWORD: str = ""
+
 
 settings = Settings()
