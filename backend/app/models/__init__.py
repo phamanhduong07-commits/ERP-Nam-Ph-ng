@@ -1,53 +1,39 @@
-from app.models.auth import Role, User, AuditLog
-from app.models.master import (
+from app.models.master import (  # noqa: F401
     PhanXuong, Warehouse, MaterialGroup, Supplier, Customer,
     PaperMaterial, OtherMaterial, CauTrucThongDung, Product, PhapNhan,
     BankAccount,
-    # Thêm: các model trong master.py trước đây không được import → Alembic không track
     LoXe, TaiXe, Xe, DonGiaVanChuyen,
     DonViTinh, ViTri, TinhThanh, PhuongXa,
 )
-from app.models.ccdc import NhomCCDC, CongCuDungCu, PhieuXuatCCDC, PhieuXuatCCDCItem
-from app.models.purchase import PurchaseOrder, PurchaseOrderItem, PurchaseReturn, PurchaseReturnItem
-from app.models.yeu_cau_giao_hang import YeuCauGiaoHang, YeuCauGiaoHangItem
-from app.models.purchase_requisition import PurchaseRequisition, PurchaseRequisitionItem
-from app.models.warehouse_doc import (
-    GoodsReceipt, GoodsReceiptItem,
-    MaterialIssue, MaterialIssueItem,
-    ProductionOutput,
-    DeliveryOrder, DeliveryOrderItem,
-    PhieuChuyenKho, PhieuChuyenKhoItem,
-    StockAdjustment, StockAdjustmentItem,
-)
-from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
-from app.models.inventory import InventoryBalance, InventoryTransaction, PaperRoll
-from app.models.production import ProductionOrder, ProductionOrderItem
-from app.models.bom import ProductionBOM, ProductionBOMItem
-from app.models.production_plan import ProductionPlan, ProductionPlanLine
-from app.models.indirect_cost import IndirectCostItem
-from app.models.addon_rate import AddonRate
-from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
-from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
-from app.models.cd2 import (
+from app.models.cd2 import (  # noqa: F401
     MayIn, PhieuIn,
-    # Thêm: các model cd2 trước đây không được import → Alembic không track
     Machine, ProductionLog, PrinterUser,
     MayScan, ScanLog, MaySauIn, ShiftCa, ShiftConfig,
 )
-from app.models.billing import SalesInvoice
-from app.models.accounting import (
-    ChartOfAccounts, JournalEntry, JournalEntryLine,
-    PurchaseInvoice, CashReceipt, CashPayment,
-    DebtLedgerEntry, OpeningBalance, CustomerRefundVoucher,
-)
-from app.models.hr import (
-    Vehicle, Department, Position, Employee, LaborContract, AttendanceLog,
-    LeaveRequest, EmployeeHistory, EmployeeDocument, FuelLog,
-    PayrollConfig, PayrollRun, RewardDiscipline,
-)
-from app.models.import_log import ImportLog
-from app.models.system import SystemSetting, PrintTemplate, AgentSession
-from app.models.quality import QCSheet, QCDefect
-from app.models.maintenance import MaintenanceMachine, MaintenanceSchedule, MaintenanceLog
-from app.models.crm import CustomerInteraction
-from app.models.fixed_asset import DepreciationEntry
+
+# Import all remaining models so Base.metadata has every table registered
+# Required for conftest.py to resolve FK references correctly in tests
+import app.models.auth  # noqa: F401
+import app.models.accounting  # noqa: F401
+import app.models.addon_rate  # noqa: F401
+import app.models.billing  # noqa: F401
+import app.models.bom  # noqa: F401
+import app.models.ccdc  # noqa: F401
+import app.models.crm  # noqa: F401
+import app.models.fixed_asset  # noqa: F401
+import app.models.hr  # noqa: F401
+import app.models.import_log  # noqa: F401
+import app.models.indirect_cost  # noqa: F401
+import app.models.inventory  # noqa: F401
+import app.models.maintenance  # noqa: F401
+import app.models.phieu_nhap_phoi_song  # noqa: F401
+import app.models.phieu_xuat_phoi  # noqa: F401
+import app.models.production  # noqa: F401
+import app.models.production_plan  # noqa: F401
+import app.models.purchase  # noqa: F401
+import app.models.purchase_requisition  # noqa: F401
+import app.models.quality  # noqa: F401
+import app.models.sales  # noqa: F401
+import app.models.system  # noqa: F401
+import app.models.warehouse_doc  # noqa: F401
+import app.models.yeu_cau_giao_hang  # noqa: F401
