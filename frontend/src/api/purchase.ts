@@ -148,6 +148,8 @@ export interface PurchaseDashboard {
 export interface DuBaoNhuCauRow {
   paper_material_id: number | null
   other_material_id: number | null
+  phan_xuong_id: number | null
+  phap_nhan_id: number | null
   ma_hang: string
   ten_hang: string
   loai: 'giay_cuon' | 'nvl_khac' | ''
@@ -155,11 +157,16 @@ export interface DuBaoNhuCauRow {
   tong_nhap_ky: number
   tb_xuat_thang: number
   ton_hien_tai: number
+  ton_dang_dat: number
   gia_tri_ton: number
   du_kien_can: number
   can_mua: number
+  can_mua_thuc: number
   don_gia_mua_gan_nhat: number
   uoc_tinh_tien_mua: number
+  so_ngay_con: number
+  xu_huong: 'tang' | 'giam' | 'on_dinh' | 'moi'
+  xu_huong_pct: number
   muc_do_uu_tien: 'cao' | 'trung_binh' | 'thap'
 }
 
@@ -211,6 +218,7 @@ export const purchaseApi = {
     thang_phan_tich?: number
     thang_du_tru?: number
     phan_xuong_id?: number
+    phap_nhan_id?: number
     loai_nvl?: string
   }) => client.get<DuBaoNhuCauRow[]>('/purchase-orders/du-bao-nhu-cau', { params }),
 

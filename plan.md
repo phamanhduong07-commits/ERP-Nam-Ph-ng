@@ -1,6 +1,6 @@
 # Plan: Hoàn thiện & Mở rộng ERP Nam Phương
 Date: 2026-05-19
-Status: PHẦN 3 PENDING_APPROVAL (Sprint A-C — hoàn thiện kỹ thuật)
+Status: PHẦN 5 PENDING_APPROVAL (Sprint T1–T5 — test coverage 32 routers còn lại)
 
 ---
 
@@ -640,4 +640,254 @@ Tác động: production_orders, sales_orders, warehouse trả chậm khi có nh
 Tuần 1  │ Sprint A │ Auth guards 6 files + security review
 Tuần 1  │ Sprint B │ CRM CreditAlertPage + route + sidebar
 Tuần 2  │ Sprint C │ N+1 fix 3 routers + final test run + đóng plan
+```
+
+---
+
+## PHẦN 6 — HOÀN THIỆN PAGE DỰ BÁO NHU CẦU (Sprint D1–D3)
+
+Date: 2026-05-20
+Status: PENDING_APPROVAL
+
+### Mục tiêu
+Nâng cấp trang `/purchasing/du-bao-nhu-cau` từ prototype lên công cụ MRP đầy đủ:
+logic nghiệp vụ đúng, lọc theo xưởng/pháp nhân, hiển thị bút toán dự kiến,
+giao diện đẹp + dễ dùng, và nút tạo PO nhanh trực tiếp từ forecast.
+
+---
+
+### 10 Cải tiến đề xuất
+
+| # | Tên cải tiến | Ưu tiên |
+|---|---|---|
+| 1 | Bộ lọc Xưởng + Pháp nhân trong UI (backend có phan_xuong_id nhưng frontend chưa dùng) | Cao |
+| 2 | Tồn kho phân tách theo xưởng — chỉ tính InventoryBalance của kho thuộc xưởng được chọn | Cao |
+| 3 | Thêm `ton_dang_dat` — tổng PO items đang pending (da_duyet/da_gui_ncc/dang_giao) | Cao |
+| 4 | Thêm `so_ngay_con` — coverage days = ton_hien_tai / avg_daily, hiển thị progress bar màu | Cao |
+| 5 | So sánh xu hướng tiêu thụ — avg kỳ này vs kỳ trước, hiển thị icon ↑↓→ | Trung bình |
+| 6 | Fix N+1 queries trong backend — batch load tất cả materials + prices | Cao |
+| 7 | Biểu đồ tổng quan — Top 10 mặt hàng cần mua nhiều nhất (Bar chart) | Trung bình |
+| 8 | KPI breakdown theo pháp nhân — bảng tóm tắt per phap_nhan | Trung bình |
+| 9 | Nút "Tạo đơn mua hàng" — chọn rows → tạo PO nhanh (chọn NCC, ngày giao) | Cao |
+| 10 | Bút toán dự kiến — hiển thị preview bút toán khi tạo PO: DR 1521/1522 / CR 3311 | Trung bình |
+
+---
+
+### Sprint D1 — Backend refactor (purchase_orders.py)
+
+- [ ] **D1.1** — Thêm `phap_nhan_id` filter param
+  - File: `backend/app/routers/purchase_orders.py`
+  - Join: `InventoryBalance.warehouse_id → Warehouse.phan_xuong_id → PhanXuong.phap_nhan_id`
+  - Mục tiêu: Khi lọc phap_nhan, chỉ tính tồn kho + xuất kho của kho thuộc pháp nhân đó
+
+- [ ] **D1.2** — Fix warehouse filtering cho InventoryBalance
+  - Khi `phan_xuong_id` hoặc `phap_nhan_id` được chọn:
+    - Lấy danh sách `warehouse_id` thuộc xưởng/pháp nhân đó
+    - Filter cả `InventoryTransaction` (XUAT_SX) và `InventoryBalance` theo `warehouse_id IN [...]`
+
+- [ ] **D1.3** — Thêm `ton_dang_dat` — pending PO quantity
+  - Query: `PurchaseOrderItem JOIN PurchaseOrder WHERE trang_thai IN ('da_duyet','da_gui_ncc','dang_giao') AND so_luong_da_nhan < so_luong`
+  - Field mới trong response: `ton_dang_dat`, `can_mua_thuc = max(0, can_mua - ton_dang_dat)`
+
+- [ ] **D1.4** — Thêm `so_ngay_con` + `xu_huong`
+  - `so_ngay_con = round(ton_hien_tai / (avg_monthly / 30), 1)` — số ngày tồn kho còn lại
+  - `xu_huong`: so avg kỳ này vs kỳ trước (cùng số tháng, lùi thêm `thang_phan_tich`)
+    - `tang` nếu avg_hien_tai > avg_truoc × 1.1
+    - `giam` nếu avg_hien_tai < avg_truoc × 0.9
+    - `on_dinh` nếu trong khoảng ±10%
+    - `xu_huong_pct` = (avg_hien_tai − avg_truoc) / avg_truoc × 100
+
+- [ ] **D1.5** — Fix N+1 queries
+  - Batch load: dùng `db.query(PaperMaterial).filter(PaperMaterial.id.in_(paper_ids)).all()`
+  - Batch load OtherMaterial tương tự
+  - Batch load average prices: 1 query thay vì N queries trong loop
+  - Cải thiện: sort mặc định theo `so_ngay_con ASC` (ít ngày tồn nhất → ưu tiên cao)
+
+- [ ] **D1.6** — Cập nhật `DuBaoNhuCauRow` schema response
+  - Thêm fields: `phap_nhan_id`, `ten_phap_nhan`, `phan_xuong_id`, `ten_phan_xuong`
+  - Thêm: `ton_dang_dat`, `can_mua_thuc`, `so_ngay_con`, `xu_huong`, `xu_huong_pct`
+
+---
+
+### Sprint D2 — Frontend redesign (DuBaoNhuCauPage.tsx + purchase.ts)
+
+- [ ] **D2.1** — Cập nhật `frontend/src/api/purchase.ts`
+  - Thêm fields mới vào `DuBaoNhuCauRow` interface
+  - Thêm `phap_nhan_id` và `phan_xuong_id` vào params của `duBaoNhuCau`
+
+- [ ] **D2.2** — Bộ lọc Xưởng + Pháp nhân
+  - Dùng `usePhanXuong()` hook từ `useMasterData.ts`
+  - Dùng `phapNhanApi.list()` từ `phap_nhan.ts`
+  - Select "Xưởng" (tùy chọn) + Select "Pháp nhân" (tùy chọn)
+  - Khi chọn xưởng → auto filter pháp nhân tương ứng
+
+- [ ] **D2.3** — Cột "Đang đặt" + "Cần mua thực"
+  - Thêm cột `ton_dang_dat` (màu xanh dương) sau cột "Tồn hiện tại"
+  - Thay cột "Cần mua" bằng `can_mua_thuc` + tooltip hiển thị can_mua gốc
+
+- [ ] **D2.4** — Cột "Số ngày tồn" với Progress bar
+  - `so_ngay_con` hiển thị với Progress bar màu:
+    - Đỏ: < 7 ngày (khẩn cấp)
+    - Vàng: 7–30 ngày (sắp hết)
+    - Xanh: > 30 ngày (ổn)
+  - Tooltip hiển thị chi tiết
+
+- [ ] **D2.5** — Cột "Xu hướng" với icon
+  - `xu_huong = 'tang'` → `<ArrowUpOutlined color="red" />` + pct
+  - `xu_huong = 'giam'` → `<ArrowDownOutlined color="green" />` + pct
+  - `xu_huong = 'on_dinh'` → `<MinusOutlined color="gray" />`
+
+- [ ] **D2.6** — Biểu đồ tổng quan (Recharts BarChart)
+  - Top 10 mặt hàng có `can_mua_thuc` cao nhất
+  - X-axis: `ten_hang` (truncated), Y-axis: `uoc_tinh_tien_mua`
+  - Hiển thị trong Card collapsible "Biểu đồ top 10 cần mua"
+
+- [ ] **D2.7** — KPI breakdown theo pháp nhân
+  - Nếu không filter pháp nhân: hiển thị bảng tóm tắt "Theo pháp nhân"
+  - Cột: tên pháp nhân | số mặt hàng ưu tiên cao | tổng ước tính chi
+
+- [ ] **D2.8** — Modal "Tạo đơn mua hàng"
+  - Nút "Tạo PO" xuất hiện khi có ≥1 row được chọn (Table rowSelection)
+  - Modal gồm:
+    - Select NCC (supplier) bắt buộc
+    - DatePicker ngày giao dự kiến
+    - Bảng xem trước items (tên, số lượng đề nghị, đơn giá gần nhất)
+    - Phần "Bút toán dự kiến khi duyệt GR": hiển thị static table
+      - DR 1521/1522 Hàng mua đang vận chuyển / CR 3311 Phải trả NCC
+  - Khi submit: gọi `purchaseApi.create(...)` → thông báo thành công + link đến PO vừa tạo
+
+- [ ] **D2.9** — Cải thiện UI tổng thể
+  - Dùng `Collapse` panel thay vì hiển thị tất cả một lúc (Controls / Charts / Table)
+  - Hiển thị "Cập nhật lúc: HH:mm:ss" để user biết data là fresh
+  - Empty state đẹp khi không có dữ liệu
+  - Row highlight gradient cho urgency (thay vì chỉ đỏ nhạt)
+
+---
+
+### Sprint D3 — Kiểm tra + Supplier Select
+
+- [ ] **D3.1** — Thêm supplier API call trong modal "Tạo PO"
+  - Dùng hook lấy danh sách supplier (đã có `suppliersApi` trong project)
+  - Validate: phải chọn NCC mới cho phép submit
+
+- [ ] **D3.2** — Build check + type check frontend
+  - Chạy: `cd frontend && npm run build`
+  - Fix tất cả TypeScript errors
+
+- [ ] **D3.3** — Manual test cuối
+  - Test filter theo xưởng → tồn kho thay đổi đúng theo xưởng
+  - Test tạo PO từ modal → PO xuất hiện trong `/purchasing/po-list`
+  - Test export Excel → file có đầy đủ cột mới
+
+---
+
+### Done Criteria — PHẦN 6
+
+- [ ] Filter xưởng/pháp nhân hoạt động: tồn kho thay đổi khi switch filter
+- [ ] `ton_dang_dat` hiển thị đúng (cần PO test data)
+- [ ] `so_ngay_con` tính đúng: ton_hien_tai / (avg_monthly/30)
+- [ ] `xu_huong` có icon đúng chiều (tang → ↑, giam → ↓)
+- [ ] Biểu đồ hiển thị Top 10 không bị lỗi render
+- [ ] Modal tạo PO: submit → PO mới xuất hiện trong PO list
+- [ ] Preview bút toán DR 1521 / CR 3311 hiển thị trong modal
+- [ ] `npm run build` → 0 TypeScript errors
+- [ ] Không có regression trên `/purchasing/po-list` và `/purchasing/doi-soat-kho`
+
+---
+
+## PHẦN 5 — TEST COVERAGE 32 ROUTERS CÒN LẠI (Sprint T1–T5)
+
+> Baseline: 258 tests xanh, 27 router đã có test.
+> Mục tiêu: viết smoke test + business rule test cho 32 router chưa có coverage.
+> Pattern: mỗi sprint = 1 file test mới, dùng `client` fixture từ conftest.py.
+
+---
+
+### Sprint T1 — System / Auth / Permissions / Phap Nhan
+
+- [ ] **Bước T1.1** — Viết `test_system_auth.py`
+  - File: `backend/tests/test_system_auth.py`
+  - Routers covered: `auth.py`, `users.py`, `permissions.py`, `phap_nhan.py`, `system.py`
+  - Test cases:
+    - `auth`: POST /api/auth/login đúng credentials → 200 + token; sai password → 401
+    - `users`: CRUD user (admin tạo, list, update role, xóa)
+    - `permissions`: GET /api/permissions → list roles; admin assign role → 200; non-admin → 403
+    - `phap_nhan`: CRUD pháp nhân (tạo, list, update, xóa)
+    - `system`: GET /api/system/settings → 200; PUT settings (admin) → 200
+
+---
+
+### Sprint T2 — HR Phụ (reward, self-service, workflow)
+
+- [ ] **Bước T2.1** — Viết `test_hr_extended.py`
+  - File: `backend/tests/test_hr_extended.py`
+  - Routers covered: `hr_reward.py`, `hr_self_service.py`, `hr_workflow.py`
+  - Test cases:
+    - `hr_reward`: tạo khen thưởng/kỷ luật cho nhân viên → list → verify
+    - `hr_self_service`: nhân viên xem thông tin cá nhân, cập nhật SĐT/địa chỉ
+    - `hr_workflow`: tạo đơn nghỉ phép → duyệt → trạng thái chuyển sang "approved"
+    - Business rule: duyệt đơn khi số ngày > quota → HTTP 400
+
+---
+
+### Sprint T3 — Logistics (yeu_cau_giao_hang, logistics_hr, xe/tai_xe/lo_xe)
+
+- [ ] **Bước T3.1** — Viết `test_logistics.py`
+  - File: `backend/tests/test_logistics.py`
+  - Routers covered: `yeu_cau_giao_hang.py`, `logistics_hr.py`, `xe.py`, `tai_xe.py`, `lo_xe.py`
+  - Test cases:
+    - `yeu_cau_giao_hang`: tạo yêu cầu giao hàng → list → cập nhật trạng thái
+    - `xe`: CRUD xe (tạo, list, update biển số, xóa)
+    - `tai_xe`: CRUD tài xế (tạo, list, update, verify liên kết xe)
+    - `lo_xe`: tạo lô xe → gán tài xế → verify
+    - `logistics_hr`: GET trip-salaries → cấu trúc JSON đúng
+
+---
+
+### Sprint T4 — Tài chính phụ (customer_refunds, bank_accounts, ccdc, addon_rates, don_gia_van_chuyen, indirect_costs)
+
+- [ ] **Bước T4.1** — Viết `test_financial_catalog.py`
+  - File: `backend/tests/test_financial_catalog.py`
+  - Routers covered: `customer_refunds.py`, `bank_accounts.py`, `ccdc.py`, `addon_rates.py`, `don_gia_van_chuyen.py`, `indirect_costs.py`
+  - Test cases:
+    - `customer_refunds`: tạo hoàn tiền KH → list → verify bút toán đảo ngược
+    - `bank_accounts`: CRUD tài khoản ngân hàng
+    - `ccdc`: CRUD công cụ dụng cụ (tạo, list, update, phân bổ)
+    - `addon_rates`: GET addon rates → list; admin PUT → update; verify giá trị mới
+    - `don_gia_van_chuyen`: CRUD đơn giá vận chuyển theo tuyến
+    - `indirect_costs`: GET/PUT chi phí gián tiếp → verify cấu trúc
+
+---
+
+### Sprint T5 — Danh mục hệ thống (don_vi_tinh, material_groups, cau_truc, vi_tri, may_dung_log, phieu_phoi, theo_doi, mst_lookup, import_logs, dashboard, media)
+
+- [ ] **Bước T5.1** — Viết `test_catalog_system.py`
+  - File: `backend/tests/test_catalog_system.py`
+  - Routers covered: `don_vi_tinh.py`, `material_groups.py`, `cau_truc.py`, `vi_tri.py`, `may_dung_log.py`, `phieu_phoi.py`, `theo_doi.py`, `mst_lookup.py`, `import_logs.py`, `dashboard.py`
+  - Strategy: 1 smoke test per router (GET list → 200, POST create → 201, GET by id → 200)
+  - Test cases đặc biệt:
+    - `mst_lookup`: GET /api/mst-lookup?mst=0123456789 → trả về thông tin DN
+    - `dashboard`: GET /api/dashboard → cấu trúc JSON có key: revenue, orders, production
+    - `import_logs`: GET /api/import-logs → list; verify có field: file_name, status, created_at
+    - `theo_doi`: tạo bản ghi theo dõi → list → verify
+
+---
+
+### Done Criteria — PHẦN 5
+
+- [ ] 5 file test mới tạo thành công
+- [ ] `pytest backend/tests/ -v` → tất cả pass (258 + N test mới)
+- [ ] Không có router nào bị lỗi import khi test
+- [ ] `flake8 backend/tests/ --max-line-length=120` → 0 errors
+
+---
+
+### Timeline Sprint T1–T5
+
+```
+Sprint T1  │ test_system_auth.py      │ auth, users, permissions, phap_nhan, system
+Sprint T2  │ test_hr_extended.py      │ hr_reward, hr_self_service, hr_workflow
+Sprint T3  │ test_logistics.py        │ yeu_cau_giao_hang, xe, tai_xe, lo_xe, logistics_hr
+Sprint T4  │ test_financial_catalog.py│ customer_refunds, bank_accounts, ccdc, addon_rates, don_gia_van_chuyen, indirect_costs
+Sprint T5  │ test_catalog_system.py   │ don_vi_tinh, material_groups, cau_truc, vi_tri, may_dung_log, phieu_phoi, theo_doi, mst_lookup, import_logs, dashboard
 ```
