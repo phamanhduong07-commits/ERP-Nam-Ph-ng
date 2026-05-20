@@ -611,6 +611,10 @@ def du_bao_nhu_cau(
             px = db.get(PhanXuong, phan_xuong_id)
             resolved_phap_nhan_id = px.phap_nhan_id if px else None
 
+    # Guard: xưởng/pháp nhân được chọn nhưng không có kho nào → trả về ngay
+    if wh_filter is not None and len(wh_filter) == 0:
+        return []
+
     def _tx_filter(q, cutoff_dt, to_dt=None):
         q = q.filter(InventoryTransaction.ngay_giao_dich >= cutoff_dt)
         if to_dt:
@@ -776,18 +780,21 @@ def du_bao_nhu_cau(
         ten_hang = ""
         ma_hang = ""
         loai = ""
+        don_vi = ""
         if xuat.paper_material_id:
             pm = pm_map.get(xuat.paper_material_id)
             if pm:
                 ten_hang = pm.ten_giay or pm.ma_chinh or ""
                 ma_hang = pm.ma_chinh or ""
                 loai = "giay_cuon"
+                don_vi = "Kg"
         elif xuat.other_material_id:
             om = om_map.get(xuat.other_material_id)
             if om:
                 ten_hang = om.ten or ""
-                ma_hang = om.ma_vt or ""
+                ma_hang = getattr(om, 'ma_chinh', None) or getattr(om, 'ma_vt', None) or ""
                 loai = "nvl_khac"
+                don_vi = getattr(om, 'dvt', '') or 'Cái'
 
         if loai_nvl and loai != loai_nvl:
             continue
@@ -824,6 +831,7 @@ def du_bao_nhu_cau(
             "so_ngay_con": so_ngay_con if so_ngay_con < 999 else 999,
             "xu_huong": xu_huong,
             "xu_huong_pct": xu_huong_pct,
+            "don_vi": don_vi,
             "muc_do_uu_tien": muc_do,
         })
 

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Alert,
@@ -8,14 +9,18 @@ import {
   Col,
   Collapse,
   DatePicker,
+  Empty,
   Form,
+  Input,
   InputNumber,
   Modal,
+  notification,
   Progress,
   Row,
   Select,
   Space,
   Statistic,
+  Switch,
   Table,
   Tag,
   Tooltip,
@@ -27,9 +32,10 @@ import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   DownloadOutlined,
+  FilterOutlined,
   MinusOutlined,
-  PlusOutlined,
   ReloadOutlined,
+  SearchOutlined,
   ShoppingCartOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -134,6 +140,7 @@ interface CreatePOModalProps {
 function CreatePOModal({ selectedRows, onClose, onSuccess }: CreatePOModalProps) {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
   const { data: supplierResp } = useQuery({
     queryKey: ['suppliers-all'],
@@ -142,7 +149,8 @@ function CreatePOModal({ selectedRows, onClose, onSuccess }: CreatePOModalProps)
   })
   const suppliers = supplierResp ?? []
 
-  const tongUocTinh = selectedRows.reduce((s, r) => s + r.uoc_tinh_tien_mua, 0)
+  const itemsToCreate = selectedRows.filter(r => r.can_mua_thuc > 0)
+  const tongUocTinh = itemsToCreate.reduce((s, r) => s + r.uoc_tinh_tien_mua, 0)
 
   async function handleSubmit() {
     const vals = await form.validateFields()
@@ -155,20 +163,35 @@ function CreatePOModal({ selectedRows, onClose, onSuccess }: CreatePOModalProps)
           ? (vals.ngay_du_kien_nhan as dayjs.Dayjs).format('YYYY-MM-DD')
           : null,
         ghi_chu: vals.ghi_chu || 'Tạo từ dự báo nhu cầu',
-        items: selectedRows
-          .filter(r => r.can_mua_thuc > 0)
-          .map(r => ({
-            paper_material_id: r.paper_material_id,
-            other_material_id: r.other_material_id,
-            ten_hang: r.ten_hang,
-            so_luong: r.can_mua_thuc,
-            dvt: r.loai === 'giay_cuon' ? 'kg' : 'cái',
-            don_gia: r.don_gia_mua_gan_nhat,
-          })),
+        items: itemsToCreate.map(r => ({
+          paper_material_id: r.paper_material_id,
+          other_material_id: r.other_material_id,
+          ten_hang: r.ten_hang,
+          so_luong: r.can_mua_thuc,
+          dvt: r.don_vi || (r.loai === 'giay_cuon' ? 'Kg' : 'Cái'),
+          don_gia: r.don_gia_mua_gan_nhat,
+        })),
       }
-      await purchaseApi.create(payload)
-      message.success('Đã tạo đơn mua hàng thành công!')
+      const res = await purchaseApi.create(payload)
       onSuccess()
+      notification.success({
+        message: 'Tạo đơn mua hàng thành công',
+        description: (
+          <span>
+            Đã tạo {itemsToCreate.length} mặt hàng.{' '}
+            <Button
+              type="link"
+              size="small"
+              style={{ padding: 0 }}
+              onClick={() => navigate('/purchasing/orders')}
+            >
+              Xem danh sách PO →
+            </Button>
+          </span>
+        ),
+        duration: 8,
+      })
+      void res
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       message.error(msg ?? 'Lỗi khi tạo đơn mua hàng')
@@ -213,16 +236,20 @@ function CreatePOModal({ selectedRows, onClose, onSuccess }: CreatePOModalProps)
             </Form.Item>
           </Col>
         </Row>
+        <Form.Item label="Ghi chú" name="ghi_chu">
+          <Input placeholder="Tạo từ dự báo nhu cầu..." />
+        </Form.Item>
       </Form>
 
       <Table
         size="small"
-        dataSource={selectedRows.filter(r => r.can_mua_thuc > 0)}
+        dataSource={itemsToCreate}
         rowKey={r => `${r.paper_material_id}-${r.other_material_id}`}
         pagination={false}
-        scroll={{ y: 220 }}
+        scroll={{ y: 200 }}
         columns={[
           { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+          { title: 'ĐVT', dataIndex: 'don_vi', width: 55 },
           { title: 'Cần mua', dataIndex: 'can_mua_thuc', align: 'right', render: v => v.toLocaleString('vi-VN') },
           { title: 'Đơn giá gần nhất', dataIndex: 'don_gia_mua_gan_nhat', align: 'right', render: fmtVND },
           {
@@ -235,7 +262,7 @@ function CreatePOModal({ selectedRows, onClose, onSuccess }: CreatePOModalProps)
         summary={() => (
           <Table.Summary fixed>
             <Table.Summary.Row>
-              <Table.Summary.Cell index={0} colSpan={3}><Text strong>Tổng ước tính</Text></Table.Summary.Cell>
+              <Table.Summary.Cell index={0} colSpan={4}><Text strong>Tổng ước tính</Text></Table.Summary.Cell>
               <Table.Summary.Cell index={1} align="right">
                 <Text strong style={{ color: '#1677ff' }}>{fmtVND(tongUocTinh)}</Text>
               </Table.Summary.Cell>
@@ -290,6 +317,8 @@ export default function DuBaoNhuCauPage() {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [showCreatePO, setShowCreatePO] = useState(false)
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
+  const [chiCanMua, setChiCanMua] = useState(true)
+  const [searchText, setSearchText] = useState('')
 
   const { phanXuongList } = usePhanXuong()
   const { phapNhanList } = usePhapNhan()
@@ -317,7 +346,7 @@ export default function DuBaoNhuCauPage() {
 
   // ── KPI theo pháp nhân ───────────────────────────────────────────────────
   const kpiByPhapNhan = useMemo(() => {
-    if (phapNhanId) return []  // đã lọc 1 pháp nhân → không cần bảng breakdown
+    if (phapNhanId) return []
     const map: Record<string, { ten: string; cao: number; tongTien: number }> = {}
     rows.forEach(r => {
       const key = String(r.phap_nhan_id ?? 'khac')
@@ -329,6 +358,20 @@ export default function DuBaoNhuCauPage() {
     return Object.values(map).filter(v => v.tongTien > 0)
   }, [rows, phapNhanList, phapNhanId])
 
+  // ── Hàng hiển thị sau lọc client-side ───────────────────────────────────
+  const displayRows = useMemo(() => {
+    let r = rows
+    if (chiCanMua) r = r.filter(x => x.can_mua_thuc > 0)
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase()
+      r = r.filter(x =>
+        x.ten_hang.toLowerCase().includes(q) ||
+        x.ma_hang.toLowerCase().includes(q)
+      )
+    }
+    return r
+  }, [rows, chiCanMua, searchText])
+
   // ── Hàng được chọn để tạo PO ─────────────────────────────────────────────
   const selectedRows = useMemo(
     () => rows.filter(r => {
@@ -338,24 +381,45 @@ export default function DuBaoNhuCauPage() {
     [rows, selectedKeys],
   )
 
+  function handleSelectAllCao() {
+    const caoKeys = rows
+      .filter(r => r.muc_do_uu_tien === 'cao' && r.can_mua_thuc > 0)
+      .map(r => `${r.paper_material_id ?? 'p'}-${r.other_material_id ?? 'o'}`)
+    setSelectedKeys(caoKeys)
+    if (caoKeys.length > 0)
+      message.success(`Đã chọn ${caoKeys.length} mặt hàng ưu tiên cao`)
+    else
+      message.info('Không có mặt hàng ưu tiên cao cần mua')
+  }
+
+  const hasActiveFilter = !!(phanXuongId || phapNhanId || loaiNvl)
+
+  function handleReset() {
+    setPhanXuongId(undefined)
+    setPhapNhanId(undefined)
+    setLoaiNvl(undefined)
+    setSearchText('')
+  }
+
   function handleExport() {
     exportToExcel('du_bao_nhu_cau', [{
       name: 'Dự báo nhu cầu',
       headers: [
-        'Mã hàng', 'Tên hàng', 'Loại', 'Mức độ',
+        'Mã hàng', 'Tên hàng', 'Loại', 'ĐVT', 'Mức độ',
         'TB xuất/tháng', 'Tồn hiện tại', 'Đang đặt', 'Dự kiến cần',
         'Cần mua', 'Cần mua thực', 'Ngày tồn', 'Xu hướng',
         'Đơn giá gần nhất', 'Ước tính tiền',
       ],
       rows: rows.map(r => [
         r.ma_hang, r.ten_hang, r.loai === 'giay_cuon' ? 'Giấy cuộn' : 'NVL khác',
+        r.don_vi,
         MUC_DO_LABEL[r.muc_do_uu_tien] ?? r.muc_do_uu_tien,
         r.tb_xuat_thang, r.ton_hien_tai, r.ton_dang_dat, r.du_kien_can,
         r.can_mua, r.can_mua_thuc,
         r.so_ngay_con >= 999 ? 'N/A' : `${r.so_ngay_con} ngày`,
         r.xu_huong, r.don_gia_mua_gan_nhat, r.uoc_tinh_tien_mua,
       ]),
-      colWidths: [12, 30, 10, 12, 14, 14, 12, 14, 12, 12, 10, 10, 18, 18],
+      colWidths: [12, 30, 10, 8, 12, 14, 14, 12, 14, 12, 12, 10, 10, 18, 18],
     }])
   }
 
@@ -381,6 +445,7 @@ export default function DuBaoNhuCauPage() {
       width: 75,
       render: (v: string) => v === 'giay_cuon' ? <Tag color="blue">Giấy</Tag> : <Tag>NVL</Tag>,
     },
+    { title: 'ĐVT', dataIndex: 'don_vi', width: 55 },
     {
       title: `TB xuất/tháng`,
       dataIndex: 'tb_xuat_thang',
@@ -546,7 +611,39 @@ export default function DuBaoNhuCauPage() {
           <Button icon={<ReloadOutlined />} loading={isFetching} onClick={() => refetch()}>
             Tính toán
           </Button>
+          {hasActiveFilter && (
+            <Button icon={<FilterOutlined />} onClick={handleReset} danger size="small">
+              Reset bộ lọc
+            </Button>
+          )}
         </Space>
+        {/* Bộ lọc nhanh và tìm kiếm */}
+        <div style={{ marginTop: 8, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Space>
+            <Switch
+              size="small"
+              checked={chiCanMua}
+              onChange={setChiCanMua}
+            />
+            <span style={{ fontSize: 13 }}>Chỉ hiển thị cần mua</span>
+          </Space>
+          <Input
+            prefix={<SearchOutlined style={{ color: '#bbb' }} />}
+            placeholder="Tìm mã hoặc tên hàng..."
+            allowClear
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            style={{ width: 220 }}
+            size="small"
+          />
+          <Button
+            size="small"
+            onClick={handleSelectAllCao}
+            disabled={!rows.length}
+          >
+            Chọn tất cả ưu tiên cao
+          </Button>
+        </div>
       </Card>
 
       {/* KPI tổng */}
@@ -595,12 +692,12 @@ export default function DuBaoNhuCauPage() {
         items={[
           {
             key: 'chart',
-            label: <><PlusOutlined /> Biểu đồ Top 10 mặt hàng cần mua nhiều nhất</>,
+            label: 'Biểu đồ Top 10 mặt hàng cần mua nhiều nhất',
             children: <TopItemsChart rows={rows} />,
           },
           ...(kpiByPhapNhan.length > 1 ? [{
             key: 'phap-nhan',
-            label: <><PlusOutlined /> Tóm tắt theo pháp nhân</>,
+            label: 'Tóm tắt theo pháp nhân',
             children: (
               <Table
                 size="small"
@@ -626,33 +723,57 @@ export default function DuBaoNhuCauPage() {
           <ShoppingCartOutlined style={{ marginRight: 4 }} />
           Tick chọn các mặt hàng muốn đặt mua → bấm <strong>Tạo đơn mua hàng</strong> ở trên.
           Checkbox chỉ hiển thị cho dòng có <em>Cần mua thực &gt; 0</em>.
+          {displayRows.length !== rows.length && (
+            <Tag style={{ marginLeft: 8 }} color="blue">
+              Đang lọc: {displayRows.length}/{rows.length} mặt hàng
+            </Tag>
+          )}
         </div>
       )}
 
-      <Table<DuBaoNhuCauRow>
-        rowKey={rowKey}
-        columns={columns}
-        dataSource={rows}
-        loading={isFetching}
-        size="small"
-        scroll={{ x: 1350 }}
-        pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `${t} mặt hàng` }}
-        rowClassName={r => r.muc_do_uu_tien === 'cao' ? 'row-urgent' : ''}
-        rowSelection={{
-          selectedRowKeys: selectedKeys,
-          onChange: keys => setSelectedKeys(keys as string[]),
-          getCheckboxProps: r => ({ disabled: r.can_mua_thuc <= 0 }),
-        }}
-        summary={() => (
-          <Table.Summary fixed>
-            <Table.Summary.Row style={{ fontWeight: 600, background: '#fafafa' }}>
-              <Table.Summary.Cell index={0} colSpan={11}>Tổng cộng</Table.Summary.Cell>
-              <Table.Summary.Cell index={1} />
-              <Table.Summary.Cell index={2} align="right">{fmtVND(tongCanMua)}</Table.Summary.Cell>
-            </Table.Summary.Row>
-          </Table.Summary>
-        )}
-      />
+      {!isFetching && rows.length === 0 && (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={
+            <span>
+              Chưa có dữ liệu dự báo.
+              Bấm <strong>Tính toán</strong> để phân tích, hoặc kiểm tra lại bộ lọc.
+              {hasActiveFilter && (
+                <Button type="link" size="small" onClick={handleReset}>Reset bộ lọc</Button>
+              )}
+            </span>
+          }
+          style={{ padding: '40px 0' }}
+        />
+      )}
+
+      {rows.length > 0 && (
+        <Table<DuBaoNhuCauRow>
+          rowKey={rowKey}
+          columns={columns}
+          dataSource={displayRows}
+          loading={isFetching}
+          size="small"
+          scroll={{ x: 1450 }}
+          pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `${t} mặt hàng` }}
+          rowClassName={r => r.muc_do_uu_tien === 'cao' ? 'row-urgent' : ''}
+          rowSelection={{
+            selectedRowKeys: selectedKeys,
+            onChange: keys => setSelectedKeys(keys as string[]),
+            getCheckboxProps: r => ({ disabled: r.can_mua_thuc <= 0 }),
+          }}
+          summary={() => (
+            <Table.Summary fixed>
+              <Table.Summary.Row style={{ fontWeight: 600, background: '#fafafa' }}>
+                {/* checkbox(1) + Mức độ(1) + Mã(1) + Tên(1) + Loại(1) + DVT(1) + TB(1) + Ngày(1) + Tồn(1) + Đặt(1) + Cần(1) + CanMua(1) + Xu(1) = 13 cols */}
+                <Table.Summary.Cell index={0} colSpan={13}>Tổng cộng</Table.Summary.Cell>
+                <Table.Summary.Cell index={1} />
+                <Table.Summary.Cell index={2} align="right">{fmtVND(tongCanMua)}</Table.Summary.Cell>
+              </Table.Summary.Row>
+            </Table.Summary>
+          )}
+        />
+      )}
 
       <style>{`
         .row-urgent td { background: #fff1f0 !important; }

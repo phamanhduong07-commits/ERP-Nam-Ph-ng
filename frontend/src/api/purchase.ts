@@ -167,6 +167,7 @@ export interface DuBaoNhuCauRow {
   so_ngay_con: number
   xu_huong: 'tang' | 'giam' | 'on_dinh' | 'moi'
   xu_huong_pct: number
+  don_vi: string
   muc_do_uu_tien: 'cao' | 'trung_binh' | 'thap'
 }
 
