@@ -479,15 +479,16 @@ export default function DuBaoNhuCauPage() {
           )}
         </div>
         <Space>
-          {selectedKeys.length > 0 && (
+          <Tooltip title={selectedKeys.length === 0 ? 'Tick chọn các mặt hàng cần mua trong bảng bên dưới, sau đó bấm nút này' : ''}>
             <Button
               type="primary"
               icon={<ShoppingCartOutlined />}
+              disabled={selectedKeys.length === 0}
               onClick={() => setShowCreatePO(true)}
             >
-              Tạo PO ({selectedKeys.length} mặt hàng)
+              {selectedKeys.length > 0 ? `Tạo PO (${selectedKeys.length} mặt hàng)` : 'Tạo đơn mua hàng'}
             </Button>
-          )}
+          </Tooltip>
           <Button icon={<DownloadOutlined />} onClick={handleExport} disabled={!rows.length}>
             Xuất Excel
           </Button>
@@ -620,6 +621,14 @@ export default function DuBaoNhuCauPage() {
       />
 
       {/* Bảng dự báo */}
+      {rows.length > 0 && (
+        <div style={{ marginBottom: 6, fontSize: 12, color: '#595959' }}>
+          <ShoppingCartOutlined style={{ marginRight: 4 }} />
+          Tick chọn các mặt hàng muốn đặt mua → bấm <strong>Tạo đơn mua hàng</strong> ở trên.
+          Checkbox chỉ hiển thị cho dòng có <em>Cần mua thực &gt; 0</em>.
+        </div>
+      )}
+
       <Table<DuBaoNhuCauRow>
         rowKey={rowKey}
         columns={columns}
