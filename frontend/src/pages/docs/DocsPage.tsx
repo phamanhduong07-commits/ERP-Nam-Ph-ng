@@ -290,6 +290,132 @@ const initialDocs = [
 <div class='doc-alert doc-info'>
   <strong>Lưu ý VAT:</strong> Thuế suất thường là 8% hoặc 10% tùy loại hàng. Kế toán xác nhận với BGĐ trước khi phát hành hàng loạt.
 </div>`
+  },
+  {
+    id: '8',
+    category: 'Phân hệ Logistics & Nhân sự',
+    title: '8. Quản lý Đội xe & Tiêu hao Nhiên liệu',
+    content: `<p>Phân hệ Logistics & Quản lý Đội xe là cầu nối cuối cùng của ERP Nam Phương, chịu trách nhiệm vận chuyển thành phẩm carton đến khách hàng, kiểm soát chi phí nhiên liệu và tự động tính lương chuyến cho tổ lái (Tài xế & Lơ xe).</p>
+
+<h2>1. Logic Hệ Thống & Liên Kết Nghiệp Vụ</h2>
+<p>Quy trình vận hành Logistics bao gồm các logic cốt lõi sau để đảm bảo tính minh bạch và tối ưu hóa chi phí:</p>
+<ul>
+  <li><strong>Quỹ chuyến (tiền chuyến):</strong> Được tính tự động = <code>Tổng m² thực giao × Đơn giá vận chuyển/m²</code> (được thiết lập theo từng tuyến đường/khách hàng tại danh mục).</li>
+  <li><strong>Hệ số phân bổ tổ lái:</strong> Lương chuyến được tự động chia cho các thành viên tổ lái theo hệ số:
+    <ul>
+      <li><strong>Tài xế chính:</strong> Hệ số <code>1.0</code> (Hưởng 100% lương tiêu chuẩn chuyến).</li>
+      <li><strong>Lơ xe (Phụ xe):</strong> Hệ số <code>0.3</code> (Hưởng 30% lương tiêu chuẩn chuyến).</li>
+    </ul>
+    <em>Ví dụ: Quỹ chuyến là 1.300.000đ. Tổng hệ số = 1.3. Tài xế nhận: 1.000.000đ; Lơ xe nhận: 300.000đ.</em>
+  </li>
+  <li><strong>Định mức tiêu hao xăng dầu:</strong> Mỗi xe có định mức tiêu chuẩn (VD: 20L/100km). Hệ thống tự tính toán hiệu suất thực tế của mỗi lần đổ dầu để cảnh báo hao hụt bất thường.</li>
+</ul>
+
+<h2>2. Quản Lý Danh Mục Đội Xe</h2>
+<p>Trước khi vận hành, bộ phận Điều phối hoặc Nhân sự cần thiết lập các danh mục nền tảng sau:</p>
+<h3>2.1. Danh mục Xe (/master/xe)</h3>
+<ul>
+  <li>Khai báo biển số xe, loại xe (tải trọng), phân xưởng quản lý.</li>
+  <li><strong>Định mức dầu:</strong> Số lít dầu tiêu chuẩn trên 100km (Ví dụ: xe 5 tấn định mức 18L/100km, xe 8 tấn định mức 22L/100km).</li>
+</ul>
+<h3>2.2. Danh mục Tài xế & Lơ xe (/master/tai-xe, /master/lo-xe)</h3>
+<ul>
+  <li>Liên kết hồ sơ nhân viên với danh mục lái xe.</li>
+  <li>Thiết lập <strong>Hệ số chuyến</strong> mặc định (Tài xế mặc định 1.0, Lơ xe mặc định 0.3 hoặc 0.2 tùy thâm niên).</li>
+  <li>Gán xe phụ trách mặc định cho tài xế.</li>
+</ul>
+
+<h2>3. Quy Trình Vận Hành Giao Hàng & Tính Lương Chuyến</h2>
+<p>Khi thủ kho chuẩn bị xuất hàng, Điều phối viên lập chuyến xe trên trang <strong>Bán Hàng > Giao Hàng</strong> (<code>/sales/giao-hang</code>):</p>
+<p><img src="https://placehold.co/600x350/f6ffed/135200?text=Lap+Chuyen+Giao+Hang+Tren+ERP" /></p>
+<h3>Bước 1: Chọn Đơn hàng & Xe vận chuyển</h3>
+<ul>
+  <li>Chọn các dòng sản phẩm carton đang nằm trong Kho Thành Phẩm chờ giao.</li>
+  <li>Chọn Xe, Tài xế, và Lơ xe phụ trách chuyến.</li>
+  <li>Hệ thống tự tính ra Tổng m² hàng hóa và gọi Bảng giá tuyến để đề xuất Đơn giá m².</li>
+</ul>
+<h3>Bước 2: Xác nhận xuất giao hàng</h3>
+<ul>
+  <li>Nhập số lượng thực giao lên xe.</li>
+  <li>Hệ thống tự tính Quỹ Chuyến = Tổng m² × Đơn giá m² và hiển thị trực quan bảng phân bổ thu nhập tạm tính cho Tài xế & Lơ xe ngay trên Form.</li>
+  <li>Bấm <strong>[Xác Nhận Giao]</strong> → In Phiếu giao hàng PDF gửi tài xế mang đi đường.</li>
+</ul>
+
+<h2>4. Nhật Ký Đổ Dầu & Quản Lý Hao Hụt Nhiên Liệu</h2>
+<p>Mỗi khi xe đổ dầu hoặc kết thúc tuần chạy, tài xế nộp hóa đơn dầu. Điều phối viên truy cập <strong>Quản lý Đội xe & Logistics</strong> (<code>/hr/logistics</code>) và chọn tab Nhật ký đổ dầu:</p>
+<h3>Bước 1: Thêm mới Phiếu đổ dầu</h3>
+<ol>
+  <li>Bấm nút <strong>[+ Nhập đổ dầu]</strong>.</li>
+  <li>Chọn Xe và Tài xế phụ trách đổ.</li>
+  <li>Nhập số <strong>KM đầu</strong> và <strong>KM cuối</strong> ghi trên đồng hồ taplo xe.</li>
+  <li>Nhập <strong>Số lít thực đổ</strong> và <strong>Đơn giá dầu/lít</strong> trên hóa đơn. Bấm [Lưu lại].</li>
+</ol>
+<h3>Bước 2: Đối soát Hiệu quả Tiêu hao Xăng Dầu</h3>
+<ul>
+  <li>Hệ thống tự tính: <code>Tổng KM chạy = KM cuối − KM đầu</code>.</li>
+  <li>Tự động tính hiệu suất tiêu hao thực tế:
+    <br/><strong>Tỷ lệ tiêu hao thực tế = (Số lít thực đổ / Tổng KM chạy) × 100 (Lít/100km)</strong>
+  </li>
+  <li><strong>Cơ chế Cảnh báo (Hiệu quả):</strong>
+    <ul>
+      <li><span style="color:#52c41a">● XANH (Đạt):</span> Nếu tỷ lệ tiêu hao thực tế ≤ Định mức tiêu chuẩn của xe → An toàn, duyệt thanh toán.</li>
+      <li><span style="color:#cf1322">● ĐỎ (Cảnh báo vượt mức):</span> Nếu tỷ lệ tiêu hao thực tế > Định mức tiêu chuẩn xe → Cần hậu kiểm (Tài xế chạy ép số, rò rỉ dầu hoặc đỗ xe nổ máy lạnh quá lâu).</li>
+    </ul>
+  </li>
+</ul>
+
+<div class="doc-alert doc-warning">
+  <strong>Lỗi thường gặp: KM cuối nhập nhỏ hơn KM đầu hoặc sai số quá lớn.</strong><br/>
+  - <em>Nguyên nhân:</em> Nhập nhầm số hiển thị trên taplo hoặc tài xế ghi chép sai.<br/>
+  - <em>Khắc phục:</em> Đối chiếu trực tiếp với số KM hành trình đo được trên phần mềm <strong>GPS Bình Minh</strong> ở mục hướng dẫn bên dưới.
+</div>`
+  },
+  {
+    id: '9',
+    category: 'Phân hệ Logistics',
+    title: '9. Hướng dẫn Giám sát Hành trình & Định vị GPS',
+    content: `<p>Hệ thống ERP Nam Phương được liên kết dữ liệu với nền tảng GPS Bình Minh (<code>gpsbinhminh.vn</code>) để quản trị và kiểm soát xe chạy trên đường một cách trực quan, chính xác.</p>
+
+<h2>1. Đăng nhập Hệ thống GPS</h2>
+<ul>
+  <li><strong>Địa chỉ truy cập Web:</strong> <a href="https://gpsbinhminh.vn" target="_blank">https://gpsbinhminh.vn</a> hoặc tải ứng dụng <strong>"Bình Minh GPS"</strong> trên điện thoại (App Store / CH Play).</li>
+  <li>Đăng nhập bằng tài khoản điều phối do bộ phận Admin cấp (Ví dụ: <code>namphuong_logistics</code>).</li>
+</ul>
+
+<h2>2. Giám sát Lộ trình Trực tuyến (Real-time Tracking)</h2>
+<p>Trên bản đồ số, you sẽ thấy vị trí thời gian thực của tất cả đầu xe trong đội xe.</p>
+<ul>
+  <li><strong>Ý nghĩa màu sắc biểu tượng xe:</strong>
+    <ul>
+      <li>🟢 <span style="color:#52c41a"><strong>Màu xanh lá:</strong></span> Xe đang di chuyển (kèm tốc độ thực tế).</li>
+      <li>🔴 <span style="color:#cf1322"><strong>Màu đỏ:</strong></span> Xe đang dừng/đỗ tắt máy.</li>
+      <li>🟡 <span style="color:#faad14"><strong>Màu cam:</strong></span> Xe đang nổ máy nhưng đứng yên (Idle - chạy không tải).</li>
+    </ul>
+  </li>
+  <li><strong>Trạng thái phụ trợ:</strong> Kiểm tra được trạng thái đóng/mở cửa thùng xe để đảm bảo an toàn hàng hóa carton tránh ẩm ướt khi trời mưa hoặc thất thoát hàng dọc đường.</li>
+</ul>
+
+<h2>3. Xem lại Lộ trình xe chạy (Route Replay) & Tra cứu KM thực tế</h2>
+<p>Đây là tính năng quan trọng nhất để đối soát phiếu xăng dầu của tài xế nhằm loại bỏ việc gian lận hóa đơn dầu:</p>
+<p><img src="https://placehold.co/600x350/fff7e6/ad4e00?text=Xem+Lai+Lo+Trinh+Xe+Chay+GPS" /></p>
+<ol>
+  <li>Vào mục <strong>Xem lại lộ trình (Replay)</strong> trên thanh công cụ GPS Bình Minh.</li>
+  <li>Chọn Biển số xe cần tra cứu và Khoảng thời gian (Ví dụ: từ 08:00 đến 17:00 ngày hôm nay).</li>
+  <li>Bấm <strong>[Xem lại]</strong> → Hệ thống vẽ lại đường chạy của xe trên bản đồ và hiển thị <strong>Tổng số KM đã di chuyển thực tế</strong>.</li>
+  <li><strong>Đối chiếu:</strong> Lấy số KM đo được từ định vị GPS so sánh với số <code>KM cuối − KM đầu</code> trên phiếu đổ dầu nhập ở ERP. Nếu lệch quá 5%, yêu cầu tài xế giải trình lộ trình chạy ngoài luồng.</li>
+</ol>
+
+<h2>4. Các Báo cáo Cần Kiểm Tra Cuối Tháng</h2>
+<p>Điều phối viên cần xuất các báo cáo sau từ GPS Bình Minh để gửi Ban Giám Đốc đối soát hiệu quả:</p>
+<ul>
+  <li><strong>Báo cáo tổng hợp hiệu suất xe:</strong> Tổng số KM chạy trong tháng, số lần vi phạm tốc độ quá quy định.</li>
+  <li><strong>Báo cáo dừng đỗ chi tiết:</strong> Xem tài xế có đỗ sai quy định hoặc giao nhận hàng trễ giờ hẹn tại kho của khách hàng hay không.</li>
+</ul>
+
+<div class="doc-alert doc-tip">
+  <strong>Mẹo quản lý tối ưu:</strong><br/>
+  Hãy xuất Excel báo cáo xăng dầu trên ERP (<code>/hr/logistics</code>) cuối mỗi tháng, đặt cạnh Báo cáo tổng hợp số KM chạy của GPS Bình Minh để phát hiện ngay xe nào đang bị thất thoát dầu nhiều nhất, giúp nhà máy tiết kiệm hàng chục triệu đồng chi phí vận chuyển.
+</div>`
   }
 ];
 
@@ -305,7 +431,7 @@ export default function DocsPage() {
 
   useEffect(() => {
     // Đổi key để ép tải lại dữ liệu mới nhất
-    const saved = localStorage.getItem('erp_docs_v6');
+    const saved = localStorage.getItem('erp_docs_v7');
     if (saved) {
       setDocs(JSON.parse(saved));
       if(JSON.parse(saved).length > 0) setActiveDoc(JSON.parse(saved)[0]);
@@ -385,7 +511,7 @@ export default function DocsPage() {
 
   const saveToLocal = (newDocs: any[]) => {
     setDocs(newDocs);
-    localStorage.setItem('erp_docs_v6', JSON.stringify(newDocs));
+    localStorage.setItem('erp_docs_v7', JSON.stringify(newDocs));
   };
 
   const handlePreviewClick = (e: React.MouseEvent) => {

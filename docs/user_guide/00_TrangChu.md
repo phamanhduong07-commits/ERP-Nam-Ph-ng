@@ -30,9 +30,10 @@ Tài liệu được chia thành các phân hệ tương ứng với chức năn
 | **Mua hàng (Purchasing)** | Đề xuất mua vật tư, làm PO, theo dõi NCC, đối soát kho. | [02_MuaHang_Kho.md](./02_MuaHang_Kho.md) |
 | **Thủ kho (Warehouse)** | Nhập/Xuất kho, chuyển kho, thẻ kho, kiểm kê tồn kho. | [02_MuaHang_Kho.md](./02_MuaHang_Kho.md) |
 | **Quản đốc / Công nhân** | Xem lệnh SX, nhận phôi, thao tác màn hình CD2 (Scan mã). | [03_SanXuat.md](./03_SanXuat.md) |
+| **Điều phối / Tài xế** | Điều xe giao hàng, nhập xăng dầu, tính lương chuyến, đối soát GPS. | [06_Logistics_DoiXe.md](./06_Logistics_DoiXe.md) |
 | **Kế toán (Accounting)** | Thu chi, đối công nợ, tính giá thành, xuất hóa đơn. | [04_KeToan_NhanSu.md](./04_KeToan_NhanSu.md) |
 | **Hành chính (HR)** | Chấm công, tính lương, quản lý nghỉ phép, phân quyền. | [04_KeToan_NhanSu.md](./04_KeToan_NhanSu.md) |
-| **Ban Giám Đốc** | Báo cáo PNL, Tồn kho, Dòng tiền, Hệ thống AI Agent. | [05_BaoCao_HeThong.md](./05_BaoCao_HeThong.md) |
+| **Ban Giám Đốc** | Báo cáo PNL, Tồn kho, Dòng tiền, Hệ thống AI Agent, OEE. | [05_BaoCao_HeThong.md](./05_BaoCao_HeThong.md) |
 
 > [!TIP]
 > **Quy tắc vàng:** Dữ liệu đầu vào của bộ phận này là đầu ra của bộ phận trước đó. Việc nhập liệu chính xác tại khâu Bán hàng (Kích thước, Số lớp, Sóng) sẽ quyết định sự chính xác của toàn bộ quy trình Sản xuất và Tính giá thành.

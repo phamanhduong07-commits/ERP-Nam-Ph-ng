@@ -100,7 +100,7 @@ export default function PayrollConfigPage() {
       dataIndex: 'don_gia',
       width: 150,
       align: 'right' as const,
-      render: (v: number) => <Text strong style={{ color: '#cf1322' }}>{v.toLocaleString()}</Text>
+      render: (v: number | null) => <Text strong style={{ color: '#cf1322' }}>{v?.toLocaleString() ?? '—'}</Text>
     },
     {
       title: 'Trang thai',

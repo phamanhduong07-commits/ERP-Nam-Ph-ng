@@ -226,6 +226,40 @@ export default function GpsTrackingPage() {
       render: (km: number) => `${km?.toFixed(1) ?? 0} km`,
     },
     {
+      title: 'Km tổng',
+      dataIndex: 'km_total',
+      key: 'km_total',
+      width: 100,
+      sorter: (a: GpsVehicle, b: GpsVehicle) => (a.km_total ?? 0) - (b.km_total ?? 0),
+      render: (km: number) => km != null
+        ? <Text>{km.toLocaleString('vi-VN', { maximumFractionDigits: 0 })} km</Text>
+        : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Lái ngày',
+      dataIndex: 'day_driving_time',
+      key: 'day_driving_time',
+      width: 90,
+      sorter: (a: GpsVehicle, b: GpsVehicle) => (a.day_driving_time ?? 0) - (b.day_driving_time ?? 0),
+      render: (minutes: number) => {
+        if (minutes == null) return <Text type="secondary">—</Text>
+        const h = Math.floor(minutes / 60)
+        const m = minutes % 60
+        const color = minutes >= 600 ? '#ff4d4f' : minutes >= 240 ? '#faad14' : undefined
+        return <Text style={{ color }}>{h > 0 ? `${h}g${m}p` : `${m}p`}</Text>
+      },
+    },
+    {
+      title: 'Số lần dừng',
+      dataIndex: 'stop_counter',
+      key: 'stop_counter',
+      width: 95,
+      sorter: (a: GpsVehicle, b: GpsVehicle) => (a.stop_counter ?? 0) - (b.stop_counter ?? 0),
+      render: (n: number) => n != null
+        ? <Text>{n} lần</Text>
+        : <Text type="secondary">—</Text>,
+    },
+    {
       title: 'Loại xe',
       dataIndex: 'vehicle_type',
       key: 'vehicle_type',

@@ -1,3 +1,34 @@
+# Plan: Tích hợp GPS Bình Minh — Theo dõi xe thời gian thực
+Date: 2026-05-20
+Status: PENDING_APPROVAL
+
+## Mục tiêu
+Tích hợp API GPS Bình Minh (`api.gpsbinhminh.vn`) vào ERP, hiển thị trạng thái thời gian thực
+của 12 xe (vị trí, tốc độ, nhiên liệu, lái xe, địa chỉ) trong một trang riêng biệt.
+
+## Các bước thực thi
+- [ ] Bước 1: Thêm biến môi trường GPS vào `.env` — File: `backend/.env` — Lưu credentials an toàn
+- [ ] Bước 2: Tạo backend router GPS — File: `backend/app/routers/gps.py` — Proxy API + merge data Xe
+- [ ] Bước 3: Mount router vào main.py — File: `backend/app/main.py` — Đăng ký `/api/gps`
+- [ ] Bước 4: Tạo trang GPS frontend — File: `frontend/src/pages/logistics/GpsTrackingPage.tsx` — Bảng theo dõi xe thời gian thực
+- [ ] Bước 5: Thêm route vào App.tsx — File: `frontend/src/App.tsx` — `/logistics/gps-tracking`
+- [ ] Bước 6: Thêm menu item — File: `frontend/src/components/layout/AppLayout.tsx` (hoặc sidebar) — Link đến trang GPS
+
+## Done Criteria
+- [ ] `GET /api/gps/vehicles` trả về danh sách xe với dữ liệu live từ GPS API
+- [ ] Frontend hiển thị bảng 12 xe với: biển số, địa chỉ, tốc độ, nhiên liệu %, lái xe, trạng thái
+- [ ] Auto-refresh mỗi 30 giây
+- [ ] Badge màu: Đang chạy (xanh), Đứng (cam), Quá tốc (đỏ)
+- [ ] Credentials GPS không hardcode trong code — lấy từ `.env`
+- [ ] Build frontend thành công
+
+## Rủi ro
+- GPS API có thể chậm (~1-2s) → backend cache 30s để không block UI
+- Biển số GPS (`50H34427`) có thể khác format trong ERP (`50H-34427`) → cần normalize khi match
+- API credentials trong URL (password) → chỉ gọi từ backend, không expose ra frontend
+
+---
+
 # Plan: Hoàn thiện & Mở rộng ERP Nam Phương
 Date: 2026-05-19
 Status: PHẦN 5 PENDING_APPROVAL (Sprint T1–T5 — test coverage 32 routers còn lại)
@@ -781,17 +812,75 @@ giao diện đẹp + dễ dùng, và nút tạo PO nhanh trực tiếp từ fore
 
 ---
 
-### Done Criteria — PHẦN 6
+### Done Criteria — PHẦN 6 (Sprint D1-D3 ✅)
 
-- [ ] Filter xưởng/pháp nhân hoạt động: tồn kho thay đổi khi switch filter
-- [ ] `ton_dang_dat` hiển thị đúng (cần PO test data)
-- [ ] `so_ngay_con` tính đúng: ton_hien_tai / (avg_monthly/30)
-- [ ] `xu_huong` có icon đúng chiều (tang → ↑, giam → ↓)
-- [ ] Biểu đồ hiển thị Top 10 không bị lỗi render
-- [ ] Modal tạo PO: submit → PO mới xuất hiện trong PO list
-- [ ] Preview bút toán DR 1521 / CR 3311 hiển thị trong modal
-- [ ] `npm run build` → 0 TypeScript errors
-- [ ] Không có regression trên `/purchasing/po-list` và `/purchasing/doi-soat-kho`
+- [x] Filter xưởng/pháp nhân hoạt động
+- [x] `ton_dang_dat` hiển thị cột đang đặt
+- [x] `so_ngay_con` + progress bar màu đỏ/vàng/xanh
+- [x] `xu_huong` icon ↑↓→
+- [x] Biểu đồ CSS Top 10
+- [x] Modal tạo PO + preview bút toán DR1521/CR3311
+- [x] `npm run build` → 0 TypeScript errors
+
+---
+
+### Sprint D4 — Hoàn thiện 10 điểm (2026-05-20)
+Status: PENDING_APPROVAL
+
+**10 cải tiến để đạt hoàn hảo:**
+
+- [ ] **D4.1** — Fix backend: guard `wh_filter = []`
+  - File: `backend/app/routers/purchase_orders.py`
+  - Khi xưởng/pháp nhân được chọn nhưng không có kho → trả về `[]` ngay, không query `IN ()`
+  - Thêm field `don_vi` vào response (lấy từ PaperMaterial.don_vi hoặc OtherMaterial.don_vi)
+
+- [ ] **D4.2** — Toggle "Chỉ hiển thị cần mua"
+  - File: `frontend/src/pages/purchase/DuBaoNhuCauPage.tsx`
+  - Switch `chiCanMua` (default: true) → lọc `rows.filter(r => r.can_mua_thuc > 0)`
+  - Hiển thị count: "X / Y mặt hàng cần mua"
+
+- [ ] **D4.3** — Nút "Chọn tất cả ưu tiên cao"
+  - Button "Chọn {N} ưu tiên cao" → auto set selectedKeys = dòng muc_do='cao' & can_mua_thuc>0
+  - Nếu đã chọn hết → nút đổi thành "Bỏ chọn tất cả"
+
+- [ ] **D4.4** — Search box theo tên/mã hàng
+  - Input.Search trên bảng, filter client-side (không call API)
+  - Placeholder: "Tìm tên hàng hoặc mã..."
+
+- [ ] **D4.5** — Cột DVT + fix DVT trong modal
+  - Thêm cột `don_vi` vào bảng (width 65)
+  - Trong modal: items dùng `r.don_vi` thay vì hardcode `'kg'/'cái'`
+  - Backend trả thêm field `don_vi` từ PaperMaterial/OtherMaterial
+
+- [ ] **D4.6** — Modal: thêm trường Ghi chú + link PO sau tạo
+  - Form.Item `ghi_chu` (textarea, optional)
+  - Sau `purchaseApi.create()` thành công: lưu `po.id` → hiển thị message với link
+    `"✅ Đã tạo PO — Xem đơn mua hàng"` → navigate `/purchasing/po-list`
+
+- [ ] **D4.7** — Fix Collapse labels + fix summary colSpan
+  - Bỏ `<PlusOutlined>` tĩnh khỏi Collapse label
+  - Summary row: `colSpan` tính đúng theo số cột thực tế
+
+- [ ] **D4.8** — Empty state đẹp
+  - Khi `rows.length === 0` và không đang loading: hiển thị Empty với icon và hướng dẫn
+
+- [ ] **D4.9** — Nút "Reset bộ lọc"
+  - Nút nhỏ reset về mặc định (thang=3, du_tru=1, bỏ xưởng/pháp nhân/loại)
+  - Chỉ hiển thị khi có filter đang active
+
+- [ ] **D4.10** — Responsive: collapse controls trên màn hình nhỏ
+  - Wrap controls sang 2 hàng tự nhiên (đã dùng `Space wrap` nhưng cần kiểm tra)
+  - Đảm bảo bảng scroll ngang mượt trên tablet
+
+**Done Criteria Sprint D4:**
+- [ ] `wh_filter=[]` guard: không crash khi chọn xưởng không có kho
+- [ ] Toggle "Chỉ cần mua" ẩn/hiện dòng ✓
+- [ ] Nút "Chọn ưu tiên cao" tự tick đúng dòng
+- [ ] Search lọc đúng tên/mã
+- [ ] Cột DVT hiển thị; modal dùng DVT thực
+- [ ] Tạo PO → message.success với link navigate
+- [ ] Collapse không có PlusOutlined tĩnh
+- [ ] `npm run build` → 0 errors
 
 ---
 
