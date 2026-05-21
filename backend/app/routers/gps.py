@@ -69,6 +69,7 @@ CACHE_TTL = 30  # seconds
 _snapshot_throttle: dict[str, float] = {}
 SNAPSHOT_INTERVAL = 300   # 5 phút — đủ dày để theo dõi dầu GPS chính xác
 RETENTION_DAYS = 60       # giữ dữ liệu GPS 2 tháng, sau đó tự xóa
+FUEL_SPIKE_THRESHOLD = 8.0  # L — tăng ≥8L giữa 2 snapshot liên tiếp = phát hiện đổ dầu tự động
 _last_cleanup: float = 0.0
 
 
@@ -631,21 +632,75 @@ def get_daily_detail(
         km_chay = max(0.0, last.km_total - first.km_total)
 
         pnorm = _normalize_plate(plate)
+
+        # GPS spike detection: quét consecutive snapshots tìm tăng dầu đột biến
+        gps_spikes = []
+        for i in range(len(snaps) - 1):
+            delta = snaps[i + 1].fuel_pct - snaps[i].fuel_pct
+            if delta >= FUEL_SPIKE_THRESHOLD:
+                gps_spikes.append({
+                    "spike_ts": to_vn(snaps[i + 1].created_at),
+                    "dau_truoc": round(snaps[i].fuel_pct, 1),
+                    "dau_sau": round(snaps[i + 1].fuel_pct, 1),
+                    "so_lit_gps": round(delta, 1),
+                    "congto": round(snaps[i + 1].km_total, 1),
+                })
+
+        fl_list = sorted(
+            fl_by_key.get((pnorm, ngay), []),
+            key=lambda f: f.created_at or datetime.min.replace(tzinfo=timezone.utc),
+        )
         fuel_events = []
-        for fl in fl_by_key.get((pnorm, ngay), []):
-            fl_ts = to_vn(fl.created_at)
-            sb = nearest_before(pnorm, fl_ts)
-            sa = nearest_after(pnorm, fl_ts)
-            fuel_events.append({
-                "id": fl.id,
-                "gio_do": hhmm(fl.created_at),
-                "so_lit": float(fl.so_lit_dau or 0),
-                "don_gia": float(fl.don_gia or 0),
-                "ghi_chu": fl.ghi_chu,
-                "dau_truoc_pct": round(sb["fuel_pct"], 1) if sb else None,
-                "dau_sau_pct": round(sa["fuel_pct"], 1) if sa else None,
-                "congto_luc_do": round(sb["km_total"], 1) if sb else None,
-            })
+
+        if gps_spikes:
+            # Primary: GPS spike — enrich với FuelLog theo thứ tự (1st spike → 1st log)
+            for idx, ge in enumerate(gps_spikes):
+                fl = fl_list[idx] if idx < len(fl_list) else None
+                fl_lit = float(fl.so_lit_dau or 0) if fl else None
+                fuel_events.append({
+                    "id": fl.id if fl else None,
+                    "gio_do": ge["spike_ts"].strftime("%H:%M"),
+                    "so_lit": ge["so_lit_gps"],        # GPS delta — có thập phân (9,5L)
+                    "so_lit_fuellog": fl_lit,          # Nhập tay để đối chiếu
+                    "don_gia": float(fl.don_gia or 0) if fl else 0,
+                    "ghi_chu": fl.ghi_chu if fl else None,
+                    "dau_truoc_pct": ge["dau_truoc"],
+                    "dau_sau_pct": ge["dau_sau"],
+                    "congto_luc_do": ge["congto"],
+                })
+            # FuelLog dư (nhiều hơn GPS spikes) — không có GPS spike tương ứng
+            for fl in fl_list[len(gps_spikes):]:
+                fl_ts = to_vn(fl.created_at)
+                sb = nearest_before(pnorm, fl_ts)
+                sa = nearest_after(pnorm, fl_ts)
+                fuel_events.append({
+                    "id": fl.id,
+                    "gio_do": hhmm(fl.created_at),
+                    "so_lit": float(fl.so_lit_dau or 0),
+                    "so_lit_fuellog": None,
+                    "don_gia": float(fl.don_gia or 0),
+                    "ghi_chu": fl.ghi_chu,
+                    "dau_truoc_pct": round(sb["fuel_pct"], 1) if sb else None,
+                    "dau_sau_pct": round(sa["fuel_pct"], 1) if sa else None,
+                    "congto_luc_do": round(sb["km_total"], 1) if sb else None,
+                })
+        else:
+            # Fallback: GPS không phát hiện spike — dùng FuelLog (existing logic)
+            for fl in fl_list:
+                fl_ts = to_vn(fl.created_at)
+                sb = nearest_before(pnorm, fl_ts)
+                sa = nearest_after(pnorm, fl_ts)
+                fuel_events.append({
+                    "id": fl.id,
+                    "gio_do": hhmm(fl.created_at),
+                    "so_lit": float(fl.so_lit_dau or 0),
+                    "so_lit_fuellog": None,
+                    "don_gia": float(fl.don_gia or 0),
+                    "ghi_chu": fl.ghi_chu,
+                    "dau_truoc_pct": round(sb["fuel_pct"], 1) if sb else None,
+                    "dau_sau_pct": round(sa["fuel_pct"], 1) if sa else None,
+                    "congto_luc_do": round(sb["km_total"], 1) if sb else None,
+                })
 
         results.append({
             "bien_so": plate,

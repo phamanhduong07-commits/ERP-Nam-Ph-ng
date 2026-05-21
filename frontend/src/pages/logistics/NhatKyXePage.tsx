@@ -11,9 +11,10 @@ const { Text, Title } = Typography
 const { RangePicker } = DatePicker
 
 interface FuelEvent {
-  id: number
+  id: number | null
   gio_do: string | null
-  so_lit: number
+  so_lit: number          // GPS delta khi phát hiện tự động; FuelLog khi fallback
+  so_lit_fuellog: number | null  // Lít nhập tay để đối chiếu (chỉ có khi GPS+FuelLog khớp)
   don_gia: number
   ghi_chu: string | null
   dau_truoc_pct: number | null
@@ -232,16 +233,43 @@ export default function NhatKyXePage() {
     return (
       <Table
         dataSource={r.fuel_events}
-        rowKey="id"
+        rowKey={(_ev, idx) => String(idx)}
         size="small"
         pagination={false}
         columns={[
+          {
+            title: 'Nguồn',
+            key: 'nguon',
+            width: 90,
+            render: (_: unknown, ev: FuelEvent) => ev.id == null
+              ? <Tag color="blue" style={{ fontSize: 11 }}>GPS tự động</Tag>
+              : <Tag color="default" style={{ fontSize: 11 }}>FuelLog</Tag>,
+          },
           { title: 'Giờ đổ', dataIndex: 'gio_do', width: 80, render: (v: string | null) => v || '—' },
-          { title: 'Số lít', dataIndex: 'so_lit', width: 90, align: 'right', render: (v: number) => <Text strong>{fmt1(v)} L</Text> },
-          { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, align: 'right', render: (v: number) => v > 0 ? `${(v/1000).toFixed(0)}k đ/L` : '—' },
-          { title: 'Dầu trước đổ (GPS)', dataIndex: 'dau_truoc_pct', width: 140, align: 'center', render: (v: number | null) => <FuelTag val={v} label="Dầu trước đổ" /> },
-          { title: 'Dầu sau đổ (GPS)', dataIndex: 'dau_sau_pct', width: 140, align: 'center', render: (v: number | null) => <FuelTag val={v} label="Dầu sau đổ" /> },
-          { title: 'Công tơ lúc đổ', dataIndex: 'congto_luc_do', width: 130, align: 'right', render: (v: number | null) => v != null ? `${fmtKm(v)} km` : '—' },
+          {
+            title: 'GPS (L)',
+            dataIndex: 'so_lit',
+            width: 90,
+            align: 'right' as const,
+            render: (v: number, ev: FuelEvent) => (
+              <Tooltip title={ev.id == null ? 'Tự động phát hiện từ cảm biến GPS' : 'GPS delta'}>
+                <Text strong style={{ color: '#1677ff' }}>{fmt1(v)} L</Text>
+              </Tooltip>
+            ),
+          },
+          {
+            title: 'Nhập tay (L)',
+            dataIndex: 'so_lit_fuellog',
+            width: 110,
+            align: 'right' as const,
+            render: (v: number | null) => v != null
+              ? <Text type="secondary">{fmt1(v)} L</Text>
+              : <Text type="secondary">—</Text>,
+          },
+          { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, align: 'right' as const, render: (v: number) => v > 0 ? `${(v/1000).toFixed(0)}k đ/L` : '—' },
+          { title: 'Dầu trước đổ (GPS)', dataIndex: 'dau_truoc_pct', width: 140, align: 'center' as const, render: (v: number | null) => <FuelTag val={v} label="Dầu trước đổ" /> },
+          { title: 'Dầu sau đổ (GPS)', dataIndex: 'dau_sau_pct', width: 140, align: 'center' as const, render: (v: number | null) => <FuelTag val={v} label="Dầu sau đổ" /> },
+          { title: 'Công tơ lúc đổ', dataIndex: 'congto_luc_do', width: 130, align: 'right' as const, render: (v: number | null) => v != null ? `${fmtKm(v)} km` : '—' },
           { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '' },
         ]}
       />
@@ -340,10 +368,12 @@ export default function NhatKyXePage() {
 
       <Card size="small" style={{ marginTop: 12 }}>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          💡 <strong>Dầu GPS (L)</strong>: Cảm biến nhiên liệu GPS Bình Minh — đơn vị lít (không phải %).
-          Xanh &gt;100L · Vàng 50–100L · Đỏ &lt;50L.
-          Snapshot được lưu mỗi 30 phút khi trang Giám sát GPS được mở — cần mở trang thường xuyên để có dữ liệu đầy đủ.
-          Dầu trước/sau đổ lấy từ snapshot GPS gần nhất với thời điểm nhập log.
+          💡 <strong>GPS tự động</strong>: Khi dầu tăng ≥8L giữa 2 snapshot (5 phút/lần), hệ thống tự phát hiện thời điểm đổ dầu và hiển thị số lít GPS (có thập phân, ví dụ 9,5L).
+          Cột <strong>Nhập tay</strong> = số lít từ FuelLog thủ công để đối chiếu.
+          Nếu không có GPS spike, fallback dùng FuelLog (tag "FuelLog").
+          <br />
+          Màu dầu: Xanh &gt;100L · Vàng 50–100L · Đỏ &lt;50L.
+          Snapshot tự động lưu mỗi 5 phút (không cần mở trang).
         </Text>
       </Card>
     </div>
