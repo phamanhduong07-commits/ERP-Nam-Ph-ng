@@ -1,6 +1,6 @@
 import time
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -60,6 +60,7 @@ async def gps_poller_loop() -> None:
                         "is_stop": v.get("IsStop", True),
                         "driver_name": v.get("DriverName"),
                         "address": v.get("Address"),
+                        "time_update": v.get("TimeUpdate"),  # GPS device time (VN tz) cho fill detection
                     }
                     for v in raw if v.get("Plate")
                 ]
@@ -96,6 +97,23 @@ _last_cleanup: float = 0.0
 def _normalize_plate(plate: str) -> str:
     """Remove hyphens/spaces to allow matching '50H-34427' == '50H34427'."""
     return plate.upper().replace("-", "").replace(" ", "")
+
+
+def _parse_gps_time(raw: str | None) -> datetime | None:
+    """Parse GPS TimeUpdate string (Vietnam time UTC+7) → naive UTC datetime.
+
+    GPS Bình Minh trả về nhiều format khác nhau — thử tuần tự.
+    Fallback None nếu không parse được → caller dùng datetime.utcnow().
+    """
+    if not raw:
+        return None
+    for fmt in ("%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+        try:
+            dt_vn = datetime.strptime(raw.strip(), fmt)
+            return dt_vn - timedelta(hours=7)
+        except ValueError:
+            continue
+    return None
 
 
 async def _fetch_gps_raw() -> list[dict]:
@@ -141,6 +159,11 @@ def _try_save_snapshots(vehicles: list[dict], db: Session) -> None:
         if now - last < SNAPSHOT_INTERVAL:
             continue
 
+        # Dùng GPS TimeUpdate (giờ thực GPS device) thay vì server time,
+        # giúp fill detection chính xác. Fallback utcnow() nếu field thiếu/sai format.
+        gps_ts = _parse_gps_time(v.get("time_update"))
+        created_utc = gps_ts if gps_ts else datetime.utcnow()
+
         to_insert.append(GpsSnapshot(
             bien_so=plate,
             xe_id=v.get("xe_id"),
@@ -154,6 +177,7 @@ def _try_save_snapshots(vehicles: list[dict], db: Session) -> None:
             is_stop=v.get("is_stop", True),
             driver_name=v.get("driver_name"),
             address=v.get("address"),
+            created_at=created_utc,
         ))
         _snapshot_throttle[plate] = now
 
@@ -333,6 +357,7 @@ def get_km_summary(
             func.sum(sub.c.km_ngay).label("km_tong"),
             func.avg(sub.c.fuel_avg).label("fuel_avg"),
             func.count(sub.c.ngay).label("so_ngay"),
+            func.max(sub.c.ngay).label("ngay_cuoi_gps"),
         )
         .group_by(sub.c.bien_so, sub.c.xe_id)
         .order_by(func.sum(sub.c.km_ngay).desc())
@@ -346,6 +371,7 @@ def get_km_summary(
             "km_tong": round(r.km_tong or 0, 1),
             "fuel_avg": round(r.fuel_avg or 0, 1),
             "so_ngay": r.so_ngay,
+            "ngay_cuoi_gps": r.ngay_cuoi_gps.isoformat() if r.ngay_cuoi_gps else None,
         }
         for r in rows
     ]
@@ -631,26 +657,32 @@ def get_daily_detail(
         candidates = [x for x in snap_by_plate.get(plate_norm, []) if x["vn_ts"] > ts]
         return candidates[0] if candidates else None
 
+    # --- Xe lookup (1 query dùng chung cho FuelLog mapping và định mức dầu) ---
+    all_xe = db.query(Xe).all()
+    all_xe_map: dict[int, str] = {xe.id: xe.bien_so for xe in all_xe}
+    xe_dinh_muc: dict[str, float] = {
+        _normalize_plate(xe.bien_so): float(xe.dinh_muc_dau)
+        for xe in all_xe
+        if xe.dinh_muc_dau and float(xe.dinh_muc_dau) > 0
+    }
+
     # --- FuelLog ---
-    all_xe_map: dict[int, str] = {xe.id: xe.bien_so for xe in db.query(Xe).all()}
-    fl_rows = (
+    fl_q = (
         db.query(FuelLog)
         .filter(FuelLog.ngay_do >= from_date, FuelLog.ngay_do <= to_date)
         .order_by(FuelLog.ngay_do, FuelLog.created_at)
-        .all()
     )
+    if bien_so:
+        # Khi lọc biển số cụ thể: chỉ load FuelLog của xe đó, tránh full scan
+        pnorm_target = _normalize_plate(bien_so)
+        xe_target = next((x for x in all_xe if _normalize_plate(x.bien_so) == pnorm_target), None)
+        fl_q = fl_q.filter(FuelLog.xe_id == xe_target.id) if xe_target else fl_q.filter(False)
+    fl_rows = fl_q.all()
     fl_by_key: dict[tuple, list] = defaultdict(list)
     for fl in fl_rows:
         b = all_xe_map.get(fl.xe_id) if fl.xe_id else None
         if b:
             fl_by_key[(_normalize_plate(b), fl.ngay_do)].append(fl)
-
-    # --- Xe định mức dầu (phát hiện hụt bất thường khi di chuyển) ---
-    xe_dinh_muc: dict[str, float] = {
-        _normalize_plate(xe.bien_so): float(xe.dinh_muc_dau)
-        for xe in db.query(Xe).all()
-        if xe.dinh_muc_dau and float(xe.dinh_muc_dau) > 0
-    }
 
     # --- Build result ---
     results = []
@@ -729,6 +761,9 @@ def get_daily_detail(
                     "congto_luc_do": round(sb["km_total"], 1) if sb else None,
                 })
 
+        # Sort fuel_events theo thời gian (GPS spikes đã đúng thứ tự, nhưng FuelLog dư có thể chen vào)
+        fuel_events.sort(key=lambda e: e.get("gio_do") or "99:99")
+
         # --- Drain detection: phát hiện hụt dầu bất thường ---
         dinh_muc = xe_dinh_muc.get(pnorm, 0)
         drain_events = []
@@ -758,11 +793,17 @@ def get_daily_detail(
                 "fuel_truoc": round(snaps[i].fuel_pct, 1),
                 "fuel_sau": round(snaps[i + 1].fuel_pct, 1),
                 "so_lit_hut": round(drop, 1),
+                "du_kien_lit": round(expected, 1) if expected > 0 else None,
                 "delta_km": round(d_km, 1),
                 "xe_dung": stopped,
                 "phan_loai": phan_loai_drain,
                 "muc_canh_bao": muc_canh_bao,
             })
+
+        # Lượng dầu tiêu hao thực tế trong ngày = dầu đầu - dầu cuối + tổng đổ
+        fill_total = sum(e["so_lit"] for e in fuel_events)
+        fuel_tieu_hao = round(max(0.0, first.fuel_pct - last.fuel_pct + fill_total), 1)
+        fuel_ly_thuyet = round(km_chay * dinh_muc / 100, 1) if dinh_muc > 0 and km_chay > 0 else None
 
         results.append({
             "bien_so": plate,
@@ -775,6 +816,8 @@ def get_daily_detail(
             "dau_dau_pct": round(first.fuel_pct, 1),
             "dau_cuoi_pct": round(last.fuel_pct, 1),
             "so_snapshot": len(snaps),
+            "fuel_tieu_hao": fuel_tieu_hao,
+            "fuel_ly_thuyet": fuel_ly_thuyet,
             "fuel_events": fuel_events,
             "drain_events": drain_events,
         })

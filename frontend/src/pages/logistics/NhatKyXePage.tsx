@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Tag, Tooltip, Typography,
 } from 'antd'
@@ -28,6 +28,7 @@ interface DrainEvent {
   fuel_truoc: number
   fuel_sau: number
   so_lit_hut: number
+  du_kien_lit: number | null
   delta_km: number
   xe_dung: boolean
   phan_loai: 'rut_khi_dung' | 'tieu_hao_bat_thuong'
@@ -45,6 +46,8 @@ interface DailyRow {
   dau_dau_pct: number
   dau_cuoi_pct: number
   so_snapshot: number
+  fuel_tieu_hao: number
+  fuel_ly_thuyet: number | null
   fuel_events: FuelEvent[]
   drain_events: DrainEvent[]
 }
@@ -157,6 +160,7 @@ export default function NhatKyXePage() {
   const today = dayjs()
   const [range, setRange] = useState<[Dayjs, Dayjs]>([today.subtract(6, 'day'), today])
   const [selectedPlate, setSelectedPlate] = useState<string | undefined>(undefined)
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([])
 
   const fromDate = range[0].format('YYYY-MM-DD')
   const toDate = range[1].format('YYYY-MM-DD')
@@ -181,6 +185,16 @@ export default function NhatKyXePage() {
   const daysWithData = new Set(data.map(r => r.ngay)).size
   const totalDrainEvents = data.reduce((s, r) => s + r.drain_events.length, 0)
   const highDrains = data.reduce((s, r) => s + r.drain_events.filter(e => e.muc_canh_bao === 'cao').length, 0)
+  const affectedVehicles = new Set(data.filter(r => r.drain_events.length > 0).map(r => r.bien_so)).size
+
+  // Auto-expand hàng có cảnh báo drain mức CAO khi data thay đổi (giới hạn 20 hàng)
+  useEffect(() => {
+    const keys = data
+      .filter(r => r.drain_events.some(e => e.muc_canh_bao === 'cao'))
+      .slice(0, 20)
+      .map(r => `${r.bien_so}-${r.ngay}`)
+    setExpandedKeys(keys)
+  }, [data])
 
   const columns = [
     {
@@ -266,6 +280,35 @@ export default function NhatKyXePage() {
           {v > 0 ? `+${fmtKm(v)}` : '0'} km
         </Text>
       ),
+    },
+    {
+      title: 'Tiêu hao ngày',
+      key: 'tieu_hao',
+      width: 120,
+      align: 'right' as const,
+      sorter: (a: DailyRow, b: DailyRow) => a.fuel_tieu_hao - b.fuel_tieu_hao,
+      render: (_: unknown, r: DailyRow) => {
+        const actual = r.fuel_tieu_hao
+        const theory = r.fuel_ly_thuyet
+        if (actual <= 0 && !theory) return <Text type="secondary">—</Text>
+        const ratio = theory && theory > 0 ? actual / theory : null
+        const color = ratio == null ? undefined
+          : ratio > 1.15 ? '#ff4d4f'
+          : ratio > 1.05 ? '#fa8c16'
+          : '#52c41a'
+        return (
+          <Tooltip title={theory ? `Định mức: ${fmt1(theory)} L / ${fmtKm(r.km_chay)} km` : 'Chưa có định mức'}>
+            <div style={{ lineHeight: 1.4 }}>
+              <Text strong style={{ color }}>{fmt1(actual)} L</Text>
+              {theory != null && (
+                <div>
+                  <Text type="secondary" style={{ fontSize: 10 }}>/ {fmt1(theory)} L ĐM</Text>
+                </div>
+              )}
+            </div>
+          </Tooltip>
+        )
+      },
     },
     {
       title: 'Dầu GPS — Timeline (L)',
@@ -359,6 +402,15 @@ export default function NhatKyXePage() {
                   width: 110,
                   align: 'right' as const,
                   render: (v: number) => `${fmt1(v)} km`,
+                },
+                {
+                  title: 'Dự kiến (L)',
+                  dataIndex: 'du_kien_lit',
+                  width: 100,
+                  align: 'right' as const,
+                  render: (v: number | null) => v != null
+                    ? <Text type="secondary">{fmt1(v)} L</Text>
+                    : <Text type="secondary">—</Text>,
                 },
                 {
                   title: 'Phân loại',
@@ -464,11 +516,18 @@ export default function NhatKyXePage() {
           message={
             <Text strong>
               {highDrains > 0
-                ? `${highDrains} cảnh báo CAO — nghi ngờ rút dầu gian lận trong kỳ này`
-                : `${totalDrainEvents} cảnh báo hụt dầu bất thường trong kỳ này`}
+                ? `⚠ Phát hiện ${highDrains} cảnh báo mức CAO trên ${affectedVehicles} xe — nghi ngờ rút dầu gian lận`
+                : `${totalDrainEvents} cảnh báo hụt dầu bất thường trên ${affectedVehicles} xe`}
             </Text>
           }
-          description="Nhấn ▶ mở rộng dòng có biểu tượng ⚠ trong bảng để xem chi tiết từng sự kiện."
+          description={
+            <span>
+              {highDrains > 0 && `${highDrains} mức CAO`}
+              {highDrains > 0 && (totalDrainEvents - highDrains) > 0 && ' · '}
+              {(totalDrainEvents - highDrains) > 0 && `${totalDrainEvents - highDrains} mức trung bình`}
+              {' — Các hàng mức CAO đã được tự động mở rộng bên dưới.'}
+            </span>
+          }
         />
       )}
 
@@ -487,6 +546,8 @@ export default function NhatKyXePage() {
           expandable={{
             expandedRowRender,
             rowExpandable: r => r.fuel_events.length > 0 || r.drain_events.length > 0,
+            expandedRowKeys: expandedKeys,
+            onExpandedRowsChange: keys => setExpandedKeys(keys as string[]),
           }}
         />
       </Card>

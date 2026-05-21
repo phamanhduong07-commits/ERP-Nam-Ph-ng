@@ -16,6 +16,7 @@ interface KmSummaryRow {
   km_tong: number
   fuel_avg: number
   so_ngay: number
+  ngay_cuoi_gps: string | null
 }
 
 interface KmDailyRow {
@@ -108,6 +109,23 @@ export default function KmThucTePage() {
       width: 130,
       render: (v: number) => `${v} ngày`,
     },
+    {
+      title: 'GPS cuối',
+      dataIndex: 'ngay_cuoi_gps',
+      key: 'ngay_cuoi_gps',
+      width: 110,
+      render: (v: string | null) => {
+        if (!v) return <Text type="secondary">—</Text>
+        const days = dayjs().diff(dayjs(v), 'day')
+        return (
+          <Tooltip title={dayjs(v).format('DD/MM/YYYY')}>
+            {days > 2
+              ? <Tag color="error">Offline {days}d</Tag>
+              : <Text type="secondary" style={{ fontSize: 11 }}>{dayjs(v).format('DD/MM')}</Text>}
+          </Tooltip>
+        )
+      },
+    },
   ]
 
   const dailyColumns = [
@@ -158,12 +176,19 @@ export default function KmThucTePage() {
       title: 'Snapshots',
       dataIndex: 'so_snapshot',
       key: 'so_snapshot',
-      width: 90,
-      render: (v: number) => (
-        <Tooltip title="Số lần GPS lưu dữ liệu trong ngày (mỗi 5 phút)">
-          <Tag color={v >= 4 ? 'green' : v >= 2 ? 'orange' : 'red'}>{v} lần</Tag>
-        </Tooltip>
-      ),
+      width: 100,
+      render: (v: number) => {
+        // 288 snapshots/ngày = lý tưởng (mỗi 5 phút × 24h)
+        const color = v >= 240 ? 'success' : v >= 100 ? 'warning' : 'error'
+        const label = v >= 240 ? 'Tốt' : v >= 100 ? 'Đủ' : 'Kém'
+        return (
+          <Tooltip title={`${v} snapshot trong ngày · Chất lượng dữ liệu: ${label} (Tốt ≥240 · Đủ ≥100 · Kém <100)`}>
+            <Tag color={color} style={{ fontSize: 11 }}>
+              {v} <span style={{ fontWeight: 400 }}>({label})</span>
+            </Tag>
+          </Tooltip>
+        )
+      },
     },
   ]
 
