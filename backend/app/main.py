@@ -1,6 +1,8 @@
+import asyncio
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -37,6 +39,7 @@ from app.routers import crm as crm_router
 from app.routers import fixed_assets as fixed_assets_router
 from app.routers import mrp as mrp_router
 from app.routers import gps as gps_router
+from app.routers.gps import gps_poller_loop
 from app.models import gps as _gps_models  # noqa: F401 — ensures GpsSnapshot is in Base.metadata
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
@@ -58,11 +61,27 @@ if settings.AUTO_CREATE_SCHEMA:
     Base.metadata.create_all(bind=engine)
     ensure_schema()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── Startup ───────────────────────────────────────────────────────────────
+    _gps_task = asyncio.create_task(gps_poller_loop())
+    logger.info("GPS background poller scheduled")
+    yield
+    # ── Shutdown ──────────────────────────────────────────────────────────────
+    _gps_task.cancel()
+    try:
+        await _gps_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("GPS background poller stopped")
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    lifespan=lifespan,
 )
 
 # ─── Socket.io ────────────────────────────────────────────────────────────────

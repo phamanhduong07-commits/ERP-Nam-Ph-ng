@@ -16,13 +16,42 @@ logger = logging.getLogger("erp.gps")
 
 router = APIRouter(prefix="/api/gps", tags=["GPS"])
 
+GPS_POLL_INTERVAL = 300  # giây — poll GPS background mỗi 5 phút
+
+
+async def gps_poller_loop() -> None:
+    """Background task: tự động poll GPS API và lưu snapshot mỗi GPS_POLL_INTERVAL giây.
+
+    Chạy kể từ khi FastAPI khởi động — không cần người dùng mở trang GPS.
+    """
+    import asyncio
+    from app.database import SessionLocal
+
+    logger.info("GPS poller: started (interval=%ds)", GPS_POLL_INTERVAL)
+    # Đợi 15 giây để app khởi động xong hoàn toàn
+    await asyncio.sleep(15)
+
+    while True:
+        try:
+            vehicles = await _fetch_gps_raw()
+            if vehicles:
+                db = SessionLocal()
+                try:
+                    _try_save_snapshots(vehicles, db)
+                finally:
+                    db.close()
+            logger.debug("GPS poller: saved snapshot for %d vehicles", len(vehicles) if vehicles else 0)
+        except Exception as exc:
+            logger.warning("GPS poller error (sẽ thử lại sau %ds): %s", GPS_POLL_INTERVAL, exc)
+        await asyncio.sleep(GPS_POLL_INTERVAL)
+
 # In-memory cache: (data, timestamp)
 _cache: dict = {"data": None, "ts": 0.0}
 CACHE_TTL = 30  # seconds
 
 # Throttle: plate → last snapshot saved timestamp
 _snapshot_throttle: dict[str, float] = {}
-SNAPSHOT_INTERVAL = 1800  # 30 phút
+SNAPSHOT_INTERVAL = 300  # 5 phút — đủ dày để theo dõi dầu GPS chính xác
 
 
 def _normalize_plate(plate: str) -> str:
