@@ -30,8 +30,9 @@ interface KmDailyRow {
 
 const fmt = (v: number, d = 1) => v.toLocaleString('vi-VN', { maximumFractionDigits: d })
 
-const fuelColor = (pct: number) =>
-  pct > 50 ? '#52c41a' : pct > 20 ? '#faad14' : '#ff4d4f'
+// GPS Bình Minh Fuel = lít (không phải %); bình ~200L
+const fuelColor = (lit: number) =>
+  lit > 100 ? '#52c41a' : lit > 50 ? '#faad14' : '#ff4d4f'
 
 export default function KmThucTePage() {
   const today = dayjs()
@@ -92,12 +93,12 @@ export default function KmThucTePage() {
       render: (v: number) => <Text strong>{fmt(v)} km</Text>,
     },
     {
-      title: 'Nhiên liệu TB',
+      title: 'Dầu TB (L)',
       dataIndex: 'fuel_avg',
       key: 'fuel_avg',
-      width: 120,
+      width: 110,
       render: (v: number) => (
-        <Text style={{ color: fuelColor(v) }}>{fmt(v)}%</Text>
+        <Text style={{ color: fuelColor(v) }}>{fmt(v)} L</Text>
       ),
     },
     {
@@ -136,12 +137,12 @@ export default function KmThucTePage() {
       },
     },
     {
-      title: 'Nhiên liệu TB',
+      title: 'Dầu TB (L)',
       dataIndex: 'fuel_avg',
       key: 'fuel_avg',
-      width: 120,
+      width: 110,
       render: (v: number) => (
-        <Text style={{ color: fuelColor(v) }}>{fmt(v)}%</Text>
+        <Text style={{ color: fuelColor(v) }}>{fmt(v)} L</Text>
       ),
     },
     {
@@ -159,7 +160,7 @@ export default function KmThucTePage() {
       key: 'so_snapshot',
       width: 90,
       render: (v: number) => (
-        <Tooltip title="Số lần GPS lưu dữ liệu trong ngày (mỗi 30 phút)">
+        <Tooltip title="Số lần GPS lưu dữ liệu trong ngày (mỗi 5 phút)">
           <Tag color={v >= 4 ? 'green' : v >= 2 ? 'orange' : 'red'}>{v} lần</Tag>
         </Tooltip>
       ),
@@ -210,10 +211,10 @@ export default function KmThucTePage() {
         <Col span={6}>
           <Card size="small">
             <Statistic
-              title="Nhiên liệu TB"
+              title="Dầu TB trong bình (L)"
               value={avgFuel}
               formatter={v => fmt(Number(v))}
-              suffix="%"
+              suffix="L"
               valueStyle={{ color: fuelColor(avgFuel) }}
             />
           </Card>
@@ -287,9 +288,10 @@ export default function KmThucTePage() {
 
       <Card size="small" style={{ marginTop: 12 }}>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          💡 Dữ liệu được lưu tự động mỗi 30 phút khi trang GPS đang mở.
-          Cột "Km hôm đó" = max(km_today) trong ngày — đây là số km xe thực sự chạy.
-          Nhấn vào biển số để lọc chi tiết ngày.
+          💡 <strong>Dầu TB (L)</strong> = trung bình mức dầu trong bình theo lít (GPS Bình Minh báo lít, không phải %).
+          Xanh &gt;100L · Vàng 50–100L · Đỏ &lt;50L (bình ~200L).
+          Dữ liệu tự động lưu mỗi 5 phút. Cột "Km hôm đó" = max(km_today) trong ngày.
+          Nhấn biển số để lọc chi tiết ngày.
         </Text>
       </Card>
     </div>
