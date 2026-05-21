@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Tag, Tooltip, Typography,
+  Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Tag, Tooltip, Typography,
 } from 'antd'
 import { ArrowRightOutlined, CarOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
@@ -22,6 +22,18 @@ interface FuelEvent {
   congto_luc_do: number | null
 }
 
+interface DrainEvent {
+  gio_bat_dau: string | null
+  gio_ket_thuc: string | null
+  fuel_truoc: number
+  fuel_sau: number
+  so_lit_hut: number
+  delta_km: number
+  xe_dung: boolean
+  phan_loai: 'rut_khi_dung' | 'tieu_hao_bat_thuong'
+  muc_canh_bao: 'cao' | 'trung_binh'
+}
+
 interface DailyRow {
   bien_so: string
   ngay: string
@@ -34,6 +46,7 @@ interface DailyRow {
   dau_cuoi_pct: number
   so_snapshot: number
   fuel_events: FuelEvent[]
+  drain_events: DrainEvent[]
 }
 
 const fmt1 = (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 1 })
@@ -64,10 +77,23 @@ function FuelTag({ val, label }: { val: number | null; label: string }) {
 }
 
 function FuelTimeline({ row }: { row: DailyRow }) {
-  const { dau_dau_pct: dauDau, dau_cuoi_pct: dauCuoi, fuel_events: events } = row
+  const { dau_dau_pct: dauDau, dau_cuoi_pct: dauCuoi, fuel_events: fills, drain_events: drains } = row
 
-  if (events.length === 0) {
-    // Không có đổ dầu
+  type TEvent =
+    | { kind: 'fill'; gio: string | null; ev: FuelEvent }
+    | { kind: 'drain'; gio: string | null; ev: DrainEvent }
+
+  const allEvents: TEvent[] = [
+    ...fills.map(e => ({ kind: 'fill' as const, gio: e.gio_do, ev: e })),
+    ...drains.map(e => ({ kind: 'drain' as const, gio: e.gio_ket_thuc, ev: e })),
+  ].sort((a, b) => {
+    if (!a.gio && !b.gio) return 0
+    if (!a.gio) return 1
+    if (!b.gio) return -1
+    return a.gio.localeCompare(b.gio)
+  })
+
+  if (allEvents.length === 0) {
     const diff = dauCuoi - dauDau
     return (
       <Space size={4} wrap>
@@ -83,30 +109,43 @@ function FuelTimeline({ row }: { row: DailyRow }) {
     )
   }
 
-  // Có đổ dầu — hiển thị timeline đầy đủ
   const parts: React.ReactNode[] = []
   parts.push(<FuelTag key="start" val={dauDau} label="Đầu ngày" />)
 
-  for (const ev of events) {
-    parts.push(
-      <ArrowRightOutlined key={`arrow-${ev.id}`} style={{ color: '#aaa', fontSize: 10 }} />
-    )
-    if (ev.dau_truoc_pct != null) {
-      parts.push(<FuelTag key={`before-${ev.id}`} val={ev.dau_truoc_pct} label="Trước đổ" />)
-      parts.push(<ArrowRightOutlined key={`arrow2-${ev.id}`} style={{ color: '#aaa', fontSize: 10 }} />)
+  allEvents.forEach((item, idx) => {
+    parts.push(<ArrowRightOutlined key={`a-${idx}`} style={{ color: '#aaa', fontSize: 10 }} />)
+
+    if (item.kind === 'fill') {
+      const ev = item.ev
+      const k = ev.id ?? `fi${idx}`
+      if (ev.dau_truoc_pct != null) {
+        parts.push(<FuelTag key={`bf-${k}`} val={ev.dau_truoc_pct} label="Trước đổ" />)
+        parts.push(<ArrowRightOutlined key={`a2-${k}`} style={{ color: '#aaa', fontSize: 10 }} />)
+      }
+      parts.push(
+        <Tooltip key={`fill-${k}`} title={`Đổ dầu${ev.gio_do ? ' lúc ' + ev.gio_do : ''}: ${fmt1(ev.so_lit)}L (GPS)`}>
+          <Tag color="blue" style={{ margin: 0, fontWeight: 600, fontSize: 12 }}>+{fmt1(ev.so_lit)}L</Tag>
+        </Tooltip>
+      )
+      if (ev.dau_sau_pct != null) {
+        parts.push(<ArrowRightOutlined key={`a3-${k}`} style={{ color: '#aaa', fontSize: 10 }} />)
+        parts.push(<FuelTag key={`af-${k}`} val={ev.dau_sau_pct} label="Sau đổ" />)
+      }
+    } else {
+      const ev = item.ev
+      const label = ev.phan_loai === 'rut_khi_dung' ? 'Hụt khi dừng xe' : 'Hụt bất thường'
+      const ac = ev.muc_canh_bao === 'cao' ? '#ff4d4f' : '#fa8c16'
+      parts.push(
+        <Tooltip key={`drain-${idx}`}
+          title={`⚠ ${label}${ev.gio_ket_thuc ? ' lúc ' + ev.gio_ket_thuc : ''}: -${fmt1(ev.so_lit_hut)}L`}
+        >
+          <Tag style={{ margin: 0, fontWeight: 700, fontSize: 12, background: ac + '22', borderColor: ac, color: ac }}>
+            ⬇ -{fmt1(ev.so_lit_hut)}L
+          </Tag>
+        </Tooltip>
+      )
     }
-    parts.push(
-      <Tooltip key={`fill-${ev.id}`} title={`Đổ dầu${ev.gio_do ? ' lúc ' + ev.gio_do : ''}: ${fmt1(ev.so_lit)}L`}>
-        <Tag color="blue" style={{ margin: 0, fontWeight: 600, fontSize: 12 }}>
-          +{fmt1(ev.so_lit)}L
-        </Tag>
-      </Tooltip>
-    )
-    if (ev.dau_sau_pct != null) {
-      parts.push(<ArrowRightOutlined key={`arrow3-${ev.id}`} style={{ color: '#aaa', fontSize: 10 }} />)
-      parts.push(<FuelTag key={`after-${ev.id}`} val={ev.dau_sau_pct} label="Sau đổ" />)
-    }
-  }
+  })
 
   parts.push(<ArrowRightOutlined key="arrow-end" style={{ color: '#aaa', fontSize: 10 }} />)
   parts.push(<FuelTag key="end" val={dauCuoi} label="Cuối ngày" />)
@@ -140,8 +179,25 @@ export default function NhatKyXePage() {
   const totalFuelEvents = data.reduce((s, r) => s + r.fuel_events.length, 0)
   const totalFuelLit = data.reduce((s, r) => s + r.fuel_events.reduce((ss, e) => ss + e.so_lit, 0), 0)
   const daysWithData = new Set(data.map(r => r.ngay)).size
+  const totalDrainEvents = data.reduce((s, r) => s + r.drain_events.length, 0)
+  const highDrains = data.reduce((s, r) => s + r.drain_events.filter(e => e.muc_canh_bao === 'cao').length, 0)
 
   const columns = [
+    {
+      title: '',
+      key: 'alert',
+      width: 28,
+      fixed: 'left' as const,
+      render: (_: unknown, r: DailyRow) => {
+        if (!r.drain_events.length) return null
+        const isHigh = r.drain_events.some(e => e.muc_canh_bao === 'cao')
+        return (
+          <Tooltip title={`${r.drain_events.length} cảnh báo hụt dầu${isHigh ? ' (mức CAO)' : ''}`}>
+            <span style={{ color: isHigh ? '#ff4d4f' : '#fa8c16', fontSize: 15 }}>⚠</span>
+          </Tooltip>
+        )
+      },
+    },
     {
       title: 'Biển số',
       dataIndex: 'bien_so',
@@ -227,52 +283,105 @@ export default function NhatKyXePage() {
   ]
 
   const expandedRowRender = (r: DailyRow) => {
-    if (!r.fuel_events.length) {
-      return <Text type="secondary" style={{ fontSize: 12 }}>Không có lần đổ dầu nào trong ngày này.</Text>
+    const hasFuel = r.fuel_events.length > 0
+    const hasDrain = r.drain_events.length > 0
+
+    if (!hasFuel && !hasDrain) {
+      return <Text type="secondary" style={{ fontSize: 12 }}>Không có sự kiện dầu nào trong ngày này.</Text>
     }
+
     return (
-      <Table
-        dataSource={r.fuel_events}
-        rowKey={(_ev, idx) => String(idx)}
-        size="small"
-        pagination={false}
-        columns={[
-          {
-            title: 'Nguồn',
-            key: 'nguon',
-            width: 90,
-            render: (_: unknown, ev: FuelEvent) => ev.id == null
-              ? <Tag color="blue" style={{ fontSize: 11 }}>GPS tự động</Tag>
-              : <Tag color="default" style={{ fontSize: 11 }}>FuelLog</Tag>,
-          },
-          { title: 'Giờ đổ', dataIndex: 'gio_do', width: 80, render: (v: string | null) => v || '—' },
-          {
-            title: 'GPS (L)',
-            dataIndex: 'so_lit',
-            width: 90,
-            align: 'right' as const,
-            render: (v: number, ev: FuelEvent) => (
-              <Tooltip title={ev.id == null ? 'Tự động phát hiện từ cảm biến GPS' : 'GPS delta'}>
-                <Text strong style={{ color: '#1677ff' }}>{fmt1(v)} L</Text>
-              </Tooltip>
-            ),
-          },
-          {
-            title: 'Nhập tay (L)',
-            dataIndex: 'so_lit_fuellog',
-            width: 110,
-            align: 'right' as const,
-            render: (v: number | null) => v != null
-              ? <Text type="secondary">{fmt1(v)} L</Text>
-              : <Text type="secondary">—</Text>,
-          },
-          { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, align: 'right' as const, render: (v: number) => v > 0 ? `${(v/1000).toFixed(0)}k đ/L` : '—' },
-          { title: 'Dầu trước đổ (GPS)', dataIndex: 'dau_truoc_pct', width: 140, align: 'center' as const, render: (v: number | null) => <FuelTag val={v} label="Dầu trước đổ" /> },
-          { title: 'Dầu sau đổ (GPS)', dataIndex: 'dau_sau_pct', width: 140, align: 'center' as const, render: (v: number | null) => <FuelTag val={v} label="Dầu sau đổ" /> },
-          { title: 'Công tơ lúc đổ', dataIndex: 'congto_luc_do', width: 130, align: 'right' as const, render: (v: number | null) => v != null ? `${fmtKm(v)} km` : '—' },
-          { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '' },
-        ]}
-      />
+      <div>
+        {hasFuel && (
+          <>
+            <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>🔵 Đổ dầu ({r.fuel_events.length} lần)</Text>
+            <Table
+              dataSource={r.fuel_events}
+              rowKey={(_ev, idx) => String(idx)}
+              size="small"
+              pagination={false}
+              columns={[
+                { title: 'Nguồn', key: 'nguon', width: 90, render: (_: unknown, ev: FuelEvent) => ev.id == null ? <Tag color="blue" style={{ fontSize: 11 }}>GPS tự động</Tag> : <Tag color="default" style={{ fontSize: 11 }}>FuelLog</Tag> },
+                { title: 'Giờ đổ', dataIndex: 'gio_do', width: 80, render: (v: string | null) => v || '—' },
+                { title: 'GPS (L)', dataIndex: 'so_lit', width: 90, align: 'right' as const, render: (v: number, ev: FuelEvent) => <Tooltip title={ev.id == null ? 'Tự động phát hiện từ cảm biến GPS' : 'GPS delta'}><Text strong style={{ color: '#1677ff' }}>{fmt1(v)} L</Text></Tooltip> },
+                { title: 'Nhập tay (L)', dataIndex: 'so_lit_fuellog', width: 110, align: 'right' as const, render: (v: number | null) => v != null ? <Text type="secondary">{fmt1(v)} L</Text> : <Text type="secondary">—</Text> },
+                { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, align: 'right' as const, render: (v: number) => v > 0 ? `${(v / 1000).toFixed(0)}k đ/L` : '—' },
+                { title: 'Dầu trước', dataIndex: 'dau_truoc_pct', width: 110, align: 'center' as const, render: (v: number | null) => <FuelTag val={v} label="Dầu trước đổ" /> },
+                { title: 'Dầu sau', dataIndex: 'dau_sau_pct', width: 110, align: 'center' as const, render: (v: number | null) => <FuelTag val={v} label="Dầu sau đổ" /> },
+                { title: 'Công tơ lúc đổ', dataIndex: 'congto_luc_do', width: 130, align: 'right' as const, render: (v: number | null) => v != null ? `${fmtKm(v)} km` : '—' },
+                { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '' },
+              ]}
+            />
+          </>
+        )}
+
+        {hasDrain && (
+          <div style={{ marginTop: hasFuel ? 12 : 0 }}>
+            <Text strong style={{ fontSize: 12, color: '#ff4d4f', display: 'block', marginBottom: 4 }}>
+              ⚠ Cảnh báo hụt dầu ({r.drain_events.length} sự kiện)
+            </Text>
+            <Table
+              dataSource={r.drain_events}
+              rowKey={(_, idx) => `drain-${idx}`}
+              size="small"
+              pagination={false}
+              columns={[
+                {
+                  title: 'Thời gian',
+                  key: 'gio',
+                  width: 130,
+                  render: (_: unknown, e: DrainEvent) => `${e.gio_bat_dau || '?'} → ${e.gio_ket_thuc || '?'}`,
+                },
+                {
+                  title: 'Hụt (L)',
+                  dataIndex: 'so_lit_hut',
+                  width: 85,
+                  align: 'right' as const,
+                  render: (v: number) => <Text strong style={{ color: '#ff4d4f' }}>-{fmt1(v)} L</Text>,
+                },
+                {
+                  title: 'Dầu trước',
+                  dataIndex: 'fuel_truoc',
+                  width: 100,
+                  align: 'center' as const,
+                  render: (v: number) => <FuelTag val={v} label="Dầu trước" />,
+                },
+                {
+                  title: 'Dầu sau',
+                  dataIndex: 'fuel_sau',
+                  width: 100,
+                  align: 'center' as const,
+                  render: (v: number) => <FuelTag val={v} label="Dầu sau" />,
+                },
+                {
+                  title: 'Km di chuyển',
+                  dataIndex: 'delta_km',
+                  width: 110,
+                  align: 'right' as const,
+                  render: (v: number) => `${fmt1(v)} km`,
+                },
+                {
+                  title: 'Phân loại',
+                  dataIndex: 'phan_loai',
+                  width: 170,
+                  render: (v: string, e: DrainEvent) => {
+                    const isHigh = e.muc_canh_bao === 'cao'
+                    const label = v === 'rut_khi_dung' ? 'Hụt khi xe dừng' : 'Tiêu hao bất thường'
+                    return <Tag color={isHigh ? 'error' : 'warning'}>{label}</Tag>
+                  },
+                },
+                {
+                  title: 'Xe dừng?',
+                  dataIndex: 'xe_dung',
+                  width: 80,
+                  align: 'center' as const,
+                  render: (v: boolean) => v ? <Tag color="red">Có</Tag> : <Tag color="orange">Không</Tag>,
+                },
+              ]}
+            />
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -347,6 +456,22 @@ export default function NhatKyXePage() {
         </Col>
       </Row>
 
+      {totalDrainEvents > 0 && (
+        <Alert
+          type={highDrains > 0 ? 'error' : 'warning'}
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={
+            <Text strong>
+              {highDrains > 0
+                ? `${highDrains} cảnh báo CAO — nghi ngờ rút dầu gian lận trong kỳ này`
+                : `${totalDrainEvents} cảnh báo hụt dầu bất thường trong kỳ này`}
+            </Text>
+          }
+          description="Nhấn ▶ mở rộng dòng có biểu tượng ⚠ trong bảng để xem chi tiết từng sự kiện."
+        />
+      )}
+
       <Card
         size="small"
         title={`Dữ liệu theo ngày (${data.length} xe-ngày)`}
@@ -361,19 +486,18 @@ export default function NhatKyXePage() {
           scroll={{ x: 900 }}
           expandable={{
             expandedRowRender,
-            rowExpandable: r => r.fuel_events.length > 0,
+            rowExpandable: r => r.fuel_events.length > 0 || r.drain_events.length > 0,
           }}
         />
       </Card>
 
       <Card size="small" style={{ marginTop: 12 }}>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          💡 <strong>GPS tự động</strong>: Khi dầu tăng ≥8L giữa 2 snapshot (5 phút/lần), hệ thống tự phát hiện thời điểm đổ dầu và hiển thị số lít GPS (có thập phân, ví dụ 9,5L).
-          Cột <strong>Nhập tay</strong> = số lít từ FuelLog thủ công để đối chiếu.
-          Nếu không có GPS spike, fallback dùng FuelLog (tag "FuelLog").
+          💡 <strong>Đổ dầu GPS</strong>: Phát hiện tự động khi dầu tăng ≥8L giữa 2 snapshot liên tiếp — thời điểm và số lít chính xác từ cảm biến (ví dụ 9,5L). Cột <strong>Nhập tay</strong> từ FuelLog để đối chiếu.
           <br />
-          Màu dầu: Xanh &gt;100L · Vàng 50–100L · Đỏ &lt;50L.
-          Snapshot tự động lưu mỗi 5 phút (không cần mở trang).
+          <strong>Cảnh báo hụt dầu ⚠</strong>: Hụt ≥8L khi xe dừng = nghi rút dầu (mức CAO). Tiêu hao &gt;2,5× định mức khi di chuyển = bất thường.
+          <br />
+          Màu dầu: Xanh &gt;100L · Vàng 50–100L · Đỏ &lt;50L. Snapshot tự động 5 phút.
         </Text>
       </Card>
     </div>

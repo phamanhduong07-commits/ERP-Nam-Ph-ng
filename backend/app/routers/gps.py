@@ -69,7 +69,9 @@ CACHE_TTL = 30  # seconds
 _snapshot_throttle: dict[str, float] = {}
 SNAPSHOT_INTERVAL = 300   # 5 phút — đủ dày để theo dõi dầu GPS chính xác
 RETENTION_DAYS = 60       # giữ dữ liệu GPS 2 tháng, sau đó tự xóa
-FUEL_SPIKE_THRESHOLD = 8.0  # L — tăng ≥8L giữa 2 snapshot liên tiếp = phát hiện đổ dầu tự động
+FUEL_SPIKE_THRESHOLD = 8.0   # L — tăng ≥8L giữa 2 snapshot liên tiếp = phát hiện đổ dầu tự động
+DRAIN_THRESHOLD = 8.0        # L — hụt ≥8L = sự kiện cần kiểm tra
+DRAIN_WHILE_MOVING_FACTOR = 2.5  # hụt > 2.5× định mức L/100km khi di chuyển = tiêu hao bất thường
 _last_cleanup: float = 0.0
 
 
@@ -625,6 +627,13 @@ def get_daily_detail(
         if b:
             fl_by_key[(_normalize_plate(b), fl.ngay_do)].append(fl)
 
+    # --- Xe định mức dầu (phát hiện hụt bất thường khi di chuyển) ---
+    xe_dinh_muc: dict[str, float] = {
+        _normalize_plate(xe.bien_so): float(xe.dinh_muc_dau)
+        for xe in db.query(Xe).all()
+        if xe.dinh_muc_dau and float(xe.dinh_muc_dau) > 0
+    }
+
     # --- Build result ---
     results = []
     for (plate, ngay), snaps in sorted(groups.items()):
@@ -702,6 +711,41 @@ def get_daily_detail(
                     "congto_luc_do": round(sb["km_total"], 1) if sb else None,
                 })
 
+        # --- Drain detection: phát hiện hụt dầu bất thường ---
+        dinh_muc = xe_dinh_muc.get(pnorm, 0)
+        drain_events = []
+        for i in range(len(snaps) - 1):
+            delta = snaps[i + 1].fuel_pct - snaps[i].fuel_pct
+            if delta >= -DRAIN_THRESHOLD:
+                continue
+            drop = abs(delta)
+            d_km = max(0.0, snaps[i + 1].km_total - snaps[i].km_total)
+            stopped = snaps[i + 1].is_stop or snaps[i + 1].speed < 5
+            expected = (d_km * dinh_muc / 100) if dinh_muc > 0 and d_km > 0 else 0
+
+            if stopped and d_km < 1:
+                # Hụt khi xe dừng, không di chuyển — rõ ràng nhất
+                phan_loai_drain = "rut_khi_dung"
+                muc_canh_bao = "cao" if drop >= 15 else "trung_binh"
+            elif expected > 0 and drop > expected * DRAIN_WHILE_MOVING_FACTOR:
+                # Tiêu hao cao hơn định mức × hệ số trong khi đang di chuyển
+                phan_loai_drain = "tieu_hao_bat_thuong"
+                muc_canh_bao = "cao" if drop > expected * 3 else "trung_binh"
+            else:
+                continue  # Tiêu hao bình thường, bỏ qua
+
+            drain_events.append({
+                "gio_bat_dau": hhmm(snaps[i].created_at),
+                "gio_ket_thuc": hhmm(snaps[i + 1].created_at),
+                "fuel_truoc": round(snaps[i].fuel_pct, 1),
+                "fuel_sau": round(snaps[i + 1].fuel_pct, 1),
+                "so_lit_hut": round(drop, 1),
+                "delta_km": round(d_km, 1),
+                "xe_dung": stopped,
+                "phan_loai": phan_loai_drain,
+                "muc_canh_bao": muc_canh_bao,
+            })
+
         results.append({
             "bien_so": plate,
             "ngay": ngay.isoformat(),
@@ -714,6 +758,7 @@ def get_daily_detail(
             "dau_cuoi_pct": round(last.fuel_pct, 1),
             "so_snapshot": len(snaps),
             "fuel_events": fuel_events,
+            "drain_events": drain_events,
         })
 
     return results
