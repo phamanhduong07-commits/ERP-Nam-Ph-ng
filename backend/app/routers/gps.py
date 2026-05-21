@@ -661,7 +661,8 @@ def get_fuel_comparison(
         f_start = fuel_start_map.get(plate, 0)
         f_end = fuel_end_map.get(plate, 0)
         tieu_hao_gps = max(0.0, f_start - f_end + dau_thuc_te)
-        tieu_hao_per_100 = round(tieu_hao_gps * 100 / km_gps, 1) if km_gps > 0 and tieu_hao_gps > 0 else None
+        # Chỉ tính L/100km khi km_gps >= 50 — dưới ngưỡng này nhiễu cảm biến GPS cho ra giá trị vô nghĩa
+        tieu_hao_per_100 = round(tieu_hao_gps * 100 / km_gps, 1) if km_gps >= 50 and tieu_hao_gps > 0 else None
 
         dau_ly_thuyet = (km_gps * dinh_muc / 100) if dinh_muc > 0 and km_gps > 0 else None
         chenh_lech_lit = (dau_thuc_te - dau_ly_thuyet) if dau_ly_thuyet is not None else None
@@ -1056,7 +1057,8 @@ def get_daily_detail(
         fuel_tieu_hao = round(max(0.0, first.fuel_pct - last.fuel_pct + fill_total), 1)
         fuel_ly_thuyet = round(km_chay * dinh_muc / 100, 1) if dinh_muc > 0 and km_chay > 0 else None
 
-        actual_per_100 = round(fuel_tieu_hao * 100 / km_chay, 1) if km_chay > 0 and fuel_tieu_hao > 0 else None
+        # Chỉ tính L/100km khi km_chay >= 20 trong ngày — tránh nhiễu cảm biến khi xe chạy ít
+        actual_per_100 = round(fuel_tieu_hao * 100 / km_chay, 1) if km_chay >= 20 and fuel_tieu_hao > 0 else None
         results.append({
             "bien_so": plate,
             "ngay": ngay.isoformat(),

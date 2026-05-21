@@ -140,14 +140,14 @@ export default function DoiSoatXangPage() {
       key: 'tieu_hao_per_100',
       width: 150,
       align: 'right' as const,
-      sorter: (a: FuelRow, b: FuelRow) => {
-        const ra = a.km_gps > 0 ? a.dau_thuc_te / a.km_gps * 100 : 0
-        const rb = b.km_gps > 0 ? b.dau_thuc_te / b.km_gps * 100 : 0
-        return ra - rb
-      },
+      sorter: (a: FuelRow, b: FuelRow) => (a.tieu_hao_per_100 ?? 0) - (b.tieu_hao_per_100 ?? 0),
       render: (_: unknown, r: FuelRow) => {
         const actual = r.tieu_hao_per_100
-        if (actual == null) return <Text type="secondary">—</Text>
+        if (actual == null) return (
+          <Tooltip title={r.km_gps < 50 ? `Km GPS quá thấp (${fmt1(r.km_gps)} km) — cần ≥ 50 km để tính đáng tin cậy` : 'Chưa đủ dữ liệu'}>
+            <Text type="secondary">—</Text>
+          </Tooltip>
+        )
         const dm = r.dinh_muc_dau
         const color = dm > 0
           ? actual > dm * 1.15 ? '#ff4d4f'
@@ -308,6 +308,7 @@ export default function DoiSoatXangPage() {
         <Text type="secondary" style={{ fontSize: 12 }}>
           💡 Dầu lý thuyết = Km GPS × Định mức (L/100km) / 100. Cần cài định mức trong danh mục Xe để tính được.
           Chênh lệch dương = dùng nhiều hơn lý thuyết. Ngưỡng cảnh báo: &gt;5% chú ý, &gt;10% bất thường.
+          Cột TH thực tế (GPS) chỉ hiển thị khi Km GPS ≥ 50 km — dưới ngưỡng này cảm biến GPS có sai số lớn.
         </Text>
       </Card>
     </div>
