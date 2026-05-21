@@ -698,6 +698,43 @@ def get_maintenance_alerts(
     return results
 
 
+_VN = timezone(timedelta(hours=7))
+
+
+def to_vn(dt: datetime | None):
+    """Convert UTC datetime → Vietnam time (UTC+7), timezone-aware."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_VN)
+
+
+def _match_fuel_log(
+    spike_ts,
+    fl_list: list,
+    already_matched: set,
+    max_hours: int = 2,
+):
+    """Match GPS spike tới FuelLog gần nhất về thời gian (≤ max_hours), chưa matched.
+
+    Trả về (index, FuelLog) hoặc None nếu không tìm được.
+    """
+    best_idx, best_fl, best_diff = None, None, timedelta(hours=max_hours)
+    for i, fl in enumerate(fl_list):
+        if i in already_matched:
+            continue
+        fl_ts = to_vn(fl.created_at)
+        if fl_ts is None:
+            continue
+        diff = abs(spike_ts - fl_ts)
+        if diff <= best_diff:
+            best_diff = diff
+            best_idx = i
+            best_fl = fl
+    return (best_idx, best_fl) if best_fl is not None else None
+
+
 @router.get("/daily-detail")
 def get_daily_detail(
     from_date: date = Query(...),
@@ -718,17 +755,7 @@ def get_daily_detail(
         raise HTTPException(400, "Khoảng thời gian tối đa 31 ngày cho nhật ký xe")
 
     from app.models.hr import FuelLog
-    from datetime import timezone, timedelta
     from collections import defaultdict
-
-    VN = timezone(timedelta(hours=7))
-
-    def to_vn(dt: datetime | None):
-        if dt is None:
-            return None
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(VN)
 
     def hhmm(dt: datetime | None) -> str | None:
         v = to_vn(dt)
@@ -769,30 +796,6 @@ def get_daily_detail(
         """Snapshot gần nhất SAU thời điểm ts."""
         candidates = [x for x in snap_by_plate.get(plate_norm, []) if x["vn_ts"] > ts]
         return candidates[0] if candidates else None
-
-    def _match_fuel_log(
-        spike_ts,
-        fl_list: list,
-        already_matched: set,
-        max_hours: int = 2,
-    ):
-        """Match GPS spike tới FuelLog gần nhất về thời gian (≤ max_hours), chưa matched.
-
-        Trả về (index, FuelLog) hoặc None nếu không tìm được.
-        """
-        best_idx, best_fl, best_diff = None, None, timedelta(hours=max_hours)
-        for i, fl in enumerate(fl_list):
-            if i in already_matched:
-                continue
-            fl_ts = to_vn(fl.created_at)
-            if fl_ts is None:
-                continue
-            diff = abs(spike_ts - fl_ts)
-            if diff <= best_diff:
-                best_diff = diff
-                best_idx = i
-                best_fl = fl
-        return (best_idx, best_fl) if best_fl is not None else None
 
     # --- Xe lookup (1 query dùng chung cho FuelLog mapping và định mức dầu) ---
     all_xe = db.query(Xe).all()
