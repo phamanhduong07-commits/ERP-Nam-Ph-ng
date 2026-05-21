@@ -17,6 +17,10 @@ interface FuelRow {
   loai_xe: string | null
   dinh_muc_dau: number
   km_gps: number
+  fuel_start: number
+  fuel_end: number
+  tieu_hao_gps: number
+  tieu_hao_per_100: number | null
   dau_ly_thuyet: number | null
   dau_thuc_te: number
   chenh_lech_lit: number | null
@@ -63,7 +67,8 @@ export default function DoiSoatXangPage() {
       'Km GPS': r.km_gps,
       'Dầu lý thuyết (L)': r.dau_ly_thuyet ?? '',
       'Dầu thực tế (L)': r.dau_thuc_te,
-      'TH thực tế (L/100km)': r.km_gps > 0 && r.dau_thuc_te > 0 ? Math.round(r.dau_thuc_te / r.km_gps * 1000) / 10 : '',
+      'TH thực tế GPS (L)': r.tieu_hao_gps,
+      'TH thực tế (L/100km)': r.tieu_hao_per_100 ?? '',
       'Chênh lệch (L)': r.chenh_lech_lit ?? '',
       'Chênh lệch (%)': r.chenh_lech_pct ?? '',
       'Trạng thái': r.canh_bao,
@@ -141,16 +146,17 @@ export default function DoiSoatXangPage() {
         return ra - rb
       },
       render: (_: unknown, r: FuelRow) => {
-        if (r.km_gps <= 0 || r.dau_thuc_te <= 0) return <Text type="secondary">—</Text>
-        const actual = r.dau_thuc_te / r.km_gps * 100
+        const actual = r.tieu_hao_per_100
+        if (actual == null) return <Text type="secondary">—</Text>
         const dm = r.dinh_muc_dau
         const color = dm > 0
           ? actual > dm * 1.15 ? '#ff4d4f'
           : actual > dm * 1.05 ? '#fa8c16'
           : '#52c41a'
           : undefined
+        const tooltipText = `GPS: ${fmt1(r.fuel_start)}L → ${fmt1(r.fuel_end)}L · Tiêu hao: ${fmt1(r.tieu_hao_gps)}L${dm > 0 ? ` · ĐM: ${fmt1(dm)} L/100km` : ''}`
         return (
-          <Tooltip title={dm > 0 ? `Định mức: ${fmt1(dm)} L/100km` : 'Chưa cài định mức'}>
+          <Tooltip title={tooltipText}>
             <Text strong style={{ color }}>{fmt1(actual)} L</Text>
           </Tooltip>
         )

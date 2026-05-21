@@ -602,7 +602,7 @@ def get_fuel_comparison(
         if xe:
             xe_for_fuel[xe.id] = plate
 
-    fuel_map: dict[int, float] = {}  # xe_id → liters
+    fuel_map: dict[int, float] = {}  # xe_id → liters filled (FuelLog)
     if xe_for_fuel:
         fuel_rows = (
             db.query(FuelLog.xe_id, func.sum(FuelLog.so_lit_dau).label("so_lit"))
@@ -616,12 +616,52 @@ def get_fuel_comparison(
         )
         fuel_map = {r.xe_id: float(r.so_lit or 0) for r in fuel_rows}
 
+    # GPS sensor: fuel tại snapshot đầu tiên và cuối cùng của kỳ per bien_so
+    # → tieu_hao_gps = fuel_start - fuel_end + fills (công thức kế toán bình chứa)
+    first_ts_sub = (
+        db.query(GpsSnapshot.bien_so, func.min(GpsSnapshot.created_at).label("ts"))
+        .filter(GpsSnapshot.ngay >= from_date, GpsSnapshot.ngay <= to_date)
+        .group_by(GpsSnapshot.bien_so)
+        .subquery()
+    )
+    last_ts_sub = (
+        db.query(GpsSnapshot.bien_so, func.max(GpsSnapshot.created_at).label("ts"))
+        .filter(GpsSnapshot.ngay >= from_date, GpsSnapshot.ngay <= to_date)
+        .group_by(GpsSnapshot.bien_so)
+        .subquery()
+    )
+    from sqlalchemy import and_
+    fuel_start_rows = (
+        db.query(GpsSnapshot.bien_so, GpsSnapshot.fuel_pct)
+        .join(first_ts_sub, and_(
+            GpsSnapshot.bien_so == first_ts_sub.c.bien_so,
+            GpsSnapshot.created_at == first_ts_sub.c.ts,
+        ))
+        .all()
+    )
+    fuel_end_rows = (
+        db.query(GpsSnapshot.bien_so, GpsSnapshot.fuel_pct)
+        .join(last_ts_sub, and_(
+            GpsSnapshot.bien_so == last_ts_sub.c.bien_so,
+            GpsSnapshot.created_at == last_ts_sub.c.ts,
+        ))
+        .all()
+    )
+    fuel_start_map: dict[str, float] = {r.bien_so: float(r.fuel_pct) for r in fuel_start_rows}
+    fuel_end_map: dict[str, float] = {r.bien_so: float(r.fuel_pct) for r in fuel_end_rows}
+
     results = []
     for plate, km_gps in km_map.items():
         xe = plate_to_xe.get(_normalize_plate(plate))
         xe_id = xe.id if xe else None
         dinh_muc = float(xe.dinh_muc_dau or 0) if xe else 0
         dau_thuc_te = fuel_map.get(xe_id, 0) if xe_id else 0
+
+        # Tiêu hao GPS = đầu kỳ - cuối kỳ + lít đổ thêm
+        f_start = fuel_start_map.get(plate, 0)
+        f_end = fuel_end_map.get(plate, 0)
+        tieu_hao_gps = max(0.0, f_start - f_end + dau_thuc_te)
+        tieu_hao_per_100 = round(tieu_hao_gps * 100 / km_gps, 1) if km_gps > 0 and tieu_hao_gps > 0 else None
 
         dau_ly_thuyet = (km_gps * dinh_muc / 100) if dinh_muc > 0 and km_gps > 0 else None
         chenh_lech_lit = (dau_thuc_te - dau_ly_thuyet) if dau_ly_thuyet is not None else None
@@ -642,6 +682,10 @@ def get_fuel_comparison(
             "loai_xe": xe.loai_xe if xe else None,
             "dinh_muc_dau": dinh_muc,
             "km_gps": round(km_gps, 1),
+            "fuel_start": round(f_start, 1),
+            "fuel_end": round(f_end, 1),
+            "tieu_hao_gps": round(tieu_hao_gps, 1),
+            "tieu_hao_per_100": tieu_hao_per_100,
             "dau_ly_thuyet": round(dau_ly_thuyet, 1) if dau_ly_thuyet else None,
             "dau_thuc_te": round(dau_thuc_te, 1),
             "chenh_lech_lit": round(chenh_lech_lit, 1) if chenh_lech_lit is not None else None,
