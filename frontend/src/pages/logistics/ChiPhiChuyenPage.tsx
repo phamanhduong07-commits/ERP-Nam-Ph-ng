@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Button, Card, Col, DatePicker, InputNumber, Row, Space, Statistic, Table, Tag, Typography,
+  Button, Card, Col, DatePicker, InputNumber, Row, Space, Statistic, Table, Tag, Tooltip, Typography,
 } from 'antd'
 import { CheckOutlined, EditOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -9,6 +9,13 @@ import client from '../../api/client'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
+
+interface KmDailyRow {
+  bien_so: string
+  xe_id: number | null
+  ngay: string
+  km_ngay: number
+}
 
 interface TripCostRow {
   id: number
@@ -51,15 +58,30 @@ export default function ChiPhiChuyenPage() {
   const [editValues, setEditValues] = useState<Record<string, number>>({})
   const qc = useQueryClient()
 
+  const fromDate = range[0].format('YYYY-MM-DD')
+  const toDate = range[1].format('YYYY-MM-DD')
+
   const { data = [], isFetching, refetch } = useQuery<TripCostRow[]>({
-    queryKey: ['trip-costs', range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD')],
+    queryKey: ['trip-costs', fromDate, toDate],
     queryFn: async () => {
       const res = await client.get('/hr/trip-costs', {
-        params: { from_date: range[0].format('YYYY-MM-DD'), to_date: range[1].format('YYYY-MM-DD') },
+        params: { from_date: fromDate, to_date: toDate },
       })
       return res.data
     },
   })
+
+  const { data: kmData = [] } = useQuery<KmDailyRow[]>({
+    queryKey: ['gps-km-report', fromDate, toDate],
+    queryFn: async () => {
+      const res = await client.get('/gps/km-report', { params: { from_date: fromDate, to_date: toDate } })
+      return res.data
+    },
+  })
+  // Lookup: "BIEN_SO|YYYY-MM-DD" → km_ngay
+  const kmLookup = new Map<string, number>(
+    kmData.map(r => [`${r.bien_so}|${r.ngay}`, r.km_ngay])
+  )
 
   const saveMutation = useMutation({
     mutationFn: async ({ id, values }: { id: number; values: Record<string, number> }) => {
@@ -176,6 +198,21 @@ export default function ChiPhiChuyenPage() {
       width: 100,
       align: 'right' as const,
       render: (v: number) => <Text>{fmt(v)}</Text>,
+    },
+    {
+      title: 'Km GPS',
+      key: 'km_gps',
+      width: 90,
+      align: 'right' as const,
+      render: (_: unknown, r: TripCostRow) => {
+        const km = kmLookup.get(`${r.xe}|${r.ngay_xuat}`)
+        if (km == null) return <Text type="secondary">—</Text>
+        return (
+          <Tooltip title="Km thực tế từ GPS Bình Minh">
+            <Text style={{ color: '#1677ff' }}>{km.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} km</Text>
+          </Tooltip>
+        )
+      },
     },
     {
       title: 'Xăng dầu',
@@ -323,7 +360,7 @@ export default function ChiPhiChuyenPage() {
           loading={isFetching}
           size="small"
           pagination={{ pageSize: 50, showSizeChanger: true }}
-          scroll={{ x: 1400 }}
+          scroll={{ x: 1500 }}
           summary={() => (
             <Table.Summary fixed>
               <Table.Summary.Row style={{ fontWeight: 600, background: '#fafafa' }}>
@@ -333,15 +370,16 @@ export default function ChiPhiChuyenPage() {
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={5} align="right">{fmt(totalRow.tien_chuyen)}</Table.Summary.Cell>
                 <Table.Summary.Cell index={6} align="right">{fmt(totalRow.tien_luong)}</Table.Summary.Cell>
-                <Table.Summary.Cell index={7} align="right">{fmt(totalRow.xang_dau)}</Table.Summary.Cell>
-                <Table.Summary.Cell index={8} align="right">{fmt(totalRow.cau_duong)}</Table.Summary.Cell>
-                <Table.Summary.Cell index={9} align="right">{fmt(totalRow.sua_chua)}</Table.Summary.Cell>
-                <Table.Summary.Cell index={10} align="right">{fmt(totalRow.tien_com)}</Table.Summary.Cell>
-                <Table.Summary.Cell index={11} align="right">{fmt(totalRow.phi_khac)}</Table.Summary.Cell>
-                <Table.Summary.Cell index={12} align="right">
+                <Table.Summary.Cell index={7} align="right" />
+                <Table.Summary.Cell index={8} align="right">{fmt(totalRow.xang_dau)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={9} align="right">{fmt(totalRow.cau_duong)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={10} align="right">{fmt(totalRow.sua_chua)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={11} align="right">{fmt(totalRow.tien_com)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={12} align="right">{fmt(totalRow.phi_khac)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={13} align="right">
                   <Text strong style={{ color: '#ff4d4f' }}>{fmt(totalRow.tong_chi_phi)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={13} />
+                <Table.Summary.Cell index={14} />
               </Table.Summary.Row>
             </Table.Summary>
           )}

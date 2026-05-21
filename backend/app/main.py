@@ -37,6 +37,7 @@ from app.routers import crm as crm_router
 from app.routers import fixed_assets as fixed_assets_router
 from app.routers import mrp as mrp_router
 from app.routers import gps as gps_router
+from app.models import gps as _gps_models  # noqa: F401 — ensures GpsSnapshot is in Base.metadata
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 logging.basicConfig(
