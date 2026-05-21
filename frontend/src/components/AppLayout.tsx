@@ -224,6 +224,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/logistics/gps-tracking', label: <Link to="/logistics/gps-tracking">📡 Theo dõi xe GPS</Link> },
         { key: '/logistics/chi-phi-chuyen', label: <Link to="/logistics/chi-phi-chuyen">💰 Chi phí đội xe</Link> },
         { key: '/logistics/km-thuc-te', label: <Link to="/logistics/km-thuc-te">📊 Km thực tế GPS</Link> },
+        { key: '/logistics/nhat-ky-xe', label: <Link to="/logistics/nhat-ky-xe">📋 Nhật ký xe</Link> },
         { key: '/logistics/doi-soat-xang', label: <Link to="/logistics/doi-soat-xang">⛽ Đối chiếu xăng dầu</Link> },
         { key: '/logistics/bao-duong-km', label: <Link to="/logistics/bao-duong-km">🔧 Bảo dưỡng theo km</Link> },
         { key: '/hr/approvals', label: <Link to="/hr/approvals">📝 Phê duyệt đơn từ</Link> },

@@ -492,3 +492,126 @@ def get_maintenance_alerts(
 
     results.sort(key=lambda x: x["km_con_lai"])
     return results
+
+
+@router.get("/daily-detail")
+def get_daily_detail(
+    from_date: date = Query(...),
+    to_date: date = Query(...),
+    bien_so: str | None = Query(None),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    """Nhật ký xe theo ngày: công tơ mét đầu/cuối ngày, dầu GPS theo timeline.
+
+    Mỗi dòng = 1 xe × 1 ngày, gồm:
+    - Giờ + công tơ + dầu% đầu ngày (snapshot đầu tiên)
+    - Giờ + công tơ + dầu% cuối ngày (snapshot cuối cùng)
+    - Km chạy = congto_cuoi - congto_dau
+    - FuelLog cùng ngày: dầu% snapshot gần nhất trước/sau lúc nhập log
+    """
+    from app.models.hr import FuelLog
+    from datetime import timezone, timedelta
+    from collections import defaultdict
+
+    VN = timezone(timedelta(hours=7))
+
+    def to_vn(dt: datetime | None):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(VN)
+
+    def hhmm(dt: datetime | None) -> str | None:
+        v = to_vn(dt)
+        return v.strftime("%H:%M") if v else None
+
+    # --- Snapshots ---
+    snap_q = (
+        db.query(GpsSnapshot)
+        .filter(GpsSnapshot.ngay >= from_date, GpsSnapshot.ngay <= to_date)
+    )
+    if bien_so:
+        snap_q = snap_q.filter(GpsSnapshot.bien_so == bien_so)
+    all_snaps = snap_q.order_by(GpsSnapshot.bien_so, GpsSnapshot.created_at).all()
+
+    if not all_snaps:
+        return []
+
+    # Group by (bien_so, ngay)
+    groups: dict[tuple, list] = defaultdict(list)
+    for s in all_snaps:
+        groups[(s.bien_so, s.ngay)].append(s)
+
+    # Index snapshots for FuelLog matching: plate_norm → sorted list by vn_ts
+    snap_by_plate: dict[str, list[dict]] = defaultdict(list)
+    for s in all_snaps:
+        snap_by_plate[_normalize_plate(s.bien_so)].append({
+            "vn_ts": to_vn(s.created_at),
+            "fuel_pct": s.fuel_pct,
+            "km_total": s.km_total,
+        })
+
+    def nearest_before(plate_norm: str, ts):
+        """Snapshot gần nhất TRƯỚC thời điểm ts."""
+        candidates = [x for x in snap_by_plate.get(plate_norm, []) if x["vn_ts"] <= ts]
+        return candidates[-1] if candidates else None
+
+    def nearest_after(plate_norm: str, ts):
+        """Snapshot gần nhất SAU thời điểm ts."""
+        candidates = [x for x in snap_by_plate.get(plate_norm, []) if x["vn_ts"] > ts]
+        return candidates[0] if candidates else None
+
+    # --- FuelLog ---
+    all_xe_map: dict[int, str] = {xe.id: xe.bien_so for xe in db.query(Xe).all()}
+    fl_rows = (
+        db.query(FuelLog)
+        .filter(FuelLog.ngay_do >= from_date, FuelLog.ngay_do <= to_date)
+        .order_by(FuelLog.ngay_do, FuelLog.created_at)
+        .all()
+    )
+    fl_by_key: dict[tuple, list] = defaultdict(list)
+    for fl in fl_rows:
+        b = all_xe_map.get(fl.xe_id) if fl.xe_id else None
+        if b:
+            fl_by_key[(_normalize_plate(b), fl.ngay_do)].append(fl)
+
+    # --- Build result ---
+    results = []
+    for (plate, ngay), snaps in sorted(groups.items()):
+        first, last = snaps[0], snaps[-1]
+        km_chay = max(0.0, last.km_total - first.km_total)
+
+        pnorm = _normalize_plate(plate)
+        fuel_events = []
+        for fl in fl_by_key.get((pnorm, ngay), []):
+            fl_ts = to_vn(fl.created_at)
+            sb = nearest_before(pnorm, fl_ts)
+            sa = nearest_after(pnorm, fl_ts)
+            fuel_events.append({
+                "id": fl.id,
+                "gio_do": hhmm(fl.created_at),
+                "so_lit": float(fl.so_lit_dau or 0),
+                "don_gia": float(fl.don_gia or 0),
+                "ghi_chu": fl.ghi_chu,
+                "dau_truoc_pct": round(sb["fuel_pct"], 1) if sb else None,
+                "dau_sau_pct": round(sa["fuel_pct"], 1) if sa else None,
+                "congto_luc_do": round(sb["km_total"], 1) if sb else None,
+            })
+
+        results.append({
+            "bien_so": plate,
+            "ngay": ngay.isoformat(),
+            "gio_dau": hhmm(first.created_at),
+            "gio_cuoi": hhmm(last.created_at),
+            "congto_dau": round(first.km_total, 1),
+            "congto_cuoi": round(last.km_total, 1),
+            "km_chay": round(km_chay, 1),
+            "dau_dau_pct": round(first.fuel_pct, 1),
+            "dau_cuoi_pct": round(last.fuel_pct, 1),
+            "so_snapshot": len(snaps),
+            "fuel_events": fuel_events,
+        })
+
+    return results
