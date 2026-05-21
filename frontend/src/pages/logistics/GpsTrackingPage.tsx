@@ -218,7 +218,7 @@ export default function GpsTrackingPage() {
       ),
     },
     {
-      title: 'Km hôm nay',
+      title: 'Km chuyến',
       dataIndex: 'km_today',
       key: 'km_today',
       width: 110,
