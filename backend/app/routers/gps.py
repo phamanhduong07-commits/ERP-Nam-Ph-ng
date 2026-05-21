@@ -657,12 +657,12 @@ def get_fuel_comparison(
         dinh_muc = float(xe.dinh_muc_dau or 0) if xe else 0
         dau_thuc_te = fuel_map.get(xe_id, 0) if xe_id else 0
 
-        # Tiêu hao GPS = đầu kỳ - cuối kỳ + lít đổ thêm
+        # GPS sensor fuel level (tham khảo thêm, không dùng để tính L/100km)
         f_start = fuel_start_map.get(plate, 0)
         f_end = fuel_end_map.get(plate, 0)
         tieu_hao_gps = max(0.0, f_start - f_end + dau_thuc_te)
-        # Chỉ tính L/100km khi km_gps >= 50 — dưới ngưỡng này nhiễu cảm biến GPS cho ra giá trị vô nghĩa
-        tieu_hao_per_100 = round(tieu_hao_gps * 100 / km_gps, 1) if km_gps >= 50 and tieu_hao_gps > 0 else None
+        # L/100km = dầu thực tế đổ / km GPS — đơn giản và chính xác khi có dữ liệu đổ dầu
+        tieu_hao_per_100 = round(dau_thuc_te * 100 / km_gps, 1) if km_gps > 0 and dau_thuc_te > 0 else None
 
         dau_ly_thuyet = (km_gps * dinh_muc / 100) if dinh_muc > 0 and km_gps > 0 else None
         chenh_lech_lit = (dau_thuc_te - dau_ly_thuyet) if dau_ly_thuyet is not None else None

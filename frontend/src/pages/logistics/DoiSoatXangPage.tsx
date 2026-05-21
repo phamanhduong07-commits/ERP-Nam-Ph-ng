@@ -144,7 +144,7 @@ export default function DoiSoatXangPage() {
       render: (_: unknown, r: FuelRow) => {
         const actual = r.tieu_hao_per_100
         if (actual == null) return (
-          <Tooltip title={r.km_gps < 50 ? `Km GPS quá thấp (${fmt1(r.km_gps)} km) — cần ≥ 50 km để tính đáng tin cậy` : 'Chưa đủ dữ liệu'}>
+          <Tooltip title="Chưa có dữ liệu đổ dầu trong kỳ — cần nhập phiếu đổ dầu để tính">
             <Text type="secondary">—</Text>
           </Tooltip>
         )
@@ -154,7 +154,7 @@ export default function DoiSoatXangPage() {
           : actual > dm * 1.05 ? '#fa8c16'
           : '#52c41a'
           : undefined
-        const tooltipText = `GPS: ${fmt1(r.fuel_start)}L → ${fmt1(r.fuel_end)}L · Tiêu hao: ${fmt1(r.tieu_hao_gps)}L${dm > 0 ? ` · ĐM: ${fmt1(dm)} L/100km` : ''}`
+        const tooltipText = `${fmt1(r.dau_thuc_te)} L ÷ ${fmt1(r.km_gps)} km × 100${dm > 0 ? ` · ĐM: ${fmt1(dm)} L/100km` : ''}`
         return (
           <Tooltip title={tooltipText}>
             <Text strong style={{ color }}>{fmt1(actual)} L</Text>
@@ -306,9 +306,9 @@ export default function DoiSoatXangPage() {
 
       <Card size="small" style={{ marginTop: 12 }}>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          💡 Dầu lý thuyết = Km GPS × Định mức (L/100km) / 100. Cần cài định mức trong danh mục Xe để tính được.
-          Chênh lệch dương = dùng nhiều hơn lý thuyết. Ngưỡng cảnh báo: &gt;5% chú ý, &gt;10% bất thường.
-          Cột TH thực tế (GPS) chỉ hiển thị khi Km GPS ≥ 50 km — dưới ngưỡng này cảm biến GPS có sai số lớn.
+          💡 Dầu lý thuyết = Km GPS × Định mức / 100. TH thực tế = Dầu thực tế đổ ÷ Km GPS × 100.
+          Chênh lệch dương = dùng nhiều hơn lý thuyết. Cảnh báo: &gt;5% chú ý, &gt;10% bất thường.
+          Cột TH thực tế chỉ hiển thị khi có phiếu đổ dầu trong kỳ.
         </Text>
       </Card>
     </div>
