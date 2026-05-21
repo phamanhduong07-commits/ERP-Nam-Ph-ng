@@ -1,9 +1,12 @@
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from app.database import get_db
+from app.deps import get_current_user
 from app.models.hr import Employee, FuelLog
 from app.models.warehouse_doc import DeliveryOrder
 from app.models.master import Xe, DonGiaVanChuyen
@@ -272,3 +275,118 @@ def get_trip_salary_summary(
         }
         for row in rows.values()
     ]
+
+
+class TripCostUpdate(BaseModel):
+    cau_duong: Optional[Decimal] = None
+    sua_chua: Optional[Decimal] = None
+    tien_com: Optional[Decimal] = None
+    phi_khac: Optional[Decimal] = None
+
+
+@router.get("/trip-costs")
+def get_trip_costs(
+    from_date: date = Query(...),
+    to_date: date = Query(...),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    """Báo cáo chi phí/doanh thu từng chuyến xe."""
+    deliveries = db.query(DeliveryOrder).options(
+        joinedload(DeliveryOrder.items),
+        joinedload(DeliveryOrder.customer),
+        joinedload(DeliveryOrder.xe),
+        joinedload(DeliveryOrder.tai_xe),
+        joinedload(DeliveryOrder.lo_xe_rel),
+        joinedload(DeliveryOrder.lo_xe_rel_2),
+        joinedload(DeliveryOrder.don_gia_vc),
+    ).filter(
+        DeliveryOrder.ngay_xuat >= from_date,
+        DeliveryOrder.ngay_xuat <= to_date,
+        DeliveryOrder.trang_thai.in_(["da_xuat", "da_giao"]),
+    ).order_by(DeliveryOrder.ngay_xuat.desc(), DeliveryOrder.id.desc()).all()
+
+    # Build salary lookup per delivery: delivery_id → tong_luong
+    # Re-use calculate_trip_salary_allocations details
+    salary_by_delivery: dict[int, Decimal] = {}
+    for delivery in deliveries:
+        tong_m2, don_gia_m2, tien_chuyen = _trip_fund(delivery, db)
+        salary_by_delivery[delivery.id] = tien_chuyen
+
+    # Build fuel lookup: xe_id → sum(thanh_tien) for day matching ngay_xuat
+    xe_ids = [d.xe_id for d in deliveries if d.xe_id]
+    fuel_logs = db.query(FuelLog).filter(
+        FuelLog.ngay_do >= from_date,
+        FuelLog.ngay_do <= to_date,
+        FuelLog.xe_id.in_(xe_ids),
+    ).all() if xe_ids else []
+
+    # Group fuel by (xe_id, ngay_do) → total thanh_tien
+    fuel_map: dict[tuple, Decimal] = {}
+    for log in fuel_logs:
+        key = (log.xe_id, log.ngay_do)
+        fuel_map[key] = fuel_map.get(key, Decimal("0")) + (log.thanh_tien or Decimal("0"))
+
+    rows = []
+    for delivery in deliveries:
+        tien_chuyen = salary_by_delivery.get(delivery.id, Decimal("0"))
+        participants = _trip_participants(delivery)
+        total_factor = sum((p["he_so"] for p in participants), Decimal("0"))
+
+        # Tiền lương = tổng phân bổ cho tất cả thành viên
+        tien_luong = tien_chuyen  # quỹ chuyến = tiền lương phân bổ
+
+        # Xăng dầu: lấy theo xe_id + ngay_xuat
+        xang_dau = Decimal("0")
+        if delivery.xe_id and delivery.ngay_xuat:
+            xang_dau = fuel_map.get((delivery.xe_id, delivery.ngay_xuat), Decimal("0"))
+
+        doanh_thu = delivery.tien_van_chuyen or Decimal("0")
+        cau_duong = delivery.cau_duong or Decimal("0")
+        sua_chua = delivery.sua_chua or Decimal("0")
+        tien_com = delivery.tien_com or Decimal("0")
+        phi_khac = delivery.phi_khac or Decimal("0")
+        tong_chi_phi = tien_luong + xang_dau + cau_duong + sua_chua + tien_com + phi_khac
+
+        rows.append({
+            "id": delivery.id,
+            "so_phieu": delivery.so_phieu,
+            "ngay_xuat": delivery.ngay_xuat.isoformat(),
+            "khach_hang": delivery.customer.ten_viet_tat if delivery.customer else "",
+            "tai_xe": delivery.tai_xe.ho_ten if delivery.tai_xe else "",
+            "xe": delivery.xe.bien_so if delivery.xe else "",
+            "trang_thai": delivery.trang_thai,
+            "doanh_thu": round(float(doanh_thu), 0),
+            "tien_chuyen": round(float(tien_chuyen), 0),
+            "tien_luong": round(float(tien_luong), 0),
+            "xang_dau": round(float(xang_dau), 0),
+            "cau_duong": round(float(cau_duong), 0),
+            "sua_chua": round(float(sua_chua), 0),
+            "tien_com": round(float(tien_com), 0),
+            "phi_khac": round(float(phi_khac), 0),
+            "tong_chi_phi": round(float(tong_chi_phi), 0),
+        })
+    return rows
+
+
+@router.patch("/trip-costs/{delivery_id}")
+def update_trip_costs(
+    delivery_id: int,
+    body: TripCostUpdate,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    """Cập nhật chi phí nhập tay cho một chuyến xe."""
+    delivery = db.get(DeliveryOrder, delivery_id)
+    if not delivery:
+        raise HTTPException(404, "Không tìm thấy phiếu giao hàng")
+    if body.cau_duong is not None:
+        delivery.cau_duong = body.cau_duong
+    if body.sua_chua is not None:
+        delivery.sua_chua = body.sua_chua
+    if body.tien_com is not None:
+        delivery.tien_com = body.tien_com
+    if body.phi_khac is not None:
+        delivery.phi_khac = body.phi_khac
+    db.commit()
+    return {"ok": True}
