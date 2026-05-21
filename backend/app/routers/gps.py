@@ -305,3 +305,149 @@ def get_km_by_date(
         {"ngay": r.ngay.isoformat(), "km_ngay": round(r.km_ngay or 0, 1), "fuel_avg": round(r.fuel_avg or 0, 1)}
         for r in rows
     ]
+
+
+@router.get("/fuel-comparison")
+def get_fuel_comparison(
+    from_date: date = Query(...),
+    to_date: date = Query(...),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    """Đối chiếu xăng GPS vs FuelLog.
+
+    km_GPS × định mức (L/100km) / 100 = dầu lý thuyết.
+    So với lít đổ thực tế từ FuelLog. Cảnh báo khi chênh lệch > 10%.
+    """
+    from app.models.hr import FuelLog
+
+    # GPS km per xe — sum of daily max(km_today)
+    daily_sub = (
+        db.query(
+            GpsSnapshot.xe_id,
+            GpsSnapshot.ngay,
+            func.max(GpsSnapshot.km_today).label("km_ngay"),
+        )
+        .filter(
+            GpsSnapshot.ngay >= from_date,
+            GpsSnapshot.ngay <= to_date,
+            GpsSnapshot.xe_id.isnot(None),
+        )
+        .group_by(GpsSnapshot.xe_id, GpsSnapshot.ngay)
+        .subquery()
+    )
+    km_rows = (
+        db.query(daily_sub.c.xe_id, func.sum(daily_sub.c.km_ngay).label("km_gps"))
+        .group_by(daily_sub.c.xe_id)
+        .all()
+    )
+    km_map = {r.xe_id: float(r.km_gps or 0) for r in km_rows}
+
+    # Actual fuel from FuelLog
+    fuel_rows = (
+        db.query(FuelLog.xe_id, func.sum(FuelLog.so_lit_dau).label("so_lit"))
+        .filter(
+            FuelLog.xe_id.isnot(None),
+            FuelLog.ngay_do >= from_date,
+            FuelLog.ngay_do <= to_date,
+        )
+        .group_by(FuelLog.xe_id)
+        .all()
+    )
+    fuel_map = {r.xe_id: float(r.so_lit or 0) for r in fuel_rows}
+
+    all_xe_ids = set(km_map.keys()) | set(fuel_map.keys())
+    if not all_xe_ids:
+        return []
+
+    xe_dict = {xe.id: xe for xe in db.query(Xe).filter(Xe.id.in_(all_xe_ids)).all()}
+
+    results = []
+    for xe_id, xe in xe_dict.items():
+        km_gps = km_map.get(xe_id, 0)
+        dau_thuc_te = fuel_map.get(xe_id, 0)
+        dinh_muc = float(xe.dinh_muc_dau or 0)
+
+        dau_ly_thuyet = (km_gps * dinh_muc / 100) if dinh_muc > 0 and km_gps > 0 else None
+        chenh_lech_lit = (dau_thuc_te - dau_ly_thuyet) if dau_ly_thuyet else None
+        chenh_lech_pct = (chenh_lech_lit / dau_ly_thuyet * 100) if chenh_lech_lit is not None and dau_ly_thuyet else None
+
+        if chenh_lech_pct is None:
+            canh_bao = "no_data"
+        elif abs(chenh_lech_pct) > 10:
+            canh_bao = "danger"
+        elif abs(chenh_lech_pct) > 5:
+            canh_bao = "warning"
+        else:
+            canh_bao = "ok"
+
+        results.append({
+            "xe_id": xe_id,
+            "bien_so": xe.bien_so,
+            "loai_xe": xe.loai_xe,
+            "dinh_muc_dau": dinh_muc,
+            "km_gps": round(km_gps, 1),
+            "dau_ly_thuyet": round(dau_ly_thuyet, 1) if dau_ly_thuyet else None,
+            "dau_thuc_te": round(dau_thuc_te, 1),
+            "chenh_lech_lit": round(chenh_lech_lit, 1) if chenh_lech_lit is not None else None,
+            "chenh_lech_pct": round(chenh_lech_pct, 1) if chenh_lech_pct is not None else None,
+            "canh_bao": canh_bao,
+        })
+
+    results.sort(key=lambda x: abs(x["chenh_lech_pct"] or 0), reverse=True)
+    return results
+
+
+@router.get("/maintenance-alerts")
+def get_maintenance_alerts(
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    """Cảnh báo bảo dưỡng theo km GPS.
+
+    Mỗi xe: km_hien_tai (max km_total từ snapshot) so với km lần bảo dưỡng tiếp theo.
+    """
+    # Max km_total per xe_id (most recent odometer reading)
+    km_rows = (
+        db.query(GpsSnapshot.xe_id, func.max(GpsSnapshot.km_total).label("km_hien_tai"))
+        .filter(GpsSnapshot.xe_id.isnot(None))
+        .group_by(GpsSnapshot.xe_id)
+        .all()
+    )
+    km_map = {r.xe_id: float(r.km_hien_tai or 0) for r in km_rows}
+
+    xe_list = db.query(Xe).filter(Xe.trang_thai == True).all()
+
+    results = []
+    for xe in xe_list:
+        km_hien_tai = km_map.get(xe.id, 0)
+        ky = int(xe.km_bao_duong_dinh_ky or 5000)
+        gan_nhat = float(xe.km_bao_duong_gan_nhat or 0)
+        km_tiep_theo = gan_nhat + ky
+        km_con_lai = km_tiep_theo - km_hien_tai
+
+        if km_hien_tai == 0:
+            alert = "no_data"
+        elif km_con_lai < 0:
+            alert = "overdue"
+        elif km_con_lai < 500:
+            alert = "danger"
+        elif km_con_lai < 1000:
+            alert = "warning"
+        else:
+            alert = "ok"
+
+        results.append({
+            "xe_id": xe.id,
+            "bien_so": xe.bien_so,
+            "loai_xe": xe.loai_xe,
+            "km_hien_tai": round(km_hien_tai),
+            "km_bao_duong_gan_nhat": gan_nhat,
+            "km_bao_duong_dinh_ky": ky,
+            "km_tiep_theo": round(km_tiep_theo),
+            "km_con_lai": round(km_con_lai),
+            "alert": alert,
+        })
+
+    results.sort(key=lambda x: x["km_con_lai"])
+    return results

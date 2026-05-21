@@ -29,6 +29,8 @@ class XeBase(BaseModel):
     loai_xe: str | None = None
     trong_tai: Decimal | None = None
     dinh_muc_dau: Decimal | None = Decimal("0")
+    km_bao_duong_dinh_ky: int = 5000
+    km_bao_duong_gan_nhat: float | None = None
     ghi_chu: str | None = None
     trang_thai: bool = True
 
@@ -38,6 +40,11 @@ class XeResponse(XeBase):
 
     class Config:
         from_attributes = True
+
+
+class XeBaoDuongUpdate(BaseModel):
+    km_bao_duong_gan_nhat: float
+    km_bao_duong_dinh_ky: int | None = None
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
@@ -109,3 +116,22 @@ def delete_xe(
     db.delete(obj)
     db.commit()
     return {"ok": True}
+
+
+@router.patch("/{id}/bao-duong", response_model=XeResponse)
+def record_bao_duong(
+    id: int,
+    data: XeBaoDuongUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Ghi nhận đã bảo dưỡng — cập nhật km_bao_duong_gan_nhat."""
+    obj = db.query(Xe).filter(Xe.id == id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Không tìm thấy xe")
+    obj.km_bao_duong_gan_nhat = data.km_bao_duong_gan_nhat
+    if data.km_bao_duong_dinh_ky is not None:
+        obj.km_bao_duong_dinh_ky = data.km_bao_duong_dinh_ky
+    db.commit()
+    db.refresh(obj)
+    return obj

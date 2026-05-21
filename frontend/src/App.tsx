@@ -158,6 +158,8 @@ const DocsPage = lazy(() => import('./pages/docs/DocsPage'))
 const GpsTrackingPage = lazy(() => import('./pages/logistics/GpsTrackingPage'))
 const ChiPhiChuyenPage = lazy(() => import('./pages/logistics/ChiPhiChuyenPage'))
 const KmThucTePage = lazy(() => import('./pages/logistics/KmThucTePage'))
+const DoiSoatXangPage = lazy(() => import('./pages/logistics/DoiSoatXangPage'))
+const BaoDuongKmPage = lazy(() => import('./pages/logistics/BaoDuongKmPage'))
 
 // Reports - Workshop
 const WorkshopPNLPage = lazy(() => import('./pages/reports/WorkshopPNLPage'))
@@ -367,6 +369,8 @@ export default function App() {
             <Route path="logistics/gps-tracking" element={<ErrorBoundary><GpsTrackingPage /></ErrorBoundary>} />
             <Route path="logistics/chi-phi-chuyen" element={<ErrorBoundary><ChiPhiChuyenPage /></ErrorBoundary>} />
             <Route path="logistics/km-thuc-te" element={<ErrorBoundary><KmThucTePage /></ErrorBoundary>} />
+            <Route path="logistics/doi-soat-xang" element={<ErrorBoundary><DoiSoatXangPage /></ErrorBoundary>} />
+            <Route path="logistics/bao-duong-km" element={<ErrorBoundary><BaoDuongKmPage /></ErrorBoundary>} />
             <Route path="hr/approvals" element={<ErrorBoundary><LeaveApprovalPage /></ErrorBoundary>} />
             <Route path="hr/rewards" element={<ErrorBoundary><RewardDisciplinePage /></ErrorBoundary>} />
             <Route path="hr/me" element={<ErrorBoundary><EmployeeMobilePortal /></ErrorBoundary>} />

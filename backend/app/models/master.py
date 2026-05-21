@@ -333,6 +333,8 @@ class Xe(Base):
     loai_xe: Mapped[str | None] = mapped_column(String(50))
     trong_tai: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dinh_muc_dau: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=0)
+    km_bao_duong_dinh_ky: Mapped[int] = mapped_column(Integer, default=5000)
+    km_bao_duong_gan_nhat: Mapped[float | None] = mapped_column(Float, nullable=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
