@@ -68,8 +68,11 @@ async def gps_poller_loop() -> None:
                     }
                     for v in raw if v.get("Plate")
                 ]
-                # 1a. Detect drain real-time trước khi throttle lọc (cập nhật _prev_snap mỗi cycle)
-                await _check_drain_realtime(normalized, db)
+                # 1a. Detect drain real-time — try riêng để không chặn snapshot khi lỗi socket/DB
+                try:
+                    await _check_drain_realtime(normalized, db)
+                except Exception as drain_exc:
+                    logger.warning("GPS drain check failed (snapshots still saved): %s", drain_exc)
                 # 1b. Lưu snapshot (throttled 5 phút) với xe_id đã resolve
                 _try_save_snapshots(normalized, db)
 
@@ -102,6 +105,7 @@ _last_cleanup: float = 0.0
 
 # xe_id plate cache: normalized_plate → xe_id (refresh mỗi 3600s)
 _xe_plate_cache: dict[str, int] = {}
+_xe_dinh_muc_cache: dict[str, float] = {}  # normalized_plate → dinh_muc_dau (L/100km)
 _xe_cache_ts: float = 0.0
 XE_CACHE_TTL = 3600  # 1 giờ
 
@@ -136,27 +140,37 @@ def _parse_gps_time(raw: str | None) -> datetime | None:
 
 
 def _refresh_xe_cache(db: Session) -> None:
-    """Load xe.bien_so → xe.id vào in-memory cache (normalize plate để match GPS format)."""
-    global _xe_plate_cache, _xe_cache_ts
-    rows = db.query(Xe.id, Xe.bien_so).filter(Xe.bien_so.isnot(None)).all()
+    """Load xe.bien_so → xe.id + dinh_muc_dau vào in-memory cache."""
+    global _xe_plate_cache, _xe_dinh_muc_cache, _xe_cache_ts
+    rows = db.query(Xe.id, Xe.bien_so, Xe.dinh_muc_dau).filter(Xe.bien_so.isnot(None)).all()
     _xe_plate_cache = {_normalize_plate(r.bien_so): r.id for r in rows}
+    _xe_dinh_muc_cache = {
+        _normalize_plate(r.bien_so): float(r.dinh_muc_dau or 0)
+        for r in rows
+    }
     _xe_cache_ts = time.time()
     logger.info("GPS xe cache refreshed: %d entries", len(_xe_plate_cache))
 
 
 async def _check_drain_realtime(vehicles: list[dict], db: Session) -> None:
-    """Sau mỗi poll cycle: so sánh snapshot mới vs prev để phát hiện rút dầu real-time.
-    Chỉ detect rut_khi_dung (xe dừng, rate >10 L/h). Emit socket + log DB khi severity=cao.
+    """Sau mỗi poll cycle: phát hiện rút dầu real-time.
+
+    Detect 2 loại:
+    - rut_khi_dung: xe dừng, drop ≥8L, rate >10 L/h
+    - tieu_hao_bat_thuong: xe chạy, drop > expected × DRAIN_WHILE_MOVING_FACTOR
     """
     now_t = time.time()
     for v in vehicles:
         plate = v.get("plate", "")
         if not plate:
             continue
+        plate_norm = _normalize_plate(plate)
         curr_fuel = float(v.get("fuel_pct") or 0)
         curr_stop = bool(v.get("is_stop", True))
         curr_addr = v.get("address")
-        curr_xe_id = _xe_plate_cache.get(_normalize_plate(plate))
+        curr_km = float(v.get("km_today") or 0)
+        curr_xe_id = _xe_plate_cache.get(plate_norm)
+        dinh_muc = _xe_dinh_muc_cache.get(plate_norm, 0.0)
 
         gps_ts = _parse_gps_time(v.get("time_update"))
         curr_ts = (gps_ts or datetime.utcnow()).replace(tzinfo=timezone.utc)
@@ -168,20 +182,38 @@ async def _check_drain_realtime(vehicles: list[dict], db: Session) -> None:
             "created_at": curr_ts,
             "address": curr_addr,
             "xe_id": curr_xe_id,
+            "km_today": curr_km,
         }
 
         if prev is None:
             continue
 
         drop = prev["fuel"] - curr_fuel
-        if drop < DRAIN_THRESHOLD or not curr_stop:
+        if drop < DRAIN_THRESHOLD:
             continue
 
         prev_ts = prev["created_at"]
         elapsed_min = max(1.0, (curr_ts - prev_ts).total_seconds() / 60)
         drain_rate = drop / (elapsed_min / 60)
 
-        if drain_rate < 10:
+        # Xác định loại sự kiện
+        phan_loai: str | None = None
+        if curr_stop:
+            # Xe dừng: check tốc độ rút (rate > 10 L/h mới là bất thường, không phải bay hơi)
+            if drain_rate >= 10:
+                phan_loai = "rut_khi_dung"
+        else:
+            # Xe chạy: check so với định mức
+            if dinh_muc > 0:
+                prev_km = prev.get("km_today", 0.0)
+                km_delta = curr_km - prev_km
+                # Bỏ qua khi km_today reset về 0 lúc 0h hoặc dữ liệu GPS lỗi
+                if 0 < km_delta < 999:
+                    expected_L = km_delta * dinh_muc / 100
+                    if drop > expected_L * DRAIN_WHILE_MOVING_FACTOR:
+                        phan_loai = "tieu_hao_bat_thuong"
+
+        if phan_loai is None:
             continue
 
         # Anti-spam cooldown per plate
@@ -198,7 +230,7 @@ async def _check_drain_realtime(vehicles: list[dict], db: Session) -> None:
             so_lit=round(drop, 1),
             drain_rate_L_per_h=round(drain_rate, 1),
             dia_diem=dia_diem,
-            phan_loai="rut_khi_dung",
+            phan_loai=phan_loai,
             muc_canh_bao="cao",
         )
         try:
@@ -215,11 +247,13 @@ async def _check_drain_realtime(vehicles: list[dict], db: Session) -> None:
             "dia_diem": dia_diem,
             "gio": curr_ts.isoformat(),
             "muc_canh_bao": "cao",
+            "phan_loai": phan_loai,
         }
         try:
             await sio.emit("drain_alert", payload)
             logger.warning(
-                "DRAIN ALERT: %s hụt %.1fL (%.1f L/h) tại %s", plate, drop, drain_rate, dia_diem
+                "DRAIN ALERT [%s]: %s hụt %.1fL (%.1f L/h) tại %s",
+                phan_loai, plate, drop, drain_rate, dia_diem,
             )
         except Exception as exc:
             logger.warning("Socket emit drain_alert failed: %s", exc)
@@ -996,3 +1030,70 @@ def get_daily_detail(
         })
 
     return results
+
+
+@router.get("/drain-alerts")
+def get_drain_alerts(
+    from_date: date | None = Query(None),
+    to_date: date | None = Query(None),
+    bien_so: str | None = Query(None),
+    trang_thai: str | None = Query(None),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    """Liệt kê lịch sử cảnh báo rút dầu với filter và workflow state."""
+    q = db.query(DrainAlertLog)
+    if from_date:
+        q = q.filter(DrainAlertLog.ngay >= from_date)
+    if to_date:
+        q = q.filter(DrainAlertLog.ngay <= to_date)
+    if bien_so:
+        q = q.filter(DrainAlertLog.bien_so.ilike(f"%{bien_so}%"))
+    if trang_thai:
+        q = q.filter(DrainAlertLog.trang_thai == trang_thai)
+    rows = q.order_by(DrainAlertLog.ngay.desc(), DrainAlertLog.id.desc()).limit(500).all()
+    return [
+        {
+            "id": r.id,
+            "bien_so": r.bien_so,
+            "xe_id": r.xe_id,
+            "ngay": r.ngay.isoformat(),
+            "gio": r.gio.isoformat() if r.gio else None,
+            "so_lit": r.so_lit,
+            "drain_rate_L_per_h": r.drain_rate_L_per_h,
+            "dia_diem": r.dia_diem,
+            "phan_loai": r.phan_loai,
+            "muc_canh_bao": r.muc_canh_bao,
+            "trang_thai": r.trang_thai,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
+@router.put("/drain-alerts/{alert_id}")
+def update_drain_alert(
+    alert_id: int,
+    trang_thai: str = Query(..., description="moi | dang_xu_ly | da_xu_ly"),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    """Cập nhật trạng thái xử lý của một cảnh báo rút dầu."""
+    VALID = {"moi", "dang_xu_ly", "da_xu_ly"}
+    if trang_thai not in VALID:
+        raise HTTPException(400, f"trang_thai phải là một trong: {', '.join(VALID)}")
+    alert = db.query(DrainAlertLog).filter(DrainAlertLog.id == alert_id).first()
+    if not alert:
+        raise HTTPException(404, "Không tìm thấy cảnh báo")
+    alert.trang_thai = trang_thai
+    db.commit()
+    db.refresh(alert)
+    return {
+        "id": alert.id,
+        "bien_so": alert.bien_so,
+        "ngay": alert.ngay.isoformat(),
+        "so_lit": alert.so_lit,
+        "phan_loai": alert.phan_loai,
+        "muc_canh_bao": alert.muc_canh_bao,
+        "trang_thai": alert.trang_thai,
+    }

@@ -227,6 +227,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/logistics/nhat-ky-xe', label: <Link to="/logistics/nhat-ky-xe">📋 Nhật ký xe</Link> },
         { key: '/logistics/doi-soat-xang', label: <Link to="/logistics/doi-soat-xang">⛽ Đối chiếu xăng dầu</Link> },
         { key: '/logistics/bao-duong-km', label: <Link to="/logistics/bao-duong-km">🔧 Bảo dưỡng theo km</Link> },
+        { key: '/logistics/canh-bao-dau', label: <Link to="/logistics/canh-bao-dau">🚨 Cảnh báo hụt dầu</Link> },
         { key: '/hr/approvals', label: <Link to="/hr/approvals">📝 Phê duyệt đơn từ</Link> },
         { key: '/hr/rewards', label: <Link to="/hr/rewards">🏆 Khen thưởng & Kỷ luật</Link> },
         { key: '/hr/me', label: <Link to="/hr/me">📱 Cổng nhân viên (Mobile)</Link> },

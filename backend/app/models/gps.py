@@ -42,4 +42,5 @@ class DrainAlertLog(Base):
     dia_diem: Mapped[str | None] = mapped_column(String(500), nullable=True)
     phan_loai: Mapped[str] = mapped_column(String(30), default="rut_khi_dung")
     muc_canh_bao: Mapped[str] = mapped_column(String(20), default="cao")
+    trang_thai: Mapped[str] = mapped_column(String(20), default="moi")  # moi/dang_xu_ly/da_xu_ly
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
