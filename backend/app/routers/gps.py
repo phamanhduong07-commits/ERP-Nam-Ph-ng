@@ -68,7 +68,7 @@ CACHE_TTL = 30  # seconds
 # Throttle: plate → last snapshot saved timestamp
 _snapshot_throttle: dict[str, float] = {}
 SNAPSHOT_INTERVAL = 300   # 5 phút — đủ dày để theo dõi dầu GPS chính xác
-RETENTION_DAYS = 90       # giữ dữ liệu GPS 3 tháng, sau đó tự xóa
+RETENTION_DAYS = 60       # giữ dữ liệu GPS 2 tháng, sau đó tự xóa
 _last_cleanup: float = 0.0
 
 
