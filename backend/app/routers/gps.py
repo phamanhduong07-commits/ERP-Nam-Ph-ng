@@ -43,9 +43,27 @@ async def gps_poller_loop() -> None:
         db = SessionLocal()
         try:
             # 1. Lưu snapshot mới
-            vehicles = await _fetch_gps_raw()
-            if vehicles:
-                _try_save_snapshots(vehicles, db)
+            # GPS API trả về uppercase keys ("Plate", "Fuel", "TripKm", ...).
+            # _try_save_snapshots dùng lowercase ("plate", "fuel_pct", "km_today", ...) — cần normalize trước.
+            raw = await _fetch_gps_raw()
+            if raw:
+                normalized = [
+                    {
+                        "plate": v.get("Plate", ""),
+                        "xe_id": None,  # poller không resolve ERP xe_id; nullable ở model
+                        "lat": v.get("Lat"),
+                        "lng": v.get("Lng"),
+                        "speed": v.get("Speed") or 0,
+                        "fuel_pct": v.get("Fuel") or 0,
+                        "km_today": v.get("TripKm") or 0,
+                        "km_total": v.get("Km") or 0,
+                        "is_stop": v.get("IsStop", True),
+                        "driver_name": v.get("DriverName"),
+                        "address": v.get("Address"),
+                    }
+                    for v in raw if v.get("Plate")
+                ]
+                _try_save_snapshots(normalized, db)
 
             # 2. Cleanup hàng ngày (86400s = 1 ngày)
             if time.time() - _last_cleanup >= 86400:
