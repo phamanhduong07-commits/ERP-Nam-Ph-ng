@@ -17,8 +17,6 @@ interface FuelRow {
   loai_xe: string | null
   dinh_muc_dau: number
   km_gps: number
-  fuel_start: number
-  fuel_end: number
   tieu_hao_gps: number
   tieu_hao_per_100: number | null
   dau_ly_thuyet: number | null
@@ -66,8 +64,7 @@ export default function DoiSoatXangPage() {
       'Định mức (L/100km)': r.dinh_muc_dau,
       'Km GPS': r.km_gps,
       'Dầu lý thuyết (L)': r.dau_ly_thuyet ?? '',
-      'Dầu thực tế (L)': r.dau_thuc_te,
-      'TH thực tế GPS (L)': r.tieu_hao_gps,
+      'Tiêu hao GPS (L)': r.tieu_hao_gps,
       'TH thực tế (L/100km)': r.tieu_hao_per_100 ?? '',
       'Chênh lệch (L)': r.chenh_lech_lit ?? '',
       'Chênh lệch (%)': r.chenh_lech_pct ?? '',
@@ -82,7 +79,7 @@ export default function DoiSoatXangPage() {
   const alertCount = data.filter(r => r.canh_bao === 'danger').length
   const warnCount = data.filter(r => r.canh_bao === 'warning').length
   const totalLyThuyet = data.reduce((s, r) => s + (r.dau_ly_thuyet ?? 0), 0)
-  const totalThucTe = data.reduce((s, r) => s + r.dau_thuc_te, 0)
+  const totalTieuHaoGps = data.reduce((s, r) => s + r.tieu_hao_gps, 0)
 
   const columns = [
     {
@@ -128,12 +125,15 @@ export default function DoiSoatXangPage() {
           : <Text type="secondary">—</Text>,
     },
     {
-      title: 'Dầu thực tế',
-      dataIndex: 'dau_thuc_te',
-      key: 'dau_thuc_te',
+      title: 'Tiêu hao GPS',
+      dataIndex: 'tieu_hao_gps',
+      key: 'tieu_hao_gps',
       width: 120,
       align: 'right' as const,
-      render: (v: number) => <Text strong>{fmt1(v)} L</Text>,
+      sorter: (a: FuelRow, b: FuelRow) => a.tieu_hao_gps - b.tieu_hao_gps,
+      render: (v: number) => v > 0
+        ? <Text strong>{fmt1(v)} L</Text>
+        : <Text type="secondary">—</Text>,
     },
     {
       title: 'TH thực tế (L/100km)',
@@ -143,18 +143,14 @@ export default function DoiSoatXangPage() {
       sorter: (a: FuelRow, b: FuelRow) => (a.tieu_hao_per_100 ?? 0) - (b.tieu_hao_per_100 ?? 0),
       render: (_: unknown, r: FuelRow) => {
         const actual = r.tieu_hao_per_100
-        if (actual == null) return (
-          <Tooltip title="Chưa có dữ liệu đổ dầu trong kỳ — cần nhập phiếu đổ dầu để tính">
-            <Text type="secondary">—</Text>
-          </Tooltip>
-        )
+        if (actual == null) return <Text type="secondary">—</Text>
         const dm = r.dinh_muc_dau
         const color = dm > 0
           ? actual > dm * 1.15 ? '#ff4d4f'
           : actual > dm * 1.05 ? '#fa8c16'
           : '#52c41a'
           : undefined
-        const tooltipText = `${fmt1(r.dau_thuc_te)} L ÷ ${fmt1(r.km_gps)} km × 100${dm > 0 ? ` · ĐM: ${fmt1(dm)} L/100km` : ''}`
+        const tooltipText = `${fmt1(r.tieu_hao_gps)} L ÷ ${fmt1(r.km_gps)} km × 100${dm > 0 ? ` · ĐM: ${fmt1(dm)} L/100km` : ''}`
         return (
           <Tooltip title={tooltipText}>
             <Text strong style={{ color }}>{fmt1(actual)} L</Text>
@@ -206,7 +202,7 @@ export default function DoiSoatXangPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>
           <AlertOutlined style={{ marginRight: 8, color: '#faad14' }} />
-          Đối chiếu xăng dầu — GPS vs Thực tế
+          Đối chiếu xăng dầu — GPS vs Định mức
         </Title>
         <Space>
           <RangePicker
@@ -258,11 +254,11 @@ export default function DoiSoatXangPage() {
         <Col span={6}>
           <Card size="small">
             <Statistic
-              title="Dầu thực tế đổ"
-              value={totalThucTe}
+              title="Tiêu hao GPS"
+              value={totalTieuHaoGps}
               formatter={v => fmt1(Number(v))}
               suffix="L"
-              valueStyle={{ color: totalThucTe > totalLyThuyet ? '#ff4d4f' : '#52c41a' }}
+              valueStyle={{ color: totalTieuHaoGps > totalLyThuyet ? '#ff4d4f' : '#52c41a' }}
             />
           </Card>
         </Col>
@@ -287,13 +283,13 @@ export default function DoiSoatXangPage() {
                   <Text type="secondary">{fmt1(totalLyThuyet)} L</Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={5} align="right">
-                  <Text strong>{fmt1(totalThucTe)} L</Text>
+                  <Text strong>{fmt1(totalTieuHaoGps)} L</Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={6} align="right" />
                 <Table.Summary.Cell index={7} align="right">
                   {totalLyThuyet > 0 && (
-                    <Text style={{ color: totalThucTe > totalLyThuyet ? '#ff4d4f' : '#52c41a' }}>
-                      {totalThucTe > totalLyThuyet ? '+' : ''}{fmt1(totalThucTe - totalLyThuyet)} L
+                    <Text style={{ color: totalTieuHaoGps > totalLyThuyet ? '#ff4d4f' : '#52c41a' }}>
+                      {totalTieuHaoGps > totalLyThuyet ? '+' : ''}{fmt1(totalTieuHaoGps - totalLyThuyet)} L
                     </Text>
                   )}
                 </Table.Summary.Cell>
@@ -306,9 +302,9 @@ export default function DoiSoatXangPage() {
 
       <Card size="small" style={{ marginTop: 12 }}>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          💡 Dầu lý thuyết = Km GPS × Định mức / 100. TH thực tế = Dầu thực tế đổ ÷ Km GPS × 100.
-          Chênh lệch dương = dùng nhiều hơn lý thuyết. Cảnh báo: &gt;5% chú ý, &gt;10% bất thường.
-          Cột TH thực tế chỉ hiển thị khi có phiếu đổ dầu trong kỳ.
+          💡 Tiêu hao GPS = tổng (fuel đầu ngày − fuel cuối ngày) qua các ngày trong kỳ.
+          Dầu lý thuyết = Km GPS × Định mức / 100. Chênh lệch dương = tiêu hao nhiều hơn định mức.
+          Cảnh báo: &gt;5% chú ý, &gt;10% bất thường.
         </Text>
       </Card>
     </div>

@@ -616,39 +616,45 @@ def get_fuel_comparison(
         )
         fuel_map = {r.xe_id: float(r.so_lit or 0) for r in fuel_rows}
 
-    # GPS sensor: fuel tại snapshot đầu tiên và cuối cùng của kỳ per bien_so
-    # → tieu_hao_gps = fuel_start - fuel_end + fills (công thức kế toán bình chứa)
-    first_ts_sub = (
-        db.query(GpsSnapshot.bien_so, func.min(GpsSnapshot.created_at).label("ts"))
-        .filter(GpsSnapshot.ngay >= from_date, GpsSnapshot.ngay <= to_date)
-        .group_by(GpsSnapshot.bien_so)
-        .subquery()
-    )
-    last_ts_sub = (
-        db.query(GpsSnapshot.bien_so, func.max(GpsSnapshot.created_at).label("ts"))
-        .filter(GpsSnapshot.ngay >= from_date, GpsSnapshot.ngay <= to_date)
-        .group_by(GpsSnapshot.bien_so)
-        .subquery()
-    )
+    # GPS fuel: cộng dồn (đầu ngày - cuối ngày) per ngày, tránh sai lệch khi so kỳ dài
+    # Xe đổ dầu giữa tháng → mức cuối kỳ ≈ đầu kỳ → delta kỳ ≈ 0 (sai). Daily delta chuẩn hơn.
     from sqlalchemy import and_
-    fuel_start_rows = (
-        db.query(GpsSnapshot.bien_so, GpsSnapshot.fuel_pct)
-        .join(first_ts_sub, and_(
-            GpsSnapshot.bien_so == first_ts_sub.c.bien_so,
-            GpsSnapshot.created_at == first_ts_sub.c.ts,
-        ))
-        .all()
+    daily_fs_sub = (
+        db.query(GpsSnapshot.bien_so, GpsSnapshot.ngay, func.min(GpsSnapshot.created_at).label("ts"))
+        .filter(GpsSnapshot.ngay >= from_date, GpsSnapshot.ngay <= to_date)
+        .group_by(GpsSnapshot.bien_so, GpsSnapshot.ngay)
+        .subquery()
     )
-    fuel_end_rows = (
-        db.query(GpsSnapshot.bien_so, GpsSnapshot.fuel_pct)
-        .join(last_ts_sub, and_(
-            GpsSnapshot.bien_so == last_ts_sub.c.bien_so,
-            GpsSnapshot.created_at == last_ts_sub.c.ts,
-        ))
-        .all()
+    daily_le_sub = (
+        db.query(GpsSnapshot.bien_so, GpsSnapshot.ngay, func.max(GpsSnapshot.created_at).label("ts"))
+        .filter(GpsSnapshot.ngay >= from_date, GpsSnapshot.ngay <= to_date)
+        .group_by(GpsSnapshot.bien_so, GpsSnapshot.ngay)
+        .subquery()
     )
-    fuel_start_map: dict[str, float] = {r.bien_so: float(r.fuel_pct) for r in fuel_start_rows}
-    fuel_end_map: dict[str, float] = {r.bien_so: float(r.fuel_pct) for r in fuel_end_rows}
+    daily_first_rows = (
+        db.query(GpsSnapshot.bien_so, GpsSnapshot.ngay, GpsSnapshot.fuel_pct)
+        .join(daily_fs_sub, and_(
+            GpsSnapshot.bien_so == daily_fs_sub.c.bien_so,
+            GpsSnapshot.ngay == daily_fs_sub.c.ngay,
+            GpsSnapshot.created_at == daily_fs_sub.c.ts,
+        )).all()
+    )
+    daily_last_rows = (
+        db.query(GpsSnapshot.bien_so, GpsSnapshot.ngay, GpsSnapshot.fuel_pct)
+        .join(daily_le_sub, and_(
+            GpsSnapshot.bien_so == daily_le_sub.c.bien_so,
+            GpsSnapshot.ngay == daily_le_sub.c.ngay,
+            GpsSnapshot.created_at == daily_le_sub.c.ts,
+        )).all()
+    )
+    daily_f_map: dict[tuple, float] = {(r.bien_so, r.ngay): float(r.fuel_pct) for r in daily_first_rows}
+    daily_l_map: dict[tuple, float] = {(r.bien_so, r.ngay): float(r.fuel_pct) for r in daily_last_rows}
+
+    # Tổng tiêu hao GPS per xe = Σ max(0, fuel_đầu_ngày - fuel_cuối_ngày)
+    tieu_hao_gps_map: dict[str, float] = {}
+    for (plate_d, d), f0 in daily_f_map.items():
+        f1 = daily_l_map.get((plate_d, d), f0)
+        tieu_hao_gps_map[plate_d] = tieu_hao_gps_map.get(plate_d, 0.0) + max(0.0, f0 - f1)
 
     results = []
     for plate, km_gps in km_map.items():
@@ -657,16 +663,12 @@ def get_fuel_comparison(
         dinh_muc = float(xe.dinh_muc_dau or 0) if xe else 0
         dau_thuc_te = fuel_map.get(xe_id, 0) if xe_id else 0
 
-        # GPS sensor fuel level (tham khảo thêm, không dùng để tính L/100km)
-        f_start = fuel_start_map.get(plate, 0)
-        f_end = fuel_end_map.get(plate, 0)
-        tieu_hao_gps = max(0.0, f_start - f_end + dau_thuc_te)
-        # L/100km = dầu thực tế đổ / km GPS — đơn giản và chính xác khi có dữ liệu đổ dầu
-        tieu_hao_per_100 = round(dau_thuc_te * 100 / km_gps, 1) if km_gps > 0 and dau_thuc_te > 0 else None
+        tieu_hao_gps = round(tieu_hao_gps_map.get(plate, 0.0), 1)
+        tieu_hao_per_100 = round(tieu_hao_gps * 100 / km_gps, 1) if km_gps > 0 and tieu_hao_gps > 0 else None
 
-        dau_ly_thuyet = (km_gps * dinh_muc / 100) if dinh_muc > 0 and km_gps > 0 else None
-        chenh_lech_lit = (dau_thuc_te - dau_ly_thuyet) if dau_ly_thuyet is not None else None
-        chenh_lech_pct = (chenh_lech_lit / dau_ly_thuyet * 100) if chenh_lech_lit is not None and dau_ly_thuyet else None
+        dau_ly_thuyet = round(km_gps * dinh_muc / 100, 1) if dinh_muc > 0 and km_gps > 0 else None
+        chenh_lech_lit = round(tieu_hao_gps - dau_ly_thuyet, 1) if dau_ly_thuyet is not None and tieu_hao_gps > 0 else None
+        chenh_lech_pct = round(chenh_lech_lit / dau_ly_thuyet * 100, 1) if chenh_lech_lit is not None and dau_ly_thuyet else None
 
         if chenh_lech_pct is None:
             canh_bao = "no_data"
@@ -683,14 +685,12 @@ def get_fuel_comparison(
             "loai_xe": xe.loai_xe if xe else None,
             "dinh_muc_dau": dinh_muc,
             "km_gps": round(km_gps, 1),
-            "fuel_start": round(f_start, 1),
-            "fuel_end": round(f_end, 1),
-            "tieu_hao_gps": round(tieu_hao_gps, 1),
+            "tieu_hao_gps": tieu_hao_gps,
             "tieu_hao_per_100": tieu_hao_per_100,
-            "dau_ly_thuyet": round(dau_ly_thuyet, 1) if dau_ly_thuyet else None,
+            "dau_ly_thuyet": dau_ly_thuyet,
             "dau_thuc_te": round(dau_thuc_te, 1),
-            "chenh_lech_lit": round(chenh_lech_lit, 1) if chenh_lech_lit is not None else None,
-            "chenh_lech_pct": round(chenh_lech_pct, 1) if chenh_lech_pct is not None else None,
+            "chenh_lech_lit": chenh_lech_lit,
+            "chenh_lech_pct": chenh_lech_pct,
             "canh_bao": canh_bao,
         })
 
