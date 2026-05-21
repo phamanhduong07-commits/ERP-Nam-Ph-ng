@@ -5,7 +5,7 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
@@ -191,17 +191,19 @@ def get_km_report(
 ):
     """Báo cáo km thực tế từng xe theo từng ngày.
 
-    Mỗi ngày lấy max(km_today) — đây là số km xe đã chạy trong ngày đó.
+    Dùng max(km_today) per ngày nhưng lọc outlier (>= 999 km/ngày là bất khả thi với xe tải).
+    Một số thiết bị GPS Bình Minh báo sai TripKm (ví dụ: 64589 km), cần loại bỏ.
     """
+    # valid_km: chỉ chấp nhận km_today hợp lệ (< 999 km/ngày)
+    valid_km = case((GpsSnapshot.km_today < 999, GpsSnapshot.km_today), else_=None)
     rows = (
         db.query(
             GpsSnapshot.bien_so,
             GpsSnapshot.xe_id,
             GpsSnapshot.ngay,
-            func.max(GpsSnapshot.km_today).label("km_ngay"),
+            func.max(valid_km).label("km_ngay"),
             func.avg(GpsSnapshot.fuel_pct).label("fuel_avg"),
             func.max(GpsSnapshot.km_total).label("km_total_max"),
-            func.min(GpsSnapshot.km_total).label("km_total_min"),
             func.count(GpsSnapshot.id).label("so_snapshot"),
         )
         .filter(
@@ -234,14 +236,18 @@ def get_km_summary(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    """Tổng hợp km theo xe trong kỳ — sum(max km_today per day)."""
-    # Subquery: max km_today per (bien_so, ngay)
+    """Tổng hợp km theo xe trong kỳ — sum(max valid km_today per day).
+
+    Lọc outlier: km_today >= 999 bị bỏ qua (một số GPS Bình Minh báo sai TripKm).
+    """
+    valid_km = case((GpsSnapshot.km_today < 999, GpsSnapshot.km_today), else_=None)
+    # Subquery: max valid km_today per (bien_so, ngay)
     sub = (
         db.query(
             GpsSnapshot.bien_so,
             GpsSnapshot.xe_id,
             GpsSnapshot.ngay,
-            func.max(GpsSnapshot.km_today).label("km_ngay"),
+            func.max(valid_km).label("km_ngay"),
             func.avg(GpsSnapshot.fuel_pct).label("fuel_avg"),
         )
         .filter(
@@ -286,10 +292,11 @@ def get_km_by_date(
     _user=Depends(get_current_user),
 ):
     """Km theo từng ngày của một xe — dùng cho biểu đồ."""
+    valid_km = case((GpsSnapshot.km_today < 999, GpsSnapshot.km_today), else_=None)
     rows = (
         db.query(
             GpsSnapshot.ngay,
-            func.max(GpsSnapshot.km_today).label("km_ngay"),
+            func.max(valid_km).label("km_ngay"),
             func.avg(GpsSnapshot.fuel_pct).label("fuel_avg"),
         )
         .filter(
@@ -321,12 +328,13 @@ def get_fuel_comparison(
     """
     from app.models.hr import FuelLog
 
-    # GPS km per bien_so in period — fallback khi xe_id chưa được liên kết ERP
+    # GPS km per bien_so in period — lọc outlier km_today >= 999 (GPS thiết bị lỗi)
+    valid_km = case((GpsSnapshot.km_today < 999, GpsSnapshot.km_today), else_=None)
     daily_sub = (
         db.query(
             GpsSnapshot.bien_so,
             GpsSnapshot.ngay,
-            func.max(GpsSnapshot.km_today).label("km_ngay"),
+            func.max(valid_km).label("km_ngay"),
         )
         .filter(
             GpsSnapshot.ngay >= from_date,
