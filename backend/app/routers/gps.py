@@ -19,30 +19,46 @@ router = APIRouter(prefix="/api/gps", tags=["GPS"])
 GPS_POLL_INTERVAL = 300  # giây — poll GPS background mỗi 5 phút
 
 
+def _cleanup_old_snapshots(db: Session) -> int:
+    """Xóa snapshot GPS cũ hơn RETENTION_DAYS ngày. Trả về số dòng đã xóa."""
+    cutoff = date.today() - timedelta(days=RETENTION_DAYS)
+    deleted = db.query(GpsSnapshot).filter(GpsSnapshot.ngay < cutoff).delete(synchronize_session=False)
+    db.commit()
+    return deleted
+
+
 async def gps_poller_loop() -> None:
     """Background task: tự động poll GPS API và lưu snapshot mỗi GPS_POLL_INTERVAL giây.
-
     Chạy kể từ khi FastAPI khởi động — không cần người dùng mở trang GPS.
+    Mỗi ngày chạy 1 lần cleanup, xóa snapshot cũ hơn RETENTION_DAYS ngày.
     """
     import asyncio
     from app.database import SessionLocal
+    global _last_cleanup
 
-    logger.info("GPS poller: started (interval=%ds)", GPS_POLL_INTERVAL)
-    # Đợi 15 giây để app khởi động xong hoàn toàn
-    await asyncio.sleep(15)
+    logger.info("GPS poller: started (interval=%ds, retention=%dd)", GPS_POLL_INTERVAL, RETENTION_DAYS)
+    await asyncio.sleep(15)  # Đợi app khởi động xong
 
     while True:
+        db = SessionLocal()
         try:
+            # 1. Lưu snapshot mới
             vehicles = await _fetch_gps_raw()
             if vehicles:
-                db = SessionLocal()
-                try:
-                    _try_save_snapshots(vehicles, db)
-                finally:
-                    db.close()
-            logger.debug("GPS poller: saved snapshot for %d vehicles", len(vehicles) if vehicles else 0)
+                _try_save_snapshots(vehicles, db)
+
+            # 2. Cleanup hàng ngày (86400s = 1 ngày)
+            if time.time() - _last_cleanup >= 86400:
+                deleted = _cleanup_old_snapshots(db)
+                if deleted:
+                    logger.info("GPS cleanup: đã xóa %d snapshot cũ hơn %d ngày", deleted, RETENTION_DAYS)
+                _last_cleanup = time.time()
+
         except Exception as exc:
-            logger.warning("GPS poller error (sẽ thử lại sau %ds): %s", GPS_POLL_INTERVAL, exc)
+            logger.warning("GPS poller error (retry in %ds): %s", GPS_POLL_INTERVAL, exc)
+        finally:
+            db.close()
+
         await asyncio.sleep(GPS_POLL_INTERVAL)
 
 # In-memory cache: (data, timestamp)
@@ -51,7 +67,9 @@ CACHE_TTL = 30  # seconds
 
 # Throttle: plate → last snapshot saved timestamp
 _snapshot_throttle: dict[str, float] = {}
-SNAPSHOT_INTERVAL = 300  # 5 phút — đủ dày để theo dõi dầu GPS chính xác
+SNAPSHOT_INTERVAL = 300   # 5 phút — đủ dày để theo dõi dầu GPS chính xác
+RETENTION_DAYS = 90       # giữ dữ liệu GPS 3 tháng, sau đó tự xóa
+_last_cleanup: float = 0.0
 
 
 def _normalize_plate(plate: str) -> str:
