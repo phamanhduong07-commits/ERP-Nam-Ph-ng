@@ -133,6 +133,11 @@ export default function DoiSoatXangPage() {
       dataIndex: 'canh_bao',
       key: 'canh_bao',
       width: 160,
+      defaultSortOrder: 'descend' as const,
+      sorter: (a: FuelRow, b: FuelRow) => {
+        const ORDER: Record<string, number> = { no_data: 0, ok: 1, warning: 2, danger: 3 }
+        return (ORDER[a.canh_bao] ?? 0) - (ORDER[b.canh_bao] ?? 0)
+      },
       render: (v: FuelRow['canh_bao'], r: FuelRow) => {
         const cfg = ALERT_CONFIG[v]
         return (

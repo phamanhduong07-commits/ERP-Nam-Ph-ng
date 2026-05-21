@@ -604,6 +604,9 @@ def get_daily_detail(
     - Km chạy = congto_cuoi - congto_dau
     - FuelLog cùng ngày: dầu% snapshot gần nhất trước/sau lúc nhập log
     """
+    if (to_date - from_date).days > 31:
+        raise HTTPException(400, "Khoảng thời gian tối đa 31 ngày cho nhật ký xe")
+
     from app.models.hr import FuelLog
     from datetime import timezone, timedelta
     from collections import defaultdict
@@ -657,6 +660,30 @@ def get_daily_detail(
         candidates = [x for x in snap_by_plate.get(plate_norm, []) if x["vn_ts"] > ts]
         return candidates[0] if candidates else None
 
+    def _match_fuel_log(
+        spike_ts,
+        fl_list: list,
+        already_matched: set,
+        max_hours: int = 2,
+    ):
+        """Match GPS spike tới FuelLog gần nhất về thời gian (≤ max_hours), chưa matched.
+
+        Trả về (index, FuelLog) hoặc None nếu không tìm được.
+        """
+        best_idx, best_fl, best_diff = None, None, timedelta(hours=max_hours)
+        for i, fl in enumerate(fl_list):
+            if i in already_matched:
+                continue
+            fl_ts = to_vn(fl.created_at)
+            if fl_ts is None:
+                continue
+            diff = abs(spike_ts - fl_ts)
+            if diff <= best_diff:
+                best_diff = diff
+                best_idx = i
+                best_fl = fl
+        return (best_idx, best_fl) if best_fl is not None else None
+
     # --- Xe lookup (1 query dùng chung cho FuelLog mapping và định mức dầu) ---
     all_xe = db.query(Xe).all()
     all_xe_map: dict[int, str] = {xe.id: xe.bien_so for xe in all_xe}
@@ -688,7 +715,12 @@ def get_daily_detail(
     results = []
     for (plate, ngay), snaps in sorted(groups.items()):
         first, last = snaps[0], snaps[-1]
-        km_chay = max(0.0, last.km_total - first.km_total)
+        # km_today (TripKm) reset hàng ngày — chính xác hơn km_total khi GPS device bị thay/reset.
+        # Lấy max trong ngày, lọc outlier >999 km (GPS Bình Minh báo sai).
+        km_chay = max(
+            (s.km_today for s in snaps if 0 < s.km_today < 999),
+            default=max(0.0, last.km_total - first.km_total),
+        )
 
         pnorm = _normalize_plate(plate)
 
@@ -712,10 +744,18 @@ def get_daily_detail(
         fuel_events = []
 
         if gps_spikes:
-            # Primary: GPS spike — enrich với FuelLog theo thứ tự (1st spike → 1st log)
-            for idx, ge in enumerate(gps_spikes):
-                fl = fl_list[idx] if idx < len(fl_list) else None
-                fl_lit = float(fl.so_lit_dau or 0) if fl else None
+            # Primary: GPS spike — match với FuelLog gần nhất về thời gian (±2h), không theo index.
+            # Positional matching (cũ) sai khi GPS phát hiện spike 08:00+14:00 nhưng FuelLog ghi 13:30.
+            matched_fl_indices: set[int] = set()
+            for ge in gps_spikes:
+                match = _match_fuel_log(ge["spike_ts"], fl_list, matched_fl_indices, max_hours=2)
+                if match:
+                    fl_idx, fl = match
+                    matched_fl_indices.add(fl_idx)
+                    fl_lit = float(fl.so_lit_dau or 0)
+                else:
+                    fl = None
+                    fl_lit = None
                 fuel_events.append({
                     "id": fl.id if fl else None,
                     "gio_do": ge["spike_ts"].strftime("%H:%M"),
@@ -727,8 +767,10 @@ def get_daily_detail(
                     "dau_sau_pct": ge["dau_sau"],
                     "congto_luc_do": ge["congto"],
                 })
-            # FuelLog dư (nhiều hơn GPS spikes) — không có GPS spike tương ứng
-            for fl in fl_list[len(gps_spikes):]:
+            # FuelLog dư (không match spike nào) — không có GPS spike tương ứng
+            for i, fl in enumerate(fl_list):
+                if i in matched_fl_indices:
+                    continue
                 fl_ts = to_vn(fl.created_at)
                 sb = nearest_before(pnorm, fl_ts)
                 sa = nearest_after(pnorm, fl_ts)
@@ -772,16 +814,30 @@ def get_daily_detail(
             if delta >= -DRAIN_THRESHOLD:
                 continue
             drop = abs(delta)
+
+            # Khoảng cách thời gian thực giữa 2 snapshot (GPS có thể mất tín hiệu → gap > 5 phút)
+            t0 = snaps[i].created_at
+            t1 = snaps[i + 1].created_at
+            if t0.tzinfo is None:
+                t0 = t0.replace(tzinfo=timezone.utc)
+            if t1.tzinfo is None:
+                t1 = t1.replace(tzinfo=timezone.utc)
+            elapsed_min = max(1.0, (t1 - t0).total_seconds() / 60)
+            drain_rate = round(drop / (elapsed_min / 60), 1)  # L/h
+
             d_km = max(0.0, snaps[i + 1].km_total - snaps[i].km_total)
             stopped = snaps[i + 1].is_stop or snaps[i + 1].speed < 5
             expected = (d_km * dinh_muc / 100) if dinh_muc > 0 and d_km > 0 else 0
 
             if stopped and d_km < 1:
-                # Hụt khi xe dừng, không di chuyển — rõ ràng nhất
+                # Hụt khi xe dừng — chỉ flag nếu tốc độ hụt > 10L/h (idle bình thường ~2-4L/h).
+                # Tránh false positive khi GPS mất tín hiệu 30 phút (drop / 0.5h = 16L/h nếu drop=8L).
+                if drain_rate < 10:
+                    continue
                 phan_loai_drain = "rut_khi_dung"
                 muc_canh_bao = "cao" if drop >= 15 else "trung_binh"
             elif expected > 0 and drop > expected * DRAIN_WHILE_MOVING_FACTOR:
-                # Tiêu hao cao hơn định mức × hệ số trong khi đang di chuyển
+                # Tiêu hao cao hơn định mức × hệ số khi đang di chuyển
                 phan_loai_drain = "tieu_hao_bat_thuong"
                 muc_canh_bao = "cao" if drop > expected * 3 else "trung_binh"
             else:
@@ -798,6 +854,10 @@ def get_daily_detail(
                 "xe_dung": stopped,
                 "phan_loai": phan_loai_drain,
                 "muc_canh_bao": muc_canh_bao,
+                "elapsed_minutes": round(elapsed_min, 1),
+                "drain_rate_L_per_h": drain_rate,
+                # Địa điểm xe lúc phát hiện hụt — snapshot sau thường chính xác hơn
+                "dia_diem": snaps[i + 1].address or snaps[i].address or None,
             })
 
         # Lượng dầu tiêu hao thực tế trong ngày = dầu đầu - dầu cuối + tổng đổ

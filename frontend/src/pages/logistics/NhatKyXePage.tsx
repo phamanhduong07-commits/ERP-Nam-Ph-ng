@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Tag, Tooltip, Typography,
 } from 'antd'
-import { ArrowRightOutlined, CarOutlined, ReloadOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, CalendarOutlined, CarOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import dayjs, { Dayjs } from 'dayjs'
 import client from '../../api/client'
@@ -33,6 +33,9 @@ interface DrainEvent {
   xe_dung: boolean
   phan_loai: 'rut_khi_dung' | 'tieu_hao_bat_thuong'
   muc_canh_bao: 'cao' | 'trung_binh'
+  elapsed_minutes: number
+  drain_rate_L_per_h: number
+  dia_diem: string | null
 }
 
 interface DailyRow {
@@ -187,6 +190,12 @@ export default function NhatKyXePage() {
   const highDrains = data.reduce((s, r) => s + r.drain_events.filter(e => e.muc_canh_bao === 'cao').length, 0)
   const affectedVehicles = new Set(data.filter(r => r.drain_events.length > 0).map(r => r.bien_so)).size
 
+  // Fleet tiêu hao: chỉ tính hàng có cả thực tế lẫn lý thuyết để tỷ lệ có nghĩa
+  const rowsWithTheory = data.filter(r => r.fuel_ly_thuyet != null && r.fuel_ly_thuyet > 0)
+  const fleetTieuHaoThuc = rowsWithTheory.reduce((s, r) => s + r.fuel_tieu_hao, 0)
+  const fleetTieuHaoLyThuyet = rowsWithTheory.reduce((s, r) => s + (r.fuel_ly_thuyet ?? 0), 0)
+  const fleetRatio = fleetTieuHaoLyThuyet > 0 ? fleetTieuHaoThuc / fleetTieuHaoLyThuyet : null
+
   // Auto-expand hàng có cảnh báo drain mức CAO khi data thay đổi (giới hạn 20 hàng)
   useEffect(() => {
     const keys = data
@@ -319,9 +328,19 @@ export default function NhatKyXePage() {
       title: 'Snapshot',
       dataIndex: 'so_snapshot',
       key: 'so_snapshot',
-      width: 80,
+      width: 95,
       align: 'center' as const,
-      render: (v: number) => <Text type="secondary">{v}</Text>,
+      render: (v: number) => {
+        const color = v >= 240 ? 'success' : v >= 100 ? 'warning' : 'error'
+        const label = v >= 240 ? 'Tốt' : v >= 100 ? 'Đủ' : 'Kém'
+        return (
+          <Tooltip title={`${v} snapshot · ${label} (≥240 Tốt · ≥100 Đủ · <100 Kém)`}>
+            <Tag color={color} style={{ fontSize: 11, margin: 0 }}>
+              {v} <span style={{ fontWeight: 400 }}>({label})</span>
+            </Tag>
+          </Tooltip>
+        )
+      },
     },
   ]
 
@@ -429,6 +448,28 @@ export default function NhatKyXePage() {
                   align: 'center' as const,
                   render: (v: boolean) => v ? <Tag color="red">Có</Tag> : <Tag color="orange">Không</Tag>,
                 },
+                {
+                  title: 'Tốc độ hụt',
+                  dataIndex: 'drain_rate_L_per_h',
+                  width: 105,
+                  align: 'right' as const,
+                  render: (v: number) => (
+                    <Text type="secondary" style={{ fontSize: 11 }}>{fmt1(v)} L/h</Text>
+                  ),
+                },
+                {
+                  title: 'Địa điểm',
+                  dataIndex: 'dia_diem',
+                  render: (v: string | null) => v
+                    ? (
+                      <Tooltip title={v}>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {v.length > 45 ? v.slice(0, 45) + '…' : v}
+                        </Text>
+                      </Tooltip>
+                    )
+                    : <Text type="secondary">—</Text>,
+                },
               ]}
             />
           </div>
@@ -453,6 +494,27 @@ export default function NhatKyXePage() {
             onChange={setSelectedPlate}
             options={plates.map(p => ({ value: p, label: p }))}
           />
+          <Button.Group>
+            <Button
+              size="small"
+              icon={<CalendarOutlined />}
+              onClick={() => setRange([today.subtract(1, 'day'), today.subtract(1, 'day')])}
+            >
+              Hôm qua
+            </Button>
+            <Button
+              size="small"
+              onClick={() => setRange([today.subtract(6, 'day'), today])}
+            >
+              7 ngày
+            </Button>
+            <Button
+              size="small"
+              onClick={() => setRange([today.startOf('month'), today])}
+            >
+              Tháng này
+            </Button>
+          </Button.Group>
           <RangePicker
             value={range}
             onChange={v => { if (v?.[0] && v?.[1]) setRange([v[0], v[1]]) }}
@@ -507,6 +569,49 @@ export default function NhatKyXePage() {
           </Card>
         </Col>
       </Row>
+
+      {rowsWithTheory.length > 0 && (
+        <Row gutter={16} style={{ marginBottom: 16 }}>
+          <Col span={12}>
+            <Card size="small">
+              <Statistic
+                title={`Tiêu hao đội xe (${rowsWithTheory.length} xe-ngày có định mức)`}
+                value={fleetTieuHaoThuc}
+                formatter={v => fmt1(Number(v))}
+                suffix={`L / ${fmt1(fleetTieuHaoLyThuyet)} L định mức`}
+                valueStyle={{
+                  color: fleetRatio == null ? undefined
+                    : fleetRatio > 1.1 ? '#ff4d4f'
+                    : fleetRatio > 1.05 ? '#fa8c16'
+                    : '#52c41a',
+                  fontSize: 20,
+                }}
+              />
+            </Card>
+          </Col>
+          <Col span={12}>
+            <Card size="small">
+              <Statistic
+                title="Hiệu suất nhiên liệu đội xe"
+                value={fleetRatio != null ? Math.round(fleetRatio * 100) : 0}
+                suffix="%"
+                valueStyle={{
+                  color: fleetRatio == null ? '#8c8c8c'
+                    : fleetRatio > 1.1 ? '#ff4d4f'
+                    : fleetRatio > 1.05 ? '#fa8c16'
+                    : '#52c41a',
+                  fontSize: 20,
+                }}
+              />
+              {fleetRatio != null && (
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  {fleetRatio > 1.1 ? '⚠ Tiêu hao vượt 10% định mức' : fleetRatio > 1.05 ? 'Chú ý: vượt 5% định mức' : '✓ Trong ngưỡng định mức'}
+                </Text>
+              )}
+            </Card>
+          </Col>
+        </Row>
+      )}
 
       {totalDrainEvents > 0 && (
         <Alert
