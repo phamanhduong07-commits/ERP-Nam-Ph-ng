@@ -315,7 +315,7 @@ export default function KmThucTePage() {
         <Text type="secondary" style={{ fontSize: 12 }}>
           💡 <strong>Dầu TB (L)</strong> = trung bình mức dầu trong bình theo lít (GPS Bình Minh báo lít, không phải %).
           Xanh &gt;100L · Vàng 50–100L · Đỏ &lt;50L (bình ~200L).
-          Dữ liệu tự động lưu mỗi 5 phút. Cột "Km hôm đó" = max(km_today) trong ngày.
+          Dữ liệu tự động lưu mỗi 5 phút. Cột "Km hôm đó" = MAX(km_total) − MIN(km_total) trong ngày.
           Nhấn biển số để lọc chi tiết ngày.
         </Text>
       </Card>

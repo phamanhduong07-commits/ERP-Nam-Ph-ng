@@ -377,7 +377,7 @@ async def get_gps_vehicles(
             "address": v.get("Address"),
             "vehicle_type": v.get("VehicleType"),
             "capacity": v.get("SheeatsOrTons"),
-            "km_today": v.get("TripKm"),
+            "km_today": v.get("TripKm") if (v.get("TripKm") or 0) < 999 else None,
             "km_total": v.get("Km"),
             "time_update": v.get("TimeUpdate"),
             "is_stop": is_stop,

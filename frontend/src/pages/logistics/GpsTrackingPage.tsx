@@ -20,7 +20,7 @@ interface GpsVehicle {
   address: string
   vehicle_type: string
   capacity: string
-  km_today: number
+  km_today: number | null
   km_total: number
   time_update: string
   is_stop: boolean
@@ -222,8 +222,8 @@ export default function GpsTrackingPage() {
       dataIndex: 'km_today',
       key: 'km_today',
       width: 110,
-      sorter: (a: GpsVehicle, b: GpsVehicle) => a.km_today - b.km_today,
-      render: (km: number) => `${km?.toFixed(1) ?? 0} km`,
+      sorter: (a: GpsVehicle, b: GpsVehicle) => (a.km_today ?? 0) - (b.km_today ?? 0),
+      render: (km: number | null) => km != null ? `${km.toFixed(1)} km` : '—',
     },
     {
       title: 'Km tổng',
