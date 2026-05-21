@@ -427,17 +427,16 @@ def get_km_report(
 ):
     """Báo cáo km thực tế từng xe theo từng ngày.
 
-    Dùng max(km_today) per ngày nhưng lọc outlier (>= 999 km/ngày là bất khả thi với xe tải).
-    Một số thiết bị GPS Bình Minh báo sai TripKm (ví dụ: 64589 km), cần loại bỏ.
+    Dùng MAX(km_total) - MIN(km_total) per ngày — km_today (TripKm) reset mỗi lần tắt máy
+    nên MAX(km_today) chỉ đếm được 1 chuyến dài nhất, bỏ sót các chuyến còn lại.
     """
-    # valid_km: chỉ chấp nhận km_today hợp lệ (< 999 km/ngày)
-    valid_km = case((GpsSnapshot.km_today < 999, GpsSnapshot.km_today), else_=None)
+    km_delta = func.max(GpsSnapshot.km_total) - func.min(GpsSnapshot.km_total)
     rows = (
         db.query(
             GpsSnapshot.bien_so,
             GpsSnapshot.xe_id,
             GpsSnapshot.ngay,
-            func.max(valid_km).label("km_ngay"),
+            case((km_delta.between(0, 999), km_delta), else_=0).label("km_ngay"),
             func.avg(GpsSnapshot.fuel_pct).label("fuel_avg"),
             func.max(GpsSnapshot.km_total).label("km_total_max"),
             func.count(GpsSnapshot.id).label("so_snapshot"),
@@ -472,18 +471,18 @@ def get_km_summary(
     db: Session = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    """Tổng hợp km theo xe trong kỳ — sum(max valid km_today per day).
+    """Tổng hợp km theo xe trong kỳ — sum(km_total delta per day).
 
-    Lọc outlier: km_today >= 999 bị bỏ qua (một số GPS Bình Minh báo sai TripKm).
+    Dùng MAX(km_total) - MIN(km_total) per ngày thay vì MAX(km_today),
+    vì km_today reset mỗi lần tắt máy (per engine cycle, không phải per day).
     """
-    valid_km = case((GpsSnapshot.km_today < 999, GpsSnapshot.km_today), else_=None)
-    # Subquery: max valid km_today per (bien_so, ngay)
+    km_delta = func.max(GpsSnapshot.km_total) - func.min(GpsSnapshot.km_total)
     sub = (
         db.query(
             GpsSnapshot.bien_so,
             GpsSnapshot.xe_id,
             GpsSnapshot.ngay,
-            func.max(valid_km).label("km_ngay"),
+            case((km_delta.between(0, 999), km_delta), else_=0).label("km_ngay"),
             func.avg(GpsSnapshot.fuel_pct).label("fuel_avg"),
         )
         .filter(
@@ -530,11 +529,11 @@ def get_km_by_date(
     _user=Depends(get_current_user),
 ):
     """Km theo từng ngày của một xe — dùng cho biểu đồ."""
-    valid_km = case((GpsSnapshot.km_today < 999, GpsSnapshot.km_today), else_=None)
+    km_delta = func.max(GpsSnapshot.km_total) - func.min(GpsSnapshot.km_total)
     rows = (
         db.query(
             GpsSnapshot.ngay,
-            func.max(valid_km).label("km_ngay"),
+            case((km_delta.between(0, 999), km_delta), else_=0).label("km_ngay"),
             func.avg(GpsSnapshot.fuel_pct).label("fuel_avg"),
         )
         .filter(
@@ -566,13 +565,14 @@ def get_fuel_comparison(
     """
     from app.models.hr import FuelLog
 
-    # GPS km per bien_so in period — lọc outlier km_today >= 999 (GPS thiết bị lỗi)
-    valid_km = case((GpsSnapshot.km_today < 999, GpsSnapshot.km_today), else_=None)
+    # GPS km per bien_so in period — dùng km_total delta per ngày
+    # km_today (TripKm) reset mỗi lần tắt máy → MAX chỉ lấy được 1 chuyến dài nhất
+    km_delta_day = func.max(GpsSnapshot.km_total) - func.min(GpsSnapshot.km_total)
     daily_sub = (
         db.query(
             GpsSnapshot.bien_so,
             GpsSnapshot.ngay,
-            func.max(valid_km).label("km_ngay"),
+            case((km_delta_day.between(0, 999), km_delta_day), else_=0).label("km_ngay"),
         )
         .filter(
             GpsSnapshot.ngay >= from_date,
@@ -907,12 +907,10 @@ def get_daily_detail(
     results = []
     for (plate, ngay), snaps in sorted(groups.items()):
         first, last = snaps[0], snaps[-1]
-        # km_today (TripKm) reset hàng ngày — chính xác hơn km_total khi GPS device bị thay/reset.
-        # Lấy max trong ngày, lọc outlier >999 km (GPS Bình Minh báo sai).
-        km_chay = max(
-            (s.km_today for s in snaps if 0 < s.km_today < 999),
-            default=max(0.0, last.km_total - first.km_total),
-        )
+        # km_total (odometer GPS) tăng liên tục, không reset mỗi chuyến.
+        # Delta ngày = cuối - đầu; lọc >999 đề phòng thiết bị GPS thay/reset odometer.
+        km_delta = last.km_total - first.km_total
+        km_chay = km_delta if 0 < km_delta < 999 else 0.0
 
         pnorm = _normalize_plate(plate)
 
