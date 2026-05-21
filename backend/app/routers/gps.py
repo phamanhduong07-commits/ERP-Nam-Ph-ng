@@ -321,55 +321,64 @@ def get_fuel_comparison(
     """
     from app.models.hr import FuelLog
 
-    # GPS km per xe — sum of daily max(km_today)
+    # GPS km per bien_so in period — fallback khi xe_id chưa được liên kết ERP
     daily_sub = (
         db.query(
-            GpsSnapshot.xe_id,
+            GpsSnapshot.bien_so,
             GpsSnapshot.ngay,
             func.max(GpsSnapshot.km_today).label("km_ngay"),
         )
         .filter(
             GpsSnapshot.ngay >= from_date,
             GpsSnapshot.ngay <= to_date,
-            GpsSnapshot.xe_id.isnot(None),
         )
-        .group_by(GpsSnapshot.xe_id, GpsSnapshot.ngay)
+        .group_by(GpsSnapshot.bien_so, GpsSnapshot.ngay)
         .subquery()
     )
     km_rows = (
-        db.query(daily_sub.c.xe_id, func.sum(daily_sub.c.km_ngay).label("km_gps"))
-        .group_by(daily_sub.c.xe_id)
+        db.query(daily_sub.c.bien_so, func.sum(daily_sub.c.km_ngay).label("km_gps"))
+        .group_by(daily_sub.c.bien_so)
         .all()
     )
-    km_map = {r.xe_id: float(r.km_gps or 0) for r in km_rows}
+    km_map: dict[str, float] = {r.bien_so: float(r.km_gps or 0) for r in km_rows}
 
-    # Actual fuel from FuelLog
-    fuel_rows = (
-        db.query(FuelLog.xe_id, func.sum(FuelLog.so_lit_dau).label("so_lit"))
-        .filter(
-            FuelLog.xe_id.isnot(None),
-            FuelLog.ngay_do >= from_date,
-            FuelLog.ngay_do <= to_date,
-        )
-        .group_by(FuelLog.xe_id)
-        .all()
-    )
-    fuel_map = {r.xe_id: float(r.so_lit or 0) for r in fuel_rows}
-
-    all_xe_ids = set(km_map.keys()) | set(fuel_map.keys())
-    if not all_xe_ids:
+    if not km_map:
         return []
 
-    xe_dict = {xe.id: xe for xe in db.query(Xe).filter(Xe.id.in_(all_xe_ids)).all()}
+    # Match GPS plate → ERP Xe bằng bien_so chuẩn hóa
+    all_xe = db.query(Xe).all()
+    plate_to_xe: dict[str, Xe] = {_normalize_plate(xe.bien_so): xe for xe in all_xe}
+
+    # Lấy xe_id từ các xe đã match để tra FuelLog
+    xe_for_fuel: dict[int, str] = {}  # xe_id → GPS plate
+    for plate in km_map:
+        xe = plate_to_xe.get(_normalize_plate(plate))
+        if xe:
+            xe_for_fuel[xe.id] = plate
+
+    fuel_map: dict[int, float] = {}  # xe_id → liters
+    if xe_for_fuel:
+        fuel_rows = (
+            db.query(FuelLog.xe_id, func.sum(FuelLog.so_lit_dau).label("so_lit"))
+            .filter(
+                FuelLog.xe_id.in_(list(xe_for_fuel.keys())),
+                FuelLog.ngay_do >= from_date,
+                FuelLog.ngay_do <= to_date,
+            )
+            .group_by(FuelLog.xe_id)
+            .all()
+        )
+        fuel_map = {r.xe_id: float(r.so_lit or 0) for r in fuel_rows}
 
     results = []
-    for xe_id, xe in xe_dict.items():
-        km_gps = km_map.get(xe_id, 0)
-        dau_thuc_te = fuel_map.get(xe_id, 0)
-        dinh_muc = float(xe.dinh_muc_dau or 0)
+    for plate, km_gps in km_map.items():
+        xe = plate_to_xe.get(_normalize_plate(plate))
+        xe_id = xe.id if xe else None
+        dinh_muc = float(xe.dinh_muc_dau or 0) if xe else 0
+        dau_thuc_te = fuel_map.get(xe_id, 0) if xe_id else 0
 
         dau_ly_thuyet = (km_gps * dinh_muc / 100) if dinh_muc > 0 and km_gps > 0 else None
-        chenh_lech_lit = (dau_thuc_te - dau_ly_thuyet) if dau_ly_thuyet else None
+        chenh_lech_lit = (dau_thuc_te - dau_ly_thuyet) if dau_ly_thuyet is not None else None
         chenh_lech_pct = (chenh_lech_lit / dau_ly_thuyet * 100) if chenh_lech_lit is not None and dau_ly_thuyet else None
 
         if chenh_lech_pct is None:
@@ -383,8 +392,8 @@ def get_fuel_comparison(
 
         results.append({
             "xe_id": xe_id,
-            "bien_so": xe.bien_so,
-            "loai_xe": xe.loai_xe,
+            "bien_so": plate,
+            "loai_xe": xe.loai_xe if xe else None,
             "dinh_muc_dau": dinh_muc,
             "km_gps": round(km_gps, 1),
             "dau_ly_thuyet": round(dau_ly_thuyet, 1) if dau_ly_thuyet else None,
@@ -407,28 +416,35 @@ def get_maintenance_alerts(
 
     Mỗi xe: km_hien_tai (max km_total từ snapshot) so với km lần bảo dưỡng tiếp theo.
     """
-    # Max km_total per xe_id (most recent odometer reading)
+    # Max km_total per bien_so — fallback khi xe_id chưa liên kết ERP
     km_rows = (
-        db.query(GpsSnapshot.xe_id, func.max(GpsSnapshot.km_total).label("km_hien_tai"))
-        .filter(GpsSnapshot.xe_id.isnot(None))
-        .group_by(GpsSnapshot.xe_id)
+        db.query(GpsSnapshot.bien_so, func.max(GpsSnapshot.km_total).label("km_hien_tai"))
+        .filter(GpsSnapshot.km_total > 0)
+        .group_by(GpsSnapshot.bien_so)
         .all()
     )
-    km_map = {r.xe_id: float(r.km_hien_tai or 0) for r in km_rows}
+    km_by_plate: dict[str, float] = {r.bien_so: float(r.km_hien_tai or 0) for r in km_rows}
 
-    xe_list = db.query(Xe).filter(Xe.trang_thai == True).all()
+    # ERP Xe — match by normalized plate
+    all_xe = db.query(Xe).filter(Xe.trang_thai == True).all()
+    plate_to_xe: dict[str, Xe] = {_normalize_plate(xe.bien_so): xe for xe in all_xe}
 
     results = []
-    for xe in xe_list:
-        km_hien_tai = km_map.get(xe.id, 0)
-        ky = int(xe.km_bao_duong_dinh_ky or 5000)
-        gan_nhat = float(xe.km_bao_duong_gan_nhat or 0)
+    seen_plates: set[str] = set()
+
+    # 1. GPS plates (có dữ liệu km thực)
+    for plate, km_hien_tai in km_by_plate.items():
+        seen_plates.add(_normalize_plate(plate))
+        xe = plate_to_xe.get(_normalize_plate(plate))
+        xe_id = xe.id if xe else None
+        loai_xe = xe.loai_xe if xe else None
+        ky = int(xe.km_bao_duong_dinh_ky or 5000) if xe else 5000
+        gan_nhat = float(xe.km_bao_duong_gan_nhat or 0) if xe else 0
+
         km_tiep_theo = gan_nhat + ky
         km_con_lai = km_tiep_theo - km_hien_tai
 
-        if km_hien_tai == 0:
-            alert = "no_data"
-        elif km_con_lai < 0:
+        if km_con_lai < 0:
             alert = "overdue"
         elif km_con_lai < 500:
             alert = "danger"
@@ -438,9 +454,9 @@ def get_maintenance_alerts(
             alert = "ok"
 
         results.append({
-            "xe_id": xe.id,
-            "bien_so": xe.bien_so,
-            "loai_xe": xe.loai_xe,
+            "xe_id": xe_id,
+            "bien_so": plate,
+            "loai_xe": loai_xe,
             "km_hien_tai": round(km_hien_tai),
             "km_bao_duong_gan_nhat": gan_nhat,
             "km_bao_duong_dinh_ky": ky,
@@ -448,6 +464,23 @@ def get_maintenance_alerts(
             "km_con_lai": round(km_con_lai),
             "alert": alert,
         })
+
+    # 2. ERP xe không có GPS data
+    for xe in all_xe:
+        if _normalize_plate(xe.bien_so) not in seen_plates:
+            ky = int(xe.km_bao_duong_dinh_ky or 5000)
+            gan_nhat = float(xe.km_bao_duong_gan_nhat or 0)
+            results.append({
+                "xe_id": xe.id,
+                "bien_so": xe.bien_so,
+                "loai_xe": xe.loai_xe,
+                "km_hien_tai": 0,
+                "km_bao_duong_gan_nhat": gan_nhat,
+                "km_bao_duong_dinh_ky": ky,
+                "km_tiep_theo": round(gan_nhat + ky),
+                "km_con_lai": round(gan_nhat + ky),
+                "alert": "no_data",
+            })
 
     results.sort(key=lambda x: x["km_con_lai"])
     return results
