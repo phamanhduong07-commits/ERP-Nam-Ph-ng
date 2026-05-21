@@ -10,7 +10,8 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.master import Xe
-from app.models.gps import GpsSnapshot
+from app.models.gps import DrainAlertLog, GpsSnapshot
+from app.socket_manager import sio
 
 logger = logging.getLogger("erp.gps")
 
@@ -42,6 +43,10 @@ async def gps_poller_loop() -> None:
     while True:
         db = SessionLocal()
         try:
+            # 0. Refresh xe plate cache nếu stale (mỗi XE_CACHE_TTL giây)
+            if time.time() - _xe_cache_ts >= XE_CACHE_TTL:
+                _refresh_xe_cache(db)
+
             # 1. Lưu snapshot mới
             # GPS API trả về uppercase keys ("Plate", "Fuel", "TripKm", ...).
             # _try_save_snapshots dùng lowercase ("plate", "fuel_pct", "km_today", ...) — cần normalize trước.
@@ -50,7 +55,6 @@ async def gps_poller_loop() -> None:
                 normalized = [
                     {
                         "plate": v.get("Plate", ""),
-                        "xe_id": None,  # poller không resolve ERP xe_id; nullable ở model
                         "lat": v.get("Lat"),
                         "lng": v.get("Lng"),
                         "speed": v.get("Speed") or 0,
@@ -64,6 +68,9 @@ async def gps_poller_loop() -> None:
                     }
                     for v in raw if v.get("Plate")
                 ]
+                # 1a. Detect drain real-time trước khi throttle lọc (cập nhật _prev_snap mỗi cycle)
+                await _check_drain_realtime(normalized, db)
+                # 1b. Lưu snapshot (throttled 5 phút) với xe_id đã resolve
                 _try_save_snapshots(normalized, db)
 
             # 2. Cleanup hàng ngày (86400s = 1 ngày)
@@ -93,6 +100,18 @@ DRAIN_THRESHOLD = 8.0        # L — hụt ≥8L = sự kiện cần kiểm tra
 DRAIN_WHILE_MOVING_FACTOR = 2.5  # hụt > 2.5× định mức L/100km khi di chuyển = tiêu hao bất thường
 _last_cleanup: float = 0.0
 
+# xe_id plate cache: normalized_plate → xe_id (refresh mỗi 3600s)
+_xe_plate_cache: dict[str, int] = {}
+_xe_cache_ts: float = 0.0
+XE_CACHE_TTL = 3600  # 1 giờ
+
+# Real-time drain: previous snapshot state per plate
+_prev_snap: dict[str, dict] = {}
+
+# Anti-spam: plate → timestamp of last drain alert (30 min cooldown)
+_drain_alert_cooldown: dict[str, float] = {}
+DRAIN_ALERT_COOLDOWN = 1800  # 30 phút
+
 
 def _normalize_plate(plate: str) -> str:
     """Remove hyphens/spaces to allow matching '50H-34427' == '50H34427'."""
@@ -114,6 +133,96 @@ def _parse_gps_time(raw: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def _refresh_xe_cache(db: Session) -> None:
+    """Load xe.bien_so → xe.id vào in-memory cache (normalize plate để match GPS format)."""
+    global _xe_plate_cache, _xe_cache_ts
+    rows = db.query(Xe.id, Xe.bien_so).filter(Xe.bien_so.isnot(None)).all()
+    _xe_plate_cache = {_normalize_plate(r.bien_so): r.id for r in rows}
+    _xe_cache_ts = time.time()
+    logger.info("GPS xe cache refreshed: %d entries", len(_xe_plate_cache))
+
+
+async def _check_drain_realtime(vehicles: list[dict], db: Session) -> None:
+    """Sau mỗi poll cycle: so sánh snapshot mới vs prev để phát hiện rút dầu real-time.
+    Chỉ detect rut_khi_dung (xe dừng, rate >10 L/h). Emit socket + log DB khi severity=cao.
+    """
+    now_t = time.time()
+    for v in vehicles:
+        plate = v.get("plate", "")
+        if not plate:
+            continue
+        curr_fuel = float(v.get("fuel_pct") or 0)
+        curr_stop = bool(v.get("is_stop", True))
+        curr_addr = v.get("address")
+        curr_xe_id = _xe_plate_cache.get(_normalize_plate(plate))
+
+        gps_ts = _parse_gps_time(v.get("time_update"))
+        curr_ts = (gps_ts or datetime.utcnow()).replace(tzinfo=timezone.utc)
+
+        prev = _prev_snap.get(plate)
+        _prev_snap[plate] = {
+            "fuel": curr_fuel,
+            "is_stop": curr_stop,
+            "created_at": curr_ts,
+            "address": curr_addr,
+            "xe_id": curr_xe_id,
+        }
+
+        if prev is None:
+            continue
+
+        drop = prev["fuel"] - curr_fuel
+        if drop < DRAIN_THRESHOLD or not curr_stop:
+            continue
+
+        prev_ts = prev["created_at"]
+        elapsed_min = max(1.0, (curr_ts - prev_ts).total_seconds() / 60)
+        drain_rate = drop / (elapsed_min / 60)
+
+        if drain_rate < 10:
+            continue
+
+        # Anti-spam cooldown per plate
+        if now_t - _drain_alert_cooldown.get(plate, 0) < DRAIN_ALERT_COOLDOWN:
+            continue
+        _drain_alert_cooldown[plate] = now_t
+
+        dia_diem = curr_addr or prev.get("address")
+        log = DrainAlertLog(
+            bien_so=plate,
+            xe_id=curr_xe_id,
+            ngay=date.today(),
+            gio=curr_ts,
+            so_lit=round(drop, 1),
+            drain_rate_L_per_h=round(drain_rate, 1),
+            dia_diem=dia_diem,
+            phan_loai="rut_khi_dung",
+            muc_canh_bao="cao",
+        )
+        try:
+            db.add(log)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.warning("DrainAlertLog save failed: %s", exc)
+
+        payload = {
+            "bien_so": plate,
+            "so_lit": round(drop, 1),
+            "drain_rate_L_per_h": round(drain_rate, 1),
+            "dia_diem": dia_diem,
+            "gio": curr_ts.isoformat(),
+            "muc_canh_bao": "cao",
+        }
+        try:
+            await sio.emit("drain_alert", payload)
+            logger.warning(
+                "DRAIN ALERT: %s hụt %.1fL (%.1f L/h) tại %s", plate, drop, drain_rate, dia_diem
+            )
+        except Exception as exc:
+            logger.warning("Socket emit drain_alert failed: %s", exc)
 
 
 async def _fetch_gps_raw() -> list[dict]:
@@ -164,9 +273,10 @@ def _try_save_snapshots(vehicles: list[dict], db: Session) -> None:
         gps_ts = _parse_gps_time(v.get("time_update"))
         created_utc = gps_ts if gps_ts else datetime.utcnow()
 
+        xe_id = _xe_plate_cache.get(_normalize_plate(plate))
         to_insert.append(GpsSnapshot(
             bien_so=plate,
-            xe_id=v.get("xe_id"),
+            xe_id=xe_id,
             ngay=today,
             lat=v.get("lat"),
             lng=v.get("lng"),

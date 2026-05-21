@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import {
-  Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Tag, Tooltip, Typography,
+  Alert, Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Tag, Tooltip, Typography, notification,
 } from 'antd'
-import { ArrowRightOutlined, CalendarOutlined, CarOutlined, ReloadOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, CalendarOutlined, CarOutlined, DownloadOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import dayjs, { Dayjs } from 'dayjs'
+import * as XLSX from 'xlsx'
 import client from '../../api/client'
+import { socket } from '../../utils/socket'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -204,6 +206,47 @@ export default function NhatKyXePage() {
       .map(r => `${r.bien_so}-${r.ngay}`)
     setExpandedKeys(keys)
   }, [data])
+
+  // Socket: nhận cảnh báo rút dầu real-time từ poller backend
+  useEffect(() => {
+    const handler = (payload: {
+      bien_so: string
+      so_lit: number
+      drain_rate_L_per_h: number
+      dia_diem: string | null
+      gio: string
+    }) => {
+      notification.warning({
+        message: `⚠ Cảnh báo rút dầu — ${payload.bien_so}`,
+        description: `Hụt ${payload.so_lit}L (${payload.drain_rate_L_per_h} L/h)${payload.dia_diem ? ' tại ' + payload.dia_diem.slice(0, 60) : ''}`,
+        duration: 12,
+        placement: 'topRight',
+      })
+    }
+    socket.on('drain_alert', handler)
+    return () => { socket.off('drain_alert', handler) }
+  }, [])
+
+  const exportToExcel = () => {
+    const rows = data.map(r => ({
+      'Biển số': r.bien_so,
+      'Ngày': dayjs(r.ngay).format('DD/MM/YYYY'),
+      'Giờ đầu': r.gio_dau ?? '',
+      'Giờ cuối': r.gio_cuoi ?? '',
+      'Km chạy': r.km_chay,
+      'Dầu đầu (L)': r.dau_dau_pct,
+      'Dầu cuối (L)': r.dau_cuoi_pct,
+      'Số snapshot': r.so_snapshot,
+      'Số lần đổ': r.fuel_events.length,
+      'Tiêu hao thực (L)': r.fuel_tieu_hao,
+      'Tiêu hao LT (L)': r.fuel_ly_thuyet ?? '',
+      'Số cảnh báo hụt': r.drain_events.length,
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Nhật ký xe')
+    XLSX.writeFile(wb, `NhatKyXe_${fromDate}_${toDate}.xlsx`)
+  }
 
   const columns = [
     {
@@ -522,6 +565,9 @@ export default function NhatKyXePage() {
           />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching}>
             Tải lại
+          </Button>
+          <Button icon={<DownloadOutlined />} onClick={exportToExcel} disabled={data.length === 0}>
+            Xuất Excel
           </Button>
         </Space>
       </div>

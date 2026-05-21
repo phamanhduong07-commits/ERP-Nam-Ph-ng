@@ -2,9 +2,10 @@ import { useState } from 'react'
 import {
   Button, Card, Col, DatePicker, Row, Space, Statistic, Table, Tag, Tooltip, Typography,
 } from 'antd'
-import { AlertOutlined, ReloadOutlined } from '@ant-design/icons'
+import { AlertOutlined, DownloadOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import dayjs, { Dayjs } from 'dayjs'
+import * as XLSX from 'xlsx'
 import client from '../../api/client'
 
 const { Text, Title } = Typography
@@ -53,6 +54,24 @@ export default function DoiSoatXangPage() {
       return res.data
     },
   })
+
+  const exportToExcel = () => {
+    const rows = data.map(r => ({
+      'Biển số': r.bien_so,
+      'Loại xe': r.loai_xe ?? '',
+      'Định mức (L/100km)': r.dinh_muc_dau,
+      'Km GPS': r.km_gps,
+      'Dầu lý thuyết (L)': r.dau_ly_thuyet ?? '',
+      'Dầu thực tế (L)': r.dau_thuc_te,
+      'Chênh lệch (L)': r.chenh_lech_lit ?? '',
+      'Chênh lệch (%)': r.chenh_lech_pct ?? '',
+      'Trạng thái': r.canh_bao,
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Đối soát xăng')
+    XLSX.writeFile(wb, `DoiSoatXang_${fromDate}_${toDate}.xlsx`)
+  }
 
   const alertCount = data.filter(r => r.canh_bao === 'danger').length
   const warnCount = data.filter(r => r.canh_bao === 'warning').length
@@ -164,6 +183,9 @@ export default function DoiSoatXangPage() {
           />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching}>
             Tải lại
+          </Button>
+          <Button icon={<DownloadOutlined />} onClick={exportToExcel} disabled={data.length === 0}>
+            Xuất Excel
           </Button>
         </Space>
       </div>

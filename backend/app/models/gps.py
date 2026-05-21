@@ -26,3 +26,20 @@ class GpsSnapshot(Base):
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     xe = relationship("Xe", foreign_keys=[xe_id])
+
+
+class DrainAlertLog(Base):
+    """Lưu lịch sử cảnh báo rút dầu severity='cao' từ poller real-time."""
+    __tablename__ = "drain_alert_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bien_so: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    xe_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("xe.id"), nullable=True)
+    ngay: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    gio: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    so_lit: Mapped[float] = mapped_column(Float, nullable=False)
+    drain_rate_L_per_h: Mapped[float] = mapped_column(Float, nullable=False)
+    dia_diem: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    phan_loai: Mapped[str] = mapped_column(String(30), default="rut_khi_dung")
+    muc_canh_bao: Mapped[str] = mapped_column(String(20), default="cao")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
