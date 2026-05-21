@@ -63,6 +63,7 @@ export default function DoiSoatXangPage() {
       'Km GPS': r.km_gps,
       'Dầu lý thuyết (L)': r.dau_ly_thuyet ?? '',
       'Dầu thực tế (L)': r.dau_thuc_te,
+      'TH thực tế (L/100km)': r.km_gps > 0 && r.dau_thuc_te > 0 ? Math.round(r.dau_thuc_te / r.km_gps * 1000) / 10 : '',
       'Chênh lệch (L)': r.chenh_lech_lit ?? '',
       'Chênh lệch (%)': r.chenh_lech_pct ?? '',
       'Trạng thái': r.canh_bao,
@@ -128,6 +129,32 @@ export default function DoiSoatXangPage() {
       width: 120,
       align: 'right' as const,
       render: (v: number) => <Text strong>{fmt1(v)} L</Text>,
+    },
+    {
+      title: 'TH thực tế (L/100km)',
+      key: 'tieu_hao_per_100',
+      width: 150,
+      align: 'right' as const,
+      sorter: (a: FuelRow, b: FuelRow) => {
+        const ra = a.km_gps > 0 ? a.dau_thuc_te / a.km_gps * 100 : 0
+        const rb = b.km_gps > 0 ? b.dau_thuc_te / b.km_gps * 100 : 0
+        return ra - rb
+      },
+      render: (_: unknown, r: FuelRow) => {
+        if (r.km_gps <= 0 || r.dau_thuc_te <= 0) return <Text type="secondary">—</Text>
+        const actual = r.dau_thuc_te / r.km_gps * 100
+        const dm = r.dinh_muc_dau
+        const color = dm > 0
+          ? actual > dm * 1.15 ? '#ff4d4f'
+          : actual > dm * 1.05 ? '#fa8c16'
+          : '#52c41a'
+          : undefined
+        return (
+          <Tooltip title={dm > 0 ? `Định mức: ${fmt1(dm)} L/100km` : 'Chưa cài định mức'}>
+            <Text strong style={{ color }}>{fmt1(actual)} L</Text>
+          </Tooltip>
+        )
+      },
     },
     {
       title: 'Chênh lệch',

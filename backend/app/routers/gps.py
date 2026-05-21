@@ -1012,6 +1012,7 @@ def get_daily_detail(
         fuel_tieu_hao = round(max(0.0, first.fuel_pct - last.fuel_pct + fill_total), 1)
         fuel_ly_thuyet = round(km_chay * dinh_muc / 100, 1) if dinh_muc > 0 and km_chay > 0 else None
 
+        actual_per_100 = round(fuel_tieu_hao * 100 / km_chay, 1) if km_chay > 0 and fuel_tieu_hao > 0 else None
         results.append({
             "bien_so": plate,
             "ngay": ngay.isoformat(),
@@ -1023,8 +1024,10 @@ def get_daily_detail(
             "dau_dau_pct": round(first.fuel_pct, 1),
             "dau_cuoi_pct": round(last.fuel_pct, 1),
             "so_snapshot": len(snaps),
+            "dinh_muc_dau": dinh_muc,         # L/100km theo ERP
             "fuel_tieu_hao": fuel_tieu_hao,
             "fuel_ly_thuyet": fuel_ly_thuyet,
+            "tieu_hao_per_100": actual_per_100, # L/100km thực tế GPS
             "fuel_events": fuel_events,
             "drain_events": drain_events,
         })

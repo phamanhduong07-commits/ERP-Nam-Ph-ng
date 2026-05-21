@@ -51,8 +51,10 @@ interface DailyRow {
   dau_dau_pct: number
   dau_cuoi_pct: number
   so_snapshot: number
+  dinh_muc_dau: number
   fuel_tieu_hao: number
   fuel_ly_thuyet: number | null
+  tieu_hao_per_100: number | null
   fuel_events: FuelEvent[]
   drain_events: DrainEvent[]
 }
@@ -240,6 +242,8 @@ export default function NhatKyXePage() {
       'Số lần đổ': r.fuel_events.length,
       'Tiêu hao thực (L)': r.fuel_tieu_hao,
       'Tiêu hao LT (L)': r.fuel_ly_thuyet ?? '',
+      'TH thực tế (L/100km)': r.tieu_hao_per_100 ?? '',
+      'Định mức (L/100km)': r.dinh_muc_dau > 0 ? r.dinh_muc_dau : '',
       'Số cảnh báo hụt': r.drain_events.length,
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -355,6 +359,36 @@ export default function NhatKyXePage() {
               {theory != null && (
                 <div>
                   <Text type="secondary" style={{ fontSize: 10 }}>/ {fmt1(theory)} L ĐM</Text>
+                </div>
+              )}
+            </div>
+          </Tooltip>
+        )
+      },
+    },
+    {
+      title: 'L/100km thực tế',
+      key: 'tieu_hao_per_100',
+      width: 120,
+      align: 'right' as const,
+      sorter: (a: DailyRow, b: DailyRow) => (a.tieu_hao_per_100 ?? 0) - (b.tieu_hao_per_100 ?? 0),
+      render: (_: unknown, r: DailyRow) => {
+        const actual = r.tieu_hao_per_100
+        const dm = r.dinh_muc_dau
+        if (actual == null) return <Text type="secondary">—</Text>
+        const color = dm > 0
+          ? actual > dm * 1.15 ? '#ff4d4f'
+          : actual > dm * 1.05 ? '#fa8c16'
+          : '#52c41a'
+          : undefined
+        return (
+          <Tooltip title={dm > 0 ? `Định mức: ${fmt1(dm)} L/100km` : 'Chưa cài định mức'}>
+            <div style={{ lineHeight: 1.4 }}>
+              <Text strong style={{ color }}>{fmt1(actual)}</Text>
+              <Text type="secondary" style={{ fontSize: 10 }}> L/100km</Text>
+              {dm > 0 && (
+                <div>
+                  <Text type="secondary" style={{ fontSize: 10 }}>ĐM: {fmt1(dm)}</Text>
                 </div>
               )}
             </div>
