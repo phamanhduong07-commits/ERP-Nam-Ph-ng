@@ -283,14 +283,15 @@ export default function DoiSoatXangPage() {
                 <Table.Summary.Cell index={5} align="right">
                   <Text strong>{fmt1(totalThucTe)} L</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={6} align="right">
+                <Table.Summary.Cell index={6} align="right" />
+                <Table.Summary.Cell index={7} align="right">
                   {totalLyThuyet > 0 && (
                     <Text style={{ color: totalThucTe > totalLyThuyet ? '#ff4d4f' : '#52c41a' }}>
                       {totalThucTe > totalLyThuyet ? '+' : ''}{fmt1(totalThucTe - totalLyThuyet)} L
                     </Text>
                   )}
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={7} />
+                <Table.Summary.Cell index={8} />
               </Table.Summary.Row>
             </Table.Summary>
           )}
