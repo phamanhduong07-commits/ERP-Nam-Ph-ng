@@ -4,11 +4,14 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 from app.config import settings
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_roles
+
+_gps_admin_required = require_roles("ADMIN", "GIAM_DOC")
 from app.models.master import Xe
 from app.models.gps import DrainAlertLog, GpsSnapshot
 from app.socket_manager import sio
@@ -38,7 +41,7 @@ async def gps_poller_loop() -> None:
     global _last_cleanup
 
     logger.info("GPS poller: started (interval=%ds, retention=%dd)", GPS_POLL_INTERVAL, RETENTION_DAYS)
-    await asyncio.sleep(15)  # Đợi app khởi động xong
+    await asyncio.sleep(5)  # Đợi app khởi động xong (giảm từ 15s để hạn chế gap sau restart)
 
     while True:
         db = SessionLocal()
@@ -656,6 +659,16 @@ def get_fuel_comparison(
         f1 = daily_l_map.get((plate_d, d), f0)
         tieu_hao_gps_map[plate_d] = tieu_hao_gps_map.get(plate_d, 0.0) + max(0.0, f0 - f1)
 
+    # Bình Minh daily summary — ưu tiên dùng khi có (chính xác hơn snapshot khi server restart)
+    from app.models.gps import GpsBinhMinhDaily
+    bm_rows = (
+        db.query(GpsBinhMinhDaily.bien_so, func.sum(GpsBinhMinhDaily.nl_tieu_thu).label("nl_tieu_thu"))
+        .filter(GpsBinhMinhDaily.ngay >= from_date, GpsBinhMinhDaily.ngay <= to_date)
+        .group_by(GpsBinhMinhDaily.bien_so)
+        .all()
+    )
+    bm_fuel_map: dict[str, float] = {r.bien_so.upper(): float(r.nl_tieu_thu or 0) for r in bm_rows}
+
     results = []
     for plate, km_gps in km_map.items():
         xe = plate_to_xe.get(_normalize_plate(plate))
@@ -663,7 +676,10 @@ def get_fuel_comparison(
         dinh_muc = float(xe.dinh_muc_dau or 0) if xe else 0
         dau_thuc_te = fuel_map.get(xe_id, 0) if xe_id else 0
 
-        tieu_hao_gps = round(tieu_hao_gps_map.get(plate, 0.0), 1)
+        # Ưu tiên dữ liệu Bình Minh (chính xác hơn khi server có downtime)
+        bm_fuel = bm_fuel_map.get(plate.upper())
+        tieu_hao_gps = round(bm_fuel if bm_fuel is not None else tieu_hao_gps_map.get(plate, 0.0), 1)
+        nguon_tieu_hao = "binhminh" if bm_fuel is not None else "snapshot"
         tieu_hao_per_100 = round(tieu_hao_gps * 100 / km_gps, 1) if km_gps > 0 and tieu_hao_gps > 0 else None
 
         dau_ly_thuyet = round(km_gps * dinh_muc / 100, 1) if dinh_muc > 0 and km_gps > 0 else None
@@ -692,6 +708,7 @@ def get_fuel_comparison(
             "chenh_lech_lit": chenh_lech_lit,
             "chenh_lech_pct": chenh_lech_pct,
             "canh_bao": canh_bao,
+            "nguon_tieu_hao": nguon_tieu_hao,  # "binhminh" | "snapshot"
         })
 
     results.sort(key=lambda x: abs(x["chenh_lech_pct"] or 0), reverse=True)
@@ -1143,4 +1160,497 @@ def update_drain_alert(
         "phan_loai": alert.phan_loai,
         "muc_canh_bao": alert.muc_canh_bao,
         "trang_thai": alert.trang_thai,
+    }
+
+
+# ─── Backfill / Import ───────────────────────────────────────────────────────
+
+class SnapshotImportItem(BaseModel):
+    """Một điểm GPS để import thủ công (hoặc từ Bình Minh history API)."""
+    bien_so: str
+    created_at_vn: str        # Giờ VN "2026-05-21 08:30:00" hoặc "2026/05/21 08:30:00"
+    km_total: float
+    fuel_pct: float           # Lít dầu (GPS Bình Minh báo lít, không phải %)
+    speed: float = 0
+    lat: float | None = None
+    lng: float | None = None
+    is_stop: bool = True
+    address: str | None = None
+    km_today: float = 0       # TripKm — tùy chọn
+
+
+def _dedup_window_seconds(plate: str, created_utc: datetime, db: Session) -> bool:
+    """True nếu đã có snapshot của plate trong vòng ±120 giây so với created_utc."""
+    lo = created_utc - timedelta(seconds=120)
+    hi = created_utc + timedelta(seconds=120)
+    return db.query(GpsSnapshot.id).filter(
+        GpsSnapshot.bien_so == plate,
+        GpsSnapshot.created_at.between(lo, hi),
+    ).first() is not None
+
+
+@router.post("/import-snapshots")
+def import_snapshots(
+    items: list[SnapshotImportItem],
+    db: Session = Depends(get_db),
+    _user=Depends(_gps_admin_required),
+):
+    """Import thủ công danh sách snapshot GPS (dùng sau khi server restart để bù dữ liệu bị mất).
+
+    - `created_at_vn`: giờ VN, tự động convert sang UTC
+    - Dedup: bỏ qua snapshot đã tồn tại trong ±120 giây
+    - Chỉ admin được gọi endpoint này
+    """
+    if not items:
+        return {"inserted": 0, "skipped": 0, "errors": []}
+
+    # Refresh xe cache nếu cần
+    if not _xe_plate_cache or time.time() - _xe_cache_ts >= XE_CACHE_TTL:
+        _refresh_xe_cache(db)
+
+    inserted = 0
+    skipped = 0
+    errors: list[str] = []
+    to_insert: list[GpsSnapshot] = []
+
+    for item in items:
+        plate = (item.bien_so or "").strip().upper()
+        if not plate:
+            errors.append(f"Bỏ qua: bien_so rỗng")
+            skipped += 1
+            continue
+
+        # Parse timestamp VN → UTC
+        created_utc = _parse_gps_time(item.created_at_vn)
+        if created_utc is None:
+            errors.append(f"{plate}: không parse được created_at_vn='{item.created_at_vn}'")
+            skipped += 1
+            continue
+
+        # Dedup check
+        if _dedup_window_seconds(plate, created_utc, db):
+            skipped += 1
+            continue
+
+        xe_id = _xe_plate_cache.get(_normalize_plate(plate))
+        snap_date = (created_utc + timedelta(hours=7)).date()  # ngày VN
+
+        to_insert.append(GpsSnapshot(
+            bien_so=plate,
+            xe_id=xe_id,
+            ngay=snap_date,
+            lat=item.lat,
+            lng=item.lng,
+            speed=item.speed,
+            fuel_pct=item.fuel_pct,
+            km_today=item.km_today,
+            km_total=item.km_total,
+            is_stop=item.is_stop,
+            address=item.address,
+            created_at=created_utc,
+        ))
+        inserted += 1
+
+    if to_insert:
+        try:
+            db.add_all(to_insert)
+            db.commit()
+            logger.info("GPS import: inserted %d snapshots (skipped %d)", inserted, skipped)
+        except Exception as exc:
+            db.rollback()
+            raise HTTPException(500, f"Lỗi khi lưu snapshot: {exc}")
+
+    return {"inserted": inserted, "skipped": skipped, "errors": errors}
+
+
+@router.post("/backfill")
+async def backfill_from_history(
+    from_dt: str = Query(..., description="Từ giờ VN, định dạng 'YYYY-MM-DD HH:MM'"),
+    to_dt: str = Query(..., description="Đến giờ VN, định dạng 'YYYY-MM-DD HH:MM'"),
+    db: Session = Depends(get_db),
+    _user=Depends(_gps_admin_required),
+):
+    """Thử gọi Bình Minh history API để backfill snapshot trong khoảng thời gian đã chỉ định.
+
+    Yêu cầu `GPS_HISTORY_API_URL` được set trong .env.
+    Nếu chưa set, trả về hướng dẫn tìm URL bằng DevTools.
+
+    Cách tìm URL:
+    1. Mở gpsbinhminh.vn → đăng nhập → vào mục Báo cáo → Lộ trình
+    2. Mở F12 → Network tab → Chọn xe + khoảng ngày → bấm Tìm kiếm
+    3. Copy URL API call xuất hiện (thường là /Report/Routes hoặc /Vehicle/Routes)
+    4. Thêm GPS_HISTORY_API_URL=<url đó> vào .env và restart backend
+    """
+    if not settings.GPS_HISTORY_API_URL:
+        return {
+            "status": "not_configured",
+            "message": (
+                "GPS_HISTORY_API_URL chưa được set trong .env. "
+                "Để tìm URL: mở gpsbinhminh.vn → Báo cáo → Lộ trình → F12 Network → "
+                "chọn khoảng ngày + xe → Copy URL API call → thêm vào .env rồi restart."
+            ),
+            "env_key": "GPS_HISTORY_API_URL",
+        }
+
+    # Parse khoảng thời gian VN → UTC
+    from_utc = _parse_gps_time(from_dt + ":00") or _parse_gps_time(from_dt)
+    to_utc = _parse_gps_time(to_dt + ":00") or _parse_gps_time(to_dt)
+    if from_utc is None or to_utc is None:
+        raise HTTPException(400, "Không parse được from_dt/to_dt. Dùng format 'YYYY-MM-DD HH:MM'")
+
+    if (to_utc - from_utc).total_seconds() > 7 * 86400:
+        raise HTTPException(400, "Khoảng thời gian backfill tối đa 7 ngày")
+
+    # Gọi history API
+    params = {
+        "pageIds": settings.GPS_PAGE_IDS,
+        "username": settings.GPS_USERNAME,
+        "pwd": settings.GPS_PASSWORD,
+        "from": (from_utc + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S"),
+        "to": (to_utc + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(settings.GPS_HISTORY_API_URL, params=params)
+            resp.raise_for_status()
+            raw = resp.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Lỗi gọi Bình Minh history API: {exc}")
+
+    # Normalize — thử nhiều format response phổ biến
+    records: list[dict] = []
+    if isinstance(raw, list):
+        records = raw
+    elif isinstance(raw, dict):
+        for key in ("Data", "data", "Routes", "routes", "Items", "items"):
+            if isinstance(raw.get(key), list):
+                records = raw[key]
+                break
+
+    if not records:
+        return {"status": "ok", "records_from_api": 0, "inserted": 0, "skipped": 0,
+                "note": "API trả về rỗng — có thể format params khác. Check GPS_HISTORY_API_URL và thử lại."}
+
+    # Refresh xe cache
+    if not _xe_plate_cache or time.time() - _xe_cache_ts >= XE_CACHE_TTL:
+        _refresh_xe_cache(db)
+
+    inserted = 0
+    skipped = 0
+    to_insert: list[GpsSnapshot] = []
+
+    for r in records:
+        # Thử nhiều field name Bình Minh có thể dùng
+        plate = (r.get("Plate") or r.get("plate") or r.get("LicensePlate") or "").strip().upper()
+        if not plate:
+            continue
+
+        time_raw = r.get("TimeUpdate") or r.get("time") or r.get("DateTime") or r.get("Timestamp") or ""
+        created_utc = _parse_gps_time(str(time_raw))
+        if created_utc is None:
+            skipped += 1
+            continue
+
+        if _dedup_window_seconds(plate, created_utc, db):
+            skipped += 1
+            continue
+
+        km_total = float(r.get("Km") or r.get("km_total") or r.get("Odometer") or 0)
+        fuel = float(r.get("Fuel") or r.get("fuel_pct") or r.get("FuelLevel") or 0)
+        xe_id = _xe_plate_cache.get(_normalize_plate(plate))
+        snap_date = (created_utc + timedelta(hours=7)).date()
+
+        to_insert.append(GpsSnapshot(
+            bien_so=plate,
+            xe_id=xe_id,
+            ngay=snap_date,
+            lat=r.get("Lat") or r.get("lat"),
+            lng=r.get("Lng") or r.get("lng"),
+            speed=float(r.get("Speed") or r.get("speed") or 0),
+            fuel_pct=fuel,
+            km_today=float(r.get("TripKm") or r.get("km_today") or 0),
+            km_total=km_total,
+            is_stop=bool(r.get("IsStop") if "IsStop" in r else r.get("is_stop", True)),
+            address=r.get("Address") or r.get("address"),
+            created_at=created_utc,
+        ))
+        inserted += 1
+
+    if to_insert:
+        try:
+            db.add_all(to_insert)
+            db.commit()
+            logger.info("GPS backfill: inserted %d snapshots (skipped %d)", inserted, skipped)
+        except Exception as exc:
+            db.rollback()
+            raise HTTPException(500, f"Lỗi khi lưu snapshot backfill: {exc}")
+
+    return {
+        "status": "ok",
+        "records_from_api": len(records),
+        "inserted": inserted,
+        "skipped": skipped,
+        "from_vn": from_dt,
+        "to_vn": to_dt,
+    }
+
+
+# ─── Binh Minh systemroute API sync ──────────────────────────────────────────
+
+import json as _json
+import os as _os
+
+# __file__ = backend/app/routers/gps.py → dirname×2 = backend/app/ → join data/
+_SERIALS_PATH = _os.path.normpath(
+    _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "data", "binhminh_serials.json")
+)
+
+
+def _load_serials() -> dict[str, int]:
+    """Load plate → serial mapping từ file JSON. Trả dict rỗng nếu file không tồn tại."""
+    try:
+        if _os.path.exists(_SERIALS_PATH):
+            with open(_SERIALS_PATH, "r", encoding="utf-8") as f:
+                data = _json.load(f)
+            return {k.upper().replace("-", "").replace(" ", ""): int(v) for k, v in data.items()}
+    except Exception as exc:
+        logger.warning("_load_serials failed: %s", exc)
+    return {}
+
+
+def _save_serials(mapping: dict[str, int]) -> None:
+    """Lưu plate → serial mapping vào file JSON."""
+    _os.makedirs(_os.path.dirname(_SERIALS_PATH), exist_ok=True)
+    with open(_SERIALS_PATH, "w", encoding="utf-8") as f:
+        _json.dump(mapping, f, ensure_ascii=False, indent=2)
+
+
+@router.get("/binhminh-serials")
+def get_binhminh_serials(_user=Depends(get_current_user)):
+    """Trả danh sách plate → serial GPS device đã biết."""
+    mapping = _load_serials()
+    return {"serials": [{"bien_so": k, "serial": v} for k, v in sorted(mapping.items())]}
+
+
+class SerialItem(BaseModel):
+    bien_so: str
+    serial: int
+
+
+@router.post("/binhminh-serials")
+def upsert_binhminh_serial(item: SerialItem, _user=Depends(_gps_admin_required)):
+    """Thêm hoặc cập nhật serial GPS device cho một biển số.
+
+    Lấy serial bằng cách: mở systemroute.gpsbinhminh.vn → F12 Network →
+    bấm xem báo cáo nhiên liệu → request TongHopNlBySerialListV2 → xem request body → copy số nguyên đó.
+    """
+    plate_norm = item.bien_so.upper().replace("-", "").replace(" ", "")
+    mapping = _load_serials()
+    mapping[plate_norm] = item.serial
+    _save_serials(mapping)
+    return {"bien_so": plate_norm, "serial": item.serial, "total": len(mapping)}
+
+
+@router.post("/binhminh-serials/bulk")
+def bulk_upsert_binhminh_serials(items: list[SerialItem], _user=Depends(_gps_admin_required)):
+    """Thêm nhiều plate→serial cùng lúc.
+
+    Body: [{"bien_so": "51C43477", "serial": 790151200953}, ...]
+
+    Cách lấy tất cả serials cùng lúc:
+    1. Mở systemroute.gpsbinhminh.vn
+    2. F12 → Network tab → filter 'TongHopNlBySerialListV2'
+    3. Bấm báo cáo nhiên liệu (Tổng hợp nhiên liệu)
+    4. Nhiều request xuất hiện — mỗi request 1 xe, body là [<serial>]
+    5. Click từng request → Payload → ghi lại serial + đối chiếu plate từ Response (field 'Bs')
+    6. Gọi endpoint này để add tất cả cùng lúc
+    """
+    mapping = _load_serials()
+    for item in items:
+        plate_norm = item.bien_so.upper().replace("-", "").replace(" ", "")
+        mapping[plate_norm] = item.serial
+    _save_serials(mapping)
+    return {"saved": len(items), "total": len(mapping)}
+
+
+@router.delete("/binhminh-serials/{bien_so}")
+def delete_binhminh_serial(bien_so: str, _user=Depends(_gps_admin_required)):
+    """Xóa serial mapping của một biển số."""
+    plate_norm = bien_so.upper().replace("-", "").replace(" ", "")
+    mapping = _load_serials()
+    if plate_norm not in mapping:
+        raise HTTPException(404, f"Không tìm thấy serial cho {bien_so}")
+    del mapping[plate_norm]
+    _save_serials(mapping)
+    return {"deleted": plate_norm, "total": len(mapping)}
+
+
+def _parse_bm_fills(fuel_values: str, times: str, locations: str, types: str) -> list[dict]:
+    """Parse semicolon-separated fill data từ Bình Minh API response."""
+    fvs = [v.strip() for v in fuel_values.rstrip(";").split(";") if v.strip()]
+    tms = [v.strip() for v in times.rstrip(";").split(";") if v.strip()]
+    locs = [v.strip() for v in locations.rstrip(";").split(";") if v.strip()]
+    typs = [v.strip() for v in types.rstrip(";").split(";") if v.strip()]
+    fills = []
+    for i, fv in enumerate(fvs):
+        try:
+            so_lit = float(fv)
+        except ValueError:
+            continue
+        fills.append({
+            "so_lit": so_lit,
+            "gio": tms[i] if i < len(tms) else None,
+            "dia_diem": locs[i] if i < len(locs) else None,
+            "loai": typs[i] if i < len(typs) else "Tăng",
+        })
+    return fills
+
+
+@router.post("/binhminh-sync")
+async def binhminh_sync(
+    ngay: date = Query(..., description="Ngày cần sync, ví dụ 2026-05-21"),
+    db: Session = Depends(get_db),
+    _user=Depends(_gps_admin_required),
+):
+    """Đồng bộ tổng hợp nhiên liệu từ Bình Minh systemroute API.
+
+    Gọi sau khi server restart để bù dữ liệu bị miss.
+    Yêu cầu GPS_BINHMINH_TOKEN trong .env và ít nhất 1 serial trong binhminh_serials.json.
+
+    API: POST /api/LogManager/TongHopNlBySerialListV2
+         body = [serial1, serial2, ...]  (JSON array of integer device serials)
+         ?companyId={GPS_PAGE_IDS}&beginTime=HH:MM:SS MM/DD/YYYY&endTime=...
+    Header: token / x-access-token
+
+    Cách lấy serial: mở systemroute.gpsbinhminh.vn → F12 Network →
+    bấm báo cáo nhiên liệu → tìm request TongHopNlBySerialListV2 → copy request body.
+    Sau đó gọi POST /api/gps/binhminh-serials để thêm vào hệ thống.
+    """
+    if not settings.GPS_BINHMINH_TOKEN:
+        return {
+            "status": "not_configured",
+            "message": (
+                "GPS_BINHMINH_TOKEN chưa set trong .env. "
+                "Lấy bằng cách: mở gpsbinhminh.vn → F12 → Network → tìm request → copy giá trị header 'token'."
+            ),
+        }
+
+    # Load serial number mapping (plate_norm → int serial)
+    serial_map = _load_serials()
+
+    # Cũng check GPS_BINHMINH_SERIALS trong .env (legacy / override)
+    env_serials_str = settings.GPS_BINHMINH_SERIALS.strip()
+    if env_serials_str:
+        for s in env_serials_str.split(","):
+            s = s.strip()
+            if s.isdigit():
+                # Nếu serial từ .env không có trong file, thêm vào runtime nhưng không ghi file
+                s_int = int(s)
+                if s_int not in serial_map.values():
+                    serial_map[f"SERIAL_{s_int}"] = s_int
+
+    if not serial_map:
+        return {
+            "status": "no_serials",
+            "message": (
+                "Chưa có serial GPS device nào. "
+                "Để thêm: mở systemroute.gpsbinhminh.vn → F12 Network → "
+                "bấm báo cáo nhiên liệu → tìm request TongHopNlBySerialListV2 → copy request body (số nguyên). "
+                "Sau đó gọi POST /api/gps/binhminh-serials với {bien_so, serial}."
+            ),
+            "add_serial_endpoint": "POST /api/gps/binhminh-serials",
+        }
+
+    serial_list = list(set(serial_map.values()))
+    logger.info("Bình Minh sync: using %d serials for date %s", len(serial_list), ngay)
+
+    mm_dd_yyyy = ngay.strftime("%m/%d/%Y")
+    begin = f"00:00:00 {mm_dd_yyyy}"
+    end = f"23:59:59 {mm_dd_yyyy}"
+    url = f"{settings.GPS_BINHMINH_SYSTEM_URL}/api/LogManager/TongHopNlBySerialListV2"
+    params = {
+        "companyId": settings.GPS_PAGE_IDS,
+        "beginTime": begin,
+        "endTime": end,
+    }
+    headers = {
+        "token": settings.GPS_BINHMINH_TOKEN,
+        "x-access-token": settings.GPS_BINHMINH_TOKEN,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Origin": "https://gpsbinhminh.vn",
+        "Referer": "https://gpsbinhminh.vn/",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(url, params=params, headers=headers, json=serial_list)
+            resp.raise_for_status()
+            raw = resp.json()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(exc.response.status_code, f"Bình Minh API lỗi: {exc}")
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Không kết nối được Bình Minh API: {exc}")
+
+    if raw.get("Status") != 1:
+        raise HTTPException(502, f"Bình Minh API trả lỗi: {raw.get('Description') or raw}")
+
+    records: list[dict] = raw.get("TongHopNlTranfers") or []
+    if not records:
+        return {"status": "ok", "synced": 0, "message": "Không có dữ liệu cho ngày này"}
+
+    upserted = 0
+    from app.models.gps import GpsBinhMinhDaily
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    for r in records:
+        plate = (r.get("Bs") or "").strip().upper()
+        if not plate:
+            continue
+
+        fills = _parse_bm_fills(
+            str(r.get("FuelValue") or ""),
+            str(r.get("ThayDoiNlTime") or ""),
+            str(r.get("ActionLocation") or ""),
+            str(r.get("DeviceStatusType") or ""),
+        )
+
+        stmt = pg_insert(GpsBinhMinhDaily).values(
+            bien_so=plate,
+            ngay=ngay,
+            km_odometer=float(r.get("KmGps") or 0),
+            nl_dau_ngay=float(r.get("NhienLieuDauNgay") or 0),
+            nl_tieu_thu=float(r.get("NhienLieuTieuThu") or 0),
+            dung_tich_binh=float(r.get("DungTichBinh") or 0),
+            fills_json=_json.dumps(fills, ensure_ascii=False) if fills else None,
+            synced_at=datetime.utcnow(),
+        ).on_conflict_do_update(
+            constraint="uq_binhminh_daily_plate_date",
+            set_={
+                "km_odometer": float(r.get("KmGps") or 0),
+                "nl_dau_ngay": float(r.get("NhienLieuDauNgay") or 0),
+                "nl_tieu_thu": float(r.get("NhienLieuTieuThu") or 0),
+                "dung_tich_binh": float(r.get("DungTichBinh") or 0),
+                "fills_json": _json.dumps(fills, ensure_ascii=False) if fills else None,
+                "synced_at": datetime.utcnow(),
+            },
+        )
+        db.execute(stmt)
+        upserted += 1
+
+    db.commit()
+    logger.info("Bình Minh sync: upserted %d rows for %s", upserted, ngay)
+    return {
+        "status": "ok",
+        "ngay": ngay.isoformat(),
+        "synced": upserted,
+        "fills_total": sum(
+            len(_parse_bm_fills(
+                str(r.get("FuelValue") or ""),
+                str(r.get("ThayDoiNlTime") or ""),
+                str(r.get("ActionLocation") or ""),
+                str(r.get("DeviceStatusType") or ""),
+            ))
+            for r in records if r.get("Bs")
+        ),
     }

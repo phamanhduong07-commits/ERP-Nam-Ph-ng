@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import Boolean, Date, DateTime, Float, Integer, Numeric, String, ForeignKey
+from sqlalchemy import Boolean, Date, DateTime, Float, Integer, Numeric, String, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -26,6 +26,23 @@ class GpsSnapshot(Base):
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     xe = relationship("Xe", foreign_keys=[xe_id])
+
+
+class GpsBinhMinhDaily(Base):
+    """Tổng hợp nhiên liệu hàng ngày từ Bình Minh API — nguồn chính xác kể cả khi server restart."""
+    __tablename__ = "gps_binhminh_daily"
+    __table_args__ = (UniqueConstraint("bien_so", "ngay", name="uq_binhminh_daily_plate_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bien_so: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    ngay: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    km_odometer: Mapped[float] = mapped_column(Float, default=0)   # KmGps — đồng hồ cuối ngày
+    nl_dau_ngay: Mapped[float] = mapped_column(Float, default=0)   # NhienLieuDauNgay (L)
+    nl_tieu_thu: Mapped[float] = mapped_column(Float, default=0)   # NhienLieuTieuThu (L) — Bình Minh tính
+    dung_tich_binh: Mapped[float] = mapped_column(Float, default=0)
+    # JSON list: [{"so_lit": 110.0, "gio": "12:34:13", "dia_diem": "...", "loai": "Tăng"}]
+    fills_json: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
 class DrainAlertLog(Base):

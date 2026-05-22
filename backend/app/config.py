@@ -47,6 +47,17 @@ class Settings(BaseSettings):
     GPS_PAGE_IDS: str = "504"
     GPS_USERNAME: str = ""
     GPS_PASSWORD: str = ""
+    # History API (tùy chọn) — nếu Bình Minh có endpoint lịch sử, set URL vào đây để backfill sau restart
+    # Ví dụ: GPS_HISTORY_API_URL=https://api.gpsbinhminh.vn/Report/Routes
+    GPS_HISTORY_API_URL: str = ""
+    # Bình Minh systemroute API — tổng hợp nhiên liệu hàng ngày
+    # URL: https://systemroute.gpsbinhminh.vn
+    # Token: lấy từ F12 → Network khi đăng nhập gpsbinhminh.vn (field "token" trong header)
+    GPS_BINHMINH_SYSTEM_URL: str = "https://systemroute.gpsbinhminh.vn"
+    GPS_BINHMINH_TOKEN: str = ""  # Session token — set trong .env, hết hạn thì lấy lại từ portal
+    # Danh sách serial GPS device, ngăn cách bằng dấu phẩy — lấy từ F12 Network header 'Serial' trong TongHopNlBySerialListV2
+    # Ví dụ: GPS_BINHMINH_SERIALS="679316178,123456789,987654321"
+    GPS_BINHMINH_SERIALS: str = ""
 
 
 settings = Settings()

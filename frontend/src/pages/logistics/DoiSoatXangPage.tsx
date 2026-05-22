@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import {
-  Button, Card, Col, DatePicker, Row, Space, Statistic, Table, Tag, Tooltip, Typography,
+  Button, Card, Col, DatePicker, Row, Space, Statistic, Table, Tag, Tooltip, Typography, message,
 } from 'antd'
-import { AlertOutlined, DownloadOutlined, ReloadOutlined } from '@ant-design/icons'
+import { AlertOutlined, CloudSyncOutlined, DownloadOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import dayjs, { Dayjs } from 'dayjs'
 import * as XLSX from 'xlsx'
@@ -24,6 +24,7 @@ interface FuelRow {
   chenh_lech_lit: number | null
   chenh_lech_pct: number | null
   canh_bao: 'ok' | 'warning' | 'danger' | 'no_data'
+  nguon_tieu_hao?: 'binhminh' | 'snapshot'
 }
 
 const fmt1 = (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 1 })
@@ -45,9 +46,32 @@ const ROW_BG: Record<string, string> = {
 export default function DoiSoatXangPage() {
   const today = dayjs()
   const [range, setRange] = useState<[Dayjs, Dayjs]>([today.startOf('month'), today])
+  const [syncing, setSyncing] = useState(false)
 
   const fromDate = range[0].format('YYYY-MM-DD')
   const toDate = range[1].format('YYYY-MM-DD')
+
+  const syncBinhMinh = async () => {
+    setSyncing(true)
+    try {
+      // Sync từng ngày trong khoảng (tối đa 7 ngày để tránh quá tải)
+      const days = range[1].diff(range[0], 'day') + 1
+      const syncDays = Math.min(days, 7)
+      let totalSynced = 0
+      for (let i = 0; i < syncDays; i++) {
+        const d = range[0].add(i, 'day').format('YYYY-MM-DD')
+        const res = await client.post(`/gps/binhminh-sync?ngay=${d}`)
+        totalSynced += res.data?.synced ?? 0
+      }
+      message.success(`Đã sync ${totalSynced} xe từ Bình Minh (${syncDays} ngày)`)
+      refetch()
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(detail ?? 'Sync thất bại — kiểm tra GPS_BINHMINH_TOKEN trong .env')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const { data = [], isFetching, refetch } = useQuery<FuelRow[]>({
     queryKey: ['fuel-comparison', fromDate, toDate],
@@ -128,11 +152,18 @@ export default function DoiSoatXangPage() {
       title: 'Tiêu hao GPS',
       dataIndex: 'tieu_hao_gps',
       key: 'tieu_hao_gps',
-      width: 120,
+      width: 130,
       align: 'right' as const,
       sorter: (a: FuelRow, b: FuelRow) => a.tieu_hao_gps - b.tieu_hao_gps,
-      render: (v: number) => v > 0
-        ? <Text strong>{fmt1(v)} L</Text>
+      render: (v: number, r: FuelRow) => v > 0
+        ? (
+          <Space direction="vertical" size={0} style={{ alignItems: 'flex-end' }}>
+            <Text strong>{fmt1(v)} L</Text>
+            {r.nguon_tieu_hao === 'binhminh' && (
+              <Tag color="blue" style={{ fontSize: 10, lineHeight: '14px', padding: '0 4px', marginRight: 0 }}>BM</Tag>
+            )}
+          </Space>
+        )
         : <Text type="secondary">—</Text>,
     },
     {
@@ -213,6 +244,11 @@ export default function DoiSoatXangPage() {
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching}>
             Tải lại
           </Button>
+          <Tooltip title="Lấy dữ liệu nhiên liệu chính xác từ Bình Minh (dùng sau khi server restart)">
+            <Button icon={<CloudSyncOutlined />} onClick={syncBinhMinh} loading={syncing}>
+              Sync Bình Minh
+            </Button>
+          </Tooltip>
           <Button icon={<DownloadOutlined />} onClick={exportToExcel} disabled={data.length === 0}>
             Xuất Excel
           </Button>
