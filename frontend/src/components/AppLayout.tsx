@@ -301,6 +301,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       label: 'Chất lượng',
       children: [
         { key: '/quality/qc-sheets', label: <Link to="/quality/qc-sheets">Phiếu kiểm tra QC</Link> },
+        { key: '/quality/giay-cuon', label: <Link to="/quality/giay-cuon">Giấy cuộn (QC)</Link> },
       ],
     },
     {

@@ -97,6 +97,27 @@ def _enrich(phieu: QCGiayCuonPhieu, db: Session) -> QCGiayCuonResponse:
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
+@router.get("/tieu-chuan/{paper_material_id}")
+def get_tieu_chuan(
+    paper_material_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Lấy tiêu chuẩn của một loại giấy để hiển thị trong form."""
+    pm = db.get(PaperMaterial, paper_material_id)
+    if not pm:
+        raise HTTPException(404, "Không tìm thấy mã nguyên vật liệu")
+    return {
+        "ma_chinh": pm.ma_chinh,
+        "ten": pm.ten,
+        "kho": float(pm.kho) if pm.kho is not None else None,
+        "dinh_luong": float(pm.dinh_luong) if pm.dinh_luong is not None else None,
+        "tieu_chuan_dinh_luong": float(pm.tieu_chuan_dinh_luong) if pm.tieu_chuan_dinh_luong is not None else None,
+        "do_buc_tieu_chuan": float(pm.do_buc_tieu_chuan) if pm.do_buc_tieu_chuan is not None else None,
+        "do_nen_vong_tc": float(pm.do_nen_vong_tc) if pm.do_nen_vong_tc is not None else None,
+    }
+
+
 @router.get("/stats", response_model=QCGiayCuonStatsResponse)
 def get_stats(
     tu_ngay: Optional[date] = Query(None),

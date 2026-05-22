@@ -111,6 +111,7 @@ const CCDCListPage = lazy(() => import('./pages/accounting/CCDCListPage'))
 const BankAccountList = lazy(() => import('./pages/danhmuc/BankAccountList'))
 // Quality
 const QCListPage = lazy(() => import('./pages/quality/QCListPage'))
+const QCGiayCuonPage = lazy(() => import('./pages/quality/QCGiayCuonPage'))
 // Maintenance
 const MaintenanceSchedulePage = lazy(() => import('./pages/maintenance/MaintenanceSchedulePage'))
 const MaintenanceLogPage = lazy(() => import('./pages/maintenance/MaintenanceLogPage'))
@@ -380,6 +381,7 @@ export default function App() {
             <Route path="hr/me" element={<ErrorBoundary><EmployeeMobilePortal /></ErrorBoundary>} />
             <Route path="hr/permission-matrix" element={<ErrorBoundary><PermissionMatrixPage /></ErrorBoundary>} />
             <Route path="quality/qc-sheets" element={<ErrorBoundary><QCListPage /></ErrorBoundary>} />
+            <Route path="quality/giay-cuon" element={<ErrorBoundary><QCGiayCuonPage /></ErrorBoundary>} />
             <Route path="maintenance/schedules" element={<ErrorBoundary><MaintenanceSchedulePage /></ErrorBoundary>} />
             <Route path="maintenance/logs" element={<ErrorBoundary><MaintenanceLogPage /></ErrorBoundary>} />
             <Route path="crm/interactions" element={<ErrorBoundary><CustomerInteractionPage /></ErrorBoundary>} />
