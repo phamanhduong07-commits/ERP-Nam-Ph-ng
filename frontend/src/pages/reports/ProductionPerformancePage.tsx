@@ -4,11 +4,11 @@ import {
   Button, Card, Col, DatePicker, Row, Select, Space, Statistic,
   Table, Tag, Progress, Typography,
 } from 'antd'
-import { FileExcelOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileExcelOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { reportsApi, ProductionPerfRow } from '../../api/reports'
-import { exportToExcel } from '../../utils/exportUtils'
+import { exportToExcel, downloadBlob } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -30,6 +30,11 @@ export default function ProductionPerformancePage() {
     queryFn: () => reportsApi.getProductionPerformance({ tu_ngay: tuNgay, den_ngay: denNgay }),
     enabled: !!(tuNgay && denNgay),
   })
+
+  const handleExportServer = async () => {
+    const blob = await reportsApi.exportProductionPerformance({ tu_ngay: tuNgay, den_ngay: denNgay })
+    downloadBlob(blob, `nang_suat_sx_${tuNgay}_${denNgay}.xlsx`)
+  }
 
   const handleExcel = () => {
     if (!data) return
@@ -81,8 +86,12 @@ export default function ProductionPerformancePage() {
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>Báo cáo năng suất sản xuất</Title>
-        <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data}
-          style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
+        <Space>
+          <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data}
+            style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
+          <Button icon={<DownloadOutlined />} onClick={handleExportServer} disabled={!data}
+            style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel (Server)</Button>
+        </Space>
       </div>
 
       <Card size="small" style={{ marginBottom: 16 }}>

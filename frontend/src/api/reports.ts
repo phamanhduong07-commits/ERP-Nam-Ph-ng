@@ -191,6 +191,22 @@ export const reportsApi = {
   getDeliveryReport: (params: { tu_ngay: string; den_ngay: string }): Promise<DeliveryReportResponse> =>
     client.get('/reports/delivery-report', { params }).then(r => r.data),
 
+  // ── Export endpoints (server-side openpyxl, styled header) ──────────────────
+  exportRevenue: (params: { tu_ngay: string; den_ngay: string; nhom?: string }): Promise<Blob> =>
+    client.get('/reports/revenue/export', { params, responseType: 'blob' }).then(r => r.data),
+
+  exportInventoryMovement: (params: { tu_ngay: string; den_ngay: string; warehouse_id?: number }): Promise<Blob> =>
+    client.get('/reports/inventory-movement/export', { params, responseType: 'blob' }).then(r => r.data),
+
+  exportDebtSummary: (params: { as_of_date?: string }): Promise<Blob> =>
+    client.get('/reports/debt-summary/export', { params, responseType: 'blob' }).then(r => r.data),
+
+  exportProductionPerformance: (params: { tu_ngay: string; den_ngay: string; phan_xuong_id?: number }): Promise<Blob> =>
+    client.get('/reports/production-performance/export', { params, responseType: 'blob' }).then(r => r.data),
+
+  exportOrderProgress: (params: { tu_ngay: string; den_ngay: string; trang_thai?: string; customer_id?: number }): Promise<Blob> =>
+    client.get('/reports/order-progress/export', { params, responseType: 'blob' }).then(r => r.data),
+
   // --- Quản trị & Tài chính ---
   getWorkshopPNL: (params: { phan_xuong_id: number; tu_ngay: string; den_ngay: string }) =>
     client.get('/accounting/reports/workshop-pnl', { params }).then(r => r.data),

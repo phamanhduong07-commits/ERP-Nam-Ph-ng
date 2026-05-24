@@ -4,11 +4,11 @@ import {
   Button, Card, Col, DatePicker, Row, Select, Space, Statistic,
   Table, Tag, Progress, Typography,
 } from 'antd'
-import { FileExcelOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileExcelOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { reportsApi, OrderProgressRow } from '../../api/reports'
-import { exportToExcel, fmtVND } from '../../utils/exportUtils'
+import { exportToExcel, fmtVND, downloadBlob } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -34,6 +34,13 @@ export default function OrderProgressPage() {
     }),
     enabled: !!(tuNgay && denNgay),
   })
+
+  const handleExportServer = async () => {
+    const params: { tu_ngay: string; den_ngay: string; trang_thai?: string } = { tu_ngay: tuNgay, den_ngay: denNgay }
+    if (filterTT) params.trang_thai = filterTT
+    const blob = await reportsApi.exportOrderProgress(params)
+    downloadBlob(blob, `tien_do_don_hang_${tuNgay}_${denNgay}.xlsx`)
+  }
 
   const handleExcel = () => {
     if (!data) return
@@ -83,8 +90,12 @@ export default function OrderProgressPage() {
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>Báo cáo tiến độ đơn hàng</Title>
-        <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data}
-          style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
+        <Space>
+          <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data}
+            style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
+          <Button icon={<DownloadOutlined />} onClick={handleExportServer} disabled={!data}
+            style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel (Server)</Button>
+        </Space>
       </div>
 
       <Card size="small" style={{ marginBottom: 16 }}>

@@ -4,11 +4,11 @@ import {
   Button, Card, Col, DatePicker, Radio, Row, Select, Space, Statistic,
   Table, Tooltip, Typography,
 } from 'antd'
-import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { reportsApi, RevenueKyRow, RevenueCustomerRow } from '../../api/reports'
-import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
+import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -76,6 +76,11 @@ export default function RevenueReportPage() {
     ])
   }
 
+  const handleExportServer = async () => {
+    const blob = await reportsApi.exportRevenue({ tu_ngay: tuNgay, den_ngay: denNgay, nhom })
+    downloadBlob(blob, `doanh_thu_${tuNgay}_${denNgay}.xlsx`)
+  }
+
   const handlePrint = () => {
     if (!data) return
     const body = buildHtmlTable(
@@ -91,6 +96,8 @@ export default function RevenueReportPage() {
         <Title level={4} style={{ margin: 0 }}>Báo cáo doanh thu</Title>
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data}>Excel</Button>
+          <Button icon={<DownloadOutlined />} onClick={handleExportServer} disabled={!data}
+            style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
           <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!data}>In</Button>
         </Space>
       </div>

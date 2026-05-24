@@ -1,8 +1,12 @@
+import io
 from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, case
 from sqlalchemy.orm import Session
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 
 from app.database import get_db
 from app.deps import get_current_user
@@ -503,3 +507,230 @@ def get_delivery_report(
             "da_giao": sum(1 for r in rows if r["trang_thai"] == "da_giao"),
         },
     }
+
+
+# ── Helpers xuất Excel ────────────────────────────────────────────────────────
+
+_HEADER_FILL = PatternFill("solid", fgColor="E65100")
+_HEADER_FONT = Font(bold=True, color="FFFFFF")
+_HEADER_ALIGN = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+
+def _make_workbook(sheet_name: str, headers: list[str], rows: list[list]) -> Workbook:
+    """Tạo workbook Excel với header màu cam Nam Phương và dữ liệu."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_name[:31]
+
+    # Header row
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = _HEADER_FONT
+        cell.fill = _HEADER_FILL
+        cell.alignment = _HEADER_ALIGN
+
+    # Data rows
+    for row in rows:
+        ws.append(row)
+
+    # Auto column width (capped at 40 chars)
+    for col in ws.columns:
+        max_len = max(
+            (len(str(c.value)) if c.value is not None else 0) for c in col
+        )
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+
+    return wb
+
+
+def _stream_workbook(wb: Workbook, filename: str) -> StreamingResponse:
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+# ── 7. Export: Báo cáo doanh thu ─────────────────────────────────────────────
+
+@router.get("/revenue/export")
+def export_revenue_excel(
+    tu_ngay: str = Query(...),
+    den_ngay: str = Query(...),
+    nhom: str = Query("month", description="day | month | quarter"),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất báo cáo doanh thu ra file Excel."""
+    # Lấy data từ endpoint gốc (reuse logic)
+    result = get_revenue_report(tu_ngay=tu_ngay, den_ngay=den_ngay, nhom=nhom, db=db, _=_)
+
+    # Sheet 1: Doanh thu theo kỳ
+    wb = _make_workbook(
+        "Theo kỳ",
+        ["Kỳ", "Doanh thu (đ)"],
+        [[r["ky"], r["doanh_thu"]] for r in result["theo_ky"]],
+    )
+
+    # Sheet 2: Top khách hàng
+    ws2 = wb.create_sheet("Top khách hàng")
+    headers2 = ["#", "Khách hàng", "Số đơn", "Doanh thu (đ)"]
+    ws2.append(headers2)
+    for cell in ws2[1]:
+        cell.font = _HEADER_FONT
+        cell.fill = _HEADER_FILL
+        cell.alignment = _HEADER_ALIGN
+    for i, r in enumerate(result["top_khach_hang"], 1):
+        ws2.append([i, r["ten_khach_hang"], r["so_don"], r["doanh_thu"]])
+    for col in ws2.columns:
+        max_len = max((len(str(c.value)) if c.value is not None else 0) for c in col)
+        ws2.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+
+    filename = f"doanh_thu_{tu_ngay}_{den_ngay}.xlsx"
+    return _stream_workbook(wb, filename)
+
+
+# ── 8. Export: Báo cáo xuất-nhập-tồn kho ─────────────────────────────────────
+
+@router.get("/inventory-movement/export")
+def export_inventory_movement_excel(
+    tu_ngay: str = Query(...),
+    den_ngay: str = Query(...),
+    warehouse_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất báo cáo xuất-nhập-tồn kho ra file Excel."""
+    result = get_inventory_movement(
+        tu_ngay=tu_ngay, den_ngay=den_ngay,
+        warehouse_id=warehouse_id, db=db, _=_,
+    )
+    rows_data = [
+        [
+            r["ten_kho"], r["ten_hang"], r["don_vi"],
+            r["ton_dau_ky"], r["nhap_trong_ky"],
+            r["xuat_trong_ky"], r["ton_cuoi_ky"], r["gia_tri_ton"],
+        ]
+        for r in result["rows"]
+    ]
+    wb = _make_workbook(
+        "Xuất nhập tồn",
+        ["Kho", "Hàng hóa", "ĐVT", "Tồn đầu kỳ", "Nhập trong kỳ",
+         "Xuất trong kỳ", "Tồn cuối kỳ", "Giá trị tồn (đ)"],
+        rows_data,
+    )
+    filename = f"xuat_nhap_ton_{tu_ngay}_{den_ngay}.xlsx"
+    return _stream_workbook(wb, filename)
+
+
+# ── 9. Export: Báo cáo công nợ tổng hợp ─────────────────────────────────────
+
+@router.get("/debt-summary/export")
+def export_debt_summary_excel(
+    as_of_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất báo cáo công nợ tổng hợp (AR + AP) ra file Excel."""
+    result = get_debt_summary(as_of_date=as_of_date, db=db, _=_)
+
+    headers = ["Đối tượng", "Số HĐ", "Tổng phát sinh (đ)", "Đã thanh toán (đ)",
+               "Còn lại (đ)", "Trong hạn (đ)", "Quá hạn (đ)"]
+
+    def _debt_rows(rows: list[dict]) -> list[list]:
+        return [
+            [r["ten_doi_tuong"], r["so_hoa_don"], r["tong_phat_sinh"],
+             r["da_thanh_toan"], r["con_lai"], r["trong_han"], r["qua_han"]]
+            for r in rows
+        ]
+
+    wb = _make_workbook("Phải thu (AR)", headers, _debt_rows(result["ar"]["rows"]))
+
+    ws2 = wb.create_sheet("Phải trả (AP)")
+    ws2.append(headers)
+    for cell in ws2[1]:
+        cell.font = _HEADER_FONT
+        cell.fill = _HEADER_FILL
+        cell.alignment = _HEADER_ALIGN
+    for row in _debt_rows(result["ap"]["rows"]):
+        ws2.append(row)
+    for col in ws2.columns:
+        max_len = max((len(str(c.value)) if c.value is not None else 0) for c in col)
+        ws2.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+
+    today_str = result["as_of_date"].replace("-", "")
+    filename = f"cong_no_{today_str}.xlsx"
+    return _stream_workbook(wb, filename)
+
+
+# ── 10. Export: Báo cáo năng suất sản xuất ───────────────────────────────────
+
+@router.get("/production-performance/export")
+def export_production_performance_excel(
+    tu_ngay: str = Query(...),
+    den_ngay: str = Query(...),
+    phan_xuong_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất báo cáo năng suất sản xuất ra file Excel."""
+    result = get_production_performance(
+        tu_ngay=tu_ngay, den_ngay=den_ngay,
+        phan_xuong_id=phan_xuong_id, db=db, _=_,
+    )
+    rows_data = [
+        [
+            r["so_lenh"], r["ngay_lenh"] or "", r["trang_thai"],
+            r["ten_khach_hang"] or "", r["ten_phan_xuong"] or "",
+            r["tong_ke_hoach"], r["tong_hoan_thanh"], r["ty_le_hoan_thanh"],
+            r["ngay_ke_hoach_xong"] or "", r["ngay_thuc_te_xong"] or "",
+            r["tre_han"] if r["tre_han"] is not None else "",
+        ]
+        for r in result["rows"]
+    ]
+    wb = _make_workbook(
+        "Năng suất SX",
+        ["Số lệnh", "Ngày lệnh", "Trạng thái", "Khách hàng", "Phân xưởng",
+         "KH (Thùng)", "Thực tế", "Tỉ lệ (%)", "Ngày KH xong", "Ngày TT xong", "Trễ (ngày)"],
+        rows_data,
+    )
+    filename = f"nang_suat_sx_{tu_ngay}_{den_ngay}.xlsx"
+    return _stream_workbook(wb, filename)
+
+
+# ── 11. Export: Báo cáo tiến độ đơn hàng ─────────────────────────────────────
+
+@router.get("/order-progress/export")
+def export_order_progress_excel(
+    tu_ngay: str = Query(...),
+    den_ngay: str = Query(...),
+    trang_thai: Optional[str] = Query(None),
+    customer_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất báo cáo tiến độ đơn hàng ra file Excel."""
+    result = get_order_progress(
+        tu_ngay=tu_ngay, den_ngay=den_ngay,
+        trang_thai=trang_thai, customer_id=customer_id, db=db, _=_,
+    )
+    rows_data = [
+        [
+            r["so_don"], r["ngay_don"] or "", r["ngay_giao_du_kien"] or "",
+            r["trang_thai"], r["ten_khach_hang"] or "",
+            r["so_luong_dat"], r["so_luong_da_giao"], r["so_luong_con_lai"],
+            r["ty_le_giao"], r["tong_tien"],
+        ]
+        for r in result["rows"]
+    ]
+    wb = _make_workbook(
+        "Tiến độ đơn hàng",
+        ["Số đơn", "Ngày đặt", "Ngày giao DK", "Trạng thái", "Khách hàng",
+         "SL đặt", "SL đã giao", "Còn lại", "Tỉ lệ (%)", "Tổng tiền (đ)"],
+        rows_data,
+    )
+    filename = f"tien_do_don_hang_{tu_ngay}_{den_ngay}.xlsx"
+    return _stream_workbook(wb, filename)

@@ -16,6 +16,21 @@ export type ExcelSheet = {
 
 // ─── Excel Export ─────────────────────────────────────────────────────────────
 
+/**
+ * Download a Blob response as a file.
+ * Dùng sau khi gọi API server-side export (axios responseType: 'blob').
+ */
+export function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 /** Build an .xlsx file with one or more sheets and trigger browser download */
 export function exportToExcel(filename: string, sheets: ExcelSheet[]) {
   const wb = XLSX.utils.book_new()

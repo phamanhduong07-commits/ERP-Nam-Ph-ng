@@ -4,11 +4,11 @@ import {
   Card, Col, DatePicker, Row, Space, Statistic, Table, Tabs, Tag, Typography,
   Button,
 } from 'antd'
-import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { reportsApi, DebtRow, DebtSummaryResponse } from '../../api/reports'
-import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
+import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 
@@ -131,6 +131,11 @@ export default function DebtSummaryPage() {
   const ar = data?.ar
   const ap = data?.ap
 
+  const handleExportServer = async () => {
+    const blob = await reportsApi.exportDebtSummary({ as_of_date: asOfDate })
+    downloadBlob(blob, `cong_no_${asOfDate.replace(/-/g, '')}.xlsx`)
+  }
+
   const handlePrint = () => {
     if (!data) return
     const cols = [
@@ -174,6 +179,8 @@ export default function DebtSummaryPage() {
             value={dayjs(asOfDate)}
             onChange={d => d && setAsOfDate(d.format('YYYY-MM-DD'))}
           />
+          <Button icon={<DownloadOutlined />} onClick={handleExportServer} disabled={!data}
+            style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
           <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!data}>In / PDF</Button>
         </Space>
       </div>

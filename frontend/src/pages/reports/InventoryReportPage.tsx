@@ -3,12 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Typography,
 } from 'antd'
-import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { reportsApi, InventoryMovementRow } from '../../api/reports'
 import { warehousesApi, Warehouse } from '../../api/warehouses'
-import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
+import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -42,6 +42,13 @@ export default function InventoryReportPage() {
       headers: ['Kho', 'Hàng hóa', 'ĐVT', 'Tồn đầu kỳ', 'Nhập trong kỳ', 'Xuất trong kỳ', 'Tồn cuối kỳ', 'Giá trị tồn'],
       rows: rows.map(r => [r.ten_kho, r.ten_hang, r.don_vi, r.ton_dau_ky, r.nhap_trong_ky, r.xuat_trong_ky, r.ton_cuoi_ky, r.gia_tri_ton]),
     }])
+  }
+
+  const handleExportServer = async () => {
+    const params: { tu_ngay: string; den_ngay: string; warehouse_id?: number } = { tu_ngay: tuNgay, den_ngay: denNgay }
+    if (warehouseId) params.warehouse_id = warehouseId
+    const blob = await reportsApi.exportInventoryMovement(params)
+    downloadBlob(blob, `xuat_nhap_ton_${tuNgay}_${denNgay}.xlsx`)
   }
 
   const handlePrint = () => {
@@ -86,6 +93,8 @@ export default function InventoryReportPage() {
         <Title level={4} style={{ margin: 0 }}>Báo cáo Xuất-Nhập-Tồn kho</Title>
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!rows.length}>Excel</Button>
+          <Button icon={<DownloadOutlined />} onClick={handleExportServer} disabled={!rows.length}
+            style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
           <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!rows.length}>In</Button>
         </Space>
       </div>
