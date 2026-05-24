@@ -55,16 +55,20 @@ export default function SalesReturnsPage() {
     queryFn: () => customersApi.list({ page_size: 100 }).then(r => r.data.items),
   })
 
+  // Khi filter phuong_an active: load toàn bộ (page_size=500) để client-side filter chính xác
+  const effectivePageSize = phuongAn ? 500 : pageSize
+  const effectivePage = phuongAn ? 1 : page
+
   const { data: returnsData, isLoading, refetch } = useQuery({
-    queryKey: ['sales-returns', search, trangThai, customerId, dateRange, page, pageSize],
+    queryKey: ['sales-returns', search, trangThai, customerId, dateRange, page, pageSize, phuongAn],
     queryFn: () => salesReturnsApi.list({
       search: search || undefined,
       trang_thai: trangThai || undefined,
       customer_id: customerId || undefined,
       tu_ngay: dateRange[0]?.format('YYYY-MM-DD'),
       den_ngay: dateRange[1]?.format('YYYY-MM-DD'),
-      page,
-      page_size: pageSize,
+      page: effectivePage,
+      page_size: effectivePageSize,
     }).then(r => r.data),
   })
 

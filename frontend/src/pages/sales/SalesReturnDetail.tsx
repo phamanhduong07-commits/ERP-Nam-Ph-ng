@@ -297,17 +297,17 @@ export default function SalesReturnDetail() {
       ellipsis: true,
     },
     {
-      title: 'SL đã bán',
+      title: 'SL đã giao',
       width: 100,
       align: 'center',
-      render: (_, r) => r.sales_order_item?.so_luong || 0,
+      render: (_, r) => r.delivery_order_item?.so_luong ?? r.sales_order_item?.so_luong ?? 0,
     },
     {
       title: 'SL trả',
       width: 100,
       render: (_, r) => editing ? (
         <Form.Item name={`so_luong_tra_${r.id}`} initialValue={r.so_luong_tra} rules={[{ required: true }]}>
-          <InputNumber min={1} max={r.sales_order_item?.so_luong || 0} style={{ width: 80 }} />
+          <InputNumber min={1} max={r.delivery_order_item?.so_luong ?? r.sales_order_item?.so_luong ?? 0} style={{ width: 80 }} />
         </Form.Item>
       ) : (
         <Text strong>{r.so_luong_tra}</Text>
@@ -360,6 +360,17 @@ export default function SalesReturnDetail() {
         </Form.Item>
       ) : (
         r.ly_do_tra || '—'
+      ),
+    },
+    {
+      title: 'Ghi chú',
+      width: 150,
+      render: (_, r) => editing ? (
+        <Form.Item name={`ghi_chu_item_${r.id}`} initialValue={r.ghi_chu}>
+          <Input placeholder="Ghi chú..." size="small" />
+        </Form.Item>
+      ) : (
+        r.ghi_chu || '—'
       ),
     },
   ]
@@ -448,7 +459,7 @@ export default function SalesReturnDetail() {
             {
               title: returnData.trang_thai === 'huy' ? 'Đã hủy' : 'Duyệt phiếu',
               description: returnData.approved_at
-                ? dayjs(returnData.approved_at).format('DD/MM HH:mm')
+                ? `${returnData.ten_nguoi_duyet || ''} ${dayjs(returnData.approved_at).format('DD/MM HH:mm')}`.trim()
                 : 'Chờ duyệt',
             },
             {
@@ -513,6 +524,16 @@ export default function SalesReturnDetail() {
                     </Button>
                   ) : '—'}
                 </Descriptions.Item>
+                <Descriptions.Item label="Phiếu giao hàng">
+                  {returnData.so_phieu_giao ? (
+                    <Space size={4}>
+                      <Text strong>{returnData.so_phieu_giao}</Text>
+                      {returnData.ngay_giao && (
+                        <Text type="secondary">({dayjs(returnData.ngay_giao).format('DD/MM/YYYY')})</Text>
+                      )}
+                    </Space>
+                  ) : '—'}
+                </Descriptions.Item>
                 <Descriptions.Item label="Khách hàng" span={2}>
                   {returnData.customer ? (
                     <Space>
@@ -523,7 +544,16 @@ export default function SalesReturnDetail() {
                 </Descriptions.Item>
                 <Descriptions.Item label="Lý do trả">{returnData.ly_do_tra}</Descriptions.Item>
                 <Descriptions.Item label="Người tạo">{returnData.ten_nguoi_tao || '—'}</Descriptions.Item>
-                <Descriptions.Item label="Người duyệt">{returnData.ten_nguoi_duyet || '—'}</Descriptions.Item>
+                <Descriptions.Item label="Người duyệt">
+                  {returnData.ten_nguoi_duyet
+                    ? <Space size={4}>
+                        <Text>{returnData.ten_nguoi_duyet}</Text>
+                        {returnData.approved_at && (
+                          <Text type="secondary">({dayjs(returnData.approved_at).format('DD/MM/YYYY HH:mm')})</Text>
+                        )}
+                      </Space>
+                    : '—'}
+                </Descriptions.Item>
                 <Descriptions.Item label="Tổng tiền trả">
                   <Text strong style={{ fontSize: 18, color: '#cf1322' }}>
                     {new Intl.NumberFormat('vi-VN').format(returnData.tong_tien_tra)}đ

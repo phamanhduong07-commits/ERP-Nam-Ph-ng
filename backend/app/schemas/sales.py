@@ -206,9 +206,20 @@ class SalesReturnItemUpdate(BaseModel):
     ghi_chu: str | None = None
 
 
+class DeliveryItemBasic(BaseModel):
+    id: int
+    so_luong: Decimal
+    ten_hang: str
+    dvt: str = "Thùng"
+
+    class Config:
+        from_attributes = True
+
+
 class SalesReturnItemResponse(BaseModel):
     id: int
     delivery_order_item_id: int | None = None
+    delivery_order_item: DeliveryItemBasic | None = None
     sales_order_item_id: int
     sales_order_item: SalesOrderItemResponse | None = None
     so_luong_tra: Decimal
@@ -252,6 +263,8 @@ class SalesReturnResponse(BaseModel):
     ngay_tra: date
     sales_order_id: int
     delivery_order_id: int | None = None
+    so_phieu_giao: str | None = None
+    ngay_giao: date | None = None
     sales_order: SalesOrderResponse | None = None
     customer_id: int
     customer: CustomerShort | None = None

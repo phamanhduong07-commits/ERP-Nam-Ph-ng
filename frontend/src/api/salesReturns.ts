@@ -4,6 +4,12 @@ import type { PagedResponse } from './customers'
 export interface SalesReturnItem {
   id: number
   delivery_order_item_id: number | null
+  delivery_order_item: {
+    id: number
+    so_luong: number
+    ten_hang: string
+    dvt: string
+  } | null
   sales_order_item_id: number
   sales_order_item: {
     id: number
@@ -26,6 +32,8 @@ export interface SalesReturn {
   ngay_tra: string
   sales_order_id: number
   delivery_order_id: number | null
+  so_phieu_giao: string | null
+  ngay_giao: string | null
   sales_order: {
     id: number
     so_don: string

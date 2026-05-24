@@ -369,6 +369,9 @@ def get_return(
     response.phuong_an_can_tru = phuong_an
     response.sales_invoice_id = invoice_id
     response.so_hoa_don = so_hoa_don
+    if return_obj.delivery_order:
+        response.so_phieu_giao = return_obj.delivery_order.so_phieu
+        response.ngay_giao = return_obj.delivery_order.ngay_xuat
     return response
 
 
