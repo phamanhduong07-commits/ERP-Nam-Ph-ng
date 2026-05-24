@@ -69,6 +69,9 @@ export default function PayrollPage() {
     onSuccess: () => {
       message.success('Da khoi tao bang luong thang thanh cong')
       refetchSummary()
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.detail || 'Khoi tao bang luong that bai')
     }
   })
 

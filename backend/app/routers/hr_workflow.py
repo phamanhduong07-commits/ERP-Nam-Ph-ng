@@ -1,7 +1,7 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.hr import LeaveRequest, Employee, AttendanceLog
@@ -81,9 +81,33 @@ def approve_leave_request(id: int, body: LeaveRequestUpdate, db: Session = Depen
         
         # TỰ ĐỘNG CẬP NHẬT VÀO CHẤM CÔNG NẾU LÀ NGHỈ PHÉP
         if req.loai_don == "nghi_phep":
-            # Logic tạo/cập nhật AttendanceLog cho các ngày nghỉ
-            # (Tạm thời note lại để triển khai chi tiết sau)
-            pass
+            start_date = req.ngay_bat_dau.date()
+            end_date = req.ngay_ket_thuc.date()
+            ghi_chu_leave = f"Nghỉ phép được duyệt{': ' + req.ly_do if req.ly_do else ''}"
+            current = start_date
+            while current <= end_date:
+                existing = (
+                    db.query(AttendanceLog)
+                    .filter(
+                        AttendanceLog.employee_id == req.employee_id,
+                        AttendanceLog.ngay == current,
+                    )
+                    .first()
+                )
+                if existing:
+                    existing.trang_thai = "nghi_phep"
+                    existing.so_cong = Decimal("1.0")
+                    existing.ghi_chu = ghi_chu_leave
+                else:
+                    db.add(AttendanceLog(
+                        employee_id=req.employee_id,
+                        ngay=current,
+                        loai="thu_cong",
+                        trang_thai="nghi_phep",
+                        so_cong=Decimal("1.0"),
+                        ghi_chu=ghi_chu_leave,
+                    ))
+                current += timedelta(days=1)
             
     db.commit()
     return {"status": "approved"}

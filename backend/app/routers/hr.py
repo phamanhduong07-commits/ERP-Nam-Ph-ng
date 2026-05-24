@@ -186,7 +186,7 @@ def list_employees(
     phap_nhan_id: Optional[int] = None,
     bo_phan_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     q = db.query(Employee)
     if search:
@@ -198,12 +198,14 @@ def list_employees(
         q = q.filter(Employee.phap_nhan_id == phap_nhan_id)
     if bo_phan_id:
         q = q.filter(Employee.bo_phan_id == bo_phan_id)
-    
+
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    is_hr_admin = role_code in ("ADMIN", "NHAN_SU")
+
     employees = q.all()
-    # Manual serialization to include related names
     result = []
     for e in employees:
-        result.append({
+        row = {
             "id": e.id,
             "ma_nv": e.ma_nv,
             "ho_ten": e.ho_ten,
@@ -233,10 +235,12 @@ def list_employees(
             "ten_phan_xuong": e.phan_xuong.ten_xuong if e.phan_xuong else None,
             "ten_phap_nhan": e.phap_nhan.ten_phap_nhan if e.phap_nhan else None,
             "has_account": e.user_id is not None,
-            "username": e.user.username if e.user else None,
-            "user_status": e.user.trang_thai if e.user else None,
-            "user_id": e.user_id
-        })
+        }
+        # Account details only for HR/Admin — prevents auth info leakage to floor workers
+        if is_hr_admin:
+            row["username"] = e.user.username if e.user else None
+            row["user_status"] = e.user.trang_thai if e.user else None
+        result.append(row)
     return result
 
 @router.get("/employees/import-template")
@@ -677,7 +681,7 @@ def import_contract_allowances(rows: List[dict], db: Session = Depends(get_db), 
     return {"ok": True, "created": created, "updated": updated}
 
 @router.post("/employees/{id}/issue-account")
-def issue_employee_account(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def issue_employee_account(id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
     from app.models.auth import Role, User
     import bcrypt
     
@@ -715,7 +719,7 @@ def issue_employee_account(id: int, db: Session = Depends(get_db), _: User = Dep
     return {"status": "success", "username": emp.ma_nv}
 
 @router.post("/employees/{id}/toggle-account-status")
-def toggle_account_status(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def toggle_account_status(id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
     from app.models.auth import User
     emp = db.get(Employee, id)
     if not emp or not emp.user_id:

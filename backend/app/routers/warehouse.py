@@ -3338,7 +3338,12 @@ def get_giao_dich(
     pm_ids = {r.paper_material_id for r in rows if r.paper_material_id}
     om_ids = {r.other_material_id for r in rows if r.other_material_id}
     pd_ids = {r.product_id for r in rows if r.product_id}
-    wh_rows = db.query(Warehouse).filter(Warehouse.id.in_(wh_ids)).all() if wh_ids else []
+    wh_rows = (
+        db.query(Warehouse)
+        .options(joinedload(Warehouse.phan_xuong_obj).joinedload(PhanXuong.phap_nhan))
+        .filter(Warehouse.id.in_(wh_ids))
+        .all()
+    ) if wh_ids else []
     wh_map = {w.id: w for w in wh_rows}
     pm_map = {p.id: (p.ma_chinh, p.ten) for p in db.query(PaperMaterial).filter(PaperMaterial.id.in_(pm_ids)).all()} if pm_ids else {}
     om_map = {p.id: (p.ma_chinh, p.ten) for p in db.query(OtherMaterial).filter(OtherMaterial.id.in_(om_ids)).all()} if om_ids else {}
