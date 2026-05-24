@@ -8,7 +8,8 @@ import {
   AlertOutlined, ArrowRightOutlined, CheckCircleOutlined, ClockCircleOutlined,
   DollarOutlined, InboxOutlined, ShoppingCartOutlined, ToolOutlined,
   TruckOutlined, AreaChartOutlined, WalletOutlined, RobotOutlined,
-  ThunderboltOutlined, AuditOutlined
+  ThunderboltOutlined, AuditOutlined, BuildOutlined, DatabaseOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '../store/auth'
 import client from '../api/client'
@@ -59,6 +60,14 @@ interface DashboardStats {
   purchase?: {
     po_cho_duyet: number
     po_dang_ve: number
+  }
+  kpi?: {
+    backlog_lsx: number
+    backlog_so_luong: number
+    ton_kho_phoi_kg: number
+    ton_kho_tp_sl: number
+    cong_no_qua_han_tien: number
+    cong_no_qua_han_so_hd: number
   }
 }
 
@@ -128,6 +137,7 @@ export default function Dashboard() {
   const prod = stats?.production
   const wh = stats?.warehouse
   const acc = stats?.accounting
+  const kpi = stats?.kpi
 
   return (
     <div style={{ padding: '24px 40px', background: '#f8f9fc', minHeight: '100vh' }}>
@@ -181,6 +191,102 @@ export default function Dashboard() {
             icon={<AlertOutlined />} 
             color="#f5222d" 
           />
+        </Col>
+      </Row>
+
+      {/* BLD KPI Row */}
+      <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
+        <Col xs={12} lg={6}>
+          <Card
+            variant="borderless"
+            style={{ borderRadius: 16, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <Text style={{ color: '#8c8c8c', fontSize: 13 }}>Backlog Sản xuất</Text>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <Title level={3} style={{ margin: 0, color: (kpi?.backlog_lsx ?? 0) > 50 ? '#cf1322' : '#1b168e', fontWeight: 800 }}>
+                    {(kpi?.backlog_lsx ?? 0).toLocaleString()}
+                  </Title>
+                  <Text style={{ color: '#8c8c8c', fontSize: 12 }}>lệnh</Text>
+                </div>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {(kpi?.backlog_so_luong ?? 0).toLocaleString()} thùng tồn đọng
+                </Text>
+              </div>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#fa8c1615', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fa8c16', fontSize: 20 }}>
+                <BuildOutlined />
+              </div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={12} lg={6}>
+          <Card
+            variant="borderless"
+            style={{ borderRadius: 16, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <Text style={{ color: '#8c8c8c', fontSize: 13 }}>Tồn kho phôi</Text>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <Title level={3} style={{ margin: 0, color: '#1b168e', fontWeight: 800 }}>
+                    {(kpi?.ton_kho_phoi_kg ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </Title>
+                  <Text style={{ color: '#8c8c8c', fontSize: 12 }}>kg</Text>
+                </div>
+                <Text type="secondary" style={{ fontSize: 12 }}>Toàn bộ kho PHOI</Text>
+              </div>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#13c2c215', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#13c2c2', fontSize: 20 }}>
+                <DatabaseOutlined />
+              </div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={12} lg={6}>
+          <Card
+            variant="borderless"
+            style={{ borderRadius: 16, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <Text style={{ color: '#8c8c8c', fontSize: 13 }}>Tồn kho thành phẩm</Text>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <Title level={3} style={{ margin: 0, color: '#1b168e', fontWeight: 800 }}>
+                    {(kpi?.ton_kho_tp_sl ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </Title>
+                  <Text style={{ color: '#8c8c8c', fontSize: 12 }}>thùng</Text>
+                </div>
+                <Text type="secondary" style={{ fontSize: 12 }}>Toàn bộ kho THANH_PHAM</Text>
+              </div>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#52c41a15', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#52c41a', fontSize: 20 }}>
+                <InboxOutlined />
+              </div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={12} lg={6}>
+          <Card
+            variant="borderless"
+            style={{ borderRadius: 16, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <Text style={{ color: '#8c8c8c', fontSize: 13 }}>Công nợ quá hạn</Text>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <Title level={3} style={{ margin: 0, color: (kpi?.cong_no_qua_han_tien ?? 0) > 0 ? '#cf1322' : '#3f8600', fontWeight: 800 }}>
+                    {((kpi?.cong_no_qua_han_tien ?? 0) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </Title>
+                  <Text style={{ color: '#8c8c8c', fontSize: 12 }}>triệu VND</Text>
+                </div>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {kpi?.cong_no_qua_han_so_hd ?? 0} hóa đơn quá hạn
+                </Text>
+              </div>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#f5222d15', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f5222d', fontSize: 20 }}>
+                <ExclamationCircleOutlined />
+              </div>
+            </div>
+          </Card>
         </Col>
       </Row>
 

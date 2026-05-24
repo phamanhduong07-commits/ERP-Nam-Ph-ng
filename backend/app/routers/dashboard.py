@@ -1,12 +1,12 @@
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.sales import SalesOrder, Quote
-from app.models.production import ProductionOrder
+from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.purchase import PurchaseOrder
 from app.models.master import Customer, Warehouse, PaperMaterial, OtherMaterial, Product
 from app.models.inventory import InventoryBalance
@@ -168,6 +168,40 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)
     ar_so_kh = int(ar_qua_han[0]) if ar_qua_han else 0
     ar_tien_qua_han = float(ar_qua_han[1]) if ar_qua_han else 0.0
 
+    # ── KPI 1: Backlog sản xuất ────────────────────────────────────────────────
+    _backlog_states = ["moi", "dang_sx", "dang_chay", "cho_nguyen_lieu"]
+    backlog_lsx = (
+        db.query(func.count(ProductionOrder.id))
+        .filter(ProductionOrder.trang_thai.in_(_backlog_states))
+        .scalar()
+    ) or 0
+
+    backlog_so_luong = (
+        db.query(func.coalesce(func.sum(ProductionOrderItem.so_luong_ke_hoach), 0))
+        .join(ProductionOrder, ProductionOrder.id == ProductionOrderItem.production_order_id)
+        .filter(ProductionOrder.trang_thai.in_(_backlog_states))
+        .scalar()
+    )
+    backlog_so_luong = float(backlog_so_luong or 0)
+
+    # ── KPI 2: Tồn kho phôi (kg) ──────────────────────────────────────────────
+    ton_kho_phoi = (
+        db.query(func.coalesce(func.sum(InventoryBalance.ton_luong), 0))
+        .join(Warehouse, Warehouse.id == InventoryBalance.warehouse_id)
+        .filter(Warehouse.loai_kho == "PHOI")
+        .scalar()
+    )
+    ton_kho_phoi = float(ton_kho_phoi or 0)
+
+    # ── KPI 3: Tồn kho thành phẩm (số lượng) ─────────────────────────────────
+    ton_kho_tp = (
+        db.query(func.coalesce(func.sum(InventoryBalance.ton_luong), 0))
+        .join(Warehouse, Warehouse.id == InventoryBalance.warehouse_id)
+        .filter(Warehouse.loai_kho == "THANH_PHAM")
+        .scalar()
+    )
+    ton_kho_tp = float(ton_kho_tp or 0)
+
     ap_qua_han = db.query(
         func.count(PurchaseInvoice.id),
         func.coalesce(func.sum(PurchaseInvoice.con_lai), 0),
@@ -214,5 +248,13 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)
             "ap_tien_qua_han": ap_tien_qua_han,
             "ap_so_hoa_don_qua_han": ap_so_hd,
             "doanh_thu_thang_truoc": float(doanh_thu_thang_truoc or 0),
+        },
+        "kpi": {
+            "backlog_lsx": int(backlog_lsx),
+            "backlog_so_luong": backlog_so_luong,
+            "ton_kho_phoi_kg": ton_kho_phoi,
+            "ton_kho_tp_sl": ton_kho_tp,
+            "cong_no_qua_han_tien": ar_tien_qua_han,
+            "cong_no_qua_han_so_hd": ar_so_kh,
         },
     }
