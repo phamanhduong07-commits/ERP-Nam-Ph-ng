@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Button, Space, Typography, Tag, Descriptions, Table, message,
   Modal, Form, Input, InputNumber, Select, Row, Col, Divider, Alert, DatePicker,
-  Steps, Badge, Tooltip, Radio,
+  Steps, Tooltip, Radio,
 } from 'antd'
 import {
   ArrowLeftOutlined, EditOutlined, CheckCircleOutlined, CloseCircleOutlined,
@@ -18,6 +18,7 @@ import dayjs from 'dayjs'
 import {
   salesReturnsApi, type SalesReturn,
   SALES_RETURN_TRANG_THAI_LABELS, SALES_RETURN_TRANG_THAI_COLORS, TINH_TRANG_HANG_LABELS,
+  PHUONG_AN_LABELS,
 } from '../../api/salesReturns'
 import { customerRefundApi, journalApi, TRANG_THAI_HOAN_TIEN } from '../../api/accounting'
 import type { CustomerRefundVoucher } from '../../api/accounting'
@@ -31,25 +32,10 @@ const APPROVE_ROLES = ['ADMIN', 'BGD_GIAM_DOC', 'BGD_TO_TRUONG', 'KE_TOAN_TRUONG
 const { Title, Text } = Typography
 const { confirm } = Modal
 
-const PHUONG_AN_LABELS: Record<string, { label: string; color: string; icon: React.ReactNode; desc: string }> = {
-  chua_xuat_hd: {
-    label: 'Chưa xuất hóa đơn',
-    color: 'green',
-    icon: <CheckOutlined />,
-    desc: 'Đã giảm công nợ phải thu. Chưa có hóa đơn cần điều chỉnh.',
-  },
-  da_xuat_hd: {
-    label: 'Đã xuất hóa đơn',
-    color: 'orange',
-    icon: <ExclamationCircleOutlined />,
-    desc: 'Đã xuất hóa đơn nhưng chưa thu tiền. Cần tạo hóa đơn điều chỉnh giảm.',
-  },
-  da_thu_tien: {
-    label: 'Đã thu tiền',
-    color: 'red',
-    icon: <DollarOutlined />,
-    desc: 'Khách đã thanh toán. Cần hoàn tiền hoặc bù trừ công nợ kỳ sau.',
-  },
+const PHUONG_AN_ICONS: Record<string, React.ReactNode> = {
+  chua_xuat_hd: <CheckOutlined />,
+  da_xuat_hd: <ExclamationCircleOutlined />,
+  da_thu_tien: <DollarOutlined />,
 }
 
 export default function SalesReturnDetail() {
@@ -401,6 +387,198 @@ export default function SalesReturnDetail() {
     returnData.trang_thai === 'da_duyet' && refundVoucher?.trang_thai === 'da_duyet' ? 3 :
     returnData.trang_thai === 'da_duyet' ? 2 : 1
 
+  function renderApprovedSidebar() {
+    if (!returnData) return null
+    const goodItems = returnData.items.filter(it => it.tinh_trang_hang === 'tot')
+    const badItems = returnData.items.filter(it => it.tinh_trang_hang !== 'tot')
+    return (
+      <>
+        {/* ── KHO ── */}
+        <Card
+          size="small"
+          title={<Space size={6}><InboxOutlined style={{ color: '#52c41a' }} /><Text strong style={{ color: '#52c41a', fontSize: 13 }}>Kho</Text></Space>}
+          style={{ marginBottom: 10, borderColor: '#b7eb8f' }}
+          styles={{ header: { background: '#f6ffed', minHeight: 34, padding: '0 12px' }, body: { padding: '10px 14px' } }}
+        >
+          <Space direction="vertical" size={6} style={{ width: '100%' }}>
+            <Space size={6}>
+              <CheckCircleOutlined style={{ color: '#52c41a' }} />
+              <Text style={{ fontSize: 12 }}>
+                Đã nhập kho — {returnData.approved_at ? dayjs(returnData.approved_at).format('DD/MM/YYYY HH:mm') : '—'}
+              </Text>
+            </Space>
+            <Space size={4} wrap>
+              <Text type="secondary" style={{ fontSize: 12 }}>Tình trạng hàng:</Text>
+              {goodItems.length > 0 && <Tag color="green" style={{ fontSize: 11 }}>{goodItems.length} tốt</Tag>}
+              {badItems.filter(i => i.tinh_trang_hang === 'loi').length > 0 && (
+                <Tag color="orange" style={{ fontSize: 11 }}>{badItems.filter(i => i.tinh_trang_hang === 'loi').length} lỗi</Tag>
+              )}
+              {badItems.filter(i => i.tinh_trang_hang === 'hong').length > 0 && (
+                <Tag color="red" style={{ fontSize: 11 }}>{badItems.filter(i => i.tinh_trang_hang === 'hong').length} hỏng</Tag>
+              )}
+            </Space>
+            <Button size="small" icon={<PrinterOutlined />} onClick={handlePrintNhapKho}>
+              In phiếu nhập kho
+            </Button>
+          </Space>
+        </Card>
+
+        {/* ── KẾ TOÁN ── */}
+        <Card
+          size="small"
+          title={<Space size={6}><BankOutlined style={{ color: '#1677ff' }} /><Text strong style={{ color: '#1677ff', fontSize: 13 }}>Kế toán</Text></Space>}
+          style={{
+            marginBottom: 10,
+            borderColor: phuongAn === 'da_thu_tien' ? '#ffa39e' : phuongAn === 'da_xuat_hd' ? '#ffd591' : '#91d5ff',
+          }}
+          styles={{
+            header: {
+              background: phuongAn === 'da_thu_tien' ? '#fff1f0' : phuongAn === 'da_xuat_hd' ? '#fffbe6' : '#e6f4ff',
+              minHeight: 34, padding: '0 12px',
+            },
+            body: { padding: '10px 14px' },
+          }}
+        >
+          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+            <Space size={6}>
+              <CheckOutlined style={{ color: '#52c41a' }} />
+              <Text style={{ fontSize: 12 }}>Đã giảm AR</Text>
+              <Text strong style={{ color: '#cf1322', fontSize: 13 }}>
+                -{new Intl.NumberFormat('vi-VN').format(returnData.tong_tien_tra)}đ
+              </Text>
+            </Space>
+            {phuongAn === 'chua_xuat_hd' && (
+              <Alert message="Chưa xuất hóa đơn" description="Công nợ đã giảm. Không cần điều chỉnh hóa đơn." type="success" showIcon style={{ fontSize: 12 }} />
+            )}
+            {phuongAn === 'da_xuat_hd' && (
+              <Alert
+                message="Đã xuất HĐ — chưa thu tiền"
+                description={
+                  <Space direction="vertical" size={4}>
+                    <Text style={{ fontSize: 12 }}>Cần tạo <strong>HĐ điều chỉnh giảm</strong> đối chiếu HĐ gốc.</Text>
+                    {returnData.so_hoa_don && (
+                      <Button size="small" type="link" icon={<FileTextOutlined />} style={{ padding: 0, fontSize: 12 }}
+                        onClick={() => navigate(`/billing/invoices/${returnData.sales_invoice_id}`)}>
+                        Xem HĐ {returnData.so_hoa_don}
+                      </Button>
+                    )}
+                  </Space>
+                }
+                type="warning" showIcon
+              />
+            )}
+            {phuongAn === 'da_thu_tien' && (
+              <Alert
+                message="Đã thu tiền — cần hoàn trả khách"
+                description={
+                  <Space direction="vertical" size={4}>
+                    <Text style={{ fontSize: 12 }}>Khách đã thanh toán đủ. Hoàn tiền hoặc bù trừ kỳ sau.</Text>
+                    {returnData.so_hoa_don && (
+                      <Button size="small" type="link" icon={<FileTextOutlined />} style={{ padding: 0, fontSize: 12 }}
+                        onClick={() => navigate(`/billing/invoices/${returnData.sales_invoice_id}`)}>
+                        Xem HĐ {returnData.so_hoa_don}
+                      </Button>
+                    )}
+                  </Space>
+                }
+                type="error" showIcon
+              />
+            )}
+            {refundVoucher && (
+              <>
+                <Divider style={{ margin: '2px 0' }} />
+                <div style={{
+                  background: refundVoucher.trang_thai === 'da_duyet' ? '#f6ffed' : '#fffbe6',
+                  border: `1px solid ${refundVoucher.trang_thai === 'da_duyet' ? '#b7eb8f' : '#ffe58f'}`,
+                  borderRadius: 6, padding: '8px 12px',
+                }}>
+                  <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                    <Text strong style={{ fontSize: 13 }}>{refundVoucher.so_phieu}</Text>
+                    <Tag color={TRANG_THAI_HOAN_TIEN[refundVoucher.trang_thai]?.color}>
+                      {TRANG_THAI_HOAN_TIEN[refundVoucher.trang_thai]?.label}
+                    </Tag>
+                  </Space>
+                  <div style={{ marginTop: 4 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Hoàn: </Text>
+                    <Text strong style={{ color: '#1677ff', fontSize: 13 }}>
+                      {Number(refundVoucher.so_tien).toLocaleString('vi-VN')}đ
+                    </Text>
+                  </div>
+                  {refundVoucher.hinh_thuc && (
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      {refundVoucher.hinh_thuc === 'bu_tru' ? 'Bù trừ công nợ'
+                        : refundVoucher.tk_hoan_tien === '111' ? 'Hoàn tiền mặt (TK 111)' : 'Hoàn ngân hàng (TK 112)'}
+                    </Text>
+                  )}
+                  {refundVoucher.trang_thai === 'nhap' && (
+                    <Space style={{ marginTop: 8 }} size={4} wrap>
+                      {!refundVoucher.hinh_thuc && (
+                        <Text style={{ fontSize: 11, color: '#fa8c16', display: 'block', width: '100%' }}>
+                          ⚠ Chưa chọn hình thức hoàn tiền
+                        </Text>
+                      )}
+                      <Button size="small" icon={<EditOutlined />} onClick={() => {
+                        refundForm.setFieldsValue({ hinh_thuc: refundVoucher.hinh_thuc || 'bu_tru', tk_hoan_tien: refundVoucher.tk_hoan_tien || '112', dien_giai: refundVoucher.dien_giai })
+                        setRefundModalOpen(true)
+                      }}>Chọn hình thức</Button>
+                      {refundVoucher.hinh_thuc && (
+                        <Button size="small" type="primary" icon={<CheckCircleOutlined />} loading={refundApproveMutation.isPending}
+                          onClick={() => confirm({
+                            title: 'Xác nhận duyệt phiếu hoàn tiền',
+                            content: `Duyệt ${refundVoucher.so_phieu} — ${Number(refundVoucher.so_tien).toLocaleString('vi-VN')}đ?`,
+                            okText: 'Duyệt', cancelText: 'Hủy',
+                            onOk: () => refundApproveMutation.mutate(),
+                          })}>Duyệt hoàn tiền</Button>
+                      )}
+                      <Button size="small" type="link" style={{ padding: 0 }} onClick={() => navigate(`/accounting/customer-refunds/${refundVoucher.id}`)}>Chi tiết →</Button>
+                    </Space>
+                  )}
+                  {refundVoucher.trang_thai === 'da_duyet' && (
+                    <div style={{ marginTop: 4 }}>
+                      <Text style={{ fontSize: 11, color: '#52c41a' }}>
+                        ✓ Đã duyệt{refundVoucher.ngay_duyet ? ` — ${dayjs(refundVoucher.ngay_duyet).format('DD/MM/YYYY')}` : ''}
+                      </Text>{' '}
+                      <Button size="small" type="link" style={{ fontSize: 11, padding: 0 }} onClick={() => navigate(`/accounting/customer-refunds/${refundVoucher.id}`)}>Chi tiết</Button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </Space>
+        </Card>
+
+        {/* ── KINH DOANH ── */}
+        <Card
+          size="small"
+          title={<Space size={6}><ShoppingOutlined style={{ color: '#722ed1' }} /><Text strong style={{ color: '#722ed1', fontSize: 13 }}>Kinh doanh</Text></Space>}
+          style={{ marginBottom: 16, borderColor: '#d3adf7' }}
+          styles={{ header: { background: '#f9f0ff', minHeight: 34, padding: '0 12px' }, body: { padding: '10px 14px' } }}
+        >
+          <Space direction="vertical" size={6} style={{ width: '100%' }}>
+            <Text style={{ fontSize: 12 }}>
+              {goodItems.length > 0
+                ? <><Tag color="green" style={{ fontSize: 11 }}>{goodItems.length} sản phẩm tốt</Tag> có thể giao bù cho khách.</>
+                : <Text type="secondary" style={{ fontSize: 12 }}>Tất cả hàng lỗi/hỏng — không nên giao bù.</Text>
+              }
+            </Text>
+            {goodItems.length > 0 && (
+              <Button size="small" type="primary" ghost icon={<SendOutlined />} onClick={() => navigate(`/sales/orders/${returnData.sales_order_id}`)}>
+                Tạo giao hàng bù
+              </Button>
+            )}
+            <Divider style={{ margin: '4px 0' }} />
+            <Space>
+              <Text type="secondary" style={{ fontSize: 12 }}>Tổng tiền trả:</Text>
+              <Text strong style={{ color: '#cf1322', fontSize: 13 }}>
+                {new Intl.NumberFormat('vi-VN').format(returnData.tong_tien_tra)}đ
+              </Text>
+            </Space>
+          </Space>
+        </Card>
+      </>
+    )
+  }
+
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       {/* Header */}
@@ -621,249 +799,7 @@ export default function SalesReturnDetail() {
         {/* Right — Xử lý tài chính */}
         <Col xs={24} xl={8}>
           {/* Panel xử lý tài chính */}
-          {returnData.trang_thai === 'da_duyet' && (() => {
-            const goodItems = returnData.items.filter(it => it.tinh_trang_hang === 'tot')
-            const badItems = returnData.items.filter(it => it.tinh_trang_hang !== 'tot')
-            return (
-              <>
-                {/* ── KHO ── */}
-                <Card
-                  size="small"
-                  title={<Space size={6}><InboxOutlined style={{ color: '#52c41a' }} /><Text strong style={{ color: '#52c41a', fontSize: 13 }}>Kho</Text></Space>}
-                  style={{ marginBottom: 10, borderColor: '#b7eb8f' }}
-                  styles={{ header: { background: '#f6ffed', minHeight: 34, padding: '0 12px' }, body: { padding: '10px 14px' } }}
-                >
-                  <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                    <Space size={6}>
-                      <CheckCircleOutlined style={{ color: '#52c41a' }} />
-                      <Text style={{ fontSize: 12 }}>
-                        Đã nhập kho — {returnData.approved_at ? dayjs(returnData.approved_at).format('DD/MM/YYYY HH:mm') : '—'}
-                      </Text>
-                    </Space>
-                    <Space size={4} wrap>
-                      <Text type="secondary" style={{ fontSize: 12 }}>Tình trạng hàng:</Text>
-                      {goodItems.length > 0 && <Tag color="green" style={{ fontSize: 11 }}>{goodItems.length} tốt</Tag>}
-                      {badItems.filter(i => i.tinh_trang_hang === 'loi').length > 0 && (
-                        <Tag color="orange" style={{ fontSize: 11 }}>{badItems.filter(i => i.tinh_trang_hang === 'loi').length} lỗi</Tag>
-                      )}
-                      {badItems.filter(i => i.tinh_trang_hang === 'hong').length > 0 && (
-                        <Tag color="red" style={{ fontSize: 11 }}>{badItems.filter(i => i.tinh_trang_hang === 'hong').length} hỏng</Tag>
-                      )}
-                    </Space>
-                    <Button size="small" icon={<PrinterOutlined />} onClick={handlePrintNhapKho}>
-                      In phiếu nhập kho
-                    </Button>
-                  </Space>
-                </Card>
-
-                {/* ── KẾ TOÁN ── */}
-                <Card
-                  size="small"
-                  title={<Space size={6}><BankOutlined style={{ color: '#1677ff' }} /><Text strong style={{ color: '#1677ff', fontSize: 13 }}>Kế toán</Text></Space>}
-                  style={{
-                    marginBottom: 10,
-                    borderColor: phuongAn === 'da_thu_tien' ? '#ffa39e' : phuongAn === 'da_xuat_hd' ? '#ffd591' : '#91d5ff',
-                  }}
-                  styles={{
-                    header: {
-                      background: phuongAn === 'da_thu_tien' ? '#fff1f0' : phuongAn === 'da_xuat_hd' ? '#fffbe6' : '#e6f4ff',
-                      minHeight: 34,
-                      padding: '0 12px',
-                    },
-                    body: { padding: '10px 14px' },
-                  }}
-                >
-                  <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                    {/* Công nợ */}
-                    <Space size={6}>
-                      <CheckOutlined style={{ color: '#52c41a' }} />
-                      <Text style={{ fontSize: 12 }}>Đã giảm AR</Text>
-                      <Text strong style={{ color: '#cf1322', fontSize: 13 }}>
-                        -{new Intl.NumberFormat('vi-VN').format(returnData.tong_tien_tra)}đ
-                      </Text>
-                    </Space>
-
-                    {/* Phương án cấn trừ */}
-                    {phuongAn === 'chua_xuat_hd' && (
-                      <Alert
-                        message="Chưa xuất hóa đơn"
-                        description="Công nợ đã giảm. Không cần điều chỉnh hóa đơn."
-                        type="success"
-                        showIcon
-                        style={{ fontSize: 12 }}
-                      />
-                    )}
-                    {phuongAn === 'da_xuat_hd' && (
-                      <Alert
-                        message="Đã xuất HĐ — chưa thu tiền"
-                        description={
-                          <Space direction="vertical" size={4}>
-                            <Text style={{ fontSize: 12 }}>Cần tạo <strong>HĐ điều chỉnh giảm</strong> đối chiếu HĐ gốc.</Text>
-                            {returnData.so_hoa_don && (
-                              <Button size="small" type="link" icon={<FileTextOutlined />} style={{ padding: 0, fontSize: 12 }}
-                                onClick={() => navigate(`/billing/invoices/${returnData.sales_invoice_id}`)}>
-                                Xem HĐ {returnData.so_hoa_don}
-                              </Button>
-                            )}
-                          </Space>
-                        }
-                        type="warning"
-                        showIcon
-                      />
-                    )}
-                    {phuongAn === 'da_thu_tien' && (
-                      <Alert
-                        message="Đã thu tiền — cần hoàn trả khách"
-                        description={
-                          <Space direction="vertical" size={4}>
-                            <Text style={{ fontSize: 12 }}>Khách đã thanh toán đủ. Hoàn tiền hoặc bù trừ kỳ sau.</Text>
-                            {returnData.so_hoa_don && (
-                              <Button size="small" type="link" icon={<FileTextOutlined />} style={{ padding: 0, fontSize: 12 }}
-                                onClick={() => navigate(`/billing/invoices/${returnData.sales_invoice_id}`)}>
-                                Xem HĐ {returnData.so_hoa_don}
-                              </Button>
-                            )}
-                          </Space>
-                        }
-                        type="error"
-                        showIcon
-                      />
-                    )}
-
-                    {/* Phiếu hoàn tiền */}
-                    {refundVoucher && (
-                      <>
-                        <Divider style={{ margin: '2px 0' }} />
-                        <div style={{
-                          background: refundVoucher.trang_thai === 'da_duyet' ? '#f6ffed' : '#fffbe6',
-                          border: `1px solid ${refundVoucher.trang_thai === 'da_duyet' ? '#b7eb8f' : '#ffe58f'}`,
-                          borderRadius: 6,
-                          padding: '8px 12px',
-                        }}>
-                          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                            <Text strong style={{ fontSize: 13 }}>{refundVoucher.so_phieu}</Text>
-                            <Tag color={TRANG_THAI_HOAN_TIEN[refundVoucher.trang_thai]?.color}>
-                              {TRANG_THAI_HOAN_TIEN[refundVoucher.trang_thai]?.label}
-                            </Tag>
-                          </Space>
-                          <div style={{ marginTop: 4 }}>
-                            <Text type="secondary" style={{ fontSize: 12 }}>Hoàn: </Text>
-                            <Text strong style={{ color: '#1677ff', fontSize: 13 }}>
-                              {Number(refundVoucher.so_tien).toLocaleString('vi-VN')}đ
-                            </Text>
-                          </div>
-                          {refundVoucher.hinh_thuc && (
-                            <Text type="secondary" style={{ fontSize: 11 }}>
-                              {refundVoucher.hinh_thuc === 'bu_tru'
-                                ? 'Bù trừ công nợ'
-                                : refundVoucher.tk_hoan_tien === '111'
-                                  ? 'Hoàn tiền mặt (TK 111)'
-                                  : 'Hoàn ngân hàng (TK 112)'}
-                            </Text>
-                          )}
-                          {refundVoucher.trang_thai === 'nhap' && (
-                            <Space style={{ marginTop: 8 }} size={4} wrap>
-                              {!refundVoucher.hinh_thuc && (
-                                <Text style={{ fontSize: 11, color: '#fa8c16', display: 'block', width: '100%' }}>
-                                  ⚠ Chưa chọn hình thức hoàn tiền
-                                </Text>
-                              )}
-                              <Button
-                                size="small"
-                                icon={<EditOutlined />}
-                                onClick={() => {
-                                  refundForm.setFieldsValue({
-                                    hinh_thuc: refundVoucher.hinh_thuc || 'bu_tru',
-                                    tk_hoan_tien: refundVoucher.tk_hoan_tien || '112',
-                                    dien_giai: refundVoucher.dien_giai,
-                                  })
-                                  setRefundModalOpen(true)
-                                }}
-                              >
-                                Chọn hình thức
-                              </Button>
-                              {refundVoucher.hinh_thuc && (
-                                <Button
-                                  size="small"
-                                  type="primary"
-                                  icon={<CheckCircleOutlined />}
-                                  loading={refundApproveMutation.isPending}
-                                  onClick={() => confirm({
-                                    title: 'Xác nhận duyệt phiếu hoàn tiền',
-                                    content: `Duyệt ${refundVoucher.so_phieu} — ${Number(refundVoucher.so_tien).toLocaleString('vi-VN')}đ?`,
-                                    okText: 'Duyệt',
-                                    cancelText: 'Hủy',
-                                    onOk: () => refundApproveMutation.mutate(),
-                                  })}
-                                >
-                                  Duyệt hoàn tiền
-                                </Button>
-                              )}
-                              <Button
-                                size="small"
-                                type="link"
-                                style={{ padding: 0 }}
-                                onClick={() => navigate(`/accounting/customer-refunds/${refundVoucher.id}`)}
-                              >
-                                Chi tiết →
-                              </Button>
-                            </Space>
-                          )}
-                          {refundVoucher.trang_thai === 'da_duyet' && (
-                            <div style={{ marginTop: 4 }}>
-                              <Text style={{ fontSize: 11, color: '#52c41a' }}>
-                                ✓ Đã duyệt{refundVoucher.ngay_duyet ? ` — ${dayjs(refundVoucher.ngay_duyet).format('DD/MM/YYYY')}` : ''}
-                              </Text>
-                              {' '}
-                              <Button size="small" type="link" style={{ fontSize: 11, padding: 0 }}
-                                onClick={() => navigate(`/accounting/customer-refunds/${refundVoucher.id}`)}>
-                                Chi tiết
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </Space>
-                </Card>
-
-                {/* ── KINH DOANH ── */}
-                <Card
-                  size="small"
-                  title={<Space size={6}><ShoppingOutlined style={{ color: '#722ed1' }} /><Text strong style={{ color: '#722ed1', fontSize: 13 }}>Kinh doanh</Text></Space>}
-                  style={{ marginBottom: 16, borderColor: '#d3adf7' }}
-                  styles={{ header: { background: '#f9f0ff', minHeight: 34, padding: '0 12px' }, body: { padding: '10px 14px' } }}
-                >
-                  <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                    <Text style={{ fontSize: 12 }}>
-                      {goodItems.length > 0
-                        ? <><Tag color="green" style={{ fontSize: 11 }}>{goodItems.length} sản phẩm tốt</Tag> có thể giao bù cho khách.</>
-                        : <Text type="secondary" style={{ fontSize: 12 }}>Tất cả hàng lỗi/hỏng — không nên giao bù.</Text>
-                      }
-                    </Text>
-                    {goodItems.length > 0 && (
-                      <Button
-                        size="small"
-                        type="primary"
-                        ghost
-                        icon={<SendOutlined />}
-                        onClick={() => navigate(`/sales/orders/${returnData.sales_order_id}`)}
-                      >
-                        Tạo giao hàng bù
-                      </Button>
-                    )}
-                    <Divider style={{ margin: '4px 0' }} />
-                    <Space>
-                      <Text type="secondary" style={{ fontSize: 12 }}>Tổng tiền trả:</Text>
-                      <Text strong style={{ color: '#cf1322', fontSize: 13 }}>
-                        {new Intl.NumberFormat('vi-VN').format(returnData.tong_tien_tra)}đ
-                      </Text>
-                    </Space>
-                  </Space>
-                </Card>
-              </>
-            )
-          })()}
+          {returnData.trang_thai === 'da_duyet' && renderApprovedSidebar()}
 
           {/* Tóm tắt khi phiếu chưa duyệt */}
           {returnData.trang_thai === 'moi' && (

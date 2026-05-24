@@ -20,6 +20,7 @@ import {
   type PagedReturnsResponse,
   SALES_RETURN_TRANG_THAI_LABELS,
   SALES_RETURN_TRANG_THAI_COLORS,
+  PHUONG_AN_LABELS,
 } from '../../api/salesReturns'
 import { customersApi } from '../../api/customers'
 import { exportToExcel } from '../../utils/exportUtils'
@@ -31,10 +32,10 @@ const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 const { confirm } = Modal
 
-const PHUONG_AN_LABELS: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  chua_xuat_hd: { label: 'Chưa xuất HĐ', color: 'green', icon: <CheckOutlined /> },
-  da_xuat_hd:   { label: 'Đã xuất HĐ', color: 'orange', icon: <ExclamationCircleOutlined /> },
-  da_thu_tien:  { label: 'Đã thu tiền', color: 'red', icon: <DollarOutlined /> },
+const PHUONG_AN_ICONS: Record<string, React.ReactNode> = {
+  chua_xuat_hd: <CheckOutlined />,
+  da_xuat_hd: <ExclamationCircleOutlined />,
+  da_thu_tien: <DollarOutlined />,
 }
 
 const TRANG_THAI_HOAN_TIEN_LABELS: Record<string, { label: string; color: string }> = {
@@ -186,7 +187,7 @@ export default function SalesReturnsPage() {
         const info = v ? PHUONG_AN_LABELS[v] : null
         if (!info) return <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
         return (
-          <Tag color={info.color} icon={info.icon} style={{ fontSize: 12 }}>
+          <Tag color={info.color} icon={PHUONG_AN_ICONS[v!]} style={{ fontSize: 12 }}>
             {info.label}
           </Tag>
         )
