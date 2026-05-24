@@ -34,7 +34,9 @@ from app.services.carton_metrics import production_item_metrics
 from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_bool, parse_decimal, parse_text,
 )
+from app.utils.log import get_logger
 
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/warehouse", tags=["warehouse"])
 
@@ -435,6 +437,7 @@ def create_phan_xuong(body: PhanXuongCreate, db: Session = Depends(get_db), _: U
     db.add(obj)
     db.commit()
     db.refresh(obj)
+    logger.info("created phan_xuong id=%s ma_xuong=%s", obj.id, obj.ma_xuong)
     return _px_to_dict(obj)
 
 
@@ -442,11 +445,13 @@ def create_phan_xuong(body: PhanXuongCreate, db: Session = Depends(get_db), _: U
 def update_phan_xuong(px_id: int, body: PhanXuongCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     obj = db.get(PhanXuong, px_id)
     if not obj:
+        logger.warning("phan_xuong id=%s not found", px_id)
         raise HTTPException(404, "Không tìm thấy phân xưởng")
     for k, v in body.model_dump().items():
         setattr(obj, k, v)
     db.commit()
     db.refresh(obj)
+    logger.info("updated phan_xuong id=%s", px_id)
     return _px_to_dict(obj)
 
 
@@ -893,8 +898,33 @@ def list_goods_receipts(
         q = q.filter(~GoodsReceipt.items.any(GoodsReceiptItem.paper_material_id.isnot(None)))
     elif loai_hang == 'phoi':
         q = q.filter(GoodsReceipt.loai_nhap == 'PHOI_NGOAI')
-    rows = q.order_by(GoodsReceipt.created_at.desc()).limit(limit).all()
-    return [_gr_to_dict(r, db, include_image=False) for r in rows]
+    rows = (
+        q.options(
+            joinedload(GoodsReceipt.supplier),
+            joinedload(GoodsReceipt.warehouse),
+            joinedload(GoodsReceipt.phan_xuong),
+            joinedload(GoodsReceipt.phap_nhan),
+            selectinload(GoodsReceipt.items),
+        )
+        .order_by(GoodsReceipt.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    # Pre-aggregate co_hoa_don per GR — avoid N+1 query in _gr_to_dict
+    gr_ids = [r.id for r in rows]
+    co_hoa_don_set: set[int] = set()
+    if gr_ids:
+        hd_rows = (
+            db.query(PurchaseInvoice.gr_id)
+            .filter(
+                PurchaseInvoice.gr_id.in_(gr_ids),
+                PurchaseInvoice.trang_thai != "huy",
+            )
+            .distinct()
+            .all()
+        )
+        co_hoa_don_set = {row[0] for row in hd_rows}
+    return [_gr_to_dict(r, db, include_image=False, co_hoa_don_override=r.id in co_hoa_don_set) for r in rows]
 
 
 @router.get("/goods-receipts/{gr_id}")
@@ -1037,6 +1067,7 @@ def create_goods_receipt(
     # Tồn kho và PO tracking chỉ cập nhật khi duyệt (approve), không tại bước tạo draft
     db.commit()
     db.refresh(gr)
+    logger.info("created goods_receipt id=%s so_phieu=%s by user=%s", gr.id, gr.so_phieu, current_user.id)
     return _gr_to_dict(gr, db)
 
 
@@ -1226,6 +1257,7 @@ def _gen_so_bt_gr(db: Session) -> str:
 def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
+        logger.warning("goods_receipt id=%s not found", gr_id)
         raise HTTPException(404, "Không tìm thấy phiếu nhập")
     if gr.trang_thai == "da_duyet":
         raise HTTPException(400, "Phiếu đã được duyệt")
@@ -1278,6 +1310,7 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_use
         acc_service.post_goods_receipt_journal(gr, phap_nhan_id, phan_xuong_id)
     db.commit()
     db.refresh(gr)
+    logger.info("approved goods_receipt id=%s so_phieu=%s by user=%s", gr_id, gr.so_phieu, current_user.id)
     return {"ok": True, "trang_thai": "da_duyet"}
 
 
@@ -1335,12 +1368,26 @@ def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = De
     return {"ok": True}
 
 
-def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True) -> dict:
-    wh = db.get(Warehouse, gr.warehouse_id) if gr.warehouse_id else None
-    sup = db.get(Supplier, gr.supplier_id)
+def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True, co_hoa_don_override: bool | None = None) -> dict:
+    # Prefer pre-loaded relationships; fall back to db.get for single-record calls (detail endpoint)
+    wh = gr.warehouse if gr.warehouse_id else None
+    if wh is None and gr.warehouse_id:
+        wh = db.get(Warehouse, gr.warehouse_id)
+    sup = gr.supplier if gr.supplier_id else None
+    if sup is None and gr.supplier_id:
+        sup = db.get(Supplier, gr.supplier_id)
     px_id = gr.phan_xuong_id or (wh.phan_xuong_id if wh else None)
-    px = db.get(PhanXuong, px_id) if px_id else None
-    pn = db.get(PhapNhan, gr.phap_nhan_id) if gr.phap_nhan_id else (px.phap_nhan if px and px.phap_nhan else None)
+    px = gr.phan_xuong if gr.phan_xuong_id else None
+    if px is None and px_id and px_id != gr.phan_xuong_id:
+        px = db.get(PhanXuong, px_id)
+    pn = gr.phap_nhan if gr.phap_nhan_id else (px.phap_nhan if px and px.phap_nhan else None)
+    if pn is None and gr.phap_nhan_id:
+        pn = db.get(PhapNhan, gr.phap_nhan_id)
+    if co_hoa_don_override is None:
+        co_hoa_don_override = db.query(PurchaseInvoice.id).filter(
+            PurchaseInvoice.gr_id == gr.id,
+            PurchaseInvoice.trang_thai != "huy",
+        ).first() is not None
     return {
         "id": gr.id,
         "so_phieu": gr.so_phieu,
@@ -1364,10 +1411,7 @@ def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True) -> di
         "phap_nhan_id": gr.phap_nhan_id,
         "ten_phap_nhan": (pn.ten_viet_tat or pn.ten_phap_nhan) if pn else None,
         "phap_nhan_id_for_print": gr.phap_nhan_id or (px.phap_nhan_id if px else None),
-        "co_hoa_don": db.query(PurchaseInvoice.id).filter(
-            PurchaseInvoice.gr_id == gr.id,
-            PurchaseInvoice.trang_thai != "huy",
-        ).first() is not None,
+        "co_hoa_don": co_hoa_don_override,
         "created_at": gr.created_at.isoformat() if gr.created_at else None,
         "items": [{
             "id": it.id,
@@ -2161,6 +2205,7 @@ def create_delivery(
 
     db.commit()
     db.refresh(do)
+    logger.info("created delivery_order id=%s so_phieu=%s by user=%s", do.id, do.so_phieu, current_user.id)
     return _do_to_dict(do, db)
 
 
@@ -2176,6 +2221,7 @@ def update_delivery_status(
         raise HTTPException(400, f"Trạng thái không hợp lệ. Chọn một trong: {', '.join(sorted(valid))}")
     do = db.get(DeliveryOrder, do_id)
     if not do:
+        logger.warning("delivery_order id=%s not found", do_id)
         raise HTTPException(404, "Không tìm thấy phiếu giao hàng")
     if do.trang_thai == "huy":
         raise HTTPException(400, "Phiếu đã huỷ, không thể đổi trạng thái")
@@ -2190,6 +2236,7 @@ def update_delivery_status(
         raise HTTPException(400, f"Hóa đơn {issued_inv.so_hoa_don} đã phát hành. Không thể thay đổi trạng thái phiếu bán hàng.")
     do.trang_thai = body.trang_thai
     db.commit()
+    logger.info("updated delivery_order id=%s trang_thai=%s", do_id, body.trang_thai)
     return {"id": do_id, "trang_thai": do.trang_thai}
 
 
@@ -2685,6 +2732,14 @@ def create_phieu_chuyen(
         if is_phoi:
             # Phôi sóng: chỉ tạo PhieuChuyenKhoItem, KHÔNG dùng InventoryBalance
             # get_ton_kho_lsx đọc tong_chuyen từ bảng này để tính tồn kho phôi
+
+            # Tự động lấy don_gia_noi_bo từ LSX nếu client không truyền (hoặc truyền 0)
+            don_gia_phoi = it.don_gia
+            if (not don_gia_phoi or don_gia_phoi == Decimal("0")) and it.production_order_id:
+                lsx = db.get(ProductionOrder, it.production_order_id)
+                if lsx and lsx.don_gia_noi_bo and lsx.don_gia_noi_bo > 0:
+                    don_gia_phoi = lsx.don_gia_noi_bo
+
             db.add(PhieuChuyenKhoItem(
                 phieu_chuyen_kho_id=phieu.id,
                 production_order_id=it.production_order_id,
@@ -2693,7 +2748,7 @@ def create_phieu_chuyen(
                 ten_hang=it.ten_hang or f"LSX #{it.production_order_id}",
                 don_vi=it.don_vi,
                 so_luong=it.so_luong,
-                don_gia=it.don_gia,
+                don_gia=don_gia_phoi,
                 ghi_chu=it.ghi_chu,
             ))
         else:
@@ -2956,6 +3011,7 @@ def _ck_item_dict(it: "PhieuChuyenKhoItem", db: Session) -> dict:
         lsx = db.get(ProductionOrder, po_id)
         if lsx:
             d["so_lsx"] = lsx.so_lenh or ""
+            d["don_gia_noi_bo"] = float(lsx.don_gia_noi_bo) if lsx.don_gia_noi_bo else None
             # Quy cách: ưu tiên PhieuIn.quy_cach (đã format sẵn), fallback về dai×rong×cao
             phieu_in = db.query(PhieuIn).filter(PhieuIn.production_order_id == po_id).first()
             if phieu_in and phieu_in.quy_cach:
