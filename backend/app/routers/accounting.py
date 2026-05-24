@@ -1,7 +1,9 @@
 from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -1109,19 +1111,86 @@ def get_trial_balance(
     return AccountingService(db).get_trial_balance(tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id)
 
 
+def _wb_stream(wb: Workbook, filename: str) -> StreamingResponse:
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/trial-balance/export")
+def export_trial_balance(
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
+    phan_xuong_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất bảng CĐPS ra Excel."""
+    rows = AccountingService(db).get_trial_balance(tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "CDPS"
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="1565C0")
+    header_align = Alignment(horizontal="center", vertical="center")
+
+    headers = [
+        "Số TK", "Tên TK",
+        "Dư đầu kỳ Nợ", "Dư đầu kỳ Có",
+        "Phát sinh Nợ", "Phát sinh Có",
+        "Dư cuối kỳ Nợ", "Dư cuối kỳ Có",
+    ]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+
+    for row_data in rows:
+        so_du_dau = float(row_data.get("so_du_dau", 0) or 0)
+        so_du_cuoi = float(row_data.get("so_du_cuoi", 0) or 0)
+        dau_no = so_du_dau if so_du_dau > 0 else 0
+        dau_co = abs(so_du_dau) if so_du_dau < 0 else 0
+        cuoi_no = so_du_cuoi if so_du_cuoi > 0 else 0
+        cuoi_co = abs(so_du_cuoi) if so_du_cuoi < 0 else 0
+        ws.append([
+            row_data.get("so_tk", ""),
+            row_data.get("ten_tk", ""),
+            dau_no,
+            dau_co,
+            float(row_data.get("phat_sinh_no", 0) or 0),
+            float(row_data.get("phat_sinh_co", 0) or 0),
+            cuoi_no,
+            cuoi_co,
+        ])
+
+    filename = f"cdps_{tu_ngay}_{den_ngay}.xlsx"
+    return _wb_stream(wb, filename)
+
+
 # ─────────────────────────────────────────────
 # BÁO CÁO QUẢN TRỊ
 # ─────────────────────────────────────────────
 
 @router.get("/reports/workshop-pnl")
 def get_workshop_pnl(
-    phan_xuong_id: int,
-    tu_ngay: date,
-    den_ngay: date,
+    phan_xuong_id: int | None = Query(None),
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     """Báo cáo Lãi/Lỗ theo Phân xưởng"""
+    if not phan_xuong_id:
+        raise HTTPException(400, "Vui lòng chọn phân xưởng")
     return AccountingService(db).get_workshop_pnl(phan_xuong_id, tu_ngay, den_ngay)
 
 
@@ -1147,6 +1216,103 @@ def get_production_costing(
 ):
     """Báo cáo Giá thành Sản xuất thực tế"""
     return AccountingService(db).get_production_costing(tu_ngay, den_ngay, phan_xuong_id)
+
+
+@router.get("/reports/production-costing/export")
+def export_production_costing(
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
+    phan_xuong_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất báo cáo Giá thành Sản xuất ra Excel."""
+    rows = AccountingService(db).get_production_costing(tu_ngay, den_ngay, phan_xuong_id)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Gia Thanh SX"
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="1B5E20")
+    header_align = Alignment(horizontal="center", vertical="center")
+
+    headers = [
+        "Số lệnh", "Tên hàng", "ĐVT", "Số lượng",
+        "CP NVL", "CP Nhân công", "CP Chung",
+        "Tổng chi phí", "Giá thành đơn vị", "Giá chuẩn",
+    ]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+
+    for row_data in rows:
+        ws.append([
+            row_data.get("so_lenh", ""),
+            row_data.get("ten_hang", ""),
+            row_data.get("dvt", ""),
+            row_data.get("so_luong", 0),
+            row_data.get("cp_nvl", 0),
+            row_data.get("cp_nhan_cong", 0),
+            row_data.get("cp_chung", 0),
+            row_data.get("tong_chi_phi", 0),
+            row_data.get("gia_thanh_don_vi", 0),
+            row_data.get("standard_cost", 0),
+        ])
+
+    filename = f"gia_thanh_{tu_ngay}_{den_ngay}.xlsx"
+    return _wb_stream(wb, filename)
+
+
+@router.get("/reports/workshop-pnl-export")
+def export_workshop_pnl(
+    phan_xuong_id: int | None = Query(None),
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất báo cáo Lãi/Lỗ Phân xưởng ra Excel."""
+    if not phan_xuong_id:
+        raise HTTPException(400, "Vui lòng chọn phân xưởng")
+
+    data = AccountingService(db).get_workshop_pnl(phan_xuong_id, tu_ngay, den_ngay)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Workshop PNL"
+
+    header_fill = PatternFill("solid", fgColor="1B5E20")
+
+    ws.cell(row=1, column=1, value="Chỉ tiêu").font = Font(bold=True, color="FFFFFF")
+    ws.cell(row=1, column=1).fill = header_fill
+    ws.cell(row=1, column=2, value="Giá trị (VNĐ)").font = Font(bold=True, color="FFFFFF")
+    ws.cell(row=1, column=2).fill = header_fill
+
+    pnl_rows = [
+        ("Doanh thu ngoại", data.get("doanh_thu_ngoai", 0)),
+        ("Doanh thu nội bộ", data.get("doanh_thu_noi_bo", 0)),
+        ("Tổng doanh thu", data.get("tong_doanh_thu", 0)),
+        ("Giá vốn ngoại", data.get("gia_von_ngoai", 0)),
+        ("Giá vốn nội bộ", data.get("gia_von_noi_bo", 0)),
+        ("Tổng giá vốn", data.get("tong_gia_von", 0)),
+        ("Lợi nhuận gộp", data.get("loi_nhuan_gop", 0)),
+        ("Biến động định mức", data.get("bien_dong_dinh_muc", 0)),
+        ("CP nhân công", data.get("cp_nhan_cong", 0)),
+        ("CP khấu hao", data.get("cp_khau_hao", 0)),
+        ("CP phân bổ", data.get("cp_phan_bo", 0)),
+        ("CP bán hàng", data.get("cp_ban_hang", 0)),
+        ("CP quản lý", data.get("cp_quan_ly", 0)),
+        ("Lợi nhuận thuần", data.get("loi_nhuan_thuan", 0)),
+    ]
+
+    for label, value in pnl_rows:
+        ws.append([label, float(value) if value is not None else 0])
+
+    filename = f"workshop_pnl_{tu_ngay}_{den_ngay}.xlsx"
+    return _wb_stream(wb, filename)
 
 
 # ─────────────────────────────────────────────
