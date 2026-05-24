@@ -8,10 +8,10 @@ import {
   DashboardOutlined, ShoppingCartOutlined, ShoppingOutlined, DatabaseOutlined,
   TeamOutlined, UserOutlined, LogoutOutlined, SettingOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, ToolOutlined, ClockCircleOutlined,
-  AccountBookOutlined, RobotOutlined, BarChartOutlined, ShopOutlined, BankOutlined,
+  AccountBookOutlined, RobotOutlined, BarChartOutlined, ShopOutlined,
   ThunderboltOutlined, FileTextOutlined, MobileOutlined, CarOutlined,
   SolutionOutlined, TrophyOutlined, CrownOutlined, DollarOutlined,
-  CheckCircleOutlined, CalculatorOutlined,
+  CheckCircleOutlined, FileProtectOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
@@ -203,6 +203,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
           ]
         },
         { key: '/accounting/journal-entries', label: <Link to="/accounting/journal-entries">Bút toán tổng hợp</Link> },
+        { key: '/accounting/hoa-don-dien-tu', icon: <FileProtectOutlined />, label: <Link to="/accounting/hoa-don-dien-tu">Hóa đơn điện tử</Link> },
         { key: '/accounting/workshop-management', label: <Link to="/accounting/workshop-management">Quản trị xưởng (Lương)</Link> },
         { key: '/accounting/ccdc', label: <Link to="/accounting/ccdc">Tài sản & CCDC</Link> },
         { key: '/accounting/general-ledger', label: <Link to="/accounting/general-ledger">Sổ cái tài khoản</Link> },
@@ -220,17 +221,41 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/hr/attendance', label: <Link to="/hr/attendance">Chấm công & Đơn từ</Link> },
         { key: '/hr/payroll', label: <Link to="/hr/payroll">Bảng lương sản phẩm</Link> },
         { key: '/hr/payroll-config', label: <Link to="/hr/payroll-config">Cấu hình hệ số lương</Link> },
-        { key: '/hr/logistics', label: <Link to="/hr/logistics">🚚 Logistics & Đội xe</Link> },
-        { key: '/logistics/gps-tracking', label: <Link to="/logistics/gps-tracking">📡 Theo dõi xe GPS</Link> },
-        { key: '/logistics/chi-phi-chuyen', label: <Link to="/logistics/chi-phi-chuyen">💰 Chi phí đội xe</Link> },
-        { key: '/logistics/km-thuc-te', label: <Link to="/logistics/km-thuc-te">📊 Km thực tế GPS</Link> },
-        { key: '/logistics/nhat-ky-xe', label: <Link to="/logistics/nhat-ky-xe">📋 Nhật ký xe</Link> },
-        { key: '/logistics/doi-soat-xang', label: <Link to="/logistics/doi-soat-xang">⛽ Đối chiếu xăng dầu</Link> },
-        { key: '/logistics/bao-duong-km', label: <Link to="/logistics/bao-duong-km">🔧 Bảo dưỡng theo km</Link> },
-        { key: '/logistics/canh-bao-dau', label: <Link to="/logistics/canh-bao-dau">🚨 Cảnh báo hụt dầu</Link> },
         { key: '/hr/approvals', label: <Link to="/hr/approvals">📝 Phê duyệt đơn từ</Link> },
         { key: '/hr/rewards', label: <Link to="/hr/rewards">🏆 Khen thưởng & Kỷ luật</Link> },
         { key: '/hr/me', label: <Link to="/hr/me">📱 Cổng nhân viên (Mobile)</Link> },
+      ],
+    },
+    {
+      key: 'doi-xe-group',
+      icon: <CarOutlined />,
+      label: 'Đội xe',
+      permissions: ['master.other.view', 'master.other.manage'],
+      children: [
+        {
+          key: 'doi-xe-van-hanh',
+          label: 'Vận hành',
+          children: [
+            { key: '/hr/logistics', label: <Link to="/hr/logistics">Tổng quan đội xe</Link> },
+            { key: '/logistics/gps-tracking', label: <Link to="/logistics/gps-tracking">📡 Theo dõi xe GPS</Link> },
+            { key: '/logistics/km-thuc-te', label: <Link to="/logistics/km-thuc-te">📊 Km thực tế GPS</Link> },
+            { key: '/logistics/nhat-ky-xe', label: <Link to="/logistics/nhat-ky-xe">📋 Nhật ký xe</Link> },
+            { key: '/logistics/chi-phi-chuyen', label: <Link to="/logistics/chi-phi-chuyen">💰 Chi phí chuyến</Link> },
+            { key: '/logistics/doi-soat-xang', label: <Link to="/logistics/doi-soat-xang">⛽ Đối chiếu xăng dầu</Link> },
+            { key: '/logistics/bao-duong-km', label: <Link to="/logistics/bao-duong-km">🔧 Bảo dưỡng theo km</Link> },
+            { key: '/logistics/canh-bao-dau', label: <Link to="/logistics/canh-bao-dau">🚨 Cảnh báo hụt dầu</Link> },
+          ],
+        },
+        {
+          key: 'doi-xe-danh-muc',
+          label: 'Danh mục',
+          children: [
+            { key: '/master/xe', label: <Link to="/master/xe">Danh mục xe</Link> },
+            { key: '/master/tai-xe', label: <Link to="/master/tai-xe">Danh mục tài xế</Link> },
+            { key: '/master/lo-xe', label: <Link to="/master/lo-xe">Danh mục lơ xe</Link> },
+            { key: '/master/don-gia-van-chuyen', label: <Link to="/master/don-gia-van-chuyen">Đơn giá vận chuyển</Link> },
+          ],
+        },
       ],
     },
     {
@@ -280,12 +305,8 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/master/paper-materials', label: <Link to="/master/paper-materials">Danh mục nguyên liệu giấy</Link>, permissions: ['master.materials.view', 'master.materials.manage'] },
         { key: '/master/vi-tri', label: <Link to="/master/vi-tri">Danh mục vị trí</Link>, permissions: ['master.other.view', 'master.other.manage'] },
         { key: '/master/other-materials', label: <Link to="/master/other-materials">Danh mục nguyên liệu khác</Link>, permissions: ['master.materials.view', 'master.materials.manage'] },
-        { key: '/master/xe', label: <Link to="/master/xe">Danh mục xe</Link>, permissions: ['master.other.view', 'master.other.manage'] },
-        { key: '/master/tai-xe', label: <Link to="/master/tai-xe">Danh mục tài xế</Link>, permissions: ['master.other.view', 'master.other.manage'] },
-        { key: '/master/lo-xe', label: <Link to="/master/lo-xe">Danh mục lơ xe</Link>, permissions: ['master.other.view', 'master.other.manage'] },
         { key: '/master/warehouses', label: <Link to="/master/warehouses">Danh mục kho</Link>, permissions: ['master.other.view', 'master.other.manage'] },
         { key: '/master/bank-accounts', label: <Link to="/master/bank-accounts">Tài khoản ngân hàng</Link>, permissions: ['master.other.view', 'master.other.manage'] },
-        { key: '/master/don-gia-van-chuyen', label: <Link to="/master/don-gia-van-chuyen">Đơn giá vận chuyển</Link>, permissions: ['master.other.view', 'master.other.manage'] },
         { key: '/master/don-vi-tinh', label: <Link to="/master/don-vi-tinh">Đơn vị tính</Link>, permissions: ['master.other.view', 'master.other.manage'] },
         { key: '/master/phuong-xa', label: <Link to="/master/phuong-xa">Danh mục phường xã</Link>, permissions: ['master.other.view', 'master.other.manage'] },
         { key: '/master/tinh-thanh', label: <Link to="/master/tinh-thanh">Danh mục tỉnh thành phố</Link>, permissions: ['master.other.view', 'master.other.manage'] },
@@ -312,24 +333,6 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/maintenance/schedules', label: <Link to="/maintenance/schedules">Lịch bảo trì</Link> },
         { key: '/maintenance/logs', label: <Link to="/maintenance/logs">Nhật ký bảo trì</Link> },
       ],
-    },
-    {
-      key: 'crm',
-      icon: <TeamOutlined />,
-      label: 'CRM',
-      children: [
-        { key: '/crm/interactions', label: <Link to="/crm/interactions">Tương tác khách hàng</Link> },
-      ],
-    },
-    {
-      key: '/fixed-assets',
-      icon: <BankOutlined />,
-      label: <Link to="/fixed-assets">Tài sản cố định</Link>,
-    },
-    {
-      key: '/mrp',
-      icon: <CalculatorOutlined />,
-      label: <Link to="/mrp">MRP Lite</Link>,
     },
     {
       key: '/agent',
