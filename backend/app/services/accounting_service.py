@@ -121,7 +121,17 @@ class AccountingService:
 
         # Cập nhật hóa đơn
         if data.sales_invoice_id:
-            invoice = self.db.get(SalesInvoice, data.sales_invoice_id)
+            from sqlalchemy.exc import CompileError
+            try:
+                invoice = (
+                    self.db.query(SalesInvoice)
+                    .filter(SalesInvoice.id == data.sales_invoice_id)
+                    .with_for_update()
+                    .first()
+                )
+            except CompileError:
+                # SQLite fallback for tests — no row-level locking
+                invoice = self.db.get(SalesInvoice, data.sales_invoice_id)
             new_da_tt = float(invoice.da_thanh_toan) + float(data.so_tien)
             new_remaining = float(invoice.tong_cong) - new_da_tt
             invoice.da_thanh_toan = Decimal(str(round(new_da_tt, 2)))
@@ -3049,11 +3059,20 @@ class AccountingService:
         closing_date = date(nam, thang, last_day)
 
         # 1. Xóa bút toán kết chuyển cũ nếu có (cho phép chạy lại)
-        old_entry = self.db.query(JournalEntry).filter(
-            JournalEntry.phap_nhan_id == phap_nhan_id,
-            JournalEntry.ngay_but_toan == closing_date,
-            JournalEntry.loai_but_toan == 'ket_chuyen'
-        ).first()
+        from sqlalchemy.exc import CompileError
+        try:
+            old_entry = self.db.query(JournalEntry).filter(
+                JournalEntry.phap_nhan_id == phap_nhan_id,
+                JournalEntry.ngay_but_toan == closing_date,
+                JournalEntry.loai_but_toan == 'ket_chuyen'
+            ).with_for_update().first()
+        except CompileError:
+            # SQLite fallback for tests — no row-level locking
+            old_entry = self.db.query(JournalEntry).filter(
+                JournalEntry.phap_nhan_id == phap_nhan_id,
+                JournalEntry.ngay_but_toan == closing_date,
+                JournalEntry.loai_but_toan == 'ket_chuyen'
+            ).first()
         if old_entry:
             self.db.query(JournalEntryLine).filter(
                 JournalEntryLine.entry_id == old_entry.id
