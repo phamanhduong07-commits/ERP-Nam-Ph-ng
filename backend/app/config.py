@@ -59,5 +59,13 @@ class Settings(BaseSettings):
     # Ví dụ: GPS_BINHMINH_SERIALS="679316178,123456789,987654321"
     GPS_BINHMINH_SERIALS: str = ""
 
+    # MISA meInvoice — hóa đơn điện tử
+    MISA_API_URL: str = "https://ws.meinvoice.vn"
+    MISA_USERNAME: str = ""
+    MISA_PASSWORD: str = ""
+    MISA_COMPANY_CODE: str = ""  # Mã công ty trên MISA
+    MISA_TEMPLATE_CODE: str = "01GTKT0/001"  # Mẫu số hóa đơn
+    MISA_SERIAL: str = ""  # Ký hiệu (VD: C25TAA)
+
 
 settings = Settings()

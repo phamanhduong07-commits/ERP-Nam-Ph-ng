@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy import (
     Boolean, Computed, Date, DateTime, ForeignKey,
-    Integer, Numeric, SmallInteger, String, Text,
+    Integer, JSON, Numeric, SmallInteger, String, Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -314,6 +314,52 @@ class FixedAsset(Base):
 
     phan_xuong = relationship("PhanXuong")
     phap_nhan = relationship("PhapNhan")
+
+
+class HoaDonDienTu(Base):
+    """Hóa đơn điện tử — tích hợp MISA meInvoice"""
+    __tablename__ = "hoa_don_dien_tu"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    so_hoa_don: Mapped[str | None] = mapped_column(String(50), nullable=True)  # Số HĐ từ MISA sau khi phát hành
+    ky_hieu: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    mau_so: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    ngay_lap: Mapped[date] = mapped_column(Date, nullable=False)
+    loai_hd: Mapped[str] = mapped_column(String(5), default="1")  # 1=GTGT, 2=bán hàng, 7=xuất kho
+
+    sales_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sales_orders.id"), nullable=True)
+    customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id"), nullable=True)
+
+    ten_khach_hang: Mapped[str] = mapped_column(String(255), nullable=False)
+    ma_so_thue_kh: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    dia_chi_kh: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    tong_tien_hang: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    tien_thue_gtgt: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    tong_cong: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+
+    trang_thai: Mapped[str] = mapped_column(String(30), default="nhap")
+    # nhap | cho_ky | da_phat_hanh | huy | can_dieu_chinh
+
+    misa_id: Mapped[str | None] = mapped_column(String(100), nullable=True)  # UUID từ MISA
+    ma_cqt: Mapped[str | None] = mapped_column(String(100), nullable=True)   # Mã CQT cấp
+    xml_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ly_do_huy: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    items: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # [{ten_hang, ma_hang, don_vi, so_luong, don_gia, thanh_tien, thue_suat}]
+
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    sales_order = relationship("SalesOrder", foreign_keys=[sales_order_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    phap_nhan = relationship("PhapNhan")
+    creator = relationship("User", foreign_keys=[created_by])
 
 
 # Import tại đây để tránh circular import khi billing.py import CashReceipt

@@ -42,6 +42,7 @@ from app.routers import gps as gps_router
 from app.routers.gps import gps_poller_loop
 from app.models import gps as _gps_models  # noqa: F401 — ensures GpsSnapshot is in Base.metadata
 from app.routers import qc_giay_cuon as qc_giay_cuon_router
+from app.routers import hoa_don_dien_tu
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -182,6 +183,7 @@ app.include_router(fixed_assets_router.router)
 app.include_router(mrp_router.router)
 app.include_router(gps_router.router)
 app.include_router(qc_giay_cuon_router.router)
+app.include_router(hoa_don_dien_tu.router)
 
 
 @app.exception_handler(IntegrityError)
