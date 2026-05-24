@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from datetime import date
 import calendar
 from app.database import get_db
+from app.deps import get_current_user
+from app.models.auth import User
 from app.models.hr import Employee, PayrollRun, AttendanceLog, RewardDiscipline, PayrollHoliday
 from app.services.hr_service import PayrollService
 from app.routers.logistics_hr import calculate_trip_salary_allocations
@@ -69,6 +71,7 @@ def calculate_production_salary(
     from_date: date = Query(...),
     to_date: date = Query(...),
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     return PayrollService.calculate_production_salary(db, from_date, to_date)
 
@@ -77,7 +80,8 @@ def calculate_production_salary(
 def generate_payroll(
     thang: int,
     nam: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     """
     Tính toán lương tự động cho tất cả nhân viên trong tháng
@@ -214,7 +218,8 @@ def generate_payroll(
 def get_payroll_summary(
     thang: int,
     nam: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     runs = db.query(PayrollRun).filter(
         PayrollRun.thang == thang,

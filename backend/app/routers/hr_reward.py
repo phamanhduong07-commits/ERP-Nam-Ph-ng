@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.deps import get_current_user
+from app.models.auth import User
 from app.models.hr import RewardDiscipline
 from pydantic import BaseModel
 from decimal import Decimal
@@ -19,7 +21,7 @@ class RewardCreate(BaseModel):
 
 
 @router.get("/rewards")
-def list_rewards(db: Session = Depends(get_db)):
+def list_rewards(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     items = db.query(RewardDiscipline).order_by(RewardDiscipline.created_at.desc()).all()
     result = []
     for item in items:
@@ -39,7 +41,7 @@ def list_rewards(db: Session = Depends(get_db)):
 
 
 @router.post("/rewards")
-def create_reward(body: RewardCreate, db: Session = Depends(get_db)):
+def create_reward(body: RewardCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     db_obj = RewardDiscipline(**body.model_dump())
     db.add(db_obj)
     db.commit()
@@ -48,7 +50,7 @@ def create_reward(body: RewardCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/rewards/{id}/status")
-def update_reward_status(id: int, status: str, db: Session = Depends(get_db)):
+def update_reward_status(id: int, status: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     item = db.query(RewardDiscipline).filter(RewardDiscipline.id == id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi")

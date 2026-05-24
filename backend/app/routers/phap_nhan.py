@@ -115,6 +115,7 @@ def list_phap_nhan(
     active_only: bool = False,
     search: str = Query(default=""),
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     q = db.query(PhapNhan).order_by(PhapNhan.ma_phap_nhan)
     if active_only:
@@ -134,7 +135,7 @@ def list_phap_nhan(
 
 
 @router.post("")
-def create_phap_nhan(body: PhapNhanCreate, db: Session = Depends(get_db)):
+def create_phap_nhan(body: PhapNhanCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     if db.query(PhapNhan).filter(PhapNhan.ma_phap_nhan == body.ma_phap_nhan).first():
         raise HTTPException(400, "Mã pháp nhân đã tồn tại")
     p = PhapNhan(**body.model_dump())
@@ -145,7 +146,7 @@ def create_phap_nhan(body: PhapNhanCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{id}")
-def update_phap_nhan(id: int, body: PhapNhanCreate, db: Session = Depends(get_db)):
+def update_phap_nhan(id: int, body: PhapNhanCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     p = db.get(PhapNhan, id)
     if not p:
         raise HTTPException(404, "Không tìm thấy")
@@ -157,7 +158,7 @@ def update_phap_nhan(id: int, body: PhapNhanCreate, db: Session = Depends(get_db
 
 
 @router.delete("/{id}")
-def delete_phap_nhan(id: int, db: Session = Depends(get_db)):
+def delete_phap_nhan(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     p = db.get(PhapNhan, id)
     if not p:
         raise HTTPException(404, "Không tìm thấy")

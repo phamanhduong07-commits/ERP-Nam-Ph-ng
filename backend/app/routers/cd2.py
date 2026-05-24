@@ -402,6 +402,7 @@ def _load(phieu_id: int, db: Session) -> PhieuIn:
 def list_may_in(
     phan_xuong_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     q = db.query(MayIn)
     if phan_xuong_id is not None:
@@ -2217,7 +2218,7 @@ def delete_printer_user(user_id: int, db: Session = Depends(get_db), _: User = D
 # ── Mobile Tracking & Monitoring ──────────────────────────────────────────────
 
 @router.get("/machines")
-def list_machines(phan_xuong_id: Optional[int] = None, db: Session = Depends(get_db)):
+def list_machines(phan_xuong_id: Optional[int] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     q = db.query(Machine).filter(Machine.active.is_(True))
     if phan_xuong_id:
         q = q.filter(Machine.phan_xuong_id == phan_xuong_id)
@@ -2303,7 +2304,7 @@ async def track_production(data: TrackPayload, db: Session = Depends(get_db),
 
 
 @router.get("/monitor/machines")
-def get_machines_status(phan_xuong_id: Optional[int] = None, db: Session = Depends(get_db)):
+def get_machines_status(phan_xuong_id: Optional[int] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     # 1. Máy báo cáo qua Mobile
     machines = db.query(Machine).filter(Machine.active.is_(True))
     if phan_xuong_id:
@@ -2384,7 +2385,7 @@ def get_machines_status(phan_xuong_id: Optional[int] = None, db: Session = Depen
 
 
 @router.get("/machines/{machine_id}/logs")
-def get_machine_logs(machine_id: int, limit: int = 10, db: Session = Depends(get_db)):
+def get_machine_logs(machine_id: int, limit: int = 10, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     q = db.query(ProductionLog)
     if machine_id > 0:
         q = q.filter(ProductionLog.machine_id == machine_id)
@@ -2428,7 +2429,7 @@ def phieu_scan_lookup(code: str, db: Session = Depends(get_db)):
 
 
 @router.get("/progress/{order_id}")
-def get_order_progress(order_id: int, db: Session = Depends(get_db)):
+def get_order_progress(order_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     logs = db.query(ProductionLog).filter(ProductionLog.production_order_id == order_id)\
              .order_by(desc(ProductionLog.created_at)).all()
     return logs
@@ -2580,7 +2581,7 @@ class PushSubscribeBody(BaseModel):
 
 
 @router.post("/push-subscribe")
-def push_subscribe(body: PushSubscribeBody, db: Session = Depends(get_db)):
+def push_subscribe(body: PushSubscribeBody, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Lưu hoặc cập nhật Web Push subscription từ browser worker."""
     sub = db.query(PushSubscription).filter(PushSubscription.endpoint == body.endpoint).first()
     if sub:
@@ -2602,7 +2603,7 @@ def push_subscribe(body: PushSubscribeBody, db: Session = Depends(get_db)):
 
 
 @router.delete("/push-subscribe")
-def push_unsubscribe(endpoint: str, db: Session = Depends(get_db)):
+def push_unsubscribe(endpoint: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).delete()
     db.commit()
     return {"ok": True}

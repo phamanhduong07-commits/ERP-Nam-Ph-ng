@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime, timezone
 from app.database import get_db
+from app.deps import get_current_user
 from app.models.hr import LeaveRequest, Employee, AttendanceLog
 from app.models.auth import User
 from pydantic import BaseModel
@@ -29,7 +30,8 @@ class LeaveRequestUpdate(BaseModel):
 @router.get("/leave-requests")
 def list_leave_requests(
     status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     query = db.query(LeaveRequest)
     if status:
@@ -53,7 +55,7 @@ def list_leave_requests(
     return result
 
 @router.post("/leave-requests")
-def create_leave_request(body: LeaveRequestCreate, db: Session = Depends(get_db)):
+def create_leave_request(body: LeaveRequestCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     db_obj = LeaveRequest(**body.model_dump())
     db.add(db_obj)
     db.commit()
@@ -61,7 +63,7 @@ def create_leave_request(body: LeaveRequestCreate, db: Session = Depends(get_db)
     return {"status": "success", "id": db_obj.id}
 
 @router.put("/leave-requests/{id}/approve")
-def approve_leave_request(id: int, body: LeaveRequestUpdate, db: Session = Depends(get_db)):
+def approve_leave_request(id: int, body: LeaveRequestUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     req = db.query(LeaveRequest).filter(LeaveRequest.id == id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn")

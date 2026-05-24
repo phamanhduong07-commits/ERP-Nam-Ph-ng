@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from app.database import get_db
 from app.deps import get_current_user
+from app.models.auth import User
 from app.models.hr import Employee, FuelLog
 from app.models.warehouse_doc import DeliveryOrder
 from app.models.master import Xe, DonGiaVanChuyen
@@ -134,12 +135,12 @@ def calculate_trip_salary_allocations(db: Session, from_date: date, to_date: dat
 
 
 @router.get("/vehicles")
-def list_vehicles(db: Session = Depends(get_db)):
+def list_vehicles(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return db.query(Xe).order_by(Xe.bien_so).all()
 
 
 @router.get("/trip-rate")
-def get_trip_rate(db: Session = Depends(get_db)):
+def get_trip_rate(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return {"don_gia_m2": float(_default_trip_rate(db))}
 
 
@@ -147,7 +148,8 @@ def get_trip_rate(db: Session = Depends(get_db)):
 def list_fuel_logs(
     from_date: date = Query(...),
     to_date: date = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     logs = db.query(FuelLog).options(
         joinedload(FuelLog.xe),
@@ -181,7 +183,7 @@ def list_fuel_logs(
 
 
 @router.post("/fuel-logs")
-def create_fuel_log(body: FuelLogCreate, db: Session = Depends(get_db)):
+def create_fuel_log(body: FuelLogCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     if body.so_km_cuoi < body.so_km_dau:
         raise HTTPException(status_code=400, detail="So km cuoi phai lon hon hoac bang so km dau")
     if not db.get(Xe, body.xe_id):
@@ -211,7 +213,8 @@ def create_fuel_log(body: FuelLogCreate, db: Session = Depends(get_db)):
 def get_trip_salaries(
     from_date: date = Query(...),
     to_date: date = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     deliveries = db.query(DeliveryOrder).options(
         joinedload(DeliveryOrder.items),
@@ -265,7 +268,8 @@ def get_trip_salaries(
 def get_trip_salary_summary(
     from_date: date = Query(...),
     to_date: date = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     rows = calculate_trip_salary_allocations(db, from_date, to_date)
     return [

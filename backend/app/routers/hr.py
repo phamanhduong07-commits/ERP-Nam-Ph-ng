@@ -12,6 +12,9 @@ from app.models.auth import User
 from app.models.hr import Department, Position, Employee, AttendanceLog, LeaveRequest, PayrollConfig, PayrollHoliday, EmployeeHistory, EmployeeDocument, LaborContract
 from app.services.hr_service import PayrollService
 from app.schemas import hr as schemas
+from app.utils.log import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/hr", tags=["hr"])
 
@@ -116,37 +119,40 @@ def _contract_allowance_total(contract: LaborContract) -> Decimal:
 
 # --- Departments ---
 @router.get("/departments", response_model=List[schemas.Department])
-def list_departments(db: Session = Depends(get_db)):
+def list_departments(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return db.query(Department).all()
 
 @router.post("/departments", response_model=schemas.Department)
-def create_department(body: schemas.DepartmentCreate, db: Session = Depends(get_db)):
+def create_department(body: schemas.DepartmentCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     if db.query(Department).filter(Department.ma_bo_phan == body.ma_bo_phan).first():
         raise HTTPException(400, "Mã bộ phận đã tồn tại")
     db_dept = Department(**body.model_dump())
     db.add(db_dept)
     db.commit()
     db.refresh(db_dept)
+    logger.info("created department id=%s ma_bo_phan=%s", db_dept.id, db_dept.ma_bo_phan)
     return db_dept
 
 @router.put("/departments/{id}", response_model=schemas.Department)
-def update_department(id: int, body: schemas.DepartmentUpdate, db: Session = Depends(get_db)):
+def update_department(id: int, body: schemas.DepartmentUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     db_dept = db.get(Department, id)
     if not db_dept:
+        logger.warning("department id=%s not found", id)
         raise HTTPException(404, "Khong tim thay bo phan")
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(db_dept, k, v)
     db.commit()
     db.refresh(db_dept)
+    logger.info("updated department id=%s", id)
     return db_dept
 
 # --- Positions ---
 @router.get("/positions", response_model=List[schemas.Position])
-def list_positions(db: Session = Depends(get_db)):
+def list_positions(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return db.query(Position).all()
 
 @router.post("/positions", response_model=schemas.Position)
-def create_position(body: schemas.PositionCreate, db: Session = Depends(get_db)):
+def create_position(body: schemas.PositionCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     if db.query(Position).filter(Position.ma_chuc_vu == body.ma_chuc_vu).first():
         raise HTTPException(400, "Mã chức vụ đã tồn tại")
     db_pos = Position(**body.model_dump())
@@ -162,7 +168,8 @@ def list_employees(
     phan_xuong_id: Optional[int] = None,
     phap_nhan_id: Optional[int] = None,
     bo_phan_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     q = db.query(Employee)
     if search:
@@ -216,24 +223,25 @@ def list_employees(
     return result
 
 @router.get("/employees/{id}")
-def get_employee(id: int, db: Session = Depends(get_db)):
+def get_employee(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     e = db.query(Employee).filter(Employee.id == id).first()
     if not e:
         raise HTTPException(404, "Không tìm thấy nhân viên")
     return e
 
 @router.post("/employees", response_model=schemas.Employee)
-def create_employee(body: schemas.EmployeeCreate, db: Session = Depends(get_db)):
+def create_employee(body: schemas.EmployeeCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     if db.query(Employee).filter(Employee.ma_nv == body.ma_nv).first():
         raise HTTPException(400, "Mã nhân viên đã tồn tại")
     db_emp = Employee(**body.model_dump())
     db.add(db_emp)
     db.commit()
     db.refresh(db_emp)
+    logger.info("created employee id=%s ma_nv=%s", db_emp.id, db_emp.ma_nv)
     return db_emp
 
 @router.post("/employees/bulk")
-def bulk_create_employees(body: schemas.EmployeeBulkCreate, db: Session = Depends(get_db)):
+def bulk_create_employees(body: schemas.EmployeeBulkCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     created = 0
     updated = 0
     errors = []
@@ -258,14 +266,15 @@ def bulk_create_employees(body: schemas.EmployeeBulkCreate, db: Session = Depend
 
 @router.put("/employees/{id}", response_model=schemas.Employee)
 def update_employee(
-    id: int, 
-    body: schemas.EmployeeUpdate, 
+    id: int,
+    body: schemas.EmployeeUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     from app.models.auth import Role, User as AuthUser
     db_emp = db.query(Employee).filter(Employee.id == id).first()
     if not db_emp:
+        logger.warning("employee id=%s not found", id)
         raise HTTPException(404, "Không tìm thấy nhân viên")
     
     # Ghi log nếu thay đổi hệ số
@@ -297,15 +306,16 @@ def update_employee(
 
     db.commit()
     db.refresh(db_emp)
+    logger.info("updated employee id=%s", id)
     return db_emp
 
 @router.get("/employees/{id}/history")
-def get_employee_history(id: int, db: Session = Depends(get_db)):
+def get_employee_history(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return db.query(EmployeeHistory).filter(EmployeeHistory.employee_id == id).order_by(EmployeeHistory.created_at.desc()).all()
 
 # --- Contracts & Warnings ---
 @router.get("/contracts/expiring")
-def list_expiring_contracts(days: int = 30, db: Session = Depends(get_db)):
+def list_expiring_contracts(days: int = 30, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     from datetime import timedelta
     limit_date = date.today() + timedelta(days=days)
     contracts = db.query(LaborContract).filter(
@@ -332,7 +342,8 @@ def list_attendance(
     employee_id: Optional[int] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     q = db.query(AttendanceLog)
     if employee_id:
@@ -344,7 +355,7 @@ def list_attendance(
     return q.order_by(AttendanceLog.ngay.desc()).all()
 
 @router.post("/attendance/bulk")
-def bulk_create_attendance(logs: List[schemas.AttendanceLogCreate], db: Session = Depends(get_db)):
+def bulk_create_attendance(logs: List[schemas.AttendanceLogCreate], db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Dùng để import dữ liệu từ máy chấm công"""
     for log in logs:
         # Check if exists
@@ -361,7 +372,7 @@ def bulk_create_attendance(logs: List[schemas.AttendanceLogCreate], db: Session 
     return {"ok": True, "count": len(logs)}
 
 @router.post("/attendance/import")
-def import_attendance(rows: List[dict], db: Session = Depends(get_db)):
+def import_attendance(rows: List[dict], db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     saved = 0
     errors = []
     for idx, row in enumerate(rows, start=1):
@@ -420,7 +431,8 @@ def import_attendance(rows: List[dict], db: Session = Depends(get_db)):
 @router.get("/leave-requests")
 def list_leave_requests(
     trang_thai: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     q = db.query(LeaveRequest)
     if trang_thai:
@@ -448,7 +460,7 @@ def list_leave_requests(
     return result
 
 @router.post("/leave-requests", response_model=schemas.LeaveRequest)
-def create_leave_request(body: schemas.LeaveRequestCreate, db: Session = Depends(get_db)):
+def create_leave_request(body: schemas.LeaveRequestCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     db_req = LeaveRequest(**body.model_dump())
     db.add(db_req)
     db.commit()
@@ -517,11 +529,11 @@ def approve_leave_request_body(
 
 # --- Payroll Config ---
 @router.get("/payroll-configs", response_model=List[schemas.PayrollConfig])
-def list_payroll_configs(db: Session = Depends(get_db)):
+def list_payroll_configs(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return db.query(PayrollConfig).all()
 
 @router.post("/payroll-configs", response_model=schemas.PayrollConfig)
-def create_payroll_config(body: schemas.PayrollConfigCreate, db: Session = Depends(get_db)):
+def create_payroll_config(body: schemas.PayrollConfigCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     db_cfg = db.query(PayrollConfig).filter(PayrollConfig.ma_hang == body.ma_hang).first()
     if db_cfg:
         for k, v in body.model_dump().items():
@@ -534,7 +546,7 @@ def create_payroll_config(body: schemas.PayrollConfigCreate, db: Session = Depen
     return db_cfg
 
 @router.put("/payroll-configs/{id}", response_model=schemas.PayrollConfig)
-def update_payroll_config(id: int, body: schemas.PayrollConfigCreate, db: Session = Depends(get_db)):
+def update_payroll_config(id: int, body: schemas.PayrollConfigCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     db_cfg = db.get(PayrollConfig, id)
     if not db_cfg:
         raise HTTPException(404, "Khong tim thay cau hinh luong")
@@ -545,7 +557,7 @@ def update_payroll_config(id: int, body: schemas.PayrollConfigCreate, db: Sessio
     return db_cfg
 
 @router.post("/payroll-configs/bulk")
-def bulk_create_payroll_configs(body: schemas.PayrollConfigBulkCreate, db: Session = Depends(get_db)):
+def bulk_create_payroll_configs(body: schemas.PayrollConfigBulkCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     created = 0
     updated = 0
     for item in body.items:
@@ -565,6 +577,7 @@ def list_payroll_holidays(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     q = db.query(PayrollHoliday)
     if from_date:
@@ -574,7 +587,7 @@ def list_payroll_holidays(
     return q.order_by(PayrollHoliday.ngay).all()
 
 @router.post("/payroll-holidays", response_model=schemas.PayrollHoliday)
-def create_payroll_holiday(body: schemas.PayrollHolidayCreate, db: Session = Depends(get_db)):
+def create_payroll_holiday(body: schemas.PayrollHolidayCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     holiday = db.query(PayrollHoliday).filter(PayrollHoliday.ngay == body.ngay).first()
     if holiday:
         for k, v in body.model_dump().items():
@@ -587,7 +600,7 @@ def create_payroll_holiday(body: schemas.PayrollHolidayCreate, db: Session = Dep
     return holiday
 
 @router.delete("/payroll-holidays/{id}")
-def delete_payroll_holiday(id: int, db: Session = Depends(get_db)):
+def delete_payroll_holiday(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     holiday = db.get(PayrollHoliday, id)
     if not holiday:
         raise HTTPException(404, "Khong tim thay ngay le")
@@ -596,7 +609,7 @@ def delete_payroll_holiday(id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 @router.post("/contracts/import-allowances")
-def import_contract_allowances(rows: List[dict], db: Session = Depends(get_db)):
+def import_contract_allowances(rows: List[dict], db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     updated = 0
     created = 0
     errors = []
@@ -641,7 +654,7 @@ def import_contract_allowances(rows: List[dict], db: Session = Depends(get_db)):
     return {"ok": True, "created": created, "updated": updated}
 
 @router.post("/employees/{id}/issue-account")
-def issue_employee_account(id: int, db: Session = Depends(get_db)):
+def issue_employee_account(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     from app.models.auth import Role, User
     import bcrypt
     
@@ -679,7 +692,7 @@ def issue_employee_account(id: int, db: Session = Depends(get_db)):
     return {"status": "success", "username": emp.ma_nv}
 
 @router.post("/employees/{id}/toggle-account-status")
-def toggle_account_status(id: int, db: Session = Depends(get_db)):
+def toggle_account_status(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     from app.models.auth import User
     emp = db.get(Employee, id)
     if not emp or not emp.user_id:
