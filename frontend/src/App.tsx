@@ -143,6 +143,7 @@ const ProfitLossPage = lazy(() => import('./pages/accounting/ProfitLossPage'))
 const BalanceSheetPage = lazy(() => import('./pages/accounting/BalanceSheetPage'))
 const PeriodClosingPage = lazy(() => import('./pages/accounting/PeriodClosingPage'))
 const OpeningBalancePage = lazy(() => import('./pages/accounting/OpeningBalancePage'))
+const HoaDonDienTuPage = lazy(() => import('./pages/accounting/HoaDonDienTuPage'))
 // HR
 const EmployeeListPage = lazy(() => import('./pages/hr/EmployeeListPage'))
 const DepartmentPage = lazy(() => import('./pages/hr/DepartmentPage'))
@@ -347,6 +348,7 @@ export default function App() {
             <Route path="accounting/profit-loss" element={<ErrorBoundary><ProfitLossPage /></ErrorBoundary>} />
             <Route path="accounting/balance-sheet" element={<ErrorBoundary><BalanceSheetPage /></ErrorBoundary>} />
             <Route path="accounting/period-closing" element={<ErrorBoundary><PeriodClosingPage /></ErrorBoundary>} />
+            <Route path="accounting/hoa-don-dien-tu" element={<ErrorBoundary><HoaDonDienTuPage /></ErrorBoundary>} />
             <Route path="accounting/opening-balances" element={<ErrorBoundary><OpeningBalancePage /></ErrorBoundary>} />
             <Route path="accounting/customer-refunds" element={<ErrorBoundary><CustomerRefundListPage /></ErrorBoundary>} />
             <Route path="accounting/customer-refunds/:id" element={<ErrorBoundary><CustomerRefundDetailPage /></ErrorBoundary>} />

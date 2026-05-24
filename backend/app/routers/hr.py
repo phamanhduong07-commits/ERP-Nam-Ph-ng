@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.hr import Department, Position, Employee, AttendanceLog, LeaveRequest, PayrollConfig, PayrollHoliday, EmployeeHistory, EmployeeDocument, LaborContract, PayrollRun
 from app.services.hr_service import PayrollService
@@ -264,7 +264,7 @@ def create_employee(body: schemas.EmployeeCreate, db: Session = Depends(get_db),
     return db_emp
 
 @router.post("/employees/bulk")
-def bulk_create_employees(body: schemas.EmployeeBulkCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def bulk_create_employees(body: schemas.EmployeeBulkCreate, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
     created = 0
     updated = 0
     errors = []
@@ -942,7 +942,7 @@ async def import_employees(
     commit: bool = Query(default=True),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU")),
 ):
     """
     Import nhân viên bulk từ file Excel (.xlsx/.xls).

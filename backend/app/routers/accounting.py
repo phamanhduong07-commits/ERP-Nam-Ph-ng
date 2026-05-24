@@ -778,7 +778,7 @@ def perform_closing(
     nam: int = Query(...),
     phap_nhan_id: int = Query(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
     """Thực hiện kết chuyển lãi lỗ cuối kỳ"""
     return AccountingService(db).perform_closing(thang, nam, phap_nhan_id, current_user.id)
