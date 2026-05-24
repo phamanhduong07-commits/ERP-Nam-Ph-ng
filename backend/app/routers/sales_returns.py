@@ -276,17 +276,28 @@ def list_returns(
             else:
                 phuong_an_map[rid] = "chua_xuat_hd"
 
-    # Global summary stats (không phụ thuộc filter hiện tại)
+    # Summary stats — theo context filter (customer_id, tu_ngay, den_ngay)
+    def _apply_context_filter(q):
+        if customer_id:
+            q = q.filter(SalesReturn.customer_id == customer_id)
+        if tu_ngay:
+            q = q.filter(SalesReturn.ngay_tra >= tu_ngay)
+        if den_ngay:
+            q = q.filter(SalesReturn.ngay_tra <= den_ngay)
+        return q
+
     summary = {
-        "so_phieu_cho_duyet": db.query(func.count(SalesReturn.id)).filter(
-            SalesReturn.trang_thai == "moi"
+        "so_phieu_cho_duyet": _apply_context_filter(
+            db.query(func.count(SalesReturn.id)).filter(SalesReturn.trang_thai == "moi")
         ).scalar() or 0,
-        "so_phieu_da_duyet": db.query(func.count(SalesReturn.id)).filter(
-            SalesReturn.trang_thai == "da_duyet"
+        "so_phieu_da_duyet": _apply_context_filter(
+            db.query(func.count(SalesReturn.id)).filter(SalesReturn.trang_thai == "da_duyet")
         ).scalar() or 0,
         "tong_tien_tra": float(
-            db.query(func.coalesce(func.sum(SalesReturn.tong_tien_tra), 0)).filter(
-                SalesReturn.trang_thai == "da_duyet"
+            _apply_context_filter(
+                db.query(func.coalesce(func.sum(SalesReturn.tong_tien_tra), 0)).filter(
+                    SalesReturn.trang_thai == "da_duyet"
+                )
             ).scalar() or 0
         ),
         "so_hoan_tien_cho_xu_ly": db.query(func.count(CustomerRefundVoucher.id)).filter(
@@ -731,6 +742,18 @@ def cancel_return(
             DebtLedgerEntry.chung_tu_loai == "sales_return",
             DebtLedgerEntry.chung_tu_id == return_obj.id,
         ).delete(synchronize_session=False)
+
+        # Xử lý phiếu hoàn tiền liên quan
+        voucher = db.query(CustomerRefundVoucher).filter(
+            CustomerRefundVoucher.sales_return_id == return_obj.id
+        ).first()
+        if voucher:
+            if voucher.trang_thai == "da_duyet":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Không thể hủy — phiếu hoàn tiền đã được duyệt. Hãy hủy phiếu hoàn tiền trước."
+                )
+            db.delete(voucher)
 
     return_obj.trang_thai = "huy"
     db.commit()
