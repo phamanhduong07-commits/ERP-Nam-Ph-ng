@@ -1,6 +1,6 @@
 # Kế hoạch Hoàn thiện ERP Nam Phương
 Date: 2026-05-24
-Status: IN_PROGRESS — Sprint 5 kế tiếp
+Status: IN_PROGRESS — Sprint 6 kế tiếp
 
 ---
 
@@ -12,7 +12,7 @@ Thay thế hoàn toàn MYPACKSOFT trong 12 tháng (deadline: 2026-12).
 |---|---|---|
 | Bán hàng | ~90% | Gần production-ready |
 | Kho & Sản xuất | ~72% | fix chuyển kho ✅ Sprint 1 |
-| Tài chính | ~70% | CĐPS export ✅ Sprint 4, thiếu HĐ điện tử |
+| Tài chính | ~82% | CĐPS ✅ Sprint 4, HĐDT MISA ✅ Sprint 5 |
 | Nhân sự | ~85% | Import bulk ✅ Sprint 3 |
 | Mua hàng | ~80% | YMH workflow ✅ Sprint 2 |
 | Báo cáo | ~75% | Export Excel ✅ Sprint 2+4, giá thành+P&L ✅ Sprint 4 |
@@ -44,10 +44,13 @@ Thay thế hoàn toàn MYPACKSOFT trong 12 tháng (deadline: 2026-12).
 - [x] Frontend: nút Xuất Excel cho CĐPS, Giá thành SX, Workshop P&L — 36aa521
 - Fix: phan_xuong_id optional (int | None) cho Workshop P&L endpoint + service
 
-## Sprint 5 — Hóa đơn điện tử (Tháng 8)
-- [ ] Quyết định: portal tay vs API VNPT/MISA
-- [ ] Implement + test HĐ thật
-- Done: Kế toán xuất HĐDT từ ERP
+## Sprint 5 — Hóa đơn điện tử (Tháng 8) — DONE (2026-05-24)
+- [x] Quyết định: API MISA meInvoice
+- [x] Model HoaDonDienTu + migration hdt001 — c825f67
+- [x] MISA service (create/publish/cancel/sync) + config settings — c825f67
+- [x] Router /hoa-don-dien-tu (CRUD + phát hành + hủy + sync-status) — c825f67
+- [x] Frontend: danh sách HĐ + filter + actions + menu Kế toán — 72e0de8
+- Note: Cần set MISA_USERNAME/PASSWORD/COMPANY_CODE/SERIAL trong .env để kết nối thật
 
 ## Sprint 6 — Zalo Bot (Tháng 8-9)
 - [ ] Bot thông báo: tồn thấp, đơn quá hạn, phiếu thu đến hạn
