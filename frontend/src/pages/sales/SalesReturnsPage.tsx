@@ -23,6 +23,9 @@ import {
 } from '../../api/salesReturns'
 import { customersApi } from '../../api/customers'
 import { exportToExcel } from '../../utils/exportUtils'
+import { useAuthStore } from '../../store/auth'
+
+const APPROVE_ROLES = ['ADMIN', 'BGD_GIAM_DOC', 'BGD_TO_TRUONG', 'KE_TOAN_TRUONG', 'KE_TOAN_CONG_NO', 'TRUONG_PHONG_SALE_ADMIN', 'SALE_ADMIN', 'KINH_DOANH_TO_TRUONG']
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -43,6 +46,8 @@ const TRANG_THAI_HOAN_TIEN_LABELS: Record<string, { label: string; color: string
 export default function SalesReturnsPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+  const canApproveRole = APPROVE_ROLES.includes(user?.role ?? '')
   const [search, setSearch] = useState('')
   const [trangThai, setTrangThai] = useState<string>('')
   const [phuongAn, setPhuongAn] = useState<string>('')
@@ -228,7 +233,7 @@ export default function SalesReturnsPage() {
               onClick={() => navigate(`/sales/returns/${r.id}`)}
             />
           </Tooltip>
-          {r.trang_thai === 'moi' && (
+          {r.trang_thai === 'moi' && canApproveRole && (
             <>
               <Tooltip title="Duyệt phiếu">
                 <Button

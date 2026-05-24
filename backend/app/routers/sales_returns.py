@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.master import Customer, Warehouse
 from app.models.sales import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
@@ -486,7 +486,7 @@ def update_return(
 def approve_return(
     return_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("sales_order.approve")),
 ):
     return_obj = db.query(SalesReturn).options(
         joinedload(SalesReturn.items).joinedload(SalesReturnItem.sales_order_item),
@@ -670,6 +670,15 @@ def cancel_return(
     ).filter(SalesReturn.id == return_id).first()
     if not return_obj:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu trả hàng")
+
+    # Hủy phiếu đã duyệt yêu cầu quyền approve
+    if return_obj.trang_thai == "da_duyet":
+        role_code = current_user.role.ma_vai_tro if current_user.role else None
+        if role_code != "ADMIN":
+            from app.models.auth import RolePermission, Permission, Role
+            owned = [r[0] for r in db.query(Permission.ma_quyen).join(RolePermission).join(Role).join(User).filter(User.id == current_user.id).all()]
+            if "sales_order.approve" not in owned:
+                raise HTTPException(status_code=403, detail="Bạn không có quyền hủy phiếu đã duyệt")
 
     if return_obj.trang_thai == "da_duyet":
         # Nếu đã duyệt, cần hủy nhập kho

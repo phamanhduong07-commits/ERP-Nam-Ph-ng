@@ -24,6 +24,9 @@ import type { CustomerRefundVoucher } from '../../api/accounting'
 import { printDocument, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import PhotoCapture from '../../components/PhotoCapture'
+import { useAuthStore } from '../../store/auth'
+
+const APPROVE_ROLES = ['ADMIN', 'BGD_GIAM_DOC', 'BGD_TO_TRUONG', 'KE_TOAN_TRUONG', 'KE_TOAN_CONG_NO', 'TRUONG_PHONG_SALE_ADMIN', 'SALE_ADMIN', 'KINH_DOANH_TO_TRUONG']
 
 const { Title, Text } = Typography
 const { confirm } = Modal
@@ -56,6 +59,8 @@ export default function SalesReturnDetail() {
   const returnId = Number(id)
   const hasValidReturnId = !isCreateRoute && Number.isInteger(returnId) && returnId > 0
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+  const canApproveRole = APPROVE_ROLES.includes(user?.role ?? '')
   const [editing, setEditing] = useState(false)
   const [form] = Form.useForm()
   const [refundForm] = Form.useForm()
@@ -380,8 +385,8 @@ export default function SalesReturnDetail() {
   if (isLoading || !returnData) return <div style={{ padding: 40 }}>Đang tải...</div>
 
   const canEdit = returnData.trang_thai === 'moi'
-  const canApprove = returnData.trang_thai === 'moi'
-  const canCancel = returnData.trang_thai !== 'huy'
+  const canApprove = returnData.trang_thai === 'moi' && canApproveRole
+  const canCancel = returnData.trang_thai !== 'huy' && (returnData.trang_thai === 'moi' || canApproveRole)
   const salesOrder = returnData.sales_order
   const phuongAn = returnData.phuong_an_can_tru
   const phuongAnInfo = phuongAn ? PHUONG_AN_LABELS[phuongAn] : null
