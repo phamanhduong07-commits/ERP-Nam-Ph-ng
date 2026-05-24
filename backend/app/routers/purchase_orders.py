@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
 from app.models.master import Supplier, PaperMaterial, OtherMaterial, PhanXuong, PhapNhan, Warehouse
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
@@ -16,6 +16,9 @@ from app.models.auth import User
 from fastapi import File, UploadFile
 from app.services.purchase_order_import_service import import_purchase_orders_excel
 from app.services.excel_import_service import build_template_response, ImportField
+from app.utils.log import get_logger
+
+logger = get_logger(__name__)
 
 PURCHASE_ORDER_IMPORT_FIELDS = [
     ImportField("so_po", "So PO", required=True, help_text="VD: PO-202405-001"),
@@ -128,7 +131,10 @@ def _resolve_phap_nhan_id(db: Session, phan_xuong_id: int | None, phap_nhan_id: 
 
 
 def _po_to_dict(po: PurchaseOrder, db: Session) -> dict:
-    sup = db.get(Supplier, po.supplier_id)
+    # Prefer pre-loaded relationship; fall back to db.get for single-record calls
+    sup = po.supplier if po.supplier_id else None
+    if sup is None and po.supplier_id:
+        sup = db.get(Supplier, po.supplier_id)
     px_id, ten_px, ten_pn = _px_info(po, db)
     items = []
     for it in po.items:
@@ -195,7 +201,7 @@ def list_pos(
     from sqlalchemy import or_
     q = (db.query(PurchaseOrder)
          .options(
-             joinedload(PurchaseOrder.items),
+             selectinload(PurchaseOrder.items),  # one-to-many → selectinload avoids duplicate rows
              joinedload(PurchaseOrder.supplier),
              joinedload(PurchaseOrder.phan_xuong).joinedload(PhanXuong.phap_nhan),
              joinedload(PurchaseOrder.phap_nhan),
@@ -283,13 +289,15 @@ def create_po(body: POCreate, db: Session = Depends(get_db), current_user: User 
     po.tong_tien = tong
     db.commit()
     db.refresh(po)
+    logger.info("created purchase_order id=%s so_po=%s by user=%s", po.id, po.so_po, current_user.id)
     return _po_to_dict(po, db)
 
 
 @router.get("/{po_id}")
-def get_po(po_id: int, db: Session = Depends(get_db)):
+def get_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
+        logger.warning("purchase_order id=%s not found", po_id)
         raise HTTPException(404, "Không tìm thấy PO")
     return _po_to_dict(po, db)
 
@@ -298,6 +306,7 @@ def get_po(po_id: int, db: Session = Depends(get_db)):
 def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
+        logger.warning("purchase_order id=%s not found", po_id)
         raise HTTPException(404, "Không tìm thấy PO")
     if po.trang_thai not in ("moi",):
         raise HTTPException(400, "Chỉ sửa được PO ở trạng thái Mới")
@@ -344,6 +353,7 @@ def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db), _: User
 
     db.commit()
     db.refresh(po)
+    logger.info("updated purchase_order id=%s", po_id)
     return _po_to_dict(po, db)
 
 
@@ -351,6 +361,7 @@ def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db), _: User
 def duyet_po(po_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
+        logger.warning("purchase_order id=%s not found", po_id)
         raise HTTPException(404, "Không tìm thấy PO")
     if po.trang_thai != "moi":
         raise HTTPException(400, "Chỉ duyệt PO ở trạng thái Mới")
@@ -358,6 +369,7 @@ def duyet_po(po_id: int, db: Session = Depends(get_db), current_user: User = Dep
     po.approved_at = datetime.now(timezone.utc)
     po.approved_by = current_user.id
     db.commit()
+    logger.info("approved purchase_order id=%s by user=%s", po_id, current_user.id)
     return {"ok": True, "trang_thai": po.trang_thai}
 
 
@@ -432,7 +444,7 @@ def doi_soat_kho(
         q = q.filter(PurchaseOrder.ngay_po <= den_ngay)
 
     pos = (q.options(
-        joinedload(PurchaseOrder.items),
+        selectinload(PurchaseOrder.items),  # one-to-many → selectinload avoids duplicate rows
         joinedload(PurchaseOrder.supplier),
         joinedload(PurchaseOrder.phan_xuong).joinedload(PhanXuong.phap_nhan),
         joinedload(PurchaseOrder.phap_nhan),
@@ -522,7 +534,7 @@ def doi_soat_kho_summary(
         q = q.filter(PurchaseOrder.ngay_po <= den_ngay)
 
     pos = q.options(
-        joinedload(PurchaseOrder.items),
+        selectinload(PurchaseOrder.items),  # one-to-many → selectinload avoids duplicate rows
         joinedload(PurchaseOrder.supplier),
     ).all()
 
