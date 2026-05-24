@@ -684,7 +684,7 @@ export default function SalesReturnDetail() {
             ) : (
               <Descriptions
                 bordered
-                column={{ xs: 1, sm: 2, md: 2 }}
+                column={{ xs: 1, sm: 1, lg: 2 }}
                 size="small"
                 labelStyle={{ fontWeight: 600, background: '#fafafa', whiteSpace: 'nowrap' }}
               >
