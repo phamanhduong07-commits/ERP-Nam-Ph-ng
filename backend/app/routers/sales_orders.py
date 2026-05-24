@@ -60,6 +60,9 @@ from app.schemas.sales import (
 from fastapi import File, UploadFile
 from app.services.sales_order_import_service import import_sales_orders_excel
 from app.services.excel_import_service import build_template_response, ImportField, parse_text, parse_decimal
+from app.utils.log import get_logger
+
+logger = get_logger(__name__)
 
 SALES_ORDER_IMPORT_FIELDS = [
     ImportField("so_don", "So don hang", required=True, help_text="VD: DH2405-001"),
@@ -72,6 +75,7 @@ SALES_ORDER_IMPORT_FIELDS = [
     ImportField("dvt", "DVT"),
     ImportField("ngay_giao", "Ngay giao", help_text="DD/MM/YYYY"),
     ImportField("dia_chi_giao", "Dia chi giao"),
+    ImportField("bo_qua_hach_toan", "Bo qua hach toan", help_text="1=bo qua, 0=binh thuong"),
 ]
 
 
@@ -189,6 +193,7 @@ def create_order(
     db.add(order)
     db.commit()
     db.refresh(order)
+    logger.info("created sales_order id=%s so_don=%s by user=%s", order.id, order.so_don, current_user.id)
     return get_order(order.id, db, current_user)
 
 
@@ -201,6 +206,7 @@ def update_order(
 ):
     order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
     if not order:
+        logger.warning("sales_order id=%s not found", order_id)
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
     if order.trang_thai not in ("moi",):
         raise HTTPException(status_code=400, detail="Chỉ có thể sửa đơn hàng ở trạng thái 'Mới'")
@@ -208,6 +214,7 @@ def update_order(
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(order, field, value)
     db.commit()
+    logger.info("updated sales_order id=%s", order_id)
     return get_order(order_id, db, current_user)
 
 
@@ -219,6 +226,7 @@ def approve_order(
 ):
     order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
     if not order:
+        logger.warning("sales_order id=%s not found", order_id)
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
     if order.trang_thai != "moi":
         raise HTTPException(status_code=400, detail=f"Đơn hàng đang ở trạng thái '{order.trang_thai}', không thể duyệt")
@@ -227,6 +235,7 @@ def approve_order(
     order.approved_by = current_user.id
     order.approved_at = datetime.now(timezone.utc)
     db.commit()
+    logger.info("approved sales_order id=%s by user=%s", order_id, current_user.id)
     return get_order(order_id, db, current_user)
 
 
@@ -238,12 +247,14 @@ def cancel_order(
 ):
     order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
     if not order:
+        logger.warning("sales_order id=%s not found", order_id)
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
     if order.trang_thai in ("hoan_thanh", "huy"):
         raise HTTPException(status_code=400, detail="Không thể huỷ đơn hàng này")
 
     order.trang_thai = "huy"
     db.commit()
+    logger.info("cancelled sales_order id=%s so_don=%s", order_id, order.so_don)
     return {"message": f"Đã huỷ đơn hàng {order.so_don}"}
 
 

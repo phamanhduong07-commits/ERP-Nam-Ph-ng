@@ -31,6 +31,7 @@ class SalesOrder(Base):
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(

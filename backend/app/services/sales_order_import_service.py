@@ -51,6 +51,13 @@ async def import_sales_orders_excel(
                 errors.append(f"Dong {row_num}: Khach hang '{ma_kh}' khong ton tai")
                 continue
 
+            # Parse bo_qua_hach_toan: cột optional, giá trị 1/true/TRUE → True
+            raw_bq = row.get("bo_qua_hach_toan")
+            if raw_bq is not None and not (isinstance(raw_bq, float) and pd.isna(raw_bq)):
+                bo_qua = str(raw_bq).strip().lower() in ("1", "true")
+            else:
+                bo_qua = False
+
             orders_data[so_don] = {
                 "ngay_don": parse_date(row.get("ngay_don")),
                 "customer_id": customer.id,
@@ -60,6 +67,7 @@ async def import_sales_orders_excel(
                     if not pd.isna(row.get("dia_chi_giao"))
                     else customer.dia_chi_giao_hang
                 ),
+                "bo_qua_hach_toan": bo_qua,
                 "items": []
             }
 
@@ -101,6 +109,7 @@ async def import_sales_orders_excel(
             order.ngay_don = data["ngay_don"]
             order.customer_id = data["customer_id"]
             order.dia_chi_giao = data["dia_chi_giao"]
+            order.bo_qua_hach_toan = data["bo_qua_hach_toan"]
             order.trang_thai = "moi"
             order.created_by = user.id
 
