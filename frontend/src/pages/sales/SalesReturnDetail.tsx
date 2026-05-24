@@ -587,6 +587,7 @@ export default function SalesReturnDetail() {
               rowKey="id"
               pagination={false}
               size="small"
+              scroll={{ x: 900 }}
               summary={() => (
                 <Table.Summary fixed>
                   <Table.Summary.Row style={{ background: '#fff7e6' }}>

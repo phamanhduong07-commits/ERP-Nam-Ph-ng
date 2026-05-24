@@ -302,6 +302,11 @@ export default function SalesReturnsPage() {
       {/* Summary KPIs */}
       {summary && (
         <Row gutter={12} style={{ marginBottom: 16 }}>
+          {(customerId || dateRange[0] || dateRange[1]) && (
+            <Col xs={24} style={{ marginBottom: 6 }}>
+              <Tag color="blue">Theo bộ lọc hiện tại</Tag>
+            </Col>
+          )}
           <Col xs={12} sm={6}>
             <Card size="small" styles={{ body: { padding: '12px 16px' } }}>
               <Statistic
@@ -380,7 +385,7 @@ export default function SalesReturnsPage() {
             <Select
               placeholder="Phương án"
               value={phuongAn || undefined}
-              onChange={(v) => setPhuongAn(v || '')}
+              onChange={(v) => { setPhuongAn(v || ''); setPage(1) }}
               allowClear
               style={{ width: '100%' }}
             >
@@ -441,6 +446,8 @@ export default function SalesReturnsPage() {
           dataSource={returnRows}
           rowKey="id"
           loading={isLoading}
+          scroll={{ x: 1000 }}
+          locale={{ emptyText: phuongAn ? 'Không có phiếu nào phù hợp với phương án đã chọn' : 'Không có dữ liệu' }}
           rowClassName={(r) => {
             if (r.trang_thai === 'da_duyet' && r.trang_thai_hoan_tien === 'nhap') return 'row-warning'
             return ''
