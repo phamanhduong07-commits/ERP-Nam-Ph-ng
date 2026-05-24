@@ -11,7 +11,7 @@ import dayjs from 'dayjs'
 import { arApi } from '../../api/accounting'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
-import { fmtVND, printToPdf, buildHtmlTable, exportToExcel } from '../../utils/exportUtils'
+import { fmtVND, printToPdf, buildHtmlTable, exportToExcel, downloadBlob } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -23,6 +23,7 @@ export default function TrialBalancePage() {
   ])
   const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
   const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
+  const [exportLoading, setExportLoading] = useState(false)
 
   // Lay danh muc phap nhan
   const { data: listPhapNhan = [] } = useQuery({
@@ -104,6 +105,23 @@ export default function TrialBalancePage() {
     )
   }
 
+  async function handleExportExcel() {
+    setExportLoading(true)
+    try {
+      const blob = await arApi.exportTrialBalance({
+        tu_ngay: dates[0].format('YYYY-MM-DD'),
+        den_ngay: dates[1].format('YYYY-MM-DD'),
+        phap_nhan_id: phapNhanId ?? null,
+        phan_xuong_id: phanXuongId ?? null,
+      })
+      downloadBlob(blob, `cdps_${dates[0].format('YYYYMMDD')}_${dates[1].format('YYYYMMDD')}.xlsx`)
+    } catch {
+      // silent
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
   return (
     <div style={{ padding: 24 }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
@@ -140,7 +158,7 @@ export default function TrialBalancePage() {
               Xem báo cáo
             </Button>
             <Button icon={<FilePdfOutlined />} onClick={handleExportPdf}>Xuất PDF</Button>
-            <Button icon={<FileExcelOutlined />}>Xuất Excel</Button>
+            <Button icon={<FileExcelOutlined />} onClick={handleExportExcel} loading={exportLoading}>Xuất Excel</Button>
           </Space>
         </Col>
       </Row>

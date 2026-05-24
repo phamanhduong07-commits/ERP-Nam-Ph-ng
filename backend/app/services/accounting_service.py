@@ -27,6 +27,9 @@ from app.schemas.accounting import (
     WorkshopPayrollCreate,
     FixedAssetCreate,
 )
+from app.utils.log import get_logger
+
+logger = get_logger(__name__)
 
 
 class AccountingService:
@@ -152,6 +155,7 @@ class AccountingService:
         self.db.add(entry)
         self.db.commit()
         self.db.refresh(receipt)
+        logger.info("created cash_receipt id=%s so_phieu=%s by user=%s", receipt.id, receipt.so_phieu, user_id)
         return receipt
 
     def _gen_so_but_toan(self, prefix: str) -> str:
@@ -387,6 +391,7 @@ class AccountingService:
     def cancel_purchase_invoice(self, inv_id: int) -> "PurchaseInvoice":
         inv = self.db.get(PurchaseInvoice, inv_id)
         if not inv:
+            logger.warning("purchase_invoice id=%s not found", inv_id)
             raise HTTPException(404, "Không tìm thấy hóa đơn mua")
         if inv.trang_thai == "huy":
             return inv
@@ -395,6 +400,7 @@ class AccountingService:
         inv.trang_thai = "huy"
         self.db.commit()
         self.db.refresh(inv)
+        logger.info("cancelled purchase_invoice id=%s so_hoa_don=%s", inv_id, inv.so_hoa_don)
         return inv
 
     def _reverse_journal_entries(self, chung_tu_loai: str, chung_tu_id: int) -> None:
@@ -660,6 +666,7 @@ class AccountingService:
 
         self.db.commit()
         self.db.refresh(inv)
+        logger.info("created purchase_invoice id=%s so_hoa_don=%s by user=%s", inv.id, inv.so_hoa_don, user_id)
         return inv
 
     def create_purchase_invoice_from_po(
@@ -839,6 +846,7 @@ class AccountingService:
         self.db.add(payment)
         self.db.commit()
         self.db.refresh(payment)
+        logger.info("created cash_payment id=%s so_phieu=%s by user=%s", payment.id, payment.so_phieu, user_id)
         return payment
 
     def approve_payment(self, payment_id: int, user_id: int) -> CashPayment:
@@ -2431,8 +2439,10 @@ class AccountingService:
             }
         }
 
-    def get_workshop_pnl(self, phan_xuong_id: int, tu_ngay: date, den_ngay: date):
+    def get_workshop_pnl(self, phan_xuong_id: int | None, tu_ngay: date, den_ngay: date):
         """Báo cáo Lãi/Lỗ theo phân xưởng (management P&L)."""
+        if phan_xuong_id is None:
+            return {}
         # Dimension filter: prefer line-level tag, fall back to header-level
         px_filter = or_(
             JournalEntryLine.phan_xuong_id == phan_xuong_id,

@@ -353,6 +353,9 @@ export const arApi = {
 
   getBalanceSheet: (params: { ngay: string; phap_nhan_id?: number | null }) =>
     client.get('/accounting/reports/balance-sheet', { params }).then(r => r.data),
+
+  exportTrialBalance: (params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number | null; phan_xuong_id?: number | null }) =>
+    client.get('/accounting/trial-balance/export', { params, responseType: 'blob' }).then(r => r.data as Blob),
 }
 
 export interface SoChiTietRow {

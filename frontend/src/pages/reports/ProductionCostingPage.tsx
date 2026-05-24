@@ -6,14 +6,16 @@ import {
 } from 'antd'
 import { reportsApi } from '../../api/reports'
 import { usePhanXuong } from '../../hooks/useMasterData'
-import { 
-  PrinterOutlined, 
-  SearchOutlined, 
-  ArrowUpOutlined, 
+import { downloadBlob } from '../../utils/exportUtils'
+import {
+  PrinterOutlined,
+  SearchOutlined,
+  ArrowUpOutlined,
   ArrowDownOutlined,
   DashboardOutlined,
   AuditOutlined,
-  WalletOutlined
+  WalletOutlined,
+  DownloadOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 
@@ -22,6 +24,7 @@ const { Title, Text } = Typography
 const ProductionCostingPage: React.FC = () => {
   const { phanXuongList } = usePhanXuong()
   const [loading, setLoading] = useState(false)
+  const [exportLoading, setExportLoading] = useState(false)
   const [data, setData] = useState<any[]>([])
   const [form] = Form.useForm()
 
@@ -39,6 +42,25 @@ const ProductionCostingPage: React.FC = () => {
       console.error(error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleExport = async () => {
+    try {
+      const values = await form.validateFields()
+      setExportLoading(true)
+      const params = {
+        phan_xuong_id: values.phan_xuong_id,
+        tu_ngay: values.range[0].format('YYYY-MM-DD'),
+        den_ngay: values.range[1].format('YYYY-MM-DD'),
+      }
+      const blob = await reportsApi.exportProductionCosting(params)
+      const filename = `gia-thanh-san-xuat_${params.tu_ngay}_${params.den_ngay}.xlsx`
+      downloadBlob(blob, filename)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setExportLoading(false)
     }
   }
 
@@ -171,6 +193,7 @@ const ProductionCostingPage: React.FC = () => {
         </Space>
         <Space>
           <Button icon={<PrinterOutlined />} size="large">Xuất PDF</Button>
+          <Button icon={<DownloadOutlined />} size="large" loading={exportLoading} onClick={handleExport}>Xuất Excel</Button>
           <Button type="primary" size="large" onClick={() => form.submit()}>Làm mới dữ liệu</Button>
         </Space>
       </div>

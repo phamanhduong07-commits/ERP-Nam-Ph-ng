@@ -222,6 +222,12 @@ export const reportsApi = {
 
   getProductionCosting: (params: { tu_ngay: string; den_ngay: string; phan_xuong_id?: number }) =>
     client.get('/accounting/reports/production-costing', { params }).then(r => r.data),
+
+  exportProductionCosting: (params: { tu_ngay: string; den_ngay: string; phan_xuong_id?: number }) =>
+    client.get('/accounting/reports/production-costing/export', { params, responseType: 'blob' }).then(r => r.data as Blob),
+
+  exportWorkshopPNL: (params: { tu_ngay: string; den_ngay: string; phan_xuong_id?: number }) =>
+    client.get('/accounting/reports/workshop-pnl-export', { params, responseType: 'blob' }).then(r => r.data as Blob),
 }
 
 export const importLogsApi = {

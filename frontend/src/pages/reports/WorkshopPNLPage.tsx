@@ -2,14 +2,17 @@ import React, { useState } from 'react'
 import { Card, Table, Form, DatePicker, Select, Button, Typography, Space, Row, Col, Statistic, Tooltip } from 'antd'
 import { reportsApi } from '../../api/reports'
 import { usePhanXuong } from '../../hooks/useMasterData'
-import { PrinterOutlined, SearchOutlined, InfoCircleOutlined } from '@ant-design/icons'
+import { downloadBlob } from '../../utils/exportUtils'
+import { PrinterOutlined, SearchOutlined, InfoCircleOutlined, DownloadOutlined } from '@ant-design/icons'
 
 const { Title, Text } = Typography
 
 const WorkshopPNLPage: React.FC = () => {
   const { phanXuongList } = usePhanXuong()
   const [loading, setLoading] = useState(false)
+  const [exportLoading, setExportLoading] = useState(false)
   const [data, setData] = useState<any>(null)
+  const [form] = Form.useForm()
 
   const onFinish = async (values: any) => {
     setLoading(true)
@@ -25,6 +28,25 @@ const WorkshopPNLPage: React.FC = () => {
       console.error(error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleExport = async () => {
+    try {
+      const values = await form.validateFields(['range'])
+      setExportLoading(true)
+      const params = {
+        phan_xuong_id: form.getFieldValue('phan_xuong_id'),
+        tu_ngay: values.range[0].format('YYYY-MM-DD'),
+        den_ngay: values.range[1].format('YYYY-MM-DD'),
+      }
+      const blob = await reportsApi.exportWorkshopPNL(params)
+      const filename = `lai-lo-phan-xuong_${params.tu_ngay}_${params.den_ngay}.xlsx`
+      downloadBlob(blob, filename)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setExportLoading(false)
     }
   }
 
@@ -77,9 +99,9 @@ const WorkshopPNLPage: React.FC = () => {
       <Title level={3}>Báo cáo Lãi/Lỗ Quản trị Phân xưởng</Title>
       
       <Card style={{ marginBottom: 24 }}>
-        <Form layout="inline" onFinish={onFinish}>
-          <Form.Item name="phan_xuong_id" label="Phân xưởng" rules={[{ required: true }]}>
-            <Select placeholder="Chọn xưởng" style={{ width: 200 }}>
+        <Form form={form} layout="inline" onFinish={onFinish}>
+          <Form.Item name="phan_xuong_id" label="Phân xưởng">
+            <Select placeholder="Tất cả phân xưởng" style={{ width: 200 }} allowClear>
               {phanXuongList.map((px: any) => <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>)}
             </Select>
           </Form.Item>
@@ -88,6 +110,9 @@ const WorkshopPNLPage: React.FC = () => {
           </Form.Item>
           <Form.Item>
             <Button type="primary" icon={<SearchOutlined />} htmlType="submit" loading={loading}>Xem báo cáo</Button>
+          </Form.Item>
+          <Form.Item>
+            <Button icon={<DownloadOutlined />} loading={exportLoading} onClick={handleExport}>Xuất Excel</Button>
           </Form.Item>
           <Form.Item>
             <Button icon={<PrinterOutlined />}>In báo cáo</Button>
