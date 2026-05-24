@@ -89,6 +89,18 @@ def require_roles(*allowed_roles: str):
     return checker
 
 
+def assert_has_permission(permission: str, user: User, db: Session) -> None:
+    """Raise 403 if user doesn't have the given permission. Use inside route bodies where
+    the check must be conditional (e.g. depends on record state)."""
+    role_code = user.role.ma_vai_tro if user.role else None
+    if role_code == "ADMIN":
+        return
+    from app.models.auth import RolePermission, Permission, Role
+    owned = [r[0] for r in db.query(Permission.ma_quyen).join(RolePermission).join(Role).join(User).filter(User.id == user.id).all()]
+    if permission not in owned:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Bạn thiếu quyền: {permission}")
+
+
 def require_permissions(*permissions: str):
     def checker(
         current_user: User = Depends(get_current_user),

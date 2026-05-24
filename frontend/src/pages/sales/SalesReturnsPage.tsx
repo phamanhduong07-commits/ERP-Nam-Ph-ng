@@ -25,8 +25,7 @@ import {
 import { customersApi } from '../../api/customers'
 import { exportToExcel } from '../../utils/exportUtils'
 import { useAuthStore } from '../../store/auth'
-
-const APPROVE_ROLES = ['ADMIN', 'BGD_GIAM_DOC', 'BGD_TO_TRUONG', 'KE_TOAN_TRUONG', 'KE_TOAN_CONG_NO', 'TRUONG_PHONG_SALE_ADMIN', 'SALE_ADMIN', 'KINH_DOANH_TO_TRUONG']
+import { APPROVE_ROLES } from '../../constants/permissions'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker

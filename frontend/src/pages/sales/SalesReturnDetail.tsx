@@ -26,8 +26,7 @@ import { printDocument, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import PhotoCapture from '../../components/PhotoCapture'
 import { useAuthStore } from '../../store/auth'
-
-const APPROVE_ROLES = ['ADMIN', 'BGD_GIAM_DOC', 'BGD_TO_TRUONG', 'KE_TOAN_TRUONG', 'KE_TOAN_CONG_NO', 'TRUONG_PHONG_SALE_ADMIN', 'SALE_ADMIN', 'KINH_DOANH_TO_TRUONG']
+import { APPROVE_ROLES } from '../../constants/permissions'
 
 const { Title, Text } = Typography
 const { confirm } = Modal
@@ -619,16 +618,6 @@ export default function SalesReturnDetail() {
           <Button icon={<PrinterOutlined />} onClick={handlePrint}>In phiếu trả</Button>
           {returnData.trang_thai === 'da_duyet' && (
             <Button icon={<PrinterOutlined />} onClick={handlePrintNhapKho}>In phiếu nhập kho</Button>
-          )}
-          {returnData.trang_thai === 'da_duyet' && returnData.sales_order_id && (
-            <Tooltip title="Tạo phiếu giao hàng mới cho đơn hàng này (giao bù cho khách)">
-              <Button
-                icon={<SendOutlined />}
-                onClick={() => navigate(`/sales/orders/${returnData.sales_order_id}`)}
-              >
-                Tạo giao hàng bù
-              </Button>
-            </Tooltip>
           )}
         </Space>
       </Space>

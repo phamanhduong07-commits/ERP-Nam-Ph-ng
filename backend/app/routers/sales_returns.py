@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.deps import get_current_user, require_permissions
+from app.deps import get_current_user, require_permissions, assert_has_permission
 from app.models.auth import User
 from app.models.master import Customer, Warehouse
 from app.models.sales import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
@@ -300,8 +300,10 @@ def list_returns(
                 )
             ).scalar() or 0
         ),
-        "so_hoan_tien_cho_xu_ly": db.query(func.count(CustomerRefundVoucher.id)).filter(
-            CustomerRefundVoucher.trang_thai == "nhap"
+        "so_hoan_tien_cho_xu_ly": _apply_context_filter(
+            db.query(func.count(CustomerRefundVoucher.id))
+            .join(SalesReturn, SalesReturn.id == CustomerRefundVoucher.sales_return_id)
+            .filter(CustomerRefundVoucher.trang_thai == "nhap")
         ).scalar() or 0,
     }
 
@@ -684,12 +686,7 @@ def cancel_return(
 
     # Hủy phiếu đã duyệt yêu cầu quyền approve
     if return_obj.trang_thai == "da_duyet":
-        role_code = current_user.role.ma_vai_tro if current_user.role else None
-        if role_code != "ADMIN":
-            from app.models.auth import RolePermission, Permission, Role
-            owned = [r[0] for r in db.query(Permission.ma_quyen).join(RolePermission).join(Role).join(User).filter(User.id == current_user.id).all()]
-            if "sales_order.approve" not in owned:
-                raise HTTPException(status_code=403, detail="Bạn không có quyền hủy phiếu đã duyệt")
+        assert_has_permission("sales_order.approve", current_user, db)
 
     if return_obj.trang_thai == "da_duyet":
         # Nếu đã duyệt, cần hủy nhập kho
