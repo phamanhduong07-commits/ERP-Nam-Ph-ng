@@ -684,9 +684,9 @@ export default function SalesReturnDetail() {
             ) : (
               <Descriptions
                 bordered
-                column={{ xs: 1, sm: 2, md: 3 }}
+                column={{ xs: 1, sm: 2, md: 2 }}
                 size="small"
-                labelStyle={{ fontWeight: 600, background: '#fafafa', width: 130 }}
+                labelStyle={{ fontWeight: 600, background: '#fafafa', whiteSpace: 'nowrap' }}
               >
                 <Descriptions.Item label="Số phiếu">
                   <Text copyable strong style={{ color: '#1677ff' }}>{returnData.so_phieu_tra}</Text>
@@ -743,7 +743,7 @@ export default function SalesReturnDetail() {
                   </Text>
                 </Descriptions.Item>
                 {returnData.ghi_chu && (
-                  <Descriptions.Item label="Ghi chú" span={3}>{returnData.ghi_chu}</Descriptions.Item>
+                  <Descriptions.Item label="Ghi chú" span={2}>{returnData.ghi_chu}</Descriptions.Item>
                 )}
               </Descriptions>
             )}
