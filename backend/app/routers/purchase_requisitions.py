@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user, get_admin_user
+from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.master import OtherMaterial, PaperMaterial, PhanXuong, PhapNhan, Supplier
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
@@ -344,7 +344,7 @@ def submit_ymh(
 def approve_ymh(
     ymh_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_roles("ADMIN", "MANAGER")),
 ):
     """Duyệt YMH (manager/admin): cho_duyet → duyet_gd (bỏ qua bước PB)"""
     ymh = db.get(PurchaseRequisition, ymh_id)
@@ -365,7 +365,7 @@ def reject_ymh(
     ymh_id: int,
     body: YMHReject,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_roles("ADMIN", "MANAGER")),
 ):
     """Từ chối YMH (manager/admin): cho_duyet / duyet_pb → tu_choi"""
     ymh = db.get(PurchaseRequisition, ymh_id)
