@@ -1,14 +1,25 @@
 import { useState } from 'react'
+import { getErrorMessage } from '../../utils/errorUtils'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Table, Button, Input, Select, DatePicker, Space, Tag, Typography,
-  Card, Row, Col, message, Modal, Tooltip,
+  Card, Row, Col, message, Modal, Tooltip, Statistic,
 } from 'antd'
-import { FileExcelOutlined, PlusOutlined, EyeOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
+import {
+  FileExcelOutlined, PlusOutlined, EyeOutlined, CheckCircleOutlined,
+  CloseCircleOutlined, ClockCircleOutlined, CheckOutlined,
+  ExclamationCircleOutlined, DollarOutlined, BankOutlined,
+} from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
-import { salesReturnsApi, type SalesReturnListItem, SALES_RETURN_TRANG_THAI_LABELS, SALES_RETURN_TRANG_THAI_COLORS } from '../../api/salesReturns'
+import {
+  salesReturnsApi,
+  type SalesReturnListItem,
+  type SalesReturnSummary,
+  SALES_RETURN_TRANG_THAI_LABELS,
+  SALES_RETURN_TRANG_THAI_COLORS,
+} from '../../api/salesReturns'
 import { customersApi } from '../../api/customers'
 import { exportToExcel } from '../../utils/exportUtils'
 
@@ -16,11 +27,24 @@ const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 const { confirm } = Modal
 
+const PHUONG_AN_LABELS: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  chua_xuat_hd: { label: 'Chưa xuất HĐ', color: 'green', icon: <CheckOutlined /> },
+  da_xuat_hd:   { label: 'Đã xuất HĐ', color: 'orange', icon: <ExclamationCircleOutlined /> },
+  da_thu_tien:  { label: 'Đã thu tiền', color: 'red', icon: <DollarOutlined /> },
+}
+
+const TRANG_THAI_HOAN_TIEN_LABELS: Record<string, { label: string; color: string }> = {
+  nhap:     { label: 'Chờ xử lý', color: 'orange' },
+  da_duyet: { label: 'Đã hoàn', color: 'green' },
+  huy:      { label: 'Đã hủy', color: 'red' },
+}
+
 export default function SalesReturnsPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [trangThai, setTrangThai] = useState<string>('')
+  const [phuongAn, setPhuongAn] = useState<string>('')
   const [customerId, setCustomerId] = useState<number | null>(null)
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null]>([null, null])
   const [page, setPage] = useState(1)
@@ -43,24 +67,46 @@ export default function SalesReturnsPage() {
       page_size: pageSize,
     }).then(r => r.data),
   })
-  const returnRows = returnsData?.items || (returnsData as { data?: SalesReturnListItem[] } | undefined)?.data || []
+
+  const allRows: SalesReturnListItem[] = returnsData?.items || []
+  const summary: SalesReturnSummary | undefined = (returnsData as any)?.summary
+
+  // Client-side filter by phuong_an (computed field, không filter ở server)
+  const returnRows = phuongAn
+    ? allRows.filter(r => r.phuong_an_can_tru === phuongAn)
+    : allRows
 
   const handleApprove = async (record: SalesReturnListItem) => {
-    try {
-      await salesReturnsApi.approve(record.id)
-      message.success('Đã duyệt phiếu trả hàng')
-      refetch()
-      queryClient.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
-      queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
-    } catch (err: any) {
-      message.error(err.response?.data?.detail || 'Có lỗi xảy ra')
-    }
+    confirm({
+      title: 'Xác nhận duyệt phiếu trả hàng',
+      content: (
+        <div>
+          <p>Duyệt phiếu <strong>{record.so_phieu_tra}</strong>?</p>
+          <p style={{ color: '#666', fontSize: 13 }}>
+            Hệ thống sẽ: nhập hàng vào kho · giảm công nợ phải thu · ghi bút toán 155/632 và 5213/131
+          </p>
+        </div>
+      ),
+      okText: 'Duyệt',
+      cancelText: 'Hủy',
+      onOk: async () => {
+        try {
+          await salesReturnsApi.approve(record.id)
+          message.success('Đã duyệt phiếu trả hàng')
+          refetch()
+          queryClient.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
+          queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
+        } catch (err: any) {
+          message.error(getErrorMessage(err))
+        }
+      },
+    })
   }
 
   const handleCancel = async (record: SalesReturnListItem) => {
     confirm({
       title: 'Xác nhận hủy phiếu trả hàng',
-      content: `Bạn có chắc muốn hủy phiếu trả hàng ${record.so_phieu_tra}?`,
+      content: `Bạn có chắc muốn hủy phiếu trả hàng ${record.so_phieu_tra}? Nếu đã duyệt, hàng sẽ được xuất lại khỏi kho.`,
       okText: 'Hủy phiếu',
       okType: 'danger',
       cancelText: 'Không',
@@ -72,7 +118,7 @@ export default function SalesReturnsPage() {
           queryClient.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
           queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
         } catch (err: any) {
-          message.error(err.response?.data?.detail || 'Có lỗi xảy ra')
+          message.error(getErrorMessage(err))
         }
       },
     })
@@ -84,7 +130,7 @@ export default function SalesReturnsPage() {
       dataIndex: 'so_phieu_tra',
       width: 140,
       render: (v, r) => (
-        <Button type="link" onClick={() => navigate(`/sales/returns/${r.id}`)}>
+        <Button type="link" style={{ padding: 0 }} onClick={() => navigate(`/sales/returns/${r.id}`)}>
           {v}
         </Button>
       ),
@@ -92,13 +138,13 @@ export default function SalesReturnsPage() {
     {
       title: 'Ngày trả',
       dataIndex: 'ngay_tra',
-      width: 120,
+      width: 100,
       render: (v) => dayjs(v).format('DD/MM/YYYY'),
     },
     {
       title: 'Đơn hàng',
       dataIndex: 'so_don_ban',
-      width: 120,
+      width: 115,
       render: (v) => v || '—',
     },
     {
@@ -114,7 +160,7 @@ export default function SalesReturnsPage() {
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
-      width: 100,
+      width: 95,
       render: (v: string) => (
         <Tag color={SALES_RETURN_TRANG_THAI_COLORS[v] || 'default'}>
           {SALES_RETURN_TRANG_THAI_LABELS[v] || v}
@@ -122,9 +168,35 @@ export default function SalesReturnsPage() {
       ),
     },
     {
+      title: 'Phương án',
+      dataIndex: 'phuong_an_can_tru',
+      width: 130,
+      render: (v: string | null, r) => {
+        if (r.trang_thai !== 'da_duyet') return <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
+        const info = v ? PHUONG_AN_LABELS[v] : null
+        if (!info) return <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
+        return (
+          <Tag color={info.color} icon={info.icon} style={{ fontSize: 12 }}>
+            {info.label}
+          </Tag>
+        )
+      },
+    },
+    {
+      title: 'Hoàn tiền',
+      dataIndex: 'trang_thai_hoan_tien',
+      width: 105,
+      render: (v: string | null, r) => {
+        if (r.trang_thai !== 'da_duyet') return null
+        const info = v ? TRANG_THAI_HOAN_TIEN_LABELS[v] : null
+        if (!info) return <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
+        return <Tag color={info.color} style={{ fontSize: 12 }}>{info.label}</Tag>
+      },
+    },
+    {
       title: 'SL trả',
       dataIndex: 'tong_so_luong_tra',
-      width: 80,
+      width: 70,
       align: 'right',
       render: (v: number) => new Intl.NumberFormat('vi-VN').format(v || 0),
     },
@@ -141,7 +213,7 @@ export default function SalesReturnsPage() {
     },
     {
       title: 'Thao tác',
-      width: 110,
+      width: 100,
       render: (_, r) => (
         <Space size="small">
           <Tooltip title="Xem chi tiết">
@@ -179,7 +251,10 @@ export default function SalesReturnsPage() {
   const handleExportExcel = () => {
     exportToExcel(`TraHangBan_${dayjs().format('YYYYMMDD')}`, [{
       name: 'Trả hàng bán',
-      headers: ['Số phiếu trả', 'Ngày trả', 'Đơn hàng', 'Khách hàng', 'Lý do trả', 'Trạng thái', 'SL trả', 'Tổng tiền (đ)'],
+      headers: [
+        'Số phiếu trả', 'Ngày trả', 'Đơn hàng', 'Khách hàng', 'Lý do trả',
+        'Trạng thái', 'Phương án cấn trừ', 'Hoàn tiền', 'SL trả', 'Tổng tiền (đ)',
+      ],
       rows: returnRows.map((r: SalesReturnListItem) => [
         r.so_phieu_tra,
         dayjs(r.ngay_tra).format('DD/MM/YYYY'),
@@ -187,10 +262,12 @@ export default function SalesReturnsPage() {
         r.ten_khach_hang,
         r.ly_do_tra || '',
         SALES_RETURN_TRANG_THAI_LABELS[r.trang_thai] || r.trang_thai,
+        r.phuong_an_can_tru ? (PHUONG_AN_LABELS[r.phuong_an_can_tru]?.label ?? r.phuong_an_can_tru) : '',
+        r.trang_thai_hoan_tien ? (TRANG_THAI_HOAN_TIEN_LABELS[r.trang_thai_hoan_tien]?.label ?? r.trang_thai_hoan_tien) : '',
         r.tong_so_luong_tra || 0,
         r.tong_tien_tra,
       ]),
-      colWidths: [18, 12, 14, 25, 25, 12, 10, 16],
+      colWidths: [18, 12, 14, 25, 25, 12, 16, 14, 10, 16],
     }])
   }
 
@@ -199,7 +276,11 @@ export default function SalesReturnsPage() {
       <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
         <Title level={4} style={{ margin: 0 }}>Quản lý trả lại hàng bán</Title>
         <Space>
-          <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
+          <Button
+            icon={<FileExcelOutlined />}
+            style={{ color: '#217346', borderColor: '#217346' }}
+            onClick={handleExportExcel}
+          >
             Xuất Excel
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/sales/returns/create')}>
@@ -208,21 +289,75 @@ export default function SalesReturnsPage() {
         </Space>
       </Space>
 
+      {/* Summary KPIs */}
+      {summary && (
+        <Row gutter={12} style={{ marginBottom: 16 }}>
+          <Col xs={12} sm={6}>
+            <Card size="small" styles={{ body: { padding: '12px 16px' } }}>
+              <Statistic
+                title={<Space size={4}><ClockCircleOutlined style={{ color: '#1677ff' }} /><span>Chờ duyệt</span></Space>}
+                value={summary.so_phieu_cho_duyet}
+                suffix="phiếu"
+                valueStyle={{ color: '#1677ff', fontSize: 20 }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small" styles={{ body: { padding: '12px 16px' } }}>
+              <Statistic
+                title={<Space size={4}><CheckCircleOutlined style={{ color: '#52c41a' }} /><span>Đã duyệt</span></Space>}
+                value={summary.so_phieu_da_duyet}
+                suffix="phiếu"
+                valueStyle={{ color: '#52c41a', fontSize: 20 }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small" styles={{ body: { padding: '12px 16px' } }}>
+              <Statistic
+                title={<Space size={4}><BankOutlined style={{ color: '#cf1322' }} /><span>Tổng tiền trả</span></Space>}
+                value={summary.tong_tien_tra}
+                formatter={(v) => new Intl.NumberFormat('vi-VN').format(v as number) + 'đ'}
+                valueStyle={{ color: '#cf1322', fontSize: 16 }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card
+              size="small"
+              styles={{ body: { padding: '12px 16px' } }}
+              style={summary.so_hoan_tien_cho_xu_ly > 0 ? { border: '1px solid #fa8c16' } : {}}
+            >
+              <Statistic
+                title={<Space size={4}><ExclamationCircleOutlined style={{ color: '#fa8c16' }} /><span>Hoàn tiền chờ xử lý</span></Space>}
+                value={summary.so_hoan_tien_cho_xu_ly}
+                suffix="phiếu"
+                valueStyle={{
+                  color: summary.so_hoan_tien_cho_xu_ly > 0 ? '#fa8c16' : '#8c8c8c',
+                  fontSize: 20,
+                }}
+              />
+            </Card>
+          </Col>
+        </Row>
+      )}
+
+      {/* Filters */}
       <Card style={{ marginBottom: 16 }}>
-        <Row gutter={16}>
-          <Col span={6}>
+        <Row gutter={[12, 8]}>
+          <Col xs={24} sm={6}>
             <Input
               placeholder="Tìm theo số phiếu, đơn hàng..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
               allowClear
             />
           </Col>
-          <Col span={4}>
+          <Col xs={12} sm={4}>
             <Select
               placeholder="Trạng thái"
-              value={trangThai}
-              onChange={setTrangThai}
+              value={trangThai || undefined}
+              onChange={(v) => { setTrangThai(v || ''); setPage(1) }}
               allowClear
               style={{ width: '100%' }}
             >
@@ -231,11 +366,26 @@ export default function SalesReturnsPage() {
               ))}
             </Select>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={4}>
+            <Select
+              placeholder="Phương án"
+              value={phuongAn || undefined}
+              onChange={(v) => setPhuongAn(v || '')}
+              allowClear
+              style={{ width: '100%' }}
+            >
+              {Object.entries(PHUONG_AN_LABELS).map(([k, v]) => (
+                <Select.Option key={k} value={k}>
+                  <Tag color={v.color} style={{ marginRight: 4 }}>{v.label}</Tag>
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+          <Col xs={24} sm={6}>
             <Select
               placeholder="Khách hàng"
               value={customerId}
-              onChange={setCustomerId}
+              onChange={(v) => { setCustomerId(v); setPage(1) }}
               allowClear
               showSearch
               optionFilterProp="children"
@@ -248,19 +398,23 @@ export default function SalesReturnsPage() {
               ))}
             </Select>
           </Col>
-          <Col span={6}>
+          <Col xs={24} sm={6}>
             <RangePicker
               placeholder={['Từ ngày', 'Đến ngày']}
               value={dateRange}
-              onChange={(dates) => setDateRange(dates as [dayjs.Dayjs | null, dayjs.Dayjs | null])}
+              onChange={(dates) => {
+                setDateRange(dates as [dayjs.Dayjs | null, dayjs.Dayjs | null])
+                setPage(1)
+              }}
               format="DD/MM/YYYY"
               style={{ width: '100%' }}
             />
           </Col>
-          <Col span={2}>
+          <Col xs={24} sm={2}>
             <Button onClick={() => {
               setSearch('')
               setTrangThai('')
+              setPhuongAn('')
               setCustomerId(null)
               setDateRange([null, null])
               setPage(1)
@@ -277,10 +431,14 @@ export default function SalesReturnsPage() {
           dataSource={returnRows}
           rowKey="id"
           loading={isLoading}
+          rowClassName={(r) => {
+            if (r.trang_thai === 'da_duyet' && r.trang_thai_hoan_tien === 'nhap') return 'row-warning'
+            return ''
+          }}
           pagination={{
             current: page,
             pageSize,
-            total: returnsData?.total || 0,
+            total: phuongAn ? returnRows.length : (returnsData?.total || 0),
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} phiếu`,
@@ -292,6 +450,11 @@ export default function SalesReturnsPage() {
           size="small"
         />
       </Card>
+
+      <style>{`
+        .row-warning td { background: #fffbe6 !important; }
+        .row-warning:hover td { background: #fff7cc !important; }
+      `}</style>
     </div>
   )
 }

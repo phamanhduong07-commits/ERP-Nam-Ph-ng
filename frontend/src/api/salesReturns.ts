@@ -64,6 +64,15 @@ export interface SalesReturnListItem {
   tong_so_luong_tra: number
   tong_tien_tra: number
   created_at: string
+  phuong_an_can_tru?: 'chua_xuat_hd' | 'da_xuat_hd' | 'da_thu_tien' | null
+  trang_thai_hoan_tien?: string | null
+}
+
+export interface SalesReturnSummary {
+  so_phieu_cho_duyet: number
+  so_phieu_da_duyet: number
+  tong_tien_tra: number
+  so_hoan_tien_cho_xu_ly: number
 }
 
 export interface CreateReturnItemPayload {

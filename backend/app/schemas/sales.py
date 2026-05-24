@@ -174,6 +174,7 @@ class PagedResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+    summary: dict | None = None
 
 
 # ─────────────────────────────────────────────
@@ -287,6 +288,8 @@ class SalesReturnListItem(BaseModel):
     tong_so_luong_tra: Decimal = Decimal("0")
     tong_tien_tra: Decimal
     created_at: datetime
+    phuong_an_can_tru: str | None = None
+    trang_thai_hoan_tien: str | None = None
 
     class Config:
         from_attributes = True

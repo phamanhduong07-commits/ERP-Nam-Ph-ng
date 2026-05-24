@@ -243,6 +243,57 @@ def list_returns(
         .all()
     ) if return_ids else {}
 
+    # Bulk-compute phuong_an_can_tru + trang_thai_hoan_tien for current page
+    da_duyet_ids = [r.id for r in returns if r.trang_thai == "da_duyet"]
+    phuong_an_map: dict[int, str] = {}
+    trang_thai_hoan_tien_map: dict[int, str | None] = {}
+
+    if da_duyet_ids:
+        vouchers = db.query(CustomerRefundVoucher).filter(
+            CustomerRefundVoucher.sales_return_id.in_(da_duyet_ids)
+        ).all()
+        voucher_by_return: dict[int, CustomerRefundVoucher] = {
+            v.sales_return_id: v for v in vouchers
+        }
+        for rid in da_duyet_ids:
+            v = voucher_by_return.get(rid)
+            trang_thai_hoan_tien_map[rid] = v.trang_thai if v else None
+
+        invoice_ids = [v.sales_invoice_id for v in vouchers if v.sales_invoice_id]
+        invoice_by_id: dict[int, SalesInvoice] = {}
+        if invoice_ids:
+            invs = db.query(SalesInvoice).filter(SalesInvoice.id.in_(invoice_ids)).all()
+            invoice_by_id = {inv.id: inv for inv in invs}
+
+        for rid in da_duyet_ids:
+            v = voucher_by_return.get(rid)
+            if v and v.sales_invoice_id:
+                inv = invoice_by_id.get(v.sales_invoice_id)
+                if inv and inv.da_thanh_toan >= inv.tong_cong:
+                    phuong_an_map[rid] = "da_thu_tien"
+                else:
+                    phuong_an_map[rid] = "da_xuat_hd"
+            else:
+                phuong_an_map[rid] = "chua_xuat_hd"
+
+    # Global summary stats (không phụ thuộc filter hiện tại)
+    summary = {
+        "so_phieu_cho_duyet": db.query(func.count(SalesReturn.id)).filter(
+            SalesReturn.trang_thai == "moi"
+        ).scalar() or 0,
+        "so_phieu_da_duyet": db.query(func.count(SalesReturn.id)).filter(
+            SalesReturn.trang_thai == "da_duyet"
+        ).scalar() or 0,
+        "tong_tien_tra": float(
+            db.query(func.coalesce(func.sum(SalesReturn.tong_tien_tra), 0)).filter(
+                SalesReturn.trang_thai == "da_duyet"
+            ).scalar() or 0
+        ),
+        "so_hoan_tien_cho_xu_ly": db.query(func.count(CustomerRefundVoucher.id)).filter(
+            CustomerRefundVoucher.trang_thai == "nhap"
+        ).scalar() or 0,
+    }
+
     return {
         "items": [{
             "id": r.id,
@@ -261,11 +312,14 @@ def list_returns(
             "tong_so_luong_tra": qty_map.get(r.id, 0),
             "tong_tien_tra": r.tong_tien_tra,
             "created_at": r.created_at,
+            "phuong_an_can_tru": phuong_an_map.get(r.id) if r.trang_thai == "da_duyet" else None,
+            "trang_thai_hoan_tien": trang_thai_hoan_tien_map.get(r.id),
         } for r in returns],
         "total": total,
         "page": page,
         "page_size": page_size,
-        "total_pages": (total + page_size - 1) // page_size
+        "total_pages": (total + page_size - 1) // page_size,
+        "summary": summary,
     }
 
 
