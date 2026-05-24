@@ -1,6 +1,6 @@
 # Kế hoạch Hoàn thiện ERP Nam Phương
 Date: 2026-05-24
-Status: IN_PROGRESS — Sprint 3 kế tiếp
+Status: IN_PROGRESS — Sprint 5 kế tiếp
 
 ---
 
@@ -12,10 +12,10 @@ Thay thế hoàn toàn MYPACKSOFT trong 12 tháng (deadline: 2026-12).
 |---|---|---|
 | Bán hàng | ~90% | Gần production-ready |
 | Kho & Sản xuất | ~72% | fix chuyển kho ✅ Sprint 1 |
-| Tài chính | ~65% | Thiếu HĐ điện tử |
-| Nhân sự | ~75% | Thiếu import MYPACKSOFT |
-| Mua hàng | ~72% | YMH workflow → Sprint 2 |
-| Báo cáo | ~55% | Export Excel → Sprint 2 |
+| Tài chính | ~70% | CĐPS export ✅ Sprint 4, thiếu HĐ điện tử |
+| Nhân sự | ~85% | Import bulk ✅ Sprint 3 |
+| Mua hàng | ~80% | YMH workflow ✅ Sprint 2 |
+| Báo cáo | ~75% | Export Excel ✅ Sprint 2+4, giá thành+P&L ✅ Sprint 4 |
 | Security | ~95% | 44 endpoints secured ✅ Sprint 1 |
 
 ---
@@ -37,10 +37,12 @@ Thay thế hoàn toàn MYPACKSOFT trong 12 tháng (deadline: 2026-12).
 - [x] Import lịch sử lương 1 năm (POST /hr/payroll/import-history, upsert thang/nam) — 7ee6807
 - Note: KH/NCC/SP import đã có sẵn từ trước (customers, suppliers, products router)
 
-## Sprint 4 — Báo cáo Nâng cao (Tháng 7 T3-4)
-- [ ] Giá thành chi tiết theo LSX
-- [ ] Workshop P&L tự động
-- [ ] CĐPS hoàn chỉnh
+## Sprint 4 — Báo cáo Nâng cao (Tháng 7 T3-4) — DONE (2026-05-24)
+- [x] CĐPS export Excel (GET /accounting/trial-balance/export) — 27e183e
+- [x] Giá thành SX export Excel (GET /accounting/reports/production-costing/export) — 27e183e
+- [x] Workshop P&L export Excel (GET /accounting/reports/workshop-pnl-export) — 27e183e
+- [x] Frontend: nút Xuất Excel cho CĐPS, Giá thành SX, Workshop P&L — 36aa521
+- Fix: phan_xuong_id optional (int | None) cho Workshop P&L endpoint + service
 
 ## Sprint 5 — Hóa đơn điện tử (Tháng 8)
 - [ ] Quyết định: portal tay vs API VNPT/MISA
