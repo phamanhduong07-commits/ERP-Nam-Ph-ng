@@ -82,6 +82,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/sales/returns', label: <Link to="/sales/returns">Trả hàng bán</Link> },
         { key: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link> },
         { key: '/sales/giao-hang', label: <Link to="/sales/giao-hang">🚚 Giao hàng</Link> },
+        { key: '/crm/interactions', icon: <SolutionOutlined />, label: <Link to="/crm/interactions">Lịch sử tương tác KH</Link> },
         { key: '/billing/invoices', label: <Link to="/billing/invoices">Hóa đơn VAT</Link> },
       ],
     },
@@ -93,6 +94,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       children: [
         { key: '/production/orders', label: <Link to="/production/orders">Lệnh sản xuất</Link>, roles: SAN_XUAT_FULL },
         { key: '/production/plans', label: <Link to="/production/plans">Kế hoạch sản xuất</Link>, roles: SAN_XUAT_FULL },
+        { key: '/mrp', icon: <BarChartOutlined />, label: <Link to="/mrp">MRP - Hoạch định NVL</Link> },
         {
           key: '/production/queue',
           roles: SAN_XUAT_FULL,
@@ -206,6 +208,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/accounting/hoa-don-dien-tu', icon: <FileProtectOutlined />, label: <Link to="/accounting/hoa-don-dien-tu">Hóa đơn điện tử</Link> },
         { key: '/accounting/workshop-management', label: <Link to="/accounting/workshop-management">Quản trị xưởng (Lương)</Link> },
         { key: '/accounting/ccdc', label: <Link to="/accounting/ccdc">Tài sản & CCDC</Link> },
+        { key: '/fixed-assets', label: <Link to="/fixed-assets">Tài sản cố định</Link> },
         { key: '/accounting/general-ledger', label: <Link to="/accounting/general-ledger">Sổ cái tài khoản</Link> },
       ],
     },

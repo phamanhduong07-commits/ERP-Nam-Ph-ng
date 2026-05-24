@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, Row, Select, Input, Spin, Table, Tag, Tooltip, Typography, Space, Statistic, Tabs, message,
+  Button, Card, Col, Row, Select, Input, Spin, Table, Tag, Tooltip, Typography, Space, Statistic, Tabs, message, Empty,
 } from 'antd'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, fmtNum, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
@@ -60,11 +60,17 @@ export default function InventoryPage() {
     enabled: activeTab === 'theo-xuong',
   })
 
-  const { data: tonKho = [], isLoading } = useQuery({
+  const { data: tonKho = [], isLoading, isError } = useQuery({
     queryKey: ['ton-kho', phapNhanId, phanXuongId, warehouseId, loai],
     queryFn: () => warehouseApi.getTonKho({ phap_nhan_id: phapNhanId, phan_xuong_id: phanXuongId, warehouse_id: warehouseId, loai }).then(r => r.data),
     refetchInterval: 60_000,
   })
+
+  useEffect(() => {
+    if (isError) {
+      message.error('Không thể tải dữ liệu tồn kho. Vui lòng thử lại.')
+    }
+  }, [isError])
 
   const phanXuongsByPn = phapNhanId ? phanXuongs.filter((x: any) => x.phap_nhan_id === phapNhanId) : phanXuongs
   const allowedPxIds = new Set(phanXuongsByPn.map((x: any) => x.id))
@@ -377,6 +383,10 @@ export default function InventoryPage() {
 
       {isLoading ? (
         <Spin style={{ margin: 40, display: 'block' }} />
+      ) : isError ? (
+        <Card size="small">
+          <Empty description="Không thể tải dữ liệu tồn kho" />
+        </Card>
       ) : (
         <Card size="small" styles={{ body: { padding: 0 } }}>
           <Table

@@ -544,7 +544,7 @@ def _spec_from_soi(soi_id: int, db: Session):
     )
     try:
         row = db.execute(
-            sql_text(f"SELECT {_SPEC_COLS} FROM sales_order_items WHERE id = :id"),
+            sql_text("SELECT " + _SPEC_COLS + " FROM sales_order_items WHERE id = :id"),
             {"id": soi_id}
         ).first()
     except Exception:
