@@ -3,20 +3,37 @@ from decimal import Decimal
 from typing import List, Optional
 import re
 import unicodedata
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.hr import Department, Position, Employee, AttendanceLog, LeaveRequest, PayrollConfig, PayrollHoliday, EmployeeHistory, EmployeeDocument, LaborContract
+from app.models.hr import Department, Position, Employee, AttendanceLog, LeaveRequest, PayrollConfig, PayrollHoliday, EmployeeHistory, EmployeeDocument, LaborContract, PayrollRun
 from app.services.hr_service import PayrollService
 from app.schemas import hr as schemas
 from app.utils.log import get_logger
+from app.services.excel_import_service import ImportField, build_template_response
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/hr", tags=["hr"])
+
+HR_EMPLOYEE_IMPORT_FIELDS = [
+    ImportField("ma_nv", "Ma NV", required=True, help_text="Ma nhan vien (duy nhat)"),
+    ImportField("ho_ten", "Ho ten", required=True),
+    ImportField("ngay_sinh", "Ngay sinh", help_text="DD/MM/YYYY"),
+    ImportField("gioi_tinh", "Gioi tinh", help_text="Nam / Nu"),
+    ImportField("so_dien_thoai", "So dien thoai"),
+    ImportField("email", "Email"),
+    ImportField("ngay_vao_lam", "Ngay vao lam", help_text="DD/MM/YYYY"),
+    ImportField("ngay_nghi_viec", "Ngay nghi viec", help_text="DD/MM/YYYY, de trong neu con lam"),
+    ImportField("trang_thai", "Trang thai", help_text="dang_lam / tam_nghi / da_nghi"),
+    ImportField("ten_chuc_vu", "Chuc vu", help_text="Ten chuc vu (lookup theo ten)"),
+    ImportField("ten_bo_phan", "Bo phan", help_text="Ten bo phan (lookup theo ten)"),
+    ImportField("he_so_ca_nhan", "He so ca nhan", help_text="So thap phan, VD: 1.5"),
+]
+
 
 def _role_code(user: User) -> str | None:
     return user.role.ma_vai_tro if getattr(user, "role", None) else None
@@ -221,6 +238,12 @@ def list_employees(
             "user_id": e.user_id
         })
     return result
+
+@router.get("/employees/import-template")
+def employee_import_template(_: User = Depends(get_current_user)):
+    """Tải file Excel mẫu để import nhân viên."""
+    return build_template_response("mau_import_nhan_vien.xlsx", HR_EMPLOYEE_IMPORT_FIELDS)
+
 
 @router.get("/employees/{id}")
 def get_employee(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
@@ -697,8 +720,460 @@ def toggle_account_status(id: int, db: Session = Depends(get_db), _: User = Depe
     emp = db.get(Employee, id)
     if not emp or not emp.user_id:
         raise HTTPException(400, "Nhân viên chưa có tài khoản")
-    
+
     user = db.get(User, emp.user_id)
     user.trang_thai = not user.trang_thai
     db.commit()
     return {"status": "success", "new_status": user.trang_thai}
+
+
+# --- Payroll History Import ---
+
+HR_PAYROLL_IMPORT_FIELDS = [
+    ImportField("ma_nv", "Ma NV", required=True),
+    ImportField("thang", "Thang", required=True, help_text="1-12"),
+    ImportField("nam", "Nam", required=True, help_text="VD: 2025"),
+    ImportField("luong_co_ban", "Luong co ban"),
+    ImportField("luong_san_pham", "Luong san pham"),
+    ImportField("phu_cap", "Phu cap"),
+    ImportField("phu_cap_chuyen_can", "Chuyen can"),
+    ImportField("phu_cap_trach_nhiem", "Trach nhiem"),
+    ImportField("tong_thu_nhap", "Tong thu nhap"),
+    ImportField("thuong", "Thuong"),
+    ImportField("bao_hiem", "Bao hiem"),
+    ImportField("thue_tncn", "Thue TNCN"),
+    ImportField("tam_ung", "Tam ung"),
+    ImportField("luong_thuc_nhan", "Luong thuc nhan"),
+    ImportField("ghi_chu", "Ghi chu"),
+]
+
+
+@router.get("/payroll/import-history-template")
+def payroll_import_template(_: User = Depends(get_current_user)):
+    return build_template_response("mau_import_lich_su_luong.xlsx", HR_PAYROLL_IMPORT_FIELDS)
+
+
+def _parse_money(value: object) -> Decimal:
+    """Parse a money value from Excel cell: strip commas, convert to Decimal. Returns 0 if empty."""
+    if value is None or str(value).strip() == "":
+        return Decimal("0")
+    text = str(value).replace(",", "").strip()
+    try:
+        return Decimal(text)
+    except Exception:
+        return Decimal("0")
+
+
+@router.post("/payroll/import-history")
+async def import_payroll_history(
+    file: UploadFile = File(...),
+    commit: bool = True,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Import lich su luong (PayrollRun) tu file Excel.
+    Upsert theo khoa (employee_id, thang, nam).
+    Tra ve: {"created": N, "updated": N, "errors": [...]}
+    """
+    from io import BytesIO
+    from openpyxl import load_workbook
+
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Chi chap nhan file Excel .xlsx/.xls")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="File rong")
+
+    try:
+        wb = load_workbook(filename=BytesIO(raw), read_only=True, data_only=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Khong doc duoc file Excel: {exc}")
+
+    ws = wb.active
+    rows_iter = ws.iter_rows(values_only=True)
+
+    # Build header map from first row
+    try:
+        header_row = next(rows_iter)
+    except StopIteration:
+        raise HTTPException(status_code=400, detail="File khong co du lieu")
+
+    # Normalize header labels to field names using HR_PAYROLL_IMPORT_FIELDS
+    label_to_field: dict[str, str] = {
+        field.label.strip().lower(): field.name
+        for field in HR_PAYROLL_IMPORT_FIELDS
+    }
+    col_index: dict[str, int] = {}  # field_name -> column index
+    for col_i, header_val in enumerate(header_row):
+        if header_val is None:
+            continue
+        normalized = str(header_val).strip().lower()
+        field_name = label_to_field.get(normalized)
+        if field_name:
+            col_index[field_name] = col_i
+
+    # Validate required columns present
+    required_fields = [f.name for f in HR_PAYROLL_IMPORT_FIELDS if f.required]
+    missing_cols = [f for f in required_fields if f not in col_index]
+    if missing_cols:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Thieu cot bat buoc: {', '.join(missing_cols)}"
+        )
+
+    created_count = 0
+    updated_count = 0
+    errors: list[dict] = []
+
+    # Collect valid rows to process (upsert) — only if no row-level errors when commit=True
+    pending: list[tuple[object | None, dict]] = []  # (existing_obj_or_None, values_dict)
+
+    for row_i, row in enumerate(rows_iter, start=2):
+        # Skip completely blank rows
+        if all(v is None or str(v).strip() == "" for v in row):
+            continue
+
+        def _cell(field_name: str):
+            idx = col_index.get(field_name)
+            if idx is None:
+                return None
+            return row[idx] if idx < len(row) else None
+
+        ma_nv_raw = _cell("ma_nv")
+        ma_nv = str(ma_nv_raw).strip() if ma_nv_raw is not None else None
+
+        # Parse thang / nam
+        try:
+            thang_val = _cell("thang")
+            thang = int(float(str(thang_val).replace(",", "").strip()))
+            if not 1 <= thang <= 12:
+                raise ValueError("Thang phai tu 1 den 12")
+        except Exception as exc:
+            errors.append({"row": row_i, "ma_nv": ma_nv, "error": f"Thang khong hop le: {exc}"})
+            continue
+
+        try:
+            nam_val = _cell("nam")
+            nam = int(float(str(nam_val).replace(",", "").strip()))
+        except Exception as exc:
+            errors.append({"row": row_i, "ma_nv": ma_nv, "error": f"Nam khong hop le: {exc}"})
+            continue
+
+        # Lookup employee
+        if not ma_nv:
+            errors.append({"row": row_i, "ma_nv": None, "error": "Ma NV trong"})
+            continue
+
+        emp = db.query(Employee).filter(Employee.ma_nv == ma_nv).first()
+        if not emp:
+            errors.append({"row": row_i, "ma_nv": ma_nv, "error": f"Khong tim thay NV ma_nv={ma_nv!r}"})
+            continue
+
+        # Build values dict for money fields
+        money_map = {
+            "luong_co_ban": "luong_co_ban",
+            "luong_san_pham": "luong_san_pham",
+            "phu_cap": "phu_cap",
+            "phu_cap_chuyen_can": "phu_cap_chuyen_can",
+            "phu_cap_trach_nhiem": "phu_cap_trach_nhiem",
+            "tong_thu_nhap": "tong_thu_nhap",
+            "thuong": "thuong",
+            "bao_hiem": "bao_hiem",
+            "thue_tncn": "thue_tncn",
+            "tam_ung": "tam_ung",
+            # "luong_thuc_nhan" in Excel maps to "thuc_linh" in model
+            "luong_thuc_nhan": "thuc_linh",
+        }
+
+        values: dict = {
+            "employee_id": emp.id,
+            "thang": thang,
+            "nam": nam,
+        }
+        for excel_field, model_field in money_map.items():
+            values[model_field] = _parse_money(_cell(excel_field))
+
+        ghi_chu_val = _cell("ghi_chu")
+        if ghi_chu_val is not None and str(ghi_chu_val).strip():
+            values["ghi_chu_import"] = str(ghi_chu_val).strip()
+
+        # Upsert lookup
+        existing = db.query(PayrollRun).filter(
+            PayrollRun.employee_id == emp.id,
+            PayrollRun.thang == thang,
+            PayrollRun.nam == nam,
+        ).first()
+
+        pending.append((existing, values))
+        if existing:
+            updated_count += 1
+        else:
+            created_count += 1
+
+    wb.close()
+
+    if commit:
+        for existing_obj, vals in pending:
+            if existing_obj:
+                for field, value in vals.items():
+                    if hasattr(existing_obj, field):
+                        setattr(existing_obj, field, value)
+            else:
+                # Only set fields that exist on the model
+                safe_vals = {k: v for k, v in vals.items() if hasattr(PayrollRun, k)}
+                db.add(PayrollRun(**safe_vals))
+        db.commit()
+
+    return {
+        "created": created_count,
+        "updated": updated_count,
+        "errors": errors,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Import nhân viên bulk từ Excel
+# ---------------------------------------------------------------------------
+
+@router.post("/employees/import")
+async def import_employees(
+    commit: bool = Query(default=True),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Import nhân viên bulk từ file Excel (.xlsx/.xls).
+    Upsert theo ma_nv: tồn tại → update, chưa có → create.
+    Lookup Position theo ten_chuc_vu (ilike), Department theo ten_bo_phan (ilike).
+    Trả về: {"created": N, "updated": N, "errors": [{"row": i, "error": "..."}]}
+    """
+    from io import BytesIO
+    from datetime import datetime as _dt
+    from decimal import Decimal as _Decimal, InvalidOperation
+    from openpyxl import load_workbook
+
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Chi chap nhan file Excel .xlsx/.xls")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="File rong")
+
+    try:
+        wb = load_workbook(BytesIO(raw), read_only=True, data_only=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Khong doc duoc file Excel: {exc}") from exc
+
+    ws = wb.active
+    rows_iter = iter(ws.rows)
+
+    # Đọc header row — map label → field name
+    try:
+        header_cells = next(rows_iter)
+    except StopIteration:
+        raise HTTPException(status_code=400, detail="File khong co du lieu")
+
+    label_to_field: dict[str, str] = {
+        f.label.strip().lower(): f.name for f in HR_EMPLOYEE_IMPORT_FIELDS
+    }
+
+    col_index: dict[str, int] = {}  # field_name → column index (0-based)
+    for idx, cell in enumerate(header_cells):
+        raw_label = str(cell.value or "").strip().lower()
+        if raw_label in label_to_field:
+            col_index[label_to_field[raw_label]] = idx
+
+    missing = [f.label for f in HR_EMPLOYEE_IMPORT_FIELDS if f.required and f.name not in col_index]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Thieu cot bat buoc: {', '.join(missing)}")
+
+    def _cell_val(row_cells, field_name: str):
+        idx = col_index.get(field_name)
+        if idx is None or idx >= len(row_cells):
+            return None
+        return row_cells[idx].value
+
+    def _parse_date_val(value) -> date | None:
+        if value is None:
+            return None
+        if isinstance(value, _dt):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        text = str(value).strip()
+        if not text:
+            return None
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
+            try:
+                return _dt.strptime(text, fmt).date()
+            except ValueError:
+                continue
+        raise ValueError(f"Khong nhan dang duoc ngay: {text!r}")
+
+    def _parse_decimal_val(value) -> _Decimal | None:
+        if value is None:
+            return None
+        text = str(value).replace(",", ".").strip()
+        if not text:
+            return None
+        try:
+            return _Decimal(text)
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError("Phai la so thap phan") from exc
+
+    def _parse_text_val(value) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    # Caches để tránh query lặp trong cùng file
+    position_cache: dict[str, int | None] = {}
+    department_cache: dict[str, int | None] = {}
+
+    n_created = 0
+    n_updated = 0
+    errors: list[dict] = []
+    objects_to_save: list[tuple] = []  # (existing | None, values_dict)
+
+    for row_idx, row_cells in enumerate(rows_iter, start=2):
+        # Bỏ qua dòng trắng
+        if all(c.value is None or str(c.value).strip() == "" for c in row_cells):
+            continue
+
+        row_errors: list[str] = []
+        values: dict = {}
+
+        # ma_nv (bắt buộc)
+        ma_nv = _parse_text_val(_cell_val(row_cells, "ma_nv"))
+        if not ma_nv:
+            row_errors.append("Ma NV: bat buoc")
+        else:
+            values["ma_nv"] = ma_nv
+
+        # ho_ten (bắt buộc)
+        ho_ten = _parse_text_val(_cell_val(row_cells, "ho_ten"))
+        if not ho_ten:
+            row_errors.append("Ho ten: bat buoc")
+        else:
+            values["ho_ten"] = ho_ten
+
+        # ngay_sinh
+        try:
+            v = _parse_date_val(_cell_val(row_cells, "ngay_sinh"))
+            if v is not None:
+                values["ngay_sinh"] = v
+        except ValueError as exc:
+            row_errors.append(f"Ngay sinh: {exc}")
+
+        # gioi_tinh
+        v = _parse_text_val(_cell_val(row_cells, "gioi_tinh"))
+        if v is not None:
+            values["gioi_tinh"] = v
+
+        # so_dien_thoai
+        v = _parse_text_val(_cell_val(row_cells, "so_dien_thoai"))
+        if v is not None:
+            values["so_dien_thoai"] = v
+
+        # email
+        v = _parse_text_val(_cell_val(row_cells, "email"))
+        if v is not None:
+            values["email"] = v
+
+        # ngay_vao_lam
+        try:
+            v = _parse_date_val(_cell_val(row_cells, "ngay_vao_lam"))
+            if v is not None:
+                values["ngay_vao_lam"] = v
+        except ValueError as exc:
+            row_errors.append(f"Ngay vao lam: {exc}")
+
+        # ngay_nghi_viec
+        try:
+            v = _parse_date_val(_cell_val(row_cells, "ngay_nghi_viec"))
+            if v is not None:
+                values["ngay_nghi_viec"] = v
+        except ValueError as exc:
+            row_errors.append(f"Ngay nghi viec: {exc}")
+
+        # trang_thai
+        v = _parse_text_val(_cell_val(row_cells, "trang_thai"))
+        if v is not None:
+            valid_statuses = {"dang_lam", "tam_nghi", "da_nghi"}
+            if v not in valid_statuses:
+                row_errors.append(
+                    f"Trang thai: phai la {'/'.join(sorted(valid_statuses))}, nhan duoc '{v}'"
+                )
+            else:
+                values["trang_thai"] = v
+
+        # ten_chuc_vu → chuc_vu_id (lookup ilike)
+        ten_chuc_vu = _parse_text_val(_cell_val(row_cells, "ten_chuc_vu"))
+        if ten_chuc_vu:
+            cache_key = ten_chuc_vu.lower()
+            if cache_key not in position_cache:
+                pos = db.query(Position).filter(
+                    Position.ten_chuc_vu.ilike(ten_chuc_vu)
+                ).first()
+                position_cache[cache_key] = pos.id if pos else None
+            chuc_vu_id = position_cache[cache_key]
+            if chuc_vu_id is None:
+                row_errors.append(f"Chuc vu '{ten_chuc_vu}': khong tim thay trong he thong")
+            else:
+                values["chuc_vu_id"] = chuc_vu_id
+
+        # ten_bo_phan → bo_phan_id (lookup ilike)
+        ten_bo_phan = _parse_text_val(_cell_val(row_cells, "ten_bo_phan"))
+        if ten_bo_phan:
+            cache_key = ten_bo_phan.lower()
+            if cache_key not in department_cache:
+                dept = db.query(Department).filter(
+                    Department.ten_bo_phan.ilike(ten_bo_phan)
+                ).first()
+                department_cache[cache_key] = dept.id if dept else None
+            bo_phan_id = department_cache[cache_key]
+            if bo_phan_id is None:
+                row_errors.append(f"Bo phan '{ten_bo_phan}': khong tim thay trong he thong")
+            else:
+                values["bo_phan_id"] = bo_phan_id
+
+        # he_so_ca_nhan
+        try:
+            v = _parse_decimal_val(_cell_val(row_cells, "he_so_ca_nhan"))
+            if v is not None:
+                values["he_so_ca_nhan"] = v
+        except ValueError as exc:
+            row_errors.append(f"He so ca nhan: {exc}")
+
+        if row_errors:
+            errors.append({"row": row_idx, "error": "; ".join(row_errors)})
+            continue
+
+        # Upsert theo ma_nv
+        existing = db.query(Employee).filter(
+            Employee.ma_nv == values.get("ma_nv")
+        ).first()
+
+        if existing:
+            objects_to_save.append((existing, values))
+            n_updated += 1
+        else:
+            objects_to_save.append((None, values))
+            n_created += 1
+
+    wb.close()
+
+    if commit:
+        for existing_emp, vals in objects_to_save:
+            if existing_emp:
+                for field_name, field_val in vals.items():
+                    setattr(existing_emp, field_name, field_val)
+            else:
+                db.add(Employee(**vals))
+        db.commit()
+
+    return {"created": n_created, "updated": n_updated, "errors": errors}
