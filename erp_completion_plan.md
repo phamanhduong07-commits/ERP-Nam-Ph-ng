@@ -31,10 +31,11 @@ Thay thế hoàn toàn MYPACKSOFT trong 12 tháng (deadline: 2026-12).
 - [x] Dashboard KPI: backlog SX, tồn phôi/TP, công nợ quá hạn — 66cd9ed
 - Bug fixed: migration ymh001 branch conflict (down_revision del001→dnb001)
 
-## Sprint 3 — Data Migration (Tháng 7 T1-2)
-- [ ] Verify master data MYPACKSOFT 100% (KH, SP, NCC)
-- [ ] Import lịch sử đơn hàng 2 năm (bo_qua_hach_toan=true)
-- [ ] Import lịch sử nhân viên + lương 1 năm
+## Sprint 3 — Data Migration (Tháng 7 T1-2) — DONE (2026-05-24)
+- [x] Import lịch sử đơn hàng 2 năm (bo_qua_hach_toan trên SalesOrder + import field) — 9266c43
+- [x] Import lịch sử nhân viên bulk (POST /hr/employees/import, upsert ma_nv) — 7ee6807
+- [x] Import lịch sử lương 1 năm (POST /hr/payroll/import-history, upsert thang/nam) — 7ee6807
+- Note: KH/NCC/SP import đã có sẵn từ trước (customers, suppliers, products router)
 
 ## Sprint 4 — Báo cáo Nâng cao (Tháng 7 T3-4)
 - [ ] Giá thành chi tiết theo LSX
