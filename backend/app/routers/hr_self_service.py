@@ -34,7 +34,21 @@ def get_my_payroll(current_user: User = Depends(get_current_user), db: Session =
         PayrollRun.employee_id == emp.id).order_by(
         PayrollRun.nam.desc(),
         PayrollRun.thang.desc()).all()
-    return runs
+    return [
+        {
+            "id": r.id,
+            "thang": r.thang,
+            "nam": r.nam,
+            "trang_thai": r.trang_thai,
+            "luong_co_ban": float(r.luong_co_ban),
+            "luong_san_pham": float(r.luong_san_pham),
+            "phu_cap": float(r.phu_cap),
+            "thuong": float(r.thuong),
+            "thuc_linh": float(r.thuc_linh),
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in runs
+    ]
 
 
 @router.get("/attendance")

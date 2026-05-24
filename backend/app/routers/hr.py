@@ -199,8 +199,7 @@ def list_employees(
     if bo_phan_id:
         q = q.filter(Employee.bo_phan_id == bo_phan_id)
 
-    role_code = current_user.role.ma_vai_tro if current_user.role else None
-    is_hr_admin = role_code in ("ADMIN", "NHAN_SU")
+    is_hr_admin = _role_code(current_user) in ("ADMIN", "NHAN_SU")
 
     employees = q.all()
     result = []
@@ -213,14 +212,6 @@ def list_employees(
             "gioi_tinh": e.gioi_tinh,
             "so_dien_thoai": e.so_dien_thoai,
             "email": e.email,
-            "cccd": e.cccd,
-            "ngay_cap": e.ngay_cap.isoformat() if e.ngay_cap else None,
-            "noi_cap": e.noi_cap,
-            "dia_chi": e.dia_chi,
-            "que_quan": e.que_quan,
-            "so_tk_ngan_hang": e.so_tk_ngan_hang,
-            "ten_ngan_hang": e.ten_ngan_hang,
-            "chi_nhanh_ngan_hang": e.chi_nhanh_ngan_hang,
             "trang_thai": e.trang_thai,
             "ngay_vao_lam": e.ngay_vao_lam.isoformat() if e.ngay_vao_lam else None,
             "ngay_nghi_viec": e.ngay_nghi_viec.isoformat() if e.ngay_nghi_viec else None,
@@ -228,16 +219,24 @@ def list_employees(
             "phan_xuong_id": e.phan_xuong_id,
             "bo_phan_id": e.bo_phan_id,
             "chuc_vu_id": e.chuc_vu_id,
-            "ma_van_tay": e.ma_van_tay,
-            "he_so_ca_nhan": float(e.he_so_ca_nhan or 0),
             "ten_bo_phan": e.bo_phan.ten_bo_phan if e.bo_phan else None,
             "ten_chuc_vu": e.chuc_vu.ten_chuc_vu if e.chuc_vu else None,
             "ten_phan_xuong": e.phan_xuong.ten_xuong if e.phan_xuong else None,
             "ten_phap_nhan": e.phap_nhan.ten_phap_nhan if e.phap_nhan else None,
             "has_account": e.user_id is not None,
         }
-        # Account details only for HR/Admin — prevents auth info leakage to floor workers
+        # Wage + PII + account: HR/Admin only — salary coeff, CCCD, bank, fingerprint
         if is_hr_admin:
+            row["he_so_ca_nhan"] = float(e.he_so_ca_nhan or 0)
+            row["cccd"] = e.cccd
+            row["ngay_cap"] = e.ngay_cap.isoformat() if e.ngay_cap else None
+            row["noi_cap"] = e.noi_cap
+            row["dia_chi"] = e.dia_chi
+            row["que_quan"] = e.que_quan
+            row["so_tk_ngan_hang"] = e.so_tk_ngan_hang
+            row["ten_ngan_hang"] = e.ten_ngan_hang
+            row["chi_nhanh_ngan_hang"] = e.chi_nhanh_ngan_hang
+            row["ma_van_tay"] = e.ma_van_tay
             row["username"] = e.user.username if e.user else None
             row["user_status"] = e.user.trang_thai if e.user else None
         result.append(row)
@@ -250,14 +249,49 @@ def employee_import_template(_: User = Depends(get_current_user)):
 
 
 @router.get("/employees/{id}")
-def get_employee(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_employee(id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     e = db.query(Employee).filter(Employee.id == id).first()
     if not e:
         raise HTTPException(404, "Không tìm thấy nhân viên")
-    return e
+    is_hr_admin = _role_code(current_user) in ("ADMIN", "NHAN_SU")
+    row: dict = {
+        "id": e.id,
+        "ma_nv": e.ma_nv,
+        "ho_ten": e.ho_ten,
+        "ngay_sinh": e.ngay_sinh.isoformat() if e.ngay_sinh else None,
+        "gioi_tinh": e.gioi_tinh,
+        "so_dien_thoai": e.so_dien_thoai,
+        "email": e.email,
+        "trang_thai": e.trang_thai,
+        "ngay_vao_lam": e.ngay_vao_lam.isoformat() if e.ngay_vao_lam else None,
+        "ngay_nghi_viec": e.ngay_nghi_viec.isoformat() if e.ngay_nghi_viec else None,
+        "phap_nhan_id": e.phap_nhan_id,
+        "phan_xuong_id": e.phan_xuong_id,
+        "bo_phan_id": e.bo_phan_id,
+        "chuc_vu_id": e.chuc_vu_id,
+        "ten_bo_phan": e.bo_phan.ten_bo_phan if e.bo_phan else None,
+        "ten_chuc_vu": e.chuc_vu.ten_chuc_vu if e.chuc_vu else None,
+        "ten_phan_xuong": e.phan_xuong.ten_xuong if e.phan_xuong else None,
+        "ten_phap_nhan": e.phap_nhan.ten_phap_nhan if e.phap_nhan else None,
+        "has_account": e.user_id is not None,
+    }
+    if is_hr_admin:
+        row["he_so_ca_nhan"] = float(e.he_so_ca_nhan or 0)
+        row["cccd"] = e.cccd
+        row["ngay_cap"] = e.ngay_cap.isoformat() if e.ngay_cap else None
+        row["noi_cap"] = e.noi_cap
+        row["dia_chi"] = e.dia_chi
+        row["que_quan"] = e.que_quan
+        row["so_tk_ngan_hang"] = e.so_tk_ngan_hang
+        row["ten_ngan_hang"] = e.ten_ngan_hang
+        row["chi_nhanh_ngan_hang"] = e.chi_nhanh_ngan_hang
+        row["ma_van_tay"] = e.ma_van_tay
+        row["username"] = e.user.username if e.user else None
+        row["user_status"] = e.user.trang_thai if e.user else None
+    return row
 
 @router.post("/employees", response_model=schemas.Employee)
-def create_employee(body: schemas.EmployeeCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def create_employee(body: schemas.EmployeeCreate, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
     if db.query(Employee).filter(Employee.ma_nv == body.ma_nv).first():
         raise HTTPException(400, "Mã nhân viên đã tồn tại")
     db_emp = Employee(**body.model_dump())
@@ -296,7 +330,7 @@ def update_employee(
     id: int,
     body: schemas.EmployeeUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU"))
 ):
     from app.models.auth import Role, User as AuthUser
     db_emp = db.query(Employee).filter(Employee.id == id).first()
@@ -337,7 +371,7 @@ def update_employee(
     return db_emp
 
 @router.get("/employees/{id}/history")
-def get_employee_history(id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_employee_history(id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
     return db.query(EmployeeHistory).filter(EmployeeHistory.employee_id == id).order_by(EmployeeHistory.created_at.desc()).all()
 
 # --- Contracts & Warnings ---
@@ -496,9 +530,9 @@ def create_leave_request(body: schemas.LeaveRequestCreate, db: Session = Depends
 
 @router.post("/leave-requests/{id}/approve")
 def approve_leave_request(
-    id: int, 
+    id: int,
     y_kien: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU", "GIAM_DOC", "QUAN_DOC")),
     db: Session = Depends(get_db)
 ):
     req = db.get(LeaveRequest, id)
@@ -534,7 +568,7 @@ def approve_leave_request(
 def approve_leave_request_body(
     id: int,
     body: schemas.LeaveApprovalRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU", "GIAM_DOC", "QUAN_DOC")),
     db: Session = Depends(get_db),
 ):
     req = db.get(LeaveRequest, id)
