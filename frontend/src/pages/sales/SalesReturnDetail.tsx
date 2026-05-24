@@ -682,70 +682,41 @@ export default function SalesReturnDetail() {
                 </Row>
               </Form>
             ) : (
-              <Descriptions
-                bordered
-                column={{ xs: 1, sm: 1, lg: 2 }}
-                size="small"
-                labelStyle={{ fontWeight: 600, background: '#fafafa', whiteSpace: 'nowrap' }}
-              >
-                <Descriptions.Item label="Số phiếu">
-                  <Text copyable strong style={{ color: '#1677ff' }}>{returnData.so_phieu_tra}</Text>
-                </Descriptions.Item>
-                <Descriptions.Item label="Ngày trả">
-                  {dayjs(returnData.ngay_tra).format('DD/MM/YYYY')}
-                </Descriptions.Item>
-                <Descriptions.Item label="Đơn hàng gốc">
-                  {salesOrder ? (
-                    <Button type="link" style={{ padding: 0 }} onClick={() => navigate(`/sales/orders/${salesOrder.id}`)}>
-                      {salesOrder.so_don}
-                    </Button>
-                  ) : '—'}
-                </Descriptions.Item>
-                <Descriptions.Item label="Phiếu giao hàng">
-                  {returnData.so_phieu_giao ? (
-                    <Space size={4}>
-                      <Button
-                        type="link"
-                        style={{ padding: 0 }}
-                        onClick={() => navigate(`/warehouse/delivery/${returnData.delivery_order_id}`)}
-                      >
-                        {returnData.so_phieu_giao}
-                      </Button>
-                      {returnData.ngay_giao && (
-                        <Text type="secondary">({dayjs(returnData.ngay_giao).format('DD/MM/YYYY')})</Text>
-                      )}
-                    </Space>
-                  ) : '—'}
-                </Descriptions.Item>
-                <Descriptions.Item label="Khách hàng" span={2}>
-                  {returnData.customer ? (
-                    <Space>
-                      <Text strong>{returnData.customer.ten_viet_tat}</Text>
-                      <Text type="secondary">[{returnData.customer.ma_kh}]</Text>
-                    </Space>
-                  ) : '—'}
-                </Descriptions.Item>
-                <Descriptions.Item label="Lý do trả">{returnData.ly_do_tra}</Descriptions.Item>
-                <Descriptions.Item label="Người tạo">{returnData.ten_nguoi_tao || '—'}</Descriptions.Item>
-                <Descriptions.Item label="Người duyệt">
-                  {returnData.ten_nguoi_duyet
-                    ? <Space size={4}>
-                        <Text>{returnData.ten_nguoi_duyet}</Text>
-                        {returnData.approved_at && (
-                          <Text type="secondary">({dayjs(returnData.approved_at).format('DD/MM/YYYY HH:mm')})</Text>
-                        )}
-                      </Space>
-                    : '—'}
-                </Descriptions.Item>
-                <Descriptions.Item label="Tổng tiền trả">
-                  <Text strong style={{ fontSize: 18, color: '#cf1322' }}>
-                    {new Intl.NumberFormat('vi-VN').format(returnData.tong_tien_tra)}đ
-                  </Text>
-                </Descriptions.Item>
-                {returnData.ghi_chu && (
-                  <Descriptions.Item label="Ghi chú" span={2}>{returnData.ghi_chu}</Descriptions.Item>
-                )}
-              </Descriptions>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'auto' }}>
+                <tbody>
+                  {[
+                    [
+                      { label: 'Số phiếu', value: <Text copyable strong style={{ color: '#1677ff' }}>{returnData.so_phieu_tra}</Text> },
+                      { label: 'Ngày trả', value: dayjs(returnData.ngay_tra).format('DD/MM/YYYY') },
+                    ],
+                    [
+                      { label: 'Đơn hàng gốc', value: salesOrder ? <Button type="link" style={{ padding: 0 }} onClick={() => navigate(`/sales/orders/${salesOrder.id}`)}>{salesOrder.so_don}</Button> : '—' },
+                      { label: 'Phiếu giao hàng', value: returnData.so_phieu_giao ? <Space size={4}><Button type="link" style={{ padding: 0 }} onClick={() => navigate(`/warehouse/delivery/${returnData.delivery_order_id}`)}>{returnData.so_phieu_giao}</Button>{returnData.ngay_giao && <Text type="secondary">({dayjs(returnData.ngay_giao).format('DD/MM/YYYY')})</Text>}</Space> : '—' },
+                    ],
+                    [
+                      { label: 'Khách hàng', value: returnData.customer ? <Space><Text strong>{returnData.customer.ten_viet_tat}</Text><Text type="secondary">[{returnData.customer.ma_kh}]</Text></Space> : '—', colSpan: 3 },
+                    ],
+                    [
+                      { label: 'Lý do trả', value: returnData.ly_do_tra },
+                      { label: 'Người tạo', value: returnData.ten_nguoi_tao || '—' },
+                    ],
+                    [
+                      { label: 'Người duyệt', value: returnData.ten_nguoi_duyet ? <Space size={4}><Text>{returnData.ten_nguoi_duyet}</Text>{returnData.approved_at && <Text type="secondary">({dayjs(returnData.approved_at).format('DD/MM/YYYY HH:mm')})</Text>}</Space> : '—' },
+                      { label: 'Tổng tiền trả', value: <Text strong style={{ fontSize: 16, color: '#cf1322' }}>{new Intl.NumberFormat('vi-VN').format(returnData.tong_tien_tra)}đ</Text> },
+                    ],
+                    ...(returnData.ghi_chu ? [[{ label: 'Ghi chú', value: returnData.ghi_chu, colSpan: 3 }]] : []),
+                  ].map((row, ri) => (
+                    <tr key={ri}>
+                      {row.map((cell, ci) => (
+                        <>
+                          <td key={`l${ci}`} style={{ padding: '8px 12px', background: '#fafafa', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', border: '1px solid #f0f0f0', width: 1 }}>{cell.label}</td>
+                          <td key={`v${ci}`} colSpan={(cell as any).colSpan} style={{ padding: '8px 12px', border: '1px solid #f0f0f0', fontSize: 13 }}>{cell.value}</td>
+                        </>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </Card>
 
