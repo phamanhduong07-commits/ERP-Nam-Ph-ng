@@ -17,6 +17,7 @@ import {
   salesReturnsApi,
   type SalesReturnListItem,
   type SalesReturnSummary,
+  type PagedReturnsResponse,
   SALES_RETURN_TRANG_THAI_LABELS,
   SALES_RETURN_TRANG_THAI_COLORS,
 } from '../../api/salesReturns'
@@ -52,14 +53,14 @@ export default function SalesReturnsPage() {
 
   const { data: customers } = useQuery({
     queryKey: ['customers-all'],
-    queryFn: () => customersApi.list({ page_size: 100 }).then(r => r.data.items),
+    queryFn: () => customersApi.list({ page_size: 500 }).then(r => r.data.items),
   })
 
   // Khi filter phuong_an active: load toàn bộ (page_size=500) để client-side filter chính xác
   const effectivePageSize = phuongAn ? 500 : pageSize
   const effectivePage = phuongAn ? 1 : page
 
-  const { data: returnsData, isLoading, refetch } = useQuery({
+  const { data: returnsData, isLoading, refetch } = useQuery<PagedReturnsResponse>({
     queryKey: ['sales-returns', search, trangThai, customerId, dateRange, page, pageSize, phuongAn],
     queryFn: () => salesReturnsApi.list({
       search: search || undefined,
@@ -69,11 +70,11 @@ export default function SalesReturnsPage() {
       den_ngay: dateRange[1]?.format('YYYY-MM-DD'),
       page: effectivePage,
       page_size: effectivePageSize,
-    }).then(r => r.data),
+    }).then(r => r.data as PagedReturnsResponse),
   })
 
   const allRows: SalesReturnListItem[] = returnsData?.items || []
-  const summary: SalesReturnSummary | undefined = (returnsData as any)?.summary
+  const summary: SalesReturnSummary | undefined = returnsData?.summary
 
   // Client-side filter by phuong_an (computed field, không filter ở server)
   const returnRows = phuongAn

@@ -83,6 +83,15 @@ export interface SalesReturnSummary {
   so_hoan_tien_cho_xu_ly: number
 }
 
+export interface PagedReturnsResponse {
+  items: SalesReturnListItem[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  summary?: SalesReturnSummary
+}
+
 export interface CreateReturnItemPayload {
   delivery_order_item_id?: number
   sales_order_item_id?: number

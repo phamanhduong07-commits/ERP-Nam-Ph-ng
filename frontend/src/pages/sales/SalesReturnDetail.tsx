@@ -177,7 +177,7 @@ export default function SalesReturnDetail() {
           don_gia_tra: values[`don_gia_tra_${item.id}`],
           ly_do_tra: values[`ly_do_tra_${item.id}`],
           tinh_trang_hang: values[`tinh_trang_hang_${item.id}`],
-          ghi_chu: values[`ghi_chu_${item.id}`],
+          ghi_chu: values[`ghi_chu_item_${item.id}`],
         })),
       })
     } catch {
