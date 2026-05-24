@@ -93,6 +93,8 @@ export default function SalesReturnDetail() {
       queryClient.invalidateQueries({ queryKey: ['sales-returns'] })
       queryClient.invalidateQueries({ queryKey: ['customer-refund-for-return', returnId] })
       queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
+      queryClient.invalidateQueries({ queryKey: ['debt-ledger'] })
+      queryClient.invalidateQueries({ queryKey: ['customer-debt'] })
     },
     onError: (err: any) => message.error(getErrorMessage(err)),
   })
@@ -104,6 +106,9 @@ export default function SalesReturnDetail() {
       queryClient.invalidateQueries({ queryKey: ['sales-return', id] })
       queryClient.invalidateQueries({ queryKey: ['sales-returns'] })
       queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
+      queryClient.invalidateQueries({ queryKey: ['debt-ledger'] })
+      queryClient.invalidateQueries({ queryKey: ['customer-debt'] })
+      queryClient.invalidateQueries({ queryKey: ['customer-refund-for-return', returnId] })
     },
     onError: (err: any) => message.error(getErrorMessage(err)),
   })
@@ -532,7 +537,13 @@ export default function SalesReturnDetail() {
                 <Descriptions.Item label="Phiếu giao hàng">
                   {returnData.so_phieu_giao ? (
                     <Space size={4}>
-                      <Text strong>{returnData.so_phieu_giao}</Text>
+                      <Button
+                        type="link"
+                        style={{ padding: 0 }}
+                        onClick={() => navigate(`/warehouse/delivery/${returnData.delivery_order_id}`)}
+                      >
+                        {returnData.so_phieu_giao}
+                      </Button>
                       {returnData.ngay_giao && (
                         <Text type="secondary">({dayjs(returnData.ngay_giao).format('DD/MM/YYYY')})</Text>
                       )}
