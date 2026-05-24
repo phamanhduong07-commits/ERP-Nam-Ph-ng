@@ -31,10 +31,15 @@ export interface PurchaseRequisition {
   ngay_duyet_gd: string | null
   po_id: number | null
   ghi_chu: string | null
+  ly_do_tu_choi: string | null
   tong_du_kien: number
   so_dong: number
   created_at: string | null
   items: YMHItem[]
+}
+
+export interface RejectYmhPayload {
+  ly_do?: string
 }
 
 export interface CreateYmhPayload {
@@ -63,18 +68,22 @@ export interface TaoPoPayload {
 
 export const TRANG_THAI_YMH: Record<string, string> = {
   nhap: 'Nháp',
+  cho_duyet: 'Chờ duyệt',
   duyet_pb: 'PB đã duyệt',
   duyet_gd: 'GĐ đã duyệt',
   tao_po: 'Đã tạo PO',
+  tu_choi: 'Từ chối',
   huy: 'Đã hủy',
 }
 
 export const TRANG_THAI_YMH_COLOR: Record<string, string> = {
   nhap: 'default',
+  cho_duyet: 'orange',
   duyet_pb: 'blue',
   duyet_gd: 'green',
   tao_po: 'cyan',
-  huy: 'red',
+  tu_choi: 'red',
+  huy: 'volcano',
 }
 
 export const ymhApi = {
@@ -94,6 +103,15 @@ export const ymhApi = {
 
   update: (id: number, data: UpdateYmhPayload) =>
     client.put<PurchaseRequisition>(`/purchase-requisitions/${id}`, data),
+
+  submit: (id: number) =>
+    client.post<{ ok: boolean; trang_thai: string }>(`/purchase-requisitions/${id}/submit`),
+
+  approve: (id: number) =>
+    client.post<{ ok: boolean; trang_thai: string }>(`/purchase-requisitions/${id}/approve`),
+
+  reject: (id: number, data: RejectYmhPayload) =>
+    client.post<{ ok: boolean; trang_thai: string }>(`/purchase-requisitions/${id}/reject`, data),
 
   duyetPB: (id: number) =>
     client.post<{ ok: boolean; trang_thai: string }>(`/purchase-requisitions/${id}/duyet-pb`),

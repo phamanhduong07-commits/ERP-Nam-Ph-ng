@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
+  Alert, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
   Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
-  CheckCircleOutlined, DeleteOutlined, EyeOutlined, FileAddOutlined, FileExcelOutlined,
-  PlusOutlined, StopOutlined, WarningOutlined,
+  CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, EyeOutlined, FileAddOutlined,
+  FileExcelOutlined, PlusOutlined, SendOutlined, StopOutlined, WarningOutlined,
 } from '@ant-design/icons'
 import {
   CreateYmhPayload, PurchaseRequisition, TRANG_THAI_YMH, TRANG_THAI_YMH_COLOR, ymhApi,
@@ -37,7 +37,7 @@ type FormItem = {
 const DVT_OPTIONS = ['Kg', 'Tấn', 'Cuộn', 'Tờ', 'Cái', 'Bộ', 'Hộp', 'Lít'].map(v => ({ value: v, label: v }))
 const DIEU_KHOAN_OPTIONS = ['COD', 'NET15', 'NET30', 'NET45', 'NET60', 'TT trước'].map(v => ({ value: v, label: v }))
 
-const ACTIVE_STATUSES = ['nhap', 'duyet_pb', 'duyet_gd']
+const ACTIVE_STATUSES = ['nhap', 'cho_duyet', 'duyet_pb', 'duyet_gd']
 const FILTER_KEY = 'ymh_filters'
 
 function loadFilters() {
@@ -69,6 +69,8 @@ export default function YMHListPage() {
   const [viewRecord, setViewRecord] = useState<PurchaseRequisition | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [poRecord, setPoRecord] = useState<PurchaseRequisition | null>(null)
+  const [rejectRecord, setRejectRecord] = useState<PurchaseRequisition | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
 
   const { data: phapNhanList = [] } = useQuery({
     queryKey: ['phap-nhan-active'],
@@ -198,6 +200,36 @@ export default function YMHListPage() {
     onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi xóa YMH'),
   })
 
+  const submitMutation = useMutation({
+    mutationFn: (id: number) => ymhApi.submit(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ymh-list'] })
+      message.success('Đã gửi yêu cầu đi duyệt')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi gửi duyệt'),
+  })
+
+  const approveMutation = useMutation({
+    mutationFn: (id: number) => ymhApi.approve(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ymh-list'] })
+      message.success('Đã phê duyệt YMH')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi phê duyệt'),
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: ({ id, ly_do }: { id: number; ly_do: string }) =>
+      ymhApi.reject(id, { ly_do }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ymh-list'] })
+      message.success('Đã từ chối YMH')
+      setRejectRecord(null)
+      setRejectReason('')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi từ chối'),
+  })
+
   const taoPOMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Parameters<typeof ymhApi.taoPO>[1] }) => ymhApi.taoPO(id, data),
     onSuccess: res => {
@@ -323,7 +355,7 @@ export default function YMHListPage() {
     { title: 'Tổng dự kiến', dataIndex: 'tong_du_kien', width: 135, align: 'right', render: fmtVND },
     {
       title: 'Thao tác',
-      width: 190,
+      width: 220,
       align: 'right',
       render: (_, r) => (
         <Space size={4}>
@@ -331,6 +363,36 @@ export default function YMHListPage() {
             <Button size="small" icon={<EyeOutlined />} onClick={() => setViewRecord(r)} />
           </Tooltip>
           {r.trang_thai === 'nhap' && (
+            <Popconfirm title="Gửi yêu cầu đi duyệt?" onConfirm={() => submitMutation.mutate(r.id)}>
+              <Tooltip title="Gửi duyệt">
+                <Button size="small" type="link" icon={<SendOutlined />} />
+              </Tooltip>
+            </Popconfirm>
+          )}
+          {['nhap', 'cho_duyet', 'duyet_pb'].includes(r.trang_thai) && (
+            <Popconfirm title="Phê duyệt YMH này?" onConfirm={() => approveMutation.mutate(r.id)}>
+              <Tooltip title="Duyệt (admin)">
+                <Button size="small" type="link" icon={<CheckCircleOutlined />} style={{ color: 'green' }} />
+              </Tooltip>
+            </Popconfirm>
+          )}
+          {['nhap', 'cho_duyet', 'duyet_pb'].includes(r.trang_thai) && (
+            <Tooltip title="Từ chối">
+              <Button
+                size="small"
+                type="link"
+                icon={<CloseCircleOutlined />}
+                style={{ color: '#cf1322' }}
+                onClick={() => { setRejectRecord(r); setRejectReason('') }}
+              />
+            </Tooltip>
+          )}
+          {r.trang_thai === 'nhap' && (
+            <Popconfirm title="Duyệt phòng ban?" onConfirm={() => duyetPBMutation.mutate(r.id)}>
+              <Button size="small" type="link" icon={<CheckCircleOutlined />}>PB</Button>
+            </Popconfirm>
+          )}
+          {r.trang_thai === 'cho_duyet' && (
             <Popconfirm title="Duyệt phòng ban?" onConfirm={() => duyetPBMutation.mutate(r.id)}>
               <Button size="small" type="link" icon={<CheckCircleOutlined />}>PB</Button>
             </Popconfirm>
@@ -345,12 +407,12 @@ export default function YMHListPage() {
               <Button size="small" type="primary" icon={<FileAddOutlined />} onClick={() => setPoRecord(r)} />
             </Tooltip>
           )}
-          {!['huy', 'tao_po'].includes(r.trang_thai) && (
+          {!['huy', 'tu_choi', 'tao_po'].includes(r.trang_thai) && (
             <Popconfirm title="Hủy YMH?" onConfirm={() => huyMutation.mutate(r.id)}>
               <Button size="small" icon={<StopOutlined />} danger />
             </Popconfirm>
           )}
-          {['nhap', 'huy'].includes(r.trang_thai) && (
+          {['nhap', 'huy', 'tu_choi'].includes(r.trang_thai) && (
             <Popconfirm title="Xóa YMH?" onConfirm={() => deleteMutation.mutate(r.id)}>
               <Button size="small" icon={<DeleteOutlined />} danger type="text" />
             </Popconfirm>
@@ -443,7 +505,7 @@ export default function YMHListPage() {
           <Col>
             <Space size={6}>
               <span style={{ fontSize: 12, color: '#888' }}>Lọc nhanh:</span>
-              {(['nhap', 'duyet_pb', 'duyet_gd'] as const).map(s => (
+              {(['nhap', 'cho_duyet', 'duyet_pb', 'duyet_gd'] as const).map(s => (
                 <Button
                   key={s}
                   size="small"
@@ -475,9 +537,45 @@ export default function YMHListPage() {
         open={!!viewRecord}
         onClose={() => setViewRecord(null)}
         width={760}
+        extra={viewRecord && (
+          <Space>
+            {viewRecord.trang_thai === 'nhap' && (
+              <Popconfirm title="Gửi yêu cầu đi duyệt?" onConfirm={() => { submitMutation.mutate(viewRecord.id); setViewRecord(null) }}>
+                <Button type="primary" size="small" icon={<SendOutlined />}>Gửi duyệt</Button>
+              </Popconfirm>
+            )}
+            {['nhap', 'cho_duyet', 'duyet_pb'].includes(viewRecord.trang_thai) && (
+              <Popconfirm title="Phê duyệt YMH?" onConfirm={() => { approveMutation.mutate(viewRecord.id); setViewRecord(null) }}>
+                <Button type="primary" size="small" icon={<CheckCircleOutlined />} style={{ background: 'green' }}>Duyệt</Button>
+              </Popconfirm>
+            )}
+            {['nhap', 'cho_duyet', 'duyet_pb'].includes(viewRecord.trang_thai) && (
+              <Button
+                danger
+                size="small"
+                icon={<CloseCircleOutlined />}
+                onClick={() => { setRejectRecord(viewRecord); setRejectReason(''); setViewRecord(null) }}
+              >Từ chối</Button>
+            )}
+            {viewRecord.trang_thai === 'duyet_gd' && (
+              <Button type="primary" size="small" icon={<FileAddOutlined />} onClick={() => { setPoRecord(viewRecord); setViewRecord(null) }}>
+                Tạo PO
+              </Button>
+            )}
+          </Space>
+        )}
       >
         {viewRecord && (
           <>
+            {viewRecord.trang_thai === 'tu_choi' && viewRecord.ly_do_tu_choi && (
+              <Alert
+                type="error"
+                showIcon
+                message="Yêu cầu đã bị từ chối"
+                description={viewRecord.ly_do_tu_choi}
+                style={{ marginBottom: 12 }}
+              />
+            )}
             <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
               <Descriptions.Item label="Số YMH">{viewRecord.so_ymh}</Descriptions.Item>
               <Descriptions.Item label="Ngày yêu cầu">{viewRecord.ngay_yeu_cau}</Descriptions.Item>
@@ -686,6 +784,27 @@ export default function YMHListPage() {
           </Form.List>
         </Form>
       </Drawer>
+
+      <Modal
+        title={`Từ chối YMH - ${rejectRecord?.so_ymh ?? ''}`}
+        open={!!rejectRecord}
+        onCancel={() => { setRejectRecord(null); setRejectReason('') }}
+        onOk={() => {
+          if (!rejectRecord) return
+          rejectMutation.mutate({ id: rejectRecord.id, ly_do: rejectReason })
+        }}
+        confirmLoading={rejectMutation.isPending}
+        okText="Xác nhận từ chối"
+        okButtonProps={{ danger: true }}
+      >
+        <p>Nhập lý do từ chối (tùy chọn):</p>
+        <Input.TextArea
+          rows={3}
+          placeholder="VD: Chưa đủ thông tin, vượt ngân sách..."
+          value={rejectReason}
+          onChange={e => setRejectReason(e.target.value)}
+        />
+      </Modal>
 
       <Modal
         title={`Tạo PO từ ${poRecord?.so_ymh ?? ''}`}

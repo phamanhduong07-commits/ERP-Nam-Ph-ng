@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_admin_user
 from app.models.auth import User
 from app.models.master import OtherMaterial, PaperMaterial, PhanXuong, PhapNhan, Supplier
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
@@ -42,6 +42,10 @@ class YMHUpdate(BaseModel):
     phap_nhan_id: Optional[int] = None
     ghi_chu: Optional[str] = None
     items: Optional[list[YMHItemCreate]] = None
+
+
+class YMHReject(BaseModel):
+    ly_do: str = ""
 
 
 class YMHCreatePO(BaseModel):
@@ -197,6 +201,7 @@ def _serialize_ymh(ymh: PurchaseRequisition, db: Session) -> dict:
         "ngay_duyet_gd": ymh.ngay_duyet_gd.isoformat() if ymh.ngay_duyet_gd else None,
         "po_id": ymh.po_id,
         "ghi_chu": ymh.ghi_chu,
+        "ly_do_tu_choi": ymh.ly_do_tu_choi,
         "tong_du_kien": tong_du_kien,
         "so_dong": len(items),
         "created_at": ymh.created_at.isoformat() if ymh.created_at else None,
@@ -316,6 +321,64 @@ def update_ymh(
     return _serialize_ymh(ymh, db)
 
 
+@router.post("/{ymh_id}/submit")
+def submit_ymh(
+    ymh_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Gửi YMH đi duyệt: nhap → cho_duyet"""
+    ymh = db.get(PurchaseRequisition, ymh_id)
+    if not ymh:
+        raise HTTPException(404, "Không tìm thấy YMH")
+    if ymh.trang_thai != "nhap":
+        raise HTTPException(400, f"Chỉ có thể gửi duyệt YMH ở trạng thái nháp (hiện tại: {ymh.trang_thai})")
+    if not ymh.items:
+        raise HTTPException(400, "YMH chưa có dòng hàng")
+    ymh.trang_thai = "cho_duyet"
+    db.commit()
+    return {"ok": True, "trang_thai": ymh.trang_thai}
+
+
+@router.post("/{ymh_id}/approve")
+def approve_ymh(
+    ymh_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Duyệt YMH (manager/admin): cho_duyet → duyet_gd (bỏ qua bước PB)"""
+    ymh = db.get(PurchaseRequisition, ymh_id)
+    if not ymh:
+        raise HTTPException(404, "Không tìm thấy YMH")
+    if ymh.trang_thai not in ("cho_duyet", "nhap", "duyet_pb"):
+        raise HTTPException(400, f"Không thể duyệt YMH ở trạng thái {ymh.trang_thai}")
+    ymh.trang_thai = "duyet_gd"
+    ymh.nguoi_duyet_gd_id = current_user.id
+    ymh.ngay_duyet_gd = datetime.now(timezone.utc)
+    ymh.ly_do_tu_choi = None  # xoá lý do từ chối cũ nếu có
+    db.commit()
+    return {"ok": True, "trang_thai": ymh.trang_thai}
+
+
+@router.post("/{ymh_id}/reject")
+def reject_ymh(
+    ymh_id: int,
+    body: YMHReject,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Từ chối YMH (manager/admin): cho_duyet / duyet_pb → tu_choi"""
+    ymh = db.get(PurchaseRequisition, ymh_id)
+    if not ymh:
+        raise HTTPException(404, "Không tìm thấy YMH")
+    if ymh.trang_thai not in ("cho_duyet", "nhap", "duyet_pb"):
+        raise HTTPException(400, f"Không thể từ chối YMH ở trạng thái {ymh.trang_thai}")
+    ymh.trang_thai = "tu_choi"
+    ymh.ly_do_tu_choi = body.ly_do or None
+    db.commit()
+    return {"ok": True, "trang_thai": ymh.trang_thai}
+
+
 @router.post("/{ymh_id}/duyet-pb")
 def duyet_pb(
     ymh_id: int,
@@ -325,7 +388,7 @@ def duyet_pb(
     ymh = db.get(PurchaseRequisition, ymh_id)
     if not ymh:
         raise HTTPException(404, "Không tìm thấy YMH")
-    if ymh.trang_thai != "nhap":
+    if ymh.trang_thai not in ("nhap", "cho_duyet"):
         raise HTTPException(400, f"Không thể duyệt PB từ trạng thái {ymh.trang_thai}")
     ymh.trang_thai = "duyet_pb"
     ymh.nguoi_duyet_pb_id = current_user.id
@@ -431,7 +494,7 @@ def huy_ymh(
     ymh = db.get(PurchaseRequisition, ymh_id)
     if not ymh:
         raise HTTPException(404, "Không tìm thấy YMH")
-    if ymh.trang_thai == "tao_po":
+    if ymh.trang_thai in ("tao_po",):
         raise HTTPException(400, "Không thể huỷ YMH đã tạo PO")
     ymh.trang_thai = "huy"
     db.commit()
@@ -447,8 +510,8 @@ def delete_ymh(
     ymh = db.get(PurchaseRequisition, ymh_id)
     if not ymh:
         raise HTTPException(404, "Không tìm thấy YMH")
-    if ymh.trang_thai not in ("nhap", "huy"):
-        raise HTTPException(400, "Chỉ có thể xóa YMH ở trạng thái nháp hoặc hủy")
+    if ymh.trang_thai not in ("nhap", "huy", "tu_choi"):
+        raise HTTPException(400, "Chỉ có thể xóa YMH ở trạng thái nháp, hủy hoặc từ chối")
     db.delete(ymh)
     db.commit()
     return {"ok": True}

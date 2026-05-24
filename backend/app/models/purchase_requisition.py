@@ -15,7 +15,8 @@ class PurchaseRequisition(Base):
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     trang_thai: Mapped[str] = mapped_column(String(30), default="nhap")
-    # nhap → duyet_pb → duyet_gd → tao_po → huy
+    # nhap → cho_duyet → duyet_pb → duyet_gd → tao_po
+    # nhap / cho_duyet / duyet_pb / duyet_gd → huy | tu_choi
     nguoi_yeu_cau_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     nguoi_duyet_pb_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     nguoi_duyet_gd_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -23,6 +24,7 @@ class PurchaseRequisition(Base):
     ngay_duyet_gd: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     po_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id"))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    ly_do_tu_choi: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
