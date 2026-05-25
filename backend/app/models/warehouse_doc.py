@@ -13,7 +13,7 @@ class GoodsReceipt(Base):
     so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # GR-YYYYMM-XXXX
     ngay_nhap: Mapped[date] = mapped_column(Date, nullable=False)
     po_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id"))
-    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
+    supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=True)
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     loai_nhap: Mapped[str] = mapped_column(String(30), default="MUA_HANG")
@@ -172,6 +172,7 @@ class DeliveryOrder(Base):
     ngay_giao_thuc_te: Mapped[date | None] = mapped_column(Date, nullable=True)
     ten_nguoi_nhan_thuc_te: Mapped[str | None] = mapped_column(String(150), nullable=True)
     da_xac_nhan_giao: Mapped[bool] = mapped_column(Boolean, default=False)
+    anh_xac_nhan_giao: Mapped[str | None] = mapped_column(Text, nullable=True)
     co_hang_ve: Mapped[bool] = mapped_column(Boolean, default=False)
     # Chi phí chuyến xe (nhập tay)
     cau_duong: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), default=0)
