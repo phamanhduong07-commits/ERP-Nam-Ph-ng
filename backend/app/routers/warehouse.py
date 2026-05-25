@@ -106,10 +106,9 @@ class GoodsReceiptIn(BaseModel):
 
 class QuickCaptureIn(BaseModel):
     ngay_nhap: date
-    supplier_id: int
-    phan_xuong_id: int
+    supplier_id: Optional[int] = None
+    phap_nhan_id: int                  # bảo vệ chọn nhà máy (Hoàng Gia / Nam Thuận / Củ Chi)
     loai_kho_auto: str = "GIAY_CUON"  # GIAY_CUON | NVL_PHU | PHOI
-    phap_nhan_id: Optional[int] = None
     so_xe: Optional[str] = None
     invoice_image: str
     hd_tong_kg: Optional[Decimal] = None
@@ -424,9 +423,15 @@ async def import_phan_xuong(
 
 
 @router.get("/phan-xuong")
-def list_phan_xuong(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    rows = db.query(PhanXuong).order_by(PhanXuong.id).all()
-    return [_px_to_dict(r) for r in rows]
+def list_phan_xuong(
+    co_kho: bool = Query(False),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(PhanXuong).filter(PhanXuong.trang_thai.is_(True))
+    if co_kho:
+        q = q.join(Warehouse, Warehouse.phan_xuong_id == PhanXuong.id).distinct()
+    return [_px_to_dict(r) for r in q.order_by(PhanXuong.id).all()]
 
 
 @router.post("/phan-xuong", status_code=201)
@@ -1071,28 +1076,57 @@ def create_goods_receipt(
     return _gr_to_dict(gr, db)
 
 
+@router.get("/goods-receipts/pending-count")
+def pending_nhap_nhanh_count(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Đếm phiếu nhap_nhanh chờ hoàn thiện — gọi từ sidebar badge."""
+    rows = (
+        db.query(GoodsReceipt.loai_nhap, Warehouse.loai_kho, func.count().label("n"))
+        .outerjoin(Warehouse, GoodsReceipt.warehouse_id == Warehouse.id)
+        .filter(GoodsReceipt.trang_thai == "nhap_nhanh")
+        .group_by(GoodsReceipt.loai_nhap, Warehouse.loai_kho)
+        .all()
+    )
+    giay = sum(r.n for r in rows if r.loai_kho == "GIAY_CUON")
+    nvl  = sum(r.n for r in rows if r.loai_kho == "NVL_PHU")
+    phoi = sum(r.n for r in rows if r.loai_nhap == "PHOI_NGOAI")
+    return {"giay": giay, "nvl": nvl, "phoi": phoi, "total": giay + nvl + phoi}
+
+
 @router.post("/goods-receipts/quick", status_code=201)
 def quick_capture_goods_receipt(
     body: QuickCaptureIn,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Bước 1: gate guard chụp ảnh phiếu NCC + chọn xưởng → tạo draft nhap_nhanh."""
-    if not db.get(Supplier, body.supplier_id):
+    """Bước 1: gate guard chụp ảnh phiếu NCC → tạo draft nhap_nhanh. supplier_id optional."""
+    if body.supplier_id and not db.get(Supplier, body.supplier_id):
         raise HTTPException(404, "Không tìm thấy nhà cung cấp")
     loai_kho = body.loai_kho_auto  # GIAY_CUON | NVL_PHU | PHOI
-    wh = _get_workshop_warehouse(db, body.phan_xuong_id, loai_kho)
+    # Tìm kho theo pháp nhân (nhà máy) + loại kho
+    wh = (
+        db.query(Warehouse)
+        .join(PhanXuong, Warehouse.phan_xuong_id == PhanXuong.id)
+        .filter(
+            PhanXuong.phap_nhan_id == body.phap_nhan_id,
+            Warehouse.loai_kho == loai_kho,
+            Warehouse.trang_thai == True,
+        )
+        .first()
+    )
     if not wh:
-        raise HTTPException(400, f"Xưởng này chưa có kho {loai_kho} — liên hệ admin")
+        raise HTTPException(400, f"Nhà máy này chưa có kho {loai_kho} — liên hệ admin")
     loai_nhap = "PHOI_NGOAI" if loai_kho == "PHOI" else "MUA_HANG"
     gr = GoodsReceipt(
         so_phieu=_gen_so(db, "GR", GoodsReceipt),
         ngay_nhap=body.ngay_nhap,
         supplier_id=body.supplier_id,
         warehouse_id=wh.id,
-        phan_xuong_id=body.phan_xuong_id,
+        phan_xuong_id=wh.phan_xuong_id,
         loai_nhap=loai_nhap,
-        phap_nhan_id=body.phap_nhan_id or (wh.phan_xuong_obj.phap_nhan_id if wh.phan_xuong_obj else None),
+        phap_nhan_id=body.phap_nhan_id,
         trang_thai="nhap_nhanh",
         so_xe=body.so_xe,
         invoice_image=body.invoice_image,
@@ -2244,6 +2278,7 @@ class XacNhanGiaoIn(BaseModel):
     ngay_giao: date
     ten_nguoi_nhan: str
     ghi_chu: Optional[str] = None
+    anh_xac_nhan_giao: Optional[str] = None
 
 
 @router.post("/deliveries/{do_id}/xac-nhan")
@@ -2264,9 +2299,45 @@ def xac_nhan_giao_hang(
     do.ten_nguoi_nhan_thuc_te = body.ten_nguoi_nhan
     if body.ghi_chu:
         do.ghi_chu = body.ghi_chu
+    if body.anh_xac_nhan_giao:
+        do.anh_xac_nhan_giao = body.anh_xac_nhan_giao
     db.commit()
     db.refresh(do)
     return _do_to_dict(do, db)
+
+
+@router.get("/deliveries/mobile-list")
+def list_deliveries_mobile(
+    xe_van_chuyen: Optional[str] = Query(None),
+    ngay: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Danh sách phiếu giao hàng cho tài xế trên mobile — chỉ trả da_xuat."""
+    from app.models.master import Customer
+    q = db.query(DeliveryOrder).filter(DeliveryOrder.trang_thai == "da_xuat")
+    if xe_van_chuyen:
+        q = q.filter(DeliveryOrder.xe_van_chuyen.ilike(f"%{xe_van_chuyen}%"))
+    if ngay:
+        q = q.filter(DeliveryOrder.ngay_xuat == ngay)
+    else:
+        from datetime import date as _date
+        q = q.filter(DeliveryOrder.ngay_xuat == _date.today())
+    rows = q.order_by(DeliveryOrder.id.desc()).limit(50).all()
+    result = []
+    for do in rows:
+        result.append({
+            "id": do.id,
+            "so_phieu": do.so_phieu,
+            "ten_khach": do.customer.ten_viet_tat or do.customer.ten_don_vi if do.customer else "",
+            "dia_chi_giao": do.dia_chi_giao,
+            "xe_van_chuyen": do.xe_van_chuyen,
+            "nguoi_nhan": do.nguoi_nhan,
+            "ngay_xuat": str(do.ngay_xuat),
+            "tong_thanh_toan": float(do.tong_thanh_toan or 0),
+            "trang_thai": do.trang_thai,
+        })
+    return result
 
 
 class DeliveryAdjustItemIn(BaseModel):

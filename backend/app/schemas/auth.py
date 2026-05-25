@@ -27,6 +27,7 @@ class UserInfo(BaseModel):
     role: str
     phan_xuong: str | None
     machine_id: int | None
+    phap_nhan_id: int | None = None
     permissions: list[str] = []
 
     class Config:
@@ -41,6 +42,8 @@ class UserCreate(BaseModel):
     password: str
     role_id: int
     phan_xuong: str | None = None
+    phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
     machine_id: int | None = None
 
 
@@ -50,6 +53,8 @@ class UserUpdate(BaseModel):
     so_dien_thoai: str | None = None
     role_id: int | None = None
     phan_xuong: str | None = None
+    phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
     machine_id: int | None = None
     trang_thai: bool | None = None
 

@@ -5,6 +5,9 @@ import AppLayout from './components/AppLayout'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 const Login = lazy(() => import('./pages/Login'))
+const GateLoginPage = lazy(() => import('./pages/warehouse/GateLoginPage'))
+const GateHubPage = lazy(() => import('./pages/warehouse/GateHubPage'))
+const GiaoHangMobilePage = lazy(() => import('./pages/warehouse/GiaoHangMobilePage'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const OrderCreate = lazy(() => import('./pages/sales/OrderCreate'))
 const OrderDetail = lazy(() => import('./pages/sales/OrderDetail'))
@@ -115,12 +118,8 @@ const QCGiayCuonPage = lazy(() => import('./pages/quality/QCGiayCuonPage'))
 // Maintenance
 const MaintenanceSchedulePage = lazy(() => import('./pages/maintenance/MaintenanceSchedulePage'))
 const MaintenanceLogPage = lazy(() => import('./pages/maintenance/MaintenanceLogPage'))
-// CRM
-const CustomerInteractionPage = lazy(() => import('./pages/crm/CustomerInteractionPage'))
 // Fixed Assets
 const FixedAssetPage = lazy(() => import('./pages/fixed_assets/FixedAssetPage'))
-// MRP
-const MRPPage = lazy(() => import('./pages/mrp/MRPPage'))
 // Reports
 const DebtSummaryPage = lazy(() => import('./pages/reports/DebtSummaryPage'))
 const RevenueReportPage = lazy(() => import('./pages/reports/RevenueReportPage'))
@@ -232,6 +231,10 @@ export default function App() {
           <Route path="/production/cd2/scan" element={<WorkerOrPrivateRoute><ErrorBoundary><ScanMayPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
           <Route path="/production/may-song" element={<WorkerOrPrivateRoute><ErrorBoundary><MaySongPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
           <Route path="/cd2/machine-login" element={<ErrorBoundary><MachineLoginPage /></ErrorBoundary>} />
+          <Route path="/gate-login" element={<ErrorBoundary><GateLoginPage /></ErrorBoundary>} />
+          <Route path="/gate-hub" element={<ErrorBoundary><Suspense fallback={null}><GateHubPage /></Suspense></ErrorBoundary>} />
+          <Route path="/gate/nhap-nhanh" element={<ErrorBoundary><Suspense fallback={null}><NhapNhanhPage /></Suspense></ErrorBoundary>} />
+          <Route path="/giao-hang-mobile" element={<ErrorBoundary><Suspense fallback={null}><GiaoHangMobilePage /></Suspense></ErrorBoundary>} />
           <Route
             path="/"
             element={
@@ -386,9 +389,9 @@ export default function App() {
             <Route path="quality/giay-cuon" element={<ErrorBoundary><QCGiayCuonPage /></ErrorBoundary>} />
             <Route path="maintenance/schedules" element={<ErrorBoundary><MaintenanceSchedulePage /></ErrorBoundary>} />
             <Route path="maintenance/logs" element={<ErrorBoundary><MaintenanceLogPage /></ErrorBoundary>} />
-            <Route path="crm/interactions" element={<ErrorBoundary><CustomerInteractionPage /></ErrorBoundary>} />
+
             <Route path="fixed-assets" element={<ErrorBoundary><FixedAssetPage /></ErrorBoundary>} />
-            <Route path="mrp" element={<ErrorBoundary><MRPPage /></ErrorBoundary>} />
+
             <Route path="agent" element={<ErrorBoundary><AgentPage /></ErrorBoundary>} />
             <Route path="master/print-templates" element={<ErrorBoundary><PrintTemplatePage /></ErrorBoundary>} />
             <Route path="docs" element={<ErrorBoundary><DocsPage /></ErrorBoundary>} />

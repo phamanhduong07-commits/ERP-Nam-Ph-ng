@@ -241,9 +241,9 @@ export interface CreateGoodsReceiptPayload {
 
 export interface QuickCapturePayload {
   ngay_nhap: string
-  supplier_id: number
-  phan_xuong_id: number
-  loai_kho_auto?: string   // 'GIAY_CUON' | 'NVL_PHU'
+  supplier_id?: number | null
+  phap_nhan_id: number
+  loai_kho_auto?: string   // 'GIAY_CUON' | 'NVL_PHU' | 'PHOI'
   so_xe?: string | null
   invoice_image: string
   hd_tong_kg?: number | null
@@ -647,7 +647,7 @@ export interface TonKhoNVLRow {
 
 export const warehouseApi = {
   // Phân xưởng
-  listPhanXuong: () => client.get<PhanXuong[]>('/warehouse/phan-xuong'),
+  listPhanXuong: (params?: { co_kho?: boolean }) => client.get<PhanXuong[]>('/warehouse/phan-xuong', { params }),
   createPhanXuong: (data: CreatePhanXuongPayload) => client.post<PhanXuong>('/warehouse/phan-xuong', data),
   updatePhanXuong: (id: number, data: CreatePhanXuongPayload) => client.put<PhanXuong>(`/warehouse/phan-xuong/${id}`, data),
   deletePhanXuong: (id: number) => client.delete(`/warehouse/phan-xuong/${id}`),
@@ -705,6 +705,7 @@ export const warehouseApi = {
   getGoodsReceipt: (id: number) => client.get<GoodsReceipt>(`/warehouse/goods-receipts/${id}`),
   createGoodsReceipt: (data: CreateGoodsReceiptPayload) => client.post<GoodsReceipt>('/warehouse/goods-receipts', data),
   quickCaptureGoodsReceipt: (data: QuickCapturePayload) => client.post<GoodsReceipt>('/warehouse/goods-receipts/quick', data),
+  getPendingNhapNhanhCount: () => client.get<{ giay: number; nvl: number; phoi: number; total: number }>('/warehouse/goods-receipts/pending-count'),
   completeGoodsReceipt: (id: number, data: CompleteGoodsReceiptPayload) => client.post<GoodsReceipt>(`/warehouse/goods-receipts/${id}/complete`, data),
   deleteGoodsReceipt: (id: number) => client.delete(`/warehouse/goods-receipts/${id}`),
   approveGoodsReceipt: (id: number) => client.patch(`/warehouse/goods-receipts/${id}/approve`),
