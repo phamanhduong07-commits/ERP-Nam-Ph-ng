@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Optional
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, text as _text
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
@@ -20,6 +21,7 @@ from app.models.billing import SalesInvoice, InvoiceAdjustmentLog
 from app.models.accounting import PurchaseInvoice, JournalEntry
 from app.models.warehouse_doc import (
     GoodsReceipt, GoodsReceiptItem,
+    GiayRoll,
     MaterialIssue, MaterialIssueItem,
     ProductionOutput,
     DeliveryOrder, DeliveryOrderItem,
@@ -3849,11 +3851,389 @@ def ton_kho_tp_lsx(
     return result
 
 
+# ── Giấy cuộn — per-roll tracking ────────────────────────────────────────────
+
+def _next_giay_roll_barcode(db: Session) -> str:
+    """Sinh barcode dạng YYGnnnnn — tăng dần, không trùng."""
+    import datetime as _dt
+    yy = _dt.date.today().strftime("%y")
+    prefix = f"{yy}G"
+    last = (db.query(GiayRoll)
+              .filter(GiayRoll.barcode.like(f"{prefix}%"))
+              .order_by(GiayRoll.id.desc())
+              .first())
+    seq = int(last.barcode[3:]) + 1 if last and last.barcode[3:].isdigit() else 1
+    return f"{prefix}{seq:05d}"
+
+
+def _giay_roll_to_dict(roll: GiayRoll) -> dict:
+    pm = roll.paper_material
+    wh = roll.warehouse
+    return {
+        "id": roll.id,
+        "barcode": roll.barcode,
+        "goods_receipt_id": roll.goods_receipt_id,
+        "goods_receipt_item_id": roll.goods_receipt_item_id,
+        "paper_material_id": roll.paper_material_id,
+        "ma_chinh": pm.ma_chinh if pm else None,
+        "ten": pm.ten if pm else None,
+        "ky_hieu": pm.ma_ky_hieu if pm else None,
+        "kho": float(pm.kho) if pm and pm.kho else None,
+        "dinh_luong": int(pm.dinh_luong) if pm and pm.dinh_luong else None,
+        "ma_nsx": (pm.nsx.ten_viet_tat if pm.nsx else None) if pm else None,
+        "warehouse_id": roll.warehouse_id,
+        "ten_kho": wh.ten_kho if wh else None,
+        "so_phieu_nhap": roll.so_phieu_nhap,
+        "ngay_nhap": roll.ngay_nhap.isoformat() if roll.ngay_nhap else None,
+        "trong_luong_ban_dau": float(roll.trong_luong_ban_dau),
+        "trong_luong_con_lai": float(roll.trong_luong_con_lai),
+        "trang_thai": roll.trang_thai,
+        "created_at": roll.created_at.isoformat() if roll.created_at else None,
+    }
+
+
+@router.post("/giay-rolls/from-receipt/{gr_id}")
+def create_giay_rolls_from_receipt(
+    gr_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Tạo GiayRoll cho mỗi dòng giấy cuộn trong phiếu nhập (idempotent)."""
+    gr = db.get(GoodsReceipt, gr_id)
+    if not gr:
+        raise HTTPException(404, "Không tìm thấy phiếu nhập")
+    if gr.trang_thai != "da_duyet":
+        raise HTTPException(400, "Chỉ tạo tem cho phiếu đã duyệt")
+
+    created, existed = [], []
+    for item in gr.items:
+        if not item.paper_material_id:
+            continue
+        existing = db.query(GiayRoll).filter(GiayRoll.goods_receipt_item_id == item.id).first()
+        if existing:
+            existed.append(existing.barcode)
+            continue
+        barcode = _next_giay_roll_barcode(db)
+        roll = GiayRoll(
+            barcode=barcode,
+            goods_receipt_id=gr.id,
+            goods_receipt_item_id=item.id,
+            paper_material_id=item.paper_material_id,
+            warehouse_id=gr.warehouse_id,
+            so_phieu_nhap=gr.so_phieu,
+            ngay_nhap=gr.ngay_nhap,
+            trong_luong_ban_dau=item.so_luong,
+            trong_luong_con_lai=item.so_luong,
+            trang_thai="trong_kho",
+        )
+        db.add(roll)
+        db.flush()
+        created.append(barcode)
+
+    db.commit()
+    return {"created": created, "existed": existed, "total": len(created) + len(existed)}
+
+
+@router.get("/giay-rolls")
+def list_giay_rolls(
+    warehouse_id: Optional[int] = None,
+    paper_material_id: Optional[int] = None,
+    trang_thai: Optional[str] = None,
+    barcode: Optional[str] = None,
+    so_phieu: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(GiayRoll)
+    if warehouse_id:
+        q = q.filter(GiayRoll.warehouse_id == warehouse_id)
+    if paper_material_id:
+        q = q.filter(GiayRoll.paper_material_id == paper_material_id)
+    if trang_thai:
+        q = q.filter(GiayRoll.trang_thai == trang_thai)
+    if barcode:
+        q = q.filter(GiayRoll.barcode.ilike(f"%{barcode}%"))
+    if so_phieu:
+        q = q.filter(GiayRoll.so_phieu_nhap.ilike(f"%{so_phieu}%"))
+    rolls = q.order_by(GiayRoll.id.asc()).limit(500).all()
+    return [_giay_roll_to_dict(r) for r in rolls]
+
+
+@router.get("/giay-rolls/by-barcode/{barcode}")
+def get_giay_roll_by_barcode(
+    barcode: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    roll = db.query(GiayRoll).filter(GiayRoll.barcode == barcode).first()
+    if not roll:
+        raise HTTPException(404, "Không tìm thấy cuộn giấy")
+    return _giay_roll_to_dict(roll)
+
+
+class CanGiayRollIn(BaseModel):
+    kg_con_lai: float
+
+
+@router.patch("/giay-rolls/{roll_id}/can")
+def can_giay_roll(
+    roll_id: int,
+    body: CanGiayRollIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cập nhật trọng lượng còn lại sau khi cân — điều chỉnh InventoryBalance."""
+    roll = db.get(GiayRoll, roll_id)
+    if not roll:
+        raise HTTPException(404, "Không tìm thấy cuộn giấy")
+    if body.kg_con_lai < 0:
+        raise HTTPException(400, "Trọng lượng không được âm")
+
+    delta_kg = float(roll.trong_luong_con_lai) - body.kg_con_lai
+    roll.trong_luong_con_lai = Decimal(str(body.kg_con_lai))
+
+    if body.kg_con_lai == 0:
+        roll.trang_thai = "da_dung"
+    elif body.kg_con_lai < float(roll.trong_luong_ban_dau):
+        roll.trang_thai = "dang_dung"
+    else:
+        roll.trang_thai = "trong_kho"
+
+    # Điều chỉnh InventoryBalance nếu có delta đáng kể
+    if roll.warehouse_id and roll.paper_material_id and abs(delta_kg) >= 0.01:
+        bal = _get_or_create_balance(
+            db, roll.warehouse_id,
+            roll.paper_material_id, None,
+        )
+        if delta_kg > 0:
+            # Giảm tồn
+            bal.ton_luong = max(Decimal("0"), bal.ton_luong - Decimal(str(delta_kg)))
+            if bal.gia_tri_ton and bal.ton_luong > 0:
+                bal.gia_tri_ton = bal.ton_luong * (bal.don_gia_binh_quan or Decimal("0"))
+            elif bal.ton_luong == 0:
+                bal.gia_tri_ton = Decimal("0")
+        else:
+            # Tăng tồn (cân lại, sửa sai)
+            bal.ton_luong = bal.ton_luong + Decimal(str(abs(delta_kg)))
+            if bal.don_gia_binh_quan:
+                bal.gia_tri_ton = bal.ton_luong * bal.don_gia_binh_quan
+
+        _log_tx(db, roll.warehouse_id, "DIEU_CHINH_CAN",
+                Decimal(str(abs(delta_kg))), bal.don_gia_binh_quan or Decimal("0"),
+                bal.ton_luong,
+                "giay_rolls", roll.id, current_user.id,
+                paper_material_id=roll.paper_material_id,
+                ghi_chu=f"Cân cuộn {roll.barcode}: còn lại {body.kg_con_lai} kg")
+
+    db.commit()
+    return _giay_roll_to_dict(roll)
+
+
+@router.get("/giay-rolls/print-one/{roll_id}", response_class=HTMLResponse)
+def print_one_giay_roll_label(
+    roll_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Trả về trang HTML in tem cho 1 cuộn giấy cụ thể."""
+    roll = db.get(GiayRoll, roll_id)
+    if not roll:
+        raise HTTPException(404, "Không tìm thấy cuộn giấy")
+
+    gr = db.get(GoodsReceipt, roll.goods_receipt_id)
+    sup = db.get(Supplier, gr.supplier_id) if gr and gr.supplier_id else None
+    ten_ncc = sup.ten_viet_tat if sup else ""
+    ma_ncc = sup.ma_ncc if sup and hasattr(sup, "ma_ncc") else ""
+
+    pm = roll.paper_material
+    ky_hieu = pm.ma_ky_hieu if pm else ""
+    kho = f"{float(pm.kho):.0f}" if pm and pm.kho else ""
+    ma_chinh = pm.ma_chinh if pm else ""
+    dinh_luong = f"{int(pm.dinh_luong)}" if pm and pm.dinh_luong else ""
+    nvl = (pm.ten_viet_tat or "") if pm else ""
+    so_kg = f"{float(roll.trong_luong_ban_dau):,.0f}"
+    ngay_str = roll.ngay_nhap.strftime("%d/%m/%Y") if roll.ngay_nhap else ""
+    so_phieu = gr.so_phieu if gr else ""
+    barcode_val = roll.barcode
+
+    label_html = f"""
+    <div class="label">
+      <div class="company">CÔNG TY TNHH SX TM NAM PHƯƠNG</div>
+      <div class="row-2col">
+        <div class="field"><div class="lbl">Ký hiệu</div><div class="val big">{ky_hieu}</div></div>
+        <div class="field"><div class="lbl">Khổ Giấy</div><div class="val big">{kho}</div></div>
+      </div>
+      <div class="field"><div class="lbl">Số KG</div><div class="val big">{so_kg}</div></div>
+      <div class="field small"><span class="lbl">Mã chính</span> <span class="val">{ma_chinh}</span></div>
+      <div class="row-2col small">
+        <div><span class="lbl">ĐL</span> <span class="val">{dinh_luong}</span></div>
+        <div><span class="lbl">Mã NCC</span> <span class="val">{ma_ncc or ten_ncc}</span></div>
+      </div>
+      <div class="row-2col small">
+        <div><span class="lbl">Khổ</span> <span class="val">{kho}</span></div>
+        <div><span class="lbl">NVL</span> <span class="val">{nvl}</span></div>
+      </div>
+      <div class="row-2col small">
+        <div><span class="lbl">Ngày nhập</span> <span class="val">{ngay_str}</span></div>
+        <div><span class="lbl">Số phiếu</span> <span class="val">{so_phieu}</span></div>
+      </div>
+      <div class="barcode-wrap">
+        <svg class="barcode" jsbarcode-value="{barcode_val}" jsbarcode-format="CODE128"
+             jsbarcode-width="2" jsbarcode-height="40" jsbarcode-fontsize="12"
+             jsbarcode-displayvalue="true"></svg>
+      </div>
+    </div>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>In tem — {barcode_val}</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<style>
+  @media print {{ @page {{ size: 80mm 100mm; margin: 0; }} .no-print {{ display:none; }} }}
+  body {{ font-family: Arial, sans-serif; margin: 0; padding: 8px; background: #f5f5f5; }}
+  .label {{
+    width: 76mm; min-height: 94mm; border: 1px solid #333;
+    padding: 4mm 3mm; margin: 4mm auto; background: #fff;
+    box-sizing: border-box;
+  }}
+  .company {{ font-size: 9pt; font-weight: bold; text-align: center; margin-bottom: 3mm; }}
+  .field {{ margin: 1mm 0; }}
+  .row-2col {{ display: flex; gap: 4mm; }}
+  .row-2col > * {{ flex: 1; }}
+  .lbl {{ font-size: 8pt; color: #555; }}
+  .val {{ font-size: 10pt; font-weight: bold; }}
+  .big {{ font-size: 22pt; font-weight: 900; line-height: 1.1; }}
+  .small .lbl {{ font-size: 7.5pt; }}
+  .small .val {{ font-size: 8.5pt; }}
+  .barcode-wrap {{ text-align: center; margin-top: 3mm; }}
+  .barcode-wrap svg {{ max-width: 100%; }}
+  .no-print {{ text-align:center; margin: 12px; }}
+  .no-print button {{ padding: 8px 24px; font-size: 14px; cursor: pointer; }}
+</style>
+</head>
+<body>
+<div class="no-print">
+  <button onclick="window.print()">🖨️ In tem — {barcode_val}</button>
+</div>
+{label_html}
+<script>JsBarcode(".barcode").init();</script>
+</body>
+</html>"""
+    return html
+
+
+@router.get("/giay-rolls/print/{gr_id}", response_class=HTMLResponse)
+def print_giay_roll_labels(
+    gr_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Trả về trang HTML in tem cho tất cả cuộn của phiếu nhập."""
+    gr = db.get(GoodsReceipt, gr_id)
+    if not gr:
+        raise HTTPException(404, "Không tìm thấy phiếu nhập")
+
+    rolls = (db.query(GiayRoll)
+               .filter(GiayRoll.goods_receipt_id == gr_id)
+               .order_by(GiayRoll.id)
+               .all())
+    if not rolls:
+        raise HTTPException(404, "Chưa tạo tem — gọi /from-receipt trước")
+
+    sup = db.get(Supplier, gr.supplier_id) if gr.supplier_id else None
+    ten_ncc = sup.ten_viet_tat if sup else ""
+    ma_ncc = sup.ma_ncc if sup and hasattr(sup, "ma_ncc") else ""
+
+    labels_html = ""
+    for roll in rolls:
+        pm = roll.paper_material
+        ky_hieu = pm.ma_ky_hieu if pm else ""
+        kho = f"{float(pm.kho):.0f}" if pm and pm.kho else ""
+        ma_chinh = pm.ma_chinh if pm else ""
+        dinh_luong = f"{int(pm.dinh_luong)}" if pm and pm.dinh_luong else ""
+        nvl = (pm.ten_viet_tat or "") if pm else ""
+        so_kg = f"{float(roll.trong_luong_ban_dau):,.0f}"
+        ngay_str = roll.ngay_nhap.strftime("%d/%m/%Y") if roll.ngay_nhap else ""
+        barcode_val = roll.barcode
+
+        # Barcode SVG via JS (sẽ render phía client)
+        labels_html += f"""
+        <div class="label">
+          <div class="company">CÔNG TY TNHH SX TM NAM PHƯƠNG</div>
+          <div class="row-2col">
+            <div class="field"><div class="lbl">Ký hiệu</div><div class="val big">{ky_hieu}</div></div>
+            <div class="field"><div class="lbl">Khổ Giấy</div><div class="val big">{kho}</div></div>
+          </div>
+          <div class="field"><div class="lbl">Số KG</div><div class="val big">{so_kg}</div></div>
+          <div class="field small"><span class="lbl">Mã chính</span> <span class="val">{ma_chinh}</span></div>
+          <div class="row-2col small">
+            <div><span class="lbl">ĐL</span> <span class="val">{dinh_luong}</span></div>
+            <div><span class="lbl">Mã NCC</span> <span class="val">{ma_ncc or ten_ncc}</span></div>
+          </div>
+          <div class="row-2col small">
+            <div><span class="lbl">Khổ</span> <span class="val">{kho}</span></div>
+            <div><span class="lbl">NVL</span> <span class="val">{nvl}</span></div>
+          </div>
+          <div class="row-2col small">
+            <div><span class="lbl">Ngày nhập</span> <span class="val">{ngay_str}</span></div>
+            <div><span class="lbl">Số phiếu</span> <span class="val">{gr.so_phieu}</span></div>
+          </div>
+          <div class="barcode-wrap">
+            <svg class="barcode" jsbarcode-value="{barcode_val}" jsbarcode-format="CODE128"
+                 jsbarcode-width="2" jsbarcode-height="40" jsbarcode-fontsize="12"
+                 jsbarcode-displayvalue="true"></svg>
+          </div>
+        </div>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>In tem cuộn giấy — {gr.so_phieu}</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<style>
+  @media print {{ @page {{ size: 80mm 100mm; margin: 0; }} .no-print {{ display:none; }} }}
+  body {{ font-family: Arial, sans-serif; margin: 0; padding: 8px; background: #f5f5f5; }}
+  .label {{
+    width: 76mm; min-height: 94mm; border: 1px solid #333;
+    padding: 4mm 3mm; margin: 4mm auto; background: #fff;
+    page-break-after: always; box-sizing: border-box;
+  }}
+  .company {{ font-size: 9pt; font-weight: bold; text-align: center; margin-bottom: 3mm; }}
+  .field {{ margin: 1mm 0; }}
+  .row-2col {{ display: flex; gap: 4mm; }}
+  .row-2col > * {{ flex: 1; }}
+  .lbl {{ font-size: 8pt; color: #555; }}
+  .val {{ font-size: 10pt; font-weight: bold; }}
+  .big {{ font-size: 22pt; font-weight: 900; line-height: 1.1; }}
+  .small .lbl {{ font-size: 7.5pt; }}
+  .small .val {{ font-size: 8.5pt; }}
+  .barcode-wrap {{ text-align: center; margin-top: 3mm; }}
+  .barcode-wrap svg {{ max-width: 100%; }}
+  .no-print {{ text-align:center; margin: 12px; }}
+  .no-print button {{ padding: 8px 24px; font-size: 14px; cursor: pointer; }}
+</style>
+</head>
+<body>
+<div class="no-print">
+  <button onclick="window.print()">🖨️ In {len(rolls)} tem</button>
+  &nbsp;&nbsp;Phiếu: <strong>{gr.so_phieu}</strong> — {len(rolls)} cuộn
+</div>
+{labels_html}
+<script>JsBarcode(".barcode").init();</script>
+</body>
+</html>"""
+    return html
+
+
 # ── Tồn kho giấy cuộn ────────────────────────────────────────────────────────
 
 @router.get("/ton-kho-giay")
 def ton_kho_giay(
     phan_xuong_id: Optional[int] = None,
+    phap_nhan_id: Optional[int] = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -3890,6 +4270,8 @@ def ton_kho_giay(
         px = px_map.get(wh.phan_xuong_id) if wh.phan_xuong_id else None
         if phan_xuong_id and wh.phan_xuong_id != phan_xuong_id:
             continue
+        if phap_nhan_id and (not px or px.phap_nhan_id != phap_nhan_id):
+            continue
         pm = pm_map.get(bal.paper_material_id)
         result.append({
             "paper_material_id": bal.paper_material_id,
@@ -3902,6 +4284,7 @@ def ton_kho_giay(
             "ten_kho": wh.ten_kho,
             "phan_xuong_id": wh.phan_xuong_id,
             "ten_phan_xuong": px.ten_xuong if px else None,
+            "phap_nhan_id": px.phap_nhan_id if px else None,
             "ton_luong": float(bal.ton_luong),
             "gia_tri_ton": float(bal.gia_tri_ton) if bal.gia_tri_ton else 0,
             "don_gia_binh_quan": float(bal.don_gia_binh_quan) if bal.don_gia_binh_quan else 0,

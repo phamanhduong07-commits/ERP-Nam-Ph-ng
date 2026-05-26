@@ -68,6 +68,10 @@ const KhoNVLPage = lazy(() => import('./pages/warehouse/KhoNVLPage'))
 const KhoTheoXuongPage = lazy(() => import('./pages/warehouse/KhoTheoXuongPage'))
 const ReceiptsPage = lazy(() => import('./pages/warehouse/ReceiptsPage'))
 const NhapGiayPage = lazy(() => import('./pages/warehouse/NhapGiayPage'))
+const KhoGiayCuonPage = lazy(() => import('./pages/warehouse/KhoGiayCuonPage'))
+const CanCuonGiayPage = lazy(() => import('./pages/warehouse/CanCuonGiayPage'))
+const KhoLoginPage = lazy(() => import('./pages/warehouse/KhoLoginPage'))
+const OcrExamplesPage = lazy(() => import('./pages/warehouse/OcrExamplesPage'))
 const NhapNhanhPage = lazy(() => import('./pages/warehouse/NhapNhanhPage'))
 const NhapPhoiNgoaiPage = lazy(() => import('./pages/warehouse/NhapPhoiNgoaiPage'))
 const IssuesPage = lazy(() => import('./pages/warehouse/IssuesPage'))
@@ -110,6 +114,7 @@ const ARLedgerPage = lazy(() => import('./pages/accounting/ARLedgerPage'))
 const APLedgerPage = lazy(() => import('./pages/accounting/APLedgerPage'))
 const CashBookPage = lazy(() => import('./pages/accounting/CashBookPage'))
 const BankLedgerPage = lazy(() => import('./pages/accounting/BankLedgerPage'))
+const BankReconciliationPage = lazy(() => import('./pages/accounting/BankReconciliationPage'))
 const CCDCListPage = lazy(() => import('./pages/accounting/CCDCListPage'))
 const BankAccountList = lazy(() => import('./pages/danhmuc/BankAccountList'))
 // Quality
@@ -232,6 +237,8 @@ export default function App() {
           <Route path="/production/may-song" element={<WorkerOrPrivateRoute><ErrorBoundary><MaySongPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
           <Route path="/cd2/machine-login" element={<ErrorBoundary><MachineLoginPage /></ErrorBoundary>} />
           <Route path="/gate-login" element={<ErrorBoundary><GateLoginPage /></ErrorBoundary>} />
+          <Route path="/kho-login" element={<ErrorBoundary><KhoLoginPage /></ErrorBoundary>} />
+          <Route path="/kho-cuon-giay" element={<ErrorBoundary><Suspense fallback={null}><CanCuonGiayPage /></Suspense></ErrorBoundary>} />
           <Route path="/gate-hub" element={<ErrorBoundary><Suspense fallback={null}><GateHubPage /></Suspense></ErrorBoundary>} />
           <Route path="/gate/nhap-nhanh" element={<ErrorBoundary><Suspense fallback={null}><NhapNhanhPage /></Suspense></ErrorBoundary>} />
           <Route path="/giao-hang-mobile" element={<ErrorBoundary><Suspense fallback={null}><GiaoHangMobilePage /></Suspense></ErrorBoundary>} />
@@ -302,6 +309,9 @@ export default function App() {
             <Route path="warehouse/inventory" element={<InventoryPage />} />
             <Route path="warehouse/nhap-nhanh" element={<NhapNhanhPage />} />
             <Route path="warehouse/nhap-giay" element={<NhapGiayPage />} />
+            <Route path="warehouse/kho-giay-cuon" element={<KhoGiayCuonPage />} />
+            <Route path="warehouse/can-cuon-giay" element={<CanCuonGiayPage />} />
+            <Route path="warehouse/ocr-examples" element={<OcrExamplesPage />} />
             <Route path="warehouse/nhap-phoi-ngoai" element={<NhapPhoiNgoaiPage />} />
             <Route path="warehouse/receipts" element={<ReceiptsPage />} />
             <Route path="warehouse/issues" element={<IssuesPage />} />
@@ -339,6 +349,7 @@ export default function App() {
             <Route path="accounting/ap-ledger" element={<APLedgerPage />} />
             <Route path="accounting/cash-book" element={<CashBookPage />} />
             <Route path="accounting/bank-ledger" element={<BankLedgerPage />} />
+            <Route path="accounting/bank-reconciliation" element={<BankReconciliationPage />} />
             <Route path="accounting/ccdc" element={<CCDCListPage />} />
             <Route path="master/bank-accounts" element={<BankAccountList />} />
             <Route path="accounting/ar-reconciliation" element={<ErrorBoundary><CustomerReconciliation /></ErrorBoundary>} />

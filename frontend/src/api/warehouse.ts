@@ -216,6 +216,7 @@ export interface GoodsReceipt {
   phap_nhan_id_for_print?: number | null
   invoice_image: string | null   // null trong list, có giá trị trong detail
   has_invoice_image: boolean
+  ocr_extracted_data: string | null  // JSON string của OcrExtracted
   co_hoa_don: boolean
   hd_tong_kg: number | null
   created_at: string | null
@@ -245,8 +246,26 @@ export interface QuickCapturePayload {
   phap_nhan_id: number
   loai_kho_auto?: string   // 'GIAY_CUON' | 'NVL_PHU' | 'PHOI'
   so_xe?: string | null
-  invoice_image: string
+  invoice_image?: string | null
   hd_tong_kg?: number | null
+}
+
+export interface OcrExtractedItem {
+  ten: string | null
+  kho_mm: number | null
+  gsm: number | null
+  ky_hieu: string | null
+  so_cuon: number | null
+  trong_luong_kg: number | null
+}
+
+export interface OcrExtracted {
+  ten_ncc: string | null
+  ngay_xuat: string | null
+  so_xe: string | null
+  hang_hoa: OcrExtractedItem[]
+  tong_kg: number | null
+  ghi_chu: string | null
 }
 
 export interface CompleteGoodsReceiptPayload {
@@ -560,9 +579,33 @@ export interface TonKhoGiayRow {
   ten_kho: string
   phan_xuong_id: number | null
   ten_phan_xuong: string | null
+  phap_nhan_id?: number | null
+  ten_phap_nhan?: string | null
   ton_luong: number
   gia_tri_ton: number
   don_gia_binh_quan: number
+}
+
+export interface GiayRoll {
+  id: number
+  barcode: string
+  goods_receipt_id: number
+  goods_receipt_item_id: number | null
+  paper_material_id: number | null
+  ma_chinh: string | null
+  ten: string | null
+  ky_hieu: string | null
+  kho: number | null
+  dinh_luong: number | null
+  ma_nsx: string | null
+  warehouse_id: number | null
+  ten_kho: string | null
+  so_phieu_nhap: string | null
+  ngay_nhap: string | null
+  trong_luong_ban_dau: number
+  trong_luong_con_lai: number
+  trang_thai: 'trong_kho' | 'dang_dung' | 'da_dung'
+  created_at: string | null
 }
 
 export interface DuTruGiayPeriod {
@@ -707,6 +750,7 @@ export const warehouseApi = {
   quickCaptureGoodsReceipt: (data: QuickCapturePayload) => client.post<GoodsReceipt>('/warehouse/goods-receipts/quick', data),
   getPendingNhapNhanhCount: () => client.get<{ giay: number; nvl: number; phoi: number; total: number }>('/warehouse/goods-receipts/pending-count'),
   completeGoodsReceipt: (id: number, data: CompleteGoodsReceiptPayload) => client.post<GoodsReceipt>(`/warehouse/goods-receipts/${id}/complete`, data),
+  extractImageOcr: (id: number) => client.post<{ raw_text: string; extracted: OcrExtracted; warning?: string }>(`/warehouse/goods-receipts/${id}/extract-image`),
   deleteGoodsReceipt: (id: number) => client.delete(`/warehouse/goods-receipts/${id}`),
   approveGoodsReceipt: (id: number) => client.patch(`/warehouse/goods-receipts/${id}/approve`),
   getGRMatchingStatus: (id: number) => client.get<{
@@ -760,8 +804,22 @@ export const warehouseApi = {
     })
   },
 
-  getTonKhoGiay: (params?: { phan_xuong_id?: number }) =>
+  getTonKhoGiay: (params?: { phan_xuong_id?: number; phap_nhan_id?: number }) =>
     client.get<TonKhoGiayRow[]>('/warehouse/ton-kho-giay', { params }),
+
+  // GiayRoll — per-roll tracking
+  createGiayRollsFromReceipt: (grId: number) =>
+    client.post<{ created: string[]; existed: string[]; total: number }>(`/warehouse/giay-rolls/from-receipt/${grId}`),
+  listGiayRolls: (params?: { warehouse_id?: number; paper_material_id?: number; trang_thai?: string; barcode?: string; so_phieu?: string }) =>
+    client.get<GiayRoll[]>('/warehouse/giay-rolls', { params }),
+  getGiayRollByBarcode: (barcode: string) =>
+    client.get<GiayRoll>(`/warehouse/giay-rolls/by-barcode/${encodeURIComponent(barcode)}`),
+  canGiayRoll: (rollId: number, kg_con_lai: number) =>
+    client.patch<GiayRoll>(`/warehouse/giay-rolls/${rollId}/can`, { kg_con_lai }),
+  printGiayRollLabels: (grId: number) =>
+    `/warehouse/giay-rolls/print/${grId}`,
+  printGiayRollLabelOne: (rollId: number) =>
+    `/warehouse/giay-rolls/print-one/${rollId}`,
 
   getDuTruGiay: (params?: { weeks?: number }) =>
     client.get<DuTruGiayRow[]>('/warehouse/du-tru-giay', { params }),
