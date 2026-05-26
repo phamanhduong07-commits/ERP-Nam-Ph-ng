@@ -582,6 +582,7 @@ export interface TonKhoGiayRow {
   phap_nhan_id?: number | null
   ten_phap_nhan?: string | null
   ton_luong: number
+  so_cuon: number
   gia_tri_ton: number
   don_gia_binh_quan: number
 }

@@ -4237,34 +4237,59 @@ def ton_kho_giay(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Tồn kho giấy cuộn theo mã giấy và kho, có thể filter theo xưởng."""
-    rows = (
-        db.query(InventoryBalance)
-        .filter(InventoryBalance.paper_material_id.isnot(None))
+    """Tồn kho giấy cuộn — tính trực tiếp từ GiayRoll.trong_luong_con_lai để luôn chính xác."""
+    from sqlalchemy import func as sql_func
+
+    # Tính tổng KG + số cuộn còn lại, group by warehouse + paper_material
+    agg = (
+        db.query(
+            GiayRoll.warehouse_id,
+            GiayRoll.paper_material_id,
+            sql_func.sum(GiayRoll.trong_luong_con_lai).label("ton_luong"),
+            sql_func.count(GiayRoll.id).label("so_cuon"),
+        )
+        .filter(
+            GiayRoll.warehouse_id.isnot(None),
+            GiayRoll.paper_material_id.isnot(None),
+            GiayRoll.trang_thai.in_(["trong_kho", "dang_dung"]),
+        )
+        .group_by(GiayRoll.warehouse_id, GiayRoll.paper_material_id)
         .all()
     )
 
-    wh_ids = {r.warehouse_id for r in rows}
-    wh_map: dict[int, Warehouse] = {}
-    if wh_ids:
-        for wh in db.query(Warehouse).filter(Warehouse.id.in_(wh_ids)).all():
-            wh_map[wh.id] = wh
+    if not agg:
+        return []
 
-    pm_ids = {r.paper_material_id for r in rows}
-    pm_map: dict[int, PaperMaterial] = {}
-    if pm_ids:
-        for pm in db.query(PaperMaterial).filter(PaperMaterial.id.in_(pm_ids)).all():
-            pm_map[pm.id] = pm
+    wh_ids = {r.warehouse_id for r in agg}
+    pm_ids = {r.paper_material_id for r in agg}
+
+    wh_map: dict[int, Warehouse] = {
+        wh.id: wh for wh in db.query(Warehouse).filter(Warehouse.id.in_(wh_ids)).all()
+    }
+    pm_map: dict[int, PaperMaterial] = {
+        pm.id: pm for pm in db.query(PaperMaterial).filter(PaperMaterial.id.in_(pm_ids)).all()
+    }
 
     px_ids = {wh.phan_xuong_id for wh in wh_map.values() if wh.phan_xuong_id}
-    px_map: dict[int, PhanXuong] = {}
-    if px_ids:
-        for px in db.query(PhanXuong).filter(PhanXuong.id.in_(px_ids)).all():
-            px_map[px.id] = px
+    px_map: dict[int, PhanXuong] = {
+        px.id: px for px in db.query(PhanXuong).filter(PhanXuong.id.in_(px_ids)).all()
+    } if px_ids else {}
+
+    # Lấy giá nhập gần nhất cho mỗi paper_material để ước tính giá trị tồn
+    don_gia_map: dict[int, float] = {}
+    for pm_id in pm_ids:
+        last_item = (
+            db.query(GoodsReceiptItem)
+            .filter(GoodsReceiptItem.paper_material_id == pm_id)
+            .order_by(GoodsReceiptItem.id.desc())
+            .first()
+        )
+        if last_item and last_item.don_gia:
+            don_gia_map[pm_id] = float(last_item.don_gia)
 
     result = []
-    for bal in rows:
-        wh = wh_map.get(bal.warehouse_id)
+    for row in agg:
+        wh = wh_map.get(row.warehouse_id)
         if not wh:
             continue
         px = px_map.get(wh.phan_xuong_id) if wh.phan_xuong_id else None
@@ -4272,22 +4297,25 @@ def ton_kho_giay(
             continue
         if phap_nhan_id and (not px or px.phap_nhan_id != phap_nhan_id):
             continue
-        pm = pm_map.get(bal.paper_material_id)
+        pm = pm_map.get(row.paper_material_id)
+        ton_luong = float(row.ton_luong or 0)
+        don_gia = don_gia_map.get(row.paper_material_id, 0)
         result.append({
-            "paper_material_id": bal.paper_material_id,
+            "paper_material_id": row.paper_material_id,
             "ma_chinh": pm.ma_chinh if pm else None,
             "ten": pm.ten if pm else None,
             "kho": float(pm.kho) if pm and pm.kho else None,
             "dinh_luong": int(pm.dinh_luong) if pm and pm.dinh_luong else None,
             "ton_toi_thieu": float(pm.ton_toi_thieu) if pm and pm.ton_toi_thieu else 0,
-            "warehouse_id": bal.warehouse_id,
+            "warehouse_id": row.warehouse_id,
             "ten_kho": wh.ten_kho,
             "phan_xuong_id": wh.phan_xuong_id,
             "ten_phan_xuong": px.ten_xuong if px else None,
             "phap_nhan_id": px.phap_nhan_id if px else None,
-            "ton_luong": float(bal.ton_luong),
-            "gia_tri_ton": float(bal.gia_tri_ton) if bal.gia_tri_ton else 0,
-            "don_gia_binh_quan": float(bal.don_gia_binh_quan) if bal.don_gia_binh_quan else 0,
+            "ton_luong": ton_luong,
+            "so_cuon": int(row.so_cuon or 0),
+            "gia_tri_ton": ton_luong * don_gia,
+            "don_gia_binh_quan": don_gia,
         })
 
     result.sort(key=lambda x: (x["ma_chinh"] or "", x["ten_kho"] or ""))
