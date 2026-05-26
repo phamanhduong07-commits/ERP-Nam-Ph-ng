@@ -8,6 +8,12 @@ client.interceptors.request.use((config) => {
   if (token && !url.includes('/auth/login') && !url.includes('/auth/refresh')) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  // Strip empty-string params so FastAPI date/int validators don't receive "" and return 422
+  if (config.params && typeof config.params === 'object') {
+    config.params = Object.fromEntries(
+      Object.entries(config.params).filter(([, v]) => v !== '' && v !== null && v !== undefined)
+    )
+  }
   return config
 })
 
@@ -94,6 +100,12 @@ client.interceptors.response.use(
         }
       }
     }
+    // Normalize FastAPI 422 validation errors: detail is array of {type,loc,msg,...}
+    if (err.response?.data?.detail && Array.isArray(err.response.data.detail)) {
+      err.response.data.detail = err.response.data.detail
+        .map((item: any) => item?.msg ?? JSON.stringify(item))
+        .join('; ')
+    }
     return Promise.reject(err)
   }
 )
@@ -124,7 +136,10 @@ function _doLogout() {
     ].join(';')
     msg.textContent = '⚠️ Phiên đăng nhập đã hết hạn. Đang chuyển về trang đăng nhập...'
     if (document.body) document.body.appendChild(msg)
-    setTimeout(() => { window.location.href = '/login' }, 1500)
+    const isGateRoute = ['/gate-hub', '/gate/', '/giao-hang-mobile'].some(
+      p => window.location.pathname.startsWith(p)
+    )
+    setTimeout(() => { window.location.href = isGateRoute ? '/gate-login' : '/login' }, 1500)
   }
 }
 

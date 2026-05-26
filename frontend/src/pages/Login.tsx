@@ -90,14 +90,14 @@ export default function Login() {
           </Form.Item>
         </Form>
 
-        <div style={{ textAlign: 'center', marginTop: 16, marginBottom: 12 }}>
-          <Button 
-            type="primary" 
+        <div style={{ textAlign: 'center', marginTop: 16, marginBottom: 8 }}>
+          <Button
+            type="primary"
             size="large"
             onClick={() => navigate('/cd2/machine-login')}
-            style={{ 
-              fontWeight: 700, 
-              background: '#ff8200', 
+            style={{
+              fontWeight: 700,
+              background: '#ff8200',
               borderColor: '#ff8200',
               height: 50,
               width: '100%',
@@ -107,6 +107,44 @@ export default function Login() {
             }}
           >
             🏭 ĐĂNG NHẬP MÁY
+          </Button>
+        </div>
+        <div style={{ textAlign: 'center', marginBottom: 8 }}>
+          <Button
+            type="primary"
+            size="large"
+            onClick={() => navigate('/gate-login')}
+            style={{
+              fontWeight: 700,
+              background: '#389e0d',
+              borderColor: '#389e0d',
+              height: 50,
+              width: '100%',
+              fontSize: 16,
+              borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(56, 158, 13, 0.3)'
+            }}
+          >
+            🚛 ĐĂNG NHẬP NHẬN HÀNG
+          </Button>
+        </div>
+        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+          <Button
+            type="primary"
+            size="large"
+            onClick={() => navigate('/gate-login')}
+            style={{
+              fontWeight: 700,
+              background: '#1677ff',
+              borderColor: '#1677ff',
+              height: 50,
+              width: '100%',
+              fontSize: 16,
+              borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(22, 119, 255, 0.3)'
+            }}
+          >
+            📦 XÁC NHẬN GIAO HÀNG
           </Button>
         </div>
 

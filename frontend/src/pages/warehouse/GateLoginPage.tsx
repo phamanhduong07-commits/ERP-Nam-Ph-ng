@@ -21,7 +21,8 @@ export default function GateLoginPage() {
     try {
       const res = await authApi.login(values.username, values.password)
       setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
-      navigate('/gate-hub')
+      const role = res.data.user?.role
+      navigate(role === 'TAI_XE' ? '/giao-hang-mobile' : '/gate-hub')
     } catch (err: unknown) {
       const detail = (err as any)?.response?.data?.detail
       setError(typeof detail === 'string' ? detail : 'Đăng nhập thất bại, vui lòng thử lại')

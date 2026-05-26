@@ -13,6 +13,7 @@ const TILES = [
     color: '#1677ff',
     grad: 'linear-gradient(135deg, #001d66 0%, #003eb5 100%)',
     border: '#1677ff',
+    href: null,
   },
   {
     loai: 'phoi',
@@ -22,6 +23,7 @@ const TILES = [
     color: '#52c41a',
     grad: 'linear-gradient(135deg, #092b00 0%, #135200 100%)',
     border: '#52c41a',
+    href: null,
   },
   {
     loai: 'nvl',
@@ -31,6 +33,7 @@ const TILES = [
     color: '#b37feb',
     grad: 'linear-gradient(135deg, #120338 0%, #22075e 100%)',
     border: '#722ed1',
+    href: null,
   },
 ]
 
@@ -93,18 +96,18 @@ export default function GateHubPage() {
         marginBottom: 16,
         letterSpacing: 0.3,
       }}>
-        🚛 Hôm nay nhập loại hàng nào?
+        Chọn nghiệp vụ
       </div>
 
       {/* Tiles */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
-        {TILES.map(({ loai, icon, label, sub, color, grad, border }) => (
+        {TILES.map(({ loai, icon, label, sub, color, grad, border, href }) => (
           <div
             key={label}
             role="button"
             tabIndex={0}
-            onClick={() => navigate(`/gate/nhap-nhanh${loai ? `?loai=${loai}` : ''}`)}
-            onKeyDown={e => e.key === 'Enter' && navigate(`/gate/nhap-nhanh${loai ? `?loai=${loai}` : ''}`)}
+            onClick={() => href ? navigate(href) : navigate(`/gate/nhap-nhanh${loai ? `?loai=${loai}` : ''}`)}
+            onKeyDown={e => e.key === 'Enter' && (href ? navigate(href) : navigate(`/gate/nhap-nhanh${loai ? `?loai=${loai}` : ``}`))}
             style={{
               flex: 1,
               minHeight: 110,

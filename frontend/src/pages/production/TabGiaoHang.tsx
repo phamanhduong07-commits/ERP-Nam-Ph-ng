@@ -4,7 +4,7 @@ import {
   Alert, Badge, Button, Card, Checkbox, Col, DatePicker, Descriptions, Divider, Drawer, Empty, Form, Input, InputNumber,
   message as antdMessage, Modal, Row, Select, Space, Spin, Statistic, Table, Tabs, Tooltip, Typography, Tag, App
 } from 'antd'
-import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, FileTextOutlined, PrinterOutlined, ReloadOutlined, WarningOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, ExportOutlined, EyeOutlined, FileSearchOutlined, FileTextOutlined, PrinterOutlined, ReloadOutlined, WarningOutlined } from '@ant-design/icons'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -64,6 +64,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
   // ── Detail drawer ─────────────────────────────────────────────────────────
   const [detailId, setDetailId] = useState<number | null>(null)
   const [showDetail, setShowDetail] = useState(false)
+  const [ocrResult, setOcrResult] = useState<Record<number, any>>({})
 
   // ── Adjust modal ──────────────────────────────────────────────────────────
   type AdjItem = { item_id: number; so_lenh: string | null; ten_hang: string; dvt: string; don_gia: number; so_luong: number; thanh_tien: number }
@@ -101,6 +102,21 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
     queryKey: ['delivery-detail', detailId],
     queryFn: () => deliveriesApi.get(detailId!).then(r => r.data),
     enabled: !!detailId,
+  })
+
+  const { data: deliveryMedia = [] } = useQuery({
+    queryKey: ['delivery-media', detailId],
+    queryFn: () => client.get(`/media/delivery_orders/${detailId}`).then(r => r.data as { id: number; filename: string; filepath: string }[]),
+    enabled: !!detailId && showDetail,
+  })
+
+  const ocrMut = useMutation({
+    mutationFn: (id: number) => client.post(`/warehouse/deliveries/${id}/extract-image`).then(r => r.data),
+    onSuccess: (data, id) => {
+      setOcrResult(prev => ({ ...prev, [id]: data }))
+      message.success('OCR đọc xong phiếu giao hàng')
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi OCR'),
   })
 
   const openDetail = (row: DeliveryOrder) => {
@@ -1188,8 +1204,8 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                   <Col>
                     <DatePicker.RangePicker
                       format="DD/MM/YYYY"
-                      value={[dayjs(doFilter.tu_ngay), dayjs(doFilter.den_ngay)]}
-                      onChange={dates => setDOFilter({ ...doFilter, tu_ngay: dates?.[0]?.format('YYYY-MM-DD') || '', den_ngay: dates?.[1]?.format('YYYY-MM-DD') || '' })}
+                      value={doFilter.tu_ngay && doFilter.den_ngay ? [dayjs(doFilter.tu_ngay), dayjs(doFilter.den_ngay)] : null}
+                      onChange={dates => setDOFilter({ ...doFilter, tu_ngay: dates?.[0]?.format('YYYY-MM-DD') ?? '', den_ngay: dates?.[1]?.format('YYYY-MM-DD') ?? '' })}
                     />
                   </Col>
                   <Col>
@@ -1411,6 +1427,132 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
               <Descriptions bordered size="small" column={1}>
                 <Descriptions.Item label="Ghi chú">{detailOrder.ghi_chu}</Descriptions.Item>
               </Descriptions>
+            )}
+
+            {/* ── Ảnh phiếu tài xế & OCR đối chiếu ── */}
+            <Divider style={{ margin: '4px 0' }}>Ảnh phiếu tài xế &amp; Đối chiếu OCR</Divider>
+            {deliveryMedia.length === 0 ? (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                Tài xế chưa upload ảnh phiếu giao hàng.
+              </Typography.Text>
+            ) : (
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Space wrap>
+                  {deliveryMedia.map(m => (
+                    <a key={m.id} href={`/uploads/${m.filepath}`} target="_blank" rel="noreferrer">
+                      <img
+                        src={`/uploads/${m.filepath}`}
+                        alt={m.filename}
+                        style={{ height: 120, borderRadius: 6, border: '1px solid #d9d9d9', cursor: 'pointer' }}
+                      />
+                    </a>
+                  ))}
+                </Space>
+                <Button
+                  icon={<FileSearchOutlined />}
+                  loading={ocrMut.isPending}
+                  onClick={() => ocrMut.mutate(detailOrder.id)}
+                  type="default"
+                >
+                  OCR đối chiếu phiếu
+                </Button>
+                {ocrResult[detailOrder.id] && (() => {
+                  const ext = ocrResult[detailOrder.id].extracted || {}
+                  const norm = (s?: string) => (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
+                  // So sánh field-level
+                  const checks: { label: string; ocr: string; sys: string; match?: boolean }[] = [
+                    {
+                      label: 'Số phiếu',
+                      ocr: ext.so_phieu || '—',
+                      sys: detailOrder.so_phieu,
+                      match: ext.so_phieu ? norm(ext.so_phieu) === norm(detailOrder.so_phieu) : undefined,
+                    },
+                    {
+                      label: 'Khách hàng',
+                      ocr: ext.ten_khach || '—',
+                      sys: detailOrder.ten_khach ?? '—',
+                      match: ext.ten_khach
+                        ? norm(detailOrder.ten_khach ?? '').includes(norm(ext.ten_khach)) || norm(ext.ten_khach).includes(norm(detailOrder.ten_khach ?? ''))
+                        : undefined,
+                    },
+                    {
+                      label: 'Người nhận',
+                      ocr: ext.ten_nguoi_nhan || '—',
+                      sys: detailOrder.ten_nguoi_nhan_thuc_te || detailOrder.nguoi_nhan || '—',
+                    },
+                    {
+                      label: 'Ngày giao',
+                      ocr: ext.ngay_giao || '—',
+                      sys: detailOrder.ngay_giao_thuc_te ? fmtDate(detailOrder.ngay_giao_thuc_te) : fmtDate(detailOrder.ngay_xuat),
+                    },
+                  ]
+
+                  // So sánh hàng hoá
+                  const ocrItems: { ten: string; so_luong: number | null; dvt?: string }[] = ext.hang_hoa || []
+                  const sysItems = detailOrder.items
+
+                  return (
+                    <Card size="small" style={{ background: '#fafafa' }}>
+                      <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>Kết quả OCR</Typography.Text>
+                      <Table
+                        size="small"
+                        pagination={false}
+                        dataSource={checks}
+                        rowKey="label"
+                        showHeader={false}
+                        style={{ marginBottom: 12 }}
+                        columns={[
+                          { dataIndex: 'label', width: 100, render: v => <Typography.Text type="secondary">{v}</Typography.Text> },
+                          { dataIndex: 'ocr', render: v => <Typography.Text>{v}</Typography.Text> },
+                          {
+                            dataIndex: 'match',
+                            width: 40,
+                            render: (v, r: any) =>
+                              r.match === true ? <Tag color="green">✓</Tag>
+                              : r.match === false ? <Tag color="red">⚠</Tag>
+                              : null,
+                          },
+                          { dataIndex: 'sys', render: v => <Typography.Text type="secondary">{v}</Typography.Text> },
+                        ]}
+                      />
+                      {ocrItems.length > 0 && (
+                        <>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>Hàng hoá OCR vs hệ thống:</Typography.Text>
+                          <Table
+                            size="small"
+                            pagination={false}
+                            style={{ marginTop: 4 }}
+                            dataSource={sysItems.map((si: any) => {
+                              const oi = ocrItems.find(o => norm(o.ten).includes(norm(si.ten_hang)) || norm(si.ten_hang).includes(norm(o.ten)))
+                              return {
+                                key: si.id,
+                                ten: si.ten_hang,
+                                sys_sl: si.so_luong,
+                                ocr_sl: oi?.so_luong ?? null,
+                                dvt: si.dvt,
+                                match: oi ? oi.so_luong === si.so_luong : undefined,
+                              }
+                            })}
+                            columns={[
+                              { title: 'Tên hàng', dataIndex: 'ten', ellipsis: true },
+                              { title: 'HT', dataIndex: 'sys_sl', width: 60, align: 'right' as const },
+                              { title: 'OCR', dataIndex: 'ocr_sl', width: 60, align: 'right' as const, render: v => v ?? '—' },
+                              { title: 'ĐVT', dataIndex: 'dvt', width: 55 },
+                              {
+                                title: '',
+                                dataIndex: 'match',
+                                width: 40,
+                                render: v => v === true ? <Tag color="green">✓</Tag> : v === false ? <Tag color="red">⚠</Tag> : null,
+                              },
+                            ]}
+                          />
+                        </>
+                      )}
+                    </Card>
+                  )
+                })()}
+              </Space>
             )}
           </Space>
         ) : null}

@@ -110,7 +110,7 @@ class QuickCaptureIn(BaseModel):
     phap_nhan_id: int                  # bảo vệ chọn nhà máy (Hoàng Gia / Nam Thuận / Củ Chi)
     loai_kho_auto: str = "GIAY_CUON"  # GIAY_CUON | NVL_PHU | PHOI
     so_xe: Optional[str] = None
-    invoice_image: str
+    invoice_image: Optional[str] = None
     hd_tong_kg: Optional[Decimal] = None
 
 
@@ -897,10 +897,27 @@ def list_goods_receipts(
     if den_ngay:
         q = q.filter(GoodsReceipt.ngay_nhap <= den_ngay)
     if loai_hang == 'giay':
-        q = q.filter(GoodsReceipt.items.any(GoodsReceiptItem.paper_material_id.isnot(None)))
+        giay_cuon_wh_ids = db.query(Warehouse.id).filter(Warehouse.loai_kho == 'GIAY_CUON').subquery()
+        q = q.filter(
+            or_(
+                GoodsReceipt.items.any(GoodsReceiptItem.paper_material_id.isnot(None)),
+                and_(
+                    GoodsReceipt.trang_thai == 'nhap_nhanh',
+                    GoodsReceipt.warehouse_id.in_(giay_cuon_wh_ids),
+                ),
+            )
+        )
     elif loai_hang == 'nvl':
+        giay_cuon_wh_ids = db.query(Warehouse.id).filter(Warehouse.loai_kho == 'GIAY_CUON').subquery()
         q = q.filter(GoodsReceipt.loai_nhap != 'PHOI_NGOAI')
         q = q.filter(~GoodsReceipt.items.any(GoodsReceiptItem.paper_material_id.isnot(None)))
+        # Exclude nhap_nhanh GIAY_CUON GRs — they belong in NhapGiayPage, not ReceiptsPage
+        q = q.filter(
+            ~and_(
+                GoodsReceipt.trang_thai == 'nhap_nhanh',
+                GoodsReceipt.warehouse_id.in_(giay_cuon_wh_ids),
+            )
+        )
     elif loai_hang == 'phoi':
         q = q.filter(GoodsReceipt.loai_nhap == 'PHOI_NGOAI')
     rows = (
@@ -930,6 +947,25 @@ def list_goods_receipts(
         )
         co_hoa_don_set = {row[0] for row in hd_rows}
     return [_gr_to_dict(r, db, include_image=False, co_hoa_don_override=r.id in co_hoa_don_set) for r in rows]
+
+
+@router.get("/goods-receipts/pending-count")
+def pending_nhap_nhanh_count(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Đếm phiếu nhap_nhanh chờ hoàn thiện — gọi từ sidebar badge."""
+    rows = (
+        db.query(GoodsReceipt.loai_nhap, Warehouse.loai_kho, func.count().label("n"))
+        .outerjoin(Warehouse, GoodsReceipt.warehouse_id == Warehouse.id)
+        .filter(GoodsReceipt.trang_thai == "nhap_nhanh")
+        .group_by(GoodsReceipt.loai_nhap, Warehouse.loai_kho)
+        .all()
+    )
+    giay = sum(r.n for r in rows if r.loai_kho == "GIAY_CUON")
+    nvl  = sum(r.n for r in rows if r.loai_kho == "NVL_PHU")
+    phoi = sum(r.n for r in rows if r.loai_nhap == "PHOI_NGOAI")
+    return {"giay": giay, "nvl": nvl, "phoi": phoi, "total": giay + nvl + phoi}
 
 
 @router.get("/goods-receipts/{gr_id}")
@@ -1076,25 +1112,6 @@ def create_goods_receipt(
     return _gr_to_dict(gr, db)
 
 
-@router.get("/goods-receipts/pending-count")
-def pending_nhap_nhanh_count(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-):
-    """Đếm phiếu nhap_nhanh chờ hoàn thiện — gọi từ sidebar badge."""
-    rows = (
-        db.query(GoodsReceipt.loai_nhap, Warehouse.loai_kho, func.count().label("n"))
-        .outerjoin(Warehouse, GoodsReceipt.warehouse_id == Warehouse.id)
-        .filter(GoodsReceipt.trang_thai == "nhap_nhanh")
-        .group_by(GoodsReceipt.loai_nhap, Warehouse.loai_kho)
-        .all()
-    )
-    giay = sum(r.n for r in rows if r.loai_kho == "GIAY_CUON")
-    nvl  = sum(r.n for r in rows if r.loai_kho == "NVL_PHU")
-    phoi = sum(r.n for r in rows if r.loai_nhap == "PHOI_NGOAI")
-    return {"giay": giay, "nvl": nvl, "phoi": phoi, "total": giay + nvl + phoi}
-
-
 @router.post("/goods-receipts/quick", status_code=201)
 def quick_capture_goods_receipt(
     body: QuickCaptureIn,
@@ -1138,6 +1155,63 @@ def quick_capture_goods_receipt(
     db.commit()
     db.refresh(gr)
     return _gr_to_dict(gr, db)
+
+
+@router.post("/goods-receipts/{gr_id}/extract-image")
+def extract_image_ocr(
+    gr_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Đọc ảnh phiếu xuất NCC bằng Gemini Vision (few-shot nếu có ảnh mẫu NCC)."""
+    import json
+    from pathlib import Path
+    from sqlalchemy import text as _sql
+    from app.utils.ocr import extract_delivery_slip, identify_supplier
+    from app.routers.ocr_examples import get_examples_for_supplier
+
+    gr = db.get(GoodsReceipt, gr_id)
+    if not gr:
+        raise HTTPException(404, "Không tìm thấy phiếu")
+
+    media_row = db.execute(
+        _sql("SELECT filepath FROM erp_media WHERE module='goods_receipts' AND record_id=:rid ORDER BY id DESC LIMIT 1"),
+        {"rid": str(gr_id)},
+    ).fetchone()
+    if not media_row:
+        raise HTTPException(404, "Phiếu này chưa có ảnh — bảo vệ cần upload ảnh trước")
+
+    upload_base = Path(__file__).parent.parent.parent / "uploads"
+    img_path = upload_base / media_row.filepath
+    if not img_path.is_file():
+        raise HTTPException(404, f"File ảnh không tìm thấy trên server: {media_row.filepath}")
+
+    try:
+        # Bước 1: Nhận diện NCC (nhanh) — chỉ chạy nếu DB có ảnh mẫu
+        from app.models.warehouse_doc import OcrSupplierExample
+        has_examples = db.query(OcrSupplierExample.id).limit(1).scalar() is not None
+        few_shot = []
+        detected_supplier = None
+        if has_examples:
+            detected_supplier = identify_supplier(str(img_path))
+            if detected_supplier:
+                few_shot = get_examples_for_supplier(detected_supplier, db, limit=3)
+
+        # Bước 2: OCR chính — few-shot nếu có mẫu, zero-shot nếu chưa
+        result = extract_delivery_slip(str(img_path), few_shot_examples=few_shot or None)
+        if detected_supplier:
+            result["detected_supplier"] = detected_supplier
+
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        logger.error("OCR lỗi không mong muốn: %s", e, exc_info=True)
+        raise HTTPException(500, f"Lỗi OCR: {type(e).__name__}")
+
+    gr.ocr_extracted_data = json.dumps(result.get("extracted", {}), ensure_ascii=False)
+    db.commit()
+
+    return result
 
 
 @router.post("/goods-receipts/{gr_id}/complete")
@@ -1441,6 +1515,7 @@ def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True, co_ho
         "so_xe": gr.so_xe,
         "invoice_image": gr.invoice_image if include_image else None,
         "has_invoice_image": bool(gr.invoice_image),
+        "ocr_extracted_data": gr.ocr_extracted_data,
         "hd_tong_kg": float(gr.hd_tong_kg) if gr.hd_tong_kg else None,
         "phap_nhan_id": gr.phap_nhan_id,
         "ten_phap_nhan": (pn.ten_viet_tat or pn.ten_phap_nhan) if pn else None,
@@ -1955,6 +2030,37 @@ def list_deliveries(
     return [_do_to_dict(r, db) for r in rows]
 
 
+@router.get("/deliveries/mobile-list")
+def list_deliveries_mobile(
+    xe_van_chuyen: Optional[str] = Query(None),
+    ngay: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Danh sách phiếu giao hàng cho tài xế trên mobile — chỉ trả da_xuat."""
+    from sqlalchemy.orm import joinedload
+    q = db.query(DeliveryOrder).options(joinedload(DeliveryOrder.customer)).filter(DeliveryOrder.trang_thai == "da_xuat")
+    if xe_van_chuyen:
+        q = q.filter(DeliveryOrder.xe_van_chuyen.ilike(f"%{xe_van_chuyen}%"))
+    if ngay:
+        q = q.filter(DeliveryOrder.ngay_xuat == ngay)
+    rows = q.order_by(DeliveryOrder.ngay_xuat.desc(), DeliveryOrder.id.desc()).limit(50).all()
+    result = []
+    for do in rows:
+        result.append({
+            "id": do.id,
+            "so_phieu": do.so_phieu,
+            "ten_khach": do.customer.ten_viet_tat or do.customer.ten_don_vi if do.customer else "",
+            "dia_chi_giao": do.dia_chi_giao,
+            "xe_van_chuyen": do.xe_van_chuyen,
+            "nguoi_nhan": do.nguoi_nhan,
+            "ngay_xuat": str(do.ngay_xuat),
+            "tong_thanh_toan": float(do.tong_thanh_toan or 0),
+            "trang_thai": do.trang_thai,
+        })
+    return result
+
+
 @router.get("/deliveries/{do_id}")
 def get_delivery(do_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     r = (
@@ -2306,37 +2412,45 @@ def xac_nhan_giao_hang(
     return _do_to_dict(do, db)
 
 
-@router.get("/deliveries/mobile-list")
-def list_deliveries_mobile(
-    xe_van_chuyen: Optional[str] = Query(None),
-    ngay: Optional[date] = Query(None),
+@router.post("/deliveries/{do_id}/extract-image")
+def extract_delivery_image_ocr(
+    do_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Danh sách phiếu giao hàng cho tài xế trên mobile — chỉ trả da_xuat."""
-    from app.models.master import Customer
-    q = db.query(DeliveryOrder).filter(DeliveryOrder.trang_thai == "da_xuat")
-    if xe_van_chuyen:
-        q = q.filter(DeliveryOrder.xe_van_chuyen.ilike(f"%{xe_van_chuyen}%"))
-    if ngay:
-        q = q.filter(DeliveryOrder.ngay_xuat == ngay)
-    else:
-        from datetime import date as _date
-        q = q.filter(DeliveryOrder.ngay_xuat == _date.today())
-    rows = q.order_by(DeliveryOrder.id.desc()).limit(50).all()
-    result = []
-    for do in rows:
-        result.append({
-            "id": do.id,
-            "so_phieu": do.so_phieu,
-            "ten_khach": do.customer.ten_viet_tat or do.customer.ten_don_vi if do.customer else "",
-            "dia_chi_giao": do.dia_chi_giao,
-            "xe_van_chuyen": do.xe_van_chuyen,
-            "nguoi_nhan": do.nguoi_nhan,
-            "ngay_xuat": str(do.ngay_xuat),
-            "tong_thanh_toan": float(do.tong_thanh_toan or 0),
-            "trang_thai": do.trang_thai,
-        })
+    """OCR ảnh phiếu giao hàng — đọc từ erp_media (module=delivery_orders) upload bởi tài xế."""
+    import json
+    from pathlib import Path
+    from sqlalchemy import text as _sql
+    from app.utils.ocr import extract_phieu_giao_hang
+
+    do = db.get(DeliveryOrder, do_id)
+    if not do:
+        raise HTTPException(404, "Không tìm thấy phiếu bán hàng")
+
+    media_row = db.execute(
+        _sql("SELECT filepath FROM erp_media WHERE module='delivery_orders' AND record_id=:rid ORDER BY id DESC LIMIT 1"),
+        {"rid": str(do_id)},
+    ).fetchone()
+    if not media_row:
+        raise HTTPException(404, "Phiếu này chưa có ảnh — tài xế cần chụp và upload ảnh phiếu trước")
+
+    upload_base = Path(__file__).parent.parent.parent / "uploads"
+    img_path = upload_base / media_row.filepath
+    if not img_path.is_file():
+        raise HTTPException(404, f"File ảnh không tìm thấy trên server: {media_row.filepath}")
+
+    try:
+        result = extract_phieu_giao_hang(str(img_path))
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        logger.error("OCR delivery lỗi: %s", e, exc_info=True)
+        raise HTTPException(500, f"Lỗi OCR: {type(e).__name__}")
+
+    do.ocr_extracted_data = json.dumps(result.get("extracted", {}), ensure_ascii=False)
+    db.commit()
+
     return result
 
 
