@@ -106,7 +106,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
 
   const { data: deliveryMedia = [] } = useQuery({
     queryKey: ['delivery-media', detailId],
-    queryFn: () => client.get(`/media/delivery_orders/${detailId}`).then(r => r.data as { id: number; filename: string; filepath: string }[]),
+    queryFn: () => client.get(`/media/delivery_orders/${detailId}`).then(r => r.data as { id: number; filename: string; url: string }[]),
     enabled: !!detailId && showDetail,
   })
 
@@ -1439,9 +1439,9 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Space wrap>
                   {deliveryMedia.map(m => (
-                    <a key={m.id} href={`/uploads/${m.filepath}`} target="_blank" rel="noreferrer">
+                    <a key={m.id} href={m.url} target="_blank" rel="noreferrer">
                       <img
-                        src={`/uploads/${m.filepath}`}
+                        src={m.url}
                         alt={m.filename}
                         style={{ height: 120, borderRadius: 6, border: '1px solid #d9d9d9', cursor: 'pointer' }}
                       />
