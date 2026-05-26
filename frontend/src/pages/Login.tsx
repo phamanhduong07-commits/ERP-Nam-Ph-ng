@@ -128,7 +128,7 @@ export default function Login() {
             🚛 ĐĂNG NHẬP NHẬN HÀNG
           </Button>
         </div>
-        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+        <div style={{ textAlign: 'center', marginBottom: 8 }}>
           <Button
             type="primary"
             size="large"
@@ -145,6 +145,25 @@ export default function Login() {
             }}
           >
             📦 XÁC NHẬN GIAO HÀNG
+          </Button>
+        </div>
+        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+          <Button
+            type="primary"
+            size="large"
+            onClick={() => navigate('/kho-login')}
+            style={{
+              fontWeight: 700,
+              background: '#002766',
+              borderColor: '#002766',
+              height: 50,
+              width: '100%',
+              fontSize: 16,
+              borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(0, 39, 102, 0.3)'
+            }}
+          >
+            ⚖️ CÂN CUỘN GIẤY
           </Button>
         </div>
 
