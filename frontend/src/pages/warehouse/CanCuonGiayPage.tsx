@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons'
 import { useMutation } from '@tanstack/react-query'
 import apiClient from '../../api/client'
-import { Html5Qrcode } from 'html5-qrcode'
+import QrScannerModal from '../../components/QrScannerModal'
 import { warehouseApi, type GiayRoll } from '../../api/warehouse'
 import { useAuthStore } from '../../store/auth'
 
@@ -52,8 +52,6 @@ export default function CanCuonGiayPage() {
   const [scanning, setScanning]     = useState(false)
   const [lookupError, setLookupError] = useState<string | null>(null)
   const [history, setHistory]       = useState<HistoryEntry[]>([])
-  const scannerRef                  = useRef<Html5Qrcode | null>(null)
-  const scanRunningRef              = useRef(false)
   const inputRef                    = useRef<HTMLInputElement | null>(null)
   const kgInputRef                  = useRef<HTMLInputElement | null>(null)
 
@@ -143,50 +141,6 @@ export default function CanCuonGiayPage() {
     }
   }
 
-  // Camera scanner setup — auto rear camera, no mode selection
-  useEffect(() => {
-    if (!scanning) {
-      if (scanRunningRef.current && scannerRef.current) {
-        scannerRef.current.stop().catch(() => {}).finally(() => {
-          scannerRef.current?.clear()
-          scannerRef.current = null
-          scanRunningRef.current = false
-        })
-      }
-      return
-    }
-    const timer = setTimeout(async () => {
-      if (scanRunningRef.current) return
-      try {
-        const scanner = new Html5Qrcode('qr-scanner-container')
-        scannerRef.current = scanner
-        await scanner.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 250, height: 120 } },
-          (decoded) => {
-            if ('vibrate' in navigator) navigator.vibrate(80)
-            setScanning(false)
-            handleBarcodeSubmit(decoded)
-          },
-          undefined,
-        )
-        scanRunningRef.current = true
-      } catch {
-        setScanning(false)
-      }
-    }, 300)
-    return () => {
-      clearTimeout(timer)
-      if (scanRunningRef.current && scannerRef.current) {
-        scannerRef.current.stop().catch(() => {}).finally(() => {
-          scannerRef.current?.clear()
-          scannerRef.current = null
-          scanRunningRef.current = false
-        })
-      }
-    }
-  }, [scanning, handleBarcodeSubmit])
-
   useEffect(() => { inputRef.current?.focus() }, [])
 
   const pctDung = roll
@@ -232,16 +186,22 @@ export default function CanCuonGiayPage() {
           />
           <Button
             size="large"
-            type={scanning ? 'primary' : 'default'}
+            type="default"
             icon={<ScanOutlined />}
-            onClick={() => setScanning(s => !s)}
+            onClick={() => setScanning(true)}
             style={{ borderRadius: '0 6px 6px 0', minWidth: 48 }}
           />
         </Space.Compact>
 
-        {scanning && (
-          <div id="qr-scanner-container" style={{ marginTop: 12 }} />
-        )}
+        <QrScannerModal
+          open={scanning}
+          onScan={(text) => {
+            setScanning(false)
+            setBarcode(text)
+            handleBarcodeSubmit(text)
+          }}
+          onClose={() => setScanning(false)}
+        />
 
         <Button
           type="primary" block size="large"
