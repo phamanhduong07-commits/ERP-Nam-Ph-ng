@@ -1418,6 +1418,29 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_use
 
         acc_service = AccountingService(db)
         acc_service.post_goods_receipt_journal(gr, phap_nhan_id, phan_xuong_id)
+    # Auto-tạo GiayRoll cho phiếu nhập giấy cuộn (idempotent)
+    if gr.warehouse_id:
+        for item in gr.items:
+            if not item.paper_material_id:
+                continue
+            exists = db.query(GiayRoll).filter(GiayRoll.goods_receipt_item_id == item.id).first()
+            if exists:
+                continue
+            barcode = _next_giay_roll_barcode(db)
+            db.add(GiayRoll(
+                barcode=barcode,
+                goods_receipt_id=gr.id,
+                goods_receipt_item_id=item.id,
+                paper_material_id=item.paper_material_id,
+                warehouse_id=gr.warehouse_id,
+                so_phieu_nhap=gr.so_phieu,
+                ngay_nhap=gr.ngay_nhap,
+                trong_luong_ban_dau=item.so_luong,
+                trong_luong_con_lai=item.so_luong,
+                trang_thai="trong_kho",
+            ))
+            db.flush()
+
     db.commit()
     db.refresh(gr)
     logger.info("approved goods_receipt id=%s so_phieu=%s by user=%s", gr_id, gr.so_phieu, current_user.id)
