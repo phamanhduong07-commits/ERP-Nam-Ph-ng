@@ -6,7 +6,7 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
-from app.deps import create_access_token, create_refresh_token, get_current_user, ALGORITHM
+from app.deps import create_access_token, create_refresh_token, get_current_user, revoke_token, oauth2_scheme, ALGORITHM
 from app.models.auth import User
 from app.schemas.auth import ChangePasswordRequest, TokenResponse, UserInfo
 
@@ -18,7 +18,7 @@ def _verify_password(plain: str, hashed: str) -> bool:
 
 
 def _hash_password(plain: str) -> str:
-    return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt()).decode()
+    return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(rounds=14)).decode()
 
 
 def _make_user_info(user: User) -> UserInfo:
@@ -92,6 +92,22 @@ def refresh_token(refresh_token: str = Body(..., embed=True), db: Session = Depe
 @router.get("/me", response_model=UserInfo)
 def get_me(current_user: User = Depends(get_current_user)):
     return _make_user_info(current_user)
+
+
+@router.post("/logout")
+def logout(
+    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user),
+):
+    """Revoke current access token immediately."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        jti = payload.get("jti")
+        if jti:
+            revoke_token(jti)
+    except JWTError:
+        pass
+    return {"message": "Đăng xuất thành công"}
 
 
 @router.post("/change-password")

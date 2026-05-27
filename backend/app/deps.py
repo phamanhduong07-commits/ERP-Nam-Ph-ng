@@ -1,4 +1,5 @@
-﻿from datetime import datetime, timedelta, timezone
+﻿import uuid
+from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -11,11 +12,19 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 ALGORITHM = "HS256"
 
+# In-memory JTI blacklist — cleared on restart (acceptable: access tokens expire in 60 min)
+_revoked_jtis: set[str] = set()
+
+
+def revoke_token(jti: str) -> None:
+    _revoked_jtis.add(jti)
+
 
 def create_access_token(data: dict) -> str:
     payload = data.copy()
     payload["exp"] = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload["type"] = "access"
+    payload["jti"] = str(uuid.uuid4())
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -23,6 +32,7 @@ def create_refresh_token(data: dict) -> str:
     payload = data.copy()
     payload["exp"] = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     payload["type"] = "refresh"
+    payload["jti"] = str(uuid.uuid4())
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -39,6 +49,9 @@ def get_current_user(
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         # Chỉ chấp nhận access token, không nhận refresh token
         if payload.get("type") == "refresh":
+            raise credentials_exception
+        jti = payload.get("jti")
+        if jti and jti in _revoked_jtis:
             raise credentials_exception
         sub = payload.get("sub")
         if sub is None:

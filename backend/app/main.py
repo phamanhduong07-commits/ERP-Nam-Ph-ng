@@ -112,13 +112,26 @@ async def log_requests(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=self, microphone=(), geolocation=()")
     response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+        "font-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'none'",
+    )
     duration_ms = round((time.time() - start) * 1000)
     # Bỏ qua static assets để log không bị nhiễu
     if not request.url.path.startswith("/assets"):
-        logger.info(
-            "%s %s %d %dms",
-            request.method, request.url.path, response.status_code, duration_ms,
-        )
+        if response.status_code in (401, 403):
+            logger.warning(
+                "AUTH FAILURE %d — %s %s — ip=%s",
+                response.status_code, request.method, request.url.path,
+                request.client.host if request.client else "unknown",
+            )
+        else:
+            logger.info(
+                "%s %s %d %dms",
+                request.method, request.url.path, response.status_code, duration_ms,
+            )
     return response
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
