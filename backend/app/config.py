@@ -1,5 +1,13 @@
-from pydantic import AliasChoices, Field
+import sys
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_INSECURE_DEFAULTS = {
+    "change-this-secret-key-immediately",
+    "secret",
+    "secretkey",
+    "your-secret-key",
+}
 
 
 class Settings(BaseSettings):
@@ -7,8 +15,21 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql://erp_user:erp_password@localhost:5432/erp_nam_phuong"
     SECRET_KEY: str = "change-this-secret-key-immediately"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 90
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
+    @model_validator(mode="after")
+    def _check_secret_key(self) -> "Settings":
+        if self.SECRET_KEY in _INSECURE_DEFAULTS or len(self.SECRET_KEY) < 32:
+            print(
+                "\n[SECURITY ERROR] SECRET_KEY không an toàn!\n"
+                "  Hãy thêm vào backend/.env:\n"
+                "  SECRET_KEY=<chuỗi ngẫu nhiên ít nhất 32 ký tự>\n"
+                "  Tạo nhanh: python -c \"import secrets; print(secrets.token_hex(32))\"\n",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return self
     # Danh sách origin được phép, ngăn cách bằng dấu phẩy
     # Ví dụ production: "https://erp.namphuong.com,https://erp-api.namphuong.com"
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000"

@@ -29,11 +29,13 @@ export default function Login() {
       navigate('/dashboard')
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-      let msg = detail
+      let msg: string | undefined
       if (Array.isArray(detail)) {
         msg = detail.map((d: { msg?: string }) => d.msg).join(', ')
       } else if (typeof detail === 'object' && detail !== null) {
         msg = JSON.stringify(detail)
+      } else if (typeof detail === 'string') {
+        msg = detail
       }
       setError(msg || 'Đăng nhập thất bại, vui lòng thử lại')
     } finally {
@@ -194,50 +196,54 @@ export default function Login() {
           </Button>
         </div>
 
-        <Divider style={{ margin: '12px 0' }}>Đăng nhập nhanh (Test)</Divider>
-        <div style={{ paddingBottom: 10 }}>
-          <Select 
-            showSearch
-            placeholder="Chọn chức vụ / phòng ban để test..." 
-            style={{ width: '100%', height: 40 }}
-            onChange={(val) => handleQuickLogin(val, '123456')}
-            options={[
-              { label: 'Hệ thống & BGD', options: [
-                { label: 'Administrator', value: 'ADMIN' },
-                { label: 'Giám đốc - Ban Giám Đốc', value: 'BGD_GIAM_DOC' },
-                { label: 'Tổ trưởng - Ban Giám Đốc', value: 'BGD_TO_TRUONG' },
-                { label: 'Nhân viên - Ban Giám Đốc', value: 'BGD_NHAN_VIEN' },
-              ]},
-              { label: 'Kinh Doanh & Sale Admin', options: [
-                { label: 'Trưởng phòng Sale Admin', value: 'TRUONG_PHONG_SALE_ADMIN' },
-                { label: 'Tổ trưởng - Sale Admin', value: 'SALE_ADMIN_TO_TRUONG' },
-                { label: 'Sale Admin', value: 'SALE_ADMIN' },
-                { label: 'Nhân viên - Sale Admin', value: 'SALE_ADMIN_NHAN_VIEN' },
-                { label: 'Tổ trưởng - Phòng Kinh Doanh', value: 'KINH_DOANH_TO_TRUONG' },
-                { label: 'Nhân viên - Phòng Kinh Doanh', value: 'KINH_DOANH_NHAN_VIEN' },
-              ]},
-              { label: 'Kế Toán', options: [
-                { label: 'Kế toán trưởng', value: 'KE_TOAN_TRUONG' },
-                { label: 'Kế toán công nợ', value: 'KE_TOAN_CONG_NO' },
-                { label: 'Tổ trưởng - Phòng Kế Toán', value: 'KETOAN_TO_TRUONG' },
-                { label: 'Nhân viên - Phòng Kế Toán', value: 'KETOAN_NHAN_VIEN' },
-              ]},
-              { label: 'Sản Xuất & Kho', options: [
-                { label: 'Giám sát - Khối Sản Xuất', value: 'SAN_XUAT_GIAM_SAT' },
-                { label: 'Tổ trưởng - Khối Sản Xuất', value: 'SAN_XUAT_TO_TRUONG' },
-                { label: 'Thợ - Khối Sản Xuất', value: 'SAN_XUAT_THO' },
-                { label: 'Tổ trưởng - Kho', value: 'KHO_TO_TRUONG' },
-                { label: 'Nhân viên - Kho', value: 'KHO_NHAN_VIEN' },
-              ]},
-              { label: 'Nhân Sự & Thiết Kế', options: [
-                { label: 'Tổ trưởng - Phòng Nhân Sự', value: 'NHAN_SU_TO_TRUONG' },
-                { label: 'Nhân viên - Phòng Nhân Sự', value: 'NHAN_SU_NHAN_VIEN' },
-                { label: 'Tổ trưởng - Phòng Thiết Kế', value: 'THIET_KE_TO_TRUONG' },
-                { label: 'Nhân viên - Phòng Thiết Kế', value: 'THIET_KE_NHAN_VIEN' },
-              ]}
-            ]}
-          />
-        </div>
+        {import.meta.env.DEV && (
+          <>
+            <Divider style={{ margin: '12px 0' }}>Đăng nhập nhanh (Test)</Divider>
+            <div style={{ paddingBottom: 10 }}>
+              <Select
+                showSearch
+                placeholder="Chọn chức vụ / phòng ban để test..."
+                style={{ width: '100%', height: 40 }}
+                onChange={(val) => handleQuickLogin(val, '123456')}
+                options={[
+                  { label: 'Hệ thống & BGD', options: [
+                    { label: 'Administrator', value: 'ADMIN' },
+                    { label: 'Giám đốc - Ban Giám Đốc', value: 'BGD_GIAM_DOC' },
+                    { label: 'Tổ trưởng - Ban Giám Đốc', value: 'BGD_TO_TRUONG' },
+                    { label: 'Nhân viên - Ban Giám Đốc', value: 'BGD_NHAN_VIEN' },
+                  ]},
+                  { label: 'Kinh Doanh & Sale Admin', options: [
+                    { label: 'Trưởng phòng Sale Admin', value: 'TRUONG_PHONG_SALE_ADMIN' },
+                    { label: 'Tổ trưởng - Sale Admin', value: 'SALE_ADMIN_TO_TRUONG' },
+                    { label: 'Sale Admin', value: 'SALE_ADMIN' },
+                    { label: 'Nhân viên - Sale Admin', value: 'SALE_ADMIN_NHAN_VIEN' },
+                    { label: 'Tổ trưởng - Phòng Kinh Doanh', value: 'KINH_DOANH_TO_TRUONG' },
+                    { label: 'Nhân viên - Phòng Kinh Doanh', value: 'KINH_DOANH_NHAN_VIEN' },
+                  ]},
+                  { label: 'Kế Toán', options: [
+                    { label: 'Kế toán trưởng', value: 'KE_TOAN_TRUONG' },
+                    { label: 'Kế toán công nợ', value: 'KE_TOAN_CONG_NO' },
+                    { label: 'Tổ trưởng - Phòng Kế Toán', value: 'KETOAN_TO_TRUONG' },
+                    { label: 'Nhân viên - Phòng Kế Toán', value: 'KETOAN_NHAN_VIEN' },
+                  ]},
+                  { label: 'Sản Xuất & Kho', options: [
+                    { label: 'Giám sát - Khối Sản Xuất', value: 'SAN_XUAT_GIAM_SAT' },
+                    { label: 'Tổ trưởng - Khối Sản Xuất', value: 'SAN_XUAT_TO_TRUONG' },
+                    { label: 'Thợ - Khối Sản Xuất', value: 'SAN_XUAT_THO' },
+                    { label: 'Tổ trưởng - Kho', value: 'KHO_TO_TRUONG' },
+                    { label: 'Nhân viên - Kho', value: 'KHO_NHAN_VIEN' },
+                  ]},
+                  { label: 'Nhân Sự & Thiết Kế', options: [
+                    { label: 'Tổ trưởng - Phòng Nhân Sự', value: 'NHAN_SU_TO_TRUONG' },
+                    { label: 'Nhân viên - Phòng Nhân Sự', value: 'NHAN_SU_NHAN_VIEN' },
+                    { label: 'Tổ trưởng - Phòng Thiết Kế', value: 'THIET_KE_TO_TRUONG' },
+                    { label: 'Nhân viên - Phòng Thiết Kế', value: 'THIET_KE_NHAN_VIEN' },
+                  ]}
+                ]}
+              />
+            </div>
+          </>
+        )}
 
         <Text type="secondary" style={{ display: 'block', textAlign: 'center', fontSize: 12 }}>
           Công ty TNHH SX TM Nam Phương
