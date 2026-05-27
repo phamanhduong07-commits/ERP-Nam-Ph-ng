@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { addonRatesApi, AddonRateItem } from '../../api/bom'
+import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 

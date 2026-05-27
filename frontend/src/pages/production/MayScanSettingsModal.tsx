@@ -5,6 +5,7 @@ import {
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, EditOutlined, SaveOutlined } from '@ant-design/icons'
 import { cd2Api, MayScan } from '../../api/cd2'
+import EmptyState from "../../components/EmptyState"
 
 interface Props {
   open: boolean
@@ -178,7 +179,8 @@ export default function MayScanSettingsModal({ open, onClose, onSaved }: Props) 
       width={520}
     >
       <Table
-        rowKey="id"
+                locale={{ emptyText: <EmptyState size="small" /> }}
+                rowKey="id"
         size="small"
         dataSource={mayScanList}
         columns={columns}

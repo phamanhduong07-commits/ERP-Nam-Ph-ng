@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import type { ColumnsType } from 'antd/es/table'
 import { hdtApi, HoaDonDienTu, TRANG_THAI_HDT, TRANG_THAI_HDT_COLOR } from '../../api/hoaDonDienTu'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -167,7 +168,8 @@ export default function HoaDonDienTuPage() {
       </Form>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={data}
         loading={isLoading}
         rowKey="id"

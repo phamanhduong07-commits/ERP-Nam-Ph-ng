@@ -8,6 +8,7 @@ interface BeforeInstallPromptEvent extends Event {
 import { useAuthStore } from './store/auth'
 import AppLayout from './components/AppLayout'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { storage } from './utils/storage'
 
 const Login = lazy(() => import('./pages/Login'))
 const GateLoginPage = lazy(() => import('./pages/warehouse/GateLoginPage'))
@@ -189,7 +190,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 function WorkerOrPrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
-  const hasWorkerSession = !!localStorage.getItem('cd2_worker_session')
+  const hasWorkerSession = !!storage.get('cd2_worker_session')
   if (isAuthenticated() || hasWorkerSession) return <>{children}</>
   return <Navigate to="/cd2/machine-login" replace />
 }

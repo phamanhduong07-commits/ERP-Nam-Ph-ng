@@ -45,6 +45,7 @@ import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import PhotoCapture from '../../components/PhotoCapture'
 import { useAuthStore } from '../../store/auth'
 import { APPROVE_ROLES } from '../../constants/permissions'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { confirm } = Modal
@@ -749,7 +750,8 @@ export default function SalesReturnDetail() {
               />
             )}
             <Table
-              columns={columns}
+                            locale={{ emptyText: <EmptyState size="small" preset="order" /> }}
+                            columns={columns}
               dataSource={returnData.items}
               rowKey="id"
               pagination={false}

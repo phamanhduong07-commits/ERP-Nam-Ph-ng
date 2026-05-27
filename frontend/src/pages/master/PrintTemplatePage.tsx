@@ -14,6 +14,7 @@ import 'react-quill/dist/quill.snow.css'
 import { systemApi, PrintTemplate, ExcelTemplate } from '../../api/system'
 import { phapNhanApi, PhapNhan } from '../../api/phap-nhan'
 import { DragOutlined } from '@ant-design/icons'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

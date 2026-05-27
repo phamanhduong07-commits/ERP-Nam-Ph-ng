@@ -20,6 +20,7 @@ import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { systemApi } from '../../api/system'
 import type { PrintTemplate } from '../../api/system'
 import { useAuthStore } from '../../store/auth'
+import EmptyState from "../../components/EmptyState"
 
 interface AxiosErrorLike { response?: { data?: { detail?: string } } }
 function apiErrorMsg(e: unknown, fallback: string): string {
@@ -878,7 +879,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
           pagination={false}
           size="small"
           scroll={{ x: 1200 }}
-          locale={{ emptyText: 'Báo giá chưa có mặt hàng nào' }}
+          locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
           onRow={(r) => ({
             onClick: () => setPreviewItem(r),
             style: { cursor: 'pointer' },

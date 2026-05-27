@@ -6,6 +6,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { loXeApi, type LoXe } from '../../api/simpleApis'
 import { hrApi } from '../../api/hr'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 

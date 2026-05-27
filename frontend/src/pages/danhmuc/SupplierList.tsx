@@ -10,6 +10,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { suppliersApi, type Supplier, type SupplierCreate } from '../../api/suppliers'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import MSTLookupButton from '../../components/MSTLookupButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -181,7 +182,8 @@ export default function SupplierList() {
         </Row>
 
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" preset="customer" /> }}
+                    rowKey="id"
           dataSource={items}
           columns={columns}
           loading={isLoading}

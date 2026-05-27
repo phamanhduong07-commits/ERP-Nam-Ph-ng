@@ -8,6 +8,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { fmtVND, printToPdf } from '../../utils/exportUtils'
 import {
+import EmptyState from "../../components/EmptyState"
   purchaseInvoiceApi, PurchaseInvoice, CashPaymentShort,
 } from '../../api/accounting'
 
@@ -208,7 +209,7 @@ export default function PurchaseInvoiceDetailPage() {
           rowKey="id"
           size="small"
           pagination={false}
-          locale={{ emptyText: 'Chưa có phiếu chi' }}
+          locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
         />
       </Card>
     </div>

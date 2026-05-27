@@ -9,6 +9,7 @@ import { hrApi , PayrollConfig } from '../../api/hr'
 import { theoDoiApi } from '../../api/theoDoi'
 import { downloadTemplate } from '../../utils/excelUtils'
 import * as XLSX from 'xlsx'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -150,7 +151,8 @@ export default function PayrollConfigPage() {
         <Col span={16}>
           <Card size="small" styles={{ body: { padding: 0 } }}>
             <Table
-              dataSource={configs}
+                            locale={{ emptyText: <EmptyState size="small" /> }}
+                            dataSource={configs}
               columns={columns}
               rowKey="id"
               loading={isLoading}
@@ -307,7 +309,8 @@ export default function PayrollConfigPage() {
         </div>
 
         <Table
-          size="small"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    size="small"
           dataSource={importData}
           pagination={false}
           columns={[

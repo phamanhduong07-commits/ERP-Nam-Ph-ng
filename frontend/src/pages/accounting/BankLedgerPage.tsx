@@ -9,6 +9,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { bankLedgerApi, bankAccountsApi, type LedgerEntry } from '../../api/banking'
 import { exportToExcel } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -190,7 +191,8 @@ export default function BankLedgerPage() {
           </Row>
 
           <Table
-            rowKey="so_chung_tu"
+                        locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                        rowKey="so_chung_tu"
             columns={columns}
             dataSource={data.entries}
             loading={isLoading}

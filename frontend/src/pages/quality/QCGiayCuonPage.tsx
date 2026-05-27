@@ -11,6 +11,7 @@ import {
 } from '../../api/qcGiayCuon'
 import { paperMaterialsFullApi, PaperMaterial } from '../../api/paperMaterials'
 import client from '../../api/client'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -605,7 +606,8 @@ export default function QCGiayCuonPage() {
 
       {/* Table */}
       <Table
-        dataSource={list}
+                locale={{ emptyText: <EmptyState size="small" /> }}
+                dataSource={list}
         columns={columns}
         rowKey="id"
         loading={isLoading}

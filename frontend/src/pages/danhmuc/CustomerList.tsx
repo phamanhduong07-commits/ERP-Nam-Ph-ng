@@ -10,6 +10,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { customersApi, type Customer } from '../../api/customers'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import MSTLookupButton from '../../components/MSTLookupButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -161,7 +162,8 @@ export default function CustomerList() {
         </Row>
 
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" preset="customer" /> }}
+                    rowKey="id"
           dataSource={items}
           columns={columns}
           loading={isLoading}

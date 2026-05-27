@@ -9,6 +9,7 @@ import dayjs from 'dayjs'
 import { reportsApi, InventoryMovementRow } from '../../api/reports'
 import { warehousesApi, Warehouse } from '../../api/warehouses'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -141,7 +142,8 @@ export default function InventoryReportPage() {
       </Row>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
+                columns={columns}
         dataSource={rows}
         rowKey={(r, i) => `${r.warehouse_id}-${r.ten_hang}-${i}`}
         loading={isLoading}

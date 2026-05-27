@@ -8,6 +8,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { warehouseApi, PhanXuong, CreatePhanXuongPayload } from '../../api/warehouse'
 import ImportExcelButton from '../../components/ImportExcelButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -170,7 +171,8 @@ export default function PhanXuongList() {
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
-          dataSource={list}
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    dataSource={list}
           columns={columns}
           rowKey="id"
           loading={isLoading}

@@ -11,6 +11,7 @@ import { theoDoiApi } from '../../api/theoDoi'
 import { downloadTemplate } from '../../utils/excelUtils'
 import * as XLSX from 'xlsx'
 import dayjs from 'dayjs'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -258,7 +259,8 @@ export default function EmployeeListPage() {
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
-          dataSource={employees}
+                    locale={{ emptyText: <EmptyState size="small" preset="customer" /> }}
+                    dataSource={employees}
           columns={columns}
           rowKey="id"
           loading={isLoading}

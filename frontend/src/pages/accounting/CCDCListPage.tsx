@@ -10,6 +10,7 @@ import ImportExcelButton from '../../components/ImportExcelButton'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { ccdcApi, type CCDC, type NhomCCDC, type CCDCCreate, type PhieuXuatCCDC, type PhieuXuatCCDCCreate } from '../../api/ccdc'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -170,7 +171,8 @@ function CCDCTab() {
       </Space>
 
       <Table
-        rowKey="id"
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                rowKey="id"
         columns={columns}
         dataSource={data}
         loading={isLoading}
@@ -363,7 +365,8 @@ function PhieuXuatTab() {
       </Space>
 
       <Table
-        rowKey="id"
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                rowKey="id"
         columns={columns}
         dataSource={data}
         loading={isLoading}
@@ -372,7 +375,8 @@ function PhieuXuatTab() {
         expandable={{
           expandedRowRender: rec => (
             <Table
-              rowKey="id"
+                            locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                            rowKey="id"
               size="small"
               pagination={false}
               dataSource={rec.items}
@@ -493,7 +497,8 @@ function NhomTab() {
         </Button>
       </Space>
       <Table
-        rowKey="id"
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                rowKey="id"
         size="small"
         pagination={false}
         loading={isLoading}

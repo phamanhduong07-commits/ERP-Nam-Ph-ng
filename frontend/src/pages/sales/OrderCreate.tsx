@@ -15,6 +15,7 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { usersApi } from '../../api/usersApi'
 import type { Product } from '../../api/products'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

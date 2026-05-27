@@ -8,6 +8,7 @@ import {
 import { PlusOutlined, DeleteOutlined, EyeOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { qualityApi, QCSheet, CreateQCSheetPayload, UpdateKetQuaPayload } from '../../api/quality'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -209,7 +210,8 @@ export default function QCListPage() {
       </Card>
 
       <Table
-        rowKey="id"
+                locale={{ emptyText: <EmptyState size="small" /> }}
+                rowKey="id"
         dataSource={sheets}
         columns={columns}
         loading={isLoading}
@@ -293,7 +295,8 @@ export default function QCListPage() {
             </Descriptions>
             {detailSheet.defects.length > 0 && (
               <Table
-                style={{ marginTop: 16 }}
+                                locale={{ emptyText: <EmptyState size="small" /> }}
+                                style={{ marginTop: 16 }}
                 rowKey="id"
                 size="small"
                 dataSource={detailSheet.defects}

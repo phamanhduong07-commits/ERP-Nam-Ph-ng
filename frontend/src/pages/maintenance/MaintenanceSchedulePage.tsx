@@ -7,6 +7,7 @@ import { PlusOutlined, CheckOutlined, WarningOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import axios from 'axios'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -152,7 +153,8 @@ export default function MaintenanceSchedulePage() {
 
       <Card>
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    rowKey="id"
           loading={isLoading}
           dataSource={schedules}
           columns={columns}

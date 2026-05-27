@@ -15,6 +15,8 @@ import { theoDoiApi, STAGE_COLORS } from '../../api/theoDoi'
 import type { DonHangTheoDoiRow, PhanXuongItem } from '../../api/theoDoi'
 import { usePhapNhanList } from '../../hooks/usePhapNhan'
 import { exportToExcel } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
+import { storage, TTL } from '../../utils/storage'
 
 const { Text, Title } = Typography
 
@@ -27,7 +29,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced
 }
 
-const FILTER_STORAGE_KEY = 'theo-doi-filters'
+const FILTER_SCREEN_KEY = 'theo-doi'
 
 interface SavedFilters {
   phanXuongId?: number
@@ -36,17 +38,14 @@ interface SavedFilters {
   includeHoanThanh: boolean
 }
 
+const DEFAULT_FILTERS: SavedFilters = { includeHoanThanh: false }
+
 function loadFilters(): SavedFilters {
-  try {
-    const raw = localStorage.getItem(FILTER_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : { includeHoanThanh: false }
-  } catch {
-    return { includeHoanThanh: false }
-  }
+  return storage.loadFilters<SavedFilters>(FILTER_SCREEN_KEY) ?? DEFAULT_FILTERS
 }
 
 function saveFilters(f: SavedFilters) {
-  localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(f))
+  storage.saveFilters(FILTER_SCREEN_KEY, f)
 }
 
 const fmtN = (v: number | null | undefined) =>

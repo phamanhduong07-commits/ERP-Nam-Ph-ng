@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { warehouseApi, type TonKhoGiayRow, type GoodsReceipt } from '../../api/warehouse'
 import { phapNhanApi } from '../../api/phap_nhan'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

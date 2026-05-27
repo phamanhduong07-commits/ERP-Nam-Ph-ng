@@ -13,6 +13,7 @@ import {
 import { warehousesApi } from '../../api/warehouses'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

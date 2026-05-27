@@ -17,6 +17,7 @@ import type { SoChiTietRow } from '../../api/purchaseReturns'
 import client from '../../api/client'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -372,7 +373,8 @@ function DoiChieuTab() {
 
           <Divider>Hóa đơn mua hàng trong kỳ</Divider>
           <Table
-            rowKey="id"
+                        locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                        rowKey="id"
             size="small"
             dataSource={data.hoa_don}
             pagination={false}
@@ -445,7 +447,8 @@ function DoiChieuTab() {
             <>
               <Divider>Thanh toán trong kỳ</Divider>
               <Table
-                rowKey="id"
+                                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                                rowKey="id"
                 size="small"
                 dataSource={data.thanh_toan}
                 pagination={false}
@@ -472,7 +475,8 @@ function DoiChieuTab() {
             <>
               <Divider>Trả hàng / Giảm giá trong kỳ</Divider>
               <Table
-                rowKey="id"
+                                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                                rowKey="id"
                 size="small"
                 dataSource={data.tra_hang}
                 pagination={false}

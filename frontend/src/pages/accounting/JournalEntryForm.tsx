@@ -18,6 +18,7 @@ import dayjs from 'dayjs'
 import { journalApi, arApi, JournalEntryCreate, JournalLine, TrialBalanceRow } from '../../api/accounting'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -206,7 +207,8 @@ export default function JournalEntryForm() {
                 {(fields, { add, remove }) => (
                   <>
                     <Table
-                      dataSource={fields}
+                                            locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                                            dataSource={fields}
                       pagination={false}
                       size="middle"
                       rowKey="key"

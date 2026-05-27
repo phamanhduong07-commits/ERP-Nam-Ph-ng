@@ -10,6 +10,7 @@ import { cd2Api, MayIn, MayScan, PhieuIn, ScanLog, TRANG_THAI_COLORS, TRANG_THAI
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { exportToExcel } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 const { RangePicker } = DatePicker

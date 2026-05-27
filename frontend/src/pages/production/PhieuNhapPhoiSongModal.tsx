@@ -16,6 +16,7 @@ import { theoDoiApi } from '../../api/theoDoi'
 import { fmtN } from '../../utils/exportUtils'
 import { calcBoxDimensions } from '../../api/quotes'
 import { mayDungLogApi, LY_DO_OPTIONS } from '../../api/mayDungLog'
+import EmptyState from "../../components/EmptyState"
 
 // Normalize tiếng Việt để so sánh tên không dấu, lowercase
 const normVi = (s: string) =>

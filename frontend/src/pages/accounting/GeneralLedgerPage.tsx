@@ -13,6 +13,7 @@ import { arApi, TrialBalanceRow } from '../../api/accounting'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { fmtVND, printToPdf, buildHtmlTable } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -150,7 +151,8 @@ export default function GeneralLedgerPage() {
       {ledger && (
         <Card styles={{ body: { padding: 0 } }}>
           <Table
-            size="small"
+                        locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                        size="small"
             loading={isLoading}
             dataSource={ledger.rows}
             columns={columns}

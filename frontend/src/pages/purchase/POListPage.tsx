@@ -22,6 +22,7 @@ import { otherMaterialsApi } from '../../api/otherMaterials'
 import { suppliersApi } from '../../api/suppliers'
 import { purchaseInvoiceApi } from '../../api/accounting'
 import { warehouseApi, TonKhoGiayRow, TonKhoNVLRow } from '../../api/warehouse'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

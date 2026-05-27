@@ -26,6 +26,7 @@ import { customersApi } from '../../api/customers'
 import { exportToExcel } from '../../utils/exportUtils'
 import { useAuthStore } from '../../store/auth'
 import { APPROVE_ROLES } from '../../constants/permissions'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -447,7 +448,7 @@ export default function SalesReturnsPage() {
           rowKey="id"
           loading={isLoading}
           scroll={{ x: 1000 }}
-          locale={{ emptyText: phuongAn ? 'Không có phiếu nào phù hợp với phương án đã chọn' : 'Không có dữ liệu' }}
+          locale={{ emptyText: <EmptyState size="small" preset={phuongAn ? "search" : "order"} /> }}
           rowClassName={(r) => {
             if (r.trang_thai === 'da_duyet' && r.trang_thai_hoan_tien === 'nhap') return 'row-warning'
             return ''

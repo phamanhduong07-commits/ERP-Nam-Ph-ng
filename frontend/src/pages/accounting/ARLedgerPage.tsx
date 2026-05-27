@@ -13,6 +13,7 @@ import { arApi, ARLedgerEntryRow, ARLedgerRow, ARAgingRow } from '../../api/acco
 import { customersApi, Customer } from '../../api/customers'
 import { TRANG_THAI_INVOICE } from '../../api/billing'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -218,7 +219,8 @@ function LedgerTab() {
       </Row>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={rows}
         rowKey="invoice_id"
         loading={isLoading}
@@ -408,7 +410,8 @@ function AgingTab() {
       </Row>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={rows}
         rowKey="customer_id"
         loading={isLoading}
@@ -454,7 +457,8 @@ function AgingTab() {
               </Col>
             </Row>
             <Table
-              rowKey="invoice_id"
+                            locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                            rowKey="invoice_id"
               columns={detailColumns}
               dataSource={unpaidDetailRows}
               loading={isDetailLoading}
@@ -582,7 +586,8 @@ function LedgerEntriesTab() {
       </Row>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={rows}
         rowKey="id"
         loading={isLoading}

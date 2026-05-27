@@ -3,6 +3,7 @@ import { Card, Table, Form, DatePicker, Select, Button, Typography, Space } from
 import { reportsApi } from '../../api/reports'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import { SearchOutlined, DownloadOutlined } from '@ant-design/icons'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

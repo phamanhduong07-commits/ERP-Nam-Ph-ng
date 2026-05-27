@@ -43,6 +43,7 @@ import { purchaseApi, DuBaoNhuCauRow, CreatePOPayload } from '../../api/purchase
 import { suppliersApi } from '../../api/suppliers'
 import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Text } = Typography
 
@@ -242,7 +243,8 @@ function CreatePOModal({ selectedRows, onClose, onSuccess }: CreatePOModalProps)
       </Form>
 
       <Table
-        size="small"
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                size="small"
         dataSource={itemsToCreate}
         rowKey={r => `${r.paper_material_id}-${r.other_material_id}`}
         pagination={false}
@@ -700,7 +702,8 @@ export default function DuBaoNhuCauPage() {
             label: 'Tóm tắt theo pháp nhân',
             children: (
               <Table
-                size="small"
+                                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                                size="small"
                 dataSource={kpiByPhapNhan}
                 rowKey="ten"
                 pagination={false}

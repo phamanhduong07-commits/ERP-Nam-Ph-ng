@@ -10,6 +10,7 @@ import { warehousesApi, type Warehouse } from '../../api/warehouses'
 import { warehouseApi, type GiaoDich } from '../../api/warehouse'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -348,7 +349,7 @@ export default function InventoryCardPage() {
         loading={isLoading}
         pagination={{ pageSize: 50, showTotal: t => `${t} giao dịch` }}
         scroll={{ x: 1200 }}
-        locale={{ emptyText: fetched ? 'Không có giao dịch' : 'Chọn khoảng thời gian và nhấn Xem thẻ kho' }}
+        locale={{ emptyText: <EmptyState size="small" preset={fetched ? "search" : "default"} /> }}
       />
     </div>
   )

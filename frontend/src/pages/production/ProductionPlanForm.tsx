@@ -14,6 +14,7 @@ import {
   calcSoDao, calcKhoTT,
 } from '../../api/productionPlans'
 import { fmtN } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 

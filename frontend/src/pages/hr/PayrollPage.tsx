@@ -17,6 +17,7 @@ import client from '../../api/client'
 import { hrApi } from '../../api/hr'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -272,7 +273,8 @@ export default function PayrollPage() {
               label: <span><DollarOutlined /> Bang luong tong hop</span>,
               children: (
                 <Table
-                  dataSource={payrollSummary || []}
+                                    locale={{ emptyText: <EmptyState size="small" /> }}
+                                    dataSource={payrollSummary || []}
                   columns={summaryColumns}
                   rowKey="id"
                   loading={loadingSummary}
@@ -287,7 +289,8 @@ export default function PayrollPage() {
               label: <span><DashboardOutlined /> Chi tiet luong san pham</span>,
               children: (
                 <Table
-                  dataSource={productionResults || []}
+                                    locale={{ emptyText: <EmptyState size="small" /> }}
+                                    dataSource={productionResults || []}
                   columns={prodColumns}
                   rowKey="employee_id"
                   loading={loadingProd}
@@ -325,7 +328,8 @@ export default function PayrollPage() {
           </Button>
         </Form>
         <Table
-          style={{ marginTop: 16 }}
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    style={{ marginTop: 16 }}
           size="small"
           dataSource={holidays}
           rowKey="id"

@@ -9,6 +9,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { customerRefundApi, CustomerRefundVoucher, TRANG_THAI_HOAN_TIEN } from '../../api/accounting'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -132,7 +133,8 @@ export default function CustomerRefundListPage() {
       </Card>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={rows}
         rowKey="id"
         loading={isLoading}

@@ -5,6 +5,7 @@ import { CarOutlined, ThunderboltOutlined, PlusOutlined, DownloadOutlined } from
 import dayjs from 'dayjs'
 import client from '../../api/client'
 import { exportToExcel } from '../../utils/excelUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker

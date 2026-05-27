@@ -4,6 +4,7 @@ import { reportsApi } from '../../api/reports'
 import { usePhanXuong } from '../../hooks/useMasterData'
 import { downloadBlob } from '../../utils/exportUtils'
 import { PrinterOutlined, SearchOutlined, InfoCircleOutlined, DownloadOutlined } from '@ant-design/icons'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

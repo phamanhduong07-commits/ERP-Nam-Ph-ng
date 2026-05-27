@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { UserInfo } from '../api/auth'
+import { storage } from '../utils/storage'
 
 interface AuthState {
   token: string | null
@@ -30,9 +31,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('user')
+    storage.clearAll()   // xóa token + refresh_token + user + toàn bộ ERP data
     set({ token: null, refreshToken: null, user: null })
   },
 

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { storage } from '../utils/storage'
 
 const client = axios.create({ baseURL: '/api' })
 
@@ -52,7 +53,7 @@ client.interceptors.response.use(
       }
 
       // Kiosk mode: worker dùng session riêng, không có JWT → để request fail bình thường
-      if (!localStorage.getItem('token') && localStorage.getItem('cd2_worker_session')) {
+      if (!localStorage.getItem('token') && !!storage.get('cd2_worker_session')) {
         return Promise.reject(err)
       }
 
@@ -114,16 +115,13 @@ function _doLogout() {
   if (_loggingOut) return
   _loggingOut = true
 
-  localStorage.removeItem('token')
-  localStorage.removeItem('refresh_token')
-  localStorage.removeItem('user')
+  storage.clearAll()   // xóa token + refresh_token + user + toàn bộ ERP data
   if (typeof window !== 'undefined') {
     if (window.location.pathname === '/login') return
 
     // Kiosk mode: công nhân chỉ có worker session, không có ERP token
-    // → redirect về machine-login thay vì /login
-    if (localStorage.getItem('cd2_worker_session')) {
-      localStorage.removeItem('cd2_worker_session')
+    // clearAll() đã xóa cd2_worker_session → redirect về machine-login
+    if (window.location.pathname.includes('cd2') || window.location.pathname.includes('machine')) {
       window.location.href = '/cd2/machine-login'
       return
     }

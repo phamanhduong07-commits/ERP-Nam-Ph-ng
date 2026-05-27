@@ -9,6 +9,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { donViTinhApi, type DonViTinh } from '../../api/simpleApis'
 import ImportExcelButton from '../../components/ImportExcelButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -141,7 +142,8 @@ export default function DvtList() {
         </Row>
 
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    rowKey="id"
           dataSource={data}
           columns={columns}
           loading={isLoading}

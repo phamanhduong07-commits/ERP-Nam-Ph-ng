@@ -7,6 +7,7 @@ import { PrinterOutlined, ReloadOutlined, WarningOutlined } from '@ant-design/ic
 import { useQuery } from '@tanstack/react-query'
 import { productionPlansApi, type KhsxBaoCaoLsx, type KhsxBaoCaoGiay } from '../../api/productionPlans'
 import dayjs from 'dayjs'
+import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 

@@ -24,6 +24,7 @@ import { useAuthStore } from '../../store/auth'
 import { systemApi } from '../../api/system'
 import { usePhapNhanList } from '../../hooks/usePhapNhan'
 import { phapNhanApi } from '../../api/phap_nhan'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -531,7 +532,7 @@ export default function SalesInvoiceDetailPage() {
           rowKey="id"
           size="small"
           pagination={false}
-          locale={{ emptyText: 'Chưa có phiếu thu' }}
+          locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
         />
       </Card>
 

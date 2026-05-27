@@ -9,6 +9,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { reportsApi, DebtRow, DebtSummaryResponse } from '../../api/reports'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -97,7 +98,8 @@ function DebtTable({ rows, type, loading }: { rows: DebtRow[]; type: 'ar' | 'ap'
         <Button size="small" icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!rows.length}>Excel</Button>
       </div>
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
+                columns={columns}
         dataSource={rows}
         rowKey={(r, i) => `${r.customer_id ?? r.supplier_id ?? i}`}
         loading={loading}

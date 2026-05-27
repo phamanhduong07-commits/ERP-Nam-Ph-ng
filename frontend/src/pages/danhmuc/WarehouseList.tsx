@@ -10,6 +10,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { warehousesApi, type Warehouse, type WarehouseCreate } from '../../api/warehouses'
 import { warehouseApi } from '../../api/warehouse'
 import ImportExcelButton from '../../components/ImportExcelButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 

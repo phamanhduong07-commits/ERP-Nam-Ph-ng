@@ -9,6 +9,7 @@ import { apApi } from '../../api/accounting'
 import { suppliersApi } from '../../api/suppliers'
 import { printDocument, fmtVND, fmtNum } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -225,7 +226,8 @@ export default function SupplierReconciliation() {
 
           <Card title="Chi tiết nhập kho (Goods Receipt)" styles={{ body: { padding: 0 } }}>
             <Table
-              size="small"
+                            locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                            size="small"
               dataSource={recon.items}
               columns={columns}
               pagination={false}
@@ -235,7 +237,8 @@ export default function SupplierReconciliation() {
 
           <Card title="Chi tiết thanh toán (Phiếu chi)" style={{ marginTop: 16 }} styles={{ body: { padding: 0 } }}>
             <Table
-              size="small"
+                            locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                            size="small"
               dataSource={recon.payments}
               columns={[
                 { title: 'Ngày', dataIndex: 'ngay_phieu', render: (v) => dayjs(v).format('DD/MM/YYYY') },

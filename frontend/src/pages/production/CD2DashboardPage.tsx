@@ -17,6 +17,7 @@ import PhieuInModal from './PhieuInModal'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { socket } from '../../utils/socket'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -163,7 +164,8 @@ export default function CD2DashboardPage() {
         }
       >
         <Table
-          dataSource={machineStatus}
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    dataSource={machineStatus}
           rowKey="id"
           size="small"
           pagination={false}

@@ -19,6 +19,7 @@ import { suppliersApi } from '../../api/suppliers'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import type { OtherMaterialSearchResult } from '../../api/otherMaterials'
 import { purchaseInvoiceApi } from '../../api/accounting'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -316,7 +317,8 @@ function TabDonMuaNVL() {
           onSearch={v => setChonNLSearch(v)}
         />
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                    rowKey="id"
           size="small"
           dataSource={filteredChonNL}
           pagination={{ pageSize: 10, size: 'small' }}

@@ -9,6 +9,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { reportsApi, RevenueKyRow, RevenueCustomerRow } from '../../api/reports'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -155,7 +156,8 @@ export default function RevenueReportPage() {
         <Col xs={24} lg={12}>
           <Card size="small" title="Doanh thu theo kỳ">
             <Table
-              columns={kyColumns}
+                            locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
+                            columns={kyColumns}
               dataSource={data?.theo_ky ?? []}
               rowKey="ky"
               loading={isLoading}
@@ -175,7 +177,8 @@ export default function RevenueReportPage() {
         <Col xs={24} lg={12}>
           <Card size="small" title="Top 10 khách hàng">
             <Table
-              columns={khColumns}
+                            locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
+                            columns={khColumns}
               dataSource={data?.top_khach_hang ?? []}
               rowKey="customer_id"
               loading={isLoading}

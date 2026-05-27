@@ -10,6 +10,7 @@ import { warehouseApi, PhanXuongWithWarehouses, WarehouseSlot, TonKho } from '..
 import { warehousesApi } from '../../api/warehouses'
 import { phapNhanApi } from '../../api/phap_nhan'
 import dayjs from 'dayjs'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -282,7 +283,8 @@ export default function InventoryPage() {
       {activeTab === 'theo-xuong' && (
         <Card size="small" styles={{ body: { padding: 0 } }} style={{ marginTop: 8 }}>
           <Table
-            dataSource={khoTheoXuong as PhanXuongWithWarehouses[]}
+                        locale={{ emptyText: <EmptyState size="small" /> }}
+                        dataSource={khoTheoXuong as PhanXuongWithWarehouses[]}
             columns={xuongColumns}
             rowKey="id"
             loading={loadingXuong}
@@ -390,7 +392,8 @@ export default function InventoryPage() {
       ) : (
         <Card size="small" styles={{ body: { padding: 0 } }}>
           <Table
-            dataSource={filtered}
+                        locale={{ emptyText: <EmptyState size="small" /> }}
+                        dataSource={filtered}
             columns={columns}
             rowKey="id"
             size="small"

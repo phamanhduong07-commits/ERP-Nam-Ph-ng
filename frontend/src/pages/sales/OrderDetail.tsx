@@ -26,6 +26,7 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import BomCalculatorPanel from '../production/BomCalculatorPanel'
 import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -518,7 +519,8 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
         extra={<Text type="secondary" style={{ fontSize: 11 }}><EyeOutlined /> Nhấn vào dòng để xem chi tiết</Text>}
       >
         <Table
-          columns={columns}
+                    locale={{ emptyText: <EmptyState size="small" preset="order" /> }}
+                    columns={columns}
           dataSource={order.items}
           rowKey="id"
           pagination={false}

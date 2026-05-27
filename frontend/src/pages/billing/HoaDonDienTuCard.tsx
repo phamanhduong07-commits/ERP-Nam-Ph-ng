@@ -18,6 +18,7 @@ import type { SalesInvoice } from '../../api/billing'
 import type { DeliveryOrder, DeliveryOrderItem } from '../../api/deliveries'
 import { useAuthStore } from '../../store/auth'
 import { fmtVND } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 interface ApiError {
   response?: { data?: { detail?: string } }
@@ -254,7 +255,8 @@ export default function HoaDonDienTuCard({ invoice, deliveryOrder }: Props) {
           </div>
         ) : (
           <Table
-            columns={columns}
+                        locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                        columns={columns}
             dataSource={hdtList}
             rowKey="id"
             size="small"

@@ -9,6 +9,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { materialGroupsApi, type MaterialGroup, type MaterialGroupCreate } from '../../api/materialGroups'
 import ImportExcelButton from '../../components/ImportExcelButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -163,7 +164,8 @@ export default function MaterialGroupList() {
         </Row>
 
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    rowKey="id"
           dataSource={data}
           columns={columns}
           loading={isLoading}

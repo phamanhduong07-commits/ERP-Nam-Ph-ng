@@ -15,6 +15,7 @@ import {
   type BankTransaction,
 } from '../../api/banking'
 import { phapNhanApi, type PhapNhan } from '../../api/phap_nhan'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -252,7 +253,7 @@ export default function BankReconciliationPage() {
           loading={loadingCandidates}
           size="small"
           pagination={false}
-          locale={{ emptyText: 'Chưa tìm thấy chứng từ khớp số tiền, tài khoản và ngày gần giao dịch' }}
+          locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
         />
       </Modal>
     </Card>

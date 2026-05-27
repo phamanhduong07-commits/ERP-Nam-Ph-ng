@@ -9,6 +9,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, InfoCircleOutlined } from '
 import type { ColumnsType } from 'antd/es/table'
 import { cauTrucApi, type CauTruc, type CauTrucCreate } from '../../api/cauTruc'
 import { paperMaterialsApi, TO_HOP_SONG_OPTIONS, getSongType } from '../../api/quotes'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -315,7 +316,8 @@ export default function CauTrucList() {
         </Row>
 
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    rowKey="id"
           dataSource={data}
           columns={columns}
           loading={isLoading}

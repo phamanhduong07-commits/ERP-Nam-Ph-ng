@@ -9,6 +9,7 @@ import dayjs from 'dayjs'
 import { purchaseApi, TRANG_THAI_PO, TRANG_THAI_PO_COLOR } from '../../api/purchase'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { fmtVND } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { RangePicker } = DatePicker
 
@@ -194,7 +195,8 @@ export default function PurchaseDashboardPage() {
             loading={isFetching}
           >
             <Table
-              rowKey="phap_nhan_id"
+                            locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                            rowKey="phap_nhan_id"
               columns={colsPhapNhan}
               dataSource={byPhapNhan}
               size="small"

@@ -19,6 +19,7 @@ import type { PhapNhan } from '../../api/phap_nhan'
 import { useAuthStore } from '../../store/auth'
 import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -502,7 +503,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
         dataSource={displayItems}
         rowKey="id"
         loading={isLoading}
-        locale={{ emptyText: hasFilter ? 'Không tìm thấy đơn hàng nào' : 'Chưa có đơn hàng nào' }}
+        locale={{ emptyText: <EmptyState size="small" preset={hasFilter ? "search" : "order"} /> }}
         rowClassName={(r) => r.id === selectedId ? 'md-selected-row' : ''}
         onRow={(r) => ({
           onClick: isEmbedded ? () => onSelect!(r.id) : undefined,

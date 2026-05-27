@@ -7,6 +7,7 @@ import { PlusOutlined, ToolOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import axios from 'axios'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -156,7 +157,8 @@ export default function MaintenanceLogPage() {
 
       <Card>
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    rowKey="id"
           loading={isLoading}
           dataSource={logs}
           columns={columns}

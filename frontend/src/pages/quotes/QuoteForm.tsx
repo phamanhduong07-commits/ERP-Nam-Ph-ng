@@ -27,6 +27,7 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { usersApi } from '../../api/usersApi'
 import { useAuthStore } from '../../store/auth'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -1672,7 +1673,8 @@ export default function QuoteForm() {
       {/* ── Items table ───────────────────────────────── */}
       <Card title={<Text strong>Chi tiết mặt hàng ({items.length} dòng)</Text>}>
         <Table
-          rowKey={(_, idx) => String(idx)}
+                    locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                    rowKey={(_, idx) => String(idx)}
           dataSource={items}
           columns={itemColumns}
           pagination={false}
@@ -1734,7 +1736,8 @@ export default function QuoteForm() {
           </Space>
         </div>
         <Table
-          size="small"
+                    locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                    size="small"
           pagination={false}
           dataSource={items}
           rowKey={r => String(r.id ?? r.stt)}
@@ -1902,7 +1905,8 @@ function CauTrucModal({
         ))}
       </Space>
       <Table
-        rowKey="id"
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                rowKey="id"
         dataSource={data}
         columns={cols}
         loading={isLoading}

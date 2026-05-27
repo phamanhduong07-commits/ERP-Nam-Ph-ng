@@ -11,6 +11,7 @@ import dayjs from 'dayjs'
 import { journalApi, JournalEntryListParams } from '../../api/accounting'
 import { fmtVND } from '../../utils/exportUtils'
 import { usePhapNhan } from '../../hooks/useMasterData'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -130,7 +131,8 @@ export default function JournalEntryListPage() {
       </Card>
 
       <Table
-        dataSource={data?.items || []}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                dataSource={data?.items || []}
         columns={columns}
         loading={isLoading}
         rowKey="id"

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Menu, Button, Typography, Space, Input, message } from 'antd';
+import { storage, TTL } from '../../utils/storage';
 import { EditOutlined, SaveOutlined, PlusOutlined, BookOutlined } from '@ant-design/icons';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
@@ -438,10 +439,10 @@ export default function DocsPage() {
 
   useEffect(() => {
     // Đổi key để ép tải lại dữ liệu mới nhất
-    const saved = localStorage.getItem('erp_docs_v7');
+    const saved = storage.get<DocItem[]>('erp_docs_v7');
     if (saved) {
-      setDocs(JSON.parse(saved));
-      if(JSON.parse(saved).length > 0) setActiveDoc(JSON.parse(saved)[0]);
+      setDocs(saved);
+      if (saved.length > 0) setActiveDoc(saved[0]);
     } else {
       setDocs(initialDocs);
       setActiveDoc(initialDocs[0]);
@@ -518,7 +519,7 @@ export default function DocsPage() {
 
   const saveToLocal = (newDocs: DocItem[]) => {
     setDocs(newDocs);
-    localStorage.setItem('erp_docs_v7', JSON.stringify(newDocs));
+    storage.set('erp_docs_v7', newDocs, { ttl: TTL.MONTH });  // cache tài liệu 30 ngày
   };
 
   const handlePreviewClick = (e: React.MouseEvent) => {

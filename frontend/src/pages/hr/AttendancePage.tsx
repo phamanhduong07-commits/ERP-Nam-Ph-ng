@@ -16,6 +16,7 @@ import { hrApi, Employee, LeaveRequest } from '../../api/hr'
 import { downloadTemplate } from '../../utils/excelUtils'
 import * as XLSX from 'xlsx'
 import dayjs from 'dayjs'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker

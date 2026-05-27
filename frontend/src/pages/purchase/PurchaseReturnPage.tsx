@@ -28,6 +28,7 @@ import type { PurchaseReturnListItem, PurchaseReturn, CreatePurchaseReturnPayloa
 import { suppliersApi, Supplier } from '../../api/suppliers'
 import { exportToExcel } from '../../utils/exportUtils'
 import { warehouseApi } from '../../api/warehouse'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -451,7 +452,8 @@ export default function PurchaseReturnPage() {
 
             {detail.items.length > 0 && (
               <Table
-                rowKey="id"
+                                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                                rowKey="id"
                 size="small"
                 dataSource={detail.items}
                 pagination={false}

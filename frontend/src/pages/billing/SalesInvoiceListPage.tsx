@@ -17,6 +17,7 @@ import {
   TRANG_THAI_INVOICE, HINH_THUC_TT,
 } from '../../api/billing'
 import { salesOrdersApi, SalesOrderListItem, TRANG_THAI_COLORS as SO_STATUS_COLORS } from '../../api/salesOrders'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -265,7 +266,8 @@ export default function SalesInvoiceListPage() {
       </Row>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={invoices}
         rowKey="id"
         loading={isLoading}

@@ -6,6 +6,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { donGiaVanChuyenApi, type DonGiaVanChuyen } from '../../api/simpleApis'
 import ImportExcelButton from '../../components/ImportExcelButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 const formatVND = (v: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(v || 0)

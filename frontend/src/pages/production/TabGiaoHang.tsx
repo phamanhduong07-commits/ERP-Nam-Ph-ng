@@ -22,6 +22,7 @@ import { billingApi } from '../../api/billing'
 import { usePhapNhanForPrint, usePhapNhanList } from '../../hooks/usePhapNhan'
 import { COMPANY_CONFIGS, exportExcelWithTemplate } from '../../utils/exportUtils'
 import { systemApi } from '../../api/system'
+import EmptyState from "../../components/EmptyState"
 
 const GH_FILTER_KEY = 'gh-do-filter'
 

@@ -17,6 +17,7 @@ import { purchaseApi } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

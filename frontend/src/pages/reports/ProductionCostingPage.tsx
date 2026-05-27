@@ -18,6 +18,7 @@ import {
   DownloadOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

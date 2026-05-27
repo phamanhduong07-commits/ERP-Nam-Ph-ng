@@ -7,6 +7,7 @@ import type { PhanXuongItem } from '../../api/theoDoi'
 import dayjs from 'dayjs'
 import { PlusOutlined, FileExcelOutlined, UploadOutlined } from '@ant-design/icons'
 import ImportExcelButton from '../../components/ImportExcelButton'
+import EmptyState from "../../components/EmptyState"
 
 const { TabPane } = Tabs
 const { Text } = Typography

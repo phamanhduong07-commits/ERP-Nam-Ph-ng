@@ -31,6 +31,7 @@ import SxParamsTab from './SxParamsTab'
 import { bomApi } from '../../api/bom'
 import { exportToExcel, printToPdf, fmtVND, fmtDate, fmtNum, fmtDim, buildHtmlTable, printProductionTag, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
 import PhotoCapture from '../../components/PhotoCapture'
+import EmptyState from "../../components/EmptyState"
 
 
 const { Title, Text } = Typography
@@ -136,7 +137,8 @@ function PhieuNhapPhoiSongTab({
         </div>
       ) : (
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    rowKey="id"
           size="small"
           pagination={false}
           dataSource={phieus}
@@ -1132,7 +1134,8 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   </Text>
                 )}
                 <Table
-                  columns={columns}
+                                    locale={{ emptyText: <EmptyState size="small" /> }}
+                                    columns={columns}
                   dataSource={order.items}
                   rowKey="id"
                   pagination={false}

@@ -21,6 +21,7 @@ import type { PlanLineResponse } from '../../api/productionPlans'
 import { warehouseApi } from '../../api/warehouse'
 import { calcBoxDimensions } from '../../api/quotes'
 import { printProductionTagBatch, exportExcelWithTemplate } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 
@@ -1216,7 +1217,7 @@ export default function MaySongPage() {
                   pagination={{ pageSize: 50, showTotal: t => `${t} lệnh SX` }}
                   size="small"
                   scroll={{ x: 1200 }}
-                  locale={{ emptyText: filterKhId ? 'Không có lệnh SX nào trong kế hoạch này' : 'Không có lệnh SX đang hoạt động' }}
+                  locale={{ emptyText: <EmptyState size="small" preset={filterKhId ? "search" : "default"} /> }}
                   onRow={(r) => {
                     if (r.trang_thai === 'dang_chay') return { style: { background: '#f6ffed' } }
                     if (!r.ngay_hoan_thanh_ke_hoach) return {}
@@ -1425,7 +1426,7 @@ export default function MaySongPage() {
                     pagination={{ pageSize: 50, showTotal: t => `${t} phiếu` }}
                     size="small"
                     scroll={{ x: 950 }}
-                    locale={{ emptyText: 'Chưa có phiếu nhập nào trong khoảng ngày này' }}
+                    locale={{ emptyText: <EmptyState size="small" /> }}
                   />
 
                   {/* Bảng tiêu thụ giấy */}

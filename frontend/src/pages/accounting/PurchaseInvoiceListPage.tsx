@@ -10,6 +10,7 @@ import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import { purchaseInvoiceApi, PurchaseInvoice } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -204,7 +205,8 @@ export default function PurchaseInvoiceListPage() {
       </Row>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={invoices}
         rowKey="id"
         loading={isLoading}

@@ -17,6 +17,7 @@ import { warehousesApi } from '../../api/warehouses'
 import type { Warehouse } from '../../api/warehouses'
 import { warehouseApi } from '../../api/warehouse'
 import type { TonKho, PhanXuong } from '../../api/warehouse'
+import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 

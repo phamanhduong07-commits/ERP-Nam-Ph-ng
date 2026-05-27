@@ -9,6 +9,7 @@ import { PlusOutlined, EditOutlined, BankOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { bankAccountsApi, type BankAccount, type BankAccountCreate } from '../../api/banking'
 import ImportExcelButton from '../../components/ImportExcelButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -115,7 +116,8 @@ export default function BankAccountList() {
       }
     >
       <Table
-        rowKey="id"
+                locale={{ emptyText: <EmptyState size="small" /> }}
+                rowKey="id"
         columns={columns}
         dataSource={data}
         loading={isLoading}

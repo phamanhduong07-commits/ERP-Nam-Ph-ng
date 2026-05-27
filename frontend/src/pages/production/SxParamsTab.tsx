@@ -11,6 +11,7 @@ import { productionOrdersApi } from '../../api/productionOrders'
 import { productionPlansApi } from '../../api/productionPlans'
 import { calcBoxDimensions, getHaoHutRate, paperMaterialsApi } from '../../api/quotes'
 import { TO_HOP_SONG_BY_LOP } from '../../api/bom'
+import EmptyState from "../../components/EmptyState"
 
 const { Text } = Typography
 
@@ -493,7 +494,8 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
         />
       )}
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" /> }}
+                columns={columns}
         dataSource={tableRows}
         rowKey="key"
         pagination={false}

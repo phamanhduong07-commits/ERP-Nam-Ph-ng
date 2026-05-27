@@ -19,6 +19,7 @@ import { productionPlansApi } from '../../api/productionPlans'
 import type { QueueLine } from '../../api/productionPlans'
 import { LOAI_LAN_LABELS } from '../../api/quotes'
 import { fmtN } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 
@@ -652,7 +653,8 @@ export default function ProductionQueuePage() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <Card bodyStyle={{ padding: 0 }}>
             <Table
-              columns={columns}
+                            locale={{ emptyText: <EmptyState size="small" /> }}
+                            columns={columns}
               dataSource={allLines}
               rowKey="id"
               loading={isLoading}

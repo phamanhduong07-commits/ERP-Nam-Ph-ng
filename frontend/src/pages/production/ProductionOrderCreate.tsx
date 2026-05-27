@@ -15,6 +15,7 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { calcBoxDimensions } from '../../api/quotes'
 import type { Product } from '../../api/products'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -408,7 +409,8 @@ export default function ProductionOrderCreate() {
             title={`Chi tiết lệnh SX (${lines.length} dòng · Tổng thùng: ${new Intl.NumberFormat('vi-VN').format(totalKH)}${totalTam > 0 ? ` · Tổng tấm: ${new Intl.NumberFormat('vi-VN').format(totalTam)}` : ''})`}
           >
             <Table
-              columns={columns}
+                            locale={{ emptyText: <EmptyState size="small" /> }}
+                            columns={columns}
               dataSource={lines}
               rowKey="key"
               pagination={false}

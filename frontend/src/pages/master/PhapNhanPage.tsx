@@ -204,3 +204,4 @@ export default function PhapNhanPage() {
 }
 
 import { Alert } from 'antd'
+import EmptyState from "../../components/EmptyState"

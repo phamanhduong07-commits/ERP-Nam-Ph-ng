@@ -11,6 +11,7 @@ import { otherMaterialsApi, type OtherMaterial, type OtherMaterialCreate } from 
 import { materialGroupsApi } from '../../api/materialGroups'
 import { suppliersApi } from '../../api/suppliers'
 import ImportExcelButton from '../../components/ImportExcelButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -199,7 +200,8 @@ export default function OtherMaterialList() {
         </Row>
 
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    rowKey="id"
           dataSource={items}
           columns={columns}
           loading={isLoading}

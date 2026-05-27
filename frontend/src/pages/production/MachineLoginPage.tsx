@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Card, Form, Input, Button, Tabs, Alert, Typography, Modal, Divider } from 'antd'
 import { UserOutlined, LockOutlined, ScanOutlined } from '@ant-design/icons'
 import { cd2Api, WorkerSession } from '../../api/cd2'
+import { storage, TTL } from '../../utils/storage'
 
 const { Title, Text } = Typography
 
@@ -14,7 +15,7 @@ export default function MachineLoginPage() {
   const [rfidValue, setRfidValue] = useState('')
 
   function saveSession(session: WorkerSession) {
-    localStorage.setItem('cd2_worker_session', JSON.stringify(session))
+    storage.set('cd2_worker_session', session, { ttl: 8 * TTL.HOUR })  // hết hạn sau 1 ca làm
     if (session.loai_may === 'scan') {
       navigate(`/production/cd2/scan?machine_id=${session.machine_id}`)
     } else {

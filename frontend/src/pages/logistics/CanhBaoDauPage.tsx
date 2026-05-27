@@ -6,6 +6,7 @@ import { AlertOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs, { Dayjs } from 'dayjs'
 import client from '../../api/client'
+import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker

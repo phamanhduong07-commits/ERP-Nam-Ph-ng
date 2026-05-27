@@ -8,6 +8,7 @@ import { PlusOutlined, EditOutlined, ApartmentOutlined } from '@ant-design/icons
 import { hrApi, Department } from '../../api/hr'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { theoDoiApi } from '../../api/theoDoi'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -115,7 +116,8 @@ export default function DepartmentPage() {
         <Col span={15}>
           <Card size="small" styles={{ body: { padding: 0 } }}>
             <Table
-              dataSource={depts}
+                            locale={{ emptyText: <EmptyState size="small" /> }}
+                            dataSource={depts}
               columns={columns}
               rowKey="id"
               loading={isLoading}

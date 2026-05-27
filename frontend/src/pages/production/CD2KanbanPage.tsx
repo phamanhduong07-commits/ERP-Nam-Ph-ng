@@ -24,10 +24,11 @@ import MayInSettingsModal from './MayInSettingsModal'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { socket } from '../../utils/socket'
+import { storage, TTL } from '../../utils/storage'
 
 const { Text } = Typography
 
-// ── Pause session (localStorage) ─────────────────────────────────────────────
+// ── Pause session (storage với TTL ca làm — 12h) ─────────────────────────────
 type PauseInfo = { time: string; ly_do: string }
 
 const PAUSE_KEY = (id: number) => `cd2-in-pause-${id}`
@@ -38,10 +39,8 @@ function readPauses(): Record<number, PauseInfo> {
     const key = localStorage.key(i)
     if (key?.startsWith('cd2-in-pause-')) {
       const id = parseInt(key.replace('cd2-in-pause-', ''))
-      try {
-        const val = JSON.parse(localStorage.getItem(key) || 'null')
-        if (!isNaN(id) && val) result[id] = val
-      } catch { /* ignore */ }
+      const val = storage.get<PauseInfo>(key)
+      if (!isNaN(id) && val) result[id] = val
     }
   }
   return result
@@ -707,7 +706,7 @@ export default function CD2KanbanPage() {
     if (!pauseReason.trim()) { message.warning('Vui lòng nhập lý do tạm dừng'); return }
     const info: PauseInfo = { time: dayjs().format('HH:mm'), ly_do: pauseReason.trim() }
     const id = pausingPhieu.id
-    localStorage.setItem(PAUSE_KEY(id), JSON.stringify(info))
+    storage.set(PAUSE_KEY(id), info, { ttl: 12 * TTL.HOUR })  // hết hạn sau 1 ca
     setPauses(prev => ({ ...prev, [id]: info }))
     setPausingPhieu(null)
     setPauseReason('')
@@ -716,7 +715,7 @@ export default function CD2KanbanPage() {
       message.info(`Tạm dừng lúc ${info.time} — ${info.ly_do}`)
       invalidate()
     } catch (e) {
-      localStorage.removeItem(PAUSE_KEY(id))
+      storage.remove(PAUSE_KEY(id))
       setPauses(prev => { const next = { ...prev }; delete next[id]; return next })
       message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạm dừng in')
     }
@@ -727,7 +726,7 @@ export default function CD2KanbanPage() {
   }, [])
 
   const handleTiepTuc = useCallback(async (phieu: PhieuIn) => {
-    localStorage.removeItem(PAUSE_KEY(phieu.id))
+    storage.remove(PAUSE_KEY(phieu.id))
     setPauses(prev => { const next = { ...prev }; delete next[phieu.id]; return next })
     try {
       await cd2Api.tiepTucIn(phieu.id)

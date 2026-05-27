@@ -12,6 +12,7 @@ import BomCalculatorPanel from './BomCalculatorPanel'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import { UploadOutlined } from '@ant-design/icons'
 import { exportToExcel, printToPdf, fmtVND, buildHtmlTable } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Text } = Typography
 
@@ -268,7 +269,8 @@ export default function BomListPage() {
         }
       >
         <Table
-          columns={columns}
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    columns={columns}
           dataSource={rows}
           rowKey="id"
           loading={isLoading}

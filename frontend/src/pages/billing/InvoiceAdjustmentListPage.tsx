@@ -13,6 +13,7 @@ import {
   billingApi, InvoiceAdjustmentLog, AdjustmentLogFilter, TRANG_THAI_INVOICE,
 } from '../../api/billing'
 import { useAuthStore } from '../../store/auth'
+import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -387,7 +388,7 @@ export default function InvoiceAdjustmentListPage() {
             onChange: keys => setSelectedIds(keys as number[]),
           }}
           pagination={{ pageSize: 20, showTotal: t => `${t} yêu cầu` }}
-          locale={{ emptyText: 'Không có yêu cầu điều chỉnh' }}
+          locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
         />
       </Card>
     </div>

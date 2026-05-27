@@ -19,6 +19,7 @@ import { purchaseApi } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
 import { exportToExcel, printDocument, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -253,7 +254,8 @@ export default function ReceiptsPage() {
         title: `Đã cập nhật giá bán ×1.05 cho ${updated.length} vật tư`,
         content: (
           <Table
-            size="small"
+                        locale={{ emptyText: <EmptyState size="small" /> }}
+                        size="small"
             pagination={false}
             dataSource={updated}
             rowKey="ma_chinh"
@@ -912,7 +914,8 @@ export default function ReceiptsPage() {
           </Col>
         </Row>
         <Table
-          size="small"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    size="small"
           pagination={{ pageSize: 10, showSizeChanger: false }}
           dataSource={handleChonNhieuNL()}
           rowKey="id"

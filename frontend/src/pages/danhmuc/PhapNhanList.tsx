@@ -9,6 +9,7 @@ import { phapNhanApi, PhapNhan, CreatePhapNhanPayload } from '../../api/phap_nha
 import { theoDoiApi, PhanXuongItem } from '../../api/theoDoi'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import MSTLookupButton from '../../components/MSTLookupButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

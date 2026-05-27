@@ -7,6 +7,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { taiXeApi, type TaiXe } from '../../api/simpleApis'
 import { hrApi } from '../../api/hr'
 import ImportExcelButton from '../../components/ImportExcelButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 

@@ -3,6 +3,7 @@ import { Alert, Card, Col, Row, Spin, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { bomApi, vnd } from '../../api/bom'
 import type { BomLayerResult } from '../../api/bom'
+import EmptyState from "../../components/EmptyState"
 
 interface Props {
   productionOrderItemId: number
@@ -181,7 +182,8 @@ export default function BomResultView({ productionOrderItemId }: Props) {
       {/* ── Kết cấu giấy ──────────────────────────────────────────────────── */}
       <Card size="small" title="Kết cấu giấy & khối lượng" style={{ marginBottom: 10 }}>
         <Table
-          columns={layerColumns}
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    columns={layerColumns}
           dataSource={data.bom_layers}
           rowKey={(_, i) => String(i)}
           pagination={false}

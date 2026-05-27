@@ -26,6 +26,7 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, smartPrintPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import { useAuthStore } from '../../store/auth'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker

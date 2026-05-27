@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons'
 import type { UploadFile } from 'antd/es/upload'
 import { openingBalanceApi } from '../../api/accounting'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -171,7 +172,8 @@ function ImportTab({
             style={{ marginBottom: 12 }}
           />
           <Table
-            dataSource={preview.rows}
+                        locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                        dataSource={preview.rows}
             columns={columns}
             rowKey="row"
             size="small"

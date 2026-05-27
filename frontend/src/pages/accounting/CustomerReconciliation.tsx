@@ -9,6 +9,7 @@ import dayjs from 'dayjs'
 import { customersApi, Customer } from '../../api/customers'
 import { arApi } from '../../api/accounting'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -184,7 +185,8 @@ export default function CustomerReconciliation() {
 
           <Card title="Chi tiết giao hàng" style={{ marginBottom: 16 }}>
             <Table
-              rowKey={(r, i) => `${r.so_phieu}-${i}`}
+                            locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                            rowKey={(r, i) => `${r.so_phieu}-${i}`}
               size="small"
               pagination={false}
               dataSource={result.items}
@@ -195,7 +197,8 @@ export default function CustomerReconciliation() {
 
           <Card title="Chi tiết thanh toán">
             <Table
-              rowKey="id"
+                            locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                            rowKey="id"
               size="small"
               pagination={false}
               dataSource={result.payments}

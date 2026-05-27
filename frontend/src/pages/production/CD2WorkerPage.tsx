@@ -14,6 +14,7 @@ import { cd2Api, Machine, PhieuIn, TrackPayload } from '../../api/cd2'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { useAuthStore } from '../../store/auth'
 import { socket } from '../../utils/socket'
+import { storage } from '../../utils/storage'
 
 const { Text, Title } = Typography
 
@@ -41,11 +42,8 @@ export default function CD2WorkerPage() {
 
   const [selectedMachineId, setSelectedMachineId] = useState<number | null>(
     () => {
-      try {
-        const raw = localStorage.getItem('cd2_worker_session')
-        const ws = raw ? JSON.parse(raw) : null
-        return ws?.machine_id ?? null
-      } catch { return null }
+      const ws = storage.get<{ machine_id?: number }>('cd2_worker_session')
+      return ws?.machine_id ?? null
     }
   )
   // IDs phiếu đang tạm dừng (local session state — mất khi reload, đủ cho dùng ca)

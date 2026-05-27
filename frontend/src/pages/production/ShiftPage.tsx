@@ -12,6 +12,7 @@ import dayjs from 'dayjs'
 import { cd2Api, ShiftCa, ShiftConfigItem } from '../../api/cd2'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

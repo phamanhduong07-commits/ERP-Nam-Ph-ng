@@ -8,6 +8,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { reportsApi, DeliveryReportRow } from '../../api/reports'
 import { exportToExcel } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -134,7 +135,8 @@ export default function DeliveryReportPage() {
         <Col xs={24} lg={8}>
           <Card size="small" title="Tổng hợp theo xe">
             <Table
-              columns={byXeColumns}
+                            locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
+                            columns={byXeColumns}
               dataSource={data?.by_xe ?? []}
               rowKey="xe"
               loading={isLoading}

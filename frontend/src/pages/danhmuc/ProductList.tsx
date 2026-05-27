@@ -10,6 +10,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { productsApi as productsFullApi, type ProductFull, type ProductFullCreate } from '../../api/products'
 import { customersApi } from '../../api/customers'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -206,7 +207,8 @@ export default function ProductList() {
         </Row>
 
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    rowKey="id"
           dataSource={items}
           columns={columns}
           loading={isLoading}

@@ -19,6 +19,7 @@ import { warehousesApi, Warehouse } from '../../api/warehouses'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, fmtVND } from '../../utils/exportUtils'
 import PhotoCapture from '../../components/PhotoCapture'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -645,7 +646,8 @@ export default function GoodsReceiptPage() {
       </Card>
 
       <Table
-        size="small"
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                size="small"
         columns={columns}
         dataSource={grList}
         rowKey="id"
@@ -945,7 +947,8 @@ export default function GoodsReceiptPage() {
               </Descriptions.Item>
             </Descriptions>
             <Table
-              size="small"
+                            locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                            size="small"
               dataSource={matchingData.lines}
               rowKey="ten_hang"
               pagination={false}

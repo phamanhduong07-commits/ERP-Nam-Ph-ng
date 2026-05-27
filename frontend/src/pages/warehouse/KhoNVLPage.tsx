@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons'
 import { warehouseApi } from '../../api/warehouse'
 import type { WarehouseSlot, WarehouseSlotNA, PhanXuongWithWarehouses, TonKho } from '../../api/warehouse'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

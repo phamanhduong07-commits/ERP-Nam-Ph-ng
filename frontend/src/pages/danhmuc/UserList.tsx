@@ -9,6 +9,7 @@ import { EditOutlined, KeyOutlined, PlusOutlined, ReloadOutlined } from '@ant-de
 import { rolesApi } from '../../api/permissions'
 import { usersApi, type NhanVien, type UserCreatePayload, type UserUpdatePayload } from '../../api/usersApi'
 import { cd2Api } from '../../api/cd2'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -220,7 +221,8 @@ export default function UserList() {
         </Row>
 
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    rowKey="id"
           dataSource={data}
           columns={columns}
           loading={isLoading}

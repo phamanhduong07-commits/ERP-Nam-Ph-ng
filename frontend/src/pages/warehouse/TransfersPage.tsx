@@ -14,6 +14,7 @@ import {
 import { warehousesApi } from '../../api/warehouses'
 import { buildHtmlTable, exportToExcel, renderTemplateAndPrint, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -573,7 +574,8 @@ export default function TransfersPage() {
               const hasLsx = detailPhieu.items.some(it => it.so_lsx)
               return (
                 <Table
-                  dataSource={detailPhieu.items}
+                                    locale={{ emptyText: <EmptyState size="small" /> }}
+                                    dataSource={detailPhieu.items}
                   rowKey={(_, i) => `detail-item-${i}`}
                   size="small"
                   pagination={false}

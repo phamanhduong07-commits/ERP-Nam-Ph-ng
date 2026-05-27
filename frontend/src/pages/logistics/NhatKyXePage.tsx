@@ -8,6 +8,7 @@ import dayjs, { Dayjs } from 'dayjs'
 import * as XLSX from 'xlsx'
 import client from '../../api/client'
 import { socket } from '../../utils/socket'
+import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -435,7 +436,8 @@ export default function NhatKyXePage() {
           <>
             <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>🔵 Đổ dầu ({r.fuel_events.length} lần)</Text>
             <Table
-              dataSource={r.fuel_events}
+                            locale={{ emptyText: <EmptyState size="small" /> }}
+                            dataSource={r.fuel_events}
               rowKey={(_ev, idx) => String(idx)}
               size="small"
               pagination={false}
@@ -460,7 +462,8 @@ export default function NhatKyXePage() {
               ⚠ Cảnh báo hụt dầu ({r.drain_events.length} sự kiện)
             </Text>
             <Table
-              dataSource={r.drain_events}
+                            locale={{ emptyText: <EmptyState size="small" /> }}
+                            dataSource={r.drain_events}
               rowKey={(_, idx) => `drain-${idx}`}
               size="small"
               pagination={false}

@@ -32,6 +32,7 @@ import type {
   AddonRateItem,
 } from '../../api/bom'
 import { paperMaterialsApi } from '../../api/quotes'
+import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 const { Panel } = Collapse

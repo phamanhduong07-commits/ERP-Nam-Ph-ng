@@ -11,6 +11,7 @@ import {
 import QRCode from 'qrcode'
 import { cd2Api, MayIn, MaySauIn, MayScan, PrinterUser, Machine } from '../../api/cd2'
 import { warehouseApi, PhanXuong } from '../../api/warehouse'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

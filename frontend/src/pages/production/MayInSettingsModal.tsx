@@ -7,6 +7,7 @@ import { PlusOutlined, DeleteOutlined, EditOutlined, SaveOutlined } from '@ant-d
 import { cd2Api, MayIn } from '../../api/cd2'
 import { warehouseApi } from '../../api/warehouse'
 import type { PhanXuong } from '../../api/warehouse'
+import EmptyState from "../../components/EmptyState"
 
 interface Props {
   open: boolean
@@ -155,7 +156,8 @@ export default function MayInSettingsModal({ open, onClose, onSaved }: Props) {
       width={580}
     >
       <Table
-        rowKey="id"
+                locale={{ emptyText: <EmptyState size="small" /> }}
+                rowKey="id"
         size="small"
         dataSource={mayIns}
         columns={columns}

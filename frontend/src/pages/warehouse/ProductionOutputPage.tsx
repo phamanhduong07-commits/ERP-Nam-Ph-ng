@@ -12,6 +12,7 @@ import { warehousesApi } from '../../api/warehouses'
 import { productionOrdersApi, type ProductionOrderListItem } from '../../api/productionOrders'
 import { PrinterOutlined, FileExcelOutlined } from '@ant-design/icons'
 import { smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

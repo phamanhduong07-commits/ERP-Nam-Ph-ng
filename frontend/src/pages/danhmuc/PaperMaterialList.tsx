@@ -11,6 +11,7 @@ import { paperMaterialsFullApi, type PaperMaterial, type PaperMaterialCreate } f
 import { materialGroupsApi } from '../../api/materialGroups'
 import { suppliersApi } from '../../api/suppliers'
 import ImportExcelButton from '../../components/ImportExcelButton'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -216,7 +217,8 @@ export default function PaperMaterialList() {
         </Row>
 
         <Table
-          rowKey="id"
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    rowKey="id"
           dataSource={items}
           columns={columns}
           loading={isLoading}

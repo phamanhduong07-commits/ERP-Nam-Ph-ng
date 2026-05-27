@@ -10,6 +10,7 @@ import { cd2Api, MayScan, ScanLog } from '../../api/cd2'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { socket } from '../../utils/socket'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -212,7 +213,8 @@ export default function ScanHistoryPage() {
 
       <Card>
         <Table
-          dataSource={filtered}
+                    locale={{ emptyText: <EmptyState size="small" /> }}
+                    dataSource={filtered}
           columns={columns}
           rowKey="id"
           size="small"

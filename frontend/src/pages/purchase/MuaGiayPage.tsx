@@ -19,6 +19,7 @@ import type { TonKhoGiayRow, DuTruGiayRow, KHSXCanPhoiNgoaiRow } from '../../api
 import { suppliersApi } from '../../api/suppliers'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { purchaseInvoiceApi } from '../../api/accounting'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 

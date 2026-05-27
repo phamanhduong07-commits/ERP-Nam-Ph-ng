@@ -2,16 +2,17 @@ import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { warehouseApi } from '../api/warehouse'
 import type { PhanXuong } from '../api/warehouse'
+import { storage } from '../utils/storage'
 
 const STORAGE_KEY = 'cd2_selected_xuong'
 
 export function useCD2Workshop() {
   const [phanXuongId, setPhanXuongIdState] = useState<number | undefined>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = storage.get<string>(STORAGE_KEY)
     return stored ? Number(stored) : undefined
   })
 
-  const isKioskMode = !!localStorage.getItem('cd2_worker_session')
+  const isKioskMode = !!storage.get('cd2_worker_session')
 
   const { data: phanXuongList = [] } = useQuery<PhanXuong[]>({
     queryKey: ['phan-xuong-list'],
@@ -23,9 +24,9 @@ export function useCD2Workshop() {
   const setPhanXuongId = (id: number | undefined) => {
     setPhanXuongIdState(id)
     if (id === undefined) {
-      localStorage.removeItem(STORAGE_KEY)
+      storage.remove(STORAGE_KEY)
     } else {
-      localStorage.setItem(STORAGE_KEY, String(id))
+      storage.set(STORAGE_KEY, String(id))
     }
   }
 

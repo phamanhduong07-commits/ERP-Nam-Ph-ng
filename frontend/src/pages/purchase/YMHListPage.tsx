@@ -20,6 +20,7 @@ import { warehouseApi } from '../../api/warehouse'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { suppliersApi } from '../../api/suppliers'
+import EmptyState from "../../components/EmptyState"
 
 const { RangePicker } = DatePicker
 const { Text, Title } = Typography
@@ -593,7 +594,8 @@ export default function YMHListPage() {
               {viewRecord.ghi_chu && <Descriptions.Item label="Ghi chú" span={2}>{viewRecord.ghi_chu}</Descriptions.Item>}
             </Descriptions>
             <Table
-              rowKey={(r, i) => r.id ?? `${r.ten_hang}-${i}`}
+                            locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                            rowKey={(r, i) => r.id ?? `${r.ten_hang}-${i}`}
               size="small"
               dataSource={viewRecord.items}
               pagination={false}

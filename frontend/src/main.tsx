@@ -8,8 +8,12 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/vi'
 import './index.css'
 import App from './App'
+import { storage } from './utils/storage'
 
 dayjs.locale('vi')
+
+// Dọn rác localStorage đã hết TTL khi app khởi động
+storage.purgeExpired()
 
 const queryClient = new QueryClient({
   defaultOptions: {

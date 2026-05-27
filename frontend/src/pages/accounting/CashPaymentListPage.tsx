@@ -10,6 +10,7 @@ import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import { paymentApi, CashPayment } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -181,7 +182,8 @@ export default function CashPaymentListPage() {
       </Row>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={payments}
         rowKey="id"
         loading={isLoading}

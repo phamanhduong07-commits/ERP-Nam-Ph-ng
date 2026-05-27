@@ -16,6 +16,7 @@ import {
   type FixedAsset,
 } from '../../api/fixedAssets'
 import { useAuthStore } from '../../store/auth'
+import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
@@ -249,7 +250,8 @@ function DanhMucTab() {
       </Space>
 
       <Table
-        rowKey="id"
+                locale={{ emptyText: <EmptyState size="small" /> }}
+                rowKey="id"
         loading={isLoading}
         dataSource={assets}
         columns={columns}

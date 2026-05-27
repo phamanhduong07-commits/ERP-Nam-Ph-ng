@@ -12,6 +12,7 @@ import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/e
 import { apApi, APLedgerRow, APAgingRow, SoChiTietRow, SoChiTietResponse, DoiChieuPhaiTraRow, TRANG_THAI_PO_INVOICE } from '../../api/accounting'
 import { suppliersApi, Supplier } from '../../api/suppliers'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
+import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -216,7 +217,8 @@ function LedgerTab() {
       </Row>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={rows}
         rowKey="invoice_id"
         loading={isLoading}
@@ -358,7 +360,8 @@ function AgingTab() {
       </Row>
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={rows}
         rowKey="supplier_id"
         loading={isLoading}
@@ -529,7 +532,8 @@ function SoChiTietTab() {
       )}
 
       <Table
-        columns={columns}
+                locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+                columns={columns}
         dataSource={rows}
         rowKey={(r, i) => `${r.ngay}-${r.chung_tu_loai}-${i}`}
         loading={isLoading}
