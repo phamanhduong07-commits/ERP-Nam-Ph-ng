@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Card, Checkbox, Col, Empty, Row, Select, Space, Tag, Typography, message } from 'antd'
 import { SaveOutlined } from '@ant-design/icons'
@@ -51,7 +52,7 @@ export default function RolePermissionsPage() {
       message.success('Đã cập nhật phân quyền')
       qc.invalidateQueries({ queryKey: ['roles'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Không cập nhật được phân quyền'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Không cập nhật được phân quyền'),
   })
 
   return (

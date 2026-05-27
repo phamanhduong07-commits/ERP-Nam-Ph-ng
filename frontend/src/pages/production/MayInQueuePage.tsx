@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Badge, Button, Card, Col, DatePicker, Divider, Empty, Form, Input,
@@ -92,8 +93,8 @@ function CompleteModal({
       message.success('Đã hoàn thành in — chuyển sang Chờ định hình')
       form.resetFields()
       onDone()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi hoàn thành in')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi hoàn thành in')
     } finally {
       setSaving(false)
     }
@@ -107,8 +108,8 @@ function CompleteModal({
       message.success(`Đã ngưng in — tạo phiếu bù ${res.data.phieu_bu.so_phieu} (${res.data.phieu_bu.so_luong_phoi} tấm)`, 5)
       form.resetFields()
       onDone()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi ngưng in')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi ngưng in')
     } finally {
       setNgungSaving(false)
     }
@@ -453,7 +454,7 @@ function MachineTab({
   const startMutation = useMutation({
     mutationFn: (id: number) => cd2Api.startPrinting(id),
     onSuccess: () => { message.success('Đã bắt đầu in'); onRefresh() },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
     onSettled: () => setActingId(null),
   })
 
@@ -461,7 +462,7 @@ function MachineTab({
     mutationFn: (id: number) =>
       cd2Api.movePhieuIn(id, { trang_thai: 'ke_hoach', may_in_id: null, sort_order: 0 }),
     onSuccess: () => { message.success('Đã trả về Kế hoạch in'); onRefresh() },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
 
   const handleTamDung = (phieu: PhieuIn) => {
@@ -482,10 +483,10 @@ function MachineTab({
       await cd2Api.tamDungIn(id, { ly_do: info.ly_do })
       message.info(`Tạm dừng lúc ${info.time} — ${info.ly_do}`)
       onRefresh()
-    } catch (e: any) {
+    } catch (e) {
       localStorage.removeItem(PAUSE_KEY(id))
       setPauses(prev => { const next = { ...prev }; delete next[id]; return next })
-      message.error(e?.response?.data?.detail || 'Lỗi tạm dừng in')
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạm dừng in')
     }
   }
 
@@ -496,8 +497,8 @@ function MachineTab({
       await cd2Api.tiepTucIn(phieu.id)
       message.success('Tiếp tục in')
       onRefresh()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi tiếp tục in')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tiếp tục in')
       onRefresh()
     }
   }

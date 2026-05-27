@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, Form, Input, InputNumber, message, Modal, Popconfirm,
@@ -62,7 +63,7 @@ export default function AddonRateList() {
       setEditItem(null)
       qc.invalidateQueries({ queryKey: ['addon-rates'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi cập nhật'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi cập nhật'),
   })
 
   const handleEdit = (r: AddonRateItem) => {
@@ -89,7 +90,7 @@ export default function AddonRateList() {
       message.success('Đã reset về mặc định')
       qc.invalidateQueries({ queryKey: ['addon-rates'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi reset'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi reset'),
   })
 
   // Group by nhom

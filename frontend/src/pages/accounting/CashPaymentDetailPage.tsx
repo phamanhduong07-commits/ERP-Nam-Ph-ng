@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Descriptions, Modal, Space, Spin, Tag, Typography, message,
@@ -105,7 +106,7 @@ export default function CashPaymentDetailPage() {
       qc.invalidateQueries({ queryKey: ['payment', paymentId] })
       qc.invalidateQueries({ queryKey: ['payments'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi duyệt phiếu chi'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi duyệt phiếu chi'),
   })
 
   const cancelMut = useMutation({
@@ -115,7 +116,7 @@ export default function CashPaymentDetailPage() {
       qc.invalidateQueries({ queryKey: ['payment', paymentId] })
       qc.invalidateQueries({ queryKey: ['payments'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi hủy phiếu chi'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi hủy phiếu chi'),
   })
 
   const companyInfo = usePhapNhanForPrint(payment?.phap_nhan_id)

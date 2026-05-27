@@ -13,6 +13,13 @@ import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
+interface ReconItem {
+  ngay: string; so_phieu: string; ten_hang: string; so_luong: number; dvt: string; don_gia: number; thanh_tien: number
+}
+interface ReconPayment {
+  ngay_phieu: string; so_phieu: string; dien_giai?: string; hinh_thuc_tt?: string; so_tien: number; id: number
+}
+
 export default function SupplierReconciliation() {
   const [supplierId, setSupplierId] = useState<number | undefined>()
   const [dates, setDates] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
@@ -56,7 +63,7 @@ export default function SupplierReconciliation() {
             </tr>
           </thead>
           <tbody>
-            ${recon.items.map((it: any) => `
+            ${recon.items.map((it: ReconItem) => `
               <tr>
                 <td class="text-center">${dayjs(it.ngay).format('DD/MM/YYYY')}</td>
                 <td>${it.so_phieu}</td>
@@ -87,7 +94,7 @@ export default function SupplierReconciliation() {
             </tr>
           </thead>
           <tbody>
-            ${recon.payments.map((p: any) => `
+            ${recon.payments.map((p: ReconPayment) => `
               <tr>
                 <td class="text-center">${dayjs(p.ngay_phieu).format('DD/MM/YYYY')}</td>
                 <td>${p.so_phieu}</td>
@@ -222,7 +229,7 @@ export default function SupplierReconciliation() {
               dataSource={recon.items}
               columns={columns}
               pagination={false}
-              rowKey={(r: any, i?: number) => `${r.so_phieu}-${i}`}
+              rowKey={(r: ReconItem, i?: number) => `${r.so_phieu}-${i}`}
             />
           </Card>
 

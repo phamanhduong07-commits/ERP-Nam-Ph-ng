@@ -22,6 +22,24 @@ import {
 } from '../../api/salesReturns'
 import { customerRefundApi, journalApi, TRANG_THAI_HOAN_TIEN } from '../../api/accounting'
 import type { CustomerRefundVoucher } from '../../api/accounting'
+
+interface JournalLine {
+  so_tk: string
+  so_tien_no: number
+  so_tien_co: number
+  dien_giai: string
+}
+
+interface JournalEntry {
+  id: number
+  loai_but_toan: string
+  dien_giai: string
+  lines: JournalLine[]
+}
+
+interface JournalListResponse {
+  items: JournalEntry[]
+}
 import { printDocument, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import PhotoCapture from '../../components/PhotoCapture'
@@ -60,13 +78,13 @@ export default function SalesReturnDetail() {
   const { data: refundVoucher, refetch: refetchVoucher } = useQuery<CustomerRefundVoucher | null>({
     queryKey: ['customer-refund-for-return', returnId],
     queryFn: () => customerRefundApi.list({ sales_return_id: returnId, page_size: 1 })
-      .then((d: any) => d.items?.[0] ?? null),
+      .then((d: { items?: CustomerRefundVoucher[] }) => d.items?.[0] ?? null),
     enabled: hasValidReturnId && returnData?.trang_thai === 'da_duyet',
   })
 
-  const { data: journalData } = useQuery({
+  const { data: journalData } = useQuery<JournalListResponse>({
     queryKey: ['journal-for-return', returnId],
-    queryFn: () => journalApi.list({ chung_tu_loai: 'sales_returns', chung_tu_id: returnId, page_size: 20 }),
+    queryFn: () => journalApi.list({ chung_tu_loai: 'sales_returns', chung_tu_id: returnId, page_size: 20 }) as Promise<JournalListResponse>,
     enabled: hasValidReturnId && returnData?.trang_thai === 'da_duyet',
   })
 
@@ -81,7 +99,7 @@ export default function SalesReturnDetail() {
       queryClient.invalidateQueries({ queryKey: ['debt-ledger'] })
       queryClient.invalidateQueries({ queryKey: ['customer-debt'] })
     },
-    onError: (err: any) => message.error(getErrorMessage(err)),
+    onError: (err: unknown) => message.error(getErrorMessage(err)),
   })
 
   const cancelMutation = useMutation({
@@ -95,18 +113,18 @@ export default function SalesReturnDetail() {
       queryClient.invalidateQueries({ queryKey: ['customer-debt'] })
       queryClient.invalidateQueries({ queryKey: ['customer-refund-for-return', returnId] })
     },
-    onError: (err: any) => message.error(getErrorMessage(err)),
+    onError: (err: unknown) => message.error(getErrorMessage(err)),
   })
 
   const updateMutation = useMutation({
-    mutationFn: (data: any) => salesReturnsApi.update(returnId, data),
+    mutationFn: (data: Parameters<typeof salesReturnsApi.update>[1]) => salesReturnsApi.update(returnId, data),
     onSuccess: () => {
       message.success('Đã cập nhật phiếu trả hàng')
       setEditing(false)
       queryClient.invalidateQueries({ queryKey: ['sales-return', id] })
       queryClient.invalidateQueries({ queryKey: ['sales-returns'] })
     },
-    onError: (err: any) => message.error(getErrorMessage(err)),
+    onError: (err: unknown) => message.error(getErrorMessage(err)),
   })
 
   const refundUpdateMutation = useMutation({
@@ -117,7 +135,7 @@ export default function SalesReturnDetail() {
       refetchVoucher()
       setRefundModalOpen(false)
     },
-    onError: (err: any) => message.error(getErrorMessage(err)),
+    onError: (err: unknown) => message.error(getErrorMessage(err)),
   })
 
   const refundApproveMutation = useMutation({
@@ -127,7 +145,7 @@ export default function SalesReturnDetail() {
       refetchVoucher()
       queryClient.invalidateQueries({ queryKey: ['sales-return', id] })
     },
-    onError: (err: any) => message.error(getErrorMessage(err)),
+    onError: (err: unknown) => message.error(getErrorMessage(err)),
   })
 
   const handleApprove = () => {
@@ -710,7 +728,7 @@ export default function SalesReturnDetail() {
                       {row.map((cell, ci) => (
                         <>
                           <td key={`l${ci}`} style={{ padding: '8px 12px', background: '#fafafa', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', border: '1px solid #f0f0f0', width: 1 }}>{cell.label}</td>
-                          <td key={`v${ci}`} colSpan={(cell as any).colSpan} style={{ padding: '8px 12px', border: '1px solid #f0f0f0', fontSize: 13 }}>{cell.value}</td>
+                          <td key={`v${ci}`} colSpan={'colSpan' in cell ? (cell as { colSpan?: number }).colSpan : undefined} style={{ padding: '8px 12px', border: '1px solid #f0f0f0', fontSize: 13 }}>{cell.value}</td>
                         </>
                       ))}
                     </tr>
@@ -783,21 +801,21 @@ export default function SalesReturnDetail() {
           )}
 
           {/* Bút toán đã ghi */}
-          {returnData.trang_thai === 'da_duyet' && journalData?.items?.length > 0 && (
+          {returnData.trang_thai === 'da_duyet' && (journalData?.items?.length ?? 0) > 0 && (
             <Card
               title={<Space><BankOutlined style={{ color: '#722ed1' }} /> Bút toán đã ghi</Space>}
               size="small"
               style={{ marginBottom: 16 }}
               styles={{ body: { padding: '8px 12px' } }}
             >
-              {journalData.items.map((je: any) => (
+              {(journalData?.items ?? []).map((je: JournalEntry) => (
                 <div key={je.id} style={{ marginBottom: 10 }}>
                   <Text type="secondary" style={{ fontSize: 11 }}>
                     {je.loai_but_toan === 'NHAP_TRA_HANG' ? 'Giá vốn' : 'Doanh thu'}
                     {' — '}{je.dien_giai}
                   </Text>
                   <div style={{ marginTop: 4 }}>
-                    {(je.lines || []).map((line: any, i: number) => (
+                    {(je.lines || []).map((line: JournalLine, i: number) => (
                       <div key={i} style={{
                         display: 'flex',
                         justifyContent: 'space-between',

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
@@ -12,6 +13,24 @@ import { customersApi, Customer } from '../../api/customers'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 
 const { Title } = Typography
+
+type Dayjs = import('dayjs').Dayjs
+type SalesInvoiceFormValues = {
+  customer_id: number
+  ngay_hoa_don: Dayjs
+  han_tt?: Dayjs
+  mau_so?: string
+  ky_hieu?: string
+  ten_don_vi?: string
+  dia_chi?: string
+  ma_so_thue?: string
+  nguoi_mua_hang?: string
+  hinh_thuc_tt: string
+  tong_tien_hang: number
+  ty_le_vat?: number
+  phap_nhan_id?: number
+  ghi_chu?: string
+}
 
 const VAT_OPTIONS = [
   { value: 0,  label: '0%' },
@@ -40,7 +59,7 @@ export default function SalesInvoiceForm() {
       message.success('Đã tạo hóa đơn')
       navigate(`/billing/invoices/${inv.id}`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi tạo hóa đơn'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo hóa đơn'),
   })
 
   const handleCustomerChange = (customerId: number) => {
@@ -63,7 +82,7 @@ export default function SalesInvoiceForm() {
 
   const fmtNum = (v: number) => v.toLocaleString('vi-VN')
 
-  const onFinish = (values: any) => {
+  const onFinish = (values: SalesInvoiceFormValues) => {
     const payload: SalesInvoiceCreate = {
       customer_id: values.customer_id,
       ngay_hoa_don: values.ngay_hoa_don.format('YYYY-MM-DD'),
@@ -198,11 +217,11 @@ export default function SalesInvoiceForm() {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="tong_tien_hang" label="Tiền hàng (chưa VAT)" rules={[{ required: true, type: 'number', min: 0 }]}>
-                <InputNumber
+                <InputNumber<number>
                   style={{ width: '100%' }}
                   min={0}
                   formatter={v => v ? Number(v).toLocaleString('vi-VN') : ''}
-                  parser={v => Number((v ?? '').replace(/\D/g, '')) as any}
+                  parser={v => Number((v ?? '').replace(/\D/g, ''))}
                 />
               </Form.Item>
             </Col>

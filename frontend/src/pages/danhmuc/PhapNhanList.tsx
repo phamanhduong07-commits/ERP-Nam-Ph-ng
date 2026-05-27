@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Drawer, Form, Input, Popconfirm, Select, Space, Switch, Table, Typography, message, Row, Col,
@@ -25,7 +26,7 @@ export default function PhapNhanList() {
 
   const { data: phanXuongList = [] } = useQuery<PhanXuongItem[]>({
     queryKey: ['phan-xuong-list'],
-    queryFn: () => theoDoiApi.listPhanXuong().then((r: any) => r.data),
+    queryFn: () => theoDoiApi.listPhanXuong().then((r: unknown) => r.data),
     staleTime: 300_000,
   })
 
@@ -37,7 +38,7 @@ export default function PhapNhanList() {
       setOpen(false)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi lưu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi lưu'),
   })
 
   const updateMut = useMutation({
@@ -50,7 +51,7 @@ export default function PhapNhanList() {
       setEditing(null)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi lưu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi lưu'),
   })
 
   const deleteMut = useMutation({
@@ -59,7 +60,7 @@ export default function PhapNhanList() {
       qc.invalidateQueries({ queryKey: ['phap-nhan'] })
       message.success('Đã xoá pháp nhân')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
   })
 
   const openCreate = () => {

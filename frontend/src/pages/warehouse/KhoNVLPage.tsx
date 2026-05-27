@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, Drawer, Empty, Menu, Progress, Row,
@@ -174,7 +175,7 @@ export default function KhoNVLPage() {
       message.success(`Đã tạo ${created} kho mới`)
       queryClient.invalidateQueries({ queryKey: ['kho-theo-xuong'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi khởi tạo kho'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi khởi tạo kho'),
   })
 
   const displayList = selectedPxId === 'all' ? list : list.filter(px => px.id === selectedPxId)
@@ -354,7 +355,7 @@ export default function KhoNVLPage() {
                       >
                         <WarehouseCard
                           loai={loai}
-                          slot={(px.warehouses as any)[loai]}
+                          slot={(px.warehouses as Record<string, unknown>)[loai]}
                           onInit={() => initMut.mutate(px.id)}
                           onDetail={setDetailSlot}
                         />

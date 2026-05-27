@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   Button, Card, Form, Input, List, Result, Skeleton, Tag, Typography, message,
@@ -57,8 +58,8 @@ export default function GiaoHangMobilePage() {
     onSuccess: () => {
       setDone({ soPhieu: selected!.so_phieu, tenKhach: selected!.ten_khach })
     },
-    onError: (e: any) =>
-      message.error(e?.response?.data?.detail || 'Lỗi xác nhận giao hàng'),
+    onError: (e: { response?: { data?: { detail?: string } } }) =>
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xác nhận giao hàng'),
   })
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,10 +85,11 @@ export default function GiaoHangMobilePage() {
         ten_nguoi_nhan: v.ten_nguoi_nhan,
         ghi_chu: v.ghi_chu || undefined,
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
       setUploading(false)
-      if (err?.response) {
-        message.error(err.response?.data?.detail || 'Lỗi upload ảnh')
+      const apiErr = err as { response?: { data?: { detail?: string } } }
+      if (apiErr?.response) {
+        message.error(apiErr.response?.data?.detail || 'Lỗi upload ảnh')
       }
       /* validation errors handled inline */
     }

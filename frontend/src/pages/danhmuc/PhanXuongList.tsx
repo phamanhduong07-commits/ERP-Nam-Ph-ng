@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, Drawer, Form, Input, Popconfirm, Row,
@@ -39,7 +40,7 @@ export default function PhanXuongList() {
       setOpen(false)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi lưu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi lưu'),
   })
 
   const updateMut = useMutation({
@@ -52,7 +53,7 @@ export default function PhanXuongList() {
       setEditing(null)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi lưu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi lưu'),
   })
 
   const deleteMut = useMutation({
@@ -61,7 +62,7 @@ export default function PhanXuongList() {
       qc.invalidateQueries({ queryKey: ['phan-xuong'] })
       message.success('Đã xoá phân xưởng')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Không thể xoá (đang được dùng bởi kho)'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Không thể xoá (đang được dùng bởi kho)'),
   })
 
   const openCreate = () => {

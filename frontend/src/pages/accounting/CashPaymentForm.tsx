@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
@@ -52,8 +53,8 @@ export default function CashPaymentForm() {
     queryKey: ['purchase-invoices-unpaid', selectedSupplier],
     queryFn: () => purchaseInvoiceApi.list({ supplier_id: selectedSupplier, page_size: 100 }),
     enabled: !!selectedSupplier,
-    select: (d: any) =>
-      (d?.items ?? d ?? []).filter((i: PurchaseInvoice) =>
+    select: (d: { items?: PurchaseInvoice[] } | PurchaseInvoice[]) =>
+      (Array.isArray(d) ? d : (d?.items ?? [])).filter((i: PurchaseInvoice) =>
         ['nhap', 'da_tt_mot_phan', 'qua_han'].includes(i.trang_thai)
       ),
   })
@@ -80,7 +81,7 @@ export default function CashPaymentForm() {
       message.success('Tạo phiếu chi thành công')
       navigate(`/accounting/payments/${r.id}`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi tạo phiếu chi'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo phiếu chi'),
   })
 
   const handleSupplierChange = (id: number) => {
@@ -102,7 +103,7 @@ export default function CashPaymentForm() {
     }
   }
 
-  const onFinish = (values: any) => {
+  const onFinish = (values: CashPaymentCreate & { ngay_phieu: import('dayjs').Dayjs }) => {
     createMut.mutate({
       supplier_id: values.supplier_id,
       purchase_invoice_id: values.purchase_invoice_id || undefined,
@@ -211,11 +212,11 @@ export default function CashPaymentForm() {
               },
             ]}
           >
-            <InputNumber
+            <InputNumber<number>
               style={{ width: '100%' }}
               min={1}
               formatter={v => v ? Number(v).toLocaleString('vi-VN') : ''}
-              parser={v => Number((v ?? '').replace(/\D/g, '')) as any}
+              parser={v => Number((v ?? '').replace(/\D/g, ''))}
             />
           </Form.Item>
 

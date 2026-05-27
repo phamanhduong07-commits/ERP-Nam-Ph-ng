@@ -8,10 +8,11 @@ const { Title, Text } = Typography
 
 const LegalEntityCashflowPage: React.FC = () => {
   const { phapNhanList } = usePhapNhan()
+  interface CashflowData { total_receipts: number; total_payments: number; net_cashflow: number }
   const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<CashflowData | null>(null)
 
-  const onFinish = async (values: any) => {
+  const onFinish = async (values: { phap_nhan_id: number; range: [{ format: (f: string) => string }, { format: (f: string) => string }] }) => {
     setLoading(true)
     try {
       const params = {
@@ -53,7 +54,7 @@ const LegalEntityCashflowPage: React.FC = () => {
         <Form layout="inline" onFinish={onFinish}>
           <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true }]}>
             <Select placeholder="Chọn pháp nhân" style={{ width: 250 }}>
-              {phapNhanList.map((pn: any) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
+              {phapNhanList.map((pn) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
             </Select>
           </Form.Item>
           <Form.Item name="range" label="Thời gian" rules={[{ required: true }]}>

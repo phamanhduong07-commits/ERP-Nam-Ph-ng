@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import {
@@ -119,7 +120,7 @@ export default function ScanMayPage() {
         lsxRef.current?.focus()
       }, 300)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lưu thất bại, vui lòng thử lại'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lưu thất bại, vui lòng thử lại'),
   })
 
   const deleteMutation = useMutation({

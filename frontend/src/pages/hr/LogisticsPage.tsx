@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, Card, Table, Typography, Row, Col, Tag, Space, DatePicker, Modal, Form, InputNumber, Select, message, Tabs } from 'antd'
 import { CarOutlined, ThunderboltOutlined, PlusOutlined, DownloadOutlined } from '@ant-design/icons'
@@ -9,7 +9,13 @@ import { exportToExcel } from '../../utils/excelUtils'
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
-function Statistic({ title, value, suffix, prefix, valueStyle }: any) {
+interface Vehicle { id: number; bien_so: string; dinh_muc_dau?: number }
+interface Employee { id: number; ho_ten: string; ma_nv: string }
+interface FuelLog { id: number; ngay_do: string; so_km_dau: number; so_km_cuoi: number; so_km_chay: number; so_lit_dau: number; don_gia: number; thanh_tien: number; vehicle?: Vehicle; employee?: Employee }
+interface TripAllocation { employee_id: number; name: string; role: string; tien_chuyen?: number; he_so: number }
+interface TripSalary { id: number; ngay_xuat: string; so_phieu: string; khach_hang: string; tai_xe: string; xe: string; tong_m2: number; don_gia_m2: number; tien_chuyen: number; allocations?: TripAllocation[]; trang_thai: string }
+
+function Statistic({ title, value, suffix, prefix, valueStyle }: { title: string; value: number; suffix?: string; prefix?: React.ReactNode; valueStyle?: React.CSSProperties }) {
   return (
     <div>
       <Text type="secondary">{title}</Text>
@@ -40,8 +46,8 @@ export default function LogisticsPage() {
 
   const fuelColumns = [
     { title: 'Ngay', dataIndex: 'ngay_do', render: (v: string) => dayjs(v).format('DD/MM/YYYY') },
-    { title: 'Bien so', dataIndex: 'bien_so', render: (_: any, r: any) => <Tag color="blue">{r.vehicle?.bien_so}</Tag> },
-    { title: 'Tai xe', dataIndex: 'ho_ten', render: (_: any, r: any) => r.employee?.ho_ten },
+    { title: 'Bien so', dataIndex: 'bien_so', render: (_: unknown, r: FuelLog) => <Tag color="blue">{r.vehicle?.bien_so}</Tag> },
+    { title: 'Tai xe', dataIndex: 'ho_ten', render: (_: unknown, r: FuelLog) => r.employee?.ho_ten },
     { title: 'KM dau', dataIndex: 'so_km_dau', align: 'right' as const },
     { title: 'KM cuoi', dataIndex: 'so_km_cuoi', align: 'right' as const },
     { title: 'Tong KM', dataIndex: 'so_km_chay', align: 'right' as const, render: (v: number) => <Text strong>{v}</Text> },
@@ -50,7 +56,7 @@ export default function LogisticsPage() {
     { title: 'Thanh tien', dataIndex: 'thanh_tien', align: 'right' as const, render: (v: number) => <Text strong style={{ color: '#cf1322' }}>{v.toLocaleString()}</Text> },
     {
       title: 'Hieu qua',
-      render: (_: any, r: any) => {
+      render: (_: unknown, r: FuelLog) => {
         const ratio = (r.so_lit_dau / (r.so_km_chay || 1)) * 100
         const color = ratio > (r.vehicle?.dinh_muc_dau || 20) ? 'red' : 'green'
         return <Tag color={color}>{ratio.toFixed(2)} L/100km</Tag>
@@ -71,9 +77,9 @@ export default function LogisticsPage() {
       title: 'Phan bo',
       dataIndex: 'allocations',
       width: 320,
-      render: (items: any[] = []) => (
+      render: (items: TripAllocation[] = []) => (
         <Space size={[4, 4]} wrap>
-          {items.map((it: any, idx: number) => (
+          {items.map((it: TripAllocation, idx: number) => (
             <Tag key={`${it.employee_id}-${idx}`} color={it.role === 'tai_xe' ? 'blue' : 'purple'}>
               {it.name}: {it.tien_chuyen?.toLocaleString()} ({it.he_so})
             </Tag>
@@ -84,14 +90,14 @@ export default function LogisticsPage() {
     { title: 'Trang thai', dataIndex: 'trang_thai', render: (v: string) => <Tag>{v}</Tag> },
   ]
 
-  const totalFuel = (fuelLogs || []).reduce((s: number, r: any) => s + (r.thanh_tien || 0), 0)
-  const totalTrip = (tripSalaries || []).reduce((s: number, r: any) => s + (r.tien_chuyen || 0), 0)
-  const totalM2 = (tripSalaries || []).reduce((s: number, r: any) => s + (r.tong_m2 || 0), 0)
+  const totalFuel = (fuelLogs as FuelLog[] || []).reduce((s: number, r: FuelLog) => s + (r.thanh_tien || 0), 0)
+  const totalTrip = (tripSalaries as TripSalary[] || []).reduce((s: number, r: TripSalary) => s + (r.tien_chuyen || 0), 0)
+  const totalM2 = (tripSalaries as TripSalary[] || []).reduce((s: number, r: TripSalary) => s + (r.tong_m2 || 0), 0)
 
   const handleExport = () => {
     const rows = activeTab === 'fuel'
-      ? fuelLogs.map((r: any) => ({ Ngay: dayjs(r.ngay_do).format('DD/MM/YYYY'), Bien_so: r.vehicle?.bien_so, Tai_xe: r.employee?.ho_ten, KM_dau: r.so_km_dau, KM_cuoi: r.so_km_cuoi, KM_chay: r.so_km_chay, So_lit: r.so_lit_dau, Don_gia: r.don_gia, Thanh_tien: r.thanh_tien }))
-      : tripSalaries.map((r: any) => ({ Ngay_xuat: dayjs(r.ngay_xuat).format('DD/MM/YYYY'), So_phieu: r.so_phieu, Khach_hang: r.khach_hang, Tai_xe: r.tai_xe, Xe: r.xe, Tong_m2: r.tong_m2, Don_gia_m2: r.don_gia_m2, Quy_chuyen: r.tien_chuyen }))
+      ? (fuelLogs as FuelLog[]).map((r: FuelLog) => ({ Ngay: dayjs(r.ngay_do).format('DD/MM/YYYY'), Bien_so: r.vehicle?.bien_so, Tai_xe: r.employee?.ho_ten, KM_dau: r.so_km_dau, KM_cuoi: r.so_km_cuoi, KM_chay: r.so_km_chay, So_lit: r.so_lit_dau, Don_gia: r.don_gia, Thanh_tien: r.thanh_tien }))
+      : (tripSalaries as TripSalary[]).map((r: TripSalary) => ({ Ngay_xuat: dayjs(r.ngay_xuat).format('DD/MM/YYYY'), So_phieu: r.so_phieu, Khach_hang: r.khach_hang, Tai_xe: r.tai_xe, Xe: r.xe, Tong_m2: r.tong_m2, Don_gia_m2: r.don_gia_m2, Quy_chuyen: r.tien_chuyen }))
     exportToExcel(rows, `${activeTab === 'fuel' ? 'Bao_Cao_Xang_Dau' : 'Bao_Cao_Luong_Chuyen'}_${dateRange[0].format('DDMMYY')}_${dateRange[1].format('DDMMYY')}`)
   }
 
@@ -139,10 +145,10 @@ export default function LogisticsPage() {
           qc.invalidateQueries({ queryKey: ['hr-fuel-logs'] })
         }}>
           <Form.Item name="xe_id" label="Chon xe" rules={[{ required: true }]}>
-            <Select options={(vehicles || []).map((v: any) => ({ value: v.id, label: v.bien_so }))} />
+            <Select options={(vehicles as Vehicle[] || []).map((v: Vehicle) => ({ value: v.id, label: v.bien_so }))} />
           </Form.Item>
           <Form.Item name="employee_id" label="Tai xe" rules={[{ required: true }]}>
-            <Select showSearch optionFilterProp="label" options={(employees || []).map((e: any) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))} />
+            <Select showSearch optionFilterProp="label" options={(employees as Employee[] || []).map((e: Employee) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))} />
           </Form.Item>
           <Row gutter={12}>
             <Col span={12}><Form.Item name="so_km_dau" label="KM dau" rules={[{ required: true }]}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>

@@ -8,7 +8,7 @@ import { FileExcelOutlined, WalletOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
-import { purchaseInvoiceApi } from '../../api/accounting'
+import { purchaseInvoiceApi, PurchaseInvoice } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
 
 const { Title, Text } = Typography
@@ -46,12 +46,12 @@ export default function PurchaseInvoiceListPage() {
       }),
   })
 
-  const invoices = data?.items ?? data ?? []
+  const invoices: PurchaseInvoice[] = data?.items ?? data ?? []
   const total: number = data?.total ?? invoices.length
-  const tongConLai = invoices.reduce((s: number, i: any) => s + (i.con_lai ?? 0), 0)
+  const tongConLai = invoices.reduce((s: number, i: PurchaseInvoice) => s + (i.con_lai ?? 0), 0)
 
   const handleExcel = () => {
-    const rows = invoices.map((i: any) => ({
+    const rows = invoices.map((i: PurchaseInvoice) => ({
       'Số HĐ': i.so_hoa_don ?? '',
       'Ngày lập': i.ngay_lap,
       'Hạn TT': i.han_tt ?? '',
@@ -68,10 +68,10 @@ export default function PurchaseInvoiceListPage() {
     }])
   }
 
-  const canPayInvoice = (r: any) =>
+  const canPayInvoice = (r: PurchaseInvoice) =>
     ['nhap', 'da_tt_mot_phan', 'qua_han'].includes(r.trang_thai) && Number(r.con_lai || 0) > 0
 
-  const columns: ColumnsType<any> = [
+  const columns: ColumnsType<PurchaseInvoice> = [
     {
       title: 'Số hóa đơn',
       dataIndex: 'so_hoa_don',
@@ -184,7 +184,7 @@ export default function PurchaseInvoiceListPage() {
               allowClear
               placeholder="Pháp nhân"
               onChange={v => { setFilterPhapNhan(v); setPage(1) }}
-              options={phapNhanList.map((p: any) => ({ value: p.id, label: p.ten_phap_nhan }))}
+              options={phapNhanList.map((p) => ({ value: p.id, label: p.ten_phap_nhan }))}
             />
           </Col>
           <Col>

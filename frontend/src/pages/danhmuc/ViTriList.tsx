@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input,
@@ -41,7 +42,7 @@ export default function ViTriList() {
       closeModal()
       message.success('Đã thêm vị trí')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi thêm'),
   })
 
   const updateMut = useMutation({
@@ -52,7 +53,7 @@ export default function ViTriList() {
       closeModal()
       message.success('Đã cập nhật')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const deleteMut = useMutation({
@@ -61,7 +62,7 @@ export default function ViTriList() {
       queryClient.invalidateQueries({ queryKey: ['vi-tri'] })
       message.success('Đã xoá')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi xoá'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi xoá'),
   })
 
   const openCreate = () => {

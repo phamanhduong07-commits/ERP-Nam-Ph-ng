@@ -25,10 +25,15 @@ const ProductionCostingPage: React.FC = () => {
   const { phanXuongList } = usePhanXuong()
   const [loading, setLoading] = useState(false)
   const [exportLoading, setExportLoading] = useState(false)
-  const [data, setData] = useState<any[]>([])
+  interface CostingItem {
+    so_lenh: string; ten_hang: string; so_luong: number; dvt: string
+    cp_nvl: number; cp_nhan_cong: number; cp_chung: number; tong_chi_phi: number
+    gia_thanh_don_vi: number; standard_cost: number
+  }
+  const [data, setData] = useState<CostingItem[]>([])
   const [form] = Form.useForm()
 
-  const fetchReport = async (values: any) => {
+  const fetchReport = async (values: { phan_xuong_id?: number; range: [{ format: (f: string) => string }, { format: (f: string) => string }] }) => {
     setLoading(true)
     try {
       const params = {
@@ -95,7 +100,7 @@ const ProductionCostingPage: React.FC = () => {
       key: 'so_luong', 
       align: 'right' as const, 
       width: 120,
-      render: (val: number, record: any) => (
+      render: (val: number, record: CostingItem) => (
         <Space direction="vertical" size={0} align="end">
           <Text strong>{val.toLocaleString()}</Text>
           <Text type="secondary" style={{ fontSize: 11 }}>{record.dvt}</Text>
@@ -106,7 +111,7 @@ const ProductionCostingPage: React.FC = () => {
       title: 'Cơ cấu Chi phí',
       key: 'cost_structure',
       width: 300,
-      render: (_: any, record: any) => {
+      render: (_: unknown, record: CostingItem) => {
         const total = record.tong_chi_phi || 1
         const pMat = (record.cp_nvl / total) * 100
         const pNC = (record.cp_nhan_cong / total) * 100
@@ -162,7 +167,7 @@ const ProductionCostingPage: React.FC = () => {
       align: 'center' as const,
       width: 120,
       fixed: 'right' as const,
-      render: (_: any, record: any) => {
+      render: (_: unknown, record: CostingItem) => {
         if (!record.standard_cost) return <Tag color="default">N/A</Tag>
         const diff = record.standard_cost - record.gia_thanh_don_vi
         const percent = (diff / record.standard_cost) * 100
@@ -218,7 +223,7 @@ const ProductionCostingPage: React.FC = () => {
             <Col xs={24} sm={12} md={8}>
               <Form.Item name="phan_xuong_id" label={<Text strong>Phân xưởng sản xuất</Text>}>
                 <Select placeholder="Tất cả phân xưởng" size="large" allowClear style={{ borderRadius: 8 }}>
-                  {phanXuongList.map((px: any) => (
+                  {phanXuongList.map((px) => (
                     <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>
                   ))}
                 </Select>

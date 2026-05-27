@@ -7,6 +7,13 @@ import 'react-quill/dist/quill.snow.css';
 const { Sider, Content } = Layout;
 const { Title } = Typography;
 
+interface DocItem {
+  id: string
+  category: string
+  title: string
+  content: string
+}
+
 // Dữ liệu nội dung hướng dẫn Sales
 const initialDocs = [
   { 
@@ -420,8 +427,8 @@ const initialDocs = [
 ];
 
 export default function DocsPage() {
-  const [docs, setDocs] = useState<any[]>([]);
-  const [activeDoc, setActiveDoc] = useState<any>(null);
+  const [docs, setDocs] = useState<DocItem[]>([]);
+  const [activeDoc, setActiveDoc] = useState<DocItem | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editorContent, setEditorContent] = useState('');
   const [editTitle, setEditTitle] = useState('');
@@ -509,7 +516,7 @@ export default function DocsPage() {
     };
   }, [zoomImage]);
 
-  const saveToLocal = (newDocs: any[]) => {
+  const saveToLocal = (newDocs: DocItem[]) => {
     setDocs(newDocs);
     localStorage.setItem('erp_docs_v7', JSON.stringify(newDocs));
   };

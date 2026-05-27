@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../api/types'
 import { Button, Modal, Space, Table, Tag, Upload, message, Typography } from 'antd'
 import { DownloadOutlined, UploadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -34,8 +35,8 @@ export default function ImportExcelButton({
   const handleDownloadTemplate = async () => {
     try {
       await importExportApi.downloadTemplate(endpoint, templateFilename)
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Không tải được file mẫu')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Không tải được file mẫu')
     }
   }
 
@@ -49,9 +50,9 @@ export default function ImportExcelButton({
       const res = await importExportApi.importExcel(endpoint, selectedFile, false)
       setResult(res.data)
       message.success('Đã kiểm tra file import')
-    } catch (e: any) {
+    } catch (e) {
       setResult(null)
-      message.error(e?.response?.data?.detail || 'File import chưa hợp lệ')
+      message.error((e as ApiError)?.response?.data?.detail || 'File import chưa hợp lệ')
     } finally {
       setLoading(false)
     }
@@ -67,8 +68,8 @@ export default function ImportExcelButton({
       onImported?.()
       setOpen(false)
       reset()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Import thất bại')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Import thất bại')
     } finally {
       setCommitting(false)
     }

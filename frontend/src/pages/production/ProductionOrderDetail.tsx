@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient, useQueries, useMutation } from '@tanstack/react-query'
 import {
@@ -90,7 +91,7 @@ function PhieuNhapPhoiSongTab({
       }
     })
 
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), itemRows.map(r => cols.map(c => (r as any)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), itemRows.map(r => cols.map(c => (r as Record<string, unknown>)[c.key])))
     
     const printData = {
       subtitle: 'PHIẾU NHẬP PHÔI SÓNG',
@@ -371,8 +372,9 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
     try {
       await productionOrdersApi.pushToCD2(Number(id))
       message.success('Đã đẩy lệnh sang hệ thống CD2 (Công Đoạn 2) thành công!')
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail ?? 'Lỗi kết nối CD2'
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { detail?: string } } }
+      const detail = apiErr?.response?.data?.detail ?? 'Lỗi kết nối CD2'
       message.error(detail)
     } finally {
       setPushingCD2(false)
@@ -469,7 +471,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
       }
     })
     
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as any)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as Record<string, unknown>)[c.key])))
     
     const printData = {
       subtitle: 'LỆNH SẢN XUẤT',

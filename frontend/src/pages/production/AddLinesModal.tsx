@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   Button, DatePicker, Input, InputNumber, message, Modal,
@@ -66,7 +67,7 @@ export default function AddLinesModal({ open, planId, existingItemIds, onClose, 
       setEditMap({})
       onAdded()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi thêm dòng'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi thêm dòng'),
   })
 
   const setEdit = (id: number, patch: Partial<EditState>) => {

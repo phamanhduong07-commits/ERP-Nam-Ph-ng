@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 
-export const exportToExcel = (data: any[], fileName: string) => {
+export const exportToExcel = (data: unknown[], fileName: string) => {
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
@@ -8,7 +8,7 @@ export const exportToExcel = (data: any[], fileName: string) => {
 };
 
 export const downloadTemplate = (type: 'employee' | 'attendance' | 'payroll_config') => {
-  let data: any[] = [];
+  let data: unknown[] = [];
   let fileName = '';
 
   if (type === 'employee') {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { Card, Form, Input, Button, Tabs, Alert, Typography, Modal, Divider } from 'antd'
 import { UserOutlined, LockOutlined, ScanOutlined } from '@ant-design/icons'
@@ -27,8 +28,9 @@ export default function MachineLoginPage() {
     try {
       const res = await cd2Api.machineLogin({ token_user: values.token_user, token_password: values.token_password })
       saveSession(res.data)
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Đăng nhập thất bại')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setError((err as ApiError)?.response?.data?.detail || 'Đăng nhập thất bại')
     } finally {
       setLoading(false)
     }
@@ -41,8 +43,9 @@ export default function MachineLoginPage() {
     try {
       const res = await cd2Api.machineLogin({ rfid_key: rfid.trim() })
       saveSession(res.data)
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Thẻ không hợp lệ')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setError((err as ApiError)?.response?.data?.detail || 'Thẻ không hợp lệ')
       setRfidValue('')
     } finally {
       setLoading(false)

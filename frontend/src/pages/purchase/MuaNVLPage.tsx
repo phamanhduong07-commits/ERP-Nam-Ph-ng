@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
@@ -105,14 +106,14 @@ function TabDonMuaNVL() {
   }
 
   const createMut = useMutation({
-    mutationFn: (data: any) => purchaseApi.create(data),
+    mutationFn: (data: Parameters<typeof purchaseApi.create>[0]) => purchaseApi.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['purchase-orders-nvl'] })
       message.success('Đã tạo đơn mua NVL')
       setOpen(false)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo PO'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo PO'),
   })
 
   const approveMut = useMutation({
@@ -135,7 +136,7 @@ function TabDonMuaNVL() {
     mutationFn: (data: { poId: number; thue_suat: number; co_vat: boolean }) =>
       purchaseInvoiceApi.fromPO(data.poId, { thue_suat: data.thue_suat, co_vat: data.co_vat }),
     onSuccess: () => message.success('Đã tạo hóa đơn'),
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo HĐ'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo HĐ'),
   })
 
   function openCreateInvoice(poId: number) {
@@ -190,7 +191,10 @@ function TabDonMuaNVL() {
   const handleSubmit = async () => {
     try {
       const v = await form.validateFields()
-      const items = (v.items || []).map((it: any) => ({
+      const items = (v.items || []).map((it: {
+        other_material_id?: number | null; ten_hang?: string
+        so_luong: number; dvt?: string; don_gia?: number; ghi_chu?: string | null
+      }) => ({
         paper_material_id: null,
         other_material_id: it.other_material_id || null,
         ten_hang: it.ten_hang || '',
@@ -269,13 +273,13 @@ function TabDonMuaNVL() {
         <Col>
           <Select placeholder="Tất cả xưởng" allowClear style={{ width: 160 }}
             value={filterXuong} onChange={setFilterXuong}
-            options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))} />
+            options={phanXuongList.map(px => ({ value: px.id, label: px.ten_xuong }))} />
         </Col>
         <Col>
           <Select placeholder="Tất cả NCC" allowClear showSearch style={{ width: 200 }}
             optionFilterProp="label"
             value={filterNCC} onChange={setFilterNCC}
-            options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))} />
+            options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))} />
         </Col>
         <Col>
           <Select placeholder="Trạng thái" allowClear style={{ width: 140 }}
@@ -349,13 +353,13 @@ function TabDonMuaNVL() {
             <Col span={12}>
               <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true, message: 'Chọn NCC' }]}>
                 <Select placeholder="Chọn NCC..." showSearch optionFilterProp="label"
-                  options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
+                  options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="phan_xuong_id" label="Xưởng nhận" rules={[{ required: true, message: 'Chọn xưởng' }]}>
                 <Select placeholder="Chọn xưởng..." showSearch optionFilterProp="label"
-                  options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))} />
+                  options={phanXuongList.map(px => ({ value: px.id, label: px.ten_xuong }))} />
               </Form.Item>
             </Col>
           </Row>
@@ -521,7 +525,7 @@ function TabTonKhoNVL() {
         <Col>
           <Select placeholder="Tất cả xưởng" allowClear style={{ width: 200 }}
             value={filterXuong} onChange={setFilterXuong}
-            options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))} />
+            options={phanXuongList.map(px => ({ value: px.id, label: px.ten_xuong }))} />
         </Col>
         <Col flex="auto">
           <Statistic title="Tổng giá trị tồn" value={tongGt} precision={0}
@@ -591,7 +595,7 @@ function TabLichSuNCCNVL() {
         <Col>
           <Select placeholder="Tất cả NCC" allowClear showSearch style={{ width: 220 }}
             optionFilterProp="label" value={filterNCC} onChange={setFilterNCC}
-            options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))} />
+            options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))} />
         </Col>
         <Col>
           <Select placeholder="Tất cả vật tư" allowClear showSearch style={{ width: 220 }}

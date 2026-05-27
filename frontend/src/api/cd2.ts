@@ -286,20 +286,20 @@ export interface KhoRow {
 
 export const cd2Api = {
   // Dashboard & monitor
-  getDashboard: (params?: any) => client.get('/cd2/dashboard', { params }),
+  getDashboard: (params?: Record<string, string | number | boolean | undefined | null>) => client.get('/cd2/dashboard', { params }),
   getMachinesStatus: (phanXuongId?: number) =>
-    client.get<any[]>('/cd2/monitor/machines', { params: { phan_xuong_id: phanXuongId } }),
+    client.get<Record<string, unknown>[]>('/cd2/monitor/machines', { params: { phan_xuong_id: phanXuongId } }),
 
   // Phiếu in — list / kanban
-  listPhieuIn: (params?: any) => client.get<PhieuIn[]>('/cd2/phieu-in', { params }),
+  listPhieuIn: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<PhieuIn[]>('/cd2/phieu-in', { params }),
   getPhieuIn: (id: number) => client.get<PhieuIn>(`/cd2/phieu-in/${id}`),
-  getKanban: (params?: any) => client.get<KanbanData>('/cd2/kanban', { params }),
-  getSauInKanban: (params?: any) => client.get<SauInKanbanData>('/cd2/sau-in-kanban', { params }),
-  getHistoryPhieuIn: (params?: any) => client.get<PhieuIn[]>('/cd2/history/phieu-in', { params }),
+  getKanban: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<KanbanData>('/cd2/kanban', { params }),
+  getSauInKanban: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<SauInKanbanData>('/cd2/sau-in-kanban', { params }),
+  getHistoryPhieuIn: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<PhieuIn[]>('/cd2/history/phieu-in', { params }),
 
   // Phiếu in — CRUD & actions
-  createPhieuIn: (data: any) => client.post<PhieuIn>('/cd2/phieu-in', data),
-  updatePhieuIn: (id: number, data: any) => client.put<PhieuIn>(`/cd2/phieu-in/${id}`, data),
+  createPhieuIn: (data: Record<string, unknown>) => client.post<PhieuIn>('/cd2/phieu-in', data),
+  updatePhieuIn: (id: number, data: Partial<PhieuIn>) => client.put<PhieuIn>(`/cd2/phieu-in/${id}`, data),
   deletePhieuIn: (id: number) => client.delete(`/cd2/phieu-in/${id}`),
   movePhieuIn: (id: number, data: { trang_thai?: string; may_in_id?: number | null; sort_order?: number }) =>
     client.put(`/cd2/phieu-in/${id}/move`, data),
@@ -327,25 +327,25 @@ export const cd2Api = {
   getTonKhoLsx: () => client.get<KhoRow[]>('/cd2/ton-kho-lsx'),
 
   // Máy in
-  listMayIn: (params?: any) => client.get<MayIn[]>('/cd2/may-in', { params }),
+  listMayIn: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<MayIn[]>('/cd2/may-in', { params }),
   createMayIn: (data: Partial<MayIn>) => client.post<MayIn>('/cd2/may-in', data),
   updateMayIn: (id: number, data: Partial<MayIn>) => client.put<MayIn>(`/cd2/may-in/${id}`, data),
   deleteMayIn: (id: number) => client.delete(`/cd2/may-in/${id}`),
 
   // Máy sau in
-  listMaySauIn: (params?: any) => client.get<MaySauIn[]>('/cd2/may-sau-in', { params }),
+  listMaySauIn: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<MaySauIn[]>('/cd2/may-sau-in', { params }),
   createMaySauIn: (data: Partial<MaySauIn>) => client.post<MaySauIn>('/cd2/may-sau-in', data),
   updateMaySauIn: (id: number, data: Partial<MaySauIn>) => client.put<MaySauIn>(`/cd2/may-sau-in/${id}`, data),
   deleteMaySauIn: (id: number) => client.delete(`/cd2/may-sau-in/${id}`),
 
   // Máy scan
-  listMayScan: (params?: any) => client.get<MayScan[]>('/cd2/may-scan', { params }),
+  listMayScan: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<MayScan[]>('/cd2/may-scan', { params }),
   createMayScan: (data: Partial<MayScan>) => client.post<MayScan>('/cd2/may-scan', data),
   updateMayScan: (id: number, data: Partial<MayScan>) => client.put<MayScan>(`/cd2/may-scan/${id}`, data),
   deleteMayScan: (id: number) => client.delete(`/cd2/may-scan/${id}`),
 
   // Scan log
-  getScanHistory: (params?: any) => client.get<ScanLog[]>('/cd2/scan-logs/history-list', { params }),
+  getScanHistory: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<ScanLog[]>('/cd2/scan-logs/history-list', { params }),
   createScanLog: (data: {
     may_scan_id: number
     so_lsx: string
@@ -366,16 +366,16 @@ export const cd2Api = {
   scanLookup: (code: string, mayScanId?: number) =>
     client.get<ScanLookupResult>(`/cd2/scan/lookup/${code}`, { params: mayScanId ? { may_scan_id: mayScanId } : undefined }),
   // Tra cứu theo Số phiếu (Phieu In) - Dành cho Mobile Tracking QR
-  phieuLookup: (code: string) => client.get<any>(`/cd2/scan-lookup/${code}`),
+  phieuLookup: (code: string) => client.get<Record<string, unknown>>(`/cd2/scan-lookup/${code}`),
 
   // Ca làm việc
-  listShiftCa: (params?: any) => client.get<ShiftCa[]>('/cd2/shift/ca', { params }),
+  listShiftCa: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<ShiftCa[]>('/cd2/shift/ca', { params }),
   createShiftCa: (data: { name: string; leader?: string }) => client.post<ShiftCa>('/cd2/shift/ca', data),
   updateShiftCa: (id: number, data: Partial<ShiftCa>) => client.put<ShiftCa>(`/cd2/shift/ca/${id}`, data),
   deleteShiftCa: (id: number) => client.delete(`/cd2/shift/ca/${id}`),
 
   // Lịch ca
-  listShiftConfig: (params?: any) => client.get<ShiftConfigItem[]>('/cd2/shift/config', { params }),
+  listShiftConfig: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<ShiftConfigItem[]>('/cd2/shift/config', { params }),
   createShiftConfig: (data: {
     may_in_id: number
     shift_ca_id: number
@@ -393,7 +393,7 @@ export const cd2Api = {
     client.post<WorkerSession>('/cd2/machine-login', data),
 
   // Người in
-  listPrinterUser: (params?: any) => client.get<PrinterUser[]>('/cd2/config/printer-user', { params }),
+  listPrinterUser: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<PrinterUser[]>('/cd2/config/printer-user', { params }),
   createPrinterUser: (data: Partial<PrinterUser> & { token_user: string; token_password: string }) =>
     client.post<PrinterUser>('/cd2/config/printer-user', data),
   updatePrinterUser: (id: number, data: Partial<PrinterUser>) =>
@@ -401,10 +401,10 @@ export const cd2Api = {
   deletePrinterUser: (id: number) => client.delete(`/cd2/config/printer-user/${id}`),
 
   // Máy sản xuất (Machine — loai_may)
-  listMachines: (params?: any) => client.get<Machine[]>('/cd2/machines', { params }),
+  listMachines: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<Machine[]>('/cd2/machines', { params }),
   createMachine: (data: Partial<Machine>) => client.post<Machine>('/cd2/machines', data),
   updateMachine: (id: number, data: Partial<Machine>) => client.put<Machine>(`/cd2/machines/${id}`, data),
-  getMachineLogs: (machineId: number) => client.get<any[]>(`/cd2/machines/${machineId}/logs`),
+  getMachineLogs: (machineId: number) => client.get<Record<string, unknown>[]>(`/cd2/machines/${machineId}/logs`),
   trackProduction: (data: TrackPayload) => client.post<{ ok: boolean; log_id: number }>('/cd2/track', data),
   getOrderProgress: (orderId: number) => client.get<ProductionLog[]>(`/cd2/progress/${orderId}`),
 

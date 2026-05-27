@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -82,7 +83,7 @@ export default function CashReceiptForm() {
       qc.invalidateQueries({ queryKey: ['ar-aging'] })
       navigate(`/accounting/receipts/${r.id}`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi tạo phiếu thu'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo phiếu thu'),
   })
 
   const handleCustomerChange = (id: number) => {
@@ -102,7 +103,7 @@ export default function CashReceiptForm() {
     }
   }
 
-  const onFinish = (values: any) => {
+  const onFinish = (values: CashReceiptCreate & { ngay_phieu: import('dayjs').Dayjs }) => {
     createMut.mutate({
       customer_id: values.customer_id,
       sales_invoice_id: values.sales_invoice_id,
@@ -207,11 +208,11 @@ export default function CashReceiptForm() {
               },
             ]}
           >
-            <InputNumber
+            <InputNumber<number>
               style={{ width: '100%' }}
               min={1}
               formatter={v => v ? Number(v).toLocaleString('vi-VN') : ''}
-              parser={v => Number((v ?? '').replace(/\D/g, '')) as any}
+              parser={v => Number((v ?? '').replace(/\D/g, ''))}
             />
           </Form.Item>
 

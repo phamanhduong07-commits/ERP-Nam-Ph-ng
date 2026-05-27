@@ -67,8 +67,8 @@ export default function InventoryCardPage() {
     staleTime: 300_000,
   })
 
-  const phanXuongsByPn = phapNhanId ? phanXuongs.filter((px: any) => px.phap_nhan_id === phapNhanId) : phanXuongs
-  const allowedPxIds = new Set(phanXuongsByPn.map((px: any) => px.id))
+  const phanXuongsByPn = phapNhanId ? phanXuongs.filter(px => px.phap_nhan_id === phapNhanId) : phanXuongs
+  const allowedPxIds = new Set(phanXuongsByPn.map(px => px.id))
   const filteredWarehouses = (whs ?? []).filter(w =>
     (!phapNhanId || allowedPxIds.has(w.phan_xuong_id)) &&
     (!phanXuongId || w.phan_xuong_id === phanXuongId)
@@ -174,7 +174,7 @@ export default function InventoryCardPage() {
 
     const table = buildHtmlTable(
       cols.map(c => ({ header: c.header, align: c.align })), 
-      itemRows.map(row => cols.map(c => (row as any)[c.key]))
+      itemRows.map(row => cols.map(c => (row as Record<string, string | number>)[c.key]))
     )
 
     const printData = {
@@ -285,7 +285,7 @@ export default function InventoryCardPage() {
             allowClear
             value={phapNhanId}
             onChange={v => { setPhapNhanId(v); setPhanXuongId(undefined); setWarehouseId(undefined) }}
-            options={phapNhans.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+            options={phapNhans.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
           />
           <Select
             style={{ width: 180 }}
@@ -293,7 +293,7 @@ export default function InventoryCardPage() {
             allowClear
             value={phanXuongId}
             onChange={v => { setPhanXuongId(v); setWarehouseId(undefined) }}
-            options={phanXuongsByPn.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
+            options={phanXuongsByPn.map(px => ({ value: px.id, label: px.ten_xuong }))}
           />
           <Select
             style={{ width: 200 }}

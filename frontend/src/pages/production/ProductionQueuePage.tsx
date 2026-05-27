@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -172,7 +173,7 @@ export default function ProductionQueuePage() {
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
 
   const handleTableChange = (
-    _pagination: any,
+    _pagination: unknown,
     filters: Record<string, FilterValue | null>,
     _sorter: SorterResult<QueueLine> | SorterResult<QueueLine>[],
   ) => {
@@ -247,13 +248,13 @@ export default function ProductionQueuePage() {
     mutationFn: ({ planId, lineId }: { planId: number; lineId: number }) =>
       productionPlansApi.completeLine(planId, lineId),
     onSuccess: () => { message.success('Đã hoàn thành'); qc.invalidateQueries({ queryKey: ['production-queue'] }) },
-    onError:   (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError:   (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
   const deleteMut = useMutation({
     mutationFn: ({ planId, lineId }: { planId: number; lineId: number }) =>
       productionPlansApi.deleteLine(planId, lineId),
     onSuccess: () => { message.success('Đã xóa'); qc.invalidateQueries({ queryKey: ['production-queue'] }) },
-    onError:   (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError:   (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
 
   const choCnt      = allLines.filter(l => l.trang_thai === 'cho').length

@@ -23,7 +23,7 @@ export default function KhoLoginPage() {
       setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
       navigate('/kho-cuon-giay')
     } catch (err: unknown) {
-      const detail = (err as any)?.response?.data?.detail
+      const detail = (err as {response?: {data?: {detail?: string}}})?.response?.data?.detail
       setError(typeof detail === 'string' ? detail : 'Đăng nhập thất bại, vui lòng thử lại')
     } finally {
       setLoading(false)

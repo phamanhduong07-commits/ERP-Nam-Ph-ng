@@ -5,12 +5,20 @@ import type { UploadFile } from 'antd/es/upload/interface'
 
 const { Text } = Typography
 
+import type { ApiError } from '../api/types'
+
+type ImportDialogResult = {
+  total?: number; created?: number; updated?: number; skipped?: number
+  errors?: number | string[]
+  rows?: Array<{ row?: number; status?: string; message?: string; [k: string]: unknown }>
+  total_orders?: number; total_pos?: number
+}
 interface ImportExcelDialogProps {
   title: string
   visible: boolean
   onCancel: () => void
   onSuccess: () => void
-  importFn: (file: File, commit: boolean) => Promise<any>
+  importFn: (file: File, commit: boolean) => Promise<ImportDialogResult>
   templateUrl?: string
 }
 
@@ -19,7 +27,7 @@ export default function ImportExcelDialog({
 }: ImportExcelDialogProps) {
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<ImportDialogResult | null>(null)
 
   const handleImport = async (commit: boolean) => {
     if (fileList.length === 0) {
@@ -31,15 +39,16 @@ export default function ImportExcelDialog({
     try {
       const res = await importFn(fileList[0].originFileObj as File, commit)
       setResult(res)
-      if (commit && (!res.errors || res.errors.length === 0)) {
+      const errCount = Array.isArray(res.errors) ? res.errors.length : (res.errors ?? 0)
+      if (commit && !errCount) {
         message.success('Import thành công!')
         onSuccess()
         onCancel()
       } else if (commit) {
         message.error('Import có lỗi, vui lòng kiểm tra danh sách bên dưới')
       }
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Lỗi khi import file')
+    } catch (error) {
+      message.error((error as ApiError)?.response?.data?.detail || 'Lỗi khi import file')
     } finally {
       setLoading(false)
     }
@@ -96,7 +105,7 @@ export default function ImportExcelDialog({
           icon={<UploadOutlined />} 
           onClick={() => handleImport(true)}
           loading={loading}
-          disabled={fileList.length === 0 || (result && result.errors && result.errors.length > 0)}
+          disabled={fileList.length === 0 || (result && !!result.errors && (Array.isArray(result.errors) ? result.errors.length > 0 : result.errors > 0))}
         >
           Thực hiện Import
         </Button>
@@ -129,7 +138,7 @@ export default function ImportExcelDialog({
                 <Text type="secondary">Bỏ qua: <b>{result.skipped}</b></Text>
               </Space>
             }
-            type={result.errors > 0 ? "warning" : "success"}
+            type={(Array.isArray(result.errors) ? result.errors.length : (result.errors ?? 0)) > 0 ? "warning" : "success"}
             showIcon
           />
         )}
@@ -140,21 +149,21 @@ export default function ImportExcelDialog({
             description={
               <Space direction="vertical">
                 <Text>Tổng số đơn hàng: <b>{result.total_orders || result.total_pos}</b></Text>
-                {result.errors.length > 0 && (
+                {Array.isArray(result.errors) && result.errors.length > 0 && (
                   <div style={{ color: '#ff4d4f' }}>
                     <ExclamationCircleOutlined /> Có {result.errors.length} lỗi trong file. Vui lòng sửa trước khi import.
                   </div>
                 )}
               </Space>
             }
-            type={result.errors.length > 0 ? "error" : "success"}
+            type={Array.isArray(result.errors) && result.errors.length > 0 ? "error" : "success"}
             showIcon
           />
         )}
 
         {result && !isOrderImport && result.rows && (
           <Table
-            dataSource={result.rows.filter((r: any) => r.status === 'error' || r.status === 'create' || r.status === 'update')}
+            dataSource={result.rows.filter(r => r.status === 'error' || r.status === 'create' || r.status === 'update')}
             columns={columns}
             size="small"
             pagination={{ pageSize: 10 }}
@@ -163,10 +172,10 @@ export default function ImportExcelDialog({
           />
         )}
 
-        {result && isOrderImport && result.errors.length > 0 && (
+        {result && isOrderImport && Array.isArray(result.errors) && result.errors.length > 0 && (
           <Card title="Danh sách lỗi" size="small">
             <div style={{ maxHeight: 300, overflowY: 'auto', color: '#ff4d4f' }}>
-              {result.errors.map((e: string, i: number) => <div key={i} style={{ marginBottom: 4 }}>• {e}</div>)}
+              {(result.errors as string[]).map((e: string, i: number) => <div key={i} style={{ marginBottom: 4 }}>• {e}</div>)}
             </div>
           </Card>
         )}

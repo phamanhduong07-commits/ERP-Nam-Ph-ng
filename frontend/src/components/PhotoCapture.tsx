@@ -13,6 +13,7 @@
  */
 
 import { useRef, useState } from 'react'
+import type { ApiError } from '../api/types'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Badge, Button, Image, Modal, Popconfirm, Progress,
@@ -108,9 +109,9 @@ export default function PhotoCapture({
       setUploadProgress(100)
       message.success('Đã tải ảnh lên thành công!')
       await qc.invalidateQueries({ queryKey: qKey })
-    } catch (err: any) {
+    } catch (err) {
       clearInterval(ticker)
-      message.error(err?.response?.data?.detail || 'Lỗi tải ảnh lên')
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi tải ảnh lên')
     } finally {
       setUploading(false)
       setUploadProgress(0)
@@ -145,8 +146,8 @@ export default function PhotoCapture({
       await mediaApi.delete(id)
       message.success('Đã xóa ảnh')
       qc.invalidateQueries({ queryKey: qKey })
-    } catch (err: any) {
-      message.error(err?.response?.data?.detail || 'Lỗi xóa ảnh')
+    } catch (err) {
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi xóa ảnh')
     }
   }
 

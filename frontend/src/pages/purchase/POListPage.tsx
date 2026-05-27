@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ApiError } from '../../../../../../../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -13,7 +14,7 @@ import ImportExcelDialog from '../../components/ImportExcelDialog'
 import dayjs from 'dayjs'
 import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, smartPrintPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import {
-  purchaseApi, PurchaseOrder, CreatePOPayload,
+  purchaseApi, PurchaseOrder, POItem, CreatePOPayload,
   TRANG_THAI_PO, TRANG_THAI_PO_COLOR,
 } from '../../api/purchase'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
@@ -154,7 +155,7 @@ export default function POListPage() {
       setOpen(false)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo PO'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi tạo PO'),
   })
 
   const approveMut = useMutation({
@@ -163,7 +164,7 @@ export default function POListPage() {
       qc.invalidateQueries({ queryKey: ['purchase-orders'] })
       message.success('Đã duyệt đơn mua hàng')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi duyệt PO'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi duyệt PO'),
   })
 
   const deleteMut = useMutation({
@@ -172,7 +173,7 @@ export default function POListPage() {
       qc.invalidateQueries({ queryKey: ['purchase-orders'] })
       message.success('Đã xoá đơn mua hàng')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
   })
 
   const guiNCCMut = useMutation({
@@ -181,7 +182,7 @@ export default function POListPage() {
       qc.invalidateQueries({ queryKey: ['purchase-orders'] })
       message.success('Đã chuyển trạng thái Đã gửi NCC')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi'),
   })
 
   const huyPOMut = useMutation({
@@ -190,7 +191,7 @@ export default function POListPage() {
       qc.invalidateQueries({ queryKey: ['purchase-orders'] })
       message.success('Đã hủy đơn mua hàng')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi hủy PO'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi hủy PO'),
   })
 
   const createPurchaseInvoiceMut = useMutation({
@@ -200,7 +201,7 @@ export default function POListPage() {
       message.success('Đã tạo hóa đơn mua hàng')
       navigate(`/accounting/purchase-invoices/${inv.id}`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn'),
   })
 
   function openCreateInvoice(poId: number) {
@@ -240,7 +241,10 @@ export default function POListPage() {
   const handleSubmit = async () => {
     try {
       const v = await form.validateFields()
-      const items = (v.items || []).map((it: any) => ({
+      const items = (v.items || []).map((it: {
+        loai_vat_tu?: string; mat_id?: number | null; ten_hang?: string
+        so_luong: number; dvt?: string; don_gia?: number; ghi_chu?: string | null
+      }) => ({
         paper_material_id: it.loai_vat_tu === 'giay' ? (it.mat_id || null) : null,
         other_material_id: it.loai_vat_tu === 'khac' ? (it.mat_id || null) : null,
         ten_hang: it.ten_hang || '',
@@ -353,7 +357,7 @@ export default function POListPage() {
         { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 130, align: 'right' as const,
           render: (v: number) => <Text strong>{(v || 0).toLocaleString('vi-VN')}đ</Text> },
         { title: 'Đã nhận', dataIndex: 'so_luong_da_nhan', width: 100, align: 'right' as const,
-          render: (v: number, row: any) => {
+          render: (v: number, row: POItem) => {
             const pct = row.so_luong > 0 ? Math.round((v || 0) / row.so_luong * 100) : 0
             return <Text type={pct >= 100 ? 'success' : undefined}>{(v || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 })} ({pct}%)</Text>
           } },
@@ -388,8 +392,9 @@ export default function POListPage() {
         { key: 'tong_tien', label: 'Tong tien', width: 16 },
         { key: 'tien_do_nhan', label: 'Tien do nhan', width: 16 },
       ], `DonMuaHang_${dayjs().format('YYYYMMDD')}`, phapNhanResult.phapNhanId, { throwOnError: true })
-    } catch (e: any) {
-      message.error(e?.message || e?.response?.data?.detail || 'Xuat Excel don mua hang that bai')
+    } catch (e) {
+      const err = e as { message?: string; response?: { data?: { detail?: string } } }
+      message.error(err?.message || (err as ApiError)?.response?.data?.detail || 'Xuat Excel don mua hang that bai')
     } finally {
       setIsExporting(false)
     }
@@ -426,8 +431,9 @@ export default function POListPage() {
           totalRow: ['', 'TONG CONG', '', '', '', fmtVND(tongTien), ''],
         }),
       }, phapNhanResult.phapNhanId, { throwOnError: true, landscape: true })
-    } catch (e: any) {
-      message.error(e?.message || e?.response?.data?.detail || 'Xuat PDF don mua hang that bai')
+    } catch (e) {
+      const err = e as { message?: string; response?: { data?: { detail?: string } } }
+      message.error(err?.message || (err as ApiError)?.response?.data?.detail || 'Xuat PDF don mua hang that bai')
     } finally {
       setIsExporting(false)
     }
@@ -482,7 +488,7 @@ export default function POListPage() {
           </Col>
           <Col xs={12} sm={4}>
             <Select placeholder="Tất cả xưởng" style={{ width: '100%' }} allowClear value={filterXuong} onChange={setFilterXuong}
-              options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))} />
+              options={phanXuongList.map(px => ({ value: px.id, label: px.ten_xuong }))} />
           </Col>
           <Col xs={12} sm={4}>
             <Select placeholder="Tất cả loại" style={{ width: '100%' }} allowClear value={filterLoaiPo} onChange={setFilterLoaiPo}
@@ -547,7 +553,7 @@ export default function POListPage() {
               <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true, message: 'Chọn NCC' }]}>
                 <Select placeholder="Chọn nhà cung cấp..." showSearch
                   filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                  options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
+                  options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -560,7 +566,7 @@ export default function POListPage() {
             <Col span={12}>
               <Form.Item name="phan_xuong_id" label="Xưởng">
                 <Select placeholder="Chọn xưởng..." allowClear
-                  options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))} />
+                  options={phanXuongList.map(px => ({ value: px.id, label: px.ten_xuong }))} />
               </Form.Item>
             </Col>
             <Col span={12}>

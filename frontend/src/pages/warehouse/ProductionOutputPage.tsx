@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
@@ -35,7 +36,7 @@ export default function ProductionOutputPage() {
     queryFn: () => productionOrdersApi.list({ page_size: 500 }).then(r => r.data),
     staleTime: 60_000,
   })
-  const lsxList = (lsxPaged as any)?.items ?? []
+  const lsxList = lsxPaged?.items ?? []
 
   const { data: outputList = [], isLoading } = useQuery({
     queryKey: ['production-outputs', filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay],
@@ -67,7 +68,7 @@ export default function ProductionOutputPage() {
       setOpen(false)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
   })
 
   const deleteMut = useMutation({
@@ -77,7 +78,7 @@ export default function ProductionOutputPage() {
       qc.invalidateQueries({ queryKey: ['ton-kho'] })
       message.success('Đã xoá phiếu nhập TP')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
   })
 
   const handleSubmit = async () => {
@@ -243,7 +244,7 @@ export default function ProductionOutputPage() {
           <Form.Item name="production_order_id" label="Lệnh sản xuất" rules={[{ required: true, message: 'Chọn LSX' }]}>
             <Select placeholder="Chọn LSX..." showSearch
               filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-              options={(lsxList as any[]).map((o: any) => ({
+              options={(lsxList as ProductionOrderListItem[]).map((o: ProductionOrderListItem) => ({
                 value: o.id,
                 label: `${o.so_lenh}${o.ten_khach_hang ? ' — ' + o.ten_khach_hang : ''}`,
               }))}

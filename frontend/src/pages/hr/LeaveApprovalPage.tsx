@@ -19,7 +19,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 
 export default function LeaveApprovalPage() {
   const [modalVisible, setModalVisible] = useState(false)
-  const [selectedReq, setSelectedReq] = useState<any>(null)
+  const [selectedReq, setSelectedReq] = useState<unknown>(null)
   const [form] = Form.useForm()
 
   const { data: requests = [], isLoading, refetch } = useQuery({
@@ -28,7 +28,7 @@ export default function LeaveApprovalPage() {
   })
 
   const approveMutation = useMutation({
-    mutationFn: (values: any) => client.put(`/hr/leave-requests/${selectedReq.id}/approve`, values),
+    mutationFn: (values: Record<string, unknown>) => client.put(`/hr/leave-requests/${selectedReq.id}/approve`, values),
     onSuccess: () => {
       message.success('Đã cập nhật trạng thái đơn')
       setModalVisible(false)
@@ -38,7 +38,7 @@ export default function LeaveApprovalPage() {
 
   const columns = [
     { title: 'Ngày tạo', dataIndex: 'created_at', render: (v: string) => dayjs(v).format('DD/MM/YYYY HH:mm') },
-    { title: 'Nhân viên', dataIndex: 'employee', render: (v: any) => (
+    { title: 'Nhân viên', dataIndex: 'employee', render: (v: unknown) => (
       <Space>
         <UserOutlined />
         <Text strong>{v.ho_ten}</Text>
@@ -48,7 +48,7 @@ export default function LeaveApprovalPage() {
     { title: 'Loại đơn', dataIndex: 'loai_don', render: (v: string) => (
       <Tag color={v === 'nghi_phep' ? 'blue' : 'orange'}>{v.toUpperCase()}</Tag>
     )},
-    { title: 'Thời gian', render: (_: any, r: any) => (
+    { title: 'Thời gian', render: (_: unknown, r: LeaveRequest) => (
       <div>
         {dayjs(r.ngay_bat_dau).format('DD/MM HH:mm')} - {dayjs(r.ngay_ket_thuc).format('DD/MM HH:mm')}
         <br />
@@ -63,7 +63,7 @@ export default function LeaveApprovalPage() {
       if (v === 'tu_choi') color = 'error'
       return <Tag color={color}>{v.toUpperCase()}</Tag>
     }},
-    { title: 'Thao tác', render: (_: any, r: any) => (
+    { title: 'Thao tác', render: (_: unknown, r: LeaveRequest) => (
       <Button 
         type="link" 
         icon={<CheckCircleOutlined />} 

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../api/types'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Layout, Menu, Avatar, Dropdown, Typography, Space, theme, Badge, Button, message,
@@ -51,7 +52,7 @@ function filterByRole(items: RawMenuItem[], role: string, userPermissions: strin
       ...(children ? { children: filterByRole(children, role, userPermissions) } : {}),
     }))
     .filter(item => {
-      const c = (item as any).children
+      const c = (item as RawMenuItem).children
       return c === undefined || c.length > 0
     })
 }
@@ -357,8 +358,8 @@ export default function AppLayout() {
       const res = await authApi.login(u, p)
       setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
       window.location.href = '/dashboard'
-    } catch (err: any) {
-      console.error('Lỗi chuyển role:', err?.response?.data || err)
+    } catch (err) {
+      console.error('Lỗi chuyển role:', (err as ApiError)?.response?.data || err)
       message.error('Không thể chuyển đổi tài khoản test. Bạn hãy kiểm tra lại username/password trong AppLayout.tsx có đúng với DB chưa.')
     }
   }
@@ -490,7 +491,7 @@ export default function AppLayout() {
           mode="inline"
           selectedKeys={selectedKeys}
           defaultOpenKeys={openKeys}
-          items={menuItems as any}
+          items={menuItems as import('antd/es/menu/interface').ItemType[]}
           theme="dark"
           style={{ border: 'none', marginTop: 8, padding: '0 6px', background: '#1b168e' }}
         />

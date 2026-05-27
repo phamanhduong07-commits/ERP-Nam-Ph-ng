@@ -37,15 +37,15 @@ export default function PeriodClosingPage() {
   const closingMutation = useMutation({
     mutationFn: (data: { thang: number; nam: number; phap_nhan_id: number }) => 
       client.post('/accounting/reports/perform-closing', null, { params: data }),
-    onSuccess: (res: any) => {
+    onSuccess: (res: { data: { profit: number } }) => {
       Modal.success({
         title: 'Kết chuyển thành công',
         content: `Đã tạo bút toán kết chuyển. Lợi nhuận trong kỳ: ${fmtVND(res.data.profit)}`,
       })
       refetch()
     },
-    onError: (err: any) => {
-      message.error('Lỗi khi kết chuyển: ' + (err.response?.data?.detail || err.message))
+    onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
+      message.error('Lỗi khi kết chuyển: ' + (err.response?.data?.detail || (err as Error).message))
     }
   })
 
@@ -79,7 +79,7 @@ export default function PeriodClosingPage() {
     },
     {
       title: 'Thao tác',
-      render: (_: any, r: any) => (
+      render: (_: unknown, _r: unknown) => (
         <Button type="link" icon={<HistoryOutlined />}>Xem chi tiết</Button>
       )
     }

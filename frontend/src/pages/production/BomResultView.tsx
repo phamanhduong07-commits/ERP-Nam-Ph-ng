@@ -49,7 +49,7 @@ export default function BomResultView({ productionOrderItemId }: Props) {
   )
 
   if (error) {
-    const detail = (error as any)?.response?.data?.detail ?? ''
+    const detail = (error as {response?: {data?: {detail?: string}}})?.response?.data?.detail ?? ''
     return (
       <Alert
         type="warning"

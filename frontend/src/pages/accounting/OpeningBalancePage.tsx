@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import {
   Card, Tabs, Button, Upload, Table, Typography, Space, Alert, Row, Col, Tag, message
 } from 'antd'
@@ -35,7 +36,7 @@ function ImportTab({
   templateFileName,
 }: {
   label: string
-  downloadFn: () => Promise<any>
+  downloadFn: () => Promise<{ data: BlobPart }>
   importFn: (file: File, commit: boolean) => Promise<ImportResult>
   templateFileName: string
 }) {
@@ -64,8 +65,9 @@ function ImportTab({
     try {
       const result = await importFn(file, false)
       setPreview(result)
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi khi đọc file')
+    } catch (e) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi khi đọc file')
     } finally {
       setLoading(false)
     }
@@ -80,8 +82,9 @@ function ImportTab({
       message.success(`Import thành công: ${result.created} dòng tạo mới, ${result.updated} cập nhật`)
       setPreview(result)
       setFileList([])
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi khi import')
+    } catch (e) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi khi import')
     } finally {
       setLoading(false)
     }

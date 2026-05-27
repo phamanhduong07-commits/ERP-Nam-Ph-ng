@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import type { ApiError } from '../../../../../../../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Drawer, Form, Input, Select, Space, Table, Typography, message, Row, Col, Tag, InputNumber
 } from 'antd'
 import { PlusOutlined, EditOutlined, SettingOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons'
-import { hrApi } from '../../api/hr'
+import { hrApi , PayrollConfig } from '../../api/hr'
 import { theoDoiApi } from '../../api/theoDoi'
 import { downloadTemplate } from '../../utils/excelUtils'
 import * as XLSX from 'xlsx'
@@ -24,7 +25,7 @@ export default function PayrollConfigPage() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<any | null>(null)
   const [importOpen, setImportOpen] = useState(false)
-  const [importData, setImportData] = useState<any[]>([])
+  const [importData, setImportData] = useState<Record<string, unknown>[]>([])
   const [form] = Form.useForm()
 
   const { data: configs = [], isLoading } = useQuery({
@@ -38,14 +39,14 @@ export default function PayrollConfigPage() {
   })
 
   const saveMut = useMutation({
-    mutationFn: (data: any) => data.id ? hrApi.updatePayrollConfig(data.id, data) : hrApi.createPayrollConfig(data),
+    mutationFn: (data: Record<string, unknown>) => data.id ? hrApi.updatePayrollConfig(data.id, data) : hrApi.createPayrollConfig(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['hr-payroll-configs'] })
       message.success('Da luu cau hinh')
       setEditing(null)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi luu du lieu'),
+    onError: (e: unknown) => message.error(e?.response?.data?.detail || 'Loi luu du lieu'),
   })
 
   const handleAddDefault = () => {
@@ -59,7 +60,7 @@ export default function PayrollConfigPage() {
     ]
 
     defaults.forEach(d => {
-      if (!configs.find((c: any) => c.ma_hang === d.ma_hang)) {
+      if (!configs.find((c: Record<string, unknown>) => c.ma_hang === d.ma_hang)) {
         saveMut.mutate(d)
       }
     })
@@ -80,7 +81,7 @@ export default function PayrollConfigPage() {
       title: 'Xuong',
       dataIndex: 'phan_xuong_id',
       width: 140,
-      render: (v: number) => phanXuongList.find((px: any) => px.id === v)?.ten_xuong || 'Dung chung'
+      render: (v: number) => phanXuongList.find((px: { id: number; ten_xuong?: string; [k: string]: unknown }) => px.id === v)?.ten_xuong || 'Dung chung'
     },
     {
       title: 'Khau',
@@ -111,7 +112,7 @@ export default function PayrollConfigPage() {
     {
       title: '',
       width: 50,
-      render: (_: any, r: any) => (
+      render: (_: unknown, r: PayrollConfig) => (
         <Button size="small" icon={<EditOutlined />} onClick={() => {
           setEditing(r)
           form.setFieldsValue(r)
@@ -138,7 +139,7 @@ export default function PayrollConfigPage() {
             <Button icon={<PlusOutlined />} onClick={handleAddDefault}>
               Khoi tao khau mac dinh
             </Button>
-            <Button type="primary" icon={<SettingOutlined />} onClick={() => setEditing({} as any)}>
+            <Button type="primary" icon={<SettingOutlined />} onClick={() => setEditing({} as Parameters<typeof setEditing>[0])}>
               Them don gia moi
             </Button>
           </Space>
@@ -186,7 +187,7 @@ export default function PayrollConfigPage() {
                       <Select
                         allowClear
                         placeholder="Dung chung"
-                        options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
+                        options={phanXuongList.map((px: { id: number; ten_xuong?: string; [k: string]: unknown }) => ({ value: px.id, label: px.ten_xuong }))}
                       />
                     </Form.Item>
                   </Col>
@@ -260,8 +261,8 @@ export default function PayrollConfigPage() {
                   setImportOpen(false)
                   setImportData([])
                   qc.invalidateQueries({ queryKey: ['hr-payroll-configs'] })
-                } catch (e: any) {
-                  message.error(e?.response?.data?.detail?.message || e?.response?.data?.detail || 'Import don gia that bai')
+                } catch (e) {
+                  message.error(e?.response?.data?.detail?.message || (e as ApiError)?.response?.data?.detail || 'Import don gia that bai')
                 }
               }}
             >
@@ -286,7 +287,7 @@ export default function PayrollConfigPage() {
                   const ws = wb.Sheets[wb.SheetNames[0]]
                   const data = XLSX.utils.sheet_to_json(ws)
 
-                  const validated = data.map((row: any) => {
+                  const validated = data.map((row: unknown) => {
                     let error = ''
                     if (!row.ma_hang) error = 'Thieu ma hang'
                     if (!row.don_gia) error = 'Thieu don gia'

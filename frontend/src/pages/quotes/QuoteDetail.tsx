@@ -18,7 +18,13 @@ import { printDocument, buildDocumentHtml, downloadAsPdf } from '../../utils/exp
 import type { PrintDocumentOptions } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { systemApi } from '../../api/system'
+import type { PrintTemplate } from '../../api/system'
 import { useAuthStore } from '../../store/auth'
+
+interface AxiosErrorLike { response?: { data?: { detail?: string } } }
+function apiErrorMsg(e: unknown, fallback: string): string {
+  return (e as AxiosErrorLike)?.response?.data?.detail || fallback
+}
 
 const { Title, Text } = Typography
 
@@ -53,7 +59,9 @@ function quoteCellValue(quote: Quote, item: QuoteItem, index: number, key: strin
   return String(values[key] ?? '')
 }
 
-function buildQuoteRowsHtml(quote: Quote, templateColumns: any[] = []): string {
+interface TemplateColumn { key?: string; [k: string]: unknown }
+
+function buildQuoteRowsHtml(quote: Quote, templateColumns: TemplateColumn[] = []): string {
   return quote.items.map((it, i) => {
     const cells = templateColumns.map(c => {
       const key = String(c.key || '')
@@ -387,7 +395,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       invalidateCounts()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Gửi duyệt thất bại'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Gửi duyệt thất bại')),
   })
 
   const approveMutation = useMutation({
@@ -398,7 +406,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       invalidateCounts()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Duyệt thất bại'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Duyệt thất bại')),
   })
 
   const cancelMutation = useMutation({
@@ -409,7 +417,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       invalidateCounts()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Huỷ thất bại'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Huỷ thất bại')),
   })
 
   const copyMutation = useMutation({
@@ -419,7 +427,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       navigate(`/quotes/${res.data.id}/edit`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Copy báo giá thất bại'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Copy báo giá thất bại')),
   })
 
   const giaHanMutation = useMutation({
@@ -452,7 +460,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
 
   const companyInfo = usePhapNhanForPrint(quote?.phap_nhan_id ?? null)
 
-  const buildQuotePrintOpts = (templateCols: any[], template: any): PrintDocumentOptions => ({
+  const buildQuotePrintOpts = (templateCols: TemplateColumn[], template: PrintTemplate): PrintDocumentOptions => ({
     title: 'BÁO GIÁ',
     subtitle: `Báo giá ${quote!.so_bao_gia}`,
     documentNumber: quote!.so_bao_gia,
@@ -495,20 +503,20 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
     },
   })
 
-  const fetchTemplate = async (action: string): Promise<{ template: any; templateCols: any[] } | null> => {
+  const fetchTemplate = async (action: string): Promise<{ template: PrintTemplate; templateCols: TemplateColumn[] } | null> => {
     if (!quote) return null
     if (!quote.phap_nhan_id) {
       message.error(`Báo giá chưa có pháp nhân. Vui lòng chọn pháp nhân trước khi ${action}.`)
       return null
     }
-    let template
+    let template: PrintTemplate
     try {
       template = await systemApi.getTemplate('SALES_QUOTE', quote.phap_nhan_id, true)
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || `Chưa cấu hình mẫu in SALES_QUOTE cho pháp nhân ${quote.ten_phap_nhan || quote.phap_nhan_id}`)
+    } catch (e: unknown) {
+      message.error(apiErrorMsg(e, `Chưa cấu hình mẫu in SALES_QUOTE cho pháp nhân ${quote.ten_phap_nhan || quote.phap_nhan_id}`))
       return null
     }
-    const templateCols = ((template.variables_meta as any)?.columns || []) as any[]
+    const templateCols: TemplateColumn[] = (template.variables_meta as { columns?: TemplateColumn[] } | undefined)?.columns || []
     if (!templateCols.length) {
       message.error('Mẫu in SALES_QUOTE chưa cấu hình cột hàng hóa.')
       return null
@@ -539,11 +547,11 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
     }
   }
 
-  const columns: any[] = [
+  const columnsRaw = [
     {
       title: 'STT',
       width: 46,
-      align: 'center',
+      align: 'center' as const,
       render: (_: unknown, __: QuoteItem, i: number) => i + 1,
     },
     {
@@ -642,7 +650,8 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       ellipsis: true,
       render: (v: string | null) => v || '—',
     },
-  ].filter(c => Object.keys(c).length > 0) as ColumnsType<QuoteItem>
+  ]
+  const columns: ColumnsType<QuoteItem> = columnsRaw.filter(c => Object.keys(c).length > 0) as ColumnsType<QuoteItem>
 
   if (isLoading) return <Skeleton active />
   if (!quote) return <Text type="secondary" style={{ padding: 24, display: 'block' }}>Không tìm thấy báo giá</Text>

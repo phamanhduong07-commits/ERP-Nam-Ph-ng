@@ -15,6 +15,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
 import type { SalesOrderListItem } from '../../api/salesOrders'
 import { phapNhanApi } from '../../api/phap_nhan'
+import type { PhapNhan } from '../../api/phap_nhan'
 import { useAuthStore } from '../../store/auth'
 import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
@@ -114,7 +115,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
       qc.invalidateQueries({ queryKey: ['sales-orders'] })
       qc.invalidateQueries({ queryKey: ['sales-orders-counts'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Duyệt đơn thất bại'),
+    onError: (e: unknown) => message.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Duyệt đơn thất bại'),
   })
 
   const cancelMutation = useMutation({
@@ -125,7 +126,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
       qc.invalidateQueries({ queryKey: ['sales-orders'] })
       qc.invalidateQueries({ queryKey: ['sales-orders-counts'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Huỷ đơn thất bại'),
+    onError: (e: unknown) => message.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Huỷ đơn thất bại'),
   })
 
   const handleExportExcel = () => {
@@ -468,7 +469,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
               filterOption={(input, option) =>
                 String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
               }
-              options={phapNhanList.map((p: any) => ({
+              options={phapNhanList.map((p: PhapNhan) => ({
                 value: p.id,
                 label: p.ten_phap_nhan,
               }))}

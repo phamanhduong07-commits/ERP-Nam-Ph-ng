@@ -32,7 +32,7 @@ export default function RewardDisciplinePage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (values: any) => client.post(`/hr/rewards`, {
+    mutationFn: (values: Record<string, unknown>) => client.post(`/hr/rewards`, {
       ...values,
       thang_ap_dung: values.ky_luong.month() + 1,
       nam_ap_dung: values.ky_luong.year()
@@ -56,7 +56,7 @@ export default function RewardDisciplinePage() {
 
   const columns = [
     { title: 'Ngày QĐ', dataIndex: 'ngay_quyet_dinh', render: (v: string) => dayjs(v).format('DD/MM/YYYY') },
-    { title: 'Nhân viên', dataIndex: 'employee', render: (v: any) => <Text strong>{v.ho_ten} ({v.ma_nv})</Text> },
+    { title: 'Nhân viên', dataIndex: 'employee', render: (v: unknown) => <Text strong>{v.ho_ten} ({v.ma_nv})</Text> },
     { title: 'Loại', dataIndex: 'loai', render: (v: string) => (
       <Tag color={v === 'khen_thuong' ? 'gold' : 'error'}>
         {v === 'khen_thuong' ? <TrophyOutlined /> : <WarningOutlined />} {v === 'khen_thuong' ? 'KHEN THƯỞNG' : 'KỶ LUẬT'}
@@ -68,10 +68,10 @@ export default function RewardDisciplinePage() {
         {v > 0 ? '+' : ''}{v.toLocaleString()}đ
       </Text>
     )},
-    { title: 'Kỳ lương áp dụng', render: (_: any, r: any) => `Tháng ${r.thang}/${r.nam}` },
+    { title: 'Kỳ lương áp dụng', render: (_: unknown, r: RewardDiscipline) => `Tháng ${r.thang}/${r.nam}` },
     { title: 'Lý do', dataIndex: 'ly_do', ellipsis: true },
     { title: 'Trạng thái', dataIndex: 'trang_thai', render: (v: string) => <Tag color={v === 'da_duyet' ? 'green' : 'orange'}>{v.toUpperCase()}</Tag> },
-    { title: 'Thao tác', render: (_: any, r: any) => (
+    { title: 'Thao tác', render: (_: unknown, r: RewardDiscipline) => (
       <Space>
         {r.trang_thai === 'moi' && (
           <Button type="link" size="small" icon={<CheckCircleOutlined />} onClick={() => updateStatusMutation.mutate({ id: r.id, status: 'da_duyet' })}>Duyệt</Button>
@@ -115,7 +115,7 @@ export default function RewardDisciplinePage() {
             <Select 
                 showSearch 
                 placeholder="Tìm nhân viên..."
-                options={(employees || []).map((e: any) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))} 
+                options={(employees || []).map((e: unknown) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))} 
                 filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
             />
           </Form.Item>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Space, Table, Typography, Row, Col, DatePicker, Statistic, Tag, message, Tabs, Modal, Form, Input
@@ -70,13 +71,13 @@ export default function PayrollPage() {
       message.success('Da khoi tao bang luong thang thanh cong')
       refetchSummary()
     },
-    onError: (err: any) => {
-      message.error(err?.response?.data?.detail || 'Khoi tao bang luong that bai')
+    onError: (err: unknown) => {
+      message.error((err as ApiError)?.response?.data?.detail || 'Khoi tao bang luong that bai')
     }
   })
 
   const holidayMutation = useMutation({
-    mutationFn: (values: any) => hrApi.createPayrollHoliday({
+    mutationFn: (values: Record<string, unknown>) => hrApi.createPayrollHoliday({
       ...values,
       ngay: values.ngay.format('YYYY-MM-DD')
     }),
@@ -96,7 +97,7 @@ export default function PayrollPage() {
   })
 
   const exportPayroll = () => {
-    const rows = (payrollSummary || []).map((r: any, idx: number) => ({
+    const rows = (payrollSummary || []).map((r: Record<string, unknown>, idx: number) => ({
       STT: idx + 1,
       'Ten nhan vien': r.ho_ten,
       'Chuc vu': r.chuc_vu || '',
@@ -157,9 +158,9 @@ export default function PayrollPage() {
       title: 'Khau / xuong',
       dataIndex: 'details',
       width: 300,
-      render: (details: any[] = []) => (
+      render: (details: unknown[] = []) => (
         <Space size={[4, 4]} wrap>
-          {details.slice(0, 4).map((d: any, idx: number) => (
+          {details.slice(0, 4).map((d: Record<string, unknown>, idx: number) => (
             <Tag key={`${d.phan_xuong_id}-${d.cong_doan}-${idx}`}>
               {d.ten_xuong || `PX${d.phan_xuong_id || '-'}`} - {d.ten_cong_doan}: {d.tong_m2?.toLocaleString()} m2
             </Tag>
@@ -172,7 +173,7 @@ export default function PayrollPage() {
   ]
 
   const summaryColumns = [
-    { title: 'STT', width: 60, fixed: 'left' as const, render: (_: any, __: any, index: number) => index + 1 },
+    { title: 'STT', width: 60, fixed: 'left' as const, render: (_: unknown, __: unknown, index: number) => index + 1 },
     { title: 'Ten nhan vien', dataIndex: 'ho_ten', width: 180, fixed: 'left' as const },
     { title: 'Chuc vu', dataIndex: 'chuc_vu', width: 150 },
     moneyColumn('Luong co ban + Phu cap', 'luong_co_ban_phu_cap', 160),
@@ -254,9 +255,9 @@ export default function PayrollPage() {
       </Row>
 
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}><Card size="small"><Statistic title="Tong thu nhap" value={(payrollSummary || []).reduce((s: number, r: any) => s + Number(r.tong_thu_nhap || 0), 0)} suffix="d" /></Card></Col>
-        <Col span={6}><Card size="small"><Statistic title="Tong thuc linh" value={(payrollSummary || []).reduce((s: number, r: any) => s + Number(r.thuc_linh || 0), 0)} suffix="d" valueStyle={{ color: '#52c41a' }} /></Card></Col>
-        <Col span={6}><Card size="small"><Statistic title="Tong tien tang ca" value={(payrollSummary || []).reduce((s: number, r: any) => s + Number(r.ot_tien_ngay_thuong || 0) + Number(r.ot_tien_chu_nhat || 0) + Number(r.ot_tien_chu_nhat_tang_ca || 0) + Number(r.ot_tien_ngay_le || 0), 0)} suffix="d" /></Card></Col>
+        <Col span={6}><Card size="small"><Statistic title="Tong thu nhap" value={(payrollSummary || []).reduce((s: number, r: Record<string, unknown>) => s + Number(r.tong_thu_nhap || 0), 0)} suffix="d" /></Card></Col>
+        <Col span={6}><Card size="small"><Statistic title="Tong thuc linh" value={(payrollSummary || []).reduce((s: number, r: Record<string, unknown>) => s + Number(r.thuc_linh || 0), 0)} suffix="d" valueStyle={{ color: '#52c41a' }} /></Card></Col>
+        <Col span={6}><Card size="small"><Statistic title="Tong tien tang ca" value={(payrollSummary || []).reduce((s: number, r: Record<string, unknown>) => s + Number(r.ot_tien_ngay_thuong || 0) + Number(r.ot_tien_chu_nhat || 0) + Number(r.ot_tien_chu_nhat_tang_ca || 0) + Number(r.ot_tien_ngay_le || 0), 0)} suffix="d" /></Card></Col>
         <Col span={6}><Card size="small"><Statistic title="Ngay le trong thang" value={holidays.length} /></Card></Col>
       </Row>
 
@@ -332,7 +333,7 @@ export default function PayrollPage() {
           columns={[
             { title: 'Ngay', dataIndex: 'ngay', render: (v: string) => dayjs(v).format('DD/MM/YYYY') },
             { title: 'Ten ngay le', dataIndex: 'ten_ngay_le' },
-            { title: '', width: 48, render: (_: any, r: any) => <Button size="small" danger icon={<DeleteOutlined />} onClick={() => deleteHolidayMutation.mutate(r.id)} /> },
+            { title: '', width: 48, render: (_: unknown, r: { id: number }) => <Button size="small" danger icon={<DeleteOutlined />} onClick={() => deleteHolidayMutation.mutate(r.id)} /> },
           ]}
         />
       </Modal>

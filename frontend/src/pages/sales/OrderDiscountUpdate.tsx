@@ -30,8 +30,8 @@ export default function OrderDiscountUpdate() {
       queryClient.invalidateQueries({ queryKey: ['sales-order', id] })
       navigate(`/sales/orders/${id}`)
     },
-    onError: (error: any) => {
-      message.error(error?.response?.data?.detail || 'Có lỗi xảy ra')
+    onError: (error: unknown) => {
+      message.error((error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Có lỗi xảy ra')
     }
   })
 
@@ -45,7 +45,13 @@ export default function OrderDiscountUpdate() {
     }
   }, [order, form])
 
-  const handleSubmit = (values: any) => {
+  interface DiscountFormValues {
+    ty_le_giam_gia?: number
+    so_tien_giam_gia?: number
+    ghi_chu?: string
+  }
+
+  const handleSubmit = (values: DiscountFormValues) => {
     updateDiscountMutation.mutate({
       ty_le_giam_gia: values.ty_le_giam_gia || undefined,
       so_tien_giam_gia: values.so_tien_giam_gia || undefined,

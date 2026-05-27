@@ -11,10 +11,17 @@ const WorkshopPNLPage: React.FC = () => {
   const { phanXuongList } = usePhanXuong()
   const [loading, setLoading] = useState(false)
   const [exportLoading, setExportLoading] = useState(false)
-  const [data, setData] = useState<any>(null)
+  interface WorkshopPNLData {
+    tong_doanh_thu: number; doanh_thu_ngoai: number; doanh_thu_noi_bo: number
+    tong_gia_von: number; gia_von_ngoai: number; gia_von_noi_bo: number
+    loi_nhuan_gop: number; bien_dong_dinh_muc: number
+    cp_ban_hang: number; cp_quan_ly: number; loi_nhuan_thuan: number
+    cp_nhan_cong: number; cp_khau_hao: number; cp_phan_bo: number
+  }
+  const [data, setData] = useState<WorkshopPNLData | null>(null)
   const [form] = Form.useForm()
 
-  const onFinish = async (values: any) => {
+  const onFinish = async (values: { phan_xuong_id?: number; range: [{ format: (f: string) => string }, { format: (f: string) => string }] }) => {
     setLoading(true)
     try {
       const params = {
@@ -50,20 +57,22 @@ const WorkshopPNLPage: React.FC = () => {
     }
   }
 
+  type PnlRow = { label: string; value: number | null; is_total?: boolean; indent?: boolean; tooltip?: string }
+
   const columns = [
-    { title: 'Chỉ tiêu', dataIndex: 'label', key: 'label', render: (text: string, record: any) => (
+    { title: 'Chỉ tiêu', dataIndex: 'label', key: 'label', render: (text: string, record: PnlRow) => (
       <Space>
         <Text strong={record.is_total} style={{ paddingLeft: record.indent ? 20 : 0 }}>{text}</Text>
         {record.tooltip && <Tooltip title={record.tooltip}><InfoCircleOutlined style={{ fontSize: 12, color: '#888' }} /></Tooltip>}
       </Space>
     )},
-    { 
-      title: 'Số tiền (VND)', 
-      dataIndex: 'value', 
-      key: 'value', 
+    {
+      title: 'Số tiền (VND)',
+      dataIndex: 'value',
+      key: 'value',
       align: 'right' as const,
-      render: (val: number, record: any) => (
-        <Text strong={record.is_total} type={val < 0 ? 'danger' : undefined}>
+      render: (val: number | null, record: PnlRow) => (
+        <Text strong={record.is_total} type={(val ?? 0) < 0 ? 'danger' : undefined}>
           {Math.round(val || 0).toLocaleString()}
         </Text>
       )
@@ -102,7 +111,7 @@ const WorkshopPNLPage: React.FC = () => {
         <Form form={form} layout="inline" onFinish={onFinish}>
           <Form.Item name="phan_xuong_id" label="Phân xưởng">
             <Select placeholder="Tất cả phân xưởng" style={{ width: 200 }} allowClear>
-              {phanXuongList.map((px: any) => <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>)}
+              {phanXuongList.map((px) => <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>)}
             </Select>
           </Form.Item>
           <Form.Item name="range" label="Thời gian" rules={[{ required: true }]}>

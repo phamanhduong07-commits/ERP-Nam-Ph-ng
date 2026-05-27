@@ -25,6 +25,6 @@ export const customersApi = {
   update: (id: number, data: Partial<Customer>) => client.put<Customer>(`/customers/${id}`, data),
   import: (file: File, commit: boolean) => {
     const fd = new FormData(); fd.append('file', file); fd.append('commit', String(commit))
-    return client.post<any>('/customers/import-excel', fd)
+    return client.post<Record<string, unknown>>('/customers/import-excel', fd)
   },
 }

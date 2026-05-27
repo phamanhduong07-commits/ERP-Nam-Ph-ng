@@ -115,8 +115,8 @@ export default function ProductionOrderCreate() {
     if (selectedSO.phap_nhan_id && !form.getFieldValue('phap_nhan_id')) {
       form.setFieldValue('phap_nhan_id', selectedSO.phap_nhan_id)
     }
-    if ((selectedSO as any).phan_xuong_id && !form.getFieldValue('phan_xuong_id')) {
-      form.setFieldValue('phan_xuong_id', (selectedSO as any).phan_xuong_id)
+    if (selectedSO.phan_xuong_id && !form.getFieldValue('phan_xuong_id')) {
+      form.setFieldValue('phan_xuong_id', selectedSO.phan_xuong_id)
     }
     message.success(`Đã import ${newLines.length} dòng từ đơn hàng ${selectedSO.so_don}`)
   }

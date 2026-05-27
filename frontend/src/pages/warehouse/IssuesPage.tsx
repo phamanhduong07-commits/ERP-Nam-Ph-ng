@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
@@ -6,7 +7,7 @@ import {
 } from 'antd'
 import { FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined, ExportOutlined, MinusCircleOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { warehouseApi, CreateMaterialIssuePayload, MaterialIssue } from '../../api/warehouse'
+import { warehouseApi, CreateMaterialIssuePayload, MaterialIssue, MaterialIssueItem } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
@@ -52,7 +53,7 @@ export default function IssuesPage() {
     queryFn: () => productionOrdersApi.list({ page_size: 500 }).then(r => r.data),
     staleTime: 60_000,
   })
-  const lsxList = (lsxPaged as any)?.items ?? []
+  const lsxList = lsxPaged?.items ?? []
 
   const { data: issueList = [], isLoading } = useQuery({
     queryKey: ['material-issues', filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay],
@@ -84,7 +85,7 @@ export default function IssuesPage() {
       setOpen(false)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
   })
 
   const deleteMut = useMutation({
@@ -94,7 +95,7 @@ export default function IssuesPage() {
       qc.invalidateQueries({ queryKey: ['ton-kho'] })
       message.success('Đã xoá phiếu xuất')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
   })
 
   const handleMatSelect = (itemName: number, loai: string, matId: number) => {
@@ -109,7 +110,7 @@ export default function IssuesPage() {
   const handleSubmit = async () => {
     try {
       const v = await form.validateFields()
-      const items = (v.items || []).map((it: any) => ({
+      const items = (v.items as Array<Record<string, unknown>> || []).map((it) => ({
         paper_material_id: it.loai_vat_tu === 'giay' ? (it.mat_id || null) : null,
         other_material_id: it.loai_vat_tu === 'khac' ? (it.mat_id || null) : null,
         ten_hang: it.ten_hang || '',
@@ -141,21 +142,21 @@ export default function IssuesPage() {
       { header: 'SL kế hoạch', key: 'so_luong_ke_hoach', align: 'right' as const },
       { header: 'SL thực xuất', key: 'so_luong_thuc_xuat', align: 'right' as const },
     ]
-    const rowData = (r.items || []).map((it: any) => ({
+    const rowData = r.items.map((it: MaterialIssueItem) => ({
       ten_hang: it.ten_hang,
       dvt: it.dvt,
       so_luong_ke_hoach: it.so_luong_ke_hoach > 0 ? Number(it.so_luong_ke_hoach).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—',
       so_luong_thuc_xuat: Number(it.so_luong_thuc_xuat).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
     }))
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rowData.map(row => cols.map(c => (row as any)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rowData.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])))
     
     const printData = {
       subtitle: 'PHIẾU XUẤT NGUYÊN VẬT LIỆU',
       document_number: r.so_phieu,
       document_date: r.ngay_xuat ?? '',
       warehouse_name: r.ten_kho ?? '—',
-      so_lenh: (r as any).so_lenh ?? '—',
-      ghi_chu: (r as any).ghi_chu ?? '—',
+      so_lenh: r.so_lenh ?? '—',
+      ghi_chu: r.ghi_chu ?? '—',
       body_html: table,
     }
 
@@ -182,7 +183,7 @@ export default function IssuesPage() {
 
     const exportData = issueList.map((r: MaterialIssue) => ({
       ...r,
-      so_lenh: (r as any).so_lenh ?? '',
+      so_lenh: r.so_lenh ?? '',
       trang_thai_lbl: r.trang_thai === 'da_xuat' ? 'Đã xuất' : r.trang_thai === 'huy' ? 'Huỷ' : 'Nhập',
     }))
 
@@ -296,12 +297,12 @@ export default function IssuesPage() {
               <Form.Item name="production_order_id" label="Lệnh sản xuất" rules={[{ required: true, message: 'Chọn LSX' }]}>
                 <Select placeholder="Chọn LSX..." showSearch
                   filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                  options={(lsxList as any[]).map((o: any) => ({
+                  options={lsxList.map((o) => ({
                     value: o.id,
                     label: `${o.so_lenh}${o.ten_khach_hang ? ' — ' + o.ten_khach_hang : ''}`,
                   }))}
                   onChange={(orderId) => {
-                    const order = (lsxList as any[]).find((o: any) => o.id === orderId)
+                    const order = lsxList.find((o) => o.id === orderId)
                     const pxId = order?.phan_xuong_id ?? null
                     setFormPxId(pxId)
                     const gcWh = warehouses.find(w => w.loai_kho === 'GIAY_CUON' && w.trang_thai && w.phan_xuong_id === pxId)

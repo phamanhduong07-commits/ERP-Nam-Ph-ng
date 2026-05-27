@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { Card, Table, Button, Form, DatePicker, Select, InputNumber, Tabs, message, Space, Tag, Typography, Checkbox, Input, Row, Col, Modal } from 'antd'
-import { workshopManagementApi, WorkshopPayroll, FixedAsset } from '../../api/accounting'
+import { workshopManagementApi, WorkshopPayroll, FixedAsset, WorkshopPayrollCreate, FixedAssetCreate, AllocateOverheadPayload } from '../../api/accounting'
 import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
+import type { PhapNhan } from '../../api/phap_nhan'
+import type { PhanXuongItem } from '../../api/theoDoi'
 import dayjs from 'dayjs'
 import { PlusOutlined, FileExcelOutlined, UploadOutlined } from '@ant-design/icons'
 import ImportExcelButton from '../../components/ImportExcelButton'
@@ -42,7 +44,7 @@ const WorkshopManagement: React.FC = () => {
     fetchData()
   }, [])
 
-  const handleCreatePayroll = async (values: any) => {
+  const handleCreatePayroll = async (values: WorkshopPayrollCreate & { thang: import('dayjs').Dayjs; bo_qua_hach_toan?: boolean }) => {
     setLoading(true)
     try {
       const data = {
@@ -71,7 +73,7 @@ const WorkshopManagement: React.FC = () => {
     }
   }
 
-  const handleCreateAsset = async (values: any) => {
+  const handleCreateAsset = async (values: FixedAssetCreate & { ngay_mua: import('dayjs').Dayjs }) => {
     setLoading(true)
     try {
       const data = {
@@ -91,19 +93,19 @@ const WorkshopManagement: React.FC = () => {
     }
   }
 
-  const handleAllocate = async (values: any) => {
+  const handleAllocate = async (values: { range: [import('dayjs').Dayjs, import('dayjs').Dayjs]; so_tk: string; phap_nhan_id: number; allocations: { phan_xuong_id: number; ty_le: number }[] }) => {
     setLoading(true)
     try {
-      const data = {
-        ...values,
+      const { range: _range, ...rest } = values
+      const data: AllocateOverheadPayload = {
+        ...rest,
         tu_ngay: values.range[0].format('YYYY-MM-DD'),
         den_ngay: values.range[1].format('YYYY-MM-DD'),
-        allocations: values.allocations.map((a: any) => ({
+        allocations: values.allocations.map((a: { phan_xuong_id: number; ty_le: number }) => ({
           phan_xuong_id: a.phan_xuong_id,
           ty_le: a.ty_le / 100
         }))
       }
-      delete data.range
       await workshopManagementApi.allocateOverhead(data)
       message.success('Đã thực hiện phân bổ chi phí thành công')
     } catch (error) {
@@ -113,7 +115,7 @@ const WorkshopManagement: React.FC = () => {
     }
   }
 
-  const handleRunDepreciation = async (values: any) => {
+  const handleRunDepreciation = async (values: { period: import('dayjs').Dayjs; phap_nhan_id: number }) => {
     setLoading(true)
     try {
       const params = {
@@ -124,7 +126,7 @@ const WorkshopManagement: React.FC = () => {
       await workshopManagementApi.runDepreciation(params)
       message.success('Đã chạy khấu hao tài sản thành công')
     } catch (error) {
-      const msg = (error as any).response?.data?.detail || 'Lỗi khi chạy khấu hao'
+      const msg = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Lỗi khi chạy khấu hao'
       message.error(msg)
     } finally {
       setLoading(false)
@@ -147,14 +149,14 @@ const WorkshopManagement: React.FC = () => {
                 <Col span={5}>
                   <Form.Item name="phan_xuong_id" label="Phân xưởng" rules={[{ required: true }]}>
                     <Select placeholder="Chọn xưởng">
-                      {phanXuongList.map((px: any) => <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>)}
+                      {phanXuongList.map((px: PhanXuongItem) => <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>)}
                     </Select>
                   </Form.Item>
                 </Col>
                 <Col span={5}>
                   <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true }]}>
                     <Select placeholder="Chọn pháp nhân">
-                      {phapNhanList.map((pn: any) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
+                      {phapNhanList.map((pn: PhapNhan) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
                     </Select>
                   </Form.Item>
                 </Col>
@@ -189,11 +191,11 @@ const WorkshopManagement: React.FC = () => {
               columns={[
                 { title: 'Số phiếu', dataIndex: 'so_phieu' },
                 { title: 'Tháng', dataIndex: 'thang', render: (val) => dayjs(val).format('MM/YYYY') },
-                { title: 'Xưởng', dataIndex: 'phan_xuong_id', render: (id) => phanXuongList.find((px: any) => px.id === id)?.ten_xuong },
+                { title: 'Xưởng', dataIndex: 'phan_xuong_id', render: (id) => phanXuongList.find((px: PhanXuongItem) => px.id === id)?.ten_xuong },
                 { title: 'Số tiền', dataIndex: 'tong_luong', align: 'right', render: (val) => val.toLocaleString() },
                 { title: 'Trạng thái', dataIndex: 'trang_thai', render: (val) => <Tag color={val === 'da_duyet' ? 'green' : 'orange'}>{val}</Tag> },
                 { title: 'Hạch toán', dataIndex: 'bo_qua_hach_toan', render: (val) => val ? <Tag>Bỏ qua</Tag> : <Tag color="blue">Tự động</Tag> },
-                { title: 'Thao tác', render: (_, record: any) => (
+                { title: 'Thao tác', render: (_: unknown, record: WorkshopPayroll) => (
                   record.trang_thai !== 'da_duyet' && <Button type="link" onClick={() => handleApprovePayroll(record.id)}>Duyệt</Button>
                 )}
               ]}
@@ -220,7 +222,7 @@ const WorkshopManagement: React.FC = () => {
                     </Form.Item>
                     <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true }]}>
                       <Select placeholder="Chọn pháp nhân">
-                        {phapNhanList.map((pn: any) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
+                        {phapNhanList.map((pn: PhapNhan) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
                       </Select>
                     </Form.Item>
                     <Button type="primary" danger htmlType="submit" loading={loading} block>Thực hiện khấu hao</Button>
@@ -239,7 +241,7 @@ const WorkshopManagement: React.FC = () => {
                     { title: 'Nguyên giá', dataIndex: 'nguyen_gia', align: 'right', render: (val) => val?.toLocaleString() },
                     { title: 'Thời gian (tháng)', dataIndex: 'thoi_gian_khau_hao' },
                     { title: 'Đã KH', dataIndex: 'da_khau_hao_thang' },
-                    { title: 'Xưởng', dataIndex: 'phan_xuong_id', render: (id) => phanXuongList.find((px: any) => px.id === id)?.ten_xuong },
+                    { title: 'Xưởng', dataIndex: 'phan_xuong_id', render: (id) => phanXuongList.find((px: PhanXuongItem) => px.id === id)?.ten_xuong },
                     { title: 'Hạch toán', dataIndex: 'bo_qua_hach_toan', render: (val) => val ? <Tag>Bỏ qua</Tag> : <Tag color="blue">Tự động</Tag> },
                   ]}
                 />
@@ -288,14 +290,14 @@ const WorkshopManagement: React.FC = () => {
                   <Col span={12}>
                     <Form.Item name="phan_xuong_id" label="Gán cho phân xưởng" rules={[{ required: true }]}>
                       <Select placeholder="Chọn xưởng">
-                        {phanXuongList.map((px: any) => <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>)}
+                        {phanXuongList.map((px: PhanXuongItem) => <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>)}
                       </Select>
                     </Form.Item>
                   </Col>
                   <Col span={12}>
                     <Form.Item name="phap_nhan_id" label="Pháp nhân chủ quản" rules={[{ required: true }]}>
                       <Select placeholder="Chọn pháp nhân">
-                        {phapNhanList.map((pn: any) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
+                        {phapNhanList.map((pn: PhapNhan) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
                       </Select>
                     </Form.Item>
                   </Col>
@@ -323,7 +325,7 @@ const WorkshopManagement: React.FC = () => {
                 </Form.Item>
                 <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true }]} style={{ width: 200 }}>
                   <Select placeholder="Chọn pháp nhân">
-                    {phapNhanList.map((pn: any) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
+                    {phapNhanList.map((pn: PhapNhan) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
                   </Select>
                 </Form.Item>
               </Space>
@@ -336,7 +338,7 @@ const WorkshopManagement: React.FC = () => {
                       <Space key={key} align="baseline">
                         <Form.Item {...restField} name={[name, 'phan_xuong_id']} rules={[{ required: true, message: 'Thiếu xưởng' }]}>
                           <Select placeholder="Chọn xưởng" style={{ width: 200 }}>
-                            {phanXuongList.map((px: any) => <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>)}
+                            {phanXuongList.map((px: PhanXuongItem) => <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>)}
                           </Select>
                         </Form.Item>
                         <Form.Item {...restField} name={[name, 'ty_le']} rules={[{ required: true, message: 'Thiếu tỷ lệ' }]}>

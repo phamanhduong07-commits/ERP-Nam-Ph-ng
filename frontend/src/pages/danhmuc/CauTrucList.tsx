@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
@@ -104,13 +105,13 @@ export default function CauTrucList() {
   const createMut = useMutation({
     mutationFn: (d: CauTrucCreate) => cauTrucApi.create(d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['cau-truc'] }); closeModal(); message.success('Đã thêm kết cấu') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi thêm'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: CauTrucCreate }) => cauTrucApi.update(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['cau-truc'] }); closeModal(); message.success('Đã cập nhật') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const deleteMut = useMutation({

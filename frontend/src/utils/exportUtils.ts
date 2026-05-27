@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import type { ApiError } from '../api/types'
 import QRCode from 'qrcode'
 
 import { saveAs } from 'file-saver'
@@ -58,9 +59,9 @@ export function exportToExcel(filename: string, sheets: ExcelSheet[]) {
  * @param data Array of objects containing raw data
  * @param config Array of column configurations [{key, label, width}]
  */
-export function exportExcelWithTemplate(filename: string, sheetName: string, data: any[], config: { key: string, label: string, width?: number }[]) {
+export function exportExcelWithTemplate(filename: string, sheetName: string, data: unknown[], config: { key: string, label: string, width?: number }[]) {
   const headers = config.map(c => c.label)
-  const rows = data.map(item => config.map(c => item[c.key]))
+  const rows = data.map(item => config.map(c => (item as Record<string, unknown>)[c.key]))
   const colWidths = config.map(c => c.width || 12)
 
   exportToExcel(filename, [{
@@ -71,7 +72,7 @@ export function exportExcelWithTemplate(filename: string, sheetName: string, dat
   }])
 }
 
-export function resolveSinglePhapNhanId(items: any[], keys: string[] = ['phap_nhan_id_for_print', 'phap_nhan_id']): number | null {
+export function resolveSinglePhapNhanId(items: unknown[], keys: string[] = ['phap_nhan_id_for_print', 'phap_nhan_id']): number | null {
   const result = analyzeSinglePhapNhanId(items, keys)
   return result.ok ? result.phapNhanId : null
 }
@@ -80,14 +81,14 @@ export type SinglePhapNhanResult =
   | { ok: true; phapNhanId: number }
   | { ok: false; reason: 'empty' | 'missing' | 'multiple'; ids: number[] }
 
-export function analyzeSinglePhapNhanId(items: any[], keys: string[] = ['phap_nhan_id_for_print', 'phap_nhan_id']): SinglePhapNhanResult {
+export function analyzeSinglePhapNhanId(items: unknown[], keys: string[] = ['phap_nhan_id_for_print', 'phap_nhan_id']): SinglePhapNhanResult {
   if (!items.length) return { ok: false, reason: 'empty', ids: [] }
   const ids = new Set<number>()
   let missingCount = 0
   for (const item of items) {
     let found = false
     for (const key of keys) {
-      const value = item?.[key]
+      const value = (item as Record<string, unknown>)?.[key]
       if (value != null) {
         ids.add(Number(value))
         found = true
@@ -119,7 +120,7 @@ type StrictTemplateOptions = {
  */
 export async function smartExportExcel(
   ma_mau: string, 
-  data: any[], 
+  data: unknown[], 
   defaultConfig: { key: string, label: string, width?: number }[],
   filename?: string,
   phapNhanId?: number,
@@ -129,10 +130,10 @@ export async function smartExportExcel(
   try {
     const tpl = await systemApi.getExcelTemplate(ma_mau, phapNhanId, true)
     if (tpl && tpl.column_config && tpl.column_config.length > 0) {
-      config = tpl.column_config
+      config = tpl.column_config as { key: string, label: string, width?: number }[]
     }
-  } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || `Không tìm thấy mẫu Excel ${ma_mau}`
+  } catch (e) {
+    const detail = (e as ApiError)?.response?.data?.detail || (e as Error)?.message || `Không tìm thấy mẫu Excel ${ma_mau}`
     console.error(`[ExcelExport] ${detail}`, e)
     if (options.throwOnError) throw new Error(detail)
     alert(detail)
@@ -597,8 +598,8 @@ export function buildHtmlTable(
 /**
  * In Tem nhận dạng sản phẩm (LSX)
  */
-export async function printProductionTag(data: any) {
-  const qrDataUrl = await QRCode.toDataURL(data.so_lenh || 'N/A', { margin: 1 })
+export async function printProductionTag(data: Record<string, unknown>) {
+  const qrDataUrl = await QRCode.toDataURL(String(data.so_lenh || 'N/A'), { margin: 1 })
 
   // 6 cột: C1=label, C2=value, C3=label, C4=value, C5=label/value, C6=QR(rows1-4)/value
   const html = `<!DOCTYPE html>
@@ -674,7 +675,7 @@ export async function printProductionTag(data: any) {
     <td class="lbl">XƯỞNG<br>SX</td>
     <td class="vlg">${data.phan_xuong || 'Nam Phương'}</td>
     <td class="lbl">CÁN LẰN<br>(QCCL)</td>
-    <td class="vmd" style="font-size:13px;line-height:1.6">${(data.qccl || '').split('+').join('<br>')}</td>
+    <td class="vmd" style="font-size:13px;line-height:1.6">${String(data.qccl || '').split('+').join('<br>')}</td>
     <td class="lbl">Cán<br>màng</td>
     <td class="lbl">Chống<br>thấm</td>
   </tr>
@@ -700,9 +701,9 @@ export async function printProductionTag(data: any) {
   <tr>
     <td class="lbl">TÊN SẢN<br>PHẨM</td>
     <td colspan="5" class="vxl" style="font-size:${
-      (data.ten_san_pham || '').length > 60 ? 11 :
-      (data.ten_san_pham || '').length > 40 ? 13 :
-      (data.ten_san_pham || '').length > 25 ? 15 : 18
+      String(data.ten_san_pham || '').length > 60 ? 11 :
+      String(data.ten_san_pham || '').length > 40 ? 13 :
+      String(data.ten_san_pham || '').length > 25 ? 15 : 18
     }px;height:52px;line-height:1.4;white-space:normal;word-break:break-word">${data.ten_san_pham || ''}</td>
   </tr>
 
@@ -753,9 +754,9 @@ export async function printProductionTag(data: any) {
 /**
  * In Tem nhận dạng theo lô (N pallet) — mỗi pallet 1 tờ A5, in 1 lần.
  */
-export async function printProductionTagBatch(data: any, totalPallets: number) {
+export async function printProductionTagBatch(data: Record<string, unknown>, totalPallets: number) {
   if (totalPallets < 1) return
-  const qrDataUrl = await QRCode.toDataURL(data.so_lenh || 'N/A', { margin: 1 })
+  const qrDataUrl = await QRCode.toDataURL(String(data.so_lenh || 'N/A'), { margin: 1 })
 
   const makeTable = (ghiChu: string) => `<table>
   <colgroup>
@@ -788,7 +789,7 @@ export async function printProductionTagBatch(data: any, totalPallets: number) {
     <td class="lbl">XƯỞNG<br>SX</td>
     <td class="vlg">${data.phan_xuong || 'Nam Phương'}</td>
     <td class="lbl">CÁN LẰN<br>(QCCL)</td>
-    <td class="vmd" style="font-size:13px;line-height:1.6">${(data.qccl || '').split('+').join('<br>')}</td>
+    <td class="vmd" style="font-size:13px;line-height:1.6">${String(data.qccl || '').split('+').join('<br>')}</td>
     <td class="lbl">Cán<br>màng</td>
     <td class="lbl">Chống<br>thấm</td>
   </tr>
@@ -808,9 +809,9 @@ export async function printProductionTagBatch(data: any, totalPallets: number) {
   <tr>
     <td class="lbl">TÊN SẢN<br>PHẨM</td>
     <td colspan="5" class="vxl" style="font-size:${
-      (data.ten_san_pham || '').length > 60 ? 11 :
-      (data.ten_san_pham || '').length > 40 ? 13 :
-      (data.ten_san_pham || '').length > 25 ? 15 : 18
+      String(data.ten_san_pham || '').length > 60 ? 11 :
+      String(data.ten_san_pham || '').length > 40 ? 13 :
+      String(data.ten_san_pham || '').length > 25 ? 15 : 18
     }px;height:52px;line-height:1.4;white-space:normal;word-break:break-word">${data.ten_san_pham || ''}</td>
   </tr>
   <tr>
@@ -937,8 +938,8 @@ export async function smartPrintPdf(ma_mau: string, data: Record<string, any>, p
     })
 
     printToPdf(tpl.ten_mau || ma_mau, html, Boolean(options.landscape)) // Mặc định portrait cho chuyên nghiệp
-  } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || `Không thể tải mẫu in ${ma_mau}`
+  } catch (e) {
+    const detail = (e as ApiError)?.response?.data?.detail || (e as Error)?.message || `Không thể tải mẫu in ${ma_mau}`
     console.error(`[PrintPdf] ${detail}`, e)
     if (options.throwOnError) throw new Error(detail)
     alert(detail)

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -17,7 +18,7 @@ import {
   TRANG_THAI_INVOICE, HINH_THUC_TT, VAT_OPTIONS,
 } from '../../api/billing'
 import { deliveriesApi } from '../../api/deliveries'
-import type { DeliveryOrder } from '../../api/deliveries'
+import type { DeliveryOrder, DeliveryOrderItem } from '../../api/deliveries'
 import { receiptApi } from '../../api/accounting'
 import { useAuthStore } from '../../store/auth'
 import { systemApi } from '../../api/system'
@@ -26,6 +27,11 @@ import { phapNhanApi } from '../../api/phap_nhan'
 
 const { Title, Text } = Typography
 
+type Dayjs = import('dayjs').Dayjs
+type ReceiptFormValues = { ngay_phieu: Dayjs; hinh_thuc_tt: string; so_tai_khoan?: string; so_tham_chieu?: string; dien_giai?: string; so_tien: number }
+type EditFormValues = { han_tt?: Dayjs; ty_le_vat?: number; hinh_thuc_tt?: string; ghi_chu?: string; ghi_chu_dieu_chinh?: string }
+type AdjustFormValues = { ty_le_vat?: number; ghi_chu_dieu_chinh?: string }
+type PrintItem = { ten_hang?: string; dvt?: string; so_luong?: number; don_gia?: number; thanh_tien?: number }
 const EDIT_ROLES    = ['SALE_ADMIN', 'KE_TOAN_CONG_NO', 'KE_TOAN', 'KE_TOAN_TRUONG', 'GIAM_DOC', 'ADMIN']
 const ADJUST_ROLES  = ['KE_TOAN_CONG_NO', 'KE_TOAN_TRUONG', 'GIAM_DOC', 'ADMIN']
 const APPROVE_ROLES = ['KE_TOAN_TRUONG', 'GIAM_DOC', 'ADMIN']
@@ -87,17 +93,17 @@ export default function SalesInvoiceDetailPage() {
   const issueMut = useMutation({
     mutationFn: () => billingApi.issueInvoice(invoiceId),
     onSuccess: () => { message.success('Đã phát hành hóa đơn'); invalidate() },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi phát hành'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi phát hành'),
   })
 
   const cancelMut = useMutation({
     mutationFn: () => billingApi.cancelInvoice(invoiceId),
     onSuccess: () => { message.success('Đã hủy hóa đơn'); invalidate() },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi hủy'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi hủy'),
   })
 
   const receiptMut = useMutation({
-    mutationFn: (values: any) =>
+    mutationFn: (values: ReceiptFormValues) =>
       receiptApi.create({
         customer_id: invoice!.customer_id,
         sales_invoice_id: invoiceId,
@@ -114,7 +120,7 @@ export default function SalesInvoiceDetailPage() {
       form.resetFields()
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi ghi nhận'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi ghi nhận'),
   })
 
   const populateAdjustItems = () => {
@@ -165,7 +171,7 @@ export default function SalesInvoiceDetailPage() {
 
   // Điều chỉnh trước kết chuyển
   const editMut = useMutation({
-    mutationFn: (values: any) => billingApi.updateInvoice(invoiceId, {
+    mutationFn: (values: EditFormValues) => billingApi.updateInvoice(invoiceId, {
       han_tt: values.han_tt ? values.han_tt.format('YYYY-MM-DD') : undefined,
       ty_le_vat: values.ty_le_vat,
       hinh_thuc_tt: values.hinh_thuc_tt,
@@ -178,22 +184,22 @@ export default function SalesInvoiceDetailPage() {
       setShowEditModal(false)
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi điều chỉnh'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi điều chỉnh'),
   })
 
   // Yêu cầu điều chỉnh sau kết chuyển
   const adjustMut = useMutation({
-    mutationFn: (values: any) => billingApi.requestAdjustment(invoiceId, {
+    mutationFn: (values: AdjustFormValues) => billingApi.requestAdjustment(invoiceId, {
       tong_tien_hang: newTotal,
-      ty_le_vat: values.ty_le_vat,
-      ghi_chu_dieu_chinh: values.ghi_chu_dieu_chinh,
+      ty_le_vat: values.ty_le_vat ?? 0,
+      ghi_chu_dieu_chinh: values.ghi_chu_dieu_chinh ?? '',
     }),
     onSuccess: () => {
       message.success('Đã gửi yêu cầu điều chỉnh')
       setShowAdjustModal(false)
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi gửi yêu cầu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi gửi yêu cầu'),
   })
 
   // Duyệt / Từ chối adjustment log
@@ -204,7 +210,7 @@ export default function SalesInvoiceDetailPage() {
       message.success(vars.approved ? 'Đã duyệt điều chỉnh' : 'Đã từ chối')
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi xử lý'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi xử lý'),
   })
 
   // Upload ảnh phiếu giao
@@ -216,7 +222,7 @@ export default function SalesInvoiceDetailPage() {
       setPhotoFile(null)
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi tải ảnh'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tải ảnh'),
   })
 
   const handlePrintInvoice = async () => {
@@ -231,7 +237,7 @@ export default function SalesInvoiceDetailPage() {
       { header: 'Thành tiền', key: 'thanh_tien', align: 'right' as const },
     ]
 
-    let itemsToPrint: any[] = []
+    let itemsToPrint: PrintItem[] = []
     if (deliveryOrder?.items && deliveryOrder.items.length > 0) {
       itemsToPrint = deliveryOrder.items
     } else {
@@ -262,7 +268,7 @@ export default function SalesInvoiceDetailPage() {
       }
     })
 
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rowData.map(r => cols.map(c => (r as any)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rowData.map(r => cols.map(c => (r as Record<string, unknown>)[c.key] as string | number | null | undefined)))
 
     const printData = {
       subtitle: invoice.mau_so ? `Mẫu số: ${invoice.mau_so}<br/>Ký hiệu: ${invoice.ky_hieu}` : 'HÓA ĐƠN BÁN HÀNG',
@@ -274,8 +280,8 @@ export default function SalesInvoiceDetailPage() {
       total_thanh_tien: Number(invoice.tong_tien_hang).toLocaleString('vi-VN'),
       total_so_luong: sumSoLuong ? sumSoLuong.toLocaleString('vi-VN') : '—',
       total_don_gia: sumDonGia ? sumDonGia.toLocaleString('vi-VN') : '—',
-      warehouse_name: (deliveryOrder as any)?.ten_kho || '—',
-      driver_name: (deliveryOrder as any)?.ten_tai_xe || '—',
+      warehouse_name: deliveryOrder?.ten_kho || '—',
+      driver_name: deliveryOrder?.ten_tai_xe || '—',
     }
 
     smartPrintPdf('SALES_INVOICE', printData, invoice.phap_nhan_id ?? undefined)
@@ -441,13 +447,13 @@ export default function SalesInvoiceDetailPage() {
                     {deliveryOrder.ngay_xuat ? dayjs(deliveryOrder.ngay_xuat).format('DD/MM/YYYY') : '—'}
                   </Descriptions.Item>
                   <Descriptions.Item label="Kho xuất">
-                    {(deliveryOrder as any).ten_kho ?? '—'}
+                    {deliveryOrder.ten_kho ?? '—'}
                   </Descriptions.Item>
                   <Descriptions.Item label="Tài xế">
-                    {(deliveryOrder as any).ten_tai_xe ?? '—'}
+                    {deliveryOrder.ten_tai_xe ?? '—'}
                   </Descriptions.Item>
                   <Descriptions.Item label="Biển số">
-                    {(deliveryOrder as any).bien_so ?? (deliveryOrder as any).xe_van_chuyen ?? '—'}
+                    {deliveryOrder.bien_so ?? deliveryOrder.xe_van_chuyen ?? '—'}
                   </Descriptions.Item>
                 </Descriptions>
                 <Button
@@ -643,7 +649,7 @@ export default function SalesInvoiceDetailPage() {
             <InputNumber
               style={{ width: '100%' }} min={1} max={conLai}
               formatter={v => v ? Number(v).toLocaleString('vi-VN') : ''}
-              parser={v => Number((v ?? '').replace(/\D/g, '')) as any}
+              parser={v => Number((v ?? '').replace(/\D/g, '')) as number}
             />
           </Form.Item>
           <Form.Item name="so_tham_chieu" label="Số tham chiếu">
@@ -690,7 +696,7 @@ export default function SalesInvoiceDetailPage() {
               { title: 'ĐVT', dataIndex: 'dvt', width: 55 },
               {
                 title: 'Số lượng', width: 120, align: 'right' as const,
-                render: (_: any, _row: AdjustItem, idx: number) => (
+                render: (_: unknown, _row: AdjustItem, idx: number) => (
                   <InputNumber
                     size="small" style={{ width: '100%' }} min={0} value={adjustItems[idx].so_luong}
                     onChange={v => setAdjustItems(prev => prev.map((it, i) => i === idx
@@ -705,7 +711,7 @@ export default function SalesInvoiceDetailPage() {
               },
               {
                 title: 'Thành tiền', width: 130, align: 'right' as const,
-                render: (_: any, _row: AdjustItem, idx: number) => (
+                render: (_: unknown, _row: AdjustItem, idx: number) => (
                   <Text strong style={{ color: '#52c41a' }}>
                     {adjustItems[idx].thanh_tien.toLocaleString('vi-VN')}
                   </Text>
@@ -782,7 +788,7 @@ export default function SalesInvoiceDetailPage() {
               { title: 'ĐVT', dataIndex: 'dvt', width: 55 },
               {
                 title: 'Số lượng', width: 120, align: 'right' as const,
-                render: (_: any, _row: AdjustItem, idx: number) => (
+                render: (_: unknown, _row: AdjustItem, idx: number) => (
                   <InputNumber
                     size="small" style={{ width: '100%' }} min={0} value={adjustItems[idx].so_luong}
                     onChange={v => setAdjustItems(prev => prev.map((it, i) => i === idx
@@ -797,7 +803,7 @@ export default function SalesInvoiceDetailPage() {
               },
               {
                 title: 'Thành tiền', width: 130, align: 'right' as const,
-                render: (_: any, _row: AdjustItem, idx: number) => (
+                render: (_: unknown, _row: AdjustItem, idx: number) => (
                   <Text strong style={{ color: '#52c41a' }}>
                     {adjustItems[idx].thanh_tien.toLocaleString('vi-VN')}
                   </Text>
@@ -826,7 +832,7 @@ export default function SalesInvoiceDetailPage() {
 
       {/* Drawer xem chi tiết phiếu xuất kho */}
       <Drawer
-        title={deliveryOrder ? `Phiếu xuất: ${(deliveryOrder as any).so_phieu}` : 'Chi tiết phiếu xuất kho'}
+        title={deliveryOrder ? `Phiếu xuất: ${deliveryOrder.so_phieu}` : 'Chi tiết phiếu xuất kho'}
         open={showDeliveryDrawer}
         onClose={() => setShowDeliveryDrawer(false)}
         width={800}
@@ -846,41 +852,41 @@ export default function SalesInvoiceDetailPage() {
           <Space direction="vertical" style={{ width: '100%' }} size={16}>
             <Descriptions bordered column={2} size="small">
               <Descriptions.Item label="Số phiếu">
-                <Text strong>{(deliveryOrder as any).so_phieu}</Text>
+                <Text strong>{deliveryOrder.so_phieu}</Text>
               </Descriptions.Item>
               <Descriptions.Item label="Ngày xuất">
-                {(deliveryOrder as any).ngay_xuat ? dayjs((deliveryOrder as any).ngay_xuat).format('DD/MM/YYYY') : '—'}
+                {deliveryOrder.ngay_xuat ? dayjs(deliveryOrder.ngay_xuat).format('DD/MM/YYYY') : '—'}
               </Descriptions.Item>
               <Descriptions.Item label="Khách hàng" span={2}>
-                {(deliveryOrder as any).ten_khach ?? '—'}
+                {deliveryOrder.ten_khach ?? '—'}
               </Descriptions.Item>
               <Descriptions.Item label="Địa chỉ giao" span={2}>
-                {(deliveryOrder as any).dia_chi_giao ?? '—'}
+                {deliveryOrder.dia_chi_giao ?? '—'}
               </Descriptions.Item>
               <Descriptions.Item label="Người nhận">
-                {(deliveryOrder as any).nguoi_nhan ?? '—'}
+                {deliveryOrder.nguoi_nhan ?? '—'}
               </Descriptions.Item>
               <Descriptions.Item label="Kho xuất">
-                {(deliveryOrder as any).ten_kho ?? '—'}
+                {deliveryOrder.ten_kho ?? '—'}
               </Descriptions.Item>
-              {(deliveryOrder as any).ten_tai_xe && (
+              {deliveryOrder.ten_tai_xe && (
                 <Descriptions.Item label="Tài xế">
-                  {(deliveryOrder as any).ten_tai_xe}
+                  {deliveryOrder.ten_tai_xe}
                 </Descriptions.Item>
               )}
-              {((deliveryOrder as any).bien_so || (deliveryOrder as any).xe_van_chuyen) && (
+              {(deliveryOrder.bien_so || deliveryOrder.xe_van_chuyen) && (
                 <Descriptions.Item label="Biển số">
-                  {(deliveryOrder as any).bien_so ?? (deliveryOrder as any).xe_van_chuyen}
+                  {deliveryOrder.bien_so ?? deliveryOrder.xe_van_chuyen}
                 </Descriptions.Item>
               )}
-              {(deliveryOrder as any).ten_lo_xe && (
+              {deliveryOrder.ten_lo_xe && (
                 <Descriptions.Item label="Lơ xe">
-                  {(deliveryOrder as any).ten_lo_xe}
+                  {deliveryOrder.ten_lo_xe}
                 </Descriptions.Item>
               )}
-              {(deliveryOrder as any).so_seal && (
+              {deliveryOrder.so_seal && (
                 <Descriptions.Item label="Số Seal">
-                  {(deliveryOrder as any).so_seal}
+                  {deliveryOrder.so_seal}
                 </Descriptions.Item>
               )}
             </Descriptions>
@@ -889,7 +895,7 @@ export default function SalesInvoiceDetailPage() {
             <Table
               size="small"
               rowKey="id"
-              dataSource={(deliveryOrder as any).items ?? []}
+              dataSource={deliveryOrder.items ?? []}
               pagination={false}
               columns={[
                 { title: 'Lệnh SX', dataIndex: 'so_lenh', width: 130, render: (v: string) => v ? <Text code>{v}</Text> : '—' },
@@ -903,12 +909,12 @@ export default function SalesInvoiceDetailPage() {
                 <Table.Summary.Row style={{ fontWeight: 700, background: '#f6ffed' }}>
                   <Table.Summary.Cell index={0} colSpan={3}><Text strong>Tổng cộng</Text></Table.Summary.Cell>
                   <Table.Summary.Cell index={3} align="right">
-                    {((deliveryOrder as any).items ?? []).reduce((s: number, it: any) => s + (it.so_luong ?? 0), 0).toLocaleString('vi-VN')}
+                    {(deliveryOrder.items ?? []).reduce((s: number, it: DeliveryOrderItem) => s + (it.so_luong ?? 0), 0).toLocaleString('vi-VN')}
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={4} />
                   <Table.Summary.Cell index={5} align="right">
                     <Text type="danger" strong>
-                      {fmtVND(((deliveryOrder as any).items ?? []).reduce((s: number, it: any) => s + (it.thanh_tien ?? 0), 0))}
+                      {fmtVND((deliveryOrder.items ?? []).reduce((s: number, it: DeliveryOrderItem) => s + (it.thanh_tien ?? 0), 0))}
                     </Text>
                   </Table.Summary.Cell>
                 </Table.Summary.Row>

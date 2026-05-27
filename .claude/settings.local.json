@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const axios = require\\('./node_modules/axios'\\); const c = axios.create\\({baseURL:'/api'}\\); const req = c.getUri\\({url:'/api/qc-sheets'}\\); console.log\\('URL:', req\\);\")"
+    ]
+  }
+}

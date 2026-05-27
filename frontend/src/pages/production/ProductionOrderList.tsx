@@ -225,7 +225,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
     }))
 
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as any)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as Record<string, unknown>)[c.key])))
 
     const printData = {
       subtitle: 'DANH SÁCH LỆNH SẢN XUẤT',
@@ -660,9 +660,9 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
               allowClear
               value={phanXuongId}
               onChange={(v) => { setPhanXuongId(v); setPage(1) }}
-              options={(phanXuongList as any[]).map((x: any) => ({
+              options={phanXuongList.map(x => ({
                 value: x.id,
-                label: x.ten_xuong ?? x.ten,
+                label: x.ten_xuong,
               }))}
             />
           </Col>
@@ -674,9 +674,9 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
               allowClear
               value={phapNhanId}
               onChange={(v) => { setPhapNhanId(v); setPage(1) }}
-              options={(phapNhanList as any[]).map((p: any) => ({
+              options={phapNhanList.map(p => ({
                 value: p.id,
-                label: p.ten_phap_nhan ?? p.ten,
+                label: p.ten_phap_nhan,
               }))}
             />
           </Col>

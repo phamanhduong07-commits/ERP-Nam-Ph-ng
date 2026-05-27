@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, DatePicker, Descriptions, Divider, Drawer, Form, Input, InputNumber,
@@ -8,7 +9,7 @@ import { EyeOutlined, FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOu
 import { systemApi } from '../../api/system'
 import dayjs from 'dayjs'
 import {
-  warehouseApi, PhieuChuyenKho, CreatePhieuChuyenPayload, TonKho,
+  warehouseApi, PhieuChuyenKho, CreatePhieuChuyenPayload, TonKho, PhieuKhoItem,
 } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { buildHtmlTable, exportToExcel, renderTemplateAndPrint, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
@@ -84,7 +85,7 @@ export default function TransfersPage() {
       setSelectedKhoXuat(undefined)
       setSelectedKhoNhap(undefined)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
   })
 
   const deleteMut = useMutation({
@@ -94,16 +95,16 @@ export default function TransfersPage() {
       qc.invalidateQueries({ queryKey: ['ton-kho'] })
       message.success('Đã xoá phiếu chuyển')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá phiếu'),
   })
 
   const phapNhanOptions = Array.from(new Map(
     warehouses.filter(w => w.phap_nhan_id).map(w => [w.phap_nhan_id, { value: w.phap_nhan_id!, label: w.ten_phap_nhan || `PN #${w.phap_nhan_id}` }])
   ).values())
-  const xuongNguonOptions = (phanXuongs as any[]).filter(x =>
+  const xuongNguonOptions = phanXuongs.filter(x =>
     !filterPhapNhanNguon || x.phap_nhan_id === filterPhapNhanNguon
   )
-  const xuongDichOptions = (phanXuongs as any[]).filter(x =>
+  const xuongDichOptions = phanXuongs.filter(x =>
     !filterPhapNhanDich || x.phap_nhan_id === filterPhapNhanDich
   )
   const activeWarehouses = warehouses.filter(w => w.trang_thai)
@@ -111,21 +112,21 @@ export default function TransfersPage() {
     .filter(w => !filterPhapNhanNguon || w.phap_nhan_id === filterPhapNhanNguon)
     .filter(w => !filterXuongNguon || w.phan_xuong_id === filterXuongNguon)
     .map(w => {
-      const px = phanXuongs.find((x: any) => x.id === w.phan_xuong_id)
+      const px = phanXuongs.find(x => x.id === w.phan_xuong_id)
       return { value: w.id, label: px ? `${w.ten_kho} (${px.ten_xuong})` : w.ten_kho }
     })
   const khoNhapOptions = activeWarehouses
     .filter(w => !filterPhapNhanDich || w.phap_nhan_id === filterPhapNhanDich)
     .filter(w => !filterXuongDich || w.phan_xuong_id === filterXuongDich)
     .map(w => {
-      const px = phanXuongs.find((x: any) => x.id === w.phan_xuong_id)
+      const px = phanXuongs.find(x => x.id === w.phan_xuong_id)
       return { value: w.id, label: px ? `${w.ten_kho} (${px.ten_xuong})` : w.ten_kho }
     })
 
   const getPhanXuongName = (wid: number) => {
     const w = warehouses.find(x => x.id === wid)
     if (!w?.phan_xuong_id) return null
-    return phanXuongs.find((x: any) => x.id === w.phan_xuong_id)?.ten_xuong ?? null
+    return phanXuongs.find(x => x.id === w.phan_xuong_id)?.ten_xuong ?? null
   }
 
   const handleTonKhoSelect = (itemName: number, tonKhoId: number) => {
@@ -153,7 +154,7 @@ export default function TransfersPage() {
         message.error('Kho xuất và kho nhận không được trùng nhau')
         return
       }
-      const items = (v.items || []).map((it: any) => ({
+      const items = (v.items || []).map((it: Record<string, unknown>) => ({
         paper_material_id: it.paper_material_id || null,
         other_material_id: it.other_material_id || null,
         ten_hang: it.ten_hang,
@@ -185,7 +186,7 @@ export default function TransfersPage() {
       { header: 'Ghi chú', key: 'ghi_chu' },
     ]
 
-    const itemRows = (detailPhieu.items || []).map((it: any, i: number) => ({
+    const itemRows = (detailPhieu.items || []).map((it: PhieuKhoItem, i: number) => ({
       stt: i + 1,
       ten_hang: it.ten_hang ?? '',
       don_vi: it.don_vi ?? '',
@@ -196,7 +197,7 @@ export default function TransfersPage() {
 
     const table = buildHtmlTable(
       cols.map(c => ({ header: c.header, align: c.align })), 
-      itemRows.map(row => cols.map(c => (row as any)[c.key]))
+      itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key] as string | number | null | undefined))
     )
 
     const ngay = detailPhieu.ngay ?? ''
@@ -569,7 +570,7 @@ export default function TransfersPage() {
             </Divider>
 
             {(() => {
-              const hasLsx = detailPhieu.items.some((it: any) => it.so_lsx)
+              const hasLsx = detailPhieu.items.some(it => it.so_lsx)
               return (
                 <Table
                   dataSource={detailPhieu.items}

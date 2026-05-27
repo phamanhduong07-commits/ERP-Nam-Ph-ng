@@ -106,7 +106,7 @@ export default function SalesReturnsPage() {
           refetch()
           queryClient.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
           queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
-        } catch (err: any) {
+        } catch (err: unknown) {
           message.error(getErrorMessage(err))
         }
       },
@@ -127,7 +127,7 @@ export default function SalesReturnsPage() {
           refetch()
           queryClient.invalidateQueries({ queryKey: ['ton-kho-tp-lsx'] })
           queryClient.invalidateQueries({ queryKey: ['ton-kho'] })
-        } catch (err: any) {
+        } catch (err: unknown) {
           message.error(getErrorMessage(err))
         }
       },

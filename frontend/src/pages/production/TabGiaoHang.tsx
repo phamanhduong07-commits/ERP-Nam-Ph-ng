@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert, Badge, Button, Card, Checkbox, Col, DatePicker, Descriptions, Divider, Drawer, Empty, Form, Input, InputNumber,
@@ -90,13 +91,13 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
   const adjustMut = useMutation({
     mutationFn: ({ id, items, ghi_chu }: { id: number; items: AdjItem[]; ghi_chu: string }) =>
       deliveriesApi.adjustItems(id, items.map(it => ({ item_id: it.item_id, so_luong_moi: it.so_luong })), ghi_chu),
-    onSuccess: (res: any) => {
+    onSuccess: (res: unknown) => {
       message.success(res.data?.message ?? 'Đã điều chỉnh phiếu bán hàng')
       setShowAdjust(false)
       qc.invalidateQueries({ queryKey: ['delivery-detail', detailId] })
       qc.invalidateQueries({ queryKey: ['deliveries'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi điều chỉnh'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi điều chỉnh'),
   })
   const { data: detailOrder, isLoading: loadingDetail } = useQuery({
     queryKey: ['delivery-detail', detailId],
@@ -116,7 +117,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
       setOcrResult(prev => ({ ...prev, [id]: data }))
       message.success('OCR đọc xong phiếu giao hàng')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi OCR'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi OCR'),
   })
 
   const openDetail = (row: DeliveryOrder) => {
@@ -236,7 +237,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
   const [isRequest, setIsRequest] = useState(false)
   const [selectedYC, setSelectedYC] = useState<YeuCauGiaoHang | null>(null)
   const [doForm] = Form.useForm()
-  const [doItems, setDOItems] = useState<any[]>([])
+  const [doItems, setDOItems] = useState<Record<string, unknown>[]>([])
   const doTotalM2 = doItems.reduce((s, it) => s + Number(it.dien_tich || 0), 0)
   const defaultTripRate = Number(tripRate?.don_gia_m2 || 0)
   const estimatedTripMoney = doTotalM2 * defaultTripRate
@@ -412,7 +413,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
   }
 
   const createYCMutation = useMutation({
-    mutationFn: (payload: any) => yeuCauApi.create(payload).then(r => r.data),
+    mutationFn: (payload: Record<string, unknown>) => yeuCauApi.create(payload).then(r => r.data),
     onSuccess: () => {
       message.success('Tạo yêu cầu giao hàng thành công')
       qc.invalidateQueries({ queryKey: ['yeu-cau-giao-hang'] })
@@ -421,11 +422,11 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
       setSelectedPhoiKeys([])
       setActiveTab('yeu-cau')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo yêu cầu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo yêu cầu'),
   })
 
   const createDOMutation = useMutation({
-    mutationFn: (payload: any) => deliveriesApi.create(payload).then(r => r.data),
+    mutationFn: (payload: Record<string, unknown>) => deliveriesApi.create(payload).then(r => r.data),
     onSuccess: () => {
       message.success('Tạo phiếu bán hàng thành công')
       qc.invalidateQueries({ queryKey: ['yeu-cau-giao-hang'] })
@@ -439,7 +440,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
       // Force immediate refetch so the new phiếu appears without waiting for invalidation
       setTimeout(() => refetchDO(), 100)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
   })
 
   const updateStatusMutation = useMutation({
@@ -449,7 +450,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
       message.success('Đổi trạng thái thành công')
       qc.invalidateQueries({ queryKey: ['deliveries'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi đổi trạng thái'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi đổi trạng thái'),
   })
 
   const xacNhanMutation = useMutation({
@@ -461,7 +462,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
       xacNhanForm.resetFields()
       qc.invalidateQueries({ queryKey: ['deliveries'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xác nhận giao hàng'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xác nhận giao hàng'),
   })
 
   const handleStatusChange = (id: number, v: string) => {
@@ -480,7 +481,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
       message.success('Đã xoá yêu cầu giao hàng')
       qc.invalidateQueries({ queryKey: ['yeu-cau-giao-hang'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá YC'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá YC'),
   })
 
   // ── Modal ghi nhận công nợ (chọn VAT + upload ảnh) ──────────────────────────
@@ -514,7 +515,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
       qc.invalidateQueries({ queryKey: ['deliveries'] })
       qc.invalidateQueries({ queryKey: ['delivery-detail', detailId] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi ghi nhận công nợ'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi ghi nhận công nợ'),
   })
 
   const printHtml = (html: string) => {
@@ -672,8 +673,8 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
         const ngayDate = ro.ngay_xuat ? new Date(ro.ngay_xuat) : null
 
         // Tạo rows khớp với cột template đã thiết kế
-        const templateCols = tpl ? ((tpl?.variables_meta as any)?.columns || []) : undefined
-        const metaAny = (tpl.variables_meta as any)
+        const templateCols = tpl ? ((tpl?.variables_meta as { columns?: { key: string }[] })?.columns || []) : undefined
+        const metaAny = (tpl.variables_meta as { columns?: { key: string }[]; easy_config?: string })
         let tplCols = metaAny?.columns as Array<{key:string}> | undefined
         // Fallback: template cũ lưu selectedColumns trong easy_config
         if (!tplCols?.length && metaAny?.easy_config) {
@@ -689,7 +690,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                   case 'stt':           val = String(i + 1); break
                   case 'ten_hang':      val = it.ten_hang ?? (it.quy_cach || it.ket_cau || '—'); break
                   case 'ma_amis': case 'ma_hang': case 'ma_sp':
-                    val = (it as any).ma_amis ?? ''; break
+                    val = it.ma_amis ?? ''; break
                   case 'quy_cach': case 'ket_cau': case 'kich_thuoc':
                     val = it.quy_cach || it.ket_cau || '—'; break
                   case 'so_po': case 'so_don_item': val = it.so_don_item || '—'; break
@@ -708,8 +709,8 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                   case 'don_gia': case 'gia_ban':
                     val = it.don_gia ? vi.format(it.don_gia) : '—'; break
                   case 'thanh_tien':    val = it.thanh_tien ? vi.format(it.thanh_tien) : '—'; break
-                  case 'so_lop':        val = (it as any).so_lop ?? ''; break
-                  case 'to_hop_song':   val = (it as any).to_hop_song ?? ''; break
+                  case 'so_lop':        val = it.so_lop ?? ''; break
+                  case 'to_hop_song':   val = it.to_hop_song ?? ''; break
                   case 'ghi_chu':       val = it.ghi_chu || ''; break
                 }
                 const isNum = ['so_luong','so_luong_thuc','total_m2','trong_luong','the_tich',
@@ -726,7 +727,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
           company_name:     co?.ten ?? '',
           company_details:  [
             co?.dia_chi             ? `Địa chỉ: ${co.dia_chi}` : '',
-            (pn as any)?.ma_so_thue ? `MST: ${(pn as any).ma_so_thue}` : '',
+            pn?.ma_so_thue ? `MST: ${pn.ma_so_thue}` : '',
             co?.so_dien_thoai       ? `SĐT: ${co.so_dien_thoai}` : '',
           ].filter(Boolean).join(' - '),
           subtitle:         isPhoi ? 'Phiếu xuất kho phôi' : 'Phiếu giao hàng',
@@ -1293,7 +1294,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                     showIcon
                     style={{ marginBottom: 8 }}
                     message="Lỗi tải danh sách phiếu bán hàng"
-                    description={(errorDO as any)?.response?.data?.detail || (errorDO as any)?.message || 'Không thể kết nối server'}
+                    description={(errorDO as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail || (errorDO as { message?: string })?.message || 'Không thể kết nối server'}
                   />
                 )}
                 <Table
@@ -1364,8 +1365,8 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
               <Descriptions.Item label="Công nợ">
                 <Tag color={CONG_NO_COLORS[detailOrder.trang_thai_cong_no]}>{CONG_NO_LABELS[detailOrder.trang_thai_cong_no] || detailOrder.trang_thai_cong_no}</Tag>
               </Descriptions.Item>
-              {(detailOrder as any).created_by_name && (
-                <Descriptions.Item label="Người lập">{(detailOrder as any).created_by_name}</Descriptions.Item>
+              {detailOrder.created_by_name && (
+                <Descriptions.Item label="Người lập">{detailOrder.created_by_name}</Descriptions.Item>
               )}
               {detailOrder.created_at && (
                 <Descriptions.Item label="Ngày tạo">{fmtDate(detailOrder.created_at)}</Descriptions.Item>
@@ -1508,7 +1509,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                           {
                             dataIndex: 'match',
                             width: 40,
-                            render: (v, r: any) =>
+                            render: (v: unknown, r: { match?: boolean }) =>
                               r.match === true ? <Tag color="green">✓</Tag>
                               : r.match === false ? <Tag color="red">⚠</Tag>
                               : null,
@@ -1523,7 +1524,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                             size="small"
                             pagination={false}
                             style={{ marginTop: 4 }}
-                            dataSource={sysItems.map((si: any) => {
+                            dataSource={sysItems.map((si) => {
                               const oi = ocrItems.find(o => norm(o.ten).includes(norm(si.ten_hang)) || norm(si.ten_hang).includes(norm(o.ten)))
                               return {
                                 key: si.id,
@@ -1681,11 +1682,11 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
           dataSource={doItems}
           pagination={false}
           columns={[
-            { title: 'Nguồn', dataIndex: 'so_lenh', width: 120, render: (v: any) => v || 'Từ kho' },
+            { title: 'Nguồn', dataIndex: 'so_lenh', width: 120, render: (v: unknown) => v || 'Từ kho' },
             { title: 'Tên hàng', dataIndex: 'ten_hang' },
             {
               title: 'Số lượng', width: 120,
-              render: (_: any, row: any, idx: number) => (
+              render: (_: unknown, row: Record<string, number>, idx: number) => (
                 <InputNumber
                   size="small" style={{ width: '100%' }} value={row.so_luong}
                   onChange={v => setDOItems(prev => prev.map((it, i) => i === idx ? { ...it, so_luong: v || 0, thanh_tien: (v || 0) * (it.don_gia || 0) } : it))}
@@ -1694,15 +1695,15 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
             },
             !isRequest && {
               title: 'Đơn giá', width: 140,
-              render: (_: any, row: any, idx: number) => (
+              render: (_: unknown, row: Record<string, number>, idx: number) => (
                 <InputNumber
                   size="small" style={{ width: '100%' }} value={row.don_gia}
                   onChange={v => setDOItems(prev => prev.map((it, i) => i === idx ? { ...it, don_gia: v || 0, thanh_tien: (v || 0) * (it.so_luong || 0) } : it))}
                 />
               )
             },
-            !isRequest && { title: 'Thành tiền', width: 140, render: (_: any, row: any) => fmtMoney(row.thanh_tien), align: 'right' },
-          ].filter(Boolean) as any}
+            !isRequest && { title: 'Thành tiền', width: 140, render: (_: unknown, row: Record<string, number>) => fmtMoney(row.thanh_tien), align: 'right' },
+          ].filter(Boolean) as number}
           summary={() => !isRequest ? (
             <Table.Summary.Row>
               <Table.Summary.Cell index={0} colSpan={4}><Text strong>Tổng cộng</Text></Table.Summary.Cell>
@@ -1816,7 +1817,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
             { title: 'ĐVT', dataIndex: 'dvt', width: 55 },
             {
               title: 'Số lượng', width: 120, align: 'right' as const,
-              render: (_: any, _row: AdjItem, idx: number) => (
+              render: (_: unknown, _row: AdjItem, idx: number) => (
                 <InputNumber
                   size="small" style={{ width: '100%' }} min={0}
                   value={adjItems[idx].so_luong}
@@ -1832,7 +1833,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
             },
             {
               title: 'Thành tiền', width: 130, align: 'right' as const,
-              render: (_: any, _row: AdjItem, idx: number) => (
+              render: (_: unknown, _row: AdjItem, idx: number) => (
                 <Typography.Text strong style={{ color: '#52c41a' }}>
                   {adjItems[idx].thanh_tien.toLocaleString('vi-VN')}
                 </Typography.Text>

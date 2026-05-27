@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation } from '@tanstack/react-query'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Button, Result, Typography, message } from 'antd'
@@ -42,7 +43,7 @@ export default function NhapNhanhPage() {
   const captureMut = useMutation({
     mutationFn: (data: QuickCapturePayload) => warehouseApi.quickCaptureGoodsReceipt(data),
     onSuccess: (res) => setDone({ soPhieu: res.data.so_phieu }),
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi gửi phiếu'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi gửi phiếu'),
   })
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {

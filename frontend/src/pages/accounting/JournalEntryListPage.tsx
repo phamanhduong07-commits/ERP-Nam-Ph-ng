@@ -8,7 +8,7 @@ import {
   PlusOutlined, SearchOutlined, FileTextOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { journalApi } from '../../api/accounting'
+import { journalApi, JournalEntryListParams } from '../../api/accounting'
 import { fmtVND } from '../../utils/exportUtils'
 import { usePhapNhan } from '../../hooks/useMasterData'
 
@@ -18,7 +18,7 @@ const { RangePicker } = DatePicker
 export default function JournalEntryListPage() {
   const navigate = useNavigate()
   const { phapNhanList } = usePhapNhan()
-  const [params, setParams] = useState<any>({
+  const [params, setParams] = useState<JournalEntryListParams & { page: number; page_size: number }>({
     tu_ngay: dayjs().startOf('month').format('YYYY-MM-DD'),
     den_ngay: dayjs().endOf('month').format('YYYY-MM-DD'),
     page: 1,
@@ -68,7 +68,7 @@ export default function JournalEntryListPage() {
       dataIndex: 'loai_but_toan',
       key: 'loai_but_toan',
       render: (v: string) => {
-        const config: any = {
+        const config: Record<string, { label: string; color: string }> = {
           tong_hop: { label: 'Tổng hợp', color: 'blue' },
           luong_nhan_cong: { label: 'Lương nhân công', color: 'green' },
           khau_hao_ts: { label: 'Khấu hao TS', color: 'orange' },
@@ -124,7 +124,7 @@ export default function JournalEntryListPage() {
           <Select
             style={{ width: 180 }} allowClear placeholder="Pháp nhân"
             onChange={v => setParams({ ...params, phap_nhan_id: v || undefined, page: 1 })}
-            options={phapNhanList.map((p: any) => ({ value: p.id, label: p.ten_phap_nhan }))}
+            options={phapNhanList.map((p) => ({ value: p.id, label: p.ten_phap_nhan }))}
           />
         </Space>
       </Card>

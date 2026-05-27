@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   DndContext, DragOverlay, closestCorners, PointerSensor,
@@ -107,8 +108,8 @@ function CompleteModal({
       message.success('Đã hoàn thành in — chuyển sang Chờ định hình')
       form.resetFields()
       onDone()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi hoàn thành in')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi hoàn thành in')
     } finally {
       setSaving(false)
     }
@@ -122,8 +123,8 @@ function CompleteModal({
       message.success(`Đã ngưng in — tạo phiếu bù ${res.data.phieu_bu.so_phieu} (${res.data.phieu_bu.so_luong_phoi} tấm)`, 5)
       form.resetFields()
       onDone()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi ngưng in')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi ngưng in')
     } finally {
       setNgungSaving(false)
     }
@@ -691,8 +692,8 @@ export default function CD2KanbanPage() {
       await cd2Api.startPrinting(phieu.id)
       message.success(`Bắt đầu in — ${phieu.so_phieu}`)
       invalidate()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi bắt đầu in')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi bắt đầu in')
     }
   }, [invalidate])
 
@@ -714,10 +715,10 @@ export default function CD2KanbanPage() {
       await cd2Api.tamDungIn(id, { ly_do: info.ly_do })
       message.info(`Tạm dừng lúc ${info.time} — ${info.ly_do}`)
       invalidate()
-    } catch (e: any) {
+    } catch (e) {
       localStorage.removeItem(PAUSE_KEY(id))
       setPauses(prev => { const next = { ...prev }; delete next[id]; return next })
-      message.error(e?.response?.data?.detail || 'Lỗi tạm dừng in')
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạm dừng in')
     }
   }, [pausingPhieu, pauseReason, invalidate])
 
@@ -732,8 +733,8 @@ export default function CD2KanbanPage() {
       await cd2Api.tiepTucIn(phieu.id)
       message.success('Tiếp tục in')
       invalidate()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi tiếp tục in')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tiếp tục in')
       invalidate()
     }
   }, [invalidate])
@@ -880,8 +881,8 @@ export default function CD2KanbanPage() {
   }
 
   if (isError) {
-    const errMsg = (error as any)?.response?.data?.detail
-      || (error as any)?.message
+    const errMsg = (error as {response?: {data?: {detail?: string}}})?.response?.data?.detail
+      || (error as {message?: string})?.message
       || 'Không thể kết nối server'
     return (
       <Alert

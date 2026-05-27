@@ -18,7 +18,11 @@ import { DragOutlined } from '@ant-design/icons'
 const { Title, Text } = Typography
 
 // Định nghĩa các loại chứng từ chuẩn trong hệ thống
-const DOC_TYPE_SCHEMAS: Record<string, { label: string, defaultColumns: any[], signatures: any[], showTable: boolean, showTotal?: boolean, customerLabel?: string, deliveryLabel?: string, easyOverrides?: Record<string, any> }> = {
+type DocColumn = { key: string; label: string }
+type DocSignature = { title: string; sub: string; align: string }
+type DocTypeSchema = { label: string; defaultColumns: DocColumn[]; signatures: DocSignature[]; showTable: boolean; showTotal?: boolean; customerLabel?: string; deliveryLabel?: string; easyOverrides?: Record<string, boolean | string> }
+
+const DOC_TYPE_SCHEMAS: Record<string, DocTypeSchema> = {
   'SALES_ORDER': {
     label: 'Đơn bán hàng (SO)',
     showTable: true,
@@ -320,12 +324,13 @@ export default function PrintTemplatePage() {
 
   const [editModal, setEditModal] = useState<PrintTemplate | null>(null)
   const [isNewMode, setIsNewMode] = useState(false)
-  const [easyConfig, setEasyConfig] = useState<any>(DEFAULT_CONFIG)
+  type EasyConfig = typeof DEFAULT_CONFIG & { selectedColumns: DocColumn[]; signatures: DocSignature[] }
+  const [easyConfig, setEasyConfig] = useState<EasyConfig>(DEFAULT_CONFIG as EasyConfig)
   const [form] = Form.useForm()
   const [previewHtml, setPreviewHtml] = useState('')
   const [activeTab, setActiveTab] = useState('easy')
 
-  const VARIABLE_LABELS: Record<string, any> = {
+  const VARIABLE_LABELS: Record<string, { label: string; desc: string }> = {
     company_name: { label: 'Tên công ty', desc: 'Tên pháp nhân của công ty' },
     company_details: { label: 'Địa chỉ & MST', desc: 'Địa chỉ, mã số thuế, số điện thoại' },
     logo_img: { label: 'Logo công ty', desc: 'Hình ảnh logo được thiết lập' },
@@ -346,7 +351,7 @@ export default function PrintTemplatePage() {
   }
 
   const buildHtmlFromConfig = () => {
-    const tableHeaderHtml = (easyConfig.selectedColumns || []).map((c: any) => `
+    const tableHeaderHtml = (easyConfig.selectedColumns || []).map((c: DocColumn) => `
     <th style="border: 1px solid #ddd; padding: 8px; background: ${easyConfig.headerColor}; color: #fff;">${c.label}</th>`).join('')
 
     const logoHtml = `<div class="logo" style="width: ${easyConfig.logoSize}px; height: ${easyConfig.logoSize}px; display: flex; align-items: center; justify-content: center;">{{logo_img}}</div>`
@@ -369,7 +374,7 @@ export default function PrintTemplatePage() {
 
     const signatureHtml = `
       <div style="margin-top: 30px; display: flex; flex-wrap: nowrap; gap: 10px; text-align: center; font-size: 13px;">
-        ${(easyConfig.signatures || []).map((s: any, idx: number) => `
+        ${(easyConfig.signatures || []).map((s: DocSignature, idx: number) => `
           <div style="flex: 1; min-width: 0; text-align: ${s.align || 'center'};">
             ${idx === (easyConfig.signatures || []).length - 1 && easyConfig.vnDateFormat ? `<div style="font-style: italic; margin-bottom: 5px;">${dateStr}</div>` : ''}
             <div style="margin-bottom: 20px;">
@@ -501,7 +506,7 @@ export default function PrintTemplatePage() {
     ]
 
     const bodyRows = mockItems.map(item => {
-      const tds = (easyConfig.selectedColumns || []).map((col: any) => {
+      const tds = (easyConfig.selectedColumns || []).map((col: DocColumn) => {
         const val = item[col.key as keyof typeof item] || '...'
         const isNumeric = ['so_luong', 'don_gia', 'thanh_tien', 'gia_ban'].includes(col.key)
         return `<td style="border:1px solid #ddd; padding:8px; text-align:${isNumeric ? 'right' : 'left'}">${val}</td>`
@@ -581,7 +586,7 @@ export default function PrintTemplatePage() {
         } else {
           message.info(`Mẫu hiện tại không khớp pháp nhân đang chọn.`)
         }
-      }).catch((e: any) => {
+      }).catch((e: { response?: { data?: { detail?: string } }; message?: string }) => {
         message.error(e?.response?.data?.detail ?? 'Không tìm thấy mẫu đúng pháp nhân')
       })
     }
@@ -599,7 +604,7 @@ export default function PrintTemplatePage() {
   }, [editModal])
 
   const updateMut = useMutation({
-    mutationFn: (payload: any) => {
+    mutationFn: (payload: { ma_mau?: string; ten_mau?: string; html_content?: string; variables_meta?: Record<string, unknown> }) => {
       const ma = payload.ma_mau || editModal?.ma_mau
       return systemApi.updateTemplate(ma, {
         ma_mau: ma,
@@ -615,7 +620,7 @@ export default function PrintTemplatePage() {
       setIsNewMode(false)
       qc.invalidateQueries({ queryKey: ['print-templates'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? e?.message ?? 'Lỗi lưu biểu mẫu'),
+    onError: (e: { response?: { data?: { detail?: string } }; message?: string }) => message.error(e?.response?.data?.detail ?? e?.message ?? 'Lỗi lưu biểu mẫu'),
   })
 
   const columns = [
@@ -633,7 +638,7 @@ export default function PrintTemplatePage() {
       title: 'Thao tác',
       key: 'action',
       width: 140,
-      render: (_: any, record: PrintTemplate) => (
+      render: (_: unknown, record: PrintTemplate) => (
         <Space>
           <Button
             type="primary"
@@ -642,11 +647,11 @@ export default function PrintTemplatePage() {
               setIsNewMode(false)
               setEditModal(record)
               form.setFieldsValue(record)
-              setSelectedPhapNhanId(record.phap_nhan_id ?? (phapNhans[0]?.id as any) ?? null)
-              const metaAny = (record.variables_meta as any)
-              const savedCols = metaAny?.columns
-              const savedEasyCfg: any = (() => { try { return metaAny?.easy_config ? JSON.parse(metaAny.easy_config) : null } catch { return null } })()
-              setEasyConfig(savedEasyCfg ?? (savedCols ? { ...DEFAULT_CONFIG, selectedColumns: savedCols } : DEFAULT_CONFIG))
+              setSelectedPhapNhanId(record.phap_nhan_id ?? phapNhans[0]?.id ?? null)
+              const metaAny = record.variables_meta as Record<string, unknown> | undefined
+              const savedCols = metaAny?.columns as DocColumn[] | undefined
+              const savedEasyCfg: EasyConfig | null = (() => { try { return metaAny?.easy_config ? JSON.parse(metaAny.easy_config as string) : null } catch { return null } })()
+              setEasyConfig(savedEasyCfg ?? (savedCols ? { ...DEFAULT_CONFIG, selectedColumns: savedCols } : DEFAULT_CONFIG) as EasyConfig)
             }}
           >
             Sửa
@@ -658,11 +663,11 @@ export default function PrintTemplatePage() {
               const copyRecord = { ...record, ten_mau: `${record.ten_mau} (Copy)` }
               setEditModal(copyRecord)
               form.setFieldsValue(copyRecord)
-              setSelectedPhapNhanId(record.phap_nhan_id ?? (phapNhans[0]?.id as any) ?? null)
-              const metaAny = (record.variables_meta as any)
-              const savedCols = metaAny?.columns
-              const savedEasyCfg: any = (() => { try { return metaAny?.easy_config ? JSON.parse(metaAny.easy_config) : null } catch { return null } })()
-              setEasyConfig(savedEasyCfg ?? (savedCols ? { ...DEFAULT_CONFIG, selectedColumns: savedCols } : DEFAULT_CONFIG))
+              setSelectedPhapNhanId(record.phap_nhan_id ?? phapNhans[0]?.id ?? null)
+              const metaAny = record.variables_meta as Record<string, unknown> | undefined
+              const savedCols = metaAny?.columns as DocColumn[] | undefined
+              const savedEasyCfg: EasyConfig | null = (() => { try { return metaAny?.easy_config ? JSON.parse(metaAny.easy_config as string) : null } catch { return null } })()
+              setEasyConfig(savedEasyCfg ?? (savedCols ? { ...DEFAULT_CONFIG, selectedColumns: savedCols } : DEFAULT_CONFIG) as EasyConfig)
               message.info('Đã sao chép cấu hình. Bạn có thể đổi Loại chứng từ hoặc Pháp nhân trước khi lưu.')
             }}
           >
@@ -692,10 +697,10 @@ export default function PrintTemplatePage() {
       message.success('Đã xóa biểu mẫu')
       qc.invalidateQueries({ queryKey: ['print-templates'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi xóa'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail ?? 'Lỗi xóa'),
   })
 
-  const handleFinish = (vals: any) => {
+  const handleFinish = (vals: { html_content?: string; variables_meta?: Record<string, unknown>; [key: string]: unknown }) => {
     let finalHtml = vals.html_content
     let meta = vals.variables_meta || {}
     if (activeTab === 'easy') {
@@ -729,7 +734,7 @@ export default function PrintTemplatePage() {
                       setEditModal({ ma_mau: '', ten_mau: '', html_content: '' })
                       form.resetFields()
                       setEasyConfig(DEFAULT_CONFIG)
-                      setSelectedPhapNhanId((phapNhans[0]?.id as any) ?? null)
+                      setSelectedPhapNhanId(phapNhans[0]?.id ?? null)
                     }}
                   >
                     Thêm mẫu mới
@@ -875,10 +880,10 @@ export default function PrintTemplatePage() {
                                  { key: 'total_m2', label: 'M2' }, { key: 'trong_luong', label: 'Kg' }, { key: 'the_tich', label: 'M3' },
                                  { key: 'gia_ban', label: 'Đơn giá' }, { key: 'thanh_tien', label: 'Thành tiền' }, { key: 'ghi_chu', label: 'Ghi chú' }
                                ].map(col => {
-                                 const isSelected = (easyConfig.selectedColumns || []).some((c:any) => c.key === col.key)
+                                 const isSelected = (easyConfig.selectedColumns || []).some((c: DocColumn) => c.key === col.key)
                                  return <Button key={col.key} size="small" type={isSelected ? 'primary' : 'default'} onClick={() => {
                                    let current = [...(easyConfig.selectedColumns || [])]
-                                   if (isSelected) current = current.filter((c:any) => c.key !== col.key)
+                                   if (isSelected) current = current.filter((c: DocColumn) => c.key !== col.key)
                                    else current.push(col)
                                    setEasyConfig({ ...easyConfig, selectedColumns: current })
                                  }}>{col.label}</Button>
@@ -896,13 +901,13 @@ export default function PrintTemplatePage() {
                           </Collapse.Panel>
 
                           <Collapse.Panel header={<Text strong><ThunderboltOutlined /> 5. Chữ ký & Người duyệt</Text>} key="5">
-                             {(easyConfig.signatures || []).map((sig: any, idx: number) => (
+                             {(easyConfig.signatures || []).map((sig: DocSignature, idx: number) => (
                                  <div key={idx} style={{ background: '#fff', padding: 12, borderRadius: 8, border: '1px solid #eee', marginBottom: 8 }}>
                                   <Row gutter={8} align="middle">
                                     <Col span={8}><Input placeholder="Chức danh" value={sig.title} onChange={e => { const newSigs = [...easyConfig.signatures]; newSigs[idx].title = e.target.value; setEasyConfig({ ...easyConfig, signatures: newSigs }) }}/></Col>
                                     <Col span={8}><Input placeholder="Phụ đề" value={sig.sub} onChange={e => { const newSigs = [...easyConfig.signatures]; newSigs[idx].sub = e.target.value; setEasyConfig({ ...easyConfig, signatures: newSigs }) }}/></Col>
                                     <Col span={6}><Radio.Group value={sig.align || 'center'} onChange={e => { const newSigs = [...easyConfig.signatures]; newSigs[idx].align = e.target.value; setEasyConfig({ ...easyConfig, signatures: newSigs }) }}><Radio.Button value="left"><AlignLeftOutlined/></Radio.Button><Radio.Button value="center"><AlignCenterOutlined/></Radio.Button><Radio.Button value="right"><AlignRightOutlined/></Radio.Button></Radio.Group></Col>
-                                    <Col span={2}><Button danger icon={<DeleteOutlined/>} onClick={() => setEasyConfig({...easyConfig, signatures: easyConfig.signatures.filter((_:any,i:number)=>i!==idx)})}/></Col>
+                                    <Col span={2}><Button danger icon={<DeleteOutlined/>} onClick={() => setEasyConfig({...easyConfig, signatures: easyConfig.signatures.filter((_: DocSignature,i:number)=>i!==idx)})}/></Col>
                                   </Row>
                                 </div>
                              ))}
@@ -955,7 +960,7 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
   const [form] = Form.useForm()
   const [editModal, setEditModal] = useState<ExcelTemplate | null>(null)
   const [selectedPhapNhanId, setSelectedPhapNhanId] = useState<number | null>(null)
-  const [availableColumns, setAvailableColumns] = useState<any[]>([])
+  const [availableColumns, setAvailableColumns] = useState<DocColumn[]>([])
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['excel-templates'],
@@ -963,7 +968,7 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
   })
 
   const saveMut = useMutation({
-    mutationFn: (vals: any) => {
+    mutationFn: (vals: { ma_mau: string; ten_mau: string; column_config?: DocColumn[]; [key: string]: unknown }) => {
       if (!vals.column_config?.length) {
         throw new Error('Mẫu Excel cần có ít nhất một cột')
       }
@@ -977,7 +982,7 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
       setEditModal(null)
       qc.invalidateQueries({ queryKey: ['excel-templates'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? e?.message ?? 'Lỗi lưu mẫu Excel')
+    onError: (e: { response?: { data?: { detail?: string } }; message?: string }) => message.error(e?.response?.data?.detail ?? e?.message ?? 'Lỗi lưu mẫu Excel')
   })
 
   const deleteMut = useMutation({
@@ -1002,12 +1007,12 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
     {
       title: 'Số cột',
       dataIndex: 'column_config',
-      render: (cfg: any[]) => cfg?.length || 0
+      render: (cfg: DocColumn[]) => cfg?.length || 0
     },
     {
       title: 'Thao tác',
       key: 'action',
-      render: (_: any, record: ExcelTemplate) => (
+      render: (_: unknown, record: ExcelTemplate) => (
         <Space>
           <Button icon={<EditOutlined />} onClick={() => {
             setEditModal(record)
@@ -1077,8 +1082,9 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
   )
 }
 
-function ExcelColumnDesigner({ value = [], onChange, availableColumns }: { value?: any[], onChange?: (v: any[]) => void, availableColumns: any[] }) {
-  const toggleColumn = (col: any) => {
+type ExcelColConfig = DocColumn & { width?: number }
+function ExcelColumnDesigner({ value = [], onChange, availableColumns }: { value?: ExcelColConfig[], onChange?: (v: ExcelColConfig[]) => void, availableColumns: DocColumn[] }) {
+  const toggleColumn = (col: DocColumn) => {
     const exists = value.find(c => c.key === col.key)
     if (exists) {
       onChange?.(value.filter(c => c.key !== col.key))
@@ -1087,7 +1093,7 @@ function ExcelColumnDesigner({ value = [], onChange, availableColumns }: { value
     }
   }
 
-  const updateCol = (key: string, field: string, val: any) => {
+  const updateCol = (key: string, field: string, val: string | number) => {
     onChange?.(value.map(c => c.key === key ? { ...c, [field]: val } : c))
   }
 

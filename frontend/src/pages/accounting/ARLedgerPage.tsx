@@ -12,7 +12,7 @@ import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/e
 import { arApi, ARLedgerEntryRow, ARLedgerRow, ARAgingRow } from '../../api/accounting'
 import { customersApi, Customer } from '../../api/customers'
 import { TRANG_THAI_INVOICE } from '../../api/billing'
-import { phapNhanApi } from '../../api/phap_nhan'
+import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -159,7 +159,7 @@ function LedgerTab() {
           <Col>
             <Select
               style={{ width: 150 }} allowClear placeholder="Pháp nhân"
-              options={listPhapNhan.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              options={listPhapNhan.map((p: PhapNhan) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
               onChange={v => setPhapNhanId(v)}
             />
           </Col>

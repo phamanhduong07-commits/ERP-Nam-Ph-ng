@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Badge, Button, Card, Col, DatePicker, Empty,
@@ -51,8 +52,9 @@ function DinhHinhModal({
       message.success('Đã chuyển sang Sau in')
       form.resetFields()
       onDone()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi, thử lại')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi, thử lại')
     } finally {
       setSaving(false)
     }
@@ -291,8 +293,9 @@ function HoanThanhModal({
       message.success('Hoàn thành — đã nhập kho thành phẩm')
       form.resetFields()
       onDone()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi')
     } finally {
       setSaving(false)
     }
@@ -317,8 +320,9 @@ function HoanThanhModal({
           message.success(`Đã ngưng — phiếu bù: ${res.data.phieu_bu.so_phieu}`)
           form.resetFields()
           onDone()
-        } catch (e: any) {
-          message.error(e?.response?.data?.detail || 'Lỗi')
+        } catch (e: unknown) {
+          const err = e as { response?: { data?: { detail?: string } } }
+          message.error((err as ApiError)?.response?.data?.detail || 'Lỗi')
         } finally {
           setNgungSaving(false)
         }
@@ -442,7 +446,7 @@ export default function DinhHinhPage() {
       message.success('Đã xoá')
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
     onSettled: () => setDeletingId(null),
   })
 

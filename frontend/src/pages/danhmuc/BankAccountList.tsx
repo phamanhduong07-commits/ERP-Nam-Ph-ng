@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input,
@@ -29,7 +30,7 @@ export default function BankAccountList() {
       closeModal()
       message.success('Đã thêm tài khoản ngân hàng')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi thêm'),
   })
 
   const updateMut = useMutation({
@@ -40,7 +41,7 @@ export default function BankAccountList() {
       closeModal()
       message.success('Đã cập nhật')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   function openCreate() {
@@ -62,7 +63,7 @@ export default function BankAccountList() {
     form.resetFields()
   }
 
-  function handleSubmit(values: any) {
+  function handleSubmit(values: BankAccountCreate & { trang_thai?: boolean }) {
     if (editing) {
       updateMut.mutate({ id: editing.id, data: values })
     } else {
@@ -150,10 +151,10 @@ export default function BankAccountList() {
             <Input placeholder="VD: BIDVVNVX" />
           </Form.Item>
           <Form.Item name="so_du_dau" label="Số dư đầu kỳ (đ)">
-            <InputNumber
+            <InputNumber<number>
               style={{ width: '100%' }}
               formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={v => v?.replace(/,/g, '') as any}
+              parser={v => Number((v ?? '').replace(/,/g, ''))}
               min={0}
             />
           </Form.Item>

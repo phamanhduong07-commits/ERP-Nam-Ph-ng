@@ -23,7 +23,7 @@ function fmtMoney(v: number) {
 }
 
 function getSlot(px: PhanXuongWithWarehouses, loai: string): WarehouseSlot | null | undefined {
-  const slot = (px.warehouses as any)[loai]
+  const slot = (px.warehouses as Record<string, unknown>)[loai]
   if (slot && 'not_applicable' in slot) return null
   return slot as WarehouseSlot | null
 }
@@ -72,9 +72,9 @@ export default function InventoryPage() {
     }
   }, [isError])
 
-  const phanXuongsByPn = phapNhanId ? phanXuongs.filter((x: any) => x.phap_nhan_id === phapNhanId) : phanXuongs
-  const allowedPxIds = new Set(phanXuongsByPn.map((x: any) => x.id))
-  const filteredWarehouses = warehouses.filter((w: any) =>
+  const phanXuongsByPn = phapNhanId ? phanXuongs.filter(x => x.phap_nhan_id === phapNhanId) : phanXuongs
+  const allowedPxIds = new Set(phanXuongsByPn.map(x => x.id))
+  const filteredWarehouses = warehouses.filter(w =>
     (!phapNhanId || allowedPxIds.has(w.phan_xuong_id)) &&
     (!phanXuongId || w.phan_xuong_id === phanXuongId)
   )
@@ -146,7 +146,7 @@ export default function InventoryPage() {
       gia_tri_ton: fmtVND(r.gia_tri_ton),
     }))
 
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as any)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as Record<string, string | number>)[c.key])))
     
     const printData = {
       subtitle: 'BÁO CÁO TỒN KHO',
@@ -334,7 +334,7 @@ export default function InventoryPage() {
               allowClear
               value={phapNhanId}
               onChange={v => { setPhapNhanId(v); setPhanXuongId(undefined); setWarehouseId(undefined) }}
-              options={phapNhans.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              options={phapNhans.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
             />
           </Col>
           <Col xs={24} sm={6}>
@@ -344,7 +344,7 @@ export default function InventoryPage() {
               allowClear
               value={phanXuongId}
               onChange={v => { setPhanXuongId(v); setWarehouseId(undefined) }}
-              options={phanXuongsByPn.map((x: any) => ({ value: x.id, label: x.ten_xuong }))}
+              options={phanXuongsByPn.map(x => ({ value: x.id, label: x.ten_xuong }))}
             />
           </Col>
           <Col xs={24} sm={6}>
@@ -354,7 +354,7 @@ export default function InventoryPage() {
               allowClear
               value={warehouseId}
               onChange={setWarehouseId}
-              options={filteredWarehouses.filter((w: any) => w.trang_thai).map((w: any) => ({ value: w.id, label: w.ten_kho }))}
+              options={filteredWarehouses.filter(w => w.trang_thai).map(w => ({ value: w.id, label: w.ten_kho }))}
             />
           </Col>
           <Col xs={24} sm={6}>

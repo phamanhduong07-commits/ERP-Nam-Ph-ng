@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import type { ApiError } from '../../api/types'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Button, Card, InputNumber, Typography, Space, Tag, Alert, Divider, List, message,
@@ -108,7 +109,7 @@ export default function CanCuonGiayPage() {
       message.success(`✓ Đã ghi: ${updated.barcode} — còn ${updated.trong_luong_con_lai} kg`)
       resetForm()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi cập nhật'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi cập nhật'),
   })
 
   const resetForm = useCallback(() => {
@@ -136,8 +137,9 @@ export default function CanCuonGiayPage() {
       )
       const w = window.open('', '_blank')
       if (w) { w.document.write(res.data); w.document.close() }
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || e?.message || 'Lỗi in tem')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } }; message?: string }
+      message.error((err as ApiError)?.response?.data?.detail || err?.message || 'Lỗi in tem')
     }
   }
 
@@ -308,7 +310,7 @@ export default function CanCuonGiayPage() {
           <div style={{ marginBottom: 12 }}>
             <Text type="secondary" style={{ fontSize: 13 }}>Cân còn lại (kg):</Text>
             <InputNumber
-              ref={kgInputRef as any}
+              ref={kgInputRef as React.Ref<HTMLInputElement>}
               value={kgConLai}
               onChange={v => setKgConLai(v)}
               min={0}

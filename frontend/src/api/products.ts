@@ -41,6 +41,6 @@ export const productsApi = {
   update: (id: number, data: Partial<ProductFullCreate>) => client.put<ProductFull>(`/products/${id}`, data),
   import: (file: File, commit: boolean) => {
     const fd = new FormData(); fd.append('file', file); fd.append('commit', String(commit))
-    return client.post<any>('/products/import-excel', fd)
+    return client.post<Record<string, unknown>>('/products/import-excel', fd)
   },
 }

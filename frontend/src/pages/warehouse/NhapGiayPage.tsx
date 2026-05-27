@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Image, Input, InputNumber,
@@ -48,10 +49,10 @@ export default function NhapGiayPage() {
   const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
 
   // Reactive watches — hooks must be at top level
-  const watchedItems: any[] = Form.useWatch('items', form) ?? []
+  const watchedItems: unknown[] = Form.useWatch('items', form) ?? []
   const hdTongKgWatch = Form.useWatch('hd_tong_kg', form)
   const watchedSupplierId: number | undefined = Form.useWatch('supplier_id', form)
-  const calcTongKg = watchedItems.reduce((s: number, it: any) => s + (Number(it?.so_luong) || 0), 0)
+  const calcTongKg = watchedItems.reduce((s: number, it: Record<string, unknown>) => s + (Number(it?.so_luong) || 0), 0)
   const kgLech = (hdTongKgWatch != null && hdTongKgWatch !== '') ? calcTongKg - Number(hdTongKgWatch) : null
   const isKhop = kgLech !== null && Math.abs(kgLech) < 1
 
@@ -174,7 +175,7 @@ export default function NhapGiayPage() {
       message.success('Đã tạo phiếu nhập giấy cuộn')
       handleClose()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
   })
 
   const completeMut = useMutation({
@@ -186,7 +187,7 @@ export default function NhapGiayPage() {
       message.success('Đã hoàn thiện phiếu — tồn kho đã cập nhật')
       handleClose()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi hoàn thiện phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi hoàn thiện phiếu'),
   })
 
   const deleteMut = useMutation({
@@ -196,7 +197,7 @@ export default function NhapGiayPage() {
       qc.invalidateQueries({ queryKey: ['ton-kho'] })
       message.success('Đã xoá phiếu nhập')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
   })
 
   const approveMut = useMutation({
@@ -205,7 +206,7 @@ export default function NhapGiayPage() {
       qc.invalidateQueries({ queryKey: ['goods-receipts-giay'] })
       message.success('Đã duyệt — giá mua giấy đã cập nhật')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi duyệt phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi duyệt phiếu'),
   })
 
   const syncGiaBanMut = useMutation({
@@ -230,7 +231,7 @@ export default function NhapGiayPage() {
         width: 600,
       })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi cập nhật giá bán'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi cập nhật giá bán'),
   })
 
   useEffect(() => {
@@ -238,8 +239,8 @@ export default function NhapGiayPage() {
     form.setFieldsValue({
       supplier_id: poDetail.supplier_id,
       items: (poDetail.items || [])
-        .filter((it: any) => it.paper_material_id)
-        .map((it: any) => ({
+        .filter((it: Record<string, unknown>) => it.paper_material_id)
+        .map((it: Record<string, unknown>) => ({
           mat_id: it.paper_material_id,
           ten_hang: it.ten_hang,
           so_luong: it.so_luong,
@@ -271,7 +272,7 @@ export default function NhapGiayPage() {
   const handleSubmit = async () => {
     try {
       const v = await form.validateFields()
-      const items = (v.items || []).map((it: any) => ({
+      const items = (v.items || []).map((it: Record<string, unknown>) => ({
         po_item_id: it.po_item_id || null,
         paper_material_id: it.mat_id || null,
         other_material_id: null,
@@ -328,7 +329,7 @@ export default function NhapGiayPage() {
       { header: 'Thành tiền (đ)', key: 'thanh_tien', align: 'right' as const },
     ]
     
-    const itemRows = (r.items || []).map((it: any) => ({
+    const itemRows = (r.items || []).map((it: Record<string, unknown>) => ({
       ma_hang: it.ma_hang || '',
       ten_hang: it.ten_hang,
       kho_mm: it.kho_mm ? `${it.kho_mm}` : '—',
@@ -338,10 +339,10 @@ export default function NhapGiayPage() {
       thanh_tien: (Number(it.thanh_tien) || 0).toLocaleString('vi-VN'),
     }))
 
-    const tong = (r.items || []).reduce((s: number, it: any) => s + (Number(it.thanh_tien) || 0), 0)
+    const tong = (r.items || []).reduce((s: number, it: Record<string, unknown>) => s + (Number(it.thanh_tien) || 0), 0)
     const table = buildHtmlTable(
       cols.map(c => ({ header: c.header, align: c.align })), 
-      itemRows.map(row => cols.map(c => (row as any)[c.key])),
+      itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])),
       { totalRow: ['', 'TỔNG CỘNG', '', '', '', '', tong.toLocaleString('vi-VN') + ' đ'] }
     )
 
@@ -382,7 +383,7 @@ export default function NhapGiayPage() {
 
     const exportData = receiptList.map((r: GoodsReceipt) => ({
       ...r,
-      tong_kg: (r.items || []).reduce((s: number, it: any) => s + Number(it.so_luong || 0), 0),
+      tong_kg: (r.items || []).reduce((s: number, it: Record<string, unknown>) => s + Number(it.so_luong || 0), 0),
       trang_thai_lbl: r.trang_thai === 'da_duyet' ? 'Đã duyệt' : 'Nhập',
     }))
 
@@ -398,7 +399,7 @@ export default function NhapGiayPage() {
     { title: 'Nhà CC', dataIndex: 'ten_ncc', width: 150 },
     { title: 'Tổng KG', width: 110, align: 'right' as const,
       render: (_: unknown, r: GoodsReceipt) => {
-        const kg = (r.items || []).reduce((s: number, it: any) => s + Number(it.so_luong || 0), 0)
+        const kg = (r.items || []).reduce((s: number, it: Record<string, unknown>) => s + Number(it.so_luong || 0), 0)
         return <Text>{kg.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} kg</Text>
       } },
     { title: 'Tổng tiền', dataIndex: 'tong_gia_tri', width: 140, align: 'right' as const,
@@ -505,7 +506,7 @@ export default function NhapGiayPage() {
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả xưởng" style={{ width: '100%' }} allowClear value={filterXuong}
               onChange={v => { setFilterXuong(v); setFilterKho(undefined) }}
-              options={phanXuongs.filter((p: any) => p.trang_thai).map((p: any) => ({ value: p.id, label: p.ten_xuong }))} />
+              options={phanXuongs.filter((p: unknown) => p.trang_thai).map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))} />
           </Col>
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả kho" style={{ width: '100%' }} allowClear value={filterKho} onChange={setFilterKho}
@@ -516,7 +517,7 @@ export default function NhapGiayPage() {
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả NCC" style={{ width: '100%' }} allowClear value={filterNCC} onChange={setFilterNCC} showSearch
               filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-              options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))} />
+              options={suppliers.map((s: unknown) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))} />
           </Col>
           <Col xs={12} sm={4}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
@@ -609,7 +610,7 @@ export default function NhapGiayPage() {
                   <Form.Item name="supplier_id" label="Nhà cung cấp (NCC)" rules={[{ required: true, message: 'Chọn NCC' }]}>
                     <Select placeholder="Chọn nhà cung cấp..." showSearch
                       filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                      options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
+                      options={suppliers.map((s: unknown) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
                   </Form.Item>
                 </Col>
                 <Col span={10}>
@@ -625,7 +626,7 @@ export default function NhapGiayPage() {
                     <Select placeholder="Chọn xưởng..." allowClear
                       value={formPxId ?? undefined}
                       onChange={v => { setFormPxId(v ?? null); form.setFieldValue('warehouse_id', undefined) }}
-                      options={phanXuongs.filter((p: any) => p.trang_thai).map((p: any) => ({ value: p.id, label: p.ten_xuong }))}
+                      options={phanXuongs.filter((p: unknown) => p.trang_thai).map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))}
                     />
                   </Form.Item>
                 </Col>

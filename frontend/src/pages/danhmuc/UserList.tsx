@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, Form, Input, Modal, Row, Select, Space, Switch, Table, Tag, Typography, message,
@@ -98,7 +99,7 @@ export default function UserList() {
       form.resetFields()
       qc.invalidateQueries({ queryKey: ['users'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Không lưu được tài khoản'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Không lưu được tài khoản'),
   })
 
   const resetPasswordMutation = useMutation({
@@ -108,7 +109,7 @@ export default function UserList() {
       setResetTarget(null)
       passwordForm.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Không đặt lại được mật khẩu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Không đặt lại được mật khẩu'),
   })
 
   const openCreate = () => {

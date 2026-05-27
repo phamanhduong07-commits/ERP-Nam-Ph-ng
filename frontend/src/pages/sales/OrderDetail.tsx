@@ -15,6 +15,11 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
 import type { SalesOrderItem } from '../../api/salesOrders'
+
+interface AxiosErrorLike { response?: { data?: { detail?: string }; status?: number }; errorFields?: unknown }
+function apiErrorMsg(e: unknown, fallback: string): string {
+  return (e as AxiosErrorLike)?.response?.data?.detail || fallback
+}
 import { productionOrdersApi } from '../../api/productionOrders'
 import { billingApi } from '../../api/billing'
 import { phapNhanApi } from '../../api/phap_nhan'
@@ -67,7 +72,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       qc.invalidateQueries({ queryKey: ['billing-invoices'] })
       if (inv?.id) navigate(`/billing/invoices/${inv.id}`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi tạo hóa đơn')),
   })
 
   const approveMutation = useMutation({
@@ -78,7 +83,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       qc.invalidateQueries({ queryKey: ['sales-orders'] })
       qc.invalidateQueries({ queryKey: ['sales-orders-counts'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Duyệt thất bại'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Duyệt thất bại')),
   })
 
   const cancelMutation = useMutation({
@@ -89,7 +94,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       qc.invalidateQueries({ queryKey: ['sales-orders'] })
       qc.invalidateQueries({ queryKey: ['sales-orders-counts'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Huỷ thất bại'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Huỷ thất bại')),
   })
 
   const handleTaoLenh = async () => {
@@ -107,13 +112,14 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       setLenhModal(false)
       qc.invalidateQueries({ queryKey: ['sales-order', id] })
       navigate('/production/orders')
-    } catch (err: any) {
-      if (err?.errorFields) {
+    } catch (err: unknown) {
+      const e = err as AxiosErrorLike
+      if (e?.errorFields) {
         // Ant Design validateFields lỗi — inline error tự hiển thị
-      } else if (err?.response?.data?.detail) {
-        message.error(err.response.data.detail)
-      } else if (err?.response) {
-        message.error(`Lập lệnh thất bại (lỗi ${err.response.status})`)
+      } else if (e?.response?.data?.detail) {
+        message.error(e.response.data.detail)
+      } else if (e?.response) {
+        message.error(`Lập lệnh thất bại (lỗi ${e.response.status})`)
       } else {
         message.error('Lập lệnh thất bại. Vui lòng thử lại.')
       }
@@ -195,7 +201,8 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       }
     })
 
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as any)[c.key])))
+    type PrintRow = (typeof rows)[number]
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => r[c.key as keyof PrintRow])))
 
     const printData = {
       subtitle: 'ĐƠN BÁN HÀNG',

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input,
@@ -34,7 +35,7 @@ export default function MaterialGroupList() {
       closeModal()
       message.success('Đã thêm nhóm vật tư')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm nhóm vật tư'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi thêm nhóm vật tư'),
   })
 
   const updateMut = useMutation({
@@ -45,7 +46,7 @@ export default function MaterialGroupList() {
       closeModal()
       message.success('Đã cập nhật nhóm vật tư')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const deleteMut = useMutation({
@@ -54,7 +55,7 @@ export default function MaterialGroupList() {
       queryClient.invalidateQueries({ queryKey: ['material-groups'] })
       message.success('Đã xoá nhóm vật tư')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi xoá'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi xoá'),
   })
 
   const openCreate = () => {

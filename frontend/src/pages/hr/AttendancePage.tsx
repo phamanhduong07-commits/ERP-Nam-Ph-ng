@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../../../../../../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Form, Input, Select, Space, Table, Typography, message, Row, Col, Tabs, Tag, DatePicker, Modal
@@ -11,7 +12,7 @@ import {
   CalendarOutlined,
   DownloadOutlined
 } from '@ant-design/icons'
-import { hrApi, Employee } from '../../api/hr'
+import { hrApi, Employee, LeaveRequest } from '../../api/hr'
 import { downloadTemplate } from '../../utils/excelUtils'
 import * as XLSX from 'xlsx'
 import dayjs from 'dayjs'
@@ -113,7 +114,7 @@ const buildAttendanceRows = (ws: XLSX.WorkSheet) => {
   return matrix.slice(headerIndex + 1)
     .filter(row => row.some(cell => String(cell ?? '').trim() !== ''))
     .map(row => {
-      const record: any = {}
+      const record: Record<string, string | number> = {}
       headers.forEach((key, idx) => {
         if (key) record[key] = row[idx]
       })
@@ -136,7 +137,7 @@ export default function AttendancePage() {
   // Modals State
   const [leaveModal, setLeaveModal] = useState(false)
   const [importModal, setImportModal] = useState(false)
-  const [importData, setImportData] = useState<any[]>([])
+  const [importData, setImportData] = useState<Record<string, unknown>[]>([])
   const [form] = Form.useForm()
   const [importForm] = Form.useForm()
 
@@ -171,7 +172,7 @@ export default function AttendancePage() {
   })
 
   const createLeaveMut = useMutation({
-    mutationFn: (data: any) => hrApi.createLeaveRequest(data),
+    mutationFn: (data: Record<string, unknown>) => hrApi.createLeaveRequest(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['hr-leave-requests'] })
       message.success('Đã gửi đơn trình duyệt')
@@ -191,31 +192,31 @@ export default function AttendancePage() {
       title: 'Trạng thái', 
       dataIndex: 'trang_thai',
       render: (v: string) => {
-        const colors: any = { hop_le: 'green', thieu_ca: 'orange', nghi_phep: 'blue', nghi_khong_phep: 'red' }
+        const colors: Record<string, string> = { hop_le: 'green', thieu_ca: 'orange', nghi_phep: 'blue', nghi_khong_phep: 'red' }
         return <Tag color={colors[v] || 'default'}>{v.toUpperCase()}</Tag>
       }
     }
   ]
 
   const reqColumns = [
-    { title: 'Ngày tạo', dataIndex: 'id', render: (_: any, r: any) => dayjs(r.created_at).format('DD/MM HH:mm') },
+    { title: 'Ngày tạo', dataIndex: 'id', render: (_: unknown, r: LeaveRequest) => dayjs(r.created_at).format('DD/MM HH:mm') },
     { title: 'Nhân viên', dataIndex: 'ho_ten', render: (v: string) => <Text strong>{v}</Text> },
     { title: 'Loại đơn', dataIndex: 'loai_don', render: (v: string) => <Tag color="purple">{v === 'nghi_phep' ? 'Nghỉ phép' : v}</Tag> },
-    { title: 'Thời gian', render: (_: any, r: any) => `${dayjs(r.ngay_bat_dau).format('DD/MM')} - ${dayjs(r.ngay_ket_thuc).format('DD/MM')}` },
+    { title: 'Thời gian', render: (_: unknown, r: LeaveRequest) => `${dayjs(r.ngay_bat_dau).format('DD/MM')} - ${dayjs(r.ngay_ket_thuc).format('DD/MM')}` },
     { title: 'Tổng ngày', dataIndex: 'tong_ngay', align: 'center' as const, render: (v: number) => <Text strong>{v}</Text> },
     { title: 'Lý do', dataIndex: 'ly_do', ellipsis: true },
     { 
       title: 'Trạng thái', 
       dataIndex: 'trang_thai',
       render: (v: string) => {
-        const labels: any = { cho_duyet: 'Chờ duyệt', phong_ban_duyet: 'P.Ban duyệt', bgd_duyet: 'BGD duyệt', tu_choi: 'Từ chối' }
-        const colors: any = { cho_duyet: 'orange', phong_ban_duyet: 'blue', bgd_duyet: 'green', tu_choi: 'red' }
+        const labels: Record<string, string> = { cho_duyet: 'Chờ duyệt', phong_ban_duyet: 'P.Ban duyệt', bgd_duyet: 'BGD duyệt', tu_choi: 'Từ chối' }
+        const colors: Record<string, string> = { cho_duyet: 'orange', phong_ban_duyet: 'blue', bgd_duyet: 'green', tu_choi: 'red' }
         return <Tag color={colors[v]}>{labels[v]}</Tag>
       }
     },
     {
       title: 'Thao tác',
-      render: (_: any, r: any) => (
+      render: (_: unknown, r: LeaveRequest) => (
         r.trang_thai !== 'bgd_duyet' && r.trang_thai !== 'tu_choi' && (
           <Button size="small" type="primary" ghost onClick={() => approveMut.mutate({ id: r.id })}>Duyệt</Button>
         )
@@ -344,8 +345,8 @@ export default function AttendancePage() {
                 setImportModal(false)
                 setImportData([])
                 qc.invalidateQueries({ queryKey: ['hr-attendance'] })
-              } catch (e: any) {
-                message.error(e?.response?.data?.detail?.message || e?.response?.data?.detail || 'Import cham cong that bai')
+              } catch (e) {
+                message.error(e?.response?.data?.detail?.message || (e as ApiError)?.response?.data?.detail || 'Import cham cong that bai')
               }
             }}
           >
@@ -369,7 +370,7 @@ export default function AttendancePage() {
                   const ws = wb.Sheets[wb.SheetNames[0]]
                   const data = buildAttendanceRows(ws)
                   
-                  const validated = data.map((row: any) => {
+                  const validated = data.map((row: unknown) => {
                     let error = ''
                     if (!row.ma_nv) error = 'Thiếu mã NV'
                     if (!row.ngay) error = 'Thiếu ngày'

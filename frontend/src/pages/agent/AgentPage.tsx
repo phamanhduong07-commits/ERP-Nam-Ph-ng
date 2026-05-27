@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import type { ApiError } from '../../api/types'
 import {
   Button, Input, Typography, Space, Card, Spin, Tooltip,
   theme, Avatar, Tag,
@@ -132,8 +133,9 @@ export default function AgentPage() {
       const { reply, session_id } = res.data
       setSessionId(session_id)
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
-    } catch (e: any) {
-      const detail = e?.response?.data?.detail || 'Lỗi kết nối. Vui lòng thử lại.'
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      const detail = (err as ApiError)?.response?.data?.detail || 'Lỗi kết nối. Vui lòng thử lại.'
       setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${detail}` }])
     } finally {
       setLoading(false)

@@ -24,7 +24,7 @@ export default function GateLoginPage() {
       const role = res.data.user?.role
       navigate(role === 'TAI_XE' ? '/giao-hang-mobile' : '/gate-hub')
     } catch (err: unknown) {
-      const detail = (err as any)?.response?.data?.detail
+      const detail = (err as {response?: {data?: {detail?: string}}})?.response?.data?.detail
       setError(typeof detail === 'string' ? detail : 'Đăng nhập thất bại, vui lòng thử lại')
     } finally {
       setLoading(false)

@@ -49,6 +49,7 @@ export interface CreateHoaDonPayload {
   tong_cong: number
   items: HoaDonItem[]
   sales_order_id?: number | null
+  sales_invoice_id?: number | null
   customer_id?: number | null
   phap_nhan_id?: number | null
   ghi_chu?: string
@@ -76,6 +77,7 @@ export const hdtApi = {
     tu_ngay?: string
     den_ngay?: string
     phap_nhan_id?: number
+    sales_invoice_id?: number
   }) => client.get<HoaDonDienTu[]>('/hoa-don-dien-tu', { params }),
 
   get: (id: number) => client.get<HoaDonDienTu>(`/hoa-don-dien-tu/${id}`),

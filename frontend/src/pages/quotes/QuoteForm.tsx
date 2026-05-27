@@ -16,6 +16,11 @@ import dayjs from 'dayjs'
 import { customersApi } from '../../api/customers'
 import { quotesApi, paperMaterialsApi, LOAI_IN_OPTIONS, LOAI_THUNG_OPTIONS, SO_LOP_OPTIONS, TO_HOP_SONG_OPTIONS, getSongType, calcBoxDimensions, buildPaperSymbol, paperCodeKey } from '../../api/quotes'
 import type { QuoteItem, CreateQuotePayload } from '../../api/quotes'
+
+interface AxiosErrorLike { response?: { data?: { detail?: string } }; errorFields?: unknown }
+function apiErrorMsg(e: unknown, fallback: string): string {
+  return (e as AxiosErrorLike)?.response?.data?.detail || fallback
+}
 import { cauTrucApi, type CauTruc } from '../../api/cauTruc'
 import { productsApi, type ProductFull } from '../../api/products'
 import { phapNhanApi } from '../../api/phap_nhan'
@@ -358,8 +363,8 @@ export default function QuoteForm() {
       } else if (force) {
         message.warning('Công thức trả về giá bán bằng 0. Kiểm tra giá mua giấy và định mức chi phí.')
       }
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail
+    } catch (err: unknown) {
+      const detail = (err as AxiosErrorLike)?.response?.data?.detail
       if (force) message.warning(detail || 'Chưa đủ dữ liệu hoặc chưa tìm được giá giấy để tính giá bán')
     } finally {
       if (force) setIsCalcLoading(false)
@@ -373,7 +378,7 @@ export default function QuoteForm() {
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       navigate(`/quotes/${res.data.id}`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo báo giá'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi tạo báo giá')),
   })
 
   const updateMutation = useMutation({
@@ -382,7 +387,7 @@ export default function QuoteForm() {
       message.success('Đã cập nhật báo giá')
       queryClient.invalidateQueries({ queryKey: ['quote', id] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi cập nhật'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi cập nhật')),
   })
 
   const submitMutation = useMutation({
@@ -393,7 +398,7 @@ export default function QuoteForm() {
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       navigate(`/quotes/${id}`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Gửi duyệt thất bại'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Gửi duyệt thất bại')),
   })
 
   const approveMutation = useMutation({
@@ -412,7 +417,7 @@ export default function QuoteForm() {
       setSelectItemsModal(false)
       navigate('/sales/orders')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo đơn'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi tạo đơn')),
   })
 
   // ── Customer search ──────────────────────────────────────
@@ -800,7 +805,7 @@ export default function QuoteForm() {
       title: '',
       key: 'act',
       width: 110,
-      render: (_: any, _row: QuoteItem, idx: number) => (
+      render: (_: unknown, _row: QuoteItem, idx: number) => (
         <Space size={2}>
           <Tooltip title="Sao chép dòng này">
             <Button
@@ -1516,7 +1521,7 @@ export default function QuoteForm() {
                       <InputNumber
                         size="small"
                         style={{ width: '100%' }}
-                        value={(finance as any)[field]}
+                        value={finance[field as keyof typeof finance] as number}
                         onChange={v => updateFinance({ [field]: v || 0 })}
                         formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                         min={0}

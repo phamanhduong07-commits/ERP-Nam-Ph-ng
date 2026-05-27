@@ -122,6 +122,8 @@ export interface DeliveryOrderItem {
   rong?: number | null
   cao?: number | null
   so_lop?: number | null
+  ma_amis?: string | null
+  to_hop_song?: string | null
 }
 
 export interface DeliveryOrder {

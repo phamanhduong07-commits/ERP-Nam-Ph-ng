@@ -8,10 +8,11 @@ const { Title, Text } = Typography
 
 const TaxTrialBalancePage: React.FC = () => {
   const { phapNhanList } = usePhapNhan()
+  interface TrialBalanceRow { so_tk: string; ten_tk: string; so_du_dau: number; phat_sinh_no: number; phat_sinh_co: number; so_du_cuoi: number }
   const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<any[]>([])
+  const [data, setData] = useState<TrialBalanceRow[]>([])
 
-  const onFinish = async (values: any) => {
+  const onFinish = async (values: { range: [{ format: (f: string) => string }, { format: (f: string) => string }]; phap_nhan_id: number }) => {
     setLoading(true)
     try {
       const params = {
@@ -77,7 +78,7 @@ const TaxTrialBalancePage: React.FC = () => {
           </Form.Item>
           <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true }]}>
             <Select placeholder="Chọn pháp nhân" style={{ width: 250 }}>
-              {phapNhanList.map((pn: any) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
+              {phapNhanList.map((pn) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
             </Select>
           </Form.Item>
           <Form.Item>

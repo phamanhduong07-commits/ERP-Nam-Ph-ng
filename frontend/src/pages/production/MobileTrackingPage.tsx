@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Button, Space, Typography, Input, InputNumber, Modal, Form,
@@ -44,7 +45,7 @@ function fmtElapsedCompact(seconds: number): string {
 
 function beep(type: 'success' | 'error' | 'warn') {
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+    const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!AudioCtx) return
     const ctx = new AudioCtx()
     const play = (freq: number, dur: number, delay = 0) => {
@@ -291,7 +292,7 @@ export default function MobileTrackingPage() {
   const [sauInElapsedSeconds, setSauInElapsedSeconds] = useState(0)
   const [clockTime, setClockTime] = useState(dayjs().format('HH:mm'))
   const isOnline = useOnlineStatus()
-  const [offlineQueue, setOfflineQueue] = useState<any[]>([])
+  const [offlineQueue, setOfflineQueue] = useState<Record<string, unknown>[]>([])
   const [form] = Form.useForm()
   const [dinhHinhForm] = Form.useForm()
   const [ngungInForm] = Form.useForm()
@@ -528,7 +529,7 @@ export default function MobileTrackingPage() {
     if (raw) { try { setOfflineQueue(JSON.parse(raw)) } catch { setOfflineQueue([]) } }
   }, [])
 
-  const saveOfflineLog = useCallback((data: any) => {
+  const saveOfflineLog = useCallback((data: Record<string, unknown>) => {
     setOfflineQueue(prev => {
       const next = [...prev, { ...data, timestamp: new Date().toISOString() }]
       localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(next))
@@ -592,7 +593,7 @@ export default function MobileTrackingPage() {
       } : prev)
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Thất bại'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
   })
 
   const dinhHinhFinishMutation = useMutation({
@@ -605,13 +606,13 @@ export default function MobileTrackingPage() {
       dinhHinhForm.resetFields()
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Thất bại'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
   })
 
   // ── Ngưng giữa chừng + tạo phiếu bù ─────────────────────────────────────
 
   const ngungInMutation = useMutation({
-    mutationFn: (values: any) => cd2Api.ngungIn(currentOrder!.id, {
+    mutationFn: (values: Record<string, unknown>) => cd2Api.ngungIn(currentOrder!.id, {
       so_luong_in_ok: values.so_luong_in_ok,
       so_luong_loi: values.so_luong_loi,
       ghi_chu_ket_qua: values.ghi_chu_ket_qua,
@@ -625,11 +626,11 @@ export default function MobileTrackingPage() {
       setSoLsx('')
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Thất bại'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
   })
 
   const ngungDinhHinhMutation = useMutation({
-    mutationFn: (values: any) => cd2Api.ngungDinhHinh(currentOrder!.id, {
+    mutationFn: (values: Record<string, unknown>) => cd2Api.ngungDinhHinh(currentOrder!.id, {
       so_luong_sau_in_ok: values.so_luong_sau_in_ok,
       so_luong_sau_in_loi: values.so_luong_sau_in_loi,
       ghi_chu_sau_in: values.ghi_chu_sau_in,
@@ -643,7 +644,7 @@ export default function MobileTrackingPage() {
       setSoLsx('')
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Thất bại'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
   })
 
   // ── Thành phẩm: tạm dừng / tiếp tục ─────────────────────────────────────
@@ -656,7 +657,7 @@ export default function MobileTrackingPage() {
       setIsStopModalOpen(false)
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Thất bại'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
   })
 
   const sauInTiepTucMutation = useMutation({
@@ -672,7 +673,7 @@ export default function MobileTrackingPage() {
       setCurrentOrder(res.data)
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Thất bại'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
   })
 
   // ── Track mutation ────────────────────────────────────────────────────────
@@ -680,11 +681,11 @@ export default function MobileTrackingPage() {
   const kioskMachineId = workerSession ? undefined : selectedMachine?.id
 
   const trackMutation = useMutation({
-    mutationFn: (data: any) => {
+    mutationFn: (data: Record<string, unknown>) => {
       if (!isOnline) { saveOfflineLog(data); return Promise.resolve({ data: { ok: true, offline: true } }) }
       return cd2Api.trackProduction(data)
     },
-    onSuccess: (res: any, variables: any) => {
+    onSuccess: (res: unknown, variables: unknown) => {
       if (res.data?.offline) {
         message.warning('Đã lưu offline. Sẽ đồng bộ khi có mạng.')
       } else {
@@ -703,7 +704,7 @@ export default function MobileTrackingPage() {
       }
       invalidate()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Thất bại'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
   })
 
   const buildPayload = (eventType: string, extra = {}) => ({
@@ -758,7 +759,7 @@ export default function MobileTrackingPage() {
     }
   }
 
-  const onFinishComplete = (values: any) => {
+  const onFinishComplete = (values: Record<string, unknown>) => {
     trackMutation.mutate(buildPayload('complete', values))
     setIsCompleteModalOpen(false)
     form.resetFields()
@@ -854,7 +855,7 @@ export default function MobileTrackingPage() {
         <Divider style={{ margin: '32px 0 16px' }}><Text type="secondary">Nhật ký xưởng hôm nay</Text></Divider>
         <Card style={{ borderRadius: 20, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', marginBottom: 40 }}>
           <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-            {factoryLogs.map((log: any, idx: number) => (
+            {factoryLogs.map((log: Record<string, unknown>, idx: number) => (
               <div key={log.id} style={{ padding: '10px 0', borderBottom: idx < factoryLogs.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                   <Text strong>{log.ten_may}</Text>

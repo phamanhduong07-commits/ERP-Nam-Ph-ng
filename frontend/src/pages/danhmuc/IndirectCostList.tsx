@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, InputNumber, message, Popconfirm,
@@ -36,7 +37,7 @@ export default function IndirectCostList() {
       setEditId(null)
       qc.invalidateQueries({ queryKey: ['indirect-costs'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi cập nhật'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi cập nhật'),
   })
 
   const seedMut = useMutation({
@@ -45,7 +46,7 @@ export default function IndirectCostList() {
       message.success('Đã reset về mặc định')
       qc.invalidateQueries({ queryKey: ['indirect-costs'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi reset'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi reset'),
   })
 
   // Group by so_lop

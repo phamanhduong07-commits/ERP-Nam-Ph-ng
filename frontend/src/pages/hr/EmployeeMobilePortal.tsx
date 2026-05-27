@@ -42,8 +42,9 @@ export default function EmployeeMobilePortal() {
     queryFn: () => client.get(`/hr/me/leave-requests`).then(r => r.data),
   })
 
+  type LeaveFormValues = { loai_don: string; ngay_bat_dau: string | { toISOString?: () => string }; ngay_ket_thuc: string | { toISOString?: () => string }; ly_do: string }
   const createLeaveMutation = useMutation({
-    mutationFn: (values: any) => client.post(`/hr/leave-requests`, {
+    mutationFn: (values: LeaveFormValues) => client.post(`/hr/leave-requests`, {
       ...values,
       employee_id: profile?.employee_id || profile?.id,
       ngay_bat_dau: values.ngay_bat_dau?.toISOString?.() || values.ngay_bat_dau,
@@ -119,7 +120,7 @@ export default function EmployeeMobilePortal() {
       <Title level={4}>Lịch sử nhận lương</Title>
       <List
         dataSource={payrolls || []}
-        renderItem={(item: any) => (
+        renderItem={(item: { thang: number; nam: number; thuc_linh: number }) => (
           <Card size="small" style={{ marginBottom: 12, borderRadius: 8 }}>
             <Row justify="space-between" align="middle">
               <Col>
@@ -150,7 +151,7 @@ export default function EmployeeMobilePortal() {
       <Title level={4}>Đơn từ của tôi</Title>
       <List
         dataSource={leaves || []}
-        renderItem={(item: any) => (
+        renderItem={(item: { loai_don: string; ngay_bat_dau: string; ngay_ket_thuc: string; trang_thai: string }) => (
           <Card size="small" style={{ marginBottom: 12, borderRadius: 8 }}>
             <Row justify="space-between">
               <Col>

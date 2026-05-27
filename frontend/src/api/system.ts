@@ -6,14 +6,14 @@ export interface PrintTemplate {
   html_content: string
   phap_nhan_id?: number
   css_content?: string
-  variables_meta?: any
+  variables_meta?: Record<string, unknown>
 }
 
 export interface ExcelTemplate {
   ma_mau: string
   ten_mau: string
   phap_nhan_id?: number
-  column_config: any[]
+  column_config: unknown[]
 }
 
 export const systemApi = {

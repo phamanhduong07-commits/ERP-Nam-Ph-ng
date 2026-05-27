@@ -18,7 +18,7 @@ export interface PhapNhan {
 }
 
 export const phapNhanApi = {
-  list: (params?: any) => client.get<PhapNhan[]>('/phap-nhan', { params }),
+  list: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<PhapNhan[]>('/phap-nhan', { params }),
   create: (data: PhapNhan) => client.post<PhapNhan>('/phap-nhan', data),
   update: (id: number, data: PhapNhan) => client.put<PhapNhan>(`/phap-nhan/${id}`, data),
   delete: (id: number) => client.delete(`/phap-nhan/${id}`),

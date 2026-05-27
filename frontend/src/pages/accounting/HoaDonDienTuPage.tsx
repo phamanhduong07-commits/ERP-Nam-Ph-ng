@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import {
   Button, DatePicker, Form, Modal, Select, Space, Table, Tag, Typography,
   message, Popconfirm, Tooltip,
@@ -35,7 +36,7 @@ export default function HoaDonDienTuPage() {
   const phatHanhMut = useMutation({
     mutationFn: (id: number) => hdtApi.phatHanh(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['hoa-don-dien-tu'] }); message.success('Phát hành thành công') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi phát hành'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi phát hành'),
   })
 
   const huyMut = useMutation({
@@ -46,19 +47,19 @@ export default function HoaDonDienTuPage() {
       setHuyModal(null)
       huyForm.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi hủy HĐ'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi hủy HĐ'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => hdtApi.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['hoa-don-dien-tu'] }); message.success('Đã xóa') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xóa'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xóa'),
   })
 
   const syncMut = useMutation({
     mutationFn: (id: number) => hdtApi.syncStatus(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['hoa-don-dien-tu'] }); message.success('Đã đồng bộ') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi sync'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi sync'),
   })
 
   const columns: ColumnsType<HoaDonDienTu> = [

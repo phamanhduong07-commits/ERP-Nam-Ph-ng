@@ -8,7 +8,7 @@ import { PlusOutlined, FileExcelOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
-import { receiptApi, TRANG_THAI_PHIEU_THU, HINH_THUC_TT } from '../../api/accounting'
+import { receiptApi, TRANG_THAI_PHIEU_THU, HINH_THUC_TT, CashReceipt } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
 
 const { Title, Text } = Typography
@@ -29,13 +29,13 @@ export default function CashReceiptListPage() {
       receiptApi.list({ tu_ngay: tuNgay, den_ngay: denNgay, trang_thai: filterTrangThai, phap_nhan_id: filterPhapNhan, page, page_size: 20 }),
   })
 
-  const receipts = data?.items ?? data ?? []
+  const receipts: CashReceipt[] = data?.items ?? data ?? []
   const total: number = data?.total ?? receipts.length
 
-  const tongSoTien = receipts.reduce((s: number, r: any) => s + (r.so_tien ?? 0), 0)
+  const tongSoTien = receipts.reduce((s: number, r: CashReceipt) => s + (r.so_tien ?? 0), 0)
 
   const handleExcel = () => {
-    const rows = receipts.map((r: any) => ({
+    const rows = receipts.map((r: CashReceipt) => ({
       'Số phiếu': r.so_phieu,
       'Ngày phiếu': r.ngay_phieu,
       'Khách hàng': r.ten_don_vi ?? r.customer_id,
@@ -50,7 +50,7 @@ export default function CashReceiptListPage() {
     }])
   }
 
-  const columns: ColumnsType<any> = [
+  const columns: ColumnsType<CashReceipt> = [
     {
       title: 'Số phiếu',
       dataIndex: 'so_phieu',
@@ -71,11 +71,11 @@ export default function CashReceiptListPage() {
     },
     {
       title: 'HĐ liên kết',
-      dataIndex: 'so_hoa_don',
+      dataIndex: 'sales_invoice_id',
       width: 140,
-      render: (v, r) =>
-        r.sales_invoice_id ? (
-          <a onClick={() => navigate(`/billing/invoices/${r.sales_invoice_id}`)}>{v ?? `HĐ#${r.sales_invoice_id}`}</a>
+      render: (v: number | null) =>
+        v ? (
+          <a onClick={() => navigate(`/billing/invoices/${v}`)}>HĐ#{v}</a>
         ) : '—',
     },
     {
@@ -138,7 +138,7 @@ export default function CashReceiptListPage() {
             <Select
               style={{ width: 180 }} allowClear placeholder="Pháp nhân"
               onChange={v => { setFilterPhapNhan(v); setPage(1) }}
-              options={phapNhanList.map((p: any) => ({ value: p.id, label: p.ten_phap_nhan }))}
+              options={phapNhanList.map(p => ({ value: p.id, label: p.ten_phap_nhan }))}
             />
           </Col>
         </Row>

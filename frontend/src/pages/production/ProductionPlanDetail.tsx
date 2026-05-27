@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Checkbox, Popconfirm, Space, Tag, Tooltip, Typography, message,
@@ -296,12 +297,12 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       qc.invalidateQueries({ queryKey: ['production-plan', planId] })
       qc.invalidateQueries({ queryKey: ['production-plans'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
   const deleteLineMut = useMutation({
     mutationFn: (lineId: number) => productionPlansApi.deleteLine(planId, lineId),
     onSuccess: () => { message.success('Đã xóa'); qc.invalidateQueries({ queryKey: ['production-plan', planId] }) },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
   const completeLineMut = useMutation({
     mutationFn: (lineId: number) => productionPlansApi.completeLine(planId, lineId),
@@ -310,13 +311,13 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       qc.invalidateQueries({ queryKey: ['production-plan', planId] })
       qc.invalidateQueries({ queryKey: ['production-plans'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
   const togglePhoiNgoaiMut = useMutation({
     mutationFn: ({ lineId, value }: { lineId: number; value: boolean }) =>
       productionPlansApi.togglePhoiNgoai(lineId, value),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['production-plan', planId] }),
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
 
   if (isLoading || !plan) return <div style={{ padding: 24 }}>Đang tải...</div>

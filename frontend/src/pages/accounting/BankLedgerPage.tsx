@@ -105,7 +105,7 @@ export default function BankLedgerPage() {
         r.loai === 'thu' ? 'Thu' : 'Chi',
         r.doi_tuong,
         r.dien_giai,
-        (r as any).so_tham_chieu ?? '',
+        r.so_tham_chieu ?? '',
         Number(r.thu) > 0 ? Number(r.thu) : '',
         Number(r.chi) > 0 ? Number(r.chi) : '',
         Number(r.so_du),

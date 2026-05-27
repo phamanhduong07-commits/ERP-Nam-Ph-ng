@@ -11,7 +11,7 @@ import dayjs from 'dayjs'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import { apApi, APLedgerRow, APAgingRow, SoChiTietRow, SoChiTietResponse, DoiChieuPhaiTraRow, TRANG_THAI_PO_INVOICE } from '../../api/accounting'
 import { suppliersApi, Supplier } from '../../api/suppliers'
-import { phapNhanApi } from '../../api/phap_nhan'
+import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -158,7 +158,7 @@ function LedgerTab() {
           <Col>
             <Select
               style={{ width: 150 }} allowClear placeholder="Pháp nhân"
-              options={listPhapNhan.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              options={listPhapNhan.map((p: PhapNhan) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
               onChange={v => setPhapNhanId(v)}
             />
           </Col>
@@ -329,7 +329,7 @@ function AgingTab() {
           <Col>
             <Select
               allowClear placeholder="Tất cả pháp nhân" style={{ width: 180 }}
-              options={(listPhapNhan as any[]).map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              options={(listPhapNhan as PhapNhan[]).map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
               value={phapNhanId}
               onChange={setPhapNhanId}
             />
@@ -486,7 +486,7 @@ function SoChiTietTab() {
               filterOption={(input, opt) =>
                 (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
               }
-              options={suppliers.map((s: any) => ({
+              options={suppliers.map((s: Supplier) => ({
                 value: s.id,
                 label: `${s.ma_ncc ? `[${s.ma_ncc}] ` : ''}${s.ten_don_vi ?? ''}`,
               }))}
@@ -615,7 +615,7 @@ function DoiChieuPhaiTraTab() {
           <Col>
             <Select
               style={{ width: 150 }} allowClear placeholder="Pháp nhân"
-              options={listPhapNhan.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              options={listPhapNhan.map((p: PhapNhan) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
               onChange={v => setPhapNhanId(v)}
             />
           </Col>

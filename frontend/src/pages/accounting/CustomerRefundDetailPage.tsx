@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Descriptions, Form, Modal, Radio, Select, Space, Spin, Tag, Typography, message,
@@ -47,7 +48,7 @@ export default function CustomerRefundDetailPage() {
       qc.invalidateQueries({ queryKey: ['ar-ledger-entries'] })
       qc.invalidateQueries({ queryKey: ['ar-aging'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi duyệt'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi duyệt'),
   })
 
   const cancelMut = useMutation({
@@ -57,7 +58,7 @@ export default function CustomerRefundDetailPage() {
       qc.invalidateQueries({ queryKey: ['customer-refund', voucherId] })
       qc.invalidateQueries({ queryKey: ['customer-refunds'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi hủy'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi hủy'),
   })
 
   const handleSaveAndApprove = async () => {

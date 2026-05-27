@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
@@ -14,7 +15,7 @@ import {
   InfoCircleOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { journalApi, arApi } from '../../api/accounting'
+import { journalApi, arApi, JournalEntryCreate, JournalLine, TrialBalanceRow } from '../../api/accounting'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 
@@ -46,24 +47,24 @@ export default function JournalEntryForm() {
   })
 
   const createMut = useMutation({
-    mutationFn: (data: any) => journalApi.create(data),
+    mutationFn: (data: JournalEntryCreate) => journalApi.create(data),
     onSuccess: () => {
       message.success('Tạo bút toán thành công')
       navigate('/accounting/journal-entries')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo bút toán')
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo bút toán')
   })
 
-  const handleValuesChange = (_: any, allValues: any) => {
+  const handleValuesChange = (_: unknown, allValues: { lines?: JournalLine[] }) => {
     const lines = allValues.lines || []
-    const sumNo = lines.reduce((sum: number, l: any) => sum + (l.so_tien_no || 0), 0)
-    const sumCo = lines.reduce((sum: number, l: any) => sum + (l.so_tien_co || 0), 0)
+    const sumNo = lines.reduce((sum: number, l: JournalLine) => sum + (l.so_tien_no || 0), 0)
+    const sumCo = lines.reduce((sum: number, l: JournalLine) => sum + (l.so_tien_co || 0), 0)
     setTotalNo(sumNo)
     setTotalCo(sumCo)
   }
 
   const applyTemplate = (type: string) => {
-    let lines: any[] = []
+    let lines: JournalLine[] = []
     let loai = 'khac'
     let dien_giai = ''
 
@@ -100,7 +101,7 @@ export default function JournalEntryForm() {
     { key: 'dien_nuoc', label: 'Mẫu Chi phí điện nước (154/111)', onClick: () => applyTemplate('dien_nuoc') },
   ]
 
-  const onFinish = (values: any) => {
+  const onFinish = (values: JournalEntryCreate & { ngay_but_toan: import('dayjs').Dayjs }) => {
     if (Math.abs(totalNo - totalCo) > 0.01) {
       return message.error(`Bút toán không cân! Chênh lệch: ${(totalNo - totalCo).toLocaleString()}`)
     }
@@ -219,7 +220,7 @@ export default function JournalEntryForm() {
                               <Select
                                 showSearch
                                 placeholder="Chọn TK"
-                                options={accounts.map((a: any) => ({ value: a.so_tk, label: `${a.so_tk} - ${a.ten_tk}` }))}
+                                options={(Array.isArray(accounts) ? accounts as TrialBalanceRow[] : []).map((a: TrialBalanceRow) => ({ value: a.so_tk, label: `${a.so_tk} - ${a.ten_tk}` }))}
                                 filterOption={(input, opt) => String(opt?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                                 bordered={false}
                                 className="cell-select"

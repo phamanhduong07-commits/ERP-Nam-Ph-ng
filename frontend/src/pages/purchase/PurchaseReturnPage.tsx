@@ -7,6 +7,7 @@
  *  3. Huỷ (chỉ khi còn Nháp)
  */
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
@@ -92,7 +93,7 @@ export default function PurchaseReturnPage() {
       setCreateOpen(false)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi tạo phiếu'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi tạo phiếu'),
   })
 
   const approveMut = useMutation({
@@ -102,7 +103,7 @@ export default function PurchaseReturnPage() {
       qc.invalidateQueries({ queryKey: ['purchase-returns'] })
       qc.invalidateQueries({ queryKey: ['purchase-return-detail', detailId] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi duyệt'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi duyệt'),
   })
 
   const cancelMut = useMutation({
@@ -112,7 +113,7 @@ export default function PurchaseReturnPage() {
       qc.invalidateQueries({ queryKey: ['purchase-returns'] })
       qc.invalidateQueries({ queryKey: ['purchase-return-detail', detailId] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi huỷ'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi huỷ'),
   })
 
   const deleteMut = useMutation({
@@ -122,7 +123,7 @@ export default function PurchaseReturnPage() {
       qc.invalidateQueries({ queryKey: ['purchase-returns'] })
       setDetailId(null)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi xoá'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi xoá'),
   })
 
   // ── Columns list ──────────────────────────────────────────────────────────────
@@ -204,8 +205,12 @@ export default function PurchaseReturnPage() {
   const tien_thue = Math.round(tong_tien_hang * thue_suat / 100)
   const tong_tt = tong_tien_hang + tien_thue
 
-  function handleCreate(values: any) {
-    const items = (values.items || []).map((it: any) => ({
+  function handleCreate(values: {
+    supplier_id: number; ngay: { format: (f: string) => string }; loai: string
+    invoice_id?: number | null; ly_do?: string | null; ghi_chu?: string | null
+    items?: Array<{ ten_hang?: string; so_luong?: number; dvt?: string; don_gia?: number; ghi_chu?: string | null }>
+  }) {
+    const items = (values.items || []).map(it => ({
       paper_material_id: null,
       other_material_id: null,
       ten_hang: it.ten_hang || '',
@@ -318,7 +323,7 @@ export default function PurchaseReturnPage() {
             allowClear
             value={filterXuong}
             onChange={v => { setFilterXuong(v); setPage(1) }}
-            options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
+            options={phanXuongList.map(px => ({ value: px.id, label: px.ten_xuong }))}
           />
         </Col>
       </Row>

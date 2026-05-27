@@ -313,3 +313,26 @@ class StockAdjustmentItem(Base):
     paper_material = relationship("PaperMaterial")
     other_material = relationship("OtherMaterial")
     product = relationship("Product")
+
+
+class GiayRoll(Base):
+    """Cuộn giấy — mỗi cuộn nhập kho tương ứng 1 GiayRoll, theo dõi trọng lượng còn lại."""
+    __tablename__ = "giay_rolls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    barcode: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    goods_receipt_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goods_receipts.id"), nullable=True)
+    goods_receipt_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goods_receipt_items.id"), nullable=True)
+    paper_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_materials.id"), nullable=True)
+    warehouse_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=True)
+    so_phieu_nhap: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    ngay_nhap: Mapped[date | None] = mapped_column(Date, nullable=True)
+    trong_luong_ban_dau: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, default=0)
+    trong_luong_con_lai: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, default=0)
+    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="trong_kho")
+    # trong_kho | dang_dung | da_dung
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    paper_material = relationship("PaperMaterial")
+    warehouse = relationship("Warehouse")
+    goods_receipt = relationship("GoodsReceipt")

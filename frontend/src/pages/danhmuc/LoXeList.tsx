@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, Table, Button, Space, Modal, Form, Input, InputNumber, Select, Tag, Popconfirm, message, Typography, Row, Col, Switch } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
@@ -19,20 +20,20 @@ export default function LoXeList() {
   const createMut = useMutation({
     mutationFn: (d: Omit<LoXe, 'id'>) => loXeApi.create(d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lo-xe'] }); closeModal(); message.success('Da them lo xe') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi khi them'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Loi khi them'),
   })
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Omit<LoXe, 'id'>> }) => loXeApi.update(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lo-xe'] }); closeModal(); message.success('Da cap nhat') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi khi cap nhat'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Loi khi cap nhat'),
   })
   const deleteMut = useMutation({
     mutationFn: (id: number) => loXeApi.delete(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lo-xe'] }); message.success('Da xoa') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi khi xoa'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Loi khi xoa'),
   })
 
-  const employeeOptions = employees.map((e: any) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))
+  const employeeOptions = employees.map((e: unknown) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))
   const openCreate = () => { setEditing(null); form.resetFields(); form.setFieldsValue({ trang_thai: true, he_so_chuyen: 0.3 }); setModalOpen(true) }
   const openEdit = (row: LoXe) => { setEditing(row); form.setFieldsValue({ ...row }); setModalOpen(true) }
   const closeModal = () => { setModalOpen(false); setEditing(null) }

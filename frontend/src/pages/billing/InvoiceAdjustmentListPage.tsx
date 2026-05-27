@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -51,7 +52,7 @@ export default function InvoiceAdjustmentListPage() {
       message.success(vars.approved ? 'Đã duyệt' : 'Đã từ chối')
       qc.invalidateQueries({ queryKey: ['billing-adjustment-logs'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi xử lý'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi xử lý'),
   })
 
   const handleApprove = (log: InvoiceAdjustmentLog) => {
@@ -98,13 +99,14 @@ export default function InvoiceAdjustmentListPage() {
   const expandedRowRender = (record: InvoiceAdjustmentLog) => {
     const b = record.du_lieu_truoc ? JSON.parse(record.du_lieu_truoc) : {}
     const a = record.du_lieu_sau   ? JSON.parse(record.du_lieu_sau)   : {}
-    const beforeItems: any[] = b.items ?? []
-    const afterItems:  any[] = a.items ?? []
+    const beforeItems: unknown[] = b.items ?? []
+    type MergedItem = { item_id: number; ten_hang?: string; dvt?: string; so_luong: number; sl_moi?: number; don_gia?: number; thanh_tien: number; tt_moi?: number }
+    const afterItems: MergedItem[] = a.items ?? []
 
     if (beforeItems.length === 0) return <Text type="secondary" style={{ fontSize: 12 }}>Không có dữ liệu chi tiết dòng hàng.</Text>
 
-    const merged = beforeItems.map((bi: any) => {
-      const ai = afterItems.find((x: any) => x.item_id === bi.item_id) ?? bi
+    const merged = (beforeItems as MergedItem[]).map((bi) => {
+      const ai = afterItems.find((x) => x.item_id === bi.item_id) ?? bi
       return { ...bi, sl_moi: ai.so_luong, tt_moi: ai.thanh_tien }
     })
 
@@ -123,7 +125,7 @@ export default function InvoiceAdjustmentListPage() {
             dataIndex: 'so_luong',
             width: 80,
             align: 'right',
-            render: (v: number, row: any) => (
+            render: (v: number, row: MergedItem) => (
               <Text style={{ color: row.sl_moi !== v ? '#ff4d4f' : undefined }}>{v}</Text>
             ),
           },
@@ -132,7 +134,7 @@ export default function InvoiceAdjustmentListPage() {
             dataIndex: 'sl_moi',
             width: 80,
             align: 'right',
-            render: (v: number, row: any) => (
+            render: (v: number, row: MergedItem) => (
               <Text strong style={{ color: v !== row.so_luong ? '#1677ff' : undefined }}>{v}</Text>
             ),
           },
@@ -148,7 +150,7 @@ export default function InvoiceAdjustmentListPage() {
             dataIndex: 'thanh_tien',
             width: 120,
             align: 'right',
-            render: (v: number, row: any) => (
+            render: (v: number, row: MergedItem) => (
               <Text style={{ color: row.tt_moi !== v ? '#ff4d4f' : undefined }}>
                 {v.toLocaleString('vi-VN')}
               </Text>
@@ -159,7 +161,7 @@ export default function InvoiceAdjustmentListPage() {
             dataIndex: 'tt_moi',
             width: 120,
             align: 'right',
-            render: (v: number, row: any) => (
+            render: (v: number, row: MergedItem) => (
               <Text strong style={{ color: v !== row.thanh_tien ? '#1677ff' : undefined }}>
                 {v.toLocaleString('vi-VN')}
               </Text>
@@ -214,7 +216,7 @@ export default function InvoiceAdjustmentListPage() {
       title: 'Trước điều chỉnh',
       width: 150,
       align: 'right',
-      render: (_: any, r: InvoiceAdjustmentLog) => {
+      render: (_: unknown, r: InvoiceAdjustmentLog) => {
         const b = r.du_lieu_truoc ? JSON.parse(r.du_lieu_truoc) : {}
         return (
           <Space direction="vertical" size={0} style={{ lineHeight: 1.4 }}>
@@ -229,7 +231,7 @@ export default function InvoiceAdjustmentListPage() {
       title: 'Sau điều chỉnh',
       width: 150,
       align: 'right',
-      render: (_: any, r: InvoiceAdjustmentLog) => {
+      render: (_: unknown, r: InvoiceAdjustmentLog) => {
         const a = r.du_lieu_sau ? JSON.parse(r.du_lieu_sau) : {}
         return (
           <Space direction="vertical" size={0} style={{ lineHeight: 1.4 }}>
@@ -244,7 +246,7 @@ export default function InvoiceAdjustmentListPage() {
       title: 'Chênh lệch',
       width: 120,
       align: 'right',
-      render: (_: any, r: InvoiceAdjustmentLog) => {
+      render: (_: unknown, r: InvoiceAdjustmentLog) => {
         const b = r.du_lieu_truoc ? JSON.parse(r.du_lieu_truoc) : {}
         const a = r.du_lieu_sau  ? JSON.parse(r.du_lieu_sau)  : {}
         const diff = Number(a.tong_cong ?? 0) - Number(b.tong_cong ?? 0)
@@ -282,7 +284,7 @@ export default function InvoiceAdjustmentListPage() {
       title: 'Thao tác',
       width: 150,
       fixed: 'right',
-      render: (_: any, r: InvoiceAdjustmentLog) => (
+      render: (_: unknown, r: InvoiceAdjustmentLog) => (
         <Space size={4} wrap>
           <Button
             size="small"

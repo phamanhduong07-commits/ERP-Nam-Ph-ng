@@ -22,8 +22,8 @@ export default function MSTLookupButton({ getMST, onFound }: Props) {
       const info = await lookupMST(mst)
       onFound(info)
       message.success('Đã tìm thấy thông tin doanh nghiệp')
-    } catch (e: any) {
-      message.error(e?.message || 'Tra cứu thất bại')
+    } catch (e) {
+      message.error((e as Error)?.message || 'Tra cứu thất bại')
     } finally {
       setLoading(false)
     }

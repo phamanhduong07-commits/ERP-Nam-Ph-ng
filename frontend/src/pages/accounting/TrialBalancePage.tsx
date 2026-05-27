@@ -8,7 +8,7 @@ import {
   SearchOutlined, AccountBookOutlined 
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { arApi } from '../../api/accounting'
+import { arApi, TrialBalanceRow } from '../../api/accounting'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { fmtVND, printToPdf, buildHtmlTable, exportToExcel, downloadBlob } from '../../utils/exportUtils'
@@ -37,7 +37,7 @@ export default function TrialBalancePage() {
     queryFn: () => warehouseApi.listTheoPhanXuong().then(r => r.data)
   })
 
-  const { data: balance = [], isLoading, refetch } = useQuery({
+  const { data: balance = [], isLoading, refetch } = useQuery<TrialBalanceRow[]>({
     queryKey: ['trial-balance', dates[0].format('YYYY-MM-DD'), dates[1].format('YYYY-MM-DD'), phapNhanId, phanXuongId],
     queryFn: () => arApi.getTrialBalance({
       tu_ngay: dates[0].format('YYYY-MM-DD'),
@@ -48,8 +48,8 @@ export default function TrialBalancePage() {
   })
 
   const safeBalance = Array.isArray(balance) ? balance : []
-  const totalNo = safeBalance.reduce((s: number, r: any) => s + Number(r.phat_sinh_no), 0)
-  const totalCo = safeBalance.reduce((s: number, r: any) => s + Number(r.phat_sinh_co), 0)
+  const totalNo = safeBalance.reduce((s: number, r: TrialBalanceRow) => s + Number(r.phat_sinh_no), 0)
+  const totalCo = safeBalance.reduce((s: number, r: TrialBalanceRow) => s + Number(r.phat_sinh_co), 0)
 
   const columns = [
     { title: 'Số TK', dataIndex: 'so_tk', key: 'so_tk', width: 100, fixed: 'left' as const },
@@ -72,7 +72,7 @@ export default function TrialBalancePage() {
       title: 'Chi tiết',
       width: 80,
       align: 'center' as const,
-      render: (_: any, r: any) => (
+      render: (_: unknown, r: TrialBalanceRow) => (
         <Tooltip title="Xem sổ cái">
           <Button size="small" icon={<FileSearchOutlined />} />
         </Tooltip>
@@ -88,7 +88,7 @@ export default function TrialBalancePage() {
       { header: 'PS Có', align: 'right' as const }, 
       { header: 'Dư cuối kỳ', align: 'right' as const }
     ]
-    const rows = safeBalance.map((r: any) => [
+    const rows = safeBalance.map((r: TrialBalanceRow) => [
       r.so_tk, r.ten_tk, fmtVND(r.so_du_dau), 
       fmtVND(r.phat_sinh_no), fmtVND(r.phat_sinh_co), fmtVND(r.so_du_cuoi)
     ])

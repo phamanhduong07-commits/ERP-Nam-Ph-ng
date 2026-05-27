@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ApiError } from '../../api/types'
 import {
   Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber,
   Modal, Popconfirm, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography, message,
@@ -106,18 +107,18 @@ function DanhMucTab() {
   })
 
   const createMut = useMutation({
-    mutationFn: (values: any) => fixedAssetApi.create(values),
+    mutationFn: (values: Partial<FixedAsset>) => fixedAssetApi.create(values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fixed-assets'] })
       setCreateOpen(false)
       form.resetFields()
       message.success('Đã thêm TSCĐ')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi lưu TSCĐ'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi lưu TSCĐ'),
   })
 
   const updateMut = useMutation({
-    mutationFn: ({ id, values }: { id: number; values: any }) => fixedAssetApi.update(id, values),
+    mutationFn: ({ id, values }: { id: number; values: Partial<FixedAsset> }) => fixedAssetApi.update(id, values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fixed-assets'] })
       setCreateOpen(false)
@@ -125,7 +126,7 @@ function DanhMucTab() {
       form.resetFields()
       message.success('Đã cập nhật TSCĐ')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const runDepMut = useMutation({
@@ -136,7 +137,7 @@ function DanhMucTab() {
       setDepModal(false)
       message.success(`Khấu hao ${data.ky}: ${data.so_tscd_da_kh} tài sản - ${fmt(data.tong_so_tien_kh)} đ`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi chạy khấu hao'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi chạy khấu hao'),
   })
 
   const totalNguyenGia = assets.reduce((s, a) => s + Number(a.nguyen_gia), 0)
@@ -166,7 +167,7 @@ function DanhMucTab() {
     setCreateOpen(true)
   }
 
-  function submitAsset(values: any) {
+  function submitAsset(values: Partial<FixedAsset> & { ngay_mua?: { format: (f: string) => string } }) {
     const payload = {
       ...values,
       ngay_mua: values.ngay_mua ? values.ngay_mua.format('YYYY-MM-DD') : undefined,
@@ -354,7 +355,7 @@ function BaoCaoKhauHaoTab() {
       queryClient.invalidateQueries({ queryKey: ['fixed-asset-report'] })
       message.success('Đã hạch toán khấu hao tài sản')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi khấu hao tài sản'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi khấu hao tài sản'),
   })
 
   const runAllMut = useMutation({
@@ -364,7 +365,7 @@ function BaoCaoKhauHaoTab() {
       queryClient.invalidateQueries({ queryKey: ['fixed-asset-report'] })
       message.success(`Đã khấu hao ${result.so_tscd_da_kh} tài sản`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi chạy khấu hao'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi chạy khấu hao'),
   })
 
   const columns: ColumnsType<DepreciationReportItem> = [

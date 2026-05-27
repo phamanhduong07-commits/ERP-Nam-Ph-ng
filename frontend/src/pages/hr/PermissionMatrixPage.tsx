@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, Card, Checkbox, Typography, Space, Row, Col, Spin, App, List, Divider, Layout, Modal } from 'antd'
 import { SaveOutlined, ReloadOutlined, SafetyOutlined } from '@ant-design/icons'
@@ -33,7 +34,7 @@ export default function PermissionMatrixPage() {
     if (selectedRoleId && roles.length > 0) {
       const role = roles.find(r => r.id === selectedRoleId)
       if (role) {
-        setRolePermissions(new Set(role.role_permissions?.map((rp: any) => rp.permission.id) || []))
+        setRolePermissions(new Set(role.role_permissions?.map((rp: { permission: { id: number } }) => rp.permission.id) || []))
         setHasChanges(false)
       }
     } else if (!selectedRoleId && roles.length > 0) {
@@ -76,8 +77,8 @@ export default function PermissionMatrixPage() {
       setHasChanges(false)
       qc.invalidateQueries({ queryKey: ['roles'] })
     },
-    onError: (e: any) => {
-      message.error(e?.response?.data?.detail || 'Lỗi khi lưu phân quyền')
+    onError: (e: { response?: { data?: { detail?: string } } }) => {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi lưu phân quyền')
     }
   })
 

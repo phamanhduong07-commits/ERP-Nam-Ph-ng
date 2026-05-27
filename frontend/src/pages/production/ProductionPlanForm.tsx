@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -92,7 +93,7 @@ export default function ProductionPlanForm() {
       message.success(`Đã tạo kế hoạch ${res.data.so_ke_hoach}`)
       navigate(`/production/plans?id=${res.data.id}`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo kế hoạch'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo kế hoạch'),
   })
 
   // Cột bảng available items

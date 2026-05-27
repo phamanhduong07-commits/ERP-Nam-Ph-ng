@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Form, Input, Select, Space, Table, Typography, message, Row, Col, TreeSelect
@@ -28,7 +29,7 @@ export default function DepartmentPage() {
 
   const { data: phanXuongList = [] } = useQuery({
     queryKey: ['phan-xuong-list'],
-    queryFn: () => theoDoiApi.listPhanXuong().then((r: any) => r.data),
+    queryFn: () => theoDoiApi.listPhanXuong().then((r: unknown) => r.data),
   })
 
   const saveMut = useMutation({
@@ -40,11 +41,11 @@ export default function DepartmentPage() {
       setEditing(null)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi lưu dữ liệu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi lưu dữ liệu'),
   })
 
   // Convert flat list to tree for TreeSelect
-  const buildTree = (list: Department[], parentId: number | null = null): any[] => {
+  const buildTree = (list: Department[], parentId: number | null = null): unknown[] => {
     return list
       .filter(item => item.parent_id === parentId)
       .map(item => ({
@@ -74,7 +75,7 @@ export default function DepartmentPage() {
     {
       title: 'Xưởng',
       dataIndex: 'phan_xuong_id',
-      render: (v: number) => phanXuongList.find((px: any) => px.id === v)?.ten_xuong
+      render: (v: number) => phanXuongList.find((px: { id: number; ten_xuong?: string; [k: string]: unknown }) => px.id === v)?.ten_xuong
     },
     {
       title: 'Pháp nhân',
@@ -84,7 +85,7 @@ export default function DepartmentPage() {
     {
       title: '',
       width: 60,
-      render: (_: any, r: Department) => (
+      render: (_: unknown, r: Department) => (
         <Button size="small" icon={<EditOutlined />} onClick={() => {
           setEditing(r)
           form.setFieldsValue(r)
@@ -102,7 +103,7 @@ export default function DepartmentPage() {
         </Col>
         <Col>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-            setEditing({} as any)
+            setEditing({} as Parameters<typeof setEditing>[0])
             form.resetFields()
           }}>
             Thêm bộ phận mới
@@ -154,7 +155,7 @@ export default function DepartmentPage() {
                     <Form.Item name="phan_xuong_id" label="Gắn với xưởng">
                       <Select 
                         allowClear
-                        options={phanXuongList.map((p: any) => ({ value: p.id, label: p.ten_xuong }))}
+                        options={phanXuongList.map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))}
                       />
                     </Form.Item>
                   </Col>

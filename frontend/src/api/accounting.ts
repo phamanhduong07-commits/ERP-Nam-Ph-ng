@@ -539,23 +539,95 @@ export interface FixedAsset {
   trang_thai: string
 }
 
+// ──────────────────────────────────────────────────────
+// Interfaces — Workshop Management
+// ──────────────────────────────────────────────────────
+
+export interface WorkshopPayrollCreate {
+  thang: string
+  phan_xuong_id: number
+  phap_nhan_id: number
+  tong_luong: number
+  bo_qua_hach_toan?: boolean
+}
+
+export interface FixedAssetCreate {
+  ma_ts: string
+  ten_ts: string
+  nguyen_gia: number
+  thoi_gian_khau_hao: number
+  ngay_mua: string
+  phan_xuong_id: number
+  phap_nhan_id: number
+  bo_qua_hach_toan?: boolean
+}
+
+export interface AllocateOverheadPayload {
+  tu_ngay: string
+  den_ngay: string
+  so_tk: string
+  phap_nhan_id: number
+  allocations: { phan_xuong_id: number; ty_le: number }[]
+}
+
+// ──────────────────────────────────────────────────────
+// Interfaces — Journal Entry
+// ──────────────────────────────────────────────────────
+
+export interface JournalLine {
+  so_tk: string
+  dien_giai?: string
+  so_tien_no: number
+  so_tien_co: number
+  phan_xuong_id?: number | null
+  phap_nhan_id?: number | null
+}
+
+export interface JournalEntryCreate {
+  ngay_but_toan: string
+  dien_giai: string
+  loai_but_toan: string
+  phap_nhan_id?: number | null
+  phan_xuong_id?: number | null
+  tong_no: number
+  tong_co: number
+  lines: JournalLine[]
+}
+
+export interface JournalEntryListParams {
+  tu_ngay?: string
+  den_ngay?: string
+  phap_nhan_id?: number
+  page?: number
+  page_size?: number
+}
+
+export interface TrialBalanceRow {
+  so_tk: string
+  ten_tk: string
+  so_du_dau: number
+  phat_sinh_no: number
+  phat_sinh_co: number
+  so_du_cuoi: number
+}
+
 export const workshopManagementApi = {
   // Bảng lương
-  listPayroll: (params?: any) => client.get('/accounting/workshop-payroll', { params }).then(r => r.data),
-  createPayroll: (data: any) => client.post('/accounting/workshop-payroll', data).then(r => r.data),
+  listPayroll: (params?: Record<string, unknown>) => client.get<WorkshopPayroll[]>('/accounting/workshop-payroll', { params }).then(r => r.data),
+  createPayroll: (data: WorkshopPayrollCreate) => client.post<WorkshopPayroll>('/accounting/workshop-payroll', data).then(r => r.data),
   approvePayroll: (id: number) => client.patch(`/accounting/workshop-payroll/${id}/approve`).then(r => r.data),
 
   // Tài sản & Khấu hao
-  listAssets: (params?: any) => client.get('/accounting/fixed-assets', { params }).then(r => r.data),
-  createAsset: (data: any) => client.post('/accounting/fixed-assets', data).then(r => r.data),
-  runDepreciation: (params: { thang: number; nam: number; phap_nhan_id: number }) => 
+  listAssets: (params?: Record<string, unknown>) => client.get<FixedAsset[]>('/accounting/fixed-assets', { params }).then(r => r.data),
+  createAsset: (data: FixedAssetCreate) => client.post<FixedAsset>('/accounting/fixed-assets', data).then(r => r.data),
+  runDepreciation: (params: { thang: number; nam: number; phap_nhan_id: number }) =>
     client.post('/accounting/fixed-assets/run-depreciation', null, { params }).then(r => r.data),
 
   // Phân bổ chi phí
-  allocateOverhead: (data: any) => client.post('/accounting/allocate-overhead', data).then(r => r.data),
+  allocateOverhead: (data: AllocateOverheadPayload) => client.post('/accounting/allocate-overhead', data).then(r => r.data),
 }
 
 export const journalApi = {
-  list: (params?: any) => client.get('/accounting/journal-entries', { params }).then(r => r.data),
-  create: (data: any) => client.post('/accounting/journal-entries', data).then(r => r.data),
+  list: (params?: JournalEntryListParams) => client.get('/accounting/journal-entries', { params }).then(r => r.data),
+  create: (data: JournalEntryCreate) => client.post('/accounting/journal-entries', data).then(r => r.data),
 }

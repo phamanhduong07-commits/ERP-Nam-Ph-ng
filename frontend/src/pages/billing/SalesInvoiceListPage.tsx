@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -12,7 +13,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
 import {
-  billingApi, SalesInvoiceListItem,
+  billingApi, SalesInvoice, SalesInvoiceListItem,
   TRANG_THAI_INVOICE, HINH_THUC_TT,
 } from '../../api/billing'
 import { salesOrdersApi, SalesOrderListItem, TRANG_THAI_COLORS as SO_STATUS_COLORS } from '../../api/salesOrders'
@@ -63,14 +64,14 @@ export default function SalesInvoiceListPage() {
 
   const fromSOmut = useMutation({
     mutationFn: (orderId: number) => billingApi.createFromOrder(orderId),
-    onSuccess: (inv: any) => {
+    onSuccess: (inv: SalesInvoice) => {
       message.success('Đã tạo hóa đơn từ đơn hàng')
       qc.invalidateQueries({ queryKey: ['billing-invoices'] })
       setShowFromSOModal(false)
       setSelectedSOId(null)
       navigate(`/billing/invoices/${inv.id}`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi tạo hóa đơn'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo hóa đơn'),
   })
 
   const tongConLai = invoices.reduce((s, i) => s + (i.con_lai ?? 0), 0)

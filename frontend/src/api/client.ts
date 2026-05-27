@@ -103,7 +103,7 @@ client.interceptors.response.use(
     // Normalize FastAPI 422 validation errors: detail is array of {type,loc,msg,...}
     if (err.response?.data?.detail && Array.isArray(err.response.data.detail)) {
       err.response.data.detail = err.response.data.detail
-        .map((item: any) => item?.msg ?? JSON.stringify(item))
+        .map((item: unknown) => (item as { msg?: string })?.msg ?? JSON.stringify(item))
         .join('; ')
     }
     return Promise.reject(err)

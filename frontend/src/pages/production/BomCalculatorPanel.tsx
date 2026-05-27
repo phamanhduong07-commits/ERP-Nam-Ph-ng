@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   Card, Row, Col, Form, Select, InputNumber, Input, Checkbox,
@@ -395,8 +396,8 @@ export default function BomCalculatorPanel({
   const calcMutation = useMutation({
     mutationFn: (req: BomCalculateRequest) => bomApi.calculate(req),
     onSuccess: (res) => { setResult(res.data) },
-    onError: (err: any) => {
-      message.error(err?.response?.data?.detail || 'Lỗi tính toán BOM')
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi tính toán BOM')
     },
   })
 
@@ -404,7 +405,7 @@ export default function BomCalculatorPanel({
     mutationFn: (req: Parameters<typeof bomApi.reverseCalculate>[0]) =>
       bomApi.reverseCalculate(req),
     onSuccess: (res) => setReverseResult(res.data),
-    onError: (err: any) => message.error(err?.response?.data?.detail || 'Lỗi tính ngược'),
+    onError: (err: { response?: { data?: { detail?: string } } }) => message.error((err as ApiError)?.response?.data?.detail || 'Lỗi tính ngược'),
   })
 
   const saveMutation = useMutation({
@@ -419,8 +420,8 @@ export default function BomCalculatorPanel({
       message.success(`Đã lưu hoạch toán BOM #${res.data.id}`)
       onBomSaved?.(res.data.id)
     },
-    onError: (err: any) => {
-      message.error(err?.response?.data?.detail || 'Lỗi lưu hoạch toán')
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi lưu hoạch toán')
     },
   })
 

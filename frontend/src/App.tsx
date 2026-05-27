@@ -1,5 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { lazy, Suspense, useEffect, useState } from 'react'
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): void
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
 import { useAuthStore } from './store/auth'
 import AppLayout from './components/AppLayout'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -190,12 +195,12 @@ function WorkerOrPrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const [installPrompt, setInstallPrompt] = useState<any>(null)
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
 
   useEffect(() => {
-    const handler = (e: any) => {
+    const handler = (e: Event) => {
       e.preventDefault()
-      setInstallPrompt(e)
+      setInstallPrompt(e as BeforeInstallPromptEvent)
     }
     window.addEventListener('beforeinstallprompt', handler)
     return () => window.removeEventListener('beforeinstallprompt', handler)

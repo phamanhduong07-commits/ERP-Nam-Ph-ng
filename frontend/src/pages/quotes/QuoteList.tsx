@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import type { ApiError } from '../../../../../../../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -15,6 +16,12 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS } from '../../api/quotes'
 import type { QuoteListItem } from '../../api/quotes'
+
+interface AxiosErrorLike { response?: { data?: { detail?: string } }; message?: string }
+function apiErrorMsg(e: unknown, fallback: string): string {
+  const err = e as AxiosErrorLike
+  return (err as ApiError)?.response?.data?.detail || err?.message || fallback
+}
 import { phapNhanApi } from '../../api/phap_nhan'
 import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, smartPrintPdf, fmtVND, fmtDate, buildHtmlTable } from '../../utils/exportUtils'
 import ImportExcelButton from '../../components/ImportExcelButton'
@@ -124,8 +131,8 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
         { key: 'gia_ban', label: 'Gia ban', width: 14 },
         { key: 'thanh_tien', label: 'Thanh tien', width: 16 },
       ], `BaoGia_${dayjs().format('YYYYMMDD')}`, phapNhanResult.phapNhanId, { throwOnError: true })
-    } catch (e: any) {
-      message.error(e?.message || e?.response?.data?.detail || 'Xuat Excel bao gia that bai')
+    } catch (e: unknown) {
+      message.error(apiErrorMsg(e, 'Xuat Excel bao gia that bai'))
     } finally {
       setIsExporting(false)
     }
@@ -156,8 +163,8 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
         total_count: String(items.length),
         body_html: buildHtmlTable(cols, rows),
       }, phapNhanResult.phapNhanId, { throwOnError: true, landscape: true })
-    } catch (e: any) {
-      message.error(e?.message || e?.response?.data?.detail || 'Xuat PDF bao gia that bai')
+    } catch (e: unknown) {
+      message.error(apiErrorMsg(e, 'Xuat PDF bao gia that bai'))
     } finally {
       setIsExporting(false)
     }
@@ -187,7 +194,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       invalidateCounts()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi gửi duyệt'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi gửi duyệt')),
   })
 
   const approveMutation = useMutation({
@@ -197,7 +204,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       invalidateCounts()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi duyệt'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi duyệt')),
   })
 
   const cancelMutation = useMutation({
@@ -207,7 +214,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       invalidateCounts()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi huỷ'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi huỷ')),
   })
 
   const taoDonMutation = useMutation({
@@ -217,7 +224,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
       queryClient.invalidateQueries({ queryKey: ['sales-orders'] })
       navigate('/sales/orders')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo đơn'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi tạo đơn')),
   })
 
   const copyMutation = useMutation({
@@ -227,7 +234,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       navigate(`/quotes/${res.data.id}/edit`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Copy báo giá thất bại'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Copy báo giá thất bại')),
   })
 
   const giaHanMutation = useMutation({
@@ -237,7 +244,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       invalidateCounts()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Gia hạn thất bại'),
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Gia hạn thất bại')),
   })
 
   const compactColumns: ColumnsType<QuoteListItem> = [

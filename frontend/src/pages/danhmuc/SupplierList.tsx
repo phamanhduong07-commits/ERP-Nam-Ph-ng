@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input,
@@ -47,7 +48,7 @@ export default function SupplierList() {
       closeModal()
       message.success('Đã thêm nhà cung cấp')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm nhà cung cấp'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi thêm nhà cung cấp'),
   })
 
   const updateMut = useMutation({
@@ -58,7 +59,7 @@ export default function SupplierList() {
       closeModal()
       message.success('Đã cập nhật nhà cung cấp')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   const openCreate = () => {

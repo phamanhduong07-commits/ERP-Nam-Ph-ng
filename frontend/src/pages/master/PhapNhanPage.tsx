@@ -28,7 +28,7 @@ export default function PhapNhanPage() {
       setModalOpen(false)
       queryClient.invalidateQueries({ queryKey: ['phap-nhans'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Thao tác thất bại')
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Thao tác thất bại')
   })
 
   const deleteMut = useMutation({

@@ -9,13 +9,18 @@ import {
   BookOutlined 
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { arApi } from '../../api/accounting'
+import { arApi, TrialBalanceRow } from '../../api/accounting'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { fmtVND, printToPdf, buildHtmlTable } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
+
+interface GeneralLedgerRow {
+  ngay: string; so_phieu: string; dien_giai?: string; tk_doi_ung?: string
+  phat_sinh_no: number; phat_sinh_co: number; so_du: number; id?: number
+}
 
 export default function GeneralLedgerPage() {
   const [searchParams] = useSearchParams()
@@ -77,7 +82,7 @@ export default function GeneralLedgerPage() {
       { header: 'TK ĐƯ' }, { header: 'Nợ', align: 'right' as const }, 
       { header: 'Có', align: 'right' as const }, { header: 'Số dư', align: 'right' as const }
     ]
-    const rows = ledger.rows.map((r: any) => [
+    const rows = (ledger.rows as GeneralLedgerRow[]).map((r: GeneralLedgerRow) => [
       dayjs(r.ngay).format('DD/MM'), r.so_phieu, r.dien_giai, 
       r.tk_doi_ung, fmtVND(r.phat_sinh_no), fmtVND(r.phat_sinh_co), fmtVND(r.so_du)
     ])
@@ -110,7 +115,7 @@ export default function GeneralLedgerPage() {
               placeholder="Chọn tài khoản..."
               value={soTk}
               onChange={setSoTk}
-              options={(Array.isArray(accounts) ? accounts : []).map((a: any) => ({ value: a.so_tk, label: `${a.so_tk} - ${a.ten_tk}` }))}
+              options={(Array.isArray(accounts) ? accounts as TrialBalanceRow[] : []).map((a: TrialBalanceRow) => ({ value: a.so_tk, label: `${a.so_tk} - ${a.ten_tk}` }))}
               filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
             />
             <Select

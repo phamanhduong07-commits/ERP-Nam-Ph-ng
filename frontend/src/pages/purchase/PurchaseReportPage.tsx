@@ -148,7 +148,7 @@ function SoChiTietTab() {
             allowClear showSearch optionFilterProp="label"
             value={supplierId}
             onChange={v => setSupplierId(v)}
-            options={(suppliers as any[]).map(s => ({ value: s.id, label: s.ten_viet_tat }))}
+            options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat }))}
           />
         </Col>
         <Col>
@@ -158,7 +158,7 @@ function SoChiTietTab() {
             allowClear showSearch optionFilterProp="label"
             value={phapNhanId}
             onChange={v => setPhapNhanId(v)}
-            options={(listPhapNhan as any[]).map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+            options={listPhapNhan.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
           />
         </Col>
         <Col>
@@ -301,7 +301,7 @@ function DoiChieuTab() {
             showSearch optionFilterProp="label"
             value={supplierId}
             onChange={v => setSupplierId(v)}
-            options={(suppliers as any[]).map(s => ({ value: s.id, label: s.ten_viet_tat }))}
+            options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat }))}
           />
         </Col>
         <Col>
@@ -377,7 +377,7 @@ function DoiChieuTab() {
             dataSource={data.hoa_don}
             pagination={false}
             scroll={{ x: 820 }}
-            rowClassName={(r: any) => {
+            rowClassName={(r: { han_tt?: string | null; trang_thai?: string }) => {
               if (!r.han_tt || r.trang_thai === 'da_tt_du') return ''
               return dayjs(r.han_tt).isBefore(dayjs(), 'day') ? 'row-overdue' : ''
             }}

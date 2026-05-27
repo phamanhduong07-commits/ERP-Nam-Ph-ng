@@ -20,6 +20,14 @@ import { socket } from '../../utils/socket'
 
 const { Title, Text } = Typography
 
+interface MayScanStat {
+  may_scan_id: number
+  ten_may: string
+  so_lan: number
+  sl_tp: number
+  tien_luong: number
+}
+
 const MAIN_STATES = [
   { key: 'cho_in',        label: 'Chờ in',        color: '#d46b08', bg: '#fff7e6', border: '#ffd591' },
   { key: 'ke_hoach',      label: 'Kế hoạch',      color: '#0958d9', bg: '#e6f4ff', border: '#91caff' },
@@ -363,7 +371,7 @@ export default function CD2DashboardPage() {
             </Link>
           </Row>
           <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
-            {mayStats.map((m: any) => (
+            {(mayStats as MayScanStat[]).map((m) => (
               <Col xs={24} sm={12} md={8} key={m.may_scan_id}>
                 <Card
                   size="small"

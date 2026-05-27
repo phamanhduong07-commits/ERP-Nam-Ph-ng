@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Row, Col, Button, Drawer, Menu, Select, Table, Typography, Tag,
@@ -189,7 +190,7 @@ export default function KhoTheoXuongPage() {
       queryClient.invalidateQueries({ queryKey: ['kho-theo-xuong'] })
       queryClient.invalidateQueries({ queryKey: ['warehouses'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi khởi tạo kho'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi khởi tạo kho'),
   })
 
   const displayList = selectedPxId === 'all'
@@ -212,7 +213,7 @@ export default function KhoTheoXuongPage() {
             style={{ width: 200 }}
             value={filterPhapNhan}
             onChange={v => { setFilterPhapNhan(v); setSelectedPxId('all') }}
-            options={phapNhanList.map((p: any) => ({
+            options={phapNhanList.map((p) => ({
               value: p.id,
               label: p.ten_viet_tat || p.ten_phap_nhan,
             }))}
@@ -313,7 +314,7 @@ export default function KhoTheoXuongPage() {
                     <Col key={loai} xs={24} sm={12} md={6}>
                       <WarehouseCard
                         loai={loai}
-                        slot={(px.warehouses as any)[loai]}
+                        slot={(px.warehouses as Record<string, unknown>)[loai]}
                         onInit={() => initMut.mutate(px.id)}
                         onDetail={setDetailSlot}
                       />

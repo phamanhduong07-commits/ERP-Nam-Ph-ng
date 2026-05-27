@@ -28,10 +28,10 @@ export default function Login() {
       setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
       navigate('/dashboard')
     } catch (err: unknown) {
-      const detail = (err as any)?.response?.data?.detail
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
       let msg = detail
       if (Array.isArray(detail)) {
-        msg = detail.map((d: any) => d.msg).join(', ')
+        msg = detail.map((d: { msg?: string }) => d.msg).join(', ')
       } else if (typeof detail === 'object' && detail !== null) {
         msg = JSON.stringify(detail)
       }

@@ -8,10 +8,11 @@ const { Title, Text } = Typography
 
 const VATSummaryPage: React.FC = () => {
   const { phapNhanList } = usePhapNhan()
+  interface VATData { doanh_thu_chiu_thue: number; thue_gtgt_dau_ra: number; gia_tri_hang_mua: number; thue_gtgt_dau_vao: number; thue_gtgt_phai_nop: number }
   const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<VATData | null>(null)
 
-  const onFinish = async (values: any) => {
+  const onFinish = async (values: { thang: { month: () => number; year: () => number }; phap_nhan_id: number }) => {
     setLoading(true)
     try {
       const params = {
@@ -58,7 +59,7 @@ const VATSummaryPage: React.FC = () => {
           </Form.Item>
           <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true }]}>
             <Select placeholder="Chọn pháp nhân" style={{ width: 250 }}>
-              {phapNhanList.map((pn: any) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
+              {phapNhanList.map((pn) => <Select.Option key={pn.id} value={pn.id}>{pn.ten_phap_nhan}</Select.Option>)}
             </Select>
           </Form.Item>
           <Form.Item>

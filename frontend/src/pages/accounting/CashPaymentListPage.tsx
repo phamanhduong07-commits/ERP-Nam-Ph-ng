@@ -8,7 +8,7 @@ import { FileExcelOutlined, PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
-import { paymentApi } from '../../api/accounting'
+import { paymentApi, CashPayment } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
 
 const { Title, Text } = Typography
@@ -52,12 +52,12 @@ export default function CashPaymentListPage() {
       }),
   })
 
-  const payments = data?.items ?? data ?? []
+  const payments: CashPayment[] = data?.items ?? data ?? []
   const total: number = data?.total ?? payments.length
-  const tongSoTien = payments.reduce((s: number, r: any) => s + (r.so_tien ?? 0), 0)
+  const tongSoTien = payments.reduce((s: number, r: CashPayment) => s + (r.so_tien ?? 0), 0)
 
   const handleExcel = () => {
-    const rows = payments.map((r: any) => ({
+    const rows = payments.map((r: CashPayment) => ({
       'Số phiếu': r.so_phieu,
       'Ngày phiếu': r.ngay_phieu,
       'Nhà cung cấp': r.ten_don_vi ?? r.supplier_id,
@@ -73,7 +73,7 @@ export default function CashPaymentListPage() {
     }])
   }
 
-  const columns: ColumnsType<any> = [
+  const columns: ColumnsType<CashPayment> = [
     {
       title: 'Số phiếu',
       dataIndex: 'so_phieu',
@@ -167,7 +167,7 @@ export default function CashPaymentListPage() {
               allowClear
               placeholder="Pháp nhân"
               onChange={v => { setFilterPhapNhan(v); setPage(1) }}
-              options={phapNhanList.map((p: any) => ({ value: p.id, label: p.ten_phap_nhan }))}
+              options={phapNhanList.map((p) => ({ value: p.id, label: p.ten_phap_nhan }))}
             />
           </Col>
         </Row>

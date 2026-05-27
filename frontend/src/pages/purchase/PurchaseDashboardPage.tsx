@@ -65,7 +65,7 @@ export default function PurchaseDashboardPage() {
           <Col>
             <Select
               allowClear placeholder="Pháp nhân" style={{ width: 180 }}
-              options={listPhapNhan.map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              options={listPhapNhan.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
               value={phapNhanId}
               onChange={setPhapNhanId}
             />

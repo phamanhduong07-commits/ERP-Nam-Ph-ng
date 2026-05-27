@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
@@ -106,7 +107,7 @@ export default function YMHListPage() {
 
   const filteredXuongList = useMemo(() => {
     if (!filterPhapNhan) return phanXuongList
-    return phanXuongList.filter((px: any) => px.phap_nhan_id === filterPhapNhan)
+    return phanXuongList.filter(px => px.phap_nhan_id === filterPhapNhan)
   }, [filterPhapNhan, phanXuongList])
 
   const effectiveTrangThai = shortcutFilter ?? trangThai
@@ -161,7 +162,7 @@ export default function YMHListPage() {
       setCreateOpen(false)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi tạo YMH'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo YMH'),
   })
 
   const duyetPBMutation = useMutation({
@@ -170,7 +171,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('Phòng ban đã duyệt')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi duyệt PB'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi duyệt PB'),
   })
 
   const duyetGDMutation = useMutation({
@@ -179,7 +180,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('GĐ đã duyệt')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi duyệt GĐ'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi duyệt GĐ'),
   })
 
   const huyMutation = useMutation({
@@ -188,7 +189,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('Đã hủy YMH')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi hủy YMH'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi hủy YMH'),
   })
 
   const deleteMutation = useMutation({
@@ -197,7 +198,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('Đã xóa YMH')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi xóa YMH'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi xóa YMH'),
   })
 
   const submitMutation = useMutation({
@@ -206,7 +207,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('Đã gửi yêu cầu đi duyệt')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi gửi duyệt'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi gửi duyệt'),
   })
 
   const approveMutation = useMutation({
@@ -215,7 +216,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('Đã phê duyệt YMH')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi phê duyệt'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi phê duyệt'),
   })
 
   const rejectMutation = useMutation({
@@ -227,7 +228,7 @@ export default function YMHListPage() {
       setRejectRecord(null)
       setRejectReason('')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi từ chối'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi từ chối'),
   })
 
   const taoPOMutation = useMutation({
@@ -239,11 +240,11 @@ export default function YMHListPage() {
       setPoRecord(null)
       poForm.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail ?? 'Lỗi tạo PO'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo PO'),
   })
 
   function syncXuongToPhapNhan(phanXuongId?: number) {
-    const px = phanXuongList.find((x: any) => x.id === phanXuongId) as any
+    const px = phanXuongList.find(x => x.id === phanXuongId)
     if (px?.phap_nhan_id) form.setFieldValue('phap_nhan_id', px.phap_nhan_id)
   }
 
@@ -276,7 +277,7 @@ export default function YMHListPage() {
     form.setFieldValue('items', updated)
   }
 
-  function toPayload(values: any): CreateYmhPayload {
+  function toPayload(values: Record<string, unknown>): CreateYmhPayload {
     const items = (values.items ?? []).map((it: FormItem) => ({
       paper_material_id: it.loai_vat_tu === 'giay' ? (it.mat_id || null) : null,
       other_material_id: it.loai_vat_tu === 'khac' ? (it.mat_id || null) : null,
@@ -487,7 +488,7 @@ export default function YMHListPage() {
               placeholder="Xưởng"
               style={{ width: '100%' }}
               optionFilterProp="label"
-              options={filteredXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
+              options={filteredXuongList.map(px => ({ value: px.id, label: px.ten_xuong }))}
               value={filterXuong}
               onChange={setFilterXuong}
             />
@@ -592,7 +593,7 @@ export default function YMHListPage() {
               {viewRecord.ghi_chu && <Descriptions.Item label="Ghi chú" span={2}>{viewRecord.ghi_chu}</Descriptions.Item>}
             </Descriptions>
             <Table
-              rowKey={(r: any, i) => r.id ?? `${r.ten_hang}-${i}`}
+              rowKey={(r, i) => r.id ?? `${r.ten_hang}-${i}`}
               size="small"
               dataSource={viewRecord.items}
               pagination={false}
@@ -659,7 +660,7 @@ export default function YMHListPage() {
                   showSearch
                   optionFilterProp="label"
                   placeholder="Chọn xưởng"
-                  options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
+                  options={phanXuongList.map(px => ({ value: px.id, label: px.ten_xuong }))}
                   onChange={syncXuongToPhapNhan}
                 />
               </Form.Item>

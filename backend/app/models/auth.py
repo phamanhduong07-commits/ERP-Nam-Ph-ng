@@ -57,6 +57,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role_id: Mapped[int] = mapped_column(Integer, ForeignKey("roles.id"), nullable=False)
     phan_xuong: Mapped[str | None] = mapped_column(String(50))
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     machine_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     lan_dang_nhap_cuoi: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

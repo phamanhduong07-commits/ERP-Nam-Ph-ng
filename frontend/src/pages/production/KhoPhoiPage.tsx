@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -120,8 +121,9 @@ export default function KhoPhoiPage() {
       message.success(`Đã đẩy ${row.so_lenh} sang ${target === 'in' ? 'Chờ in' : 'Chờ định hình'}`)
       qc.invalidateQueries({ queryKey: ['ton-kho-lsx'] })
       navigate('/production/cd2')
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi đẩy sang CD2')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi đẩy sang CD2')
     } finally {
       setPushingKey(null)
     }
@@ -173,8 +175,9 @@ export default function KhoPhoiPage() {
       setSelectedRowKeys([])
       qc.invalidateQueries({ queryKey: ['ton-kho-lsx'] })
       qc.invalidateQueries({ queryKey: ['phieu-chuyen'] })
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu chuyển kho')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu chuyển kho')
     } finally {
       setChuyenLoading(false)
     }

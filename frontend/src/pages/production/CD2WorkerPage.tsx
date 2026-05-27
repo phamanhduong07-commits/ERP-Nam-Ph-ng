@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Form, InputNumber, message, Modal,
@@ -9,7 +10,7 @@ import {
   PlayCircleOutlined, WarningFilled,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { cd2Api, Machine, PhieuIn } from '../../api/cd2'
+import { cd2Api, Machine, PhieuIn, TrackPayload } from '../../api/cd2'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { useAuthStore } from '../../store/auth'
 import { socket } from '../../utils/socket'
@@ -79,18 +80,18 @@ export default function CD2WorkerPage() {
   }, [qc, selectedMachineId])
 
   const trackMutation = useMutation({
-    mutationFn: (data: any) => cd2Api.trackProduction(data),
+    mutationFn: (data: TrackPayload) => cd2Api.trackProduction(data),
     onSuccess: () => {
       message.success('Đã cập nhật!')
       qc.invalidateQueries({ queryKey: ['worker-phieu', selectedMachineId] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Thất bại'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
   })
 
   const doTrack = (
     phieu: PhieuIn,
     eventType: 'start' | 'stop' | 'resume' | 'complete',
-    extra: any = {}
+    extra: Partial<TrackPayload> = {}
   ) => {
     if ('vibrate' in navigator) navigator.vibrate(50)
     trackMutation.mutate({
@@ -112,7 +113,7 @@ export default function CD2WorkerPage() {
     setPausedIds(prev => { const s = new Set(prev); s.delete(phieu.id); return s })
   }
 
-  const onConfirmComplete = (values: any) => {
+  const onConfirmComplete = (values: { quantity_ok: number; quantity_loi?: number }) => {
     if (!completePhieu) return
     doTrack(completePhieu, 'complete', {
       quantity_ok: values.quantity_ok,

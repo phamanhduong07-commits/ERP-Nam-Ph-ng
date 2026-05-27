@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
@@ -342,8 +343,9 @@ function TabNhap() {
       }
       message.error('Mẫu in delivery_order chưa có nội dung')
       return
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || e?.message || 'Không tìm thấy mẫu in đúng pháp nhân')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } }; message?: string }
+      message.error((err as ApiError)?.response?.data?.detail || err?.message || 'Không tìm thấy mẫu in đúng pháp nhân')
       return
     }
     const ngayFmt = fmtDate(phieu.ngay)
@@ -464,7 +466,7 @@ function TabNhap() {
         'Giờ bắt đầu', 'Giờ kết thúc', 'Thời gian thực hiện',
         'SL thực tế', 'Phôi lỗi', 'Nhập kho',
       ]
-      const summaryRows: any[][] = []
+      const summaryRows: (string | number | null)[][] = []
       let sttPhieu = 0
       grouped.forEach(({ order, phieus }) => {
         phieus.forEach(p => {
@@ -499,7 +501,7 @@ function TabNhap() {
         'Tên hàng (item)', 'Chiều khổ', 'Chiều cắt',
         'SL kế hoạch', 'SL thực tế', 'Phôi lỗi', 'Nhập kho', 'Số tấm', 'Ghi chú',
       ]
-      const detailRows: any[][] = []
+      const detailRows: (string | number | null)[][] = []
       grouped.forEach(({ order, phieus }) => {
         phieus.forEach(p => {
           const dur = calcDuration(p.gio_bat_dau, p.gio_ket_thuc)
@@ -970,7 +972,7 @@ function TabXuat() {
       setGhiChu('')
       setXuatRows([{ ten_hang: '', so_luong: null, ghi_chu: '' }])
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu xuất'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu xuất'),
   })
 
   const updateXuatRow = (i: number, patch: Partial<XuatRowState>) =>

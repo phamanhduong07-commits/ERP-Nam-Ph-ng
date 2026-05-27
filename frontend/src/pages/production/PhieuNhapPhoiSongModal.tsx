@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import type { ApiError } from '../../api/types'
 import {
   Button, DatePicker, Form, Input, InputNumber, message,
   Modal, Select, Space, Table, TimePicker, Tag, Typography,
@@ -253,8 +254,9 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
       setResult(res.data)
       message.success(`Đã tạo ${res.data.so_phieu}`)
       onSuccess()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu')
     } finally {
       setLoading(false)
     }
@@ -282,8 +284,9 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
       setTamDungModalOpen(false)
       message.info('Đã tạm dừng — dữ liệu nhập sẽ được khôi phục khi mở lại')
       onClose()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi ghi log tạm dừng')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error((err as ApiError)?.response?.data?.detail || 'Lỗi ghi log tạm dừng')
     } finally {
       setTamDungLoading(false)
     }

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Badge, Button, Card, Col, DatePicker, Divider, Empty,
@@ -138,8 +139,8 @@ function StartDinhHinhModal({
       message.success('Đã chuyển sang TP')
       form.resetFields()
       onDone()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi')
     } finally {
       setSaving(false)
     }
@@ -211,8 +212,8 @@ function HoanThanhModal({
       message.success('Hoàn thành TP — đã nhập kho thành phẩm')
       form.resetFields()
       onDone()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi')
     } finally {
       setSaving(false)
     }
@@ -237,8 +238,8 @@ function HoanThanhModal({
           message.success(`Đã ngưng — phiếu bù: ${res.data.phieu_bu.so_phieu}`)
           form.resetFields()
           onDone()
-        } catch (e: any) {
-          message.error(e?.response?.data?.detail || 'Lỗi')
+        } catch (e) {
+          message.error((e as ApiError)?.response?.data?.detail || 'Lỗi')
         } finally {
           setNgungSaving(false)
         }
@@ -353,13 +354,13 @@ function MaySauInSettingsModal({ open, onClose }: { open: boolean; onClose: () =
   const createMut = useMutation({
     mutationFn: (d: { ten_may: string; sort_order: number }) => cd2Api.createMaySauIn(d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['cd2-may-sau-in'] }); form.resetFields() },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo máy'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo máy'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => cd2Api.deleteMaySauIn(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['cd2-may-sau-in'] }),
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá máy'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá máy'),
   })
 
   return (
@@ -767,7 +768,7 @@ export default function SauInKanbanPage() {
   const startMut = useMutation({
     mutationFn: (id: number) => cd2Api.batDauSauIn(id),
     onSuccess: invalidate,
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi bắt đầu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi bắt đầu'),
   })
 
   const handleComplete = (phieu: PhieuIn) => {
@@ -777,14 +778,14 @@ export default function SauInKanbanPage() {
   const returnMut = useMutation({
     mutationFn: (id: number) => cd2Api.traVeSauIn(id),
     onSuccess: invalidate,
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi trả về'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi trả về'),
   })
 
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => cd2Api.deletePhieuIn(id),
     onSuccess: () => { invalidate(); message.success('Đã xoá') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
     onSettled: () => setDeletingId(null),
   })
 
@@ -796,7 +797,7 @@ export default function SauInKanbanPage() {
   const tamDungMut = useMutation({
     mutationFn: ({ id, ly_do }: { id: number; ly_do: string }) => cd2Api.tamDungIn(id, { ly_do }),
     onSuccess: () => { invalidate(); setPausingPhieu(null); setPauseReason('') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạm dừng'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạm dừng'),
   })
 
   const handleConfirmPause = () => {
@@ -813,8 +814,8 @@ export default function SauInKanbanPage() {
         await cd2Api.batDauSauIn(phieu.id)
       }
       invalidate()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Lỗi tiếp tục')
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tiếp tục')
     }
   }
 

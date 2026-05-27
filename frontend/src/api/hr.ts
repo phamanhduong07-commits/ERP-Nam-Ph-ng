@@ -55,6 +55,33 @@ export interface Employee {
   user_status?: boolean
 }
 
+export interface LeaveRequest {
+  id: number
+  employee_id: number
+  ho_ten?: string
+  loai_don: string
+  ngay_bat_dau: string
+  ngay_ket_thuc: string
+  tong_ngay: number
+  ly_do: string | null
+  trang_thai: string
+  y_kien_duyet: string | null
+  created_at: string
+}
+
+export interface RewardDiscipline {
+  id: number
+  employee_id: number
+  loai: string
+  hinh_thuc: string
+  so_tien: number
+  thang: number
+  nam: number
+  ly_do: string | null
+  trang_thai: string
+  created_at: string
+}
+
 export interface PayrollConfig {
   id: number
   ma_hang: string
@@ -82,25 +109,25 @@ export const hrApi = {
   listEmployees: (params?: { search?: string; phan_xuong_id?: number; phap_nhan_id?: number; bo_phan_id?: number }) =>
     client.get<Employee[]>('/hr/employees', { params }),
   getEmployee: (id: number) => client.get<Employee>(`/hr/employees/${id}`),
-  getEmployeeHistory: (id: number) => client.get<any[]>(`/hr/employees/${id}/history`),
+  getEmployeeHistory: (id: number) => client.get<Record<string, unknown>[]>(`/hr/employees/${id}/history`),
   createEmployee: (data: Partial<Employee>) => client.post<Employee>('/hr/employees', data),
   updateEmployee: (id: number, data: Partial<Employee>) => client.put<Employee>(`/hr/employees/${id}`, data),
   bulkCreateEmployees: (items: Partial<Employee>[]) => client.post('/hr/employees/bulk', { items }),
-  listExpiringContracts: (days: number = 30) => client.get<any[]>('/hr/contracts/expiring', { params: { days } }),
-  importContractAllowances: (rows: any[]) => client.post('/hr/contracts/import-allowances', rows),
+  listExpiringContracts: (days: number = 30) => client.get<Record<string, unknown>[]>('/hr/contracts/expiring', { params: { days } }),
+  importContractAllowances: (rows: unknown[]) => client.post('/hr/contracts/import-allowances', rows),
   issueAccount: (id: number) => client.post(`/hr/employees/${id}/issue-account`),
   toggleAccountStatus: (id: number) => client.post(`/hr/employees/${id}/toggle-account-status`),
 
   // Attendance
   listAttendance: (params?: { employee_id?: number; from_date?: string; to_date?: string }) =>
-    client.get<any[]>('/hr/attendance', { params }),
-  bulkCreateAttendance: (logs: any[]) => client.post('/hr/attendance/bulk', logs),
-  importAttendance: (rows: any[]) => client.post('/hr/attendance/import', rows),
+    client.get<Record<string, unknown>[]>('/hr/attendance', { params }),
+  bulkCreateAttendance: (logs: unknown[]) => client.post('/hr/attendance/bulk', logs),
+  importAttendance: (rows: unknown[]) => client.post('/hr/attendance/import', rows),
 
   // Leave Requests
   listLeaveRequests: (params?: { trang_thai?: string }) =>
-    client.get<any[]>('/hr/leave-requests', { params }),
-  createLeaveRequest: (data: any) => client.post('/hr/leave-requests', data),
+    client.get<LeaveRequest[]>('/hr/leave-requests', { params }),
+  createLeaveRequest: (data: Record<string, unknown>) => client.post('/hr/leave-requests', data),
   approveLeaveRequest: (id: number, y_kien?: string, trang_thai: string = 'bgd_duyet') =>
     client.put(`/hr/leave-requests/${id}/approve`, { y_kien_duyet: y_kien, trang_thai }),
 
@@ -110,7 +137,7 @@ export const hrApi = {
   updatePayrollConfig: (id: number, data: Partial<PayrollConfig>) => client.put<PayrollConfig>(`/hr/payroll-configs/${id}`, data),
   bulkCreatePayrollConfigs: (items: Partial<PayrollConfig>[]) => client.post('/hr/payroll-configs/bulk', { items }),
   listPayrollHolidays: (params?: { from_date?: string; to_date?: string }) =>
-    client.get<any[]>('/hr/payroll-holidays', { params }),
-  createPayrollHoliday: (data: any) => client.post('/hr/payroll-holidays', data),
+    client.get<Record<string, unknown>[]>('/hr/payroll-holidays', { params }),
+  createPayrollHoliday: (data: Record<string, unknown>) => client.post('/hr/payroll-holidays', data),
   deletePayrollHoliday: (id: number) => client.delete(`/hr/payroll-holidays/${id}`),
 }

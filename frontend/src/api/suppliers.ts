@@ -30,6 +30,6 @@ export const suppliersApi = {
   update: (id: number, data: Partial<SupplierCreate>) => client.put<Supplier>(`/suppliers/${id}`, data),
   import: (file: File, commit: boolean) => {
     const fd = new FormData(); fd.append('file', file); fd.append('commit', String(commit))
-    return client.post<any>('/suppliers/import-excel', fd)
+    return client.post<Record<string, unknown>>('/suppliers/import-excel', fd)
   },
 }

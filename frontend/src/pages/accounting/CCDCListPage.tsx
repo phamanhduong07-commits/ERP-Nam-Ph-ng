@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
@@ -8,7 +9,7 @@ import { PlusOutlined, EditOutlined, ToolOutlined, CheckCircleOutlined, CloseCir
 import ImportExcelButton from '../../components/ImportExcelButton'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import { ccdcApi, type CCDC, type NhomCCDC, type CCDCCreate, type PhieuXuatCCDC } from '../../api/ccdc'
+import { ccdcApi, type CCDC, type NhomCCDC, type CCDCCreate, type PhieuXuatCCDC, type PhieuXuatCCDCCreate } from '../../api/ccdc'
 
 const { Title } = Typography
 
@@ -51,7 +52,7 @@ function CCDCTab() {
       closeModal()
       message.success('Đã thêm công cụ dụng cụ')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi thêm'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi thêm'),
   })
 
   const updateMut = useMutation({
@@ -62,7 +63,7 @@ function CCDCTab() {
       closeModal()
       message.success('Đã cập nhật')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi cập nhật'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi cập nhật'),
   })
 
   function openCreate() {
@@ -87,8 +88,8 @@ function CCDCTab() {
     form.resetFields()
   }
 
-  function handleSubmit(values: any) {
-    const payload = {
+  function handleSubmit(values: CCDCCreate & { ngay_mua?: import('dayjs').Dayjs | null }) {
+    const payload: CCDCCreate = {
       ...values,
       ngay_mua: values.ngay_mua ? values.ngay_mua.format('YYYY-MM-DD') : null,
     }
@@ -215,18 +216,18 @@ function CCDCTab() {
           </Space>
           <Space style={{ width: '100%', marginTop: 12 }}>
             <Form.Item name="nguyen_gia" label="Nguyên giá (đ)" style={{ marginBottom: 0 }}>
-              <InputNumber
+              <InputNumber<number>
                 style={{ width: 160 }}
                 formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={v => v?.replace(/,/g, '') as any}
+                parser={v => Number(v?.replace(/,/g, ''))}
                 min={0}
               />
             </Form.Item>
             <Form.Item name="gia_tri_con_lai" label="Giá trị còn lại (đ)" style={{ marginBottom: 0 }}>
-              <InputNumber
+              <InputNumber<number>
                 style={{ width: 160 }}
                 formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={v => v?.replace(/,/g, '') as any}
+                parser={v => Number(v?.replace(/,/g, ''))}
                 min={0}
               />
             </Form.Item>
@@ -269,14 +270,14 @@ function PhieuXuatTab() {
   })
 
   const createMut = useMutation({
-    mutationFn: (d: any) => ccdcApi.createPhieuXuat(d),
+    mutationFn: (d: PhieuXuatCCDCCreate) => ccdcApi.createPhieuXuat(d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['phieu-xuat-ccdc'] })
       setModalOpen(false)
       form.resetFields()
       message.success('Đã tạo phiếu xuất CCDC')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi khi tạo phiếu'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi tạo phiếu'),
   })
 
   const approveMut = useMutation({
@@ -285,7 +286,7 @@ function PhieuXuatTab() {
       queryClient.invalidateQueries({ queryKey: ['phieu-xuat-ccdc'] })
       message.success('Đã duyệt phiếu xuất')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
 
   const cancelMut = useMutation({
@@ -294,10 +295,10 @@ function PhieuXuatTab() {
       queryClient.invalidateQueries({ queryKey: ['phieu-xuat-ccdc'] })
       message.success('Đã hủy phiếu')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
 
-  function handleSubmit(values: any) {
+  function handleSubmit(values: PhieuXuatCCDCCreate & { ngay_xuat: import('dayjs').Dayjs }) {
     createMut.mutate({
       ...values,
       ngay_xuat: values.ngay_xuat.format('YYYY-MM-DD'),
@@ -470,16 +471,18 @@ function NhomTab() {
     queryFn: () => ccdcApi.listNhom().then(r => Array.isArray(r.data) ? r.data : []),
   })
 
+  type NhomCCDCPayload = { ma_nhom: string; ten_nhom: string; ghi_chu?: string }
+
   const createMut = useMutation({
-    mutationFn: (d: any) => ccdcApi.createNhom(d),
+    mutationFn: (d: NhomCCDCPayload) => ccdcApi.createNhom(d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['nhom-ccdc'] }); setModalOpen(false); form.resetFields(); message.success('Đã thêm nhóm') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => ccdcApi.updateNhom(id, data),
+    mutationFn: ({ id, data }: { id: number; data: NhomCCDCPayload }) => ccdcApi.updateNhom(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['nhom-ccdc'] }); setModalOpen(false); form.resetFields(); message.success('Đã cập nhật') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi'),
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
 
   return (

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, Table, Button, Space, Modal, Form, Input, InputNumber, Tag, Popconfirm, message, Typography, Row, Col, Switch } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
@@ -19,17 +20,17 @@ export default function XeList() {
   const createMut = useMutation({
     mutationFn: (d: Omit<Xe, 'id'>) => xeApi.create(d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['xe'] }); closeModal(); message.success('Da them xe') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi khi them'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Loi khi them'),
   })
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Omit<Xe, 'id'>> }) => xeApi.update(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['xe'] }); closeModal(); message.success('Da cap nhat') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi khi cap nhat'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Loi khi cap nhat'),
   })
   const deleteMut = useMutation({
     mutationFn: (id: number) => xeApi.delete(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['xe'] }); message.success('Da xoa') },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi khi xoa'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Loi khi xoa'),
   })
 
   const openCreate = () => { setEditing(null); form.resetFields(); form.setFieldsValue({ trang_thai: true, dinh_muc_dau: 0 }); setModalOpen(true) }

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
@@ -7,7 +8,7 @@ import {
 import { AuditOutlined, DeleteOutlined, FileExcelOutlined, PrinterOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
-  CreateStockAdjustmentPayload, StockAdjustment, TonKho, warehouseApi,
+  CreateStockAdjustmentPayload, StockAdjustment, StockAdjustmentItem, TonKho, warehouseApi,
 } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
@@ -68,7 +69,7 @@ export default function StockAdjustmentsPage() {
       form.resetFields()
       setSelectedKho(undefined)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu kiểm kê'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu kiểm kê'),
   })
 
   const deleteMut = useMutation({
@@ -79,7 +80,7 @@ export default function StockAdjustmentsPage() {
       qc.invalidateQueries({ queryKey: ['ton-kho-kiem-ke'] })
       message.success('Đã xoá phiếu kiểm kê')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xoá phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá phiếu'),
   })
 
   const phapNhanOptions = Array.from(new Map(
@@ -116,8 +117,8 @@ export default function StockAdjustmentsPage() {
     try {
       const v = await form.validateFields()
       const items = (v.items || [])
-        .filter((it: any) => it.inventory_balance_id)
-        .map((it: any) => ({
+        .filter((it: Record<string, unknown>) => it.inventory_balance_id)
+        .map((it: Record<string, unknown>) => ({
           inventory_balance_id: it.inventory_balance_id,
           so_luong_thuc_te: Number(it.so_luong_thuc_te || 0),
           ghi_chu: it.ghi_chu || null,
@@ -126,7 +127,7 @@ export default function StockAdjustmentsPage() {
         message.warning('Thêm ít nhất 1 dòng hàng')
         return
       }
-      if (items.every((it: any) => {
+      if (items.every((it: Record<string, unknown>) => {
         const ton = tonKho.find(t => t.id === it.inventory_balance_id)
         return ton && Number(it.so_luong_thuc_te) === Number(ton.ton_luong)
       })) {
@@ -158,7 +159,7 @@ export default function StockAdjustmentsPage() {
       { header: 'Chênh lệch', key: 'chenhlech', align: 'right' as const },
     ]
     
-    const itemRows = r.items.map((it: any) => ({
+    const itemRows = r.items.map((it: Record<string, unknown>) => ({
       ten_hang: it.ten_hang,
       don_vi: it.don_vi,
       so_luong_so_sach: fmtNum(it.so_luong_so_sach),
@@ -168,7 +169,7 @@ export default function StockAdjustmentsPage() {
 
     const table = buildHtmlTable(
       cols.map(c => ({ header: c.header, align: c.align })), 
-      itemRows.map(row => cols.map(c => (row as any)[c.key]))
+      itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key]))
     )
 
     const printData = {
@@ -206,9 +207,9 @@ export default function StockAdjustmentsPage() {
       { key: 'ly_do', label: 'Lý do', width: 20 },
     ]
 
-    const allRows: any[] = []
+    const allRows: unknown[] = []
     phieuList.forEach((r: StockAdjustment) => {
-      r.items.forEach((it: any) => {
+      r.items.forEach((it: StockAdjustmentItem) => {
         allRows.push({
           ...it,
           so_phieu: r.so_phieu,

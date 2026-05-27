@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ApiError } from '../../../../../../../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Checkbox, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
@@ -121,7 +122,7 @@ export default function GoodsReceiptPage() {
 
   const filteredXuongList = useMemo(() => {
     if (!filterPhapNhan) return phanXuongList
-    return phanXuongList.filter((px: any) => px.phap_nhan_id === filterPhapNhan)
+    return phanXuongList.filter(px => px.phap_nhan_id === filterPhapNhan)
   }, [filterPhapNhan, phanXuongList])
 
   const filteredKhoList = useMemo(() => {
@@ -184,7 +185,7 @@ export default function GoodsReceiptPage() {
       qc.invalidateQueries({ queryKey: ['po-for-gr-all'] })
       message.success('Đã duyệt phiếu nhập kho và cập nhật tồn kho')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi duyệt phiếu'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi duyệt phiếu'),
   })
 
   const deleteMut = useMutation({
@@ -193,7 +194,7 @@ export default function GoodsReceiptPage() {
       qc.invalidateQueries({ queryKey: ['goods-receipts'] })
       message.success('Đã xóa phiếu nhập kho')
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi xóa phiếu'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi xóa phiếu'),
   })
 
   const createMut = useMutation({
@@ -207,7 +208,7 @@ export default function GoodsReceiptPage() {
       setSelectedPO(null)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu nhập kho'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi tạo phiếu nhập kho'),
   })
 
   const { data: matchingData, isFetching: matchingFetching } = useQuery({
@@ -224,7 +225,7 @@ export default function GoodsReceiptPage() {
       qc.invalidateQueries({ queryKey: ['goods-receipts'] })
       message.success(`Đã tạo hóa đơn mua #${inv.id}`)
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn mua từ phiếu nhập'),
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi tạo hóa đơn mua từ phiếu nhập'),
   })
 
   function openCreateInvoice(grId: number) {
@@ -309,13 +310,27 @@ export default function GoodsReceiptPage() {
       if (!wh && po.phan_xuong_id) {
         message.info('Chưa tìm thấy kho phù hợp, hệ thống sẽ thử tự chọn kho khi lưu phiếu')
       }
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || 'Không đọc được PO')
+    } catch (e) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error(err?.response?.data?.detail || 'Không đọc được PO')
     }
   }
 
-  function onFinish(values: any) {
-    const items = (values.items ?? []).map((it: any) => ({
+  type GRFormItem = {
+    po_item_id?: number | null
+    paper_material_id?: number | null
+    other_material_id?: number | null
+    ten_hang?: string
+    so_luong?: number
+    so_cuon?: number | null
+    dvt?: string
+    don_gia?: number
+    ket_qua_kiem_tra?: string
+    ghi_chu?: string | null
+  }
+
+  function onFinish(values: { items?: GRFormItem[]; ngay_nhap: { format: (f: string) => string }; supplier_id: number; warehouse_id?: number; bo_qua_hach_toan?: boolean; ghi_chu?: string; so_xe?: string }) {
+    const items = (values.items ?? []).map((it: GRFormItem) => ({
       po_item_id: it.po_item_id ?? null,
       paper_material_id: it.paper_material_id ?? null,
       other_material_id: it.other_material_id ?? null,
@@ -332,11 +347,11 @@ export default function GoodsReceiptPage() {
       message.warning('Thêm ít nhất 1 dòng hàng')
       return
     }
-    if (items.some((it: any) => !it.ten_hang)) {
+    if (items.some(it => !it.ten_hang)) {
       message.warning('Mỗi dòng hàng cần có tên hàng')
       return
     }
-    if (items.some((it: any) => {
+    if (items.some(it => {
       if (it.paper_material_id && it.so_cuon) return it.so_cuon <= 0 || it.so_luong <= 0
       return it.so_luong <= 0
     })) {
@@ -489,8 +504,9 @@ export default function GoodsReceiptPage() {
         { key: 'tong_gia_tri', label: 'Tong gia tri', width: 16 },
         { key: 'trang_thai', label: 'Trang thai', width: 16 },
       ], `phieu_nhap_kho_mua_hang_${dayjs().format('YYYYMMDD')}`, phapNhanResult.phapNhanId, { throwOnError: true })
-    } catch (e: any) {
-      message.error(e?.message || e?.response?.data?.detail || 'Xuat Excel phieu nhap mua hang that bai')
+    } catch (e) {
+      const err = e as { message?: string; response?: { data?: { detail?: string } } }
+      message.error(err?.message || (err as ApiError)?.response?.data?.detail || 'Xuat Excel phieu nhap mua hang that bai')
     } finally {
       setIsExporting(false)
     }
@@ -551,7 +567,7 @@ export default function GoodsReceiptPage() {
               allowClear
               showSearch
               optionFilterProp="label"
-              options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))}
+              options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))}
               value={filterNCC}
               onChange={setFilterNCC}
             />
@@ -575,7 +591,7 @@ export default function GoodsReceiptPage() {
               allowClear
               showSearch
               optionFilterProp="label"
-              options={filteredXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
+              options={filteredXuongList.map(px => ({ value: px.id, label: px.ten_xuong }))}
               value={filterXuong}
               onChange={v => { setFilterXuong(v); setFilterKho(undefined) }}
             />
@@ -769,7 +785,7 @@ export default function GoodsReceiptPage() {
                 <Select
                   showSearch
                   optionFilterProp="label"
-                  options={suppliers.map((s: any) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))}
+                  options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))}
                 />
               </Form.Item>
             </Col>

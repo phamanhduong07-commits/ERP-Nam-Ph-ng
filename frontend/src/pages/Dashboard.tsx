@@ -1,3 +1,4 @@
+import React from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -71,7 +72,14 @@ interface DashboardStats {
   }
 }
 
-const KPICard = ({ title, value, suffix, icon, color, gradient }: any) => (
+const KPICard = ({ title, value, suffix, icon, color, gradient }: {
+  title: string
+  value: number | string
+  suffix?: string
+  icon: React.ReactNode
+  color?: string
+  gradient?: string
+}) => (
   <Card 
     variant="borderless" 
     style={{ 
@@ -108,7 +116,12 @@ const KPICard = ({ title, value, suffix, icon, color, gradient }: any) => (
   </Card>
 )
 
-const QuickLink = ({ icon, label, path, color }: any) => (
+const QuickLink = ({ icon, label, path, color }: {
+  icon: React.ReactNode
+  label: string
+  path: string
+  color: string
+}) => (
   <Link to={path}>
     <Card 
       hoverable 
