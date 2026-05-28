@@ -94,7 +94,7 @@ export default function PurchaseReturnPage() {
       setCreateOpen(false)
       form.resetFields()
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi tạo phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi tạo phiếu'),
   })
 
   const approveMut = useMutation({
@@ -104,7 +104,7 @@ export default function PurchaseReturnPage() {
       qc.invalidateQueries({ queryKey: ['purchase-returns'] })
       qc.invalidateQueries({ queryKey: ['purchase-return-detail', detailId] })
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi duyệt'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi duyệt'),
   })
 
   const cancelMut = useMutation({
@@ -114,7 +114,7 @@ export default function PurchaseReturnPage() {
       qc.invalidateQueries({ queryKey: ['purchase-returns'] })
       qc.invalidateQueries({ queryKey: ['purchase-return-detail', detailId] })
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi huỷ'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi huỷ'),
   })
 
   const deleteMut = useMutation({
@@ -124,7 +124,7 @@ export default function PurchaseReturnPage() {
       qc.invalidateQueries({ queryKey: ['purchase-returns'] })
       setDetailId(null)
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi xoá'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi xoá'),
   })
 
   // ── Columns list ──────────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ export default function PurchaseReturnPage() {
     createMut.mutate({
       supplier_id: values.supplier_id,
       ngay: values.ngay.format('YYYY-MM-DD'),
-      loai: values.loai,
+      loai: values.loai as 'tra_hang' | 'giam_gia',
       invoice_id: values.invoice_id || null,
       ly_do: values.ly_do || null,
       thue_suat: thue_suat,

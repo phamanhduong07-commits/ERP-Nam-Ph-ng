@@ -18,10 +18,11 @@ import dayjs from 'dayjs'
 import {
   salesReturnsApi, type SalesReturn,
   SALES_RETURN_TRANG_THAI_LABELS, SALES_RETURN_TRANG_THAI_COLORS, TINH_TRANG_HANG_LABELS,
-  PHUONG_AN_LABELS,
+  PHUONG_AN_LABELS as _PHUONG_AN_LABELS_RAW,
 } from '../../api/salesReturns'
 import { customerRefundApi, journalApi, TRANG_THAI_HOAN_TIEN } from '../../api/accounting'
 import type { CustomerRefundVoucher } from '../../api/accounting'
+const PHUONG_AN_LABELS = _PHUONG_AN_LABELS_RAW as unknown as Record<string, { label: string; color: string }>
 
 interface JournalLine {
   so_tk: string

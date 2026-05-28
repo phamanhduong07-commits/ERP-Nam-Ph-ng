@@ -15,7 +15,7 @@ export default function OcrExamplesPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form] = Form.useForm()
-  const [fileList, setFileList] = useState<Record<string, unknown>[]>([])
+  const [fileList, setFileList] = useState<import('antd').UploadFile[]>([])
 
   const load = async () => {
     setLoading(true)
@@ -61,7 +61,7 @@ export default function OcrExamplesPage() {
       fd.append('ten_ncc', values.ten_ncc)
       fd.append('extracted_json', values.extracted_json)
       if (values.ghi_chu) fd.append('ghi_chu', values.ghi_chu)
-      fd.append('file', fileList[0].originFileObj)
+      fd.append('file', fileList[0].originFileObj as File)
       await ocrExamplesApi.create(fd)
       message.success('Đã lưu ảnh mẫu')
       setModalOpen(false)
@@ -69,8 +69,7 @@ export default function OcrExamplesPage() {
       setFileList([])
       load()
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } }
-      message.error((err as ApiError)?.response?.data?.detail || 'Lưu thất bại')
+      message.error((e as ApiError)?.response?.data?.detail || 'Lưu thất bại')
     } finally {
       setSaving(false)
     }

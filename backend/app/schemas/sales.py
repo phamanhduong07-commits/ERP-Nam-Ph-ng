@@ -15,6 +15,7 @@ class SalesOrderItemCreate(BaseModel):
     ngay_giao_hang: date | None = None
     ghi_chu_san_pham: str | None = None
     yeu_cau_in: str | None = None
+    phan_xuong_id: int | None = None
 
     @field_validator("so_luong")
     @classmethod
@@ -32,6 +33,7 @@ class SalesOrderItemUpdate(BaseModel):
     ngay_giao_hang: date | None = None
     ghi_chu_san_pham: str | None = None
     yeu_cau_in: str | None = None
+    phan_xuong_id: int | None = None
 
 
 class SalesOrderItemResponse(BaseModel):
@@ -75,6 +77,8 @@ class SalesOrderItemResponse(BaseModel):
     so_mau: int | None = None
     # Link sang lệnh SX (nếu đã lập lệnh)
     production_order_item_id: int | None = None
+    phan_xuong_id: int | None = None
+    ten_phan_xuong: str | None = None
 
     class Config:
         from_attributes = True

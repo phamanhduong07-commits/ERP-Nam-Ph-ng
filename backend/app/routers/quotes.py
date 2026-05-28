@@ -353,7 +353,7 @@ def _load_quote(quote_id: int, db: Session) -> Quote:
         db.query(Quote)
         .options(
             joinedload(Quote.customer),
-            joinedload(Quote.items),
+            joinedload(Quote.items).joinedload(QuoteItem.phan_xuong),
             joinedload(Quote.phap_nhan),
             joinedload(Quote.phap_nhan_sx),
             joinedload(Quote.phan_xuong),
@@ -970,6 +970,7 @@ def tao_don_hang_tu_bao_gia(
                 loai_in=qi.loai_in, so_mau=qi.so_mau, loai_lan=qi.loai_lan,
                 c_tham=qi.c_tham,   can_man=qi.can_man,
                 kho_tt=qi.kho_tt,   dai_tt=qi.dai_tt,   dien_tich=qi.dien_tich,
+                phan_xuong_id=qi.phan_xuong_id,
             )
             order.items.append(item)
             tong_tien += qi.so_luong * qi.gia_ban

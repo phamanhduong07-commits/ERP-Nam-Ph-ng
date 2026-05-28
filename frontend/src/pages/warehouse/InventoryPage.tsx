@@ -25,7 +25,7 @@ function fmtMoney(v: number) {
 
 function getSlot(px: PhanXuongWithWarehouses, loai: string): WarehouseSlot | null | undefined {
   const slot = (px.warehouses as Record<string, unknown>)[loai]
-  if (slot && 'not_applicable' in slot) return null
+  if (slot && typeof slot === 'object' && 'not_applicable' in slot) return null
   return slot as WarehouseSlot | null
 }
 
@@ -76,7 +76,7 @@ export default function InventoryPage() {
   const phanXuongsByPn = phapNhanId ? phanXuongs.filter(x => x.phap_nhan_id === phapNhanId) : phanXuongs
   const allowedPxIds = new Set(phanXuongsByPn.map(x => x.id))
   const filteredWarehouses = warehouses.filter(w =>
-    (!phapNhanId || allowedPxIds.has(w.phan_xuong_id)) &&
+    (!phapNhanId || (w.phan_xuong_id != null && allowedPxIds.has(w.phan_xuong_id))) &&
     (!phanXuongId || w.phan_xuong_id === phanXuongId)
   )
 
@@ -88,7 +88,7 @@ export default function InventoryPage() {
   const tongGiaTri = filtered.reduce((s, r) => s + r.gia_tri_ton, 0)
 
   const handleExportExcel = () => {
-    const resolvedPhapNhanId = phapNhanId || (phanXuongId ? phanXuongs.find(px => px.id === phanXuongId)?.phap_nhan_id : null)
+    const resolvedPhapNhanId = phapNhanId ?? (phanXuongId ? (phanXuongs.find(px => px.id === phanXuongId)?.phap_nhan_id ?? null) : null)
     if (!filtered.length) {
       message.warning('Không có dữ liệu để xuất Excel')
       return
@@ -119,7 +119,7 @@ export default function InventoryPage() {
   }
 
   const handleExportPdf = () => {
-    const resolvedPhapNhanId = phapNhanId || (phanXuongId ? phanXuongs.find(px => px.id === phanXuongId)?.phap_nhan_id : null)
+    const resolvedPhapNhanId = phapNhanId ?? (phanXuongId ? (phanXuongs.find(px => px.id === phanXuongId)?.phap_nhan_id ?? null) : null)
     if (!filtered.length) {
       message.warning('Không có dữ liệu để in')
       return
@@ -147,7 +147,7 @@ export default function InventoryPage() {
       gia_tri_ton: fmtVND(r.gia_tri_ton),
     }))
 
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as Record<string, string | number>)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as Record<string, string | number>)[c.key])) as (string | number | null | undefined)[][])
     
     const printData = {
       subtitle: 'BÁO CÁO TỒN KHO',
@@ -430,7 +430,7 @@ export default function InventoryPage() {
         visible={importVisible}
         onCancel={() => setImportVisible(false)}
         onSuccess={() => qc.invalidateQueries({ queryKey: ['ton-kho'] })}
-        importFn={(file, commit) => warehouseApi.importInventory(warehouseId!, file, commit)}
+        importFn={(file, commit) => warehouseApi.importInventory(warehouseId!, file, commit).then(r => r.data)}
         templateUrl="/api/warehouse/inventory/import-template"
       />
     </div>

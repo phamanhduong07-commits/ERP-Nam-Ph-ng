@@ -1,364 +1,528 @@
-import React, { useState, useEffect } from 'react'
-import { 
-  Card, Table, Form, DatePicker, Select, Button, 
-  Typography, Space, Row, Col, Statistic, Tag, 
-  Tooltip, Progress, Divider, Empty
-} from 'antd'
-import { reportsApi } from '../../api/reports'
-import { usePhanXuong } from '../../hooks/useMasterData'
-import { downloadBlob } from '../../utils/exportUtils'
+import React, { useMemo, useState } from 'react'
 import {
-  PrinterOutlined,
-  SearchOutlined,
-  ArrowUpOutlined,
-  ArrowDownOutlined,
-  DashboardOutlined,
-  AuditOutlined,
-  WalletOutlined,
-  DownloadOutlined
-} from '@ant-design/icons'
+  Alert,
+  Button,
+  Card,
+  DatePicker,
+  Drawer,
+  Form,
+  Input,
+  Modal,
+  Select,
+  Space,
+  Statistic,
+  Table,
+  Tabs,
+  Tag,
+  Typography,
+  message,
+} from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
-import EmptyState from "../../components/EmptyState"
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  CalculatorOutlined,
+  CheckCircleOutlined,
+  FileSearchOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SyncOutlined,
+} from '@ant-design/icons'
+import {
+  productionCostApi,
+  type ProductionCostAllocation,
+  type ProductionCostInput,
+  type ProductionCostPeriod,
+} from '../../api/accounting'
+import { usePhanXuong, usePhapNhan } from '../../hooks/useMasterData'
+import { fmtVND } from '../../utils/exportUtils'
 
+const { RangePicker } = DatePicker
 const { Title, Text } = Typography
 
+type PeriodFilters = {
+  phap_nhan_id?: number
+  phan_xuong_id?: number
+  trang_thai?: string
+}
+
+type CreatePeriodForm = {
+  ma_ky?: string
+  ten_ky?: string
+  range: [Dayjs, Dayjs]
+  phap_nhan_id?: number
+  phan_xuong_id?: number
+  ghi_chu?: string
+}
+
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  nhap: { label: 'Nhap', color: 'default' },
+  dang_tinh: { label: 'Dang tinh', color: 'processing' },
+  da_chot: { label: 'Da chot', color: 'green' },
+  huy: { label: 'Huy', color: 'red' },
+}
+
+const SOURCE_META: Record<string, { label: string; color: string }> = {
+  nvl: { label: 'NVL', color: 'blue' },
+  san_luong: { label: 'San luong', color: 'green' },
+  nhan_cong: { label: 'Nhan cong', color: 'orange' },
+  sxc: { label: 'SXC', color: 'purple' },
+  khau_hao: { label: 'Khau hao', color: 'cyan' },
+}
+
+const numberText = (value: number | null | undefined, suffix = '') => {
+  if (value == null) return '-'
+  return `${new Intl.NumberFormat('vi-VN').format(Number(value))}${suffix}`
+}
+
+const moneyText = (value: number | null | undefined) => `${fmtVND(value)} d`
+
 const ProductionCostingPage: React.FC = () => {
-  const { phanXuongList } = usePhanXuong()
-  const [loading, setLoading] = useState(false)
-  const [exportLoading, setExportLoading] = useState(false)
-  interface CostingItem {
-    so_lenh: string; ten_hang: string; so_luong: number; dvt: string
-    cp_nvl: number; cp_nhan_cong: number; cp_chung: number; tong_chi_phi: number
-    gia_thanh_don_vi: number; standard_cost: number
-  }
-  const [data, setData] = useState<CostingItem[]>([])
-  const [form] = Form.useForm()
+  const queryClient = useQueryClient()
+  const { phanXuongList, isLoading: loadingPhanXuong } = usePhanXuong()
+  const { phapNhanList, isLoading: loadingPhapNhan } = usePhapNhan()
+  const [filterForm] = Form.useForm<PeriodFilters>()
+  const [createForm] = Form.useForm<CreatePeriodForm>()
+  const [filters, setFilters] = useState<PeriodFilters>({})
+  const [createOpen, setCreateOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [selectedPeriodId, setSelectedPeriodId] = useState<number | undefined>()
 
-  const fetchReport = async (values: { phan_xuong_id?: number; range: [{ format: (f: string) => string }, { format: (f: string) => string }] }) => {
-    setLoading(true)
-    try {
-      const params = {
-        phan_xuong_id: values.phan_xuong_id,
-        tu_ngay: values.range[0].format('YYYY-MM-DD'),
-        den_ngay: values.range[1].format('YYYY-MM-DD')
-      }
-      const res = await reportsApi.getProductionCosting(params)
-      setData(res)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
-    }
+  const phapNhanOptions = useMemo(
+    () => phapNhanList.map(item => ({ value: item.id, label: item.ten_viet_tat || item.ten_phap_nhan })),
+    [phapNhanList],
+  )
+  const phanXuongOptions = useMemo(
+    () => phanXuongList.map(item => ({ value: item.id, label: item.ten_xuong })),
+    [phanXuongList],
+  )
+
+  const phapNhanName = (id: number | null | undefined) =>
+    id ? phapNhanList.find(item => item.id === id)?.ten_viet_tat || phapNhanList.find(item => item.id === id)?.ten_phap_nhan || `#${id}` : 'Tat ca'
+  const phanXuongName = (id: number | null | undefined) =>
+    id ? phanXuongList.find(item => item.id === id)?.ten_xuong || `#${id}` : 'Tat ca'
+
+  const periodsQuery = useQuery({
+    queryKey: ['production-cost-periods', filters],
+    queryFn: () => productionCostApi.list(filters),
+  })
+
+  const periods = periodsQuery.data ?? []
+  const currentPeriodId = selectedPeriodId ?? periods[0]?.id
+
+  const detailQuery = useQuery({
+    queryKey: ['production-cost-period', currentPeriodId],
+    queryFn: () => productionCostApi.get(currentPeriodId as number),
+    enabled: !!currentPeriodId,
+  })
+
+  const currentPeriod = detailQuery.data ?? periods.find(item => item.id === currentPeriodId)
+  const isClosed = currentPeriod?.trang_thai === 'da_chot'
+
+  const previewQuery = useQuery({
+    queryKey: ['production-cost-preview', currentPeriodId],
+    queryFn: () => productionCostApi.preview(currentPeriodId as number),
+    enabled: false,
+  })
+
+  const refreshPeriod = async (id?: number) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['production-cost-periods'] }),
+      id ? queryClient.invalidateQueries({ queryKey: ['production-cost-period', id] }) : Promise.resolve(),
+      id ? queryClient.invalidateQueries({ queryKey: ['production-cost-preview', id] }) : Promise.resolve(),
+    ])
   }
 
-  const handleExport = async () => {
-    try {
-      const values = await form.validateFields()
-      setExportLoading(true)
-      const params = {
-        phan_xuong_id: values.phan_xuong_id,
+  const createMutation = useMutation({
+    mutationFn: (values: CreatePeriodForm) =>
+      productionCostApi.create({
+        ma_ky: values.ma_ky?.trim() || undefined,
+        ten_ky: values.ten_ky?.trim() || undefined,
         tu_ngay: values.range[0].format('YYYY-MM-DD'),
         den_ngay: values.range[1].format('YYYY-MM-DD'),
-      }
-      const blob = await reportsApi.exportProductionCosting(params)
-      const filename = `gia-thanh-san-xuat_${params.tu_ngay}_${params.den_ngay}.xlsx`
-      downloadBlob(blob, filename)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setExportLoading(false)
-    }
-  }
-
-  // Auto-fetch on load
-  useEffect(() => {
-    fetchReport({
-      range: [dayjs().startOf('month'), dayjs()],
-      phan_xuong_id: undefined
-    })
-  }, [])
-
-  const columns = [
-    { 
-      title: 'Số Lệnh SX', 
-      dataIndex: 'so_lenh', 
-      key: 'so_lenh', 
-      width: 140, 
-      fixed: 'left' as const,
-      render: (text: string) => <Text strong style={{ color: '#1b168e' }}>{text}</Text>
+        phap_nhan_id: values.phap_nhan_id ?? null,
+        phan_xuong_id: values.phan_xuong_id ?? null,
+        tieu_thuc_pb: 'san_luong',
+        ghi_chu: values.ghi_chu?.trim() || null,
+      }),
+    onSuccess: async period => {
+      message.success('Da tao ky gia thanh')
+      setCreateOpen(false)
+      createForm.resetFields()
+      setSelectedPeriodId(period.id)
+      await refreshPeriod(period.id)
     },
-    { 
-      title: 'Tên Sản Phẩm', 
-      dataIndex: 'ten_hang', 
-      key: 'ten_hang', 
-      width: 250, 
-      ellipsis: true,
-      render: (text: string) => <Text>{text}</Text>
+  })
+
+  const collectMutation = useMutation({
+    mutationFn: (id: number) => productionCostApi.collectInputs(id),
+    onSuccess: async data => {
+      message.success(`Da thu thap ${data.created_inputs} dong du lieu`)
+      setSelectedPeriodId(data.period.id)
+      await refreshPeriod(data.period.id)
     },
-    { 
-      title: 'Sản lượng', 
-      dataIndex: 'so_luong', 
-      key: 'so_luong', 
-      align: 'right' as const, 
-      width: 120,
-      render: (val: number, record: CostingItem) => (
-        <Space direction="vertical" size={0} align="end">
-          <Text strong>{val.toLocaleString()}</Text>
-          <Text type="secondary" style={{ fontSize: 11 }}>{record.dvt}</Text>
+  })
+
+  const calculateMutation = useMutation({
+    mutationFn: (id: number) => productionCostApi.calculate(id),
+    onSuccess: async period => {
+      message.success('Da tinh gia thanh')
+      setSelectedPeriodId(period.id)
+      await refreshPeriod(period.id)
+    },
+  })
+
+  const closeMutation = useMutation({
+    mutationFn: (id: number) => productionCostApi.close(id),
+    onSuccess: async period => {
+      message.success('Da chot ky gia thanh')
+      setSelectedPeriodId(period.id)
+      await refreshPeriod(period.id)
+    },
+  })
+
+  const periodColumns: ColumnsType<ProductionCostPeriod> = [
+    {
+      title: 'Ky',
+      dataIndex: 'ma_ky',
+      width: 180,
+      fixed: 'left',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{record.ma_ky}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>{record.ten_ky}</Text>
         </Space>
-      )
+      ),
     },
     {
-      title: 'Cơ cấu Chi phí',
-      key: 'cost_structure',
-      width: 300,
-      render: (_: unknown, record: CostingItem) => {
-        const total = record.tong_chi_phi || 1
-        const pMat = (record.cp_nvl / total) * 100
-        const pNC = (record.cp_nhan_cong / total) * 100
-        const pSXC = (record.cp_chung / total) * 100
-        return (
-          <Tooltip title={
-            <div>
-              NVL: {record.cp_nvl.toLocaleString()} ({pMat.toFixed(1)}%)<br/>
-              Lương: {record.cp_nhan_cong.toLocaleString()} ({pNC.toFixed(1)}%)<br/>
-              Chung: {record.cp_chung.toLocaleString()} ({pSXC.toFixed(1)}%)
-            </div>
-          }>
-            <Progress 
-              percent={100} 
-              success={{ percent: pMat }} 
-              strokeColor="#52c41a" // For the rest
-              showInfo={false}
-              size="small"
-              className="custom-cost-progress"
-            />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginTop: 4 }}>
-              <Text type="secondary">NVL: {pMat.toFixed(0)}%</Text>
-              <Text type="secondary">NC: {pNC.toFixed(0)}%</Text>
-              <Text type="secondary">SXC: {pSXC.toFixed(0)}%</Text>
-            </div>
-          </Tooltip>
-        )
-      }
+      title: 'Thoi gian',
+      width: 170,
+      render: (_, record) => `${dayjs(record.tu_ngay).format('DD/MM/YYYY')} - ${dayjs(record.den_ngay).format('DD/MM/YYYY')}`,
     },
-    { 
-      title: 'Giá thành / ĐV', 
-      dataIndex: 'gia_thanh_don_vi', 
-      key: 'gia_thanh_don_vi', 
-      align: 'right' as const,
-      width: 150,
-      render: (val: number) => (
-        <Text strong style={{ fontSize: 15, color: '#1b168e' }}>
-          {Math.round(val).toLocaleString()}
-        </Text>
-      )
-    },
-    { 
-      title: 'Định mức', 
-      dataIndex: 'standard_cost', 
-      key: 'standard_cost', 
-      align: 'right' as const,
-      width: 130,
-      render: (val: number) => val > 0 ? <Text type="secondary">{val.toLocaleString()}</Text> : '-'
-    },
+    { title: 'Phap nhan', dataIndex: 'phap_nhan_id', width: 140, render: phapNhanName },
+    { title: 'Phan xuong', dataIndex: 'phan_xuong_id', width: 150, render: phanXuongName },
+    { title: 'Chi phi', dataIndex: 'tong_chi_phi', width: 140, align: 'right', render: moneyText },
+    { title: 'San luong', dataIndex: 'tong_san_luong', width: 120, align: 'right', render: (v: number) => numberText(v) },
     {
-      title: 'Biến động',
-      key: 'variance',
-      align: 'center' as const,
-      width: 120,
-      fixed: 'right' as const,
-      render: (_: unknown, record: CostingItem) => {
-        if (!record.standard_cost) return <Tag color="default">N/A</Tag>
-        const diff = record.standard_cost - record.gia_thanh_don_vi
-        const percent = (diff / record.standard_cost) * 100
-        const isSaving = diff >= 0
-        return (
-          <Tag 
-            color={isSaving ? 'success' : 'error'} 
-            style={{ borderRadius: 12, padding: '0 8px', border: 'none' }}
-            icon={isSaving ? <ArrowDownOutlined /> : <ArrowUpOutlined />}
-          >
-            {Math.abs(percent).toFixed(1)}%
-          </Tag>
-        )
-      }
-    }
+      title: 'Trang thai',
+      dataIndex: 'trang_thai',
+      width: 110,
+      render: (value: string) => {
+        const meta = STATUS_META[value] ?? { label: value, color: 'default' }
+        return <Tag color={meta.color}>{meta.label}</Tag>
+      },
+    },
   ]
 
-  const totalCost = data.reduce((sum, item) => sum + item.tong_chi_phi, 0)
-  const totalQty = data.reduce((sum, item) => sum + item.so_luong, 0)
-  const avgCost = totalQty > 0 ? totalCost / totalQty : 0
+  const inputColumns: ColumnsType<ProductionCostInput> = [
+    {
+      title: 'Nguon',
+      dataIndex: 'source_type',
+      width: 115,
+      render: (value: string) => {
+        const meta = SOURCE_META[value] ?? { label: value, color: 'default' }
+        return <Tag color={meta.color}>{meta.label}</Tag>
+      },
+    },
+    { title: 'Lenh SX', dataIndex: 'production_order_id', width: 95, render: (v: number | null) => v ? `#${v}` : '-' },
+    { title: 'Bang nguon', dataIndex: 'source_table', width: 145, render: (v: string | null) => v || '-' },
+    { title: 'So tien', dataIndex: 'so_tien', width: 130, align: 'right', render: moneyText },
+    { title: 'So luong', dataIndex: 'so_luong', width: 110, align: 'right', render: (v: number | null) => v ? numberText(v) : '-' },
+    { title: 'Dien giai', dataIndex: 'dien_giai', ellipsis: true, render: (v: string | null) => v || '-' },
+  ]
+
+  const allocationColumns: ColumnsType<ProductionCostAllocation> = [
+    { title: 'Lenh SX', dataIndex: 'production_order_id', width: 95, render: (v: number | null) => v ? `#${v}` : '-' },
+    { title: 'San luong', dataIndex: 'san_luong', width: 115, align: 'right', render: (v: number) => numberText(v) },
+    { title: 'Ty le', dataIndex: 'ty_le', width: 90, align: 'right', render: (v: number) => `${(Number(v || 0) * 100).toFixed(2)}%` },
+    { title: 'NVL', dataIndex: 'chi_phi_nvl', width: 130, align: 'right', render: moneyText },
+    { title: 'Nhan cong', dataIndex: 'chi_phi_nhan_cong', width: 130, align: 'right', render: moneyText },
+    { title: 'SXC', dataIndex: 'chi_phi_sxc', width: 130, align: 'right', render: moneyText },
+    { title: 'Tong CP', dataIndex: 'tong_chi_phi', width: 140, align: 'right', render: (v: number) => <Text strong>{moneyText(v)}</Text> },
+    { title: 'Gia thanh/DV', dataIndex: 'gia_thanh_don_vi', width: 140, align: 'right', render: (v: number) => <Text strong>{moneyText(v)}</Text> },
+  ]
+
+  const runPreview = async () => {
+    if (!currentPeriodId) return
+    setPreviewOpen(true)
+    await previewQuery.refetch()
+  }
+
+  const confirmClose = () => {
+    if (!currentPeriod) return
+    Modal.confirm({
+      title: 'Chot ky gia thanh?',
+      content: `Ky ${currentPeriod.ma_ky} se khoa du lieu tinh gia thanh va ghi audit.`,
+      okText: 'Chot ky',
+      cancelText: 'Huy',
+      okButtonProps: { danger: true },
+      onOk: () => closeMutation.mutateAsync(currentPeriod.id),
+    })
+  }
+
+  const actionDisabled = !currentPeriod || isClosed
 
   return (
-    <div className="costing-report-container" style={{ padding: '24px 32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-        <Space direction="vertical" size={4}>
-          <Title level={2} style={{ margin: 0, color: '#1b168e' }}>Báo cáo Giá thành Sản xuất</Title>
-          <Text type="secondary">Phân tích chi phí thực tế và so sánh hiệu quả định mức sản xuất</Text>
-        </Space>
-        <Space>
-          <Button icon={<PrinterOutlined />} size="large">Xuất PDF</Button>
-          <Button icon={<DownloadOutlined />} size="large" loading={exportLoading} onClick={handleExport}>Xuất Excel</Button>
-          <Button type="primary" size="large" onClick={() => form.submit()}>Làm mới dữ liệu</Button>
-        </Space>
-      </div>
-      
-      {/* Search Header - Glassmorphism style */}
-      <Card 
-        style={{ 
-          marginBottom: 32, 
-          borderRadius: 16, 
-          boxShadow: '0 8px 32px rgba(27, 22, 142, 0.05)',
-          border: '1px solid rgba(27, 22, 142, 0.1)'
-        }}
-        bodyStyle={{ padding: '20px 24px' }}
-      >
-        <Form 
-          form={form}
-          layout="vertical" 
-          onFinish={fetchReport} 
-          initialValues={{ range: [dayjs().startOf('month'), dayjs()] }}
+    <div style={{ padding: 24 }}>
+      <Space align="start" style={{ justifyContent: 'space-between', width: '100%', marginBottom: 16 }} wrap>
+        <div>
+          <Title level={3} style={{ margin: 0 }}>Gia thanh san xuat</Title>
+          <Text type="secondary">Quan ly ky tinh gia thanh theo phap nhan, phan xuong va du lieu san xuat thuc te.</Text>
+        </div>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+          Tao ky
+        </Button>
+      </Space>
+
+      <Card size="small" style={{ marginBottom: 12 }}>
+        <Form
+          form={filterForm}
+          layout="inline"
+          onFinish={values => {
+            setSelectedPeriodId(undefined)
+            setFilters(values)
+          }}
         >
-          <Row gutter={24} align="bottom">
-            <Col xs={24} sm={12} md={8}>
-              <Form.Item name="phan_xuong_id" label={<Text strong>Phân xưởng sản xuất</Text>}>
-                <Select placeholder="Tất cả phân xưởng" size="large" allowClear style={{ borderRadius: 8 }}>
-                  {phanXuongList.map((px) => (
-                    <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Form.Item name="range" label={<Text strong>Khoảng thời gian báo cáo</Text>} rules={[{ required: true }]}>
-                <DatePicker.RangePicker size="large" style={{ width: '100%', borderRadius: 8 }} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={8}>
-              <Form.Item>
-                <Button 
-                  type="primary" 
-                  icon={<SearchOutlined />} 
-                  htmlType="submit" 
-                  loading={loading}
-                  size="large"
-                  block
-                  style={{ borderRadius: 8, height: 40 }}
-                >
-                  Truy vấn dữ liệu
-                </Button>
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item name="phap_nhan_id">
+            <Select
+              allowClear
+              showSearch
+              loading={loadingPhapNhan}
+              placeholder="Phap nhan"
+              optionFilterProp="label"
+              options={phapNhanOptions}
+              style={{ width: 190 }}
+            />
+          </Form.Item>
+          <Form.Item name="phan_xuong_id">
+            <Select
+              allowClear
+              showSearch
+              loading={loadingPhanXuong}
+              placeholder="Phan xuong"
+              optionFilterProp="label"
+              options={phanXuongOptions}
+              style={{ width: 190 }}
+            />
+          </Form.Item>
+          <Form.Item name="trang_thai">
+            <Select
+              allowClear
+              placeholder="Trang thai"
+              options={Object.entries(STATUS_META).map(([value, meta]) => ({ value, label: meta.label }))}
+              style={{ width: 150 }}
+            />
+          </Form.Item>
+          <Form.Item>
+            <Space>
+              <Button htmlType="submit" icon={<FileSearchOutlined />}>Loc</Button>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  filterForm.resetFields()
+                  setSelectedPeriodId(undefined)
+                  setFilters({})
+                }}
+              >
+                Dat lai
+              </Button>
+            </Space>
+          </Form.Item>
         </Form>
       </Card>
 
-      {data.length > 0 ? (
-        <>
-          <Row gutter={24} style={{ marginBottom: 32 }}>
-            <Col xs={24} md={8}>
-              <Card className="stat-card" style={{ background: 'linear-gradient(135deg, #1b168e 0%, #3a32cc 100%)', borderRadius: 16 }}>
-                <Statistic 
-                  title={<Text style={{ color: 'rgba(255,255,255,0.8)' }}>Tổng giá trị sản xuất</Text>}
-                  value={totalCost} 
-                  precision={0}
-                  prefix={<WalletOutlined style={{ color: '#fff', marginRight: 8 }} />}
-                  suffix={<Text style={{ color: '#fff', fontSize: 16 }}>VND</Text>}
-                  valueStyle={{ color: '#fff', fontSize: 28, fontWeight: 'bold' }} 
-                />
-              </Card>
-            </Col>
-            <Col xs={24} md={8}>
-              <Card className="stat-card" style={{ background: '#fff', borderRadius: 16, border: '1px solid #e8e8e8' }}>
-                <Statistic 
-                  title="Tổng sản lượng nhập kho"
-                  value={totalQty} 
-                  precision={0}
-                  prefix={<DashboardOutlined style={{ color: '#1890ff', marginRight: 8 }} />}
-                  suffix={<Text type="secondary" style={{ fontSize: 16 }}>đv</Text>}
-                  valueStyle={{ color: '#262626', fontSize: 28, fontWeight: 'bold' }} 
-                />
-              </Card>
-            </Col>
-            <Col xs={24} md={8}>
-              <Card className="stat-card" style={{ background: '#fff', borderRadius: 16, border: '1px solid #e8e8e8' }}>
-                <Statistic 
-                  title="Giá thành trung bình"
-                  value={avgCost} 
-                  precision={0}
-                  prefix={<AuditOutlined style={{ color: '#52c41a', marginRight: 8 }} />}
-                  suffix={<Text type="secondary" style={{ fontSize: 16 }}>VND/đv</Text>}
-                  valueStyle={{ color: '#262626', fontSize: 28, fontWeight: 'bold' }} 
-                />
-              </Card>
-            </Col>
-          </Row>
+      <Card size="small" style={{ marginBottom: 12 }}>
+        <Table<ProductionCostPeriod>
+          rowKey="id"
+          size="small"
+          loading={periodsQuery.isLoading}
+          columns={periodColumns}
+          dataSource={periods}
+          scroll={{ x: 1100 }}
+          pagination={{ pageSize: 8, showSizeChanger: false }}
+          rowSelection={{
+            type: 'radio',
+            selectedRowKeys: currentPeriodId ? [currentPeriodId] : [],
+            onChange: keys => setSelectedPeriodId(Number(keys[0])),
+          }}
+          onRow={record => ({ onClick: () => setSelectedPeriodId(record.id) })}
+        />
+      </Card>
 
-          <Card 
-            title={<Title level={4} style={{ margin: 0 }}>Chi tiết chi phí theo Lệnh sản xuất</Title>}
-            extra={<Text type="secondary">Tìm thấy {data.length} lệnh sản xuất</Text>}
-            style={{ borderRadius: 16, boxShadow: '0 4px 12px rgba(0,0,0,0.03)', border: 'none' }}
-            bodyStyle={{ padding: 0 }}
-          >
-            <Table 
-              columns={columns} 
-              dataSource={data} 
-              pagination={{ pageSize: 20, showSizeChanger: true }} 
-              loading={loading}
-              rowKey="so_lenh"
-              scroll={{ x: 1200 }}
-              className="costing-table"
-              summary={(pageData) => {
-                let tMat = 0, tNC = 0, tSXC = 0
-                pageData.forEach(r => {
-                  tMat += r.cp_nvl; tNC += r.cp_nhan_cong; tSXC += r.cp_chung;
-                })
-                return (
-                  <Table.Summary fixed>
-                    <Table.Summary.Row style={{ background: '#fafafa' }}>
-                      <Table.Summary.Cell index={0} colSpan={3}><Text strong>TỔNG CỘNG TRANG NÀY</Text></Table.Summary.Cell>
-                      <Table.Summary.Cell index={3}>
-                        <div style={{ textAlign: 'right' }}>
-                          <Text strong>{(tMat+tNC+tSXC).toLocaleString()}</Text>
-                          <div style={{ fontSize: 10, color: '#8c8c8c' }}>
-                            NVL: {tMat.toLocaleString()}
-                          </div>
-                        </div>
-                      </Table.Summary.Cell>
-                      <Table.Summary.Cell index={4} colSpan={3} />
-                    </Table.Summary.Row>
-                  </Table.Summary>
-                )
-              }}
+      <Card
+        size="small"
+        title={currentPeriod ? `${currentPeriod.ma_ky} - ${currentPeriod.ten_ky}` : 'Chi tiet ky gia thanh'}
+        extra={
+          <Space wrap>
+            <Button
+              icon={<SyncOutlined />}
+              disabled={actionDisabled}
+              loading={collectMutation.isPending}
+              onClick={() => currentPeriodId && collectMutation.mutate(currentPeriodId)}
+            >
+              Lay du lieu SX
+            </Button>
+            <Button
+              icon={<FileSearchOutlined />}
+              disabled={!currentPeriod}
+              loading={previewQuery.isFetching}
+              onClick={runPreview}
+            >
+              Preview
+            </Button>
+            <Button
+              type="primary"
+              icon={<CalculatorOutlined />}
+              disabled={actionDisabled}
+              loading={calculateMutation.isPending}
+              onClick={() => currentPeriodId && calculateMutation.mutate(currentPeriodId)}
+            >
+              Tinh gia thanh
+            </Button>
+            <Button
+              danger
+              icon={<CheckCircleOutlined />}
+              disabled={actionDisabled}
+              loading={closeMutation.isPending}
+              onClick={confirmClose}
+            >
+              Chot ky
+            </Button>
+          </Space>
+        }
+      >
+        {!currentPeriod ? (
+          <Alert type="info" showIcon message="Chua co ky nao" description="Tao ky tinh gia thanh hoac dieu chinh bo loc de xem du lieu." />
+        ) : (
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+              <div style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 6 }}>
+                <Statistic title="Tong chi phi" value={currentPeriod.tong_chi_phi} formatter={v => moneyText(Number(v))} />
+              </div>
+              <div style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 6 }}>
+                <Statistic title="NVL" value={currentPeriod.tong_nvl} formatter={v => moneyText(Number(v))} />
+              </div>
+              <div style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 6 }}>
+                <Statistic title="Nhan cong" value={currentPeriod.tong_nhan_cong} formatter={v => moneyText(Number(v))} />
+              </div>
+              <div style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 6 }}>
+                <Statistic title="SXC" value={currentPeriod.tong_sxc} formatter={v => moneyText(Number(v))} />
+              </div>
+              <div style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 6 }}>
+                <Statistic title="San luong" value={currentPeriod.tong_san_luong} formatter={v => numberText(Number(v))} />
+              </div>
+            </div>
+
+            <Space wrap>
+              <Text type="secondary">Phap nhan:</Text><Text strong>{phapNhanName(currentPeriod.phap_nhan_id)}</Text>
+              <Text type="secondary">Phan xuong:</Text><Text strong>{phanXuongName(currentPeriod.phan_xuong_id)}</Text>
+              <Text type="secondary">Tieu thuc:</Text><Tag color="blue">San luong</Tag>
+              <Text type="secondary">Trang thai:</Text>
+              <Tag color={(STATUS_META[currentPeriod.trang_thai] ?? STATUS_META.nhap).color}>
+                {(STATUS_META[currentPeriod.trang_thai] ?? STATUS_META.nhap).label}
+              </Tag>
+            </Space>
+
+            <Tabs
+              items={[
+                {
+                  key: 'inputs',
+                  label: `Du lieu dau vao (${currentPeriod.inputs?.length ?? 0})`,
+                  children: (
+                    <Table<ProductionCostInput>
+                      rowKey="id"
+                      size="small"
+                      loading={detailQuery.isFetching}
+                      columns={inputColumns}
+                      dataSource={currentPeriod.inputs ?? []}
+                      pagination={{ pageSize: 10, showSizeChanger: false }}
+                      scroll={{ x: 900 }}
+                    />
+                  ),
+                },
+                {
+                  key: 'allocations',
+                  label: `Phan bo (${currentPeriod.allocations?.length ?? 0})`,
+                  children: (
+                    <Table<ProductionCostAllocation>
+                      rowKey={record => `${record.production_order_id}-${record.product_id}-${record.san_luong}`}
+                      size="small"
+                      loading={detailQuery.isFetching}
+                      columns={allocationColumns}
+                      dataSource={currentPeriod.allocations ?? []}
+                      pagination={{ pageSize: 10, showSizeChanger: false }}
+                      scroll={{ x: 1050 }}
+                    />
+                  ),
+                },
+              ]}
             />
-          </Card>
-        </>
-      ) : (
-        !loading && <Card style={{ borderRadius: 16, textAlign: 'center', padding: '60px 0' }}><Empty description="Chưa có dữ liệu trong khoảng thời gian này" /></Card>
-      )}
+          </Space>
+        )}
+      </Card>
 
-      <style>{`
-        .costing-report-container .ant-statistic-title {
-          font-size: 14px;
-          margin-bottom: 8px;
-        }
-        .stat-card {
-          transition: all 0.3s;
-          height: 100%;
-        }
-        .stat-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 24px rgba(0,0,0,0.1) !important;
-        }
-        .costing-table .ant-table-thead > tr > th {
-          background: #f0f2f5;
-          font-weight: 700;
-        }
-        .bg-highlight-blue {
-          background: #e6f7ff;
-        }
-      `}</style>
+      <Modal
+        title="Tao ky tinh gia thanh"
+        open={createOpen}
+        onCancel={() => setCreateOpen(false)}
+        onOk={() => createForm.submit()}
+        okText="Tao ky"
+        confirmLoading={createMutation.isPending}
+        destroyOnClose
+      >
+        <Form<CreatePeriodForm>
+          form={createForm}
+          layout="vertical"
+          initialValues={{ range: [dayjs().startOf('month'), dayjs().endOf('month')] }}
+          onFinish={values => createMutation.mutate(values)}
+        >
+          <Form.Item name="range" label="Khoang ngay" rules={[{ required: true, message: 'Chon khoang ngay' }]}>
+            <RangePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+          </Form.Item>
+          <Form.Item name="ma_ky" label="Ma ky">
+            <Input placeholder="Tu dong neu de trong" />
+          </Form.Item>
+          <Form.Item name="ten_ky" label="Ten ky">
+            <Input placeholder="Tu dong neu de trong" />
+          </Form.Item>
+          <Form.Item name="phap_nhan_id" label="Phap nhan">
+            <Select allowClear showSearch optionFilterProp="label" options={phapNhanOptions} loading={loadingPhapNhan} />
+          </Form.Item>
+          <Form.Item name="phan_xuong_id" label="Phan xuong">
+            <Select allowClear showSearch optionFilterProp="label" options={phanXuongOptions} loading={loadingPhanXuong} />
+          </Form.Item>
+          <Form.Item name="ghi_chu" label="Ghi chu">
+            <Input.TextArea rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Drawer
+        title="Preview phan bo chi phi"
+        width={920}
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {previewQuery.data?.warnings?.map(item => (
+            <Alert key={item} type="warning" showIcon message={item} />
+          ))}
+          <Space wrap>
+            <Statistic title="Chua phan bo" value={previewQuery.data?.unallocated_cost ?? 0} formatter={v => moneyText(Number(v))} />
+            <Statistic title="Dong phan bo" value={previewQuery.data?.allocations.length ?? 0} />
+          </Space>
+          <Table<ProductionCostAllocation>
+            rowKey={record => `${record.production_order_id}-${record.product_id}-${record.san_luong}`}
+            size="small"
+            loading={previewQuery.isFetching}
+            columns={allocationColumns}
+            dataSource={previewQuery.data?.allocations ?? []}
+            pagination={false}
+            scroll={{ x: 1050 }}
+          />
+        </Space>
+      </Drawer>
     </div>
   )
 }

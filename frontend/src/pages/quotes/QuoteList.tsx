@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { ApiError } from '../../../../../../../../api/types'
+import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {

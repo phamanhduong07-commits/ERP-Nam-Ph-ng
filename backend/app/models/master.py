@@ -407,6 +407,7 @@ class BankAccount(Base):
     ma_tk: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     ten_ngan_hang: Mapped[str] = mapped_column(String(200), nullable=False)
     so_tai_khoan: Mapped[str] = mapped_column(String(50), nullable=False)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
     chu_tai_khoan: Mapped[str | None] = mapped_column(String(200))
     chi_nhanh: Mapped[str | None] = mapped_column(String(200))
     swift_code: Mapped[str | None] = mapped_column(String(20))
@@ -414,6 +415,8 @@ class BankAccount(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    phap_nhan = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
 
 
 class PhapNhan(Base):

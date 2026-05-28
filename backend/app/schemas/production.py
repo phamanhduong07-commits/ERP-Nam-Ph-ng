@@ -58,6 +58,8 @@ class ProductionOrderItemResponse(BaseModel):
     loai_lan: str | None = None
     kho_tt: Decimal | None = None
     dai_tt: Decimal | None = None
+    so_lan_cat: int | None = None
+    be_so_con: int | None = None
     qccl: str | None = None
     dien_tich: Decimal | None = None
     gia_ban_muc_tieu: Decimal | None = None
@@ -125,6 +127,7 @@ class ProductionOrderUpdate(BaseModel):
     phap_nhan_id: int | None = None
     kho_sx_id: int | None = None
     phan_xuong_id: int | None = None
+    phoi_phan_xuong_id: int | None = None
     nv_theo_doi_id: int | None = None
     ngay_bat_dau_ke_hoach: date | None = None
     ngay_hoan_thanh_ke_hoach: date | None = None
@@ -160,6 +163,9 @@ class ProductionOrderResponse(BaseModel):
     ghi_chu: str | None
     ghi_chu_don_hang: str | None = None
     don_gia_noi_bo: Decimal | None = None
+    phoi_phan_xuong_id: int | None = None
+    ten_phoi_phan_xuong: str | None = None
+    ten_kho_nhap_phoi_du_kien: str | None = None
     items: list[ProductionOrderItemResponse] = []
     created_at: datetime
     updated_at: datetime
@@ -190,6 +196,8 @@ class ProductionOrderListItem(BaseModel):
     de_xuat_mua_ngoai: bool = False       # kho >= 2000mm → đề xuất mua phôi ngoài
     kho_tt: float | None = None           # kho item đầu tiên (mm)
     dai_tt: float | None = None           # cắt item đầu tiên (mm)
+    so_lan_cat: int | None = None
+    be_so_con: int | None = None
     so_lop: int | None = None
     to_hop_song: str | None = None
     loai_thung: str | None = None
@@ -207,6 +215,8 @@ class UpdateItemSxParams(BaseModel):
     """Thông số sản xuất: kết cấu + chiều khổ — KHÔNG ảnh hưởng giá bán."""
     kho_tt: Decimal | None = None
     dai_tt: Decimal | None = None
+    so_lan_cat: int | None = None
+    be_so_con: int | None = None
     qccl: str | None = None
     ghi_chu: str | None = None
     to_hop_song: str | None = None

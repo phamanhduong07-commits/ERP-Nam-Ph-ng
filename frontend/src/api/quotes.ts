@@ -45,11 +45,14 @@ export interface QuoteItem {
   c_tham?: string | null
   can_man?: string | null
   so_c_be?: string | null
+  be_so_con?: number | null
   may_in?: string | null
   loai_lan?: string | null
   ban_ve_kt?: string | null
   gia_ban: number
   ghi_chu?: string | null
+  phan_xuong_id?: number | null
+  ten_phan_xuong?: string | null
 }
 
 export interface Quote {
@@ -243,7 +246,8 @@ export function calcBoxDimensions(
   rong: number | null | undefined,  // cm
   cao: number | null | undefined,   // cm
   so_lop: number,
-): { kho1: number; dai1: number; so_dao: number; kho_tt: number; dai_tt: number; dien_tich: number; kho_ke_hoach: number; dai_ke_hoach: number } | null {
+  be_so_con: number = 1,            // số con bế cùng lúc theo chiều ngang
+): { kho1: number; dai1: number; so_dao: number; kho_tt: number; dai_tt: number; dien_tich: number; kho_ke_hoach: number; dai_ke_hoach: number; hai_manh: boolean } | null {
   if (!loai_thung || !dai || !rong || !cao) return null
   const D = dai, R = rong, C = cao
   let kho1 = 0, dai1 = 0, dai_tt = 0
@@ -301,12 +305,27 @@ export function calcBoxDimensions(
 
   if (kho1 <= 0 || dai1 <= 0) return null
 
-  // Số dao = floor(180 / kho_ke_hoach) — dùng kích thước kế hoạch (không có tab dán)
-  const so_dao = Math.max(1, Math.floor(180 / kho_ke_hoach))
-  // Khổ thực tế = làm tròn lên bội số 5 của (kho_ke_hoach × soDao + 1.8)
-  const kho_tt = Math.ceil((kho_ke_hoach * so_dao + 1.8) / 5) * 5
-  // Diện tích 1 con (m²) - dùng kho1 và dai1
-  const dien_tich = kho1 >= 180
+  // 2 mảnh: A1/A3/A7 khi ≥3 lớp và dai_ke_hoach > 270 cm
+  // Mỗi mảnh: dai_kh_manh = (D+R)+3, diện tích tổng = 2 × kho1 × dai1_manh
+  const HAI_MANH_TYPES = new Set(['A1', 'A3', 'A7'])
+  let hai_manh = false
+  if (so_lop >= 3 && dai_ke_hoach > 270 && HAI_MANH_TYPES.has(loai_thung)) {
+    hai_manh = true
+    dai_ke_hoach = D + R + 3
+    dai1         = D + R + 5
+    dai_tt       = D + R + (so_lop === 7 ? 5 : 4)
+  }
+
+  // Số dao = số nhóm khuôn bế vừa vào máy 180 cm
+  // be_so_con > 1: mỗi nhóm chiếm kho_ke_hoach × be_so_con → số nhóm ít hơn
+  const beN = Math.max(1, be_so_con)
+  const so_dao = Math.max(1, Math.floor(180 / (kho_ke_hoach * beN)))
+  // Khổ thực tế = làm tròn lên bội số 5 của (kho_ke_hoach × beN × soDao + 1.8)
+  const kho_tt = Math.ceil((kho_ke_hoach * beN * so_dao + 1.8) / 5) * 5
+  // Diện tích 1 con (m²): 2 mảnh × diện tích mỗi mảnh; bình thường kho1 × dai1
+  const dien_tich = hai_manh
+    ? 2 * kho1 * dai1 / 10000
+    : kho1 >= 180
     ? (kho1 + 5) * dai1 / 10000
     : kho1 * dai1 / 10000
 
@@ -319,6 +338,7 @@ export function calcBoxDimensions(
     dien_tich: Math.round(dien_tich * 10000) / 10000,
     kho_ke_hoach: Math.round(kho_ke_hoach * 10) / 10,
     dai_ke_hoach: Math.round(dai_ke_hoach * 10) / 10,
+    hai_manh,
   }
 }
 

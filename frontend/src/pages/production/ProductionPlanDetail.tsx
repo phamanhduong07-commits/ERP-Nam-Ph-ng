@@ -50,8 +50,9 @@ function getSongSlots(r: PlanLineResponse): { songC: SongSlot; songB: SongSlot }
 
 // ─── Tính toán ────────────────────────────────────────────────────────────────
 
-function calcSoTam(slKeHoach: number, soDao: number | null): number {
-  return soDao && soDao > 0 ? Math.ceil(slKeHoach / soDao) : Math.ceil(slKeHoach)
+function calcSoTam(slKeHoach: number, soDao: number | null, beConBe: number = 1, soLanCat: number = 1): number {
+  const conMoiPhoi = (soDao && soDao > 0 ? soDao : 1) * Math.max(1, beConBe) * Math.max(1, soLanCat)
+  return Math.ceil(slKeHoach / conMoiPhoi)
 }
 
 function calcMetToi(soTam: number, daiTt: number | null): number {
@@ -81,7 +82,8 @@ function calcQuyCache(r: PlanLineResponse): string {
     return `${fmtN(r.dai, 1)}×${fmtN(r.rong, 1)}×${fmtN(r.cao, 1)}_${soLop}L ${song}`
   }
   // Tấm phẳng
-  const daiTt = r.dai_tt ? fmtN(r.dai_tt, 1) : fmtN(r.dai, 1) || '?'
+  const daiTtEff = r.dai_tt ? Number(r.dai_tt) * (r.so_lan_cat ?? 1) : null
+  const daiTt = daiTtEff ? fmtN(daiTtEff, 1) : fmtN(r.dai, 1) || '?'
   const kho1  = r.kho1   ? fmtN(r.kho1,  1) : fmtN(r.rong, 1) || '?'
   return `${daiTt}×${kho1}_${soLop}L ${song}`
 }
@@ -224,9 +226,11 @@ function buildTableRows(lines: PlanLineResponse[]): { rows: TableRow[]; totalMT:
     let soTam = 0
     let soLuong = 0
     for (const r of groupLines) {
-      const tam = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
+      const slc = Math.max(1, r.so_lan_cat ?? 1)
+      const bcc = Math.max(1, r.be_so_con ?? 1)
+      const tam = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao, bcc, slc)
       soTam += tam
-      soMT  += calcMetToi(tam, r.dai_tt)
+      soMT  += calcMetToi(tam, r.dai_tt != null ? Number(r.dai_tt) * slc : null)
       soLuong += Number(r.so_luong_ke_hoach)
     }
     totalMT += soMT
@@ -377,8 +381,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       } else {
         const r = row as LineRow
         const songs  = getSongLetters(r.to_hop_song)
-        const soTam  = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
-        const metToi = calcMetToi(soTam, r.dai_tt)
+        const slcEx  = Math.max(1, r.so_lan_cat ?? 1)
+        const bccEx  = Math.max(1, r.be_so_con ?? 1)
+        const soTam  = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao, bccEx, slcEx)
+        const daiEff = r.dai_tt != null ? Number(r.dai_tt) * slcEx : null
+        const metToi = calcMetToi(soTam, daiEff)
         const qccl   = r.qccl || calcQCCL(r.rong, r.cao, r.so_lop)
         const soLop  = r.so_lop ?? 3
         const inner  = getMatInner(r)
@@ -395,11 +402,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
           calcQuyCache(r),
           r.to_hop_song ?? '',
           r.kho_giay != null ? Number(r.kho_giay) : '',
-          daiTt ?? '',
+          daiEff ?? '',
           soTam,
           r.so_dao ?? '',
           qccl,
-          kho1 != null && r.kho_tt != null ? `${fmtN(kho1, 1)}/${fmtN(r.kho_tt, 1)}` : (kho1 ?? ''),
+          r.kho_giay != null && r.so_dao && r.so_dao > 0 ? Number(r.kho_giay) / r.so_dao : (r.kho_giay ?? ''),
           Number(r.so_luong_ke_hoach),
           r.loai_lan ? (LOAI_LAN_LABELS[r.loai_lan] ?? r.loai_lan) : '',
           r.loai_in ?? '',
@@ -471,21 +478,25 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       }
 
       const r = row as LineRow
-      const songs  = getSongLetters(r.to_hop_song)
-      const soTam  = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
-      const metToi = calcMetToi(soTam, r.dai_tt)
-      const qccl   = r.qccl || calcQCCL(r.rong, r.cao, r.so_lop)
-      const soLop  = r.so_lop ?? 3
-      const inner  = getMatInner(r)
-      const kho1   = r.kho1 ? Number(r.kho1) : null
-      const daiTt  = r.dai_tt ? Number(r.dai_tt) : null
+      const songs   = getSongLetters(r.to_hop_song)
+      const slcPdf  = Math.max(1, r.so_lan_cat ?? 1)
+      const bccPdf  = Math.max(1, r.be_so_con ?? 1)
+      const soTam   = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao, bccPdf, slcPdf)
+      const daiEff  = r.dai_tt != null ? Number(r.dai_tt) * slcPdf : null
+      const metToi  = calcMetToi(soTam, daiEff)
+      const qccl    = r.qccl || calcQCCL(r.rong, r.cao, r.so_lop)
+      const soLop   = r.so_lop ?? 3
+      const inner   = getMatInner(r)
+      const kho1    = r.kho1 ? Number(r.kho1) : null
+      const daiTt   = r.dai_tt ? Number(r.dai_tt) : null
 
-      const slots   = getSongSlots(r)
-      const kgMatC  = calcLayerKg(soTam, kho1, daiTt, r.mat_dl,        false, null)
-      const kgSongC = calcLayerKg(soTam, kho1, daiTt, slots.songC.dl,  true,  slots.songC.flute)
-      const kgMatB  = soLop >= 5 ? calcLayerKg(soTam, kho1, daiTt, r.mat_1_dl, false, null) : 0
-      const kgSongB = calcLayerKg(soTam, kho1, daiTt, slots.songB.dl,  true,  slots.songB.flute)
-      const kgInner = calcLayerKg(soTam, kho1, daiTt, inner.dl, false, null)
+      const slots    = getSongSlots(r)
+      const soTamKg  = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
+      const kgMatC   = calcLayerKg(soTamKg, kho1, daiTt, r.mat_dl,        false, null)
+      const kgSongC  = calcLayerKg(soTamKg, kho1, daiTt, slots.songC.dl,  true,  slots.songC.flute)
+      const kgMatB   = soLop >= 5 ? calcLayerKg(soTamKg, kho1, daiTt, r.mat_1_dl, false, null) : 0
+      const kgSongB  = calcLayerKg(soTamKg, kho1, daiTt, slots.songB.dl,  true,  slots.songB.flute)
+      const kgInner  = calcLayerKg(soTamKg, kho1, daiTt, inner.dl, false, null)
 
       const loaiLan = r.loai_lan ? (LOAI_LAN_LABELS[r.loai_lan] ?? r.loai_lan) : '—'
 
@@ -500,11 +511,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         <td style="white-space:nowrap">${calcQuyCache(r)}</td>
         <td class="center" style="font-weight:700;color:#531dab">${r.to_hop_song ?? '—'}</td>
         <td class="right" style="color:${!r.kho_giay || Number(r.kho_giay) === 0 ? '#ff4d4f' : '#1677ff'};font-weight:700;font-size:13px">${!r.kho_giay || Number(r.kho_giay) === 0 ? '⚠ —' : fmtN(r.kho_giay, 1)}</td>
-        <td class="right">${daiTt != null ? fmtN(daiTt, 1) : '—'}</td>
+        <td class="right">${daiEff != null ? fmtN(daiEff, 1) : '—'}</td>
         <td class="right" style="font-weight:800;font-size:15px">${soTam.toLocaleString('vi-VN')}</td>
         <td class="center" style="color:#1677ff;font-weight:700">${r.so_dao ?? '—'}</td>
         <td style="font-size:8px;font-family:monospace">${qccl || '—'}</td>
-        <td class="center">${kho1 != null ? `<div style="font-size:7px;color:#8c8c8c">${fmtN(kho1, 1)}</div><div style="font-weight:700;color:#1677ff">${r.kho_tt != null ? fmtN(r.kho_tt, 1) : '—'}</div>` : '—'}</td>
+        <td class="center" style="font-weight:700;color:#1677ff">${r.kho_giay != null && r.so_dao && r.so_dao > 0 ? fmtN(Number(r.kho_giay) / r.so_dao, 1) : '—'}</td>
         <td class="right" style="font-weight:600">${Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')}</td>
         <td class="center"><span class="tag-lan">${loaiLan}</span></td>
         <td class="center">${inCell(r)}</td>
@@ -748,21 +759,25 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
 
               const r = row as LineRow
               const songs    = getSongLetters(r.to_hop_song)
-              const soTam    = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
-              const metToi   = calcMetToi(soTam, r.dai_tt)
+              const slcRx    = Math.max(1, r.so_lan_cat ?? 1)
+              const bccRx    = Math.max(1, r.be_so_con ?? 1)
+              const soTam    = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao, bccRx, slcRx)
+              const daiEff   = r.dai_tt != null ? Number(r.dai_tt) * slcRx : null
+              const metToi   = calcMetToi(soTam, daiEff)
               const qccl     = r.qccl || calcQCCL(r.rong, r.cao, r.so_lop)
               const soLop    = r.so_lop ?? 3
               const inner    = getMatInner(r)
               const kho1     = r.kho1 ? Number(r.kho1) : null
               const daiTt    = r.dai_tt ? Number(r.dai_tt) : null
 
-              // Kg từng lớp — map đúng cột theo loại sóng thực tế
+              // Kg từng lớp — dùng soTam cũ để giữ nguyên kg hiện tại
               const slots    = getSongSlots(r)
-              const kgMatC   = calcLayerKg(soTam, kho1, daiTt, r.mat_dl,        false, null)
-              const kgSongC  = calcLayerKg(soTam, kho1, daiTt, slots.songC.dl,  true,  slots.songC.flute)
-              const kgMatB   = soLop >= 5 ? calcLayerKg(soTam, kho1, daiTt, r.mat_1_dl, false, null) : 0
-              const kgSongB  = calcLayerKg(soTam, kho1, daiTt, slots.songB.dl,  true,  slots.songB.flute)
-              const kgInner  = calcLayerKg(soTam, kho1, daiTt, inner.dl, false, null)
+              const soTamKg  = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
+              const kgMatC   = calcLayerKg(soTamKg, kho1, daiTt, r.mat_dl,        false, null)
+              const kgSongC  = calcLayerKg(soTamKg, kho1, daiTt, slots.songC.dl,  true,  slots.songC.flute)
+              const kgMatB   = soLop >= 5 ? calcLayerKg(soTamKg, kho1, daiTt, r.mat_1_dl, false, null) : 0
+              const kgSongB  = calcLayerKg(soTamKg, kho1, daiTt, slots.songB.dl,  true,  slots.songB.flute)
+              const kgInner  = calcLayerKg(soTamKg, kho1, daiTt, inner.dl, false, null)
 
               const hasNoKho = !r.kho_giay || Number(r.kho_giay) === 0
               const isDangChay = r.trang_thai === 'dang_chay'
@@ -844,9 +859,9 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                     {hasNoKho ? '⚠ —' : fmtN(r.kho_giay, 1)}
                   </td>
 
-                  {/* Dài */}
+                  {/* Dài — chiều dài tờ phôi = dai_tt × so_lan_cat */}
                   <td style={{ ...TD, textAlign: 'center' }}>
-                    {daiTt != null ? fmtN(daiTt, 1) : '—'}
+                    {daiEff != null ? fmtN(daiEff, 1) : '—'}
                   </td>
 
                   {/* Số Tấm — to hơn, công nhân nhìn chính */}
@@ -864,16 +879,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                     {qccl || '—'}
                   </td>
 
-                  {/* Kho1/TT: kho1 (nhỏ, xám) + kho_tt (to, xanh) */}
+                  {/* kho_giay / so_dao = khổ mỗi dao */}
                   <td style={{ ...TD, textAlign: 'center' }}>
-                    {kho1 != null ? (
-                      <>
-                        <div style={{ fontSize: 10, color: '#8c8c8c' }}>{fmtN(kho1, 1)}</div>
-                        <div style={{ fontWeight: 700, fontSize: 14, color: '#1677ff' }}>
-                          {r.kho_tt != null ? fmtN(r.kho_tt, 1) : '—'}
-                        </div>
-                      </>
-                    ) : <span style={{ color: '#d9d9d9' }}>—</span>}
+                    {r.kho_giay != null && r.so_dao && r.so_dao > 0
+                      ? <span style={{ fontWeight: 700, fontSize: 14, color: '#1677ff' }}>{fmtN(Number(r.kho_giay) / r.so_dao, 1)}</span>
+                      : <span style={{ color: '#d9d9d9' }}>—</span>}
                   </td>
 
                   {/* SL Thùng — nhỏ hơn, tham khảo */}

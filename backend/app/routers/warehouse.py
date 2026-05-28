@@ -4326,6 +4326,7 @@ def ton_kho_giay(
         result.append({
             "paper_material_id": row.paper_material_id,
             "ma_chinh": pm.ma_chinh if pm else None,
+            "ma_ky_hieu": pm.ma_ky_hieu if pm else None,
             "ten": pm.ten if pm else None,
             "kho": float(pm.kho) if pm and pm.kho else None,
             "dinh_luong": int(pm.dinh_luong) if pm and pm.dinh_luong else None,

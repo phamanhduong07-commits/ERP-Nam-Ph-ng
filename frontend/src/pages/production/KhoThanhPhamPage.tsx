@@ -11,12 +11,11 @@ import client from '../../api/client'
 import { warehouseApi } from '../../api/warehouse'
 import type { TonKhoTPRow, PhanXuong } from '../../api/warehouse'
 import {
-import EmptyState from "../../components/EmptyState"
   salesReturnsApi,
   SALES_RETURN_TRANG_THAI_COLORS,
   SALES_RETURN_TRANG_THAI_LABELS,
-  type SalesReturnListItem,
 } from '../../api/salesReturns'
+import type { SalesReturnListItem } from '../../api/salesReturns'
 
 const { Text, Title } = Typography
 

@@ -69,7 +69,7 @@ export default function ProductionOutputPage() {
       setOpen(false)
       form.resetFields()
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
   })
 
   const deleteMut = useMutation({
@@ -79,7 +79,7 @@ export default function ProductionOutputPage() {
       qc.invalidateQueries({ queryKey: ['ton-kho'] })
       message.success('Đã xoá phiếu nhập TP')
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
   })
 
   const handleSubmit = async () => {

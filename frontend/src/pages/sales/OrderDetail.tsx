@@ -295,6 +295,14 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       ellipsis: true,
     },
     {
+      title: 'Xưởng SX',
+      dataIndex: 'ten_phan_xuong',
+      width: 110,
+      render: (v: string | null) => v
+        ? <Tag color="cyan" style={{ fontSize: 10 }}>{v}</Tag>
+        : null,
+    },
+    {
       title: 'BOM',
       width: 90,
       align: 'center' as const,

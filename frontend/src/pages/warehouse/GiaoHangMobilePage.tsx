@@ -58,7 +58,7 @@ export default function GiaoHangMobilePage() {
     onSuccess: () => {
       setDone({ soPhieu: selected!.so_phieu, tenKhach: selected!.ten_khach })
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) =>
+    onError: (e: unknown) =>
       message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xác nhận giao hàng'),
   })
 

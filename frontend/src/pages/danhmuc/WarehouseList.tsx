@@ -205,7 +205,7 @@ export default function WarehouseList() {
                 <Select
                   placeholder="Chọn xưởng (nếu có)"
                   allowClear
-                  options={phanXuongs.map((x: unknown) => ({ value: x.id, label: x.ten_xuong }))}
+                  options={phanXuongs.map((x: unknown) => { const px = x as { id: number; ten_xuong: string }; return { value: px.id, label: px.ten_xuong } })}
                 />
               </Form.Item>
             </Col>

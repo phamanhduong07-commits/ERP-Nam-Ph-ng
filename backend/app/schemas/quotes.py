@@ -57,12 +57,14 @@ class QuoteItemCreate(BaseModel):
     c_tham: str | None = None
     can_man: str | None = None
     so_c_be: str | None = None
+    be_so_con: int | None = None
     may_in: str | None = None
     loai_lan: str | None = None
     ban_ve_kt: str | None = None
 
     gia_ban: Decimal = Decimal("0")
     ghi_chu: str | None = None
+    phan_xuong_id: int | None = None
 
     @field_validator("so_luong")
     @classmethod
@@ -120,11 +122,14 @@ class QuoteItemResponse(BaseModel):
     c_tham: str | None
     can_man: str | None
     so_c_be: str | None
+    be_so_con: int | None = None
     may_in: str | None
     loai_lan: str | None
     ban_ve_kt: str | None
     gia_ban: Decimal
     ghi_chu: str | None
+    phan_xuong_id: int | None = None
+    ten_phan_xuong: str | None = None
 
     class Config:
         from_attributes = True

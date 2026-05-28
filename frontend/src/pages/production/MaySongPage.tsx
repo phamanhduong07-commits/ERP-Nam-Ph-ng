@@ -69,15 +69,28 @@ function mmToDisplayCm(mm: number | null | undefined): string {
   return (mm / 10).toFixed(1).replace(/\.0$/, '')
 }
 
+// Tính số dao thực tế từ kho_tt đã lưu (operator chỉnh) hoặc fallback dims
+function calcSoDaoThucTe(dims: ReturnType<typeof calcBoxDimensions>, khoTtSaved: number | null | undefined): number {
+  if (!dims) return 1
+  const khoTt = khoTtSaved ? Number(khoTtSaved) : dims.kho_tt
+  return dims.kho_ke_hoach > 0
+    ? Math.max(1, Math.floor((khoTt - 1.8) / dims.kho_ke_hoach))
+    : Math.max(1, dims.so_dao)
+}
+
+// Số PHÔI (tấm lớn từ máy sóng): ceil(soThung / (so_dao × so_lan_cat)) × 2 khi hai_manh
 function calcSoTam(oi: ProductionOrderItem, soThung: number): number | null {
   if (!oi.loai_thung || !oi.dai || !oi.rong || !oi.cao) return null
   const soLop = oi.so_lop ?? oi.product?.so_lop ?? 3
   const dims = calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), soLop)
-  if (!dims || dims.so_dao < 1) return null
-  return Math.ceil(soThung / dims.so_dao)
+  if (!dims) return null
+  const so_dao   = calcSoDaoThucTe(dims, oi.kho_tt)
+  const soLanCat = oi.so_lan_cat ?? 1
+  // hai_manh: chạy 2 đợt riêng (mảnh 1 và mảnh 2)
+  return Math.ceil(soThung / (so_dao * soLanCat)) * (dims.hai_manh ? 2 : 1)
 }
 
-// Tính số tấm từ list item — ưu tiên TT, fallback KH khi chưa nhập phiếu
+// Tính số phôi từ list item — ưu tiên TT, fallback KH khi chưa nhập phiếu
 function calcSoTamFromListItem(lsx: ProductionOrderListItem): number | null {
   const qty = Number(lsx.tong_sl_thuc_te) > 0
     ? Number(lsx.tong_sl_thuc_te)
@@ -86,8 +99,10 @@ function calcSoTamFromListItem(lsx: ProductionOrderListItem): number | null {
   if (!lsx.loai_thung || !lsx.dai || !lsx.rong || !lsx.cao) return qty
   const soLop = lsx.so_lop ?? 5
   const dims = calcBoxDimensions(lsx.loai_thung, Number(lsx.dai), Number(lsx.rong), Number(lsx.cao), soLop)
-  if (!dims || dims.so_dao < 1) return qty
-  return Math.ceil(qty / dims.so_dao)
+  if (!dims) return qty
+  const so_dao   = calcSoDaoThucTe(dims, lsx.kho_tt)
+  const soLanCat = lsx.so_lan_cat ?? 1
+  return Math.ceil(qty / (so_dao * soLanCat)) * (dims.hai_manh ? 2 : 1)
 }
 
 // Detect ca làm việc từ giờ hiện tại
@@ -364,8 +379,15 @@ function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: 
     const dims = oi?.loai_thung && oi?.dai && oi?.rong && oi?.cao
       ? calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), oi.so_lop ?? 3)
       : null
-    const so_dao    = Math.max(1, dims?.so_dao ?? 1)
-    const tamNho    = soTam > 0 ? Math.round(soTam / so_dao) : 0
+    // so_dao: dùng kho_tt đã lưu để khớp với thực tế máy (SxParamsTab đã chỉnh)
+    // calcSoDaoThucTe = tổng vị trí cá thể (dao_groups × be_so_con)
+    const soDaoTotal = calcSoDaoThucTe(dims, oi?.kho_tt)
+    const beConBe    = oi?.be_so_con && oi.be_so_con > 1 ? oi.be_so_con : 1
+    const soDaoGroups = Math.max(1, Math.round(soDaoTotal / beConBe))  // nhóm dao thực tế
+    const soLanCat   = oi?.so_lan_cat ?? 1
+    // Số con = phôi × nhóm dao (không nhân be_so_con / soLanCat — người dùng yêu cầu)
+    const soPhoi    = dims?.hai_manh ? Math.ceil(soTam / 2) : soTam
+    const tamNho    = soPhoi > 0 ? soPhoi * soDaoGroups : 0
     const ngaySxMaySong = phieu?.ngay ?? order.ngay_bat_dau_ke_hoach ?? ''
     const loaiLanLabel = oi?.loai_lan === 'lan_bang' ? 'Lằn Bằng'
                        : oi?.loai_lan === 'lan_am_duong' ? 'Lằn Âm Dương'
@@ -386,9 +408,9 @@ function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: 
       loai_lan:         loaiLanLabel,
       ten_san_pham:     oi?.ten_hang ?? '',
       sl_tam_lon: soTam > 0
-        ? `${khoCmStr} × ${catCmStr} cm | ${soTam.toLocaleString()} tấm | ${soPallet} pallet`
+        ? `${khoCmStr} × ${catCmStr} cm | ${soTam.toLocaleString()} phôi × ${soDaoGroups} dao${beConBe > 1 ? ` × ${beConBe}con` : ''}${soLanCat > 1 ? ` × ${soLanCat}xếp` : ''}${dims?.hai_manh ? ' (2 mảnh)' : ''} | ${soPallet} pallet`
         : `${khoCmStr} × ${catCmStr} cm`,
-      sl_tam_nho: tamNho > 0 ? `${tamNho.toLocaleString()} tấm` : '',
+      sl_tam_nho: tamNho > 0 ? `${tamNho.toLocaleString()} con` : '',
       sl_thung: soThung > 0
         ? `${soThung.toLocaleString()} ${oi?.dvt ?? 'thùng'}`
         : `${oi?.so_luong_ke_hoach ?? ''} ${oi?.dvt ?? 'thùng'}`,
@@ -463,9 +485,9 @@ function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: 
                 </Col>
                 <Col span={8}>
                   <div style={{ border: '2px solid #722ed1', borderRadius: 6, textAlign: 'center', padding: '8px 4px', background: '#f9f0ff' }}>
-                    <div style={{ fontSize: 10, color: '#722ed1', fontWeight: 600, marginBottom: 2 }}>SỐ TẤM</div>
+                    <div style={{ fontSize: 10, color: '#722ed1', fontWeight: 600, marginBottom: 2 }}>SỐ PHÔI</div>
                     <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>{soTam > 0 ? soTam.toLocaleString() : '—'}</div>
-                    <div style={{ fontSize: 11, color: '#888' }}>tấm</div>
+                    <div style={{ fontSize: 11, color: '#888' }}>phôi</div>
                   </div>
                 </Col>
                 <Col span={8}>
@@ -553,7 +575,7 @@ export default function MaySongPage() {
   const [pauseTarget, setPauseTarget]   = useState<StatusTarget | null>(null)
   const [inTemState, setInTemState]     = useState<InTemState | null>(null)
   const [inTemLoading, setInTemLoading] = useState(false)
-  const [histTuNgay, setHistTuNgay]     = useState(dayjs().subtract(7, 'day').format('YYYY-MM-DD'))
+  const [histTuNgay, setHistTuNgay]     = useState(dayjs().subtract(30, 'day').format('YYYY-MM-DD'))
   const [histDenNgay, setHistDenNgay]   = useState(dayjs().format('YYYY-MM-DD'))
   const [histFilterCa, setHistFilterCa]   = useState<string | undefined>()
   const [histSearchLenh, setHistSearchLenh] = useState('')
@@ -854,7 +876,7 @@ export default function MaySongPage() {
       render: (_, r) => [r.so_lop ? `${r.so_lop}L` : null, r.to_hop_song].filter(Boolean).join(' · ') || '—',
     },
     {
-      title: 'Số tấm',
+      title: 'Số phôi',
       width: 80,
       align: 'right',
       render: (_, r) => {

@@ -238,16 +238,22 @@ function LedgerTab() {
 function AgingTab() {
   const navigate = useNavigate()
   const [asOfDate, setAsOfDate] = useState<string | undefined>()
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
   const [selectedCustomer, setSelectedCustomer] = useState<ARAgingRow | null>(null)
 
+  const { data: listPhapNhan = [] } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list().then(r => r.data),
+  })
+
   const { data: rows = [], isLoading } = useQuery<ARAgingRow[]>({
-    queryKey: ['ar-aging', asOfDate],
-    queryFn: () => arApi.getAging(asOfDate),
+    queryKey: ['ar-aging', asOfDate, phapNhanId],
+    queryFn: () => arApi.getAging(asOfDate, phapNhanId),
   })
 
   const { data: detailRows = [], isLoading: isDetailLoading } = useQuery<ARLedgerRow[]>({
-    queryKey: ['ar-ledger-customer-detail', selectedCustomer?.customer_id, asOfDate],
-    queryFn: () => arApi.getLedger({ customer_id: selectedCustomer?.customer_id, den_ngay: asOfDate }),
+    queryKey: ['ar-ledger-customer-detail', selectedCustomer?.customer_id, asOfDate, phapNhanId],
+    queryFn: () => arApi.getLedger({ customer_id: selectedCustomer?.customer_id, den_ngay: asOfDate, phap_nhan_id: phapNhanId }),
     enabled: !!selectedCustomer?.customer_id,
   })
   const unpaidDetailRows = detailRows.filter(r => (r.con_lai ?? 0) > 0)
@@ -375,6 +381,19 @@ function AgingTab() {
     <>
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[12, 8]} align="middle">
+          <Col>
+            <Select
+              style={{ width: 180 }}
+              allowClear
+              placeholder="Pháp nhân"
+              value={phapNhanId}
+              options={listPhapNhan.map((p: PhapNhan) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              onChange={v => {
+                setPhapNhanId(v)
+                setSelectedCustomer(null)
+              }}
+            />
+          </Col>
           <Col>
             <Space>
               <span style={{ fontSize: 13 }}>Tính đến ngày:</span>

@@ -114,10 +114,16 @@ class SalesOrderItem(Base):
     dien_tich: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     c_tham: Mapped[str | None] = mapped_column(String(50))
     can_man: Mapped[str | None] = mapped_column(String(50))
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
 
     order: Mapped["SalesOrder"] = relationship("SalesOrder", back_populates="items")
     product: Mapped["Product | None"] = relationship("Product", back_populates="sales_order_items")
     quote_item: Mapped["QuoteItem | None"] = relationship("QuoteItem", foreign_keys=[quote_item_id])
+    phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
+
+    @property
+    def ten_phan_xuong(self) -> str | None:
+        return self.phan_xuong.ten_xuong if self.phan_xuong else None
 
     @property
     def thanh_tien(self) -> Decimal:
@@ -331,6 +337,7 @@ class QuoteItem(Base):
     c_tham: Mapped[str | None] = mapped_column(String(50))
     can_man: Mapped[str | None] = mapped_column(String(50))
     so_c_be: Mapped[str | None] = mapped_column(String(50))
+    be_so_con: Mapped[int | None] = mapped_column(SmallInteger)
     may_in: Mapped[str | None] = mapped_column(String(100))
     loai_lan: Mapped[str | None] = mapped_column(String(50))
     ban_ve_kt: Mapped[str | None] = mapped_column(String(500))
@@ -338,6 +345,12 @@ class QuoteItem(Base):
     # Giá
     gia_ban: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
 
     quote: Mapped["Quote"] = relationship("Quote", back_populates="items")
     product: Mapped["Product | None"] = relationship("Product")
+    phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
+
+    @property
+    def ten_phan_xuong(self) -> str | None:
+        return self.phan_xuong.ten_xuong if self.phan_xuong else None

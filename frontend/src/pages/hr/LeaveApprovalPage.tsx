@@ -10,6 +10,7 @@ import {
   UserOutlined
 } from '@ant-design/icons'
 import client from '../../api/client'
+import type { LeaveRequest } from '../../api/hr'
 import dayjs from 'dayjs'
 import EmptyState from "../../components/EmptyState"
 
@@ -20,7 +21,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 
 export default function LeaveApprovalPage() {
   const [modalVisible, setModalVisible] = useState(false)
-  const [selectedReq, setSelectedReq] = useState<unknown>(null)
+  const [selectedReq, setSelectedReq] = useState<LeaveRequest | null>(null)
   const [form] = Form.useForm()
 
   const { data: requests = [], isLoading, refetch } = useQuery({
@@ -29,7 +30,7 @@ export default function LeaveApprovalPage() {
   })
 
   const approveMutation = useMutation({
-    mutationFn: (values: Record<string, unknown>) => client.put(`/hr/leave-requests/${selectedReq.id}/approve`, values),
+    mutationFn: (values: Record<string, unknown>) => client.put(`/hr/leave-requests/${selectedReq?.id}/approve`, values),
     onSuccess: () => {
       message.success('Đã cập nhật trạng thái đơn')
       setModalVisible(false)
@@ -39,11 +40,11 @@ export default function LeaveApprovalPage() {
 
   const columns = [
     { title: 'Ngày tạo', dataIndex: 'created_at', render: (v: string) => dayjs(v).format('DD/MM/YYYY HH:mm') },
-    { title: 'Nhân viên', dataIndex: 'employee', render: (v: unknown) => (
+    { title: 'Nhân viên', dataIndex: 'employee', render: (v: { ho_ten?: string; ma_nv?: string }) => (
       <Space>
         <UserOutlined />
-        <Text strong>{v.ho_ten}</Text>
-        <Text type="secondary">({v.ma_nv})</Text>
+        <Text strong>{v?.ho_ten}</Text>
+        <Text type="secondary">({v?.ma_nv})</Text>
       </Space>
     )},
     { title: 'Loại đơn', dataIndex: 'loai_don', render: (v: string) => (
@@ -126,7 +127,7 @@ export default function LeaveApprovalPage() {
         {selectedReq && (
           <Form form={form} layout="vertical">
             <div style={{ marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 8 }}>
-              <Text strong>{selectedReq.employee.ho_ten}</Text> xin nghỉ {selectedReq.loai_don} 
+              <Text strong>{selectedReq.ho_ten}</Text> xin nghỉ {selectedReq.loai_don}
               <br />
               Từ: {dayjs(selectedReq.ngay_bat_dau).format('DD/MM/YYYY HH:mm')}
               <br />

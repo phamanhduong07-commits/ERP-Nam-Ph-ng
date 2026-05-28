@@ -26,12 +26,12 @@ const WorkshopPNLPage: React.FC = () => {
     setLoading(true)
     try {
       const params = {
-        phan_xuong_id: values.phan_xuong_id,
+        phan_xuong_id: values.phan_xuong_id!,
         tu_ngay: values.range[0].format('YYYY-MM-DD'),
         den_ngay: values.range[1].format('YYYY-MM-DD')
       }
       const res = await reportsApi.getWorkshopPNL(params)
-      setData(res)
+      setData(res as WorkshopPNLData)
     } catch (error) {
       console.error(error)
     } finally {

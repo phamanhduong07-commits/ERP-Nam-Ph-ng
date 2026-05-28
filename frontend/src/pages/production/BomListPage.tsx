@@ -314,7 +314,7 @@ export default function BomListPage() {
         visible={importVisible}
         onCancel={() => setImportVisible(false)}
         onSuccess={() => refetch()}
-        importFn={(file, commit) => bomApi.importBoms(file, commit)}
+        importFn={(file, commit) => bomApi.importBoms(file, commit).then(r => r.data)}
         templateUrl="/api/bom/import-template"
       />
     </div>

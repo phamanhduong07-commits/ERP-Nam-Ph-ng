@@ -26,6 +26,7 @@ class ProductionOrder(Base):
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
     kho_sx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("warehouses.id"))
+    phoi_phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     nv_theo_doi_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -45,7 +46,9 @@ class ProductionOrder(Base):
     kho_sx: Mapped["Warehouse | None"] = relationship(
         "Warehouse", foreign_keys=[kho_sx_id])  # type: ignore[name-defined]
     phan_xuong: Mapped["PhanXuong | None"] = relationship(
-        "PhanXuong", foreign_keys=[phan_xuong_id])  # type: ignore[name-defined]
+        "PhanXuong", foreign_keys=[phan_xuong_id])
+    phoi_phan_xuong: Mapped["PhanXuong | None"] = relationship(
+        "PhanXuong", foreign_keys=[phoi_phan_xuong_id])  # type: ignore[name-defined]
     items: Mapped[list["ProductionOrderItem"]] = relationship(
         "ProductionOrderItem", back_populates="production_order",
         cascade="all, delete-orphan"
@@ -96,6 +99,8 @@ class ProductionOrderItem(Base):
     can_man: Mapped[str | None] = mapped_column(String(50))
     kho_tt: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dai_tt: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    so_lan_cat: Mapped[int | None] = mapped_column(SmallInteger)
+    be_so_con: Mapped[int | None] = mapped_column(SmallInteger)
     qccl: Mapped[str | None] = mapped_column(String(50))
     dien_tich: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     gia_ban_muc_tieu: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))

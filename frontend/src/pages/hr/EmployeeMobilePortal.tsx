@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
   Card, Col, Row, Typography, Space, Button, Avatar, List, Tag, Tabs, Modal, Form, DatePicker, Input, message, Select
@@ -27,9 +27,10 @@ export default function EmployeeMobilePortal() {
   const [leaveModal, setLeaveModal] = useState(false)
   const [form] = Form.useForm()
 
+  type ProfileData = { ho_ten?: string; ma_nv?: string; chuc_vu?: string; employee_id?: number; id?: number }
   const { data: profile } = useQuery({
     queryKey: ['my-profile'],
-    queryFn: () => client.get(`/hr/me/profile`).then(r => r.data),
+    queryFn: () => client.get<ProfileData>(`/hr/me/profile`).then(r => r.data),
   })
 
   const { data: payrolls = [] } = useQuery({
@@ -47,9 +48,9 @@ export default function EmployeeMobilePortal() {
     mutationFn: (values: LeaveFormValues) => client.post(`/hr/leave-requests`, {
       ...values,
       employee_id: profile?.employee_id || profile?.id,
-      ngay_bat_dau: values.ngay_bat_dau?.toISOString?.() || values.ngay_bat_dau,
-      ngay_ket_thuc: values.ngay_ket_thuc?.toISOString?.() || values.ngay_ket_thuc,
-      tong_ngay: Math.max(0.5, dayjs(values.ngay_ket_thuc).diff(dayjs(values.ngay_bat_dau), 'day') + 1)
+      ngay_bat_dau: (values.ngay_bat_dau as unknown as { toISOString?: () => string })?.toISOString?.() || String(values.ngay_bat_dau),
+      ngay_ket_thuc: (values.ngay_ket_thuc as unknown as { toISOString?: () => string })?.toISOString?.() || String(values.ngay_ket_thuc),
+      tong_ngay: Math.max(0.5, dayjs(values.ngay_ket_thuc as string).diff(dayjs(values.ngay_bat_dau as string), 'day') + 1)
     }),
     onSuccess: () => {
       message.success('Đã gửi đơn thành công')

@@ -571,6 +571,7 @@ export interface CreatePhanXuongPayload {
 export interface TonKhoGiayRow {
   paper_material_id: number
   ma_chinh: string | null
+  ma_ky_hieu: string | null
   ten: string | null
   kho: number | null
   dinh_luong: number | null

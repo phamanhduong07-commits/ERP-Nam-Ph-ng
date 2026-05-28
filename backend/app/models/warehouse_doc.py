@@ -24,6 +24,7 @@ class GoodsReceipt(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     so_xe: Mapped[str | None] = mapped_column(String(30))
     invoice_image: Mapped[str | None] = mapped_column(Text)
+    ocr_extracted_data: Mapped[str | None] = mapped_column(Text)
     hd_tong_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
-from app.models.accounting import CashReceipt, CashPayment, OpeningBalance, PurchaseInvoice
-from app.models.master import Customer, PhapNhan, Supplier
+from app.models.auth import AuditLog
+from app.models.accounting import BankTransaction, CashReceipt, CashPayment, OpeningBalance, PurchaseInvoice
+from app.models.master import BankAccount, Customer, PhapNhan, Supplier
 from app.models.warehouse_doc import GoodsReceipt
-from sqlalchemy import func
+from sqlalchemy import desc, func
 from app.services.accounting_service import AccountingService
 from app.schemas.accounting import (
     PurchaseInvoiceCreate,
@@ -21,11 +22,12 @@ from app.schemas.accounting import (
     CashPaymentResponse, OpeningBalanceCreate,
     WorkshopPayrollCreate,
     WorkshopPayrollResponse, OverheadAllocationRequest,
+    ProductionCostPeriodCreate,
     FixedAssetCreate,
     FixedAssetResponse, ManualJournalEntryCreate,
 )
 from app.services.excel_import_service import (
-    ImportField, build_template_response, parse_decimal, parse_text,
+    ImportField, build_template_response, import_excel, parse_date, parse_decimal, parse_text,
 )
 import io
 import pandas as pd
@@ -33,6 +35,351 @@ import pandas as pd
 router = APIRouter(prefix="/api/accounting", tags=["accounting"])
 
 KE_TOAN_ROLES = ("KE_TOAN", "GIAM_DOC")
+ACCOUNTING_AUDIT_TABLES = {
+    "bank_transactions",
+    "cash_receipts",
+    "cash_payments",
+    "purchase_invoices",
+    "production_cost_periods",
+    "journal_entries",
+}
+
+BANK_TRANSACTION_IMPORT_FIELDS = [
+    ImportField("ngay_giao_dich", "Ngay giao dich", required=True, parser=parse_date, help_text="YYYY-MM-DD hoac DD/MM/YYYY"),
+    ImportField("so_tai_khoan", "So tai khoan", required=True, parser=parse_text),
+    ImportField("so_tham_chieu", "So tham chieu", parser=parse_text),
+    ImportField("mo_ta", "Mo ta", parser=parse_text),
+    ImportField("thu", "Thu", parser=parse_decimal, default=Decimal("0")),
+    ImportField("chi", "Chi", parser=parse_decimal, default=Decimal("0")),
+    ImportField("so_du", "So du", parser=parse_decimal),
+]
+
+
+def _bank_transaction_resolver(db: Session, values: dict) -> tuple[dict, list[str]]:
+    errors: list[str] = []
+    so_tai_khoan = values.get("so_tai_khoan")
+    account = None
+    if so_tai_khoan:
+        account = db.query(BankAccount).filter(BankAccount.so_tai_khoan == so_tai_khoan).first()
+        if account:
+            values["bank_account_id"] = account.id
+            values["phap_nhan_id"] = account.phap_nhan_id
+
+    thu = Decimal(str(values.get("thu") or 0))
+    chi = Decimal(str(values.get("chi") or 0))
+    if thu < 0 or chi < 0:
+        errors.append("Thu/Chi khong duoc am")
+    if (thu > 0 and chi > 0) or (thu == 0 and chi == 0):
+        errors.append("Moi giao dich phai co dung mot cot Thu hoac Chi")
+
+    ngay = values.get("ngay_giao_dich")
+    parts = [
+        str(account.id if account else so_tai_khoan or ""),
+        ngay.isoformat() if hasattr(ngay, "isoformat") else str(ngay or ""),
+        str(values.get("so_tham_chieu") or ""),
+        str(thu),
+        str(chi),
+        str(values.get("mo_ta") or "")[:80],
+    ]
+    values["import_key"] = "|".join(parts)[:255]
+    values["trang_thai"] = "chua_doi_soat"
+    return values, errors
+
+
+@router.post("/chart-of-accounts/seed")
+def seed_chart_of_accounts(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    """Seed idempotent he thong tai khoan loi, gom tai khoan noi bo va thue."""
+    result = AccountingService(db).ensure_core_chart_of_accounts()
+    db.commit()
+    return result
+
+
+@router.get("/audit-logs")
+def list_accounting_audit_logs(
+    bang: str | None = Query(None),
+    ban_ghi_id: str | None = Query(None),
+    user_id: int | None = Query(None),
+    tu_ngay: date | None = Query(None),
+    den_ngay: date | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    if bang:
+        if bang not in ACCOUNTING_AUDIT_TABLES:
+            raise HTTPException(400, "Bang audit khong thuoc pham vi ke toan")
+    q = db.query(AuditLog).filter(AuditLog.bang.in_(ACCOUNTING_AUDIT_TABLES))
+    if bang:
+        q = q.filter(AuditLog.bang == bang)
+    if ban_ghi_id:
+        q = q.filter(AuditLog.ban_ghi_id == str(ban_ghi_id))
+    if user_id:
+        q = q.filter(AuditLog.user_id == user_id)
+    if tu_ngay:
+        q = q.filter(func.date(AuditLog.created_at) >= tu_ngay)
+    if den_ngay:
+        q = q.filter(func.date(AuditLog.created_at) <= den_ngay)
+
+    total = q.count()
+    items = q.order_by(desc(AuditLog.created_at), desc(AuditLog.id))\
+             .offset((page - 1) * page_size).limit(page_size).all()
+    return {"total": total, "page": page, "page_size": page_size, "items": items}
+
+
+@router.get("/documents/{bang}/{ban_ghi_id}/audit")
+def get_document_audit(
+    bang: str,
+    ban_ghi_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    if bang not in ACCOUNTING_AUDIT_TABLES:
+        raise HTTPException(400, "Bang audit khong thuoc pham vi ke toan")
+    return db.query(AuditLog).filter(
+        AuditLog.bang == bang,
+        AuditLog.ban_ghi_id == str(ban_ghi_id),
+    ).order_by(AuditLog.created_at, AuditLog.id).all()
+
+
+@router.get("/documents/{chung_tu_loai}/{chung_tu_id}/journal-entries")
+def get_document_journal_entries(
+    chung_tu_loai: str,
+    chung_tu_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from app.models.accounting import JournalEntry
+    return db.query(JournalEntry).filter(
+        JournalEntry.chung_tu_loai == chung_tu_loai,
+        JournalEntry.chung_tu_id == chung_tu_id,
+    ).order_by(JournalEntry.ngay_but_toan, JournalEntry.id).all()
+
+
+def _bank_transaction_payload(tx: BankTransaction) -> dict:
+    return {
+        "id": tx.id,
+        "bank_account_id": tx.bank_account_id,
+        "phap_nhan_id": tx.phap_nhan_id,
+        "ngay_giao_dich": tx.ngay_giao_dich,
+        "so_tai_khoan": tx.so_tai_khoan or (tx.bank_account.so_tai_khoan if tx.bank_account else None),
+        "so_tham_chieu": tx.so_tham_chieu,
+        "mo_ta": tx.mo_ta,
+        "thu": tx.thu,
+        "chi": tx.chi,
+        "so_du": tx.so_du,
+        "trang_thai": tx.trang_thai,
+        "matched_chung_tu_loai": tx.matched_chung_tu_loai,
+        "matched_chung_tu_id": tx.matched_chung_tu_id,
+        "matched_at": tx.matched_at,
+        "matched_by": tx.matched_by,
+        "created_at": tx.created_at,
+    }
+
+
+def _candidate_payload(chung_tu_loai: str, obj, doi_tuong: str | None) -> dict:
+    return {
+        "chung_tu_loai": chung_tu_loai,
+        "chung_tu_id": obj.id,
+        "so_chung_tu": obj.so_phieu,
+        "ngay": obj.ngay_phieu,
+        "doi_tuong": doi_tuong,
+        "dien_giai": obj.dien_giai,
+        "so_tien": obj.so_tien,
+    }
+
+
+def _get_bank_transaction_or_404(db: Session, tx_id: int) -> BankTransaction:
+    tx = db.get(BankTransaction, tx_id)
+    if not tx:
+        raise HTTPException(404, "Khong tim thay giao dich ngan hang")
+    return tx
+
+
+def _validate_reconcile_target(db: Session, tx: BankTransaction, payload: dict) -> tuple[str, int]:
+    chung_tu_loai = payload.get("chung_tu_loai")
+    chung_tu_id = payload.get("chung_tu_id")
+    if chung_tu_loai not in {"phieu_thu", "phieu_chi"} or not chung_tu_id:
+        raise HTTPException(400, "Doi tuong doi soat khong hop le")
+
+    model = CashReceipt if chung_tu_loai == "phieu_thu" else CashPayment
+    obj = db.get(model, int(chung_tu_id))
+    if not obj:
+        raise HTTPException(404, "Khong tim thay chung tu doi soat")
+    if obj.trang_thai != "da_duyet":
+        raise HTTPException(400, "Chi doi soat chung tu da duyet")
+
+    tx_amount = Decimal(str(tx.thu or 0)) if tx.thu and tx.thu > 0 else Decimal(str(tx.chi or 0))
+    if Decimal(str(obj.so_tien)) != tx_amount:
+        raise HTTPException(400, "So tien giao dich khong khop chung tu")
+    if chung_tu_loai == "phieu_thu" and not (tx.thu and tx.thu > 0):
+        raise HTTPException(400, "Giao dich thu chi duoc doi soat voi phieu thu")
+    if chung_tu_loai == "phieu_chi" and not (tx.chi and tx.chi > 0):
+        raise HTTPException(400, "Giao dich chi chi duoc doi soat voi phieu chi")
+    if tx.phap_nhan_id and obj.phap_nhan_id and tx.phap_nhan_id != obj.phap_nhan_id:
+        raise HTTPException(400, "Phap nhan giao dich khong khop chung tu")
+    return chung_tu_loai, int(chung_tu_id)
+
+
+@router.get("/bank-transactions/import-template")
+def download_bank_transaction_import_template(_: User = Depends(get_current_user)):
+    return build_template_response("mau_import_sao_ke_ngan_hang.xlsx", BANK_TRANSACTION_IMPORT_FIELDS)
+
+
+@router.post("/bank-transactions/import")
+async def import_bank_transactions(
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    return await import_excel(
+        db=db,
+        file=file,
+        model=BankTransaction,
+        fields=BANK_TRANSACTION_IMPORT_FIELDS,
+        key_field="import_key",
+        commit=commit,
+        resolver=_bank_transaction_resolver,
+        user=current_user,
+        loai_du_lieu="sao_ke_ngan_hang",
+    )
+
+
+@router.get("/bank-transactions")
+def list_bank_transactions(
+    tu_ngay: date | None = Query(None),
+    den_ngay: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
+    bank_account_id: int | None = Query(None),
+    trang_thai: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(BankTransaction)
+    if tu_ngay:
+        q = q.filter(BankTransaction.ngay_giao_dich >= tu_ngay)
+    if den_ngay:
+        q = q.filter(BankTransaction.ngay_giao_dich <= den_ngay)
+    if phap_nhan_id:
+        q = q.filter(BankTransaction.phap_nhan_id == phap_nhan_id)
+    if bank_account_id:
+        q = q.filter(BankTransaction.bank_account_id == bank_account_id)
+    if trang_thai:
+        q = q.filter(BankTransaction.trang_thai == trang_thai)
+
+    total = q.count()
+    items = (
+        q.order_by(desc(BankTransaction.ngay_giao_dich), desc(BankTransaction.id))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {"total": total, "page": page, "page_size": page_size, "items": [_bank_transaction_payload(tx) for tx in items]}
+
+
+@router.get("/bank-transactions/{tx_id}/candidates")
+def get_bank_transaction_candidates(
+    tx_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    tx = _get_bank_transaction_or_404(db, tx_id)
+    amount = Decimal(str(tx.thu or 0)) if tx.thu and tx.thu > 0 else Decimal(str(tx.chi or 0))
+    candidates = []
+    if tx.thu and tx.thu > 0:
+        q = db.query(CashReceipt).join(Customer, CashReceipt.customer_id == Customer.id).filter(
+            CashReceipt.trang_thai == "da_duyet",
+            CashReceipt.so_tien == amount,
+        )
+        if tx.phap_nhan_id:
+            q = q.filter(CashReceipt.phap_nhan_id == tx.phap_nhan_id)
+        for obj in q.order_by(desc(CashReceipt.ngay_phieu), desc(CashReceipt.id)).limit(20).all():
+            candidates.append(_candidate_payload("phieu_thu", obj, obj.customer.ten_viet_tat if obj.customer else None))
+    elif tx.chi and tx.chi > 0:
+        q = db.query(CashPayment).join(Supplier, CashPayment.supplier_id == Supplier.id).filter(
+            CashPayment.trang_thai == "da_duyet",
+            CashPayment.so_tien == amount,
+        )
+        if tx.phap_nhan_id:
+            q = q.filter(CashPayment.phap_nhan_id == tx.phap_nhan_id)
+        for obj in q.order_by(desc(CashPayment.ngay_phieu), desc(CashPayment.id)).limit(20).all():
+            candidates.append(_candidate_payload("phieu_chi", obj, obj.supplier.ten_viet_tat if obj.supplier else None))
+    return candidates
+
+
+@router.post("/bank-transactions/{tx_id}/reconcile")
+def reconcile_bank_transaction(
+    tx_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    tx = _get_bank_transaction_or_404(db, tx_id)
+    if tx.trang_thai == "da_doi_soat":
+        raise HTTPException(400, "Giao dich da doi soat")
+    chung_tu_loai, chung_tu_id = _validate_reconcile_target(db, tx, payload)
+    tx.trang_thai = "da_doi_soat"
+    tx.matched_chung_tu_loai = chung_tu_loai
+    tx.matched_chung_tu_id = chung_tu_id
+    tx.matched_at = datetime.now(timezone.utc)
+    tx.matched_by = current_user.id
+    AccountingService(db)._audit(
+        "reconcile",
+        "bank_transactions",
+        tx.id,
+        user_id=current_user.id,
+        du_lieu_moi={"chung_tu_loai": chung_tu_loai, "chung_tu_id": chung_tu_id},
+    )
+    db.commit()
+    db.refresh(tx)
+    return _bank_transaction_payload(tx)
+
+
+@router.post("/bank-transactions/{tx_id}/unreconcile")
+def unreconcile_bank_transaction(
+    tx_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    tx = _get_bank_transaction_or_404(db, tx_id)
+    old = {"chung_tu_loai": tx.matched_chung_tu_loai, "chung_tu_id": tx.matched_chung_tu_id}
+    tx.trang_thai = "chua_doi_soat"
+    tx.matched_chung_tu_loai = None
+    tx.matched_chung_tu_id = None
+    tx.matched_at = None
+    tx.matched_by = None
+    AccountingService(db)._audit("unreconcile", "bank_transactions", tx.id, user_id=current_user.id, du_lieu_cu=old)
+    db.commit()
+    db.refresh(tx)
+    return _bank_transaction_payload(tx)
+
+
+@router.post("/bank-transactions/{tx_id}/ignore")
+def ignore_bank_transaction(
+    tx_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    tx = _get_bank_transaction_or_404(db, tx_id)
+    old_status = tx.trang_thai
+    tx.trang_thai = "bo_qua"
+    AccountingService(db)._audit(
+        "ignore",
+        "bank_transactions",
+        tx.id,
+        user_id=current_user.id,
+        du_lieu_cu={"trang_thai": old_status},
+        du_lieu_moi={"trang_thai": tx.trang_thai},
+    )
+    db.commit()
+    db.refresh(tx)
+    return _bank_transaction_payload(tx)
 
 
 # ─────────────────────────────────────────────
@@ -89,10 +436,11 @@ def approve_receipt(
 @router.patch("/receipts/{receipt_id}/cancel", response_model=CashReceiptResponse)
 def cancel_receipt(
     receipt_id: int,
+    ly_do: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
-    return AccountingService(db).cancel_receipt(receipt_id)
+    return AccountingService(db).cancel_receipt(receipt_id, current_user.id, ly_do)
 
 
 # ─────────────────────────────────────────────
@@ -167,10 +515,11 @@ def create_purchase_invoice_from_gr(
 @router.post("/purchase-invoices/{inv_id}/huy", response_model=PurchaseInvoiceResponse)
 def cancel_purchase_invoice(
     inv_id: int,
+    ly_do: str | None = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*KE_TOAN_ROLES)),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
-    return AccountingService(db).cancel_purchase_invoice(inv_id)
+    return AccountingService(db).cancel_purchase_invoice(inv_id, current_user.id, ly_do)
 
 
 # ─────────────────────────────────────────────
@@ -227,10 +576,11 @@ def approve_payment(
 @router.patch("/payments/{payment_id}/cancel", response_model=CashPaymentResponse)
 def cancel_payment(
     payment_id: int,
+    ly_do: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
-    return AccountingService(db).cancel_payment(payment_id)
+    return AccountingService(db).cancel_payment(payment_id, current_user.id, ly_do)
 
 
 # ─────────────────────────────────────────────
@@ -334,6 +684,21 @@ def ap_balance(
 # ─────────────────────────────────────────────
 # SỔ CHI TIẾT MUA HÀNG
 # ─────────────────────────────────────────────
+
+@router.get("/debt/overdue-alerts")
+def debt_overdue_alerts(
+    as_of_date: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return AccountingService(db).get_debt_overdue_alerts(
+        as_of_date=as_of_date,
+        phap_nhan_id=phap_nhan_id,
+        limit=limit,
+    )
+
 
 @router.get("/purchase/so-chi-tiet")
 def so_chi_tiet_mua_hang(
@@ -1450,6 +1815,75 @@ def allocate_overhead(
         phap_nhan_id=data.phap_nhan_id,
         user_id=current_user.id
     )
+
+
+@router.get("/production-cost-periods")
+def list_production_cost_periods(
+    phap_nhan_id: int | None = Query(None),
+    phan_xuong_id: int | None = Query(None),
+    trang_thai: str | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return AccountingService(db).list_production_cost_periods(
+        phap_nhan_id=phap_nhan_id,
+        phan_xuong_id=phan_xuong_id,
+        trang_thai=trang_thai,
+    )
+
+
+@router.post("/production-cost-periods", status_code=201)
+def create_production_cost_period(
+    data: ProductionCostPeriodCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    return AccountingService(db).create_production_cost_period(data, current_user.id)
+
+
+@router.get("/production-cost-periods/{period_id}")
+def get_production_cost_period(
+    period_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return AccountingService(db).get_production_cost_period(period_id)
+
+
+@router.post("/production-cost-periods/{period_id}/collect-inputs")
+def collect_production_cost_inputs(
+    period_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    return AccountingService(db).collect_production_cost_inputs(period_id, current_user.id)
+
+
+@router.get("/production-cost-periods/{period_id}/allocation-preview")
+def preview_production_cost_allocations(
+    period_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return AccountingService(db).preview_production_cost_allocations(period_id)
+
+
+@router.post("/production-cost-periods/{period_id}/calculate")
+def calculate_production_cost_period(
+    period_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    return AccountingService(db).calculate_production_cost_period(period_id, current_user.id)
+
+
+@router.post("/production-cost-periods/{period_id}/close")
+def close_production_cost_period(
+    period_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    return AccountingService(db).close_production_cost_period(period_id, current_user.id)
 
 
 # ─────────────────────────────────────────────

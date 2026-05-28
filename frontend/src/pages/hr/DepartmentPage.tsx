@@ -30,7 +30,7 @@ export default function DepartmentPage() {
 
   const { data: phanXuongList = [] } = useQuery({
     queryKey: ['phan-xuong-list'],
-    queryFn: () => theoDoiApi.listPhanXuong().then((r: unknown) => r.data),
+    queryFn: () => theoDoiApi.listPhanXuong().then((r: { data: { id: number; ten_xuong?: string }[] }) => r.data),
   })
 
   const saveMut = useMutation({
@@ -46,7 +46,8 @@ export default function DepartmentPage() {
   })
 
   // Convert flat list to tree for TreeSelect
-  const buildTree = (list: Department[], parentId: number | null = null): unknown[] => {
+  interface DeptTreeNode { value: number; title: string; children: DeptTreeNode[] }
+  const buildTree = (list: Department[], parentId: number | null = null): DeptTreeNode[] => {
     return list
       .filter(item => item.parent_id === parentId)
       .map(item => ({
@@ -76,7 +77,7 @@ export default function DepartmentPage() {
     {
       title: 'Xưởng',
       dataIndex: 'phan_xuong_id',
-      render: (v: number) => phanXuongList.find((px: { id: number; ten_xuong?: string; [k: string]: unknown }) => px.id === v)?.ten_xuong
+      render: (v: number) => phanXuongList.find((px) => px.id === v)?.ten_xuong
     },
     {
       title: 'Pháp nhân',
@@ -157,7 +158,7 @@ export default function DepartmentPage() {
                     <Form.Item name="phan_xuong_id" label="Gắn với xưởng">
                       <Select 
                         allowClear
-                        options={phanXuongList.map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))}
+                        options={phanXuongList.map((p) => ({ value: p.id, label: p.ten_xuong }))}
                       />
                     </Form.Item>
                   </Col>

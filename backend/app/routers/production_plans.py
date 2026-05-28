@@ -170,6 +170,8 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         to_hop_song=bom.to_hop_song if bom else (item.to_hop_song if item else None),
         # Thông số kỹ thuật từ item
         dai_tt=item.dai_tt if item else None,
+        so_lan_cat=item.so_lan_cat if item else None,
+        be_so_con=item.be_so_con if item else None,
         loai_lan=item.loai_lan if item else None,
         mat=item.mat if item else None, mat_dl=item.mat_dl if item else None,
         song_1=item.song_1 if item else None, song_1_dl=item.song_1_dl if item else None,
@@ -537,6 +539,26 @@ def push_to_queue(
         so_dao = math.floor(float(data.kho_giay) / float(data.kho1))
     kho_tt = _calc_kho_tt(data.kho1, so_dao)
 
+    # Sync snapshot sang tất cả plan lines đang active (chưa hoàn thành) của item này
+    if data.kho1 is not None or data.kho_giay is not None or so_dao is not None:
+        active_lines = (
+            db.query(ProductionPlanLine)
+            .filter(
+                ProductionPlanLine.production_order_item_id == data.production_order_item_id,
+                ProductionPlanLine.trang_thai != "hoan_thanh",
+            )
+            .all()
+        )
+        for ln in active_lines:
+            if data.kho1 is not None:
+                ln.kho1 = data.kho1
+            if data.kho_giay is not None:
+                ln.kho_giay = data.kho_giay
+            if so_dao is not None:
+                ln.so_dao = so_dao
+            if kho_tt is not None:
+                ln.kho_tt = kho_tt
+
     existing = (
         db.query(ProductionPlanLine)
         .join(ProductionPlan)
@@ -549,14 +571,6 @@ def push_to_queue(
     )
 
     if existing:
-        if data.kho1 is not None:
-            existing.kho1 = data.kho1
-        if data.kho_giay is not None:
-            existing.kho_giay = data.kho_giay
-        if so_dao is not None:
-            existing.so_dao = so_dao
-        if kho_tt is not None:
-            existing.kho_tt = kho_tt
         existing.so_luong_ke_hoach = data.so_luong_ke_hoach
         if poi.ghi_chu:
             existing.ghi_chu = poi.ghi_chu
@@ -842,6 +856,8 @@ def _build_queue_line(line: ProductionPlanLine, plan: ProductionPlan) -> QueueLi
         c_tham=q_c_tham,
         can_man=q_can_man,
         dai_tt=item.dai_tt if item else None,
+        so_lan_cat=item.so_lan_cat if item else None,
+        be_so_con=item.be_so_con if item else None,
         mat=item.mat if item else None, mat_dl=item.mat_dl if item else None,
         song_1=item.song_1 if item else None, song_1_dl=item.song_1_dl if item else None,
         mat_1=item.mat_1 if item else None, mat_1_dl=item.mat_1_dl if item else None,

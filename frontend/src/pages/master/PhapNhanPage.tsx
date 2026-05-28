@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Table, Button, Modal, Form, Input, Space, Card, Typography, message, Tag, Switch, Row, Col,
+  Table, Button, Modal, Form, Input, Space, Card, Typography, message, Tag, Switch, Row, Col, Select,
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, BankOutlined, MailOutlined, PhoneOutlined } from '@ant-design/icons'
 import { phapNhanApi, PhapNhan } from '../../api/phap-nhan'
+import { warehouseApi } from '../../api/warehouse'
 
 const { Title, Text } = Typography
 
@@ -17,6 +18,12 @@ export default function PhapNhanPage() {
   const { data: phapNhans, isLoading } = useQuery({
     queryKey: ['phap-nhans'],
     queryFn: () => phapNhanApi.list().then(r => r.data)
+  })
+
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong-all'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+    staleTime: 300_000,
   })
 
   const saveMut = useMutation({
@@ -75,6 +82,11 @@ export default function PhapNhanPage() {
           <Text style={{ fontSize: 11 }}><BankOutlined /> {r.ngan_hang} - {r.tai_khoan}</Text>
         </Space>
       )
+    },
+    {
+      title: 'Xưởng phôi',
+      dataIndex: 'ten_phoi_phan_xuong',
+      render: (v: string | null) => v ? <Tag color="green">{v}</Tag> : <Text type="secondary" style={{ fontSize: 12 }}>Chưa cấu hình</Text>
     },
     {
       title: 'Trạng thái',
@@ -196,6 +208,20 @@ export default function PhapNhanPage() {
 
           <Form.Item name="trang_thai" label="Trạng thái hoạt động" valuePropName="checked">
             <Switch />
+          </Form.Item>
+
+          <Form.Item
+            name="phoi_phan_xuong_id"
+            label="Xưởng phôi mặc định"
+            tooltip="Xưởng CD1+CD2 cung cấp phôi sóng cho pháp nhân này. NP/Visunpack → Hoàng Gia, NP Long An → Nam Thuận."
+          >
+            <Select allowClear placeholder="Chọn xưởng cung cấp phôi">
+              {phanXuongList
+                .filter(px => px.cong_doan === 'cd1_cd2' && px.trang_thai)
+                .map(px => (
+                  <Select.Option key={px.id} value={px.id}>{px.ten_xuong}</Select.Option>
+                ))}
+            </Select>
           </Form.Item>
         </Form>
       </Modal>

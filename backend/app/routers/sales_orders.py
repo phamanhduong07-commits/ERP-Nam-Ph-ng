@@ -177,6 +177,7 @@ def create_order(
             ngay_giao_hang=item_data.ngay_giao_hang,
             ghi_chu_san_pham=item_data.ghi_chu_san_pham,
             yeu_cau_in=item_data.yeu_cau_in,
+            phan_xuong_id=item_data.phan_xuong_id,
         )
         order.items.append(item)
         tong_tien += float(item.thanh_tien)

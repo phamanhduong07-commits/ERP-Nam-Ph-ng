@@ -358,7 +358,7 @@ export default function ProductList() {
         visible={importVisible}
         onCancel={() => setImportVisible(false)}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ['products-full'] })}
-        importFn={(file, commit) => productsFullApi.import(file, commit)}
+        importFn={(file, commit) => productsFullApi.import(file, commit).then(r => r.data as { total?: number; created?: number; updated?: number; skipped?: number; errors?: number | string[]; rows?: Array<{ row?: number; status?: string; message?: string }> })}
         templateUrl="/api/products/import-template"
       />
     </div>

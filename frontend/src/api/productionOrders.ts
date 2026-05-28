@@ -43,6 +43,8 @@ export interface ProductionOrderItem {
   loai_lan: string | null
   kho_tt: number | null
   dai_tt: number | null
+  so_lan_cat: number | null
+  be_so_con: number | null
   qccl: string | null
   dien_tich: number | null
   gia_ban_muc_tieu: number | null
@@ -75,6 +77,9 @@ export interface ProductionOrder {
   ghi_chu: string | null
   ghi_chu_don_hang: string | null
   don_gia_noi_bo: number | null
+  phoi_phan_xuong_id: number | null
+  ten_phoi_phan_xuong: string | null
+  ten_kho_nhap_phoi_du_kien: string | null
   items: ProductionOrderItem[]
   created_at: string
   updated_at: string
@@ -103,6 +108,8 @@ export interface ProductionOrderListItem {
   de_xuat_mua_ngoai: boolean     // kho >= 2000mm → đề xuất mua phôi ngoài
   kho_tt: number | null          // kho item đầu tiên (mm)
   dai_tt: number | null          // cắt item đầu tiên (mm)
+  so_lan_cat: number | null
+  be_so_con: number | null
   so_lop: number | null
   to_hop_song: string | null
   loai_thung: string | null
@@ -116,6 +123,8 @@ export interface ProductionOrderListItem {
 export interface UpdateItemSxParamsPayload {
   kho_tt?: number | null
   dai_tt?: number | null
+  so_lan_cat?: number | null
+  be_so_con?: number | null
   qccl?: string | null
   ghi_chu?: string | null
   to_hop_song?: string | null

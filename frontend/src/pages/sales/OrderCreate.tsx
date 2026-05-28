@@ -30,6 +30,7 @@ interface OrderLine {
   ngay_giao_hang: string | null
   ghi_chu_san_pham: string | null
   yeu_cau_in: string | null
+  phan_xuong_id: number | null
 }
 
 export default function OrderCreate() {
@@ -101,6 +102,7 @@ export default function OrderCreate() {
       ngay_giao_hang: null,
       ghi_chu_san_pham: null,
       yeu_cau_in: null,
+      phan_xuong_id: null,
     }])
   }
 
@@ -153,6 +155,7 @@ export default function OrderCreate() {
           ngay_giao_hang: l.ngay_giao_hang || undefined,
           ghi_chu_san_pham: l.ghi_chu_san_pham || undefined,
           yeu_cau_in: l.yeu_cau_in || undefined,
+          phan_xuong_id: l.phan_xuong_id || undefined,
         })),
       }
       const res = await salesOrdersApi.create(payload)
@@ -265,6 +268,23 @@ export default function OrderCreate() {
           value={r.ghi_chu_san_pham || ''}
           onChange={(e) => updateLine(r.key, 'ghi_chu_san_pham', e.target.value)}
           size="small"
+        />
+      ),
+    },
+    {
+      title: 'Xưởng SX',
+      width: 130,
+      render: (_, r) => (
+        <Select
+          size="small"
+          allowClear
+          placeholder="Theo đơn"
+          style={{ width: '100%' }}
+          value={r.phan_xuong_id ?? undefined}
+          onChange={(v) => updateLine(r.key, 'phan_xuong_id', v ?? null)}
+          options={phanXuongList
+            .filter((p: { trang_thai: boolean }) => p.trang_thai)
+            .map((p: { id: number; ten_xuong: string }) => ({ value: p.id, label: p.ten_xuong }))}
         />
       ),
     },

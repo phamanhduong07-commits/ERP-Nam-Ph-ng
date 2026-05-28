@@ -61,7 +61,7 @@ export function exportToExcel(filename: string, sheets: ExcelSheet[]) {
  */
 export function exportExcelWithTemplate(filename: string, sheetName: string, data: unknown[], config: { key: string, label: string, width?: number }[]) {
   const headers = config.map(c => c.label)
-  const rows = data.map(item => config.map(c => (item as Record<string, unknown>)[c.key]))
+  const rows = data.map(item => config.map(c => (item as Record<string, unknown>)[c.key] as string | number | null | undefined))
   const colWidths = config.map(c => c.width || 12)
 
   exportToExcel(filename, [{
@@ -707,15 +707,15 @@ export async function printProductionTag(data: Record<string, unknown>) {
     }px;height:52px;line-height:1.4;white-space:normal;word-break:break-word">${data.ten_san_pham || ''}</td>
   </tr>
 
-  <!-- R9: SL Tấm lớn -->
+  <!-- R9: SL Phôi (tấm lớn từ máy sóng) -->
   <tr>
-    <td class="lbl">SL TẤM<br>LỚN</td>
+    <td class="lbl">SL PHÔI</td>
     <td colspan="5" class="vxl">${data.sl_tam_lon || ''}</td>
   </tr>
 
-  <!-- R10: SL Tấm nhỏ -->
+  <!-- R10: SL Con (tấm nhỏ sau cắt dao) -->
   <tr>
-    <td class="lbl">SL TẤM<br>NHỎ</td>
+    <td class="lbl">SL CON</td>
     <td colspan="5" class="vxl">${data.sl_tam_nho || ''}</td>
   </tr>
 
@@ -815,11 +815,11 @@ export async function printProductionTagBatch(data: Record<string, unknown>, tot
     }px;height:52px;line-height:1.4;white-space:normal;word-break:break-word">${data.ten_san_pham || ''}</td>
   </tr>
   <tr>
-    <td class="lbl">SL TẤM<br>LỚN</td>
+    <td class="lbl">SL PHÔI</td>
     <td colspan="5" class="vxl">${data.sl_tam_lon || ''}</td>
   </tr>
   <tr>
-    <td class="lbl">SL TẤM<br>NHỎ</td>
+    <td class="lbl">SL CON</td>
     <td colspan="5" class="vxl">${data.sl_tam_nho || ''}</td>
   </tr>
   <tr>

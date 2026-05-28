@@ -4,19 +4,21 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Tag, Button, Space, Typography, Row, Col,
-  Statistic, Popconfirm, message, Tooltip, Badge, Divider, Alert,
+  Statistic, Popconfirm, message, Tooltip, Badge, Divider, Alert, Drawer,
 } from 'antd'
 import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import {
   CheckCircleOutlined, DeleteOutlined,
   ReloadOutlined, ClockCircleOutlined, ThunderboltOutlined,
   FileTextOutlined, CalculatorOutlined, InfoCircleOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { TableRowSelection } from 'antd/es/table/interface'
 import dayjs from 'dayjs'
 import { productionPlansApi } from '../../api/productionPlans'
 import type { QueueLine } from '../../api/productionPlans'
+import { warehouseApi } from '../../api/warehouse'
 import { LOAI_LAN_LABELS } from '../../api/quotes'
 import { fmtN } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
@@ -51,8 +53,9 @@ function calcLayerKgs(r: QueueLine): LayerDef[] {
   const khoGiay = Number(r.kho_giay) || 0
   const daiTt   = Number(r.dai_tt)   || 0
   const soDao   = r.so_dao || 1
+  const beConBe = r.be_so_con && r.be_so_con > 1 ? r.be_so_con : 1
   const soLuong = Number(r.so_luong_ke_hoach)
-  const khoMoiCon = soDao > 0 && khoGiay > 0 ? khoGiay / soDao : 0
+  const khoMoiCon = soDao > 0 && khoGiay > 0 ? khoGiay / (soDao * beConBe) : 0
   const songs = getSongLetters(r.to_hop_song)
   const soLop = r.so_lop ?? 3
 
@@ -122,8 +125,9 @@ function calcKgSummary(rows: QueueLine[]): LayerKgEntry[] {
 
 interface MtByKhoEntry { kho: number; soLenh: number; totalMT: number }
 
-function calcSoTam(slKeHoach: number, soDao: number | null): number {
-  return soDao && soDao > 0 ? Math.ceil(slKeHoach / soDao) : Math.ceil(slKeHoach)
+function calcSoTam(slKeHoach: number, soDao: number | null, beConBe: number = 1, soLanCat: number = 1): number {
+  const conMoiPhoi = (soDao && soDao > 0 ? soDao : 1) * Math.max(1, beConBe) * Math.max(1, soLanCat)
+  return Math.ceil(slKeHoach / conMoiPhoi)
 }
 
 function calcMetToi(soTam: number, daiTt: number | null): number {
@@ -136,8 +140,9 @@ function calcMtByKho(rows: QueueLine[]): MtByKhoEntry[] {
   for (const r of rows) {
     const kho = Number(r.kho_giay) || 0
     if (!kho) continue
-    const soTam = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao)
-    const mt    = calcMetToi(soTam, r.dai_tt)
+    const soLanCat = r.so_lan_cat && r.so_lan_cat > 1 ? r.so_lan_cat : 1
+    const soTam = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao, r.be_so_con ?? 1, soLanCat)
+    const mt    = calcMetToi(soTam, (r.dai_tt ?? 0) * soLanCat)
     const ex    = map.get(kho)
     if (ex) { ex.soLenh++; ex.totalMT = Math.round((ex.totalMT + mt) * 10) / 10 }
     else    { map.set(kho, { kho, soLenh: 1, totalMT: Math.round(mt * 10) / 10 }) }
@@ -172,6 +177,7 @@ export default function ProductionQueuePage() {
   // Antd table filter state
   const [filteredInfo, setFilteredInfo] = useState<Record<string, FilterValue | null>>({})
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
+  const [tonDetailOpen, setTonDetailOpen] = useState(false)
 
   const handleTableChange = (
     _pagination: unknown,
@@ -243,6 +249,30 @@ export default function ProductionQueuePage() {
   const kgByMa       = useMemo(() => calcKgByMa(planningRows), [planningRows])
   const totalMT      = mtByKho.reduce((s, e) => s + e.totalMT, 0)
   const showPanel    = planningRows.length > 0
+
+  // ── tồn kho giấy để đối chiếu ────────────────────────────────────────────
+  const { data: tonKhoGiay = [] } = useQuery({
+    queryKey: ['ton-kho-giay'],
+    queryFn: () => warehouseApi.getTonKhoGiay().then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  // Gộp tồn kho theo ma_ky_hieu (cộng dồn nhiều kho)
+  const inventoryByMa = useMemo(() => {
+    const map = new Map<string, { ton_luong: number; so_cuon: number }>()
+    for (const row of tonKhoGiay) {
+      const key = row.ma_ky_hieu || row.ma_chinh
+      if (!key) continue
+      const ex = map.get(key)
+      if (ex) {
+        ex.ton_luong += row.ton_luong
+        ex.so_cuon   += row.so_cuon
+      } else {
+        map.set(key, { ton_luong: row.ton_luong, so_cuon: row.so_cuon })
+      }
+    }
+    return map
+  }, [tonKhoGiay])
 
   // ── mutations ─────────────────────────────────────────────────────────────
   const completeMut = useMutation({
@@ -373,11 +403,13 @@ export default function ProductionQueuePage() {
     {
       title: 'Cắt (cm)',
       dataIndex: 'dai_tt',
-      width: 70,
+      width: 80,
       align: 'center',
-      render: v => v
-        ? <Text strong style={{ fontSize: 13 }}>{fmtN(v, 1)}</Text>
-        : <Text type="secondary">—</Text>,
+      render: (v, r) => {
+        if (!v) return <Text type="secondary">—</Text>
+        const eff = Number(v) * (r.so_lan_cat ?? 1)
+        return <Text strong style={{ fontSize: 13 }}>{fmtN(eff, 1)}</Text>
+      },
     },
     {
       title: 'QCCL',
@@ -407,7 +439,9 @@ export default function ProductionQueuePage() {
       width: 70,
       align: 'center',
       render: (_, r) => {
-        const n = r.so_dao && r.so_dao > 0 ? Math.ceil(Number(r.so_luong_ke_hoach) / r.so_dao) : null
+        const beN = r.be_so_con && r.be_so_con > 1 ? r.be_so_con : 1
+        const slc = r.so_lan_cat && r.so_lan_cat > 1 ? r.so_lan_cat : 1
+        const n = r.so_dao && r.so_dao > 0 ? Math.ceil(Number(r.so_luong_ke_hoach) / (r.so_dao * beN * slc)) : null
         return n
           ? <Text style={{ fontSize: 12, color: '#52c41a' }}>{n.toLocaleString('vi-VN')}</Text>
           : <Text type="secondary">—</Text>
@@ -546,8 +580,9 @@ export default function ProductionQueuePage() {
     const total = layers.reduce((s, l) => s + l.kg, 0)
     const khoGiay   = Number(r.kho_giay) || 0
     const soDao     = r.so_dao || 1
+    const beConBe   = r.be_so_con && r.be_so_con > 1 ? r.be_so_con : 1
     const daiTt     = Number(r.dai_tt) || 0
-    const khoMoiCon = soDao > 0 ? khoGiay / soDao : 0
+    const khoMoiCon = soDao > 0 ? khoGiay / (soDao * beConBe) : 0
     return (
       <div style={{ padding: '4px 0 4px 40px' }}>
         <Text strong style={{ fontSize: 12 }}>
@@ -765,35 +800,57 @@ export default function ProductionQueuePage() {
                   Chưa có dữ liệu kết cấu giấy
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#f6ffed' }}>
-                      <th style={{ padding: '7px 10px', border: '1px solid #b7eb8f' }}>Mã giấy</th>
-                      <th style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'center' }}>ĐL (g/m²)</th>
-                      <th style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'right' }}>Kg</th>
+                      <th style={{ padding: '6px 8px', border: '1px solid #b7eb8f' }}>Mã giấy</th>
+                      <th style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'center' }}>ĐL</th>
+                      <th style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right' }}>Cần (kg)</th>
+                      <th style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right' }}>Tồn (kg)</th>
+                      <th style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'center' }}>Cuộn</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {kgByMa.map((p, i) => (
-                      <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#f9f9f9' }}>
-                        <td style={{ padding: '7px 10px', border: '1px solid #b7eb8f', fontWeight: 600, fontSize: 14 }}>{p.ma}</td>
-                        <td style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'center', color: '#8c8c8c' }}>
-                          {p.dl != null ? p.dl : '—'}
-                        </td>
-                        <td style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700, color: '#389e0d', fontSize: 14 }}>
-                          {Math.round(p.totalKg).toLocaleString('vi-VN')}
-                        </td>
-                      </tr>
-                    ))}
+                    {kgByMa.map((p, i) => {
+                      const inv = inventoryByMa.get(p.ma)
+                      const canKg = Math.round(p.totalKg)
+                      const tonKg = inv ? Math.round(inv.ton_luong) : null
+                      const du = tonKg !== null && tonKg >= canKg
+                      const thieu = tonKg !== null && tonKg < canKg
+                      const rowBg = thieu ? '#fff1f0' : du ? '#f6ffed' : (i % 2 === 0 ? '#fff' : '#f9f9f9')
+                      return (
+                        <tr key={i} style={{ background: rowBg }}>
+                          <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', fontWeight: 600, fontSize: 13 }}>{p.ma}</td>
+                          <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'center', color: '#8c8c8c' }}>
+                            {p.dl != null ? p.dl : '—'}
+                          </td>
+                          <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700, color: '#389e0d', fontSize: 13 }}>
+                            {canKg.toLocaleString('vi-VN')}
+                          </td>
+                          <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 600,
+                            color: thieu ? '#cf1322' : du ? '#389e0d' : '#8c8c8c' }}>
+                            {tonKg !== null ? tonKg.toLocaleString('vi-VN') : <span style={{ color: '#bfbfbf' }}>—</span>}
+                          </td>
+                          <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'center', color: '#595959' }}>
+                            {inv ? (
+                              <Tooltip title={`${inv.so_cuon} cuộn`}>
+                                <span style={{ fontWeight: 600 }}>{inv.so_cuon}</span>
+                              </Tooltip>
+                            ) : <span style={{ color: '#bfbfbf' }}>—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                   <tfoot>
                     <tr style={{ background: '#f6ffed' }}>
-                      <td colSpan={2} style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700 }}>
+                      <td colSpan={2} style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700 }}>
                         Tổng cộng
                       </td>
-                      <td style={{ padding: '7px 10px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 800, color: '#fa8c16', fontSize: 15 }}>
+                      <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 800, color: '#fa8c16', fontSize: 14 }}>
                         {Math.round(totalKg).toLocaleString('vi-VN')} kg
                       </td>
+                      <td colSpan={2} style={{ border: '1px solid #b7eb8f' }} />
                     </tr>
                   </tfoot>
                 </table>

@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Row, Col, Table, InputNumber, Select, Input, Button, Space, Typography,
-  Tag, Divider, message, Alert, Tooltip,
+  Tag, Divider, message, Alert, Tooltip, Checkbox, Radio,
 } from 'antd'
 import { SaveOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -84,6 +84,10 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   const [toHopSong, setToHopSong] = useState<string>(item.to_hop_song ?? '')
   const soLuong   = Number(item.so_luong_ke_hoach)
 
+  // Detect mismatch: ten_hang says "sóng XX" but to_hop_song differs
+  const waveInName = item.ten_hang?.match(/sóng\s+([A-Z]{1,3})/i)?.[1]?.toUpperCase()
+  const hasMismatch = !!(waveInName && toHopSong && waveInName !== toHopSong)
+
   const dai  = Number(item.dai  ?? item.product?.dai  ?? 0)
   const rong = Number(item.rong ?? item.product?.rong ?? 0)
   const cao  = Number(item.cao  ?? item.product?.cao  ?? 0)
@@ -120,6 +124,22 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   const [saving, setSaving] = useState(false)
   // Đã lưu nếu item có kho_tt (chứng tỏ đã từng bấm Lưu)
   const [saved,  setSaved]  = useState(() => !!item.kho_tt)
+  // Chạy ngược sóng: đổi chiều khổ ↔ chiều cắt trên máy
+  const [nguocSong, setNguocSong] = useState(false)
+  // Số con bế: khuôn bế cắt N con cùng lúc theo chiều ngang
+  const [beConBe, setBeConBe] = useState<number>(item.be_so_con && item.be_so_con > 1 ? item.be_so_con : 1)
+
+  // Khi đổi hướng sóng, tính lại chiều khổ tối ưu theo hướng mới
+  useEffect(() => {
+    const daiKH = baseDims?.dai_ke_hoach ?? 0
+    const eff = nguocSong ? daiKH : (baseDims?.kho_ke_hoach ?? 0)
+    if (eff <= 0) return
+    const beN = Math.max(1, beConBe)
+    const soDaoBase = Math.max(1, Math.floor(180 / (eff * beN)))
+    const newKho = Math.ceil((eff * beN * soDaoBase + 1.8) / 5) * 5
+    if (newKho > 0) setKhoTt(newKho)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nguocSong])
 
   const layerDefs = useMemo(() => getLayerDefs(soLop, toHopSong), [soLop, toHopSong])
   const haoHut    = getHaoHutRate(soLuong)
@@ -127,12 +147,64 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   const kho1         = baseDims?.kho1 ?? 0
   // Khổ kế hoạch mỗi con (theo tài liệu hệ thống giai đoạn 1)
   const khoKeHoach   = baseDims?.kho_ke_hoach ?? 0
-  // Số dao = floor((khoTt - 1.8) / kho_ke_hoach) — nhất quán với cách tính kho_tt
-  const soDaoCurrent = khoKeHoach > 0 ? Math.max(1, Math.floor((khoTt - 1.8) / khoKeHoach)) : baseDims?.so_dao ?? 1
+  // Khổ giấy lý thuyết tính đúng với be_so_con và hướng chạy — dùng cho hint "Mặc định"
+  const defaultKhoTt = useMemo(() => {
+    const daiKH = baseDims?.dai_ke_hoach ?? 0
+    const eff = nguocSong ? daiKH : khoKeHoach
+    if (!baseDims || eff <= 0) return baseDims?.kho_tt ?? 0
+    const beN = Math.max(1, beConBe)
+    const soDaoBase = Math.max(1, Math.floor(180 / (eff * beN)))
+    return Math.ceil((eff * beN * soDaoBase + 1.8) / 5) * 5
+  }, [baseDims, khoKeHoach, beConBe, nguocSong])
+  const daiKeHoach   = baseDims?.dai_ke_hoach ?? 0
   const daiTt        = baseDims?.dai_tt ?? Number(item.dai_tt) ?? 0
+  // 2 mảnh: baseDims đã tính lại dai_tt per mảnh và dien_tich × 2
+  const haiManh = baseDims?.hai_manh ?? false
 
-  // Khổ thực tế phân cho mỗi con (dùng cho tính KG)
-  const khoMoiCon = soDaoCurrent > 0 && khoTt > 0 ? khoTt / soDaoCurrent : kho1
+  // Ngược sóng: chiều rộng mỗi con ↔ chiều dài máy đổi chỗ nhau
+  // effectivePieceWidth: chiều ngang máy cho mỗi con (để tính số dao)
+  // effectiveDaiTt:      chiều cắt thực tế máy chạy (để hiển thị & lưu)
+  const effectivePieceWidth = nguocSong ? daiKeHoach : khoKeHoach
+  const effectiveDaiTt      = nguocSong ? kho1 : daiTt
+  // Số dao dựa trên chiều rộng mỗi con theo hướng máy đang chạy
+  // beConBe > 1: khuôn bế chiếm beConBe × effectivePieceWidth mỗi nhát
+  const soDaoCurrent = effectivePieceWidth > 0
+    ? Math.max(1, Math.floor((khoTt - 1.8) / (effectivePieceWidth * beConBe)))
+    : baseDims?.so_dao ?? 1
+
+  // < 70 cm (≥3 lớp): xếp ×2 hoặc ×3 theo chiều cắt để đủ chiều dài tối thiểu
+  const DAI_TT_MIN = 70
+  const soLanCat = useMemo(() => {
+    if (haiManh || soLop < 3 || effectiveDaiTt <= 0 || effectiveDaiTt >= DAI_TT_MIN) return 1
+    for (const m of [2, 3, 4]) {
+      if (effectiveDaiTt * m >= DAI_TT_MIN) return m
+    }
+    return 1
+  }, [haiManh, soLop, effectiveDaiTt])
+  // Số lần xếp do người dùng chọn (null = dùng auto soLanCat)
+  const [selectedLanCat, setSelectedLanCat] = useState<number | null>(
+    (item.so_lan_cat && item.so_lan_cat > 1) ? item.so_lan_cat : null
+  )
+  // Tất cả multiplier hợp lệ: đưa chiều cắt lên ≥70 cm và ≤270 cm
+  const availableLanCats = (!haiManh && soLop >= 3 && effectiveDaiTt > 0 && effectiveDaiTt < DAI_TT_MIN)
+    ? [2, 3, 4].filter(m => effectiveDaiTt * m <= 270)
+    : []
+  const activeSoLanCat = !haiManh ? (selectedLanCat ?? soLanCat) : 1
+
+  // Tổng con/phôi = soDaoCurrent (nhóm dao) × beConBe (con/nhóm) × activeSoLanCat (xếp)
+  const conMoiPhoi = soDaoCurrent * beConBe * activeSoLanCat
+  // Số phôi cần sản xuất — điều chỉnh theo chế độ
+  // haiManh: chạy 2 đợt riêng (mảnh 1 + mảnh 2), mỗi đợt ceil(soLuong / tổng con/phôi)
+  const soPhoi = (kho1 > 0 && soDaoCurrent > 0)
+    ? haiManh
+      ? Math.ceil(soLuong / (soDaoCurrent * beConBe)) * 2
+      : Math.ceil(soLuong / conMoiPhoi)
+    : 0
+
+  // Khổ thực tế phân cho mỗi con (dùng cho tính KG): khổ giấy ÷ tổng số con theo chiều ngang
+  const khoMoiCon = (soDaoCurrent > 0 && khoTt > 0) ? khoTt / (soDaoCurrent * beConBe) : kho1
+  // Chiều rộng mỗi con hiển thị (thay đổi khi chạy ngược sóng)
+  const displayPieceWidth = nguocSong ? daiKeHoach : khoKeHoach
 
   // Tính rows — dùng kho1 (quy cách tấm thực tế) * daiTt làm diện tích
   const tableRows: LayerRow[] = useMemo(() =>
@@ -140,9 +212,10 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
       const ls   = layers[def.key]
       const dl   = ls.dinh_luong ?? 0
       const take = def.isSong ? (TAKE_UP_FACTORS[def.songType ?? ''] ?? 1.0) : 1.0
-      // Diện tích mỗi lớp = khổ tấm (kho1, gồm nắp gài) × chiều cắt × hệ số sóng
+      // Diện tích mỗi lớp = khổ tấm × chiều cắt × hệ số sóng
+      // haiManh: daiTt là per-mảnh → nhân 2 để ra diện tích 1 thùng
       const area = daiTt > 0 && kho1 > 0
-        ? (kho1 * daiTt * take) / 10000
+        ? (kho1 * daiTt * take * (haiManh ? 2 : 1)) / 10000
         : 0
       const kg1  = (dl * area) / 1000
       return {
@@ -158,7 +231,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
         total_kg:       Math.round(kg1 * soLuong * (1 + haoHut) * 10) / 10,
       }
     }),
-    [layerDefs, layers, khoMoiCon, daiTt, soLuong, haoHut],
+    [layerDefs, layers, khoMoiCon, daiTt, haiManh, soLuong, haoHut],
   )
 
   const tongKg = tableRows.reduce((s, r) => s + r.total_kg, 0)
@@ -179,7 +252,9 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
       await productionOrdersApi.updateItemSxParams(orderId, item.id, {
         to_hop_song: toHopSong || null,
         kho_tt: khoTt,
-        dai_tt: daiTt,
+        dai_tt: effectiveDaiTt,   // kho1 khi ngược sóng, daiTt khi bình thường
+        so_lan_cat: activeSoLanCat > 1 ? activeSoLanCat : null,
+        be_so_con: beConBe > 1 ? beConBe : null,
         qccl:   qccl || null,
         ghi_chu: ghiChu || null,
         mat:    layers.mat.ma_ky_hieu,    mat_dl:    layers.mat.dinh_luong,
@@ -194,7 +269,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
       // Tự động đẩy vào hàng chờ kế hoạch sản xuất
       await productionPlansApi.pushToQueue({
         production_order_item_id: item.id,
-        kho1:             kho1 || undefined,
+        kho1:             (nguocSong ? daiKeHoach : kho1) || undefined,
         kho_giay:         khoTt || undefined,
         so_dao:           soDaoCurrent || undefined,
         so_luong_ke_hoach: soLuong,
@@ -233,7 +308,18 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
           value={r.ma_ky_hieu ?? undefined}
           allowClear
           placeholder="Chọn..."
-          onChange={v => updateLayer(r.key as LayerKey, 'ma_ky_hieu', v ?? null)}
+          onChange={v => {
+            const newMk = v ?? null
+            const dlOpts = newMk ? (paperOpts.by_mk[newMk] ?? []) : []
+            markDirty()
+            setLayers(prev => ({
+              ...prev,
+              [r.key as LayerKey]: {
+                ma_ky_hieu: newMk,
+                dinh_luong: dlOpts.length === 1 ? dlOpts[0] : (newMk === null ? null : prev[r.key as LayerKey].dinh_luong),
+              },
+            }))
+          }}
           options={paperOpts.ma_ky_hieu.map(mk => ({ value: mk, label: mk }))}
         />
       ),
@@ -314,9 +400,16 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
               <Tag color="blue">{soLuong.toLocaleString('vi-VN')} {item.dvt}</Tag>
               {loaiThung && <Tag>{loaiThung}</Tag>}
               {soLop && (
-                <Tag color={toHopSong ? 'purple' : 'warning'}>
-                  {soLop} lớp {toHopSong ? `(${toHopSong})` : '— chưa có tổ hợp sóng'}
-                </Tag>
+                <Tooltip
+                  title={hasMismatch
+                    ? `Tên hàng ghi "sóng ${waveInName}" nhưng tổ hợp sóng đang là "${toHopSong}" — hãy chỉnh lại nếu sai`
+                    : undefined}
+                >
+                  <Tag color={hasMismatch ? 'error' : toHopSong ? 'purple' : 'warning'}>
+                    {soLop} lớp {toHopSong ? `(${toHopSong})` : '— chưa có tổ hợp sóng'}
+                    {hasMismatch && ' ⚠'}
+                  </Tag>
+                </Tooltip>
               )}
             </Space>
           </Col>
@@ -368,22 +461,44 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
               <Col span={12}>
                 <div style={{ marginBottom: 8 }}>
                   <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Chiều cắt (dai_tt)</Text>
-                  <Text strong style={{ color: '#52c41a' }}>
-                    {daiTt > 0 ? `${daiTt} cm` : '—'}
-                  </Text>
+                  {nguocSong ? (
+                    <Space size={4} wrap>
+                      <Text strong style={{ color: '#722ed1' }}>{kho1} cm</Text>
+                      {activeSoLanCat > 1 && (
+                        <Tag color="purple" style={{ margin: 0 }}>×{activeSoLanCat} → {kho1 * activeSoLanCat} cm</Tag>
+                      )}
+                    </Space>
+                  ) : haiManh ? (
+                    <Space size={4} wrap>
+                      <Tag color="blue" style={{ margin: 0 }}>2 mảnh × {daiTt} cm/mảnh</Tag>
+                    </Space>
+                  ) : availableLanCats.length > 0 ? (
+                    <Space size={4} wrap>
+                      <Text strong style={{ color: '#d46b08' }}>{daiTt} cm</Text>
+                      {activeSoLanCat > 1
+                        ? <Tag color="orange" style={{ margin: 0 }}>×{activeSoLanCat} → {daiTt * activeSoLanCat} cm</Tag>
+                        : <Tag style={{ margin: 0 }}>×1 (dưới 70 cm)</Tag>}
+                    </Space>
+                  ) : (
+                    <Text strong style={{ color: '#52c41a' }}>
+                      {daiTt > 0 ? `${daiTt} cm` : '—'}
+                    </Text>
+                  )}
                 </div>
                 <div style={{ marginBottom: 8 }}>
                   <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Khổ min 1 con (kho1)</Text>
                   <Text strong>{kho1 > 0 ? `${kho1} cm` : '—'}</Text>
                 </div>
                 <div>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Khổ kế hoạch/con</Text>
-                  {khoKeHoach > 250
-                    ? <Tag color="error" style={{ marginTop: 2 }}>Không sản xuất được ({khoKeHoach.toFixed(1)} cm &gt; 250)</Tag>
-                    : khoKeHoach > 180
-                    ? <Tag color="orange" style={{ marginTop: 2 }}>Mua phôi ngoài ({khoKeHoach.toFixed(1)} cm)</Tag>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
+                    {nguocSong ? 'Khổ/con (ngược sóng)' : 'Khổ kế hoạch/con'}
+                  </Text>
+                  {displayPieceWidth > 250
+                    ? <Tag color="error" style={{ marginTop: 2 }}>Không SX được ({displayPieceWidth.toFixed(1)} cm &gt; 250)</Tag>
+                    : displayPieceWidth > 180
+                    ? <Tag color="orange" style={{ marginTop: 2 }}>Mua phôi ngoài ({displayPieceWidth.toFixed(1)} cm)</Tag>
                     : <Text strong style={{ color: '#389e0d' }}>
-                        {khoKeHoach > 0 ? `${khoKeHoach.toFixed(1)} cm` : '—'}
+                        {displayPieceWidth > 0 ? `${displayPieceWidth.toFixed(1)} cm` : '—'}
                       </Text>
                   }
                 </div>
@@ -427,6 +542,51 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                 )}
               </div>
             </div>
+            {/* Chế độ vận hành máy */}
+            {!haiManh && (
+              <div style={{ marginTop: 8, padding: '5px 8px', background: '#f0f5ff', borderRadius: 6, border: '1px solid #adc6ff' }}>
+                <Space size={16} wrap>
+                  <Checkbox
+                    checked={nguocSong}
+                    onChange={e => { markDirty(); setNguocSong(e.target.checked) }}
+                  >
+                    <Text style={{ fontSize: 12 }}>Chạy ngược sóng (đổi khổ ↔ cắt)</Text>
+                  </Checkbox>
+                  {availableLanCats.length > 0 && (
+                    <Space size={4}>
+                      <Text style={{ fontSize: 12 }}>Số lần xếp:</Text>
+                      <Radio.Group
+                        size="small"
+                        value={activeSoLanCat}
+                        onChange={e => { markDirty(); setSelectedLanCat(e.target.value) }}
+                      >
+                        <Radio.Button value={1}>×1</Radio.Button>
+                        {availableLanCats.map(m => (
+                          <Radio.Button key={m} value={m}>
+                            ×{m}{m === soLanCat ? ' ✓' : ''}
+                          </Radio.Button>
+                        ))}
+                      </Radio.Group>
+                    </Space>
+                  )}
+                  <Space size={4}>
+                    <Text style={{ fontSize: 12 }}>Số con bế:</Text>
+                    <Select
+                      size="small"
+                      style={{ width: 70 }}
+                      value={beConBe}
+                      onChange={(v: number) => {
+                        markDirty()
+                        setBeConBe(v)
+                        // Auto-cập nhật khổ giấy tối thiểu: kho_ke_hoach × N + viền
+                        if (khoKeHoach > 0) setKhoTt(Math.ceil((khoKeHoach * v + 1.8) / 5) * 5)
+                      }}
+                      options={[1, 2, 3, 4, 6, 8].map(n => ({ value: n, label: `${n} con` }))}
+                    />
+                  </Space>
+                </Space>
+              </div>
+            )}
           </Card>
         </Col>
 
@@ -453,8 +613,8 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                   <Text type="secondary">cm</Text>
                 </Space>
                 <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
-                  {baseDims && Math.round(baseDims.kho_tt * 10) / 10 !== khoTt
-                    ? `Mặc định: ${Math.round(baseDims.kho_tt * 10) / 10} cm`
+                  {defaultKhoTt > 0 && Math.round(defaultKhoTt * 10) / 10 !== khoTt
+                    ? `Mặc định: ${Math.round(defaultKhoTt * 10) / 10} cm`
                     : '\u00a0'}
                 </Text>
                 {soDaoCurrent > 0 && (
@@ -464,10 +624,41 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                 )}
               </Col>
               <Col span={12}>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Số dao (con/khổ)</Text>
-                <Text strong style={{ fontSize: 22, color: '#1677ff' }}>{soDaoCurrent}</Text>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
+                  {beConBe > 1 ? `Số dao × ${beConBe} con` : 'Số dao (con/khổ)'}
+                </Text>
+                <Space size={4} align="baseline">
+                  <Text strong style={{ fontSize: 22, color: '#1677ff' }}>{soDaoCurrent}</Text>
+                  {beConBe > 1 && (
+                    <Text style={{ fontSize: 13, color: '#722ed1' }}>
+                      = {soDaoCurrent * beConBe} con
+                    </Text>
+                  )}
+                </Space>
                 <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 2 }}>
-                  Số lần chạy: {kho1 > 0 ? Math.ceil(soLuong / soDaoCurrent).toLocaleString('vi-VN') : '—'}
+                  Số phôi: <Text strong style={{ color: activeSoLanCat > 1 || haiManh || nguocSong || beConBe > 1 ? '#d46b08' : undefined }}>
+                    {soPhoi > 0 ? soPhoi.toLocaleString('vi-VN') : '—'}
+                  </Text>
+                  {haiManh && (
+                    <Text type="secondary" style={{ fontSize: 10, marginLeft: 4 }}>
+                      ({Math.ceil(soLuong / (soDaoCurrent * beConBe)).toLocaleString('vi-VN')} × 2 đợt)
+                    </Text>
+                  )}
+                  {activeSoLanCat > 1 && (
+                    <Text type="secondary" style={{ fontSize: 10, marginLeft: 4 }}>
+                      (×{activeSoLanCat} xếp)
+                    </Text>
+                  )}
+                  {beConBe > 1 && (
+                    <Text type="secondary" style={{ fontSize: 10, marginLeft: 4 }}>
+                      ({beConBe} con bế)
+                    </Text>
+                  )}
+                  {nguocSong && (
+                    <Text type="secondary" style={{ fontSize: 10, marginLeft: 4 }}>
+                      (ngược sóng)
+                    </Text>
+                  )}
                 </Text>
               </Col>
             </Row>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import type { InputNumberRef } from 'rc-input-number'
 import type { ApiError } from '../../api/types'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -54,7 +55,7 @@ export default function CanCuonGiayPage() {
   const [lookupError, setLookupError] = useState<string | null>(null)
   const [history, setHistory]       = useState<HistoryEntry[]>([])
   const inputRef                    = useRef<HTMLInputElement | null>(null)
-  const kgInputRef                  = useRef<HTMLInputElement | null>(null)
+  const kgInputRef                  = useRef<InputNumberRef>(null)
 
   const selectRoll = useCallback((r: GiayRoll) => {
     setRoll(r)
@@ -109,7 +110,7 @@ export default function CanCuonGiayPage() {
       message.success(`✓ Đã ghi: ${updated.barcode} — còn ${updated.trong_luong_con_lai} kg`)
       resetForm()
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi cập nhật'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi cập nhật'),
   })
 
   const resetForm = useCallback(() => {
@@ -310,7 +311,7 @@ export default function CanCuonGiayPage() {
           <div style={{ marginBottom: 12 }}>
             <Text type="secondary" style={{ fontSize: 13 }}>Cân còn lại (kg):</Text>
             <InputNumber
-              ref={kgInputRef as React.Ref<HTMLInputElement>}
+              ref={kgInputRef}
               value={kgConLai}
               onChange={v => setKgConLai(v)}
               min={0}

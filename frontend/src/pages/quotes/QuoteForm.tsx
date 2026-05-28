@@ -52,14 +52,9 @@ function buildGhiChu(ci: QuoteItem): string {
   if (ci.be_lo)   parts.push('BL')       // Bê lỗ
   if (ci.do_kho)  parts.push('SP khó')
 
-  // Bế khuôn: Bế 4c
-  if (ci.so_c_be) {
-    const v = ci.so_c_be.trim()
-    if (v && v !== '0') {
-      // rút "4 con" → "4c"
-      const short = v.replace(/\s*con$/i, 'c')
-      parts.push(`Bế ${short}`)
-    }
+  // Bế khuôn: Bế 3c
+  if (ci.be_so_con && ci.be_so_con > 1) {
+    parts.push(`Bế ${ci.be_so_con}c`)
   }
 
   // Chống thấm: CT 1m / CT 2m
@@ -89,7 +84,7 @@ function buildGhiChu(ci: QuoteItem): string {
 const ADDON_TRIGGER_KEYS: (keyof QuoteItem)[] = [
   'loai_in', 'so_mau', 'do_phu',
   'boi', 'ghim', 'dan', 'chap_xa', 'be_lo', 'do_kho',
-  'so_c_be', 'c_tham', 'can_man',
+  'c_tham', 'can_man',
   'may_in', 'loai_lan', 'ban_ve_kt',
 ]
 
@@ -122,10 +117,11 @@ const emptyItem = (): QuoteItem => ({
   loai_in: 'khong_in',
   do_kho: false, ghim: false, chap_xa: false,
   do_phu: false, dan: false, boi: false, be_lo: false,
-  c_tham: null, can_man: null, so_c_be: null,
+  c_tham: null, can_man: null, be_so_con: null,
   may_in: null, loai_lan: null, ban_ve_kt: null,
   gia_ban: 0,
   ghi_chu: null,
+  phan_xuong_id: null,
 })
 
 // ─── Hook: load distinct ma_ky_hieu + dinh_luong từ backend ─────────────────
@@ -182,7 +178,10 @@ function LayerRow({
           placeholder="Mã giấy"
           value={mkVal || undefined}
           options={mkList.map(mk => ({ value: mk, label: paperLabel(mk) }))}
-          onChange={v => setCI({ [mkField]: v ?? null, [dlField]: null })}
+          onChange={v => {
+            const dlOpts = v ? (byMk[v] ?? []) : []
+            setCI({ [mkField]: v ?? null, [dlField]: dlOpts.length === 1 ? dlOpts[0] : null })
+          }}
           filterOption={(input, opt) =>
             `${opt?.value ?? ''} ${opt?.label ?? ''}`.toLowerCase().includes(input.toLowerCase())
           }
@@ -496,7 +495,7 @@ export default function QuoteForm() {
         'mat', 'mat_dl', 'song_1', 'song_1_dl', 'mat_1', 'mat_1_dl',
         'song_2', 'song_2_dl', 'mat_2', 'mat_2_dl', 'song_3', 'song_3_dl', 'mat_3', 'mat_3_dl',
         'loai_in', 'so_mau', 'do_phu', 'c_tham', 'can_man', 'chap_xa',
-        'boi', 'be_lo', 'so_c_be', 'dan', 'ghim', 'do_kho',
+        'boi', 'be_lo', 'dan', 'ghim', 'do_kho',
       ]
       const hasFormulaChange = Object.keys(patch).some(k => formulaTriggers.includes(k))
       if (hasFormulaChange && !Object.prototype.hasOwnProperty.call(patch, 'gia_ban')) {
@@ -504,10 +503,13 @@ export default function QuoteForm() {
       }
 
       // Auto-calculate kho_tt, dai_tt, dien_tich when relevant fields change
-      const dimTriggers: (keyof QuoteItem)[] = ['loai_thung', 'dai', 'rong', 'cao', 'so_lop']
+      const dimTriggers: (keyof QuoteItem)[] = ['loai_thung', 'dai', 'rong', 'cao', 'so_lop', 'be_so_con']
       const hasDimChange = Object.keys(patch).some(k => dimTriggers.includes(k as keyof QuoteItem))
       if (hasDimChange && !next.khong_ct) {
-        const calc = calcBoxDimensions(next.loai_thung, next.dai, next.rong, next.cao, next.so_lop)
+        const calc = calcBoxDimensions(
+          next.loai_thung, next.dai, next.rong, next.cao, next.so_lop,
+          next.be_so_con ?? 1,
+        )
         if (calc) {
           next.kho_tt = calc.kho_tt
           next.dai_tt = calc.dai_tt
@@ -572,7 +574,7 @@ export default function QuoteForm() {
     currentItem.mat_2, currentItem.mat_2_dl, currentItem.song_3, currentItem.song_3_dl,
     currentItem.mat_3, currentItem.mat_3_dl, currentItem.loai_in, currentItem.so_mau,
     currentItem.do_phu, currentItem.c_tham, currentItem.can_man, currentItem.chap_xa,
-    currentItem.boi, currentItem.be_lo, currentItem.so_c_be, currentItem.dan,
+    currentItem.boi, currentItem.be_lo, currentItem.dan,
     currentItem.ghim, currentItem.do_kho, applyFormulaPrice,
   ])
 
@@ -801,6 +803,14 @@ export default function QuoteForm() {
       width: 140,
       ellipsis: true,
       render: (v: string | null) => v || '—',
+    },
+    {
+      title: 'Xưởng SX',
+      dataIndex: 'ten_phan_xuong',
+      width: 110,
+      render: (v: string | null) => v
+        ? <Tag color="cyan" style={{ fontSize: 10 }}>{v}</Tag>
+        : <Tag color="default" style={{ fontSize: 10, color: '#aaa' }}>Theo đơn</Tag>,
     },
     !isReadonly ? {
       title: '',
@@ -1427,10 +1437,15 @@ export default function QuoteForm() {
                       ]}
                     />
                   </Col>
-                  <Col span={8}>
-                    <Text style={{ fontSize: 11 }}>Số Con Bế</Text>
-                    <Input size="small" value={ci.so_c_be || ''}
-                      onChange={e => setCI({ so_c_be: e.target.value })} />
+                  <Col span={4}>
+                    <Text style={{ fontSize: 11 }}>Con bế/lần</Text>
+                    <Select
+                      size="small"
+                      style={{ width: '100%' }}
+                      value={ci.be_so_con ?? 1}
+                      onChange={(v: number) => setCI({ be_so_con: v > 1 ? v : null })}
+                      options={[1, 2, 3, 4, 6, 8].map(n => ({ value: n, label: `${n} con` }))}
+                    />
                   </Col>
                 </Row>
                 <Row gutter={8} style={{ marginTop: 4 }}>
@@ -1470,6 +1485,22 @@ export default function QuoteForm() {
                     <Text style={{ fontSize: 11 }}>Bản vẽ KT</Text>
                     <Input size="small" value={ci.ban_ve_kt || ''}
                       onChange={e => setCI({ ban_ve_kt: e.target.value })} />
+                  </Col>
+                </Row>
+                <Row style={{ marginTop: 4 }}>
+                  <Col span={24}>
+                    <Text style={{ fontSize: 11 }}>Xưởng SX (dòng này)</Text>
+                    <Select
+                      size="small"
+                      allowClear
+                      placeholder="Dùng xưởng của đơn"
+                      style={{ width: '100%', marginBottom: 4 }}
+                      value={ci.phan_xuong_id ?? undefined}
+                      onChange={v => setCI({ phan_xuong_id: v ?? null })}
+                      options={phanXuongList
+                        .filter((p: { trang_thai: boolean }) => p.trang_thai)
+                        .map((p: { id: number; ten_xuong: string }) => ({ value: p.id, label: p.ten_xuong }))}
+                    />
                   </Col>
                 </Row>
                 <Row style={{ marginTop: 4 }}>

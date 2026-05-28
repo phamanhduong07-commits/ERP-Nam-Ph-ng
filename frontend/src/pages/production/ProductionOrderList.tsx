@@ -226,7 +226,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       trang_thai_lbl: TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai,
     }))
 
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as Record<string, unknown>)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as Record<string, unknown>)[c.key])) as (string | number | null | undefined)[][])
 
     const printData = {
       subtitle: 'DANH SÁCH LỆNH SẢN XUẤT',

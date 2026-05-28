@@ -316,6 +316,147 @@ class FixedAsset(Base):
     phap_nhan = relationship("PhapNhan")
 
 
+class BankTransaction(Base):
+    """Giao dich sao ke ngan hang dung cho doi soat phieu thu/chi."""
+    __tablename__ = "bank_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bank_account_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("bank_accounts.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    ngay_giao_dich: Mapped[date] = mapped_column(Date, nullable=False)
+    so_tai_khoan: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    so_tham_chieu: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    mo_ta: Mapped[str | None] = mapped_column(Text, nullable=True)
+    thu: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    chi: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    so_du: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="chua_doi_soat")
+    matched_chung_tu_loai: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    matched_chung_tu_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    matched_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    import_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    bank_account = relationship("BankAccount")
+    phap_nhan = relationship("PhapNhan")
+    matcher = relationship("User", foreign_keys=[matched_by])
+
+
+class ProductionCostPeriod(Base):
+    """Ky tinh gia thanh theo phap nhan va phan xuong."""
+    __tablename__ = "production_cost_periods"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ma_ky: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
+    ten_ky: Mapped[str] = mapped_column(String(255), nullable=False)
+    tu_ngay: Mapped[date] = mapped_column(Date, nullable=False)
+    den_ngay: Mapped[date] = mapped_column(Date, nullable=False)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
+    tieu_thuc_pb: Mapped[str] = mapped_column(String(30), default="san_luong")
+    trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")
+    tong_nvl: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    tong_nhan_cong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    tong_sxc: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    tong_chi_phi: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    tong_san_luong: Mapped[Decimal] = mapped_column(Numeric(18, 3), default=0)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    closed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    phap_nhan = relationship("PhapNhan")
+    phan_xuong = relationship("PhanXuong")
+    creator = relationship("User", foreign_keys=[created_by])
+    closer = relationship("User", foreign_keys=[closed_by])
+    inputs: Mapped[list["ProductionCostInput"]] = relationship(
+        "ProductionCostInput", back_populates="period", cascade="all, delete-orphan"
+    )
+    allocations: Mapped[list["ProductionCostAllocation"]] = relationship(
+        "ProductionCostAllocation", back_populates="period", cascade="all, delete-orphan"
+    )
+    product_costs: Mapped[list["ProductCost"]] = relationship(
+        "ProductCost", back_populates="period", cascade="all, delete-orphan"
+    )
+
+
+class ProductionCostInput(Base):
+    """Dong chi phi/san luong nguon duoc gom vao ky gia thanh."""
+    __tablename__ = "production_cost_inputs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    period_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_cost_periods.id"), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    source_table: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    production_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=True)
+    product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
+    so_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    so_luong: Mapped[Decimal] = mapped_column(Numeric(18, 3), default=0)
+    dien_giai: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    period = relationship("ProductionCostPeriod", back_populates="inputs")
+    production_order = relationship("ProductionOrder")
+    product = relationship("Product")
+    phap_nhan = relationship("PhapNhan")
+    phan_xuong = relationship("PhanXuong")
+
+
+class ProductionCostAllocation(Base):
+    """Ket qua phan bo chi phi cho tung lenh san xuat."""
+    __tablename__ = "production_cost_allocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    period_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_cost_periods.id"), nullable=False)
+    production_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=False)
+    product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
+    tieu_thuc: Mapped[str] = mapped_column(String(30), default="san_luong")
+    ty_le: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=0)
+    san_luong: Mapped[Decimal] = mapped_column(Numeric(18, 3), default=0)
+    chi_phi_nvl: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    chi_phi_nhan_cong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    chi_phi_sxc: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    tong_chi_phi: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    gia_thanh_don_vi: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    period = relationship("ProductionCostPeriod", back_populates="allocations")
+    production_order = relationship("ProductionOrder")
+    product = relationship("Product")
+    phap_nhan = relationship("PhapNhan")
+    phan_xuong = relationship("PhanXuong")
+
+
+class ProductCost(Base):
+    """Gia thanh thanh pham theo ky."""
+    __tablename__ = "product_costs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    period_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_cost_periods.id"), nullable=False)
+    production_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=False)
+    product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+    ten_hang: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
+    san_luong: Mapped[Decimal] = mapped_column(Numeric(18, 3), default=0)
+    tong_chi_phi: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    gia_thanh_don_vi: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    period = relationship("ProductionCostPeriod", back_populates="product_costs")
+    production_order = relationship("ProductionOrder")
+    product = relationship("Product")
+    phap_nhan = relationship("PhapNhan")
+    phan_xuong = relationship("PhanXuong")
+
+
 class HoaDonDienTu(Base):
     """Hóa đơn điện tử — tích hợp MISA meInvoice"""
     __tablename__ = "hoa_don_dien_tu"

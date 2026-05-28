@@ -14,6 +14,7 @@ import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, G
 import { warehousesApi } from '../../api/warehouses'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { purchaseApi } from '../../api/purchase'
+import type { POItem } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
@@ -50,7 +51,7 @@ export default function NhapGiayPage() {
   const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
 
   // Reactive watches — hooks must be at top level
-  const watchedItems: unknown[] = Form.useWatch('items', form) ?? []
+  const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
   const hdTongKgWatch = Form.useWatch('hd_tong_kg', form)
   const watchedSupplierId: number | undefined = Form.useWatch('supplier_id', form)
   const calcTongKg = watchedItems.reduce((s: number, it: Record<string, unknown>) => s + (Number(it?.so_luong) || 0), 0)
@@ -240,8 +241,8 @@ export default function NhapGiayPage() {
     form.setFieldsValue({
       supplier_id: poDetail.supplier_id,
       items: (poDetail.items || [])
-        .filter((it: Record<string, unknown>) => it.paper_material_id)
-        .map((it: Record<string, unknown>) => ({
+        .filter((it: POItem) => Boolean(it.paper_material_id))
+        .map((it: POItem) => ({
           mat_id: it.paper_material_id,
           ten_hang: it.ten_hang,
           so_luong: it.so_luong,
@@ -330,8 +331,8 @@ export default function NhapGiayPage() {
       { header: 'Thành tiền (đ)', key: 'thanh_tien', align: 'right' as const },
     ]
     
-    const itemRows = (r.items || []).map((it: Record<string, unknown>) => ({
-      ma_hang: it.ma_hang || '',
+    const itemRows = (r.items || []).map(it => ({
+      ma_hang: (it as unknown as Record<string, unknown>).ma_hang || '',
       ten_hang: it.ten_hang,
       kho_mm: it.kho_mm ? `${it.kho_mm}` : '—',
       so_cuon: it.so_cuon ? `${it.so_cuon}` : '—',
@@ -340,10 +341,10 @@ export default function NhapGiayPage() {
       thanh_tien: (Number(it.thanh_tien) || 0).toLocaleString('vi-VN'),
     }))
 
-    const tong = (r.items || []).reduce((s: number, it: Record<string, unknown>) => s + (Number(it.thanh_tien) || 0), 0)
+    const tong = (r.items || []).reduce((s: number, it) => s + (Number(it.thanh_tien) || 0), 0)
     const table = buildHtmlTable(
-      cols.map(c => ({ header: c.header, align: c.align })), 
-      itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])),
+      cols.map(c => ({ header: c.header, align: c.align })),
+      itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])) as (string | number | null | undefined)[][],
       { totalRow: ['', 'TỔNG CỘNG', '', '', '', '', tong.toLocaleString('vi-VN') + ' đ'] }
     )
 
@@ -384,7 +385,7 @@ export default function NhapGiayPage() {
 
     const exportData = receiptList.map((r: GoodsReceipt) => ({
       ...r,
-      tong_kg: (r.items || []).reduce((s: number, it: Record<string, unknown>) => s + Number(it.so_luong || 0), 0),
+      tong_kg: (r.items || []).reduce((s: number, it) => s + Number(it.so_luong || 0), 0),
       trang_thai_lbl: r.trang_thai === 'da_duyet' ? 'Đã duyệt' : 'Nhập',
     }))
 
@@ -400,7 +401,7 @@ export default function NhapGiayPage() {
     { title: 'Nhà CC', dataIndex: 'ten_ncc', width: 150 },
     { title: 'Tổng KG', width: 110, align: 'right' as const,
       render: (_: unknown, r: GoodsReceipt) => {
-        const kg = (r.items || []).reduce((s: number, it: Record<string, unknown>) => s + Number(it.so_luong || 0), 0)
+        const kg = (r.items || []).reduce((s: number, it) => s + Number(it.so_luong || 0), 0)
         return <Text>{kg.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} kg</Text>
       } },
     { title: 'Tổng tiền', dataIndex: 'tong_gia_tri', width: 140, align: 'right' as const,
@@ -507,7 +508,7 @@ export default function NhapGiayPage() {
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả xưởng" style={{ width: '100%' }} allowClear value={filterXuong}
               onChange={v => { setFilterXuong(v); setFilterKho(undefined) }}
-              options={phanXuongs.filter((p: unknown) => p.trang_thai).map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))} />
+              options={phanXuongs.filter(p => p.trang_thai).map(p => ({ value: p.id, label: p.ten_xuong }))} />
           </Col>
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả kho" style={{ width: '100%' }} allowClear value={filterKho} onChange={setFilterKho}
@@ -518,7 +519,7 @@ export default function NhapGiayPage() {
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả NCC" style={{ width: '100%' }} allowClear value={filterNCC} onChange={setFilterNCC} showSearch
               filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-              options={suppliers.map((s: unknown) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))} />
+              options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))} />
           </Col>
           <Col xs={12} sm={4}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
@@ -611,7 +612,7 @@ export default function NhapGiayPage() {
                   <Form.Item name="supplier_id" label="Nhà cung cấp (NCC)" rules={[{ required: true, message: 'Chọn NCC' }]}>
                     <Select placeholder="Chọn nhà cung cấp..." showSearch
                       filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                      options={suppliers.map((s: unknown) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
+                      options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
                   </Form.Item>
                 </Col>
                 <Col span={10}>
@@ -627,7 +628,7 @@ export default function NhapGiayPage() {
                     <Select placeholder="Chọn xưởng..." allowClear
                       value={formPxId ?? undefined}
                       onChange={v => { setFormPxId(v ?? null); form.setFieldValue('warehouse_id', undefined) }}
-                      options={phanXuongs.filter((p: unknown) => p.trang_thai).map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))}
+                      options={phanXuongs.filter(p => p.trang_thai).map(p => ({ value: p.id, label: p.ten_xuong }))}
                     />
                   </Form.Item>
                 </Col>

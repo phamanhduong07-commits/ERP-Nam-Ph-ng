@@ -1,3 +1,110 @@
+# Plan: Fix Medium + Low Security Issues
+Date: 2026-05-27
+Status: PENDING_APPROVAL
+
+## Mục tiêu
+Fix 7 issues bảo mật còn lại (4 MEDIUM + 3 LOW) mà không thay đổi DB schema.
+
+## Các bước thực thi
+
+- [ ] Bước 1: Fix role check bug trong media.py (#8)
+  - File: `backend/app/routers/media.py:173`
+  - `getattr(current_user, "role", "") in ("ADMIN", "admin")` → `current_user.role and current_user.role.ma_vai_tro == "ADMIN"`
+
+- [ ] Bước 2: Tăng bcrypt rounds lên 14 (#9)
+  - File: `backend/app/routers/auth.py`
+  - `_bcrypt.gensalt()` → `_bcrypt.gensalt(rounds=14)` trong `_hash_password()`
+
+- [ ] Bước 3: Token revocation với in-memory JTI blacklist (#10)
+  - File: `backend/app/deps.py` + `backend/app/routers/auth.py`
+  - Thêm `jti` claim vào access token khi tạo
+  - Thêm `_revoked_jtis: set[str]` in-memory trong deps.py
+  - Thêm `POST /api/auth/logout` endpoint ghi jti vào blacklist
+  - `get_current_user` check jti có trong blacklist không
+
+- [ ] Bước 4: Thêm Content-Security-Policy header (#11)
+  - File: `backend/app/main.py`
+  - Thêm CSP vào middleware response headers
+
+- [ ] Bước 5: Audit log cho 401/403 (#12)
+  - File: `backend/app/main.py`
+  - Middleware `log_requests` đã có — thêm logger.warning khi status 401/403
+
+- [ ] Bước 6: Input validation cho module/record_id trong media.py (#14)
+  - File: `backend/app/routers/media.py`
+  - Validate module chỉ chứa `[a-z0-9_]`, record_id chỉ chứa `[a-z0-9_-]`
+
+- [ ] Bước 7: Refactor media.py raw SQL → ORM (#13)
+  - Tạo model `ErpMedia` trong `backend/app/models/`
+  - Thay thế 4 raw SQL queries bằng ORM
+
+## Done Criteria
+- [ ] Admin có thể xóa ảnh của user khác (bug #8 fixed)
+- [ ] Password mới hash với bcrypt rounds=14
+- [ ] `POST /api/auth/logout` trả 200 và token cũ bị reject
+- [ ] Response có header `Content-Security-Policy`
+- [ ] Log hiện warning khi có 401/403
+- [ ] Upload với module="../../../etc" bị reject 422
+- [ ] TypeScript build không lỗi
+- [ ] Python import không lỗi
+
+## Rủi ro
+- **Bcrypt rounds 14:** Hash password chậm hơn ~4x so với rounds 12 — chấp nhận được (login ~0.5s → ~2s). Chỉ áp dụng cho password tạo mới/đổi mới, hash cũ vẫn verify được bình thường.
+- **JTI blacklist mất khi restart server:** Với access token 60 phút, rủi ro tối đa là 60 phút sau khi restart. Chấp nhận được cho ERP nội bộ.
+
+---
+<!-- previous plan below -->
+# Plan: Fix Critical Security Issues
+Date: 2026-05-27
+Status: APPROVED
+
+## Mục tiêu
+Fix 4 critical security issues trong ERP Nam Phương mà không phá vỡ auth flow hiện tại:
+1. SECRET_KEY có default value dễ đoán → JWT token bị giả mạo
+2. Access token expire 7 ngày → cửa sổ tấn công quá lớn
+3. Refresh token expire 90 ngày → quá lâu
+4. Quick-login dropdown với password `123456` hiển thị ở production
+
+> **Ghi chú:** localStorage → httpOnly cookies là refactor lớn, giữ nguyên cho sprint sau.
+
+---
+
+## Các bước thực thi
+
+- [ ] Bước 1: Thêm startup validator cho SECRET_KEY
+  - File: `backend/app/config.py`
+  - Mục tiêu: App từ chối khởi động nếu SECRET_KEY là giá trị default
+
+- [ ] Bước 2: Giảm token expiry xuống mức hợp lý
+  - File: `backend/app/config.py`
+  - Thay đổi: ACCESS_TOKEN_EXPIRE_MINUTES: 10080 → 60, REFRESH_TOKEN_EXPIRE_DAYS: 90 → 30
+
+- [ ] Bước 3: Restrict CORS allow_methods + thêm HSTS header
+  - File: `backend/app/main.py`
+  - allow_methods: `["*"]` → `["GET","POST","PUT","PATCH","DELETE","OPTIONS"]`
+  - Thêm: `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+
+- [ ] Bước 4: Ẩn quick-login dropdown trong production
+  - File: `frontend/src/pages/Login.tsx`
+  - Guard bằng `import.meta.env.DEV` (Vite env flag)
+
+---
+
+## Done Criteria
+- [ ] Khởi động app với SECRET_KEY default → lỗi rõ ràng
+- [ ] Access token expire trong 60 phút (không phải 7 ngày)
+- [ ] Refresh token expire trong 30 ngày (không phải 90 ngày)
+- [ ] Response header có `Strict-Transport-Security`
+- [ ] CORS không cho phép tất cả methods
+- [ ] Build frontend không lỗi
+- [ ] Quick-login không thấy khi `import.meta.env.DEV = false`
+
+## Rủi ro
+- **Token expiry giảm mạnh (7 ngày → 60 phút):** User đang đăng nhập sẽ bị logout khi token cũ hết hạn. Tuy nhiên refresh token flow đã có sẵn trong client.ts — sẽ tự refresh trong suốt.
+- **CORS methods restrict:** Không ảnh hưởng vì ERP chỉ dùng GET/POST/PUT/PATCH/DELETE.
+
+---
+<!-- previous plan below, kept for history -->
 # Plan: Trang Trả Hàng Bán — Cải thiện 6 tiêu chí
 Date: 2026-05-24
 Status: DONE ✅ (2026-05-24)

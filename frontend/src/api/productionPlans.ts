@@ -54,6 +54,8 @@ export interface PlanLineResponse {
   to_hop_song: string | null
   // Thông số kỹ thuật
   dai_tt: number | null
+  so_lan_cat: number | null
+  be_so_con: number | null
   loai_lan: string | null
   loai_in: string | null
   so_mau: number | null
@@ -155,6 +157,8 @@ export interface QueueLine {
   c_tham: string | null
   can_man: string | null
   dai_tt: number | null
+  so_lan_cat: number | null
+  be_so_con: number | null
   mat: string | null;     mat_dl: number | null
   song_1: string | null;  song_1_dl: number | null
   mat_1: string | null;   mat_1_dl: number | null
@@ -182,6 +186,47 @@ export interface AvailableItem {
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
+
+export interface KhsxBaoCaoLsx {
+  id: number
+  so_lenh: string
+  ngay_chay?: string | null
+  trang_thai: string
+  ten_hang?: string | null
+  so_lop?: number | null
+  kho_giay_cm?: number | null
+  so_dao?: number | null
+  so_tam: number
+  so_luong_ke_hoach: number
+  so_tam_loi: number
+  completion_pct: number
+  kg_tot: number
+  kg_loi: number
+}
+
+export interface KhsxBaoCaoGiay {
+  ma_chinh?: string | null
+  ten?: string | null
+  kho_cm?: number | null
+  gsm?: number | null
+  kg_xuat: number
+}
+
+export interface KhsxBaoCaoResponse {
+  plan: { so_ke_hoach: string; trang_thai: string; ngay_ke_hoach: string }
+  lsx_list: KhsxBaoCaoLsx[]
+  giay_dung: KhsxBaoCaoGiay[]
+  warnings: string[]
+  completion_pct: number
+  tong_so_tam: number
+  tong_so_tam_ke_hoach: number
+  tong_kg_giay_dung: number
+  tong_kg_thanh_pham: number
+  tong_kg_loi: number
+  hao_hut_kg: number
+  hao_hut_pct: number
+  tong_so_tam_loi: number
+}
 
 export const productionPlansApi = {
   list: (params?: {
@@ -244,6 +289,9 @@ export const productionPlansApi = {
       `/production-plans/lines/${lineId}/phoi-ngoai`,
       { mua_phoi_ngoai }
     ),
+
+  getBaoCao: (id: number) =>
+    client.get<KhsxBaoCaoResponse>(`/production-plans/${id}/bao-cao`),
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -149,15 +149,23 @@ def get_phoi_source_warehouse(
     db: Session,
     phan_xuong_id: Optional[int],
     phap_nhan_id: Optional[int] = None,
+    order_phoi_phan_xuong_id: Optional[int] = None,
 ) -> Optional[Warehouse]:
     """
     Trả về kho PHOI nguồn để nhập phôi sóng.
 
-    Ưu tiên: phap_nhan_id → PhapNhan.phoi_phan_xuong_id → kho PHOI của xưởng đó.
-    Fallback: phan_xuong_id → kho PHOI của chính xưởng đó (nếu cd1_cd2)
-              hoặc kho PHOI của xưởng cd1_cd2 đầu tiên tìm được.
+    Ưu tiên 3 tầng:
+      1. order_phoi_phan_xuong_id — override riêng LSX (nullable)
+      2. phap_nhan.phoi_phan_xuong_id — mặc định theo pháp nhân
+      3. phan_xuong_id — fallback cuối (chỉ đúng với CD1+CD2)
     """
-    # 1. Dùng cấu hình pháp nhân (ưu tiên nhất)
+    # 1. Override riêng LSX
+    if order_phoi_phan_xuong_id:
+        wh = get_workshop_warehouse(db, order_phoi_phan_xuong_id, "PHOI")
+        if wh:
+            return wh
+
+    # 2. Cấu hình pháp nhân
     if phap_nhan_id:
         pn = db.get(PhapNhan, phap_nhan_id)
         if pn and pn.phoi_phan_xuong_id:
@@ -165,14 +173,12 @@ def get_phoi_source_warehouse(
             if wh:
                 return wh
 
-    # 2. Fallback: dùng phan_xuong_id
+    # 3. Fallback: dùng phan_xuong_id
     if phan_xuong_id:
         px = db.get(PhanXuong, phan_xuong_id)
         if px:
-            # CD1+CD2: dùng kho của chính xưởng
             if px.cong_doan == "cd1_cd2":
                 return get_workshop_warehouse(db, phan_xuong_id, "PHOI")
-            # CD2: dùng phoi_tu_phan_xuong_id nếu đã cấu hình
             if px.phoi_tu_phan_xuong_id:
                 wh = get_workshop_warehouse(db, px.phoi_tu_phan_xuong_id, "PHOI")
                 if wh:

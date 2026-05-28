@@ -92,7 +92,7 @@ function PhieuNhapPhoiSongTab({
       }
     })
 
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), itemRows.map(r => cols.map(c => (r as Record<string, unknown>)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), itemRows.map(r => cols.map(c => (r as Record<string, unknown>)[c.key])) as (string | number | null | undefined)[][])
     
     const printData = {
       subtitle: 'PHIẾU NHẬP PHÔI SÓNG',
@@ -258,13 +258,11 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
     queryFn: () => warehouseApi.listTheoPhanXuong().then(r => r.data),
     staleTime: 300_000,
   })
-  // Kho nhập phôi = kho PHOI của phan_xuong_id lệnh SX
-  const khoNhapPhoiDuKien = order
-    ? phanXuongWithWh.find(px => px.id === order.phan_xuong_id)?.warehouses?.PHOI ?? null
-    : null
+  // Kho nhập phôi dự kiến: backend tính theo phap_nhan.phoi_phan_xuong_id (ưu tiên) → phan_xuong fallback
+  const khoNhapPhoiDuKien = order?.ten_kho_nhap_phoi_du_kien ?? null
 
   const updateSxMutation = useMutation({
-    mutationFn: (vals: { phap_nhan_id?: number | null; phan_xuong_id?: number | null }) =>
+    mutationFn: (vals: { phap_nhan_id?: number | null; phan_xuong_id?: number | null; phoi_phan_xuong_id?: number | null }) =>
       productionOrdersApi.update(Number(id), vals),
     onSuccess: () => {
       message.success('Cập nhật thành công')
@@ -473,7 +471,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
       }
     })
     
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as Record<string, unknown>)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as Record<string, unknown>)[c.key])) as (string | number | null | undefined)[][])
     
     const printData = {
       subtitle: 'LỆNH SẢN XUẤT',
@@ -857,6 +855,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                       editSxForm.setFieldsValue({
                         phap_nhan_id: order.phap_nhan_id ?? undefined,
                         phan_xuong_id: order.phan_xuong_id ?? undefined,
+                        phoi_phan_xuong_id: order.phoi_phan_xuong_id ?? undefined,
                       })
                       setEditSxModal(true)
                     }}
@@ -877,6 +876,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                       editSxForm.setFieldsValue({
                         phap_nhan_id: order.phap_nhan_id ?? undefined,
                         phan_xuong_id: order.phan_xuong_id ?? undefined,
+                        phoi_phan_xuong_id: order.phoi_phan_xuong_id ?? undefined,
                       })
                       setEditSxModal(true)
                     }}
@@ -887,7 +887,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                 {khoNhapPhoiGanNhat
                   ? <Tag color="orange">{khoNhapPhoiGanNhat}</Tag>
                   : khoNhapPhoiDuKien
-                  ? <Tag color="default">{khoNhapPhoiDuKien.ten_kho}</Tag>
+                  ? <Tag color="default">{khoNhapPhoiDuKien}</Tag>
                   : <Typography.Text type="secondary">—</Typography.Text>}
               </Descriptions.Item>
               <Descriptions.Item label="Giá nội bộ (đ/tấm)">
@@ -1387,6 +1387,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
           onFinish={(vals) => updateSxMutation.mutate({
             phap_nhan_id: vals.phap_nhan_id ?? null,
             phan_xuong_id: vals.phan_xuong_id ?? null,
+            phoi_phan_xuong_id: vals.phoi_phan_xuong_id ?? null,
           })}
         >
           <Form.Item name="phap_nhan_id" label="Pháp nhân">
@@ -1401,6 +1402,19 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
               allowClear
               placeholder="Chọn xưởng"
               options={phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="phoi_phan_xuong_id"
+            label="Xưởng phôi (ghi đè)"
+            tooltip="Chỉ đặt khi LSX này cần nhập phôi từ xưởng khác mặc định của pháp nhân. Để trống = dùng mặc định."
+          >
+            <Select
+              allowClear
+              placeholder="Mặc định theo pháp nhân"
+              options={phanXuongList
+                .filter((x: { cong_doan?: string }) => x.cong_doan === 'cd1_cd2')
+                .map((x: { id: number; ten_xuong: string }) => ({ value: x.id, label: x.ten_xuong }))}
             />
           </Form.Item>
         </Form>

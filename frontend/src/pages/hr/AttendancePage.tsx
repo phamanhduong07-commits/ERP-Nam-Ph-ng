@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ApiError } from '../../../../../../../../api/types'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Form, Input, Select, Space, Table, Typography, message, Row, Col, Tabs, Tag, DatePicker, Modal
@@ -117,15 +117,15 @@ const buildAttendanceRows = (ws: XLSX.WorkSheet) => {
     .map(row => {
       const record: Record<string, string | number> = {}
       headers.forEach((key, idx) => {
-        if (key) record[key] = row[idx]
+        if (key) record[key] = row[idx] as string | number
       })
       record.ma_nv = String(record.ma_nv ?? '').trim()
       record.ngay = parseExcelDate(record.ngay)
       record.gio_vao = parseExcelTime(record.gio_vao, record.ngay)
       record.gio_ra = parseExcelTime(record.gio_ra, record.ngay)
-      record.so_cong = parseNumber(record.so_cong)
-      record.so_gio_ot = parseNumber(record.so_gio_ot)
-      record.tong_gio_thuc = parseNumber(record.tong_gio_thuc)
+      record.so_cong = parseNumber(record.so_cong) ?? 0
+      record.so_gio_ot = parseNumber(record.so_gio_ot) ?? 0
+      record.tong_gio_thuc = parseNumber(record.tong_gio_thuc) ?? 0
       return record
     })
 }
@@ -346,8 +346,8 @@ export default function AttendancePage() {
                 setImportModal(false)
                 setImportData([])
                 qc.invalidateQueries({ queryKey: ['hr-attendance'] })
-              } catch (e) {
-                message.error(e?.response?.data?.detail?.message || (e as ApiError)?.response?.data?.detail || 'Import cham cong that bai')
+              } catch (e: unknown) {
+                message.error((e as ApiError)?.response?.data?.detail || 'Import cham cong that bai')
               }
             }}
           >
@@ -370,8 +370,8 @@ export default function AttendancePage() {
                   const wb = XLSX.read(bstr, { type: 'binary' })
                   const ws = wb.Sheets[wb.SheetNames[0]]
                   const data = buildAttendanceRows(ws)
-                  
-                  const validated = data.map((row: unknown) => {
+
+                  const validated = data.map((row) => {
                     let error = ''
                     if (!row.ma_nv) error = 'Thiếu mã NV'
                     if (!row.ngay) error = 'Thiếu ngày'
@@ -394,8 +394,8 @@ export default function AttendancePage() {
             dataSource={importData}
             pagination={{ pageSize: 10 }}
             columns={[
-              { title: 'Trạng thái', dataIndex: '_status', width: 120, render: (v, r) => (
-                <Tag color={v === 'success' ? 'green' : 'red'}>{v === 'success' ? 'Hợp lệ' : r._error}</Tag>
+              { title: 'Trạng thái', dataIndex: '_status', width: 120, render: (v: string, r: Record<string, unknown>) => (
+                <Tag color={v === 'success' ? 'green' : 'red'}>{v === 'success' ? 'Hợp lệ' : r._error as string}</Tag>
               )},
               { title: 'Mã NV', dataIndex: 'ma_nv' },
               { title: 'Ngày', dataIndex: 'ngay' },

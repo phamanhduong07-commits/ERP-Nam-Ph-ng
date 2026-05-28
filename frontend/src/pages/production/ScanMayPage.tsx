@@ -155,7 +155,7 @@ export default function ScanMayPage() {
       setTimeout(() => slRef.current?.focus?.(), 100)
       // Lấy thêm thông tin phiếu in đầy đủ (nếu có)
       cd2Api.phieuLookup(code).then(r => {
-        if (r.data) setPhieuDetail(r.data as PhieuIn)
+        if (r.data) setPhieuDetail(r.data as unknown as PhieuIn)
       }).catch(() => { /* không có phiếu in thì bỏ qua */ })
     } catch {
       setLookup({ loading: false, result: null, error: 'Không tìm thấy lệnh sản xuất' })

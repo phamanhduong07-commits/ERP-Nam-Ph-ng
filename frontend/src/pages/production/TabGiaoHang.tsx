@@ -11,7 +11,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 
 import { yeuCauApi, deliveriesApi, YEU_CAU_TRANG_THAI_LABELS, YEU_CAU_TRANG_THAI_COLORS, CONG_NO_LABELS, CONG_NO_COLORS } from '../../api/deliveries'
-import type { YeuCauGiaoHang, DeliveryOrder } from '../../api/deliveries'
+import type { YeuCauGiaoHang, DeliveryOrder, CreateYeuCauPayload, CreateDeliveryPayload, CreateYeuCauItemPayload } from '../../api/deliveries'
 import { xeApi, loXeApi, taiXeApi } from '../../api/simpleApis'
 import client from '../../api/client'
 import { warehouseApi } from '../../api/warehouse'
@@ -93,7 +93,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
     mutationFn: ({ id, items, ghi_chu }: { id: number; items: AdjItem[]; ghi_chu: string }) =>
       deliveriesApi.adjustItems(id, items.map(it => ({ item_id: it.item_id, so_luong_moi: it.so_luong })), ghi_chu),
     onSuccess: (res: unknown) => {
-      message.success(res.data?.message ?? 'Đã điều chỉnh phiếu bán hàng')
+      message.success((res as { data?: { message?: string } })?.data?.message ?? 'Đã điều chỉnh phiếu bán hàng')
       setShowAdjust(false)
       qc.invalidateQueries({ queryKey: ['delivery-detail', detailId] })
       qc.invalidateQueries({ queryKey: ['deliveries'] })
@@ -414,7 +414,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
   }
 
   const createYCMutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => yeuCauApi.create(payload).then(r => r.data),
+    mutationFn: (payload: CreateYeuCauPayload) => yeuCauApi.create(payload).then(r => r.data),
     onSuccess: () => {
       message.success('Tạo yêu cầu giao hàng thành công')
       qc.invalidateQueries({ queryKey: ['yeu-cau-giao-hang'] })
@@ -427,7 +427,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
   })
 
   const createDOMutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => deliveriesApi.create(payload).then(r => r.data),
+    mutationFn: (payload: CreateDeliveryPayload) => deliveriesApi.create(payload).then(r => r.data),
     onSuccess: () => {
       message.success('Tạo phiếu bán hàng thành công')
       qc.invalidateQueries({ queryKey: ['yeu-cau-giao-hang'] })
@@ -674,7 +674,6 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
         const ngayDate = ro.ngay_xuat ? new Date(ro.ngay_xuat) : null
 
         // Tạo rows khớp với cột template đã thiết kế
-        const templateCols = tpl ? ((tpl?.variables_meta as { columns?: { key: string }[] })?.columns || []) : undefined
         const metaAny = (tpl.variables_meta as { columns?: { key: string }[]; easy_config?: string })
         let tplCols = metaAny?.columns as Array<{key:string}> | undefined
         // Fallback: template cũ lưu selectedColumns trong easy_config
@@ -685,7 +684,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
           ? ro.items.map((it, i) => {
               const m2 = it.dien_tich && it.dien_tich > 0 ? it.dien_tich
                 : (it.kho_tt && it.dai_tt ? it.kho_tt * it.dai_tt * it.so_luong / 1_000_000 : 0)
-              const cells = tplCols.map(col => {
+              const cells = tplCols!.map(col => {
                 let val = ''
                 switch (col.key) {
                   case 'stt':           val = String(i + 1); break
@@ -710,7 +709,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                   case 'don_gia': case 'gia_ban':
                     val = it.don_gia ? vi.format(it.don_gia) : '—'; break
                   case 'thanh_tien':    val = it.thanh_tien ? vi.format(it.thanh_tien) : '—'; break
-                  case 'so_lop':        val = it.so_lop ?? ''; break
+                  case 'so_lop':        val = String(it.so_lop ?? ''); break
                   case 'to_hop_song':   val = it.to_hop_song ?? ''; break
                   case 'ghi_chu':       val = it.ghi_chu || ''; break
                 }
@@ -798,7 +797,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
           dien_tich: it.dien_tich,
           trong_luong: it.trong_luong,
           ghi_chu: it.ghi_chu,
-        })),
+        })) as CreateYeuCauItemPayload[],
       })
     } else {
       createDOMutation.mutate({
@@ -1687,37 +1686,37 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
             { title: 'Tên hàng', dataIndex: 'ten_hang' },
             {
               title: 'Số lượng', width: 120,
-              render: (_: unknown, row: Record<string, number>, idx: number) => (
+              render: (_: unknown, row: Record<string, unknown>, idx: number) => (
                 <InputNumber
-                  size="small" style={{ width: '100%' }} value={row.so_luong}
-                  onChange={v => setDOItems(prev => prev.map((it, i) => i === idx ? { ...it, so_luong: v || 0, thanh_tien: (v || 0) * (it.don_gia || 0) } : it))}
+                  size="small" style={{ width: '100%' }} value={row.so_luong as number}
+                  onChange={v => setDOItems(prev => prev.map((it, i) => i === idx ? { ...it, so_luong: v || 0, thanh_tien: (v || 0) * Number(it.don_gia || 0) } : it))}
                 />
               )
             },
             !isRequest && {
               title: 'Đơn giá', width: 140,
-              render: (_: unknown, row: Record<string, number>, idx: number) => (
+              render: (_: unknown, row: Record<string, unknown>, idx: number) => (
                 <InputNumber
-                  size="small" style={{ width: '100%' }} value={row.don_gia}
-                  onChange={v => setDOItems(prev => prev.map((it, i) => i === idx ? { ...it, don_gia: v || 0, thanh_tien: (v || 0) * (it.so_luong || 0) } : it))}
+                  size="small" style={{ width: '100%' }} value={row.don_gia as number}
+                  onChange={v => setDOItems(prev => prev.map((it, i) => i === idx ? { ...it, don_gia: v || 0, thanh_tien: (v || 0) * Number(it.so_luong || 0) } : it))}
                 />
               )
             },
-            !isRequest && { title: 'Thành tiền', width: 140, render: (_: unknown, row: Record<string, number>) => fmtMoney(row.thanh_tien), align: 'right' },
-          ].filter(Boolean) as number}
+            !isRequest && { title: 'Thành tiền', width: 140, render: (_: unknown, row: Record<string, unknown>) => fmtMoney(Number(row.thanh_tien)), align: 'right' },
+          ].filter(Boolean) as ColumnsType<Record<string, unknown>>}
           summary={() => !isRequest ? (
             <Table.Summary.Row>
               <Table.Summary.Cell index={0} colSpan={4}><Text strong>Tổng cộng</Text></Table.Summary.Cell>
-              <Table.Summary.Cell index={4} align="right"><Text strong type="danger">{fmtMoney(doItems.reduce((s, it) => s + (it.thanh_tien || 0), 0))}</Text></Table.Summary.Cell>
+              <Table.Summary.Cell index={4} align="right"><Text strong type="danger">{fmtMoney(doItems.reduce((s, it) => s + Number(it.thanh_tien || 0), 0))}</Text></Table.Summary.Cell>
             </Table.Summary.Row>
           ) : null}
         />
         {/* Running totals M²/Kg/M³ */}
         {(() => {
-          const totSL  = doItems.reduce((s, it) => s + (it.so_luong || 0), 0)
-          const totM2  = doItems.reduce((s, it) => s + (it.dien_tich || 0), 0)
-          const totKg  = doItems.reduce((s, it) => s + (it.trong_luong || 0), 0)
-          const totM3  = doItems.reduce((s, it) => s + (it.the_tich || 0), 0)
+          const totSL  = doItems.reduce((s, it) => s + Number(it.so_luong || 0), 0)
+          const totM2  = doItems.reduce((s, it) => s + Number(it.dien_tich || 0), 0)
+          const totKg  = doItems.reduce((s, it) => s + Number(it.trong_luong || 0), 0)
+          const totM3  = doItems.reduce((s, it) => s + Number(it.the_tich || 0), 0)
           return (
             <div style={{ marginTop: 8, padding: '6px 12px', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 4, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
               <span><Text type="secondary">Tổng SL:</Text> <Text strong>{fmtN(totSL)}</Text></span>

@@ -13,11 +13,15 @@ Pattern:
   - helper _make_* để tạo prerequisite data
   - mỗi test độc lập, không chia sẻ state
 """
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
-from app.models.accounting import CashReceipt, CashPayment, JournalEntry, PurchaseInvoice
-from app.models.master import Customer, Supplier, PhapNhan
+from app.models.accounting import BankTransaction, CashReceipt, CashPayment, DebtLedgerEntry, JournalEntry, PurchaseInvoice
+from app.models.auth import AuditLog
+from app.models.billing import SalesInvoice
+from app.models.master import Customer, PhanXuong, PhapNhan, Supplier, Warehouse
+from app.models.production import ProductionOrder, ProductionOrderItem
+from app.models.warehouse_doc import MaterialIssue, MaterialIssueItem, ProductionOutput
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────
@@ -41,6 +45,20 @@ def _make_supplier(db, ma="NCC_ACC"):
     db.add(sup)
     db.flush()
     return sup
+
+
+def _make_phan_xuong(db, pn, ma="PX_ACC"):
+    px = PhanXuong(ma_xuong=ma, ten_xuong=f"Phan xuong {ma}", phap_nhan_id=pn.id)
+    db.add(px)
+    db.flush()
+    return px
+
+
+def _make_warehouse(db, px, ma="WH_ACC", loai="NVL_PHU"):
+    wh = Warehouse(ma_kho=ma, ten_kho=f"Kho {ma}", loai_kho=loai, phan_xuong_id=px.id, trang_thai=True)
+    db.add(wh)
+    db.flush()
+    return wh
 
 
 # ─── JournalEntry — bút toán thủ công ────────────────────────────────────────
@@ -89,6 +107,21 @@ def test_create_journal_entry_empty_lines_returns_422(client, db_session):
     }
     res = client.post("/api/accounting/journal-entries", json=payload)
     assert res.status_code == 422, res.text
+
+
+def test_create_journal_entry_unknown_account_returns_400(client, db_session):
+    """Tai khoan khong ton tai bi chan o service validate."""
+    payload = {
+        "ngay_but_toan": date.today().isoformat(),
+        "dien_giai": "But toan tai khoan sai",
+        "lines": [
+            {"so_tk": "9999", "so_tien_no": 1000000, "so_tien_co": 0},
+            {"so_tk": "131", "so_tien_no": 0, "so_tien_co": 1000000},
+        ],
+    }
+    res = client.post("/api/accounting/journal-entries", json=payload)
+    assert res.status_code == 400, res.text
+    assert "Tai khoan" in res.json()["detail"]
 
 
 def test_list_journal_entries(client, db_session):
@@ -257,6 +290,13 @@ def test_approve_receipt_creates_balanced_journal(client, db_session):
     tks_no = {line.so_tk for line in journal.lines if line.so_tien_no > 0}
     assert "112" in tks_no
 
+    audit_actions = {
+        row.hanh_dong for row in db_session.query(AuditLog)
+        .filter(AuditLog.bang.in_(["cash_receipts", "journal_entries"]))
+        .all()
+    }
+    assert {"create", "approve"}.issubset(audit_actions)
+
 
 def test_approve_already_approved_receipt_returns_400(client, db_session):
     """Duyệt phiếu thu đã duyệt → 400."""
@@ -290,6 +330,19 @@ def test_cancel_receipt_changes_status(client, db_session):
     cancel_res = client.patch(f"/api/accounting/receipts/{receipt_id}/cancel")
     assert cancel_res.status_code == 200, cancel_res.text
     assert cancel_res.json()["trang_thai"] == "huy"
+
+    audit = db_session.query(AuditLog).filter(
+        AuditLog.bang == "cash_receipts",
+        AuditLog.ban_ghi_id == str(receipt_id),
+        AuditLog.hanh_dong == "cancel",
+    ).first()
+    assert audit is not None
+
+
+def test_accounting_document_audit_rejects_non_accounting_table(client, db_session):
+    res = client.get("/api/accounting/documents/users/1/audit")
+    assert res.status_code == 400, res.text
+    assert "pham vi ke toan" in res.json()["detail"]
 
 
 # ─── Phiếu chi (CashPayment) ─────────────────────────────────────────────────
@@ -450,6 +503,127 @@ def test_ar_ledger_filter_by_customer(client, db_session):
 
 # ─── Hóa đơn mua hàng ────────────────────────────────────────────────────────
 
+def test_ar_aging_applies_refund_credit_and_phap_nhan_filter(client, db_session):
+    pn = _make_phap_nhan(db_session, "PN_ARAGE")
+    other_pn = _make_phap_nhan(db_session, "PN_ARAGE_O")
+    kh = _make_customer(db_session, "KH_ARAGE")
+    due_date = date.today() - timedelta(days=45)
+    db_session.add(SalesInvoice(
+        so_hoa_don="AR-AGE-001",
+        ngay_hoa_don=due_date,
+        han_tt=due_date,
+        customer_id=kh.id,
+        ten_don_vi=kh.ten_viet_tat,
+        tong_tien_hang=Decimal("1000000"),
+        tien_vat=Decimal("0"),
+        tong_cong=Decimal("1000000"),
+        da_thanh_toan=Decimal("0"),
+        trang_thai="da_phat_hanh",
+        phap_nhan_id=pn.id,
+    ))
+    db_session.add(DebtLedgerEntry(
+        ngay=date.today(),
+        loai="giam_no",
+        doi_tuong="khach_hang",
+        customer_id=kh.id,
+        chung_tu_loai="phieu_hoan_tien",
+        chung_tu_id=1,
+        so_tien=Decimal("400000"),
+        phap_nhan_id=pn.id,
+    ))
+    db_session.commit()
+
+    res = client.get("/api/accounting/ar/aging", params={"phap_nhan_id": pn.id})
+    assert res.status_code == 200, res.text
+    rows = res.json()
+    assert len(rows) == 1
+    assert float(rows[0]["tong_con_lai"]) == 600000.0
+    assert float(rows[0]["qua_han_60"]) == 600000.0
+
+    empty_res = client.get("/api/accounting/ar/aging", params={"phap_nhan_id": other_pn.id})
+    assert empty_res.status_code == 200, empty_res.text
+    assert empty_res.json() == []
+
+
+def test_ap_aging_applies_purchase_return_credit(client, db_session):
+    pn = _make_phap_nhan(db_session, "PN_APAGE")
+    sup = _make_supplier(db_session, "NCC_APAGE")
+    due_date = date.today() - timedelta(days=20)
+    db_session.add(PurchaseInvoice(
+        so_hoa_don="AP-AGE-001",
+        supplier_id=sup.id,
+        ten_don_vi=sup.ten_viet_tat,
+        ngay_lap=due_date,
+        han_tt=due_date,
+        tong_tien_hang=Decimal("2000000"),
+        tien_thue=Decimal("0"),
+        tong_thanh_toan=Decimal("2000000"),
+        da_thanh_toan=Decimal("0"),
+        trang_thai="nhap",
+        phap_nhan_id=pn.id,
+    ))
+    db_session.add(DebtLedgerEntry(
+        ngay=date.today(),
+        loai="giam_no",
+        doi_tuong="nha_cung_cap",
+        supplier_id=sup.id,
+        chung_tu_loai="purchase_return",
+        chung_tu_id=1,
+        so_tien=Decimal("700000"),
+        phap_nhan_id=pn.id,
+    ))
+    db_session.commit()
+
+    res = client.get("/api/accounting/ap/aging", params={"phap_nhan_id": pn.id})
+    assert res.status_code == 200, res.text
+    rows = res.json()
+    assert len(rows) == 1
+    assert float(rows[0]["tong_con_lai"]) == 1300000.0
+    assert float(rows[0]["qua_han_30"]) == 1300000.0
+
+
+def test_debt_overdue_alerts_returns_ar_and_ap_buckets(client, db_session):
+    pn = _make_phap_nhan(db_session, "PN_ALERT")
+    kh = _make_customer(db_session, "KH_ALERT")
+    sup = _make_supplier(db_session, "NCC_ALERT")
+    due_date = date.today() - timedelta(days=10)
+    db_session.add(SalesInvoice(
+        so_hoa_don="AR-ALERT-001",
+        ngay_hoa_don=due_date,
+        han_tt=due_date,
+        customer_id=kh.id,
+        ten_don_vi=kh.ten_viet_tat,
+        tong_tien_hang=Decimal("500000"),
+        tien_vat=Decimal("0"),
+        tong_cong=Decimal("500000"),
+        da_thanh_toan=Decimal("0"),
+        trang_thai="da_phat_hanh",
+        phap_nhan_id=pn.id,
+    ))
+    db_session.add(PurchaseInvoice(
+        so_hoa_don="AP-ALERT-001",
+        supplier_id=sup.id,
+        ten_don_vi=sup.ten_viet_tat,
+        ngay_lap=due_date,
+        han_tt=due_date,
+        tong_tien_hang=Decimal("800000"),
+        tien_thue=Decimal("0"),
+        tong_thanh_toan=Decimal("800000"),
+        da_thanh_toan=Decimal("0"),
+        trang_thai="nhap",
+        phap_nhan_id=pn.id,
+    ))
+    db_session.commit()
+
+    res = client.get("/api/accounting/debt/overdue-alerts", params={"phap_nhan_id": pn.id})
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["ar"]["count"] == 1
+    assert float(data["ar"]["total_overdue"]) == 500000.0
+    assert data["ap"]["count"] == 1
+    assert float(data["ap"]["total_overdue"]) == 800000.0
+
+
 def test_create_purchase_invoice_manual(client, db_session):
     """POST /api/accounting/purchase-invoices → tong_thanh_toan = tong_tien_hang + tien_thue."""
     pn = _make_phap_nhan(db_session, "PN_HD1")
@@ -559,6 +733,65 @@ def test_cancel_purchase_invoice_no_payment(client, db_session):
     assert cancel_res.status_code == 200, cancel_res.text
     assert cancel_res.json()["trang_thai"] == "huy"
 
+    reversal = db_session.query(DebtLedgerEntry).filter(
+        DebtLedgerEntry.chung_tu_loai == "huy_hoa_don_mua",
+        DebtLedgerEntry.chung_tu_id == inv_id,
+        DebtLedgerEntry.loai == "giam_no",
+        DebtLedgerEntry.doi_tuong == "nha_cung_cap",
+    ).first()
+    assert reversal is not None
+    assert float(reversal.so_tien) == 2_160_000.0
+
+
+def test_list_bank_transactions_empty(client, db_session):
+    res = client.get("/api/accounting/bank-transactions")
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["total"] == 0
+    assert data["items"] == []
+
+
+def test_reconcile_bank_transaction_with_cash_receipt(client, db_session):
+    kh = _make_customer(db_session, "KH_BANKREC")
+    db_session.commit()
+
+    create_res = client.post("/api/accounting/receipts", json={
+        "customer_id": kh.id,
+        "ngay_phieu": date.today().isoformat(),
+        "so_tien": 700000,
+    })
+    assert create_res.status_code == 200, create_res.text
+    receipt_id = create_res.json()["id"]
+    approve_res = client.patch(f"/api/accounting/receipts/{receipt_id}/approve")
+    assert approve_res.status_code == 200, approve_res.text
+
+    tx = BankTransaction(
+        ngay_giao_dich=date.today(),
+        so_tai_khoan="0123456789",
+        so_tham_chieu="REF-BANK-1",
+        mo_ta="Thu tien khach",
+        thu=Decimal("700000"),
+        chi=Decimal("0"),
+        import_key="test-bank-rec-1",
+    )
+    db_session.add(tx)
+    db_session.commit()
+    db_session.refresh(tx)
+
+    candidates_res = client.get(f"/api/accounting/bank-transactions/{tx.id}/candidates")
+    assert candidates_res.status_code == 200, candidates_res.text
+    assert any(row["chung_tu_id"] == receipt_id for row in candidates_res.json())
+
+    reconcile_res = client.post(
+        f"/api/accounting/bank-transactions/{tx.id}/reconcile",
+        json={"chung_tu_loai": "phieu_thu", "chung_tu_id": receipt_id},
+    )
+    assert reconcile_res.status_code == 200, reconcile_res.text
+    data = reconcile_res.json()
+    assert data["trang_thai"] == "da_doi_soat"
+    assert data["matched_chung_tu_loai"] == "phieu_thu"
+    assert data["matched_chung_tu_id"] == receipt_id
+
 
 def test_cancel_purchase_invoice_404(client, db_session):
     """Hủy HĐ không tồn tại → 404."""
@@ -626,6 +859,98 @@ def test_trial_balance_returns_list(client, db_session):
 
 
 # ─── Tài sản cố định ─────────────────────────────────────────────────────────
+
+def test_production_cost_period_collects_production_data(client, db_session):
+    pn = _make_phap_nhan(db_session, "PN_COST1")
+    px = _make_phan_xuong(db_session, pn, "PX_COST1")
+    wh_nvl = _make_warehouse(db_session, px, "WH_COST_NVL", "NVL_PHU")
+    wh_tp = _make_warehouse(db_session, px, "WH_COST_TP", "THANH_PHAM")
+    order = ProductionOrder(
+        so_lenh="LSX-COST-001",
+        ngay_lenh=date.today(),
+        phap_nhan_id=pn.id,
+        phan_xuong_id=px.id,
+    )
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(ProductionOrderItem(
+        production_order_id=order.id,
+        ten_hang="Hop carton test",
+        so_luong_ke_hoach=Decimal("100"),
+        so_luong_hoan_thanh=Decimal("0"),
+    ))
+    mi = MaterialIssue(
+        so_phieu="XI-COST-001",
+        ngay_xuat=date.today(),
+        production_order_id=order.id,
+        warehouse_id=wh_nvl.id,
+        trang_thai="da_xuat",
+    )
+    db_session.add(mi)
+    db_session.flush()
+    db_session.add(MaterialIssueItem(
+        issue_id=mi.id,
+        ten_hang="Keo dan",
+        so_luong_thuc_xuat=Decimal("10"),
+        don_gia=Decimal("2000"),
+    ))
+    db_session.add(ProductionOutput(
+        so_phieu="TP-COST-001",
+        ngay_nhap=date.today(),
+        production_order_id=order.id,
+        warehouse_id=wh_tp.id,
+        ten_hang="Hop carton test",
+        so_luong_nhap=Decimal("50"),
+        don_gia_xuat_xuong=Decimal("0"),
+    ))
+    db_session.commit()
+
+    create_res = client.post("/api/accounting/production-cost-periods", json={
+        "tu_ngay": date.today().isoformat(),
+        "den_ngay": date.today().isoformat(),
+        "phap_nhan_id": pn.id,
+        "phan_xuong_id": px.id,
+    })
+    assert create_res.status_code == 201, create_res.text
+    period_id = create_res.json()["id"]
+
+    collect_res = client.post(f"/api/accounting/production-cost-periods/{period_id}/collect-inputs")
+    assert collect_res.status_code == 200, collect_res.text
+    period = collect_res.json()["period"]
+    assert float(period["tong_nvl"]) == 20000.0
+    assert float(period["tong_san_luong"]) == 50.0
+
+    preview_res = client.get(f"/api/accounting/production-cost-periods/{period_id}/allocation-preview")
+    assert preview_res.status_code == 200, preview_res.text
+    preview = preview_res.json()
+    assert preview["warnings"] == []
+    assert float(preview["allocations"][0]["gia_thanh_don_vi"]) == 400.0
+
+
+def test_production_cost_period_close_audits(client, db_session):
+    pn = _make_phap_nhan(db_session, "PN_COST2")
+    px = _make_phan_xuong(db_session, pn, "PX_COST2")
+    db_session.commit()
+
+    create_res = client.post("/api/accounting/production-cost-periods", json={
+        "tu_ngay": date.today().isoformat(),
+        "den_ngay": date.today().isoformat(),
+        "phap_nhan_id": pn.id,
+        "phan_xuong_id": px.id,
+    })
+    assert create_res.status_code == 201, create_res.text
+    period_id = create_res.json()["id"]
+
+    close_res = client.post(f"/api/accounting/production-cost-periods/{period_id}/close")
+    assert close_res.status_code == 200, close_res.text
+    assert close_res.json()["trang_thai"] == "da_chot"
+    audit = db_session.query(AuditLog).filter(
+        AuditLog.bang == "production_cost_periods",
+        AuditLog.ban_ghi_id == str(period_id),
+        AuditLog.hanh_dong == "close",
+    ).first()
+    assert audit is not None
+
 
 def test_create_fixed_asset(client, db_session):
     """POST /api/accounting/fixed-assets → 200, trang_thai = dang_su_dung."""

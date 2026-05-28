@@ -199,6 +199,11 @@ def calculate_dien_tich(
     # A7 uses half the A1 offset (kho1 uses Rộng/2)
     kho_offset_a7 = {3: 0.1, 5: 0.2, 7: 0.4}.get(so_lop, 0.1)
 
+    # 2 mảnh: áp dụng cho A1/A3/A7 khi ≥3 lớp và dai_kh > 270 cm
+    # Mỗi mảnh có dai_kh_manh = (D+R)+3, dien_tich tổng = 2 × kho_kh × dai_kh_manh
+    HAI_MANH_THRESHOLD = 270
+    hai_manh = False
+
     if loai == "TAM":
         kho1 = rong + cao + 3
         dai1 = (dai + rong) * 2 + 5
@@ -211,23 +216,37 @@ def calculate_dien_tich(
 
     elif loai == "A1":
         kho1 = rong + cao + 3
-        dai1 = (dai + rong) * 2 + 5
         so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
         kho_tt = kho1 * so_dao + 1.8
-        dai_tt = dai_tt_std
         kho_kh = rong + cao + kho_offset_a1
         dai_kh = (dai + rong) * 2 + 3
-        dien_tich = kho_kh * dai_kh / 10000
+        if so_lop >= 3 and dai_kh > HAI_MANH_THRESHOLD:
+            hai_manh = True
+            dai_kh  = (dai + rong) + 3
+            dai1    = (dai + rong) + 5
+            dai_tt  = (dai + rong) + (5 if so_lop == 7 else 4)
+            dien_tich = 2 * kho_kh * dai_kh / 10000
+        else:
+            dai1 = (dai + rong) * 2 + 5
+            dai_tt = dai_tt_std
+            dien_tich = kho_kh * dai_kh / 10000
 
     elif loai == "A3":
         kho1 = 2 * rong + cao + 3
-        dai1 = (dai + rong) * 2 + 5
         so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
         kho_tt = kho1 * so_dao + 1.8
-        dai_tt = dai_tt_std
-        kho_kh = 2 * rong + cao        # KH: (Rộng×2)+Cao — no layer offset
+        kho_kh = 2 * rong + cao
         dai_kh = (dai + rong) * 2 + 3
-        dien_tich = kho_kh * dai_kh / 10000
+        if so_lop >= 3 and dai_kh > HAI_MANH_THRESHOLD:
+            hai_manh = True
+            dai_kh  = (dai + rong) + 3
+            dai1    = (dai + rong) + 5
+            dai_tt  = (dai + rong) + (5 if so_lop == 7 else 4)
+            dien_tich = 2 * kho_kh * dai_kh / 10000
+        else:
+            dai1 = (dai + rong) * 2 + 5
+            dai_tt = dai_tt_std
+            dien_tich = kho_kh * dai_kh / 10000
 
     elif loai == "A5":
         kho1 = 2 * cao + rong + 2
@@ -242,13 +261,20 @@ def calculate_dien_tich(
     elif loai == "A7":
         # Thùng 1 nắp
         kho1 = rong / 2 + cao + 3
-        dai1 = (dai + rong) * 2 + 5
         so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
         kho_tt = kho1 * so_dao + 1.8
-        dai_tt = dai_tt_std
         kho_kh = rong / 2 + cao + kho_offset_a7
         dai_kh = (dai + rong) * 2 + 3
-        dien_tich = kho_kh * dai_kh / 10000
+        if so_lop >= 3 and dai_kh > HAI_MANH_THRESHOLD:
+            hai_manh = True
+            dai_kh  = (dai + rong) + 3
+            dai1    = (dai + rong) + 5
+            dai_tt  = (dai + rong) + (5 if so_lop == 7 else 4)
+            dien_tich = 2 * kho_kh * dai_kh / 10000
+        else:
+            dai1 = (dai + rong) * 2 + 5
+            dai_tt = dai_tt_std
+            dien_tich = kho_kh * dai_kh / 10000
 
     elif loai == "GOI_GIUA":
         kho1 = 2 * cao + rong + 3
@@ -285,6 +311,7 @@ def calculate_dien_tich(
         "kho_kh": round(kho_kh, 4),
         "dai_kh": round(dai_kh, 4),
         "dien_tich": round(dien_tich, 6),
+        "hai_manh": hai_manh,
     }
 
 

@@ -81,7 +81,7 @@ export default function BankReconciliationPage() {
       setSelectedTx(null)
       invalidate()
     },
-    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Không đối soát được'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Không đối soát được'),
   })
 
   const unreconcileMut = useMutation({
@@ -90,7 +90,7 @@ export default function BankReconciliationPage() {
       message.success('Đã hủy đối soát')
       invalidate()
     },
-    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Không hủy được đối soát'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Không hủy được đối soát'),
   })
 
   const ignoreMut = useMutation({
@@ -99,7 +99,7 @@ export default function BankReconciliationPage() {
       message.success('Đã bỏ qua giao dịch')
       invalidate()
     },
-    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Không bỏ qua được'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Không bỏ qua được'),
   })
 
   const columns: ColumnsType<BankTransaction> = [

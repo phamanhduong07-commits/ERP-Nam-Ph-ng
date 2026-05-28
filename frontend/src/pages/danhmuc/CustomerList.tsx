@@ -331,7 +331,7 @@ export default function CustomerList() {
         visible={importVisible}
         onCancel={() => setImportVisible(false)}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
-        importFn={(file, commit) => customersApi.import(file, commit)}
+        importFn={(file, commit) => customersApi.import(file, commit).then(r => r.data as { total?: number; created?: number; updated?: number; skipped?: number; errors?: number | string[]; rows?: Array<{ row?: number; status?: string; message?: string }> })}
         templateUrl="/api/customers/import-template"
       />
     </div>

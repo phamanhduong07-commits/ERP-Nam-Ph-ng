@@ -27,7 +27,7 @@ export default function PhapNhanList() {
 
   const { data: phanXuongList = [] } = useQuery<PhanXuongItem[]>({
     queryKey: ['phan-xuong-list'],
-    queryFn: () => theoDoiApi.listPhanXuong().then((r: unknown) => r.data),
+    queryFn: () => theoDoiApi.listPhanXuong().then(r => r.data),
     staleTime: 300_000,
   })
 

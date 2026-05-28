@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { ApiError } from '../../../../../../../../api/types'
+import React, { useState } from 'react'
+import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Drawer, Form, Input, List, Select, Space, Table, Tabs, Typography, message, Row, Col, Tag, Avatar, InputNumber
@@ -43,7 +43,7 @@ export default function EmployeeListPage() {
 
   const { data: phanXuongList = [] } = useQuery({
     queryKey: ['phan-xuong-list'],
-    queryFn: () => theoDoiApi.listPhanXuong().then((r: unknown) => r.data),
+    queryFn: () => theoDoiApi.listPhanXuong().then((r: { data: { id: number; ten_xuong?: string }[] }) => r.data),
   })
 
   const { data: depts = [] } = useQuery({
@@ -72,7 +72,7 @@ export default function EmployeeListPage() {
       setEditing(null)
       form.resetFields()
     },
-    onError: (e: unknown) => message.error(e?.response?.data?.detail || 'Lỗi lưu dữ liệu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi lưu dữ liệu'),
   })
 
   const issueAccMut = useMutation({
@@ -208,7 +208,7 @@ export default function EmployeeListPage() {
       {expiring.length > 0 && (
         <Alert
           message={`Có ${expiring.length} nhân viên sắp hết hạn hợp đồng lao động!`}
-          description={expiring.map(c => `${c.ho_ten} (${dayjs(c.ngay_het_han).format('DD/MM/YYYY')})`).join(', ')}
+          description={expiring.map(c => `${c.ho_ten as string} (${dayjs(c.ngay_het_han as string).format('DD/MM/YYYY')})`).join(', ')}
           type="warning"
           showIcon
           icon={<WarningOutlined />}
@@ -227,21 +227,21 @@ export default function EmployeeListPage() {
               placeholder="Tìm tên, mã NV..."
               prefix={<SearchOutlined />}
               style={{ width: 200 }}
-              onPressEnter={(e: unknown) => setSearch(e.target.value)}
-              onBlur={(e: unknown) => setSearch(e.target.value)}
+              onPressEnter={(e: React.KeyboardEvent<HTMLInputElement>) => setSearch((e.target as HTMLInputElement).value)}
+              onBlur={(e: React.FocusEvent<HTMLInputElement>) => setSearch(e.target.value)}
             />
             <Select
               placeholder="Chọn pháp nhân"
               style={{ width: 180 }}
               allowClear
-              options={(phapNhanList || []).map((p: unknown) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+              options={(phapNhanList || []).map((p) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
               onChange={v => setFilters(f => ({ ...f, phap_nhan_id: v }))}
             />
             <Select
               placeholder="Chọn xưởng"
               style={{ width: 150 }}
               allowClear
-              options={(phanXuongList || []).map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))}
+              options={(phanXuongList || []).map((p) => ({ value: p.id, label: p.ten_xuong }))}
               onChange={v => setFilters(f => ({ ...f, phan_xuong_id: v }))}
             />
             <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
@@ -335,7 +335,7 @@ export default function EmployeeListPage() {
                   </Col>
                   <Col span={12}>
                     <Form.Item name="phan_xuong_id" label="Xưởng / Nhà máy">
-                      <Select options={phanXuongList.map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))} />
+                      <Select options={phanXuongList.map((p) => ({ value: p.id, label: p.ten_xuong }))} />
                     </Form.Item>
                   </Col>
                 </Row>
@@ -343,12 +343,12 @@ export default function EmployeeListPage() {
                 <Row gutter={16}>
                   <Col span={12}>
                     <Form.Item name="bo_phan_id" label="Phòng ban / Bộ phận">
-                      <Select options={(depts || []).map((d: unknown) => ({ value: d.id, label: d.ten_bo_phan }))} />
+                      <Select options={(depts || []).map((d) => ({ value: d.id, label: d.ten_bo_phan }))} />
                     </Form.Item>
                   </Col>
                   <Col span={12}>
                     <Form.Item name="chuc_vu_id" label="Chức vụ">
-                      <Select options={(positions || []).map((p: unknown) => ({ value: p.id, label: p.ten_chuc_vu }))} />
+                      <Select options={(positions || []).map((p) => ({ value: p.id, label: p.ten_chuc_vu }))} />
                     </Form.Item>
                   </Col>
                 </Row>
@@ -399,16 +399,16 @@ export default function EmployeeListPage() {
             children: (
               <List
                 dataSource={history}
-                renderItem={(item: unknown) => (
+                renderItem={(item: Record<string, unknown>) => (
                   <List.Item>
                     <List.Item.Meta
-                      title={<Text strong>{item.loai === 'he_so' ? 'Thay đổi Hệ số cá nhân' : item.loai}</Text>}
+                      title={<Text strong>{item.loai === 'he_so' ? 'Thay đổi Hệ số cá nhân' : String(item.loai ?? '')}</Text>}
                       description={
                         <div>
-                          <Tag color="orange">{item.gia_tri_cu}</Tag> {'->'} <Tag color="green">{item.gia_tri_moi}</Tag>
+                          <Tag color="orange">{String(item.gia_tri_cu ?? '')}</Tag> {'->'} <Tag color="green">{String(item.gia_tri_moi ?? '')}</Tag>
                           <br />
                           <Text type="secondary" style={{ fontSize: '12px' }}>
-                            {dayjs(item.created_at).format('DD/MM/YYYY HH:mm')} - Lý do: {item.ly_do}
+                            {dayjs(item.created_at as string).format('DD/MM/YYYY HH:mm')} - Lý do: {String(item.ly_do ?? '')}
                           </Text>
                         </div>
                       }
@@ -451,15 +451,15 @@ export default function EmployeeListPage() {
                 // Giả lập gửi lên API
                 try {
                   await hrApi.bulkCreateEmployees(validData)
-                  if (validData.some((row: unknown) => row.luong_co_ban || row.phu_cap_chuyen_can || row.phu_cap_trach_nhiem || row.phu_cap_nha_o_com || row.phu_cap_dien_thoai || row.phu_cap_khac)) {
+                  if (validData.some((row) => (row as Record<string, unknown>).luong_co_ban || (row as Record<string, unknown>).phu_cap_chuyen_can || (row as Record<string, unknown>).phu_cap_trach_nhiem || (row as Record<string, unknown>).phu_cap_nha_o_com || (row as Record<string, unknown>).phu_cap_dien_thoai || (row as Record<string, unknown>).phu_cap_khac)) {
                     await hrApi.importContractAllowances(validData)
                   }
                   message.success(`Đã import thành công ${validData.length} nhân viên`)
                   setImportOpen(false)
                   setImportData([])
                   qc.invalidateQueries({ queryKey: ['hr-employees'] })
-                } catch (e) {
-                  message.error(e?.response?.data?.detail?.message || (e as ApiError)?.response?.data?.detail || 'Import nhan vien that bai')
+                } catch (e: unknown) {
+                  message.error((e as ApiError)?.response?.data?.detail || 'Import nhan vien that bai')
                 }
               }}
             >
@@ -487,13 +487,14 @@ export default function EmployeeListPage() {
                   
                   // Validation logic
                   const validated = data.map((row: unknown) => {
+                    const r = row as Record<string, unknown>
                     let error = ''
-                    if (!row.ma_nv) error = 'Thiếu mã nhân viên'
-                    if (!row.ho_ten) error = 'Thiếu họ tên'
-                    if (row.he_so_ca_nhan && (row.he_so_ca_nhan < 1 || row.he_so_ca_nhan > 3)) error = 'Hệ số phải từ 1.0 - 3.0'
+                    if (!r.ma_nv) error = 'Thiếu mã nhân viên'
+                    if (!r.ho_ten) error = 'Thiếu họ tên'
+                    if (r.he_so_ca_nhan && (Number(r.he_so_ca_nhan) < 1 || Number(r.he_so_ca_nhan) > 3)) error = 'Hệ số phải từ 1.0 - 3.0'
                     
                     return {
-                      ...row,
+                      ...r,
                       _error: error,
                       _status: error ? 'error' : 'success'
                     }
@@ -511,8 +512,8 @@ export default function EmployeeListPage() {
           dataSource={importData}
           pagination={false}
           columns={[
-            { title: 'Trạng thái', dataIndex: '_status', width: 100, render: (v, r) => (
-              <Tag color={v === 'success' ? 'green' : 'red'}>{v === 'success' ? 'Hợp lệ' : r._error}</Tag>
+            { title: 'Trạng thái', dataIndex: '_status', width: 100, render: (v: string, r: Record<string, unknown>) => (
+              <Tag color={v === 'success' ? 'green' : 'red'}>{v === 'success' ? 'Hợp lệ' : r._error as string}</Tag>
             )},
             { title: 'Mã NV', dataIndex: 'ma_nv' },
             { title: 'Họ tên', dataIndex: 'ho_ten' },

@@ -11,10 +11,13 @@ from app.models.accounting import (
     PurchaseInvoice, CashReceipt, CashPayment,
     DebtLedgerEntry, OpeningBalance, JournalEntry, JournalEntryLine,
     CustomerRefundVoucher, WorkshopPayroll, FixedAsset,
+    ProductCost, ProductionCostAllocation, ProductionCostInput, ProductionCostPeriod,
 )
+from app.models.auth import AuditLog
 from app.models.master import Customer, Supplier, PhanXuong
 from app.models.purchase import PurchaseOrder
-from app.models.warehouse_doc import GoodsReceipt, DeliveryOrder
+from app.models.production import ProductionOrder
+from app.models.warehouse_doc import GoodsReceipt, DeliveryOrder, MaterialIssue, ProductionOutput
 from app.schemas.accounting import (
     PurchaseInvoiceCreate,
     CashReceiptCreate,
@@ -26,10 +29,60 @@ from app.schemas.accounting import (
     CustomerRefundVoucherUpdate,
     WorkshopPayrollCreate,
     FixedAssetCreate,
+    ProductionCostPeriodCreate,
 )
 from app.utils.log import get_logger
 
 logger = get_logger(__name__)
+
+CORE_CHART_OF_ACCOUNTS: tuple[tuple[str, str, str, int, str | None], ...] = (
+    ("111", "Tien mat", "TSNO", 1, None),
+    ("112", "Tien gui ngan hang", "TSNO", 1, None),
+    ("131", "Phai thu cua khach hang", "TSNO", 1, None),
+    ("133", "Thue GTGT duoc khau tru", "TSNO", 1, None),
+    ("1331", "Thue GTGT dau vao duoc khau tru", "TSNO", 2, "133"),
+    ("136", "Phai thu noi bo", "TSNO", 1, None),
+    ("1368", "Phai thu noi bo khac", "TSNO", 2, "136"),
+    ("151", "Hang mua dang di duong", "TSNO", 1, None),
+    ("152", "Nguyen lieu, vat lieu", "TSNO", 1, None),
+    ("1521", "Nguyen vat lieu chinh", "TSNO", 2, "152"),
+    ("1522", "Nguyen vat lieu phu", "TSNO", 2, "152"),
+    ("153", "Cong cu, dung cu", "TSNO", 1, None),
+    ("154", "Chi phi san xuat kinh doanh do dang", "TSNO", 1, None),
+    ("155", "Thanh pham", "TSNO", 1, None),
+    ("211", "Tai san co dinh huu hinh", "TSNO", 1, None),
+    ("214", "Hao mon tai san co dinh", "TSCO", 1, None),
+    ("331", "Phai tra nguoi ban", "TSCO", 1, None),
+    ("333", "Thue va cac khoan phai nop nha nuoc", "TSCO", 1, None),
+    ("3331", "Thue GTGT phai nop", "TSCO", 2, "333"),
+    ("334", "Phai tra nguoi lao dong", "TSCO", 1, None),
+    ("336", "Phai tra noi bo", "TSCO", 1, None),
+    ("3368", "Phai tra noi bo khac", "TSCO", 2, "336"),
+    ("338", "Phai tra, phai nop khac", "TSCO", 1, None),
+    ("411", "Von dau tu cua chu so huu", "VONSH", 1, None),
+    ("421", "Loi nhuan sau thue chua phan phoi", "VONSH", 1, None),
+    ("4212", "Loi nhuan sau thue chua phan phoi nam nay", "VONSH", 2, "421"),
+    ("511", "Doanh thu ban hang va cung cap dich vu", "DOANHTHU", 1, None),
+    ("5111", "Doanh thu ban hang ben ngoai", "DOANHTHU", 2, "511"),
+    ("5112", "Doanh thu noi bo", "DOANHTHU", 2, "511"),
+    ("515", "Doanh thu hoat dong tai chinh", "DOANHTHU", 1, None),
+    ("521", "Cac khoan giam tru doanh thu", "DOANHTHU", 1, None),
+    ("621", "Chi phi nguyen lieu, vat lieu truc tiep", "CHIPHI", 1, None),
+    ("622", "Chi phi nhan cong truc tiep", "CHIPHI", 1, None),
+    ("627", "Chi phi san xuat chung", "CHIPHI", 1, None),
+    ("632", "Gia von hang ban", "CHIPHI", 1, None),
+    ("6321", "Gia von ban hang ben ngoai", "CHIPHI", 2, "632"),
+    ("6322", "Gia von noi bo", "CHIPHI", 2, "632"),
+    ("635", "Chi phi tai chinh", "CHIPHI", 1, None),
+    ("641", "Chi phi ban hang", "CHIPHI", 1, None),
+    ("642", "Chi phi quan ly doanh nghiep", "CHIPHI", 1, None),
+    ("711", "Thu nhap khac", "DOANHTHU", 1, None),
+    ("811", "Chi phi khac", "CHIPHI", 1, None),
+    ("911", "Xac dinh ket qua kinh doanh", "CHIPHI", 1, None),
+)
+
+INTERNAL_ACCOUNTS = {"1368", "3368", "5112", "6322"}
+VAT_ACCOUNTS = {"1331", "3331"}
 
 
 class AccountingService:
@@ -70,24 +123,149 @@ class AccountingService:
     def __init__(self, db: Session):
         self.db = db
 
+    def ensure_core_chart_of_accounts(self) -> dict:
+        created = 0
+        updated = 0
+        for so_tk, ten_tk, loai_tk, cap, so_tk_cha in CORE_CHART_OF_ACCOUNTS:
+            acc = self.db.query(ChartOfAccounts).filter(ChartOfAccounts.so_tk == so_tk).first()
+            if not acc:
+                self.db.add(ChartOfAccounts(
+                    so_tk=so_tk,
+                    ten_tk=ten_tk,
+                    loai_tk=loai_tk,
+                    cap=cap,
+                    so_tk_cha=so_tk_cha,
+                    trang_thai=True,
+                ))
+                created += 1
+            else:
+                changed = False
+                if not acc.ten_tk:
+                    acc.ten_tk = ten_tk
+                    changed = True
+                if not acc.loai_tk:
+                    acc.loai_tk = loai_tk
+                    changed = True
+                if not acc.cap:
+                    acc.cap = cap
+                    changed = True
+                if so_tk_cha and not acc.so_tk_cha:
+                    acc.so_tk_cha = so_tk_cha
+                    changed = True
+                if changed:
+                    updated += 1
+        self.db.flush()
+        return {
+            "created": created,
+            "updated": updated,
+            "internal_accounts": sorted(INTERNAL_ACCOUNTS),
+            "vat_accounts": sorted(VAT_ACCOUNTS),
+        }
+
+    def _audit(
+        self,
+        hanh_dong: str,
+        bang: str,
+        ban_ghi_id: int | str | None,
+        user_id: int | None = None,
+        du_lieu_cu: dict | None = None,
+        du_lieu_moi: dict | None = None,
+    ) -> None:
+        self.db.add(AuditLog(
+            user_id=user_id,
+            hanh_dong=hanh_dong[:20],
+            bang=bang,
+            ban_ghi_id=str(ban_ghi_id) if ban_ghi_id is not None else None,
+            du_lieu_cu=du_lieu_cu,
+            du_lieu_moi=du_lieu_moi,
+        ))
+
+    def _account_exists_and_active(self, so_tk: str) -> bool:
+        return self.db.query(ChartOfAccounts).filter(
+            ChartOfAccounts.so_tk == so_tk,
+            ChartOfAccounts.trang_thai.is_(True),
+        ).first() is not None
+
+    def _validate_journal_entry(
+        self,
+        loai_but_toan: str,
+        chung_tu_loai: str | None,
+        chung_tu_id: int | None,
+        lines: list[dict[str, object]],
+        phap_nhan_id: int | None,
+        phan_xuong_id: int | None,
+    ) -> tuple[Decimal, Decimal]:
+        if not lines or len(lines) < 2:
+            raise HTTPException(400, "But toan phai co it nhat 2 dong")
+        if chung_tu_loai and chung_tu_id is None and chung_tu_loai not in {"tong_hop", "phan_bo_chi_phi"}:
+            raise HTTPException(400, "But toan tu dong phai co chung_tu_id")
+
+        tong_no = Decimal("0")
+        tong_co = Decimal("0")
+        account_codes: set[str] = set()
+        line_has_internal_account = False
+        line_has_vat_account = False
+
+        for idx, line in enumerate(lines, 1):
+            so_tk = str(line.get("so_tk") or "").strip()
+            if not so_tk:
+                raise HTTPException(400, f"Dong {idx} thieu tai khoan")
+            account_codes.add(so_tk)
+
+            no = Decimal(str(line.get("so_tien_no", 0) or 0))
+            co = Decimal(str(line.get("so_tien_co", 0) or 0))
+            if no < 0 or co < 0:
+                raise HTTPException(400, f"Dong {idx} co so tien am")
+            if no == 0 and co == 0:
+                raise HTTPException(400, f"Dong {idx} phai co so tien No hoac Co")
+            if no > 0 and co > 0:
+                raise HTTPException(400, f"Dong {idx} khong duoc vua ghi No vua ghi Co")
+
+            if so_tk in INTERNAL_ACCOUNTS:
+                line_has_internal_account = True
+            if so_tk in VAT_ACCOUNTS:
+                line_has_vat_account = True
+
+            tong_no += no
+            tong_co += co
+
+        if tong_no != tong_co:
+            raise HTTPException(400, f"But toan khong can: Tong No={tong_no}, Tong Co={tong_co}")
+
+        missing_accounts = sorted(code for code in account_codes if not self._account_exists_and_active(code))
+        if missing_accounts:
+            raise HTTPException(400, f"Tai khoan khong ton tai hoac da ngung dung: {', '.join(missing_accounts)}")
+
+        if loai_but_toan in {"noi_bo", "giao_dich_noi_bo"} and not line_has_internal_account:
+            raise HTTPException(400, "But toan noi bo phai dung tai khoan noi bo")
+        # VAT reports can filter by phap_nhan_id when present. Legacy/manual data may
+        # still omit it, so do not block posting at the journal layer.
+        if loai_but_toan in {"luong_nhan_cong", "khau_hao_ts", "phan_bo_chi_phi"}:
+            has_workshop_line = any(line.get("phan_xuong_id") or phan_xuong_id for line in lines)
+            if not has_workshop_line:
+                raise HTTPException(400, "But toan chi phi xuong phai co phan_xuong_id")
+
+        return tong_no, tong_co
+
     # ─────────────────────────────────────────────
     # Sinh số phiếu: PREFIX-YYYYMM-XXXX
     # ─────────────────────────────────────────────
     def _gen_so_phieu(self, prefix: str, model) -> str:
-        full_prefix = f"{prefix}{date.today().strftime('%Y%m')}"
+        full_prefix = f"{prefix}-{date.today().strftime('%Y%m')}"
         last = (
             self.db.query(model)
             .filter(model.so_phieu.like(f"{full_prefix}%"))
             .order_by(desc(model.so_phieu))
             .first()
         )
-        seq = int(last.so_phieu[-4:]) + 1 if last else 1
+        seq = int(last.so_phieu.rsplit("-", 1)[-1]) + 1 if last else 1
         return f"{full_prefix}-{seq:04d}"
 
     # ─────────────────────────────────────────────
     # PHIẾU THU
     # ─────────────────────────────────────────────
     def create_cash_receipt(self, data: CashReceiptCreate, user_id: int) -> CashReceipt:
+        self.ensure_core_chart_of_accounts()
         # Validate số tiền không vượt con_lai
         if data.sales_invoice_id:
             invoice = self.db.get(SalesInvoice, data.sales_invoice_id)
@@ -163,20 +341,32 @@ class AccountingService:
             phap_nhan_id=receipt.phap_nhan_id,
         )
         self.db.add(entry)
+        self._audit(
+            "create",
+            "cash_receipts",
+            receipt.id,
+            user_id=user_id,
+            du_lieu_moi={
+                "so_phieu": receipt.so_phieu,
+                "trang_thai": receipt.trang_thai,
+                "so_tien": str(receipt.so_tien),
+                "phap_nhan_id": receipt.phap_nhan_id,
+            },
+        )
         self.db.commit()
         self.db.refresh(receipt)
         logger.info("created cash_receipt id=%s so_phieu=%s by user=%s", receipt.id, receipt.so_phieu, user_id)
         return receipt
 
     def _gen_so_but_toan(self, prefix: str) -> str:
-        full_prefix = f"{prefix}{date.today().strftime('%Y%m')}"
+        full_prefix = f"{prefix}-{date.today().strftime('%Y%m')}"
         last = (
             self.db.query(JournalEntry)
             .filter(JournalEntry.so_but_toan.like(f"{full_prefix}%"))
             .order_by(desc(JournalEntry.so_but_toan))
             .first()
         )
-        seq = int(last.so_but_toan[-4:]) + 1 if last else 1
+        seq = int(last.so_but_toan.rsplit("-", 1)[-1]) + 1 if last else 1
         return f"{full_prefix}-{seq:04d}"
 
     def _create_journal_entry(
@@ -189,14 +379,24 @@ class AccountingService:
         lines: list[dict[str, object]],
         phap_nhan_id: int | None = None,
         phan_xuong_id: int | None = None,
+        user_id: int | None = None,
     ) -> JournalEntry:
+        self.ensure_core_chart_of_accounts()
+        tong_no, tong_co = self._validate_journal_entry(
+            loai_but_toan=loai_but_toan,
+            chung_tu_loai=chung_tu_loai,
+            chung_tu_id=chung_tu_id,
+            lines=lines,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=phan_xuong_id,
+        )
         entry = JournalEntry(
             so_but_toan=self._gen_so_but_toan('BT'),
             ngay_but_toan=ngay,
             dien_giai=dien_giai,
             loai_but_toan=loai_but_toan,
-            tong_no=sum(float(l['so_tien_no']) for l in lines),
-            tong_co=sum(float(l['so_tien_co']) for l in lines),
+            tong_no=tong_no,
+            tong_co=tong_co,
             chung_tu_loai=chung_tu_loai,
             chung_tu_id=chung_tu_id,
             phap_nhan_id=phap_nhan_id,
@@ -216,6 +416,22 @@ class AccountingService:
             )
             self.db.add(entry_line)
         self.db.flush()
+        self._audit(
+            "create",
+            "journal_entries",
+            entry.id,
+            user_id=user_id,
+            du_lieu_moi={
+                "so_but_toan": entry.so_but_toan,
+                "loai_but_toan": entry.loai_but_toan,
+                "chung_tu_loai": entry.chung_tu_loai,
+                "chung_tu_id": entry.chung_tu_id,
+                "tong_no": str(entry.tong_no),
+                "tong_co": str(entry.tong_co),
+                "phap_nhan_id": entry.phap_nhan_id,
+                "phan_xuong_id": entry.phan_xuong_id,
+            },
+        )
         return entry
 
     def _post_cash_receipt_journal(self, receipt: CashReceipt) -> None:
@@ -398,7 +614,12 @@ class AccountingService:
             phan_xuong_id=inv.phan_xuong_id
         )
 
-    def cancel_purchase_invoice(self, inv_id: int) -> "PurchaseInvoice":
+    def cancel_purchase_invoice(
+        self,
+        inv_id: int,
+        user_id: int | None = None,
+        ly_do: str | None = None,
+    ) -> "PurchaseInvoice":
         inv = self.db.get(PurchaseInvoice, inv_id)
         if not inv:
             logger.warning("purchase_invoice id=%s not found", inv_id)
@@ -407,13 +628,53 @@ class AccountingService:
             return inv
         if float(inv.da_thanh_toan or 0) > 0:
             raise HTTPException(400, "Không thể hủy hóa đơn đã có thanh toán")
+        self._reverse_journal_entries("purchase_invoices", inv.id, user_id=user_id, ly_do=ly_do)
+        original_debt = self.db.query(DebtLedgerEntry).filter(
+            DebtLedgerEntry.chung_tu_loai == "hoa_don_mua",
+            DebtLedgerEntry.chung_tu_id == inv.id,
+            DebtLedgerEntry.loai == "tang_no",
+            DebtLedgerEntry.doi_tuong == "nha_cung_cap",
+        ).first()
+        existing_reversal = self.db.query(DebtLedgerEntry).filter(
+            DebtLedgerEntry.chung_tu_loai == "huy_hoa_don_mua",
+            DebtLedgerEntry.chung_tu_id == inv.id,
+            DebtLedgerEntry.loai == "giam_no",
+            DebtLedgerEntry.doi_tuong == "nha_cung_cap",
+        ).first()
+        if original_debt and not existing_reversal:
+            self.db.add(DebtLedgerEntry(
+                ngay=date.today(),
+                loai="giam_no",
+                doi_tuong="nha_cung_cap",
+                supplier_id=inv.supplier_id,
+                chung_tu_loai="huy_hoa_don_mua",
+                chung_tu_id=inv.id,
+                so_tien=original_debt.so_tien,
+                ghi_chu=f"Huy hoa don mua {inv.so_hoa_don or inv.id}",
+                phap_nhan_id=inv.phap_nhan_id,
+            ))
+        old_status = inv.trang_thai
         inv.trang_thai = "huy"
+        self._audit(
+            "cancel",
+            "purchase_invoices",
+            inv.id,
+            user_id=user_id,
+            du_lieu_cu={"trang_thai": old_status},
+            du_lieu_moi={"trang_thai": "huy", "ly_do": ly_do},
+        )
         self.db.commit()
         self.db.refresh(inv)
         logger.info("cancelled purchase_invoice id=%s so_hoa_don=%s", inv_id, inv.so_hoa_don)
         return inv
 
-    def _reverse_journal_entries(self, chung_tu_loai: str, chung_tu_id: int) -> None:
+    def _reverse_journal_entries(
+        self,
+        chung_tu_loai: str,
+        chung_tu_id: int,
+        user_id: int | None = None,
+        ly_do: str | None = None,
+    ) -> list[JournalEntry]:
         originals = (
             self.db.query(JournalEntry)
             .filter(
@@ -423,6 +684,7 @@ class AccountingService:
             )
             .all()
         )
+        reversed_entries = []
         for orig in originals:
             reversed_lines = [
                 {
@@ -435,7 +697,7 @@ class AccountingService:
                 }
                 for line in orig.lines
             ]
-            self._create_journal_entry(
+            reverse = self._create_journal_entry(
                 ngay=date.today(),
                 dien_giai=f"Đảo ngược {orig.dien_giai}",
                 loai_but_toan='dao_nguoc',
@@ -444,7 +706,22 @@ class AccountingService:
                 lines=reversed_lines,
                 phap_nhan_id=orig.phap_nhan_id,
                 phan_xuong_id=orig.phan_xuong_id,
+                user_id=user_id,
             )
+            reversed_entries.append(reverse)
+            self._audit(
+                "reverse",
+                "journal_entries",
+                reverse.id,
+                user_id=user_id,
+                du_lieu_cu={"journal_id": orig.id, "so_but_toan": orig.so_but_toan},
+                du_lieu_moi={
+                    "journal_id": reverse.id,
+                    "so_but_toan": reverse.so_but_toan,
+                    "ly_do": ly_do,
+                },
+            )
+        return reversed_entries
 
     def post_inventory_journal(
         self,
@@ -528,11 +805,24 @@ class AccountingService:
         receipt.nguoi_duyet_id = user_id
         receipt.ngay_duyet = datetime.now(timezone.utc)
         self._post_cash_receipt_journal(receipt)
+        self._audit(
+            "approve",
+            "cash_receipts",
+            receipt.id,
+            user_id=user_id,
+            du_lieu_cu={"trang_thai": "cho_duyet"},
+            du_lieu_moi={"trang_thai": receipt.trang_thai, "ngay_duyet": receipt.ngay_duyet.isoformat()},
+        )
         self.db.commit()
         self.db.refresh(receipt)
         return receipt
 
-    def cancel_receipt(self, receipt_id: int) -> CashReceipt:
+    def cancel_receipt(
+        self,
+        receipt_id: int,
+        user_id: int | None = None,
+        ly_do: str | None = None,
+    ) -> CashReceipt:
         receipt = self.db.get(CashReceipt, receipt_id)
         if not receipt:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
@@ -542,7 +832,7 @@ class AccountingService:
         # Đảo ngược bút toán nếu đã duyệt
         was_approved = receipt.trang_thai == "da_duyet"
         if was_approved:
-            self._reverse_journal_entries("phieu_thu", receipt.id)
+            self._reverse_journal_entries("phieu_thu", receipt.id, user_id=user_id, ly_do=ly_do)
 
         # Hoàn lại da_thanh_toan trên HĐ
         if receipt.sales_invoice_id:
@@ -559,7 +849,16 @@ class AccountingService:
                             "chua_thu" if new_da_tt == 0 else "da_thu_mot_phan"
                         )
 
+        old_status = receipt.trang_thai
         receipt.trang_thai = "huy"
+        self._audit(
+            "cancel",
+            "cash_receipts",
+            receipt.id,
+            user_id=user_id,
+            du_lieu_cu={"trang_thai": old_status},
+            du_lieu_moi={"trang_thai": "huy", "ly_do": ly_do, "was_approved": was_approved},
+        )
         entry = DebtLedgerEntry(
             ngay=date.today(),
             loai="tang_no",
@@ -612,6 +911,7 @@ class AccountingService:
     # HÓA ĐƠN MUA HÀNG
     # ─────────────────────────────────────────────
     def create_purchase_invoice(self, data: PurchaseInvoiceCreate, user_id: int) -> PurchaseInvoice:
+        self.ensure_core_chart_of_accounts()
         supplier = self.db.get(Supplier, data.supplier_id)
         if not supplier:
             raise HTTPException(404, "Không tìm thấy nhà cung cấp")
@@ -673,6 +973,21 @@ class AccountingService:
             ))
 
         self._post_purchase_invoice_journal(inv)
+        self._audit(
+            "create",
+            "purchase_invoices",
+            inv.id,
+            user_id=user_id,
+            du_lieu_moi={
+                "so_hoa_don": inv.so_hoa_don,
+                "trang_thai": inv.trang_thai,
+                "tong_thanh_toan": str(inv.tong_thanh_toan),
+                "co_vat": inv.co_vat,
+                "tien_thue": str(inv.tien_thue),
+                "phap_nhan_id": inv.phap_nhan_id,
+                "phan_xuong_id": inv.phan_xuong_id,
+            },
+        )
 
         self.db.commit()
         self.db.refresh(inv)
@@ -823,6 +1138,7 @@ class AccountingService:
         ))
 
     def create_cash_payment(self, data: CashPaymentCreate, user_id: int) -> CashPayment:
+        self.ensure_core_chart_of_accounts()
         inv = None
         if data.purchase_invoice_id:
             inv = self.db.get(PurchaseInvoice, data.purchase_invoice_id)
@@ -854,6 +1170,20 @@ class AccountingService:
             created_by=user_id,
         )
         self.db.add(payment)
+        self.db.flush()
+        self._audit(
+            "create",
+            "cash_payments",
+            payment.id,
+            user_id=user_id,
+            du_lieu_moi={
+                "so_phieu": payment.so_phieu,
+                "trang_thai": payment.trang_thai,
+                "so_tien": str(payment.so_tien),
+                "phap_nhan_id": payment.phap_nhan_id,
+                "phan_xuong_id": payment.phan_xuong_id,
+            },
+        )
         self.db.commit()
         self.db.refresh(payment)
         logger.info("created cash_payment id=%s so_phieu=%s by user=%s", payment.id, payment.so_phieu, user_id)
@@ -867,17 +1197,31 @@ class AccountingService:
         next_state = transitions.get(p.trang_thai)
         if not next_state:
             raise HTTPException(400, f"Không thể chuyển trạng thái từ {p.trang_thai}")
+        old_status = p.trang_thai
         p.trang_thai = next_state
         if next_state == "da_duyet":
             self._apply_cash_payment_to_invoice_and_debt(p)
             p.nguoi_duyet_id = user_id
             p.ngay_duyet = datetime.now(timezone.utc)
             self._post_cash_payment_journal(p)
+        self._audit(
+            "approve",
+            "cash_payments",
+            p.id,
+            user_id=user_id,
+            du_lieu_cu={"trang_thai": old_status},
+            du_lieu_moi={"trang_thai": p.trang_thai, "ngay_duyet": p.ngay_duyet.isoformat() if p.ngay_duyet else None},
+        )
         self.db.commit()
         self.db.refresh(p)
         return p
 
-    def cancel_payment(self, payment_id: int) -> CashPayment:
+    def cancel_payment(
+        self,
+        payment_id: int,
+        user_id: int | None = None,
+        ly_do: str | None = None,
+    ) -> CashPayment:
         p = self.db.get(CashPayment, payment_id)
         if not p:
             raise HTTPException(404, "Không tìm thấy phiếu chi")
@@ -885,7 +1229,7 @@ class AccountingService:
             return p
         was_approved = p.trang_thai == "da_duyet"
         if was_approved:
-            self._reverse_journal_entries("phieu_chi", p.id)
+            self._reverse_journal_entries("phieu_chi", p.id, user_id=user_id, ly_do=ly_do)
         applied_debt = self.db.query(DebtLedgerEntry).filter(
             DebtLedgerEntry.chung_tu_loai == "phieu_chi",
             DebtLedgerEntry.chung_tu_id == payment_id,
@@ -900,7 +1244,16 @@ class AccountingService:
             DebtLedgerEntry.chung_tu_loai == "phieu_chi",
             DebtLedgerEntry.chung_tu_id == payment_id,
         ).delete(synchronize_session=False)
+        old_status = p.trang_thai
         p.trang_thai = "huy"
+        self._audit(
+            "cancel",
+            "cash_payments",
+            p.id,
+            user_id=user_id,
+            du_lieu_cu={"trang_thai": old_status},
+            du_lieu_moi={"trang_thai": "huy", "ly_do": ly_do, "was_approved": was_approved},
+        )
         self.db.commit()
         self.db.refresh(p)
         return p
@@ -1005,7 +1358,6 @@ class AccountingService:
         ).filter(
             DebtLedgerEntry.doi_tuong == "khach_hang",
             DebtLedgerEntry.loai == "giam_no",
-            DebtLedgerEntry.chung_tu_loai == "phieu_thu",
             DebtLedgerEntry.ngay <= today,
         )
         if phap_nhan_id:
@@ -1278,12 +1630,29 @@ class AccountingService:
         self._mark_overdue_ap()
 
         ap_q = self.db.query(PurchaseInvoice).filter(
-            PurchaseInvoice.trang_thai.notin_(["huy", "da_tt_du"]),
-            PurchaseInvoice.con_lai > 0,
+            PurchaseInvoice.trang_thai != "huy",
+            PurchaseInvoice.ngay_lap <= today,
         )
         if phap_nhan_id:
             ap_q = ap_q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
-        invoices = ap_q.all()
+        invoices = ap_q.order_by(
+            PurchaseInvoice.supplier_id, PurchaseInvoice.han_tt, PurchaseInvoice.ngay_lap, PurchaseInvoice.id
+        ).all()
+
+        credits_q = self.db.query(
+            DebtLedgerEntry.supplier_id,
+            func.coalesce(func.sum(DebtLedgerEntry.so_tien), 0),
+        ).filter(
+            DebtLedgerEntry.doi_tuong == "nha_cung_cap",
+            DebtLedgerEntry.loai == "giam_no",
+            DebtLedgerEntry.ngay <= today,
+        )
+        if phap_nhan_id:
+            credits_q = credits_q.filter(DebtLedgerEntry.phap_nhan_id == phap_nhan_id)
+        credits = credits_q.group_by(DebtLedgerEntry.supplier_id).all()
+        credit_by_supplier: dict[int, Decimal] = {
+            sid: Decimal(str(amount or 0)) for sid, amount in credits if sid
+        }
 
         by_supplier: dict[int, dict] = {}
         for inv in invoices:
@@ -1296,10 +1665,17 @@ class AccountingService:
                     "qua_han_30": Decimal("0"),
                     "qua_han_60": Decimal("0"),
                     "qua_han_90": Decimal("0"),
+                    "credit_left": max(Decimal("0"), credit_by_supplier.get(sid, Decimal("0"))),
                 }
             d = by_supplier[sid]
+            invoice_amount = inv.tong_thanh_toan or Decimal("0")
+            applied = min(d["credit_left"], invoice_amount)
+            d["credit_left"] -= applied
+            con_lai = invoice_amount - applied
+            if con_lai <= 0:
+                continue
+
             so_ngay = (today - inv.han_tt).days if inv.han_tt else 0
-            con_lai = inv.con_lai or Decimal("0")
             if so_ngay <= 0:
                 d["trong_han"] += con_lai
             elif so_ngay <= 30:
@@ -1312,6 +1688,8 @@ class AccountingService:
         result = []
         for d in by_supplier.values():
             tong = d["trong_han"] + d["qua_han_30"] + d["qua_han_60"] + d["qua_han_90"]
+            if tong <= 0:
+                continue
             result.append(APAgingRow(
                 supplier_id=d["supplier_id"],
                 ten_don_vi=d["ten_don_vi"],
@@ -1322,6 +1700,65 @@ class AccountingService:
                 qua_han_90=d["qua_han_90"],
             ))
         return sorted(result, key=lambda r: r.tong_con_lai, reverse=True)
+
+    def get_debt_overdue_alerts(
+        self,
+        as_of_date: date | None = None,
+        phap_nhan_id: int | None = None,
+        limit: int = 20,
+    ) -> dict:
+        today = as_of_date or date.today()
+        ar_rows = self.get_ar_aging(today, phap_nhan_id=phap_nhan_id)
+        ap_rows = self.get_ap_aging(today, phap_nhan_id=phap_nhan_id)
+
+        def overdue_amount(row) -> Decimal:
+            return row.qua_han_30 + row.qua_han_60 + row.qua_han_90
+
+        ar_items = [
+            {
+                "doi_tuong": "khach_hang",
+                "doi_tuong_id": row.customer_id,
+                "ten_don_vi": row.ten_don_vi,
+                "tong_con_lai": row.tong_con_lai,
+                "qua_han": overdue_amount(row),
+                "qua_han_30": row.qua_han_30,
+                "qua_han_60": row.qua_han_60,
+                "qua_han_90": row.qua_han_90,
+            }
+            for row in ar_rows
+            if overdue_amount(row) > 0
+        ]
+        ap_items = [
+            {
+                "doi_tuong": "nha_cung_cap",
+                "doi_tuong_id": row.supplier_id,
+                "ten_don_vi": row.ten_don_vi,
+                "tong_con_lai": row.tong_con_lai,
+                "qua_han": overdue_amount(row),
+                "qua_han_30": row.qua_han_30,
+                "qua_han_60": row.qua_han_60,
+                "qua_han_90": row.qua_han_90,
+            }
+            for row in ap_rows
+            if overdue_amount(row) > 0
+        ]
+        ar_items.sort(key=lambda item: item["qua_han"], reverse=True)
+        ap_items.sort(key=lambda item: item["qua_han"], reverse=True)
+
+        return {
+            "as_of_date": today,
+            "phap_nhan_id": phap_nhan_id,
+            "ar": {
+                "count": len(ar_items),
+                "total_overdue": sum((item["qua_han"] for item in ar_items), Decimal("0")),
+                "items": ar_items[:limit],
+            },
+            "ap": {
+                "count": len(ap_items),
+                "total_overdue": sum((item["qua_han"] for item in ap_items), Decimal("0")),
+                "items": ap_items[:limit],
+            },
+        }
 
     def get_ar_balance(
         self, customer_id: int | None, tu_ngay: date, den_ngay: date,
@@ -2134,9 +2571,15 @@ class AccountingService:
             )
         )
         if phap_nhan_id:
-            base_pre = base_pre.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
+            base_pre = base_pre.filter(or_(
+                JournalEntryLine.phap_nhan_id == phap_nhan_id,
+                and_(JournalEntryLine.phap_nhan_id.is_(None), JournalEntry.phap_nhan_id == phap_nhan_id),
+            ))
         if phan_xuong_id:
-            base_pre = base_pre.filter(JournalEntry.phan_xuong_id == phan_xuong_id)
+            base_pre = base_pre.filter(or_(
+                JournalEntryLine.phan_xuong_id == phan_xuong_id,
+                and_(JournalEntryLine.phan_xuong_id.is_(None), JournalEntry.phan_xuong_id == phan_xuong_id),
+            ))
 
         pre_no = base_pre.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_no), 0)).scalar() or Decimal("0")
         pre_co = base_pre.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_co), 0)).scalar() or Decimal("0")
@@ -2151,9 +2594,15 @@ class AccountingService:
             .filter(JournalEntry.ngay_but_toan <= den_ngay)
             
         if phap_nhan_id:
-            query = query.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
+            query = query.filter(or_(
+                JournalEntryLine.phap_nhan_id == phap_nhan_id,
+                and_(JournalEntryLine.phap_nhan_id.is_(None), JournalEntry.phap_nhan_id == phap_nhan_id),
+            ))
         if phan_xuong_id:
-            query = query.filter(JournalEntry.phan_xuong_id == phan_xuong_id)
+            query = query.filter(or_(
+                JournalEntryLine.phan_xuong_id == phan_xuong_id,
+                and_(JournalEntryLine.phan_xuong_id.is_(None), JournalEntry.phan_xuong_id == phan_xuong_id),
+            ))
             
         lines = query.options(joinedload(JournalEntryLine.entry)).order_by(JournalEntry.ngay_but_toan, JournalEntry.so_but_toan).all()
 
@@ -2259,11 +2708,19 @@ class AccountingService:
             )
 
             if phap_nhan_id:
-                base_pre = base_pre.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
-                base_cur = base_cur.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
+                pn_filter = or_(
+                    JournalEntryLine.phap_nhan_id == phap_nhan_id,
+                    and_(JournalEntryLine.phap_nhan_id.is_(None), JournalEntry.phap_nhan_id == phap_nhan_id),
+                )
+                base_pre = base_pre.filter(pn_filter)
+                base_cur = base_cur.filter(pn_filter)
             if phan_xuong_id:
-                base_pre = base_pre.filter(JournalEntry.phan_xuong_id == phan_xuong_id)
-                base_cur = base_cur.filter(JournalEntry.phan_xuong_id == phan_xuong_id)
+                px_filter = or_(
+                    JournalEntryLine.phan_xuong_id == phan_xuong_id,
+                    and_(JournalEntryLine.phan_xuong_id.is_(None), JournalEntry.phan_xuong_id == phan_xuong_id),
+                )
+                base_pre = base_pre.filter(px_filter)
+                base_cur = base_cur.filter(px_filter)
 
             pre_no = base_pre.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_no), 0)).scalar() or Decimal("0")
             pre_co = base_pre.with_entities(func.coalesce(func.sum(JournalEntryLine.so_tien_co), 0)).scalar() or Decimal("0")
@@ -2789,11 +3246,449 @@ class AccountingService:
         }
 
     # ─────────────────────────────────────────────
+    # GIÁ THÀNH SẢN XUẤT
+    # ─────────────────────────────────────────────
+    def _cost_period_or_404(self, period_id: int) -> ProductionCostPeriod:
+        period = self.db.get(ProductionCostPeriod, period_id)
+        if not period:
+            raise HTTPException(404, "Khong tim thay ky gia thanh")
+        return period
+
+    def _cost_period_payload(self, period: ProductionCostPeriod, include_details: bool = False) -> dict:
+        data = {
+            "id": period.id,
+            "ma_ky": period.ma_ky,
+            "ten_ky": period.ten_ky,
+            "tu_ngay": period.tu_ngay,
+            "den_ngay": period.den_ngay,
+            "phap_nhan_id": period.phap_nhan_id,
+            "phan_xuong_id": period.phan_xuong_id,
+            "tieu_thuc_pb": period.tieu_thuc_pb,
+            "trang_thai": period.trang_thai,
+            "tong_nvl": period.tong_nvl,
+            "tong_nhan_cong": period.tong_nhan_cong,
+            "tong_sxc": period.tong_sxc,
+            "tong_chi_phi": period.tong_chi_phi,
+            "tong_san_luong": period.tong_san_luong,
+            "ghi_chu": period.ghi_chu,
+            "created_at": period.created_at,
+            "closed_at": period.closed_at,
+        }
+        if include_details:
+            data["inputs"] = [
+                {
+                    "id": row.id,
+                    "source_type": row.source_type,
+                    "source_table": row.source_table,
+                    "source_id": row.source_id,
+                    "production_order_id": row.production_order_id,
+                    "product_id": row.product_id,
+                    "so_tien": row.so_tien,
+                    "so_luong": row.so_luong,
+                    "dien_giai": row.dien_giai,
+                }
+                for row in period.inputs
+            ]
+            data["allocations"] = [
+                {
+                    "id": row.id,
+                    "production_order_id": row.production_order_id,
+                    "product_id": row.product_id,
+                    "san_luong": row.san_luong,
+                    "ty_le": row.ty_le,
+                    "chi_phi_nvl": row.chi_phi_nvl,
+                    "chi_phi_nhan_cong": row.chi_phi_nhan_cong,
+                    "chi_phi_sxc": row.chi_phi_sxc,
+                    "tong_chi_phi": row.tong_chi_phi,
+                    "gia_thanh_don_vi": row.gia_thanh_don_vi,
+                }
+                for row in period.allocations
+            ]
+        return data
+
+    def create_production_cost_period(
+        self,
+        data: ProductionCostPeriodCreate,
+        user_id: int,
+    ) -> dict:
+        phap_nhan_id = data.phap_nhan_id
+        if data.phan_xuong_id:
+            px = self.db.get(PhanXuong, data.phan_xuong_id)
+            if not px:
+                raise HTTPException(404, "Khong tim thay phan xuong")
+            phap_nhan_id = phap_nhan_id or px.phap_nhan_id
+        ma_ky = data.ma_ky or (
+            f"GT-{data.tu_ngay.strftime('%Y%m%d')}-{data.den_ngay.strftime('%Y%m%d')}"
+            f"-{phap_nhan_id or 'ALL'}-{data.phan_xuong_id or 'ALL'}"
+        )
+        if self.db.query(ProductionCostPeriod).filter(ProductionCostPeriod.ma_ky == ma_ky).first():
+            raise HTTPException(400, f"Ky gia thanh {ma_ky} da ton tai")
+        period = ProductionCostPeriod(
+            ma_ky=ma_ky,
+            ten_ky=data.ten_ky or f"Gia thanh {data.tu_ngay:%m/%Y}",
+            tu_ngay=data.tu_ngay,
+            den_ngay=data.den_ngay,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=data.phan_xuong_id,
+            tieu_thuc_pb=data.tieu_thuc_pb,
+            ghi_chu=data.ghi_chu,
+            created_by=user_id,
+        )
+        self.db.add(period)
+        self.db.flush()
+        self._audit(
+            "create",
+            "production_cost_periods",
+            period.id,
+            user_id=user_id,
+            du_lieu_moi={
+                "ma_ky": period.ma_ky,
+                "tu_ngay": period.tu_ngay.isoformat(),
+                "den_ngay": period.den_ngay.isoformat(),
+                "phap_nhan_id": period.phap_nhan_id,
+                "phan_xuong_id": period.phan_xuong_id,
+            },
+        )
+        self.db.commit()
+        self.db.refresh(period)
+        return self._cost_period_payload(period)
+
+    def list_production_cost_periods(
+        self,
+        phap_nhan_id: int | None = None,
+        phan_xuong_id: int | None = None,
+        trang_thai: str | None = None,
+    ) -> list[dict]:
+        q = self.db.query(ProductionCostPeriod)
+        if phap_nhan_id:
+            q = q.filter(ProductionCostPeriod.phap_nhan_id == phap_nhan_id)
+        if phan_xuong_id:
+            q = q.filter(ProductionCostPeriod.phan_xuong_id == phan_xuong_id)
+        if trang_thai:
+            q = q.filter(ProductionCostPeriod.trang_thai == trang_thai)
+        return [
+            self._cost_period_payload(row)
+            for row in q.order_by(desc(ProductionCostPeriod.tu_ngay), desc(ProductionCostPeriod.id)).all()
+        ]
+
+    def get_production_cost_period(self, period_id: int) -> dict:
+        return self._cost_period_payload(self._cost_period_or_404(period_id), include_details=True)
+
+    def _reset_cost_period_details(self, period: ProductionCostPeriod) -> None:
+        self.db.query(ProductCost).filter(ProductCost.period_id == period.id).delete(synchronize_session=False)
+        self.db.query(ProductionCostAllocation).filter(
+            ProductionCostAllocation.period_id == period.id
+        ).delete(synchronize_session=False)
+        self.db.query(ProductionCostInput).filter(
+            ProductionCostInput.period_id == period.id
+        ).delete(synchronize_session=False)
+
+    def _period_filters_match_order(self, period: ProductionCostPeriod, order: ProductionOrder | None) -> bool:
+        if not order:
+            return False
+        if period.phan_xuong_id and order.phan_xuong_id != period.phan_xuong_id:
+            return False
+        if period.phap_nhan_id and order.phap_nhan_id and order.phap_nhan_id != period.phap_nhan_id:
+            return False
+        return True
+
+    def collect_production_cost_inputs(self, period_id: int, user_id: int) -> dict:
+        period = self._cost_period_or_404(period_id)
+        if period.trang_thai == "da_chot":
+            raise HTTPException(400, "Ky gia thanh da chot, khong duoc gom lai du lieu")
+
+        self._reset_cost_period_details(period)
+        created = 0
+
+        material_issues = (
+            self.db.query(MaterialIssue)
+            .options(joinedload(MaterialIssue.items), joinedload(MaterialIssue.production_order))
+            .join(ProductionOrder, ProductionOrder.id == MaterialIssue.production_order_id)
+            .filter(MaterialIssue.ngay_xuat >= period.tu_ngay, MaterialIssue.ngay_xuat <= period.den_ngay)
+            .filter(MaterialIssue.trang_thai != "huy")
+        )
+        if period.phan_xuong_id:
+            material_issues = material_issues.filter(ProductionOrder.phan_xuong_id == period.phan_xuong_id)
+        if period.phap_nhan_id:
+            material_issues = material_issues.filter(or_(
+                ProductionOrder.phap_nhan_id == period.phap_nhan_id,
+                ProductionOrder.phap_nhan_id.is_(None),
+            ))
+        for issue in material_issues.all():
+            order = issue.production_order
+            amount = sum(
+                (item.so_luong_thuc_xuat or Decimal("0")) * (item.don_gia or Decimal("0"))
+                for item in issue.items
+            )
+            if amount <= 0:
+                continue
+            self.db.add(ProductionCostInput(
+                period_id=period.id,
+                source_type="nvl",
+                source_table="material_issues",
+                source_id=issue.id,
+                production_order_id=issue.production_order_id,
+                phap_nhan_id=order.phap_nhan_id if order else period.phap_nhan_id,
+                phan_xuong_id=order.phan_xuong_id if order else period.phan_xuong_id,
+                so_tien=amount,
+                so_luong=Decimal("0"),
+                dien_giai=f"Xuat NVL {issue.so_phieu}",
+            ))
+            created += 1
+
+        outputs = (
+            self.db.query(ProductionOutput)
+            .options(joinedload(ProductionOutput.production_order))
+            .join(ProductionOrder, ProductionOrder.id == ProductionOutput.production_order_id)
+            .filter(ProductionOutput.ngay_nhap >= period.tu_ngay, ProductionOutput.ngay_nhap <= period.den_ngay)
+        )
+        if period.phan_xuong_id:
+            outputs = outputs.filter(ProductionOrder.phan_xuong_id == period.phan_xuong_id)
+        if period.phap_nhan_id:
+            outputs = outputs.filter(or_(
+                ProductionOrder.phap_nhan_id == period.phap_nhan_id,
+                ProductionOrder.phap_nhan_id.is_(None),
+            ))
+        for output in outputs.all():
+            order = output.production_order
+            if not self._period_filters_match_order(period, order):
+                continue
+            self.db.add(ProductionCostInput(
+                period_id=period.id,
+                source_type="san_luong",
+                source_table="production_outputs",
+                source_id=output.id,
+                production_order_id=output.production_order_id,
+                product_id=output.product_id,
+                phap_nhan_id=order.phap_nhan_id if order else period.phap_nhan_id,
+                phan_xuong_id=order.phan_xuong_id if order else period.phan_xuong_id,
+                so_tien=Decimal("0"),
+                so_luong=output.so_luong_nhap or Decimal("0"),
+                dien_giai=f"Nhap thanh pham {output.so_phieu}",
+            ))
+            created += 1
+
+        payrolls = self.db.query(WorkshopPayroll).filter(
+            WorkshopPayroll.thang >= period.tu_ngay,
+            WorkshopPayroll.thang <= period.den_ngay,
+            WorkshopPayroll.trang_thai == "da_duyet",
+        )
+        if period.phan_xuong_id:
+            payrolls = payrolls.filter(WorkshopPayroll.phan_xuong_id == period.phan_xuong_id)
+        if period.phap_nhan_id:
+            payrolls = payrolls.filter(WorkshopPayroll.phap_nhan_id == period.phap_nhan_id)
+        for payroll in payrolls.all():
+            amount = (payroll.tong_luong or 0) + (payroll.tong_thuong or 0) + (payroll.tong_bao_hiem or 0)
+            if amount <= 0:
+                continue
+            self.db.add(ProductionCostInput(
+                period_id=period.id,
+                source_type="nhan_cong",
+                source_table="workshop_payroll",
+                source_id=payroll.id,
+                phap_nhan_id=payroll.phap_nhan_id,
+                phan_xuong_id=payroll.phan_xuong_id,
+                so_tien=amount,
+                so_luong=Decimal("0"),
+                dien_giai=f"Luong xuong {payroll.so_phieu}",
+            ))
+            created += 1
+
+        overhead_lines = (
+            self.db.query(JournalEntryLine)
+            .join(JournalEntry, JournalEntry.id == JournalEntryLine.entry_id)
+            .filter(JournalEntry.ngay_but_toan >= period.tu_ngay, JournalEntry.ngay_but_toan <= period.den_ngay)
+            .filter(JournalEntryLine.so_tien_no > 0)
+            .filter(or_(JournalEntryLine.so_tk.like("627%"), JournalEntry.loai_but_toan == "khau_hao_ts"))
+        )
+        if period.phan_xuong_id:
+            overhead_lines = overhead_lines.filter(or_(
+                JournalEntryLine.phan_xuong_id == period.phan_xuong_id,
+                and_(JournalEntryLine.phan_xuong_id.is_(None), JournalEntry.phan_xuong_id == period.phan_xuong_id),
+            ))
+        if period.phap_nhan_id:
+            overhead_lines = overhead_lines.filter(or_(
+                JournalEntryLine.phap_nhan_id == period.phap_nhan_id,
+                and_(JournalEntryLine.phap_nhan_id.is_(None), JournalEntry.phap_nhan_id == period.phap_nhan_id),
+            ))
+        for line in overhead_lines.all():
+            source_type = "khau_hao" if line.entry.loai_but_toan == "khau_hao_ts" else "sxc"
+            self.db.add(ProductionCostInput(
+                period_id=period.id,
+                source_type=source_type,
+                source_table="journal_entry_lines",
+                source_id=line.id,
+                phap_nhan_id=line.phap_nhan_id or line.entry.phap_nhan_id,
+                phan_xuong_id=line.phan_xuong_id or line.entry.phan_xuong_id,
+                so_tien=line.so_tien_no or Decimal("0"),
+                so_luong=Decimal("0"),
+                dien_giai=line.dien_giai or line.entry.dien_giai,
+            ))
+            created += 1
+
+        self.db.flush()
+        self._refresh_cost_period_totals(period)
+        period.trang_thai = "dang_tinh"
+        self._audit(
+            "collect",
+            "production_cost_periods",
+            period.id,
+            user_id=user_id,
+            du_lieu_moi={"created_inputs": created},
+        )
+        self.db.commit()
+        self.db.refresh(period)
+        return {"created_inputs": created, "period": self._cost_period_payload(period, include_details=True)}
+
+    def _refresh_cost_period_totals(self, period: ProductionCostPeriod) -> None:
+        rows = self.db.query(ProductionCostInput).filter(ProductionCostInput.period_id == period.id).all()
+        period.tong_nvl = sum((row.so_tien for row in rows if row.source_type == "nvl"), Decimal("0"))
+        period.tong_nhan_cong = sum((row.so_tien for row in rows if row.source_type == "nhan_cong"), Decimal("0"))
+        period.tong_sxc = sum(
+            (row.so_tien for row in rows if row.source_type in {"sxc", "khau_hao"}),
+            Decimal("0"),
+        )
+        period.tong_chi_phi = period.tong_nvl + period.tong_nhan_cong + period.tong_sxc
+        period.tong_san_luong = sum((row.so_luong for row in rows if row.source_type == "san_luong"), Decimal("0"))
+
+    def preview_production_cost_allocations(self, period_id: int) -> dict:
+        period = self._cost_period_or_404(period_id)
+        self._refresh_cost_period_totals(period)
+        rows = self.db.query(ProductionCostInput).filter(ProductionCostInput.period_id == period.id).all()
+
+        output_by_order: dict[int, dict] = {}
+        nvl_by_order: dict[int, Decimal] = {}
+        for row in rows:
+            if row.production_order_id and row.source_type == "san_luong":
+                item = output_by_order.setdefault(row.production_order_id, {
+                    "production_order_id": row.production_order_id,
+                    "product_id": row.product_id,
+                    "phap_nhan_id": row.phap_nhan_id,
+                    "phan_xuong_id": row.phan_xuong_id,
+                    "san_luong": Decimal("0"),
+                })
+                item["san_luong"] += row.so_luong or Decimal("0")
+                item["product_id"] = item["product_id"] or row.product_id
+            if row.production_order_id and row.source_type == "nvl":
+                nvl_by_order[row.production_order_id] = nvl_by_order.get(row.production_order_id, Decimal("0")) + (row.so_tien or Decimal("0"))
+
+        allocatable_labor = period.tong_nhan_cong
+        allocatable_overhead = period.tong_sxc
+        total_output = sum((item["san_luong"] for item in output_by_order.values()), Decimal("0"))
+        allocations = []
+        allocated_total = Decimal("0")
+        for order_id, item in sorted(output_by_order.items()):
+            qty = item["san_luong"]
+            ratio = (qty / total_output) if total_output > 0 else Decimal("0")
+            labor = (allocatable_labor * ratio).quantize(Decimal("0.01"))
+            overhead = (allocatable_overhead * ratio).quantize(Decimal("0.01"))
+            nvl = nvl_by_order.get(order_id, Decimal("0"))
+            total = nvl + labor + overhead
+            unit_cost = (total / qty).quantize(Decimal("0.0001")) if qty > 0 else Decimal("0")
+            allocated_total += total
+            allocations.append({
+                **item,
+                "ty_le": ratio,
+                "chi_phi_nvl": nvl,
+                "chi_phi_nhan_cong": labor,
+                "chi_phi_sxc": overhead,
+                "tong_chi_phi": total,
+                "gia_thanh_don_vi": unit_cost,
+            })
+
+        warnings = []
+        if period.tong_chi_phi > 0 and total_output <= 0:
+            warnings.append("Khong co san luong thanh pham de phan bo chi phi")
+        for order_id in sorted(set(nvl_by_order) - set(output_by_order)):
+            warnings.append(f"Lenh san xuat {order_id} co NVL nhung chua co thanh pham trong ky")
+
+        return {
+            "period": self._cost_period_payload(period),
+            "allocations": allocations,
+            "warnings": warnings,
+            "unallocated_cost": period.tong_chi_phi - allocated_total if allocations else period.tong_chi_phi,
+        }
+
+    def calculate_production_cost_period(self, period_id: int, user_id: int) -> dict:
+        period = self._cost_period_or_404(period_id)
+        if period.trang_thai == "da_chot":
+            raise HTTPException(400, "Ky gia thanh da chot")
+        preview = self.preview_production_cost_allocations(period_id)
+        self.db.query(ProductCost).filter(ProductCost.period_id == period.id).delete(synchronize_session=False)
+        self.db.query(ProductionCostAllocation).filter(
+            ProductionCostAllocation.period_id == period.id
+        ).delete(synchronize_session=False)
+        for item in preview["allocations"]:
+            allocation = ProductionCostAllocation(
+                period_id=period.id,
+                production_order_id=item["production_order_id"],
+                product_id=item["product_id"],
+                phap_nhan_id=item["phap_nhan_id"],
+                phan_xuong_id=item["phan_xuong_id"],
+                tieu_thuc=period.tieu_thuc_pb,
+                ty_le=item["ty_le"],
+                san_luong=item["san_luong"],
+                chi_phi_nvl=item["chi_phi_nvl"],
+                chi_phi_nhan_cong=item["chi_phi_nhan_cong"],
+                chi_phi_sxc=item["chi_phi_sxc"],
+                tong_chi_phi=item["tong_chi_phi"],
+                gia_thanh_don_vi=item["gia_thanh_don_vi"],
+            )
+            self.db.add(allocation)
+            order = self.db.get(ProductionOrder, item["production_order_id"])
+            ten_hang = order.items[0].ten_hang if order and order.items else None
+            self.db.add(ProductCost(
+                period_id=period.id,
+                production_order_id=item["production_order_id"],
+                product_id=item["product_id"],
+                ten_hang=ten_hang,
+                phap_nhan_id=item["phap_nhan_id"],
+                phan_xuong_id=item["phan_xuong_id"],
+                san_luong=item["san_luong"],
+                tong_chi_phi=item["tong_chi_phi"],
+                gia_thanh_don_vi=item["gia_thanh_don_vi"],
+            ))
+        period.trang_thai = "dang_tinh"
+        self._audit(
+            "calculate",
+            "production_cost_periods",
+            period.id,
+            user_id=user_id,
+            du_lieu_moi={"allocations": len(preview["allocations"]), "warnings": preview["warnings"]},
+        )
+        self.db.commit()
+        self.db.refresh(period)
+        return self._cost_period_payload(period, include_details=True)
+
+    def close_production_cost_period(self, period_id: int, user_id: int) -> dict:
+        period = self._cost_period_or_404(period_id)
+        if period.trang_thai == "da_chot":
+            return self._cost_period_payload(period, include_details=True)
+        preview = self.preview_production_cost_allocations(period_id)
+        if preview["warnings"]:
+            raise HTTPException(400, {"message": "Ky gia thanh con canh bao, khong the chot", "warnings": preview["warnings"]})
+        self.calculate_production_cost_period(period_id, user_id)
+        period = self._cost_period_or_404(period_id)
+        period.trang_thai = "da_chot"
+        period.closed_by = user_id
+        period.closed_at = datetime.now(timezone.utc)
+        self._audit(
+            "close",
+            "production_cost_periods",
+            period.id,
+            user_id=user_id,
+            du_lieu_moi={"trang_thai": "da_chot"},
+        )
+        self.db.commit()
+        self.db.refresh(period)
+        return self._cost_period_payload(period, include_details=True)
+
+    # ─────────────────────────────────────────────
     # BÁO CÁO THUẾ
     # ─────────────────────────────────────────────
 
     # Tài khoản chỉ dùng nội bộ — loại ra khi lập BCTC/kê khai thuế
-    _INTERNAL_ACCOUNTS = {"5112", "6322", "1368", "3368"}
+    _INTERNAL_ACCOUNTS = INTERNAL_ACCOUNTS
 
     def get_trial_balance_tax(
         self,
@@ -2845,7 +3740,10 @@ class AccountingService:
 
             def _apply_pn(q_base):
                 if phap_nhan_id:
-                    q_base = q_base.filter(JournalEntry.phap_nhan_id == phap_nhan_id)
+                    q_base = q_base.filter(or_(
+                        JournalEntryLine.phap_nhan_id == phap_nhan_id,
+                        and_(JournalEntryLine.phap_nhan_id.is_(None), JournalEntry.phap_nhan_id == phap_nhan_id),
+                    ))
                 return q_base
 
             pre = _apply_pn(

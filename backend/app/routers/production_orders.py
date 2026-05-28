@@ -54,7 +54,7 @@ def _generate_so_lenh(db: Session) -> str:
     return f"{prefix}{seq:03d}"
 
 
-def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
+def _build_response(order: ProductionOrder, db: Session | None = None) -> ProductionOrderResponse:
     so_don = order.sales_order.so_don if order.sales_order else None
     kh = order.sales_order.customer if order.sales_order else None
     ten_khach_hang = kh.ten_viet_tat if kh else None
@@ -125,7 +125,9 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
             song_3=_f('song_3'), song_3_dl=_f('song_3_dl'),
             mat_3=_f('mat_3'), mat_3_dl=_f('mat_3_dl'),
             loai_in=_f('loai_in'), so_mau=_f('so_mau'), loai_lan=_f('loai_lan'),
-            kho_tt=item.kho_tt, dai_tt=item.dai_tt, qccl=item.qccl,
+            kho_tt=item.kho_tt, dai_tt=item.dai_tt,
+            so_lan_cat=item.so_lan_cat, be_so_con=item.be_so_con,
+            qccl=item.qccl,
             dien_tich=item.dien_tich,
             gia_ban_muc_tieu=item.gia_ban_muc_tieu,
             cong_doan=cong_doan,
@@ -160,6 +162,17 @@ def _build_response(order: ProductionOrder) -> ProductionOrderResponse:
         ghi_chu=order.ghi_chu,
         ghi_chu_don_hang=order.sales_order.ghi_chu if order.sales_order else None,
         don_gia_noi_bo=getattr(order, "don_gia_noi_bo", None),
+        phoi_phan_xuong_id=getattr(order, "phoi_phan_xuong_id", None),
+        ten_phoi_phan_xuong=(
+            order.phoi_phan_xuong.ten_xuong if getattr(order, "phoi_phan_xuong", None) else None
+        ),
+        ten_kho_nhap_phoi_du_kien=(
+            _get_phoi_source_warehouse(
+                db, order.phan_xuong_id, order.phap_nhan_id,
+                getattr(order, "phoi_phan_xuong_id", None),
+            ).ten_kho
+            if db else None
+        ),
         items=items,
         created_at=order.created_at,
         updated_at=order.updated_at,
@@ -180,6 +193,7 @@ def _load_order(order_id: int, db: Session) -> ProductionOrder:
             joinedload(ProductionOrder.phap_nhan),
             joinedload(ProductionOrder.kho_sx),
             joinedload(ProductionOrder.phan_xuong),
+            joinedload(ProductionOrder.phoi_phan_xuong),
             joinedload(ProductionOrder.nv_theo_doi),
             joinedload(ProductionOrder.creator),
         )
@@ -225,7 +239,7 @@ def get_order(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return _build_response(_load_order(order_id, db))
+    return _build_response(_load_order(order_id, db), db)
 
 
 @router.post("/tu-don-hang/{order_id:int}", response_model=List[ProductionOrderResponse], status_code=201)
@@ -274,9 +288,10 @@ def tao_lenh_tu_don_hang(
                         nv_theo_doi_id = quote.nv_theo_doi_id
                         break
 
-    kho_sx_id = _auto_kho_sx_id(db, data.phan_xuong_id, data.kho_sx_id)
     created_orders = []
     for idx, soi in enumerate(so.items):
+        effective_px_id = soi.phan_xuong_id or data.phan_xuong_id or so.phan_xuong_id
+        kho_sx_id = _auto_kho_sx_id(db, effective_px_id, data.kho_sx_id)
         so_lenh = f"{prefix}{(start_seq + idx):03d}"
         order = ProductionOrder(
             so_lenh=so_lenh,
@@ -286,7 +301,7 @@ def tao_lenh_tu_don_hang(
             ngay_hoan_thanh_ke_hoach=data.ngay_hoan_thanh_ke_hoach or so.ngay_giao_hang,
             phap_nhan_id=data.phap_nhan_id or so.phap_nhan_id,
             kho_sx_id=kho_sx_id,
-            phan_xuong_id=data.phan_xuong_id or so.phan_xuong_id,
+            phan_xuong_id=effective_px_id,
             nv_theo_doi_id=nv_theo_doi_id,
             ghi_chu=data.ghi_chu,
             created_by=current_user.id,
@@ -324,6 +339,8 @@ def tao_lenh_tu_don_hang(
             loai_in=_s('loai_in'), so_mau=_s('so_mau'),
             loai_lan=_s('loai_lan'),
             c_tham=_s('c_tham'), can_man=_s('can_man'),
+            be_so_con=_s('be_so_con'),
+            kho_tt=_s('kho_tt'), dai_tt=_s('dai_tt'),
         )
         order.items.append(item)
         db.add(order)
@@ -335,7 +352,7 @@ def tao_lenh_tu_don_hang(
     db.commit()
 
     # Load lại từng order với đầy đủ relationships sau commit
-    return [_build_response(_load_order(oid, db)) for oid in order_ids]
+    return [_build_response(_load_order(oid, db), db) for oid in order_ids]
 
 
 @router.post("", response_model=ProductionOrderResponse, status_code=201)
@@ -374,7 +391,7 @@ def start_order(
     order.trang_thai = "dang_chay"
     order.ngay_bat_dau_thuc_te = date.today()
     db.commit()
-    return _build_response(_load_order(order_id, db))
+    return _build_response(_load_order(order_id, db), db)
 
 
 @router.patch("/{order_id:int}/complete", response_model=ProductionOrderResponse)
@@ -392,7 +409,7 @@ def complete_order(
     order.trang_thai = "hoan_thanh"
     order.ngay_hoan_thanh_thuc_te = date.today()
     db.commit()
-    return _build_response(_load_order(order_id, db))
+    return _build_response(_load_order(order_id, db), db)
 
 
 class PauseOrderBody(BaseModel):
@@ -432,7 +449,7 @@ def pause_order(
     db.add(log)
     order.trang_thai = "tam_dung"
     db.commit()
-    return _build_response(_load_order(order_id, db))
+    return _build_response(_load_order(order_id, db), db)
 
 
 @router.patch("/{order_id:int}/resume", response_model=ProductionOrderResponse)
@@ -466,7 +483,7 @@ def resume_order(
 
     order.trang_thai = "dang_chay"
     db.commit()
-    return _build_response(_load_order(order_id, db))
+    return _build_response(_load_order(order_id, db), db)
 
 
 @router.patch("/{order_id:int}/cancel")
@@ -561,7 +578,7 @@ def update_item_sx_params(
         setattr(item, field, value)
 
     db.commit()
-    return _build_response(_load_order(order_id, db))
+    return _build_response(_load_order(order_id, db), db)
 
 
 # ── Phiếu nhập phôi sóng ─────────────────────────────────────────────────────

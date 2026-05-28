@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ApiError } from '../../../../../../../../api/types'
+import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -707,7 +707,7 @@ export default function POListPage() {
         visible={importVisible}
         onCancel={() => setImportVisible(false)}
         onSuccess={() => qc.invalidateQueries({ queryKey: ['purchase-orders'] })}
-        importFn={(file, commit) => purchaseApi.importPOs(file, commit)}
+        importFn={(file, commit) => purchaseApi.importPOs(file, commit) as Promise<{ total?: number; created?: number; updated?: number; skipped?: number; errors?: number | string[]; rows?: Array<{ row?: number; status?: string; message?: string }> }>}
         templateUrl="/api/purchase-orders/import-template"
       />
     </div>

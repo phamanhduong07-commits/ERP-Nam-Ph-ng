@@ -56,7 +56,7 @@ export default function NhapPhoiNgoaiPage() {
   const [invoicePreviewUrl, setInvoicePreviewUrl] = useState<string | null>(null)
   const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
 
-  const watchedItems: unknown[] = Form.useWatch('items', form) ?? []
+  const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
   const hdTongKgWatch = Form.useWatch('hd_tong_kg', form)
   const calcTongTam = watchedItems.reduce((s: number, it: Record<string, unknown>) => s + (Number(it?.so_luong) || 0), 0)
   const kgLech = (hdTongKgWatch != null && hdTongKgWatch !== '') ? calcTongTam - Number(hdTongKgWatch) : null
@@ -66,7 +66,7 @@ export default function NhapPhoiNgoaiPage() {
     queryKey: ['warehouses-all'],
     queryFn: () => warehousesApi.list().then(r => r.data),
   })
-  const phoiWarehouses = warehouses.filter((w: Record<string, unknown>) => w.trang_thai && w.loai_kho === 'PHOI')
+  const phoiWarehouses = warehouses.filter(w => w.trang_thai && w.loai_kho === 'PHOI')
 
   const { data: phanXuongs = [] } = useQuery({
     queryKey: ['phan-xuong-list'],
@@ -179,15 +179,15 @@ export default function NhapPhoiNgoaiPage() {
     if (!poDetail) return
     form.setFieldsValue({
       supplier_id: poDetail.supplier_id,
-      items: (poDetail.items || []).map((it: Record<string, unknown>) => ({
+      items: (poDetail.items || []).map((it) => ({
         ten_hang: it.ten_hang,
         so_luong: it.so_luong,
         dvt: it.dvt || 'Tấm',
         don_gia: it.don_gia,
         po_item_id: it.id,
-        so_lop: it.phoi_spec?.so_lop || null,
-        kho_mm: it.phoi_spec?.kho_tt || null,   // kho_tt = chiều rộng tấm phôi thực tế
-        dai_mm: it.phoi_spec?.dai_tt || null,   // dai_tt = chiều dài tấm phôi thực tế
+        so_lop: (it.phoi_spec as Record<string, unknown> | null)?.so_lop || null,
+        kho_mm: (it.phoi_spec as Record<string, unknown> | null)?.kho_tt || null,   // kho_tt = chiều rộng tấm phôi thực tế
+        dai_mm: (it.phoi_spec as Record<string, unknown> | null)?.dai_tt || null,   // dai_tt = chiều dài tấm phôi thực tế
         ket_qua_kiem_tra: 'DAT',
       })),
     })
@@ -234,7 +234,7 @@ export default function NhapPhoiNgoaiPage() {
           invoice_image,
           hd_tong_kg: v.hd_tong_kg || null,
           items,
-        } as Record<string, unknown>)
+        } as CreateGoodsReceiptPayload)
       }
     } catch { /* validation inline */ }
   }
@@ -250,7 +250,7 @@ export default function NhapPhoiNgoaiPage() {
       { header: 'Thành tiền (đ)', key: 'thanh_tien', align: 'right' as const },
     ]
     
-    const itemRows = (r.items || []).map((it: Record<string, unknown>) => ({
+    const itemRows = (r.items || []).map(it => ({
       ten_hang: it.ten_hang,
       so_lop: it.so_lop ? `${it.so_lop}L` : '—',
       kho_mm: it.kho_mm ? `${it.kho_mm}` : '—',
@@ -260,10 +260,10 @@ export default function NhapPhoiNgoaiPage() {
       thanh_tien: (Number(it.thanh_tien) || 0).toLocaleString('vi-VN'),
     }))
 
-    const tong = (r.items || []).reduce((s: number, it: Record<string, unknown>) => s + (Number(it.thanh_tien) || 0), 0)
+    const tong = (r.items || []).reduce((s: number, it) => s + (Number(it.thanh_tien) || 0), 0)
     const table = buildHtmlTable(
-      cols.map(c => ({ header: c.header, align: c.align })), 
-      itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])),
+      cols.map(c => ({ header: c.header, align: c.align })),
+      itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])) as (string | number | null | undefined)[][],
       { totalRow: ['TỔNG CỘNG', '', '', '', '', '', tong.toLocaleString('vi-VN') + ' đ'] }
     )
 
@@ -367,7 +367,7 @@ export default function NhapPhoiNgoaiPage() {
           { title: 'Số tấm', dataIndex: 'so_cuon', width: 80, align: 'right' as const,
             render: (v: number | null) => v ?? '—' },
           { title: 'Số lượng', dataIndex: 'so_luong', width: 90, align: 'right' as const,
-            render: (v: number, it: Record<string, unknown>) => `${Number(v).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} ${it.dvt}` },
+            render: (v: number, it: { dvt?: string }) => `${Number(v).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} ${it.dvt}` },
           { title: 'Đơn giá', dataIndex: 'don_gia', width: 120, align: 'right' as const,
             render: (v: number) => v > 0 ? v.toLocaleString('vi-VN') + 'đ' : '—' },
           { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 130, align: 'right' as const,
@@ -410,12 +410,12 @@ export default function NhapPhoiNgoaiPage() {
         <Row gutter={[8, 8]}>
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả xưởng" style={{ width: '100%' }} allowClear value={filterXuong} onChange={setFilterXuong}
-              options={phanXuongs.filter((p: unknown) => p.trang_thai).map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))} />
+              options={phanXuongs.filter(p => p.trang_thai).map(p => ({ value: p.id, label: p.ten_xuong }))} />
           </Col>
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả NCC" style={{ width: '100%' }} allowClear value={filterNCC} onChange={setFilterNCC} showSearch
               filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-              options={suppliers.map((s: unknown) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))} />
+              options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi }))} />
           </Col>
           <Col xs={12} sm={4}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
@@ -486,7 +486,7 @@ export default function NhapPhoiNgoaiPage() {
                 <Col span={8}>
                   <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true, message: 'Chọn pháp nhân' }]}>
                     <Select placeholder="Nam Phương / Visunpack / ..."
-                      options={phapNhans.map((p: unknown) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))} />
+                      options={phapNhans.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))} />
                   </Form.Item>
                 </Col>
                 <Col span={6}>
@@ -516,7 +516,7 @@ export default function NhapPhoiNgoaiPage() {
                   <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true, message: 'Chọn NCC' }]}>
                     <Select placeholder="Chọn NCC..." showSearch
                       filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                      options={suppliers.map((s: unknown) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
+                      options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
                   </Form.Item>
                 </Col>
                 <Col span={6}>
@@ -524,7 +524,7 @@ export default function NhapPhoiNgoaiPage() {
                     <Select placeholder="Chọn xưởng..." allowClear
                       value={formPxId ?? undefined}
                       onChange={v => { setFormPxId(v ?? null); form.setFieldValue('warehouse_id', undefined) }}
-                      options={phanXuongs.filter((p: unknown) => p.trang_thai).map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))}
+                      options={phanXuongs.filter(p => p.trang_thai).map(p => ({ value: p.id, label: p.ten_xuong }))}
                     />
                   </Form.Item>
                 </Col>
@@ -532,8 +532,8 @@ export default function NhapPhoiNgoaiPage() {
                   <Form.Item name="warehouse_id" label="Kho phôi nhận" rules={[{ required: true, message: 'Chọn kho phôi' }]}>
                     <Select placeholder="Chọn kho phôi"
                       options={phoiWarehouses
-                        .filter((w: Record<string, unknown>) => !formPxId || w.phan_xuong_id === formPxId)
-                        .map((w: Record<string, unknown>) => ({ value: w.id, label: w.ten_kho }))} />
+                        .filter(w => !formPxId || w.phan_xuong_id === formPxId)
+                        .map(w => ({ value: w.id, label: w.ten_kho }))} />
                   </Form.Item>
                 </Col>
               </Row>

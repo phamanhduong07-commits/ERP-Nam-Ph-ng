@@ -65,7 +65,7 @@ export default function ReceiptsPage() {
   const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
 
   // Reactive watches — must be at top level
-  const watchedItems: unknown[] = Form.useWatch('items', form) ?? []
+  const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
   const hdTongKgWatch = Form.useWatch('hd_tong_kg', form)
   const watchedSupplierId: number | undefined = Form.useWatch('supplier_id', form)
   const calcTongKg = watchedItems.reduce((s: number, it: Record<string, unknown>) => s + (Number(it?.so_luong) || 0), 0)
@@ -129,7 +129,7 @@ export default function ReceiptsPage() {
   const phapNhanOptions = Array.from(new Map(
     warehouses.filter(w => w.phap_nhan_id).map(w => [w.phap_nhan_id, { value: w.phap_nhan_id!, label: w.ten_phap_nhan || `PN #${w.phap_nhan_id}` }])
   ).values())
-  const phanXuongOptions = (phanXuongs as Array<Record<string, unknown>>).filter(x => !filterPhapNhan || x.phap_nhan_id === filterPhapNhan)
+  const phanXuongOptions = phanXuongs.filter(x => !filterPhapNhan || x.phap_nhan_id === filterPhapNhan)
   const warehouseOptions = warehouses
     .filter(w => w.trang_thai)
     .filter(w => !filterPhapNhan || w.phap_nhan_id === filterPhapNhan)
@@ -283,7 +283,7 @@ export default function ReceiptsPage() {
     if (!poDetail) return
     form.setFieldsValue({
       supplier_id: poDetail.supplier_id,
-      items: (poDetail.items || []).map((it: Record<string, unknown>) => ({
+      items: (poDetail.items || []).map((it) => ({
         loai_vat_tu: it.other_material_id ? 'khac' : 'tu_do',
         mat_id: it.paper_material_id || it.other_material_id,
         po_item_id: it.id,
@@ -376,15 +376,15 @@ export default function ReceiptsPage() {
       { header: 'Đơn giá (đ)', key: 'don_gia', align: 'right' as const },
       { header: 'Thành tiền (đ)', key: 'thanh_tien', align: 'right' as const },
     ]
-    const rowData = (r.items || []).map((it: Record<string, unknown>) => ({
+    const rowData = (r.items || []).map(it => ({
       ten_hang: it.ten_hang,
       dvt: it.dvt,
       so_luong: Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
       don_gia: Number(it.don_gia) > 0 ? Number(it.don_gia).toLocaleString('vi-VN') : '—',
       thanh_tien: (Number(it.thanh_tien) || 0).toLocaleString('vi-VN'),
     }))
-    const tong = (r.items || []).reduce((s: number, it: Record<string, unknown>) => s + (Number(it.thanh_tien) || 0), 0)
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rowData.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])))
+    const tong = (r.items || []).reduce((s: number, it) => s + (Number(it.thanh_tien) || 0), 0)
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rowData.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])) as (string | number | null | undefined)[][])
 
     const printData = {
       subtitle: 'PHIẾU NHẬP KHO',
@@ -450,7 +450,7 @@ export default function ReceiptsPage() {
     {
       title: '', width: 160,
       render: (_: unknown, r: GoodsReceipt) => {
-        const hasPaper = (r.items || []).some((it: Record<string, unknown>) => it.paper_material_id)
+        const hasPaper = (r.items || []).some(it => it.paper_material_id)
         return (
           <Space size={4}>
             {r.trang_thai === 'nhap_nhanh' ? (
@@ -550,7 +550,7 @@ export default function ReceiptsPage() {
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả xưởng" style={{ width: '100%' }} allowClear value={filterXuong}
               onChange={v => { setFilterXuong(v); setFilterKho(undefined) }}
-              options={phanXuongOptions.filter((p: unknown) => p.trang_thai).map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))} />
+              options={phanXuongOptions.filter(p => p.trang_thai).map(p => ({ value: p.id, label: p.ten_xuong }))} />
           </Col>
           <Col xs={12} sm={5}>
             <Select placeholder="Tất cả kho" style={{ width: '100%' }} allowClear value={filterKho} onChange={setFilterKho}
@@ -666,7 +666,7 @@ export default function ReceiptsPage() {
                   <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true, message: 'Chọn NCC' }]}>
                     <Select placeholder="Chọn nhà cung cấp..." showSearch
                       filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                      options={suppliers.map((s: unknown) => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
+                      options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
                   </Form.Item>
                 </Col>
                 <Col span={10}>
@@ -683,7 +683,7 @@ export default function ReceiptsPage() {
                     <Select placeholder="Chọn xưởng..." allowClear
                       value={formPxId ?? undefined}
                       onChange={v => { setFormPxId(v ?? null); form.setFieldValue('warehouse_id', undefined) }}
-                      options={phanXuongs.filter((p: unknown) => p.trang_thai).map((p: unknown) => ({ value: p.id, label: p.ten_xuong }))}
+                      options={phanXuongs.filter(p => p.trang_thai).map(p => ({ value: p.id, label: p.ten_xuong }))}
                     />
                   </Form.Item>
                 </Col>

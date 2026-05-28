@@ -51,6 +51,8 @@ export interface SalesOrderItem {
   kho_tt?: number | null
   dai_tt?: number | null
   dien_tich?: number | null
+  phan_xuong_id?: number | null
+  ten_phan_xuong?: string | null
 }
 
 export interface SalesOrder {

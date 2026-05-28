@@ -330,6 +330,8 @@ class ProductionOrderService:
                 de_xuat_mua_ngoai=(kho_tt_max or 0) >= _KHO_DE_XUAT,
                 kho_tt=float(first_item.kho_tt) if first_item and first_item.kho_tt is not None else None,
                 dai_tt=float(first_item.dai_tt) if first_item and first_item.dai_tt is not None else None,
+                so_lan_cat=first_item.so_lan_cat if first_item else None,
+                be_so_con=first_item.be_so_con if first_item else None,
                 so_lop=first_item.so_lop if first_item else None,
                 to_hop_song=first_item.to_hop_song if first_item else None,
                 loai_thung=first_item.loai_thung if first_item else None,

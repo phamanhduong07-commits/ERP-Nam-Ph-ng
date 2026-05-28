@@ -108,6 +108,7 @@ class SalesOrderService:
                 joinedload(SalesOrder.approver),
                 joinedload(SalesOrder.items).joinedload(SalesOrderItem.product),
                 joinedload(SalesOrder.items).joinedload(SalesOrderItem.quote_item).joinedload(QuoteItem.quote),
+                joinedload(SalesOrder.items).joinedload(SalesOrderItem.phan_xuong),
             )
             .filter(SalesOrder.id == order_id)
             .first()

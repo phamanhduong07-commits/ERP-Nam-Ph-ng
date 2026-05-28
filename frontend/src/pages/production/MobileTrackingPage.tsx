@@ -15,7 +15,7 @@ import {
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { useAuthStore } from '../../store/auth'
-import { cd2Api, MayIn, MaySauIn, PhieuIn, WorkerSession, WorkerDayStats, TRANG_THAI_COLORS, TRANG_THAI_LABELS } from '../../api/cd2'
+import { cd2Api, MayIn, MaySauIn, PhieuIn, WorkerSession, WorkerDayStats, TRANG_THAI_COLORS, TRANG_THAI_LABELS, TrackPayload } from '../../api/cd2'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import QrScannerModal from '../../components/QrScannerModal'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
@@ -546,7 +546,7 @@ export default function MobileTrackingPage() {
     message.loading(`Đang đồng bộ ${queue.length} lệnh offline...`, 0)
     let ok = 0
     for (const item of queue) {
-      try { await cd2Api.trackProduction(item); ok++ } catch { /* keep */ }
+      try { await cd2Api.trackProduction(item as unknown as TrackPayload); ok++ } catch { /* keep */ }
     }
     const remaining = queue.slice(ok)
     setOfflineQueue(remaining)
@@ -613,9 +613,9 @@ export default function MobileTrackingPage() {
 
   const ngungInMutation = useMutation({
     mutationFn: (values: Record<string, unknown>) => cd2Api.ngungIn(currentOrder!.id, {
-      so_luong_in_ok: values.so_luong_in_ok,
-      so_luong_loi: values.so_luong_loi,
-      ghi_chu_ket_qua: values.ghi_chu_ket_qua,
+      so_luong_in_ok: values.so_luong_in_ok as number | undefined,
+      so_luong_loi: values.so_luong_loi as number | undefined,
+      ghi_chu_ket_qua: values.ghi_chu_ket_qua as string | undefined,
     }),
     onSuccess: (res) => {
       const bu = res.data.phieu_bu
@@ -631,9 +631,9 @@ export default function MobileTrackingPage() {
 
   const ngungDinhHinhMutation = useMutation({
     mutationFn: (values: Record<string, unknown>) => cd2Api.ngungDinhHinh(currentOrder!.id, {
-      so_luong_sau_in_ok: values.so_luong_sau_in_ok,
-      so_luong_sau_in_loi: values.so_luong_sau_in_loi,
-      ghi_chu_sau_in: values.ghi_chu_sau_in,
+      so_luong_sau_in_ok: (values.so_luong_sau_in_ok as number | undefined) ?? 0,
+      so_luong_sau_in_loi: values.so_luong_sau_in_loi as number | undefined,
+      ghi_chu_sau_in: values.ghi_chu_sau_in as string | undefined,
     }),
     onSuccess: (res) => {
       const bu = res.data.phieu_bu
@@ -680,23 +680,25 @@ export default function MobileTrackingPage() {
 
   const kioskMachineId = workerSession ? undefined : selectedMachine?.id
 
-  const trackMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => {
-      if (!isOnline) { saveOfflineLog(data); return Promise.resolve({ data: { ok: true, offline: true } }) }
+  const trackMutation = useMutation<ReturnType<typeof cd2Api.trackProduction> extends Promise<infer R> ? R : never, Error, TrackPayload>({
+    mutationFn: (data: TrackPayload) => {
+      if (!isOnline) { saveOfflineLog(data as unknown as Record<string, unknown>); return Promise.resolve({ data: { ok: true, offline: true } }) as unknown as ReturnType<typeof cd2Api.trackProduction> }
       return cd2Api.trackProduction(data)
     },
     onSuccess: (res: unknown, variables: unknown) => {
-      if (res.data?.offline) {
+      const resAny = res as { data?: { offline?: boolean } }
+      const varsAny = variables as Record<string, unknown>
+      if (resAny.data?.offline) {
         message.warning('Đã lưu offline. Sẽ đồng bộ khi có mạng.')
       } else {
         message.success('Đã cập nhật!')
         // Cập nhật tức thì currentOrder theo event — không cần đợi refetch
         // (quan trọng với 'complete' vì phiếu sẽ biến khỏi machine-list sau khi may_in_id = null)
-        const evt: string = variables?.event_type ?? ''
+        const evt: string = (varsAny?.event_type as string) ?? ''
         setCurrentOrder(prev => {
           if (!prev) return prev
           if (evt === 'start')    return { ...prev, trang_thai: 'dang_in',       tam_dung_luc: null, tam_dung_ly_do: null, gio_bat_dau_in: new Date().toISOString() }
-          if (evt === 'stop')     return { ...prev, tam_dung_luc: new Date().toISOString(), tam_dung_ly_do: variables?.ghi_chu ?? null }
+          if (evt === 'stop')     return { ...prev, tam_dung_luc: new Date().toISOString(), tam_dung_ly_do: (varsAny?.ghi_chu as string | null) ?? null }
           if (evt === 'resume')   return { ...prev, tam_dung_luc: null,           tam_dung_ly_do: null }
           if (evt === 'complete') return { ...prev, trang_thai: 'cho_dinh_hinh', may_in_id: null }
           return prev
@@ -707,14 +709,14 @@ export default function MobileTrackingPage() {
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Thất bại'),
   })
 
-  const buildPayload = (eventType: string, extra = {}) => ({
+  const buildPayload = (eventType: TrackPayload['event_type'], extra: Record<string, unknown> = {}): TrackPayload => ({
     production_order_id: currentOrder?.production_order_id ?? 0,
     machine_id: kioskMachineId,
     phieu_in_id: currentOrder?.id ?? undefined,
     event_type: eventType,
     printer_user_id: workerSession?.printer_user_id ?? undefined,
     ...extra,
-  })
+  } as TrackPayload)
 
   // Xác nhận trước BẮT ĐẦU để tránh ghi sai giờ
   const handleStartWithConfirm = () => {
@@ -795,7 +797,7 @@ export default function MobileTrackingPage() {
       const res = await cd2Api.phieuLookup(code)
       beep('success')
       if ('vibrate' in navigator) navigator.vibrate(60)
-      setCurrentOrder(res.data)
+      setCurrentOrder(res.data as unknown as PhieuIn)
       setShowSearch(false)
       setTimeout(() => window.scrollTo({ top: 400, behavior: 'smooth' }), 100)
     } catch {
@@ -856,16 +858,16 @@ export default function MobileTrackingPage() {
         <Card style={{ borderRadius: 20, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', marginBottom: 40 }}>
           <div style={{ maxHeight: 300, overflowY: 'auto' }}>
             {factoryLogs.map((log: Record<string, unknown>, idx: number) => (
-              <div key={log.id} style={{ padding: '10px 0', borderBottom: idx < factoryLogs.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+              <div key={log.id as number} style={{ padding: '10px 0', borderBottom: idx < factoryLogs.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                  <Text strong>{log.ten_may}</Text>
-                  <Text type="secondary">{dayjs(log.created_at).format('HH:mm')}</Text>
+                  <Text strong>{log.ten_may as string}</Text>
+                  <Text type="secondary">{dayjs(log.created_at as string).format('HH:mm')}</Text>
                 </div>
                 <div style={{ fontSize: 13 }}>
                   <Tag color={log.event_type === 'complete' ? 'success' : 'processing'} style={{ fontSize: 11 }}>
-                    {log.event_type.toUpperCase()}
+                    {(log.event_type as string | undefined)?.toUpperCase()}
                   </Tag>
-                  <Text>{log.so_phieu}</Text>
+                  <Text>{log.so_phieu as string}</Text>
                 </div>
               </div>
             ))}

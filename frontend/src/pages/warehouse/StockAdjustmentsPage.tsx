@@ -128,7 +128,7 @@ export default function StockAdjustmentsPage() {
         message.warning('Thêm ít nhất 1 dòng hàng')
         return
       }
-      if (items.every((it: Record<string, unknown>) => {
+      if ((items as Array<Record<string, unknown>>).every((it: Record<string, unknown>) => {
         const ton = tonKho.find(t => t.id === it.inventory_balance_id)
         return ton && Number(it.so_luong_thuc_te) === Number(ton.ton_luong)
       })) {
@@ -160,7 +160,7 @@ export default function StockAdjustmentsPage() {
       { header: 'Chênh lệch', key: 'chenhlech', align: 'right' as const },
     ]
     
-    const itemRows = r.items.map((it: Record<string, unknown>) => ({
+    const itemRows = r.items.map((it: StockAdjustmentItem) => ({
       ten_hang: it.ten_hang,
       don_vi: it.don_vi,
       so_luong_so_sach: fmtNum(it.so_luong_so_sach),
@@ -169,8 +169,8 @@ export default function StockAdjustmentsPage() {
     }))
 
     const table = buildHtmlTable(
-      cols.map(c => ({ header: c.header, align: c.align })), 
-      itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key]))
+      cols.map(c => ({ header: c.header, align: c.align })),
+      itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])) as (string | number | null | undefined)[][]
     )
 
     const printData = {

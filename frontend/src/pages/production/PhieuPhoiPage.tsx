@@ -484,8 +484,8 @@ function TabNhap() {
           ])
         })
       })
-      const totalTT = summaryRows.reduce((s, r) => s + (r[10] ?? 0), 0)
-      const totalLoi = summaryRows.reduce((s, r) => s + (r[11] ?? 0), 0)
+      const totalTT = summaryRows.reduce((s, r) => s + Number(r[10] ?? 0), 0)
+      const totalLoi = summaryRows.reduce((s, r) => s + Number(r[11] ?? 0), 0)
       summaryRows.push(['', 'TỔNG CỘNG', '', '', '', '', '', '', '', '',
         totalTT, totalLoi, totalTT - totalLoi])
       const ws1 = XLSX.utils.aoa_to_sheet([summaryHeader, ...summaryRows])

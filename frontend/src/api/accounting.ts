@@ -259,6 +259,24 @@ export interface BalanceByPeriod {
   so_du_cuoi_ky: number
 }
 
+export interface DebtOverdueAlertItem {
+  doi_tuong: 'khach_hang' | 'nha_cung_cap'
+  doi_tuong_id: number
+  ten_don_vi: string | null
+  tong_con_lai: number
+  qua_han: number
+  qua_han_30: number
+  qua_han_60: number
+  qua_han_90: number
+}
+
+export interface DebtOverdueAlerts {
+  as_of_date: string
+  phap_nhan_id: number | null
+  ar: { count: number; total_overdue: number; items: DebtOverdueAlertItem[] }
+  ap: { count: number; total_overdue: number; items: DebtOverdueAlertItem[] }
+}
+
 // ──────────────────────────────────────────────────────
 // API calls — Phiếu thu (AR)
 // ──────────────────────────────────────────────────────
@@ -333,8 +351,8 @@ export const arApi = {
   getLedgerEntries: (params?: Record<string, unknown>): Promise<ARLedgerEntries> =>
     client.get('/accounting/ar/ledger-entries', { params }).then(r => r.data),
 
-  getAging: (asOfDate?: string): Promise<ARAgingRow[]> =>
-    client.get('/accounting/ar/aging', { params: asOfDate ? { as_of_date: asOfDate } : {} }).then(r => r.data),
+  getAging: (asOfDate?: string, phapNhanId?: number): Promise<ARAgingRow[]> =>
+    client.get('/accounting/ar/aging', { params: { ...(asOfDate ? { as_of_date: asOfDate } : {}), ...(phapNhanId ? { phap_nhan_id: phapNhanId } : {}) } }).then(r => r.data),
 
   getBalance: (params: { customer_id?: number; tu_ngay: string; den_ngay: string }): Promise<BalanceByPeriod> =>
     client.get('/accounting/ar/balance', { params }).then(r => r.data),
@@ -356,6 +374,11 @@ export const arApi = {
 
   exportTrialBalance: (params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number | null; phan_xuong_id?: number | null }) =>
     client.get('/accounting/trial-balance/export', { params, responseType: 'blob' }).then(r => r.data as Blob),
+}
+
+export const debtAlertsApi = {
+  getOverdue: (params?: { as_of_date?: string; phap_nhan_id?: number; limit?: number }): Promise<DebtOverdueAlerts> =>
+    client.get('/accounting/debt/overdue-alerts', { params }).then(r => r.data),
 }
 
 export interface SoChiTietRow {
@@ -598,6 +621,8 @@ export interface JournalEntryListParams {
   tu_ngay?: string
   den_ngay?: string
   phap_nhan_id?: number
+  chung_tu_loai?: string
+  chung_tu_id?: number
   page?: number
   page_size?: number
 }
@@ -630,4 +655,86 @@ export const workshopManagementApi = {
 export const journalApi = {
   list: (params?: JournalEntryListParams) => client.get('/accounting/journal-entries', { params }).then(r => r.data),
   create: (data: JournalEntryCreate) => client.post('/accounting/journal-entries', data).then(r => r.data),
+}
+
+export interface ProductionCostInput {
+  id: number
+  source_type: string
+  source_table: string | null
+  source_id: number | null
+  production_order_id: number | null
+  product_id: number | null
+  so_tien: number
+  so_luong: number | null
+  dien_giai: string | null
+}
+
+export interface ProductionCostAllocation {
+  id?: number
+  production_order_id: number | null
+  product_id: number | null
+  san_luong: number
+  ty_le: number
+  chi_phi_nvl: number
+  chi_phi_nhan_cong: number
+  chi_phi_sxc: number
+  tong_chi_phi: number
+  gia_thanh_don_vi: number
+}
+
+export interface ProductionCostPeriod {
+  id: number
+  ma_ky: string
+  ten_ky: string
+  tu_ngay: string
+  den_ngay: string
+  phap_nhan_id: number | null
+  phan_xuong_id: number | null
+  tieu_thuc_pb: string
+  trang_thai: string
+  tong_nvl: number
+  tong_nhan_cong: number
+  tong_sxc: number
+  tong_chi_phi: number
+  tong_san_luong: number
+  ghi_chu: string | null
+  created_at: string
+  closed_at: string | null
+  inputs?: ProductionCostInput[]
+  allocations?: ProductionCostAllocation[]
+}
+
+export interface ProductionCostPeriodCreate {
+  ma_ky?: string
+  ten_ky?: string
+  tu_ngay: string
+  den_ngay: string
+  phap_nhan_id?: number | null
+  phan_xuong_id?: number | null
+  tieu_thuc_pb?: string
+  ghi_chu?: string | null
+}
+
+export interface ProductionCostPreview {
+  period: ProductionCostPeriod
+  allocations: ProductionCostAllocation[]
+  warnings: string[]
+  unallocated_cost: number
+}
+
+export const productionCostApi = {
+  list: (params?: { phap_nhan_id?: number; phan_xuong_id?: number; trang_thai?: string }) =>
+    client.get<ProductionCostPeriod[]>('/accounting/production-cost-periods', { params }).then(r => r.data),
+  create: (data: ProductionCostPeriodCreate) =>
+    client.post<ProductionCostPeriod>('/accounting/production-cost-periods', data).then(r => r.data),
+  get: (id: number) =>
+    client.get<ProductionCostPeriod>(`/accounting/production-cost-periods/${id}`).then(r => r.data),
+  collectInputs: (id: number) =>
+    client.post<{ created_inputs: number; period: ProductionCostPeriod }>(`/accounting/production-cost-periods/${id}/collect-inputs`).then(r => r.data),
+  preview: (id: number) =>
+    client.get<ProductionCostPreview>(`/accounting/production-cost-periods/${id}/allocation-preview`).then(r => r.data),
+  calculate: (id: number) =>
+    client.post<ProductionCostPeriod>(`/accounting/production-cost-periods/${id}/calculate`).then(r => r.data),
+  close: (id: number) =>
+    client.post<ProductionCostPeriod>(`/accounting/production-cost-periods/${id}/close`).then(r => r.data),
 }

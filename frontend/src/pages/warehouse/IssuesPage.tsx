@@ -127,7 +127,7 @@ export default function IssuesPage() {
         production_order_id: v.production_order_id,
         warehouse_id: v.warehouse_id,
         ghi_chu: v.ghi_chu || null,
-        items,
+        items: items as CreateMaterialIssuePayload['items'],
       })
     } catch { /* validation shown inline */ }
   }
@@ -149,7 +149,7 @@ export default function IssuesPage() {
       so_luong_ke_hoach: it.so_luong_ke_hoach > 0 ? Number(it.so_luong_ke_hoach).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—',
       so_luong_thuc_xuat: Number(it.so_luong_thuc_xuat).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
     }))
-    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rowData.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])))
+    const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rowData.map(row => cols.map(c => (row as Record<string, unknown>)[c.key])) as (string | number | null | undefined)[][])
     
     const printData = {
       subtitle: 'PHIẾU XUẤT NGUYÊN VẬT LIỆU',

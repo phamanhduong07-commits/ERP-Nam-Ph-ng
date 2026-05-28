@@ -71,7 +71,7 @@ export default function InventoryCardPage() {
   const phanXuongsByPn = phapNhanId ? phanXuongs.filter(px => px.phap_nhan_id === phapNhanId) : phanXuongs
   const allowedPxIds = new Set(phanXuongsByPn.map(px => px.id))
   const filteredWarehouses = (whs ?? []).filter(w =>
-    (!phapNhanId || allowedPxIds.has(w.phan_xuong_id)) &&
+    (!phapNhanId || (w.phan_xuong_id !== null && allowedPxIds.has(w.phan_xuong_id))) &&
     (!phanXuongId || w.phan_xuong_id === phanXuongId)
   )
   const selectedWarehouse = warehouseId ? whs?.find(w => w.id === warehouseId) : undefined
@@ -87,7 +87,7 @@ export default function InventoryCardPage() {
         den_ngay: range[1].format('YYYY-MM-DD'),
         warehouse_id: warehouseId,
         phan_xuong_id: phanXuongId,
-        phap_nhan_id: phapNhanId,
+        phap_nhan_id: phapNhanId ?? undefined,
         limit: 1000,
       }).then(r => r.data),
     enabled: fetched,
@@ -175,7 +175,7 @@ export default function InventoryCardPage() {
 
     const table = buildHtmlTable(
       cols.map(c => ({ header: c.header, align: c.align })), 
-      itemRows.map(row => cols.map(c => (row as Record<string, string | number>)[c.key]))
+      itemRows.map(row => cols.map(c => (row as Record<string, string | number>)[c.key])) as (string | number | null | undefined)[][]
     )
 
     const printData = {

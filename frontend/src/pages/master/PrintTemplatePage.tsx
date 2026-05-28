@@ -582,7 +582,7 @@ export default function PrintTemplatePage() {
         if (tpl && tpl.phap_nhan_id === selectedPhapNhanId) {
           form.setFieldsValue(tpl)
           if (tpl.variables_meta?.easy_config) {
-            try { setEasyConfig(JSON.parse(tpl.variables_meta.easy_config)) } catch(e) {}
+            try { setEasyConfig(JSON.parse(tpl.variables_meta.easy_config as string)) } catch(e) {}
           }
         } else {
           message.info(`Mẫu hiện tại không khớp pháp nhân đang chọn.`)
@@ -597,7 +597,7 @@ export default function PrintTemplatePage() {
     if (editModal) {
       if (editModal.variables_meta?.easy_config) {
         try { 
-          setEasyConfig({ ...DEFAULT_CONFIG, ...JSON.parse(editModal.variables_meta.easy_config) }) 
+          setEasyConfig({ ...DEFAULT_CONFIG, ...JSON.parse(editModal.variables_meta.easy_config as string) })
         } catch (e) { console.error('Lỗi parse easy_config', e) }
       }
       updatePreview()
@@ -607,7 +607,7 @@ export default function PrintTemplatePage() {
   const updateMut = useMutation({
     mutationFn: (payload: { ma_mau?: string; ten_mau?: string; html_content?: string; variables_meta?: Record<string, unknown> }) => {
       const ma = payload.ma_mau || editModal?.ma_mau
-      return systemApi.updateTemplate(ma, {
+      return systemApi.updateTemplate(ma ?? '', {
         ma_mau: ma,
         ten_mau: payload.ten_mau,
         phap_nhan_id: selectedPhapNhanId ?? undefined,
@@ -828,9 +828,9 @@ export default function PrintTemplatePage() {
                             <Row gutter={16}>
                               <Col span={8}><Form.Item label="Vị trí Logo"><Select value={easyConfig.logoPos} onChange={v => setEasyConfig({...easyConfig, logoPos:v})} options={[{label:'Trái',value:'left'},{label:'Giữa',value:'center'},{label:'Phải',value:'right'}]}/></Form.Item></Col>
                               <Col span={8}><Form.Item label="Màu chủ đạo"><Input type="color" value={easyConfig.headerColor} onChange={e => setEasyConfig({...easyConfig, headerColor:e.target.value})}/></Form.Item></Col>
-                              <Col span={8}><Form.Item label="Kích thước Logo (px)"><InputNumber value={easyConfig.logoSize} onChange={v => setEasyConfig({...easyConfig, logoSize:v})}/></Form.Item></Col>
-                              <Col span={8}><Form.Item label="Cỡ chữ Tên Cty"><InputNumber value={easyConfig.companyFontSize} onChange={v => setEasyConfig({...easyConfig, companyFontSize:v})}/></Form.Item></Col>
-                              <Col span={8}><Form.Item label="Cỡ chữ Tiêu đề"><InputNumber value={easyConfig.titleSize} onChange={v => setEasyConfig({...easyConfig, titleSize:v})}/></Form.Item></Col>
+                              <Col span={8}><Form.Item label="Kích thước Logo (px)"><InputNumber value={easyConfig.logoSize} onChange={v => setEasyConfig({...easyConfig, logoSize: v ?? 0})}/></Form.Item></Col>
+                              <Col span={8}><Form.Item label="Cỡ chữ Tên Cty"><InputNumber value={easyConfig.companyFontSize} onChange={v => setEasyConfig({...easyConfig, companyFontSize: v ?? 0})}/></Form.Item></Col>
+                              <Col span={8}><Form.Item label="Cỡ chữ Tiêu đề"><InputNumber value={easyConfig.titleSize} onChange={v => setEasyConfig({...easyConfig, titleSize: v ?? 0})}/></Form.Item></Col>
                               <Col span={8}><Form.Item label="Font chữ"><Input value={easyConfig.fontFamily} onChange={e => setEasyConfig({...easyConfig, fontFamily:e.target.value})}/></Form.Item></Col>
                               <Col span={6}><Form.Item label="Hiện Tên Công ty"><Switch checked={easyConfig.showCompany} onChange={v => setEasyConfig({...easyConfig, showCompany:v})}/></Form.Item></Col>
                               <Col span={6}><Form.Item label="Hiện Liên hệ"><Switch checked={easyConfig.showContact} onChange={v => setEasyConfig({...easyConfig, showContact:v})}/></Form.Item></Col>
@@ -885,7 +885,7 @@ export default function PrintTemplatePage() {
                                  return <Button key={col.key} size="small" type={isSelected ? 'primary' : 'default'} onClick={() => {
                                    let current = [...(easyConfig.selectedColumns || [])]
                                    if (isSelected) current = current.filter((c: DocColumn) => c.key !== col.key)
-                                   else current.push(col)
+                                   else (current as DocColumn[]).push(col as DocColumn)
                                    setEasyConfig({ ...easyConfig, selectedColumns: current })
                                  }}>{col.label}</Button>
                                })}

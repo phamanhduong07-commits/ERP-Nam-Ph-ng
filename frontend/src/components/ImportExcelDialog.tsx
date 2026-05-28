@@ -105,7 +105,7 @@ export default function ImportExcelDialog({
           icon={<UploadOutlined />} 
           onClick={() => handleImport(true)}
           loading={loading}
-          disabled={fileList.length === 0 || (result && !!result.errors && (Array.isArray(result.errors) ? result.errors.length > 0 : result.errors > 0))}
+          disabled={fileList.length === 0 || (result != null && !!result.errors && (Array.isArray(result.errors) ? result.errors.length > 0 : result.errors > 0))}
         >
           Thực hiện Import
         </Button>

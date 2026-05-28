@@ -62,6 +62,8 @@ class ProductionPlanLineResponse(BaseModel):
     to_hop_song: str | None = None
     # Thông số kỹ thuật từ ProductionOrderItem
     dai_tt: Decimal | None = None
+    so_lan_cat: int | None = None
+    be_so_con: int | None = None
     loai_lan: str | None = None
     mat: str | None = None
     mat_dl: Decimal | None = None
@@ -198,6 +200,8 @@ class QueueLineResponse(BaseModel):
     c_tham: str | None = None
     can_man: str | None = None
     dai_tt: Decimal | None
+    so_lan_cat: int | None = None
+    be_so_con: int | None = None
     # Kết cấu giấy
     mat: str | None
     mat_dl: Decimal | None

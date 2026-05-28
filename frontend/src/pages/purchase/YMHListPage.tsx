@@ -163,7 +163,7 @@ export default function YMHListPage() {
       setCreateOpen(false)
       form.resetFields()
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo YMH'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo YMH'),
   })
 
   const duyetPBMutation = useMutation({
@@ -172,7 +172,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('Phòng ban đã duyệt')
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi duyệt PB'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi duyệt PB'),
   })
 
   const duyetGDMutation = useMutation({
@@ -181,7 +181,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('GĐ đã duyệt')
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi duyệt GĐ'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi duyệt GĐ'),
   })
 
   const huyMutation = useMutation({
@@ -190,7 +190,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('Đã hủy YMH')
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi hủy YMH'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi hủy YMH'),
   })
 
   const deleteMutation = useMutation({
@@ -199,7 +199,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('Đã xóa YMH')
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi xóa YMH'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi xóa YMH'),
   })
 
   const submitMutation = useMutation({
@@ -208,7 +208,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('Đã gửi yêu cầu đi duyệt')
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi gửi duyệt'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi gửi duyệt'),
   })
 
   const approveMutation = useMutation({
@@ -217,7 +217,7 @@ export default function YMHListPage() {
       qc.invalidateQueries({ queryKey: ['ymh-list'] })
       message.success('Đã phê duyệt YMH')
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi phê duyệt'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi phê duyệt'),
   })
 
   const rejectMutation = useMutation({
@@ -229,7 +229,7 @@ export default function YMHListPage() {
       setRejectRecord(null)
       setRejectReason('')
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi từ chối'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi từ chối'),
   })
 
   const taoPOMutation = useMutation({
@@ -241,7 +241,7 @@ export default function YMHListPage() {
       setPoRecord(null)
       poForm.resetFields()
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo PO'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo PO'),
   })
 
   function syncXuongToPhapNhan(phanXuongId?: number) {
@@ -279,7 +279,7 @@ export default function YMHListPage() {
   }
 
   function toPayload(values: Record<string, unknown>): CreateYmhPayload {
-    const items = (values.items ?? []).map((it: FormItem) => ({
+    const items = ((values.items as FormItem[] | undefined) ?? []).map((it: FormItem) => ({
       paper_material_id: it.loai_vat_tu === 'giay' ? (it.mat_id || null) : null,
       other_material_id: it.loai_vat_tu === 'khac' ? (it.mat_id || null) : null,
       ten_hang: it.ten_hang ?? '',
@@ -290,10 +290,10 @@ export default function YMHListPage() {
       ghi_chu: it.ghi_chu ?? null,
     }))
     return {
-      ngay_yeu_cau: dayjs(values.ngay_yeu_cau).format('YYYY-MM-DD'),
-      phap_nhan_id: values.phap_nhan_id ?? null,
-      phan_xuong_id: values.phan_xuong_id ?? null,
-      ghi_chu: values.ghi_chu ?? null,
+      ngay_yeu_cau: dayjs(values.ngay_yeu_cau as string).format('YYYY-MM-DD'),
+      phap_nhan_id: (values.phap_nhan_id as number | undefined) ?? null,
+      phan_xuong_id: (values.phan_xuong_id as number | undefined) ?? null,
+      ghi_chu: (values.ghi_chu as string | undefined) ?? null,
       items,
     }
   }

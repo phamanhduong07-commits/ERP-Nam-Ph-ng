@@ -176,7 +176,7 @@ export default function KhoNVLPage() {
       message.success(`Đã tạo ${created} kho mới`)
       queryClient.invalidateQueries({ queryKey: ['kho-theo-xuong'] })
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi khởi tạo kho'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi khởi tạo kho'),
   })
 
   const displayList = selectedPxId === 'all' ? list : list.filter(px => px.id === selectedPxId)
@@ -356,7 +356,7 @@ export default function KhoNVLPage() {
                       >
                         <WarehouseCard
                           loai={loai}
-                          slot={(px.warehouses as Record<string, unknown>)[loai]}
+                          slot={(px.warehouses as Record<string, WarehouseSlot | WarehouseSlotNA | null | undefined>)[loai]}
                           onInit={() => initMut.mutate(px.id)}
                           onDetail={setDetailSlot}
                         />

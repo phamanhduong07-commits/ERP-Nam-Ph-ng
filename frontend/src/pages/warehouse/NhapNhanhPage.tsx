@@ -43,7 +43,7 @@ export default function NhapNhanhPage() {
   const captureMut = useMutation({
     mutationFn: (data: QuickCapturePayload) => warehouseApi.quickCaptureGoodsReceipt(data),
     onSuccess: (res) => setDone({ soPhieu: res.data.so_phieu }),
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi gửi phiếu'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi gửi phiếu'),
   })
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {

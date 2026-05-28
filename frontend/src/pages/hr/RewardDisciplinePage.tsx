@@ -10,6 +10,7 @@ import {
   CheckCircleOutlined
 } from '@ant-design/icons'
 import client from '../../api/client'
+import type { RewardDiscipline } from '../../api/hr'
 import dayjs from 'dayjs'
 import EmptyState from "../../components/EmptyState"
 
@@ -35,8 +36,8 @@ export default function RewardDisciplinePage() {
   const createMutation = useMutation({
     mutationFn: (values: Record<string, unknown>) => client.post(`/hr/rewards`, {
       ...values,
-      thang_ap_dung: values.ky_luong.month() + 1,
-      nam_ap_dung: values.ky_luong.year()
+      thang_ap_dung: (values.ky_luong as { month: () => number }).month() + 1,
+      nam_ap_dung: (values.ky_luong as { year: () => number }).year()
     }),
     onSuccess: () => {
       message.success('Đã thêm bản ghi mới')
@@ -57,7 +58,7 @@ export default function RewardDisciplinePage() {
 
   const columns = [
     { title: 'Ngày QĐ', dataIndex: 'ngay_quyet_dinh', render: (v: string) => dayjs(v).format('DD/MM/YYYY') },
-    { title: 'Nhân viên', dataIndex: 'employee', render: (v: unknown) => <Text strong>{v.ho_ten} ({v.ma_nv})</Text> },
+    { title: 'Nhân viên', dataIndex: 'employee', render: (v: { ho_ten?: string; ma_nv?: string }) => <Text strong>{v?.ho_ten} ({v?.ma_nv})</Text> },
     { title: 'Loại', dataIndex: 'loai', render: (v: string) => (
       <Tag color={v === 'khen_thuong' ? 'gold' : 'error'}>
         {v === 'khen_thuong' ? <TrophyOutlined /> : <WarningOutlined />} {v === 'khen_thuong' ? 'KHEN THƯỞNG' : 'KỶ LUẬT'}
@@ -116,7 +117,7 @@ export default function RewardDisciplinePage() {
             <Select 
                 showSearch 
                 placeholder="Tìm nhân viên..."
-                options={(employees || []).map((e: unknown) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))} 
+                options={(employees || []).map((e: { id: number; ma_nv?: string; ho_ten?: string }) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))}
                 filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
             />
           </Form.Item>

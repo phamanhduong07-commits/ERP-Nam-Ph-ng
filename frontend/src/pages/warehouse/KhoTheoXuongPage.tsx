@@ -191,7 +191,7 @@ export default function KhoTheoXuongPage() {
       queryClient.invalidateQueries({ queryKey: ['kho-theo-xuong'] })
       queryClient.invalidateQueries({ queryKey: ['warehouses'] })
     },
-    onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi khởi tạo kho'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi khởi tạo kho'),
   })
 
   const displayList = selectedPxId === 'all'
@@ -315,7 +315,7 @@ export default function KhoTheoXuongPage() {
                     <Col key={loai} xs={24} sm={12} md={6}>
                       <WarehouseCard
                         loai={loai}
-                        slot={(px.warehouses as Record<string, unknown>)[loai]}
+                        slot={(px.warehouses as Record<string, WarehouseSlot | WarehouseSlotNA | null>)[loai]}
                         onInit={() => initMut.mutate(px.id)}
                         onDetail={setDetailSlot}
                       />

@@ -322,6 +322,7 @@ class BankAccountCreate(BaseModel):
     ma_tk: str
     ten_ngan_hang: str
     so_tai_khoan: str
+    phap_nhan_id: int | None = None
     chu_tai_khoan: str | None = None
     chi_nhanh: str | None = None
     swift_code: str | None = None
@@ -332,6 +333,7 @@ class BankAccountCreate(BaseModel):
 class BankAccountUpdate(BaseModel):
     ten_ngan_hang: str | None = None
     so_tai_khoan: str | None = None
+    phap_nhan_id: int | None = None
     chu_tai_khoan: str | None = None
     chi_nhanh: str | None = None
     swift_code: str | None = None
@@ -345,6 +347,7 @@ class BankAccountResponse(BaseModel):
     ma_tk: str
     ten_ngan_hang: str
     so_tai_khoan: str
+    phap_nhan_id: int | None = None
     chu_tai_khoan: str | None
     chi_nhanh: str | None
     swift_code: str | None
@@ -546,6 +549,25 @@ class OverheadAllocationRequest(BaseModel):
 # ──────────────────────────────────────────────
 # Bút toán thủ công (journal entry)
 # ──────────────────────────────────────────────
+
+class ProductionCostPeriodCreate(BaseModel):
+    ma_ky: str | None = None
+    ten_ky: str | None = None
+    tu_ngay: date
+    den_ngay: date
+    phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
+    tieu_thuc_pb: str = "san_luong"
+    ghi_chu: str | None = None
+
+    @model_validator(mode="after")
+    def check_period(self) -> "ProductionCostPeriodCreate":
+        if self.den_ngay < self.tu_ngay:
+            raise ValueError("den_ngay phai lon hon hoac bang tu_ngay")
+        if self.tieu_thuc_pb not in {"san_luong"}:
+            raise ValueError("Hien chi ho tro tieu thuc phan bo san_luong")
+        return self
+
 
 class ManualJournalLineIn(BaseModel):
     so_tk: str

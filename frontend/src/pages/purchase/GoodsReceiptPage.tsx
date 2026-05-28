@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ApiError } from '../../../../../../../../api/types'
+import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Checkbox, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
@@ -376,7 +376,7 @@ export default function GoodsReceiptPage() {
       loai_nhap: selectedPO?.loai_po === 'giay_tam' ? 'PHOI_NGOAI' : 'MUA_HANG',
       ghi_chu: values.ghi_chu ?? null,
       so_xe: values.so_xe ?? null,
-      items,
+      items: items as CreateGoodsReceiptPayload['items'],
     }
     createMut.mutate(payload)
   }

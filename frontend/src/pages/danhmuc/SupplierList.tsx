@@ -315,7 +315,7 @@ export default function SupplierList() {
         visible={importVisible}
         onCancel={() => setImportVisible(false)}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ['suppliers'] })}
-        importFn={(file, commit) => suppliersApi.import(file, commit)}
+        importFn={(file, commit) => suppliersApi.import(file, commit).then(r => r.data as { total?: number; created?: number; updated?: number; skipped?: number; errors?: number | string[]; rows?: Array<{ row?: number; status?: string; message?: string }> })}
         templateUrl="/api/suppliers/import-template"
       />
     </div>

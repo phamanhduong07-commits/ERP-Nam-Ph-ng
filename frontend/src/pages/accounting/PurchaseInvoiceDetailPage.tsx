@@ -7,10 +7,9 @@ import { ArrowLeftOutlined, PrinterOutlined, WalletOutlined } from '@ant-design/
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { fmtVND, printToPdf } from '../../utils/exportUtils'
-import {
-import EmptyState from "../../components/EmptyState"
-  purchaseInvoiceApi, PurchaseInvoice, CashPaymentShort,
-} from '../../api/accounting'
+import EmptyState from '../../components/EmptyState'
+import { purchaseInvoiceApi } from '../../api/accounting'
+import type { PurchaseInvoice, CashPaymentShort } from '../../api/accounting'
 
 const { Title, Text } = Typography
 

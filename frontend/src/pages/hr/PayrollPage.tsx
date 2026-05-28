@@ -80,7 +80,7 @@ export default function PayrollPage() {
   const holidayMutation = useMutation({
     mutationFn: (values: Record<string, unknown>) => hrApi.createPayrollHoliday({
       ...values,
-      ngay: values.ngay.format('YYYY-MM-DD')
+      ngay: (values.ngay as { format: (f: string) => string }).format('YYYY-MM-DD')
     }),
     onSuccess: () => {
       message.success('Da luu ngay le')
@@ -159,11 +159,11 @@ export default function PayrollPage() {
       title: 'Khau / xuong',
       dataIndex: 'details',
       width: 300,
-      render: (details: unknown[] = []) => (
+      render: (details: Record<string, unknown>[] = []) => (
         <Space size={[4, 4]} wrap>
           {details.slice(0, 4).map((d: Record<string, unknown>, idx: number) => (
             <Tag key={`${d.phan_xuong_id}-${d.cong_doan}-${idx}`}>
-              {d.ten_xuong || `PX${d.phan_xuong_id || '-'}`} - {d.ten_cong_doan}: {d.tong_m2?.toLocaleString()} m2
+              {d.ten_xuong as string || `PX${d.phan_xuong_id || '-'}`} - {d.ten_cong_doan as string}: {(d.tong_m2 as number)?.toLocaleString()} m2
             </Tag>
           ))}
           {details.length > 4 ? <Tag>+{details.length - 4}</Tag> : null}
@@ -331,7 +331,7 @@ export default function PayrollPage() {
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     style={{ marginTop: 16 }}
           size="small"
-          dataSource={holidays}
+          dataSource={holidays as { id: number }[]}
           rowKey="id"
           pagination={false}
           columns={[

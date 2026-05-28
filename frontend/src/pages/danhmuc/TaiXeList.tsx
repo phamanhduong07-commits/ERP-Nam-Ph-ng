@@ -35,7 +35,7 @@ export default function TaiXeList() {
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Loi khi xoa'),
   })
 
-  const employeeOptions = employees.map((e: unknown) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))
+  const employeeOptions = employees.map((e: unknown) => { const emp = e as { id: number; ma_nv: string; ho_ten: string }; return { value: emp.id, label: `${emp.ma_nv} - ${emp.ho_ten}` } })
   const openCreate = () => { setEditing(null); form.resetFields(); form.setFieldsValue({ trang_thai: true, he_so_chuyen: 1 }); setModalOpen(true) }
   const openEdit = (row: TaiXe) => { setEditing(row); form.setFieldsValue({ ...row }); setModalOpen(true) }
   const closeModal = () => { setModalOpen(false); setEditing(null) }

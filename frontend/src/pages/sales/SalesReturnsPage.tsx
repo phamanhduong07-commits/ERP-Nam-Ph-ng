@@ -20,8 +20,9 @@ import {
   type PagedReturnsResponse,
   SALES_RETURN_TRANG_THAI_LABELS,
   SALES_RETURN_TRANG_THAI_COLORS,
-  PHUONG_AN_LABELS,
+  PHUONG_AN_LABELS as _PHUONG_AN_LABELS_RAW,
 } from '../../api/salesReturns'
+const PHUONG_AN_LABELS = _PHUONG_AN_LABELS_RAW as unknown as Record<string, { label: string; color: string }>
 import { customersApi } from '../../api/customers'
 import { exportToExcel } from '../../utils/exportUtils'
 import { useAuthStore } from '../../store/auth'

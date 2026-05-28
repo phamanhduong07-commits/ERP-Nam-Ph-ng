@@ -8,10 +8,8 @@ import {
 import { SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import {
-import EmptyState from "../../components/EmptyState"
-  productionPlansApi, AvailableItem, calcSoDao, calcKhoTT,
-} from '../../api/productionPlans'
+import { productionPlansApi, calcSoDao, calcKhoTT } from '../../api/productionPlans'
+import type { AvailableItem } from '../../api/productionPlans'
 
 const { Text } = Typography
 
