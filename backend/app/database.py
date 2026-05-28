@@ -63,6 +63,45 @@ def _seed_phan_xuong() -> None:
         logger.info("seed_phan_xuong: đã tạo 4 xưởng mặc định")
 
 
+def _seed_phap_nhan() -> None:
+    """Tạo 3 pháp nhân mặc định nếu bảng còn trống."""
+    from app.models.master import PhapNhan, PhanXuong
+
+    with SessionLocal() as db:
+        if db.query(PhapNhan).count() > 0:
+            return
+
+        hoang_gia = db.query(PhanXuong).filter_by(ma_xuong="hoang_gia").first()
+        nam_thuan = db.query(PhanXuong).filter_by(ma_xuong="nam_thuan").first()
+
+        seeds = [
+            PhapNhan(
+                ma_phap_nhan="NP",
+                ten_phap_nhan="Nam Phương",
+                ten_viet_tat="NP",
+                email="info@namphuong.vn",
+                phoi_phan_xuong_id=hoang_gia.id if hoang_gia else None,
+            ),
+            PhapNhan(
+                ma_phap_nhan="NP LA",
+                ten_phap_nhan="Nam Phương LA",
+                ten_viet_tat="NP LA",
+                email="info@namphuong.vn",
+                phoi_phan_xuong_id=nam_thuan.id if nam_thuan else None,
+            ),
+            PhapNhan(
+                ma_phap_nhan="VISUN",
+                ten_phap_nhan="Visunpack",
+                ten_viet_tat="VISUN",
+                email="info@visunpack.vn",
+                phoi_phan_xuong_id=hoang_gia.id if hoang_gia else None,
+            ),
+        ]
+        db.add_all(seeds)
+        db.commit()
+        logger.info("seed_phap_nhan: đã tạo 3 pháp nhân mặc định")
+
+
 def ensure_schema() -> None:
     """
     Khởi tạo schema và data seed sau khi app start.
@@ -76,6 +115,7 @@ def ensure_schema() -> None:
       2. Đảm bảo Hóc Môn / Củ Chi có phoi_tu_phan_xuong_id trỏ về Hoàng Gia
     """
     _seed_phan_xuong()
+    _seed_phap_nhan()
 
     # Idempotent: chỉ set khi chưa có giá trị
     with engine.begin() as conn:
