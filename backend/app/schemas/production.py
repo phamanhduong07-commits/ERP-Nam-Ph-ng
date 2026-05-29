@@ -113,6 +113,7 @@ class ProductionOrderCreate(BaseModel):
     ngay_hoan_thanh_ke_hoach: date | None = None
     ghi_chu: str | None = None
     don_gia_noi_bo: Decimal | None = None
+    tan_dung: bool = False
     items: list[ProductionOrderItemCreate]
 
     @field_validator("items")
@@ -135,6 +136,7 @@ class ProductionOrderUpdate(BaseModel):
     ngay_hoan_thanh_thuc_te: date | None = None
     ghi_chu: str | None = None
     don_gia_noi_bo: Decimal | None = None
+    tan_dung: bool | None = None
 
 
 class ProductionOrderResponse(BaseModel):
@@ -163,6 +165,7 @@ class ProductionOrderResponse(BaseModel):
     ghi_chu: str | None
     ghi_chu_don_hang: str | None = None
     don_gia_noi_bo: Decimal | None = None
+    tan_dung: bool = False
     phoi_phan_xuong_id: int | None = None
     ten_phoi_phan_xuong: str | None = None
     ten_kho_nhap_phoi_du_kien: str | None = None
@@ -205,6 +208,7 @@ class ProductionOrderListItem(BaseModel):
     rong: Decimal | None = None
     cao: Decimal | None = None
     tong_sl_thuc_te: Decimal = Decimal("0")   # tổng SL thực tế đã nhập qua phiếu
+    tan_dung: bool = False
     created_at: datetime
 
     class Config:

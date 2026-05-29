@@ -90,6 +90,16 @@ def get_optional_user(
         return None
 
 
+def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền thực hiện thao tác này",
+        )
+    return current_user
+
+
 def require_roles(*allowed_roles: str):
     def checker(current_user: User = Depends(get_current_user)) -> User:
         role_code = current_user.role.ma_vai_tro if current_user.role else None

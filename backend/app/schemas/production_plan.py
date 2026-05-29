@@ -171,6 +171,7 @@ class QueueLineResponse(BaseModel):
     id: int
     plan_id: int
     so_ke_hoach: str
+    production_order_id: int | None = None
     production_order_item_id: int
     thu_tu: int
     ngay_chay: date | None

@@ -17,6 +17,22 @@ from typing import Any
 # 1. Indirect cost (Chi phí gián tiếp) — đ/m²
 # ---------------------------------------------------------------------------
 
+# Tề biên (edge trimming) for die-cut types — (kho_add_cm, dai_add_cm)
+_TE_BIEN: dict[str, tuple[float, float]] = {
+    "be_tay":        (1.0, 1.0),
+    "be_tu_dong_3":  (2.0, 1.5),
+    "be_tu_dong_5":  (2.0, 2.0),
+    "be_tu_dong_7":  (2.0, 2.0),
+    "be_tem_offset": (2.0, 2.0),
+}
+
+_DIE_CUT_TYPES = frozenset({
+    "HOP_CAI", "HOP_CAI_CHAU", "HOP_GIAY", "HOP_PIZZA",
+    "HOP_NAP_CAI_DAY_GAI", "HOP_NAP_CAI_2_DAU",
+    "HOP_AM_DUONG_THAN", "HOP_AM_DUONG_NAP",
+    "KHAY_1_THANH", "KHAY_2_THANH", "KHAY_1_THANH_CHAU",
+})
+
 _INDIRECT_COST: dict[int, float] = {
     3: 898.0,
     5: 1178.2,
@@ -172,6 +188,7 @@ def calculate_dien_tich(
     rong: float,
     cao: float,
     so_lop: int,
+    loai_be: str | None = None,
 ) -> dict[str, Any]:
     """
     Calculate all dimensions and area for the box.
@@ -190,6 +207,10 @@ def calculate_dien_tich(
         kho_kh, dai_kh, dien_tich  (m²/unit)
     """
     loai = loai_thung.upper().strip()
+
+    # kho_sx / dai_sx: production dims (set explicitly for hộp/khay, else = kho_kh/dai_kh)
+    kho_sx: float | None = None
+    dai_sx: float | None = None
 
     # dai_tt standard: 3/5-layer = (D+R)*2+4, 7-layer = (D+R)*2+5
     dai_tt_std = (dai + rong) * 2 + (5 if so_lop == 7 else 4)
@@ -253,9 +274,120 @@ def calculate_dien_tich(
         dai1 = 2 * cao + dai + 2
         so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
         kho_tt = kho1 * so_dao + 1.8
-        dai_tt = dai1                  # same for all layers: (2×Cao)+Dài+2
-        kho_kh = 2 * cao + rong        # KH: (Cao×2)+Rộng
-        dai_kh = 2 * cao + dai         # KH: (Cao×2)+Dài
+        dai_tt = dai1
+        kho_kh = 2 * cao + rong
+        dai_kh = 2 * cao + dai
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "A5_DAY":
+        kho_kh = 2 * cao + rong
+        dai_kh = 2 * cao + dai
+        kho1 = kho_kh + 2
+        dai1 = dai_kh + 2
+        so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
+        kho_tt = kho1 * so_dao + 1.8
+        dai_tt = dai1
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "A5_NAP":
+        # Nắp lớn hơn đáy: D+2, R+2, C+1 → +4 cả hai chiều
+        kho_kh = 2 * cao + rong + 4
+        dai_kh = 2 * cao + dai + 4
+        kho1 = kho_kh + 2
+        dai1 = dai_kh + 2
+        so_dao = math.floor(180 / kho1) if kho1 > 0 else 1
+        kho_tt = kho1 * so_dao + 1.8
+        dai_tt = dai1
+        dien_tich = kho_kh * dai_kh / 10000
+
+    # ── HỘP (die-cut) ──────────────────────────────────────────────────────
+    elif loai == "HOP_CAI":
+        kho_sx = 3 * cao + 2 * rong
+        dai_sx = 4 * cao + dai + 0.5
+        kho_kh = 3 * cao + 2 * rong + 5
+        dai_kh = 4 * cao + dai + 10
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "HOP_CAI_CHAU":
+        kho_sx = 3 * cao + 2 * rong + 3
+        dai_sx = 4 * cao + dai + 0.5
+        kho_kh = 3 * cao + 2 * rong + 10
+        dai_kh = 4 * cao + dai + 10
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "HOP_GIAY":
+        kho_sx = 3 * cao + 2 * rong + 1
+        dai_sx = 3 * cao + dai
+        kho_kh = 3 * cao + 2 * rong + 10
+        dai_kh = 3 * cao + dai + 10
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "HOP_PIZZA":
+        kho_sx = 4 * cao + 2 * rong + 1
+        dai_sx = 2 * cao + dai
+        kho_kh = 4 * cao + 2 * rong + 5
+        dai_kh = 2 * cao + dai + 5
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "HOP_NAP_CAI_DAY_GAI":
+        kho_sx = (dai + rong) * 2 + 3
+        dai_sx = cao + 1.5 * rong + 6
+        kho_kh = (dai + rong) * 2 + 8
+        dai_kh = cao + 2 * rong + 5
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "HOP_NAP_CAI_2_DAU":
+        kho_sx = (dai + rong) * 2 + 3
+        dai_sx = cao + 2 * rong + 6
+        kho_kh = (dai + rong + 5) * 2
+        dai_kh = cao + 2 * rong + 8
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "HOP_AM_DUONG_THAN":
+        kho_sx = 4 * cao + dai + 1
+        dai_sx = 2 * cao + rong + 1
+        kho_kh = 4 * cao + dai + 5
+        dai_kh = 2 * cao + rong + 5
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "HOP_AM_DUONG_NAP":
+        kho_sx = 4 * cao + dai + 1
+        dai_sx = 2 * cao + rong + 1
+        kho_kh = 4 * cao + dai + 6
+        dai_kh = 2 * cao + rong + 6
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
+    # ── KHAY (die-cut) ─────────────────────────────────────────────────────
+    elif loai == "KHAY_1_THANH":
+        kho_sx = 2 * cao + rong + 2
+        dai_sx = 3 * cao + dai
+        kho_kh = 2 * cao + rong + 7
+        dai_kh = 3 * cao + dai + 5
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "KHAY_2_THANH":
+        kho_sx = 3 * cao + rong
+        dai_sx = 4 * cao + dai + 2
+        kho_kh = 3 * cao + rong + 5
+        dai_kh = 4 * cao + dai + 7
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
+    elif loai == "KHAY_1_THANH_CHAU":
+        kho_sx = (8 / 3) * cao + rong + 4
+        dai_sx = 3 * cao + dai
+        kho_kh = (8 / 3) * cao + rong + 9
+        dai_kh = 3 * cao + dai + 5
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
         dien_tich = kho_kh * dai_kh / 10000
 
     elif loai == "A7":
@@ -299,8 +431,25 @@ def calculate_dien_tich(
     else:
         raise ValueError(
             f"loai_thung không hợp lệ: '{loai_thung}'. "
-            "Chấp nhận: A1, A3, A5, A7, GOI_GIUA, GOI_SUON, TAM"
+            "Chấp nhận: A1, A3, A5/A5_DAY/A5_NAP, A7, GOI_GIUA, GOI_SUON, TAM, "
+            "HOP_CAI, HOP_CAI_CHAU, HOP_GIAY, HOP_PIZZA, "
+            "HOP_NAP_CAI_DAY_GAI, HOP_NAP_CAI_2_DAU, "
+            "HOP_AM_DUONG_THAN, HOP_AM_DUONG_NAP, "
+            "KHAY_1_THANH, KHAY_2_THANH, KHAY_1_THANH_CHAU"
         )
+
+    # Apply tề biên for die-cut types when loai_be is specified
+    if loai in _DIE_CUT_TYPES and loai_be:
+        te_kho, te_dai = _TE_BIEN.get(loai_be.lower(), (0.0, 0.0))
+        kho_kh += te_kho
+        dai_kh += te_dai
+        kho1 = kho_kh
+        kho_tt = kho_kh
+        if kho_sx is not None:
+            kho_sx += te_kho
+        if dai_sx is not None:
+            dai_sx += te_dai
+        dien_tich = kho_kh * dai_kh / 10000
 
     return {
         "kho1": round(kho1, 4),
@@ -310,6 +459,8 @@ def calculate_dien_tich(
         "dai_tt": round(dai_tt, 4),
         "kho_kh": round(kho_kh, 4),
         "dai_kh": round(dai_kh, 4),
+        "kho_sx": round(kho_sx, 4) if kho_sx is not None else round(kho_kh, 4),
+        "dai_sx": round(dai_sx, 4) if dai_sx is not None else round(dai_kh, 4),
         "dien_tich": round(dien_tich, 6),
         "hai_manh": hai_manh,
     }
@@ -507,8 +658,10 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
     chi_phi_khac: float = float(inp.get("chi_phi_khac", 0))
     chiet_khau: float = float(inp.get("chiet_khau", 0))
 
+    loai_be: str | None = inp.get("loai_be")
+
     # ---- Dimensions ----
-    dims = calculate_dien_tich(loai_thung, dai, rong, cao, so_lop)
+    dims = calculate_dien_tich(loai_thung, dai, rong, cao, so_lop, loai_be)
     dien_tich = dims["dien_tich"]  # m²/unit
 
     # ---- Parse corrugated layers ----
@@ -648,4 +801,105 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
         "gia_ban_cuoi": round(gia_ban_cuoi, 2),
         "bom_layers": bom_layers,
         "gian_tiep_breakdown": gian_tiep_breakdown,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 9. Offset / tem cost calculator
+# ---------------------------------------------------------------------------
+
+def calculate_offset_cost(
+    qty: float,
+    tem_loai_giay: str | None = None,
+    tem_gsm: float | None = None,
+    tem_don_gia_kg: float | None = None,
+    tem_dai_to: float | None = None,
+    tem_rong_to: float | None = None,
+    tem_sp_per_to: int = 2,
+    tem_waste_to: int = 150,
+    tem_so_mau: int = 0,
+    tem_gia_kem_mau: float | None = None,
+    tem_gia_in_1000to: float | None = None,
+    tem_co_can_mang: bool = False,
+    tem_gia_can_mang_m2: float | None = None,
+    tem_co_khuon_be: bool = False,
+    tem_gia_khuon_be: float | None = None,
+    tem_khuon_be_phan_bo: int = 10000,
+    tem_co_uv: bool = False,
+    tem_gia_uv_m2: float | None = None,
+    tem_co_suppo: bool = False,
+    tem_gia_suppo_m2: float | None = None,
+    tem_co_luoi: bool = False,
+    tem_gia_luoi_m2: float | None = None,
+    tem_hai_manh: bool = False,
+) -> dict:
+    """
+    Tính chi phí tem/offset per cái sản phẩm.
+
+    Công thức:
+        so_to = ceil(qty / tem_sp_per_to) + tem_waste_to
+        chi_phi_giay    = so_to × DT_to × (gsm/1000) × don_gia_kg
+        chi_phi_in      = so_mau × (gia_kem_mau + gia_in_1000to × so_to/1000)
+        chi_phi_can_mang= so_to × DT_to × gia_can_mang_m2
+        chi_phi_khuon_be= gia_khuon_be / phan_bo × qty
+        chi_phi_uv      = so_to × DT_to × gia_uv_m2
+        chi_phi_suppo   = so_to × DT_to × gia_suppo_m2
+        chi_phi_luoi    = so_to × DT_to × gia_luoi_m2
+        gia_per_cai     = (sum các chi phí trên) / qty
+    """
+    import math
+
+    if not qty or qty <= 0:
+        return {"gia_ban_tem_per_cai": 0.0, "so_to": 0, "dien_tich_to": 0.0, "detail": {}}
+
+    so_to = (math.ceil(qty / max(tem_sp_per_to, 1)) + tem_waste_to) * (2 if tem_hai_manh else 1)
+    dien_tich_to = (tem_dai_to or 0.0) * (tem_rong_to or 0.0) / 10000.0
+
+    chi_phi_giay = 0.0
+    if tem_gsm and tem_don_gia_kg and dien_tich_to:
+        chi_phi_giay = so_to * dien_tich_to * (tem_gsm / 1000.0) * tem_don_gia_kg
+
+    chi_phi_in = 0.0
+    if tem_so_mau > 0:
+        kem = (tem_gia_kem_mau or 0.0) * tem_so_mau
+        cong_in = (tem_gia_in_1000to or 0.0) * tem_so_mau * so_to / 1000.0
+        chi_phi_in = kem + cong_in
+
+    chi_phi_can_mang = 0.0
+    if tem_co_can_mang and tem_gia_can_mang_m2 and dien_tich_to:
+        chi_phi_can_mang = so_to * dien_tich_to * tem_gia_can_mang_m2
+
+    chi_phi_khuon_be = 0.0
+    if tem_co_khuon_be and tem_gia_khuon_be:
+        chi_phi_khuon_be = tem_gia_khuon_be / max(tem_khuon_be_phan_bo, 1) * qty
+
+    chi_phi_uv = 0.0
+    if tem_co_uv and tem_gia_uv_m2 and dien_tich_to:
+        chi_phi_uv = so_to * dien_tich_to * tem_gia_uv_m2
+
+    chi_phi_suppo = 0.0
+    if tem_co_suppo and tem_gia_suppo_m2 and dien_tich_to:
+        chi_phi_suppo = so_to * dien_tich_to * tem_gia_suppo_m2
+
+    chi_phi_luoi = 0.0
+    if tem_co_luoi and tem_gia_luoi_m2 and dien_tich_to:
+        chi_phi_luoi = so_to * dien_tich_to * tem_gia_luoi_m2
+
+    tong = chi_phi_giay + chi_phi_in + chi_phi_can_mang + chi_phi_khuon_be + chi_phi_uv + chi_phi_suppo + chi_phi_luoi
+    gia_per_cai = tong / qty
+
+    return {
+        "gia_ban_tem_per_cai": round(gia_per_cai, 2),
+        "so_to": so_to,
+        "dien_tich_to": round(dien_tich_to, 6),
+        "detail": {
+            "chi_phi_giay": round(chi_phi_giay, 2),
+            "chi_phi_in": round(chi_phi_in, 2),
+            "chi_phi_can_mang": round(chi_phi_can_mang, 2),
+            "chi_phi_khuon_be": round(chi_phi_khuon_be, 2),
+            "chi_phi_uv": round(chi_phi_uv, 2),
+            "chi_phi_suppo": round(chi_phi_suppo, 2),
+            "chi_phi_luoi": round(chi_phi_luoi, 2),
+            "tong_chi_phi": round(tong, 2),
+        },
     }

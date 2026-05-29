@@ -28,7 +28,7 @@ from app.services.excel_import_service import (
     parse_int,
     parse_text,
 )
-from app.services.price_calculator import calculate_price
+from app.services.price_calculator import calculate_price, calculate_offset_cost
 from app.routers.indirect_costs import get_indirect_breakdown_from_db
 from app.routers.addon_rates import get_addon_rates_from_db
 
@@ -250,19 +250,61 @@ def _quote_layers(item: QuoteItem | dict, db: Session) -> list[dict]:
     ]
 
 
+def _calc_offset_addon(item: QuoteItem | dict, qty: float) -> float:
+    """Tính chi phí tem offset per cái, trả về 0 nếu co_tem_offset=False."""
+    if not _item_get(item, "co_tem_offset"):
+        return 0.0
+    result = calculate_offset_cost(
+        qty=qty,
+        tem_loai_giay=_item_get(item, "tem_loai_giay"),
+        tem_gsm=float(_item_get(item, "tem_gsm") or 0) or None,
+        tem_don_gia_kg=float(_item_get(item, "tem_don_gia_kg") or 0) or None,
+        tem_dai_to=float(_item_get(item, "tem_dai_to") or 0) or None,
+        tem_rong_to=float(_item_get(item, "tem_rong_to") or 0) or None,
+        tem_sp_per_to=int(_item_get(item, "tem_sp_per_to") or 2),
+        tem_waste_to=int(_item_get(item, "tem_waste_to") or 150),
+        tem_so_mau=int(_item_get(item, "tem_so_mau") or 0),
+        tem_gia_kem_mau=float(_item_get(item, "tem_gia_kem_mau") or 0) or None,
+        tem_gia_in_1000to=float(_item_get(item, "tem_gia_in_1000to") or 0) or None,
+        tem_co_can_mang=bool(_item_get(item, "tem_co_can_mang")),
+        tem_gia_can_mang_m2=float(_item_get(item, "tem_gia_can_mang_m2") or 0) or None,
+        tem_co_khuon_be=bool(_item_get(item, "tem_co_khuon_be")),
+        tem_gia_khuon_be=float(_item_get(item, "tem_gia_khuon_be") or 0) or None,
+        tem_khuon_be_phan_bo=int(_item_get(item, "tem_khuon_be_phan_bo") or 10000),
+        tem_co_uv=bool(_item_get(item, "tem_co_uv")),
+        tem_gia_uv_m2=float(_item_get(item, "tem_gia_uv_m2") or 0) or None,
+        tem_co_suppo=bool(_item_get(item, "tem_co_suppo")),
+        tem_gia_suppo_m2=float(_item_get(item, "tem_gia_suppo_m2") or 0) or None,
+        tem_co_luoi=bool(_item_get(item, "tem_co_luoi")),
+        tem_gia_luoi_m2=float(_item_get(item, "tem_gia_luoi_m2") or 0) or None,
+        tem_hai_manh=bool(_item_get(item, "tem_hai_manh")),
+    )
+    return result["gia_ban_tem_per_cai"]
+
+
 def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
     _zero = {"gia_ban": Decimal("0"), "gia_noi_bo": Decimal("0")}
     so_lop = int(_item_get(item, "so_lop") or 0)
-    if so_lop not in (3, 5, 7):
-        return _zero
+    co_tem_offset = bool(_item_get(item, "co_tem_offset"))
+    so_luong = float(_item_get(item, "so_luong") or 0)
     loai_thung = (_item_get(item, "loai_thung") or "A1").upper()
     if loai_thung == "LOT":
         loai_thung = "TAM"
+
+    # Case B: offset thuần (so_lop không phải 3/5/7, nhưng có co_tem_offset)
+    if so_lop not in (3, 5, 7):
+        if co_tem_offset and so_luong > 0:
+            offset_per_cai = _calc_offset_addon(item, so_luong)
+            gia = Decimal(str(offset_per_cai)).quantize(Decimal("1"))
+            return {"gia_ban": gia, "gia_noi_bo": gia}
+        return _zero
+
     if loai_thung == "KHAC":
         return _zero
     if not (_item_get(item, "dai") and _item_get(item, "rong") and _item_get(item, "to_hop_song")):
         return _zero
 
+    # Case A / C: corrugated (+ optional offset add-on)
     loai_in = _item_get(item, "loai_in")
     calc_input = {
         "loai_thung": loai_thung,
@@ -271,7 +313,7 @@ def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
         "cao": float(_item_get(item, "cao") or 0),
         "so_lop": so_lop,
         "to_hop_song": _item_get(item, "to_hop_song"),
-        "so_luong": float(_item_get(item, "so_luong") or 0),
+        "so_luong": so_luong,
         "layers": _quote_layers(item, db),
         "chong_tham": _parse_mat_field(_item_get(item, "c_tham")),
         "in_flexo_mau": int(_item_get(item, "so_mau") or 0) if loai_in == "flexo" else 0,
@@ -294,8 +336,12 @@ def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
     addon_rates_db = get_addon_rates_from_db(db)
     result = calculate_price(calc_input, indirect_breakdown=indirect_bd, addon_rates=addon_rates_db)
     gia_noi_bo = result["chi_phi_giay"] + result["chi_phi_gian_tiep"] + result["loi_nhuan"]
+
+    # Case C: cộng thêm chi phí offset
+    offset_addon = _calc_offset_addon(item, so_luong) if co_tem_offset else 0.0
+
     return {
-        "gia_ban": Decimal(str(result["gia_ban_cuoi"])).quantize(Decimal("1")),
+        "gia_ban": Decimal(str(result["gia_ban_cuoi"] + offset_addon)).quantize(Decimal("1")),
         "gia_noi_bo": Decimal(str(gia_noi_bo)).quantize(Decimal("1")),
     }
 

@@ -33,6 +33,33 @@ export interface QuoteItem {
   dai_tt?: number | null
   dien_tich?: number | null
   khong_ct: boolean
+  loai_be?: string | null
+  kho_sx?: number | null
+  dai_sx?: number | null
+  nhom_san_pham?: string | null
+  co_tem_offset: boolean
+  tem_loai_giay?: string | null
+  tem_gsm?: number | null
+  tem_don_gia_kg?: number | null
+  tem_dai_to?: number | null
+  tem_rong_to?: number | null
+  tem_sp_per_to: number
+  tem_waste_to: number
+  tem_so_mau: number
+  tem_gia_kem_mau?: number | null
+  tem_gia_in_1000to?: number | null
+  tem_co_can_mang: boolean
+  tem_gia_can_mang_m2?: number | null
+  tem_co_khuon_be: boolean
+  tem_gia_khuon_be?: number | null
+  tem_khuon_be_phan_bo: number
+  tem_co_uv: boolean
+  tem_gia_uv_m2?: number | null
+  tem_co_suppo: boolean
+  tem_gia_suppo_m2?: number | null
+  tem_co_luoi: boolean
+  tem_gia_luoi_m2?: number | null
+  tem_hai_manh: boolean
   // In ấn
   loai_in: string
   do_kho: boolean
@@ -180,15 +207,45 @@ export const LOAI_IN_OPTIONS = [
 ]
 
 export const LOAI_THUNG_OPTIONS = [
-  { value: 'A1', label: 'A1 - Thùng thường' },
-  { value: 'A3', label: 'A3 - Nắp chồm' },
-  { value: 'A5', label: 'A5 - Âm dương (Nắp/Đáy)' },
-  { value: 'A7', label: 'A7 - Thùng 1 nắp' },
-  { value: 'GOI_GIUA', label: 'Gói giữa' },
-  { value: 'GOI_SUON', label: 'Gói sườn' },
-  { value: 'LOT', label: 'Lót (Giấy tấm)' },
-  { value: 'KHAC', label: 'Khác' },
+  // Thùng
+  { value: 'A1',       label: 'A1 - Thùng thường',   group: 'Thùng' },
+  { value: 'A3',       label: 'A3 - Nắp chồm',        group: 'Thùng' },
+  { value: 'A5_DAY',   label: 'A5 - Âm dương đáy',    group: 'Thùng' },
+  { value: 'A5_NAP',   label: 'A5 - Âm dương nắp',    group: 'Thùng' },
+  { value: 'A7',       label: 'A7 - Thùng 1 nắp',     group: 'Thùng' },
+  { value: 'GOI_GIUA', label: 'Gói giữa',              group: 'Thùng' },
+  { value: 'GOI_SUON', label: 'Gói sườn',              group: 'Thùng' },
+  { value: 'LOT',      label: 'Lót (Giấy tấm)',        group: 'Thùng' },
+  { value: 'KHAC',     label: 'Khác',                  group: 'Thùng' },
+  // Hộp
+  { value: 'HOP_CAI',             label: 'Hộp nắp gài',            group: 'Hộp' },
+  { value: 'HOP_CAI_CHAU',        label: 'Hộp cài có chấu',        group: 'Hộp' },
+  { value: 'HOP_GIAY',            label: 'Hộp giày',               group: 'Hộp' },
+  { value: 'HOP_PIZZA',           label: 'Hộp pizza',              group: 'Hộp' },
+  { value: 'HOP_NAP_CAI_DAY_GAI', label: 'Hộp nắp cài đáy gài',   group: 'Hộp' },
+  { value: 'HOP_NAP_CAI_2_DAU',   label: 'Hộp nắp cài 2 đầu',     group: 'Hộp' },
+  { value: 'HOP_AM_DUONG_THAN',   label: 'Hộp âm dương — thân',   group: 'Hộp' },
+  { value: 'HOP_AM_DUONG_NAP',    label: 'Hộp âm dương — nắp',    group: 'Hộp' },
+  // Khay
+  { value: 'KHAY_1_THANH',       label: 'Khay 1 thành',            group: 'Khay' },
+  { value: 'KHAY_2_THANH',       label: 'Khay 2 thành',            group: 'Khay' },
+  { value: 'KHAY_1_THANH_CHAU',  label: 'Khay 1 thành có chấu',   group: 'Khay' },
 ]
+
+export const LOAI_BE_OPTIONS = [
+  { value: 'be_tay',        label: 'Bế tay (+1/+1 cm)' },
+  { value: 'be_tu_dong_3',  label: 'Bế tự động 3 lớp (+2/+1.5 cm)' },
+  { value: 'be_tu_dong_5',  label: 'Bế tự động 5 lớp (+2/+2 cm)' },
+  { value: 'be_tu_dong_7',  label: 'Bế tự động 7 lớp (+2/+2 cm)' },
+  { value: 'be_tem_offset',  label: 'Bế tem offset (+2/+2 cm)' },
+]
+
+export const DIE_CUT_TYPES = new Set([
+  'HOP_CAI', 'HOP_CAI_CHAU', 'HOP_GIAY', 'HOP_PIZZA',
+  'HOP_NAP_CAI_DAY_GAI', 'HOP_NAP_CAI_2_DAU',
+  'HOP_AM_DUONG_THAN', 'HOP_AM_DUONG_NAP',
+  'KHAY_1_THANH', 'KHAY_2_THANH', 'KHAY_1_THANH_CHAU',
+])
 
 export const SO_LOP_OPTIONS = [1, 3, 5, 7]
 
@@ -246,61 +303,164 @@ export function calcBoxDimensions(
   rong: number | null | undefined,  // cm
   cao: number | null | undefined,   // cm
   so_lop: number,
-  be_so_con: number = 1,            // số con bế cùng lúc theo chiều ngang
-): { kho1: number; dai1: number; so_dao: number; kho_tt: number; dai_tt: number; dien_tich: number; kho_ke_hoach: number; dai_ke_hoach: number; hai_manh: boolean } | null {
+  be_so_con: number = 1,
+  loai_be: string | null | undefined = null,
+): { kho1: number; dai1: number; so_dao: number; kho_tt: number; dai_tt: number; dien_tich: number; kho_ke_hoach: number; dai_ke_hoach: number; kho_sx: number; dai_sx: number; hai_manh: boolean } | null {
   if (!loai_thung || !dai || !rong || !cao) return null
   const D = dai, R = rong, C = cao
   let kho1 = 0, dai1 = 0, dai_tt = 0
   let kho_ke_hoach = 0, dai_ke_hoach = 0
+  let kho_sx = 0, dai_sx = 0
+  let isDieCut = false
 
   // Offset kế hoạch theo số lớp (Tài liệu 02 — Giai đoạn 1)
   const off = so_lop <= 3 ? 0.2 : so_lop <= 5 ? 0.4 : 0.8
 
+  // Tề biên lookup
+  const TE_BIEN: Record<string, [number, number]> = {
+    be_tay:        [1,   1  ],
+    be_tu_dong_3:  [2,   1.5],
+    be_tu_dong_5:  [2,   2  ],
+    be_tu_dong_7:  [2,   2  ],
+    be_tem_offset: [2,   2  ],
+  }
+
   switch (loai_thung) {
-    case 'A1': // Thùng thường
+    case 'A1':
       kho1 = R + C + 3
       dai1 = (D + R) * 2 + 5
       dai_tt = so_lop === 7 ? (D + R) * 2 + 5 : (D + R) * 2 + 4
       kho_ke_hoach = R + C + off
       dai_ke_hoach = (D + R) * 2 + 3
       break
-    case 'A3': // Nắp chồm
+    case 'A3':
       kho1 = 2 * R + C + 3
       dai1 = (D + R) * 2 + 5
       dai_tt = (D + R) * 2 + 5
       kho_ke_hoach = R + C + off
       dai_ke_hoach = (D + R) * 2 + 3
       break
-    case 'A5': // Âm dương (Nắp/Đáy)
+    case 'A5':
       kho1 = 2 * C + R + 3
       dai1 = 2 * C + D + 3
       dai_tt = 2 * C + D
       kho_ke_hoach = 2 * C + R
       dai_ke_hoach = 2 * C + D
       break
-    case 'A7': // Thùng 1 nắp
+    case 'A5_DAY':
+      kho_ke_hoach = 2 * C + R
+      dai_ke_hoach = 2 * C + D
+      kho1 = kho_ke_hoach + 2; dai1 = dai_ke_hoach + 2; dai_tt = dai1
+      break
+    case 'A5_NAP':
+      kho_ke_hoach = 2 * C + R + 4
+      dai_ke_hoach = 2 * C + D + 4
+      kho1 = kho_ke_hoach + 2; dai1 = dai_ke_hoach + 2; dai_tt = dai1
+      break
+    case 'A7':
       kho1 = R / 2 + C + 3
       dai1 = (D + R) * 2 + 5
       dai_tt = so_lop === 7 ? (D + R) * 2 + 5 : (D + R) * 2 + 4
       kho_ke_hoach = R / 2 + C + off / 2
       dai_ke_hoach = (D + R) * 2 + 3
       break
-    case 'GOI_GIUA': // Gói giữa
+    case 'GOI_GIUA':
       kho1 = 2 * R + C + 3
       dai1 = (D + R) * 2 + 5
       dai_tt = so_lop === 7 ? (D + R) * 2 + 5 : (D + R) * 2 + 4
       kho_ke_hoach = 2 * R + C
       dai_ke_hoach = (D + R) * 2
       break
-    case 'GOI_SUON': // Gói sườn
+    case 'GOI_SUON':
       kho1 = 2 * R + C + 3
       dai1 = 2 * D + 3 * R + 5
-      dai_tt = so_lop === 7 ? D + 2 * C + 3 : D + 2 * C + 3
+      dai_tt = D + 2 * C + 3
       kho_ke_hoach = 2 * R + C
       dai_ke_hoach = 2 * D + 3 * R
       break
+    // ── HỘP ──────────────────────────────────────────────────────────────
+    case 'HOP_CAI':
+      isDieCut = true
+      kho_sx = 3*C + 2*R;       dai_sx = 4*C + D + 0.5
+      kho_ke_hoach = kho_sx + 5; dai_ke_hoach = dai_sx + 9.5
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
+    case 'HOP_CAI_CHAU':
+      isDieCut = true
+      kho_sx = 3*C + 2*R + 3;    dai_sx = 4*C + D + 0.5
+      kho_ke_hoach = kho_sx + 7; dai_ke_hoach = dai_sx + 9.5
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
+    case 'HOP_GIAY':
+      isDieCut = true
+      kho_sx = 3*C + 2*R + 1;    dai_sx = 3*C + D
+      kho_ke_hoach = kho_sx + 9; dai_ke_hoach = dai_sx + 10
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
+    case 'HOP_PIZZA':
+      isDieCut = true
+      kho_sx = 4*C + 2*R + 1;   dai_sx = 2*C + D
+      kho_ke_hoach = kho_sx + 4; dai_ke_hoach = dai_sx + 5
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
+    case 'HOP_NAP_CAI_DAY_GAI':
+      isDieCut = true
+      kho_sx = (D + R) * 2 + 3;  dai_sx = C + 1.5*R + 6
+      kho_ke_hoach = kho_sx + 5; dai_ke_hoach = C + 2*R + 5
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
+    case 'HOP_NAP_CAI_2_DAU':
+      isDieCut = true
+      kho_sx = (D + R) * 2 + 3;  dai_sx = C + 2*R + 6
+      kho_ke_hoach = (D + R + 5) * 2; dai_ke_hoach = C + 2*R + 8
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
+    case 'HOP_AM_DUONG_THAN':
+      isDieCut = true
+      kho_sx = 4*C + D + 1;      dai_sx = 2*C + R + 1
+      kho_ke_hoach = kho_sx + 4; dai_ke_hoach = dai_sx + 4
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
+    case 'HOP_AM_DUONG_NAP':
+      isDieCut = true
+      kho_sx = 4*C + D + 1;      dai_sx = 2*C + R + 1
+      kho_ke_hoach = kho_sx + 5; dai_ke_hoach = dai_sx + 5
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
+    // ── KHAY ─────────────────────────────────────────────────────────────
+    case 'KHAY_1_THANH':
+      isDieCut = true
+      kho_sx = 2*C + R + 2;      dai_sx = 3*C + D
+      kho_ke_hoach = kho_sx + 5; dai_ke_hoach = dai_sx + 5
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
+    case 'KHAY_2_THANH':
+      isDieCut = true
+      kho_sx = 3*C + R;           dai_sx = 4*C + D + 2
+      kho_ke_hoach = kho_sx + 5;  dai_ke_hoach = dai_sx + 5
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
+    case 'KHAY_1_THANH_CHAU':
+      isDieCut = true
+      kho_sx = (8/3)*C + R + 4;   dai_sx = 3*C + D
+      kho_ke_hoach = kho_sx + 5;  dai_ke_hoach = dai_sx + 5
+      kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+      break
     default:
       return null
+  }
+
+  // Apply tề biên for die-cut types
+  if (isDieCut && loai_be) {
+    const [te_kho, te_dai] = TE_BIEN[loai_be] ?? [0, 0]
+    kho_ke_hoach += te_kho; dai_ke_hoach += te_dai
+    kho_sx       += te_kho; dai_sx       += te_dai
+    kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+  }
+
+  // For non-die-cut types, kho_sx = kho_ke_hoach, dai_sx = dai_ke_hoach
+  if (!isDieCut) {
+    kho_sx = kho_ke_hoach; dai_sx = dai_ke_hoach
   }
 
   if (kho1 <= 0 || dai1 <= 0) return null
@@ -338,7 +498,108 @@ export function calcBoxDimensions(
     dien_tich: Math.round(dien_tich * 10000) / 10000,
     kho_ke_hoach: Math.round(kho_ke_hoach * 10) / 10,
     dai_ke_hoach: Math.round(dai_ke_hoach * 10) / 10,
+    kho_sx: Math.round(kho_sx * 10) / 10,
+    dai_sx: Math.round(dai_sx * 10) / 10,
     hai_manh,
+  }
+}
+
+// ─── Offset / Tem cost calculator ────────────────────────────────────────────
+export interface OffsetCostResult {
+  gia_ban_tem_per_cai: number
+  so_to: number
+  dien_tich_to: number
+  detail: {
+    chi_phi_giay: number
+    chi_phi_in: number
+    chi_phi_can_mang: number
+    chi_phi_khuon_be: number
+    chi_phi_uv: number
+    chi_phi_suppo: number
+    chi_phi_luoi: number
+    tong_chi_phi: number
+  }
+}
+
+export function calcOffsetCost(
+  qty: number,
+  ci: Partial<QuoteItem>,
+): OffsetCostResult | null {
+  if (!qty || qty <= 0 || !ci.co_tem_offset) return null
+
+  const spPerTo = Math.max(ci.tem_sp_per_to ?? 2, 1)
+  const wasteTo  = ci.tem_waste_to ?? 150
+  const soTo     = (Math.ceil(qty / spPerTo) + wasteTo) * (ci.tem_hai_manh ? 2 : 1)
+
+  const dtTo = ((ci.tem_dai_to ?? 0) * (ci.tem_rong_to ?? 0)) / 10000
+
+  const chiPhiGiay =
+    ci.tem_gsm && ci.tem_don_gia_kg && dtTo
+      ? soTo * dtTo * (ci.tem_gsm / 1000) * ci.tem_don_gia_kg
+      : 0
+
+  const soMau = ci.tem_so_mau ?? 0
+  const chiPhiIn =
+    soMau > 0
+      ? soMau * ((ci.tem_gia_kem_mau ?? 0) + (ci.tem_gia_in_1000to ?? 0) * soTo / 1000)
+      : 0
+
+  const chiPhiCanMang =
+    ci.tem_co_can_mang && ci.tem_gia_can_mang_m2 && dtTo
+      ? soTo * dtTo * ci.tem_gia_can_mang_m2
+      : 0
+
+  const chiPhiKhuonBe =
+    ci.tem_co_khuon_be && ci.tem_gia_khuon_be
+      ? (ci.tem_gia_khuon_be / Math.max(ci.tem_khuon_be_phan_bo ?? 10000, 1)) * qty
+      : 0
+
+  const chiPhiUv =
+    ci.tem_co_uv && ci.tem_gia_uv_m2 && dtTo
+      ? soTo * dtTo * ci.tem_gia_uv_m2
+      : 0
+
+  const chiPhiSuppo =
+    ci.tem_co_suppo && ci.tem_gia_suppo_m2 && dtTo
+      ? soTo * dtTo * ci.tem_gia_suppo_m2
+      : 0
+
+  const chiPhiLuoi =
+    ci.tem_co_luoi && ci.tem_gia_luoi_m2 && dtTo
+      ? soTo * dtTo * ci.tem_gia_luoi_m2
+      : 0
+
+  const tong = chiPhiGiay + chiPhiIn + chiPhiCanMang + chiPhiKhuonBe + chiPhiUv + chiPhiSuppo + chiPhiLuoi
+  const perCai = tong / qty
+
+  const r = (v: number) => Math.round(v * 100) / 100
+  return {
+    gia_ban_tem_per_cai: r(perCai),
+    so_to: soTo,
+    dien_tich_to: Math.round(dtTo * 1000000) / 1000000,
+    detail: {
+      chi_phi_giay:     r(chiPhiGiay),
+      chi_phi_in:       r(chiPhiIn),
+      chi_phi_can_mang: r(chiPhiCanMang),
+      chi_phi_khuon_be: r(chiPhiKhuonBe),
+      chi_phi_uv:       r(chiPhiUv),
+      chi_phi_suppo:    r(chiPhiSuppo),
+      chi_phi_luoi:     r(chiPhiLuoi),
+      tong_chi_phi:     r(tong),
+    },
+  }
+}
+
+// ─── Offset sheet auto-calc from box dims (dóng + 1cm/cạnh tề) ───────────────
+// kho_dong = R+C; dai_dong_1manh = (D+R)*2+3; dai_dong_2manh = (D+R)+3
+// rong_to = kho_dong + 2cm; dai_to = dai_dong + 2cm  (1cm mỗi cạnh, 2 cạnh mỗi chiều)
+export function calcOffsetSheetDims(d: number, r: number, c: number, haiManh: boolean) {
+  const TE = 2
+  const khoDong = r + c
+  const daiDong = haiManh ? (d + r) + 3 : (d + r) * 2 + 3
+  return {
+    rong_to: Math.round((khoDong + TE) * 100) / 100,
+    dai_to:  Math.round((daiDong  + TE) * 100) / 100,
   }
 }
 

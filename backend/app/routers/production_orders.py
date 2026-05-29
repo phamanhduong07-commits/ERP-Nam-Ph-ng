@@ -162,6 +162,7 @@ def _build_response(order: ProductionOrder, db: Session | None = None) -> Produc
         ghi_chu=order.ghi_chu,
         ghi_chu_don_hang=order.sales_order.ghi_chu if order.sales_order else None,
         don_gia_noi_bo=getattr(order, "don_gia_noi_bo", None),
+        tan_dung=getattr(order, "tan_dung", False),
         phoi_phan_xuong_id=getattr(order, "phoi_phan_xuong_id", None),
         ten_phoi_phan_xuong=(
             order.phoi_phan_xuong.ten_xuong if getattr(order, "phoi_phan_xuong", None) else None
@@ -353,6 +354,26 @@ def tao_lenh_tu_don_hang(
 
     # Load lại từng order với đầy đủ relationships sau commit
     return [_build_response(_load_order(oid, db), db) for oid in order_ids]
+
+
+class BatchTanDungPayload(BaseModel):
+    ids: list[int]
+    tan_dung: bool = True
+
+
+@router.patch("/batch-tan-dung")
+def batch_set_tan_dung(
+    payload: BatchTanDungPayload,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    if not payload.ids:
+        return {"updated": 0}
+    db.query(ProductionOrder).filter(
+        ProductionOrder.id.in_(payload.ids)
+    ).update({"tan_dung": payload.tan_dung}, synchronize_session=False)
+    db.commit()
+    return {"updated": len(payload.ids)}
 
 
 @router.post("", response_model=ProductionOrderResponse, status_code=201)

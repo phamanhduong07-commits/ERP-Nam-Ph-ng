@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, useQueries, useMutation } from '@tanstack/rea
 import {
   Card, Descriptions, Tag, Button, Space, Table, Typography,
   Row, Col, Divider, Popconfirm, message, Progress, InputNumber,
-  Statistic, Tabs, Collapse, Drawer, Tooltip, Modal, Form, Select, Alert,
+  Statistic, Tabs, Collapse, Drawer, Tooltip, Modal, Form, Select, Alert, Switch,
 } from 'antd'
 import {
   ArrowLeftOutlined, PlayCircleOutlined, CheckCircleOutlined,
@@ -262,7 +262,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const khoNhapPhoiDuKien = order?.ten_kho_nhap_phoi_du_kien ?? null
 
   const updateSxMutation = useMutation({
-    mutationFn: (vals: { phap_nhan_id?: number | null; phan_xuong_id?: number | null; phoi_phan_xuong_id?: number | null }) =>
+    mutationFn: (vals: { phap_nhan_id?: number | null; phan_xuong_id?: number | null; phoi_phan_xuong_id?: number | null; tan_dung?: boolean }) =>
       productionOrdersApi.update(Number(id), vals),
     onSuccess: () => {
       message.success('Cập nhật thành công')
@@ -896,6 +896,15 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                       {new Intl.NumberFormat('vi-VN').format(Number(order.don_gia_noi_bo))} đ
                     </Typography.Text>
                   : <Typography.Text type="secondary">Chưa đặt</Typography.Text>}
+              </Descriptions.Item>
+              <Descriptions.Item label="Tận dụng phôi">
+                <Switch
+                  checked={order.tan_dung}
+                  checkedChildren="Tận dụng"
+                  unCheckedChildren="Bình thường"
+                  loading={updateSxMutation.isPending}
+                  onChange={(v) => updateSxMutation.mutate({ tan_dung: v })}
+                />
               </Descriptions.Item>
               <Descriptions.Item label="Bắt đầu (KH)">
                 {order.ngay_bat_dau_ke_hoach

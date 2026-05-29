@@ -323,6 +323,36 @@ class QuoteItem(Base):
     dai_tt: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dien_tich: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     khong_ct: Mapped[bool] = mapped_column(Boolean, default=False)
+    loai_be: Mapped[str | None] = mapped_column(String(30))
+    kho_sx: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    dai_sx: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+
+    nhom_san_pham: Mapped[str | None] = mapped_column(String(20))
+    co_tem_offset: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Thông số giấy in offset/tem
+    tem_loai_giay: Mapped[str | None] = mapped_column(String(30))
+    tem_gsm: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    tem_don_gia_kg: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    tem_dai_to: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    tem_rong_to: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    tem_sp_per_to: Mapped[int] = mapped_column(SmallInteger, default=2)
+    tem_waste_to: Mapped[int] = mapped_column(SmallInteger, default=150)
+    tem_so_mau: Mapped[int] = mapped_column(SmallInteger, default=0)
+    tem_gia_kem_mau: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    tem_gia_in_1000to: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    tem_co_can_mang: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_gia_can_mang_m2: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    tem_co_khuon_be: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_gia_khuon_be: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    tem_khuon_be_phan_bo: Mapped[int] = mapped_column(Integer, default=10000)
+    tem_co_uv: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_gia_uv_m2: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    tem_co_suppo: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_gia_suppo_m2: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    tem_co_luoi: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_gia_luoi_m2: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    tem_hai_manh: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # In ấn
     loai_in: Mapped[str] = mapped_column(String(30), default="khong_in")
@@ -354,3 +384,26 @@ class QuoteItem(Base):
     @property
     def ten_phan_xuong(self) -> str | None:
         return self.phan_xuong.ten_xuong if self.phan_xuong else None
+
+
+class TemPaperPrice(Base):
+    __tablename__ = "tem_paper_prices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    loai_giay: Mapped[str] = mapped_column(String(30), nullable=False)
+    ten: Mapped[str] = mapped_column(String(100), nullable=False)
+    gsm: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    don_gia_kg: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+
+
+class OffsetAddonPrice(Base):
+    __tablename__ = "offset_addon_prices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    loai_addon: Mapped[str] = mapped_column(String(30), nullable=False)
+    ten: Mapped[str] = mapped_column(String(100), nullable=False)
+    don_gia_m2: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)

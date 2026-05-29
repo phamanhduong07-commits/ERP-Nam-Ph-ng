@@ -46,10 +46,13 @@ const ProductionOrderCreate = lazy(() => import('./pages/production/ProductionOr
 const ProductionOrderDetail = lazy(() => import('./pages/production/ProductionOrderDetail'))
 const ProductionOrdersPage = lazy(() => import('./pages/production/ProductionOrdersPage'))
 const ProductionPlansPage = lazy(() => import('./pages/production/ProductionPlansPage'))
+const TanDungPlanPage = lazy(() => import('./pages/production/TanDungPlanPage'))
 const ProductionPlanForm = lazy(() => import('./pages/production/ProductionPlanForm'))
 const ProductionQueuePage = lazy(() => import('./pages/production/ProductionQueuePage'))
 const IndirectCostList = lazy(() => import('./pages/danhmuc/IndirectCostList'))
 const AddonRateList = lazy(() => import('./pages/danhmuc/AddonRateList'))
+const TemPaperPriceList = lazy(() => import('./pages/danhmuc/TemPaperPriceList'))
+const OffsetAddonPriceList = lazy(() => import('./pages/danhmuc/OffsetAddonPriceList'))
 const BomListPage = lazy(() => import('./pages/production/BomListPage'))
 const PhieuPhoiPage = lazy(() => import('./pages/production/PhieuPhoiPage'))
 const KhoPhoiPage = lazy(() => import('./pages/production/KhoPhoiPage'))
@@ -292,6 +295,7 @@ export default function App() {
             <Route path="production/orders/:id" element={<ProductionOrderDetail />} />
             <Route path="production/plans" element={<ProductionPlansPage />} />
             <Route path="production/plans/new" element={<ProductionPlanForm />} />
+            <Route path="production/tan-dung" element={<TanDungPlanPage />} />
             <Route path="production/queue" element={<ProductionQueuePage />} />
             <Route path="production/bom" element={<BomListPage />} />
             <Route path="production/phieu-phoi" element={<PhieuPhoiPage />} />
@@ -339,6 +343,8 @@ export default function App() {
             <Route path="master/phan-xuong" element={<PhanXuongList />} />
             <Route path="master/indirect-costs" element={<IndirectCostList />} />
             <Route path="master/addon-rates" element={<AddonRateList />} />
+            <Route path="master/tem-paper-prices" element={<TemPaperPriceList />} />
+            <Route path="master/offset-addon-prices" element={<OffsetAddonPriceList />} />
             <Route path="billing/invoices" element={<SalesInvoiceListPage />} />
             <Route path="billing/invoices/new" element={<SalesInvoiceForm />} />
             <Route path="billing/invoices/:id" element={<SalesInvoiceDetailPage />} />

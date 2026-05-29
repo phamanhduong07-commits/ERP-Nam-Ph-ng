@@ -339,6 +339,7 @@ class ProductionOrderService:
                 rong=first_item.rong if first_item else None,
                 cao=first_item.cao if first_item else None,
                 tong_sl_thuc_te=sl_thuc_te_map.get(o.id, Decimal("0")),
+                tan_dung=getattr(o, "tan_dung", False),
                 created_at=o.created_at,
             ))
 

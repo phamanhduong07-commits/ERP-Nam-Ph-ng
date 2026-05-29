@@ -44,6 +44,34 @@ class QuoteItemCreate(BaseModel):
     dai_tt: Decimal | None = None
     dien_tich: Decimal | None = None
     khong_ct: bool = False
+    loai_be: str | None = None
+    kho_sx: Decimal | None = None
+    dai_sx: Decimal | None = None
+
+    nhom_san_pham: str | None = None
+    co_tem_offset: bool = False
+    tem_loai_giay: str | None = None
+    tem_gsm: Decimal | None = None
+    tem_don_gia_kg: Decimal | None = None
+    tem_dai_to: Decimal | None = None
+    tem_rong_to: Decimal | None = None
+    tem_sp_per_to: int = 2
+    tem_waste_to: int = 150
+    tem_so_mau: int = 0
+    tem_gia_kem_mau: Decimal | None = None
+    tem_gia_in_1000to: Decimal | None = None
+    tem_co_can_mang: bool = False
+    tem_gia_can_mang_m2: Decimal | None = None
+    tem_co_khuon_be: bool = False
+    tem_gia_khuon_be: Decimal | None = None
+    tem_khuon_be_phan_bo: int = 10000
+    tem_co_uv: bool = False
+    tem_gia_uv_m2: Decimal | None = None
+    tem_co_suppo: bool = False
+    tem_gia_suppo_m2: Decimal | None = None
+    tem_co_luoi: bool = False
+    tem_gia_luoi_m2: Decimal | None = None
+    tem_hai_manh: bool = False
 
     # In ấn
     loai_in: str = "khong_in"
@@ -111,6 +139,33 @@ class QuoteItemResponse(BaseModel):
     dai_tt: Decimal | None
     dien_tich: Decimal | None
     khong_ct: bool
+    loai_be: str | None
+    kho_sx: Decimal | None
+    dai_sx: Decimal | None
+    nhom_san_pham: str | None
+    co_tem_offset: bool
+    tem_loai_giay: str | None
+    tem_gsm: Decimal | None
+    tem_don_gia_kg: Decimal | None
+    tem_dai_to: Decimal | None
+    tem_rong_to: Decimal | None
+    tem_sp_per_to: int
+    tem_waste_to: int
+    tem_so_mau: int
+    tem_gia_kem_mau: Decimal | None
+    tem_gia_in_1000to: Decimal | None
+    tem_co_can_mang: bool
+    tem_gia_can_mang_m2: Decimal | None
+    tem_co_khuon_be: bool
+    tem_gia_khuon_be: Decimal | None
+    tem_khuon_be_phan_bo: int
+    tem_co_uv: bool
+    tem_gia_uv_m2: Decimal | None
+    tem_co_suppo: bool
+    tem_gia_suppo_m2: Decimal | None
+    tem_co_luoi: bool
+    tem_gia_luoi_m2: Decimal | None
+    tem_hai_manh: bool
     loai_in: str
     do_kho: bool
     ghim: bool

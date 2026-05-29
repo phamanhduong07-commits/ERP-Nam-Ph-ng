@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Form, Input, InputNumber, Select, DatePicker, Checkbox, Radio,
+  Form, Input, InputNumber, Select, DatePicker, Checkbox, Radio, Switch,
   Button, Card, Row, Col, Table, Space, Typography, Divider,
   message, Spin, Tag, Tooltip, Popconfirm, Modal, Badge,
 } from 'antd'
@@ -14,8 +14,11 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { customersApi } from '../../api/customers'
-import { quotesApi, paperMaterialsApi, LOAI_IN_OPTIONS, LOAI_THUNG_OPTIONS, SO_LOP_OPTIONS, TO_HOP_SONG_OPTIONS, getSongType, calcBoxDimensions, buildPaperSymbol, paperCodeKey } from '../../api/quotes'
+import { quotesApi, paperMaterialsApi, LOAI_IN_OPTIONS, LOAI_THUNG_OPTIONS, LOAI_BE_OPTIONS, DIE_CUT_TYPES, SO_LOP_OPTIONS, TO_HOP_SONG_OPTIONS, getSongType, calcBoxDimensions, calcOffsetCost, calcOffsetSheetDims, buildPaperSymbol, paperCodeKey } from '../../api/quotes'
 import type { QuoteItem, CreateQuotePayload } from '../../api/quotes'
+import { temPaperPricesApi } from '../../api/temPaperPrices'
+import { offsetAddonPricesApi } from '../../api/offsetAddonPrices'
+import type { OffsetAddonPrice } from '../../api/offsetAddonPrices'
 
 interface AxiosErrorLike { response?: { data?: { detail?: string } }; errorFields?: unknown }
 function apiErrorMsg(e: unknown, fallback: string): string {
@@ -30,6 +33,26 @@ import { useAuthStore } from '../../store/auth'
 import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
+
+// Grouped options for Ant Design Select
+const LOAI_THUNG_GROUPED = [
+  { label: 'Thùng', options: LOAI_THUNG_OPTIONS.filter(o => o.group === 'Thùng') },
+  { label: 'Hộp',   options: LOAI_THUNG_OPTIONS.filter(o => o.group === 'Hộp') },
+  { label: 'Khay',  options: LOAI_THUNG_OPTIONS.filter(o => o.group === 'Khay') },
+]
+
+const TEM_LOAI_GIAY_OPTIONS = [
+  { value: 'duplex',  label: 'Duplex (DUP)' },
+  { value: 'ivory',   label: 'Ivory' },
+  { value: 'couche',  label: 'Couche' },
+  { value: 'kraft',   label: 'Kraft' },
+]
+
+const NHOM_SAN_PHAM_OPTIONS = [
+  { value: 'thung', label: 'Thùng' },
+  { value: 'hop',   label: 'Hộp' },
+  { value: 'khay',  label: 'Khay' },
+]
 
 // ─── Auto-generate ghi_chu từ các chi tiết gia công (viết tắt gọn) ─────────────
 function buildGhiChu(ci: QuoteItem): string {
@@ -114,6 +137,19 @@ const emptyItem = (): QuoteItem => ({
   dai: null, rong: null, cao: null,
   kho_tt: null, dai_tt: null, dien_tich: null,
   khong_ct: false,
+  loai_be: null, kho_sx: null, dai_sx: null,
+  nhom_san_pham: null,
+  co_tem_offset: false,
+  tem_loai_giay: null, tem_gsm: null, tem_don_gia_kg: null,
+  tem_dai_to: null, tem_rong_to: null,
+  tem_sp_per_to: 2, tem_waste_to: 150, tem_so_mau: 0,
+  tem_gia_kem_mau: null, tem_gia_in_1000to: null,
+  tem_co_can_mang: false, tem_gia_can_mang_m2: null,
+  tem_co_khuon_be: false, tem_gia_khuon_be: null, tem_khuon_be_phan_bo: 10000,
+  tem_co_uv: false, tem_gia_uv_m2: null,
+  tem_co_suppo: false, tem_gia_suppo_m2: null,
+  tem_co_luoi: false, tem_gia_luoi_m2: null,
+  tem_hai_manh: false,
   loai_in: 'khong_in',
   do_kho: false, ghim: false, chap_xa: false,
   do_phu: false, dan: false, boi: false, be_lo: false,
@@ -245,6 +281,22 @@ export default function QuoteForm() {
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([])
   const { mkList, byMk, paperCodes } = usePaperOptions()
   const giaBanManualRef = useRef(false)
+
+  const { data: temPaperList = [] } = useQuery({
+    queryKey: ['tem-paper-prices'],
+    queryFn: () => temPaperPricesApi.list(true).then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: offsetAddonList = [] } = useQuery({
+    queryKey: ['offset-addon-prices'],
+    queryFn: () => offsetAddonPricesApi.list(true).then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const getAddonPrice = (loai: string): OffsetAddonPrice | undefined =>
+    offsetAddonList.find(p => p.loai_addon === loai)
+
   const priceCalcSeq = useRef(0)
   const confirmOpenRef = useRef(false)
 
@@ -502,18 +554,33 @@ export default function QuoteForm() {
         giaBanManualRef.current = false
       }
 
+      // Auto-set nhom_san_pham from loai_thung group
+      if ('loai_thung' in patch) {
+        const opt = LOAI_THUNG_OPTIONS.find(o => o.value === patch.loai_thung)
+        next.nhom_san_pham = opt ? (opt as { group?: string }).group?.toLowerCase() ?? null : null
+      }
+
+      // Clear loai_be when switching to non-die-cut type
+      if ('loai_thung' in patch && !DIE_CUT_TYPES.has(patch.loai_thung ?? '')) {
+        next.loai_be = null
+        next.kho_sx = null
+        next.dai_sx = null
+      }
+
       // Auto-calculate kho_tt, dai_tt, dien_tich when relevant fields change
-      const dimTriggers: (keyof QuoteItem)[] = ['loai_thung', 'dai', 'rong', 'cao', 'so_lop', 'be_so_con']
+      const dimTriggers: (keyof QuoteItem)[] = ['loai_thung', 'dai', 'rong', 'cao', 'so_lop', 'be_so_con', 'loai_be']
       const hasDimChange = Object.keys(patch).some(k => dimTriggers.includes(k as keyof QuoteItem))
       if (hasDimChange && !next.khong_ct) {
         const calc = calcBoxDimensions(
           next.loai_thung, next.dai, next.rong, next.cao, next.so_lop,
-          next.be_so_con ?? 1,
+          next.be_so_con ?? 1, next.loai_be,
         )
         if (calc) {
           next.kho_tt = calc.kho_tt
           next.dai_tt = calc.dai_tt
           next.dien_tich = calc.dien_tich
+          next.kho_sx = calc.kho_sx
+          next.dai_sx = calc.dai_sx
         }
       }
 
@@ -522,6 +589,18 @@ export default function QuoteForm() {
       const hasKhoChange = Object.keys(patch).some(k => khoTriggers.includes(k as keyof QuoteItem))
       if (hasKhoChange && next.khong_ct && next.kho_tt && next.dai_tt) {
         next.dien_tich = Math.round(next.kho_tt * next.dai_tt / 10000 * 10000) / 10000
+      }
+
+      // Auto-lookup giá giấy tem từ danh mục
+      const temTriggers: (keyof QuoteItem)[] = ['tem_loai_giay', 'tem_gsm']
+      if (Object.keys(patch).some(k => temTriggers.includes(k as keyof QuoteItem)) && next.tem_loai_giay) {
+        const match = temPaperList.find(p =>
+          p.loai_giay === next.tem_loai_giay &&
+          (p.gsm == null || Number(p.gsm) === (next.tem_gsm ?? 0))
+        ) ?? temPaperList.find(p =>
+          p.loai_giay === next.tem_loai_giay && p.gsm == null
+        )
+        if (match) next.tem_don_gia_kg = Number(match.don_gia_kg)
       }
 
       // Auto-generate tên hàng khi thay đổi kích thước/loại thùng,
@@ -771,10 +850,17 @@ export default function QuoteForm() {
     {
       title: 'Loại in',
       dataIndex: 'loai_in',
-      width: 80,
-      render: (v: string) => {
+      width: 90,
+      render: (v: string, r: QuoteItem) => {
         const opt = LOAI_IN_OPTIONS.find(o => o.value === v)
-        return opt?.value !== 'khong_in' ? <Tag color="purple" style={{ fontSize: 10 }}>{opt?.label}</Tag> : '—'
+        const hasIn = opt && opt.value !== 'khong_in'
+        if (!hasIn && !r.co_tem_offset) return '—'
+        return (
+          <Space size={2} direction="vertical" style={{ lineHeight: 1.2 }}>
+            {hasIn && <Tag color="purple" style={{ fontSize: 10, margin: 0 }}>{opt!.label}</Tag>}
+            {r.co_tem_offset && <Tag color="magenta" style={{ fontSize: 10, margin: 0 }}>Offset</Tag>}
+          </Space>
+        )
       },
     },
     {
@@ -1276,14 +1362,14 @@ export default function QuoteForm() {
                 {/* Box dimensions */}
                 <Row gutter={6} style={{ marginTop: 6 }}>
                   <Col span={6}>
-                    <Text style={{ fontSize: 11 }}>Loại thùng</Text>
+                    <Text style={{ fontSize: 11 }}>Loại thùng / hộp</Text>
                     <Select
                       size="small"
                       style={{ width: '100%' }}
                       value={ci.loai_thung || undefined}
                       onChange={v => setCI({ loai_thung: v })}
                       allowClear
-                      options={LOAI_THUNG_OPTIONS}
+                      options={LOAI_THUNG_GROUPED}
                     />
                   </Col>
                   <Col span={4}>
@@ -1312,6 +1398,36 @@ export default function QuoteForm() {
                       onChange={v => setCI({ dai_tt: v })} placeholder="auto" step={0.1} />
                   </Col>
                 </Row>
+                {/* Loại bế — chỉ hiện khi là hộp/khay die-cut */}
+                {ci.loai_thung && DIE_CUT_TYPES.has(ci.loai_thung) && (
+                  <Row gutter={6} style={{ marginTop: 4 }}>
+                    <Col span={8}>
+                      <Text style={{ fontSize: 11, color: '#722ed1', fontWeight: 600 }}>Loại bế khuôn</Text>
+                      <Select
+                        size="small"
+                        style={{ width: '100%' }}
+                        allowClear
+                        placeholder="Chọn loại bế..."
+                        value={ci.loai_be || undefined}
+                        onChange={v => setCI({ loai_be: v ?? null })}
+                        options={LOAI_BE_OPTIONS}
+                      />
+                    </Col>
+                    {ci.kho_sx && ci.dai_sx ? (
+                      <Col span={16}>
+                        <Text style={{ fontSize: 11 }}>Khổ SX × Dài SX (cm)</Text>
+                        <div>
+                          <Text style={{ fontSize: 12, color: '#722ed1', fontWeight: 600 }}>
+                            {ci.kho_sx} × {ci.dai_sx}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 10, marginLeft: 6 }}>
+                            (trước khuôn bế)
+                          </Text>
+                        </div>
+                      </Col>
+                    ) : null}
+                  </Row>
+                )}
                 <Row gutter={6} style={{ marginTop: 4 }}>
                   <Col span={6}>
                     <Tooltip title="Không tự động tính kích thước, nhập thủ công">
@@ -1346,6 +1462,257 @@ export default function QuoteForm() {
                     </Col>
                   ) : null}
                 </Row>
+
+                {/* Tem Offset */}
+                <Row gutter={6} style={{ marginTop: 6 }} align="middle">
+                  <Col>
+                    <Switch
+                      size="small"
+                      checked={ci.co_tem_offset}
+                      onChange={v => {
+                        const updates: Partial<typeof ci> = { co_tem_offset: v }
+                        if (v) {
+                          const inAddon = getAddonPrice('in_offset')
+                          if (inAddon) updates.tem_gia_in_1000to = inAddon.don_gia_m2
+                        }
+                        setCI(updates)
+                      }}
+                    />
+                  </Col>
+                  <Col>
+                    <Text style={{ fontSize: 11, fontWeight: 600, color: '#722ed1' }}>Tem offset bồi</Text>
+                  </Col>
+                  {ci.co_tem_offset && (() => {
+                    const offsetResult = calcOffsetCost(ci.so_luong, ci)
+                    return offsetResult ? (
+                      <Col>
+                        <Text style={{ fontSize: 11, color: '#722ed1' }}>
+                          ≈ {offsetResult.gia_ban_tem_per_cai.toLocaleString('vi-VN')} đ/cái
+                          <Text type="secondary" style={{ fontSize: 10, marginLeft: 4 }}>({offsetResult.so_to} tờ{ci.tem_hai_manh ? ', 2 mảnh' : ''})</Text>
+                        </Text>
+                      </Col>
+                    ) : null
+                  })()}
+                </Row>
+                {ci.co_tem_offset && (
+                  <Card size="small" style={{ marginTop: 6, background: '#faf0ff', border: '1px solid #d3adf7' }}>
+                    <Row gutter={6}>
+                      <Col span={8}>
+                        <Text style={{ fontSize: 10 }}>Loại giấy</Text>
+                        <Select size="small" style={{ width: '100%' }} allowClear placeholder="DUP/Ivory/Couche"
+                          value={ci.tem_loai_giay || undefined}
+                          onChange={v => {
+                            const dm = temPaperList.find(p =>
+                              p.loai_giay === v &&
+                              (p.gsm == null || Number(p.gsm) === (ci.tem_gsm ?? 0))
+                            ) ?? temPaperList.find(p => p.loai_giay === v && p.gsm == null)
+                            setCI({ tem_loai_giay: v ?? null, ...(dm ? { tem_don_gia_kg: Number(dm.don_gia_kg) } : {}) })
+                          }}
+                          options={TEM_LOAI_GIAY_OPTIONS}
+                        />
+                      </Col>
+                      <Col span={8}>
+                        <Text style={{ fontSize: 10 }}>GSM (g/m²)</Text>
+                        <Select size="small" style={{ width: '100%' }} allowClear placeholder="Chọn GSM"
+                          value={ci.tem_gsm ?? undefined}
+                          onChange={v => {
+                            const dm = ci.tem_loai_giay ? (
+                              temPaperList.find(p =>
+                                p.loai_giay === ci.tem_loai_giay &&
+                                (p.gsm == null || Number(p.gsm) === (v ?? 0))
+                              ) ?? temPaperList.find(p => p.loai_giay === ci.tem_loai_giay && p.gsm == null)
+                            ) : null
+                            setCI({ tem_gsm: v ?? null, ...(dm ? { tem_don_gia_kg: Number(dm.don_gia_kg) } : {}) })
+                          }}
+                          options={[200, 230, 250, 300, 350].map(g => ({ value: g, label: `${g} g/m²` }))}
+                        />
+                      </Col>
+                    </Row>
+                    {/* Thùng 2 mảnh + auto-calc */}
+                    <Row gutter={6} style={{ marginTop: 4 }} align="middle">
+                      <Col>
+                        <Button
+                          size="small"
+                          type={ci.tem_hai_manh ? 'primary' : 'default'}
+                          style={{ fontSize: 11 }}
+                          onClick={() => {
+                            const next = !ci.tem_hai_manh
+                            const updates: Partial<typeof ci> = { tem_hai_manh: next }
+                            if (ci.dai && ci.rong && ci.cao) {
+                              const dims = calcOffsetSheetDims(ci.dai, ci.rong, ci.cao, next)
+                              updates.tem_dai_to = dims.dai_to
+                              updates.tem_rong_to = dims.rong_to
+                            }
+                            setCI(updates)
+                          }}
+                        >
+                          {ci.tem_hai_manh ? '2 mảnh ✓' : 'Thùng 2 mảnh'}
+                        </Button>
+                      </Col>
+                      {(ci.dai && ci.rong && ci.cao) ? (
+                        <Col>
+                          <Button
+                            size="small"
+                            style={{ fontSize: 11 }}
+                            onClick={() => {
+                              const dims = calcOffsetSheetDims(ci.dai!, ci.rong!, ci.cao!, ci.tem_hai_manh)
+                              setCI({ tem_dai_to: dims.dai_to, tem_rong_to: dims.rong_to })
+                            }}
+                          >
+                            Auto kích thước tờ
+                          </Button>
+                          <Text type="secondary" style={{ fontSize: 10, marginLeft: 6 }}>
+                            {(() => {
+                              const d = calcOffsetSheetDims(ci.dai!, ci.rong!, ci.cao!, ci.tem_hai_manh)
+                              return `≈ ${d.dai_to} × ${d.rong_to} cm`
+                            })()}
+                          </Text>
+                        </Col>
+                      ) : null}
+                    </Row>
+                    <Row gutter={6} style={{ marginTop: 4 }}>
+                      <Col span={6}>
+                        <Text style={{ fontSize: 10 }}>Dài tờ (cm)</Text>
+                        <InputNumber size="small" style={{ width: '100%' }} min={0} step={1}
+                          value={ci.tem_dai_to ?? undefined}
+                          onChange={v => setCI({ tem_dai_to: v })}
+                        />
+                      </Col>
+                      <Col span={6}>
+                        <Text style={{ fontSize: 10 }}>Rộng tờ (cm)</Text>
+                        <InputNumber size="small" style={{ width: '100%' }} min={0} step={1}
+                          value={ci.tem_rong_to ?? undefined}
+                          onChange={v => setCI({ tem_rong_to: v })}
+                        />
+                      </Col>
+                      <Col span={6}>
+                        <Text style={{ fontSize: 10 }}>SP/tờ</Text>
+                        <InputNumber size="small" style={{ width: '100%' }} min={1}
+                          value={ci.tem_sp_per_to}
+                          onChange={v => setCI({ tem_sp_per_to: v ?? 2 })}
+                        />
+                      </Col>
+                      <Col span={6}>
+                        <Text style={{ fontSize: 10 }}>Bù hao (tờ)</Text>
+                        <InputNumber size="small" style={{ width: '100%' }} min={0}
+                          value={ci.tem_waste_to}
+                          onChange={v => setCI({ tem_waste_to: v ?? 150 })}
+                        />
+                      </Col>
+                    </Row>
+                    <Row gutter={6} style={{ marginTop: 4 }} align="middle">
+                      <Col span={6}>
+                        <Text style={{ fontSize: 10 }}>Số màu</Text>
+                        <InputNumber size="small" style={{ width: '100%' }} min={0} max={8}
+                          value={ci.tem_so_mau}
+                          onChange={v => setCI({ tem_so_mau: v ?? 0 })}
+                        />
+                      </Col>
+                      {ci.tem_so_mau > 0 && ci.tem_gia_in_1000to && (
+                        <Col>
+                          <Text type="secondary" style={{ fontSize: 10 }}>
+                            {ci.tem_gia_in_1000to.toLocaleString('vi-VN')} đ/1000 tờ/màu
+                          </Text>
+                        </Col>
+                      )}
+                    </Row>
+                    {/* Addon services: checkboxes 1 hàng, inputs bên dưới */}
+                    <Row gutter={8} style={{ marginTop: 4 }} align="middle">
+                      <Col>
+                        <Checkbox checked={ci.tem_co_can_mang} onChange={e => {
+                          const addon = e.target.checked ? getAddonPrice('can_mang') : undefined
+                          setCI({ tem_co_can_mang: e.target.checked, ...(addon ? { tem_gia_can_mang_m2: addon.don_gia_m2 } : {}) })
+                        }}><Text style={{ fontSize: 10 }}>Cán màng</Text></Checkbox>
+                      </Col>
+                      <Col>
+                        <Checkbox checked={ci.tem_co_uv} onChange={e => {
+                          const addon = e.target.checked ? getAddonPrice('uv') : undefined
+                          setCI({ tem_co_uv: e.target.checked, ...(addon ? { tem_gia_uv_m2: addon.don_gia_m2 } : {}) })
+                        }}><Text style={{ fontSize: 10 }}>UV</Text></Checkbox>
+                      </Col>
+                      <Col>
+                        <Checkbox checked={ci.tem_co_suppo} onChange={e => {
+                          const addon = e.target.checked ? getAddonPrice('suppo') : undefined
+                          setCI({ tem_co_suppo: e.target.checked, ...(addon ? { tem_gia_suppo_m2: addon.don_gia_m2 } : {}) })
+                        }}><Text style={{ fontSize: 10 }}>Suppo</Text></Checkbox>
+                      </Col>
+                      <Col>
+                        <Checkbox checked={ci.tem_co_luoi} onChange={e => {
+                          const addon = e.target.checked ? getAddonPrice('luoi') : undefined
+                          setCI({ tem_co_luoi: e.target.checked, ...(addon ? { tem_gia_luoi_m2: addon.don_gia_m2 } : {}) })
+                        }}><Text style={{ fontSize: 10 }}>Lưới</Text></Checkbox>
+                      </Col>
+                    </Row>
+                    {(ci.tem_co_can_mang || ci.tem_co_uv || ci.tem_co_suppo || ci.tem_co_luoi) && (
+                      <Row gutter={6} style={{ marginTop: 3 }}>
+                        {ci.tem_co_can_mang && (
+                          <Col span={6}>
+                            <Text style={{ fontSize: 9 }}>Cán màng đ/m²</Text>
+                            <InputNumber size="small" style={{ width: '100%' }} min={0} step={1000} placeholder="đ/m²"
+                              value={ci.tem_gia_can_mang_m2 ?? undefined}
+                              onChange={v => setCI({ tem_gia_can_mang_m2: v })}
+                              formatter={v => v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                            />
+                          </Col>
+                        )}
+                        {ci.tem_co_uv && (
+                          <Col span={6}>
+                            <Text style={{ fontSize: 9 }}>UV đ/m²</Text>
+                            <InputNumber size="small" style={{ width: '100%' }} min={0} step={500} placeholder="đ/m²"
+                              value={ci.tem_gia_uv_m2 ?? undefined}
+                              onChange={v => setCI({ tem_gia_uv_m2: v })}
+                              formatter={v => v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                            />
+                          </Col>
+                        )}
+                        {ci.tem_co_suppo && (
+                          <Col span={6}>
+                            <Text style={{ fontSize: 9 }}>Suppo đ/m²</Text>
+                            <InputNumber size="small" style={{ width: '100%' }} min={0} step={500} placeholder="đ/m²"
+                              value={ci.tem_gia_suppo_m2 ?? undefined}
+                              onChange={v => setCI({ tem_gia_suppo_m2: v })}
+                              formatter={v => v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                            />
+                          </Col>
+                        )}
+                        {ci.tem_co_luoi && (
+                          <Col span={6}>
+                            <Text style={{ fontSize: 9 }}>Lưới đ/m²</Text>
+                            <InputNumber size="small" style={{ width: '100%' }} min={0} step={500} placeholder="đ/m²"
+                              value={ci.tem_gia_luoi_m2 ?? undefined}
+                              onChange={v => setCI({ tem_gia_luoi_m2: v })}
+                              formatter={v => v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                            />
+                          </Col>
+                        )}
+                      </Row>
+                    )}
+                    {/* Breakdown chi phí offset */}
+                    {(() => {
+                      const r = calcOffsetCost(ci.so_luong, ci)
+                      if (!r || r.detail.tong_chi_phi === 0) return null
+                      const fmt = (v: number) => v.toLocaleString('vi-VN')
+                      return (
+                        <Row gutter={4} style={{ marginTop: 6, padding: '4px 0', borderTop: '1px dashed #d3adf7' }}>
+                          <Col span={24}>
+                            <Text style={{ fontSize: 10, color: '#555' }}>
+                              {r.so_to} tờ{ci.tem_hai_manh ? ' (2 mảnh)' : ''} × {r.dien_tich_to.toFixed(4)} m² &nbsp;|&nbsp;
+                              {r.detail.chi_phi_giay > 0 && <>Giấy: <b>{fmt(r.detail.chi_phi_giay)}</b> &nbsp;</>}
+                              {r.detail.chi_phi_in > 0 && <>In: <b>{fmt(r.detail.chi_phi_in)}</b> &nbsp;</>}
+                              {r.detail.chi_phi_can_mang > 0 && <>CM: <b>{fmt(r.detail.chi_phi_can_mang)}</b> &nbsp;</>}
+                              {r.detail.chi_phi_khuon_be > 0 && <>KB: <b>{fmt(r.detail.chi_phi_khuon_be)}</b> &nbsp;</>}
+                              {r.detail.chi_phi_uv > 0 && <>UV: <b>{fmt(r.detail.chi_phi_uv)}</b> &nbsp;</>}
+                              {r.detail.chi_phi_suppo > 0 && <>Suppo: <b>{fmt(r.detail.chi_phi_suppo)}</b> &nbsp;</>}
+                              {r.detail.chi_phi_luoi > 0 && <>Lưới: <b>{fmt(r.detail.chi_phi_luoi)}</b> &nbsp;</>}
+                              → <b style={{ color: '#722ed1' }}>{fmt(r.detail.tong_chi_phi)} đ tổng</b>
+                              &nbsp;/ <b>{fmt(r.gia_ban_tem_per_cai)} đ/cái</b>
+                            </Text>
+                          </Col>
+                        </Row>
+                      )
+                    })()}
+                  </Card>
+                )}
 
                 <Divider style={{ margin: '6px 0' }} />
 

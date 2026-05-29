@@ -43,6 +43,9 @@ from app.routers.gps import gps_poller_loop
 from app.models import gps as _gps_models  # noqa: F401 — ensures GpsSnapshot is in Base.metadata
 from app.routers import qc_giay_cuon as qc_giay_cuon_router
 from app.routers import hoa_don_dien_tu
+from app.routers import ke_hoach_tan_dung
+from app.routers import tem_paper_prices as tem_paper_prices_router
+from app.routers import offset_addon_prices as offset_addon_prices_router
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -160,6 +163,7 @@ app.include_router(phuong_xa.router)
 app.include_router(don_gia_van_chuyen.router)
 app.include_router(production_orders.router)
 app.include_router(production_plans.router)
+app.include_router(ke_hoach_tan_dung.router)
 app.include_router(bom.router)
 app.include_router(indirect_costs.router)
 app.include_router(addon_rates.router)
@@ -198,6 +202,8 @@ app.include_router(mrp_router.router)
 app.include_router(gps_router.router)
 app.include_router(qc_giay_cuon_router.router)
 app.include_router(hoa_don_dien_tu.router)
+app.include_router(tem_paper_prices_router.router, prefix="/api")
+app.include_router(offset_addon_prices_router.router, prefix="/api")
 
 
 @app.exception_handler(IntegrityError)

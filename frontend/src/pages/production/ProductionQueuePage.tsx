@@ -11,13 +11,14 @@ import {
   CheckCircleOutlined, DeleteOutlined,
   ReloadOutlined, ClockCircleOutlined, ThunderboltOutlined,
   FileTextOutlined, CalculatorOutlined, InfoCircleOutlined,
-  UnorderedListOutlined,
+  UnorderedListOutlined, SendOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { TableRowSelection } from 'antd/es/table/interface'
 import dayjs from 'dayjs'
 import { productionPlansApi } from '../../api/productionPlans'
 import type { QueueLine } from '../../api/productionPlans'
+import { productionOrdersApi } from '../../api/productionOrders'
 import { warehouseApi } from '../../api/warehouse'
 import { LOAI_LAN_LABELS } from '../../api/quotes'
 import { fmtN } from '../../utils/exportUtils'
@@ -178,6 +179,7 @@ export default function ProductionQueuePage() {
   const [filteredInfo, setFilteredInfo] = useState<Record<string, FilterValue | null>>({})
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
   const [tonDetailOpen, setTonDetailOpen] = useState(false)
+  const [isBatchLoading, setIsBatchLoading] = useState(false)
 
   const handleTableChange = (
     _pagination: unknown,
@@ -274,6 +276,61 @@ export default function ProductionQueuePage() {
     return map
   }, [tonKhoGiay])
 
+  // ── drawer: tồn chi tiết theo mã ký hiệu ─────────────────────────────────
+  const maInPlan = useMemo(() => new Set(kgByMa.map(e => e.ma)), [kgByMa])
+
+  const canKgByMa = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const e of kgByMa) m.set(e.ma, (m.get(e.ma) ?? 0) + e.totalKg)
+    return m
+  }, [kgByMa])
+
+  interface TonDetailRow {
+    key: string
+    ma: string
+    dl: number | null
+    khoMm: number | null
+    tenKho: string | null
+    canKg: number
+    tonKg: number
+    soCuon: number
+    children?: TonDetailRow[]
+  }
+
+  const tonDetailRows = useMemo((): TonDetailRow[] => {
+    return Array.from(maInPlan).sort().map(ma => {
+      const childRows: TonDetailRow[] = tonKhoGiay
+        .filter(r => r.ma_chinh === ma)
+        .sort((a, b) =>
+          ((a.dinh_luong ?? 0) - (b.dinh_luong ?? 0)) ||
+          (a.ma_ky_hieu ?? '').localeCompare(b.ma_ky_hieu ?? ''))
+        .map((r, i) => ({
+          key: `${ma}-${i}`,
+          ma: r.ma_ky_hieu ?? r.ma_chinh ?? '—',
+          dl: r.dinh_luong,
+          khoMm: r.kho,
+          tenKho: r.ten_kho,
+          canKg: 0,
+          tonKg: r.ton_luong,
+          soCuon: r.so_cuon,
+          children: undefined,
+        }))
+      const totalTon  = childRows.reduce((s, c) => s + c.tonKg, 0)
+      const totalCuon = childRows.reduce((s, c) => s + c.soCuon, 0)
+      return {
+        key: `hdr-${ma}`,
+        ma,
+        dl:     null,
+        khoMm:  null,
+        tenKho: null,
+        canKg:  canKgByMa.get(ma) ?? 0,
+        tonKg:  totalTon,
+        soCuon: totalCuon,
+        children: childRows.length > 0 ? childRows : undefined,
+      }
+    })
+  }, [tonKhoGiay, maInPlan, canKgByMa])
+
   // ── mutations ─────────────────────────────────────────────────────────────
   const completeMut = useMutation({
     mutationFn: ({ planId, lineId }: { planId: number; lineId: number }) =>
@@ -287,6 +344,26 @@ export default function ProductionQueuePage() {
     onSuccess: () => { message.success('Đã xóa'); qc.invalidateQueries({ queryKey: ['production-queue'] }) },
     onError:   (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
+
+  const handleBatchTanDung = async () => {
+    const orderIds = selectedRows
+      .map(r => r.production_order_id)
+      .filter((id): id is number => id != null)
+    const uniqueIds = [...new Set(orderIds)]
+    if (!uniqueIds.length) { message.warning('Không tìm thấy lệnh SX liên kết'); return }
+    setIsBatchLoading(true)
+    try {
+      const { data: res } = await productionOrdersApi.batchSetTanDung(uniqueIds)
+      message.success(`Đã đánh dấu ${res.updated} lệnh SX sang Tận dụng phôi`)
+      setSelectedKeys([])
+      qc.invalidateQueries({ queryKey: ['production-queue'] })
+      qc.invalidateQueries({ queryKey: ['tan-dung-plan'] })
+    } catch {
+      message.error('Cập nhật thất bại')
+    } finally {
+      setIsBatchLoading(false)
+    }
+  }
 
   const choCnt      = allLines.filter(l => l.trang_thai === 'cho').length
   const dangChayCnt = allLines.filter(l => l.trang_thai === 'dang_chay').length
@@ -636,6 +713,7 @@ export default function ProductionQueuePage() {
 
   // ─── render ───────────────────────────────────────────────────────────────
   return (
+    <>
     <div>
       {/* ── Header ── */}
       <Row align="middle" justify="space-between" style={{ marginBottom: 12 }}>
@@ -653,7 +731,26 @@ export default function ProductionQueuePage() {
               </Button>
             )}
             {selectedKeys.length > 0 && (
-              <Tag color="blue">Đã chọn {selectedKeys.length} dòng</Tag>
+              <>
+                <Tag color="blue">Đã chọn {selectedKeys.length} dòng</Tag>
+                <Popconfirm
+                  title={`Đánh dấu ${selectedKeys.length} lệnh SX là "Tận dụng phôi"?`}
+                  description="Các lệnh này sẽ xuất hiện trong trang Kế hoạch tận dụng."
+                  onConfirm={handleBatchTanDung}
+                  okText="Xác nhận"
+                  cancelText="Huỷ"
+                >
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<SendOutlined />}
+                    loading={isBatchLoading}
+                  >
+                    Đẩy sang Tận dụng
+                  </Button>
+                </Popconfirm>
+                <Button size="small" onClick={() => setSelectedKeys([])}>Bỏ chọn</Button>
+              </>
             )}
             <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
           </Space>
@@ -793,7 +890,17 @@ export default function ProductionQueuePage() {
               {/* ── Kg theo mã giấy (gộp tất cả lớp) ── */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                 <div style={{ width: 4, height: 16, background: '#52c41a', borderRadius: 2 }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#389e0d' }}>Kg theo mã giấy</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#389e0d', flex: 1 }}>Kg theo mã giấy</span>
+                {kgByMa.length > 0 && (
+                  <Button
+                    size="small"
+                    icon={<UnorderedListOutlined />}
+                    onClick={() => setTonDetailOpen(true)}
+                    style={{ fontSize: 11 }}
+                  >
+                    Chi tiết KH
+                  </Button>
+                )}
               </div>
               {kgByMa.length === 0 ? (
                 <div style={{ padding: '10px 0', textAlign: 'center', color: '#aaa', fontSize: 13 }}>
@@ -906,5 +1013,124 @@ export default function ProductionQueuePage() {
         )}
       </div>
     </div>
+
+    {/* ── Drawer: tồn kho chi tiết theo mã ký hiệu ─────────────────────── */}
+    <Drawer
+      title="Tồn kho chi tiết theo mã ký hiệu"
+      open={tonDetailOpen}
+      onClose={() => setTonDetailOpen(false)}
+      width={720}
+      styles={{ body: { padding: '12px 16px' } }}
+    >
+      <p style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 12 }}>
+        Hiển thị tồn kho cho{' '}
+        <strong style={{ color: '#389e0d' }}>{tonDetailRows.length} mã giấy</strong>{' '}
+        đang cần trong hàng chờ.
+        Mở rộng từng mã để xem chi tiết theo ký hiệu.
+      </p>
+      <Table<TonDetailRow>
+        dataSource={tonDetailRows}
+        size="small"
+        pagination={false}
+        rowClassName={r => r.children !== undefined ? 'ton-detail-parent' : ''}
+        expandable={{ defaultExpandAllRows: true }}
+        columns={[
+          {
+            title: 'Mã giấy / Ký hiệu',
+            dataIndex: 'ma',
+            key: 'ma',
+            width: 150,
+            render: (val: string, row) =>
+              row.children !== undefined
+                ? <span style={{ fontWeight: 800, fontSize: 14, color: '#1d1d1d' }}>{val}</span>
+                : <span style={{ color: '#595959' }}>{val}</span>,
+          },
+          {
+            title: 'ĐL (g/m²)',
+            dataIndex: 'dl',
+            key: 'dl',
+            align: 'center',
+            width: 80,
+            render: (val: number | null) => val != null ? val : <span style={{ color: '#bfbfbf' }}>—</span>,
+          },
+          {
+            title: 'Khổ (mm)',
+            dataIndex: 'khoMm',
+            key: 'khoMm',
+            align: 'center',
+            width: 80,
+            render: (val: number | null) => val != null ? val : <span style={{ color: '#bfbfbf' }}>—</span>,
+          },
+          {
+            title: 'Kho',
+            dataIndex: 'tenKho',
+            key: 'tenKho',
+            ellipsis: true,
+            render: (val: string | null) => val ?? <span style={{ color: '#bfbfbf' }}>—</span>,
+          },
+          {
+            title: 'Cần (kg)',
+            dataIndex: 'canKg',
+            key: 'canKg',
+            align: 'right',
+            width: 90,
+            render: (val: number, row) =>
+              row.children !== undefined
+                ? <span style={{ fontWeight: 700, color: '#389e0d' }}>{Math.round(val).toLocaleString('vi-VN')}</span>
+                : null,
+          },
+          {
+            title: 'Tồn (kg)',
+            dataIndex: 'tonKg',
+            key: 'tonKg',
+            align: 'right',
+            width: 90,
+            render: (val: number, row) => {
+              if (row.children !== undefined) {
+                const isLow = val < row.canKg
+                const color = val === 0 ? '#bfbfbf' : isLow ? '#cf1322' : '#389e0d'
+                return (
+                  <span style={{ fontWeight: 700, color }}>
+                    {Math.round(val).toLocaleString('vi-VN')}
+                  </span>
+                )
+              }
+              return <span>{Math.round(val).toLocaleString('vi-VN')}</span>
+            },
+          },
+          {
+            title: 'Cuộn',
+            dataIndex: 'soCuon',
+            key: 'soCuon',
+            align: 'center',
+            width: 60,
+            render: (val: number) => val > 0 ? val : <span style={{ color: '#bfbfbf' }}>—</span>,
+          },
+        ]}
+        summary={() => (
+          <Table.Summary.Row style={{ background: '#f6ffed' }}>
+            <Table.Summary.Cell index={0} colSpan={4}>
+              <span style={{ fontWeight: 700 }}>Tổng cộng</span>
+            </Table.Summary.Cell>
+            <Table.Summary.Cell index={4} align="right">
+              <span style={{ fontWeight: 800, color: '#fa8c16', fontSize: 13 }}>
+                {Math.round(totalKg).toLocaleString('vi-VN')} kg
+              </span>
+            </Table.Summary.Cell>
+            <Table.Summary.Cell index={5} align="right">
+              <span style={{ fontWeight: 800, color: '#389e0d', fontSize: 13 }}>
+                {Math.round(tonDetailRows.reduce((s, r) => s + r.tonKg, 0)).toLocaleString('vi-VN')} kg
+              </span>
+            </Table.Summary.Cell>
+            <Table.Summary.Cell index={6} align="center">
+              <span style={{ fontWeight: 700 }}>
+                {tonDetailRows.reduce((s, r) => s + r.soCuon, 0)}
+              </span>
+            </Table.Summary.Cell>
+          </Table.Summary.Row>
+        )}
+      />
+    </Drawer>
+    </>
   )
 }

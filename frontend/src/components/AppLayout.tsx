@@ -95,7 +95,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       children: [
         { key: '/production/orders', label: <Link to="/production/orders">Lệnh sản xuất</Link>, roles: SAN_XUAT_FULL },
         { key: '/production/plans', label: <Link to="/production/plans">Kế hoạch sản xuất</Link>, roles: SAN_XUAT_FULL },
-        { key: '/mrp', icon: <BarChartOutlined />, label: <Link to="/mrp">MRP - Hoạch định NVL</Link> },
+        { key: '/production/tan-dung', label: <Link to="/production/tan-dung">Kế hoạch tận dụng</Link>, roles: SAN_XUAT_FULL },
         {
           key: '/production/queue',
           roles: SAN_XUAT_FULL,
@@ -316,6 +316,8 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/master/tinh-thanh', label: <Link to="/master/tinh-thanh">Danh mục tỉnh thành phố</Link>, permissions: ['master.other.view', 'master.other.manage'] },
         { key: '/master/indirect-costs', label: <Link to="/master/indirect-costs">Chi phí gián tiếp</Link>, permissions: ['master.other.view', 'master.other.manage'] },
         { key: '/master/addon-rates', label: <Link to="/master/addon-rates">Phí gia công / Tỷ lệ lãi</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/tem-paper-prices', label: <Link to="/master/tem-paper-prices">Giá giấy tem offset</Link>, permissions: ['master.other.view', 'master.other.manage'] },
+        { key: '/master/offset-addon-prices', label: <Link to="/master/offset-addon-prices">Giá dịch vụ offset</Link>, permissions: ['master.other.view', 'master.other.manage'] },
         { key: '/reports/import-history', label: <Link to="/reports/import-history">Lịch sử Import</Link>, permissions: ['master.import', 'master.other.manage'] },
         { key: '/master/print-templates', label: <Link to="/master/print-templates">⚙ Cấu hình biểu mẫu in</Link>, permissions: ['master.other.manage'] },
       ],

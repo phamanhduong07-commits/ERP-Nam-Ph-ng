@@ -827,6 +827,7 @@ def _build_queue_line(line: ProductionPlanLine, plan: ProductionPlan) -> QueueLi
         id=line.id,
         plan_id=line.plan_id,
         so_ke_hoach=plan.so_ke_hoach,
+        production_order_id=order.id if order else None,
         production_order_item_id=line.production_order_item_id,
         thu_tu=line.thu_tu,
         ngay_chay=line.ngay_chay,

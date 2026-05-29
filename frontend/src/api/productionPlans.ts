@@ -128,6 +128,7 @@ export interface QueueLine {
   id: number
   plan_id: number
   so_ke_hoach: string
+  production_order_id: number | null
   production_order_item_id: number
   thu_tu: number
   ngay_chay: string | null

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Table, Button, Input, Select, Space, Tag, Card, Typography,
   DatePicker, Row, Col, Tooltip, Popconfirm, message, Pagination,
@@ -10,7 +10,7 @@ import {
   PlusOutlined, SearchOutlined, EyeOutlined,
   PlayCircleOutlined, CheckCircleOutlined, CloseOutlined,
   FileExcelOutlined, FilePdfOutlined, ShoppingCartOutlined,
-  WarningOutlined, ClockCircleOutlined,
+  WarningOutlined, ClockCircleOutlined, SendOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -99,6 +99,7 @@ function groupOrders(orders: ProductionOrderListItem[]): DonHangGroup[] {
 
 export default function ProductionOrderList({ selectedId, onSelect }: Props) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const saved = loadFilters()
 
   const [inputSearch, setInputSearch] = useState<string>(saved.search ?? '')
@@ -109,6 +110,8 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
   const [shortcutFilter, setShortcutFilter] = useState<string | null>(saved.shortcutFilter ?? null)
   const [dateRange, setDateRange] = useState<[string, string] | null>(saved.dateRange ?? null)
   const [page, setPage] = useState<number>(saved.page ?? 1)
+  const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([])
+  const [isBatchLoading, setIsBatchLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isEmbedded = !!onSelect
@@ -338,6 +341,22 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
     }
   }
 
+  const handleBatchSetTanDung = async () => {
+    if (!selectedOrderIds.length) return
+    setIsBatchLoading(true)
+    try {
+      const { data } = await productionOrdersApi.batchSetTanDung(selectedOrderIds)
+      message.success(`Đã đánh dấu ${data.updated} lệnh SX sang Tận dụng phôi`)
+      setSelectedOrderIds([])
+      queryClient.invalidateQueries({ queryKey: ['production-orders'] })
+      queryClient.invalidateQueries({ queryKey: ['tan-dung-plan'] })
+    } catch {
+      message.error('Cập nhật thất bại')
+    } finally {
+      setIsBatchLoading(false)
+    }
+  }
+
   // ── Cột compact (sidebar — child rows bên trong nhóm đơn hàng) ──────────
   const compactColumns: ColumnsType<ProductionOrderListItem> = [
     {
@@ -380,6 +399,9 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
             </Button>
             {r.de_xuat_mua_ngoai && r.trang_thai !== 'mua_ngoai' && (
               <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>Khổ ≥2m</Tag>
+            )}
+            {r.tan_dung && (
+              <Tag color="green" style={{ fontSize: 10, margin: 0 }}>Tận dụng</Tag>
             )}
           </Space>
           {r.ten_hang && (
@@ -839,6 +861,33 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
         </>
       )}
 
+      {/* ── Action bar khi đã chọn lệnh SX ── */}
+      {!isEmbedded && selectedOrderIds.length > 0 && (
+        <div style={{
+          background: '#e6f4ff', border: '1px solid #91caff', borderRadius: 6,
+          padding: '8px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <Text>Đã chọn <strong>{selectedOrderIds.length}</strong> lệnh SX</Text>
+          <Button size="small" onClick={() => setSelectedOrderIds([])}>Bỏ chọn</Button>
+          <Popconfirm
+            title={`Đánh dấu ${selectedOrderIds.length} lệnh SX là "Tận dụng phôi"?`}
+            description="Các lệnh này sẽ xuất hiện trong trang Kế hoạch tận dụng."
+            onConfirm={handleBatchSetTanDung}
+            okText="Xác nhận"
+            cancelText="Huỷ"
+          >
+            <Button
+              size="small"
+              type="primary"
+              icon={<SendOutlined />}
+              loading={isBatchLoading}
+            >
+              Đẩy sang Tận dụng
+            </Button>
+          </Popconfirm>
+        </div>
+      )}
+
       {/* ── Chế độ full: bảng 2 cấp — đơn hàng → lệnh SX ── */}
       {!isEmbedded && (
         <>
@@ -863,6 +912,19 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
                     onRow={(r) => ({
                       onClick: () => navigate(`/production/orders/${r.id}`),
                     })}
+                    rowSelection={{
+                      type: 'checkbox',
+                      selectedRowKeys: g.orders
+                        .filter(o => selectedOrderIds.includes(o.id))
+                        .map(o => o.id),
+                      onChange: (keys) => {
+                        setSelectedOrderIds(prev => {
+                          const groupIds = new Set(g.orders.map(o => o.id))
+                          const kept = prev.filter(id => !groupIds.has(id))
+                          return [...kept, ...(keys as number[])]
+                        })
+                      },
+                    }}
                   />
                 </div>
               ),

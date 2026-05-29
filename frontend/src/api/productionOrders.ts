@@ -77,6 +77,7 @@ export interface ProductionOrder {
   ghi_chu: string | null
   ghi_chu_don_hang: string | null
   don_gia_noi_bo: number | null
+  tan_dung: boolean
   phoi_phan_xuong_id: number | null
   ten_phoi_phan_xuong: string | null
   ten_kho_nhap_phoi_du_kien: string | null
@@ -117,6 +118,7 @@ export interface ProductionOrderListItem {
   rong: number | null
   cao: number | null
   tong_sl_thuc_te: number        // tổng SL thực tế đã nhập qua phiếu
+  tan_dung: boolean
   created_at: string
 }
 
@@ -152,10 +154,12 @@ export interface CreateProductionOrderPayload {
   sales_order_id?: number
   phap_nhan_id?: number | null
   phan_xuong_id?: number | null
+  phoi_phan_xuong_id?: number | null
   kho_sx_id?: number | null
   ngay_bat_dau_ke_hoach?: string
   ngay_hoan_thanh_ke_hoach?: string
   ghi_chu?: string
+  tan_dung?: boolean
   items: CreateProductionItemPayload[]
 }
 
@@ -307,6 +311,9 @@ export const productionOrdersApi = {
 
   listAllPhieu: (params?: { tu_ngay?: string; den_ngay?: string; production_order_id?: number; warehouse_id?: number }) =>
     client.get<PhieuNhapPhoiSongListItem[]>('/production-orders/phieu-nhap-phoi-song', { params }),
+
+  batchSetTanDung: (ids: number[], tan_dung = true) =>
+    client.patch<{ updated: number }>('/production-orders/batch-tan-dung', { ids, tan_dung }),
 
   chuyenMuaPhoi: (orderId: number) =>
     client.patch<{ ok: boolean; trang_thai: string; so_lenh: string }>(
