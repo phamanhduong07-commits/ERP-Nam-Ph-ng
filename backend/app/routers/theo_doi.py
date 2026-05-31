@@ -1,7 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, exists
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
@@ -126,6 +126,7 @@ def _build_so_row(so: SalesOrder) -> dict:
         "ten_may_in": None,
         "ngay_in": None,
         "so_luong_in_ok": None,
+        "so_khoi": 0.0,
         "stage": "da_duyet",
         "stage_label": STAGE_LABELS["da_duyet"],
     }
@@ -250,7 +251,10 @@ def _query_rows(
                 joinedload(SalesOrder.customer),
                 joinedload(SalesOrder.items),
             )
-            .filter(SalesOrder.trang_thai == "da_duyet")
+            .filter(
+                SalesOrder.trang_thai == "da_duyet",
+                ~exists().where(ProductionOrder.sales_order_id == SalesOrder.id),
+            )
         )
         if so_don:
             so_q = so_q.filter(SalesOrder.so_don.ilike(f"%{so_don}%"))

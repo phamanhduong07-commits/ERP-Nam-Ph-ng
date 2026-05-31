@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Col, DatePicker, Divider, Form, Input, InputNumber,
@@ -56,11 +56,12 @@ function getKhoMm(oi: ProductionOrderItem): number | null {
 }
 
 function getCatMm(oi: ProductionOrderItem): number | null {
-  if (oi.dai_tt != null) return Number(oi.dai_tt) * 10
+  const soLanCat = oi.so_lan_cat ?? 1
+  if (oi.dai_tt != null) return Number(oi.dai_tt) * 10 * soLanCat
   if (!oi.loai_thung || !oi.dai || !oi.rong || !oi.cao) return null
   const soLop = oi.so_lop ?? oi.product?.so_lop ?? 3
   const dims = calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), soLop)
-  return dims?.dai_tt ? Math.round(dims.dai_tt * 10) : null
+  return dims?.dai_tt ? Math.round(dims.dai_tt * 10) * soLanCat : null
 }
 
 // mm → chuỗi cm hiển thị
@@ -230,6 +231,54 @@ interface ModalHoanThanhProps {
   onClose: () => void
   onSubmit: (orderId: number, data: PhieuNhapPhoiSongPayload) => void
 }
+// Tính ngược: từ số phôi → số thùng
+function tamToThung(soTam: number, oi: ProductionOrderItem, planSoDao: number | null): number {
+  const soDao = planSoDao ?? (() => {
+    if (!oi.loai_thung || !oi.dai || !oi.rong || !oi.cao) return 1
+    const soLop = oi.so_lop ?? oi.product?.so_lop ?? 3
+    const dims = calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), soLop)
+    return dims ? calcSoDaoThucTe(dims, oi.kho_tt) : 1
+  })()
+  const soLanCat = oi.so_lan_cat ?? 1
+  const haiManh = (() => {
+    if (!oi.loai_thung || !oi.dai || !oi.rong || !oi.cao) return false
+    const soLop = oi.so_lop ?? oi.product?.so_lop ?? 3
+    const dims = calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), soLop)
+    return dims?.hai_manh ?? false
+  })()
+  return Math.floor((haiManh ? soTam / 2 : soTam) * soDao * soLanCat)
+}
+
+// Lấy các thông số dao để tính số con (dùng chung nhiều chỗ)
+function getDaoParams(oi: ProductionOrderItem, planSoDao: number | null) {
+  const soLop = oi.so_lop ?? oi.product?.so_lop ?? 3
+  const dims = (oi.loai_thung && oi.dai && oi.rong && oi.cao)
+    ? calcBoxDimensions(oi.loai_thung, Number(oi.dai), Number(oi.rong), Number(oi.cao), soLop)
+    : null
+  const soDaoTotal  = planSoDao ?? (dims ? calcSoDaoThucTe(dims, oi.kho_tt) : 1)
+  const beConBe     = oi.be_so_con && oi.be_so_con > 1 ? oi.be_so_con : 1
+  const soDaoGroups = Math.max(1, Math.round(soDaoTotal / beConBe))
+  const haiManh     = dims?.hai_manh ?? false
+  return { soDaoTotal, soDaoGroups, haiManh }
+}
+
+// soTam → số con
+function calcSoCon(soTam: number, oi: ProductionOrderItem, planSoDao: number | null): number {
+  const { soDaoGroups, haiManh } = getDaoParams(oi, planSoDao)
+  const soPhoi = haiManh ? Math.ceil(soTam / 2) : soTam
+  return soPhoi * soDaoGroups
+}
+
+// số con → số thùng
+function conToThung(soCon: number, oi: ProductionOrderItem, planSoDao: number | null): number {
+  const { soDaoTotal, soDaoGroups, haiManh } = getDaoParams(oi, planSoDao)
+  if (soDaoGroups === 0) return 0
+  const soPhoi  = Math.floor(soCon / soDaoGroups)
+  const soTam   = haiManh ? soPhoi * 2 : soPhoi
+  const soLanCat = oi.so_lan_cat ?? 1
+  return Math.floor(soTam * soDaoTotal * soLanCat / (haiManh ? 2 : 1))
+}
+
 function ModalHoanThanh({ orderId, order, orderLoading, planLine, submitting, onClose, onSubmit }: ModalHoanThanhProps) {
   const [form] = Form.useForm()
   const slTTWatch = Form.useWatch<number>('so_luong_thuc_te', form)
@@ -255,7 +304,7 @@ function ModalHoanThanh({ orderId, order, orderLoading, planLine, submitting, on
               <Text type="secondary" style={{ fontSize: 12 }}>
                 KH: {order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0).toLocaleString()} thùng
                 {planLine?.kho1 ? ` | Khổ: ${planLine.kho1} cm` : ''}
-                {planLine?.dai_tt ? ` | Cắt: ${planLine.dai_tt} cm` : ''}
+                {planLine?.dai_tt ? ` | Cắt: ${Number(planLine.dai_tt) * (planLine.so_lan_cat ?? 1)} cm${(planLine.so_lan_cat ?? 1) > 1 ? ` (×${planLine.so_lan_cat}xếp)` : ''}` : ''}
                 {planLine?.qccl ? ` | ${planLine.qccl}` : ''}
               </Text>
             </div>
@@ -268,7 +317,7 @@ function ModalHoanThanh({ orderId, order, orderLoading, planLine, submitting, on
               const catCm = planLine?.dai_tt ?? (getCatMm(oi) != null ? getCatMm(oi)! / 10 : null)
               const soDao = planLine?.so_dao ?? null
               const slTT = values.so_luong_thuc_te as number
-              const soTam = soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi, slTT) ?? null)
+              const soTam = (values.so_tam_thuc_te as number | null) ?? (soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi, slTT) ?? null))
               onSubmit(orderId, {
                 ngay: (values.ngay as dayjs.Dayjs)?.format('YYYY-MM-DD') ?? dayjs().format('YYYY-MM-DD'),
                 ca: values.ca as string,
@@ -312,34 +361,59 @@ function ModalHoanThanh({ orderId, order, orderLoading, planLine, submitting, on
                 </Form.Item>
               </Col>
             </Row>
-            <Form.Item name="so_luong_thuc_te" label="Số lượng thực tế (thùng)"
-              rules={[{ required: true, message: 'Nhập SL thực tế' }]}
-              initialValue={order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)}
-            >
-              <InputNumber min={0} style={{ width: '100%' }} size="large" />
-            </Form.Item>
             {(() => {
-              const slKH = order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
-              const slTT = slTTWatch ?? 0
-              const pct = slKH > 0 ? Math.min(100, Math.round((slTT / slKH) * 100)) : 0
-              const oi0 = order.items[0]
+              const slKH  = order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
+              const oi0   = order.items[0]
               const soDao = planLine?.so_dao ?? null
-              const estTam = slTT > 0
-                ? (soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi0, slTT) ?? null))
-                : null
-              return slKH > 0 ? (
+              const calcTam = (slTT: number) =>
+                soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi0, slTT) ?? 0)
+              const initSlTT = slKH
+              const initTam  = calcTam(initSlTT)
+              const slTT  = slTTWatch ?? 0
+              const pct   = slKH > 0 ? Math.min(100, Math.round((slTT / slKH) * 100)) : 0
+              return (
                 <>
-                  <Progress percent={pct} size="small" style={{ marginBottom: 4 }}
-                    strokeColor={pct >= 100 ? '#52c41a' : pct >= 80 ? '#fa8c16' : '#1677ff'}
-                    format={p => `${p}% (${slTT.toLocaleString()}/${slKH.toLocaleString()})`}
-                  />
-                  {estTam != null && (
-                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
-                      Ước tính: <Text strong>{estTam.toLocaleString()} tấm</Text>
-                    </Text>
+                  <Row gutter={12} align="bottom">
+                    <Col span={12}>
+                      <Form.Item name="so_luong_thuc_te" label="Số thùng (thực tế)"
+                        rules={[{ required: true, message: 'Nhập SL thực tế' }]}
+                        initialValue={initSlTT}
+                        style={{ marginBottom: 4 }}
+                      >
+                        <InputNumber
+                          min={0} style={{ width: '100%' }} size="large"
+                          onChange={(v) => {
+                            const slTTNew = Number(v ?? 0)
+                            form.setFieldValue('so_tam_thuc_te', slTTNew > 0 ? calcTam(slTTNew) : null)
+                          }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item name="so_tam_thuc_te" label="Số phôi (thực tế)"
+                        initialValue={initTam || null}
+                        style={{ marginBottom: 4 }}
+                      >
+                        <InputNumber
+                          min={0} style={{ width: '100%' }} size="large"
+                          onChange={(v) => {
+                            const soTamNew = Number(v ?? 0)
+                            if (soTamNew > 0 && oi0) {
+                              form.setFieldValue('so_luong_thuc_te', tamToThung(soTamNew, oi0, soDao))
+                            }
+                          }}
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  {slKH > 0 && (
+                    <Progress percent={pct} size="small" style={{ marginBottom: 8 }}
+                      strokeColor={pct >= 100 ? '#52c41a' : pct >= 80 ? '#fa8c16' : '#1677ff'}
+                      format={p => `${p}% (${slTT.toLocaleString()}/${slKH.toLocaleString()})`}
+                    />
                   )}
                 </>
-              ) : null
+              )
             })()}
             <Row gutter={10}>
               <Col span={12}>
@@ -583,14 +657,15 @@ export default function MaySongPage() {
 
   // ─── Queries ───────────────────────────────────────────────────────────────
 
-  const { data: pxList = [] } = useQuery({
+  const { data: _allPxList = [] } = useQuery({
     queryKey: ['phan-xuong-list'],
-    queryFn: () =>
-      warehouseApi.listPhanXuong().then(r =>
-        r.data.filter(px => ['Hoàng Gia', 'Nam Thuận'].some(n => (px.ten_xuong ?? '').includes(n)))
-      ),
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
     staleTime: 60_000,
   })
+  const pxList = useMemo(
+    () => _allPxList.filter(px => px.cong_doan === 'cd1_cd2'),
+    [_allPxList],
+  )
 
   const { data: khList = [] } = useQuery({
     queryKey: ['ke-hoach-list'],
@@ -865,8 +940,9 @@ export default function MaySongPage() {
       render: (_, r) => {
         if (!r.kho_tt && !r.dai_tt) return <Text type="secondary">—</Text>
         const kho = r.kho_tt != null ? Number(r.kho_tt) : '?'
-        const cat = r.dai_tt != null ? Number(r.dai_tt) : '?'
-        return <Text style={{ fontWeight: 600 }}>{kho} × {cat} cm</Text>
+        const soLanCat = r.so_lan_cat ?? 1
+        const cat = r.dai_tt != null ? Number(r.dai_tt) * soLanCat : '?'
+        return <Text style={{ fontWeight: 600 }}>{kho} × {cat} cm{soLanCat > 1 ? <Text type="warning" style={{ fontSize: 11, marginLeft: 4 }}>×{soLanCat}xếp</Text> : null}</Text>
       },
     },
     {

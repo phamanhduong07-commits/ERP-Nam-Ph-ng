@@ -46,9 +46,10 @@ function getChieuKho(oi: ProductionOrderItem): number | null {
   return roundUpTo5(dims.kho_tt)
 }
 
-// Lấy chiều cắt: ưu tiên dai_tt đã lưu, fallback tính từ kích thước thùng
+// Lấy chiều cắt: dai_tt × so_lan_cat (tổng chiều dài 1 tấm phôi theo hướng cắt)
 function getChieuCat(oi: ProductionOrderItem): number | null {
-  if (oi.dai_tt != null) return Number(oi.dai_tt)
+  const soLanCat = Math.max(1, Number(oi.so_lan_cat) || 1)
+  if (oi.dai_tt != null) return Number(oi.dai_tt) * soLanCat
   const dims = calcBoxDimensions(
     oi.loai_thung,
     oi.dai != null ? Number(oi.dai) : null,
@@ -56,7 +57,7 @@ function getChieuCat(oi: ProductionOrderItem): number | null {
     oi.cao != null ? Number(oi.cao) : null,
     oi.so_lop ?? (oi.product?.so_lop ?? 3),
   )
-  return dims?.dai_tt ?? null
+  return dims?.dai_tt != null ? dims.dai_tt * soLanCat : null
 }
 
 // Tính số tấm từ item lệnh SX (ceil(so_thung / so_dao))

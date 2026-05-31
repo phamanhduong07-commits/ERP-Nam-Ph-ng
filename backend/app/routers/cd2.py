@@ -2439,14 +2439,11 @@ def get_order_progress(order_id: int, db: Session = Depends(get_db), _: User = D
 def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Tồn kho phôi sóng theo từng Lệnh SX."""
 
-    # 1. Tổng nhập phôi theo production_order_id
+    # 1. Tổng nhập phôi theo production_order_id — dùng so_tam (tấm) để khớp đơn vị với tong_xuat
     nhap_rows = (
         db.query(
             PhieuNhapPhoiSong.production_order_id,
-            func.sum(
-                func.coalesce(PhieuNhapPhoiSongItem.so_luong_thuc_te, 0)
-                - func.coalesce(PhieuNhapPhoiSongItem.so_luong_loi, 0)
-            ).label("tong_nhap"),
+            func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_tam), 0).label("tong_nhap"),
             func.min(PhieuNhapPhoiSong.warehouse_id).label("warehouse_id"),
         )
         .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id)
@@ -2552,7 +2549,10 @@ def get_ton_kho_lsx(db: Session = Depends(get_db), _: User = Depends(get_current
             "cong_doan": order.phan_xuong.cong_doan if order.phan_xuong else (wh_px.cong_doan if wh_px else None),
             "co_in": co_in,
             "chieu_kho": float(first_item.kho_tt) if first_item and first_item.kho_tt else None,
-            "chieu_cat": float(first_item.dai_tt) if first_item and first_item.dai_tt else None,
+            "chieu_cat": (
+                float(first_item.dai_tt) * max(1, int(first_item.so_lan_cat or 1))
+                if first_item and first_item.dai_tt else None
+            ),
             "tong_nhap": tong_nhap,
             "tong_xuat": tong_xuat,
             "tong_chuyen_phoi": tong_chuyen,
