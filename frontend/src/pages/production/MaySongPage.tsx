@@ -262,7 +262,7 @@ function getDaoParams(oi: ProductionOrderItem, planSoDao: number | null) {
   return { soDaoTotal, soDaoGroups, haiManh }
 }
 
-// soTam → số con
+// soTam → số con  (= số phôi × nhóm dao)
 function calcSoCon(soTam: number, oi: ProductionOrderItem, planSoDao: number | null): number {
   const { soDaoGroups, haiManh } = getDaoParams(oi, planSoDao)
   const soPhoi = haiManh ? Math.ceil(soTam / 2) : soTam
@@ -271,12 +271,11 @@ function calcSoCon(soTam: number, oi: ProductionOrderItem, planSoDao: number | n
 
 // số con → số thùng
 function conToThung(soCon: number, oi: ProductionOrderItem, planSoDao: number | null): number {
-  const { soDaoTotal, soDaoGroups, haiManh } = getDaoParams(oi, planSoDao)
+  const { soDaoGroups, soDaoTotal, haiManh } = getDaoParams(oi, planSoDao)
   if (soDaoGroups === 0) return 0
-  const soPhoi  = Math.floor(soCon / soDaoGroups)
-  const soTam   = haiManh ? soPhoi * 2 : soPhoi
+  const soPhoi   = Math.floor(soCon / soDaoGroups)
   const soLanCat = oi.so_lan_cat ?? 1
-  return Math.floor(soTam * soDaoTotal * soLanCat / (haiManh ? 2 : 1))
+  return Math.floor(soPhoi * soDaoTotal * soLanCat / (haiManh ? 1 : 1))
 }
 
 function ModalHoanThanh({ orderId, order, orderLoading, planLine, submitting, onClose, onSubmit }: ModalHoanThanhProps) {
@@ -369,13 +368,14 @@ function ModalHoanThanh({ orderId, order, orderLoading, planLine, submitting, on
                 soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi0, slTT) ?? 0)
               const initSlTT = slKH
               const initTam  = calcTam(initSlTT)
+              const initCon  = oi0 ? calcSoCon(initTam, oi0, soDao) : null
               const slTT  = slTTWatch ?? 0
               const pct   = slKH > 0 ? Math.min(100, Math.round((slTT / slKH) * 100)) : 0
               return (
                 <>
-                  <Row gutter={12} align="bottom">
-                    <Col span={12}>
-                      <Form.Item name="so_luong_thuc_te" label="Số thùng (thực tế)"
+                  <Row gutter={10} align="bottom">
+                    <Col span={8}>
+                      <Form.Item name="so_luong_thuc_te" label="Số thùng"
                         rules={[{ required: true, message: 'Nhập SL thực tế' }]}
                         initialValue={initSlTT}
                         style={{ marginBottom: 4 }}
@@ -384,13 +384,17 @@ function ModalHoanThanh({ orderId, order, orderLoading, planLine, submitting, on
                           min={0} style={{ width: '100%' }} size="large"
                           onChange={(v) => {
                             const slTTNew = Number(v ?? 0)
-                            form.setFieldValue('so_tam_thuc_te', slTTNew > 0 ? calcTam(slTTNew) : null)
+                            if (slTTNew > 0 && oi0) {
+                              const tam = calcTam(slTTNew)
+                              form.setFieldValue('so_tam_thuc_te', tam)
+                              form.setFieldValue('so_con_thuc_te', calcSoCon(tam, oi0, soDao))
+                            }
                           }}
                         />
                       </Form.Item>
                     </Col>
-                    <Col span={12}>
-                      <Form.Item name="so_tam_thuc_te" label="Số phôi (thực tế)"
+                    <Col span={8}>
+                      <Form.Item name="so_tam_thuc_te" label="Số phôi"
                         initialValue={initTam || null}
                         style={{ marginBottom: 4 }}
                       >
@@ -400,6 +404,26 @@ function ModalHoanThanh({ orderId, order, orderLoading, planLine, submitting, on
                             const soTamNew = Number(v ?? 0)
                             if (soTamNew > 0 && oi0) {
                               form.setFieldValue('so_luong_thuc_te', tamToThung(soTamNew, oi0, soDao))
+                              form.setFieldValue('so_con_thuc_te', calcSoCon(soTamNew, oi0, soDao))
+                            }
+                          }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item name="so_con_thuc_te" label="Số con"
+                        initialValue={initCon || null}
+                        style={{ marginBottom: 4 }}
+                      >
+                        <InputNumber
+                          min={0} style={{ width: '100%' }} size="large"
+                          onChange={(v) => {
+                            const soConNew = Number(v ?? 0)
+                            if (soConNew > 0 && oi0) {
+                              const thung = conToThung(soConNew, oi0, soDao)
+                              const tam   = calcTam(thung)
+                              form.setFieldValue('so_luong_thuc_te', thung)
+                              form.setFieldValue('so_tam_thuc_te', tam)
                             }
                           }}
                         />
@@ -459,7 +483,7 @@ function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: 
     const beConBe    = oi?.be_so_con && oi.be_so_con > 1 ? oi.be_so_con : 1
     const soDaoGroups = Math.max(1, Math.round(soDaoTotal / beConBe))  // nhóm dao thực tế
     const soLanCat   = oi?.so_lan_cat ?? 1
-    // Số con = phôi × nhóm dao (không nhân be_so_con / soLanCat — người dùng yêu cầu)
+    // Số con = phôi × nhóm dao
     const soPhoi    = dims?.hai_manh ? Math.ceil(soTam / 2) : soTam
     const tamNho    = soPhoi > 0 ? soPhoi * soDaoGroups : 0
     const ngaySxMaySong = phieu?.ngay ?? order.ngay_bat_dau_ke_hoach ?? ''
