@@ -18,6 +18,7 @@ from app.services.carton_metrics import production_item_metrics
 router = APIRouter(prefix="/api/theo-doi", tags=["theo-doi"])
 
 STAGE_LABELS = {
+    "moi": "Đơn mới",
     "da_duyet": "Đã duyệt",
     "lap_lenh": "Lập lệnh SX",
     "cho_sx": "Chờ SX",
@@ -127,8 +128,8 @@ def _build_so_row(so: SalesOrder) -> dict:
         "ngay_in": None,
         "so_luong_in_ok": None,
         "so_khoi": 0.0,
-        "stage": "da_duyet",
-        "stage_label": STAGE_LABELS["da_duyet"],
+        "stage": so.trang_thai,
+        "stage_label": STAGE_LABELS.get(so.trang_thai, so.trang_thai),
     }
 
 
@@ -243,8 +244,8 @@ def _query_rows(
 
     result = [_build_row(o, nhap_map, xuat_map, pi_map, plan_set, chuyen_map) for o in orders]
 
-    # SOs đã duyệt, chưa có lệnh SX — chỉ hiển thị khi không filter theo xưởng/NV/pháp nhân
-    if not phan_xuong_id and not nv_theo_doi_id and not phap_nhan_id and not include_hoan_thanh:
+    # SOs chưa có lệnh SX — chỉ hiển thị khi không filter theo xưởng/NV/pháp nhân
+    if not phan_xuong_id and not nv_theo_doi_id and not phap_nhan_id:
         so_q = (
             db.query(SalesOrder)
             .options(
@@ -252,7 +253,7 @@ def _query_rows(
                 joinedload(SalesOrder.items),
             )
             .filter(
-                SalesOrder.trang_thai == "da_duyet",
+                SalesOrder.trang_thai.in_(["moi", "da_duyet"]),
                 ~exists().where(ProductionOrder.sales_order_id == SalesOrder.id),
             )
         )

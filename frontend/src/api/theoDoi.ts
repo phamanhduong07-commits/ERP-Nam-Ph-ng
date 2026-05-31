@@ -57,6 +57,7 @@ export interface TheoDoiParams {
 }
 
 export const STAGE_COLORS: Record<string, string> = {
+  moi:           'default',
   da_duyet:      'gold',
   lap_lenh:      'blue',
   cho_sx:        'geekblue',
