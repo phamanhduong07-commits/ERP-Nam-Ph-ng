@@ -1608,6 +1608,16 @@ export default function QuoteForm() {
                           onChange={v => setCI({ tem_so_mau: v ?? 0 })}
                         />
                       </Col>
+                      {ci.tem_so_mau > 0 && (
+                        <Col span={9}>
+                          <Text style={{ fontSize: 9 }}>Kẹp màu (đ/màu)</Text>
+                          <InputNumber size="small" style={{ width: '100%' }} min={0} step={10000} placeholder="đ/màu"
+                            value={ci.tem_gia_kem_mau ?? undefined}
+                            onChange={v => setCI({ tem_gia_kem_mau: v })}
+                            formatter={v => v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                          />
+                        </Col>
+                      )}
                       {ci.tem_so_mau > 0 && ci.tem_gia_in_1000to && (
                         <Col>
                           <Text type="secondary" style={{ fontSize: 10 }}>
@@ -1642,8 +1652,13 @@ export default function QuoteForm() {
                           setCI({ tem_co_luoi: e.target.checked, ...(addon ? { tem_gia_luoi_m2: addon.don_gia_m2 } : {}) })
                         }}><Text style={{ fontSize: 10 }}>Lưới</Text></Checkbox>
                       </Col>
+                      <Col>
+                        <Checkbox checked={ci.tem_co_khuon_be} onChange={e => {
+                          setCI({ tem_co_khuon_be: e.target.checked })
+                        }}><Text style={{ fontSize: 10 }}>Khuôn bế</Text></Checkbox>
+                      </Col>
                     </Row>
-                    {(ci.tem_co_can_mang || ci.tem_co_uv || ci.tem_co_suppo || ci.tem_co_luoi) && (
+                    {(ci.tem_co_can_mang || ci.tem_co_uv || ci.tem_co_suppo || ci.tem_co_luoi || ci.tem_co_khuon_be) && (
                       <Row gutter={6} style={{ marginTop: 3 }}>
                         {ci.tem_co_can_mang && (
                           <Col span={6}>
@@ -1684,6 +1699,26 @@ export default function QuoteForm() {
                               formatter={v => v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
                             />
                           </Col>
+                        )}
+                        {ci.tem_co_khuon_be && (
+                          <>
+                            <Col span={8}>
+                              <Text style={{ fontSize: 9 }}>Khuôn bế (đ)</Text>
+                              <InputNumber size="small" style={{ width: '100%' }} min={0} step={100000} placeholder="đ"
+                                value={ci.tem_gia_khuon_be ?? undefined}
+                                onChange={v => setCI({ tem_gia_khuon_be: v })}
+                                formatter={v => v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                              />
+                            </Col>
+                            <Col span={8}>
+                              <Text style={{ fontSize: 9 }}>Phân bổ (cái)</Text>
+                              <InputNumber size="small" style={{ width: '100%' }} min={1} step={1000} placeholder="10000"
+                                value={ci.tem_khuon_be_phan_bo}
+                                onChange={v => setCI({ tem_khuon_be_phan_bo: v ?? 10000 })}
+                                formatter={v => v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''}
+                              />
+                            </Col>
+                          </>
                         )}
                       </Row>
                     )}
