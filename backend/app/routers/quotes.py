@@ -5,6 +5,7 @@ import unicodedata
 from typing import Optional, List
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, UploadFile
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy import cast, Date
 from sqlalchemy.orm import Session, joinedload
@@ -13,6 +14,7 @@ from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.master import Customer, PhanXuong, PaperMaterial
 from app.models.sales import Quote, QuoteItem, SalesOrder, SalesOrderItem
+from app.models.system import PrintTemplate, SystemSetting
 from app.schemas.master import CustomerShort
 from app.schemas.quotes import (
     QuoteCreate, QuoteUpdate,
@@ -42,6 +44,7 @@ class QuoteItemPriceRequest(BaseModel):
 class QuoteItemPriceResponse(BaseModel):
     gia_ban: Decimal
     gia_noi_bo: Decimal
+    warnings: List[str] = []
 
 
 QUOTE_IMPORT_FIELDS = [
@@ -335,7 +338,9 @@ def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
     indirect_bd = get_indirect_breakdown_from_db(so_lop, db)
     addon_rates_db = get_addon_rates_from_db(db)
     result = calculate_price(calc_input, indirect_breakdown=indirect_bd, addon_rates=addon_rates_db)
-    gia_noi_bo = result["chi_phi_giay"] + result["chi_phi_gian_tiep"] + result["loi_nhuan"]
+    # gia_noi_bo = giá xuất phôi VSP = toàn bộ chi phí SX (giấy + gián tiếp + hao hụt + addon) + lợi nhuận
+    # = gia_ban_co_ban (p), không tính hoa hồng/chiết khấu ngoài
+    gia_noi_bo = result["gia_ban_co_ban"]
 
     # Case C: cộng thêm chi phí offset
     offset_addon = _calc_offset_addon(item, so_luong) if co_tem_offset else 0.0
@@ -414,6 +419,33 @@ def _load_quote(quote_id: int, db: Session) -> Quote:
     if not quote:
         raise HTTPException(status_code=404, detail="Không tìm thấy báo giá")
     return quote
+
+
+def _recalc_totals(quote: Quote) -> None:
+    """Tính lại tổng tiền hàng, tiền VAT và tổng cộng từ các dòng hàng (in-place)."""
+    tong_tien = sum(
+        (
+            Decimal(str(item.gia_ban or 0)) * Decimal(str(item.so_luong or 0))
+            for item in quote.items
+        ),
+        Decimal("0"),
+    )
+    ty_le = Decimal(str(quote.ty_le_vat or 8))
+    tien_vat = (tong_tien * ty_le / 100).quantize(Decimal("1"))
+    tong_cong = (
+        tong_tien
+        + tien_vat
+        + Decimal(str(quote.chi_phi_bang_in or 0))
+        + Decimal(str(quote.chi_phi_khuon or 0))
+        + Decimal(str(quote.chi_phi_van_chuyen or 0))
+        + Decimal(str(quote.chi_phi_hang_hoa_dv or 0))
+        + Decimal(str(quote.chi_phi_khac_1 or 0))
+        + Decimal(str(quote.chi_phi_khac_2 or 0))
+        - Decimal(str(quote.chiet_khau or 0))
+    )
+    quote.tong_tien_hang = tong_tien.quantize(Decimal("1"))
+    quote.tien_vat = tien_vat
+    quote.tong_cong = tong_cong.quantize(Decimal("1"))
 
 
 def _auto_expire_quotes(db: Session) -> None:
@@ -507,7 +539,21 @@ def calculate_quote_item_price(
         result = _quote_item_price(payload.item, db)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return QuoteItemPriceResponse(**result)
+
+    warnings: List[str] = []
+    if result["gia_ban"] == Decimal("0"):
+        item = payload.item
+        missing = [
+            field
+            for field in ("dai", "rong", "to_hop_song", "so_lop")
+            if not item.get(field)
+        ]
+        if missing:
+            warnings.append(f"Thiếu thông số: {', '.join(missing)} — giá = 0")
+        else:
+            warnings.append("Không tìm thấy giấy phù hợp — giá = 0")
+
+    return QuoteItemPriceResponse(**result, warnings=warnings)
 
 
 @router.get("/counts")
@@ -783,6 +829,7 @@ def create_quote(
                 item_values["gia_ban"] = Decimal("0")
         quote.items.append(QuoteItem(**item_values))
 
+    _recalc_totals(quote)
     db.add(quote)
     db.commit()
     db.refresh(quote)
@@ -819,6 +866,7 @@ def update_quote(
                     item_values["gia_ban"] = Decimal("0")
             quote.items.append(QuoteItem(**item_values))
 
+    _recalc_totals(quote)
     db.commit()
     return _build_response(_load_quote(quote_id, db))
 
@@ -1035,3 +1083,123 @@ def tao_don_hang_tu_bao_gia(
         "so_dong": len(order.items),
         "message": f"Đã tạo đơn hàng {order.so_don} với {len(order.items)} mặt hàng",
     }
+
+
+@router.get("/{quote_id}/print", response_class=HTMLResponse)
+def print_quote(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    quote = _load_quote(quote_id, db)
+    tpl = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "SALES_QUOTE").first()
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Không tìm thấy mẫu in SALES_QUOTE")
+
+    settings = {s.key: s.value for s in db.query(SystemSetting).all()}
+    company_name = settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+    company_details = settings.get("company_details") or ""
+    logo_url = settings.get("logo_url") or ""
+    logo_img = f'<img src="{logo_url}" />' if logo_url else ""
+
+    rows = ""
+    for i, item in enumerate(quote.items, 1):
+        gia_ban = Decimal(str(item.gia_ban or 0))
+        so_luong = Decimal(str(item.so_luong or 0))
+        thanh_tien = (gia_ban * so_luong).quantize(Decimal("1"))
+        kich_thuoc = ""
+        if item.dai and item.rong:
+            kich_thuoc = f"{item.dai}×{item.rong}"
+            if item.cao:
+                kich_thuoc += f"×{item.cao}"
+        rows += (
+            f"<tr>"
+            f"<td style='text-align:center'>{i}</td>"
+            f"<td>{item.ma_amis or ''}</td>"
+            f"<td>{item.ten_hang or ''}</td>"
+            f"<td style='text-align:center'>{kich_thuoc}</td>"
+            f"<td style='text-align:center'>{item.so_lop or ''}</td>"
+            f"<td style='text-align:center'>{item.to_hop_song or ''}</td>"
+            f"<td style='text-align:center'>{item.ma_ky_hieu or ''}</td>"
+            f"<td style='text-align:right'>{int(so_luong):,}</td>"
+            f"<td style='text-align:center'>{item.dvt or 'Thùng'}</td>"
+            f"<td style='text-align:right'>{int(gia_ban):,}</td>"
+            f"<td style='text-align:right'>{int(thanh_tien):,}</td>"
+            f"<td>{item.ghi_chu or ''}</td>"
+            f"</tr>"
+        )
+
+    def _fmt(val) -> str:
+        try:
+            return f"{int(Decimal(str(val or 0))):,}"
+        except Exception:
+            return "0"
+
+    def _vis(val) -> str:
+        try:
+            return "table-row" if val and Decimal(str(val)) != 0 else "none"
+        except Exception:
+            return "none"
+
+    customer = quote.customer
+    customer_name = customer.ten_khach_hang if customer else ""
+    ngay_bao_gia = quote.ngay_bao_gia.strftime("%d/%m/%Y") if quote.ngay_bao_gia else ""
+    ngay_het_han = quote.ngay_het_han.strftime("%d/%m/%Y") if quote.ngay_het_han else ""
+    nguoi_lap = quote.creator.ho_ten if quote.creator else ""
+
+    html = tpl.html_content
+    replacements = {
+        "{{logo_img}}": logo_img,
+        "{{company_name}}": company_name,
+        "{{company_details}}": company_details,
+        "{{document_number}}": quote.so_bao_gia or "",
+        "{{document_date}}": ngay_bao_gia,
+        "{{customer_name}}": customer_name,
+        "{{delivery_address}}": ngay_het_han,
+        "{{body_html}}": rows,
+        "{{tong_tien_hang}}": _fmt(quote.tong_tien_hang),
+        "{{chi_phi_bang_in}}": _fmt(quote.chi_phi_bang_in),
+        "{{chi_phi_bang_in_vis}}": _vis(quote.chi_phi_bang_in),
+        "{{chi_phi_khuon}}": _fmt(quote.chi_phi_khuon),
+        "{{chi_phi_khuon_vis}}": _vis(quote.chi_phi_khuon),
+        "{{chi_phi_van_chuyen}}": _fmt(quote.chi_phi_van_chuyen),
+        "{{chi_phi_van_chuyen_vis}}": _vis(quote.chi_phi_van_chuyen),
+        "{{chi_phi_khac_1_ten}}": quote.chi_phi_khac_1_ten or "",
+        "{{chi_phi_khac_1}}": _fmt(quote.chi_phi_khac_1),
+        "{{chi_phi_khac_1_vis}}": _vis(quote.chi_phi_khac_1),
+        "{{chi_phi_khac_2_ten}}": quote.chi_phi_khac_2_ten or "",
+        "{{chi_phi_khac_2}}": _fmt(quote.chi_phi_khac_2),
+        "{{chi_phi_khac_2_vis}}": _vis(quote.chi_phi_khac_2),
+        "{{ty_le_vat}}": str(quote.ty_le_vat or 8),
+        "{{tien_vat}}": _fmt(quote.tien_vat),
+        "{{tong_cong}}": _fmt(quote.tong_cong),
+        "{{dieu_khoan}}": quote.dieu_khoan or "",
+        "{{nguoi_lap}}": nguoi_lap,
+    }
+    for placeholder, value in replacements.items():
+        html = html.replace(placeholder, value)
+
+    so_bao_gia = quote.so_bao_gia or ""
+    page = (
+        "<!DOCTYPE html>\n"
+        '<html lang="vi">\n'
+        "<head>\n"
+        '  <meta charset="UTF-8">\n'
+        '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        f"  <title>Báo Giá {so_bao_gia}</title>\n"
+        "  <style>\n"
+        "    body { margin: 0; padding: 0; }\n"
+        "    @media print { .no-print { display: none !important; } }\n"
+        "  </style>\n"
+        "</head>\n"
+        "<body>\n"
+        '  <div class="no-print" style="padding:12px;background:#f0f0f0;display:flex;gap:12px;align-items:center">\n'
+        "    <button onclick=\"window.print()\" style=\"padding:8px 20px;background:#E65100;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px\">🖨️ In / Xuất PDF</button>\n"
+        "    <button onclick=\"window.close()\" style=\"padding:8px 16px;border:1px solid #ccc;border-radius:4px;cursor:pointer\">Đóng</button>\n"
+        '    <span style="font-size:12px;color:#666">Tip: Ctrl+P → Save as PDF</span>\n'
+        "  </div>\n"
+        f"  {html}\n"
+        "</body>\n"
+        "</html>"
+    )
+    return HTMLResponse(content=page)

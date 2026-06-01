@@ -386,7 +386,7 @@ export default function QuoteForm() {
     if (!item.loai_thung || item.loai_thung === 'KHAC') return false
     const needsCao = item.loai_thung !== 'LOT'
     if (!item.dai || !item.rong || !item.to_hop_song || !item.so_luong) return false
-    if (needsCao && !item.cao) return false
+    if (needsCao && item.cao == null) return false
     const layers: [keyof QuoteItem, keyof QuoteItem][] = [
       ['mat', 'mat_dl'],
       ['song_1', 'song_1_dl'],
@@ -527,7 +527,7 @@ export default function QuoteForm() {
     if (item.loai_thung === 'LOT') {
       return `Tấm ${item.so_lop}L`
     }
-    if (item.dai && item.rong && item.cao) {
+    if (item.dai && item.rong && item.cao != null) {
       return `Thùng Carton ${item.dai}x${item.rong}x${item.cao} ${item.so_lop}L`
     }
     return `Thùng Carton ${item.so_lop}L`
@@ -612,7 +612,7 @@ export default function QuoteForm() {
         if (isAutoName) {
           if (next.loai_thung === 'LOT') {
             next.ten_hang = `Tấm ${next.so_lop}L`
-          } else if (next.dai && next.rong && next.cao) {
+          } else if (next.dai && next.rong && next.cao != null) {
             next.ten_hang = `Thùng Carton ${next.dai}x${next.rong}x${next.cao} ${next.so_lop}L`
           } else if (next.loai_thung || next.so_lop) {
             next.ten_hang = `Thùng Carton ${next.so_lop}L`
@@ -1448,7 +1448,7 @@ export default function QuoteForm() {
                     </Text>
                     <InputNumber size="small" style={{ width: '100%' }} value={ci.dien_tich || undefined}
                       onChange={v => setCI({ dien_tich: v })} placeholder="0" step={0.0001}
-                      readOnly={!ci.khong_ct && Boolean(ci.loai_thung && ci.dai && ci.rong && ci.cao)}
+                      readOnly={!ci.khong_ct && Boolean(ci.loai_thung && ci.dai && ci.rong && ci.cao != null)}
                     />
                   </Col>
                   {!hideCostDetails && ci.dien_tich && ci.don_gia_m2 ? (
@@ -1538,7 +1538,7 @@ export default function QuoteForm() {
                           onClick={() => {
                             const next = !ci.tem_hai_manh
                             const updates: Partial<typeof ci> = { tem_hai_manh: next }
-                            if (ci.dai && ci.rong && ci.cao) {
+                            if (ci.dai && ci.rong && ci.cao != null) {
                               const dims = calcOffsetSheetDims(ci.dai, ci.rong, ci.cao, next)
                               updates.tem_dai_to = dims.dai_to
                               updates.tem_rong_to = dims.rong_to
@@ -1549,7 +1549,7 @@ export default function QuoteForm() {
                           {ci.tem_hai_manh ? '2 mảnh ✓' : 'Thùng 2 mảnh'}
                         </Button>
                       </Col>
-                      {(ci.dai && ci.rong && ci.cao) ? (
+                      {(ci.dai && ci.rong && ci.cao != null) ? (
                         <Col>
                           <Button
                             size="small"
