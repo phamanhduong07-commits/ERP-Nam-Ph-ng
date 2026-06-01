@@ -541,7 +541,7 @@ export function calcOffsetCost(
   const soMau = ci.tem_so_mau ?? 0
   const chiPhiIn =
     soMau > 0
-      ? soMau * ((ci.tem_gia_kem_mau ?? 0) + (ci.tem_gia_in_1000to ?? 0) * soTo / 1000)
+      ? soMau * ((ci.tem_gia_kem_mau ?? 0) * (ci.tem_hai_manh ? 2 : 1) + (ci.tem_gia_in_1000to ?? 0) * soTo / 1000)
       : 0
 
   const chiPhiCanMang =

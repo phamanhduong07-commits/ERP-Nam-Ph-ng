@@ -861,7 +861,8 @@ def calculate_offset_cost(
 
     chi_phi_in = 0.0
     if tem_so_mau > 0:
-        kem = (tem_gia_kem_mau or 0.0) * tem_so_mau
+        # hai_manh: 2 mảnh khác thiết kế → 2 bộ kẹp màu riêng
+        kem = (tem_gia_kem_mau or 0.0) * tem_so_mau * (2 if tem_hai_manh else 1)
         cong_in = (tem_gia_in_1000to or 0.0) * tem_so_mau * so_to / 1000.0
         chi_phi_in = kem + cong_in
 
