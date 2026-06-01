@@ -281,6 +281,7 @@ def _calc_offset_addon(item: QuoteItem | dict, qty: float) -> float:
         tem_co_luoi=bool(_item_get(item, "tem_co_luoi")),
         tem_gia_luoi_m2=float(_item_get(item, "tem_gia_luoi_m2") or 0) or None,
         tem_hai_manh=bool(_item_get(item, "tem_hai_manh")),
+        tem_khac_thiet_ke=bool(_item_get(item, "tem_khac_thiet_ke")),
     )
     return result["gia_ban_tem_per_cai"]
 

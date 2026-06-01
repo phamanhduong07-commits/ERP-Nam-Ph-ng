@@ -832,6 +832,7 @@ def calculate_offset_cost(
     tem_co_luoi: bool = False,
     tem_gia_luoi_m2: float | None = None,
     tem_hai_manh: bool = False,
+    tem_khac_thiet_ke: bool = False,
 ) -> dict:
     """
     Tính chi phí tem/offset per cái sản phẩm.
@@ -861,8 +862,8 @@ def calculate_offset_cost(
 
     chi_phi_in = 0.0
     if tem_so_mau > 0:
-        # hai_manh: 2 mảnh khác thiết kế → 2 bộ kẹp màu riêng
-        kem = (tem_gia_kem_mau or 0.0) * tem_so_mau * (2 if tem_hai_manh else 1)
+        # khac_thiet_ke: 2 mảnh khác thiết kế → 2 bộ kẹp màu riêng; cùng thiết kế → 1 bộ
+        kem = (tem_gia_kem_mau or 0.0) * tem_so_mau * (2 if tem_khac_thiet_ke else 1)
         cong_in = (tem_gia_in_1000to or 0.0) * tem_so_mau * so_to / 1000.0
         chi_phi_in = kem + cong_in
 
@@ -872,7 +873,8 @@ def calculate_offset_cost(
 
     chi_phi_khuon_be = 0.0
     if tem_co_khuon_be and tem_gia_khuon_be:
-        chi_phi_khuon_be = tem_gia_khuon_be / max(tem_khuon_be_phan_bo, 1) * qty
+        so_khuon = 2 if tem_khac_thiet_ke else 1
+        chi_phi_khuon_be = tem_gia_khuon_be / max(tem_khuon_be_phan_bo, 1) * qty * so_khuon
 
     chi_phi_uv = 0.0
     if tem_co_uv and tem_gia_uv_m2 and dien_tich_to:

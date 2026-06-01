@@ -72,6 +72,7 @@ class QuoteItemCreate(BaseModel):
     tem_co_luoi: bool = False
     tem_gia_luoi_m2: Decimal | None = None
     tem_hai_manh: bool = False
+    tem_khac_thiet_ke: bool = False
 
     # In ấn
     loai_in: str = "khong_in"
@@ -166,6 +167,7 @@ class QuoteItemResponse(BaseModel):
     tem_co_luoi: bool
     tem_gia_luoi_m2: Decimal | None
     tem_hai_manh: bool
+    tem_khac_thiet_ke: bool
     loai_in: str
     do_kho: bool
     ghim: bool

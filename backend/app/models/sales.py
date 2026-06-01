@@ -353,6 +353,7 @@ class QuoteItem(Base):
     tem_co_luoi: Mapped[bool] = mapped_column(Boolean, default=False)
     tem_gia_luoi_m2: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     tem_hai_manh: Mapped[bool] = mapped_column(Boolean, default=False)
+    tem_khac_thiet_ke: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # In ấn
     loai_in: Mapped[str] = mapped_column(String(30), default="khong_in")

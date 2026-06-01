@@ -150,6 +150,7 @@ const emptyItem = (): QuoteItem => ({
   tem_co_suppo: false, tem_gia_suppo_m2: null,
   tem_co_luoi: false, tem_gia_luoi_m2: null,
   tem_hai_manh: false,
+  tem_khac_thiet_ke: false,
   loai_in: 'khong_in',
   do_kho: false, ghim: false, chap_xa: false,
   do_phu: false, dan: false, boi: false, be_lo: false,
@@ -1549,6 +1550,16 @@ export default function QuoteForm() {
                           {ci.tem_hai_manh ? '2 mảnh ✓' : 'Thùng 2 mảnh'}
                         </Button>
                       </Col>
+                      {ci.tem_hai_manh && (
+                        <Col>
+                          <Checkbox
+                            checked={ci.tem_khac_thiet_ke}
+                            onChange={e => setCI({ tem_khac_thiet_ke: e.target.checked })}
+                          >
+                            <Text style={{ fontSize: 10 }}>Khác thiết kế (×2 kẹp màu/khuôn)</Text>
+                          </Checkbox>
+                        </Col>
+                      )}
                       {(ci.dai && ci.rong && ci.cao != null) ? (
                         <Col>
                           <Button

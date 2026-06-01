@@ -60,6 +60,7 @@ export interface QuoteItem {
   tem_co_luoi: boolean
   tem_gia_luoi_m2?: number | null
   tem_hai_manh: boolean
+  tem_khac_thiet_ke: boolean
   // In ấn
   loai_in: string
   do_kho: boolean
@@ -541,7 +542,7 @@ export function calcOffsetCost(
   const soMau = ci.tem_so_mau ?? 0
   const chiPhiIn =
     soMau > 0
-      ? soMau * ((ci.tem_gia_kem_mau ?? 0) * (ci.tem_hai_manh ? 2 : 1) + (ci.tem_gia_in_1000to ?? 0) * soTo / 1000)
+      ? soMau * ((ci.tem_gia_kem_mau ?? 0) * (ci.tem_khac_thiet_ke ? 2 : 1) + (ci.tem_gia_in_1000to ?? 0) * soTo / 1000)
       : 0
 
   const chiPhiCanMang =
@@ -551,7 +552,7 @@ export function calcOffsetCost(
 
   const chiPhiKhuonBe =
     ci.tem_co_khuon_be && ci.tem_gia_khuon_be
-      ? (ci.tem_gia_khuon_be / Math.max(ci.tem_khuon_be_phan_bo ?? 10000, 1)) * qty
+      ? (ci.tem_gia_khuon_be / Math.max(ci.tem_khuon_be_phan_bo ?? 10000, 1)) * qty * (ci.tem_khac_thiet_ke ? 2 : 1)
       : 0
 
   const chiPhiUv =
