@@ -881,12 +881,7 @@ export default function QuoteForm() {
       },
     },
     {
-      title: () => (
-        <span style={{ fontSize: 11 }}>
-          Giá phôi<br />
-          <span style={{ color: '#8c8c8c', fontWeight: 400 }}>a+b+e</span>
-        </span>
-      ),
+      title: 'Giá phôi',
       dataIndex: 'gia_phoi',
       width: 100,
       align: 'right' as const,
@@ -896,12 +891,7 @@ export default function QuoteForm() {
           : <Text style={{ color: '#bfbfbf', fontSize: 11 }}>—</Text>,
     },
     {
-      title: () => (
-        <span style={{ fontSize: 11 }}>
-          Giá TP<br />
-          <span style={{ color: '#8c8c8c', fontWeight: 400 }}>a+b+c+d+e</span>
-        </span>
-      ),
+      title: 'Giá TP',
       dataIndex: 'gia_noi_bo',
       width: 100,
       align: 'right' as const,
@@ -2117,11 +2107,7 @@ export default function QuoteForm() {
                   </Col>
                 </Row>
                 <Row gutter={4} style={{ marginTop: 4 }} align="middle">
-                  <Col span={12}>
-                    <Text style={{ fontSize: 11 }}>Giá Phôi</Text>
-                    <br />
-                    <Text style={{ fontSize: 10, color: '#8c8c8c' }}>a+b+e (chuyển kho phôi)</Text>
-                  </Col>
+                  <Col span={12}><Text style={{ fontSize: 11 }}>Giá Phôi</Text></Col>
                   <Col span={12}>
                     <Text strong style={{ color: '#52c41a', fontSize: 13 }}>
                       {(items.find(it => it.stt === 1)?.gia_phoi || 0) > 0
@@ -2131,11 +2117,7 @@ export default function QuoteForm() {
                   </Col>
                 </Row>
                 <Row gutter={4} style={{ marginTop: 4 }} align="middle">
-                  <Col span={12}>
-                    <Text style={{ fontSize: 11 }}>Giá TP (nội bộ)</Text>
-                    <br />
-                    <Text style={{ fontSize: 10, color: '#8c8c8c' }}>a+b+c+d+e (chuyển kho TP)</Text>
-                  </Col>
+                  <Col span={12}><Text style={{ fontSize: 11 }}>Giá TP (nội bộ)</Text></Col>
                   <Col span={12}>
                     <InputNumber size="small" style={{ width: '100%' }}
                       value={finance.gia_xuat_phoi_vsp}
