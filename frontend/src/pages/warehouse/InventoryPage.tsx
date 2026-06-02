@@ -684,6 +684,36 @@ function GiayCuonTab() {
   const totalKg = filtered.reduce((s, r) => s + r.ton_luong, 0)
   const totalGiaTri = filtered.reduce((s, r) => s + r.gia_tri_ton, 0)
 
+  // Top 5 khổ + định lượng — tính từ data gốc (không bị filter ảnh hưởng)
+  const topKho = useMemo(() => {
+    const map = new Map<number, { kg: number; cuon: number }>()
+    for (const r of data) {
+      if (r.kho_mm == null) continue
+      const cur = map.get(r.kho_mm) ?? { kg: 0, cuon: 0 }
+      map.set(r.kho_mm, { kg: cur.kg + r.ton_luong, cuon: cur.cuon + 1 })
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[1].kg - a[1].kg)
+      .slice(0, 5)
+      .map(([kho, v]) => ({ label: `${kho} mm`, ...v }))
+  }, [data])
+
+  const topDL = useMemo(() => {
+    const map = new Map<number, { kg: number; cuon: number }>()
+    for (const r of data) {
+      if (r.dinh_luong == null) continue
+      const cur = map.get(r.dinh_luong) ?? { kg: 0, cuon: 0 }
+      map.set(r.dinh_luong, { kg: cur.kg + r.ton_luong, cuon: cur.cuon + 1 })
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[1].kg - a[1].kg)
+      .slice(0, 5)
+      .map(([dl, v]) => ({ label: `${dl} g/m²`, ...v }))
+  }, [data])
+
+  const maxKhoKg = topKho[0]?.kg ?? 1
+  const maxDLKg = topDL[0]?.kg ?? 1
+
   if (isLoading) return <Spin style={{ margin: 60, display: 'block', textAlign: 'center' }} />
 
   const filterBar = (
@@ -780,8 +810,59 @@ function GiayCuonTab() {
     },
   ]
 
+  const renderRankPanel = (
+    title: string,
+    rows: { label: string; kg: number; cuon: number }[],
+    maxKg: number,
+    color: string,
+    onClickFilter: (label: string) => void,
+  ) => (
+    <Card size="small" title={<Text strong style={{ fontSize: 13 }}>{title}</Text>} styles={{ body: { padding: '8px 12px' } }}>
+      {rows.map((r, i) => (
+        <div key={r.label} style={{ marginBottom: 10, cursor: 'pointer' }} onClick={() => onClickFilter(r.label)}>
+          <Row justify="space-between" style={{ marginBottom: 2 }}>
+            <Space size={6}>
+              <Text style={{ color: '#999', fontSize: 11, width: 14, display: 'inline-block' }}>#{i + 1}</Text>
+              <Text strong style={{ fontSize: 13 }}>{r.label}</Text>
+            </Space>
+            <Space size={12}>
+              <Text style={{ color: '#1677ff', fontSize: 12 }}>{r.cuon} cuộn</Text>
+              <Text strong style={{ color, fontSize: 13 }}>{Math.round(r.kg).toLocaleString('vi-VN')} kg</Text>
+            </Space>
+          </Row>
+          <Progress
+            percent={Math.round((r.kg / maxKg) * 100)}
+            showInfo={false}
+            strokeColor={color}
+            trailColor="#f0f0f0"
+            size={['100%', 6] as any}
+          />
+        </div>
+      ))}
+    </Card>
+  )
+
   return (
     <div>
+      <Row gutter={12} style={{ marginBottom: 12 }}>
+        <Col span={12}>
+          {renderRankPanel(
+            '🔢 Top 5 khổ giấy tồn nhiều nhất',
+            topKho, maxKhoKg, '#389e0d',
+            (label) => {
+              const mm = parseFloat(label)
+              if (!isNaN(mm)) setKhoFilter(mm)
+            },
+          )}
+        </Col>
+        <Col span={12}>
+          {renderRankPanel(
+            '⚖️ Top 5 định lượng tồn nhiều nhất',
+            topDL, maxDLKg, '#d46b08',
+            () => {},
+          )}
+        </Col>
+      </Row>
       {filterBar}
       <Card
         size="small"
