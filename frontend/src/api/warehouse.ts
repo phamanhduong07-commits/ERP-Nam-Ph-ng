@@ -49,6 +49,8 @@ export interface TonKho {
   dinh_luong?: number | null
   so_cuon?: number | null
   bien_dong?: number | null
+  ten_nsx?: string | null
+  ngay_nhap_gan_nhat?: string | null
 }
 
 export interface TonKhoSummary {
@@ -592,6 +594,7 @@ export interface TonKhoGiayRow {
   ten: string | null
   kho: number | null
   dinh_luong: number | null
+  loai_giay?: string | null
   ton_toi_thieu: number
   warehouse_id: number
   ten_kho: string
@@ -603,6 +606,9 @@ export interface TonKhoGiayRow {
   so_cuon: number
   gia_tri_ton: number
   don_gia_binh_quan: number
+  ten_nsx?: string | null
+  bien_dong?: number | null
+  ngay_nhap_gan_nhat?: string | null
 }
 
 export interface GiayRoll {

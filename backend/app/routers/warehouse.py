@@ -647,6 +647,37 @@ def get_ton_kho(
 
     rows = q.all()
 
+    # Batch-load NSX và ngay_nhap_gan_nhat — tránh N+1 per paper material
+    pm_ids_set = [r.paper_material_id for r in rows if r.paper_material_id]
+    ten_nsx_map: dict[int, str | None] = {}
+    nhap_date_map: dict[int, str | None] = {}
+    if pm_ids_set:
+        pm_nsx_rows = (
+            db.query(PaperMaterial.id, Supplier.ten_viet_tat)
+            .outerjoin(Supplier, PaperMaterial.ma_nsx_id == Supplier.id)
+            .filter(PaperMaterial.id.in_(pm_ids_set))
+            .all()
+        )
+        ten_nsx_map = {pm_id: ten for pm_id, ten in pm_nsx_rows}
+
+        nhap_q = (
+            db.query(
+                GoodsReceiptItem.paper_material_id,
+                func.max(GoodsReceipt.ngay_nhap).label("max_ngay"),
+            )
+            .join(GoodsReceipt, GoodsReceiptItem.receipt_id == GoodsReceipt.id)
+            .filter(
+                GoodsReceiptItem.paper_material_id.in_(pm_ids_set),
+                GoodsReceipt.trang_thai == "da_duyet",
+            )
+            .group_by(GoodsReceiptItem.paper_material_id)
+            .all()
+        )
+        nhap_date_map = {
+            r.paper_material_id: r.max_ngay.isoformat() if r.max_ngay else None
+            for r in nhap_q
+        }
+
     result = []
     for r in rows:
         ten_hang = r.ten_hang or ""
@@ -714,6 +745,8 @@ def get_ton_kho(
             "kho_mm": kho_mm,
             "dinh_luong": dinh_luong,
             "bien_dong": (float(r.ton_luong) - float(r.ton_luong_truoc)) if r.ton_luong_truoc is not None else None,
+            "ten_nsx": ten_nsx_map.get(r.paper_material_id) if r.paper_material_id else None,
+            "ngay_nhap_gan_nhat": nhap_date_map.get(r.paper_material_id) if r.paper_material_id else None,
         })
     return result
 
@@ -4606,17 +4639,67 @@ def ton_kho_giay(
         px.id: px for px in db.query(PhanXuong).filter(PhanXuong.id.in_(px_ids)).all()
     } if px_ids else {}
 
-    # Lấy giá nhập gần nhất cho mỗi paper_material để ước tính giá trị tồn
-    don_gia_map: dict[int, float] = {}
-    for pm_id in pm_ids:
-        last_item = (
-            db.query(GoodsReceiptItem)
-            .filter(GoodsReceiptItem.paper_material_id == pm_id)
-            .order_by(GoodsReceiptItem.id.desc())
-            .first()
+    # Lấy giá nhập gần nhất cho mỗi paper_material (1 query, không N+1)
+    don_gia_rows = (
+        db.query(
+            GoodsReceiptItem.paper_material_id,
+            func.max(GoodsReceiptItem.id).label("max_id"),
         )
-        if last_item and last_item.don_gia:
-            don_gia_map[pm_id] = float(last_item.don_gia)
+        .filter(GoodsReceiptItem.paper_material_id.in_(pm_ids))
+        .group_by(GoodsReceiptItem.paper_material_id)
+        .all()
+    )
+    last_item_ids = [r.max_id for r in don_gia_rows]
+    don_gia_map: dict[int, float] = {}
+    if last_item_ids:
+        for item in db.query(GoodsReceiptItem).filter(GoodsReceiptItem.id.in_(last_item_ids)).all():
+            if item.paper_material_id and item.don_gia:
+                don_gia_map[item.paper_material_id] = float(item.don_gia)
+
+    # Batch-load NSX names
+    nsx_ids = {pm.ma_nsx_id for pm in pm_map.values() if pm.ma_nsx_id}
+    sup_map: dict[int, str] = {
+        s.id: (s.ten_viet_tat or "")
+        for s in db.query(Supplier).filter(Supplier.id.in_(nsx_ids)).all()
+    } if nsx_ids else {}
+
+    # Batch-load bien_dong từ InventoryBalance (ton_luong - ton_luong_truoc)
+    bien_dong_map: dict[int, float | None] = {}
+    if pm_ids:
+        bal_rows = (
+            db.query(
+                InventoryBalance.paper_material_id,
+                func.sum(InventoryBalance.ton_luong).label("ton_now"),
+                func.sum(InventoryBalance.ton_luong_truoc).label("ton_prev"),
+            )
+            .filter(InventoryBalance.paper_material_id.in_(pm_ids))
+            .group_by(InventoryBalance.paper_material_id)
+            .all()
+        )
+        for b in bal_rows:
+            if b.ton_prev is not None:
+                bien_dong_map[b.paper_material_id] = float(b.ton_now or 0) - float(b.ton_prev)
+
+    # Batch-load ngay_nhap_gan_nhat
+    nhap_date_map: dict[int, str | None] = {}
+    if pm_ids:
+        nhap_rows = (
+            db.query(
+                GoodsReceiptItem.paper_material_id,
+                func.max(GoodsReceipt.ngay_nhap).label("max_ngay"),
+            )
+            .join(GoodsReceipt, GoodsReceiptItem.receipt_id == GoodsReceipt.id)
+            .filter(
+                GoodsReceiptItem.paper_material_id.in_(pm_ids),
+                GoodsReceipt.trang_thai == "da_duyet",
+            )
+            .group_by(GoodsReceiptItem.paper_material_id)
+            .all()
+        )
+        nhap_date_map = {
+            r.paper_material_id: r.max_ngay.isoformat() if r.max_ngay else None
+            for r in nhap_rows
+        }
 
     result = []
     for row in agg:
@@ -4638,6 +4721,7 @@ def ton_kho_giay(
             "ten": pm.ten if pm else None,
             "kho": float(pm.kho) if pm and pm.kho else None,
             "dinh_luong": int(pm.dinh_luong) if pm and pm.dinh_luong else None,
+            "loai_giay": pm.loai_giay if pm else None,
             "ton_toi_thieu": float(pm.ton_toi_thieu) if pm and pm.ton_toi_thieu else 0,
             "warehouse_id": row.warehouse_id,
             "ten_kho": wh.ten_kho,
@@ -4648,6 +4732,9 @@ def ton_kho_giay(
             "so_cuon": int(row.so_cuon or 0),
             "gia_tri_ton": ton_luong * don_gia,
             "don_gia_binh_quan": don_gia,
+            "ten_nsx": sup_map.get(pm.ma_nsx_id) if pm and pm.ma_nsx_id else None,
+            "bien_dong": bien_dong_map.get(row.paper_material_id),
+            "ngay_nhap_gan_nhat": nhap_date_map.get(row.paper_material_id),
         })
 
     result.sort(key=lambda x: (x["ma_chinh"] or "", x["ten_kho"] or ""))

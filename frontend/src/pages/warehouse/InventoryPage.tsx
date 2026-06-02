@@ -784,11 +784,23 @@ function GiayCuonTab() {
       title: 'Tên giấy',
       dataIndex: 'ten_hang',
       render: (v: string, r: TonKho) => (
-        <Space size={4}>
-          <Text style={{ fontSize: 12 }}>{v}</Text>
-          {r.ma_chinh && <Text type="secondary" style={{ fontSize: 10 }}>({r.ma_chinh})</Text>}
+        <Space direction="vertical" size={0}>
+          <Space size={4}>
+            <Text style={{ fontSize: 12 }}>{v}</Text>
+            {r.ma_chinh && <Text type="secondary" style={{ fontSize: 10 }}>({r.ma_chinh})</Text>}
+          </Space>
+          {r.ten_nsx && <Text type="secondary" style={{ fontSize: 10 }}>{r.ten_nsx}</Text>}
         </Space>
       ),
+    },
+    {
+      title: 'Nhập gần nhất',
+      dataIndex: 'ngay_nhap_gan_nhat',
+      width: 100,
+      align: 'center' as const,
+      render: (v: string | null) => v
+        ? <Text type="secondary" style={{ fontSize: 11 }}>{v}</Text>
+        : <Text type="secondary" style={{ fontSize: 11 }}>—</Text>,
     },
     {
       title: 'Tồn (kg)',

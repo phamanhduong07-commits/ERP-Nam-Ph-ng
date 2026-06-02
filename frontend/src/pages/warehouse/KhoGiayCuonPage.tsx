@@ -23,11 +23,15 @@ interface GroupedRow {
   ten: string | null
   kho: number | null
   dinh_luong: number | null
+  loai_giay: string | null
   ton_toi_thieu: number
   ton_tong: number
   so_cuon_tong: number
   gia_tri_tong: number
   is_low: boolean
+  ten_nsx: string | null
+  bien_dong: number | null
+  ngay_nhap_gan_nhat: string | null
   details: TonKhoGiayRow[]
 }
 
@@ -103,11 +107,15 @@ export default function KhoGiayCuonPage() {
           ten: r.ten,
           kho: r.kho,
           dinh_luong: r.dinh_luong,
+          loai_giay: r.loai_giay ?? null,
           ton_toi_thieu: r.ton_toi_thieu,
           ton_tong: 0,
           so_cuon_tong: 0,
           gia_tri_tong: 0,
           is_low: false,
+          ten_nsx: r.ten_nsx ?? null,
+          bien_dong: r.bien_dong ?? null,
+          ngay_nhap_gan_nhat: r.ngay_nhap_gan_nhat ?? null,
           details: [],
         }
         map.set(r.paper_material_id, g)
@@ -193,7 +201,12 @@ export default function KhoGiayCuonPage() {
     {
       title: 'Tên / mô tả',
       dataIndex: 'ten',
-      render: (v) => v || '—',
+      render: (v, r) => (
+        <Space direction="vertical" size={0}>
+          <Text>{v || '—'}</Text>
+          {r.ten_nsx && <Text type="secondary" style={{ fontSize: 11 }}>{r.ten_nsx}</Text>}
+        </Space>
+      ),
     },
     {
       title: 'Khổ (cm)',
@@ -221,10 +234,18 @@ export default function KhoGiayCuonPage() {
       dataIndex: 'ton_tong',
       width: 140,
       align: 'right',
+      sorter: (a: GroupedRow, b: GroupedRow) => a.ton_tong - b.ton_tong,
       render: (v, r) => (
-        <span style={{ color: r.is_low ? '#cf1322' : undefined, fontWeight: r.is_low ? 700 : undefined }}>
-          {formatKg(v)}
-        </span>
+        <Space direction="vertical" size={0} style={{ textAlign: 'right' }}>
+          <span style={{ color: r.is_low ? '#cf1322' : undefined, fontWeight: r.is_low ? 700 : undefined }}>
+            {formatKg(v)}
+          </span>
+          {r.bien_dong != null && Math.abs(r.bien_dong) >= 1 && (
+            <Text style={{ fontSize: 11, color: r.bien_dong > 0 ? '#1677ff' : '#ff4d4f' }}>
+              {r.bien_dong > 0 ? '▲' : '▼'} {Math.abs(Math.round(r.bien_dong)).toLocaleString('vi-VN')}
+            </Text>
+          )}
+        </Space>
       ),
     },
     {
@@ -242,20 +263,66 @@ export default function KhoGiayCuonPage() {
       render: (v) => formatVnd(v),
     },
     {
+      title: 'Ngày nhập gần nhất',
+      dataIndex: 'ngay_nhap_gan_nhat',
+      width: 130,
+      align: 'center',
+      render: (v) => v
+        ? <Text type="secondary" style={{ fontSize: 12 }}>{v}</Text>
+        : <Text type="secondary">—</Text>,
+    },
+    {
       title: 'Số kho',
-      width: 80,
+      width: 70,
       align: 'center',
       render: (_, r) => <Tag>{r.details.length}</Tag>,
     },
   ]
 
+  const LOAI_GIAY_COLOR: Record<string, string> = {
+    nau: 'brown', trang: 'default', vang: 'gold', xeo: 'cyan', khac: 'default',
+  }
+  const LOAI_GIAY_LABEL: Record<string, string> = {
+    nau: 'Nâu', trang: 'Trắng', vang: 'Vàng', xeo: 'Xeo', khac: 'Khác',
+  }
+
   const detailColumns: ColumnsType<TonKhoGiayRow> = [
-    { title: 'Kho',          dataIndex: 'ten_kho',         width: 180 },
-    { title: 'Phân xưởng',   dataIndex: 'ten_phan_xuong',  width: 160, render: v => v || '—' },
-    { title: 'Số cuộn',      dataIndex: 'so_cuon',         width: 90,  align: 'right', render: v => <Tag color="blue">{v ?? 0} cuộn</Tag> },
-    { title: 'Tồn (kg)',     dataIndex: 'ton_luong',       width: 120, align: 'right', render: v => formatKg(v) },
-    { title: 'Đơn giá BQ',   dataIndex: 'don_gia_binh_quan', width: 130, align: 'right', render: v => v ? formatVnd(v) + '/kg' : '—' },
-    { title: 'Giá trị tồn',  dataIndex: 'gia_tri_ton',     width: 150, align: 'right', render: v => formatVnd(v) },
+    { title: 'Kho',         dataIndex: 'ten_kho',         width: 180 },
+    { title: 'Phân xưởng',  dataIndex: 'ten_phan_xuong',  width: 150, render: v => v || '—' },
+    {
+      title: 'Loại giấy',
+      dataIndex: 'loai_giay',
+      width: 90,
+      render: v => v
+        ? <Tag color={LOAI_GIAY_COLOR[v] ?? 'default'}>{LOAI_GIAY_LABEL[v] ?? v}</Tag>
+        : '—',
+    },
+    { title: 'Số cuộn', dataIndex: 'so_cuon', width: 90, align: 'right', render: v => <Tag color="blue">{v ?? 0} cuộn</Tag> },
+    {
+      title: 'Tồn (kg)',
+      dataIndex: 'ton_luong',
+      width: 120,
+      align: 'right',
+      render: (v, r) => (
+        <Space direction="vertical" size={0} style={{ textAlign: 'right' }}>
+          <Text strong>{formatKg(v)}</Text>
+          {r.bien_dong != null && Math.abs(r.bien_dong) >= 1 && (
+            <Text style={{ fontSize: 11, color: r.bien_dong > 0 ? '#1677ff' : '#ff4d4f' }}>
+              {r.bien_dong > 0 ? '▲' : '▼'} {Math.abs(Math.round(r.bien_dong)).toLocaleString('vi-VN')}
+            </Text>
+          )}
+        </Space>
+      ),
+    },
+    { title: 'Đơn giá BQ',  dataIndex: 'don_gia_binh_quan', width: 130, align: 'right', render: v => v ? formatVnd(v) + '/kg' : '—' },
+    { title: 'Giá trị tồn', dataIndex: 'gia_tri_ton',     width: 140, align: 'right', render: v => formatVnd(v) },
+    {
+      title: 'Ngày nhập gần nhất',
+      dataIndex: 'ngay_nhap_gan_nhat',
+      width: 130,
+      align: 'center',
+      render: v => v ? <Text type="secondary" style={{ fontSize: 11 }}>{v}</Text> : '—',
+    },
   ]
 
   return (
