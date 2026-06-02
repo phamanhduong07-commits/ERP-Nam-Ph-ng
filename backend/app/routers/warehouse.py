@@ -1,10 +1,12 @@
 ﻿import io
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from io import BytesIO
 from typing import Optional
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from openpyxl import Workbook
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, text as _text
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
@@ -648,20 +650,30 @@ def get_ton_kho(
     for r in rows:
         ten_hang = r.ten_hang or ""
         don_vi = r.don_vi or ""
-        ton_toi_thieu = 0
+        ton_toi_thieu = 0.0
+        ma_chinh = None
+        ma_ky_hieu = None
+        loai_giay = None
+        kho_mm = None
+        dinh_luong = None
 
         if r.paper_material_id:
             mat = db.get(PaperMaterial, r.paper_material_id)
             if mat:
                 ten_hang = mat.ten
-                don_vi = mat.dvt
-                ton_toi_thieu = float(mat.ton_toi_thieu)
+                don_vi = mat.dvt or ""
+                ton_toi_thieu = float(mat.ton_toi_thieu or 0)
+                ma_chinh = mat.ma_chinh
+                ma_ky_hieu = mat.ma_ky_hieu
+                loai_giay = mat.loai_giay
+                kho_mm = float(mat.kho) if mat.kho else None
+                dinh_luong = float(mat.dinh_luong) if mat.dinh_luong else None
         elif r.other_material_id:
             mat = db.get(OtherMaterial, r.other_material_id)
             if mat:
                 ten_hang = mat.ten
-                don_vi = mat.dvt
-                ton_toi_thieu = float(mat.ton_toi_thieu)
+                don_vi = mat.dvt or ""
+                ton_toi_thieu = float(mat.ton_toi_thieu or 0)
         elif r.product_id:
             prod = db.get(Product, r.product_id)
             if prod:
@@ -694,8 +706,91 @@ def get_ton_kho(
             "gia_tri_ton": float(r.gia_tri_ton),
             "ton_toi_thieu": ton_toi_thieu,
             "cap_nhat_luc": r.cap_nhat_luc.isoformat() if r.cap_nhat_luc else None,
+            # Giấy cuộn specific
+            "ma_chinh": ma_chinh,
+            "ma_ky_hieu": ma_ky_hieu,
+            "loai_giay": loai_giay,
+            "kho_mm": kho_mm,
+            "dinh_luong": dinh_luong,
         })
     return result
+
+
+@router.get("/ton-kho/summary")
+def get_ton_kho_summary(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Dashboard summary: breakdown by loai_kho + warehouse, low-stock count."""
+    from decimal import Decimal
+
+    rows = (db.query(InventoryBalance)
+            .join(Warehouse, Warehouse.id == InventoryBalance.warehouse_id)
+            .filter(InventoryBalance.ton_luong > 0)
+            .all())
+
+    by_loai: dict[str, dict] = {}
+    by_warehouse: list[dict] = []
+    warehouse_map: dict[int, dict] = {}
+    low_stock: list[dict] = []
+
+    for r in rows:
+        wh = db.get(Warehouse, r.warehouse_id)
+        if not wh:
+            continue
+        loai_kho = wh.loai_kho or "KHAC"
+        ton = float(r.ton_luong)
+        gia_tri = float(r.gia_tri_ton)
+
+        if loai_kho not in by_loai:
+            by_loai[loai_kho] = {"loai_kho": loai_kho, "gia_tri": 0.0, "so_mat_hang": 0}
+        by_loai[loai_kho]["gia_tri"] += gia_tri
+        by_loai[loai_kho]["so_mat_hang"] += 1
+
+        wid = r.warehouse_id
+        if wid not in warehouse_map:
+            warehouse_map[wid] = {"warehouse_id": wid, "ten_kho": wh.ten_kho, "gia_tri": 0.0, "so_mat_hang": 0}
+        warehouse_map[wid]["gia_tri"] += gia_tri
+        warehouse_map[wid]["so_mat_hang"] += 1
+
+        ton_toi_thieu = 0.0
+        ten_hang = r.ten_hang or ""
+        if r.paper_material_id:
+            mat = db.get(PaperMaterial, r.paper_material_id)
+            if mat:
+                ten_hang = mat.ten
+                ton_toi_thieu = float(mat.ton_toi_thieu or 0)
+        elif r.other_material_id:
+            mat = db.get(OtherMaterial, r.other_material_id)
+            if mat:
+                ten_hang = mat.ten
+                ton_toi_thieu = float(mat.ton_toi_thieu or 0)
+
+        if ton_toi_thieu > 0 and ton < ton_toi_thieu:
+            low_stock.append({
+                "id": r.id,
+                "ten_hang": ten_hang,
+                "ten_kho": wh.ten_kho,
+                "ton_luong": ton,
+                "ton_toi_thieu": ton_toi_thieu,
+                "don_vi": r.don_vi or "",
+                "pct": round(ton / ton_toi_thieu * 100, 1),
+            })
+
+    by_warehouse_list = sorted(warehouse_map.values(), key=lambda x: -x["gia_tri"])[:12]
+    low_stock.sort(key=lambda x: x["pct"])
+
+    total_gia_tri = sum(v["gia_tri"] for v in by_loai.values())
+    total_mat_hang = sum(v["so_mat_hang"] for v in by_loai.values())
+
+    return {
+        "total_gia_tri": total_gia_tri,
+        "total_mat_hang": total_mat_hang,
+        "low_stock_count": len(low_stock),
+        "by_loai": list(by_loai.values()),
+        "by_warehouse": by_warehouse_list,
+        "low_stock": low_stock[:20],
+    }
 
 
 _TON_KHO_FIELDS = [
@@ -843,6 +938,210 @@ async def import_ton_kho_dau_ky(
                     setattr(existing, k, v)
             else:
                 db.add(InventoryBalance(**vals))
+        db.commit()
+
+    updated = sum(1 for s in rows if s["status"] == "update")
+    created = sum(1 for s in rows if s["status"] == "create")
+    return {"commit": commit, "total": len(rows), "created": created, "updated": updated, "skipped": 0, "errors": errors_count, "rows": rows[:200]}
+
+
+_LOAI_KHO_TO_HANG: dict[str, str] = {
+    "GIAY_CUON": "giay",
+    "NVL_PHU": "nvl",
+    "THANH_PHAM": "tp",
+    "PHOI": "tp",
+}
+
+
+@router.get("/inventory/import-template")
+def download_inventory_import_template(
+    warehouse_id: int = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    wh = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
+    if not wh:
+        raise HTTPException(404, "Kho khong ton tai")
+
+    loai_hang_hint = _LOAI_KHO_TO_HANG.get(wh.loai_kho, "giay | nvl | tp")
+    fixed_loai = loai_hang_hint if loai_hang_hint in ("giay", "nvl", "tp") else None
+
+    fields: list[ImportField] = []
+    if not fixed_loai:
+        fields.append(ImportField("loai_hang", "Loai hang", required=True, parser=parse_text,
+                                  help_text="giay | nvl | tp"))
+    fields += [
+        ImportField("ma_hang",  "Ma hang",  required=True,  parser=parse_text,    help_text="Ma chinh vat tu giay/NVL hoac Ma AMIS san pham"),
+        ImportField("so_luong", "So luong", required=True,  parser=parse_decimal, help_text="Ton luong dau ky"),
+        ImportField("don_gia",  "Don gia",  parser=parse_decimal, default=0,       help_text="Don gia binh quan (de trong neu chua co)"),
+        ImportField("don_vi",   "Don vi",   parser=parse_text,                     help_text="Don vi tinh (de trong se lay tu danh muc)"),
+    ]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Du lieu import"
+    headers = [f.label for f in fields]
+    if fixed_loai:
+        headers.insert(0, "Kho")
+        ws.append(headers)
+        ws.append([wh.ma_kho] + ["" for _ in fields])
+    else:
+        ws.append(headers)
+        ws.append(["" for _ in fields])
+
+    guide = wb.create_sheet("Huong dan")
+    guide.append(["Kho", wh.ma_kho, wh.ten_kho if hasattr(wh, "ten_kho") else ""])
+    if fixed_loai:
+        guide.append(["Loai hang (tu dong)", fixed_loai, f"Toan bo du lieu trong kho nay la loai '{fixed_loai}'"])
+    guide.append(["", "", ""])
+    guide.append(["Cot", "Bat buoc", "Ghi chu"])
+    for f in fields:
+        guide.append([f.label, "Co" if f.required else "Khong", f.help_text])
+
+    for sheet in wb.worksheets:
+        for col in sheet.columns:
+            width = max(len(str(cell.value or "")) for cell in col) + 2
+            sheet.column_dimensions[col[0].column_letter].width = min(max(width, 12), 42)
+
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    fname = f"mau_import_ton_kho_{wh.ma_kho}.xlsx"
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.post("/inventory/import")
+async def import_inventory_by_warehouse(
+    warehouse_id: int = Query(...),
+    commit: bool = Query(default=False),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("inventory.import")),
+):
+    wh = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
+    if not wh:
+        raise HTTPException(404, "Kho khong ton tai")
+
+    fixed_loai = _LOAI_KHO_TO_HANG.get(wh.loai_kho)
+
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(400, "Chi chap nhan file Excel .xlsx/.xls")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "File rong")
+    df = pd.read_excel(io.BytesIO(raw), dtype=object)
+
+    rows: list[dict] = []
+    errors_count = 0
+    objects_to_save: list[tuple] = []
+
+    for idx, src in df.iterrows():
+        row_no = int(idx) + 2
+        errs: list[str] = []
+
+        loai_hang = fixed_loai or str(src.get("Loai hang", "") or "").strip().lower()
+        ma_hang   = str(src.get("Ma hang",   "") or "").strip()
+        so_luong_raw = src.get("So luong")
+        don_gia_raw  = src.get("Don gia")
+        don_vi_raw   = str(src.get("Don vi",   "") or "").strip() or None
+
+        if loai_hang not in ("giay", "nvl", "tp"):
+            errs.append("Loai hang: phai la 'giay', 'nvl', hoac 'tp'")
+        if not ma_hang:
+            errs.append("Ma hang: bat buoc")
+
+        try:
+            so_luong = Decimal(str(so_luong_raw).replace(",", "")) if so_luong_raw is not None else None
+        except Exception:
+            so_luong = None
+        if so_luong is None:
+            errs.append("So luong: bat buoc va phai la so")
+
+        try:
+            don_gia = Decimal(str(don_gia_raw).replace(",", "")) if don_gia_raw not in (None, "", "nan") else Decimal("0")
+        except Exception:
+            don_gia = Decimal("0")
+
+        paper_material_id = other_material_id = product_id = None
+        resolved_don_vi = don_vi_raw
+
+        if not errs and ma_hang:
+            if loai_hang == "giay":
+                mat = db.query(PaperMaterial).filter(PaperMaterial.ma_chinh == ma_hang).first()
+                if not mat:
+                    errs.append(f"Ma hang: khong tim thay vat tu giay '{ma_hang}'")
+                else:
+                    paper_material_id = mat.id
+                    resolved_don_vi = resolved_don_vi or mat.dvt
+            elif loai_hang == "nvl":
+                mat = db.query(OtherMaterial).filter(OtherMaterial.ma_chinh == ma_hang).first()
+                if not mat:
+                    errs.append(f"Ma hang: khong tim thay NVL '{ma_hang}'")
+                else:
+                    other_material_id = mat.id
+                    resolved_don_vi = resolved_don_vi or mat.dvt
+            elif loai_hang == "tp":
+                prod = db.query(Product).filter(
+                    (Product.ma_amis == ma_hang) | (Product.ma_hang == ma_hang)
+                ).first()
+                if not prod:
+                    errs.append(f"Ma hang: khong tim thay san pham '{ma_hang}'")
+                else:
+                    product_id = prod.id
+                    resolved_don_vi = resolved_don_vi or getattr(prod, "dvt", "Thung") or "Thung"
+
+        if errs:
+            errors_count += 1
+            rows.append({"row": row_no, "status": "error", "errors": errs, "data": {}})
+            continue
+
+        gia_tri = (so_luong or Decimal("0")) * (don_gia or Decimal("0"))
+        bal_q = db.query(InventoryBalance).filter(InventoryBalance.warehouse_id == wh.id)
+        if loai_hang == "giay":
+            bal_q = bal_q.filter(InventoryBalance.paper_material_id == paper_material_id)
+        elif loai_hang == "nvl":
+            bal_q = bal_q.filter(InventoryBalance.other_material_id == other_material_id)
+        else:
+            bal_q = bal_q.filter(InventoryBalance.product_id == product_id)
+        existing = bal_q.first()
+
+        status = "update" if existing else "create"
+        vals = {
+            "warehouse_id": wh.id,
+            "paper_material_id": paper_material_id,
+            "other_material_id": other_material_id,
+            "product_id": product_id,
+            "ton_luong": so_luong,
+            "don_gia_binh_quan": don_gia,
+            "gia_tri_ton": gia_tri,
+            "don_vi": resolved_don_vi,
+            "cap_nhat_luc": datetime.now(timezone.utc),
+        }
+        objects_to_save.append((existing, vals))
+        rows.append({"row": row_no, "status": status, "errors": [], "data": {"ma_hang": ma_hang, "so_luong": str(so_luong)}})
+
+    if commit and errors_count == 0:
+        from app.models.import_log import ImportLog
+        for existing, vals in objects_to_save:
+            if existing:
+                for k, v in vals.items():
+                    setattr(existing, k, v)
+            else:
+                db.add(InventoryBalance(**vals))
+        log = ImportLog(
+            user_id=current_user.id,
+            ten_nguoi_import=current_user.full_name or current_user.username,
+            loai_du_lieu="inventory",
+            ten_file=file.filename,
+            so_dong_thanh_cong=len(objects_to_save),
+            so_dong_loi=0,
+            trang_thai="success",
+        )
+        db.add(log)
         db.commit()
 
     updated = sum(1 for s in rows if s["status"] == "update")

@@ -30,6 +30,7 @@ class PaperMaterialCreate(BaseModel):
     dvt: str = "Kg"
     kho: Decimal | None = None
     ma_ky_hieu: str | None = None
+    loai_giay: str | None = None  # nau | trang | xeo | vang | khac
     ma_dong_cap: str | None = None
     dinh_luong: Decimal | None = None
     ma_nsx_id: int | None = None
@@ -50,6 +51,7 @@ class PaperMaterialUpdate(BaseModel):
     dvt: str | None = None
     kho: Decimal | None = None
     ma_ky_hieu: str | None = None
+    loai_giay: str | None = None  # nau | trang | xeo | vang | khac
     ma_dong_cap: str | None = None
     dinh_luong: Decimal | None = None
     ma_nsx_id: int | None = None
@@ -74,6 +76,7 @@ class PaperMaterialResponse(BaseModel):
     dvt: str
     kho: Decimal | None = None
     ma_ky_hieu: str | None = None
+    loai_giay: str | None = None
     ma_dong_cap: str | None = None
     dinh_luong: Decimal | None = None
     ma_nsx_id: int | None = None
@@ -202,6 +205,7 @@ def list_paper_materials(
                 "dvt": p.dvt,
                 "kho": p.kho,
                 "ma_ky_hieu": p.ma_ky_hieu,
+                "loai_giay": p.loai_giay,
                 "ma_dong_cap": p.ma_dong_cap,
                 "dinh_luong": p.dinh_luong,
                 "ma_nsx_id": p.ma_nsx_id,

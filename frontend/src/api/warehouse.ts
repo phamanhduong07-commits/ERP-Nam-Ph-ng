@@ -41,6 +41,21 @@ export interface TonKho {
   gia_tri_ton: number
   ton_toi_thieu: number
   cap_nhat_luc: string | null
+  // Giấy cuộn specific
+  ma_chinh?: string | null
+  ma_ky_hieu?: string | null
+  loai_giay?: string | null
+  kho_mm?: number | null
+  dinh_luong?: number | null
+}
+
+export interface TonKhoSummary {
+  total_gia_tri: number
+  total_mat_hang: number
+  low_stock_count: number
+  by_loai: { loai_kho: string; gia_tri: number; so_mat_hang: number }[]
+  by_warehouse: { warehouse_id: number; ten_kho: string; gia_tri: number; so_mat_hang: number }[]
+  low_stock: { id: number; ten_hang: string; ten_kho: string; ton_luong: number; ton_toi_thieu: number; don_vi: string; pct: number }[]
 }
 
 export interface PhieuKhoItem {
@@ -700,6 +715,7 @@ export const warehouseApi = {
   // Tồn kho
   getTonKho: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; loai?: string; search?: string }) =>
     client.get<TonKho[]>('/warehouse/ton-kho', { params }),
+  getTonKhoSummary: () => client.get<TonKhoSummary>('/warehouse/ton-kho/summary'),
 
   // Phiếu nhập kho
   listPhieuNhap: (params?: { warehouse_id?: number; phan_xuong_id?: number; loai_nhap?: string; tu_ngay?: string; den_ngay?: string }) =>

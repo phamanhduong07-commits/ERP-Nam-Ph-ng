@@ -168,6 +168,7 @@ class PaperMaterial(Base):
     dvt: Mapped[str] = mapped_column(String(20), default="Kg")
     kho: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     ma_ky_hieu: Mapped[str | None] = mapped_column(String(20))
+    loai_giay: Mapped[str | None] = mapped_column(String(20))  # nau | trang | xeo | vang | khac
     ma_dong_cap: Mapped[str | None] = mapped_column(String(20))
     dinh_luong: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     ma_nsx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"))
