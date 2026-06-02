@@ -489,7 +489,7 @@ def update_return(
         return_obj.items.clear()
         for return_item, _qty in prepared_items:
             return_obj.items.append(return_item)
-        return_obj.tong_tien_tra = round(float(tong_tien_tra), 2)
+        return_obj.tong_tien_tra = round(tong_tien_tra, 2)
 
     db.commit()
     return get_return(return_id, db, current_user)

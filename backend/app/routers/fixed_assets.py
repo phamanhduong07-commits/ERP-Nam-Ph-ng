@@ -118,6 +118,8 @@ def run_depreciation(
         if exists:
             continue
 
+        if not a.so_thang_khau_hao or a.so_thang_khau_hao <= 0:
+            continue
         kh_thang = (a.nguyen_gia / a.so_thang_khau_hao).quantize(Decimal("1"))
         con_lai = a.nguyen_gia - a.gia_tri_da_khau_hao
         so_tien = min(kh_thang, con_lai)

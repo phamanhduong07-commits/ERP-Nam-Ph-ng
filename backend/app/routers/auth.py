@@ -1,12 +1,13 @@
 ﻿from datetime import datetime, timezone
 import bcrypt as _bcrypt
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.deps import create_access_token, create_refresh_token, get_current_user, revoke_token, oauth2_scheme, ALGORITHM
+from app.limiter import limiter
 from app.models.auth import User
 from app.schemas.auth import ChangePasswordRequest, TokenResponse, UserInfo
 
@@ -36,7 +37,8 @@ def _make_user_info(user: User) -> UserInfo:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(
         User.username == form.username,
         User.trang_thai == True

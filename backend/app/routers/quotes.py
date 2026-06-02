@@ -941,7 +941,7 @@ def gia_han_quote(
         raise HTTPException(status_code=404, detail="Không tìm thấy báo giá")
     if quote.trang_thai != "het_han":
         raise HTTPException(status_code=400, detail="Chỉ gia hạn được báo giá ở trạng thái Hết hạn")
-    if body.ngay_het_han <= date.today():
+    if body.ngay_het_han < date.today():
         raise HTTPException(status_code=400, detail="Ngày hết hạn mới phải sau hôm nay")
     quote.ngay_het_han = body.ngay_het_han
     quote.trang_thai = "da_duyet" if quote.approved_by else "moi"

@@ -2047,13 +2047,12 @@ def delete_shift_config(config_id: int, db: Session = Depends(get_db), _: User =
 # ── Config: Printer User ──────────────────────────────────────────────────────
 
 def _pw_hash(plain: str) -> str:
-    return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt()).decode()
+    return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(rounds=14)).decode()
 
 
 def _pw_verify(plain: str, stored: str) -> bool:
-    # backward-compat: plain-text passwords not yet hashed
     if not stored.startswith("$2b$") and not stored.startswith("$2a$"):
-        return plain == stored
+        return False  # reject un-hashed passwords — reset via admin endpoint
     return _bcrypt.checkpw(plain.encode(), stored.encode())
 
 

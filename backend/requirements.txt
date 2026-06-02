@@ -16,3 +16,4 @@ httpx==0.28.1
 anthropic>=0.40.0
 python-socketio==5.11.0
 fastapi-socketio==0.0.10
+slowapi==0.1.9

@@ -1394,14 +1394,19 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_use
             poi = db.get(PurchaseOrderItem, item.po_item_id)
             if poi:
                 poi.so_luong_da_nhan = (poi.so_luong_da_nhan or Decimal("0")) + item.so_luong
-                if item.so_cuon and poi.so_cuon:
+                if item.so_cuon is not None and poi.so_cuon is not None:
                     poi.so_cuon_da_nhan = (poi.so_cuon_da_nhan or 0) + item.so_cuon
     _recalc_purchase_order_receipt_status(db, gr.po_id)
 
     # Auto-sync gia_mua từ don_gia trên PNK khi duyệt
     for item in gr.items:
         if item.paper_material_id and item.don_gia and item.don_gia > 0:
-            pm = db.get(PaperMaterial, item.paper_material_id)
+            pm = (
+                db.query(PaperMaterial)
+                .filter(PaperMaterial.id == item.paper_material_id)
+                .with_for_update()
+                .first()
+            )
             if pm:
                 pm.gia_mua = item.don_gia
 
@@ -1663,10 +1668,10 @@ def create_material_issue(
         if it.dvt and it.dvt != "Kg":
             dvt = it.dvt
 
-        # Lấy giá bình quân TRƯỚC khi trừ tồn — dùng cho cả item lẫn bút toán
+        # Lock row trước khi trừ tồn — tránh race condition concurrent exports
         bal = _get_or_create_balance(db, warehouse_id,
                                      it.paper_material_id, it.other_material_id,
-                                     ten_hang=ten_hang, don_vi=dvt)
+                                     ten_hang=ten_hang, don_vi=dvt, lock=True)
         don_gia_xuat = bal.don_gia_binh_quan
 
         db.add(MaterialIssueItem(

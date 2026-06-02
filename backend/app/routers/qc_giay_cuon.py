@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.master import PaperMaterial
 from app.models.quality import QCGiayCuonPhieu
@@ -182,7 +182,7 @@ def list_phieu(
 def create_phieu(
     body: QCGiayCuonCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("QC", "GIAM_DOC", "ADMIN")),
 ):
     pm = db.get(PaperMaterial, body.paper_material_id)
     if not pm:
@@ -194,7 +194,7 @@ def create_phieu(
         created_by=user.id,
         # Snapshot tiêu chuẩn tại thời điểm kiểm tra
         tc_dinh_luong=float(pm.dinh_luong) if pm.dinh_luong is not None else None,
-        tc_sai_so_pct=float(pm.tieu_chuan_dinh_luong) if pm.tieu_chuan_dinh_luong is not None else None,
+        tc_sai_so_pct=float(pm.sai_so_pct) if pm.sai_so_pct is not None else None,
         tc_do_buc=float(pm.do_buc_tieu_chuan) if pm.do_buc_tieu_chuan is not None else None,
         tc_do_nen_vong=float(pm.do_nen_vong_tc) if pm.do_nen_vong_tc is not None else None,
     )
@@ -222,7 +222,7 @@ def update_phieu(
     id: int,
     body: QCGiayCuonUpdate,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_roles("QC", "GIAM_DOC", "ADMIN", "NHAN_SU")),
 ):
     obj = db.get(QCGiayCuonPhieu, id)
     if not obj:
@@ -239,7 +239,7 @@ def update_phieu(
 def delete_phieu(
     id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_roles("QC", "GIAM_DOC", "ADMIN")),
 ):
     obj = db.get(QCGiayCuonPhieu, id)
     if not obj:

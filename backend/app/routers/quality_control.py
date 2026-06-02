@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.quality import QCSheet, QCDefect
 from app.schemas.quality import (
@@ -185,7 +185,7 @@ def update_ket_qua(
 def delete_qc_sheet(
     sheet_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles("QC", "GIAM_DOC", "ADMIN")),
 ):
     sheet = db.get(QCSheet, sheet_id)
     if not sheet:

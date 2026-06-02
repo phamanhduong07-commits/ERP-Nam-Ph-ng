@@ -1,7 +1,9 @@
 from datetime import date
-from typing import List, Optional
+from decimal import Decimal
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,6 +13,42 @@ from app.models.accounting import HoaDonDienTu
 import app.services.misa_invoice_service as misa_svc
 
 router = APIRouter(prefix="/api/hoa-don-dien-tu", tags=["Hóa đơn điện tử"])
+
+
+class HoaDonDienTuCreate(BaseModel):
+    ngay_lap: date
+    loai_hd: str = "1"
+    ten_khach_hang: str
+    tong_tien_hang: Decimal
+    tong_cong: Decimal
+    tien_thue_gtgt: Decimal = Decimal("0")
+    customer_id: Optional[int] = None
+    sales_order_id: Optional[int] = None
+    ky_hieu: Optional[str] = None
+    mau_so: Optional[str] = None
+    ma_so_thue_kh: Optional[str] = None
+    dia_chi_kh: Optional[str] = None
+    items: Optional[list[Any]] = None
+    phap_nhan_id: Optional[int] = None
+    ghi_chu: Optional[str] = None
+
+
+class HoaDonDienTuUpdate(BaseModel):
+    ngay_lap: Optional[date] = None
+    loai_hd: Optional[str] = None
+    ten_khach_hang: Optional[str] = None
+    tong_tien_hang: Optional[Decimal] = None
+    tong_cong: Optional[Decimal] = None
+    tien_thue_gtgt: Optional[Decimal] = None
+    customer_id: Optional[int] = None
+    sales_order_id: Optional[int] = None
+    ky_hieu: Optional[str] = None
+    mau_so: Optional[str] = None
+    ma_so_thue_kh: Optional[str] = None
+    dia_chi_kh: Optional[str] = None
+    items: Optional[list[Any]] = None
+    phap_nhan_id: Optional[int] = None
+    ghi_chu: Optional[str] = None
 
 
 def _serialize(hdt: HoaDonDienTu) -> dict:
@@ -73,8 +111,8 @@ def get_hdt(id: int, db: Session = Depends(get_db), user: User = Depends(get_cur
 
 
 @router.post("", response_model=dict, status_code=201)
-def create_hdt(body: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    hdt = HoaDonDienTu(**{k: v for k, v in body.items() if hasattr(HoaDonDienTu, k)})
+def create_hdt(body: HoaDonDienTuCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    hdt = HoaDonDienTu(**body.model_dump())
     hdt.created_by = user.id
     hdt.trang_thai = "nhap"
     db.add(hdt)
@@ -84,15 +122,14 @@ def create_hdt(body: dict, db: Session = Depends(get_db), user: User = Depends(g
 
 
 @router.put("/{id}", response_model=dict)
-def update_hdt(id: int, body: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def update_hdt(id: int, body: HoaDonDienTuUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     hdt = db.get(HoaDonDienTu, id)
     if not hdt:
         raise HTTPException(404, "Hóa đơn không tồn tại")
     if hdt.trang_thai != "nhap":
         raise HTTPException(400, "Chỉ có thể sửa hóa đơn ở trạng thái Nháp")
-    for k, v in body.items():
-        if hasattr(HoaDonDienTu, k) and k not in ("id", "created_by", "created_at", "trang_thai"):
-            setattr(hdt, k, v)
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(hdt, k, v)
     db.commit()
     db.refresh(hdt)
     return _serialize(hdt)
@@ -141,6 +178,32 @@ def phat_hanh(id: int, db: Session = Depends(get_db), user: User = Depends(get_c
         db.commit()
     except Exception as e:
         raise HTTPException(502, f"MISA API lỗi: {e}")
+
+    # Ghi nhận doanh thu vào sổ kế toán sau khi phát hành thành công
+    try:
+        from app.services.accounting_service import AccountingService
+        svc = AccountingService(db)
+        tong_tien_hang = float(hdt.tong_tien_hang or 0)
+        tong_cong = float(hdt.tong_cong or 0)
+        tien_thue = float(hdt.tien_thue_gtgt or 0)
+        lines = [
+            {"so_tk": "131", "dien_giai": f"Phải thu KH {hdt.ten_khach_hang}", "so_tien_no": tong_cong, "so_tien_co": 0},
+            {"so_tk": "5111", "dien_giai": f"Doanh thu HĐDT {hdt.so_hoa_don or hdt.id}", "so_tien_no": 0, "so_tien_co": tong_tien_hang},
+        ]
+        if tien_thue > 0:
+            lines.append({"so_tk": "3331", "dien_giai": f"Thuế GTGT HĐDT {hdt.so_hoa_don or hdt.id}", "so_tien_no": 0, "so_tien_co": tien_thue})
+        svc._create_journal_entry(
+            ngay=hdt.ngay_lap,
+            dien_giai=f"Hóa đơn điện tử {hdt.so_hoa_don or hdt.id} — {hdt.ten_khach_hang}",
+            loai_but_toan="hoa_don_dien_tu",
+            chung_tu_loai="hoa_don_dien_tu",
+            chung_tu_id=hdt.id,
+            lines=lines,
+            phap_nhan_id=hdt.phap_nhan_id,
+        )
+    except Exception as je:
+        import logging as _log
+        _log.getLogger("erp").warning("HĐDT %s journal sync failed: %s", hdt.id, je)
 
     db.refresh(hdt)
     return _serialize(hdt)

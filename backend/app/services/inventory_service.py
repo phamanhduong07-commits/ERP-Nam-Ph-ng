@@ -23,18 +23,16 @@ def get_or_create_balance(
     product_id: Optional[int] = None,
     ten_hang: str = "",
     don_vi: str = "Kg",
+    lock: bool = False,
 ) -> InventoryBalance:
     q = db.query(InventoryBalance).filter(InventoryBalance.warehouse_id == warehouse_id)
 
     if paper_material_id:
         q = q.filter(InventoryBalance.paper_material_id == paper_material_id)
-        balance = q.first()
     elif other_material_id:
         q = q.filter(InventoryBalance.other_material_id == other_material_id)
-        balance = q.first()
     elif product_id:
         q = q.filter(InventoryBalance.product_id == product_id)
-        balance = q.first()
     else:
         q = q.filter(
             InventoryBalance.paper_material_id.is_(None),
@@ -42,7 +40,14 @@ def get_or_create_balance(
             InventoryBalance.product_id.is_(None),
             InventoryBalance.ten_hang == ten_hang,
         )
-        balance = q.first()
+
+    if lock:
+        try:
+            q = q.with_for_update()
+        except Exception:
+            pass  # SQLite fallback — no row-level locking
+
+    balance = q.first()
 
     if not balance:
         balance = InventoryBalance(

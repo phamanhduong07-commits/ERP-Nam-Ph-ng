@@ -172,6 +172,7 @@ class PaperMaterial(Base):
     dinh_luong: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     ma_nsx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"))
     tieu_chuan_dinh_luong: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    sai_so_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))  # % tolerance cho QC định lượng (vd: 5.00 = ±5%)
     do_buc_tieu_chuan: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     do_nen_vong_tc: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     do_cobb_tieu_chuan: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))

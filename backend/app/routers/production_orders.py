@@ -29,6 +29,24 @@ from app.schemas.production import (
 router = APIRouter(prefix="/api/production-orders", tags=["production-orders"])
 
 
+def _sync_so_trang_thai(db: Session, order: ProductionOrder) -> None:
+    """Khi LSX hoàn thành, kiểm tra nếu tất cả LSX của cùng 1 SO đều hoan_thanh → đặt SO thành da_giao."""
+    if not order.sales_order_id:
+        return
+    pending = (
+        db.query(ProductionOrder)
+        .filter(
+            ProductionOrder.sales_order_id == order.sales_order_id,
+            ProductionOrder.trang_thai.not_in(["hoan_thanh", "huy"]),
+        )
+        .count()
+    )
+    if pending == 0:
+        so = db.get(SalesOrder, order.sales_order_id)
+        if so and so.trang_thai == "da_duyet":
+            so.trang_thai = "da_giao"
+
+
 def _auto_kho_sx_id(db: Session, phan_xuong_id: int | None, kho_sx_id: int | None) -> int | None:
     """Tự động tìm kho SX nếu chưa có: GIAY_CUON cho xưởng cd1_cd2, PHOI cho xưởng cd2."""
     if kho_sx_id or not phan_xuong_id:
@@ -429,6 +447,7 @@ def complete_order(
 
     order.trang_thai = "hoan_thanh"
     order.ngay_hoan_thanh_thuc_te = date.today()
+    _sync_so_trang_thai(db, order)
     db.commit()
     return _build_response(_load_order(order_id, db), db)
 
@@ -736,6 +755,7 @@ def create_phieu_nhap_phoi_song(
             order.ngay_bat_dau_thuc_te = data.ngay
         order.trang_thai = "hoan_thanh"
         order.ngay_hoan_thanh_thuc_te = data.ngay
+        _sync_so_trang_thai(db, order)
 
     db.commit()
     db.refresh(phieu)
@@ -864,12 +884,14 @@ def delete_phieu_nhap_phoi_song(
             else:
                 poi = db.get(ProductionOrderItem, it.production_order_item_id)
                 ten_hang = (poi.ten_hang if poi else None) or "Phôi sóng"
-            balance = get_or_create_balance(db, phieu.warehouse_id, ten_hang=ten_hang, don_vi="Tấm")
-            try:
-                xuat_balance(balance, sl_nhap, ten_hang)
-            except Exception:
-                balance.ton_luong = Decimal("0")
-                balance.gia_tri_ton = Decimal("0")
+            balance = get_or_create_balance(db, phieu.warehouse_id, ten_hang=ten_hang, don_vi="Tấm", lock=True)
+            if balance.ton_luong < sl_nhap:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Không thể xóa phiếu: tồn kho {ten_hang} ({float(balance.ton_luong):g}) "
+                           f"thấp hơn số lượng cần hoàn ({float(sl_nhap):g})"
+                )
+            xuat_balance(balance, sl_nhap, ten_hang)
             log_tx(db, phieu.warehouse_id, "XUAT_PHOI_HOAN", sl_nhap,
                    balance.don_gia_binh_quan, balance.ton_luong,
                    "phieu_nhap_phoi_song", phieu.id, current_user.id)
@@ -985,6 +1007,12 @@ def push_to_cd2(
         from app.services.cd2_service import cd2_login, cd2_create_dhcho
         token = cd2_login()
         result = cd2_create_dhcho(token, dhcho_payload)
+        order.trang_thai = "dang_chay"
+        db.commit()
         return {"ok": True, "data": result, "payload_sent": dhcho_payload}
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as exc:
+        db.rollback()
         raise HTTPException(status_code=502, detail=f"Lỗi kết nối CD2: {exc}")

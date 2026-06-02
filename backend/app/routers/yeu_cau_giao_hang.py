@@ -4,14 +4,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.master import Customer, Warehouse
 from app.models.production import ProductionOrder
 from app.models.sales import SalesOrder
-from app.models.yeu_cau_giao_hang import YeuCauGiaoHang, YeuCauGiaoHangItem
+from app.models.yeu_cau_giao_hang import YeuCauGiaoHang, YeuCauGiaoHangItem  # noqa: F401 used in selectinload
 from app.services.carton_metrics import production_item_metrics
 
 router = APIRouter(prefix="/api/yeu-cau-giao-hang", tags=["yeu-cau-giao-hang"])
@@ -49,6 +49,14 @@ class YeuCauPatchIn(BaseModel):
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 
+def _load_opts():
+    return [
+        joinedload(YeuCauGiaoHang.customer),
+        selectinload(YeuCauGiaoHang.items).selectinload(YeuCauGiaoHangItem.production_order).selectinload("phap_nhan"),
+        selectinload(YeuCauGiaoHang.items).selectinload(YeuCauGiaoHangItem.warehouse),
+    ]
+
+
 def _gen_yc_so(db: Session) -> str:
     ym = datetime.today().strftime("%Y%m")
     pattern = f"YC-{ym}-%"
@@ -65,21 +73,19 @@ def _gen_yc_so(db: Session) -> str:
 
 
 def _yc_to_dict(yc: YeuCauGiaoHang, db: Session) -> dict:
-    cus = db.get(Customer, yc.customer_id) if yc.customer_id else None
+    cus = yc.customer
     items_out = []
     ten_phap_nhan_set: list[str] = []
     ten_kho_tp_set: list[str] = []
     tong_dien_tich = 0.0
     tong_trong_luong = 0.0
     for it in yc.items:
-        po = db.get(ProductionOrder, it.production_order_id)
-        wh = db.get(Warehouse, it.warehouse_id)
+        po = it.production_order
+        wh = it.warehouse
         ten_kho = wh.ten_kho if wh else None
         ten_phap_nhan = None
-        if po and po.phap_nhan_id:
-            from app.models.master import PhapNhan
-            pn = db.get(PhapNhan, po.phap_nhan_id)
-            ten_phap_nhan = pn.ten_phap_nhan if pn else None
+        if po and po.phap_nhan:
+            ten_phap_nhan = po.phap_nhan.ten_phap_nhan
         if ten_phap_nhan and ten_phap_nhan not in ten_phap_nhan_set:
             ten_phap_nhan_set.append(ten_phap_nhan)
         if ten_kho and ten_kho not in ten_kho_tp_set:
@@ -151,7 +157,7 @@ def list_yeu_cau(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = db.query(YeuCauGiaoHang).options(joinedload(YeuCauGiaoHang.items))
+    q = db.query(YeuCauGiaoHang).options(*_load_opts())
     if trang_thai:
         q = q.filter(YeuCauGiaoHang.trang_thai == trang_thai)
     if customer_id:
@@ -187,7 +193,7 @@ def list_yeu_cau(
 
 @router.get("/{yc_id}")
 def get_yeu_cau(yc_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    yc = db.query(YeuCauGiaoHang).options(joinedload(YeuCauGiaoHang.items)).filter(
+    yc = db.query(YeuCauGiaoHang).options(*_load_opts()).filter(
         YeuCauGiaoHang.id == yc_id
     ).first()
     if not yc:
@@ -275,7 +281,7 @@ def create_yeu_cau(
         ))
 
     db.commit()
-    yc = db.query(YeuCauGiaoHang).options(joinedload(YeuCauGiaoHang.items)).filter(
+    yc = db.query(YeuCauGiaoHang).options(*_load_opts()).filter(
         YeuCauGiaoHang.id == yc.id
     ).first()
     return _yc_to_dict(yc, db)
@@ -306,7 +312,7 @@ def update_yeu_cau(
         yc.ghi_chu = body.ghi_chu
 
     db.commit()
-    yc = db.query(YeuCauGiaoHang).options(joinedload(YeuCauGiaoHang.items)).filter(
+    yc = db.query(YeuCauGiaoHang).options(*_load_opts()).filter(
         YeuCauGiaoHang.id == yc_id
     ).first()
     return _yc_to_dict(yc, db)

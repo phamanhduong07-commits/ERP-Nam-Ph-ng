@@ -1,10 +1,11 @@
 import io
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, case
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload, joinedload
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
@@ -12,12 +13,12 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.billing import SalesInvoice
-from app.models.accounting import PurchaseInvoice
-from app.models.sales import SalesOrder
+from app.models.accounting import PurchaseInvoice, ProductionCostAllocation
+from app.models.sales import SalesOrder, SalesOrderItem
 from app.models.master import Customer, Warehouse
 from app.models.inventory import InventoryTransaction, InventoryBalance
 from app.models.master import PaperMaterial, OtherMaterial, Product
-from app.models.production import ProductionOrder
+from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.warehouse_doc import DeliveryOrder
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -33,25 +34,28 @@ _XUAT_LOAI = {"XUAT_SX", "XUAT_BAN", "DIEU_CHINH_GIAM", "XOA_NHAP_SX"}
 @router.get("/debt-summary")
 def get_debt_summary(
     as_of_date: Optional[str] = Query(None, description="Ngày tính (YYYY-MM-DD), mặc định hôm nay"),
+    phap_nhan_id: Optional[int] = Query(None, description="Lọc theo pháp nhân"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     today = date.fromisoformat(as_of_date) if as_of_date else date.today()
 
     # ── AR (phải thu) ─────────────────────────────────────────────────────────
+    ar_q = db.query(
+        SalesInvoice.customer_id,
+        SalesInvoice.ten_don_vi,
+        func.count(SalesInvoice.id).label("so_hoa_don"),
+        func.coalesce(func.sum(SalesInvoice.tong_cong), 0).label("tong_phat_sinh"),
+        func.coalesce(func.sum(SalesInvoice.da_thanh_toan), 0).label("da_thu"),
+        func.coalesce(func.sum(SalesInvoice.con_lai), 0).label("con_lai"),
+        func.coalesce(func.sum(
+            case((SalesInvoice.han_tt < today, SalesInvoice.con_lai), else_=0)
+        ), 0).label("qua_han"),
+    ).filter(SalesInvoice.trang_thai.notin_(["huy"]), SalesInvoice.con_lai > 0)
+    if phap_nhan_id is not None:
+        ar_q = ar_q.filter(SalesInvoice.phap_nhan_id == phap_nhan_id)
     ar_rows = (
-        db.query(
-            SalesInvoice.customer_id,
-            SalesInvoice.ten_don_vi,
-            func.count(SalesInvoice.id).label("so_hoa_don"),
-            func.coalesce(func.sum(SalesInvoice.tong_cong), 0).label("tong_phat_sinh"),
-            func.coalesce(func.sum(SalesInvoice.da_thanh_toan), 0).label("da_thu"),
-            func.coalesce(func.sum(SalesInvoice.con_lai), 0).label("con_lai"),
-            func.coalesce(func.sum(
-                case((SalesInvoice.han_tt < today, SalesInvoice.con_lai), else_=0)
-            ), 0).label("qua_han"),
-        )
-        .filter(SalesInvoice.trang_thai.notin_(["huy"]), SalesInvoice.con_lai > 0)
+        ar_q
         .group_by(SalesInvoice.customer_id, SalesInvoice.ten_don_vi)
         .order_by(func.sum(SalesInvoice.con_lai).desc())
         .all()
@@ -94,6 +98,7 @@ def get_debt_summary(
             ), 0).label("qua_han"),
         )
         .filter(PurchaseInvoice.trang_thai.notin_(["huy"]), PurchaseInvoice.con_lai > 0)
+        .filter(*([PurchaseInvoice.phap_nhan_id == phap_nhan_id] if phap_nhan_id is not None else []))
         .group_by(PurchaseInvoice.supplier_id, PurchaseInvoice.ten_don_vi)
         .order_by(func.sum(PurchaseInvoice.con_lai).desc())
         .all()
@@ -136,6 +141,7 @@ def get_revenue_report(
     tu_ngay: str = Query(...),
     den_ngay: str = Query(...),
     nhom: str = Query("month", description="day | month | quarter"),
+    phap_nhan_id: Optional[int] = Query(None, description="Lọc theo pháp nhân"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -143,7 +149,7 @@ def get_revenue_report(
     d_to = date.fromisoformat(den_ngay)
 
     # ── Doanh thu theo kỳ ─────────────────────────────────────────────────────
-    base_rows = (
+    revenue_q = (
         db.query(SalesOrder, Customer.ten_don_vi)
         .join(Customer, Customer.id == SalesOrder.customer_id)
         .filter(
@@ -151,8 +157,10 @@ def get_revenue_report(
             SalesOrder.ngay_don <= d_to,
             SalesOrder.trang_thai.notin_(["huy"]),
         )
-        .all()
     )
+    if phap_nhan_id is not None:
+        revenue_q = revenue_q.filter(SalesOrder.phap_nhan_id == phap_nhan_id)
+    base_rows = revenue_q.all()
 
     period_map: dict[str, float] = {}
     for row, _ in base_rows:
@@ -734,3 +742,205 @@ def export_order_progress_excel(
     )
     filename = f"tien_do_don_hang_{tu_ngay}_{den_ngay}.xlsx"
     return _stream_workbook(wb, filename)
+
+
+# ── 12. Báo cáo chi phí / lợi nhuận theo LSX ─────────────────────────────────
+
+def _build_production_cost_rows(
+    db: Session,
+    tu_ngay: Optional[str],
+    den_ngay: Optional[str],
+    phap_nhan_id: Optional[int],
+    phan_xuong_id: Optional[int],
+    trang_thai: Optional[str],
+):
+    q = db.query(ProductionOrder).options(
+        selectinload(ProductionOrder.items).selectinload(ProductionOrderItem.sales_order_item),
+        joinedload(ProductionOrder.sales_order).joinedload(SalesOrder.customer),
+        joinedload(ProductionOrder.phap_nhan),
+        joinedload(ProductionOrder.phan_xuong),
+    )
+    if tu_ngay:
+        q = q.filter(ProductionOrder.ngay_lenh >= date.fromisoformat(tu_ngay))
+    if den_ngay:
+        q = q.filter(ProductionOrder.ngay_lenh <= date.fromisoformat(den_ngay))
+    if phap_nhan_id:
+        q = q.filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
+    if phan_xuong_id:
+        q = q.filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
+    if trang_thai:
+        q = q.filter(ProductionOrder.trang_thai == trang_thai)
+
+    orders = q.order_by(ProductionOrder.ngay_lenh.desc(), ProductionOrder.so_lenh.desc()).all()
+    if not orders:
+        return [], {}
+
+    # Lấy chi phí phân bổ theo LSX (sum nếu nhiều kỳ)
+    order_ids = [o.id for o in orders]
+    alloc_rows = (
+        db.query(
+            ProductionCostAllocation.production_order_id,
+            func.coalesce(func.sum(ProductionCostAllocation.chi_phi_nvl), 0).label("chi_phi_nvl"),
+            func.coalesce(func.sum(ProductionCostAllocation.chi_phi_nhan_cong), 0).label("chi_phi_nhan_cong"),
+            func.coalesce(func.sum(ProductionCostAllocation.chi_phi_sxc), 0).label("chi_phi_sxc"),
+            func.coalesce(func.sum(ProductionCostAllocation.tong_chi_phi), 0).label("tong_chi_phi"),
+        )
+        .filter(ProductionCostAllocation.production_order_id.in_(order_ids))
+        .group_by(ProductionCostAllocation.production_order_id)
+        .all()
+    )
+    cost_map = {
+        r.production_order_id: {
+            "chi_phi_nvl": float(r.chi_phi_nvl),
+            "chi_phi_nhan_cong": float(r.chi_phi_nhan_cong),
+            "chi_phi_sxc": float(r.chi_phi_sxc),
+            "tong_chi_phi": float(r.tong_chi_phi),
+        }
+        for r in alloc_rows
+    }
+
+    rows = []
+    for o in orders:
+        # Doanh thu: số lượng LSX × đơn giá SO item
+        doanh_thu = Decimal("0")
+        for item in o.items:
+            soi: SalesOrderItem | None = item.sales_order_item
+            if soi and soi.don_gia:
+                qty = item.so_luong_ke_hoach or Decimal("0")
+                unit_price = soi.don_gia
+                if soi.ty_le_giam_gia and soi.ty_le_giam_gia > 0:
+                    unit_price = unit_price * (1 - soi.ty_le_giam_gia / Decimal("100"))
+                doanh_thu += qty * unit_price
+
+        costs = cost_map.get(o.id, {
+            "chi_phi_nvl": 0, "chi_phi_nhan_cong": 0, "chi_phi_sxc": 0, "tong_chi_phi": 0
+        })
+        doanh_thu_f = float(doanh_thu)
+        tong_cp = costs["tong_chi_phi"]
+        loi_nhuan = doanh_thu_f - tong_cp
+        ty_le_ln = round(loi_nhuan / doanh_thu_f * 100, 1) if doanh_thu_f > 0 else None
+
+        first_item = o.items[0] if o.items else None
+        so_luong_kh = sum(float(i.so_luong_ke_hoach or 0) for i in o.items)
+        so_luong_ht = sum(float(i.so_luong_hoan_thanh or 0) for i in o.items)
+        dien_tich = sum(
+            float(i.dien_tich or 0) * float(i.so_luong_ke_hoach or 0)
+            for i in o.items
+        )
+
+        so_don = o.sales_order.so_don if o.sales_order else None
+        ten_khach = None
+        if o.sales_order and o.sales_order.customer:
+            c = o.sales_order.customer
+            ten_khach = c.ten_viet_tat or c.ten_don_vi
+
+        rows.append({
+            "lsx_id": o.id,
+            "so_lenh": o.so_lenh,
+            "ngay_lenh": o.ngay_lenh.isoformat() if o.ngay_lenh else None,
+            "trang_thai": o.trang_thai,
+            "ten_hang": first_item.ten_hang if first_item else None,
+            "so_luong_ke_hoach": round(so_luong_kh, 0),
+            "so_luong_hoan_thanh": round(so_luong_ht, 0),
+            "dien_tich": round(dien_tich, 2),
+            "so_don": so_don,
+            "ten_khach": ten_khach,
+            "ten_phap_nhan": o.phap_nhan.ten_phap_nhan if o.phap_nhan else None,
+            "ten_xuong": o.phan_xuong.ten_xuong if o.phan_xuong else None,
+            "doanh_thu": round(doanh_thu_f, 0),
+            "chi_phi_nvl": round(costs["chi_phi_nvl"], 0),
+            "chi_phi_nhan_cong": round(costs["chi_phi_nhan_cong"], 0),
+            "chi_phi_sxc": round(costs["chi_phi_sxc"], 0),
+            "tong_chi_phi": round(tong_cp, 0),
+            "da_phan_bo": o.id in cost_map,
+            "loi_nhuan": round(loi_nhuan, 0),
+            "ty_le_loi_nhuan": ty_le_ln,
+        })
+
+    tong_dt = sum(r["doanh_thu"] for r in rows)
+    tong_cp = sum(r["tong_chi_phi"] for r in rows)
+    tong_ln = sum(r["loi_nhuan"] for r in rows)
+    totals = {
+        "tong_doanh_thu": round(tong_dt, 0),
+        "tong_chi_phi_nvl": round(sum(r["chi_phi_nvl"] for r in rows), 0),
+        "tong_chi_phi_nhan_cong": round(sum(r["chi_phi_nhan_cong"] for r in rows), 0),
+        "tong_chi_phi_sxc": round(sum(r["chi_phi_sxc"] for r in rows), 0),
+        "tong_chi_phi": round(tong_cp, 0),
+        "tong_loi_nhuan": round(tong_ln, 0),
+        "ty_le_loi_nhuan": round(tong_ln / tong_dt * 100, 1) if tong_dt > 0 else None,
+    }
+    return rows, totals
+
+
+@router.get("/production-cost")
+def get_production_cost_report(
+    tu_ngay: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    den_ngay: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    phap_nhan_id: Optional[int] = Query(None),
+    phan_xuong_id: Optional[int] = Query(None),
+    trang_thai: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Báo cáo chi phí và lợi nhuận theo lệnh sản xuất."""
+    rows, totals = _build_production_cost_rows(
+        db, tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id, trang_thai
+    )
+    return {"rows": rows, "totals": totals, "total": len(rows)}
+
+
+@router.get("/production-cost/export")
+def export_production_cost_excel(
+    tu_ngay: Optional[str] = Query(None),
+    den_ngay: Optional[str] = Query(None),
+    phap_nhan_id: Optional[int] = Query(None),
+    phan_xuong_id: Optional[int] = Query(None),
+    trang_thai: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất Excel báo cáo chi phí / lợi nhuận theo LSX."""
+    rows, totals = _build_production_cost_rows(
+        db, tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id, trang_thai
+    )
+
+    headers = [
+        "Số lệnh", "Ngày lệnh", "Trạng thái", "Tên hàng", "Khách hàng",
+        "Số đơn", "Pháp nhân", "Phân xưởng",
+        "SL kế hoạch", "SL hoàn thành", "Diện tích (m²)",
+        "Doanh thu", "CP NVL", "CP Nhân công", "CP SXC", "Tổng CP",
+        "Đã phân bổ", "Lợi nhuận", "Tỉ lệ LN (%)",
+    ]
+    rows_data = [
+        [
+            r["so_lenh"], r["ngay_lenh"] or "", r["trang_thai"],
+            r["ten_hang"] or "", r["ten_khach"] or "", r["so_don"] or "",
+            r["ten_phap_nhan"] or "", r["ten_xuong"] or "",
+            r["so_luong_ke_hoach"], r["so_luong_hoan_thanh"], r["dien_tich"],
+            r["doanh_thu"], r["chi_phi_nvl"], r["chi_phi_nhan_cong"],
+            r["chi_phi_sxc"], r["tong_chi_phi"],
+            "Có" if r["da_phan_bo"] else "Chưa",
+            r["loi_nhuan"], r["ty_le_loi_nhuan"] if r["ty_le_loi_nhuan"] is not None else "",
+        ]
+        for r in rows
+    ]
+
+    wb = _make_workbook("Chi phí & Lợi nhuận LSX", headers, rows_data)
+
+    # Dòng tổng cuối
+    ws = wb.active
+    last_row = ws.max_row + 1
+    total_cells = ["", "", "", "", "", "", "", "", "", "", "",
+                   totals["tong_doanh_thu"], totals["tong_chi_phi_nvl"],
+                   totals["tong_chi_phi_nhan_cong"], totals["tong_chi_phi_sxc"],
+                   totals["tong_chi_phi"], "", totals["tong_loi_nhuan"],
+                   totals["ty_le_loi_nhuan"] if totals["ty_le_loi_nhuan"] is not None else ""]
+    total_cells[0] = "TỔNG CỘNG"
+    ws.append(total_cells)
+    bold_fill = PatternFill("solid", fgColor="FFF3E0")
+    for cell in ws[last_row]:
+        cell.font = Font(bold=True)
+        cell.fill = bold_fill
+
+    suffix = f"_{tu_ngay}_{den_ngay}" if tu_ngay else ""
+    return _stream_workbook(wb, f"chi_phi_loi_nhuan_lsx{suffix}.xlsx")

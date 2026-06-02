@@ -45,7 +45,7 @@ _BACKFILL_SPEC_PG = """
     FROM quote_items qi
     WHERE soi.quote_item_id = qi.id
 """
-from app.deps import get_current_user, require_permissions
+from app.deps import get_current_user, get_admin_user, require_permissions
 from app.models.auth import User
 from app.models.master import Customer, Product
 from app.models.sales import SalesOrder, SalesOrderItem, QuoteItem
@@ -259,6 +259,50 @@ def cancel_order(
     return {"message": f"Đã huỷ đơn hàng {order.so_don}"}
 
 
+@router.patch("/{order_id}/confirm-delivery", response_model=SalesOrderResponse)
+def confirm_delivery(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Xác nhận đã giao hàng — chuyển trạng thái da_duyet → da_giao."""
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+    if order.trang_thai != "da_duyet":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Chỉ có thể xác nhận giao hàng khi đơn ở trạng thái 'Đã duyệt'. Hiện tại: '{order.trang_thai}'"
+        )
+    order.trang_thai = "da_giao"
+    order.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    logger.info("confirm_delivery sales_order id=%s by user=%s", order_id, current_user.id)
+    return get_order(order_id, db, current_user)
+
+
+@router.patch("/{order_id}/complete", response_model=SalesOrderResponse)
+def complete_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Hoàn thành đơn hàng — chuyển trạng thái da_giao → hoan_thanh."""
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+    if order.trang_thai != "da_giao":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Chỉ có thể hoàn thành khi đơn ở trạng thái 'Đã giao'. Hiện tại: '{order.trang_thai}'"
+        )
+    order.trang_thai = "hoan_thanh"
+    order.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    logger.info("complete_order sales_order id=%s by user=%s", order_id, current_user.id)
+    return get_order(order_id, db, current_user)
+
+
 @router.patch("/{order_id}/update-discount")
 def update_discount(
     order_id: int,
@@ -324,7 +368,7 @@ def update_discount(
 @router.post("/admin/backfill-spec")
 def backfill_spec(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(get_admin_user),
 ):
     """
     Chạy lại backfill spec từ quote_items → sales_order_items.

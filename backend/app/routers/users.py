@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user, require_roles
+from app.deps import get_current_user, get_admin_user, require_roles
 from app.models.auth import Role, User
 from app.schemas.auth import UserCreate, UserUpdate
 
@@ -14,7 +14,7 @@ admin_required = require_roles("ADMIN", "GIAM_DOC")
 
 
 def _hash_password(plain: str) -> str:
-    return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt()).decode()
+    return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(rounds=14)).decode()
 
 
 class UserResponse(BaseModel):
@@ -60,7 +60,7 @@ def list_users(
     phan_xuong: str | None = Query(default=None),
     trang_thai: bool | None = Query(default=True),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(get_admin_user),
 ):
     q = db.query(User)
     if trang_thai is not None:

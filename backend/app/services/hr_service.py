@@ -67,14 +67,21 @@ class PayrollService:
         config_by_scope = {
             (c.phan_xuong_id, c.cong_doan): c
             for c in configs
-            if c.cong_doan
+            if c.cong_doan and c.loai != "so_lop_giay"
         }
-        config_by_code = {c.ma_hang: c for c in configs}
+        config_by_code = {c.ma_hang: c for c in configs if c.loai != "so_lop_giay"}
+        # Hệ số máy sóng theo số lớp: ma_cau_hinh → gia_tri (ví dụ: "3"→1.0, "5"→2.0, "7"→3.0)
+        so_lop_hs_map: dict[str, Decimal] = {
+            c.ma_cau_hinh: (c.gia_tri or Decimal("1"))
+            for c in configs
+            if c.loai == "so_lop_giay" and c.ma_cau_hinh
+        }
 
         from_dt = datetime.combine(from_date, time.min)
         to_dt = datetime.combine(to_date, time.max)
         logs = db.query(ScanLog).options(
-            joinedload(ScanLog.may_scan_obj)
+            joinedload(ScanLog.may_scan_obj),
+            joinedload(ScanLog.production_order),
         ).filter(
             ScanLog.created_at >= from_dt,
             ScanLog.created_at <= to_dt
@@ -120,7 +127,18 @@ class PayrollService:
 
             don_gia = cfg.don_gia or Decimal("0")
             pct = cfg.phan_tram_luong_sp or Decimal("100")
-            fund = m2 * don_gia * (pct / Decimal("100"))
+            # Áp hệ số số lớp giấy cho máy sóng nếu có config so_lop_giay
+            he_so_so_lop = Decimal("1")
+            if cong_doan == "MAY_SONG_CD1" and so_lop_hs_map:
+                po = getattr(log, "production_order", None)
+                so_lop = getattr(po, "so_lop", None) if po else None
+                if so_lop is not None:
+                    he_so_so_lop = (
+                        so_lop_hs_map.get(str(so_lop))
+                        or so_lop_hs_map.get(f"HS_{so_lop}_LOP")
+                        or Decimal("1")
+                    )
+            fund = m2 * don_gia * (pct / Decimal("100")) * he_so_so_lop
             group_funds[key]["tong_m2"] += m2
             group_funds[key]["quy_luong"] += fund
             group_funds[key]["logs"].append(log)

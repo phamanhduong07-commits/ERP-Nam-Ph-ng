@@ -310,10 +310,11 @@ class AccountingService:
             except CompileError:
                 # SQLite fallback for tests — no row-level locking
                 invoice = self.db.get(SalesInvoice, data.sales_invoice_id)
-            new_da_tt = float(invoice.da_thanh_toan) + float(data.so_tien)
-            new_remaining = float(invoice.tong_cong) - new_da_tt
-            invoice.da_thanh_toan = Decimal(str(round(new_da_tt, 2)))
-            if new_remaining <= 0.001:
+            so_tien_d = data.so_tien if isinstance(data.so_tien, Decimal) else Decimal(str(data.so_tien))
+            new_da_tt = (invoice.da_thanh_toan or Decimal("0")) + so_tien_d
+            new_remaining = (invoice.tong_cong or Decimal("0")) - new_da_tt
+            invoice.da_thanh_toan = new_da_tt.quantize(Decimal("0.01"))
+            if new_remaining <= Decimal("0.001"):
                 invoice.trang_thai = "da_tt_du"
             elif new_da_tt > 0:
                 invoice.trang_thai = "da_tt_mot_phan"
@@ -460,20 +461,31 @@ class AccountingService:
         )
 
     def _post_cash_payment_journal(self, payment: CashPayment) -> None:
-        lines = [
-            {
-                'so_tk': payment.tk_no,
-                'dien_giai': f"Trả nợ NCC {payment.supplier_id} HĐ {payment.purchase_invoice_id or ''}",
-                'so_tien_no': float(payment.so_tien),
-                'so_tien_co': 0,
-            },
-            {
-                'so_tk': payment.tk_co,
-                'dien_giai': f"Chi tiền {payment.dien_giai or payment.so_phieu}",
-                'so_tien_no': 0,
-                'so_tien_co': float(payment.so_tien),
-            },
-        ]
+        so_tien = Decimal(str(payment.so_tien))
+        vat_amount = Decimal("0")
+
+        # Tách VAT đầu vào (TK 1331) khi thanh toán hóa đơn mua hàng có thuế
+        if payment.purchase_invoice_id and str(payment.tk_no).startswith("331"):
+            inv = self.db.get(PurchaseInvoice, payment.purchase_invoice_id)
+            if inv and inv.tien_thue and inv.tong_thanh_toan and inv.tong_thanh_toan > 0:
+                vat_ratio = Decimal(str(inv.tien_thue)) / Decimal(str(inv.tong_thanh_toan))
+                vat_amount = (so_tien * vat_ratio).quantize(Decimal("1"))
+
+        net_amount = so_tien - vat_amount
+        dien_giai_no = f"Trả nợ NCC {payment.supplier_id} HĐ {payment.purchase_invoice_id or ''}"
+
+        if vat_amount > 0:
+            lines = [
+                {"so_tk": payment.tk_no, "dien_giai": dien_giai_no, "so_tien_no": float(net_amount), "so_tien_co": 0},
+                {"so_tk": "1331", "dien_giai": f"Thuế GTGT đầu vào HĐ {payment.purchase_invoice_id}", "so_tien_no": float(vat_amount), "so_tien_co": 0},
+                {"so_tk": payment.tk_co, "dien_giai": f"Chi tiền {payment.dien_giai or payment.so_phieu}", "so_tien_no": 0, "so_tien_co": float(so_tien)},
+            ]
+        else:
+            lines = [
+                {"so_tk": payment.tk_no, "dien_giai": dien_giai_no, "so_tien_no": float(so_tien), "so_tien_co": 0},
+                {"so_tk": payment.tk_co, "dien_giai": f"Chi tiền {payment.dien_giai or payment.so_phieu}", "so_tien_no": 0, "so_tien_co": float(so_tien)},
+            ]
+
         self._create_journal_entry(
             ngay=payment.ngay_phieu,
             dien_giai=f"Phiếu chi {payment.so_phieu}",
@@ -1146,9 +1158,9 @@ class AccountingService:
                 raise HTTPException(404, "Không tìm thấy hóa đơn mua")
             if inv.supplier_id != data.supplier_id:
                 raise HTTPException(400, "Nhà cung cấp phiếu chi không khớp hóa đơn mua")
-            remaining = float(inv.tong_thanh_toan) - float(inv.da_thanh_toan)
-            if float(data.so_tien) > remaining + 0.001:
-                raise HTTPException(400, f"Số tiền vượt quá còn lại ({remaining:,.0f})")
+            remaining = (inv.tong_thanh_toan or Decimal("0")) - (inv.da_thanh_toan or Decimal("0"))
+            if Decimal(str(data.so_tien)) > remaining + Decimal("0.001"):
+                raise HTTPException(400, f"Số tiền vượt quá còn lại ({float(remaining):,.0f})")
 
         phap_nhan_id = data.phap_nhan_id or (inv.phap_nhan_id if inv else None)
         phan_xuong_id = data.phan_xuong_id or (inv.phan_xuong_id if inv else None)
@@ -1169,28 +1181,40 @@ class AccountingService:
             phan_xuong_id=phan_xuong_id,
             created_by=user_id,
         )
-        self.db.add(payment)
-        self.db.flush()
-        self._audit(
-            "create",
-            "cash_payments",
-            payment.id,
-            user_id=user_id,
-            du_lieu_moi={
-                "so_phieu": payment.so_phieu,
-                "trang_thai": payment.trang_thai,
-                "so_tien": str(payment.so_tien),
-                "phap_nhan_id": payment.phap_nhan_id,
-                "phan_xuong_id": payment.phan_xuong_id,
-            },
-        )
-        self.db.commit()
+        try:
+            self.db.add(payment)
+            self.db.flush()
+            self._audit(
+                "create",
+                "cash_payments",
+                payment.id,
+                user_id=user_id,
+                du_lieu_moi={
+                    "so_phieu": payment.so_phieu,
+                    "trang_thai": payment.trang_thai,
+                    "so_tien": str(payment.so_tien),
+                    "phap_nhan_id": payment.phap_nhan_id,
+                    "phan_xuong_id": payment.phan_xuong_id,
+                },
+            )
+            self.db.commit()
+        except HTTPException:
+            self.db.rollback()
+            raise
+        except Exception as exc:
+            self.db.rollback()
+            raise HTTPException(500, f"Lỗi tạo phiếu chi: {exc}") from exc
         self.db.refresh(payment)
         logger.info("created cash_payment id=%s so_phieu=%s by user=%s", payment.id, payment.so_phieu, user_id)
         return payment
 
     def approve_payment(self, payment_id: int, user_id: int) -> CashPayment:
-        p = self.db.get(CashPayment, payment_id)
+        p = (
+            self.db.query(CashPayment)
+            .filter(CashPayment.id == payment_id)
+            .with_for_update()
+            .first()
+        )
         if not p:
             raise HTTPException(404, "Không tìm thấy phiếu chi")
         transitions = {"cho_chot": "da_chot", "da_chot": "da_duyet"}
@@ -1199,20 +1223,27 @@ class AccountingService:
             raise HTTPException(400, f"Không thể chuyển trạng thái từ {p.trang_thai}")
         old_status = p.trang_thai
         p.trang_thai = next_state
-        if next_state == "da_duyet":
-            self._apply_cash_payment_to_invoice_and_debt(p)
-            p.nguoi_duyet_id = user_id
-            p.ngay_duyet = datetime.now(timezone.utc)
-            self._post_cash_payment_journal(p)
-        self._audit(
-            "approve",
-            "cash_payments",
-            p.id,
-            user_id=user_id,
-            du_lieu_cu={"trang_thai": old_status},
-            du_lieu_moi={"trang_thai": p.trang_thai, "ngay_duyet": p.ngay_duyet.isoformat() if p.ngay_duyet else None},
-        )
-        self.db.commit()
+        try:
+            if next_state == "da_duyet":
+                self._apply_cash_payment_to_invoice_and_debt(p)
+                p.nguoi_duyet_id = user_id
+                p.ngay_duyet = datetime.now(timezone.utc)
+                self._post_cash_payment_journal(p)
+            self._audit(
+                "approve",
+                "cash_payments",
+                p.id,
+                user_id=user_id,
+                du_lieu_cu={"trang_thai": old_status},
+                du_lieu_moi={"trang_thai": p.trang_thai, "ngay_duyet": p.ngay_duyet.isoformat() if p.ngay_duyet else None},
+            )
+            self.db.commit()
+        except HTTPException:
+            self.db.rollback()
+            raise
+        except Exception as exc:
+            self.db.rollback()
+            raise HTTPException(500, f"Lỗi duyệt phiếu chi: {exc}") from exc
         self.db.refresh(p)
         return p
 
