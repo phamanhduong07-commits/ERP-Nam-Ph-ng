@@ -647,17 +647,6 @@ def get_ton_kho(
 
     rows = q.all()
 
-    # Đếm cuộn tồn từ giay_rolls (1 query, dùng dict lookup trong loop)
-    cuon_counts: dict[tuple, int] = {}
-    if any(r.paper_material_id for r in rows):
-        cuon_rows = (
-            db.query(GiayRoll.paper_material_id, GiayRoll.warehouse_id, func.count(GiayRoll.id))
-            .filter(GiayRoll.trang_thai.notin_(["da_xuat"]))
-            .group_by(GiayRoll.paper_material_id, GiayRoll.warehouse_id)
-            .all()
-        )
-        cuon_counts = {(pm_id, wh_id): cnt for pm_id, wh_id, cnt in cuon_rows}
-
     result = []
     for r in rows:
         ten_hang = r.ten_hang or ""
@@ -724,7 +713,6 @@ def get_ton_kho(
             "loai_giay": loai_giay,
             "kho_mm": kho_mm,
             "dinh_luong": dinh_luong,
-            "so_cuon": cuon_counts.get((r.paper_material_id, r.warehouse_id), 0) if r.paper_material_id else None,
         })
     return result
 

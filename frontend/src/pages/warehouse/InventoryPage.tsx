@@ -683,7 +683,6 @@ function GiayCuonTab() {
 
   const totalKg = filtered.reduce((s, r) => s + r.ton_luong, 0)
   const totalGiaTri = filtered.reduce((s, r) => s + r.gia_tri_ton, 0)
-  const totalCuon = filtered.reduce((s, r) => s + (r.so_cuon ?? 0), 0)
 
   if (isLoading) return <Spin style={{ margin: 60, display: 'block', textAlign: 'center' }} />
 
@@ -712,7 +711,8 @@ function GiayCuonTab() {
         </Col>
         <Col xs={24} sm={5}>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            {filtered.length} loại · tổng <Text strong>{Math.round(totalKg).toLocaleString('vi-VN')} kg</Text>
+            <Text strong style={{ color: '#1677ff' }}>{filtered.length} cuộn</Text>
+            {' · '}tổng <Text strong>{Math.round(totalKg).toLocaleString('vi-VN')} kg</Text>
           </Text>
         </Col>
       </Row>
@@ -756,16 +756,6 @@ function GiayCuonTab() {
           {r.ma_chinh && <Text type="secondary" style={{ fontSize: 10 }}>({r.ma_chinh})</Text>}
         </Space>
       ),
-    },
-    {
-      title: 'Số cuộn',
-      dataIndex: 'so_cuon',
-      width: 80,
-      align: 'right' as const,
-      sorter: (a: TonKho, b: TonKho) => (a.so_cuon ?? 0) - (b.so_cuon ?? 0),
-      render: (v: number | null) => v != null && v > 0
-        ? <Text strong style={{ color: '#1677ff' }}>{v}</Text>
-        : <Text type="secondary">—</Text>,
     },
     {
       title: 'Tồn (kg)',
@@ -814,20 +804,18 @@ function GiayCuonTab() {
           locale={{ emptyText: <EmptyState size="small" /> }}
           summary={() => (
             <Table.Summary.Row style={{ background: '#f6ffed' }}>
-              <Table.Summary.Cell index={0} colSpan={4} align="right">
+              <Table.Summary.Cell index={0} colSpan={3} align="right">
                 <Text strong>Tổng cộng</Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={4} align="right">
-                {totalCuon > 0 && (
-                  <Text strong style={{ color: '#1677ff' }}>{totalCuon} cuộn</Text>
-                )}
+              <Table.Summary.Cell index={3} align="left">
+                <Text strong style={{ color: '#1677ff' }}>{tableRows.length} cuộn</Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={5} align="right">
+              <Table.Summary.Cell index={4} align="right">
                 <Text strong style={{ color: '#389e0d', fontSize: 13 }}>
                   {Math.round(totalKg).toLocaleString('vi-VN')} kg
                 </Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={6} align="right">
+              <Table.Summary.Cell index={5} align="right">
                 <Text strong style={{ color: '#52c41a' }}>{fmtB(totalGiaTri)}</Text>
               </Table.Summary.Cell>
             </Table.Summary.Row>
