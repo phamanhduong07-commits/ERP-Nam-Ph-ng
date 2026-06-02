@@ -49,6 +49,9 @@ from app.routers import hoa_don_dien_tu
 from app.routers import ke_hoach_tan_dung
 from app.routers import tem_paper_prices as tem_paper_prices_router
 from app.routers import offset_addon_prices as offset_addon_prices_router
+from app.routers import sync_htcph as sync_htcph_router
+from app.services.htcph_sync import run_daily_sync
+from app.database import SessionLocal as _SessionLocal
 
 # ─── Logging setup ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -69,19 +72,31 @@ if settings.AUTO_CREATE_SCHEMA:
     Base.metadata.create_all(bind=engine)
     ensure_schema()
 
+def _get_db():
+    db = _SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ───────────────────────────────────────────────────────────────
     _gps_task = asyncio.create_task(gps_poller_loop())
+    _htcph_task = asyncio.create_task(run_daily_sync(_get_db))
     logger.info("GPS background poller scheduled")
+    logger.info("HTCPH daily sync scheduled (next run: 02:00)")
     yield
     # ── Shutdown ──────────────────────────────────────────────────────────────
     _gps_task.cancel()
-    try:
-        await _gps_task
-    except asyncio.CancelledError:
-        pass
-    logger.info("GPS background poller stopped")
+    _htcph_task.cancel()
+    for task in (_gps_task, _htcph_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    logger.info("Background tasks stopped")
 
 
 app = FastAPI(
@@ -209,6 +224,7 @@ app.include_router(qc_giay_cuon_router.router)
 app.include_router(hoa_don_dien_tu.router)
 app.include_router(tem_paper_prices_router.router, prefix="/api")
 app.include_router(offset_addon_prices_router.router, prefix="/api")
+app.include_router(sync_htcph_router.router)
 
 
 @app.exception_handler(IntegrityError)

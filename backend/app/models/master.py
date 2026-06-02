@@ -273,9 +273,17 @@ class Product(Base):
     rong: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     cao: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     so_lop: Mapped[int] = mapped_column(SmallInteger, default=3)
-    so_mau: Mapped[int] = mapped_column(SmallInteger, default=0)
+    so_mau: Mapped[int] = mapped_column(SmallInteger, default=0)    # số màu in thực tế
+    loai_in: Mapped[int] = mapped_column(Integer, default=0)       # 0=không in, 1=flexo, 2=KTS
     ghim: Mapped[bool] = mapped_column(Boolean, default=False)
     dan: Mapped[bool] = mapped_column(Boolean, default=False)
+    chap_xa: Mapped[int] = mapped_column(Integer, default=0)        # 0=không, 1=có chấp xả
+    loai_lan: Mapped[str | None] = mapped_column(String(10))       # "bang"=lằn bằng, "am_duong"=lằn âm dương
+    loai_thung: Mapped[str | None] = mapped_column(String(50))     # A1/A3/A5/Tấm bế/Thùng bế...
+    chong_tham: Mapped[int] = mapped_column(Integer, default=0)    # 0=không, 1=trong, 2=ngoài
+    boi: Mapped[int] = mapped_column(Integer, default=0)           # 0=không, 1=có
+    be_so_con: Mapped[int] = mapped_column(Integer, default=0)     # số con bế
+    can_mang: Mapped[int] = mapped_column(Integer, default=0)      # 0=không, 1=trong, 2=ngoài
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
     phan_xuong: Mapped[str | None] = mapped_column(String(50))
     loai: Mapped[str | None] = mapped_column(String(50))

@@ -21,6 +21,7 @@ from app.models.bom import ProductionBOM, ProductionBOMItem
 from app.models.sales import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
 from app.models.billing import SalesInvoice, InvoiceAdjustmentLog
 from app.models.accounting import PurchaseInvoice, JournalEntry
+from app.models.quality import QCGiayCuonPhieu
 from app.models.warehouse_doc import (
     GoodsReceipt, GoodsReceiptItem,
     GiayRoll,
@@ -647,10 +648,11 @@ def get_ton_kho(
 
     rows = q.all()
 
-    # Batch-load NSX và ngay_nhap_gan_nhat — tránh N+1 per paper material
+    # Batch-load NSX, ngay_nhap_gan_nhat, so_cuon — tránh N+1 per paper material
     pm_ids_set = [r.paper_material_id for r in rows if r.paper_material_id]
     ten_nsx_map: dict[int, str | None] = {}
     nhap_date_map: dict[int, str | None] = {}
+    so_cuon_map: dict[int, int] = {}
     if pm_ids_set:
         pm_nsx_rows = (
             db.query(PaperMaterial.id, Supplier.ten_viet_tat)
@@ -677,6 +679,17 @@ def get_ton_kho(
             r.paper_material_id: r.max_ngay.isoformat() if r.max_ngay else None
             for r in nhap_q
         }
+
+        cuon_rows = (
+            db.query(GiayRoll.paper_material_id, func.count(GiayRoll.id).label("n"))
+            .filter(
+                GiayRoll.paper_material_id.in_(pm_ids_set),
+                GiayRoll.trang_thai == "trong_kho",
+            )
+            .group_by(GiayRoll.paper_material_id)
+            .all()
+        )
+        so_cuon_map = {r.paper_material_id: r.n for r in cuon_rows}
 
     result = []
     for r in rows:
@@ -747,6 +760,7 @@ def get_ton_kho(
             "bien_dong": (float(r.ton_luong) - float(r.ton_luong_truoc)) if r.ton_luong_truoc is not None else None,
             "ten_nsx": ten_nsx_map.get(r.paper_material_id) if r.paper_material_id else None,
             "ngay_nhap_gan_nhat": nhap_date_map.get(r.paper_material_id) if r.paper_material_id else None,
+            "so_cuon": so_cuon_map.get(r.paper_material_id) if r.paper_material_id else None,
         })
     return result
 
@@ -1270,9 +1284,11 @@ def list_goods_receipts(
         .limit(limit)
         .all()
     )
-    # Pre-aggregate co_hoa_don per GR — avoid N+1 query in _gr_to_dict
+    # Pre-aggregate co_hoa_don and qc_phieu_id per GR — avoid N+1 queries in _gr_to_dict
     gr_ids = [r.id for r in rows]
     co_hoa_don_set: set[int] = set()
+    qc_map: dict[int, int] = {}
+    barcode_flat: dict[int, str] = {}
     if gr_ids:
         hd_rows = (
             db.query(PurchaseInvoice.gr_id)
@@ -1284,7 +1300,26 @@ def list_goods_receipts(
             .all()
         )
         co_hoa_don_set = {row[0] for row in hd_rows}
-    return [_gr_to_dict(r, db, include_image=False, co_hoa_don_override=r.id in co_hoa_don_set) for r in rows]
+        qc_rows = (
+            db.query(QCGiayCuonPhieu.goods_receipt_id, QCGiayCuonPhieu.id)
+            .filter(QCGiayCuonPhieu.goods_receipt_id.in_(gr_ids))
+            .all()
+        )
+        qc_map = {row.goods_receipt_id: row.id for row in qc_rows}
+        all_item_ids = [it.id for r in rows for it in r.items]
+        barcode_flat: dict[int, str] = {}
+        if all_item_ids:
+            roll_rows = (
+                db.query(GiayRoll.goods_receipt_item_id, GiayRoll.barcode)
+                .filter(GiayRoll.goods_receipt_item_id.in_(all_item_ids))
+                .all()
+            )
+            barcode_flat = {rr.goods_receipt_item_id: rr.barcode for rr in roll_rows}
+    per_gr_barcode: dict[int, dict] = {
+        r.id: {it.id: barcode_flat.get(it.id) for it in r.items}
+        for r in rows
+    }
+    return [_gr_to_dict(r, db, include_image=False, co_hoa_don_override=r.id in co_hoa_don_set, qc_phieu_id=qc_map.get(r.id), barcode_map=per_gr_barcode.get(r.id, {})) for r in rows]
 
 
 @router.get("/goods-receipts/pending-count")
@@ -1312,6 +1347,60 @@ def get_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depen
     if not r:
         raise HTTPException(404, "Không tìm thấy phiếu nhập")
     return _gr_to_dict(r, db)
+
+
+@router.post("/goods-receipts/{gr_id}/tao-phieu-qc", status_code=201)
+def tao_phieu_qc(
+    gr_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Tạo phiếu QC giấy cuộn từ phiếu nhập. 409 nếu đã có QC."""
+    gr = db.query(GoodsReceipt).options(selectinload(GoodsReceipt.items)).filter(GoodsReceipt.id == gr_id).first()
+    if not gr:
+        raise HTTPException(404, "Không tìm thấy phiếu nhập")
+
+    existing = db.query(QCGiayCuonPhieu.id, QCGiayCuonPhieu.so_phieu).filter(
+        QCGiayCuonPhieu.goods_receipt_id == gr_id
+    ).first()
+    if existing:
+        raise HTTPException(409, f"Đã tạo phiếu QC: {existing.so_phieu} (id={existing.id})")
+
+    items_with_pm = [it for it in gr.items if it.paper_material_id]
+    if not items_with_pm:
+        raise HTTPException(400, "Phiếu nhập không có item giấy cuộn (paper_material_id)")
+
+    pm_id = items_with_pm[0].paper_material_id
+    pm = db.get(PaperMaterial, pm_id)
+
+    today_str = date.today().strftime("%Y%m%d")
+    prefix = f"QCGC-{today_str}-"
+    last = (
+        db.query(QCGiayCuonPhieu)
+        .filter(QCGiayCuonPhieu.so_phieu.like(f"{prefix}%"))
+        .order_by(QCGiayCuonPhieu.id.desc())
+        .first()
+    )
+    seq = int(last.so_phieu.split("-")[-1]) + 1 if last else 1
+    so_phieu = f"{prefix}{seq:03d}"
+
+    obj = QCGiayCuonPhieu(
+        so_phieu=so_phieu,
+        paper_material_id=pm_id,
+        goods_receipt_id=gr_id,
+        goods_receipt_item_id=items_with_pm[0].id,
+        ngay_nhap_giay=gr.ngay_nhap,
+        ngay_kiem_tra=date.today(),
+        created_by=user.id,
+        tc_dinh_luong=float(pm.dinh_luong) if pm and pm.dinh_luong is not None else None,
+        tc_sai_so_pct=float(pm.sai_so_pct) if pm and pm.sai_so_pct is not None else None,
+        tc_do_buc=float(pm.do_buc_tieu_chuan) if pm and pm.do_buc_tieu_chuan is not None else None,
+        tc_do_nen_vong=float(pm.do_nen_vong_tc) if pm and pm.do_nen_vong_tc is not None else None,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return {"qc_phieu_id": obj.id, "so_phieu": obj.so_phieu}
 
 
 @router.post("/goods-receipts", status_code=201)
@@ -1842,7 +1931,7 @@ def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = De
     return {"ok": True}
 
 
-def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True, co_hoa_don_override: bool | None = None) -> dict:
+def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True, co_hoa_don_override: bool | None = None, qc_phieu_id: int | None = None, barcode_map: dict | None = None) -> dict:
     # Prefer pre-loaded relationships; fall back to db.get for single-record calls (detail endpoint)
     wh = gr.warehouse if gr.warehouse_id else None
     if wh is None and gr.warehouse_id:
@@ -1862,6 +1951,20 @@ def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True, co_ho
             PurchaseInvoice.gr_id == gr.id,
             PurchaseInvoice.trang_thai != "huy",
         ).first() is not None
+    if qc_phieu_id is None:
+        qc_row = db.query(QCGiayCuonPhieu.id).filter(QCGiayCuonPhieu.goods_receipt_id == gr.id).first()
+        qc_phieu_id = qc_row[0] if qc_row else None
+    if barcode_map is None:
+        item_ids = [it.id for it in gr.items]
+        if item_ids:
+            roll_rows = (
+                db.query(GiayRoll.goods_receipt_item_id, GiayRoll.barcode)
+                .filter(GiayRoll.goods_receipt_item_id.in_(item_ids))
+                .all()
+            )
+            barcode_map = {r.goods_receipt_item_id: r.barcode for r in roll_rows}
+        else:
+            barcode_map = {}
     return {
         "id": gr.id,
         "so_phieu": gr.so_phieu,
@@ -1887,6 +1990,7 @@ def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True, co_ho
         "ten_phap_nhan": (pn.ten_viet_tat or pn.ten_phap_nhan) if pn else None,
         "phap_nhan_id_for_print": gr.phap_nhan_id or (px.phap_nhan_id if px else None),
         "co_hoa_don": co_hoa_don_override,
+        "qc_phieu_id": qc_phieu_id,
         "created_at": gr.created_at.isoformat() if gr.created_at else None,
         "items": [{
             "id": it.id,
@@ -1907,6 +2011,7 @@ def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True, co_ho
             "dai_mm": float(it.dai_mm) if it.dai_mm else None,
             "so_lop": it.so_lop,
             "ghi_chu": it.ghi_chu,
+            "barcode": barcode_map.get(it.id),
         } for it in gr.items],
     }
 
@@ -5074,4 +5179,124 @@ def khsx_can_phoi_ngoai(
             "nguon": "lenh_sx",
         })
 
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Đối soát tồn kho giấy cuộn: SQL Server vs ERP Receipts
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/doi-soat-giay")
+def doi_soat_giay(
+    ncc_id: Optional[int] = Query(None),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    So sánh tồn kho SQL Server (warehouse_id=9) với tổng nhập ERP (GoodsReceipt da_duyet, MUA_HANG).
+    Sắp xếp theo |chênh lệch| giảm dần để dễ phát hiện sai số.
+    """
+    GIAY_WH_ID = 9
+
+    # ── A: SQL Server inventory ───────────────────────────────────────────────
+    inv_rows = (
+        db.query(
+            InventoryBalance.paper_material_id,
+            func.sum(InventoryBalance.ton_luong).label("ton_sql"),
+            func.sum(InventoryBalance.don_gia_binh_quan * InventoryBalance.ton_luong).label("weighted"),
+        )
+        .filter(
+            InventoryBalance.warehouse_id == GIAY_WH_ID,
+            InventoryBalance.paper_material_id.isnot(None),
+        )
+        .group_by(InventoryBalance.paper_material_id)
+        .all()
+    )
+    inv_map: dict[int, dict] = {}
+    for r in inv_rows:
+        ton = float(r.ton_sql or 0)
+        weighted = float(r.weighted or 0)
+        inv_map[r.paper_material_id] = {
+            "ton_sql": ton,
+            "gia_sql": round(weighted / ton, 0) if ton > 0 else 0.0,
+        }
+
+    # ── B: ERP receipts (da_duyet, MUA_HANG) ─────────────────────────────────
+    gr_q = (
+        db.query(
+            GoodsReceiptItem.paper_material_id,
+            func.sum(GoodsReceiptItem.so_luong).label("tong_nhap_erp"),
+            func.max(GoodsReceiptItem.don_gia).label("gia_erp"),
+            func.max(GoodsReceipt.ngay_nhap).label("ngay_nhap_erp"),
+        )
+        .join(GoodsReceipt, GoodsReceiptItem.receipt_id == GoodsReceipt.id)
+        .filter(
+            GoodsReceipt.trang_thai == "da_duyet",
+            GoodsReceipt.loai_nhap == "MUA_HANG",
+            GoodsReceiptItem.paper_material_id.isnot(None),
+        )
+    )
+    if ncc_id:
+        gr_q = gr_q.filter(GoodsReceipt.supplier_id == ncc_id)
+    if date_from:
+        gr_q = gr_q.filter(GoodsReceipt.ngay_nhap >= date_from)
+    if date_to:
+        gr_q = gr_q.filter(GoodsReceipt.ngay_nhap <= date_to)
+    gr_rows = gr_q.group_by(GoodsReceiptItem.paper_material_id).all()
+    gr_map: dict[int, dict] = {
+        r.paper_material_id: {
+            "tong_nhap_erp": float(r.tong_nhap_erp or 0),
+            "gia_erp": float(r.gia_erp or 0),
+            "ngay_nhap_erp": r.ngay_nhap_erp.isoformat() if r.ngay_nhap_erp else None,
+        }
+        for r in gr_rows
+    }
+
+    all_pm_ids = set(inv_map) | set(gr_map)
+    if not all_pm_ids:
+        return []
+
+    # ── PaperMaterial + NSX batch ─────────────────────────────────────────────
+    sup_alias = aliased(Supplier)
+    pm_rows = (
+        db.query(PaperMaterial, sup_alias.ten_viet_tat.label("ten_nsx"))
+        .outerjoin(sup_alias, PaperMaterial.ma_nsx_id == sup_alias.id)
+        .filter(PaperMaterial.id.in_(all_pm_ids))
+        .all()
+    )
+    pm_map: dict[int, tuple] = {pm.id: (pm, ten_nsx) for pm, ten_nsx in pm_rows}
+
+    result = []
+    for pm_id in all_pm_ids:
+        inv = inv_map.get(pm_id, {"ton_sql": 0.0, "gia_sql": 0.0})
+        gr = gr_map.get(pm_id, {"tong_nhap_erp": 0.0, "gia_erp": 0.0, "ngay_nhap_erp": None})
+        pm_info = pm_map.get(pm_id)
+        pm = pm_info[0] if pm_info else None
+        ten_nsx = pm_info[1] if pm_info else None
+
+        ton_sql = inv["ton_sql"]
+        tong_nhap = gr["tong_nhap_erp"]
+        chenh_lech = ton_sql - tong_nhap
+        ty_le_khop = round(tong_nhap / ton_sql * 100, 1) if ton_sql > 0 else None
+        chenh_gia = inv["gia_sql"] - gr["gia_erp"]
+
+        result.append({
+            "paper_material_id": pm_id,
+            "ma_chinh": pm.ma_chinh if pm else None,
+            "ma_ky_hieu": pm.ma_ky_hieu if pm else None,
+            "ten": pm.ten if pm else None,
+            "ten_nsx": ten_nsx,
+            "loai_giay": pm.loai_giay if pm else None,
+            "ton_sql": round(ton_sql, 2),
+            "gia_sql": round(inv["gia_sql"], 0),
+            "tong_nhap_erp": round(tong_nhap, 2),
+            "gia_erp": round(gr["gia_erp"], 0),
+            "chenh_lech": round(chenh_lech, 2),
+            "ty_le_khop": ty_le_khop,
+            "chenh_gia": round(chenh_gia, 0),
+            "ngay_nhap_erp": gr["ngay_nhap_erp"],
+        })
+
+    result.sort(key=lambda x: abs(x["chenh_lech"]), reverse=True)
     return result

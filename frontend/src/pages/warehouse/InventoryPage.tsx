@@ -16,7 +16,7 @@ import {
   WarningOutlined, UploadOutlined, SyncOutlined,
   InboxOutlined, DollarOutlined, AppstoreOutlined, UnorderedListOutlined,
 } from '@ant-design/icons'
-import { warehouseApi, PhanXuongWithWarehouses, WarehouseSlot, TonKho, TonKhoGiayRow } from '../../api/warehouse'
+import { warehouseApi, PhanXuongWithWarehouses, WarehouseSlot, TonKho, TonKhoGiayRow, GiayRoll } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { phapNhanApi } from '../../api/phap_nhan'
 import dayjs from 'dayjs'
@@ -231,6 +231,35 @@ function DashboardTab() {
 }
 
 // ─── Chi tiết Tab ─────────────────────────────────────────────────────────────
+function RollsExpand({ pmId, whId }: { pmId: number | null; whId: number }) {
+  const { data: rolls = [], isLoading } = useQuery({
+    queryKey: ['giay-rolls-expand', pmId, whId],
+    queryFn: () => warehouseApi.listGiayRolls({ paper_material_id: pmId ?? undefined, warehouse_id: whId, trang_thai: 'trong_kho' }).then(r => r.data),
+    enabled: pmId != null,
+    staleTime: 60_000,
+  })
+  if (isLoading) return <Spin size="small" style={{ margin: 8 }} />
+  if (!rolls.length) return <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>Chưa có cuộn nào đăng ký</Text>
+  return (
+    <Table<GiayRoll>
+      dataSource={rolls} rowKey="id" size="small" pagination={false}
+      style={{ marginLeft: 48 }}
+      columns={[
+        { title: 'Mã cuộn', dataIndex: 'barcode', width: 130,
+          render: (v: string) => <Text code style={{ color: '#1677ff', fontWeight: 600 }}>{v}</Text> },
+        { title: 'KL ban đầu', dataIndex: 'trong_luong_ban_dau', width: 120, align: 'right' as const,
+          render: (v: number) => `${v.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} kg` },
+        { title: 'KL còn lại', dataIndex: 'trong_luong_con_lai', width: 120, align: 'right' as const,
+          render: (v: number) => <Text strong style={{ color: '#1677ff' }}>{v.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} kg</Text> },
+        { title: 'Phiếu nhập', dataIndex: 'so_phieu_nhap', width: 160,
+          render: (v: string | null) => v ? <Text code style={{ fontSize: 11 }}>{v}</Text> : '—' },
+        { title: 'Ngày nhập', dataIndex: 'ngay_nhap', width: 110,
+          render: (v: string | null) => v ? <Text type="secondary" style={{ fontSize: 11 }}>{v}</Text> : '—' },
+      ]}
+    />
+  )
+}
+
 function ChiTietTab() {
   const qc = useQueryClient()
   const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
@@ -552,6 +581,10 @@ function ChiTietTab() {
             scroll={{ x: isGiay ? 1000 : 800 }}
             rowClassName={(r: TonKho) =>
               r.ton_luong < r.ton_toi_thieu && r.ton_toi_thieu > 0 ? 'ant-table-row-danger' : ''}
+            expandable={isGiay ? {
+              expandedRowRender: (r: TonKho) => <RollsExpand pmId={r.paper_material_id} whId={r.warehouse_id} />,
+              rowExpandable: (r: TonKho) => r.paper_material_id != null,
+            } : undefined}
           />
         </Card>
       ) : (
