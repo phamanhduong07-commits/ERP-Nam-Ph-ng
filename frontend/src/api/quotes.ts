@@ -702,6 +702,9 @@ export const quotesApi = {
 
   cancel: (id: number) => client.patch(`/quotes/${id}/cancel`),
 
+  bulkCancel: (ids: number[]) =>
+    client.post<{ cancelled: number }>('/quotes/bulk-cancel', { ids }),
+
   copy: (id: number) => client.post<Quote>(`/quotes/${id}/copy`),
 
   calculateItemPrice: (item: QuoteItem) =>

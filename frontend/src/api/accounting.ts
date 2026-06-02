@@ -357,7 +357,7 @@ export const arApi = {
   getBalance: (params: { customer_id?: number; tu_ngay: string; den_ngay: string }): Promise<BalanceByPeriod> =>
     client.get('/accounting/ar/balance', { params }).then(r => r.data),
 
-  getReconciliation: (customerId: number, params: { tu_ngay: string; den_ngay: string }) =>
+  getReconciliation: (customerId: number, params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number }) =>
     client.get(`/accounting/ar/reconciliation/${customerId}`, { params }).then(r => r.data),
 
   getGeneralLedger: (params: { so_tk: string; tu_ngay: string; den_ngay: string; phap_nhan_id?: number | null; phan_xuong_id?: number | null }) =>
@@ -426,7 +426,7 @@ export const apApi = {
   getSoChiTiet: (params: { supplier_id?: number; tu_ngay: string; den_ngay: string }): Promise<SoChiTietResponse> =>
     client.get('/accounting/purchase/so-chi-tiet', { params }).then(r => r.data),
 
-  getReconciliation: (supplierId: number, params: { tu_ngay: string; den_ngay: string }) =>
+  getReconciliation: (supplierId: number, params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number }) =>
     client.get(`/accounting/ap/reconciliation/${supplierId}`, { params }).then(r => r.data),
 
   doiChieuPhaiTra: (params?: {

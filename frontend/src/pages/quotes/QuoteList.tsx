@@ -57,6 +57,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
   const [page, setPage] = useState<number>(saved.page || 1)
   const [myOnly, setMyOnly] = useState<boolean>(saved.myOnly || false)
   const [isExporting, setIsExporting] = useState(false)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const role = useAuthStore(s => s.user?.role)
@@ -216,6 +217,17 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
       invalidateCounts()
     },
     onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi huỷ')),
+  })
+
+  const bulkCancelMutation = useMutation({
+    mutationFn: (ids: number[]) => quotesApi.bulkCancel(ids),
+    onSuccess: (_, ids) => {
+      message.success(`Đã hủy ${ids.length} báo giá`)
+      setSelectedRowKeys([])
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
+    },
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi hủy báo giá')),
   })
 
   const taoDonMutation = useMutation({
@@ -550,9 +562,32 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
         </Row>
       </Card>
 
+      {selectedRowKeys.length > 0 && (
+        <div style={{ marginBottom: 8, padding: '8px 12px', background: '#e6f4ff', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Text>Đã chọn <b>{selectedRowKeys.length}</b> báo giá</Text>
+          <Popconfirm
+            title={`Hủy ${selectedRowKeys.length} báo giá đã chọn?`}
+            onConfirm={() => bulkCancelMutation.mutate(selectedRowKeys)}
+            okText="Hủy báo giá" cancelText="Không"
+          >
+            <Button danger size="small" icon={<StopOutlined />} loading={bulkCancelMutation.isPending}>
+              Hủy đã chọn
+            </Button>
+          </Popconfirm>
+          <Button size="small" onClick={() => setSelectedRowKeys([])}>Bỏ chọn</Button>
+        </div>
+      )}
+
       <Table
         rowKey="id"
         loading={isLoading}
+        rowSelection={canApprove || !isEmbedded ? {
+          selectedRowKeys,
+          onChange: (keys) => setSelectedRowKeys(keys as number[]),
+          getCheckboxProps: (record) => ({
+            disabled: record.trang_thai === 'huy',
+          }),
+        } : undefined}
         columns={isEmbedded ? compactColumns : fullColumns}
         dataSource={data?.items || []}
         locale={{ emptyText: search || trangThai || phapNhanId || dateRange.length ? 'Không tìm thấy báo giá nào' : 'Chưa có báo giá nào' }}

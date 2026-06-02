@@ -1,13 +1,13 @@
 """add depreciation_entries table for TSCĐ module
 
-Revision ID: d4e5f6a7b8c9
+Revision ID: fa001
 Revises: c3d4e5f6a7b8
 Create Date: 2026-05-19
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = 'd4e5f6a7b8c9'
+revision = 'fa001'
 down_revision = 'c3d4e5f6a7b8'
 branch_labels = None
 depends_on = None

@@ -273,6 +273,12 @@ class Quote(Base):
     phap_nhan_sx: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_sx_id])
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
     items: Mapped[list["QuoteItem"]] = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
+    history: Mapped[list["QuoteHistory"]] = relationship(
+        "QuoteHistory",
+        back_populates="quote",
+        cascade="all, delete-orphan",
+        order_by="QuoteHistory.changed_at.desc()",
+    )
 
 
 class QuoteItem(Base):
@@ -410,3 +416,28 @@ class OffsetAddonPrice(Base):
     don_gia_m2: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+
+
+# ─────────────────────────────────────────────
+# Lịch sử báo giá (Quote audit trail)
+# ─────────────────────────────────────────────
+class QuoteHistory(Base):
+    __tablename__ = "quote_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    quote_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("quotes.id", ondelete="CASCADE"), nullable=False)
+    changed_by: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    action: Mapped[str] = mapped_column(String(30), nullable=False)
+    # created | updated | submitted | approved | cancelled | extended
+    old_status: Mapped[str | None] = mapped_column(String(30))
+    new_status: Mapped[str | None] = mapped_column(String(30))
+    old_tong_cong: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    new_tong_cong: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    note: Mapped[str | None] = mapped_column(Text)
+
+    quote: Mapped["Quote"] = relationship("Quote", back_populates="history")
+    changed_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[changed_by])

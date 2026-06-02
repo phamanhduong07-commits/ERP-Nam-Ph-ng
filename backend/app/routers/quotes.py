@@ -1,6 +1,7 @@
 ﻿from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
+import html
 import unicodedata
 from typing import Optional, List
 import pandas as pd
@@ -8,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, Upload
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy import cast, Date
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
 from app.deps import get_current_user, require_permissions
 from app.models.auth import User
@@ -452,17 +453,54 @@ def _recalc_totals(quote: Quote) -> None:
 
 def _auto_expire_quotes(db: Session) -> None:
     """Chuyển BG quá ngày hết hạn sang trạng thái het_han (lazy, gọi khi list)."""
-    today = date.today()
-    (
-        db.query(Quote)
-        .filter(
-            Quote.trang_thai.in_(["moi", "cho_duyet", "da_duyet"]),
-            Quote.ngay_het_han < today,
-            Quote.ngay_het_han.isnot(None),
+    try:
+        today = date.today()
+        (
+            db.query(Quote)
+            .filter(
+                Quote.trang_thai.in_(["moi", "cho_duyet", "da_duyet"]),
+                Quote.ngay_het_han < today,
+                Quote.ngay_het_han.isnot(None),
+            )
+            .update({"trang_thai": "het_han"}, synchronize_session=False)
         )
-        .update({"trang_thai": "het_han"}, synchronize_session=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+_MANAGER_ROLES = {"ADMIN", "GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN"}
+
+
+def _check_quote_owner_or_manager(quote: Quote, user: User) -> None:
+    role_code = user.role.ma_vai_tro if user.role else None
+    if quote.created_by != user.id and role_code not in _MANAGER_ROLES:
+        raise HTTPException(status_code=403, detail="Không có quyền thao tác báo giá này")
+
+
+def _log_quote_history(
+    quote: Quote,
+    action: str,
+    user: "User | None",
+    db: Session,
+    old_status: str | None = None,
+    new_status: str | None = None,
+    old_tong_cong=None,
+    new_tong_cong=None,
+    note: str | None = None,
+) -> None:
+    from app.models.sales import QuoteHistory
+    entry = QuoteHistory(
+        quote_id=quote.id,
+        changed_by=user.id if user else None,
+        action=action,
+        old_status=old_status,
+        new_status=new_status,
+        old_tong_cong=old_tong_cong,
+        new_tong_cong=new_tong_cong,
+        note=note,
     )
-    db.commit()
+    db.add(entry)
 
 
 @router.get("", response_model=PagedResponse)
@@ -484,6 +522,7 @@ def list_quotes(
         joinedload(Quote.customer),
         joinedload(Quote.creator),
         joinedload(Quote.phap_nhan),
+        selectinload(Quote.items),
     )
     if search:
         like = f"%{search}%"
@@ -831,6 +870,7 @@ def create_quote(
                 item_values["gia_phoi"]  = prices["gia_phoi"]
                 item_values["gia_noi_bo"] = prices["gia_noi_bo"]
             except Exception:
+                import traceback; traceback.print_exc()
                 item_values["gia_ban"] = Decimal("0")
         quote.items.append(QuoteItem(**item_values))
 
@@ -838,6 +878,7 @@ def create_quote(
     db.add(quote)
     db.commit()
     db.refresh(quote)
+    _log_quote_history(quote, "created", current_user, db, new_status="moi"); db.commit()
     return _build_response(_load_quote(quote.id, db))
 
 
@@ -849,6 +890,7 @@ def update_quote(
     current_user: User = Depends(get_current_user),
 ):
     quote = _load_quote(quote_id, db)
+    _check_quote_owner_or_manager(quote, current_user)
     if quote.trang_thai not in ("moi",):
         raise HTTPException(status_code=400, detail="Chỉ sửa được báo giá ở trạng thái Mới")
 
@@ -868,6 +910,7 @@ def update_quote(
                 try:
                     item_values["gia_ban"] = _quote_item_price(item_values, db)["gia_ban"]
                 except Exception:
+                    import traceback; traceback.print_exc()
                     item_values["gia_ban"] = Decimal("0")
             quote.items.append(QuoteItem(**item_values))
 
@@ -880,7 +923,7 @@ def update_quote(
 def submit_quote(
     quote_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Gửi báo giá để duyệt — SALE_ADMIN hoặc người tạo BG."""
     quote = _load_quote(quote_id, db)
@@ -889,6 +932,7 @@ def submit_quote(
     if not quote.items:
         raise HTTPException(status_code=400, detail="Báo giá cần có ít nhất 1 mặt hàng")
     quote.trang_thai = "cho_duyet"
+    _log_quote_history(quote, "submitted", current_user, db, old_status="moi", new_status="cho_duyet")
     db.commit()
     return _build_response(_load_quote(quote_id, db))
 
@@ -905,10 +949,34 @@ def approve_quote(
     quote = _load_quote(quote_id, db)
     if quote.trang_thai not in ("moi", "cho_duyet"):
         raise HTTPException(status_code=400, detail="Chỉ duyệt được báo giá ở trạng thái Mới hoặc Chờ duyệt")
+    old_status = quote.trang_thai
     quote.trang_thai = "da_duyet"
     quote.approved_by = current_user.id
     quote.approved_at = datetime.now(timezone.utc)
+    _log_quote_history(quote, "approved", current_user, db, old_status=old_status, new_status="da_duyet")
     db.commit()
+    # Fire-and-forget webhook → Zalo Bot
+    import os as _os, threading as _threading
+    _webhook_url = _os.getenv("ZALO_BOT_WEBHOOK_URL")
+    if _webhook_url:
+        import urllib.request as _urllib_req, json as _json
+        def _fire_webhook():
+            try:
+                _req = _urllib_req.Request(
+                    _webhook_url,
+                    data=_json.dumps({
+                        "event": "quote_approved",
+                        "quote_id": quote.id,
+                        "so_bao_gia": quote.so_bao_gia,
+                        "customer_id": quote.customer_id,
+                    }).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                _urllib_req.urlopen(_req, timeout=5)
+            except Exception:
+                pass
+        _threading.Thread(target=_fire_webhook, daemon=True).start()
     return _build_response(_load_quote(quote_id, db))
 
 
@@ -916,16 +984,50 @@ def approve_quote(
 def cancel_quote(
     quote_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     quote = db.query(Quote).filter(Quote.id == quote_id).first()
     if not quote:
         raise HTTPException(status_code=404, detail="Không tìm thấy báo giá")
+    _check_quote_owner_or_manager(quote, current_user)
     if quote.trang_thai in ("huy",):
         raise HTTPException(status_code=400, detail="Báo giá đã huỷ")
+    old_status = quote.trang_thai
     quote.trang_thai = "huy"
+    _log_quote_history(quote, "cancelled", current_user, db, old_status=old_status, new_status="huy")
     db.commit()
     return {"message": f"Đã huỷ báo giá {quote.so_bao_gia}"}
+
+
+class BulkCancelBody(BaseModel):
+    ids: list[int]
+
+
+@router.post("/bulk-cancel")
+def bulk_cancel_quotes(
+    body: BulkCancelBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="Danh sách ID không được rỗng")
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    is_manager = role_code in _MANAGER_ROLES
+
+    quotes_to_cancel = db.query(Quote).filter(Quote.id.in_(body.ids)).all()
+    cancelled = []
+    errors = []
+    for qt in quotes_to_cancel:
+        if qt.trang_thai == "huy":
+            errors.append(f"{qt.so_bao_gia}: đã huỷ")
+            continue
+        if not is_manager and qt.created_by != current_user.id:
+            errors.append(f"{qt.so_bao_gia}: không có quyền")
+            continue
+        qt.trang_thai = "huy"
+        cancelled.append(qt.so_bao_gia)
+    db.commit()
+    return {"cancelled": len(cancelled), "errors": errors}
 
 
 class GiaHanBody(BaseModel):
@@ -937,7 +1039,7 @@ def gia_han_quote(
     quote_id: int,
     body: GiaHanBody,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Gia hạn báo giá hết hạn — đặt ngày mới và trả về trạng thái 'moi'."""
     quote = db.query(Quote).filter(Quote.id == quote_id).first()
@@ -949,6 +1051,7 @@ def gia_han_quote(
         raise HTTPException(status_code=400, detail="Ngày hết hạn mới phải sau hôm nay")
     quote.ngay_het_han = body.ngay_het_han
     quote.trang_thai = "da_duyet" if quote.approved_by else "moi"
+    _log_quote_history(quote, "extended", current_user, db, note=f"Ngày hết hạn mới: {body.ngay_het_han}")
     db.commit()
     return _build_response(_load_quote(quote_id, db))
 
@@ -994,17 +1097,21 @@ def copy_quote(
         trang_thai="moi",
         created_by=current_user.id,
     )
-    for src in sorted(source.items, key=lambda x: x.stt):
-        data = {
-            c.name: getattr(src, c.name)
-            for c in QuoteItem.__table__.columns
-            if c.name not in ("id", "quote_id")
-        }
-        quote.items.append(QuoteItem(**data))
-    db.add(quote)
-    db.commit()
-    db.refresh(quote)
-    return _build_response(_load_quote(quote.id, db))
+    try:
+        for src in sorted(source.items, key=lambda x: x.stt):
+            data = {
+                c.name: getattr(src, c.name)
+                for c in QuoteItem.__table__.columns
+                if c.name not in ("id", "quote_id")
+            }
+            quote.items.append(QuoteItem(**data))
+        db.add(quote)
+        db.commit()
+        db.refresh(quote)
+        return _build_response(_load_quote(quote.id, db))
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Lỗi khi sao chép báo giá")
 
 
 @router.post("/{quote_id}/tao-don-hang", response_model=dict)
@@ -1090,6 +1197,91 @@ def tao_don_hang_tu_bao_gia(
     }
 
 
+@router.get("/export-excel")
+def export_quotes_excel(
+    search: str = Query(default=""),
+    trang_thai: str | None = Query(default=None),
+    customer_id: int | None = Query(default=None),
+    created_by: int | None = Query(default=None),
+    phap_nhan_id: int | None = Query(default=None),
+    tu_ngay: date | None = Query(default=None),
+    den_ngay: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from fastapi.responses import StreamingResponse
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from io import BytesIO
+
+    _auto_expire_quotes(db)
+    q = db.query(Quote).options(
+        joinedload(Quote.customer),
+        joinedload(Quote.creator),
+        joinedload(Quote.phap_nhan),
+        selectinload(Quote.items),
+    )
+    if search:
+        like = f"%{search}%"
+        q = q.join(Customer).filter(
+            Quote.so_bao_gia.ilike(like) | Customer.ten_viet_tat.ilike(like)
+        )
+    if trang_thai:
+        q = q.filter(Quote.trang_thai == trang_thai)
+    if customer_id:
+        q = q.filter(Quote.customer_id == customer_id)
+    if created_by:
+        q = q.filter(Quote.created_by == created_by)
+    if phap_nhan_id:
+        q = q.filter(Quote.phap_nhan_id == phap_nhan_id)
+    if tu_ngay:
+        q = q.filter(Quote.ngay_bao_gia >= tu_ngay)
+    if den_ngay:
+        q = q.filter(Quote.ngay_bao_gia <= den_ngay)
+
+    quotes_data = q.order_by(Quote.created_at.desc()).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Báo giá"
+
+    headers = ["Số báo giá", "Ngày BG", "Khách hàng", "Trạng thái", "Ngày hết hạn", "Tổng cộng", "Số dòng", "Người lập"]
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="E65100", end_color="E65100", fill_type="solid")
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+
+    STATUS_MAP = {
+        "moi": "Mới", "cho_duyet": "Chờ duyệt", "da_duyet": "Đã duyệt",
+        "het_han": "Hết hạn", "huy": "Huỷ"
+    }
+    for row_idx, qt in enumerate(quotes_data, 2):
+        ws.cell(row=row_idx, column=1, value=qt.so_bao_gia)
+        ws.cell(row=row_idx, column=2, value=qt.ngay_bao_gia.strftime("%d/%m/%Y") if qt.ngay_bao_gia else "")
+        ws.cell(row=row_idx, column=3, value=qt.customer.ten_viet_tat if qt.customer else "")
+        ws.cell(row=row_idx, column=4, value=STATUS_MAP.get(qt.trang_thai, qt.trang_thai))
+        ws.cell(row=row_idx, column=5, value=qt.ngay_het_han.strftime("%d/%m/%Y") if qt.ngay_het_han else "")
+        ws.cell(row=row_idx, column=6, value=int(qt.tong_cong or 0))
+        ws.cell(row=row_idx, column=7, value=len(qt.items))
+        ws.cell(row=row_idx, column=8, value=qt.creator.ho_ten if qt.creator else "")
+
+    for col in ws.columns:
+        max_len = max((len(str(cell.value or "")) for cell in col), default=10)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=bao_gia.xlsx"},
+    )
+
+
 @router.get("/{quote_id}/print", response_class=HTMLResponse)
 def print_quote(
     quote_id: int,
@@ -1120,17 +1312,17 @@ def print_quote(
         rows += (
             f"<tr>"
             f"<td style='text-align:center'>{i}</td>"
-            f"<td>{item.ma_amis or ''}</td>"
-            f"<td>{item.ten_hang or ''}</td>"
+            f"<td>{html.escape(item.ma_amis or '')}</td>"
+            f"<td>{html.escape(item.ten_hang or '')}</td>"
             f"<td style='text-align:center'>{kich_thuoc}</td>"
             f"<td style='text-align:center'>{item.so_lop or ''}</td>"
-            f"<td style='text-align:center'>{item.to_hop_song or ''}</td>"
-            f"<td style='text-align:center'>{item.ma_ky_hieu or ''}</td>"
+            f"<td style='text-align:center'>{html.escape(item.to_hop_song or '')}</td>"
+            f"<td style='text-align:center'>{html.escape(item.ma_ky_hieu or '')}</td>"
             f"<td style='text-align:right'>{int(so_luong):,}</td>"
-            f"<td style='text-align:center'>{item.dvt or 'Thùng'}</td>"
+            f"<td style='text-align:center'>{html.escape(item.dvt or 'Thùng')}</td>"
             f"<td style='text-align:right'>{int(gia_ban):,}</td>"
             f"<td style='text-align:right'>{int(thanh_tien):,}</td>"
-            f"<td>{item.ghi_chu or ''}</td>"
+            f"<td>{html.escape(item.ghi_chu or '')}</td>"
             f"</tr>"
         )
 
@@ -1155,12 +1347,13 @@ def print_quote(
     html = tpl.html_content
     replacements = {
         "{{logo_img}}": logo_img,
-        "{{company_name}}": company_name,
-        "{{company_details}}": company_details,
-        "{{document_number}}": quote.so_bao_gia or "",
+        "{{company_name}}": html.escape(company_name),
+        "{{company_details}}": html.escape(company_details),
+        "{{document_number}}": html.escape(quote.so_bao_gia or ""),
         "{{document_date}}": ngay_bao_gia,
-        "{{customer_name}}": customer_name,
+        "{{customer_name}}": html.escape(customer_name),
         "{{delivery_address}}": ngay_het_han,
+        "{{ngay_het_han}}": ngay_het_han,
         "{{body_html}}": rows,
         "{{tong_tien_hang}}": _fmt(quote.tong_tien_hang),
         "{{chi_phi_bang_in}}": _fmt(quote.chi_phi_bang_in),
@@ -1179,7 +1372,7 @@ def print_quote(
         "{{tien_vat}}": _fmt(quote.tien_vat),
         "{{tong_cong}}": _fmt(quote.tong_cong),
         "{{dieu_khoan}}": quote.dieu_khoan or "",
-        "{{nguoi_lap}}": nguoi_lap,
+        "{{nguoi_lap}}": html.escape(nguoi_lap),
     }
     for placeholder, value in replacements.items():
         html = html.replace(placeholder, value)
@@ -1208,3 +1401,32 @@ def print_quote(
         "</html>"
     )
     return HTMLResponse(content=page)
+
+
+@router.get("/{quote_id}/history")
+def get_quote_history(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from app.models.sales import QuoteHistory
+    entries = (
+        db.query(QuoteHistory)
+        .filter(QuoteHistory.quote_id == quote_id)
+        .order_by(QuoteHistory.changed_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": e.id,
+            "action": e.action,
+            "old_status": e.old_status,
+            "new_status": e.new_status,
+            "old_tong_cong": float(e.old_tong_cong) if e.old_tong_cong else None,
+            "new_tong_cong": float(e.new_tong_cong) if e.new_tong_cong else None,
+            "note": e.note,
+            "changed_at": e.changed_at.isoformat() if e.changed_at else None,
+            "changed_by_name": e.changed_by_user.ho_ten if e.changed_by_user else None,
+        }
+        for e in entries
+    ]

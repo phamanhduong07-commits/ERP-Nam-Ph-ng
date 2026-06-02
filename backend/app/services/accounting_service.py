@@ -1462,16 +1462,24 @@ class AccountingService:
             ))
         return sorted(result, key=lambda r: r.tong_con_lai, reverse=True)
 
-    def get_supplier_reconciliation(self, supplier_id: int, tu_ngay: date, den_ngay: date):
+    def get_supplier_reconciliation(
+        self,
+        supplier_id: int,
+        tu_ngay: date,
+        den_ngay: date,
+        phap_nhan_id: int | None = None,
+    ):
         # 1. Lay danh sach nhap kho (Goods Receipt)
-        receipts = (self.db.query(GoodsReceipt)
+        receipt_q = (self.db.query(GoodsReceipt)
             .filter(GoodsReceipt.supplier_id == supplier_id)
             .filter(GoodsReceipt.ngay_nhap >= tu_ngay)
             .filter(GoodsReceipt.ngay_nhap <= den_ngay)
             .filter(GoodsReceipt.trang_thai != "huy")
             .options(joinedload(GoodsReceipt.items))
-            .order_by(GoodsReceipt.ngay_nhap)
-            .all())
+            .order_by(GoodsReceipt.ngay_nhap))
+        if phap_nhan_id:
+            receipt_q = receipt_q.filter(GoodsReceipt.phap_nhan_id == phap_nhan_id)
+        receipts = receipt_q.all()
 
         from app.models.purchase import PurchaseOrderItem
         items_detail = []
@@ -1500,12 +1508,14 @@ class AccountingService:
                 })
 
         # 2. Lay danh sach thanh toan (CashPayment - Phieu chi)
-        payments = (self.db.query(CashPayment)
+        payment_q = (self.db.query(CashPayment)
             .filter(CashPayment.supplier_id == supplier_id)
             .filter(CashPayment.ngay_phieu >= tu_ngay)
             .filter(CashPayment.ngay_phieu <= den_ngay)
-            .filter(CashPayment.trang_thai != "huy")
-            .all())
+            .filter(CashPayment.trang_thai != "huy"))
+        if phap_nhan_id:
+            payment_q = payment_q.filter(CashPayment.phap_nhan_id == phap_nhan_id)
+        payments = payment_q.order_by(CashPayment.ngay_phieu, CashPayment.id).all()
 
         total_paid = sum((p.so_tien for p in payments), Decimal("0"))
 
@@ -1513,6 +1523,7 @@ class AccountingService:
             "supplier_id": supplier_id,
             "tu_ngay": tu_ngay,
             "den_ngay": den_ngay,
+            "phap_nhan_id": phap_nhan_id,
             "items": items_detail,
             "payments": payments,
             "total_purchase_amount": total_purchase_amount,
@@ -2501,16 +2512,24 @@ class AccountingService:
         self.db.commit()
         return self.get_customer_refund(voucher_id)
 
-    def get_customer_reconciliation(self, customer_id: int, tu_ngay: date, den_ngay: date):
+    def get_customer_reconciliation(
+        self,
+        customer_id: int,
+        tu_ngay: date,
+        den_ngay: date,
+        phap_nhan_id: int | None = None,
+    ):
         from app.models.sales import SalesOrderItem
-        deliveries = (self.db.query(DeliveryOrder)
+        delivery_q = (self.db.query(DeliveryOrder)
             .filter(DeliveryOrder.customer_id == customer_id)
             .filter(DeliveryOrder.ngay_xuat >= tu_ngay)
             .filter(DeliveryOrder.ngay_xuat <= den_ngay)
             .filter(DeliveryOrder.trang_thai != "huy")
             .options(joinedload(DeliveryOrder.items))
-            .order_by(DeliveryOrder.ngay_xuat)
-            .all())
+            .order_by(DeliveryOrder.ngay_xuat))
+        if phap_nhan_id:
+            delivery_q = delivery_q.filter(DeliveryOrder.phap_nhan_id == phap_nhan_id)
+        deliveries = delivery_q.all()
 
         items_detail = []
         total_amount = Decimal("0")
@@ -2534,12 +2553,14 @@ class AccountingService:
                     "ghi_chu": do.ghi_chu,
                 })
 
-        payments = (self.db.query(CashReceipt)
+        payment_q = (self.db.query(CashReceipt)
             .filter(CashReceipt.customer_id == customer_id)
             .filter(CashReceipt.ngay_phieu >= tu_ngay)
             .filter(CashReceipt.ngay_phieu <= den_ngay)
-            .filter(CashReceipt.trang_thai != "huy")
-            .all())
+            .filter(CashReceipt.trang_thai != "huy"))
+        if phap_nhan_id:
+            payment_q = payment_q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
+        payments = payment_q.order_by(CashReceipt.ngay_phieu, CashReceipt.id).all()
 
         total_paid = sum((p.so_tien for p in payments), Decimal("0"))
 
@@ -2547,6 +2568,7 @@ class AccountingService:
             "customer_id": customer_id,
             "tu_ngay": tu_ngay,
             "den_ngay": den_ngay,
+            "phap_nhan_id": phap_nhan_id,
             "items": items_detail,
             "payments": payments,
             "total_delivery_amount": total_amount,

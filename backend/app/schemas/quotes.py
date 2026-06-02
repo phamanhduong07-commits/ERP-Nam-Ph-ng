@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from app.schemas.master import CustomerShort
 
 
@@ -102,6 +102,13 @@ class QuoteItemCreate(BaseModel):
     def so_luong_duong(cls, v: Decimal) -> Decimal:
         if v <= 0:
             raise ValueError("Số lượng phải lớn hơn 0")
+        return v
+
+    @field_validator("so_lop")
+    @classmethod
+    def so_lop_hop_le(cls, v: int) -> int:
+        if v not in (3, 5, 7):
+            raise ValueError("Số lớp phải là 3, 5 hoặc 7")
         return v
 
 
@@ -234,6 +241,16 @@ class QuoteCreate(BaseModel):
             raise ValueError("Báo giá phải có ít nhất 1 mặt hàng")
         return v
 
+    @model_validator(mode="after")
+    def ngay_het_han_sau_ngay_bao_gia(self) -> "QuoteCreate":
+        if (
+            self.ngay_het_han is not None
+            and self.ngay_bao_gia is not None
+            and self.ngay_het_han < self.ngay_bao_gia
+        ):
+            raise ValueError("Ngày hết hạn phải sau hoặc bằng ngày báo giá")
+        return self
+
 
 class QuoteUpdate(BaseModel):
     phap_nhan_id: int | None = None
@@ -243,6 +260,14 @@ class QuoteUpdate(BaseModel):
     nv_theo_doi_id: int | None = None
     ngay_het_han: date | None = None
     chi_phi_bang_in: Decimal | None = None
+
+    @field_validator("ngay_het_han")
+    @classmethod
+    def ngay_het_han_khong_qua_khu(cls, v: date | None) -> date | None:
+        if v is not None and v < date.today():
+            raise ValueError("Ngày hết hạn không được là ngày trong quá khứ")
+        return v
+
     chi_phi_khuon: Decimal | None = None
     chi_phi_van_chuyen: Decimal | None = None
     tong_tien_hang: Decimal | None = None

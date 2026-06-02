@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Card, Col, DatePicker, Row, Space, Statistic, Table, Tabs, Tag, Typography,
+  Alert, Card, Col, DatePicker, Row, Space, Statistic, Table, Tabs, Tag, Typography,
   Button,
 } from 'antd'
-import { DownloadOutlined, FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileExcelOutlined, FilePdfOutlined, WarningOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { reportsApi, DebtRow, DebtSummaryResponse } from '../../api/reports'
+import { debtAlertsApi, type DebtOverdueAlertItem } from '../../api/accounting'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 
@@ -122,6 +123,83 @@ function DebtTable({ rows, type, loading }: { rows: DebtRow[]; type: 'ar' | 'ap'
   )
 }
 
+function OverdueAlertsPanel({ asOfDate }: { asOfDate: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['debt-overdue-alerts', asOfDate],
+    queryFn: () => debtAlertsApi.getOverdue({ as_of_date: asOfDate, limit: 10 }),
+  })
+
+  const columns: ColumnsType<DebtOverdueAlertItem> = [
+    { title: 'Đối tượng', dataIndex: 'ten_don_vi', ellipsis: true, render: v => v || '—' },
+    {
+      title: 'Quá hạn',
+      dataIndex: 'qua_han',
+      align: 'right',
+      width: 120,
+      render: v => <Text strong style={{ color: v > 0 ? '#cf1322' : undefined }}>{fmtM(v)}</Text>,
+    },
+    { title: '1-30', dataIndex: 'qua_han_30', align: 'right', width: 100, render: v => v > 0 ? fmtM(v) : '—' },
+    { title: '31-60', dataIndex: 'qua_han_60', align: 'right', width: 100, render: v => v > 0 ? fmtM(v) : '—' },
+    { title: '>60', dataIndex: 'qua_han_90', align: 'right', width: 100, render: v => v > 0 ? fmtM(v) : '—' },
+  ]
+
+  const arItems = data?.ar.items ?? []
+  const apItems = data?.ap.items ?? []
+  const totalOverdue = Number(data?.ar.total_overdue ?? 0) + Number(data?.ap.total_overdue ?? 0)
+
+  if (!isLoading && totalOverdue <= 0) {
+    return (
+      <Alert
+        showIcon
+        type="success"
+        message="Không có công nợ quá hạn"
+        description={`Tính đến ${dayjs(asOfDate).format('DD/MM/YYYY')}, AR/AP không có khoản quá hạn cần cảnh báo.`}
+        style={{ marginBottom: 12 }}
+      />
+    )
+  }
+
+  return (
+    <Card
+      size="small"
+      title={<Space><WarningOutlined style={{ color: '#cf1322' }} />Cảnh báo quá hạn thanh toán</Space>}
+      extra={<Tag color={totalOverdue > 0 ? 'red' : 'default'}>{fmtM(totalOverdue)}</Tag>}
+      style={{ marginBottom: 12 }}
+    >
+      <Row gutter={[16, 12]}>
+        <Col xs={24} lg={12}>
+          <Text strong>Phải thu quá hạn</Text>
+          <Table<DebtOverdueAlertItem>
+            locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
+            rowKey={r => `ar-${r.doi_tuong_id}`}
+            size="small"
+            loading={isLoading}
+            columns={columns}
+            dataSource={arItems}
+            pagination={false}
+            scroll={{ x: 620 }}
+            style={{ marginTop: 8 }}
+          />
+        </Col>
+        <Col xs={24} lg={12}>
+          <Text strong>Phải trả quá hạn</Text>
+          <Table<DebtOverdueAlertItem>
+            locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
+            rowKey={r => `ap-${r.doi_tuong_id}`}
+            size="small"
+            loading={isLoading}
+            columns={columns}
+            dataSource={apItems}
+            pagination={false}
+            scroll={{ x: 620 }}
+            style={{ marginTop: 8 }}
+          />
+        </Col>
+      </Row>
+    </Card>
+  )
+}
+
 export default function DebtSummaryPage() {
   const [asOfDate, setAsOfDate] = useState<string>(dayjs().format('YYYY-MM-DD'))
 
@@ -186,6 +264,8 @@ export default function DebtSummaryPage() {
           <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!data}>In / PDF</Button>
         </Space>
       </div>
+
+      <OverdueAlertsPanel asOfDate={asOfDate} />
 
       <Tabs
         items={[

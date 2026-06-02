@@ -1430,11 +1430,12 @@ def get_customer_reconciliation(
     customer_id: int,
     tu_ngay: date = Query(...),
     den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
     """Lấy dữ liệu đối chiếu công nợ khách hàng dựa trên giao hàng và thanh toán."""
-    return AccountingService(db).get_customer_reconciliation(customer_id, tu_ngay, den_ngay)
+    return AccountingService(db).get_customer_reconciliation(customer_id, tu_ngay, den_ngay, phap_nhan_id)
 
 
 @router.get("/ap/reconciliation/{supplier_id}")
@@ -1442,11 +1443,12 @@ def get_supplier_reconciliation(
     supplier_id: int,
     tu_ngay: date = Query(...),
     den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
     """Lấy dữ liệu đối chiếu công nợ nhà cung cấp dựa trên nhập kho và phiếu chi."""
-    return AccountingService(db).get_supplier_reconciliation(supplier_id, tu_ngay, den_ngay)
+    return AccountingService(db).get_supplier_reconciliation(supplier_id, tu_ngay, den_ngay, phap_nhan_id)
 
 
 @router.get("/general-ledger")
