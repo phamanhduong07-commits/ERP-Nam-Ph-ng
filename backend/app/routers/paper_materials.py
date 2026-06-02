@@ -323,6 +323,7 @@ def get_paper_options(
     )
     paper_codes: dict[str, str] = {}
     raw_to_mk: dict[str, str] = {}
+    gia_ban_map: dict[str, float] = {}
     for p in papers:
         mk = (p.ma_ky_hieu or "").strip()
         if not mk:
@@ -334,11 +335,20 @@ def get_paper_options(
         paper_codes.setdefault(f"{mk}|", code)
         if p.ma_chinh:
             raw_to_mk[p.ma_chinh] = mk
+        # gia_ban_map: "GC|175" → gia_ban (đ/kg), dùng để tính don_gia_m2 tự động
+        if p.dinh_luong is not None and float(p.gia_ban or 0) > 0:
+            key = f"{mk}|{dl_key}"
+            # Ưu tiên gia_ban cao hơn nếu có nhiều record cùng (mk, dl)
+            existing = gia_ban_map.get(key, 0)
+            gia_ban_val = float(p.gia_ban)
+            if gia_ban_val > existing:
+                gia_ban_map[key] = gia_ban_val
     return {
         "ma_ky_hieu": sorted(by_mk.keys()),
         "by_mk": by_mk,
         "paper_codes": paper_codes,
         "raw_to_mk": raw_to_mk,
+        "gia_ban_map": gia_ban_map,
     }
 
 
@@ -508,5 +518,82 @@ def sync_gia_mua_from_htcph(
         matched=matched,
         updated=updated_count if not dry_run else 0,
         not_found=not_found,
+        preview=preview,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tính giá bán giấy = max(gia_mua) trong cùng (ma_ky_hieu, dinh_luong) × 1.05
+# ---------------------------------------------------------------------------
+
+class UpdateGiaBanResult(_BaseModel):
+    groups: int
+    updated: int
+    preview: list[dict]
+
+
+@router.post("/update-gia-ban", response_model=UpdateGiaBanResult)
+def update_gia_ban(
+    dry_run: bool = Query(default=True, description="True=preview, False=áp dụng"),
+    markup_pct: float = Query(default=5.0, description="% tăng trên giá mua cao nhất, mặc định 5%"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permissions("admin.paper_materials")),
+):
+    """
+    Tính gia_ban cho từng loại giấy:
+      gia_ban = max(gia_mua trong cùng ma_ky_hieu + dinh_luong) × (1 + markup_pct/100)
+
+    dry_run=True (default): chỉ preview, không ghi DB.
+    dry_run=False: áp dụng thực sự.
+    """
+    from sqlalchemy import func
+
+    # Tính max(gia_mua) per (ma_ky_hieu, dinh_luong)
+    max_per_group = (
+        db.query(
+            PaperMaterial.ma_ky_hieu,
+            PaperMaterial.dinh_luong,
+            func.max(PaperMaterial.gia_mua).label("max_gia_mua"),
+        )
+        .filter(
+            PaperMaterial.ma_ky_hieu.isnot(None),
+            PaperMaterial.dinh_luong.isnot(None),
+            PaperMaterial.gia_mua > 0,
+        )
+        .group_by(PaperMaterial.ma_ky_hieu, PaperMaterial.dinh_luong)
+        .all()
+    )
+
+    multiplier = Decimal(str(1 + markup_pct / 100))
+    preview: list[dict] = []
+    updated_count = 0
+
+    for mk, dl, max_gia in max_per_group:
+        gia_ban_moi = (Decimal(str(max_gia)) * multiplier).quantize(Decimal("1"))
+        preview.append({
+            "ma_ky_hieu": mk,
+            "dinh_luong": float(dl),
+            "max_gia_mua": float(max_gia),
+            "gia_ban_moi": float(gia_ban_moi),
+        })
+        if not dry_run:
+            papers = (
+                db.query(PaperMaterial)
+                .filter(
+                    PaperMaterial.ma_ky_hieu == mk,
+                    PaperMaterial.dinh_luong == dl,
+                )
+                .all()
+            )
+            for p in papers:
+                p.gia_ban = gia_ban_moi
+                updated_count += 1
+
+    if not dry_run and updated_count:
+        db.commit()
+
+    return UpdateGiaBanResult(
+        groups=len(max_per_group),
+        updated=updated_count if not dry_run else 0,
         preview=preview,
     )

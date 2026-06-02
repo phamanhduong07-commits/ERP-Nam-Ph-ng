@@ -9,12 +9,19 @@ import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { productsApi as productsFullApi, type ProductFull, type ProductFullCreate } from '../../api/products'
 import { customersApi } from '../../api/customers'
+import { LOAI_THUNG_OPTIONS } from '../../api/quotes'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import EmptyState from "../../components/EmptyState"
 
 const { Title } = Typography
 
 const SO_LOP_OPTIONS = [1, 3, 5, 7]
+
+const LOAI_THUNG_GROUPED = [
+  { label: 'Thùng', options: LOAI_THUNG_OPTIONS.filter(o => o.group === 'Thùng') },
+  { label: 'Hộp',   options: LOAI_THUNG_OPTIONS.filter(o => o.group === 'Hộp') },
+  { label: 'Khay',  options: LOAI_THUNG_OPTIONS.filter(o => o.group === 'Khay') },
+]
 
 export default function ProductList() {
   const queryClient = useQueryClient()
@@ -109,7 +116,7 @@ export default function ProductList() {
       loai_in: 0,
       chap_xa: 0,
       loai_lan: null,
-      loai_thung: null,
+      loai_thung: vals.loai_thung ?? null,
       chong_tham: 0,
       boi: 0,
       be_so_con: 0,
@@ -302,6 +309,14 @@ export default function ProductList() {
               </Form.Item>
             </Col>
           </Row>
+
+          <Form.Item label="Loại thùng" name="loai_thung">
+            <Select
+              allowClear
+              placeholder="Chọn loại thùng..."
+              options={LOAI_THUNG_GROUPED}
+            />
+          </Form.Item>
 
           <Row gutter={12}>
             <Col span={8}>

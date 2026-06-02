@@ -117,6 +117,7 @@ class ProductUpdate(BaseModel):
     so_mau: int | None = None
     ghim: bool | None = None
     dan: bool | None = None
+    loai_thung: str | None = None
     gia_ban: Decimal | None = None
     ghi_chu: str | None = None
     trang_thai: bool | None = None

@@ -626,6 +626,41 @@ export function getLoiNhuanRate(so_lop: number): number {
   return 0.06
 }
 
+// ─── Auto-tính don_gia_m2 từ gia_ban từng lớp giấy
+// Lớp phẳng (mặt): gia_ban × dl / 1000
+// Lớp sóng:        gia_ban × dl / 1000 × 1.5  (hệ số uốn sóng)
+export function calcDonGiaM2(
+  item: Pick<QuoteItem,
+    'mat' | 'mat_dl' | 'song_1' | 'song_1_dl' | 'mat_1' | 'mat_1_dl' |
+    'song_2' | 'song_2_dl' | 'mat_2' | 'mat_2_dl' | 'song_3' | 'song_3_dl' | 'mat_3' | 'mat_3_dl'
+  >,
+  giaBanMap: Record<string, number>,
+): number | null {
+  const layers: { mk: string | null | undefined; dl: number | null | undefined; isSong: boolean }[] = [
+    { mk: item.mat,    dl: item.mat_dl,    isSong: false },
+    { mk: item.song_1, dl: item.song_1_dl, isSong: true  },
+    { mk: item.mat_1,  dl: item.mat_1_dl,  isSong: false },
+    { mk: item.song_2, dl: item.song_2_dl, isSong: true  },
+    { mk: item.mat_2,  dl: item.mat_2_dl,  isSong: false },
+    { mk: item.song_3, dl: item.song_3_dl, isSong: true  },
+    { mk: item.mat_3,  dl: item.mat_3_dl,  isSong: false },
+  ]
+
+  const active = layers.filter(
+    (l): l is { mk: string; dl: number; isSong: boolean } => !!l.mk && l.dl != null && l.dl > 0,
+  )
+  if (active.length === 0) return null
+
+  let total = 0
+  for (const { mk, dl, isSong } of active) {
+    const key = paperCodeKey(mk, dl)
+    const giaBan = giaBanMap[key]
+    if (giaBan == null) return null  // thiếu giá 1 lớp → không auto-fill
+    total += giaBan * dl / 1000 * (isSong ? 1.5 : 1)
+  }
+  return Math.round(total)
+}
+
 // ─── Suggest gia_ban per thùng (simplified formula without 'b' indirect costs)
 // gia_ban = a * (1 + hao_hut_rate) * (1 + loi_nhuan_rate)
 export function suggestGiaBan(
@@ -692,7 +727,7 @@ export const paperMaterialsApi = {
     ),
 
   options: () =>
-    client.get<{ ma_ky_hieu: string[]; by_mk: Record<string, number[]>; paper_codes?: Record<string, string>; raw_to_mk?: Record<string, string> }>(
+    client.get<{ ma_ky_hieu: string[]; by_mk: Record<string, number[]>; paper_codes?: Record<string, string>; raw_to_mk?: Record<string, string>; gia_ban_map?: Record<string, number> }>(
       '/paper-materials/options'
     ),
 }

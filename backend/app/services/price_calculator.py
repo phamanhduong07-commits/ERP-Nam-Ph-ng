@@ -733,6 +733,11 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
             "chi_phi_1con": round(cost_per_unit, 2),
         })
 
+    # Nếu don_gia_m2 được set thủ công (user override), dùng thẳng thay vì tính từng lớp
+    don_gia_m2_override = float(inp.get("don_gia_m2_override") or 0)
+    if don_gia_m2_override > 0:
+        a = don_gia_m2_override * dien_tich
+
     # ---- Indirect cost (b) ----
     # Dùng bảng từ DB nếu được truyền vào, ngược lại dùng giá trị hardcode
     if indirect_breakdown is not None:

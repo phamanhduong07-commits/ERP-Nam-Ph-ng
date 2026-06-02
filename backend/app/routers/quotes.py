@@ -227,7 +227,7 @@ def _resolve_quote_layer(code, dl, loai_lop: str, vi_tri_lop: str, db: Session) 
         "ma_ky_hieu": base,
         "paper_material_id": paper.id,
         "dinh_luong": float(dl),
-        "don_gia_kg": float(paper.gia_mua or 0),
+        "don_gia_kg": float(paper.gia_ban or paper.gia_mua or 0),
     }
 
 
@@ -336,6 +336,7 @@ def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
         "hoa_hong_kh_pct": 0.0,
         "chi_phi_khac": 0.0,
         "chiet_khau": 0.0,
+        "don_gia_m2_override": float(_item_get(item, "don_gia_m2") or 0),
     }
     indirect_bd = get_indirect_breakdown_from_db(so_lop, db)
     addon_rates_db = get_addon_rates_from_db(db)

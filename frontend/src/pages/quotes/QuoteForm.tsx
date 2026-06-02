@@ -14,7 +14,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { customersApi } from '../../api/customers'
-import { quotesApi, paperMaterialsApi, LOAI_IN_OPTIONS, LOAI_THUNG_OPTIONS, LOAI_BE_OPTIONS, DIE_CUT_TYPES, SO_LOP_OPTIONS, TO_HOP_SONG_OPTIONS, getSongType, calcBoxDimensions, calcOffsetCost, calcOffsetSheetDims, buildPaperSymbol, paperCodeKey } from '../../api/quotes'
+import { quotesApi, paperMaterialsApi, LOAI_IN_OPTIONS, LOAI_THUNG_OPTIONS, LOAI_BE_OPTIONS, DIE_CUT_TYPES, SO_LOP_OPTIONS, TO_HOP_SONG_OPTIONS, getSongType, calcBoxDimensions, calcOffsetCost, calcOffsetSheetDims, buildPaperSymbol, paperCodeKey, calcDonGiaM2 } from '../../api/quotes'
 import type { QuoteItem, CreateQuotePayload } from '../../api/quotes'
 import { temPaperPricesApi } from '../../api/temPaperPrices'
 import { offsetAddonPricesApi } from '../../api/offsetAddonPrices'
@@ -169,6 +169,7 @@ function usePaperOptions() {
   const [byMk, setByMk] = useState<Record<string, number[]>>({})
   const [paperCodes, setPaperCodes] = useState<Record<string, string>>({})
   const [rawToMk, setRawToMk] = useState<Record<string, string>>({})
+  const [giaBanMap, setGiaBanMap] = useState<Record<string, number>>({})
   const loaded = useRef(false)
   useEffect(() => {
     if (loaded.current) return
@@ -178,9 +179,10 @@ function usePaperOptions() {
       setByMk(res.data.by_mk)
       setPaperCodes(res.data.paper_codes || {})
       setRawToMk(res.data.raw_to_mk || {})
+      setGiaBanMap(res.data.gia_ban_map || {})
     })
   }, [])
-  return { mkList, byMk, paperCodes, rawToMk }
+  return { mkList, byMk, paperCodes, rawToMk, giaBanMap }
 }
 
 // ─── LayerRow: 1 dòng lớp giấy với Mã KH + Định lượng ───────────────────────
@@ -284,8 +286,9 @@ export default function QuoteForm() {
   const [productSearching, setProductSearching] = useState(false)
   const [selectItemsModal, setSelectItemsModal] = useState(false)
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([])
-  const { mkList, byMk, paperCodes, rawToMk } = usePaperOptions()
+  const { mkList, byMk, paperCodes, rawToMk, giaBanMap } = usePaperOptions()
   const giaBanManualRef = useRef(false)
+  const financeGiaBanLockRef = useRef(false)  // lock finance.gia_ban khi lấy từ catalog
 
   const { data: temPaperList = [] } = useQuery({
     queryKey: ['tem-paper-prices'],
@@ -321,6 +324,7 @@ export default function QuoteForm() {
     chi_phi_khac_2: 0,
     chiet_khau: 0,
     gia_ban: 0,
+    gia_phoi: 0,
     gia_xuat_phoi_vsp: 0,
   })
 
@@ -362,6 +366,7 @@ export default function QuoteForm() {
         chi_phi_khac_2: Number(quoteData.chi_phi_khac_2),
         chiet_khau: Number(quoteData.chiet_khau),
         gia_ban: Number(quoteData.gia_ban),
+        gia_phoi: Number(quoteData.items?.[0]?.gia_phoi || 0),
         gia_xuat_phoi_vsp: Number(quoteData.gia_xuat_phoi_vsp),
       })
       if (quoteData.customer) {
@@ -415,9 +420,19 @@ export default function QuoteForm() {
       const giaBan = Number(res.data.gia_ban || 0)
       const giaPhoi = Number(res.data.gia_phoi || 0)
       const giaNB = Number(res.data.gia_noi_bo || 0)
-      if (giaBan > 0 && (force || !giaBanManualRef.current)) {
-        setCurrentItem(prev => ({ ...prev, gia_ban: giaBan, gia_phoi: giaPhoi, gia_noi_bo: giaNB }))
-        setFinance(prev => recalcFinance({ ...prev, gia_ban: giaBan, gia_xuat_phoi_vsp: giaNB }))
+      if (giaBan > 0) {
+        // Item row gia_ban: luôn cập nhật từ công thức (trừ khi user nhập tay)
+        if (force || !giaBanManualRef.current) {
+          setCurrentItem(prev => ({ ...prev, gia_ban: giaBan, gia_phoi: giaPhoi, gia_noi_bo: giaNB }))
+        }
+        // Finance: gia_phoi + gia_noi_bo luôn cập nhật; gia_ban chỉ update khi không lock
+        if (force) financeGiaBanLockRef.current = false
+        setFinance(prev => recalcFinance({
+          ...prev,
+          gia_ban: (force || !financeGiaBanLockRef.current) ? giaBan : prev.gia_ban,
+          gia_phoi: giaPhoi,
+          gia_xuat_phoi_vsp: giaNB,
+        }))
       } else if (force) {
         message.warning('Công thức trả về giá bán bằng 0. Kiểm tra giá mua giấy và định mức chi phí.')
       }
@@ -540,10 +555,39 @@ export default function QuoteForm() {
     return parts.join('') || null
   }
 
+  // Chuyển giá trị loai_thung cũ (text) → code mới cho calcBoxDimensions
+  // startsWith ASCII prefix: immune với NFC/NFD encoding của ký tự tiếng Việt đằng sau
+  // NFC-normalize cả hai phía cho Vietnamese exact-match
+  const normalizeLoaiThung = (v: string | null): string | null => {
+    if (!v) return null
+    // Đã là code mới → giữ nguyên
+    const VALID_CODES = new Set(['A1','A3','A5','A5_DAY','A5_NAP','A7','GOI_GIUA','GOI_SUON','LOT','KHAC',
+      'HOP_CAI','HOP_CAI_CHAU','HOP_GIAY','HOP_PIZZA','HOP_DAY_NGAN','HOP_DUOI_CA','HOP_PIZZA_CO_TAY','KHAY_1','KHAY_2','KHAY_3'])
+    if (VALID_CODES.has(v)) return v
+    // ASCII prefix check: 'A1-', 'A3-', 'A5-', 'A7-' → safe dù encoding tiếng Việt phía sau thế nào
+    if (v.startsWith('A1-')) return 'A1'
+    if (v.startsWith('A3-')) return 'A3'
+    if (v.startsWith('A5-')) return 'A5_DAY'
+    if (v.startsWith('A7-')) return 'A7'
+    // Vietnamese exact-match (NFC normalize để tránh NFD mismatch)
+    const n = v.normalize('NFC')
+    if (n === 'Gói giữa')  return 'GOI_GIUA'
+    if (n === 'Gói sườn')  return 'GOI_SUON'
+    if (n === 'Tấm lót')   return 'LOT'
+    if (n === 'Tấm lót bế') return 'LOT'
+    if (n === 'Tấm bế')    return 'LOT'
+    return v
+  }
+
   const _applyProductToCI = (p: ProductFull) => {
     // Convert ma_chinh (full raw code) → ma_ky_hieu (short code dùng trong form)
     const toMk = (raw: string | null) => raw ? (rawToMk[raw] ?? raw) : null
-    giaBanManualRef.current = false
+    const productGiaBan = p.gia_ban ? Number(p.gia_ban) : 0
+    giaBanManualRef.current = false  // item gia_ban luôn dùng công thức
+    financeGiaBanLockRef.current = productGiaBan > 0  // finance.gia_ban lock nếu catalog có giá
+    if (productGiaBan > 0) {
+      setFinance(prev => recalcFinance({ ...prev, gia_ban: productGiaBan }))
+    }
     setCI({
       product_id: p.id,
       ma_amis: p.ma_amis,
@@ -566,7 +610,8 @@ export default function QuoteForm() {
       can_man: _coverageStr(p.can_mang ?? 0),
       loai_lan: _loaiLanStr(p.loai_lan ?? null),
       // Chỉ override loai_thung nếu sản phẩm có giá trị — không xoá loai_thung đã chọn
-      ...(p.loai_thung != null ? { loai_thung: p.loai_thung } : {}),
+      // normalizeLoaiThung chuyển format cũ ("A1-Thùng thường") → code mới ("A1")
+      ...(p.loai_thung != null ? { loai_thung: normalizeLoaiThung(p.loai_thung) } : {}),
       // kết cấu giấy — convert raw code → ma_ky_hieu
       mat: toMk(p.mat),         mat_dl: p.mat_dl ? Number(p.mat_dl) : null,
       song_1: toMk(p.song_1),   song_1_dl: p.song_1_dl ? Number(p.song_1_dl) : null,
@@ -619,8 +664,11 @@ export default function QuoteForm() {
         'loai_in', 'so_mau', 'do_phu', 'c_tham', 'can_man', 'chap_xa',
         'boi', 'be_lo', 'dan', 'ghim', 'do_kho',
       ]
+      // so_luong ảnh hưởng hao_hút → formula recalc, nhưng không unlock giá đã lock từ catalog
+      const giaBanResetTriggers = formulaTriggers.filter(k => k !== 'so_luong')
       const hasFormulaChange = Object.keys(patch).some(k => formulaTriggers.includes(k))
-      if (hasFormulaChange && !Object.prototype.hasOwnProperty.call(patch, 'gia_ban')) {
+      const hasGiaBanResetChange = Object.keys(patch).some(k => giaBanResetTriggers.includes(k))
+      if (hasGiaBanResetChange && !Object.prototype.hasOwnProperty.call(patch, 'gia_ban')) {
         giaBanManualRef.current = false
       }
 
@@ -704,6 +752,10 @@ export default function QuoteForm() {
       ].includes(k))
       if (hasPaperChange) {
         next.ma_ky_hieu = buildPaperSymbol(next, paperCodes)
+        // Auto-fill don_gia_m2 từ gia_ban từng lớp: sum(gia_ban_kg × dl / 1000)
+        // Chỉ điền khi có đủ giá cho tất cả lớp; user vẫn có thể sửa tay sau đó
+        const computed = calcDonGiaM2(next, giaBanMap)
+        if (computed !== null) next.don_gia_m2 = computed
       }
 
       return next
@@ -739,6 +791,7 @@ export default function QuoteForm() {
     return () => window.clearTimeout(timer)
   }, [
     currentItem.so_lop, currentItem.to_hop_song, currentItem.so_luong,
+    currentItem.don_gia_m2,
     currentItem.loai_thung, currentItem.dai, currentItem.rong, currentItem.cao,
     currentItem.mat, currentItem.mat_dl, currentItem.song_1, currentItem.song_1_dl,
     currentItem.mat_1, currentItem.mat_1_dl, currentItem.song_2, currentItem.song_2_dl,
@@ -766,19 +819,8 @@ export default function QuoteForm() {
         kho_tt: _saveCalc.kho_tt, dai_tt: _saveCalc.dai_tt, dien_tich: _saveCalc.dien_tich,
         kho_sx: _saveCalc.kho_sx, dai_sx: _saveCalc.dai_sx,
       } : {}),
-    }
-    if (!itemToSave.gia_ban && hasFormulaPriceData(itemToSave)) {
-      try {
-        const res = await quotesApi.calculateItemPrice(itemToSave)
-        itemToSave.gia_ban   = Number(res.data.gia_ban   || 0)
-        itemToSave.gia_phoi  = Number(res.data.gia_phoi  || 0)
-        itemToSave.gia_noi_bo = Number(res.data.gia_noi_bo || 0)
-        if (itemToSave.gia_ban > 0) {
-          setFinance(prev => recalcFinance({ ...prev, gia_ban: itemToSave.gia_ban }))
-        }
-      } catch {
-        message.warning('Chưa tính được giá bán. Kiểm tra lại mã giấy, định lượng, kích thước và tổ hợp sóng.')
-      }
+      // Finance Giá bán là giá thật — dùng cho tong_tien, BOM, downstream logic
+      gia_ban: finance.gia_ban || currentItem.gia_ban,
     }
     let newItems: QuoteItem[]
     if (editingIdx !== null) {
@@ -819,6 +861,12 @@ export default function QuoteForm() {
     }
     setCurrentItem(loadedItem)
     giaBanManualRef.current = false
+    // Load finance.gia_ban từ giá đã lưu; lock nếu item có product từ catalog
+    const savedGiaBan = Number(item.gia_ban || 0)
+    financeGiaBanLockRef.current = savedGiaBan > 0 && !!(item.product_id)
+    if (savedGiaBan > 0) {
+      setFinance(prev => recalcFinance({ ...prev, gia_ban: savedGiaBan }))
+    }
     setEditingIdx(idx)
     window.scrollTo({ top: 0, behavior: 'smooth' })
     // Nếu dòng có product_id, inject option vào Select để hiển thị đúng
@@ -2252,7 +2300,7 @@ export default function QuoteForm() {
                   <Col span={12}>
                     <InputNumber size="small" style={{ width: '100%' }}
                       value={finance.gia_ban}
-                      onChange={v => updateFinance({ gia_ban: v || 0 })}
+                      onChange={v => { financeGiaBanLockRef.current = true; updateFinance({ gia_ban: v || 0 }) }}
                       formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
                   </Col>
                 </Row>
@@ -2260,8 +2308,8 @@ export default function QuoteForm() {
                   <Col span={12}><Text style={{ fontSize: 11 }}>Giá Phôi</Text></Col>
                   <Col span={12}>
                     <Text strong style={{ color: '#52c41a', fontSize: 13 }}>
-                      {(items.find(it => it.stt === 1)?.gia_phoi || 0) > 0
-                        ? items.reduce((s, it) => s + (it.gia_phoi || 0) * (it.so_luong || 0), 0).toLocaleString('vi-VN') + ' đ'
+                      {finance.gia_phoi > 0
+                        ? finance.gia_phoi.toLocaleString('vi-VN') + ' đ'
                         : '—'}
                     </Text>
                   </Col>
