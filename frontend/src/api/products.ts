@@ -20,8 +20,30 @@ export interface Product {
 // Đầy đủ trường (dùng trong trang Danh mục hàng hóa)
 export interface ProductFull extends Product {
   ma_kh_id: number | null
+  loai_in: number
   ghim: boolean
   dan: boolean
+  chap_xa: number
+  loai_lan: string | null
+  loai_thung: string | null
+  chong_tham: number
+  boi: number
+  be_so_con: number
+  can_mang: number
+  mat: string | null
+  mat_dl: number | null
+  song_1: string | null
+  song_1_dl: number | null
+  mat_1: string | null
+  mat_1_dl: number | null
+  song_2: string | null
+  song_2_dl: number | null
+  mat_2: string | null
+  mat_2_dl: number | null
+  song_3: string | null
+  song_3_dl: number | null
+  mat_3: string | null
+  mat_3_dl: number | null
   phan_xuong: string | null
   loai: string | null
   ghi_chu: string | null

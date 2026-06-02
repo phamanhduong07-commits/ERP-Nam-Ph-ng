@@ -168,6 +168,7 @@ function usePaperOptions() {
   const [mkList, setMkList] = useState<string[]>([])
   const [byMk, setByMk] = useState<Record<string, number[]>>({})
   const [paperCodes, setPaperCodes] = useState<Record<string, string>>({})
+  const [rawToMk, setRawToMk] = useState<Record<string, string>>({})
   const loaded = useRef(false)
   useEffect(() => {
     if (loaded.current) return
@@ -176,9 +177,10 @@ function usePaperOptions() {
       setMkList(res.data.ma_ky_hieu)
       setByMk(res.data.by_mk)
       setPaperCodes(res.data.paper_codes || {})
+      setRawToMk(res.data.raw_to_mk || {})
     })
   }, [])
-  return { mkList, byMk, paperCodes }
+  return { mkList, byMk, paperCodes, rawToMk }
 }
 
 // ─── LayerRow: 1 dòng lớp giấy với Mã KH + Định lượng ───────────────────────
@@ -282,7 +284,7 @@ export default function QuoteForm() {
   const [productSearching, setProductSearching] = useState(false)
   const [selectItemsModal, setSelectItemsModal] = useState(false)
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([])
-  const { mkList, byMk, paperCodes } = usePaperOptions()
+  const { mkList, byMk, paperCodes, rawToMk } = usePaperOptions()
   const giaBanManualRef = useRef(false)
 
   const { data: temPaperList = [] } = useQuery({
@@ -494,11 +496,17 @@ export default function QuoteForm() {
   }
 
   // ── Product search from catalog ───────────────────────────
-  const handleProductSearch = async (q: string) => {
-    if (!q || q.length < 1) return
+  const loadProductOptions = async (q: string) => {
+    const customerId = headerForm.getFieldValue('customer_id') as number | undefined
+    // Nếu không có KH và không có query → không load
+    if (!customerId && (!q || q.length < 1)) return
     setProductSearching(true)
     try {
-      const res = await productsApi.list({ search: q, page_size: 40 })
+      const res = await productsApi.list({
+        search: q,
+        page_size: 50,
+        ...(customerId ? { ma_kh_id: customerId } : {}),
+      })
       setProductOptions(
         res.data.items.map(p => ({
           value: p.id,
@@ -511,8 +519,30 @@ export default function QuoteForm() {
     }
   }
 
-  const handleProductSelect = (_val: number, opt: unknown) => {
-    const p = (opt as { record: ProductFull }).record
+  const handleProductSearch = (q: string) => { loadProductOptions(q) }
+
+  // Khi dropdown mở: nếu đã chọn KH mà chưa có options → auto-load
+  const handleProductDropdownOpen = (open: boolean) => {
+    if (open && productOptions.length === 0) {
+      loadProductOptions('')
+    }
+  }
+
+  const _loaiInStr = (v: number) => v === 1 ? 'flexo' : v === 2 ? 'ky_thuat_so' : 'khong_in'
+  const _coverageStr = (v: number) => v === 1 ? '1 mặt' : v === 2 ? '2 mặt' : null
+  const _loaiLanStr = (v: string | null) =>
+    v === 'bang' ? 'lan_bang' : v === 'am_duong' ? 'lan_am_duong' : null
+  const _deriveToHopSong = (p: ProductFull): string | null => {
+    const parts: string[] = []
+    if (p.song_1) parts.push('B')
+    if (p.song_2) parts.push('C')
+    if (p.song_3) parts.push('E')
+    return parts.join('') || null
+  }
+
+  const _applyProductToCI = (p: ProductFull) => {
+    // Convert ma_chinh (full raw code) → ma_ky_hieu (short code dùng trong form)
+    const toMk = (raw: string | null) => raw ? (rawToMk[raw] ?? raw) : null
     giaBanManualRef.current = false
     setCI({
       product_id: p.id,
@@ -520,10 +550,46 @@ export default function QuoteForm() {
       ten_hang: p.ten_hang,
       dvt: p.dvt,
       so_lop: p.so_lop,
-      ...(p.dai != null ? { dai: p.dai } : {}),
-      ...(p.rong != null ? { rong: p.rong } : {}),
-      ...(p.cao != null ? { cao: p.cao } : {}),
+      to_hop_song: _deriveToHopSong(p),
+      ...(p.dai != null ? { dai: Number(p.dai) } : {}),
+      ...(p.rong != null ? { rong: Number(p.rong) } : {}),
+      ...(p.cao != null ? { cao: Number(p.cao) } : {}),
+      // addon
+      loai_in: _loaiInStr(p.loai_in ?? 0),
+      so_mau: p.so_mau ?? 0,
+      ghim: p.ghim ?? false,
+      dan: p.dan ?? false,
+      chap_xa: !!(p.chap_xa),
+      boi: !!(p.boi),
+      be_so_con: p.be_so_con ?? 0,
+      c_tham: _coverageStr(p.chong_tham ?? 0),
+      can_man: _coverageStr(p.can_mang ?? 0),
+      loai_lan: _loaiLanStr(p.loai_lan ?? null),
+      // Chỉ override loai_thung nếu sản phẩm có giá trị — không xoá loai_thung đã chọn
+      ...(p.loai_thung != null ? { loai_thung: p.loai_thung } : {}),
+      // kết cấu giấy — convert raw code → ma_ky_hieu
+      mat: toMk(p.mat),         mat_dl: p.mat_dl ? Number(p.mat_dl) : null,
+      song_1: toMk(p.song_1),   song_1_dl: p.song_1_dl ? Number(p.song_1_dl) : null,
+      mat_1: toMk(p.mat_1),     mat_1_dl: p.mat_1_dl ? Number(p.mat_1_dl) : null,
+      song_2: toMk(p.song_2),   song_2_dl: p.song_2_dl ? Number(p.song_2_dl) : null,
+      mat_2: toMk(p.mat_2),     mat_2_dl: p.mat_2_dl ? Number(p.mat_2_dl) : null,
+      song_3: toMk(p.song_3),   song_3_dl: p.song_3_dl ? Number(p.song_3_dl) : null,
+      mat_3: toMk(p.mat_3),     mat_3_dl: p.mat_3_dl ? Number(p.mat_3_dl) : null,
+      // giá từ danh mục
+      ...(p.gia_ban ? { gia_ban: Number(p.gia_ban) } : {}),
     })
+  }
+
+  const handleProductSelect = async (val: number) => {
+    // Fetch full product detail to get kết cấu + addon fields
+    try {
+      const res = await productsApi.get(val)
+      _applyProductToCI(res.data)
+    } catch {
+      // Fallback: dùng data từ option nếu fetch lỗi
+      const opt = productOptions.find(o => o.value === val)
+      if (opt) _applyProductToCI(opt.record)
+    }
   }
 
   // ── Auto-generate tên hàng từ kích thước ─────────────────
@@ -643,6 +709,28 @@ export default function QuoteForm() {
       return next
     })
 
+  // Sync kho_tt/dai_tt/dien_tich into state whenever dim inputs change
+  useEffect(() => {
+    if (currentItem.khong_ct) return
+    const calc = calcBoxDimensions(
+      currentItem.loai_thung, currentItem.dai, currentItem.rong, currentItem.cao,
+      currentItem.so_lop, currentItem.be_so_con ?? 1, currentItem.loai_be,
+    )
+    if (!calc) return
+    setCurrentItem(prev => ({
+      ...prev,
+      kho_tt: calc.kho_tt,
+      dai_tt: calc.dai_tt,
+      dien_tich: calc.dien_tich,
+      kho_sx: calc.kho_sx,
+      dai_sx: calc.dai_sx,
+    }))
+  }, [
+    currentItem.khong_ct, currentItem.loai_thung,
+    currentItem.dai, currentItem.rong, currentItem.cao,
+    currentItem.so_lop, currentItem.be_so_con, currentItem.loai_be,
+  ])
+
   useEffect(() => {
     if (!canCalculateItemPrice(currentItem)) return
     const timer = window.setTimeout(() => {
@@ -666,9 +754,18 @@ export default function QuoteForm() {
       message.warning('Vui lòng nhập tên hàng')
       return
     }
+    // Apply computed dims at save time (in case state sync lagged behind)
+    const _saveCalc = !currentItem.khong_ct
+      ? calcBoxDimensions(currentItem.loai_thung, currentItem.dai, currentItem.rong, currentItem.cao,
+          currentItem.so_lop, currentItem.be_so_con ?? 1, currentItem.loai_be)
+      : null
     const itemToSave: QuoteItem = {
       ...currentItem,
       ma_ky_hieu: currentItem.ma_ky_hieu || buildPaperSymbol(currentItem, paperCodes),
+      ...(_saveCalc ? {
+        kho_tt: _saveCalc.kho_tt, dai_tt: _saveCalc.dai_tt, dien_tich: _saveCalc.dien_tich,
+        kho_sx: _saveCalc.kho_sx, dai_sx: _saveCalc.dai_sx,
+      } : {}),
     }
     if (!itemToSave.gia_ban && hasFormulaPriceData(itemToSave)) {
       try {
@@ -702,7 +799,25 @@ export default function QuoteForm() {
 
   const handleEditItem = (idx: number) => {
     const item = items[idx]
-    setCurrentItem(item)
+    // Recalc dims in case item was saved before auto-calc was implemented
+    let loadedItem = item
+    if (!item.khong_ct && item.loai_thung && item.dai && item.rong) {
+      const calc = calcBoxDimensions(
+        item.loai_thung, item.dai, item.rong, item.cao,
+        item.so_lop, item.be_so_con ?? 1, item.loai_be,
+      )
+      if (calc) {
+        loadedItem = {
+          ...item,
+          kho_tt: calc.kho_tt,
+          dai_tt: calc.dai_tt,
+          dien_tich: calc.dien_tich,
+          kho_sx: calc.kho_sx,
+          dai_sx: calc.dai_sx,
+        }
+      }
+    }
+    setCurrentItem(loadedItem)
     giaBanManualRef.current = false
     setEditingIdx(idx)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -951,6 +1066,9 @@ export default function QuoteForm() {
   if (loadingQuote) return <Spin size="large" style={{ display: 'block', margin: '80px auto' }} />
 
   const ci = currentItem
+  const boxCalc = !ci.khong_ct
+    ? calcBoxDimensions(ci.loai_thung, ci.dai, ci.rong, ci.cao, ci.so_lop, ci.be_so_con ?? 1, ci.loai_be)
+    : null
 
   return (
     <div style={{ maxWidth: 1600 }}>
@@ -1072,6 +1190,7 @@ export default function QuoteForm() {
                   options={customerOptions}
                   placeholder="Tìm khách hàng..."
                   notFoundContent={customerSearching ? <Spin size="small" /> : 'Gõ để tìm...'}
+                  onChange={() => { setProductOptions([]); loadProductOptions('') }}
                 />
               </Form.Item>
             </Col>
@@ -1181,8 +1300,13 @@ export default function QuoteForm() {
                 value={ci.product_id ?? undefined}
                 onSearch={handleProductSearch}
                 onSelect={handleProductSelect}
-                onClear={() => setCI({ product_id: null, ma_amis: null })}
-                notFoundContent={productSearching ? <Spin size="small" /> : 'Gõ tên / mã AMIS...'}
+                onDropdownVisibleChange={handleProductDropdownOpen}
+                onClear={() => {
+                  setCurrentItem(prev => ({ ...emptyItem(), stt: prev.stt, so_luong: prev.so_luong }))
+                  giaBanManualRef.current = false
+                  setProductOptions([])
+                }}
+                notFoundContent={productSearching ? <Spin size="small" /> : (headerForm.getFieldValue('customer_id') ? 'Không tìm thấy' : 'Gõ tên / mã AMIS...')}
                 options={productOptions}
               />
             </Col>
@@ -1415,15 +1539,40 @@ export default function QuoteForm() {
                   </Col>
                   <Col span={3}>
                     <Text style={{ fontSize: 11 }}>Khổ TT (cm)</Text>
-                    <InputNumber size="small" style={{ width: '100%' }} value={ci.kho_tt || undefined}
-                      onChange={v => setCI({ kho_tt: v })} placeholder="auto" step={0.1} />
+                    <InputNumber size="small" style={{ width: '100%' }}
+                      value={!ci.khong_ct ? (boxCalc?.kho_tt ?? ci.kho_tt ?? undefined) : (ci.kho_tt || undefined)}
+                      onChange={v => setCI({ kho_tt: v })} placeholder="auto" step={0.1}
+                      readOnly={!ci.khong_ct && boxCalc != null} />
                   </Col>
                   <Col span={3}>
                     <Text style={{ fontSize: 11 }}>Dài TT (cm)</Text>
-                    <InputNumber size="small" style={{ width: '100%' }} value={ci.dai_tt || undefined}
-                      onChange={v => setCI({ dai_tt: v })} placeholder="auto" step={0.1} />
+                    <InputNumber size="small" style={{ width: '100%' }}
+                      value={!ci.khong_ct ? (boxCalc?.dai_tt ?? ci.dai_tt ?? undefined) : (ci.dai_tt || undefined)}
+                      onChange={v => setCI({ dai_tt: v })} placeholder="auto" step={0.1}
+                      readOnly={!ci.khong_ct && boxCalc != null} />
                   </Col>
                 </Row>
+                {/* Computed dimensions row */}
+                {boxCalc && (
+                  <Row style={{ marginTop: 3 }} align="middle">
+                    <Col span={24}>
+                      <Space size={10} wrap>
+                        <Text style={{ fontSize: 10, color: '#595959' }}>
+                          Kho: <b>{boxCalc.kho1}</b> × Dài: <b>{boxCalc.dai1}</b> cm
+                        </Text>
+                        <Text style={{ fontSize: 10, color: '#1890ff' }}>
+                          KKH: <b>{boxCalc.kho_ke_hoach}</b> cm
+                        </Text>
+                        <Text style={{ fontSize: 10, color: '#52c41a' }}>
+                          Số dao: <b>{boxCalc.so_dao}</b>
+                        </Text>
+                        {boxCalc.hai_manh && (
+                          <Tag color="orange" style={{ fontSize: 9, margin: 0 }}>2 mảnh</Tag>
+                        )}
+                      </Space>
+                    </Col>
+                  </Row>
+                )}
                 {/* Loại bế — chỉ hiện khi là hộp/khay die-cut */}
                 {ci.loai_thung && DIE_CUT_TYPES.has(ci.loai_thung) && (
                   <Row gutter={6} style={{ marginTop: 4 }}>
@@ -1472,9 +1621,10 @@ export default function QuoteForm() {
                         <Text style={{ fontSize: 10, color: '#52c41a', marginLeft: 4 }}>tự tính</Text>
                       ) : null}
                     </Text>
-                    <InputNumber size="small" style={{ width: '100%' }} value={ci.dien_tich || undefined}
+                    <InputNumber size="small" style={{ width: '100%' }}
+                      value={!ci.khong_ct ? (boxCalc?.dien_tich ?? ci.dien_tich ?? undefined) : (ci.dien_tich || undefined)}
                       onChange={v => setCI({ dien_tich: v })} placeholder="0" step={0.0001}
-                      readOnly={!ci.khong_ct && Boolean(ci.loai_thung && ci.dai && ci.rong && ci.cao != null)}
+                      readOnly={!ci.khong_ct && boxCalc != null}
                     />
                   </Col>
                   {!hideCostDetails && ci.dien_tich && ci.don_gia_m2 ? (

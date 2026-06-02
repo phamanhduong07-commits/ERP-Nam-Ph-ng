@@ -33,19 +33,19 @@ class ProductService:
         total = q.count()
         items = q.order_by(Product.ten_hang).offset((page - 1) * page_size).limit(page_size).all()
         return PagedResponse(
-            items=[ProductShort.model_validate(p) for p in items],
+            items=[ProductResponse.model_validate(p) for p in items],
             total=total,
             page=page,
             page_size=page_size,
             total_pages=(total + page_size - 1) // page_size,
         )
 
-    def get_products_by_customer(self, customer_id: int) -> list[ProductShort]:
+    def get_products_by_customer(self, customer_id: int) -> list[ProductResponse]:
         products = self.db.query(Product).filter(
             Product.ma_kh_id == customer_id,
             Product.trang_thai.is_(True)
         ).order_by(Product.ten_hang).all()
-        return [ProductShort.model_validate(p) for p in products]
+        return [ProductResponse.model_validate(p) for p in products]
 
     def get_product_by_id(self, product_id: int) -> ProductResponse:
         product = self.db.query(Product).filter(Product.id == product_id).first()

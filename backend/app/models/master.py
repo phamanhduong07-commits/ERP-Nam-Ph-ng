@@ -284,6 +284,21 @@ class Product(Base):
     boi: Mapped[int] = mapped_column(Integer, default=0)           # 0=không, 1=có
     be_so_con: Mapped[int] = mapped_column(Integer, default=0)     # số con bế
     can_mang: Mapped[int] = mapped_column(Integer, default=0)      # 0=không, 1=trong, 2=ngoài
+    # Kết cấu giấy (từ DTBaoGia)
+    mat: Mapped[str | None] = mapped_column(String(30))
+    mat_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_1: Mapped[str | None] = mapped_column(String(30))
+    song_1_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_1: Mapped[str | None] = mapped_column(String(30))
+    mat_1_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_2: Mapped[str | None] = mapped_column(String(30))
+    song_2_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_2: Mapped[str | None] = mapped_column(String(30))
+    mat_2_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    song_3: Mapped[str | None] = mapped_column(String(30))
+    song_3_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    mat_3: Mapped[str | None] = mapped_column(String(30))
+    mat_3_dl: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
     phan_xuong: Mapped[str | None] = mapped_column(String(50))
     loai: Mapped[str | None] = mapped_column(String(50))

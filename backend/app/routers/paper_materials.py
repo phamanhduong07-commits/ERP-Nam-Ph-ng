@@ -322,6 +322,7 @@ def get_paper_options(
         .all()
     )
     paper_codes: dict[str, str] = {}
+    raw_to_mk: dict[str, str] = {}
     for p in papers:
         mk = (p.ma_ky_hieu or "").strip()
         if not mk:
@@ -331,10 +332,13 @@ def get_paper_options(
         code = f"{mk}-{suffix}" if suffix else mk
         paper_codes.setdefault(f"{mk}|{dl_key}", code)
         paper_codes.setdefault(f"{mk}|", code)
+        if p.ma_chinh:
+            raw_to_mk[p.ma_chinh] = mk
     return {
         "ma_ky_hieu": sorted(by_mk.keys()),
         "by_mk": by_mk,
         "paper_codes": paper_codes,
+        "raw_to_mk": raw_to_mk,
     }
 
 

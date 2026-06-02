@@ -151,6 +151,7 @@ SELECT
     dt.Mat_DL,
     dt.SB_DL,    dt.MB_DL,
     dt.SC_DL,    dt.MC_DL,
+    dt.SE_DL,    dt.ME_DL,
     dt.SoMau, dt.LoaiIn, dt.CHAPXA, dt.Lan, dt.LoaiThung,
     dt.isChongTham, dt.isBoi, dt.isBe, dt.isCanMan, dt.Ghim, dt.Dan,
     mb.NgayCT
@@ -245,7 +246,7 @@ def _bg_to_cau_truc(bg: dict, so_lop: int) -> dict | None:
         "mat_2":     str(bg["MC_Giay"]).strip() if bg.get("MC_Giay") else None,
         "mat_2_dl":  _to_decimal(bg.get("MC_DL")),
         "song_3":    str(bg["SE_Giay"]).strip() if bg.get("SE_Giay") else None,
-        "song_3_dl": _to_decimal(bg.get("ME_Giay")),
+        "song_3_dl": _to_decimal(bg.get("SE_DL")),
         "mat_3":     None,
         "mat_3_dl":  None,
     }
@@ -338,9 +339,20 @@ def _upsert(db: Session, htcph_data: dict) -> dict:
             trang_thai = True
 
             # Paper structure fields from DTBaoGia
-            mat = str(bg.get("Mat_Giay") or "").strip() or None
-            song_1 = str(bg.get("SB_Giay") or "").strip() or None
-            mat_1 = str(bg.get("MB_Giay") or "").strip() or None
+            mat     = str(bg.get("Mat_Giay") or "").strip() or None
+            mat_dl  = _to_decimal(bg.get("Mat_DL"))
+            song_1    = str(bg.get("SB_Giay") or "").strip() or None
+            song_1_dl = _to_decimal(bg.get("SB_DL"))
+            mat_1     = str(bg.get("MB_Giay") or "").strip() or None
+            mat_1_dl  = _to_decimal(bg.get("MB_DL"))
+            song_2    = str(bg.get("SC_Giay") or "").strip() or None
+            song_2_dl = _to_decimal(bg.get("SC_DL"))
+            mat_2     = str(bg.get("MC_Giay") or "").strip() or None
+            mat_2_dl  = _to_decimal(bg.get("MC_DL"))
+            song_3    = str(bg.get("SE_Giay") or "").strip() or None
+            song_3_dl = _to_decimal(bg.get("SE_DL"))
+            mat_3     = None
+            mat_3_dl  = None
 
             so_mau = _norm_int(bg.get("SoMau"), default=0)
             loai_in = _norm_int(bg.get("LoaiIn"), default=0)
@@ -380,6 +392,13 @@ def _upsert(db: Session, htcph_data: dict) -> dict:
                     boi=boi,
                     be_so_con=be_so_con,
                     can_mang=can_mang,
+                    mat=mat, mat_dl=mat_dl,
+                    song_1=song_1, song_1_dl=song_1_dl,
+                    mat_1=mat_1, mat_1_dl=mat_1_dl,
+                    song_2=song_2, song_2_dl=song_2_dl,
+                    mat_2=mat_2, mat_2_dl=mat_2_dl,
+                    song_3=song_3, song_3_dl=song_3_dl,
+                    mat_3=mat_3, mat_3_dl=mat_3_dl,
                     dvt=dvt,
                     loai=loai,
                     ma_kh_id=ma_kh_id,
@@ -391,9 +410,6 @@ def _upsert(db: Session, htcph_data: dict) -> dict:
                 db.add(product)
                 stats["new"] += 1
             else:
-                # Detect meaningful change before touching the row.
-                # Product model stores structural fields directly; mat/song_1/mat_1
-                # live in CauTrucThongDung so are not compared here.
                 changed = (
                     existing.gia_ban != gia_ban
                     or existing.so_lop != so_lop
@@ -404,6 +420,7 @@ def _upsert(db: Session, htcph_data: dict) -> dict:
                     or existing.be_so_con != be_so_con
                     or existing.ghim != ghim
                     or existing.dan != dan
+                    or existing.mat != mat
                 )
                 if changed:
                     existing.ten_hang = ten_hang
@@ -422,6 +439,13 @@ def _upsert(db: Session, htcph_data: dict) -> dict:
                     existing.boi = boi
                     existing.be_so_con = be_so_con
                     existing.can_mang = can_mang
+                    existing.mat = mat; existing.mat_dl = mat_dl
+                    existing.song_1 = song_1; existing.song_1_dl = song_1_dl
+                    existing.mat_1 = mat_1; existing.mat_1_dl = mat_1_dl
+                    existing.song_2 = song_2; existing.song_2_dl = song_2_dl
+                    existing.mat_2 = mat_2; existing.mat_2_dl = mat_2_dl
+                    existing.song_3 = song_3; existing.song_3_dl = song_3_dl
+                    existing.mat_3 = mat_3; existing.mat_3_dl = mat_3_dl
                     existing.dvt = dvt
                     existing.loai = loai
                     existing.ma_kh_id = ma_kh_id

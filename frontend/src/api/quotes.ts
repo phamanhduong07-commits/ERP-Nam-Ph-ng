@@ -692,7 +692,7 @@ export const paperMaterialsApi = {
     ),
 
   options: () =>
-    client.get<{ ma_ky_hieu: string[]; by_mk: Record<string, number[]>; paper_codes?: Record<string, string> }>(
+    client.get<{ ma_ky_hieu: string[]; by_mk: Record<string, number[]>; paper_codes?: Record<string, string>; raw_to_mk?: Record<string, string> }>(
       '/paper-materials/options'
     ),
 }
