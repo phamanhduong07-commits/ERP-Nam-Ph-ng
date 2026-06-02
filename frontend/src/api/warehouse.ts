@@ -47,6 +47,7 @@ export interface TonKho {
   loai_giay?: string | null
   kho_mm?: number | null
   dinh_luong?: number | null
+  so_cuon?: number | null
 }
 
 export interface TonKhoSummary {

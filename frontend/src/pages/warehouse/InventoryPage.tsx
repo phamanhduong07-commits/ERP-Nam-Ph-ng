@@ -683,6 +683,7 @@ function GiayCuonTab() {
 
   const totalKg = filtered.reduce((s, r) => s + r.ton_luong, 0)
   const totalGiaTri = filtered.reduce((s, r) => s + r.gia_tri_ton, 0)
+  const totalCuon = filtered.reduce((s, r) => s + (r.so_cuon ?? 0), 0)
 
   if (isLoading) return <Spin style={{ margin: 60, display: 'block', textAlign: 'center' }} />
 
@@ -757,6 +758,16 @@ function GiayCuonTab() {
       ),
     },
     {
+      title: 'Số cuộn',
+      dataIndex: 'so_cuon',
+      width: 80,
+      align: 'right' as const,
+      sorter: (a: TonKho, b: TonKho) => (a.so_cuon ?? 0) - (b.so_cuon ?? 0),
+      render: (v: number | null) => v != null && v > 0
+        ? <Text strong style={{ color: '#1677ff' }}>{v}</Text>
+        : <Text type="secondary">—</Text>,
+    },
+    {
       title: 'Tồn (kg)',
       dataIndex: 'ton_luong',
       width: 110,
@@ -807,11 +818,16 @@ function GiayCuonTab() {
                 <Text strong>Tổng cộng</Text>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={4} align="right">
+                {totalCuon > 0 && (
+                  <Text strong style={{ color: '#1677ff' }}>{totalCuon} cuộn</Text>
+                )}
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={5} align="right">
                 <Text strong style={{ color: '#389e0d', fontSize: 13 }}>
                   {Math.round(totalKg).toLocaleString('vi-VN')} kg
                 </Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={5} align="right">
+              <Table.Summary.Cell index={6} align="right">
                 <Text strong style={{ color: '#52c41a' }}>{fmtB(totalGiaTri)}</Text>
               </Table.Summary.Cell>
             </Table.Summary.Row>
