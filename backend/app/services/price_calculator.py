@@ -88,14 +88,14 @@ def get_indirect_cost(so_lop: int) -> float:
 # Giấy tấm (tam): tỷ lệ cố định theo số lớp
 _SPOILAGE_TAM: dict[int, float] = {3: 0.04, 5: 0.05, 7: 0.07}
 
-# Giấy thùng (A1/A3/A5): bảng theo số lượng — chung cho mọi số lớp
+# Giấy thùng: bảng theo số lượng — dùng chung cho mọi số lớp (theo hệ thống cũ)
 _SPOILAGE_THUNG: list[tuple[float, float]] = [
-    (200, 0.30),
-    (400, 0.20),
-    (600, 0.15),
-    (1000, 0.10),
-    (1500, 0.08),
-    (2000, 0.07),
+    (200,      0.35),
+    (400,      0.20),
+    (600,      0.15),
+    (1000,     0.10),
+    (1500,     0.08),
+    (2000,     0.07),
     (math.inf, 0.06),
 ]
 
@@ -120,12 +120,16 @@ def get_spoilage_rate(so_luong: float, so_lop: int, loai_thung: str = "") -> flo
 # 3. Corrugated take-up factors (tỷ lệ sóng)
 # ---------------------------------------------------------------------------
 
+# Tỷ lệ sóng thực tế — dùng để tính TRỌNG LƯỢNG giấy (kg)
 _TAKE_UP_FACTOR: dict[str, float] = {
     "E": 1.22,
     "B": 1.32,
     "C": 1.45,
     "A": 1.56,
 }
+
+# Tỷ lệ sóng dùng để tính GIÁ (theo hệ thống cũ, cố định 1.5 cho mọi loại sóng)
+_TAKE_UP_FACTOR_PRICE = 1.5
 
 
 def get_take_up_factor(flute_type: str) -> float:
@@ -224,6 +228,7 @@ def calculate_dien_tich(
     # Mỗi mảnh có dai_kh_manh = (D+R)+3, dien_tich tổng = 2 × kho_kh × dai_kh_manh
     HAI_MANH_THRESHOLD = 270
     hai_manh = False
+    dien_tich_gia: float | None = None  # SQL Server formula — set cho A1/A3/A7
 
     if loai == "TAM":
         kho1 = rong + cao + 3
@@ -247,10 +252,12 @@ def calculate_dien_tich(
             dai1    = (dai + rong) + 5
             dai_tt  = (dai + rong) + (5 if so_lop == 7 else 4)
             dien_tich = 2 * kho_kh * dai_kh / 10000
+            dien_tich_gia = 2 * kho1 * ((dai + rong) + 5) / 10000
         else:
             dai1 = (dai + rong) * 2 + 5
             dai_tt = dai_tt_std
             dien_tich = kho_kh * dai_kh / 10000
+            dien_tich_gia = kho1 * ((dai + rong) * 2 + 5) / 10000
 
     elif loai == "A3":
         kho1 = 2 * rong + cao + 3
@@ -264,10 +271,12 @@ def calculate_dien_tich(
             dai1    = (dai + rong) + 5
             dai_tt  = (dai + rong) + (5 if so_lop == 7 else 4)
             dien_tich = 2 * kho_kh * dai_kh / 10000
+            dien_tich_gia = 2 * kho1 * ((dai + rong) + 5) / 10000
         else:
             dai1 = (dai + rong) * 2 + 5
             dai_tt = dai_tt_std
             dien_tich = kho_kh * dai_kh / 10000
+            dien_tich_gia = kho1 * ((dai + rong) * 2 + 5) / 10000
 
     elif loai == "A5":
         kho1 = 2 * cao + rong + 2
@@ -403,10 +412,12 @@ def calculate_dien_tich(
             dai1    = (dai + rong) + 5
             dai_tt  = (dai + rong) + (5 if so_lop == 7 else 4)
             dien_tich = 2 * kho_kh * dai_kh / 10000
+            dien_tich_gia = 2 * kho1 * ((dai + rong) + 5) / 10000
         else:
             dai1 = (dai + rong) * 2 + 5
             dai_tt = dai_tt_std
             dien_tich = kho_kh * dai_kh / 10000
+            dien_tich_gia = kho1 * ((dai + rong) * 2 + 5) / 10000
 
     elif loai == "GOI_GIUA":
         kho1 = 2 * cao + rong + 3
@@ -438,6 +449,10 @@ def calculate_dien_tich(
             "KHAY_1_THANH, KHAY_2_THANH, KHAY_1_THANH_CHAU"
         )
 
+    # Các loại không có dien_tich_gia riêng (die-cut, A5, gói...) dùng dien_tich
+    if dien_tich_gia is None:
+        dien_tich_gia = dien_tich
+
     # Apply tề biên for die-cut types when loai_be is specified
     if loai in _DIE_CUT_TYPES and loai_be:
         te_kho, te_dai = _TE_BIEN.get(loai_be.lower(), (0.0, 0.0))
@@ -450,6 +465,7 @@ def calculate_dien_tich(
         if dai_sx is not None:
             dai_sx += te_dai
         dien_tich = kho_kh * dai_kh / 10000
+        dien_tich_gia = dien_tich  # die-cut: no separate pricing area
 
     return {
         "kho1": round(kho1, 4),
@@ -461,19 +477,23 @@ def calculate_dien_tich(
         "dai_kh": round(dai_kh, 4),
         "kho_sx": round(kho_sx, 4) if kho_sx is not None else round(kho_kh, 4),
         "dai_sx": round(dai_sx, 4) if dai_sx is not None else round(dai_kh, 4),
-        "dien_tich": round(dien_tich, 6),
+        "dien_tich": round(dien_tich, 6),        # KHSX / kế hoạch sản xuất
+        "dien_tich_gia": round(dien_tich_gia, 6), # tính giá (SQL Server formula)
         "hai_manh": hai_manh,
     }
 
 
 # ---------------------------------------------------------------------------
-# 6. Default profit margins
+# 6. Default profit margins & final markup
 # ---------------------------------------------------------------------------
 
 # Giấy tấm: phân biệt theo số lớp
 # Giấy thùng (A1/A3/A5): 6% đồng nhất
 _DEFAULT_PROFIT_TAM: dict[int, float] = {3: 0.07, 5: 0.08, 7: 0.10}
 _DEFAULT_PROFIT_THUNG = 0.06
+
+# Markup cuối cố định theo hệ thống cũ: GiaBan = p_co_ban × 1.12
+FINAL_MARKUP_RATE = 0.12
 
 
 def _default_profit_rate(loai_thung: str, so_lop: int) -> float:
@@ -662,7 +682,7 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
 
     # ---- Dimensions ----
     dims = calculate_dien_tich(loai_thung, dai, rong, cao, so_lop, loai_be)
-    dien_tich = dims["dien_tich"]  # m²/unit
+    dien_tich = dims["dien_tich_gia"]  # m²/unit dùng cho tính giá (SQL Server formula)
 
     # ---- Parse corrugated layers ----
     song_types = parse_song_types(to_hop_song, so_lop)
@@ -678,9 +698,10 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
         don_gia_kg: float = float(layer["don_gia_kg"])  # đ/kg
 
         if loai_lop == "mat":
-            take_up = 1.0
+            take_up_weight = 1.0
+            take_up_price = 1.0
             flute_type = None
-            weight_per_unit = dien_tich * dinh_luong / 1000  # kg
+            weight_per_unit = dien_tich * dinh_luong / 1000  # kg thực tế
         else:
             # song layer
             if song_idx >= len(song_types):
@@ -689,10 +710,12 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
                 )
             flute_type = song_types[song_idx]
             song_idx += 1
-            take_up = get_take_up_factor(flute_type)
-            weight_per_unit = dien_tich * take_up * dinh_luong / 1000  # kg
+            take_up_weight = get_take_up_factor(flute_type)   # E=1.22, B=1.32, C=1.45 — tính kg
+            take_up_price = _TAKE_UP_FACTOR_PRICE              # 1.5 cố định — tính giá
+            weight_per_unit = dien_tich * take_up_weight * dinh_luong / 1000  # kg thực tế
 
-        cost_per_unit = weight_per_unit * don_gia_kg
+        # Chi phí giấy tính theo take_up_price (1.5 cho sóng), không theo kg thực
+        cost_per_unit = dien_tich * take_up_price * dinh_luong / 1000 * don_gia_kg
         a += cost_per_unit
 
         bom_layers.append({
@@ -702,8 +725,9 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
             "ma_ky_hieu": layer.get("ma_ky_hieu", ""),
             "paper_material_id": layer.get("paper_material_id"),
             "dinh_luong": dinh_luong,
-            "take_up_factor": take_up,
-            "dien_tich_1con": round(dien_tich * take_up, 6),
+            "take_up_factor": take_up_weight,        # factor thực — dùng cho tính kg BOM
+            "take_up_factor_price": take_up_price,   # factor tính giá
+            "dien_tich_1con": round(dien_tich * take_up_weight, 6),
             "trong_luong_1con": round(weight_per_unit, 6),
             "don_gia_kg": don_gia_kg,
             "chi_phi_1con": round(cost_per_unit, 2),
@@ -765,12 +789,16 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
     p = a + b + c + d + e
 
     # ---- Final price ----
-    f = p * hoa_hong_kd_pct
-    g = p * hoa_hong_kh_pct
+    # Markup cuối 12% cố định (theo hệ thống cũ): GiaBan = p × 1.12
+    markup_cuoi = p * FINAL_MARKUP_RATE
     h = chi_phi_khac
     i = chiet_khau
 
-    gia_ban_cuoi = p + f + g + h - i
+    gia_ban_cuoi = p + markup_cuoi + h - i
+
+    # Giá phôi = a + b + e (không có add-on d, không có lợi nhuận c)
+    # Dùng cho chuyển kho phôi nội bộ
+    gia_phoi = a + b + e
 
     return {
         "dimensions": dims,
@@ -780,6 +808,7 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
         "chi_phi_hao_hut": round(e, 2),
         "ty_le_loi_nhuan": round(ty_le_loi_nhuan, 4),
         "loi_nhuan": round(c, 2),
+        "gia_phoi": round(gia_phoi, 2),
         "addon_detail": {
             "d1_chong_tham": round(d1, 2),
             "d2_in_flexo": round(d2, 2),
@@ -794,8 +823,7 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
         },
         "chi_phi_addon": round(d, 2),
         "gia_ban_co_ban": round(p, 2),
-        "hoa_hong_kd": round(f, 2),
-        "hoa_hong_kh": round(g, 2),
+        "markup_cuoi": round(markup_cuoi, 2),
         "chi_phi_khac": round(h, 2),
         "chiet_khau": round(i, 2),
         "gia_ban_cuoi": round(gia_ban_cuoi, 2),

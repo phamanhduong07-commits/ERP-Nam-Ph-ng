@@ -92,6 +92,8 @@ class QuoteItemCreate(BaseModel):
     ban_ve_kt: str | None = None
 
     gia_ban: Decimal = Decimal("0")
+    gia_phoi: Decimal = Decimal("0")    # a+b+e — giá chuyển kho phôi
+    gia_noi_bo: Decimal = Decimal("0")  # a+b+c+d+e — giá chuyển kho thành phẩm
     ghi_chu: str | None = None
     phan_xuong_id: int | None = None
 
@@ -184,6 +186,8 @@ class QuoteItemResponse(BaseModel):
     loai_lan: str | None
     ban_ve_kt: str | None
     gia_ban: Decimal
+    gia_phoi: Decimal = Decimal("0")
+    gia_noi_bo: Decimal = Decimal("0")
     ghi_chu: str | None
     phan_xuong_id: int | None = None
     ten_phan_xuong: str | None = None

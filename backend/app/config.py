@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     VAPID_PUBLIC_KEY: str = ""
     VAPID_EMAIL: str = "mailto:visunpack@namphuongbaobi.com"
 
+    # SQL Server HTCPH — hệ thống ERP cũ, dùng để sync giá NVL
+    HTCPH_HOST: str = "203.162.54.176"
+    HTCPH_PORT: int = 1441
+    HTCPH_USER: str = "duong"
+    HTCPH_PASSWORD: str = ""
+    HTCPH_DB: str = "HTCPH"
+
     # SerpAPI for lead crawler
     SERPAPI_KEY: str = ""
 

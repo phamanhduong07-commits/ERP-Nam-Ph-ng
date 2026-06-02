@@ -43,7 +43,8 @@ class QuoteItemPriceRequest(BaseModel):
 
 class QuoteItemPriceResponse(BaseModel):
     gia_ban: Decimal
-    gia_noi_bo: Decimal
+    gia_phoi: Decimal       # a + b + e — giá chuyển kho phôi
+    gia_noi_bo: Decimal     # a + b + c + d + e — giá chuyển kho thành phẩm
     warnings: List[str] = []
 
 
@@ -287,7 +288,7 @@ def _calc_offset_addon(item: QuoteItem | dict, qty: float) -> float:
 
 
 def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
-    _zero = {"gia_ban": Decimal("0"), "gia_noi_bo": Decimal("0")}
+    _zero = {"gia_ban": Decimal("0"), "gia_phoi": Decimal("0"), "gia_noi_bo": Decimal("0")}
     so_lop = int(_item_get(item, "so_lop") or 0)
     co_tem_offset = bool(_item_get(item, "co_tem_offset"))
     so_luong = float(_item_get(item, "so_luong") or 0)
@@ -300,7 +301,7 @@ def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
         if co_tem_offset and so_luong > 0:
             offset_per_cai = _calc_offset_addon(item, so_luong)
             gia = Decimal(str(offset_per_cai)).quantize(Decimal("1"))
-            return {"gia_ban": gia, "gia_noi_bo": gia}
+            return {"gia_ban": gia, "gia_phoi": gia, "gia_noi_bo": gia}
         return _zero
 
     if loai_thung == "KHAC":
@@ -339,16 +340,15 @@ def _quote_item_price(item: QuoteItem | dict, db: Session) -> Decimal:
     indirect_bd = get_indirect_breakdown_from_db(so_lop, db)
     addon_rates_db = get_addon_rates_from_db(db)
     result = calculate_price(calc_input, indirect_breakdown=indirect_bd, addon_rates=addon_rates_db)
-    # gia_noi_bo = giá xuất phôi VSP = toàn bộ chi phí SX (giấy + gián tiếp + hao hụt + addon) + lợi nhuận
-    # = gia_ban_co_ban (p), không tính hoa hồng/chiết khấu ngoài
-    gia_noi_bo = result["gia_ban_co_ban"]
+    # gia_phoi   = a + b + e  — giá chuyển kho phôi (chưa có add-on in/bế/dán, chưa lợi nhuận)
+    # gia_noi_bo = a + b + c + d + e = gia_ban_co_ban — giá chuyển kho thành phẩm
 
-    # Case C: cộng thêm chi phí offset
     offset_addon = _calc_offset_addon(item, so_luong) if co_tem_offset else 0.0
 
     return {
-        "gia_ban": Decimal(str(result["gia_ban_cuoi"] + offset_addon)).quantize(Decimal("1")),
-        "gia_noi_bo": Decimal(str(gia_noi_bo)).quantize(Decimal("1")),
+        "gia_ban":   Decimal(str(result["gia_ban_cuoi"] + offset_addon)).quantize(Decimal("1")),
+        "gia_phoi":  Decimal(str(result["gia_phoi"])).quantize(Decimal("1")),
+        "gia_noi_bo": Decimal(str(result["gia_ban_co_ban"])).quantize(Decimal("1")),
     }
 
 
@@ -825,7 +825,10 @@ def create_quote(
         item_values["ma_ky_hieu"] = item_values.get("ma_ky_hieu") or _build_ma_ky_hieu(item_values, paper_codes)
         if not item_values.get("gia_ban"):
             try:
-                item_values["gia_ban"] = _quote_item_price(item_values, db)["gia_ban"]
+                prices = _quote_item_price(item_values, db)
+                item_values["gia_ban"]   = prices["gia_ban"]
+                item_values["gia_phoi"]  = prices["gia_phoi"]
+                item_values["gia_noi_bo"] = prices["gia_noi_bo"]
             except Exception:
                 item_values["gia_ban"] = Decimal("0")
         quote.items.append(QuoteItem(**item_values))

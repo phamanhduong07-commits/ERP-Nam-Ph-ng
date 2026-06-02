@@ -953,6 +953,185 @@ function GiayCuonTab() {
 }
 
 // ─── Theo xưởng Tab ───────────────────────────────────────────────────────────
+// ─── Đối soát kho giấy cuộn ──────────────────────────────────────────────────
+function DoiSoatTab() {
+  const [nccId, setNccId] = useState<number | undefined>()
+  const [dateRange, setDateRange] = useState<[string, string] | null>(null)
+
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['suppliers-list-doi-soat'],
+    queryFn: () => import('../../api/suppliers').then(m => m.suppliersApi.list({ trang_thai: true, page_size: 200 })).then(r => r.data.items ?? r.data),
+  })
+
+  const params = {
+    ncc_id: nccId,
+    date_from: dateRange?.[0] || undefined,
+    date_to: dateRange?.[1] || undefined,
+  }
+  const { data = [], isLoading, refetch } = useQuery({
+    queryKey: ['doi-soat-giay', params],
+    queryFn: () => warehouseApi.getDoiSoatGiay(params).then(r => r.data),
+  })
+
+  const tongLenh = data.length
+  const tongKhop = data.filter(r => Math.abs(r.chenh_lech) <= 50 && (r.ty_le_khop == null || r.ty_le_khop >= 80)).length
+  const tongLech = tongLenh - tongKhop
+
+  function rowClass(r: import('../../api/warehouse').DoiSoatGiayRow) {
+    if (Math.abs(r.chenh_lech) > 50 || (r.ty_le_khop != null && r.ty_le_khop < 80))
+      return 'doi-soat-row-lech'
+    return ''
+  }
+
+  const columns = [
+    {
+      title: 'Mã', width: 110, fixed: 'left' as const,
+      render: (_: unknown, r: import('../../api/warehouse').DoiSoatGiayRow) => (
+        <div>
+          <Text strong style={{ fontSize: 12 }}>{r.ma_chinh ?? '—'}</Text>
+          <br />
+          <Text type="secondary" style={{ fontSize: 11 }}>{r.ma_ky_hieu ?? ''}</Text>
+        </div>
+      ),
+    },
+    {
+      title: 'Tên / NSX / Loại', width: 170,
+      render: (_: unknown, r: import('../../api/warehouse').DoiSoatGiayRow) => (
+        <div>
+          <div style={{ fontSize: 12 }}>{r.ten ?? '—'}</div>
+          <Text type="secondary" style={{ fontSize: 11 }}>{r.ten_nsx ?? ''}</Text>
+          {r.loai_giay && (
+            <Tag style={{ marginLeft: 4, fontSize: 10 }} color={
+              r.loai_giay === 'nau' ? 'volcano' : r.loai_giay === 'trang' ? 'default' :
+              r.loai_giay === 'vang' ? 'gold' : r.loai_giay === 'xeo' ? 'cyan' : 'default'
+            }>{r.loai_giay}</Tag>
+          )}
+        </div>
+      ),
+    },
+    {
+      title: 'Tồn SQL (kg)', dataIndex: 'ton_sql', width: 110, align: 'right' as const,
+      sorter: (a: import('../../api/warehouse').DoiSoatGiayRow, b: import('../../api/warehouse').DoiSoatGiayRow) => a.ton_sql - b.ton_sql,
+      render: (v: number) => <Text strong>{fmtNum(v)}</Text>,
+    },
+    {
+      title: 'Nhập ERP (kg)', dataIndex: 'tong_nhap_erp', width: 120, align: 'right' as const,
+      sorter: (a: import('../../api/warehouse').DoiSoatGiayRow, b: import('../../api/warehouse').DoiSoatGiayRow) => a.tong_nhap_erp - b.tong_nhap_erp,
+      render: (v: number) => fmtNum(v),
+    },
+    {
+      title: 'Chênh lệch (kg)', dataIndex: 'chenh_lech', width: 130, align: 'right' as const,
+      defaultSortOrder: 'descend' as const,
+      sorter: (a: import('../../api/warehouse').DoiSoatGiayRow, b: import('../../api/warehouse').DoiSoatGiayRow) => Math.abs(b.chenh_lech) - Math.abs(a.chenh_lech),
+      render: (v: number) => {
+        const color = Math.abs(v) > 50 ? '#cf1322' : v > 0 ? '#389e0d' : '#595959'
+        return <Text style={{ color, fontWeight: Math.abs(v) > 50 ? 700 : 400 }}>{v > 0 ? '+' : ''}{fmtNum(v)}</Text>
+      },
+    },
+    {
+      title: 'Tỷ lệ khớp', dataIndex: 'ty_le_khop', width: 110, align: 'right' as const,
+      sorter: (a: import('../../api/warehouse').DoiSoatGiayRow, b: import('../../api/warehouse').DoiSoatGiayRow) => (a.ty_le_khop ?? 0) - (b.ty_le_khop ?? 0),
+      render: (v: number | null) => {
+        if (v == null) return <Text type="secondary">—</Text>
+        const color = v < 80 ? '#cf1322' : v < 95 ? '#d46b08' : '#389e0d'
+        return <Text style={{ color, fontWeight: v < 80 ? 700 : 400 }}>{v}%</Text>
+      },
+    },
+    {
+      title: 'Giá SQL (đ/kg)', dataIndex: 'gia_sql', width: 120, align: 'right' as const,
+      render: (v: number) => v ? fmtVND(v) : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Giá ERP (đ/kg)', dataIndex: 'gia_erp', width: 120, align: 'right' as const,
+      render: (v: number) => v ? fmtVND(v) : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Chênh giá', dataIndex: 'chenh_gia', width: 110, align: 'right' as const,
+      render: (v: number) => {
+        if (!v) return <Text type="secondary">—</Text>
+        const color = Math.abs(v) > 1000 ? '#cf1322' : '#595959'
+        return <Text style={{ color }}>{v > 0 ? '+' : ''}{fmtVND(v)}</Text>
+      },
+    },
+    {
+      title: 'Nhập ERP gần nhất', dataIndex: 'ngay_nhap_erp', width: 130,
+      render: (v: string | null) => v ? dayjs(v).format('DD/MM/YYYY') : <Text type="secondary">—</Text>,
+    },
+  ]
+
+  const exportDefaultConfig = [
+    { key: 'ma_chinh', label: 'Mã chính', width: 14 },
+    { key: 'ma_ky_hieu', label: 'Mã ký hiệu', width: 14 },
+    { key: 'ten', label: 'Tên', width: 30 },
+    { key: 'ten_nsx', label: 'NSX', width: 18 },
+    { key: 'loai_giay', label: 'Loại giấy', width: 12 },
+    { key: 'ton_sql', label: 'Tồn SQL (kg)', width: 16 },
+    { key: 'tong_nhap_erp', label: 'Nhập ERP (kg)', width: 16 },
+    { key: 'chenh_lech', label: 'Chênh lệch (kg)', width: 16 },
+    { key: 'ty_le_khop', label: 'Tỷ lệ khớp (%)', width: 14 },
+    { key: 'gia_sql', label: 'Giá SQL (đ/kg)', width: 16 },
+    { key: 'gia_erp', label: 'Giá ERP (đ/kg)', width: 16 },
+    { key: 'chenh_gia', label: 'Chênh giá (đ/kg)', width: 16 },
+    { key: 'ngay_nhap_erp', label: 'Nhập ERP gần nhất', width: 18 },
+  ]
+  function handleExport() {
+    smartExportExcel('DOI_SOAT_GIAY', data, exportDefaultConfig, `DoiSoatGiay_${dayjs().format('YYYYMMDD')}`)
+  }
+
+  return (
+    <div>
+      <style>{`.doi-soat-row-lech td { background: #fff1f0 !important; }`}</style>
+      <Card size="small" style={{ marginBottom: 10 }}>
+        <Row gutter={[8, 8]} align="middle">
+          <Col>
+            <Select
+              allowClear placeholder="Lọc NCC"
+              style={{ width: 180 }} value={nccId} onChange={setNccId}
+              options={(Array.isArray(suppliers) ? suppliers : ((suppliers as unknown as { items?: unknown[] }).items ?? [])).map((s) => {
+                const sup = s as { id: number; ten_viet_tat?: string; ten_ncc?: string }
+                return { value: sup.id, label: sup.ten_viet_tat || sup.ten_ncc || String(sup.id) }
+              })}
+            />
+          </Col>
+          <Col>
+            <Space>
+              <Text style={{ fontSize: 12 }}>Từ:</Text>
+              <Input type="date" style={{ width: 130 }}
+                value={dateRange?.[0] ?? ''} onChange={e => setDateRange(prev => [e.target.value, prev?.[1] ?? ''])} />
+              <Text style={{ fontSize: 12 }}>Đến:</Text>
+              <Input type="date" style={{ width: 130 }}
+                value={dateRange?.[1] ?? ''} onChange={e => setDateRange(prev => [prev?.[0] ?? '', e.target.value])} />
+              {dateRange && <Button size="small" onClick={() => setDateRange(null)}>Xóa</Button>}
+            </Space>
+          </Col>
+          <Col flex="auto" />
+          <Col>
+            <Space>
+              <Tag color="green">Khớp: {tongKhop}</Tag>
+              <Tag color="red">Lệch: {tongLech}</Tag>
+              <Button size="small" icon={<SyncOutlined />} onClick={() => refetch()}>Làm mới</Button>
+              <Button size="small" icon={<FileExcelOutlined />} onClick={handleExport}>Excel</Button>
+            </Space>
+          </Col>
+        </Row>
+      </Card>
+      <Card size="small" styles={{ body: { padding: 0 } }}>
+        <Table
+          locale={{ emptyText: <EmptyState size="small" /> }}
+          dataSource={data}
+          columns={columns}
+          rowKey="paper_material_id"
+          loading={isLoading}
+          size="small"
+          pagination={{ pageSize: 50, showSizeChanger: true }}
+          scroll={{ x: 1240 }}
+          rowClassName={rowClass}
+        />
+      </Card>
+    </div>
+  )
+}
+
 function TheoXuongTab() {
   const { data: khoTheoXuong = [], isLoading } = useQuery({
     queryKey: ['kho-theo-xuong'],
@@ -1045,6 +1224,7 @@ export default function InventoryPage() {
           { key: 'giay-cuon', label: <Space><InboxOutlined style={{ color: '#1677ff' }} />Giấy cuộn</Space> },
           { key: 'chi-tiet', label: <Space><UnorderedListOutlined />Chi tiết tồn kho</Space> },
           { key: 'theo-xuong', label: <Space><DatabaseOutlined />Theo xưởng</Space> },
+          { key: 'doi-soat', label: <Space><WarningOutlined style={{ color: '#faad14' }} />Đối soát</Space> },
         ]}
       />
 
@@ -1052,6 +1232,7 @@ export default function InventoryPage() {
       {activeTab === 'giay-cuon' && <GiayCuonTab />}
       {activeTab === 'chi-tiet' && <ChiTietTab />}
       {activeTab === 'theo-xuong' && <TheoXuongTab />}
+      {activeTab === 'doi-soat' && <DoiSoatTab />}
     </div>
   )
 }

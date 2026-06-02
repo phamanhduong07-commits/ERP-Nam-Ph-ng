@@ -3,6 +3,7 @@ from decimal import Decimal
 import unicodedata
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel as _BaseModel
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -371,3 +372,137 @@ def search_paper_materials(
         }
         for p in items
     ]
+
+
+# ---------------------------------------------------------------------------
+# Sync giá NVL từ SQL Server HTCPH
+# ---------------------------------------------------------------------------
+
+class SyncGiaMuaResult(_BaseModel):
+    total_htcph: int
+    matched: int
+    updated: int
+    not_found: list[dict]
+    preview: list[dict]
+
+
+@router.post("/sync-gia-mua-htcph", response_model=SyncGiaMuaResult)
+def sync_gia_mua_from_htcph(
+    dry_run: bool = Query(default=True, description="True=preview, False=áp dụng"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permissions("admin.paper_materials")),
+):
+    """
+    Lấy đơn giá mua mới nhất từ DT42 (phiếu nhập kho) trong SQL Server HTCPH,
+    khớp theo DMNL.KyHieu + DMNL.DL với PaperMaterial.ma_ky_hieu + dinh_luong,
+    rồi cập nhật gia_mua.
+
+    dry_run=True (default): chỉ preview, không ghi DB.
+    dry_run=False: áp dụng thực sự.
+    """
+    try:
+        import pymssql
+    except ImportError:
+        raise HTTPException(status_code=500, detail="pymssql chưa được cài. Chạy: pip install pymssql")
+
+    from app.config import settings
+
+    try:
+        conn = pymssql.connect(
+            server=settings.HTCPH_HOST,
+            port=settings.HTCPH_PORT,
+            user=settings.HTCPH_USER,
+            password=settings.HTCPH_PASSWORD,
+            database=settings.HTCPH_DB,
+            timeout=20,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Không kết nối được SQL Server HTCPH: {exc}")
+
+    try:
+        cur = conn.cursor(as_dict=True)
+        # Lấy giá nhập kho mới nhất per (KyHieu, DL) từ DT42 + MT42 + DMNL
+        cur.execute("""
+            WITH ranked AS (
+                SELECT
+                    nl.KyHieu,
+                    nl.DL,
+                    d.DonGia,
+                    m.NgayCT,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY nl.KyHieu, nl.DL
+                        ORDER BY m.NgayCT DESC, m.MT42ID DESC
+                    ) AS rn
+                FROM DT42 d
+                JOIN MT42 m ON d.MT42ID = m.MT42ID
+                JOIN DMNL nl ON d.MaNL = nl.Ma
+                WHERE d.DonGia > 0
+                  AND nl.KyHieu IS NOT NULL
+                  AND nl.KyHieu <> ''
+                  AND nl.DL IS NOT NULL
+                  AND nl.Cuon = 1
+            )
+            SELECT KyHieu, DL, DonGia, NgayCT
+            FROM ranked
+            WHERE rn = 1
+        """)
+        htcph_prices = cur.fetchall()
+    finally:
+        conn.close()
+
+    preview = []
+    not_found = []
+    updated_count = 0
+
+    for row in htcph_prices:
+        ky_hieu = (row["KyHieu"] or "").strip()
+        dl = row["DL"]
+        don_gia = row["DonGia"]
+        ngay_ct = row["NgayCT"]
+
+        if not ky_hieu or dl is None or not don_gia:
+            continue
+
+        dl_dec = Decimal(str(dl))
+        don_gia_dec = Decimal(str(don_gia)).quantize(Decimal("1"))
+
+        papers = (
+            db.query(PaperMaterial)
+            .filter(
+                PaperMaterial.ma_ky_hieu == ky_hieu,
+                PaperMaterial.dinh_luong == dl_dec,
+                PaperMaterial.su_dung == True,
+            )
+            .all()
+        )
+
+        if not papers:
+            not_found.append({"ky_hieu": ky_hieu, "dl": float(dl), "don_gia": float(don_gia), "ngay_ct": str(ngay_ct)})
+            continue
+
+        for p in papers:
+            gia_cu = float(p.gia_mua or 0)
+            preview.append({
+                "ma_chinh": p.ma_chinh,
+                "ma_ky_hieu": ky_hieu,
+                "dinh_luong": float(dl),
+                "gia_mua_cu": gia_cu,
+                "gia_mua_moi": float(don_gia_dec),
+                "ngay_ct_htcph": str(ngay_ct),
+                "thay_doi": gia_cu != float(don_gia_dec),
+            })
+            if not dry_run and gia_cu != float(don_gia_dec):
+                p.gia_mua = don_gia_dec
+                updated_count += 1
+
+    if not dry_run and updated_count:
+        db.commit()
+
+    matched = len([x for x in preview])
+    return SyncGiaMuaResult(
+        total_htcph=len(htcph_prices),
+        matched=matched,
+        updated=updated_count if not dry_run else 0,
+        not_found=not_found,
+        preview=preview,
+    )

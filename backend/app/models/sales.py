@@ -375,6 +375,8 @@ class QuoteItem(Base):
 
     # Giá
     gia_ban: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    gia_phoi: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)    # a+b+e — chuyển kho phôi
+    gia_noi_bo: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)  # a+b+c+d+e — chuyển kho TP
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
 

@@ -211,6 +211,7 @@ export interface GoodsReceiptItem {
   dai_mm: number | null      // chiều dài phôi tấm (mm)
   so_lop: number | null      // số lớp: 3 | 5 | 7
   ghi_chu: string | null
+  barcode?: string | null
 }
 
 export interface GoodsReceipt {
@@ -237,6 +238,7 @@ export interface GoodsReceipt {
   has_invoice_image: boolean
   ocr_extracted_data: string | null  // JSON string của OcrExtracted
   co_hoa_don: boolean
+  qc_phieu_id: number | null
   hd_tong_kg: number | null
   created_at: string | null
   items: GoodsReceiptItem[]
@@ -611,6 +613,23 @@ export interface TonKhoGiayRow {
   ngay_nhap_gan_nhat?: string | null
 }
 
+export interface DoiSoatGiayRow {
+  paper_material_id: number
+  ma_chinh: string | null
+  ma_ky_hieu: string | null
+  ten: string | null
+  ten_nsx: string | null
+  loai_giay: string | null
+  ton_sql: number
+  gia_sql: number
+  tong_nhap_erp: number
+  gia_erp: number
+  chenh_lech: number
+  ty_le_khop: number | null
+  chenh_gia: number
+  ngay_nhap_erp: string | null
+}
+
 export interface GiayRoll {
   id: number
   barcode: string
@@ -859,4 +878,10 @@ export const warehouseApi = {
     client.get<TonKhoNVLRow[]>('/warehouse/ton-kho', {
       params: { loai: 'khac', ...params }
     }),
+
+  getDoiSoatGiay: (params?: { ncc_id?: number; date_from?: string; date_to?: string }) =>
+    client.get<DoiSoatGiayRow[]>('/warehouse/doi-soat-giay', { params }),
+
+  taoPhieuQC: (grId: number) =>
+    client.post<{ qc_phieu_id: number; so_phieu: string }>(`/warehouse/goods-receipts/${grId}/tao-phieu-qc`),
 }

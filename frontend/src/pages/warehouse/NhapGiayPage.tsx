@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -8,6 +9,7 @@ import {
 import {
   FileExcelOutlined, FileImageOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
   CheckCircleOutlined, DollarOutlined, ThunderboltOutlined, UploadOutlined, RollbackOutlined,
+  AuditOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
@@ -31,6 +33,7 @@ const fileToBase64 = (file: File): Promise<string> =>
   })
 
 export default function NhapGiayPage() {
+  const navigate = useNavigate()
   const companyInfo = usePhapNhanForPrint()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -209,6 +212,19 @@ export default function NhapGiayPage() {
       message.success('Đã duyệt — giá mua giấy đã cập nhật')
     },
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi duyệt phiếu'),
+  })
+
+  const taoQCMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.taoPhieuQC(id),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['goods-receipts-giay'] })
+      message.success(`Đã tạo phiếu QC: ${res.data.so_phieu}`)
+      navigate(`/quality/giay-cuon?id=${res.data.qc_phieu_id}`)
+    },
+    onError: (e: unknown) => {
+      const detail = (e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu QC'
+      message.error(detail)
+    },
   })
 
   const syncGiaBanMut = useMutation({
@@ -413,7 +429,7 @@ export default function NhapGiayPage() {
         return <Tag color="blue">Đã nhập</Tag>
       } },
     {
-      title: '', width: 165,
+      title: '', width: 190,
       render: (_: unknown, r: GoodsReceipt) => (
         <Space size={4}>
           {r.trang_thai === 'nhap_nhanh' ? (
@@ -429,13 +445,30 @@ export default function NhapGiayPage() {
               disabled={r.trang_thai !== 'nhap'} />
           </Popconfirm>
           {r.trang_thai === 'da_duyet' && (
-            <Tooltip title="Cập nhật giá bán = giá mua × 1.05">
-              <Popconfirm title="Cập nhật giá bán ×1.05?" onConfirm={() => syncGiaBanMut.mutate(r.id)}>
-                <Button size="small" icon={<DollarOutlined />}
-                  style={{ color: '#fa8c16', borderColor: '#fa8c16' }}
-                  loading={syncGiaBanMut.isPending} />
-              </Popconfirm>
-            </Tooltip>
+            <>
+              <Tooltip title="Cập nhật giá bán = giá mua × 1.05">
+                <Popconfirm title="Cập nhật giá bán ×1.05?" onConfirm={() => syncGiaBanMut.mutate(r.id)}>
+                  <Button size="small" icon={<DollarOutlined />}
+                    style={{ color: '#fa8c16', borderColor: '#fa8c16' }}
+                    loading={syncGiaBanMut.isPending} />
+                </Popconfirm>
+              </Tooltip>
+              {r.qc_phieu_id ? (
+                <Tooltip title={`Xem phiếu QC #${r.qc_phieu_id}`}>
+                  <Button size="small" icon={<AuditOutlined />}
+                    style={{ color: '#52c41a', borderColor: '#52c41a' }}
+                    onClick={() => navigate(`/quality/giay-cuon?id=${r.qc_phieu_id}`)} />
+                </Tooltip>
+              ) : (
+                <Tooltip title="Tạo phiếu QC giấy cuộn">
+                  <Popconfirm title="Tạo phiếu QC từ phiếu nhập này?" onConfirm={() => taoQCMut.mutate(r.id)}>
+                    <Button size="small" icon={<AuditOutlined />}
+                      style={{ color: '#1677ff', borderColor: '#1677ff' }}
+                      loading={taoQCMut.isPending} />
+                  </Popconfirm>
+                </Tooltip>
+              )}
+            </>
           )}
           <Popconfirm title="Xoá phiếu?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
             disabled={r.trang_thai === 'da_duyet'}>
@@ -463,6 +496,10 @@ export default function NhapGiayPage() {
             render: (v: number | null) => v ?? '—' },
           { title: 'Ký hiệu', dataIndex: 'ky_hieu_cuon', width: 80,
             render: (v: string | null) => v || '—' },
+          { title: 'Mã cuộn', dataIndex: 'barcode', width: 110,
+            render: (v: string | null) => v
+              ? <Text code style={{ fontSize: 12, color: '#1677ff' }}>{v}</Text>
+              : <Text type="secondary" style={{ fontSize: 11 }}>—</Text> },
           { title: 'Số lượng (kg)', dataIndex: 'so_luong', width: 120, align: 'right' as const,
             render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) },
           { title: 'Đơn giá', dataIndex: 'don_gia', width: 120, align: 'right' as const,
