@@ -157,6 +157,8 @@ const emptyItem = (): QuoteItem => ({
   c_tham: null, can_man: null, be_so_con: null,
   may_in: null, loai_lan: null, ban_ve_kt: null,
   gia_ban: 0,
+  gia_phoi: 0,
+  gia_noi_bo: 0,
   ghi_chu: null,
   phan_xuong_id: null,
 })
@@ -409,9 +411,10 @@ export default function QuoteForm() {
       const res = await quotesApi.calculateItemPrice(item)
       if (seq !== priceCalcSeq.current) return
       const giaBan = Number(res.data.gia_ban || 0)
+      const giaPhoi = Number(res.data.gia_phoi || 0)
       const giaNB = Number(res.data.gia_noi_bo || 0)
       if (giaBan > 0 && (force || !giaBanManualRef.current)) {
-        setCurrentItem(prev => ({ ...prev, gia_ban: giaBan }))
+        setCurrentItem(prev => ({ ...prev, gia_ban: giaBan, gia_phoi: giaPhoi, gia_noi_bo: giaNB }))
         setFinance(prev => recalcFinance({ ...prev, gia_ban: giaBan, gia_xuat_phoi_vsp: giaNB }))
       } else if (force) {
         message.warning('Công thức trả về giá bán bằng 0. Kiểm tra giá mua giấy và định mức chi phí.')
@@ -670,7 +673,9 @@ export default function QuoteForm() {
     if (!itemToSave.gia_ban && hasFormulaPriceData(itemToSave)) {
       try {
         const res = await quotesApi.calculateItemPrice(itemToSave)
-        itemToSave.gia_ban = Number(res.data.gia_ban || 0)
+        itemToSave.gia_ban   = Number(res.data.gia_ban   || 0)
+        itemToSave.gia_phoi  = Number(res.data.gia_phoi  || 0)
+        itemToSave.gia_noi_bo = Number(res.data.gia_noi_bo || 0)
         if (itemToSave.gia_ban > 0) {
           setFinance(prev => recalcFinance({ ...prev, gia_ban: itemToSave.gia_ban }))
         }
@@ -874,6 +879,36 @@ export default function QuoteForm() {
         if (r.ten_hang) return <Tag color="warning" style={{ fontSize: 11 }}>Chưa có giá</Tag>
         return '—'
       },
+    },
+    {
+      title: () => (
+        <span style={{ fontSize: 11 }}>
+          Giá phôi<br />
+          <span style={{ color: '#8c8c8c', fontWeight: 400 }}>a+b+e</span>
+        </span>
+      ),
+      dataIndex: 'gia_phoi',
+      width: 100,
+      align: 'right' as const,
+      render: (v: number) =>
+        v > 0
+          ? <Text style={{ color: '#52c41a', fontSize: 12 }}>{v.toLocaleString('vi-VN')}</Text>
+          : <Text style={{ color: '#bfbfbf', fontSize: 11 }}>—</Text>,
+    },
+    {
+      title: () => (
+        <span style={{ fontSize: 11 }}>
+          Giá TP<br />
+          <span style={{ color: '#8c8c8c', fontWeight: 400 }}>a+b+c+d+e</span>
+        </span>
+      ),
+      dataIndex: 'gia_noi_bo',
+      width: 100,
+      align: 'right' as const,
+      render: (v: number) =>
+        v > 0
+          ? <Text style={{ color: '#722ed1', fontSize: 12 }}>{v.toLocaleString('vi-VN')}</Text>
+          : <Text style={{ color: '#bfbfbf', fontSize: 11 }}>—</Text>,
     },
     {
       title: 'Thành tiền',
@@ -2082,7 +2117,25 @@ export default function QuoteForm() {
                   </Col>
                 </Row>
                 <Row gutter={4} style={{ marginTop: 4 }} align="middle">
-                  <Col span={12}><Text style={{ fontSize: 11 }}>Giá Nội Bộ</Text></Col>
+                  <Col span={12}>
+                    <Text style={{ fontSize: 11 }}>Giá Phôi</Text>
+                    <br />
+                    <Text style={{ fontSize: 10, color: '#8c8c8c' }}>a+b+e (chuyển kho phôi)</Text>
+                  </Col>
+                  <Col span={12}>
+                    <Text strong style={{ color: '#52c41a', fontSize: 13 }}>
+                      {(items.find(it => it.stt === 1)?.gia_phoi || 0) > 0
+                        ? items.reduce((s, it) => s + (it.gia_phoi || 0) * (it.so_luong || 0), 0).toLocaleString('vi-VN') + ' đ'
+                        : '—'}
+                    </Text>
+                  </Col>
+                </Row>
+                <Row gutter={4} style={{ marginTop: 4 }} align="middle">
+                  <Col span={12}>
+                    <Text style={{ fontSize: 11 }}>Giá TP (nội bộ)</Text>
+                    <br />
+                    <Text style={{ fontSize: 10, color: '#8c8c8c' }}>a+b+c+d+e (chuyển kho TP)</Text>
+                  </Col>
                   <Col span={12}>
                     <InputNumber size="small" style={{ width: '100%' }}
                       value={finance.gia_xuat_phoi_vsp}

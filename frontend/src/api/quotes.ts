@@ -78,6 +78,8 @@ export interface QuoteItem {
   loai_lan?: string | null
   ban_ve_kt?: string | null
   gia_ban: number
+  gia_phoi?: number   // a+b+e — giá chuyển kho phôi
+  gia_noi_bo?: number // a+b+c+d+e — giá chuyển kho thành phẩm
   ghi_chu?: string | null
   phan_xuong_id?: number | null
   ten_phan_xuong?: string | null
@@ -668,7 +670,7 @@ export const quotesApi = {
   copy: (id: number) => client.post<Quote>(`/quotes/${id}/copy`),
 
   calculateItemPrice: (item: QuoteItem) =>
-    client.post<{ gia_ban: number; gia_noi_bo: number }>('/quotes/calculate-item-price', { item }),
+    client.post<{ gia_ban: number; gia_phoi: number; gia_noi_bo: number }>('/quotes/calculate-item-price', { item }),
 
   taoDonHang: (id: number, item_ids?: number[]) =>
     client.post<{ so_don: string; order_id: number; message: string }>(
