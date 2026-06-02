@@ -59,3 +59,5 @@
 {"timestamp":"2026-06-02T00:13:49-07:00","rating":5,"session_id":"46bd8cf3-60d6-4fad-9d6d-2af5646747c3","source":"implicit","sentiment_summary":"Inferred from follow-up behavior","confidence":0.5}
 {"timestamp":"2026-06-02T00:18:49-07:00","rating":5,"session_id":"46bd8cf3-60d6-4fad-9d6d-2af5646747c3","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
 {"timestamp":"2026-06-02T00:24:55-07:00","rating":5,"session_id":"46bd8cf3-60d6-4fad-9d6d-2af5646747c3","source":"implicit","sentiment_summary":"Inference failed: Timeout after 15000ms","confidence":0.3}
+{"timestamp":"2026-06-02T00:34:31-07:00","rating":5,"session_id":"46bd8cf3-60d6-4fad-9d6d-2af5646747c3","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-02T00:37:24-07:00","rating":5,"session_id":"46bd8cf3-60d6-4fad-9d6d-2af5646747c3","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}

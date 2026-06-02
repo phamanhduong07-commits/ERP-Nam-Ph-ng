@@ -48,6 +48,7 @@ export interface TonKho {
   kho_mm?: number | null
   dinh_luong?: number | null
   so_cuon?: number | null
+  bien_dong?: number | null
 }
 
 export interface TonKhoSummary {

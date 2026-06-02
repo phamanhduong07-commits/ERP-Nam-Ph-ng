@@ -167,6 +167,7 @@ def sync_to_erp(mssql_rows: list[dict]) -> dict:
                 if abs(float(ton_kho) - old) < 0.01:
                     result["unchanged"] += 1
                     continue
+                existing.ton_luong_truoc   = existing.ton_luong  # lưu trước khi overwrite
                 existing.ton_luong         = ton_kho
                 existing.don_gia_binh_quan = don_gia
                 existing.gia_tri_ton       = gia_tri

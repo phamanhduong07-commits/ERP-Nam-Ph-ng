@@ -16,6 +16,7 @@ class InventoryBalance(Base):
     ten_hang: Mapped[str | None] = mapped_column(String(255))   # dùng khi cả 2 material ID đều null
     don_vi: Mapped[str | None] = mapped_column(String(20))
     ton_luong: Mapped[Decimal] = mapped_column(Numeric(14, 3), default=0)
+    ton_luong_truoc: Mapped[Decimal | None] = mapped_column(Numeric(14, 3), nullable=True)
     gia_tri_ton: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     don_gia_binh_quan: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=0)
     cap_nhat_luc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

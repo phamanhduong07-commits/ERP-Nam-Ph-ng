@@ -713,6 +713,7 @@ def get_ton_kho(
             "loai_giay": loai_giay,
             "kho_mm": kho_mm,
             "dinh_luong": dinh_luong,
+            "bien_dong": (float(r.ton_luong) - float(r.ton_luong_truoc)) if r.ton_luong_truoc is not None else None,
         })
     return result
 
@@ -935,6 +936,8 @@ async def import_ton_kho_dau_ky(
         
         for existing, vals in objects_to_save:
             if existing:
+                # Lưu giá trị cũ trước khi overwrite (dùng để tính biến động)
+                existing.ton_luong_truoc = existing.ton_luong
                 for k, v in vals.items():
                     setattr(existing, k, v)
             else:

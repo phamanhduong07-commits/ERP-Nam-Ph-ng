@@ -683,6 +683,9 @@ function GiayCuonTab() {
 
   const totalKg = filtered.reduce((s, r) => s + r.ton_luong, 0)
   const totalGiaTri = filtered.reduce((s, r) => s + r.gia_tri_ton, 0)
+  const totalNhap = data.filter(r => (r.bien_dong ?? 0) > 0).reduce((s, r) => s + (r.bien_dong ?? 0), 0)
+  const totalXuat = data.filter(r => (r.bien_dong ?? 0) < 0).reduce((s, r) => s + Math.abs(r.bien_dong ?? 0), 0)
+  const hasBienDong = data.some(r => r.bien_dong != null)
 
   // Top 5 khổ + định lượng — tính từ data gốc (không bị filter ảnh hưởng)
   const topKho = useMemo(() => {
@@ -793,10 +796,17 @@ function GiayCuonTab() {
       width: 110,
       align: 'right' as const,
       sorter: (a: TonKho, b: TonKho) => a.ton_luong - b.ton_luong,
-      render: (v: number) => (
-        <Text strong style={{ color: '#389e0d', fontSize: 13 }}>
-          {Math.round(v).toLocaleString('vi-VN')}
-        </Text>
+      render: (v: number, r: TonKho) => (
+        <Space size={4} direction="vertical" style={{ gap: 0 }}>
+          <Text strong style={{ color: '#389e0d', fontSize: 13 }}>
+            {Math.round(v).toLocaleString('vi-VN')}
+          </Text>
+          {r.bien_dong != null && Math.abs(r.bien_dong) >= 1 && (
+            <Text style={{ fontSize: 11, color: r.bien_dong > 0 ? '#1677ff' : '#ff4d4f' }}>
+              {r.bien_dong > 0 ? '▲' : '▼'} {Math.abs(Math.round(r.bien_dong)).toLocaleString('vi-VN')}
+            </Text>
+          )}
+        </Space>
       ),
     },
     {
@@ -863,6 +873,29 @@ function GiayCuonTab() {
           )}
         </Col>
       </Row>
+      {hasBienDong && (
+        <Card size="small" style={{ marginBottom: 12 }}
+          styles={{ body: { padding: '8px 16px' } }}>
+          <Row gutter={24} align="middle">
+            <Col><Text strong style={{ fontSize: 13 }}>📊 Biến động hôm nay</Text></Col>
+            <Col>
+              <Text style={{ color: '#1677ff' }}>
+                ▲ Nhập: <Text strong style={{ color: '#1677ff' }}>{Math.round(totalNhap).toLocaleString('vi-VN')} kg</Text>
+              </Text>
+            </Col>
+            <Col>
+              <Text style={{ color: '#ff4d4f' }}>
+                ▼ Xuất/giảm: <Text strong style={{ color: '#ff4d4f' }}>{Math.round(totalXuat).toLocaleString('vi-VN')} kg</Text>
+              </Text>
+            </Col>
+            <Col>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                (so với lần sync trước)
+              </Text>
+            </Col>
+          </Row>
+        </Card>
+      )}
       {filterBar}
       <Card
         size="small"
