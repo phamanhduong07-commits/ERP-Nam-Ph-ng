@@ -155,7 +155,7 @@ export default function TeamPermissionsPage() {
                 <Space>
                   <Text strong>Quyền bổ sung của: </Text>
                   <Text style={{ color: '#1677ff' }}>{selectedUser.ho_ten}</Text>
-                  <Tag>{selectedUser.role}</Tag>
+                  <Tag>{selectedUser.role_code || '—'}</Tag>
                 </Space>
                 <Button
                   icon={<KeyOutlined />}

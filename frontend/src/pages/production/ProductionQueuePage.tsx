@@ -442,7 +442,7 @@ export default function ProductionQueuePage() {
       width: 110,
       render: (_, r) => r.dai ? (
         <Space direction="vertical" size={0}>
-          <Text style={{ fontSize: 11 }}>{+r.dai}×{+r.rong}×{+r.cao}</Text>
+          <Text style={{ fontSize: 11 }}>{Number(r.dai)}×{Number(r.rong ?? 0)}×{Number(r.cao ?? 0)}</Text>
           <Text type="secondary" style={{ fontSize: 10 }}>{r.loai_thung} · {r.so_lop}L</Text>
         </Space>
       ) : <Text type="secondary">—</Text>,

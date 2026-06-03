@@ -394,7 +394,7 @@ export default function ScanMayPage() {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
                   {lookup.result.dai && (
                     <Tag style={{ borderRadius: 8, fontSize: 12 }}>
-                      {+lookup.result.dai}×{+lookup.result.rong}×{+lookup.result.cao}
+                      {Number(lookup.result.dai)}×{Number(lookup.result.rong ?? 0)}×{Number(lookup.result.cao ?? 0)}
                     </Tag>
                   )}
                   {lookup.result.kho_tt && <Tag color="blue" style={{ borderRadius: 8, fontSize: 12 }}>Khổ TT: {lookup.result.kho_tt}</Tag>}

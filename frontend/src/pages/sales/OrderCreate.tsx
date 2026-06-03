@@ -193,7 +193,7 @@ export default function OrderCreate() {
       title: 'Kích thước',
       width: 110,
       render: (_, r) => r.product.dai
-        ? `${+r.product.dai}×${+r.product.rong}×${+r.product.cao}`
+        ? `${Number(r.product.dai)}×${Number(r.product.rong ?? 0)}×${Number(r.product.cao ?? 0)}`
         : '—',
     },
     {
@@ -542,7 +542,7 @@ export default function OrderCreate() {
                   <Space size={4}>
                     {p.dai && (
                       <Text type="secondary" style={{ fontSize: 11 }}>
-                        {+p.dai}×{+p.rong}×{+p.cao}cm
+                        {Number(p.dai)}×{Number(p.rong ?? 0)}×{Number(p.cao ?? 0)}cm
                       </Text>
                     )}
                     <Text type="secondary" style={{ fontSize: 11 }}>{p.so_lop} lớp</Text>

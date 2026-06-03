@@ -132,6 +132,8 @@ export function emptyItem(): QuoteItem {
     kho_tt: null, dai_tt: null, dien_tich: null,
     khong_ct: false,
     loai_be: null, kho_sx: null, dai_sx: null,
+    co_be: false,
+    be_hai_manh: false,
     nhom_san_pham: null,
     co_tem_offset: false,
     tem_loai_giay: null, tem_gsm: null, tem_don_gia_kg: null,

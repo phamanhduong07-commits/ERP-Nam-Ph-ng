@@ -95,7 +95,7 @@ export default function AddLinesModal({ open, planId, existingItemIds, onClose, 
           <Text style={{ fontSize: 12 }}>{v}</Text>
           {r.loai_thung && (
             <Text type="secondary" style={{ fontSize: 10 }}>
-              {r.loai_thung} {r.so_lop}L {r.to_hop_song} · {+r.dai}×{+r.rong}×{+r.cao}
+              {r.loai_thung} {r.so_lop}L {r.to_hop_song} · {[r.dai, r.rong, r.cao].map(v => Number(v ?? 0)).filter(Boolean).join('×')}
             </Text>
           )}
         </Space>

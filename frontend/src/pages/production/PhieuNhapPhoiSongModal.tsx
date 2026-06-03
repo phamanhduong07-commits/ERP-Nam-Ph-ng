@@ -309,7 +309,7 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
     const itemRows = phieu.items.map((it, i) => {
       const orderItem = order.items.find(oi => oi.id === it.production_order_item_id)
       const dims = orderItem
-        ? [orderItem.dai, orderItem.rong, orderItem.cao].map(v => +v).filter(Boolean).join('×')
+        ? [orderItem.dai, orderItem.rong, orderItem.cao].map(v => Number(v ?? 0)).filter(Boolean).join('×')
         : ''
       const sl_thuc = it.so_luong_thuc_te
       const sl_loi = it.so_luong_loi
@@ -426,7 +426,7 @@ export default function PhieuNhapPhoiSongModal({ open, order, onClose, onSuccess
             <Text style={{ fontSize: 12 }}>{v}</Text>
             {oi && (oi.dai || oi.so_lop) && (
               <Text type="secondary" style={{ fontSize: 10 }}>
-                {[oi.dai, oi.rong, oi.cao].map(v => +v).filter(Boolean).join('×')}
+                {[oi.dai, oi.rong, oi.cao].map(v => Number(v ?? 0)).filter(Boolean).join('×')}
                 {oi.so_lop ? ` · ${oi.so_lop}L` : ''}
                 {oi.to_hop_song ? ` ${oi.to_hop_song}` : ''}
               </Text>
