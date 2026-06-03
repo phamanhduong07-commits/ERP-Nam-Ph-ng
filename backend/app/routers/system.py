@@ -40,19 +40,15 @@ def list_templates(db: Session = Depends(get_db), _: User = Depends(get_current_
 @router.get("/templates/{ma_mau}")
 def get_template(ma_mau: str, phap_nhan_id: Optional[int] = None, strict: bool = False, db: Session = Depends(
         get_db), _: User = Depends(get_current_user)):
-    query = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == ma_mau)
+    key = ma_mau.lower()
+    query = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == key)
 
     if phap_nhan_id:
-        # Ưu tiên template của pháp nhân cụ thể
         tpl = query.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first()
         if tpl:
             return tpl
-        # Fallback về template global (phap_nhan_id IS NULL)
-        tpl = query.filter(PrintTemplate.phap_nhan_id.is_(None)).first()
-        if tpl:
-            return tpl
         if strict:
-            raise HTTPException(404, f"Khong tim thay mau in {ma_mau} cho phap nhan ID {phap_nhan_id}")
+            raise HTTPException(404, f"Khong tim thay mau in {key} cho phap nhan ID {phap_nhan_id}")
         tpl = query.first()
     else:
         tpl = query.filter(PrintTemplate.phap_nhan_id.is_(None)).first()
@@ -61,7 +57,7 @@ def get_template(ma_mau: str, phap_nhan_id: Optional[int] = None, strict: bool =
 
     if not tpl:
         if strict:
-            raise HTTPException(404, f"Khong tim thay mau in {ma_mau}")
+            raise HTTPException(404, f"Khong tim thay mau in {key}")
         raise HTTPException(404, "Không tìm thấy mẫu in")
     return tpl
 
@@ -73,14 +69,14 @@ def update_template(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("ADMIN"))
 ):
-    # Tìm đúng mẫu của pháp nhân này
+    key = ma_mau.lower()
     tpl = db.query(PrintTemplate).filter(
-        PrintTemplate.ma_mau == ma_mau,
+        PrintTemplate.ma_mau == key,
         PrintTemplate.phap_nhan_id == body.phap_nhan_id
     ).first()
 
     if not tpl:
-        tpl = PrintTemplate(ma_mau=ma_mau, phap_nhan_id=body.phap_nhan_id)
+        tpl = PrintTemplate(ma_mau=key, phap_nhan_id=body.phap_nhan_id)
         db.add(tpl)
 
     tpl.ten_mau = body.ten_mau
@@ -99,8 +95,9 @@ def delete_template(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("ADMIN"))
 ):
+    key = ma_mau.lower()
     tpl = db.query(PrintTemplate).filter(
-        PrintTemplate.ma_mau == ma_mau,
+        PrintTemplate.ma_mau == key,
         PrintTemplate.phap_nhan_id == phap_nhan_id
     ).first()
     if not tpl:
@@ -120,18 +117,15 @@ def list_excel_templates(db: Session = Depends(get_db), _: User = Depends(get_cu
 @router.get("/excel-templates/{ma_mau}")
 def get_excel_template(ma_mau: str, phap_nhan_id: Optional[int] = None, strict: bool = False, db: Session = Depends(
         get_db), _: User = Depends(get_current_user)):
-    query = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == ma_mau)
+    key = ma_mau.lower()
+    query = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == key)
 
     if phap_nhan_id:
         tpl = query.filter(ExcelTemplate.phap_nhan_id == phap_nhan_id).first()
         if tpl:
             return tpl
-        # Fallback về template global (phap_nhan_id IS NULL)
-        tpl = query.filter(ExcelTemplate.phap_nhan_id.is_(None)).first()
-        if tpl:
-            return tpl
         if strict:
-            raise HTTPException(404, f"Khong tim thay mau Excel {ma_mau} cho phap nhan ID {phap_nhan_id}")
+            raise HTTPException(404, f"Khong tim thay mau Excel {key} cho phap nhan ID {phap_nhan_id}")
         tpl = query.first()
     else:
         tpl = query.filter(ExcelTemplate.phap_nhan_id.is_(None)).first()
@@ -152,13 +146,14 @@ def update_excel_template(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("ADMIN"))
 ):
+    key = ma_mau.lower()
     tpl = db.query(ExcelTemplate).filter(
-        ExcelTemplate.ma_mau == ma_mau,
+        ExcelTemplate.ma_mau == key,
         ExcelTemplate.phap_nhan_id == body.phap_nhan_id
     ).first()
 
     if not tpl:
-        tpl = ExcelTemplate(ma_mau=ma_mau, phap_nhan_id=body.phap_nhan_id)
+        tpl = ExcelTemplate(ma_mau=key, phap_nhan_id=body.phap_nhan_id)
         db.add(tpl)
 
     tpl.ten_mau = body.ten_mau
@@ -175,8 +170,9 @@ def delete_excel_template(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("ADMIN"))
 ):
+    key = ma_mau.lower()
     tpl = db.query(ExcelTemplate).filter(
-        ExcelTemplate.ma_mau == ma_mau,
+        ExcelTemplate.ma_mau == key,
         ExcelTemplate.phap_nhan_id == phap_nhan_id
     ).first()
     if not tpl:
