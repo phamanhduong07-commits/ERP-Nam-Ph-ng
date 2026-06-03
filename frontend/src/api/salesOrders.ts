@@ -168,6 +168,7 @@ export const salesOrdersApi = {
   updateDiscount: (id: number, data: { ty_le_giam_gia?: number; so_tien_giam_gia?: number; ghi_chu?: string }) =>
     client.patch<SalesOrder>(`/sales-orders/${id}/update-discount`, data),
   approve: (id: number) => client.patch<SalesOrder>(`/sales-orders/${id}/approve`),
+  unapprove: (id: number) => client.patch<SalesOrder>(`/sales-orders/${id}/unapprove`),
   cancel: (id: number) => client.patch(`/sales-orders/${id}/cancel`),
   importOrders: (file: File, commit: boolean = false) => {
     const formData = new FormData()

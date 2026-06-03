@@ -319,6 +319,7 @@ def get_available_items(
 def list_plans(
     search: str = Query(default=""),
     trang_thai: str | None = Query(default=None),
+    exclude_nhap: bool = Query(default=False),
     noi_sx: str | None = Query(default=None),
     tu_ngay: date | None = Query(default=None),
     den_ngay: date | None = Query(default=None),
@@ -333,6 +334,8 @@ def list_plans(
         q = q.filter(ProductionPlan.so_ke_hoach.ilike(f"%{search}%"))
     if trang_thai:
         q = q.filter(ProductionPlan.trang_thai == trang_thai)
+    elif exclude_nhap:
+        q = q.filter(ProductionPlan.trang_thai != "nhap")
     if noi_sx:
         # PhanXuong của LSX có thể là CD2 (HM, CC) → follow phoi_tu_phan_xuong_id để ra CD1
         _PX = aliased(PhanXuong)   # xưởng trực tiếp của LSX
@@ -840,6 +843,7 @@ def _build_queue_line(line: ProductionPlanLine, plan: ProductionPlan) -> QueueLi
         so_luong_ke_hoach=line.so_luong_ke_hoach,
         so_luong_hoan_thanh=line.so_luong_hoan_thanh,
         trang_thai=line.trang_thai,
+        plan_trang_thai=plan.trang_thai,
         mua_phoi_ngoai=getattr(line, "mua_phoi_ngoai", False),
         ghi_chu=line.ghi_chu or (item.ghi_chu if item else None),
         so_lenh=order.so_lenh if order else None,

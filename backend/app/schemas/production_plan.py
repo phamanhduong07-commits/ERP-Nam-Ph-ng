@@ -182,6 +182,7 @@ class QueueLineResponse(BaseModel):
     so_luong_ke_hoach: Decimal
     so_luong_hoan_thanh: Decimal
     trang_thai: str
+    plan_trang_thai: str = "nhap"  # trang_thai của ProductionPlan
     mua_phoi_ngoai: bool = False
     ghi_chu: str | None
     so_lenh: str | None

@@ -30,7 +30,7 @@ _DIE_CUT_TYPES = frozenset({
     "HOP_CAI", "HOP_CAI_CHAU", "HOP_GIAY", "HOP_PIZZA",
     "HOP_NAP_CAI_DAY_GAI", "HOP_NAP_CAI_2_DAU",
     "HOP_AM_DUONG_THAN", "HOP_AM_DUONG_NAP",
-    "KHAY_1_THANH", "KHAY_2_THANH", "KHAY_1_THANH_CHAU",
+    "KHAY_1_THANH", "KHAY_2_THANH", "KHAY_1_THANH_CHAU", "KHAY_NUOC_GK",
 })
 
 _INDIRECT_COST: dict[int, float] = {
@@ -399,6 +399,14 @@ def calculate_dien_tich(
         kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
         dien_tich = kho_kh * dai_kh / 10000
 
+    elif loai == "KHAY_NUOC_GK":
+        kho_sx = dai + 2 * cao
+        dai_sx = rong + 2 * cao
+        kho_kh = kho_sx + 5
+        dai_kh = dai_sx + 5
+        kho1 = kho_kh; dai1 = dai_kh; so_dao = 1; kho_tt = kho_kh; dai_tt = dai_kh
+        dien_tich = kho_kh * dai_kh / 10000
+
     elif loai == "A7":
         # Thùng 1 nắp
         kho1 = rong / 2 + cao + 3
@@ -446,7 +454,7 @@ def calculate_dien_tich(
             "HOP_CAI, HOP_CAI_CHAU, HOP_GIAY, HOP_PIZZA, "
             "HOP_NAP_CAI_DAY_GAI, HOP_NAP_CAI_2_DAU, "
             "HOP_AM_DUONG_THAN, HOP_AM_DUONG_NAP, "
-            "KHAY_1_THANH, KHAY_2_THANH, KHAY_1_THANH_CHAU"
+            "KHAY_1_THANH, KHAY_2_THANH, KHAY_1_THANH_CHAU, KHAY_NUOC_GK"
         )
 
     # Các loại không có dien_tich_gia riêng (die-cut, A5, gói...) dùng dien_tich

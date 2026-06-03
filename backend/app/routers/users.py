@@ -2,7 +2,7 @@ from datetime import datetime
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import get_current_user, get_admin_user, require_roles
@@ -28,6 +28,10 @@ class UserResponse(BaseModel):
     role_name: str | None = None
     role_code: str | None = None
     phan_xuong: str | None = None
+    phap_nhan_id: int | None = None
+    ten_phap_nhan: str | None = None
+    machine_id: int | None = None
+    ten_may: str | None = None
     trang_thai: bool
     created_at: datetime
 
@@ -50,6 +54,9 @@ def _to_response(user: User) -> UserResponse:
         role_name=user.role.ten_vai_tro if user.role else None,
         role_code=user.role.ma_vai_tro if user.role else None,
         phan_xuong=user.phan_xuong,
+        phap_nhan_id=user.phap_nhan_id,
+        ten_phap_nhan=user.phap_nhan.ten_phap_nhan if user.phap_nhan else None,
+        machine_id=user.machine_id,
         trang_thai=user.trang_thai,
         created_at=user.created_at,
     )
@@ -63,7 +70,7 @@ def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(list_users_allowed),
 ):
-    q = db.query(User)
+    q = db.query(User).options(selectinload(User.role), selectinload(User.phap_nhan))
     if trang_thai is not None:
         q = q.filter(User.trang_thai == trang_thai)
     if search:

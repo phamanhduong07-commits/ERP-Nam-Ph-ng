@@ -9,7 +9,7 @@ import {
 import {
   ArrowLeftOutlined, CheckOutlined, CloseOutlined,
   PrinterOutlined, ThunderboltOutlined, CalculatorOutlined,
-  FileExcelOutlined, PercentageOutlined, EyeOutlined,
+  FileExcelOutlined, PercentageOutlined, EyeOutlined, RollbackOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -85,6 +85,17 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       qc.invalidateQueries({ queryKey: ['sales-orders-counts'] })
     },
     onError: (e: unknown) => message.error(apiErrorMsg(e, 'Duyệt thất bại')),
+  })
+
+  const unapproveMutation = useMutation({
+    mutationFn: () => salesOrdersApi.unapprove(Number(id)),
+    onSuccess: () => {
+      message.success('Đã bỏ duyệt, đơn hàng trả về trạng thái Mới')
+      qc.invalidateQueries({ queryKey: ['sales-order', id] })
+      qc.invalidateQueries({ queryKey: ['sales-orders'] })
+      qc.invalidateQueries({ queryKey: ['sales-orders-counts'] })
+    },
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Bỏ duyệt thất bại')),
   })
 
   const cancelMutation = useMutation({
@@ -414,6 +425,19 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
               <Popconfirm title="Duyệt đơn hàng này?" onConfirm={() => approveMutation.mutate()} okText="Duyệt">
                 <Button size={embedded ? 'small' : 'middle'} type="primary" icon={<CheckOutlined />} loading={approveMutation.isPending}>
                   Duyệt đơn
+                </Button>
+              </Popconfirm>
+            )}
+            {order.trang_thai === 'da_duyet' && (
+              <Popconfirm
+                title="Bỏ duyệt đơn hàng?"
+                description="Đơn hàng sẽ trở về trạng thái Mới để chỉnh sửa."
+                onConfirm={() => unapproveMutation.mutate()}
+                okText="Bỏ duyệt"
+                okButtonProps={{ danger: true }}
+              >
+                <Button size={embedded ? 'small' : 'middle'} icon={<RollbackOutlined />} loading={unapproveMutation.isPending}>
+                  Bỏ duyệt
                 </Button>
               </Popconfirm>
             )}

@@ -206,6 +206,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
           ]
         },
         { key: '/accounting/journal-entries', label: <Link to="/accounting/journal-entries">Bút toán tổng hợp</Link> },
+        { key: '/accounting/audit-logs', label: <Link to="/accounting/audit-logs">Nhật ký audit kế toán</Link> },
         { key: '/accounting/hoa-don-dien-tu', icon: <FileProtectOutlined />, label: <Link to="/accounting/hoa-don-dien-tu">Hóa đơn điện tử</Link> },
         { key: '/accounting/workshop-management', label: <Link to="/accounting/workshop-management">Quản trị xưởng (Lương)</Link> },
         { key: '/accounting/ccdc', label: <Link to="/accounting/ccdc">Tài sản & CCDC</Link> },

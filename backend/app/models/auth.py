@@ -59,6 +59,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role_id: Mapped[int] = mapped_column(Integer, ForeignKey("roles.id"), nullable=False)
     phan_xuong: Mapped[str | None] = mapped_column(String(50))
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     machine_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -71,6 +72,8 @@ class User(Base):
         onupdate=datetime.utcnow)
 
     role: Mapped["Role"] = relationship("Role", back_populates="users")
+    phan_xuong_obj: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys="User.phan_xuong_id")
+    phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys="User.phap_nhan_id")
     user_permissions: Mapped[list["UserPermission"]] = relationship(
         "UserPermission", foreign_keys="UserPermission.user_id",
         back_populates="user", cascade="all, delete-orphan")

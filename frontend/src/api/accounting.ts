@@ -627,6 +627,35 @@ export interface JournalEntryListParams {
   page_size?: number
 }
 
+export interface AccountingAuditLog {
+  id: number
+  user_id: number | null
+  hanh_dong: string
+  bang: string
+  ban_ghi_id: string | null
+  du_lieu_cu: Record<string, unknown> | null
+  du_lieu_moi: Record<string, unknown> | null
+  ip_address: string | null
+  created_at: string
+}
+
+export interface AccountingAuditLogParams {
+  bang?: string
+  ban_ghi_id?: string
+  user_id?: number
+  tu_ngay?: string
+  den_ngay?: string
+  page?: number
+  page_size?: number
+}
+
+export interface AccountingAuditLogResponse {
+  total: number
+  page: number
+  page_size: number
+  items: AccountingAuditLog[]
+}
+
 export interface TrialBalanceRow {
   so_tk: string
   ten_tk: string
@@ -655,6 +684,13 @@ export const workshopManagementApi = {
 export const journalApi = {
   list: (params?: JournalEntryListParams) => client.get('/accounting/journal-entries', { params }).then(r => r.data),
   create: (data: JournalEntryCreate) => client.post('/accounting/journal-entries', data).then(r => r.data),
+}
+
+export const accountingAuditApi = {
+  list: (params?: AccountingAuditLogParams): Promise<AccountingAuditLogResponse> =>
+    client.get('/accounting/audit-logs', { params }).then(r => r.data),
+  document: (bang: string, banGhiId: string | number): Promise<AccountingAuditLog[]> =>
+    client.get(`/accounting/documents/${bang}/${banGhiId}/audit`).then(r => r.data),
 }
 
 export interface ProductionCostInput {

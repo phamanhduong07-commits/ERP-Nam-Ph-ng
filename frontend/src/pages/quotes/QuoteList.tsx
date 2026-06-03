@@ -7,7 +7,7 @@ import {
   Popconfirm, message, Card, Row, Col, Typography, Tooltip, Badge, Modal,
 } from 'antd'
 import {
-  PlusOutlined, SearchOutlined, EyeOutlined,
+  PlusOutlined, SearchOutlined, EyeOutlined, EditOutlined,
   CheckCircleOutlined, StopOutlined, FileAddOutlined,
   FileExcelOutlined, FilePdfOutlined, CopyOutlined, SendOutlined, SyncOutlined,
   WarningOutlined,
@@ -373,12 +373,17 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
     {
       title: '',
       key: 'actions',
-      width: 140,
+      width: 170,
       render: (_, row) => (
         <Space size={4}>
           <Tooltip title="Xem chi tiết">
             <Button size="small" icon={<EyeOutlined />} onClick={() => navigate(`/quotes/${row.id}`)} />
           </Tooltip>
+          {(row.trang_thai === 'moi' || row.trang_thai === 'cho_duyet') && (
+            <Tooltip title="Sửa">
+              <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/quotes/${row.id}/edit`)} />
+            </Tooltip>
+          )}
           {row.trang_thai === 'moi' && !canApprove && (
             <Tooltip title="Gửi duyệt">
               <Popconfirm title="Gửi báo giá để duyệt?" onConfirm={() => submitMutation.mutate(row.id)}>

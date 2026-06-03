@@ -658,7 +658,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
         </Col>
         <Col>
           <Space wrap>
-            {(trangThai === 'moi' || (trangThai === 'cho_duyet' && canApprove)) && (
+            {(trangThai === 'moi' || trangThai === 'cho_duyet') && (
               <Button
                 size={embedded ? 'small' : 'middle'}
                 icon={<EditOutlined />}
@@ -867,7 +867,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
 
       <ItemDetailDrawer
         item={previewItem}
-        canEdit={trangThai === 'moi' || (trangThai === 'cho_duyet' && canApprove)}
+        canEdit={trangThai === 'moi' || trangThai === 'cho_duyet'}
         hideCostDetails={hideCostDetails}
         onClose={() => setPreviewItem(null)}
         onEditClick={() => { setPreviewItem(null); navigate(`/quotes/${id}/edit`) }}

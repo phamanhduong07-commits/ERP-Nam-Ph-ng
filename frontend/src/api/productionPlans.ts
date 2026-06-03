@@ -139,6 +139,7 @@ export interface QueueLine {
   so_luong_ke_hoach: number
   so_luong_hoan_thanh: number
   trang_thai: string
+  plan_trang_thai: string  // nhap | da_xuat | hoan_thanh
   mua_phoi_ngoai: boolean
   ghi_chu: string | null
   so_lenh: string | null
@@ -233,6 +234,7 @@ export const productionPlansApi = {
   list: (params?: {
     search?: string
     trang_thai?: string
+    exclude_nhap?: boolean
     noi_sx?: string
     tu_ngay?: string
     den_ngay?: string

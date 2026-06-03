@@ -233,6 +233,7 @@ export const LOAI_THUNG_OPTIONS = [
   { value: 'KHAY_1_THANH',       label: 'Khay 1 thành',            group: 'Khay' },
   { value: 'KHAY_2_THANH',       label: 'Khay 2 thành',            group: 'Khay' },
   { value: 'KHAY_1_THANH_CHAU',  label: 'Khay 1 thành có chấu',   group: 'Khay' },
+  { value: 'KHAY_NUOC_GK',       label: 'Khay nước GK',            group: 'Khay' },
 ]
 
 export const LOAI_BE_OPTIONS = [
@@ -247,7 +248,7 @@ export const DIE_CUT_TYPES = new Set([
   'HOP_CAI', 'HOP_CAI_CHAU', 'HOP_GIAY', 'HOP_PIZZA',
   'HOP_NAP_CAI_DAY_GAI', 'HOP_NAP_CAI_2_DAU',
   'HOP_AM_DUONG_THAN', 'HOP_AM_DUONG_NAP',
-  'KHAY_1_THANH', 'KHAY_2_THANH', 'KHAY_1_THANH_CHAU',
+  'KHAY_1_THANH', 'KHAY_2_THANH', 'KHAY_1_THANH_CHAU', 'KHAY_NUOC_GK',
 ])
 
 export const SO_LOP_OPTIONS = [1, 3, 5, 7]
@@ -449,6 +450,12 @@ export function calcBoxDimensions(
       kho_ke_hoach = kho_sx + 5;  dai_ke_hoach = dai_sx + 5
       kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
       break
+    case 'KHAY_NUOC_GK':
+      isDieCut = true
+      kho_sx = D + 2*C;            dai_sx = R + 2*C
+      kho_ke_hoach = kho_sx;       dai_ke_hoach = dai_sx        // dùng kho_sx để tính kho_tt (giấy SX)
+      kho1 = kho_sx + 5;           dai1 = dai_sx + 5; dai_tt = dai1  // dùng +5 để tính diện tích giá
+      break
     default:
       return null
   }
@@ -459,6 +466,8 @@ export function calcBoxDimensions(
     kho_ke_hoach += te_kho; dai_ke_hoach += te_dai
     kho_sx       += te_kho; dai_sx       += te_dai
     kho1 = kho_ke_hoach; dai1 = dai_ke_hoach; dai_tt = dai1
+    // KHAY_NUOC_GK: kho_ke_hoach = kho_sx (không có +5), kho1 tính giá phải cộng thêm +5
+    if (loai_thung === 'KHAY_NUOC_GK') { kho1 = kho_ke_hoach + 5; dai1 = dai_ke_hoach + 5 }
   }
 
   // For non-die-cut types, kho_sx = kho_ke_hoach, dai_sx = dai_ke_hoach
@@ -482,9 +491,14 @@ export function calcBoxDimensions(
   // Số dao = số nhóm khuôn bế vừa vào máy 180 cm
   // be_so_con > 1: mỗi nhóm chiếm kho_ke_hoach × be_so_con → số nhóm ít hơn
   const beN = Math.max(1, be_so_con)
-  const so_dao = Math.max(1, Math.floor(180 / (kho_ke_hoach * beN)))
+  let so_dao = Math.max(1, Math.floor(180 / (kho_ke_hoach * beN)))
   // Khổ thực tế = làm tròn lên bội số 5 của (kho_ke_hoach × beN × soDao + 1.8)
-  const kho_tt = Math.ceil((kho_ke_hoach * beN * so_dao + 1.8) / 5) * 5
+  let kho_tt = Math.ceil((kho_ke_hoach * beN * so_dao + 1.8) / 5) * 5
+  // Cap: nếu kho_tt > 180 (vd 60×3+1.8=181.8) thì giảm so_dao xuống 1
+  if (kho_tt > 180 && so_dao > 1) {
+    so_dao -= 1
+    kho_tt = Math.ceil((kho_ke_hoach * beN * so_dao + 1.8) / 5) * 5
+  }
   // Diện tích 1 con (m²): 2 mảnh × diện tích mỗi mảnh; bình thường kho1 × dai1
   const dien_tich = hai_manh
     ? 2 * kho1 * dai1 / 10000

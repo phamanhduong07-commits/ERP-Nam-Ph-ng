@@ -891,8 +891,8 @@ def update_quote(
 ):
     quote = _load_quote(quote_id, db)
     _check_quote_owner_or_manager(quote, current_user)
-    if quote.trang_thai not in ("moi",):
-        raise HTTPException(status_code=400, detail="Chỉ sửa được báo giá ở trạng thái Mới")
+    if quote.trang_thai not in ("moi", "cho_duyet"):
+        raise HTTPException(status_code=400, detail="Chỉ sửa được báo giá ở trạng thái Mới hoặc Chờ duyệt")
 
     update_data = data.model_dump(exclude_none=True, exclude={"items"})
     for field, value in update_data.items():

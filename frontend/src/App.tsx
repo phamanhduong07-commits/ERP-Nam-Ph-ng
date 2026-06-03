@@ -153,6 +153,7 @@ const TrialBalancePage = lazy(() => import('./pages/accounting/TrialBalancePage'
 const WorkshopManagement = lazy(() => import('./pages/accounting/WorkshopManagement'))
 const JournalEntryListPage = lazy(() => import('./pages/accounting/JournalEntryListPage'))
 const JournalEntryForm = lazy(() => import('./pages/accounting/JournalEntryForm'))
+const AccountingAuditPage = lazy(() => import('./pages/accounting/AccountingAuditPage'))
 const ProfitLossPage = lazy(() => import('./pages/accounting/ProfitLossPage'))
 const BalanceSheetPage = lazy(() => import('./pages/accounting/BalanceSheetPage'))
 const PeriodClosingPage = lazy(() => import('./pages/accounting/PeriodClosingPage'))
@@ -373,6 +374,7 @@ export default function App() {
             <Route path="accounting/workshop-management" element={<ErrorBoundary><WorkshopManagement /></ErrorBoundary>} />
             <Route path="accounting/journal-entries" element={<ErrorBoundary><JournalEntryListPage /></ErrorBoundary>} />
             <Route path="accounting/journal-entries/new" element={<ErrorBoundary><JournalEntryForm /></ErrorBoundary>} />
+            <Route path="accounting/audit-logs" element={<ErrorBoundary><AccountingAuditPage /></ErrorBoundary>} />
             <Route path="accounting/profit-loss" element={<ErrorBoundary><ProfitLossPage /></ErrorBoundary>} />
             <Route path="accounting/balance-sheet" element={<ErrorBoundary><BalanceSheetPage /></ErrorBoundary>} />
             <Route path="accounting/period-closing" element={<ErrorBoundary><PeriodClosingPage /></ErrorBoundary>} />

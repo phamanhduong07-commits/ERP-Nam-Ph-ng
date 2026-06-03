@@ -81,6 +81,7 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
       productionPlansApi.list({
         search,
         trang_thai: effectiveTrangThai,
+        exclude_nhap: shortcut !== 'nhap' && !effectiveTrangThai,
         noi_sx: noiSx,
         tu_ngay: dateRange?.[0],
         den_ngay: dateRange?.[1],

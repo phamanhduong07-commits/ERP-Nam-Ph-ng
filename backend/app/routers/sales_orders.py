@@ -240,6 +240,26 @@ def approve_order(
     return get_order(order_id, db, current_user)
 
 
+@router.patch("/{order_id}/unapprove", response_model=SalesOrderResponse)
+def unapprove_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permissions("sales_order.approve")),
+):
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+    if order.trang_thai != "da_duyet":
+        raise HTTPException(status_code=400, detail=f"Chỉ có thể bỏ duyệt đơn hàng ở trạng thái 'Đã duyệt'. Hiện tại: '{order.trang_thai}'")
+
+    order.trang_thai = "moi"
+    order.approved_by = None
+    order.approved_at = None
+    db.commit()
+    logger.info("unapproved sales_order id=%s by user=%s", order_id, current_user.id)
+    return get_order(order_id, db, current_user)
+
+
 @router.patch("/{order_id}/cancel")
 def cancel_order(
     order_id: int,

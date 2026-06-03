@@ -8,7 +8,7 @@ import {
 } from 'antd'
 import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import {
-  CheckCircleOutlined, DeleteOutlined,
+  DeleteOutlined,
   ReloadOutlined, ClockCircleOutlined, ThunderboltOutlined,
   FileTextOutlined, CalculatorOutlined, InfoCircleOutlined,
   UnorderedListOutlined, SendOutlined,
@@ -227,6 +227,18 @@ export default function ProductionQueuePage() {
     [allLines, selectedKeys],
   )
 
+  const selectedNhapPlans = useMemo(() => {
+    const map = new Map<number, { plan_id: number; so_ke_hoach: string; count: number }>()
+    selectedRows.forEach(r => {
+      if (r.plan_trang_thai === 'nhap') {
+        const cur = map.get(r.plan_id)
+        if (cur) cur.count++
+        else map.set(r.plan_id, { plan_id: r.plan_id, so_ke_hoach: r.so_ke_hoach, count: 1 })
+      }
+    })
+    return Array.from(map.values())
+  }, [selectedRows])
+
   // Xác định tập dòng dùng để tính vật liệu: ưu tiên tích chọn, fallback lọc tất cả khi có filter
   const hasFilter = Object.values(filteredInfo).some(v => v && v.length > 0)
   // Filtered lines (apply filter manually for planning panel)
@@ -332,18 +344,37 @@ export default function ProductionQueuePage() {
   }, [tonKhoGiay, maInPlan, canKgByMa])
 
   // ── mutations ─────────────────────────────────────────────────────────────
-  const completeMut = useMutation({
-    mutationFn: ({ planId, lineId }: { planId: number; lineId: number }) =>
-      productionPlansApi.completeLine(planId, lineId),
-    onSuccess: () => { message.success('Đã hoàn thành'); qc.invalidateQueries({ queryKey: ['production-queue'] }) },
-    onError:   (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
-  })
+
   const deleteMut = useMutation({
     mutationFn: ({ planId, lineId }: { planId: number; lineId: number }) =>
       productionPlansApi.deleteLine(planId, lineId),
     onSuccess: () => { message.success('Đã xóa'); qc.invalidateQueries({ queryKey: ['production-queue'] }) },
     onError:   (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
+
+  const chotMut = useMutation({
+    mutationFn: (planId: number) => productionPlansApi.export(planId),
+    onSuccess: () => {
+      message.success('Đã chốt kế hoạch — plan xuất hiện trong trang KHSX')
+      qc.invalidateQueries({ queryKey: ['production-queue'] })
+      qc.invalidateQueries({ queryKey: ['production-plans'] })
+    },
+    onError: (e: { response?: { data?: { detail?: string } } }) =>
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi chốt kế hoạch'),
+  })
+
+  // Nhóm các plan còn nhap (chưa chốt) từ queue lines
+  const nhapPlans = useMemo(() => {
+    const map = new Map<number, { plan_id: number; so_ke_hoach: string; count: number }>()
+    allLines.forEach(l => {
+      if (l.plan_trang_thai === 'nhap') {
+        const cur = map.get(l.plan_id)
+        if (cur) cur.count++
+        else map.set(l.plan_id, { plan_id: l.plan_id, so_ke_hoach: l.so_ke_hoach, count: 1 })
+      }
+    })
+    return Array.from(map.values())
+  }, [allLines])
 
   const handleBatchTanDung = async () => {
     const orderIds = selectedRows
@@ -604,37 +635,42 @@ export default function ProductionQueuePage() {
     {
       title: 'TT',
       dataIndex: 'trang_thai',
-      width: 90,
+      width: 110,
       align: 'center',
       filters: ttOptions,
       filteredValue: filteredInfo['trang_thai'] || null,
       onFilter: (value, r) => r.trang_thai === value,
-      render: v => {
+      render: (v, r) => {
         const cfg = TRANG_THAI_CFG[v] ?? { label: v, color: 'default', icon: null }
-        return <Tag color={cfg.color} icon={cfg.icon}>{cfg.label}</Tag>
+        return (
+          <Space direction="vertical" size={2}>
+            <Tag color={cfg.color} icon={cfg.icon}>{cfg.label}</Tag>
+            {r.plan_trang_thai === 'nhap' && (
+              <Tag color="warning" style={{ fontSize: 10, lineHeight: '14px' }}>Chưa chốt KH</Tag>
+            )}
+          </Space>
+        )
       },
     },
     {
       title: 'Hành động',
-      width: 90,
+      width: 130,
       align: 'center',
       fixed: 'right',
       render: (_, r) => (
-        <Space size={4}>
-          {(r.trang_thai === 'cho' || r.trang_thai === 'dang_chay') && (
-            <Tooltip title="Hoàn thành">
+        <Space size={4} wrap>
+          {r.plan_trang_thai === 'nhap' && r.trang_thai === 'cho' && (
+            <Tooltip title={`Chốt kế hoạch ${r.so_ke_hoach} — xuất hiện bên KHSX`}>
               <Popconfirm
-                title="Đánh dấu hoàn thành dòng này?"
-                onConfirm={() => completeMut.mutate({ planId: r.plan_id, lineId: r.id })}
-                okText="Hoàn thành"
-                okButtonProps={{ style: { background: '#52c41a', borderColor: '#52c41a' } }}
+                title={`Chốt kế hoạch ${r.so_ke_hoach}?`}
+                description="Plan sẽ xuất hiện trong trang Kế hoạch SX."
+                onConfirm={() => chotMut.mutate(r.plan_id)}
+                okText="Chốt"
+                okButtonProps={{ style: { background: '#1677ff' } }}
               >
-                <Button
-                  size="small"
-                  icon={<CheckCircleOutlined />}
-                  style={{ color: '#52c41a', borderColor: '#52c41a' }}
-                  loading={completeMut.isPending}
-                />
+                <Button size="small" type="primary" icon={<SendOutlined />} loading={chotMut.isPending}>
+                  Chốt KH
+                </Button>
               </Popconfirm>
             </Tooltip>
           )}
@@ -733,6 +769,25 @@ export default function ProductionQueuePage() {
             {selectedKeys.length > 0 && (
               <>
                 <Tag color="blue">Đã chọn {selectedKeys.length} dòng</Tag>
+                {selectedNhapPlans.map(p => (
+                  <Popconfirm
+                    key={p.plan_id}
+                    title={`Chốt kế hoạch ${p.so_ke_hoach}?`}
+                    description={`${p.count} lệnh sẽ xuất hiện trong trang Kế hoạch SX.`}
+                    onConfirm={() => chotMut.mutate(p.plan_id)}
+                    okText="Chốt"
+                    okButtonProps={{ style: { background: '#1677ff' } }}
+                  >
+                    <Button
+                      size="small"
+                      type="primary"
+                      icon={<SendOutlined />}
+                      loading={chotMut.isPending}
+                    >
+                      Chốt KH {p.so_ke_hoach}
+                    </Button>
+                  </Popconfirm>
+                ))}
                 <Popconfirm
                   title={`Đánh dấu ${selectedKeys.length} lệnh SX là "Tận dụng phôi"?`}
                   description="Các lệnh này sẽ xuất hiện trong trang Kế hoạch tận dụng."
@@ -743,6 +798,7 @@ export default function ProductionQueuePage() {
                   <Button
                     size="small"
                     type="primary"
+                    ghost
                     icon={<SendOutlined />}
                     loading={isBatchLoading}
                   >
@@ -756,6 +812,42 @@ export default function ProductionQueuePage() {
           </Space>
         </Col>
       </Row>
+
+      {/* ── Kế hoạch chờ chốt ── */}
+      {nhapPlans.length > 0 && (
+        <Card
+          size="small"
+          style={{ marginBottom: 12, borderColor: '#faad14', background: '#fffbe6' }}
+          bodyStyle={{ padding: '8px 12px' }}
+        >
+          <Space wrap>
+            <Text strong style={{ color: '#ad6800' }}>
+              <SendOutlined style={{ marginRight: 6 }} />
+              Kế hoạch chờ chốt ({nhapPlans.length}):
+            </Text>
+            {nhapPlans.map(p => (
+              <Popconfirm
+                key={p.plan_id}
+                title={`Chốt kế hoạch ${p.so_ke_hoach}?`}
+                description={`${p.count} lệnh sẽ xuất hiện trong trang Kế hoạch SX.`}
+                onConfirm={() => chotMut.mutate(p.plan_id)}
+                okText="Chốt"
+                okButtonProps={{ style: { background: '#1677ff' } }}
+              >
+                <Button
+                  size="small"
+                  type="primary"
+                  ghost
+                  icon={<SendOutlined />}
+                  loading={chotMut.isPending}
+                >
+                  {p.so_ke_hoach} · {p.count} lệnh
+                </Button>
+              </Popconfirm>
+            ))}
+          </Space>
+        </Card>
+      )}
 
       {/* ── Stats ── */}
       <Row gutter={12} style={{ marginBottom: 12 }}>

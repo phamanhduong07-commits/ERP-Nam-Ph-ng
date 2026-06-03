@@ -10,6 +10,7 @@ import { rolesApi } from '../../api/permissions'
 import { usersApi, type NhanVien, type UserCreatePayload, type UserUpdatePayload } from '../../api/usersApi'
 import { cd2Api } from '../../api/cd2'
 import EmptyState from "../../components/EmptyState"
+import { phapNhanApi } from '../../api/phap_nhan'
 
 const { Title } = Typography
 
@@ -31,6 +32,7 @@ type UserFormValues = {
   password?: string
   role_id: number
   phan_xuong?: string
+  phap_nhan_id?: number
   trang_thai?: boolean
   machine_id?: number
 }
@@ -67,6 +69,11 @@ export default function UserList() {
     queryFn: () => cd2Api.listMachines().then(r => r.data),
   })
 
+  const { data: phapNhanList = [] } = useQuery({
+    queryKey: ['phap-nhan-active'],
+    queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
+  })
+
   const saveMutation = useMutation({
     mutationFn: (values: UserFormValues) => {
       if (editing) {
@@ -76,6 +83,7 @@ export default function UserList() {
           so_dien_thoai: values.so_dien_thoai || null,
           role_id: values.role_id,
           phan_xuong: values.phan_xuong || null,
+          phap_nhan_id: values.phap_nhan_id || null,
           trang_thai: values.trang_thai ?? true,
           machine_id: values.machine_id || null,
         }
@@ -89,6 +97,7 @@ export default function UserList() {
         password: values.password || '',
         role_id: values.role_id,
         phan_xuong: values.phan_xuong || null,
+        phap_nhan_id: values.phap_nhan_id || null,
         machine_id: values.machine_id || null,
       }
       return usersApi.create(payload)
@@ -129,6 +138,7 @@ export default function UserList() {
       so_dien_thoai: record.so_dien_thoai || undefined,
       role_id: record.role_id,
       phan_xuong: record.phan_xuong || undefined,
+      phap_nhan_id: record.phap_nhan_id || undefined,
       trang_thai: record.trang_thai,
       machine_id: record.machine_id || undefined,
     })
@@ -139,8 +149,15 @@ export default function UserList() {
     { title: 'Họ tên', dataIndex: 'ho_ten', width: 180 },
     { title: 'Username', dataIndex: 'username', width: 130 },
     {
+      title: 'Vai trò',
+      dataIndex: 'role_name',
+      width: 180,
+      render: (_: string | null, r) => <Tag color="geekblue">{r.role_name || r.role_code || '-'}</Tag>,
+    },
+    {
       title: 'Email',
       dataIndex: 'email',
+      width: 160,
       ellipsis: true,
       render: (v: string | null) => v ?? '-',
     },
@@ -151,10 +168,10 @@ export default function UserList() {
       render: (v: string | null) => v ?? '-',
     },
     {
-      title: 'Vai trò',
-      dataIndex: 'role_name',
-      width: 160,
-      render: (_: string | null, r) => <Tag color="geekblue">{r.role_name || r.role_code || '-'}</Tag>,
+      title: 'Pháp nhân',
+      dataIndex: 'ten_phap_nhan',
+      width: 140,
+      render: (v: string | null) => v ?? '-',
     },
     {
       title: 'Phân xưởng',
@@ -227,7 +244,7 @@ export default function UserList() {
           columns={columns}
           loading={isLoading}
           size="small"
-          pagination={{ pageSize: 20 }}
+          pagination={{ pageSize: 50, showSizeChanger: false }}
         />
       </Card>
 
@@ -271,6 +288,15 @@ export default function UserList() {
             <Col span={12}>
               <Form.Item name="so_dien_thoai" label="SĐT">
                 <Input />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="phap_nhan_id" label="Pháp nhân">
+                <Select
+                  allowClear
+                  placeholder="-- Chọn pháp nhân --"
+                  options={phapNhanList.map(p => ({ value: p.id, label: p.ten_phap_nhan }))}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
