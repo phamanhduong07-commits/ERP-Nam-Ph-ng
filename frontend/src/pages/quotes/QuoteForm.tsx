@@ -77,6 +77,7 @@ export default function QuoteForm() {
   const [selectItemsModal, setSelectItemsModal] = useState(false)
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([])
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [saveToProductLoading, setSaveToProductLoading] = useState(false)
 
   const role = useAuthStore(s => s.user?.role)
   const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
@@ -137,15 +138,15 @@ export default function QuoteForm() {
       dieu_khoan:        quoteData.dieu_khoan,
     })
     setItems(quoteData.items)
-    setFinance({
+    setFinance(recalcFinance({
       chi_phi_bang_in:       Number(quoteData.chi_phi_bang_in),
       chi_phi_khuon:         Number(quoteData.chi_phi_khuon),
       chi_phi_van_chuyen:    Number(quoteData.chi_phi_van_chuyen),
       tong_tien_hang:        Number(quoteData.tong_tien_hang),
       ty_le_vat:             Number(quoteData.ty_le_vat),
-      tien_vat:              Number(quoteData.tien_vat),
-      chi_phi_hang_hoa_dv:   Number(quoteData.chi_phi_hang_hoa_dv),
-      tong_cong:             Number(quoteData.tong_cong),
+      tien_vat:              0,
+      chi_phi_hang_hoa_dv:   0,
+      tong_cong:             0,
       chi_phi_khac_1_ten:    quoteData.chi_phi_khac_1_ten || '',
       chi_phi_khac_1:        Number(quoteData.chi_phi_khac_1),
       chi_phi_khac_2_ten:    quoteData.chi_phi_khac_2_ten || '',
@@ -154,7 +155,7 @@ export default function QuoteForm() {
       gia_ban:               Number(quoteData.gia_ban),
       gia_phoi:              Number(quoteData.items?.[0]?.gia_phoi || 0),
       gia_xuat_phoi_vsp:     Number(quoteData.gia_xuat_phoi_vsp),
-    })
+    }))
     if (quoteData.customer) {
       setCustomerOptions([{
         value: quoteData.customer_id,
@@ -384,6 +385,48 @@ export default function QuoteForm() {
     setCurrentItem(prev => ({ ...emptyItem(), stt: prev.stt, so_luong: prev.so_luong }))
     giaBanManualRef.current = false
     setProductOptions([])
+  }
+
+  const handleSaveCurrentItemToProduct = async () => {
+    const productId = currentItem.product_id
+    if (productId == null) return
+    setSaveToProductLoading(true)
+    try {
+      const ci = currentItem
+      await productsApi.update(productId, {
+        ten_hang: ci.ten_hang,
+        dvt: ci.dvt,
+        dai: ci.dai ?? null,
+        rong: ci.rong ?? null,
+        cao: ci.cao ?? null,
+        so_lop: ci.so_lop,
+        so_mau: ci.so_mau ?? 0,
+        gia_ban: ci.gia_ban ?? 0,
+        ghim: ci.ghim ?? false,
+        dan: ci.dan ?? false,
+        loai_thung: ci.loai_thung ?? null,
+        loai_in: ci.loai_in === 'flexo' ? 1 : ci.loai_in === 'ky_thuat_so' ? 2 : 0,
+        chap_xa: ci.chap_xa ? 1 : 0,
+        loai_lan: ci.loai_lan === 'lan_bang' ? 'bang' : ci.loai_lan === 'lan_am_duong' ? 'am_duong' : null,
+        chong_tham: ci.c_tham === '1 mặt' ? 1 : ci.c_tham === '2 mặt' ? 2 : 0,
+        boi: ci.boi ? 1 : 0,
+        be_so_con: ci.be_so_con ?? 0,
+        can_mang: ci.can_man === '1 mặt' ? 1 : ci.can_man === '2 mặt' ? 2 : 0,
+        mat: ci.mat ?? null,     mat_dl: ci.mat_dl ?? null,
+        song_1: ci.song_1 ?? null, song_1_dl: ci.song_1_dl ?? null,
+        mat_1: ci.mat_1 ?? null,   mat_1_dl: ci.mat_1_dl ?? null,
+        song_2: ci.song_2 ?? null, song_2_dl: ci.song_2_dl ?? null,
+        mat_2: ci.mat_2 ?? null,   mat_2_dl: ci.mat_2_dl ?? null,
+        song_3: ci.song_3 ?? null, song_3_dl: ci.song_3_dl ?? null,
+        mat_3: ci.mat_3 ?? null,   mat_3_dl: ci.mat_3_dl ?? null,
+      })
+      message.success('Đã lưu vào danh mục sản phẩm')
+      queryClient.invalidateQueries({ queryKey: ['products-full'] })
+    } catch (e) {
+      message.error(apiErrorMsg(e, 'Lỗi khi lưu vào danh mục'))
+    } finally {
+      setSaveToProductLoading(false)
+    }
   }
 
   // ── Item editing (setCI with all auto-logic) ───────────────
@@ -723,6 +766,8 @@ export default function QuoteForm() {
           onOpenCauTruc={() => setCauTrucModal(true)}
           onAutoName={handleAutoName}
           getCustomerId={() => headerForm.getFieldValue('customer_id') as number | undefined}
+          onSaveToProduct={currentItem.product_id != null ? handleSaveCurrentItemToProduct : undefined}
+          saveToProductLoading={saveToProductLoading}
         />
       )}
 

@@ -435,19 +435,19 @@ def _recalc_totals(quote: Quote) -> None:
     )
     ty_le = Decimal(str(quote.ty_le_vat or 8))
     tien_vat = (tong_tien * ty_le / 100).quantize(Decimal("1"))
+    chi_phi_hh_dv = tong_tien + tien_vat
     tong_cong = (
-        tong_tien
-        + tien_vat
+        chi_phi_hh_dv
         + Decimal(str(quote.chi_phi_bang_in or 0))
         + Decimal(str(quote.chi_phi_khuon or 0))
         + Decimal(str(quote.chi_phi_van_chuyen or 0))
-        + Decimal(str(quote.chi_phi_hang_hoa_dv or 0))
         + Decimal(str(quote.chi_phi_khac_1 or 0))
         + Decimal(str(quote.chi_phi_khac_2 or 0))
         - Decimal(str(quote.chiet_khau or 0))
     )
     quote.tong_tien_hang = tong_tien.quantize(Decimal("1"))
     quote.tien_vat = tien_vat
+    quote.chi_phi_hang_hoa_dv = chi_phi_hh_dv.quantize(Decimal("1"))
     quote.tong_cong = tong_cong.quantize(Decimal("1"))
 
 
