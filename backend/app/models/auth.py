@@ -17,6 +17,8 @@ class Permission(Base):
 
     role_permissions: Mapped[list["RolePermission"]] = relationship(
         "RolePermission", back_populates="permission", cascade="all, delete-orphan")
+    user_permissions: Mapped[list["UserPermission"]] = relationship(
+        "UserPermission", back_populates="permission", cascade="all, delete-orphan")
 
 
 class RolePermission(Base):
@@ -69,6 +71,24 @@ class User(Base):
         onupdate=datetime.utcnow)
 
     role: Mapped["Role"] = relationship("Role", back_populates="users")
+    user_permissions: Mapped[list["UserPermission"]] = relationship(
+        "UserPermission", foreign_keys="UserPermission.user_id",
+        back_populates="user", cascade="all, delete-orphan")
+
+
+class UserPermission(Base):
+    """Per-user permission overrides — granted on top of role permissions."""
+    __tablename__ = "user_permissions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    permission_id: Mapped[int] = mapped_column(Integer, ForeignKey("permissions.id", ondelete="CASCADE"), nullable=False)
+    granted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id], back_populates="user_permissions")
+    permission: Mapped["Permission"] = relationship("Permission", back_populates="user_permissions")
+    granter: Mapped["User | None"] = relationship("User", foreign_keys=[granted_by])
 
 
 class AuditLog(Base):

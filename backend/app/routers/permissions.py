@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.deps import require_roles
-from app.models.auth import User
+from app.deps import require_roles, get_current_user, _owned_permissions
+from app.models.auth import User, UserPermission, Permission
 from app.services.role_service import PermissionService, RoleService
 from app.schemas.auth import (
     PermissionCreate, PermissionUpdate, PermissionResponse,
@@ -196,3 +197,105 @@ def remove_permission_from_role(
     """Xóa một quyền từ vai trò"""
     service = RoleService(db)
     return service.remove_permission_from_role(role_id, permission_id)
+
+
+# ====================================================
+# USER-LEVEL PERMISSION ENDPOINTS (Trưởng phòng quản lý team)
+# ====================================================
+
+# Permissions có thể được trưởng phòng cấp cho team (không cấp được quyền cao hơn mình)
+_GRANTABLE_BY_TEAM_LEAD = {
+    "report.xnt_all_nv",
+    "report.cong_no_all_nv",
+}
+
+_team_lead_required = require_roles("ADMIN", "TRUONG_PHONG_SALE_ADMIN")
+
+
+class UserPermissionGrantRequest(BaseModel):
+    permission_ma_quyen: str
+
+
+@role_router.get("/users/{user_id}/permissions", tags=["user-permissions"])
+def get_user_extra_permissions(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_team_lead_required),
+):
+    """Lấy danh sách quyền cá nhân (bổ sung ngoài role) của một user."""
+    rows = (
+        db.query(UserPermission)
+        .options(joinedload(UserPermission.permission), joinedload(UserPermission.granter))
+        .filter(UserPermission.user_id == user_id)
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "ma_quyen": r.permission.ma_quyen,
+            "ten_quyen": r.permission.ten_quyen,
+            "granted_by_name": r.granter.ho_ten if r.granter else None,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+
+
+@role_router.post("/users/{user_id}/permissions", tags=["user-permissions"], status_code=201)
+def grant_user_permission(
+    user_id: int,
+    body: UserPermissionGrantRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_team_lead_required),
+):
+    """Cấp thêm quyền cá nhân cho một user."""
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    # Trưởng phòng chỉ cấp được các quyền trong _GRANTABLE_BY_TEAM_LEAD
+    if role_code != "ADMIN" and body.permission_ma_quyen not in _GRANTABLE_BY_TEAM_LEAD:
+        raise HTTPException(status_code=403, detail=f"Bạn không được phép cấp quyền: {body.permission_ma_quyen}")
+
+    perm = db.query(Permission).filter(Permission.ma_quyen == body.permission_ma_quyen).first()
+    if not perm:
+        raise HTTPException(status_code=404, detail="Không tìm thấy quyền này")
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Không tìm thấy user")
+
+    existing = db.query(UserPermission).filter(
+        UserPermission.user_id == user_id,
+        UserPermission.permission_id == perm.id
+    ).first()
+    if existing:
+        return {"message": "User đã có quyền này"}
+
+    up = UserPermission(user_id=user_id, permission_id=perm.id, granted_by=current_user.id)
+    db.add(up)
+    db.commit()
+    return {"message": f"Đã cấp quyền {body.permission_ma_quyen} cho {target_user.ho_ten}"}
+
+
+@role_router.delete("/users/{user_id}/permissions/{ma_quyen}", tags=["user-permissions"])
+def revoke_user_permission(
+    user_id: int,
+    ma_quyen: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_team_lead_required),
+):
+    """Thu hồi quyền cá nhân của một user."""
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code != "ADMIN" and ma_quyen not in _GRANTABLE_BY_TEAM_LEAD:
+        raise HTTPException(status_code=403, detail=f"Bạn không được phép thu hồi quyền: {ma_quyen}")
+
+    perm = db.query(Permission).filter(Permission.ma_quyen == ma_quyen).first()
+    if not perm:
+        raise HTTPException(status_code=404, detail="Không tìm thấy quyền này")
+
+    deleted = db.query(UserPermission).filter(
+        UserPermission.user_id == user_id,
+        UserPermission.permission_id == perm.id
+    ).delete()
+    db.commit()
+    if not deleted:
+        raise HTTPException(status_code=404, detail="User không có quyền này")
+    return {"message": f"Đã thu hồi quyền {ma_quyen}"}

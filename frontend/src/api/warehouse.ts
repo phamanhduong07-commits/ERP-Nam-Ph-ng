@@ -743,6 +743,7 @@ export const warehouseApi = {
   getTonKho: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; loai?: string; search?: string }) =>
     client.get<TonKho[]>('/warehouse/ton-kho', { params }),
   getTonKhoSummary: () => client.get<TonKhoSummary>('/warehouse/ton-kho/summary'),
+  snapshotTonKho: () => client.post<{ snapped: number }>('/warehouse/ton-kho/snapshot'),
 
   // Phiếu nhập kho
   listPhieuNhap: (params?: { warehouse_id?: number; phan_xuong_id?: number; loai_nhap?: string; tu_ngay?: string; den_ngay?: string }) =>

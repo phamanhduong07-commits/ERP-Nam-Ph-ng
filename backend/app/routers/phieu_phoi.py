@@ -8,6 +8,7 @@ GET  /api/phieu-phoi/xuat/{id}     — chi tiết phiếu xuất
 """
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -353,6 +354,7 @@ def get_phieu_xuat(
 
 @router.get("/ton-kho-lsx")
 def ton_kho_lsx(
+    nv_theo_doi_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -362,8 +364,19 @@ def ton_kho_lsx(
     """
     from app.models.cd2 import PhieuIn
 
+    # Lọc theo NV theo dõi nếu có
+    allowed_order_ids: list[int] | None = None
+    if nv_theo_doi_id is not None:
+        allowed_order_ids = [
+            r.id for r in db.query(ProductionOrder.id)
+            .filter(ProductionOrder.nv_theo_doi_id == nv_theo_doi_id)
+            .all()
+        ]
+        if not allowed_order_ids:
+            return []
+
     # 1. Nhập phôi từ sản xuất (CD1): sum(so_tam) per (production_order_id, warehouse_id)
-    nhap_rows = (
+    nhap_q = (
         db.query(
             PhieuNhapPhoiSong.production_order_id,
             PhieuNhapPhoiSong.warehouse_id,
@@ -372,13 +385,13 @@ def ton_kho_lsx(
             func.max(PhieuNhapPhoiSongItem.chieu_cat).label("chieu_cat"),
         )
         .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id)
-        .group_by(PhieuNhapPhoiSong.production_order_id, PhieuNhapPhoiSong.warehouse_id)
-        .all()
     )
+    if allowed_order_ids is not None:
+        nhap_q = nhap_q.filter(PhieuNhapPhoiSong.production_order_id.in_(allowed_order_ids))
+    nhap_rows = nhap_q.group_by(PhieuNhapPhoiSong.production_order_id, PhieuNhapPhoiSong.warehouse_id).all()
 
     # 2. Xuất phôi cho sản xuất (CD1/CD2): sum per (production_order_id, warehouse_id)
-    # Lưu ý: Cần join qua ProductionOrder để lấy warehouse_id của xưởng sản xuất
-    xuat_rows = (
+    xuat_q = (
         db.query(
             ProductionOrderItem.production_order_id,
             Warehouse.id.label("warehouse_id"),
@@ -387,34 +400,40 @@ def ton_kho_lsx(
         .join(PhieuXuatPhoiItem, PhieuXuatPhoiItem.production_order_item_id == ProductionOrderItem.id)
         .join(PhieuXuatPhoi, PhieuXuatPhoi.id == PhieuXuatPhoiItem.phieu_id)
         .join(ProductionOrder, ProductionOrder.id == ProductionOrderItem.production_order_id)
-        # Tìm kho PHOI của xưởng sản xuất lệnh đó
         .join(Warehouse, (Warehouse.phan_xuong_id == ProductionOrder.phan_xuong_id) & (Warehouse.loai_kho == "PHOI"))
-        .group_by(ProductionOrderItem.production_order_id, Warehouse.id)
-        .all()
     )
+    if allowed_order_ids is not None:
+        xuat_q = xuat_q.filter(ProductionOrderItem.production_order_id.in_(allowed_order_ids))
+    xuat_rows = xuat_q.group_by(ProductionOrderItem.production_order_id, Warehouse.id).all()
 
     # 3. Chuyển kho (Đi/Đến)
-    chuyen_xuat_rows = (
+    chuyen_xuat_q = (
         db.query(
             PhieuChuyenKhoItem.production_order_id,
             PhieuChuyenKho.warehouse_xuat_id.label("warehouse_id"),
             func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0).label("tong_chuyen_xuat"),
         )
         .join(PhieuChuyenKho, PhieuChuyenKho.id == PhieuChuyenKhoItem.phieu_chuyen_kho_id)
-        .group_by(PhieuChuyenKhoItem.production_order_id, PhieuChuyenKho.warehouse_xuat_id)
-        .all()
     )
+    if allowed_order_ids is not None:
+        chuyen_xuat_q = chuyen_xuat_q.filter(PhieuChuyenKhoItem.production_order_id.in_(allowed_order_ids))
+    chuyen_xuat_rows = chuyen_xuat_q.group_by(
+        PhieuChuyenKhoItem.production_order_id, PhieuChuyenKho.warehouse_xuat_id
+    ).all()
 
-    chuyen_nhap_rows = (
+    chuyen_nhap_q = (
         db.query(
             PhieuChuyenKhoItem.production_order_id,
             PhieuChuyenKho.warehouse_nhap_id.label("warehouse_id"),
             func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0).label("tong_chuyen_nhap"),
         )
         .join(PhieuChuyenKho, PhieuChuyenKho.id == PhieuChuyenKhoItem.phieu_chuyen_kho_id)
-        .group_by(PhieuChuyenKhoItem.production_order_id, PhieuChuyenKho.warehouse_nhap_id)
-        .all()
     )
+    if allowed_order_ids is not None:
+        chuyen_nhap_q = chuyen_nhap_q.filter(PhieuChuyenKhoItem.production_order_id.in_(allowed_order_ids))
+    chuyen_nhap_rows = chuyen_nhap_q.group_by(
+        PhieuChuyenKhoItem.production_order_id, PhieuChuyenKho.warehouse_nhap_id
+    ).all()
 
     # 4. Gom tất cả tổ hợp (LSX, Kho) có phát sinh
     stats = {}  # (order_id, wh_id) -> data

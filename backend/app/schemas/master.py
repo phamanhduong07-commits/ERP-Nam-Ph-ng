@@ -110,6 +110,7 @@ class ProductCreate(ProductBase):
 
 class ProductUpdate(BaseModel):
     ten_hang: str | None = None
+    dvt: str | None = None
     dai: Decimal | None = None
     rong: Decimal | None = None
     cao: Decimal | None = None
@@ -121,6 +122,27 @@ class ProductUpdate(BaseModel):
     gia_ban: Decimal | None = None
     ghi_chu: str | None = None
     trang_thai: bool | None = None
+    loai_in: int | None = None
+    chap_xa: int | None = None
+    loai_lan: str | None = None
+    chong_tham: int | None = None
+    boi: int | None = None
+    be_so_con: int | None = None
+    can_mang: int | None = None
+    mat: str | None = None
+    mat_dl: Decimal | None = None
+    song_1: str | None = None
+    song_1_dl: Decimal | None = None
+    mat_1: str | None = None
+    mat_1_dl: Decimal | None = None
+    song_2: str | None = None
+    song_2_dl: Decimal | None = None
+    mat_2: str | None = None
+    mat_2_dl: Decimal | None = None
+    song_3: str | None = None
+    song_3_dl: Decimal | None = None
+    mat_3: str | None = None
+    mat_3_dl: Decimal | None = None
 
 
 class ProductResponse(ProductBase):

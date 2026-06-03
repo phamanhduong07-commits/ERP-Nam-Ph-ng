@@ -12,7 +12,7 @@ from app.models.sales import SalesOrder
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoiItem
 from app.models.cd2 import PhieuIn
-from app.models.warehouse_doc import PhieuChuyenKhoItem
+from app.models.warehouse_doc import PhieuChuyenKho, PhieuChuyenKhoItem, ProductionOutput, DeliveryOrder, DeliveryOrderItem
 from app.services.carton_metrics import production_item_metrics
 
 router = APIRouter(prefix="/api/theo-doi", tags=["theo-doi"])
@@ -35,7 +35,7 @@ STAGE_LABELS = {
 }
 
 
-def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None):
+def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None, ton_tp_map=None):
     nhap = nhap_map.get(po.id)
     tong_nhap = float(nhap.tong_tam or 0) if nhap else 0.0
     ton_kho = tong_nhap - xuat_map.get(po.id, 0.0)
@@ -80,7 +80,8 @@ def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None):
         "tong_nhap_phoi": tong_nhap,
         "ngay_nhap_cuoi": str(nhap.ngay_cuoi) if nhap and nhap.ngay_cuoi else None,
         "ton_kho_phoi": ton_kho,
-        "tong_chuyen_phoi": float((chuyen_map or {}).get(po.id) or 0),
+        "tong_chuyen_phoi": float(((chuyen_map or {}).get(po.id) or {}).get("tong_chuyen", 0)),
+        "ngay_chuyen_cuoi": ((chuyen_map or {}).get(po.id) or {}).get("ngay_cuoi"),
         "phieu_in_id": pi.id if pi else None,
         "so_phieu_in": pi.so_phieu if pi else None,
         "trang_thai_in": pi.trang_thai if pi else None,
@@ -88,6 +89,8 @@ def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None):
         "ngay_in": str(pi.ngay_in) if pi and pi.ngay_in else None,
         "so_luong_in_ok": float(pi.so_luong_in_ok or 0) if pi else None,
         "so_khoi": so_khoi,
+        "ton_kho_tp": float(((ton_tp_map or {}).get(po.id) or {}).get("ton", 0)),
+        "ngay_nhap_tp_cuoi": ((ton_tp_map or {}).get(po.id) or {}).get("ngay_cuoi"),
         "stage": stage,
         "stage_label": STAGE_LABELS.get(stage, stage),
     }
@@ -121,6 +124,7 @@ def _build_so_row(so: SalesOrder) -> dict:
         "ngay_nhap_cuoi": None,
         "ton_kho_phoi": 0,
         "tong_chuyen_phoi": 0,
+        "ngay_chuyen_cuoi": None,
         "phieu_in_id": None,
         "so_phieu_in": None,
         "trang_thai_in": None,
@@ -128,6 +132,8 @@ def _build_so_row(so: SalesOrder) -> dict:
         "ngay_in": None,
         "so_luong_in_ok": None,
         "so_khoi": 0.0,
+        "ton_kho_tp": 0.0,
+        "ngay_nhap_tp_cuoi": None,
         "stage": so.trang_thai,
         "stage_label": STAGE_LABELS.get(so.trang_thai, so.trang_thai),
     }
@@ -235,14 +241,63 @@ def _query_rows(
             db.query(
                 PhieuChuyenKhoItem.production_order_id,
                 func.sum(PhieuChuyenKhoItem.so_luong).label("tong_chuyen"),
+                func.max(PhieuChuyenKho.ngay).label("ngay_cuoi"),
             )
+            .join(PhieuChuyenKho, PhieuChuyenKho.id == PhieuChuyenKhoItem.phieu_chuyen_kho_id)
             .filter(PhieuChuyenKhoItem.production_order_id.in_(po_ids))
             .group_by(PhieuChuyenKhoItem.production_order_id)
             .all()
         )
-        chuyen_map = {r.production_order_id: float(r.tong_chuyen or 0) for r in chuyen_agg}
+        chuyen_map = {
+            r.production_order_id: {
+                "tong_chuyen": float(r.tong_chuyen or 0),
+                "ngay_cuoi": str(r.ngay_cuoi) if r.ngay_cuoi else None,
+            }
+            for r in chuyen_agg
+        }
 
-    result = [_build_row(o, nhap_map, xuat_map, pi_map, plan_set, chuyen_map) for o in orders]
+        nhap_tp_agg = (
+            db.query(
+                ProductionOutput.production_order_id,
+                func.coalesce(func.sum(ProductionOutput.so_luong_nhap), 0).label("tong_nhap_tp"),
+                func.max(ProductionOutput.ngay_nhap).label("ngay_cuoi"),
+            )
+            .filter(ProductionOutput.production_order_id.in_(po_ids))
+            .group_by(ProductionOutput.production_order_id)
+            .all()
+        )
+        nhap_tp_map = {
+            r.production_order_id: {
+                "tong_nhap": float(r.tong_nhap_tp),
+                "ngay_cuoi": str(r.ngay_cuoi) if r.ngay_cuoi else None,
+            }
+            for r in nhap_tp_agg
+        }
+
+        xuat_tp_agg = (
+            db.query(
+                DeliveryOrderItem.production_order_id,
+                func.coalesce(func.sum(DeliveryOrderItem.so_luong), 0).label("tong_xuat_tp"),
+            )
+            .join(DeliveryOrder, DeliveryOrder.id == DeliveryOrderItem.delivery_id)
+            .filter(
+                DeliveryOrderItem.production_order_id.in_(po_ids),
+                DeliveryOrder.trang_thai != "huy",
+            )
+            .group_by(DeliveryOrderItem.production_order_id)
+            .all()
+        )
+        xuat_tp_map = {r.production_order_id: float(r.tong_xuat_tp) for r in xuat_tp_agg}
+
+        ton_tp_map = {
+            po_id: {
+                "ton": nhap_tp_map.get(po_id, {}).get("tong_nhap", 0.0) - xuat_tp_map.get(po_id, 0.0),
+                "ngay_cuoi": nhap_tp_map.get(po_id, {}).get("ngay_cuoi"),
+            }
+            for po_id in po_ids
+        }
+
+    result = [_build_row(o, nhap_map, xuat_map, pi_map, plan_set, chuyen_map, ton_tp_map) for o in orders]
 
     # SOs chưa có lệnh SX — chỉ hiển thị khi không filter theo xưởng/NV/pháp nhân
     if not phan_xuong_id and not nv_theo_doi_id and not phap_nhan_id:

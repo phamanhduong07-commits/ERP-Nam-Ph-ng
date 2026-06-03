@@ -25,6 +25,7 @@ export interface DonHangTheoDoiRow {
   // Kho
   ton_kho_phoi: number
   tong_chuyen_phoi: number
+  ngay_chuyen_cuoi: string | null
   // CD2
   phieu_in_id: number | null
   so_phieu_in: string | null
@@ -33,6 +34,8 @@ export interface DonHangTheoDoiRow {
   ngay_in: string | null
   so_luong_in_ok: number | null
   so_khoi: number
+  ton_kho_tp: number
+  ngay_nhap_tp_cuoi: string | null
   // Summary
   stage: string
   stage_label: string

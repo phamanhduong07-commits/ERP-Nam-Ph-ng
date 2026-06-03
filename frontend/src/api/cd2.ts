@@ -324,7 +324,7 @@ export const cd2Api = {
     client.post(`/cd2/phieu-in/tu-lenh-sx/${orderId}`, null, { params: { target } }),
 
   // Kho phôi
-  getTonKhoLsx: () => client.get<KhoRow[]>('/cd2/ton-kho-lsx'),
+  getTonKhoLsx: (params?: { nv_theo_doi_id?: number }) => client.get<KhoRow[]>('/phieu-phoi/ton-kho-lsx', { params }),
 
   // Máy in
   listMayIn: (params?: Record<string, string | number | boolean | undefined | null>) => client.get<MayIn[]>('/cd2/may-in', { params }),

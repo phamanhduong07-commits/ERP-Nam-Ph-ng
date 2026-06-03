@@ -60,7 +60,17 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    user = db.query(User).filter(User.id == user_id, User.trang_thai == True).first()
+    from sqlalchemy.orm import selectinload, joinedload
+    from app.models.auth import UserPermission, Permission as _Perm, RolePermission, Role
+    user = (
+        db.query(User)
+        .options(
+            joinedload(User.role).selectinload(Role.role_permissions).joinedload(RolePermission.permission),
+            selectinload(User.user_permissions).joinedload(UserPermission.permission),
+        )
+        .filter(User.id == user_id, User.trang_thai == True)
+        .first()
+    )
     if user is None:
         raise credentials_exception
     return user
@@ -112,15 +122,20 @@ def require_roles(*allowed_roles: str):
     return checker
 
 
+def _owned_permissions(user: User, db: Session) -> set[str]:
+    """Return all ma_quyen the user has (role-level + user-level overrides)."""
+    from app.models.auth import RolePermission, Permission, Role, UserPermission
+    role_perms = {r[0] for r in db.query(Permission.ma_quyen).join(RolePermission).join(Role).join(User).filter(User.id == user.id).all()}
+    user_perms = {r[0] for r in db.query(Permission.ma_quyen).join(UserPermission, UserPermission.permission_id == Permission.id).filter(UserPermission.user_id == user.id).all()}
+    return role_perms | user_perms
+
+
 def assert_has_permission(permission: str, user: User, db: Session) -> None:
-    """Raise 403 if user doesn't have the given permission. Use inside route bodies where
-    the check must be conditional (e.g. depends on record state)."""
+    """Raise 403 if user doesn't have the given permission."""
     role_code = user.role.ma_vai_tro if user.role else None
     if role_code == "ADMIN":
         return
-    from app.models.auth import RolePermission, Permission, Role
-    owned = [r[0] for r in db.query(Permission.ma_quyen).join(RolePermission).join(Role).join(User).filter(User.id == user.id).all()]
-    if permission not in owned:
+    if permission not in _owned_permissions(user, db):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Bạn thiếu quyền: {permission}")
 
 
@@ -132,16 +147,9 @@ def require_permissions(*permissions: str):
         role_code = current_user.role.ma_vai_tro if current_user.role else None
         if role_code == "ADMIN":
             return current_user
-        
-        from app.models.auth import RolePermission, Permission, Role
-        q = db.query(Permission.ma_quyen).join(RolePermission).join(Role).join(User).filter(User.id == current_user.id)
-        owned_permissions = [r[0] for r in q.all()]
-        
+        owned = _owned_permissions(current_user, db)
         for p in permissions:
-            if p not in owned_permissions:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Bạn thiếu quyền: {p}",
-                )
+            if p not in owned:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Bạn thiếu quyền: {p}")
         return current_user
     return checker

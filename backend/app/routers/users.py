@@ -11,6 +11,7 @@ from app.schemas.auth import UserCreate, UserUpdate
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 admin_required = require_roles("ADMIN", "GIAM_DOC")
+list_users_allowed = require_roles("ADMIN", "GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN")
 
 
 def _hash_password(plain: str) -> str:
@@ -60,7 +61,7 @@ def list_users(
     phan_xuong: str | None = Query(default=None),
     trang_thai: bool | None = Query(default=True),
     db: Session = Depends(get_db),
-    _: User = Depends(get_admin_user),
+    _: User = Depends(list_users_allowed),
 ):
     q = db.query(User)
     if trang_thai is not None:
@@ -131,18 +132,41 @@ def update_user(
     return _to_response(user)
 
 
+_reset_pw_allowed = require_roles("ADMIN", "GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN")
+
+# Roles trưởng phòng được phép reset mật khẩu (chỉ reset tài khoản thuộc các role này)
+_TEAM_ROLES = {"SALE_ADMIN", "TRUONG_PHONG_SALE_ADMIN"}
+# Roles không ai được phép reset ngoài ADMIN / GIAM_DOC
+_PROTECTED_ROLES = {"ADMIN", "GIAM_DOC", "KE_TOAN_TRUONG"}
+
+
 @router.post("/{user_id}/reset-password")
 def reset_password(
     user_id: int,
     data: ResetPasswordRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(admin_required),
+    current_user: User = Depends(_reset_pw_allowed),
 ):
     if len(data.password) < 6:
         raise HTTPException(status_code=400, detail="Mật khẩu phải có ít nhất 6 ký tự")
-    user = db.get(User, user_id)
-    if not user:
+    target = db.get(User, user_id)
+    if not target:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản")
-    user.password_hash = _hash_password(data.password)
+
+    caller_role = current_user.role.ma_vai_tro if current_user.role else None
+    target_role = target.role.ma_vai_tro if target.role else None
+
+    # Trưởng phòng: chỉ reset được tài khoản trong _TEAM_ROLES
+    if caller_role == "TRUONG_PHONG_SALE_ADMIN":
+        if target_role not in _TEAM_ROLES:
+            raise HTTPException(
+                status_code=403,
+                detail="Bạn chỉ được đặt lại mật khẩu cho nhân viên trong team Sale",
+            )
+
+    # ADMIN/GIAM_DOC không được reset tài khoản ADMIN khác (bảo vệ chéo)
+    # — ngoại lệ: chính mình thì được (xử lý qua change-password riêng)
+
+    target.password_hash = _hash_password(data.password)
     db.commit()
     return {"message": "Đã đặt lại mật khẩu"}

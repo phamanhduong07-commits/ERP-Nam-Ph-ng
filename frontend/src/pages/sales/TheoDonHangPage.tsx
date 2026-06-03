@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Descriptions, Drawer, Empty, Input, Row,
-  Select, Space, Statistic, Table, Tag, Tooltip, Typography,
+  Select, Space, Statistic, Table, Tag, Typography,
 } from 'antd'
 import {
   DownloadOutlined, LeftOutlined, RightOutlined,
@@ -300,8 +300,14 @@ export default function TheoDonHangPage() {
         ) : <Text type="secondary">—</Text>,
     },
     {
-      title: 'Chuyển phôi', dataIndex: 'tong_chuyen_phoi', width: 95, align: 'right' as const,
-      render: v => v > 0 ? <Tag color="geekblue">{fmtN(v)}</Tag> : <Text type="secondary">—</Text>,
+      title: 'Chuyển phôi', width: 100,
+      render: (_, r) =>
+        r.tong_chuyen_phoi > 0 ? (
+          <div>
+            <Tag color="geekblue" style={{ margin: 0 }}>{fmtN(r.tong_chuyen_phoi)}</Tag>
+            {r.ngay_chuyen_cuoi && <div><Text type="secondary" style={{ fontSize: 11 }}>{fmtDate(r.ngay_chuyen_cuoi)}</Text></div>}
+          </div>
+        ) : <Text type="secondary">—</Text>,
     },
     {
       title: 'Tồn phôi', dataIndex: 'ton_kho_phoi', width: 90,
@@ -311,25 +317,15 @@ export default function TheoDonHangPage() {
         : <Text type="secondary">0</Text>,
     },
     {
-      title: 'Tiến độ in', width: 110,
-      render: (_, r) => {
-        if (!r.so_luong_in_ok && r.so_luong_in_ok !== 0) return <Text type="secondary">—</Text>
-        const kh = r.so_luong_ke_hoach || 1
-        const ok = r.so_luong_in_ok ?? 0
-        const pct = Math.min(100, Math.round((ok / kh) * 100))
-        const color = pct >= 100 ? '#52c41a' : pct > 0 ? '#1677ff' : '#d9d9d9'
-        return (
-          <Tooltip title={`${fmtN(ok)} / ${fmtN(r.so_luong_ke_hoach)} thùng`}>
-            <div style={{ fontSize: 12 }}>
-              <Text style={{ color, fontWeight: 600 }}>{fmtN(ok)}</Text>
-              <Text type="secondary"> / {fmtN(r.so_luong_ke_hoach)}</Text>
-              <div style={{ height: 4, background: '#f0f0f0', borderRadius: 2, marginTop: 2 }}>
-                <div style={{ height: 4, width: `${pct}%`, background: color, borderRadius: 2, transition: 'width 0.3s' }} />
-              </div>
-            </div>
-          </Tooltip>
-        )
-      },
+      title: 'Tồn TP', width: 100,
+      render: (_, r) =>
+        r.ton_kho_tp > 0 ? (
+          <div>
+            <Tag color="cyan" style={{ margin: 0 }}>{fmtN(r.ton_kho_tp)}</Tag>
+            {r.ngay_nhap_tp_cuoi && <div><Text type="secondary" style={{ fontSize: 11 }}>{fmtDate(r.ngay_nhap_tp_cuoi)}</Text></div>}
+          </div>
+        ) : r.ton_kho_tp < 0 ? <Tag color="red">{fmtN(r.ton_kho_tp)}</Tag>
+        : <Text type="secondary">0</Text>,
     },
     {
       title: 'Giai đoạn', width: 150,
@@ -541,7 +537,7 @@ export default function TheoDonHangPage() {
             dataSource={filtered}
             columns={columns}
             pagination={{ pageSize: 50, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] }}
-            scroll={{ x: 1650 }}
+            scroll={{ x: 1630 }}
             rowClassName={getRowClass}
             rowSelection={{
               selectedRowKeys: selectedKeys,
@@ -719,6 +715,11 @@ export default function TheoDonHangPage() {
               <Descriptions.Item label="Tồn kho phôi">
                 {d.ton_kho_phoi > 0
                   ? <Tag color="lime">{fmtN(d.ton_kho_phoi)}</Tag>
+                  : <Text type="secondary">0</Text>}
+              </Descriptions.Item>
+              <Descriptions.Item label="Tồn thành phẩm">
+                {d.ton_kho_tp > 0
+                  ? <Tag color="cyan">{fmtN(d.ton_kho_tp)}</Tag>
                   : <Text type="secondary">0</Text>}
               </Descriptions.Item>
               <Descriptions.Item label="Giai đoạn">

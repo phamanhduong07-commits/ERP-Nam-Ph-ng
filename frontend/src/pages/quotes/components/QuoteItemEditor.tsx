@@ -50,6 +50,8 @@ export interface QuoteItemEditorProps {
   onOpenCauTruc: () => void
   onAutoName: () => void
   getCustomerId: () => number | undefined
+  onSaveToProduct?: () => Promise<void>
+  saveToProductLoading?: boolean
 }
 
 export default function QuoteItemEditor({
@@ -60,6 +62,7 @@ export default function QuoteItemEditor({
   temPaperList, getAddonPrice,
   finance, updateFinance, onGiaBanChange,
   phanXuongList, onOpenCauTruc, onAutoName, getCustomerId,
+  onSaveToProduct, saveToProductLoading,
 }: QuoteItemEditorProps) {
   const boxCalc = !ci.khong_ct
     ? calcBoxDimensions(ci.loai_thung, ci.dai, ci.rong, ci.cao, ci.so_lop, ci.be_so_con ?? 1, ci.loai_be)
@@ -77,9 +80,21 @@ export default function QuoteItemEditor({
         </Space>
       }
       extra={
-        <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
-          {editingIdx !== null ? 'Cập nhật dòng' : 'Thêm vào danh sách'}
-        </Button>
+        <Space>
+          {ci.product_id != null && onSaveToProduct && (
+            <Button
+              size="small"
+              icon={<SyncOutlined />}
+              loading={saveToProductLoading}
+              onClick={onSaveToProduct}
+            >
+              Lưu vào danh mục
+            </Button>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+            {editingIdx !== null ? 'Cập nhật dòng' : 'Thêm vào danh sách'}
+          </Button>
+        </Space>
       }
     >
       {/* ── Row 1: Product info ───────────────────────────────── */}

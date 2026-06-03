@@ -136,6 +136,7 @@ const MaintenanceLogPage = lazy(() => import('./pages/maintenance/MaintenanceLog
 const FixedAssetPage = lazy(() => import('./pages/fixed_assets/FixedAssetPage'))
 // Reports
 const DebtSummaryPage = lazy(() => import('./pages/reports/DebtSummaryPage'))
+const BaoCaoPhoiTpPage = lazy(() => import('./pages/reports/BaoCaoPhoiTpPage'))
 const RevenueReportPage = lazy(() => import('./pages/reports/RevenueReportPage'))
 const InventoryReportPage = lazy(() => import('./pages/reports/InventoryReportPage'))
 const ProductionPerformancePage = lazy(() => import('./pages/reports/ProductionPerformancePage'))
@@ -168,6 +169,7 @@ const LeaveApprovalPage = lazy(() => import('./pages/hr/LeaveApprovalPage'))
 const RewardDisciplinePage = lazy(() => import('./pages/hr/RewardDisciplinePage'))
 const EmployeeMobilePortal = lazy(() => import('./pages/hr/EmployeeMobilePortal'))
 const PermissionMatrixPage = lazy(() => import('./pages/hr/PermissionMatrixPage'))
+const TeamPermissionsPage = lazy(() => import('./pages/hr/TeamPermissionsPage'))
 const PrintTemplatePage = lazy(() => import('./pages/master/PrintTemplatePage'))
 const DocsPage = lazy(() => import('./pages/docs/DocsPage'))
 const GpsTrackingPage = lazy(() => import('./pages/logistics/GpsTrackingPage'))
@@ -380,6 +382,7 @@ export default function App() {
             <Route path="accounting/customer-refunds/:id" element={<ErrorBoundary><CustomerRefundDetailPage /></ErrorBoundary>} />
             <Route path="reports/hub" element={<ErrorBoundary><ReportingHubPage /></ErrorBoundary>} />
             <Route path="reports/debt-summary" element={<ErrorBoundary><DebtSummaryPage /></ErrorBoundary>} />
+            <Route path="reports/phoi-thanh-pham" element={<ErrorBoundary><BaoCaoPhoiTpPage /></ErrorBoundary>} />
             <Route path="reports/revenue" element={<ErrorBoundary><RevenueReportPage /></ErrorBoundary>} />
             <Route path="reports/inventory" element={<ErrorBoundary><InventoryReportPage /></ErrorBoundary>} />
             <Route path="reports/production-performance" element={<ErrorBoundary><ProductionPerformancePage /></ErrorBoundary>} />
@@ -408,6 +411,7 @@ export default function App() {
             <Route path="hr/rewards" element={<ErrorBoundary><RewardDisciplinePage /></ErrorBoundary>} />
             <Route path="hr/me" element={<ErrorBoundary><EmployeeMobilePortal /></ErrorBoundary>} />
             <Route path="hr/permission-matrix" element={<ErrorBoundary><PermissionMatrixPage /></ErrorBoundary>} />
+            <Route path="hr/team-permissions" element={<ErrorBoundary><TeamPermissionsPage /></ErrorBoundary>} />
             <Route path="quality/qc-sheets" element={<ErrorBoundary><QCListPage /></ErrorBoundary>} />
             <Route path="quality/giay-cuon" element={<ErrorBoundary><QCGiayCuonPage /></ErrorBoundary>} />
             <Route path="maintenance/schedules" element={<ErrorBoundary><MaintenanceSchedulePage /></ErrorBoundary>} />

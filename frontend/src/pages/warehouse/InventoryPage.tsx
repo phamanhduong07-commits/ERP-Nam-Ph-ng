@@ -676,9 +676,24 @@ type GiayCuonGrouped = {
 
 
 function GiayCuonTab() {
+  const qc = useQueryClient()
   const [khoFilter, setKhoFilter] = useState<number | undefined>()
   const [loaiGiayFilter, setLoaiGiayFilter] = useState<string | undefined>()
   const [search, setSearch] = useState('')
+  const [snapshotLoading, setSnapshotLoading] = useState(false)
+
+  const handleSnapshot = async () => {
+    setSnapshotLoading(true)
+    try {
+      const res = await warehouseApi.snapshotTonKho()
+      message.success(`Đã chụp snapshot cho ${res.data.snapped} mặt hàng`)
+      qc.invalidateQueries({ queryKey: ['ton-kho'] })
+    } catch {
+      message.error('Không thể chụp snapshot')
+    } finally {
+      setSnapshotLoading(false)
+    }
+  }
 
   const { data = [], isLoading } = useQuery({
     queryKey: ['ton-kho', undefined, undefined, undefined, 'giay'],
@@ -918,29 +933,36 @@ function GiayCuonTab() {
           )}
         </Col>
       </Row>
-      {hasBienDong && (
-        <Card size="small" style={{ marginBottom: 12 }}
-          styles={{ body: { padding: '8px 16px' } }}>
-          <Row gutter={24} align="middle">
-            <Col><Text strong style={{ fontSize: 13 }}>📊 Biến động hôm nay</Text></Col>
-            <Col>
-              <Text style={{ color: '#1677ff' }}>
-                ▲ Nhập: <Text strong style={{ color: '#1677ff' }}>{Math.round(totalNhap).toLocaleString('vi-VN')} kg</Text>
-              </Text>
-            </Col>
-            <Col>
-              <Text style={{ color: '#ff4d4f' }}>
-                ▼ Xuất/giảm: <Text strong style={{ color: '#ff4d4f' }}>{Math.round(totalXuat).toLocaleString('vi-VN')} kg</Text>
-              </Text>
-            </Col>
-            <Col>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                (so với lần sync trước)
-              </Text>
-            </Col>
-          </Row>
-        </Card>
-      )}
+      <Card size="small" style={{ marginBottom: 12 }}
+        styles={{ body: { padding: '8px 16px' } }}>
+        <Row gutter={24} align="middle">
+          <Col><Text strong style={{ fontSize: 13 }}>📊 Biến động so với snapshot</Text></Col>
+          {hasBienDong && (
+            <>
+              <Col>
+                <Text style={{ color: '#1677ff' }}>
+                  ▲ Nhập: <Text strong style={{ color: '#1677ff' }}>{Math.round(totalNhap).toLocaleString('vi-VN')} kg</Text>
+                </Text>
+              </Col>
+              <Col>
+                <Text style={{ color: '#ff4d4f' }}>
+                  ▼ Xuất/giảm: <Text strong style={{ color: '#ff4d4f' }}>{Math.round(totalXuat).toLocaleString('vi-VN')} kg</Text>
+                </Text>
+              </Col>
+            </>
+          )}
+          {!hasBienDong && (
+            <Col><Text type="secondary" style={{ fontSize: 12 }}>Chưa có snapshot — bấm "Chụp snapshot" để bắt đầu theo dõi biến động</Text></Col>
+          )}
+          <Col style={{ marginLeft: 'auto' }}>
+            <Tooltip title="Lưu tồn kho hiện tại làm điểm so sánh. Nên chụp mỗi đầu ngày để theo dõi biến động trong ngày.">
+              <Button size="small" icon={<SyncOutlined />} loading={snapshotLoading} onClick={handleSnapshot}>
+                Chụp snapshot
+              </Button>
+            </Tooltip>
+          </Col>
+        </Row>
+      </Card>
       {filterBar}
       <Card
         size="small"

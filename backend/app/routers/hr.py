@@ -201,6 +201,18 @@ def list_employees(
 
     is_hr_admin = _role_code(current_user) in ("ADMIN", "NHAN_SU")
 
+    # Trưởng phòng Sale chỉ thấy nhân viên trong team sale
+    caller_role = _role_code(current_user)
+    if caller_role == "TRUONG_PHONG_SALE_ADMIN":
+        from app.models.auth import User as AuthUser, Role as AuthRole
+        sale_user_ids = (
+            db.query(AuthUser.id)
+            .join(AuthRole, AuthRole.id == AuthUser.role_id)
+            .filter(AuthRole.ma_vai_tro.in_(["SALE_ADMIN", "TRUONG_PHONG_SALE_ADMIN"]))
+            .scalar_subquery()
+        )
+        q = q.filter(Employee.user_id.in_(sale_user_ids))
+
     employees = q.all()
     result = []
     for e in employees:

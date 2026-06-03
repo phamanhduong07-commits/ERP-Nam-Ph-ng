@@ -22,6 +22,16 @@ def _hash_password(plain: str) -> str:
     return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(rounds=14)).decode()
 
 
+def _get_user_permissions(user: User) -> list[str]:
+    """Merge role permissions + user-level overrides."""
+    perms: set[str] = set()
+    if user.role and hasattr(user.role, 'role_permissions'):
+        perms.update(rp.permission.ma_quyen for rp in user.role.role_permissions)
+    if hasattr(user, 'user_permissions'):
+        perms.update(up.permission.ma_quyen for up in user.user_permissions)
+    return sorted(perms)
+
+
 def _make_user_info(user: User) -> UserInfo:
     return UserInfo(
         id=user.id,
@@ -32,7 +42,7 @@ def _make_user_info(user: User) -> UserInfo:
         phan_xuong=user.phan_xuong,
         machine_id=user.machine_id,
         phap_nhan_id=user.phap_nhan_id,
-        permissions=[rp.permission.ma_quyen for rp in user.role.role_permissions] if user.role and hasattr(user.role, 'role_permissions') else []
+        permissions=_get_user_permissions(user)
     )
 
 

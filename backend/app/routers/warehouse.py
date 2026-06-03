@@ -996,6 +996,19 @@ async def import_ton_kho_dau_ky(
     return {"commit": commit, "total": len(rows), "created": created, "updated": updated, "skipped": 0, "errors": errors_count, "rows": rows[:200]}
 
 
+@router.post("/ton-kho/snapshot")
+def chup_snapshot_ton_kho(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Chụp snapshot tồn kho hiện tại — dùng làm điểm so sánh biến động."""
+    balances = db.query(InventoryBalance).all()
+    for bal in balances:
+        bal.ton_luong_truoc = bal.ton_luong
+    db.commit()
+    return {"snapped": len(balances)}
+
+
 _LOAI_KHO_TO_HANG: dict[str, str] = {
     "GIAY_CUON": "giay",
     "NVL_PHU": "nvl",
