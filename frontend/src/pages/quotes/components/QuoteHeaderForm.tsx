@@ -1,5 +1,6 @@
 import { Row, Col, Card, Form, Input, Select, DatePicker, Spin } from 'antd'
 import type { FormInstance } from 'antd'
+import { useEffect, useState } from 'react'
 import dayjs from 'dayjs'
 import type { PhapNhan } from '../../../api/phap_nhan'
 import type { PhanXuong } from '../../../api/warehouse'
@@ -10,7 +11,7 @@ interface QuoteHeaderFormProps {
   isEdit: boolean
   isReadonly: boolean
   triggerAutosave: () => void
-  customerOptions: { value: number; label: string }[]
+  customerOptions: { value: number; label: string; ma_kh: string }[]
   customerSearching: boolean
   onCustomerSearch: (q: string) => void
   onCustomerChange: () => void
@@ -24,6 +25,16 @@ export default function QuoteHeaderForm({
   customerOptions, customerSearching, onCustomerSearch, onCustomerChange,
   phapNhanList, phanXuongList, nhanVienList,
 }: QuoteHeaderFormProps) {
+  const selectedCustomerId = Form.useWatch('customer_id', form)
+  const [maKhSearch, setMaKhSearch] = useState('')
+
+  useEffect(() => { setMaKhSearch('') }, [selectedCustomerId])
+
+  const maKhOptions = maKhSearch
+    ? customerOptions.filter(o => o.ma_kh.toLowerCase().includes(maKhSearch.toLowerCase()))
+        .map(o => ({ value: o.value, label: o.ma_kh }))
+    : customerOptions.map(o => ({ value: o.value, label: o.ma_kh }))
+
   return (
     <Card style={{ marginBottom: 12 }}>
       <Form form={form} layout="vertical" disabled={isReadonly} onValuesChange={triggerAutosave}>
@@ -38,16 +49,32 @@ export default function QuoteHeaderForm({
               <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
             </Form.Item>
           </Col>
-          <Col span={8}>
+          <Col span={3}>
+            <Form.Item label="Mã KH">
+              <Select
+                showSearch filterOption={false}
+                value={selectedCustomerId ?? undefined}
+                placeholder="Mã KH..."
+                notFoundContent={customerSearching ? <Spin size="small" /> : 'Gõ để tìm...'}
+                options={maKhOptions}
+                onSearch={q => { setMaKhSearch(q); onCustomerSearch(q) }}
+                onSelect={v => { form.setFieldValue('customer_id', v); onCustomerChange() }}
+                onClear={() => { form.setFieldValue('customer_id', null); onCustomerChange() }}
+                allowClear
+                disabled={isReadonly}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={5}>
             <Form.Item
-              label="*Khách hàng" name="customer_id"
+              label="*Tên khách hàng" name="customer_id"
               rules={[{ required: true, message: 'Chọn khách hàng' }]}
             >
               <Select
                 showSearch filterOption={false}
                 onSearch={onCustomerSearch}
                 options={customerOptions}
-                placeholder="Tìm khách hàng..."
+                placeholder="Tìm theo tên..."
                 notFoundContent={customerSearching ? <Spin size="small" /> : 'Gõ để tìm...'}
                 onChange={onCustomerChange}
               />

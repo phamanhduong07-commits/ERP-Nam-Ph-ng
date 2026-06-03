@@ -67,7 +67,7 @@ export default function QuoteForm() {
   const [items, setItems] = useState<QuoteItem[]>([])
   const [currentItem, setCurrentItem] = useState<QuoteItem>(emptyItem())
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
-  const [customerOptions, setCustomerOptions] = useState<{ value: number; label: string }[]>([])
+  const [customerOptions, setCustomerOptions] = useState<{ value: number; label: string; ma_kh: string }[]>([])
   const [customerSearching, setCustomerSearching] = useState(false)
   const [isCalcLoading, setIsCalcLoading] = useState(false)
   const [finance, setFinance] = useState<QuoteFinance>(DEFAULT_FINANCE)
@@ -160,6 +160,7 @@ export default function QuoteForm() {
       setCustomerOptions([{
         value: quoteData.customer_id,
         label: `${quoteData.customer.ten_viet_tat}${quoteData.customer.ten_don_vi ? ' – ' + quoteData.customer.ten_don_vi : ''}`,
+        ma_kh: quoteData.customer.ma_kh,
       }])
     }
   }, [quoteData, headerForm])
@@ -293,6 +294,7 @@ export default function QuoteForm() {
       setCustomerOptions(res.data.items.map(c => ({
         value: c.id,
         label: `${c.ten_viet_tat}${c.ten_don_vi ? ' – ' + c.ten_don_vi : ''}`,
+        ma_kh: c.ma_kh,
       })))
     } finally {
       setCustomerSearching(false)
@@ -310,7 +312,7 @@ export default function QuoteForm() {
       })
       setProductOptions(res.data.items.map(p => ({
         value: p.id,
-        label: `[${p.ma_amis}] ${p.ten_hang}`,
+        label: p.ten_hang,
         record: p,
       })))
     } finally {
@@ -342,6 +344,7 @@ export default function QuoteForm() {
       ...prev,
       product_id: p.id,
       ma_amis: p.ma_amis,
+      loai: p.ma_amis ?? null,
       ten_hang: p.ten_hang,
       dvt: p.dvt,
       so_lop: p.so_lop,

@@ -99,18 +99,18 @@ export default function QuoteItemEditor({
     >
       {/* ── Row 1: Product info ───────────────────────────────── */}
       <Row gutter={8} style={{ marginBottom: 8 }}>
-        <Col span={2}>
+        <Col span={3}>
           <Input
-            size="small" placeholder="Loại"
+            size="small" placeholder="Mã AMIS"
             value={ci.loai || ''}
             onChange={e => setCI({ loai: e.target.value })}
           />
         </Col>
-        <Col span={5}>
+        <Col span={6}>
           <Select
             size="small" style={{ width: '100%' }}
             showSearch allowClear filterOption={false}
-            placeholder="🔍 Tìm SP từ danh mục..."
+            placeholder="🔍 Tìm SP danh mục..."
             value={ci.product_id ?? undefined}
             onSearch={onProductSearch}
             onSelect={onProductSelect}
@@ -124,7 +124,7 @@ export default function QuoteItemEditor({
             options={productOptions}
           />
         </Col>
-        <Col span={9}>
+        <Col span={8}>
           <Input
             size="small" placeholder="*Tên hàng"
             value={ci.ten_hang}
@@ -145,7 +145,7 @@ export default function QuoteItemEditor({
             onChange={e => setCI({ dvt: e.target.value })}
           />
         </Col>
-        <Col span={3}>
+        <Col span={2}>
           <InputNumber size="small" style={{ width: '100%' }}
             placeholder="Số lượng BG"
             value={ci.so_luong}
