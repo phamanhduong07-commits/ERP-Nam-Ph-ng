@@ -236,7 +236,7 @@ function PhieuDetailDrawer({
 
       <SectionHeader title="Kỹ thuật" />
       {(phieu.dai || phieu.rong || phieu.cao) && (
-        <Row label="Kích thước" value={`${phieu.dai ?? '—'} × ${phieu.rong ?? '—'} × ${phieu.cao ?? '—'} mm`} />
+        <Row label="Kích thước" value={`${phieu.dai != null ? +phieu.dai : '—'} × ${phieu.rong != null ? +phieu.rong : '—'} × ${phieu.cao != null ? +phieu.cao : '—'} mm`} />
       )}
       {phieu.so_lop != null && <Row label="Số lớp" value={`${phieu.so_lop} lớp`} />}
       {phieu.to_hop_song && <Row label="Tổ hợp sóng" value={phieu.to_hop_song} />}

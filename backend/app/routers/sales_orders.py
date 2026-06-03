@@ -223,7 +223,7 @@ def update_order(
 def approve_order(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("sales_order.approve")),
 ):
     order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
     if not order:
@@ -244,7 +244,7 @@ def approve_order(
 def cancel_order(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("sales_order.cancel")),
 ):
     order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
     if not order:
@@ -255,7 +255,7 @@ def cancel_order(
 
     order.trang_thai = "huy"
     db.commit()
-    logger.info("cancelled sales_order id=%s so_don=%s", order_id, order.so_don)
+    logger.info("cancelled sales_order id=%s so_don=%s by user=%s", order_id, order.so_don, current_user.id)
     return {"message": f"Đã huỷ đơn hàng {order.so_don}"}
 
 
@@ -263,7 +263,7 @@ def cancel_order(
 def confirm_delivery(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("sales_order.approve")),
 ):
     """Xác nhận đã giao hàng — chuyển trạng thái da_duyet → da_giao."""
     order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
@@ -285,7 +285,7 @@ def confirm_delivery(
 def complete_order(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("sales_order.approve")),
 ):
     """Hoàn thành đơn hàng — chuyển trạng thái da_giao → hoan_thanh."""
     order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
@@ -310,7 +310,7 @@ def update_discount(
     so_tien_giam_gia: float | None = None,
     ghi_chu: str | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("sales_order.approve")),
 ):
     """
     Cập nhật giảm giá cho đơn hàng đã duyệt/xuất kho.

@@ -56,7 +56,7 @@ export default function QuoteItemsTable({
     },
     {
       title: 'D×R×C (cm)', width: 120,
-      render: (_: unknown, r: QuoteItem) => r.dai ? `${r.dai}×${r.rong}×${r.cao}` : '—',
+      render: (_: unknown, r: QuoteItem) => r.dai ? `${+r.dai}×${+r.rong}×${+r.cao}` : '—',
     },
     {
       title: 'S (m²)', dataIndex: 'dien_tich', width: 68, align: 'right' as const,

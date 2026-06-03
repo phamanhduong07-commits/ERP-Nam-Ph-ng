@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from 'react'
+﻿import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Row, Col, Table, InputNumber, Select, Input, Button, Space, Typography,
@@ -124,6 +124,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   const [saving, setSaving] = useState(false)
   // Đã lưu nếu item có kho_tt (chứng tỏ đã từng bấm Lưu)
   const [saved,  setSaved]  = useState(() => !!item.kho_tt)
+  const [queueStatus, setQueueStatus] = useState<string | null>(item.queue_status ?? null)
   // Chạy ngược sóng: đổi chiều khổ ↔ chiều cắt trên máy
   const [nguocSong, setNguocSong] = useState(false)
   // Số con bế: khuôn bế cắt N con cùng lúc theo chiều ngang
@@ -236,7 +237,9 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
 
   const tongKg = tableRows.reduce((s, r) => s + r.total_kg, 0)
 
-  const markDirty = () => { if (saved) setSaved(false) }
+  useEffect(() => { setQueueStatus(item.queue_status ?? null) }, [item.queue_status])
+
+  const markDirty = useCallback(() => { if (saved) setSaved(false) }, [saved])
 
   const updateLayer = (key: LayerKey, field: 'ma_ky_hieu' | 'dinh_luong', value: string | number | null) => {
     markDirty()
@@ -276,6 +279,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
       })
 
       setSaved(true)
+      setQueueStatus('cho')
       message.success('Đã lưu và thêm vào Kế hoạch SX chờ')
       onSaved()
     } catch {
@@ -414,16 +418,22 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
             </Space>
           </Col>
           <Col>
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              size="small"
-              loading={saving}
-              onClick={handleSave}
-              style={saved ? { background: '#52c41a', borderColor: '#52c41a' } : undefined}
-            >
-              {saved ? '✓ Đã lưu' : 'Lưu thông số SX'}
-            </Button>
+            <Space size={8}>
+              {queueStatus === 'cho' && <Tag color="processing">📋 Đang chờ KHSX</Tag>}
+              {queueStatus === 'dang_chay' && <Tag color="success">⚙️ Đang sản xuất</Tag>}
+              {queueStatus === 'hoan_thanh' && <Tag color="default">✅ Hoàn thành</Tag>}
+              {!queueStatus && saved && <Tag color="warning">⚠️ Chưa đẩy KHSX</Tag>}
+              <Button
+                type="primary"
+                icon={<SaveOutlined />}
+                size="small"
+                loading={saving}
+                onClick={handleSave}
+                style={saved ? { background: '#52c41a', borderColor: '#52c41a' } : undefined}
+              >
+                {saved ? '✓ Đã lưu' : 'Lưu thông số SX'}
+              </Button>
+            </Space>
           </Col>
         </Row>
       }

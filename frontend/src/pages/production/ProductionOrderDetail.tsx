@@ -77,7 +77,7 @@ function PhieuNhapPhoiSongTab({
 
     const itemRows = p.items.map((it, i) => {
       const oi = order.items.find(x => x.id === it.production_order_item_id)
-      const dims = oi ? [oi.dai, oi.rong, oi.cao].filter(Boolean).join('×') : ''
+      const dims = oi ? [oi.dai, oi.rong, oi.cao].map(v => +v).filter(Boolean).join('×') : ''
       const net = it.so_luong_thuc_te != null ? it.so_luong_thuc_te - (it.so_luong_loi ?? 0) : null
       return {
         stt: i + 1,
@@ -433,7 +433,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
         ...r,
         stt: i + 1,
         ma_amis: r.product?.ma_amis ?? '',
-        kich_thuoc: d ? `${d}×${rw}×${c} cm` : '',
+        kich_thuoc: d ? `${+d}×${+rw}×${+c} cm` : '',
         ngay_giao: fmtDate(r.ngay_giao_hang),
       }
     })
@@ -462,7 +462,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
         stt: i + 1,
         ma_amis: r.product?.ma_amis ?? '—',
         ten_hang: r.ten_hang,
-        kich_thuoc: d ? `${d}×${rw}×${c}` : '—',
+        kich_thuoc: d ? `${+d}×${+rw}×${+c}` : '—',
         so_lop: r.so_lop ?? '—',
         so_luong_ke_hoach: fmtNum(r.so_luong_ke_hoach),
         dvt: r.dvt,
@@ -556,7 +556,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
           const revenue = d.gia_ban_bao_gia * d.so_luong
           const cost = d.bien_phi * d.so_luong
           return [
-            `${d.loai_thung} ${d.dai}×${d.rong}×${d.cao}`,
+            `${d.loai_thung} ${+d.dai}×${+d.rong}×${+d.cao}`,
             d.so_luong, 'thùng',
             d.gia_ban_bao_gia, d.bien_phi,
             revenue, cost, revenue - cost,
@@ -623,7 +623,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
           {r.product && (
             <Text type="secondary" style={{ fontSize: 11 }}>
               [{r.product.ma_amis}]
-              {r.product.dai ? ` ${r.product.dai}×${r.product.rong}×${r.product.cao}cm` : ''}
+              {r.product.dai ? ` ${+r.product.dai}×${+r.product.rong}×${+r.product.cao}cm` : ''}
             </Text>
           )}
         </Space>
@@ -792,9 +792,9 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
                     [{order.items[0].product.ma_amis}]
                     {order.items[0].dai
-                      ? ` · ${order.items[0].dai}×${order.items[0].rong}×${order.items[0].cao} cm`
+                      ? ` · ${+order.items[0].dai}×${+order.items[0].rong}×${+order.items[0].cao} cm`
                       : order.items[0].product?.dai
-                        ? ` · ${order.items[0].product.dai}×${order.items[0].product.rong}×${order.items[0].product.cao} cm`
+                        ? ` · ${+order.items[0].product.dai}×${+order.items[0].product.rong}×${+order.items[0].product.cao} cm`
                         : ''}
                     {order.items[0].so_lop ? ` · ${order.items[0].so_lop} lớp` : ''}
                   </div>

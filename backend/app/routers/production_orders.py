@@ -78,6 +78,20 @@ def _build_response(order: ProductionOrder, db: Session | None = None) -> Produc
     ten_khach_hang = kh.ten_viet_tat if kh else None
     ma_khach_hang = kh.ma_kh if kh else None
 
+    # Queue status: lấy 1 lần cho tất cả items (tránh N+1)
+    item_ids = [it.id for it in order.items]
+    queue_status_map: dict[int, str] = {}
+    if item_ids and db is not None:
+        active_lines = (
+            db.query(ProductionPlanLine.production_order_item_id, ProductionPlanLine.trang_thai)
+            .filter(
+                ProductionPlanLine.production_order_item_id.in_(item_ids),
+                ProductionPlanLine.trang_thai != "hoan_thanh",
+            )
+            .all()
+        )
+        queue_status_map = {row.production_order_item_id: row.trang_thai for row in active_lines}
+
     def _build_item(item: ProductionOrderItem) -> ProductionOrderItemResponse:
         soi = item.sales_order_item
         qi = soi.quote_item if soi else None
@@ -149,6 +163,7 @@ def _build_response(order: ProductionOrder, db: Session | None = None) -> Produc
             dien_tich=item.dien_tich,
             gia_ban_muc_tieu=item.gia_ban_muc_tieu,
             cong_doan=cong_doan,
+            queue_status=queue_status_map.get(item.id),
         )
 
     items = [_build_item(item) for item in order.items]

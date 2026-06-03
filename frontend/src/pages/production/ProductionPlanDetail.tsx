@@ -79,7 +79,7 @@ function calcQuyCache(r: PlanLineResponse): string {
   const soLop = r.so_lop ?? 3
   const song = r.to_hop_song ?? ''
   if (r.cao && Number(r.cao) > 0) {
-    return `${fmtN(r.dai, 1)}×${fmtN(r.rong, 1)}×${fmtN(r.cao, 1)}_${soLop}L ${song}`
+    return `${fmtN(r.dai, 0)}×${fmtN(r.rong, 0)}×${fmtN(r.cao, 0)}_${soLop}L ${song}`
   }
   // Tấm phẳng
   const daiTtEff = r.dai_tt ? Number(r.dai_tt) * (r.so_lan_cat ?? 1) : null

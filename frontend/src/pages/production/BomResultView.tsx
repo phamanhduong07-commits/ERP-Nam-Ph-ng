@@ -132,7 +132,7 @@ export default function BomResultView({ productionOrderItemId }: Props) {
           <Col>
             <Text strong style={{ fontSize: 14 }}>{data.loai_thung}</Text>
             <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
-              {data.dai}×{data.rong}×{data.cao} cm &nbsp;·&nbsp; {data.so_lop} lớp &nbsp;·&nbsp; {data.to_hop_song}
+              {+data.dai}×{+data.rong}×{+data.cao} cm &nbsp;·&nbsp; {data.so_lop} lớp &nbsp;·&nbsp; {data.to_hop_song}
             </Text>
           </Col>
           <Col>

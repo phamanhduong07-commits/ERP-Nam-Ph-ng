@@ -1044,7 +1044,7 @@ export default function BomCalculatorPanel({
               <Col xs={12} sm={6}>
                 <Statistic
                   title="Kích thước"
-                  value={`${dai}×${rong}×${cao} cm`}
+                  value={`${+dai}×${+rong}×${+cao} cm`}
                   valueStyle={{ fontSize: 14 }}
                 />
               </Col>

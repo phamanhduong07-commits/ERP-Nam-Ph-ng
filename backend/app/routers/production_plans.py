@@ -564,17 +564,19 @@ def push_to_queue(
         .join(ProductionPlan)
         .filter(
             ProductionPlanLine.production_order_item_id == data.production_order_item_id,
-            ProductionPlanLine.trang_thai == "cho",
+            ProductionPlanLine.trang_thai.in_(["cho", "dang_chay"]),
             ProductionPlan.trang_thai.in_(["nhap", "da_xuat"]),
         )
         .first()
     )
 
     if existing:
-        existing.so_luong_ke_hoach = data.so_luong_ke_hoach
-        if poi.ghi_chu:
-            existing.ghi_chu = poi.ghi_chu
-        db.commit()
+        # Chỉ cập nhật thông số nếu đang chờ; nếu đang chạy thì chỉ sync snapshot (đã làm trên)
+        if existing.trang_thai == "cho":
+            existing.so_luong_ke_hoach = data.so_luong_ke_hoach
+            if poi.ghi_chu:
+                existing.ghi_chu = poi.ghi_chu
+            db.commit()
         line_id = existing.id
     else:
         today = date.today()

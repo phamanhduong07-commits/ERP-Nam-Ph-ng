@@ -156,7 +156,7 @@ export default function TanDungPlanPage() {
       ngay_giao_kh:     r.ngay_giao_kh   ? dayjs(r.ngay_giao_kh).format('DD/MM/YYYY')   : '',
       cong_doan:        r.cong_doan ?? '',
       loai_lan:         loaiLanLabel,
-      ten_san_pham:     r.ten_hang ?? `${r.loai_thung ?? ''} ${r.dai ?? ''}×${r.rong ?? ''}×${r.cao ?? ''} cm`,
+      ten_san_pham:     r.ten_hang ?? `${r.loai_thung ?? ''} ${r.dai != null ? +r.dai : ''}×${r.rong != null ? +r.rong : ''}×${r.cao != null ? +r.cao : ''} cm`,
       sl_tam_lon:       slTamLon,
       sl_tam_nho:       '',
       sl_thung:         `${Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')} thùng`,
@@ -383,7 +383,7 @@ export default function TanDungPlanPage() {
                 <Text type="secondary" style={{ fontSize: 10 }}>TÊN SẢN PHẨM</Text>
                 <div>
                   <Text strong style={{ fontSize: 15 }}>
-                    {inTemItem.ten_hang ?? `${inTemItem.loai_thung ?? ''} ${inTemItem.dai ?? ''}×${inTemItem.rong ?? ''}×${inTemItem.cao ?? ''} cm`}
+                    {inTemItem.ten_hang ?? `${inTemItem.loai_thung ?? ''} ${inTemItem.dai != null ? +inTemItem.dai : ''}×${inTemItem.rong != null ? +inTemItem.rong : ''}×${inTemItem.cao != null ? +inTemItem.cao : ''} cm`}
                   </Text>
                 </div>
               </div>
@@ -493,7 +493,7 @@ export default function TanDungPlanPage() {
             {/* Thông tin sản phẩm */}
             <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6, padding: '10px 12px', marginBottom: 16 }}>
               <Text strong style={{ fontSize: 13 }}>
-                {tpItem.ten_hang ?? `${tpItem.loai_thung ?? ''} ${tpItem.dai ?? ''}×${tpItem.rong ?? ''}×${tpItem.cao ?? ''} cm`}
+                {tpItem.ten_hang ?? `${tpItem.loai_thung ?? ''} ${tpItem.dai != null ? +tpItem.dai : ''}×${tpItem.rong != null ? +tpItem.rong : ''}×${tpItem.cao != null ? +tpItem.cao : ''} cm`}
               </Text>
               <div style={{ marginTop: 4 }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>

@@ -148,7 +148,7 @@ export default function ProductList() {
       title: 'D×R×C',
       width: 120,
       render: (_: unknown, r: ProductFull) => {
-        const parts = [r.dai, r.rong, r.cao].map(v => v ?? '?')
+        const parts = [r.dai, r.rong, r.cao].map(v => v != null ? +v : '?')
         return <span style={{ fontSize: 12 }}>{parts.join('×')}</span>
       },
     },

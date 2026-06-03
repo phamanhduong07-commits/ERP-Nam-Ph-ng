@@ -927,7 +927,7 @@ export default function MaySongPage() {
     {
       title: 'Tên hàng',
       render: (_, r) => {
-        const dimStr = r.dai && r.rong && r.cao ? `${r.dai}×${r.rong}×${r.cao} cm` : null
+        const dimStr = r.dai && r.rong && r.cao ? `${+r.dai}×${+r.rong}×${+r.cao} cm` : null
         return (
           <Tooltip title={dimStr}>
             <div>

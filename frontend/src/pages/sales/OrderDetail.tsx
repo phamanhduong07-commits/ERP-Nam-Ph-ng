@@ -155,7 +155,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
         stt: i + 1,
         ma_amis: r.product?.ma_amis ?? '',
         ten_hang: r.ten_hang || r.product?.ten_hang || '',
-        kich_thuoc: d ? `${d}×${rw}×${c} cm` : '',
+        kich_thuoc: d ? `${+d}×${+rw}×${+c} cm` : '',
         so_lop: r.so_lop ?? r.product?.so_lop ?? '',
         so_luong: Number(r.so_luong),
         don_gia: Number(r.don_gia),
@@ -193,7 +193,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
         ma_amis: r.product?.ma_amis ?? '—',
         ten_hang: r.ten_hang || r.product?.ten_hang || '—',
         loai_thung: r.loai_thung ?? '—',
-        kich_thuoc: d ? `${d}×${rw}×${c}` : '—',
+        kich_thuoc: d ? `${+d}×${+rw}×${+c}` : '—',
         so_lop: r.so_lop ?? r.product?.so_lop ?? '—',
         so_luong: fmtVND(Number(r.so_luong)),
         dvt: r.dvt,
@@ -253,7 +253,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
         const d = r.dai ?? r.product?.dai
         const rr = r.rong ?? r.product?.rong
         const c = r.cao ?? r.product?.cao
-        return d ? `${d}×${rr}×${c} cm` : '—'
+        return d ? `${+d}×${+rr}×${+c} cm` : '—'
       },
     },
     {
@@ -716,7 +716,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                     return d && rw && c ? (
                       <Col span={12}>
                         <Text type="secondary" style={{ fontSize: 11 }}>Kích thước (D×R×C)</Text>
-                        <div><Text strong>{d}×{rw}×{c} cm</Text></div>
+                        <div><Text strong>{+d}×{+rw}×{+c} cm</Text></div>
                       </Col>
                     ) : null
                   })()}

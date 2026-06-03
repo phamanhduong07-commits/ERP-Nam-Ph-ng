@@ -36,7 +36,7 @@ const num = (v: number | null | undefined) =>
   v != null ? new Intl.NumberFormat('vi-VN').format(Number(v)) : '-'
 
 function quoteCellValue(quote: Quote, item: QuoteItem, index: number, key: string): string {
-  const size = item.dai && item.rong && item.cao ? `${item.dai}x${item.rong}x${item.cao}` : ''
+  const size = item.dai && item.rong && item.cao ? `${+item.dai}x${+item.rong}x${+item.cao}` : ''
   const amount = Math.round((item.gia_ban || 0) * (item.so_luong || 0))
   const values: Record<string, string | number | null | undefined> = {
     stt: index + 1,

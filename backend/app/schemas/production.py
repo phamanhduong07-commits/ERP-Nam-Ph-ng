@@ -64,6 +64,7 @@ class ProductionOrderItemResponse(BaseModel):
     dien_tich: Decimal | None = None
     gia_ban_muc_tieu: Decimal | None = None
     cong_doan: str | None = None
+    queue_status: str | None = None  # trang_thai của ProductionPlanLine active (cho/dang_chay/hoan_thanh)
 
     class Config:
         from_attributes = True

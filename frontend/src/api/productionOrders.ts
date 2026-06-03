@@ -49,6 +49,7 @@ export interface ProductionOrderItem {
   dien_tich: number | null
   gia_ban_muc_tieu: number | null
   cong_doan: string | null
+  queue_status: string | null  // trang_thai KHSX: cho | dang_chay | hoan_thanh | null
 }
 
 export interface ProductionOrder {

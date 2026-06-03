@@ -63,7 +63,7 @@ export default function BomListPage() {
       headers: ['STT', 'Lệnh SX', 'Sản phẩm', 'Khách hàng', 'Loại thùng', 'Kích thước', 'SL (thùng)', 'CP giấy (đ)', 'CP gián tiếp (đ)', 'Hao hụt (đ)', 'Gia công (đ)', 'Giá bán cuối (đ/thùng)', 'Trạng thái'],
       rows: rows.map((r, i) => [
         i + 1, r.so_lenh ?? '', r.ten_hang ?? '', r.ten_khach_hang ?? '',
-        r.loai_thung, `${r.dai}×${r.rong}×${r.cao} cm / ${r.so_lop}L`,
+        r.loai_thung, `${+r.dai}×${+r.rong}×${+r.cao} cm / ${r.so_lop}L`,
         Number(r.so_luong_sx),
         r.chi_phi_giay != null ? Number(r.chi_phi_giay) : '',
         r.chi_phi_gian_tiep != null ? Number(r.chi_phi_gian_tiep) : '',
@@ -87,7 +87,7 @@ export default function BomListPage() {
     ]
     const tableRows = rows.map((r, i) => [
       i + 1, r.so_lenh ?? '—', r.ten_hang ?? '—', r.ten_khach_hang ?? '—',
-      `${r.dai}×${r.rong}×${r.cao}/${r.so_lop}L`,
+      `${+r.dai}×${+r.rong}×${+r.cao}/${r.so_lop}L`,
       vnd(r.so_luong_sx),
       r.chi_phi_giay != null ? fmtVND(r.chi_phi_giay) : '—',
       r.chi_phi_gian_tiep != null ? fmtVND(r.chi_phi_gian_tiep) : '—',
@@ -128,7 +128,7 @@ export default function BomListPage() {
         <Space direction="vertical" size={0}>
           <Text style={{ fontSize: 13 }}>{v ?? '—'}</Text>
           <Text type="secondary" style={{ fontSize: 11 }}>
-            {r.loai_thung} · {r.dai}×{r.rong}×{r.cao} cm · {r.so_lop} lớp
+            {r.loai_thung} · {+r.dai}×{+r.rong}×{+r.cao} cm · {r.so_lop} lớp
             {r.to_hop_song ? ` (${r.to_hop_song})` : ''}
           </Text>
         </Space>

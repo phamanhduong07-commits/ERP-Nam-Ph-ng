@@ -394,7 +394,7 @@ export default function ScanMayPage() {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
                   {lookup.result.dai && (
                     <Tag style={{ borderRadius: 8, fontSize: 12 }}>
-                      {lookup.result.dai}×{lookup.result.rong}×{lookup.result.cao}
+                      {+lookup.result.dai}×{+lookup.result.rong}×{+lookup.result.cao}
                     </Tag>
                   )}
                   {lookup.result.kho_tt && <Tag color="blue" style={{ borderRadius: 8, fontSize: 12 }}>Khổ TT: {lookup.result.kho_tt}</Tag>}
@@ -735,7 +735,7 @@ export default function ScanMayPage() {
 
               <Divider orientation="left" style={{ fontSize: 11, color: '#aaa', margin: '10px 0 2px' }}>KỸ THUẬT</Divider>
               {(p.dai || p.rong || p.cao) && (
-                <DetailRow label="Kích thước" value={`${p.dai ?? '—'} × ${p.rong ?? '—'} × ${p.cao ?? '—'} mm`} />
+                <DetailRow label="Kích thước" value={`${p.dai != null ? +p.dai : '—'} × ${p.rong != null ? +p.rong : '—'} × ${p.cao != null ? +p.cao : '—'} mm`} />
               )}
               {p.so_lop != null && <DetailRow label="Số lớp" value={`${p.so_lop} lớp`} />}
               {p.to_hop_song && <DetailRow label="Tổ hợp sóng" value={p.to_hop_song} />}

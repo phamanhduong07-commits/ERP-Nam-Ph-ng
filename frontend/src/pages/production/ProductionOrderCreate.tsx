@@ -210,7 +210,7 @@ export default function ProductionOrderCreate() {
           {r.product && (
             <Text type="secondary" style={{ fontSize: 11 }}>
               [{r.product.ma_amis}]
-              {r.product.dai ? ` ${r.product.dai}×${r.product.rong}×${r.product.cao}cm` : ''}
+              {r.product.dai ? ` ${+r.product.dai}×${+r.product.rong}×${+r.product.cao}cm` : ''}
               {` • ${r.product.so_lop} lớp`}
             </Text>
           )}
@@ -454,7 +454,7 @@ export default function ProductionOrderCreate() {
                   <Text style={{ fontSize: 12 }}>{p.ten_hang}</Text>
                   <br />
                   <Text type="secondary" style={{ fontSize: 11 }}>
-                    {p.dai ? `${p.dai}×${p.rong}×${p.cao}cm · ` : ''}
+                    {p.dai ? `${+p.dai}×${+p.rong}×${+p.cao}cm · ` : ''}
                     {p.so_lop} lớp · {p.dvt}
                   </Text>
                 </Card>
