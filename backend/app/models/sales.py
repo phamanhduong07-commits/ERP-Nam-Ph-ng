@@ -372,6 +372,8 @@ class QuoteItem(Base):
     dan: Mapped[bool] = mapped_column(Boolean, default=False)
     boi: Mapped[bool] = mapped_column(Boolean, default=False)
     be_lo: Mapped[bool] = mapped_column(Boolean, default=False)
+    co_be: Mapped[bool] = mapped_column(Boolean, default=False)
+    be_hai_manh: Mapped[bool] = mapped_column(Boolean, default=False)
     c_tham: Mapped[str | None] = mapped_column(String(50))
     can_man: Mapped[str | None] = mapped_column(String(50))
     so_c_be: Mapped[str | None] = mapped_column(String(50))

@@ -83,6 +83,8 @@ class QuoteItemCreate(BaseModel):
     dan: bool = False
     boi: bool = False
     be_lo: bool = False
+    co_be: bool = False
+    be_hai_manh: bool = False
     c_tham: str | None = None
     can_man: str | None = None
     so_c_be: str | None = None
@@ -185,6 +187,8 @@ class QuoteItemResponse(BaseModel):
     dan: bool
     boi: bool
     be_lo: bool
+    co_be: bool
+    be_hai_manh: bool
     c_tham: str | None
     can_man: str | None
     so_c_be: str | None

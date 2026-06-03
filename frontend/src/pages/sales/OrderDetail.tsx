@@ -530,7 +530,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
             {order.ngay_giao_hang ? dayjs(order.ngay_giao_hang).format('DD/MM/YYYY') : '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Khách hàng" span={2}>
-            <Text strong>[{order.customer?.ma_kh}]</Text> {order.customer?.ten_viet_tat}
+            <Text strong>{order.customer?.ten_viet_tat}</Text>
             {order.customer?.ten_don_vi && <Text type="secondary"> — {order.customer.ten_don_vi}</Text>}
           </Descriptions.Item>
           <Descriptions.Item label="Điện thoại">

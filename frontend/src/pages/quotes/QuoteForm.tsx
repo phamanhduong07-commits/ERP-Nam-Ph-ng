@@ -456,13 +456,13 @@ export default function QuoteForm() {
       }
 
       if ('loai_thung' in patch && !DIE_CUT_TYPES.has(patch.loai_thung ?? '')) {
-        next.loai_be = null; next.kho_sx = null; next.dai_sx = null
+        next.loai_be = null; next.kho_sx = null; next.dai_sx = null; next.co_be = false
       }
 
-      const dimTriggers: (keyof QuoteItem)[] = ['loai_thung', 'dai', 'rong', 'cao', 'so_lop', 'be_so_con', 'loai_be']
+      const dimTriggers: (keyof QuoteItem)[] = ['loai_thung', 'dai', 'rong', 'cao', 'so_lop', 'be_so_con', 'loai_be', 'be_hai_manh']
       const hasDimChange = Object.keys(patch).some(k => dimTriggers.includes(k as keyof QuoteItem))
       if (hasDimChange && !next.khong_ct) {
-        const calc = calcBoxDimensions(next.loai_thung, next.dai, next.rong, next.cao, next.so_lop, next.be_so_con ?? 1, next.loai_be)
+        const calc = calcBoxDimensions(next.loai_thung, next.dai, next.rong, next.cao, next.so_lop, next.be_so_con ?? 1, next.loai_be, next.be_hai_manh)
         if (calc) {
           next.kho_tt = calc.kho_tt; next.dai_tt = calc.dai_tt; next.dien_tich = calc.dien_tich
           next.kho_sx = calc.kho_sx; next.dai_sx = calc.dai_sx
@@ -518,14 +518,14 @@ export default function QuoteForm() {
     if (currentItem.khong_ct) return
     const calc = calcBoxDimensions(
       currentItem.loai_thung, currentItem.dai, currentItem.rong, currentItem.cao,
-      currentItem.so_lop, currentItem.be_so_con ?? 1, currentItem.loai_be,
+      currentItem.so_lop, currentItem.be_so_con ?? 1, currentItem.loai_be, currentItem.be_hai_manh,
     )
     if (!calc) return
     setCurrentItem(prev => ({ ...prev, kho_tt: calc.kho_tt, dai_tt: calc.dai_tt, dien_tich: calc.dien_tich, kho_sx: calc.kho_sx, dai_sx: calc.dai_sx }))
   }, [
     currentItem.khong_ct, currentItem.loai_thung,
     currentItem.dai, currentItem.rong, currentItem.cao,
-    currentItem.so_lop, currentItem.be_so_con, currentItem.loai_be,
+    currentItem.so_lop, currentItem.be_so_con, currentItem.loai_be, currentItem.be_hai_manh,
   ])
 
   // ── Auto-price calc effect ─────────────────────────────────

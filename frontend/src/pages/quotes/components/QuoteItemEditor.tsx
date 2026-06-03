@@ -65,7 +65,7 @@ export default function QuoteItemEditor({
   onSaveToProduct, saveToProductLoading,
 }: QuoteItemEditorProps) {
   const boxCalc = !ci.khong_ct
-    ? calcBoxDimensions(ci.loai_thung, ci.dai, ci.rong, ci.cao, ci.so_lop, ci.be_so_con ?? 1, ci.loai_be)
+    ? calcBoxDimensions(ci.loai_thung, ci.dai, ci.rong, ci.cao, ci.so_lop, ci.be_so_con ?? 1, ci.loai_be, ci.be_hai_manh)
     : null
 
   return (
@@ -366,7 +366,7 @@ export default function QuoteItemEditor({
               </Row>
             )}
 
-            {ci.loai_thung && DIE_CUT_TYPES.has(ci.loai_thung) && (
+            {ci.loai_thung && (DIE_CUT_TYPES.has(ci.loai_thung) || !!ci.co_be) && (
               <Row gutter={6} style={{ marginTop: 4 }}>
                 <Col span={8}>
                   <Text style={{ fontSize: 11, color: '#722ed1', fontWeight: 600 }}>Loại bế khuôn</Text>
@@ -738,6 +738,8 @@ export default function QuoteItemEditor({
                   <Checkbox checked={ci.dan}     onChange={e => setCI({ dan: e.target.checked })}><Text style={{ fontSize: 11 }}>Dán</Text></Checkbox>
                   <Checkbox checked={ci.boi}     onChange={e => setCI({ boi: e.target.checked })}><Text style={{ fontSize: 11 }}>Bồi</Text></Checkbox>
                   <Checkbox checked={ci.be_lo}   onChange={e => setCI({ be_lo: e.target.checked })}><Text style={{ fontSize: 11 }}>Bế Lỗ</Text></Checkbox>
+                  <Checkbox checked={ci.co_be}   onChange={e => setCI({ co_be: e.target.checked, ...(!e.target.checked ? { loai_be: null, be_hai_manh: false } : {}) })}><Text style={{ fontSize: 11 }}>Bế khuôn</Text></Checkbox>
+                  <Checkbox checked={ci.be_hai_manh} onChange={e => setCI({ be_hai_manh: e.target.checked })}><Text style={{ fontSize: 11 }}>2 mảnh</Text></Checkbox>
                 </Space>
               </Col>
             </Row>

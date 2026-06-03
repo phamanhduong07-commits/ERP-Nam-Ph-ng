@@ -70,6 +70,8 @@ export interface QuoteItem {
   dan: boolean
   boi: boolean
   be_lo: boolean
+  co_be: boolean
+  be_hai_manh: boolean
   c_tham?: string | null
   can_man?: string | null
   so_c_be?: string | null
@@ -309,6 +311,7 @@ export function calcBoxDimensions(
   so_lop: number,
   be_so_con: number = 1,
   loai_be: string | null | undefined = null,
+  force_hai_manh: boolean = false,
 ): { kho1: number; dai1: number; so_dao: number; kho_tt: number; dai_tt: number; dien_tich: number; kho_ke_hoach: number; dai_ke_hoach: number; kho_sx: number; dai_sx: number; hai_manh: boolean } | null {
   if (!loai_thung || !dai || !rong || !cao) return null
   const D = dai, R = rong, C = cao
@@ -481,7 +484,7 @@ export function calcBoxDimensions(
   // Mỗi mảnh: dai_kh_manh = (D+R)+3, diện tích tổng = 2 × kho1 × dai1_manh
   const HAI_MANH_TYPES = new Set(['A1', 'A3', 'A7'])
   let hai_manh = false
-  if (so_lop >= 3 && dai_ke_hoach > 270 && HAI_MANH_TYPES.has(loai_thung)) {
+  if (so_lop >= 3 && (dai_ke_hoach > 270 || force_hai_manh) && HAI_MANH_TYPES.has(loai_thung)) {
     hai_manh = true
     dai_ke_hoach = D + R + 3
     dai1         = D + R + 5

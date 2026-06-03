@@ -837,6 +837,8 @@ def calculate_price(inp: dict, indirect_breakdown: list[dict] | None = None, add
         "chi_phi_addon": round(d, 2),
         "gia_ban_co_ban": round(p, 2),
         "markup_cuoi": round(markup_cuoi, 2),
+        "hoa_hong_kd": round(p * hoa_hong_kd_pct, 2),
+        "hoa_hong_kh": round(p * hoa_hong_kh_pct, 2),
         "chi_phi_khac": round(h, 2),
         "chiet_khau": round(i, 2),
         "gia_ban_cuoi": round(gia_ban_cuoi, 2),

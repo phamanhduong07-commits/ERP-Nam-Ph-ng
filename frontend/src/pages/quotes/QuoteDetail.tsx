@@ -798,7 +798,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
           <Descriptions.Item label="Khách hàng" span={2}>
             {quote.customer ? (
               <>
-                <Text strong>[{quote.customer.ma_kh}]</Text> {quote.customer.ten_viet_tat}
+                <Text strong>{quote.customer.ten_viet_tat}</Text>
                 {quote.customer.ten_don_vi && (
                   <Text type="secondary"> — {quote.customer.ten_don_vi}</Text>
                 )}
