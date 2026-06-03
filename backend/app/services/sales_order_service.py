@@ -29,6 +29,11 @@ class SalesOrderService:
             seq = 1
         return f"{prefix}{seq:03d}"
 
+    def _generate_so_po_kh(self, customer_id: int, ngay_don: date) -> str:
+        customer = self.db.query(Customer).filter(Customer.id == customer_id).first()
+        ma_kh = customer.ma_kh if customer else "KH"
+        return f"{ma_kh}{ngay_don.strftime('%d%m%Y')}"
+
     def get_sales_orders_paginated(
         self,
         search: str = "",
@@ -136,6 +141,10 @@ class SalesOrderService:
         order_data = data.model_dump()
         if not order_data.get('so_don'):
             order_data['so_don'] = self._generate_so_don()
+        if not order_data.get('so_po_kh'):
+            order_data['so_po_kh'] = self._generate_so_po_kh(
+                data.customer_id, data.ngay_don
+            )
         order_data['created_by'] = user_id
         order = SalesOrder(**order_data)
         self.db.add(order)

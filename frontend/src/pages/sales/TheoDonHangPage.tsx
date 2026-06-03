@@ -537,7 +537,7 @@ export default function TheoDonHangPage() {
             dataSource={filtered}
             columns={columns}
             pagination={{ pageSize: 50, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] }}
-            scroll={{ x: 1630 }}
+            scroll={{ x: 'max-content' }}
             rowClassName={getRowClass}
             rowSelection={{
               selectedRowKeys: selectedKeys,

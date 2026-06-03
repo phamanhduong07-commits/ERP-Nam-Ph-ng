@@ -14,6 +14,7 @@ class SalesOrder(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_don: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
+    so_po_kh: Mapped[str | None] = mapped_column(String(100), nullable=True)
     ngay_don: Mapped[date] = mapped_column(Date, nullable=False)
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
     nv_kinh_doanh_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))

@@ -171,16 +171,28 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
   const [ycDateRange, setYcDateRange] = useState<[string, string] | null>(null)
   const [ycTenKhachInput, setYcTenKhachInput] = useState('')
   const [ycTenKhach, setYcTenKhach] = useState('')
+  const [ycStatusFilter, setYcStatusFilter] = useState<string | null>(null)
+  const [ycSoYCInput, setYcSoYCInput] = useState('')
+  const [ycSoYC, setYcSoYC] = useState('')
+  const [ycNguoiYeuCauInput, setYcNguoiYeuCauInput] = useState('')
+  const [ycNguoiYeuCau, setYcNguoiYeuCau] = useState('')
+  const [selectedYCKeys, setSelectedYCKeys] = useState<React.Key[]>([])
   const ycDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { data: yeuCauList = [], isLoading: loadingYC } = useQuery({
-    queryKey: ['yeu-cau-giao-hang', ycTenKhach, ycDateRange],
+  const { data: yeuCauListRaw = [], isLoading: loadingYC, refetch: refetchYC } = useQuery({
+    queryKey: ['yeu-cau-giao-hang', ycTenKhach, ycDateRange, ycStatusFilter],
     queryFn: () => yeuCauApi.list({
-      trang_thai: 'moi',
+      trang_thai: ycStatusFilter || undefined,
       ten_khach: ycTenKhach || undefined,
       tu_ngay: ycDateRange?.[0] || undefined,
       den_ngay: ycDateRange?.[1] || undefined,
     }).then(r => r.data),
   })
+  const yeuCauList = useMemo(() => {
+    let list = yeuCauListRaw
+    if (ycSoYC) list = list.filter(r => r.so_yeu_cau.toLowerCase().includes(ycSoYC.toLowerCase()))
+    if (ycNguoiYeuCau) list = list.filter(r => r.created_by_name?.toLowerCase().includes(ycNguoiYeuCau.toLowerCase()))
+    return list
+  }, [yeuCauListRaw, ycSoYC, ycNguoiYeuCau])
 
   // ── 4. Lịch sử Phiếu BH — filter persistence + debounce ───────────────────
   const loadSavedFilter = () => {
@@ -780,6 +792,200 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
     }
   }
 
+  const YC_TEMPLATE_CODES = ['YEU_CAU_GIAO_HANG', 'YCGH', 'PHIEU_YEU_CAU_GIAO_HANG']
+
+  const handlePrintYC = (yc: YeuCauGiaoHang) => {
+    const tenPN = yc.ten_phap_nhan?.split(',')[0]?.trim() ?? ''
+    const pn = phapNhanList.find(p => p.ten_phap_nhan === tenPN) ?? phapNhanList[0]
+    const _nm = pn?.ten_phap_nhan?.toUpperCase() ?? ''
+    const fallbackCfg = _nm.includes('VISUNPACK') ? COMPANY_CONFIGS['VISUNPACK']
+      : (_nm.includes('L.A') || _nm.includes('LONG AN')) ? COMPANY_CONFIGS['NAM PHUONG LONG AN']
+      : COMPANY_CONFIGS['NAM PHUONG']
+    const co = pn
+      ? { ...fallbackCfg, ten: pn.ten_phap_nhan, dia_chi: pn.dia_chi ?? fallbackCfg?.dia_chi, so_dien_thoai: pn.so_dien_thoai ?? fallbackCfg?.so_dien_thoai }
+      : fallbackCfg
+    const logoSrc = pn?.logo_path ? `/${pn.logo_path.replace(/^\//, '')}` : (fallbackCfg?.logo || '/logo_namphuong.png')
+
+    const vi = new Intl.NumberFormat('vi-VN')
+    const viDec = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 })
+    const fmtD = (v: string | null | undefined) => {
+      if (!v) return '—'
+      const d = new Date(v)
+      return isNaN(d.getTime()) ? v : `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
+    }
+
+    const ngayDate = yc.ngay_yeu_cau ? new Date(yc.ngay_yeu_cau) : null
+    const totSL = yc.items.reduce((s, it) => s + it.so_luong, 0)
+    const totM2 = yc.tong_dien_tich
+    const totKg = yc.tong_trong_luong
+
+    // Ưu tiên template DB (mã mẫu YEU_CAU_GIAO_HANG / YCGH / PHIEU_YEU_CAU_GIAO_HANG)
+    const ycTpl = templates.find(t => YC_TEMPLATE_CODES.includes(t.ma_mau?.toUpperCase() ?? ''))
+    if (ycTpl?.html_content) {
+      // Hỗ trợ easy builder: render body_html theo columns nếu có
+      const metaAny = (ycTpl.variables_meta as { columns?: { key: string }[]; easy_config?: string })
+      let tplCols = metaAny?.columns as Array<{ key: string }> | undefined
+      if (!tplCols?.length && metaAny?.easy_config) {
+        try { const cfg = JSON.parse(metaAny.easy_config); if (cfg?.selectedColumns?.length) tplCols = cfg.selectedColumns } catch { /* ignore */ }
+      }
+      const bodyRows = tplCols?.length
+        ? yc.items.map((it, i) => {
+            const cells = tplCols!.map(col => {
+              let val = ''
+              switch (col.key) {
+                case 'stt':           val = String(i + 1); break
+                case 'so_lenh':       val = it.so_lenh || '—'; break
+                case 'ten_hang':      val = it.ten_hang; break
+                case 'so_luong':      val = vi.format(it.so_luong); break
+                case 'dvt':           val = it.dvt; break
+                case 'total_m2':      val = it.dien_tich > 0 ? viDec.format(it.dien_tich) : '—'; break
+                case 'trong_luong': case 'kg':
+                  val = it.trong_luong > 0 ? viDec.format(it.trong_luong) : '—'; break
+                case 'ten_kho': case 'kho':
+                  val = it.ten_kho || '—'; break
+                case 'ghi_chu':       val = it.ghi_chu || ''; break
+              }
+              const isNum = ['so_luong','total_m2','trong_luong','kg'].includes(col.key)
+              return `<td${isNum ? ' style="text-align:right"' : ''}>${val}</td>`
+            }).join('')
+            return `<tr>${cells}</tr>`
+          }).join('')
+        : ''
+
+      const fullItemsHtml = `<table><thead><tr><th>STT</th><th>Số lệnh SX</th><th>Tên hàng</th><th>SL</th><th>ĐVT</th><th>M²</th><th>Kg</th><th>Kho</th><th>Ghi chú</th></tr></thead><tbody>${
+        yc.items.map((it,i) => `<tr><td>${i+1}</td><td>${it.so_lenh||'—'}</td><td>${it.ten_hang}</td><td style="text-align:right">${vi.format(it.so_luong)}</td><td>${it.dvt}</td><td style="text-align:right">${it.dien_tich>0?viDec.format(it.dien_tich):'—'}</td><td style="text-align:right">${it.trong_luong>0?viDec.format(it.trong_luong):'—'}</td><td>${it.ten_kho||'—'}</td><td>${it.ghi_chu||''}</td></tr>`).join('')
+      }</tbody></table>`
+
+      const vars: Record<string, string> = {
+        logo_img:         `<img src="${logoSrc}" style="height:60px;max-width:100%;object-fit:contain;" />`,
+        logo_url:         logoSrc,
+        company_name:     co?.ten ?? '',
+        company_details:  [co?.dia_chi ? `Địa chỉ: ${co.dia_chi}` : '', pn?.ma_so_thue ? `MST: ${pn.ma_so_thue}` : '', co?.so_dien_thoai ? `SĐT: ${co.so_dien_thoai}` : ''].filter(Boolean).join(' - '),
+        document_number:  yc.so_yeu_cau,
+        so_yeu_cau:       yc.so_yeu_cau,
+        document_date:    fmtD(yc.ngay_yeu_cau),
+        document_day:     ngayDate ? String(ngayDate.getDate()).padStart(2,'0') : '',
+        document_month:   ngayDate ? String(ngayDate.getMonth()+1).padStart(2,'0') : '',
+        document_year:    ngayDate ? String(ngayDate.getFullYear()) : '',
+        customer_name:    yc.ten_khach_hang ?? '',
+        khach_hang:       yc.ten_khach_hang ?? '',
+        delivery_address: yc.dia_chi_giao ?? '',
+        dia_chi_giao:     yc.dia_chi_giao ?? '',
+        ngay_giao:        fmtD(yc.ngay_giao_yeu_cau),
+        nguoi_nhan:       yc.nguoi_nhan ?? '',
+        ghi_chu:          yc.ghi_chu ?? '',
+        nguoi_yeu_cau:    yc.created_by_name ?? '',
+        created_by_name:  yc.created_by_name ?? '',
+        tong_sl:          vi.format(totSL),
+        total_so_luong:   vi.format(totSL),
+        tong_m2:          totM2 > 0 ? viDec.format(totM2) : '',
+        total_m2:         totM2 > 0 ? viDec.format(totM2) : '',
+        tong_kg:          totKg > 0 ? viDec.format(totKg) : '',
+        body_html:        bodyRows,
+        items_html:       fullItemsHtml,
+        footer_html:      '',
+      }
+      const filled = Object.entries(vars).reduce(
+        (html, [k, v]) => html.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v),
+        ycTpl.html_content,
+      )
+      printHtml(filled)
+      return
+    }
+
+    const tableRows = yc.items.map((it, i) => `<tr>
+      <td style="text-align:center">${i + 1}</td>
+      <td><b>${it.so_lenh || '—'}</b></td>
+      <td>${it.ten_hang}</td>
+      <td style="text-align:right"><b>${vi.format(it.so_luong)}</b></td>
+      <td>${it.dvt}</td>
+      <td style="text-align:right">${it.dien_tich > 0 ? viDec.format(it.dien_tich) : '—'}</td>
+      <td style="text-align:right">${it.trong_luong > 0 ? viDec.format(it.trong_luong) : '—'}</td>
+      <td>${it.ten_kho || '—'}</td>
+      <td>${it.ghi_chu || ''}</td>
+    </tr>`).join('')
+
+    const html = `<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8">
+<style>
+  @page{size:A4 portrait;margin:15mm 12mm}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Times New Roman',serif;font-size:11pt;color:#000}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
+  .company-name{font-size:13pt;font-weight:bold;color:#E65100;text-transform:uppercase}
+  .company-info{font-size:8.5pt;line-height:1.5;color:#333}
+  .divider{border:none;border-top:2px solid #E65100;margin:6px 0 10px}
+  .title{text-align:center;margin-bottom:10px}
+  .title h2{font-size:16pt;font-weight:bold;letter-spacing:2px;text-transform:uppercase}
+  .title .so{font-size:9pt;color:#333;margin-top:2px}
+  .title .date{font-size:9pt;color:#555;font-style:italic}
+  .info-block{font-size:10.5pt;line-height:1.9;margin-bottom:10px}
+  .row{display:flex;margin:2px 0}
+  .lbl{font-weight:bold;min-width:140px;flex-shrink:0}
+  .dots{flex:1;border-bottom:1px dotted #888;padding-left:4px}
+  table{width:100%;border-collapse:collapse;margin:8px 0}
+  th{background:#E65100;color:#fff;border:1px solid #ccc;padding:4px 6px;font-size:10pt}
+  td{border:1px solid #ccc;padding:4px 6px;font-size:10pt}
+  tfoot td{font-weight:bold;background:#FFF3E0}
+  .sig-table{width:100%;border:none;margin-top:30px}
+  .sig-table td{border:none;text-align:center;vertical-align:top;width:25%}
+  .sig-label{font-weight:bold;font-size:10pt}
+  .sig-sub{font-style:italic;font-size:8.5pt;color:#555}
+  .sig-name{margin-top:40px;font-weight:bold}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class="header">
+  <div>
+    <img src="${logoSrc}" style="height:55px;max-width:160px;object-fit:contain;margin-bottom:4px"><br>
+    <div class="company-name">${co?.ten ?? ''}</div>
+    <div class="company-info">${[co?.dia_chi ? `Địa chỉ: ${co.dia_chi}` : '', co?.so_dien_thoai ? `SĐT: ${co.so_dien_thoai}` : ''].filter(Boolean).join(' — ')}</div>
+  </div>
+</div>
+<hr class="divider">
+<div class="title">
+  <h2>Yêu cầu giao hàng</h2>
+  <div class="so">Số: <b>${yc.so_yeu_cau}</b></div>
+  <div class="date">Ngày ${ngayDate ? String(ngayDate.getDate()).padStart(2,'0') : '__'} tháng ${ngayDate ? String(ngayDate.getMonth()+1).padStart(2,'0') : '__'} năm ${ngayDate ? String(ngayDate.getFullYear()) : '____'}</div>
+</div>
+<div class="info-block">
+  <div class="row"><span class="lbl">Khách hàng:</span><span class="dots">${yc.ten_khach_hang ?? ''}</span></div>
+  <div class="row"><span class="lbl">Địa chỉ giao:</span><span class="dots">${yc.dia_chi_giao ?? ''}</span></div>
+  <div class="row"><span class="lbl">Ngày giao dự kiến:</span><span class="dots">${fmtD(yc.ngay_giao_yeu_cau)}</span></div>
+  <div class="row"><span class="lbl">Người nhận:</span><span class="dots">${yc.nguoi_nhan ?? ''}</span></div>
+  ${yc.ghi_chu ? `<div class="row"><span class="lbl">Ghi chú:</span><span class="dots">${yc.ghi_chu}</span></div>` : ''}
+</div>
+<table>
+  <thead><tr>
+    <th style="text-align:center;width:28px">STT</th>
+    <th style="width:100px">Số lệnh SX</th>
+    <th>Tên hàng</th>
+    <th style="text-align:right;width:72px">Số lượng</th>
+    <th style="width:44px">ĐVT</th>
+    <th style="text-align:right;width:68px">M²</th>
+    <th style="text-align:right;width:68px">Kg</th>
+    <th style="width:120px">Kho</th>
+    <th>Ghi chú</th>
+  </tr></thead>
+  <tbody>${tableRows}</tbody>
+  <tfoot><tr>
+    <td colspan="3" style="text-align:right">Tổng cộng:</td>
+    <td style="text-align:right">${vi.format(totSL)}</td>
+    <td></td>
+    <td style="text-align:right">${totM2 > 0 ? viDec.format(totM2) : '—'}</td>
+    <td style="text-align:right">${totKg > 0 ? viDec.format(totKg) : '—'}</td>
+    <td colspan="2"></td>
+  </tr></tfoot>
+</table>
+<table class="sig-table"><tr>
+  <td><div class="sig-label">Người yêu cầu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">${yc.created_by_name ?? ''}</div></td>
+  <td><div class="sig-label">Người nhận hàng</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">${yc.nguoi_nhan ?? ''}</div></td>
+  <td><div class="sig-label">Thủ kho</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
+  <td><div class="sig-label">Người lập phiếu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
+</tr></table>
+</body></html>`
+    printHtml(html)
+  }
+
   const handleSaveModal = async () => {
     const vals = await doForm.validateFields()
     if (isRequest) {
@@ -903,16 +1109,29 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
   ]
 
   const ycCols: ColumnsType<YeuCauGiaoHang> = [
-    { title: 'Số YC', dataIndex: 'so_yeu_cau', width: 160 },
+    { title: 'Số YC', dataIndex: 'so_yeu_cau', width: 160, render: v => <Text code>{v}</Text> },
     { title: 'Ngày YC', dataIndex: 'ngay_yeu_cau', width: 100, render: fmtDate },
+    { title: 'Ngày giao', dataIndex: 'ngay_giao_yeu_cau', width: 100,
+      render: (v: string | null) => v ? fmtDate(v) : <Text type="secondary">—</Text> },
     { title: 'Khách hàng', dataIndex: 'ten_khach_hang', ellipsis: true },
+    { title: 'Pháp nhân', dataIndex: 'ten_phap_nhan', width: 130, ellipsis: true,
+      render: (v: string | null) => v || <Text type="secondary">—</Text> },
+    { title: 'Địa chỉ giao', dataIndex: 'dia_chi_giao', width: 160, ellipsis: true,
+      render: (v: string | null) => v || <Text type="secondary">—</Text> },
+    { title: 'Người nhận', dataIndex: 'nguoi_nhan', width: 110, ellipsis: true,
+      render: (v: string | null) => v || <Text type="secondary">—</Text> },
     { title: 'Tổng m²', dataIndex: 'tong_dien_tich', width: 90, align: 'right' as const,
       render: (v: number) => v > 0 ? v.toFixed(2) : '—' },
+    { title: 'Tổng Kg', dataIndex: 'tong_trong_luong', width: 85, align: 'right' as const,
+      render: (v: number) => v > 0 ? v.toFixed(1) : '—' },
     { title: 'Trạng thái', dataIndex: 'trang_thai', width: 130,
       render: (v: string) => <Tag color={YEU_CAU_TRANG_THAI_COLORS[v]}>{YEU_CAU_TRANG_THAI_LABELS[v] || v}</Tag> },
-    { title: '', width: 150,
+    { title: 'Người YC', dataIndex: 'created_by_name', width: 120, ellipsis: true,
+      render: (v: string | null) => v ? <Text type="secondary" style={{ fontSize: 12 }}>{v}</Text> : '—' },
+    { title: 'Thao tác', width: 180, fixed: 'right' as const,
       render: (_: unknown, r: YeuCauGiaoHang) => (
         <Space size={4}>
+          <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintYC(r)} />
           <Button size="small" type="primary" onClick={() => openDOModalFromYC(r)}>Lập phiếu</Button>
           {r.trang_thai === 'moi' && (
             <Button
@@ -1153,10 +1372,49 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
             label: <span>🚚 3. Yêu cầu giao hàng <Badge count={yeuCauList.length} size="small" style={{ marginLeft: 4 }} /></span>,
             children: (
               <Card size="small">
-                <Row gutter={8} style={{ marginBottom: 12 }}>
+                {/* Row 1: date + status + shortcuts + reload + count */}
+                <Row gutter={8} style={{ marginBottom: 8 }} align="middle">
+                  <Col>
+                    <DatePicker.RangePicker
+                      format="DD/MM/YYYY"
+                      onChange={dates => setYcDateRange(dates ? [dates[0]!.format('YYYY-MM-DD'), dates[1]!.format('YYYY-MM-DD')] : null)}
+                      placeholder={['Từ ngày', 'Đến ngày']}
+                    />
+                  </Col>
+                  <Col>
+                    <Select
+                      placeholder="Tất cả trạng thái"
+                      allowClear
+                      style={{ width: 160 }}
+                      value={ycStatusFilter}
+                      onChange={(v: string | null) => setYcStatusFilter(v ?? null)}
+                      options={Object.entries(YEU_CAU_TRANG_THAI_LABELS).map(([k, label]) => ({ value: k, label }))}
+                    />
+                  </Col>
+                  <Col>
+                    <Space size={4}>
+                      {(['moi', 'da_sap_xe'] as const).map(st => (
+                        <Button
+                          key={st} size="small"
+                          type={ycStatusFilter === st ? 'primary' : 'default'}
+                          onClick={() => setYcStatusFilter(ycStatusFilter === st ? null : st)}
+                        >{YEU_CAU_TRANG_THAI_LABELS[st]}</Button>
+                      ))}
+                    </Space>
+                  </Col>
+                  <Col>
+                    <Button icon={<ReloadOutlined />} onClick={() => refetchYC()} loading={loadingYC}>Tải lại</Button>
+                  </Col>
+                  <Col flex="auto" />
+                  <Col>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{yeuCauList.length} yêu cầu</Text>
+                  </Col>
+                </Row>
+                {/* Row 2: text filters */}
+                <Row gutter={8} style={{ marginBottom: 8 }}>
                   <Col span={6}>
                     <Input
-                      placeholder="Tìm khách hàng..."
+                      placeholder="Tên khách hàng..."
                       allowClear
                       value={ycTenKhachInput}
                       onChange={e => {
@@ -1166,16 +1424,36 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                       }}
                     />
                   </Col>
-                  <Col span={8}>
-                    <DatePicker.RangePicker
-                      format="DD/MM/YYYY"
-                      onChange={dates => setYcDateRange(dates ? [dates[0]!.format('YYYY-MM-DD'), dates[1]!.format('YYYY-MM-DD')] : null)}
-                      placeholder={['Từ ngày', 'Đến ngày']}
+                  <Col span={5}>
+                    <Input
+                      placeholder="Số yêu cầu..."
+                      allowClear
+                      value={ycSoYCInput}
+                      onChange={e => {
+                        const v = e.target.value; setYcSoYCInput(v)
+                        if (ycDebounceRef.current) clearTimeout(ycDebounceRef.current)
+                        ycDebounceRef.current = setTimeout(() => setYcSoYC(v), 400)
+                      }}
+                    />
+                  </Col>
+                  <Col span={5}>
+                    <Input
+                      placeholder="Người yêu cầu..."
+                      allowClear
+                      value={ycNguoiYeuCauInput}
+                      onChange={e => {
+                        const v = e.target.value; setYcNguoiYeuCauInput(v)
+                        if (ycDebounceRef.current) clearTimeout(ycDebounceRef.current)
+                        ycDebounceRef.current = setTimeout(() => setYcNguoiYeuCau(v), 400)
+                      }}
                     />
                   </Col>
                 </Row>
                 <Table
                   size="small" rowKey="id" loading={loadingYC} dataSource={yeuCauList} columns={ycCols}
+                  pagination={{ pageSize: 20 }}
+                  scroll={{ x: 1250 }}
+                  rowSelection={{ selectedRowKeys: selectedYCKeys, onChange: setSelectedYCKeys }}
                   locale={{ emptyText: <Empty description="Không có yêu cầu giao hàng nào" /> }}
                   expandable={{
                     expandedRowRender: (row: YeuCauGiaoHang) => (
@@ -1192,6 +1470,22 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                     ),
                   }}
                 />
+                {selectedYCKeys.length > 0 && (() => {
+                  const rows = yeuCauList.filter(r => selectedYCKeys.includes(r.id))
+                  const totSL = rows.reduce((s, r) => s + r.items.reduce((si, it) => si + it.so_luong, 0), 0)
+                  const totM2 = rows.reduce((s, r) => s + r.tong_dien_tich, 0)
+                  const totM3 = rows.reduce((s, r) => s + r.items.reduce((si, it) => si + (it.the_tich ?? 0), 0), 0)
+                  const totKg = rows.reduce((s, r) => s + r.tong_trong_luong, 0)
+                  return (
+                    <div style={{ marginTop: 8, padding: '10px 20px', background: '#fff7e6', border: '1px solid #ffd591', borderRadius: 6, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 32 }}>
+                      <Text strong style={{ color: '#fa8c16' }}>Đã chọn {selectedYCKeys.length} yêu cầu:</Text>
+                      <Statistic title="Số lượng (tấm)" value={totSL} precision={0} valueStyle={{ fontSize: 18, color: '#1677ff', fontWeight: 600 }} />
+                      <Statistic title="Tổng m²" value={totM2} precision={2} valueStyle={{ fontSize: 18, fontWeight: 600 }} />
+                      <Statistic title="Tổng m³" value={totM3} precision={3} valueStyle={{ fontSize: 18, fontWeight: 600 }} />
+                      <Statistic title="Tổng Kg" value={totKg} precision={1} valueStyle={{ fontSize: 18, fontWeight: 600 }} suffix="kg" />
+                    </div>
+                  )
+                })()}
               </Card>
             )
           },

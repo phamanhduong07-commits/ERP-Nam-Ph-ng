@@ -208,6 +208,38 @@ const DOC_TYPE_SCHEMAS: Record<string, DocTypeSchema> = {
       { title: 'Giao hàng', sub: '(Ký)', align: 'center' },
       { title: 'Khách nhận', sub: '(Ký)', align: 'right' },
     ]
+  },
+  'YEU_CAU_GIAO_HANG': {
+    label: 'Phiếu yêu cầu giao hàng (YCGH)',
+    showTable: true,
+    customerLabel: 'Khách hàng',
+    deliveryLabel: 'Địa chỉ giao hàng',
+    easyOverrides: {
+      showDriver: false,
+      showAssistant1: false,
+      showAssistant2: false,
+      showM2: true,
+      showWarehouse: false,
+      showCustomer: true,
+      showDelivery: true,
+    },
+    defaultColumns: [
+      { key: 'stt', label: 'STT' },
+      { key: 'so_lenh', label: 'Số lệnh SX' },
+      { key: 'ten_hang', label: 'Tên hàng' },
+      { key: 'so_luong', label: 'Số lượng' },
+      { key: 'dvt', label: 'ĐVT' },
+      { key: 'total_m2', label: 'M²' },
+      { key: 'trong_luong', label: 'Kg' },
+      { key: 'ten_kho', label: 'Kho' },
+      { key: 'ghi_chu', label: 'Ghi chú' },
+    ],
+    signatures: [
+      { title: 'Người yêu cầu', sub: '(Ký, họ tên)', align: 'left' },
+      { title: 'Người nhận hàng', sub: '(Ký, họ tên)', align: 'center' },
+      { title: 'Thủ kho', sub: '(Ký, họ tên)', align: 'center' },
+      { title: 'Người lập phiếu', sub: '(Ký, họ tên)', align: 'right' },
+    ]
   }
 }
 

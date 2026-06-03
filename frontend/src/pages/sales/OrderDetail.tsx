@@ -109,6 +109,15 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     onError: (e: unknown) => message.error(apiErrorMsg(e, 'Huỷ thất bại')),
   })
 
+  const updateSoPoKhMutation = useMutation({
+    mutationFn: (val: string) => salesOrdersApi.updateSoPoKh(Number(id), val || null),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales-order', id] })
+      message.success('Đã cập nhật Số PO KH')
+    },
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Cập nhật thất bại')),
+  })
+
   const handleTaoLenh = async () => {
     try {
       const vals = await lenhForm.validateFields()
@@ -502,6 +511,18 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       <Card style={{ marginBottom: 16 }}>
         <Descriptions column={{ xs: 1, sm: 2, lg: embedded ? 2 : 3 }} bordered size="small">
           <Descriptions.Item label="Số đơn hàng">{order.so_don}</Descriptions.Item>
+          <Descriptions.Item label="Số PO KH">
+            <Text
+              strong={!!order.so_po_kh}
+              editable={{
+                tooltip: 'Nhấn để sửa Số PO KH',
+                text: order.so_po_kh ?? '',
+                onChange: (val) => updateSoPoKhMutation.mutate(val),
+              }}
+            >
+              {order.so_po_kh || '—'}
+            </Text>
+          </Descriptions.Item>
           <Descriptions.Item label="Ngày đặt hàng">
             {dayjs(order.ngay_don).format('DD/MM/YYYY')}
           </Descriptions.Item>

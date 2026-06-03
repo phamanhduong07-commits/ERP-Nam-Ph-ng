@@ -12,6 +12,7 @@ from app.models.master import Customer, Warehouse
 from app.models.production import ProductionOrder
 from app.models.sales import SalesOrder
 from app.models.yeu_cau_giao_hang import YeuCauGiaoHang, YeuCauGiaoHangItem  # noqa: F401 used in selectinload
+from app.models.production import ProductionOrder as _PO
 from app.services.carton_metrics import production_item_metrics
 
 router = APIRouter(prefix="/api/yeu-cau-giao-hang", tags=["yeu-cau-giao-hang"])
@@ -52,7 +53,8 @@ class YeuCauPatchIn(BaseModel):
 def _load_opts():
     return [
         joinedload(YeuCauGiaoHang.customer),
-        selectinload(YeuCauGiaoHang.items).selectinload(YeuCauGiaoHangItem.production_order).selectinload("phap_nhan"),
+        joinedload(YeuCauGiaoHang.creator),
+        selectinload(YeuCauGiaoHang.items).selectinload(YeuCauGiaoHangItem.production_order).selectinload(_PO.phap_nhan),
         selectinload(YeuCauGiaoHang.items).selectinload(YeuCauGiaoHangItem.warehouse),
     ]
 
@@ -139,6 +141,7 @@ def _yc_to_dict(yc: YeuCauGiaoHang, db: Session) -> dict:
         "tong_trong_luong": tong_trong_luong,
         "items": items_out,
         "created_at": yc.created_at.isoformat() if yc.created_at else None,
+        "created_by_name": yc.creator.ho_ten if yc.creator else None,
     }
 
 

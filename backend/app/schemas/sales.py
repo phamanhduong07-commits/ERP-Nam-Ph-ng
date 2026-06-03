@@ -87,6 +87,7 @@ class SalesOrderItemResponse(BaseModel):
 class SalesOrderCreate(BaseModel):
     customer_id: int
     ngay_don: date
+    so_po_kh: str | None = None
     phap_nhan_id: int | None = None
     phap_nhan_sx_id: int | None = None
     phan_xuong_id: int | None = None
@@ -107,6 +108,7 @@ class SalesOrderCreate(BaseModel):
 
 
 class SalesOrderUpdate(BaseModel):
+    so_po_kh: str | None = None
     phap_nhan_id: int | None = None
     phap_nhan_sx_id: int | None = None
     ngay_giao_hang: date | None = None
@@ -119,6 +121,7 @@ class SalesOrderUpdate(BaseModel):
 class SalesOrderResponse(BaseModel):
     id: int
     so_don: str
+    so_po_kh: str | None = None
     ngay_don: date
     customer_id: int
     customer: CustomerShort | None = None
@@ -150,6 +153,7 @@ class SalesOrderResponse(BaseModel):
 class SalesOrderListItem(BaseModel):
     id: int
     so_don: str
+    so_po_kh: str | None = None
     ngay_don: date
     customer_id: int
     ten_khach_hang: str | None = None

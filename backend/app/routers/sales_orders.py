@@ -385,6 +385,23 @@ def update_discount(
     return get_order(order_id, db, current_user)
 
 
+@router.patch("/{order_id}/so-po-kh", response_model=SalesOrderResponse)
+def update_so_po_kh(
+    order_id: int,
+    so_po_kh: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from datetime import datetime, timezone
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+    order.so_po_kh = so_po_kh or None
+    order.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return get_order(order_id, db, current_user)
+
+
 @router.post("/admin/backfill-spec")
 def backfill_spec(
     db: Session = Depends(get_db),

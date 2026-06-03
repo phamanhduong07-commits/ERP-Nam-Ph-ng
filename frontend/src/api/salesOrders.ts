@@ -58,6 +58,7 @@ export interface SalesOrderItem {
 export interface SalesOrder {
   id: number
   so_don: string
+  so_po_kh: string | null
   ngay_don: string
   customer_id: number
   customer: { id: number; ma_kh: string; ten_viet_tat: string; ten_don_vi: string | null; dien_thoai: string | null } | null
@@ -86,6 +87,7 @@ export interface SalesOrder {
 export interface SalesOrderListItem {
   id: number
   so_don: string
+  so_po_kh: string | null
   ngay_don: string
   customer_id: number
   ten_khach_hang: string | null
@@ -116,6 +118,7 @@ export interface CreateOrderItemPayload {
 export interface CreateOrderPayload {
   customer_id: number
   ngay_don: string
+  so_po_kh?: string
   phap_nhan_id?: number | null
   phap_nhan_sx_id?: number | null
   phan_xuong_id?: number | null
@@ -165,6 +168,8 @@ export const salesOrdersApi = {
   create: (data: CreateOrderPayload) => client.post<SalesOrder>('/sales-orders', data),
   update: (id: number, data: Partial<CreateOrderPayload>) =>
     client.put<SalesOrder>(`/sales-orders/${id}`, data),
+  updateSoPoKh: (id: number, so_po_kh: string | null) =>
+    client.patch<SalesOrder>(`/sales-orders/${id}/so-po-kh`, null, { params: { so_po_kh: so_po_kh ?? '' } }),
   updateDiscount: (id: number, data: { ty_le_giam_gia?: number; so_tien_giam_gia?: number; ghi_chu?: string }) =>
     client.patch<SalesOrder>(`/sales-orders/${id}/update-discount`, data),
   approve: (id: number) => client.patch<SalesOrder>(`/sales-orders/${id}/approve`),

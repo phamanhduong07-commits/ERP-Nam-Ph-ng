@@ -36,6 +36,7 @@ export interface YeuCauGiaoHang {
   tong_trong_luong: number
   items: YeuCauItem[]
   created_at: string
+  created_by_name: string | null
 }
 
 export interface CreateYeuCauItemPayload {

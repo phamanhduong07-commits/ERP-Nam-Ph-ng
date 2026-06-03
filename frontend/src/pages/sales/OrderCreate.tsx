@@ -38,10 +38,17 @@ export default function OrderCreate() {
   const [form] = Form.useForm()
   const [lines, setLines] = useState<OrderLine[]>([])
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null)
+  const [selectedCustomerMaKh, setSelectedCustomerMaKh] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [productSearch, setProductSearch] = useState('')
   const [customerOptions, setCustomerOptions] = useState<{ value: number; label: string }[]>([])
   const [customerSearching, setCustomerSearching] = useState(false)
+
+  const autoFillSoPoKh = (maKh: string | null, ngayDon?: unknown) => {
+    const d = ngayDon ? dayjs(ngayDon as string) : dayjs()
+    const dateStr = d.format('DDMMYYYY')
+    form.setFieldValue('so_po_kh', `${maKh ?? 'KH'}${dateStr}`)
+  }
 
   const handleCustomerSearch = async (q: string) => {
     if (!q || q.length < 1) return
@@ -133,6 +140,7 @@ export default function OrderCreate() {
       const payload = {
         customer_id: values.customer_id,
         ngay_don: dayjs(values.ngay_don).format('YYYY-MM-DD'),
+        so_po_kh: values.so_po_kh || undefined,
         phap_nhan_id: values.phap_nhan_id ?? null,
         phap_nhan_sx_id: values.phap_nhan_sx_id ?? null,
         phan_xuong_id: values.phan_xuong_id ?? null,
@@ -333,6 +341,9 @@ export default function OrderCreate() {
                         setSelectedCustomerId(v)
                         customersApi.get(v).then(r => {
                           if (r.data?.dia_chi_giao_hang) form.setFieldValue('dia_chi_giao', r.data.dia_chi_giao_hang)
+                          const maKh = r.data?.ma_kh ?? null
+                          setSelectedCustomerMaKh(maKh)
+                          autoFillSoPoKh(maKh, form.getFieldValue('ngay_don'))
                         })
                       }}
                       options={customerOptions}
@@ -346,12 +357,23 @@ export default function OrderCreate() {
                     initialValue={dayjs()}
                     rules={[{ required: true }]}
                   >
-                    <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+                    <DatePicker
+                      format="DD/MM/YYYY"
+                      style={{ width: '100%' }}
+                      onChange={(d) => {
+                        if (selectedCustomerMaKh) autoFillSoPoKh(selectedCustomerMaKh, d)
+                      }}
+                    />
                   </Form.Item>
                 </Col>
                 <Col span={6}>
                   <Form.Item name="ngay_giao_hang" label="Ngày giao hàng">
                     <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="so_po_kh" label="Số PO KH">
+                    <Input placeholder="Tự động sinh hoặc nhập tay..." allowClear />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
