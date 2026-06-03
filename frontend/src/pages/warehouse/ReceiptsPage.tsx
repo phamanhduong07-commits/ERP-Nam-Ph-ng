@@ -192,7 +192,7 @@ export default function ReceiptsPage() {
     if (detail.invoice_image) setInvoicePreviewUrl(detail.invoice_image)
     form.setFieldsValue({
       so_xe: detail.so_xe,
-      ngay_nhap: detail.ngay_nhap ? require('dayjs')(detail.ngay_nhap) : undefined,
+      ngay_nhap: detail.ngay_nhap ? dayjs(detail.ngay_nhap) : undefined,
       supplier_id: detail.supplier_id,
       warehouse_id: detail.warehouse_id,
       hd_tong_kg: detail.hd_tong_kg,
@@ -862,6 +862,16 @@ export default function ReceiptsPage() {
                                   <Col span={8}>
                                     <Form.Item name={[name, 'ky_hieu_cuon']} label="Ký hiệu cuộn" style={{ marginBottom: 4 }}>
                                       <Input size="small" placeholder="VD: 98" />
+                                    </Form.Item>
+                                  </Col>
+                                  <Col span={12}>
+                                    <Form.Item name={[name, 'dinh_luong_thuc_te']} label="Định lượng thực tế (g/m²)" style={{ marginBottom: 4 }}>
+                                      <InputNumber size="small" min={0} style={{ width: '100%' }} placeholder="g/m²" />
+                                    </Form.Item>
+                                  </Col>
+                                  <Col span={12}>
+                                    <Form.Item name={[name, 'do_am']} label="Độ ẩm (%)" style={{ marginBottom: 4 }}>
+                                      <InputNumber size="small" min={0} max={100} style={{ width: '100%' }} placeholder="%" />
                                     </Form.Item>
                                   </Col>
                                 </>

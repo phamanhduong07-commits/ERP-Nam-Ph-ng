@@ -25,8 +25,28 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 # ── Hằng số ──────────────────────────────────────────────────────────────────
 
-_NHAP_LOAI = {"NHAP_MUA", "NHAP_SX", "DIEU_CHINH_TANG"}
-_XUAT_LOAI = {"XUAT_SX", "XUAT_BAN", "DIEU_CHINH_GIAM", "XOA_NHAP_SX"}
+_NHAP_LOAI = {
+    "NHAP_MUA",            # nhập từ mua hàng (GoodsReceipt approve)
+    "NHAP_SX",             # nhập thành phẩm từ sản xuất
+    "NHAP_TP",             # nhập TP (phieu_nhap_tp)
+    "CHUYEN_KHO_NHAP",     # nhận hàng từ chuyển kho
+    "DIEU_CHINH_TANG",     # điều chỉnh tăng (StockAdjustment)
+    "XOA_XUAT_SX",         # hoàn tồn khi xóa phiếu xuất SX
+    "XOA_XUAT_BAN",        # hoàn tồn khi xóa phiếu giao hàng
+    "XOA_CHUYEN_XUAT",     # hoàn tồn khi xóa chuyển kho (phía xuất)
+    "XOA_DIEU_CHINH_GIAM", # hoàn tồn khi xóa điều chỉnh giảm
+    "DIEU_CHINH_GIAM_XUAT",# giảm số lượng giao hàng → trả lại kho
+}
+_XUAT_LOAI = {
+    "XUAT_SX",             # xuất NVL cho sản xuất
+    "XUAT_BAN",            # xuất bán / giao hàng cho khách
+    "CHUYEN_KHO_XUAT",     # chuyển kho (phía xuất)
+    "DIEU_CHINH_GIAM",     # điều chỉnh giảm (StockAdjustment)
+    "XOA_NHAP_SX",         # hoàn tồn khi xóa nhập TP từ SX
+    "XOA_CHUYEN_NHAP",     # hoàn tồn khi xóa chuyển kho (phía nhận)
+    "XOA_DIEU_CHINH_TANG", # hoàn tồn khi xóa điều chỉnh tăng
+    "DIEU_CHINH_TANG_XUAT",# tăng số lượng giao hàng → trừ thêm kho
+}
 
 
 # ── 1. Báo cáo công nợ tổng hợp ──────────────────────────────────────────────
@@ -236,6 +256,43 @@ def get_inventory_movement(
         tx_q = tx_q.filter(InventoryTransaction.warehouse_id == warehouse_id)
     transactions = tx_q.all()
 
+    # Tính tồn đầu kỳ: tổng NHAP - tổng XUAT trước date_from
+    pre_q = (
+        db.query(
+            InventoryTransaction.warehouse_id,
+            InventoryTransaction.paper_material_id,
+            InventoryTransaction.other_material_id,
+            InventoryTransaction.product_id,
+            func.sum(
+                case(
+                    (InventoryTransaction.loai_giao_dich.in_(_NHAP_LOAI), InventoryTransaction.so_luong),
+                    else_=0,
+                )
+            ).label("nhap_truoc"),
+            func.sum(
+                case(
+                    (InventoryTransaction.loai_giao_dich.in_(_XUAT_LOAI), InventoryTransaction.so_luong),
+                    else_=0,
+                )
+            ).label("xuat_truoc"),
+        )
+        .filter(func.date(InventoryTransaction.ngay_giao_dich) < d_from)
+    )
+    if warehouse_id:
+        pre_q = pre_q.filter(InventoryTransaction.warehouse_id == warehouse_id)
+    pre_q = pre_q.group_by(
+        InventoryTransaction.warehouse_id,
+        InventoryTransaction.paper_material_id,
+        InventoryTransaction.other_material_id,
+        InventoryTransaction.product_id,
+    )
+    pre_rows = pre_q.all()
+
+    key_ton_dau: dict[tuple, float] = {}
+    for row in pre_rows:
+        key = (row.warehouse_id, row.paper_material_id, row.other_material_id, row.product_id)
+        key_ton_dau[key] = float(row.nhap_truoc or 0) - float(row.xuat_truoc or 0)
+
     # Lấy tên hàng từ master
     paper_map = {p.id: p for p in db.query(PaperMaterial).all()}
     other_map = {o.id: o for o in db.query(OtherMaterial).all()}
@@ -276,10 +333,10 @@ def get_inventory_movement(
         key = (b.warehouse_id, b.paper_material_id, b.other_material_id, b.product_id)
         nhap = key_nhap.get(key, 0.0)
         xuat = key_xuat.get(key, 0.0)
-        ton_hien_tai = float(b.ton_luong)
-        # Tồn cuối = tồn hiện tại; tồn đầu ≈ cuối - nhập + xuất
-        ton_cuoi = ton_hien_tai
-        ton_dau = ton_cuoi - nhap + xuat
+        # Tồn đầu kỳ = tổng nhập - tổng xuất TRƯỚC date_from
+        ton_dau = key_ton_dau.get(key, 0.0)
+        # Tồn cuối kỳ = tồn đầu + nhập trong kỳ - xuất trong kỳ
+        ton_cuoi = ton_dau + nhap - xuat
 
         rows.append({
             "warehouse_id": b.warehouse_id,
@@ -289,7 +346,7 @@ def get_inventory_movement(
             "ton_dau_ky": max(ton_dau, 0.0),
             "nhap_trong_ky": nhap,
             "xuat_trong_ky": xuat,
-            "ton_cuoi_ky": ton_cuoi,
+            "ton_cuoi_ky": max(ton_cuoi, 0.0),
             "gia_tri_ton": float(b.gia_tri_ton),
         })
 

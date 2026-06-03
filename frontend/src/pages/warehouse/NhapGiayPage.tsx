@@ -161,7 +161,7 @@ export default function NhapGiayPage() {
     if (detail.invoice_image) setInvoicePreviewUrl(detail.invoice_image)
     form.setFieldsValue({
       so_xe: detail.so_xe,
-      ngay_nhap: detail.ngay_nhap ? require('dayjs')(detail.ngay_nhap) : undefined,
+      ngay_nhap: detail.ngay_nhap ? dayjs(detail.ngay_nhap) : undefined,
       supplier_id: detail.supplier_id,
       warehouse_id: detail.warehouse_id,
       hd_tong_kg: detail.hd_tong_kg,

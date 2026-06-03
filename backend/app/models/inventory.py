@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -20,6 +20,13 @@ class InventoryBalance(Base):
     gia_tri_ton: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     don_gia_binh_quan: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=0)
     cap_nhat_luc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            'warehouse_id', 'paper_material_id', 'other_material_id', 'product_id',
+            name='uq_inv_balance_item'
+        ),
+    )
 
 
 class InventoryTransaction(Base):

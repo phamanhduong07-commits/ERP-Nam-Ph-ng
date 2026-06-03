@@ -2,16 +2,16 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from io import BytesIO
-from typing import Optional
+from typing import Literal, Optional
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from openpyxl import Workbook
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, text as _text
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 from app.database import get_db
-from app.deps import get_current_user, require_permissions
+from app.deps import get_current_user, require_permissions, require_roles
 from app.models.auth import User
 from app.models.inventory import InventoryBalance, InventoryTransaction
 from app.models.master import Warehouse, PaperMaterial, OtherMaterial, Product, PhanXuong, PhapNhan, Supplier, Customer, DonGiaVanChuyen
@@ -78,14 +78,14 @@ class GoodsReceiptItemIn(BaseModel):
     paper_material_id: Optional[int] = None
     other_material_id: Optional[int] = None
     ten_hang: str = ""
-    so_luong: Optional[Decimal] = Decimal("0")
+    so_luong: Optional[Decimal] = Field(Decimal("0"), ge=0)
     dvt: str = "Kg"
-    don_gia: Decimal = Decimal("0")
+    don_gia: Decimal = Field(Decimal("0"), ge=0)
     dinh_luong_thuc_te: Optional[Decimal] = None
     do_am: Optional[Decimal] = None
     ket_qua_kiem_tra: str = "DAT"
     kho_mm: Optional[Decimal] = None
-    so_cuon: Optional[int] = None
+    so_cuon: Optional[int] = Field(None, ge=0)
     ky_hieu_cuon: Optional[str] = None
     dai_mm: Optional[Decimal] = None    # chiều dài phôi tấm (mm)
     so_lop: Optional[int] = None        # số lớp: 3 | 5 | 7
@@ -99,7 +99,7 @@ class GoodsReceiptIn(BaseModel):
     warehouse_id: Optional[int] = None
     phan_xuong_id: Optional[int] = None  # dùng để tự tìm kho khi warehouse_id không truyền
     loai_kho_auto: str = "GIAY_CUON"     # loai_kho ưu tiên khi auto-resolve
-    loai_nhap: str = "MUA_HANG"
+    loai_nhap: Literal["MUA_HANG", "PHOI_NGOAI"] = "MUA_HANG"
     phap_nhan_id: Optional[int] = None
     bo_qua_hach_toan: bool = False
     ghi_chu: Optional[str] = None
@@ -130,10 +130,10 @@ class MaterialIssueItemIn(BaseModel):
     paper_material_id: Optional[int] = None
     other_material_id: Optional[int] = None
     ten_hang: str = ""
-    so_luong_ke_hoach: Decimal = Decimal("0")
-    so_luong_thuc_xuat: Decimal
+    so_luong_ke_hoach: Decimal = Field(Decimal("0"), ge=0)
+    so_luong_thuc_xuat: Decimal = Field(..., gt=0)
     dvt: str = "Kg"
-    don_gia: Decimal = Decimal("0")
+    don_gia: Decimal = Field(Decimal("0"), ge=0)
     ghi_chu: Optional[str] = None
 
 
@@ -151,10 +151,10 @@ class ProductionOutputIn(BaseModel):
     warehouse_id: Optional[int] = None
     product_id: Optional[int] = None
     ten_hang: str = ""
-    so_luong_nhap: Decimal
-    so_luong_loi: Decimal = Decimal("0")
+    so_luong_nhap: Decimal = Field(..., gt=0)
+    so_luong_loi: Decimal = Field(Decimal("0"), ge=0)
     dvt: str = "Thùng"
-    don_gia_xuat_xuong: Decimal = Decimal("0")
+    don_gia_xuat_xuong: Decimal = Field(Decimal("0"), ge=0)
     ghi_chu: Optional[str] = None
 
 
@@ -163,12 +163,12 @@ class DeliveryOrderItemIn(BaseModel):
     sales_order_item_id: Optional[int] = None
     product_id: Optional[int] = None
     ten_hang: str = ""
-    so_luong: Decimal
+    so_luong: Decimal = Field(..., gt=0)
     dvt: str = "Thùng"
     dien_tich: Optional[Decimal] = None
     trong_luong: Optional[Decimal] = None
     the_tich: Optional[Decimal] = None
-    don_gia: Optional[Decimal] = None
+    don_gia: Optional[Decimal] = Field(None, ge=0)
     ghi_chu: Optional[str] = None
 
 
@@ -203,8 +203,8 @@ class PhieuChuyenItemIn(BaseModel):
     production_order_id: Optional[int] = None
     ten_hang: str = ""
     don_vi: str = "Kg"
-    so_luong: Decimal
-    don_gia: Decimal = Decimal("0")
+    so_luong: Decimal = Field(..., gt=0)
+    don_gia: Decimal = Field(Decimal("0"), ge=0)
     ghi_chu: Optional[str] = None
 
 
@@ -218,7 +218,7 @@ class PhieuChuyenIn(BaseModel):
 
 class StockAdjustmentItemIn(BaseModel):
     inventory_balance_id: int
-    so_luong_thuc_te: Decimal
+    so_luong_thuc_te: Decimal = Field(..., ge=0)
     ghi_chu: Optional[str] = None
 
 
@@ -248,8 +248,8 @@ from app.services.inventory_service import (
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _gen_so(db: Session, prefix: str, model_cls) -> str:
-    ym = datetime.today().strftime("%Y%m")
-    pattern = f"{prefix}-{ym}-%"
+    ymd = datetime.today().strftime("%Y%m%d")
+    pattern = f"{prefix}-{ymd}-%"
     last = db.query(func.max(model_cls.so_phieu)).filter(
         model_cls.so_phieu.like(pattern)
     ).scalar()
@@ -259,7 +259,7 @@ def _gen_so(db: Session, prefix: str, model_cls) -> str:
             seq = int(last.rsplit("-", 1)[-1]) + 1
         except (ValueError, IndexError):
             seq = 1
-    return f"{prefix}-{ym}-{seq:04d}"
+    return f"{prefix}-{ymd}-{seq:03d}"
 
 
 def _resolve_nvl_name(db: Session, paper_material_id: Optional[int], other_material_id: Optional[int], fallback: str = "") -> tuple[str, str]:
@@ -1802,7 +1802,7 @@ def _gen_so_bt_gr(db: Session) -> str:
 
 
 @router.patch("/goods-receipts/{gr_id}/approve")
-def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "GIAM_DOC", "ADMIN"))):
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
         logger.warning("goods_receipt id=%s not found", gr_id)
@@ -1891,7 +1891,7 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_use
 
 
 @router.post("/goods-receipts/{gr_id}/sync-gia-ban")
-def sync_gia_ban(gr_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def sync_gia_ban(gr_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("GIAM_DOC", "ADMIN"))):
     """Bấm nút thủ công: gia_ban = gia_mua × 1.05 cho tất cả vật tư giấy trong PNK này."""
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
@@ -1915,7 +1915,7 @@ def sync_gia_ban(gr_id: int, db: Session = Depends(get_db), _: User = Depends(ge
 
 
 @router.delete("/goods-receipts/{gr_id}")
-def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "ADMIN"))):
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
         raise HTTPException(404, "Không tìm thấy phiếu nhập")
@@ -2177,7 +2177,7 @@ def create_material_issue(
 
 
 @router.delete("/material-issues/{mi_id}")
-def delete_material_issue(mi_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def delete_material_issue(mi_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "ADMIN"))):
     mi = db.get(MaterialIssue, mi_id)
     if not mi:
         raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
@@ -2759,12 +2759,13 @@ def create_delivery(
             ghi_chu=it.ghi_chu,
         ))
 
+        # Lock rows trước khi trừ tồn — tránh race condition concurrent delivery
         balances = db.query(InventoryBalance).filter(
             InventoryBalance.warehouse_id == warehouse_id,
             InventoryBalance.product_id == it.product_id,
             InventoryBalance.ton_luong > 0,
-        ).all() if it.product_id else [
-            _get_or_create_balance(db, warehouse_id, product_id=it.product_id, ten_hang=ten_hang, don_vi=dvt)
+        ).with_for_update().all() if it.product_id else [
+            _get_or_create_balance(db, warehouse_id, product_id=it.product_id, ten_hang=ten_hang, don_vi=dvt, lock=True)
         ]
         balances.sort(key=lambda b: 0)
 
@@ -3003,8 +3004,51 @@ def adjust_delivery_items(
             raise HTTPException(400, f"Không tìm thấy dòng hàng ID {adj.item_id}")
         if adj.so_luong_moi < 0:
             raise HTTPException(400, "Số lượng không được âm")
+
+        old_so_luong = it.so_luong or Decimal("0")
+        delta = Decimal(str(adj.so_luong_moi)) - old_so_luong
+
         it.so_luong   = adj.so_luong_moi
         it.thanh_tien = adj.so_luong_moi * (it.don_gia or Decimal("0"))
+
+        # Điều chỉnh tồn kho tương ứng với thay đổi số lượng
+        if delta != 0 and do.warehouse_id:
+            ten_hang = it.ten_hang or ""
+            dvt = it.dvt or "Thùng"
+            don_gia_item = it.don_gia or Decimal("0")
+            if delta < 0:
+                # Giảm số lượng → trả lại kho
+                bal = _get_or_create_balance(
+                    db, do.warehouse_id,
+                    product_id=it.product_id,
+                    ten_hang=ten_hang, don_vi=dvt,
+                )
+                _nhap_balance(bal, -delta, don_gia_item)
+                _log_tx(db, do.warehouse_id, "DIEU_CHINH_GIAM_XUAT",
+                        -delta, bal.don_gia_binh_quan, bal.ton_luong,
+                        "delivery_orders", do.id, current_user.id,
+                        product_id=it.product_id,
+                        ghi_chu=f"Điều chỉnh {do.so_phieu}: giảm {ten_hang}")
+            else:
+                # Tăng số lượng → kiểm tra tồn rồi trừ thêm
+                bal = _get_or_create_balance(
+                    db, do.warehouse_id,
+                    product_id=it.product_id,
+                    ten_hang=ten_hang, don_vi=dvt,
+                    lock=True,
+                )
+                if bal.ton_luong < delta:
+                    raise HTTPException(
+                        400,
+                        f"Không đủ tồn kho để tăng: {ten_hang} — "
+                        f"cần thêm {float(delta):g}, còn {float(bal.ton_luong):g}"
+                    )
+                _xuat_balance(bal, delta, ten_hang)
+                _log_tx(db, do.warehouse_id, "DIEU_CHINH_TANG_XUAT",
+                        delta, bal.don_gia_binh_quan, bal.ton_luong,
+                        "delivery_orders", do.id, current_user.id,
+                        product_id=it.product_id,
+                        ghi_chu=f"Điều chỉnh {do.so_phieu}: tăng {ten_hang}")
 
     # Snapshot items AFTER thay đổi
     item_after = [
@@ -3096,7 +3140,7 @@ def adjust_delivery_items(
 
 
 @router.delete("/deliveries/{do_id}")
-def delete_delivery(do_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def delete_delivery(do_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "ADMIN"))):
     do = db.get(DeliveryOrder, do_id)
     if not do:
         raise HTTPException(404, "Không tìm thấy phiếu giao hàng")
@@ -3436,10 +3480,10 @@ def create_phieu_chuyen(
                     ten_hang = it.ten_hang
                 don_vi = it.don_vi or don_vi
 
-                # Lấy giá bình quân TRƯỚC khi tạo item để lưu đúng vào PhieuChuyenKhoItem.don_gia
+                # Lấy giá bình quân TRƯỚC khi tạo item — lock row để tránh race condition
                 bal_xuat = _get_or_create_balance(db, body.warehouse_xuat_id,
                                                   it.paper_material_id, it.other_material_id,
-                                                  ten_hang=ten_hang, don_vi=don_vi)
+                                                  ten_hang=ten_hang, don_vi=don_vi, lock=True)
                 don_gia_xuat = bal_xuat.don_gia_binh_quan
 
                 db.add(PhieuChuyenKhoItem(
@@ -3763,7 +3807,7 @@ def get_stock_adjustment(adj_id: int, db: Session = Depends(get_db), _: User = D
 def create_stock_adjustment(
     body: StockAdjustmentIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "KE_TOAN", "ADMIN")),
 ):
     if not body.items:
         raise HTTPException(400, "Phieu kiem ke phai co it nhat 1 dong hang")
@@ -3871,7 +3915,7 @@ def create_stock_adjustment(
 
 
 @router.delete("/stock-adjustments/{adj_id}")
-def delete_stock_adjustment(adj_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def delete_stock_adjustment(adj_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "KE_TOAN", "ADMIN"))):
     adj = db.get(StockAdjustment, adj_id)
     if not adj:
         raise HTTPException(404, "Khong tim thay phieu kiem ke")
