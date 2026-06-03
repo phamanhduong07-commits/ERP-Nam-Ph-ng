@@ -706,6 +706,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                   case 'quy_cach': case 'ket_cau': case 'kich_thuoc':
                     val = it.quy_cach || it.ket_cau || '—'; break
                   case 'so_po': case 'so_don_item': val = it.so_don_item || '—'; break
+                  case 'so_po_kh': val = (it as any).so_po_kh || '—'; break
                   case 'so_lsx': case 'so_lenh':   val = it.so_lenh || '—'; break
                   case 'ngay_po':       val = fmtDateStr(it.ngay_po); break
                   case 'kho_cat':

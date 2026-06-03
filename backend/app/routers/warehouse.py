@@ -3149,7 +3149,15 @@ def delete_delivery(do_id: int, db: Session = Depends(get_db), current_user: Use
 def _do_to_dict(do: DeliveryOrder, db: Session, include_print_data: bool = False) -> dict:
     wh = db.get(Warehouse, do.warehouse_id)
     cus = db.get(Customer, do.customer_id)
-    so = db.get(SalesOrder, do.sales_order_id) if do.sales_order_id else None
+    # Derive effective sales_order_id: direct FK first, then via production orders (LSX flow)
+    effective_so_id = do.sales_order_id
+    if not effective_so_id and do.items:
+        for _item in do.items:
+            _po = _item.production_order if hasattr(_item, "production_order") else None
+            if _po and _po.sales_order_id:
+                effective_so_id = _po.sales_order_id
+                break
+    so = db.get(SalesOrder, effective_so_id) if effective_so_id else None
     xe = do.xe if hasattr(do, "xe") else None
     tai_xe = do.tai_xe if hasattr(do, "tai_xe") else None
     don_gia_vc = do.don_gia_vc if hasattr(do, "don_gia_vc") else None
@@ -3226,6 +3234,7 @@ def _do_to_dict(do: DeliveryOrder, db: Session, include_print_data: bool = False
                 quy_cach = None
             base.update({
                 "so_don_item": po_so.so_don if po_so else None,
+                "so_po_kh": po_so.so_po_kh if po_so else None,
                 "ngay_po": str(po_so.ngay_dat) if po_so and getattr(po_so, "ngay_dat", None) else None,
                 "ket_cau": pi.to_hop_song if pi else None,
                 "quy_cach": quy_cach,
@@ -3242,7 +3251,7 @@ def _do_to_dict(do: DeliveryOrder, db: Session, include_print_data: bool = False
         "id": do.id,
         "so_phieu": do.so_phieu,
         "ngay_xuat": str(do.ngay_xuat),
-        "sales_order_id": do.sales_order_id,
+        "sales_order_id": effective_so_id,
         "so_don": so.so_don if so else None,
         "customer_id": do.customer_id,
         "ten_khach": cus.ten_viet_tat if cus else "",

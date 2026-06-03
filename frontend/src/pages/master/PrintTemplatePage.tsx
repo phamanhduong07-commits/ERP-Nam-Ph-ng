@@ -907,7 +907,7 @@ export default function PrintTemplatePage() {
                                {[
                                  { key: 'stt', label: 'STT' }, { key: 'ma_sp', label: 'Mã SP' }, { key: 'ma_amis', label: 'Mã AMIS' },
                                  { key: 'ten_hang', label: 'Tên hàng' }, { key: 'kich_thuoc', label: 'Quy cách' },
-                                 { key: 'so_lop', label: 'Lớp' }, { key: 'to_hop_song', label: 'Sóng' }, { key: 'so_po', label: 'Số PO' },
+                                 { key: 'so_lop', label: 'Lớp' }, { key: 'to_hop_song', label: 'Sóng' }, { key: 'so_po', label: 'Số PO' }, { key: 'so_po_kh', label: 'Số PO KH' },
                                  { key: 'so_lsx', label: 'Số LSX' }, { key: 'ngay_po', label: 'Ngày PO' }, { key: 'kho_cat', label: 'Khổ×Cắt' },
                                  { key: 'so_luong', label: 'Số lượng' }, { key: 'dvt', label: 'ĐVT' },
                                  { key: 'total_m2', label: 'M2' }, { key: 'trong_luong', label: 'Kg' }, { key: 'the_tich', label: 'M3' },
