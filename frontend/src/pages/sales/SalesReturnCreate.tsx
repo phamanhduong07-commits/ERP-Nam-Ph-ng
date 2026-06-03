@@ -4,16 +4,18 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Card, Form, Select, DatePicker, Input, Button, Table, Space,
   InputNumber, Typography, Row, Col, Divider, message, Empty, Spin,
-  Alert,
+  Alert, Tag,
 } from 'antd'
-import { DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons'
+import { DeleteOutlined, ArrowLeftOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { salesReturnsApi } from '../../api/salesReturns'
 import { deliveriesApi } from '../../api/deliveries'
 import { salesOrdersApi } from '../../api/salesOrders'
+import { customersApi } from '../../api/customers'
 import { TINH_TRANG_HANG_LABELS } from '../../api/salesReturns'
 import type { DeliveryOrder, DeliveryOrderItem } from '../../api/deliveries'
+import type { SalesOrderListItem } from '../../api/salesOrders'
 import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
@@ -35,26 +37,39 @@ export default function SalesReturnCreate() {
   const [form] = Form.useForm()
   const [lines, setLines] = useState<ReturnLine[]>([])
   const [selectedSalesOrderId, setSelectedSalesOrderId] = useState<number | null>(null)
-  const [selectedSalesOrderNo, setSelectedSalesOrderNo] = useState<string | null>(null)
   const [selectedDeliveryId, setSelectedDeliveryId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+  const [autoSOOption, setAutoSOOption] = useState<SalesOrderListItem | null>(null)
+  const [pbhValue, setPbhValue] = useState<number | null>(null)
+
+  const [searchKH, setSearchKH] = useState('')
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null)
+  const { data: customers, isLoading: customersLoading } = useQuery({
+    queryKey: ['customers-for-return', searchKH],
+    queryFn: () => customersApi.list({ search: searchKH || undefined, page_size: 50 }).then(r => r.data.items),
+  })
 
   const [searchSO, setSearchSO] = useState('')
   const { data: salesOrders, isLoading: salesOrdersLoading } = useQuery({
-    queryKey: ['sales-orders-for-return', searchSO],
+    queryKey: ['sales-orders-for-return', searchSO, selectedCustomerId],
     queryFn: () => salesOrdersApi.list({
       search: searchSO || undefined,
+      customer_id: selectedCustomerId || undefined,
       page_size: 50,
     }).then(r => r.data.items),
   })
 
-  const [searchDO, setSearchDO] = useState('')
+  const [searchPBH, setSearchPBH] = useState('')
+  const { data: pbhResults, isLoading: pbhLoading } = useQuery({
+    queryKey: ['pbh-search-for-return', searchPBH],
+    queryFn: () => deliveriesApi.list({ so_phieu: searchPBH }).then(r => r.data),
+    enabled: searchPBH.length >= 2,
+  })
+
   const { data: deliveryOrders, isLoading: deliveryOrdersLoading } = useQuery({
-    queryKey: ['delivery-orders-for-return-v2', selectedSalesOrderId, selectedSalesOrderNo, searchDO],
+    queryKey: ['delivery-orders-for-return-v2', selectedSalesOrderId],
     queryFn: () => deliveriesApi.list({
       sales_order_id: selectedSalesOrderId || undefined,
-      so_don: selectedSalesOrderNo || undefined,
-      so_phieu: searchDO || undefined,
     }).then(r => r.data),
     enabled: !!selectedSalesOrderId,
   })
@@ -71,18 +86,45 @@ export default function SalesReturnCreate() {
     ? deliveryList.filter((delivery) => delivery.id === selectedDeliveryId)
     : deliveryList
 
-  const handleSelectDelivery = (deliveryId: number) => {
-    setSelectedDeliveryId(deliveryId)
+  const handleSelectCustomer = (customerId: number) => {
+    setSelectedCustomerId(customerId)
+    setSelectedSalesOrderId(null)
+    setSelectedDeliveryId(null)
+    setPbhValue(null)
+    setAutoSOOption(null)
+    setLines([])
+    form.setFieldsValue({ sales_order_id: undefined })
   }
 
-  const handleSelectSalesOrder = (salesOrderId: number) => {
-    const selectedOrder = salesOrders?.find((order) => order.id === salesOrderId)
+const handleSelectSalesOrder = (salesOrderId: number) => {
     setSelectedSalesOrderId(salesOrderId)
-    setSelectedSalesOrderNo(selectedOrder?.so_don || null)
     setSelectedDeliveryId(null)
-    setSearchDO('')
+    setPbhValue(null)
+    setAutoSOOption(null)
     setLines([])
-    form.setFieldsValue({ delivery_order_id: undefined })
+  }
+
+  const handleSelectPBH = (deliveryId: number) => {
+    const delivery = pbhResults?.find(d => d.id === deliveryId)
+    if (!delivery) return
+    setPbhValue(deliveryId)
+    setSelectedDeliveryId(deliveryId)
+    if (delivery.sales_order_id) {
+      const soId = delivery.sales_order_id
+      setAutoSOOption({
+        id: soId,
+        so_don: delivery.so_don || '',
+        ten_khach_hang: delivery.ten_khach,
+        ngay_don: delivery.ngay_xuat,
+        customer_id: delivery.customer_id,
+        so_po_kh: null, phap_nhan_id: null, ten_phap_nhan: null,
+        trang_thai: '', ngay_giao_hang: null, tong_tien: 0,
+        tong_tien_sau_giam: 0, so_dong: 0, created_by_name: null, created_at: '',
+      })
+      setSelectedSalesOrderId(soId)
+      form.setFieldsValue({ sales_order_id: soId })
+      setLines([])
+    }
   }
 
   const addLine = (delivery: DeliveryOrder, item: DeliveryOrderItem) => {
@@ -111,6 +153,32 @@ export default function SalesReturnCreate() {
       tinh_trang_hang: 'tot',
       ghi_chu: '',
     }])
+  }
+
+  const handleAddAll = (delivery: DeliveryOrder) => {
+    const items = delivery.items ?? []
+    const newLines: ReturnLine[] = []
+    items.forEach((item) => {
+      if (!item.sales_order_item_id && !item.production_order_id) return
+      const key = `${delivery.id}-${item.id}`
+      if (lines.some((l) => l.key === key)) return
+      const maxTra = item.so_luong_con_lai ?? item.so_luong
+      if (maxTra <= 0) return
+      newLines.push({
+        key,
+        delivery_order: delivery,
+        sales_order_item_id: item.sales_order_item_id,
+        delivery_item: item,
+        so_luong_tra: maxTra,
+        don_gia_tra: item.don_gia,
+        ly_do_tra: '',
+        tinh_trang_hang: 'tot',
+        ghi_chu: '',
+      })
+    })
+    if (newLines.length > 0) {
+      setLines((prev) => [...prev, ...newLines])
+    }
   }
 
   const removeLine = (key: string) => setLines((prev) => prev.filter((l) => l.key !== key))
@@ -305,7 +373,59 @@ export default function SalesReturnCreate() {
           <Card title="Thông tin phiếu trả" style={{ marginBottom: 16 }}>
             <Form form={form} layout="vertical">
               <Row gutter={16}>
-                <Col xs={24} md={9}>
+                <Col xs={24} md={4}>
+                  <Form.Item label="Khách hàng">
+                    <Select
+                      showSearch
+                      placeholder="Tìm khách hàng..."
+                      optionFilterProp="children"
+                      filterOption={false}
+                      onSearch={(val) => setSearchKH(val)}
+                      onChange={handleSelectCustomer}
+                      loading={customersLoading}
+                      allowClear
+                      onClear={() => {
+                        setSelectedCustomerId(null)
+                        setSelectedSalesOrderId(null)
+                        setSelectedDeliveryId(null)
+                        setLines([])
+                        form.setFieldsValue({ sales_order_id: undefined })
+                      }}
+                    >
+                      {customers?.map((c) => (
+                        <Select.Option key={c.id} value={c.id}>
+                          {c.ten_viet_tat}{c.ten_don_vi ? ` — ${c.ten_don_vi}` : ''}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={6}>
+                  <Form.Item label="Phiếu bán hàng">
+                    <Select
+                      showSearch
+                      value={pbhValue || undefined}
+                      placeholder="Tìm số phiếu..."
+                      filterOption={false}
+                      onSearch={(val) => setSearchPBH(val)}
+                      onChange={handleSelectPBH}
+                      loading={pbhLoading}
+                      allowClear
+                      onClear={() => {
+                        setPbhValue(null)
+                        setSelectedDeliveryId(null)
+                      }}
+                      notFoundContent={searchPBH.length >= 2 ? 'Không tìm thấy' : 'Nhập ít nhất 2 ký tự'}
+                    >
+                      {pbhResults?.map((d) => (
+                        <Select.Option key={d.id} value={d.id}>
+                          {d.so_phieu} — {d.ten_khach || ''} ({dayjs(d.ngay_xuat).format('DD/MM/YYYY')})
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={10}>
                   <Form.Item
                     name="sales_order_id"
                     label="Đơn bán hàng"
@@ -313,7 +433,7 @@ export default function SalesReturnCreate() {
                   >
                     <Select
                       showSearch
-                      placeholder="Tìm theo số đơn, khách hàng..."
+                      placeholder="Tìm theo số đơn..."
                       optionFilterProp="children"
                       filterOption={false}
                       onSearch={(val) => setSearchSO(val)}
@@ -322,41 +442,20 @@ export default function SalesReturnCreate() {
                       allowClear
                       onClear={() => {
                         setSelectedSalesOrderId(null)
-                        setSelectedSalesOrderNo(null)
                         setSelectedDeliveryId(null)
+                        setPbhValue(null)
+                        setAutoSOOption(null)
                         setLines([])
-                        form.setFieldsValue({ delivery_order_id: undefined })
                       }}
                     >
+                      {autoSOOption && !salesOrders?.some(o => o.id === autoSOOption.id) && (
+                        <Select.Option key={autoSOOption.id} value={autoSOOption.id}>
+                          {autoSOOption.so_don} — {autoSOOption.ten_khach_hang || ''} ({dayjs(autoSOOption.ngay_don).format('DD/MM/YYYY')})
+                        </Select.Option>
+                      )}
                       {salesOrders?.map((order) => (
                         <Select.Option key={order.id} value={order.id}>
                           {order.so_don} — {order.ten_khach_hang || ''} ({dayjs(order.ngay_don).format('DD/MM/YYYY')})
-                        </Select.Option>
-                      ))}
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={7}>
-                  <Form.Item
-                    name="delivery_order_id"
-                    label="Lọc theo phiếu giao"
-                  >
-                    <Select
-                      showSearch
-                      placeholder="Chọn phiếu giao để lọc..."
-                      optionFilterProp="children"
-                      filterOption={false}
-                      onSearch={(val) => setSearchDO(val)}
-                      onChange={handleSelectDelivery}
-                      loading={deliveryOrdersLoading}
-                      disabled={!selectedSalesOrderId}
-                      allowClear
-                      onClear={() => setSelectedDeliveryId(null)}
-                      notFoundContent={null}
-                    >
-                      {deliveryOrders?.filter((delivery) => delivery.sales_order_id).map((delivery) => (
-                        <Select.Option key={delivery.id} value={delivery.id}>
-                          {delivery.so_phieu} ({dayjs(delivery.ngay_xuat).format('DD/MM/YYYY')})
                         </Select.Option>
                       ))}
                     </Select>
@@ -372,7 +471,7 @@ export default function SalesReturnCreate() {
                     <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
-                <Col xs={24} md={4}>
+                <Col xs={24} md={18}>
                   <Form.Item
                     name="ly_do_tra"
                     label="Lý do trả"
@@ -381,7 +480,7 @@ export default function SalesReturnCreate() {
                     <Input placeholder="Lý do trả hàng..." />
                   </Form.Item>
                 </Col>
-                <Col span={24}>
+                <Col xs={24} md={6}>
                   <Form.Item name="ghi_chu" label="Ghi chú">
                     <Input.TextArea rows={1} placeholder="Ghi chú thêm..." />
                   </Form.Item>
@@ -438,7 +537,13 @@ export default function SalesReturnCreate() {
         </Col>
 
         <Col xs={24} lg={8}>
-          <Card title="Chọn mã hàng / lệnh sản xuất đã giao" style={{ position: 'sticky', top: 24 }}>
+          <Card
+            title="Chọn mã hàng / lệnh sản xuất đã giao"
+            style={{ position: 'sticky', top: 24 }}
+            extra={lines.length > 0 ? (
+              <Tag color="blue">{lines.length} mã đã thêm</Tag>
+            ) : undefined}
+          >
             {!selectedSalesOrderId ? (
               <Empty description="Chọn phiếu bán hàng để xem các mã hàng đã giao" />
             ) : deliveryOrdersLoading || deliveryLoading ? (
@@ -447,44 +552,83 @@ export default function SalesReturnCreate() {
               <Empty description="Đơn bán này chưa có phiếu giao hàng" />
             ) : (
               <div style={{ maxHeight: 560, overflowY: 'auto' }}>
-                {visibleDeliveries.map((delivery) => (
-                  <div key={delivery.id} style={{ marginBottom: 12 }}>
-                    <Text strong>{delivery.so_phieu}</Text>
-                    <br />
-                    <Text type="secondary" style={{ fontSize: 11 }}>
-                      {delivery.so_don || ''} - {delivery.ten_khach || ''} - {dayjs(delivery.ngay_xuat).format('DD/MM/YYYY')}
-                    </Text>
-                    <div style={{ marginTop: 8 }}>
-                      {delivery.items.map((item) => (
-                        <Card
-                          key={`${delivery.id}-${item.id}`}
-                          size="small"
-                          hoverable={!!item.sales_order_item_id || !!item.production_order_id}
-                          onClick={() => addLine(delivery, item)}
-                          style={{
-                            marginBottom: 6,
-                            cursor: item.sales_order_item_id || item.production_order_id ? 'pointer' : 'not-allowed',
-                            opacity: item.sales_order_item_id || item.production_order_id ? 1 : 0.55,
-                          }}
-                        >
-                          <Text strong style={{ fontSize: 12 }}>{item.ten_hang}</Text>
+                {visibleDeliveries.map((delivery) => {
+                  const addableCount = delivery.items.filter((item) =>
+                    (item.sales_order_item_id || item.production_order_id) &&
+                    (item.so_luong_con_lai ?? item.so_luong) > 0 &&
+                    !lines.some((l) => l.key === `${delivery.id}-${item.id}`)
+                  ).length
+
+                  return (
+                    <div key={delivery.id} style={{ marginBottom: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                        <div>
+                          <Text strong>{delivery.so_phieu}</Text>
                           <br />
-                          <Space direction="vertical" size={0}>
-                            <Text type="secondary" style={{ fontSize: 11 }}>
-                              LSX: {item.so_lenh || item.production_order_id || '-'} | Đã giao: {item.so_luong} {item.dvt}
-                            </Text>
-                            <Text type="secondary" style={{ fontSize: 11 }}>
-                              Giá: {new Intl.NumberFormat('vi-VN').format(item.don_gia)}đ
-                            </Text>
-                            <Text type="danger" style={{ fontSize: 11, fontWeight: 'bold' }}>
-                              Còn có thể trả: {item.so_luong_con_lai ?? item.so_luong} {item.dvt}
-                            </Text>
-                          </Space>
-                        </Card>
-                      ))}
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {delivery.so_don || ''} - {delivery.ten_khach || ''} - {dayjs(delivery.ngay_xuat).format('DD/MM/YYYY')}
+                          </Text>
+                        </div>
+                        {addableCount > 0 && (
+                          <Button size="small" type="dashed" onClick={() => handleAddAll(delivery)}>
+                            Thêm tất cả ({addableCount})
+                          </Button>
+                        )}
+                      </div>
+                      <div style={{ marginTop: 8 }}>
+                        {delivery.items.map((item) => {
+                          const itemKey = `${delivery.id}-${item.id}`
+                          const isAdded = lines.some((l) => l.key === itemKey)
+                          const canAdd = !!(item.sales_order_item_id || item.production_order_id) && (item.so_luong_con_lai ?? item.so_luong) > 0
+
+                          return (
+                            <Card
+                              key={itemKey}
+                              size="small"
+                              hoverable={!!item.sales_order_item_id || !!item.production_order_id}
+                              onClick={() => {
+                                if (isAdded) {
+                                  removeLine(itemKey)
+                                } else {
+                                  addLine(delivery, item)
+                                }
+                              }}
+                              style={{
+                                marginBottom: 6,
+                                cursor: (canAdd || isAdded) ? 'pointer' : 'not-allowed',
+                                opacity: (canAdd || isAdded) ? 1 : 0.55,
+                                border: isAdded ? '1px solid #52c41a' : undefined,
+                                background: isAdded ? '#f6ffed' : undefined,
+                                transition: 'all 0.2s',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                  <Text strong style={{ fontSize: 12 }}>{item.ten_hang}</Text>
+                                  <br />
+                                  <Space direction="vertical" size={0}>
+                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                      LSX: {item.so_lenh || item.production_order_id || '-'} | Đã giao: {item.so_luong} {item.dvt}
+                                    </Text>
+                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                      Giá: {new Intl.NumberFormat('vi-VN').format(item.don_gia)}đ
+                                    </Text>
+                                    <Text type="danger" style={{ fontSize: 11, fontWeight: 'bold' }}>
+                                      Còn có thể trả: {item.so_luong_con_lai ?? item.so_luong} {item.dvt}
+                                    </Text>
+                                  </Space>
+                                </div>
+                                {isAdded && (
+                                  <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 16, marginLeft: 8, flexShrink: 0 }} />
+                                )}
+                              </div>
+                            </Card>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </Card>
