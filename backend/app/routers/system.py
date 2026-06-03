@@ -40,26 +40,28 @@ def list_templates(db: Session = Depends(get_db), _: User = Depends(get_current_
 @router.get("/templates/{ma_mau}")
 def get_template(ma_mau: str, phap_nhan_id: Optional[int] = None, strict: bool = False, db: Session = Depends(
         get_db), _: User = Depends(get_current_user)):
-    # Tìm theo pháp nhân cụ thể trước
     query = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == ma_mau)
+
     if phap_nhan_id:
+        # Ưu tiên template của pháp nhân cụ thể
         tpl = query.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first()
+        if tpl:
+            return tpl
+        # Fallback về template global (phap_nhan_id IS NULL)
+        tpl = query.filter(PrintTemplate.phap_nhan_id.is_(None)).first()
         if tpl:
             return tpl
         if strict:
             raise HTTPException(404, f"Khong tim thay mau in {ma_mau} cho phap nhan ID {phap_nhan_id}")
-
-    # Nếu không thấy theo pháp nhân, tìm cái mặc định (NULL)
-    tpl = query.filter(PrintTemplate.phap_nhan_id is None).first()
-    if strict:
-        if not tpl:
-            raise HTTPException(404, f"Khong tim thay mau in {ma_mau}")
-        return tpl
-    if not tpl:
-        # Nếu vẫn không thấy, lấy cái đầu tiên có cùng mã
         tpl = query.first()
+    else:
+        tpl = query.filter(PrintTemplate.phap_nhan_id.is_(None)).first()
+        if not tpl:
+            tpl = query.first()
 
     if not tpl:
+        if strict:
+            raise HTTPException(404, f"Khong tim thay mau in {ma_mau}")
         raise HTTPException(404, "Không tìm thấy mẫu in")
     return tpl
 
@@ -119,21 +121,26 @@ def list_excel_templates(db: Session = Depends(get_db), _: User = Depends(get_cu
 def get_excel_template(ma_mau: str, phap_nhan_id: Optional[int] = None, strict: bool = False, db: Session = Depends(
         get_db), _: User = Depends(get_current_user)):
     query = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == ma_mau)
+
     if phap_nhan_id:
         tpl = query.filter(ExcelTemplate.phap_nhan_id == phap_nhan_id).first()
         if tpl:
             return tpl
+        # Fallback về template global (phap_nhan_id IS NULL)
+        tpl = query.filter(ExcelTemplate.phap_nhan_id.is_(None)).first()
+        if tpl:
+            return tpl
         if strict:
             raise HTTPException(404, f"Khong tim thay mau Excel {ma_mau} cho phap nhan ID {phap_nhan_id}")
-
-    tpl = query.filter(ExcelTemplate.phap_nhan_id is None).first()
-    if strict:
-        if not tpl:
-            raise HTTPException(404, f"Khong tim thay mau Excel {ma_mau}")
-        return tpl
-    if not tpl:
         tpl = query.first()
+    else:
+        tpl = query.filter(ExcelTemplate.phap_nhan_id.is_(None)).first()
+        if not tpl:
+            tpl = query.first()
+
     if not tpl:
+        if strict:
+            raise HTTPException(404, f"Khong tim thay mau Excel {ma_mau}")
         raise HTTPException(404, "Không tìm thấy mẫu Excel")
     return tpl
 
