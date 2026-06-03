@@ -111,7 +111,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
         customer_name: q.customer?.ten_viet_tat || q.customer?.ten_don_vi || '',
         ma_amis: it.ma_amis || '',
         ten_hang: it.ten_hang,
-        kich_thuoc: it.dai && it.rong && it.cao ? `${it.dai}x${it.rong}x${it.cao}` : '',
+        kich_thuoc: it.dai && it.rong && it.cao ? `${+it.dai}x${+it.rong}x${+it.cao}` : '',
         so_lop: it.so_lop,
         to_hop_song: it.to_hop_song || '',
         ma_ky_hieu: it.ma_ky_hieu || '',

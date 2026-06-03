@@ -246,17 +246,17 @@ function ItemDetailDrawer({
             <Text type="secondary" style={{ fontSize: 11 }}>Kích thước D × R × C (cm)</Text>
             <div>
               {item.dai && item.rong && item.cao
-                ? <Text strong style={{ fontSize: 13 }}>{item.dai} × {item.rong} × {item.cao} cm</Text>
+                ? <Text strong style={{ fontSize: 13 }}>{+item.dai} × {+item.rong} × {+item.cao} cm</Text>
                 : <Text type="secondary">—</Text>}
             </div>
           </Col>
           <Col span={8}>
             <Text type="secondary" style={{ fontSize: 11 }}>Khổ TT (cm)</Text>
-            <div><Text>{item.kho_tt ?? '—'}</Text></div>
+            <div><Text>{item.kho_tt != null ? +item.kho_tt : '—'}</Text></div>
           </Col>
           <Col span={8}>
             <Text type="secondary" style={{ fontSize: 11 }}>Dài TT (cm)</Text>
-            <div><Text>{item.dai_tt ?? '—'}</Text></div>
+            <div><Text>{item.dai_tt != null ? +item.dai_tt : '—'}</Text></div>
           </Col>
           <Col span={8}>
             <Text type="secondary" style={{ fontSize: 11 }}>Diện tích (m²)</Text>
@@ -585,7 +585,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       width: 130,
       render: (_: unknown, r: QuoteItem) =>
         r.dai && r.rong && r.cao
-          ? `${r.dai}×${r.rong}×${r.cao} cm`
+          ? `${+r.dai}×${+r.rong}×${+r.cao} cm`
           : '—',
     },
     {
