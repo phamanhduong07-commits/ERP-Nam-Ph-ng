@@ -331,14 +331,6 @@ function ItemDetailDrawer({
                 : <Text type="secondary">—</Text>}
             </div>
           </Col>}
-          {!hideCostDetails && <Col span={12}>
-            <Text type="secondary" style={{ fontSize: 11 }}>CP Gián tiếp (m²)</Text>
-            <div>
-              {chiPhiGianTiep != null
-                ? <Text>{vnd(chiPhiGianTiep)} đ</Text>
-                : <Text type="secondary">—</Text>}
-            </div>
-          </Col>}
           <Col span={12}>
             <Text type="secondary" style={{ fontSize: 11 }}>Giá bán / thùng</Text>
             <div><Text strong style={{ fontSize: 15, color: '#f5222d' }}>{vnd(item.gia_ban)} đ</Text></div>
@@ -614,20 +606,6 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       width: 150,
       render: (v: string | null, r: QuoteItem) => v || buildPaperSymbol(r) || '—',
     },
-    !hideCostDetails ? {
-      title: 'CP Gián tiếp',
-      width: 110,
-      align: 'right',
-      render: (_: unknown, r: QuoteItem) => {
-        const rate = GIAN_TIEP_M2[r.so_lop]
-        if (!rate || !r.dien_tich) return '—'
-        return (
-          <Text style={{ fontSize: 12 }}>
-            {vnd(rate * r.dien_tich)} đ
-          </Text>
-        )
-      },
-    } : {},
     {
       title: 'Đơn giá',
       dataIndex: 'gia_ban',
