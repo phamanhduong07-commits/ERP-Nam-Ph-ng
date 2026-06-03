@@ -121,6 +121,7 @@ export interface ProductionOrderListItem {
   tong_sl_thuc_te: number        // tổng SL thực tế đã nhập qua phiếu
   tan_dung: boolean
   created_at: string
+  ke_hoach_trang_thai: string | null  // 'nhap' | 'da_xuat' khi LSX đang nằm trong kế hoạch SX
 }
 
 export interface UpdateItemSxParamsPayload {

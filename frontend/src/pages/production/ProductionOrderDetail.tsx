@@ -230,6 +230,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
     queryKey: ['production-order', id],
     queryFn: () => productionOrdersApi.get(Number(id)).then((r) => r.data),
     enabled: !!id,
+    refetchOnWindowFocus: true,
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['production-order', id] })

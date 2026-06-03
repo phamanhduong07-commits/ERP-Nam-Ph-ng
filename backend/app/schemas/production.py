@@ -211,6 +211,7 @@ class ProductionOrderListItem(BaseModel):
     tong_sl_thuc_te: Decimal = Decimal("0")   # tổng SL thực tế đã nhập qua phiếu
     tan_dung: bool = False
     created_at: datetime
+    ke_hoach_trang_thai: str | None = None   # 'nhap' | 'da_xuat' nếu LSX đang ở trong 1 kế hoạch SX chưa hoàn thành
 
     class Config:
         from_attributes = True

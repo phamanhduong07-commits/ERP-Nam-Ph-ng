@@ -305,7 +305,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
   })
   const deleteLineMut = useMutation({
     mutationFn: (lineId: number) => productionPlansApi.deleteLine(planId, lineId),
-    onSuccess: () => { message.success('Đã xóa'); qc.invalidateQueries({ queryKey: ['production-plan', planId] }) },
+    onSuccess: () => {
+      message.success('Đã xóa')
+      qc.invalidateQueries({ queryKey: ['production-plan', planId] })
+      qc.invalidateQueries({ queryKey: ['production-order'] })
+    },
     onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
   const completeLineMut = useMutation({

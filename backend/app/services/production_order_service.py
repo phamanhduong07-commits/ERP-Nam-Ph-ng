@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import or_, func
 from app.models.production import ProductionOrder, ProductionOrderItem
+from app.models.production_plan import ProductionPlanLine, ProductionPlan
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.sales import SalesOrder, SalesOrderItem
 from app.models.master import Product, Customer, PhanXuong
@@ -299,6 +300,34 @@ class ProductionOrderService:
             )
             sl_thuc_te_map = {r.production_order_id: Decimal(str(r.total)) for r in rows}
 
+        # Batch query: trạng thái dòng kế hoạch đang chứa từng LSX (tránh N+1)
+        # Dùng line.trang_thai thay vì plan.trang_thai để phản ánh đúng tiến trình sản xuất:
+        # line 'cho' → hiển thị 'nhap' (KHSX Chờ), line 'dang_chay' → hiển thị 'da_xuat' (KHSX)
+        ke_hoach_rows = []
+        if order_ids:
+            ke_hoach_rows = (
+                self.db.query(
+                    ProductionOrderItem.production_order_id,
+                    ProductionPlanLine.trang_thai.label("line_trang_thai"),
+                )
+                .join(ProductionPlanLine, ProductionPlanLine.production_order_item_id == ProductionOrderItem.id)
+                .join(ProductionPlan, ProductionPlan.id == ProductionPlanLine.plan_id)
+                .filter(
+                    ProductionOrderItem.production_order_id.in_(order_ids),
+                    ProductionPlanLine.trang_thai.in_(["cho", "dang_chay"]),
+                    ProductionPlan.trang_thai.in_(["nhap", "da_xuat"]),
+                )
+                .distinct()
+                .all()
+            )
+        # Ưu tiên 'dang_chay' hơn 'cho'; map sang giá trị frontend-friendly
+        ke_hoach_map: dict[int, str] = {}
+        for r in ke_hoach_rows:
+            existing = ke_hoach_map.get(r.production_order_id)
+            new_val = "nhap" if r.line_trang_thai == "cho" else "da_xuat"
+            if existing is None or new_val == "da_xuat":
+                ke_hoach_map[r.production_order_id] = new_val
+
         items = []
         for o in orders:
             first_item = o.items[0] if o.items else None
@@ -341,6 +370,7 @@ class ProductionOrderService:
                 tong_sl_thuc_te=sl_thuc_te_map.get(o.id, Decimal("0")),
                 tan_dung=getattr(o, "tan_dung", False),
                 created_at=o.created_at,
+                ke_hoach_trang_thai=ke_hoach_map.get(o.id),
             ))
 
         return PagedResponse(

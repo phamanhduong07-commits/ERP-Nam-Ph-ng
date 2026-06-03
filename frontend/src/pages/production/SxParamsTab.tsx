@@ -122,9 +122,15 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   const [ghiChu, setGhiChu] = useState<string>(item.ghi_chu ?? '')
 
   const [saving, setSaving] = useState(false)
-  // Đã lưu nếu item có kho_tt (chứng tỏ đã từng bấm Lưu)
-  const [saved,  setSaved]  = useState(() => !!item.kho_tt)
+  // Đã lưu nếu item có kho_tt VÀ đang trong hàng chờ — nếu bị xóa khỏi queue thì reset
+  const [saved,  setSaved]  = useState(() => !!item.kho_tt && !!item.queue_status)
   const [queueStatus, setQueueStatus] = useState<string | null>(item.queue_status ?? null)
+
+  // Sync lại khi parent re-fetch (vd: item bị xóa khỏi queue bên ngoài)
+  useEffect(() => {
+    setQueueStatus(item.queue_status ?? null)
+    if (!item.queue_status) setSaved(false)
+  }, [item.queue_status])
   // Chạy ngược sóng: đổi chiều khổ ↔ chiều cắt trên máy
   const [nguocSong, setNguocSong] = useState(false)
   // Số con bế: khuôn bế cắt N con cùng lúc theo chiều ngang
@@ -419,10 +425,10 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
           </Col>
           <Col>
             <Space size={8}>
-              {queueStatus === 'cho' && <Tag color="processing">📋 Đang chờ KHSX</Tag>}
+
               {queueStatus === 'dang_chay' && <Tag color="success">⚙️ Đang sản xuất</Tag>}
               {queueStatus === 'hoan_thanh' && <Tag color="default">✅ Hoàn thành</Tag>}
-              {!queueStatus && saved && <Tag color="warning">⚠️ Chưa đẩy KHSX</Tag>}
+
               <Button
                 type="primary"
                 icon={<SaveOutlined />}

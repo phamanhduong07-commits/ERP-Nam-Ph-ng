@@ -382,7 +382,14 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
     {
       dataIndex: 'trang_thai',
       width: 82,
-      render: (v) => <Tag color={TRANG_THAI_COLORS[v]} style={{ fontSize: 10 }}>{TRANG_THAI_LABELS[v] || v}</Tag>,
+      render: (v, r) => {
+        // Khi LSX đang ở trạng thái 'moi' và nằm trong kế hoạch → hiện trạng thái kế hoạch
+        if (v === 'moi' && r.ke_hoach_trang_thai === 'nhap')
+          return <Tag color="orange" style={{ fontSize: 10 }}>KHSX Chờ</Tag>
+        if (v === 'moi' && r.ke_hoach_trang_thai === 'da_xuat')
+          return <Tag color="blue" style={{ fontSize: 10 }}>KHSX</Tag>
+        return <Tag color={TRANG_THAI_COLORS[v]} style={{ fontSize: 10 }}>{TRANG_THAI_LABELS[v] || v}</Tag>
+      },
     },
   ]
 
