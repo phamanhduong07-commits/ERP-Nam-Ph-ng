@@ -10,12 +10,45 @@ from app.models.auth import Role, User
 from app.schemas.auth import UserCreate, UserUpdate
 
 router = APIRouter(prefix="/api/users", tags=["users"])
-admin_required = require_roles("ADMIN", "GIAM_DOC")
-list_users_allowed = require_roles("ADMIN", "GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN")
+
+# Manager role → roles they can see/manage (including themselves)
+DEPARTMENT_MAP: dict[str, set[str]] = {
+    "TRUONG_PHONG_SALE_ADMIN": {"TRUONG_PHONG_SALE_ADMIN", "SALE_ADMIN"},
+    "KINH_DOANH_TO_TRUONG":    {"KINH_DOANH_TO_TRUONG",    "KINH_DOANH_NHAN_VIEN"},
+    "KE_TOAN_TRUONG":          {"KE_TOAN_TRUONG",           "KE_TOAN_CONG_NO", "KETOAN_NHAN_VIEN"},
+    "NHAN_SU_TO_TRUONG":       {"NHAN_SU_TO_TRUONG",        "NHAN_SU_NHAN_VIEN"},
+    "KHO_TO_TRUONG":           {"KHO_TO_TRUONG",            "KHO_NHAN_VIEN"},
+    "THIET_KE_TO_TRUONG":      {"THIET_KE_TO_TRUONG",       "THIET_KE_NHAN_VIEN"},
+    "BGD_TO_TRUONG":           {"BGD_TO_TRUONG",            "BGD_NHAN_VIEN"},
+    "SAN_XUAT_GIAM_SAT":       {"SAN_XUAT_GIAM_SAT",        "SAN_XUAT_TO_TRUONG", "SAN_XUAT_THO"},
+}
+
+_FULL_ACCESS = {"ADMIN", "GIAM_DOC"}
+_ALL_MANAGERS = list(DEPARTMENT_MAP.keys())
+_users_access = require_roles("ADMIN", "GIAM_DOC", *_ALL_MANAGERS)
 
 
 def _hash_password(plain: str) -> str:
     return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(rounds=14)).decode()
+
+
+def _team_roles_for(caller: User) -> set[str] | None:
+    """None = unrestricted (ADMIN/GIAM_DOC). set = scoped to department."""
+    code = caller.role.ma_vai_tro if caller.role else ""
+    if code in _FULL_ACCESS:
+        return None
+    return DEPARTMENT_MAP.get(code, set())
+
+
+def _assert_target_in_team(target: User, team: set[str]) -> None:
+    code = target.role.ma_vai_tro if target.role else ""
+    if code not in team:
+        raise HTTPException(status_code=403, detail="Tài khoản này không thuộc phòng bạn quản lý")
+
+
+def _assert_role_in_team(role_code: str, team: set[str]) -> None:
+    if role_code not in team:
+        raise HTTPException(status_code=403, detail="Vai trò này không thuộc phòng bạn quản lý")
 
 
 class UserResponse(BaseModel):
@@ -68,7 +101,7 @@ def list_users(
     phan_xuong: str | None = Query(default=None),
     trang_thai: bool | None = Query(default=True),
     db: Session = Depends(get_db),
-    _: User = Depends(list_users_allowed),
+    current_user: User = Depends(_users_access),
 ):
     q = db.query(User).options(selectinload(User.role), selectinload(User.phap_nhan))
     if trang_thai is not None:
@@ -79,6 +112,11 @@ def list_users(
     if phan_xuong:
         q = q.filter(User.phan_xuong == phan_xuong)
 
+    team = _team_roles_for(current_user)
+    if team is not None:
+        allowed_ids = [r.id for r in db.query(Role.id).filter(Role.ma_vai_tro.in_(team)).all()]
+        q = q.filter(User.role_id.in_(allowed_ids))
+
     return [_to_response(u) for u in q.order_by(User.ho_ten).all()]
 
 
@@ -86,7 +124,7 @@ def list_users(
 def create_user(
     data: UserCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(admin_required),
+    current_user: User = Depends(_users_access),
 ):
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=400, detail="Username đã tồn tại")
@@ -98,6 +136,10 @@ def create_user(
         raise HTTPException(status_code=400, detail="Vai trò không hợp lệ")
     if len(data.password) < 6:
         raise HTTPException(status_code=400, detail="Mật khẩu phải có ít nhất 6 ký tự")
+
+    team = _team_roles_for(current_user)
+    if team is not None:
+        _assert_role_in_team(role.ma_vai_tro, team)
 
     user = User(
         username=data.username,
@@ -120,17 +162,24 @@ def update_user(
     user_id: int,
     data: UserUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(admin_required),
+    current_user: User = Depends(_users_access),
 ):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản")
     if data.email and db.query(User).filter(User.email == data.email, User.id != user_id).first():
         raise HTTPException(status_code=400, detail="Email đã tồn tại")
+
+    team = _team_roles_for(current_user)
+    if team is not None:
+        _assert_target_in_team(user, team)
+
     if data.role_id is not None:
         role = db.get(Role, data.role_id)
         if not role or not role.trang_thai:
             raise HTTPException(status_code=400, detail="Vai trò không hợp lệ")
+        if team is not None:
+            _assert_role_in_team(role.ma_vai_tro, team)
 
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(user, key, value)
@@ -139,12 +188,24 @@ def update_user(
     return _to_response(user)
 
 
-_reset_pw_allowed = require_roles("ADMIN", "GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN")
+@router.delete("/{user_id}", status_code=204)
+def deactivate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_users_access),
+):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Không thể vô hiệu hóa tài khoản của chính mình")
 
-# Roles trưởng phòng được phép reset mật khẩu (chỉ reset tài khoản thuộc các role này)
-_TEAM_ROLES = {"SALE_ADMIN", "TRUONG_PHONG_SALE_ADMIN"}
-# Roles không ai được phép reset ngoài ADMIN / GIAM_DOC
-_PROTECTED_ROLES = {"ADMIN", "GIAM_DOC", "KE_TOAN_TRUONG"}
+    team = _team_roles_for(current_user)
+    if team is not None:
+        _assert_target_in_team(user, team)
+
+    user.trang_thai = False
+    db.commit()
 
 
 @router.post("/{user_id}/reset-password")
@@ -152,7 +213,7 @@ def reset_password(
     user_id: int,
     data: ResetPasswordRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(_reset_pw_allowed),
+    current_user: User = Depends(_users_access),
 ):
     if len(data.password) < 6:
         raise HTTPException(status_code=400, detail="Mật khẩu phải có ít nhất 6 ký tự")
@@ -160,19 +221,9 @@ def reset_password(
     if not target:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản")
 
-    caller_role = current_user.role.ma_vai_tro if current_user.role else None
-    target_role = target.role.ma_vai_tro if target.role else None
-
-    # Trưởng phòng: chỉ reset được tài khoản trong _TEAM_ROLES
-    if caller_role == "TRUONG_PHONG_SALE_ADMIN":
-        if target_role not in _TEAM_ROLES:
-            raise HTTPException(
-                status_code=403,
-                detail="Bạn chỉ được đặt lại mật khẩu cho nhân viên trong team Sale",
-            )
-
-    # ADMIN/GIAM_DOC không được reset tài khoản ADMIN khác (bảo vệ chéo)
-    # — ngoại lệ: chính mình thì được (xử lý qua change-password riêng)
+    team = _team_roles_for(current_user)
+    if team is not None:
+        _assert_target_in_team(target, team)
 
     target.password_hash = _hash_password(data.password)
     db.commit()

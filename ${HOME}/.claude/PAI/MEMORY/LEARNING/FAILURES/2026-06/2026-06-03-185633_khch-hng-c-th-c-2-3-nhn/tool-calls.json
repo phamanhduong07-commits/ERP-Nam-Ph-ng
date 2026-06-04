@@ -1,0 +1,804 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls \"C:\\Users\\TUF\\Downloads\\\" | grep -i \"danh_sach\\|khach_hang\\|nhan_vien\" 2>/dev/null || dir \"C:\\Users\\TUF\\Downloads\\\" /b | findstr /i \"danh\"",
+      "description": "List files in Downloads matching the name"
+    },
+    "timestamp": "2026-06-04T01:26:55.097Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "Get-ChildItem \"C:\\Users\\TUF\\Downloads\\\" | Where-Object { $_.Name -match \"danh|khach|nhan_vien\" } | Select-Object Name, Extension",
+      "description": "List files in Downloads"
+    },
+    "timestamp": "2026-06-04T01:26:59.563Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "\n$file = \"C:\\Users\\TUF\\Downloads\\danh_sách_khách_hàng_theo_NV.xlsx\"\n# Read with Python since we're in the ERP project\ncd \"d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\"\npython -c \"\nimport openpyxl\nwb = openpyxl.load_workbook(r'C:\\Users\\TUF\\Downloads\\danh_sách_khách_hàng_theo_NV.xlsx')\nfor sheet in wb.sheetnames:\n    ws = wb[sheet]\n    print(f'=== Sheet: {sheet} ===')\n    for i, row in enumerate(ws.iter_rows(values_only=True)):\n        if i >= 20:\n            print('...')\n            break\n        print(row)\n\"\n",
+      "description": "Read Excel file to understand structure"
+    },
+    "timestamp": "2026-06-04T01:27:07.882Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "\ncd \"d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\"\npython -c \"\nimport openpyxl, sys\nsys.stdout.reconfigure(encoding='utf-8')\nwb = openpyxl.load_workbook(r'C:\\Users\\TUF\\Downloads\\danh_sach_khach_hang_theo_NV.xlsx' if False else r'C:\\Users\\TUF\\Downloads\\danh_sach_khách_hàng_theo_NV.xlsx')\n\" 2>&1 | head -5\n\npython -c \"\nimport openpyxl, sys\nsys.stdout.reconfigure(encoding='utf-8')\npath = 'C:/Users/TUF/Downloads/danh_sách_khách_hàng_theo_NV.xlsx'\nwb = openpyxl.load_workbook(path)\nfor sheet in wb.sheetnames:\n    ws = wb[sheet]\n    print(f'Sheet: {sheet}, rows: {ws.max_row}, cols: {ws.max_column}')\n    for i, row in enumerate(ws.iter_rows(values_only=True)):\n        if i >= 30: \n            print('...')\n            break\n        print(row)\n\" 2>&1\n",
+      "description": "Read Excel with UTF-8 encoding"
+    },
+    "timestamp": "2026-06-04T01:27:17.925Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "\npython -c \"\nimport openpyxl, sys\nsys.stdout.reconfigure(encoding='utf-8')\npath = 'C:/Users/TUF/Downloads/danh_sách_khách_hàng_theo_NV.xlsx'\nwb = openpyxl.load_workbook(path)\nws = wb.active\n\n# Get unique NV (sales reps) and teams\nnv_set = {}\nteam_set = set()\nfor row in ws.iter_rows(min_row=2, values_only=True):\n    ma_kh, ten_kh, chi_nhanh, team, ten_nv = row\n    if ten_nv:\n        key = str(ten_nv).strip()\n        if key not in nv_set:\n            nv_set[key] = {'team': team, 'count': 0}\n        nv_set[key]['count'] += 1\n    if team:\n        team_set.add(team)\n\nprint('=== Teams ===')\nfor t in sorted(team_set):\n    print(f'  Team {t}')\n    \nprint()\nprint('=== Nhân viên sale (tên NV -> team -> số KH) ===')\nfor nv, info in sorted(nv_set.items(), key=lambda x: (x[1]['team'], x[0])):\n    print(f'  {nv} | Team {info[\\\"team\\\"]} | {info[\\\"count\\\"]} KH')\n\nprint()\nprint(f'Total: {ws.max_row - 1} rows, {len(nv_set)} NV, {len(team_set)} teams')\n\"\n",
+      "description": "Extract unique sales reps and teams from Excel"
+    },
+    "timestamp": "2026-06-04T01:27:30.875Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "\n$script = @'\nimport openpyxl, sys\nsys.stdout.reconfigure(encoding=\"utf-8\")\npath = \"C:/Users/TUF/Downloads/danh_sach_khach_hang_theo_NV.xlsx\"\ntry:\n    wb = openpyxl.load_workbook(path)\nexcept:\n    import glob\n    files = glob.glob(\"C:/Users/TUF/Downloads/*theo_NV*\")\n    wb = openpyxl.load_workbook(files[0])\n\nws = wb.active\nnv_dict = {}\nteam_set = set()\nfor row in ws.iter_rows(min_row=2, values_only=True):\n    ma_kh, ten_kh, chi_nhanh, team, ten_nv = row\n    if ten_nv:\n        key = str(ten_nv).strip()\n        if key not in nv_dict:\n            nv_dict[key] = {\"team\": team, \"count\": 0}\n        nv_dict[key][\"count\"] += 1\n    if team:\n        team_set.add(team)\n\nprint(\"=== Teams ===\")\nfor t in sorted(team_set):\n    print(\"  Team \" + str(t))\n    \nprint()\nprint(\"=== Nhan vien sale ===\")\nfor nv, info in sorted(nv_dict.items(), key=lambda x: (x[1][\"team\"], x[0])):\n    print(\"  \" + nv + \" | Team \" + str(info[\"team\"]) + \" | \" + str(info[\"count\"]) + \" KH\")\n\nprint()\nprint(\"Total: \" + str(ws.max_row - 1) + \" rows, \" + str(len(nv_dict)) + \" NV, \" + str(len(team_set)) + \" teams\")\n'@\npython -c $script\n",
+      "description": "Extract unique sales reps from Excel"
+    },
+    "timestamp": "2026-06-04T01:29:06.083Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "C:\\Users\\TUF\\AppData\\Local\\Temp\\read_nv.py",
+      "content": "import openpyxl, sys, glob\nsys.stdout.reconfigure(encoding=\"utf-8\")\n\nfiles = glob.glob(\"C:/Users/TUF/Downloads/*theo_NV*\")\nprint(\"Found:\", files)\nwb = openpyxl.load_workbook(files[0])\nws = wb.active\n\nnv_dict = {}\nteam_set = set()\nfor row in ws.iter_rows(min_row=2, values_only=True):\n    ma_kh, ten_kh, chi_nhanh, team, ten_nv = row\n    if ten_nv:\n        key = str(ten_nv).strip()\n        if key not in nv_dict:\n            nv_dict[key] = {\"team\": team, \"count\": 0}\n        nv_dict[key][\"count\"] += 1\n    if team:\n        team_set.add(team)\n\nprint(\"=== Teams ===\")\nfor t in sorted(team_set):\n    print(\"  Team \" + str(t))\n\nprint()\nprint(\"=== Nhan vien sale (ten -> team -> so KH) ===\")\nfor nv, info in sorted(nv_dict.items(), key=lambda x: (x[1][\"team\"], x[0])):\n    print(\"  \" + nv + \" | Team \" + str(info[\"team\"]) + \" | \" + str(info[\"count\"]) + \" KH\")\n\nprint()\nprint(\"Total: \" + str(ws.max_row - 1) + \" rows, \" + str(len(nv_dict)) + \" NV, \" + str(len(team_set)) + \" teams\")\n"
+    },
+    "timestamp": "2026-06-04T01:29:14.270Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "python \"C:\\Users\\TUF\\AppData\\Local\\Temp\\read_nv.py\"",
+      "description": "Run the Python script to read Excel file"
+    },
+    "timestamp": "2026-06-04T01:29:20.244Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"role\\|sale\\|group\\|nhom\\|nhan_vien\" d:/NAM_PHUONG_SOFTWARE/DU\\ LIEU\\ MPS/erp-nam-phuong/backend/app/models/auth.py 2>/dev/null | head -60",
+      "description": "Check user model roles"
+    },
+    "timestamp": "2026-06-04T01:29:53.771Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "ls d:/NAM_PHUONG_SOFTWARE/DU\\ LIEU\\ MPS/erp-nam-phuong/backend/app/models/ 2>/dev/null",
+      "description": "List model files"
+    },
+    "timestamp": "2026-06-04T01:29:54.333Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"nhom_kh\\|customer_group\\|nhan_vien\\|sale_admin\\|NhanVien\\|NhomKhachHang\" d:/NAM_PHUONG_SOFTWARE/DU\\ LIEU\\ MPS/erp-nam-phuong/backend/app/models/crm.py 2>/dev/null | head -40",
+      "description": "Check CRM model for customer groups"
+    },
+    "timestamp": "2026-06-04T01:29:57.866Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -rn \"sale_admin\\|nhan_vien_sale\\|NhanVienSale\\|NhomKhachHang\" d:/NAM_PHUONG_SOFTWARE/DU\\ LIEU\\ MPS/erp-nam-phuong/backend/app/models/ 2>/dev/null | head -20",
+      "description": "Search for sale admin or customer group models"
+    },
+    "timestamp": "2026-06-04T01:29:59.225Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\models\\auth.py"
+    },
+    "timestamp": "2026-06-04T01:30:01.875Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\models\\crm.py",
+      "limit": 80
+    },
+    "timestamp": "2026-06-04T01:30:02.495Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"nhom_kh\\|nhan_vien_sale\\|sale\\|nguoi_phu_trach\\|NhomKhachHang\\|customer_group\" d:/NAM_PHUONG_SOFTWARE/DU\\ LIEU\\ MPS/erp-nam-phuong/backend/app/models/sales.py 2>/dev/null | head -30",
+      "description": "Check sales model for customer groups/sale fields"
+    },
+    "timestamp": "2026-06-04T01:30:07.348Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "\npython -c \"\nimport sqlite3, sys\nsys.stdout.reconfigure(encoding='utf-8')\nconn = sqlite3.connect('d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/backend/erp.db')\ncur = conn.cursor()\ncur.execute(\\\"SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE '%nhom%' OR name LIKE '%sale%' OR name LIKE '%group%' OR name LIKE '%nhan_vien%')\\\")\nprint('Tables:', cur.fetchall())\ncur.execute(\\\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\\\")\ntables = [r[0] for r in cur.fetchall()]\nprint('All tables:', tables)\nconn.close()\n\"\n",
+      "description": "Check SQLite DB for existing tables"
+    },
+    "timestamp": "2026-06-04T01:30:10.066Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "C:\\Users\\TUF\\AppData\\Local\\Temp\\check_db.py",
+      "content": "import sqlite3, sys\nsys.stdout.reconfigure(encoding=\"utf-8\")\nconn = sqlite3.connect(\"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/backend/erp.db\")\ncur = conn.cursor()\n\n# Tables related to nhom/sale/group\ncur.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE '%nhom%' OR name LIKE '%sale%' OR name LIKE '%group%' OR name LIKE '%nhan_vien%')\")\nprint(\"Relevant tables:\", cur.fetchall())\n\n# All tables\ncur.execute(\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\")\ntables = [r[0] for r in cur.fetchall()]\nprint(\"All tables:\", tables)\n\n# Roles\ncur.execute(\"SELECT id, ma_vai_tro, ten_vai_tro FROM roles\")\nprint(\"Roles:\", cur.fetchall())\n\n# Customer table columns\ncur.execute(\"PRAGMA table_info(customers)\")\nprint(\"Customer cols:\", [r[1] for r in cur.fetchall()])\n\nconn.close()\n"
+    },
+    "timestamp": "2026-06-04T01:30:18.778Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "python \"C:\\Users\\TUF\\AppData\\Local\\Temp\\check_db.py\"",
+      "description": "Check DB structure"
+    },
+    "timestamp": "2026-06-04T01:30:24.375Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "C:\\Users\\TUF\\AppData\\Local\\Temp\\check_db2.py",
+      "content": "import sqlite3, sys, glob, os\nsys.stdout.reconfigure(encoding=\"utf-8\")\n\n# Find the right DB file\ndbs = glob.glob(\"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/**/*.db\", recursive=True)\nprint(\"DB files:\", dbs)\n\nfor db_path in dbs:\n    print(f\"\\n=== {db_path} ({os.path.getsize(db_path)} bytes) ===\")\n    conn = sqlite3.connect(db_path)\n    cur = conn.cursor()\n    cur.execute(\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\")\n    tables = [r[0] for r in cur.fetchall()]\n    print(\"Tables:\", tables[:20])\n    conn.close()\n"
+    },
+    "timestamp": "2026-06-04T01:30:33.697Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "python \"C:\\Users\\TUF\\AppData\\Local\\Temp\\check_db2.py\"",
+      "description": "Find correct DB files"
+    },
+    "timestamp": "2026-06-04T01:30:38.374Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"DATABASE_URL\\|DB_PATH\\|erp.db\" d:/NAM_PHUONG_SOFTWARE/DU\\ LIEU\\ MPS/erp-nam-phuong/backend/app/config.py 2>/dev/null | head -20",
+      "description": "Check config for DB path"
+    },
+    "timestamp": "2026-06-04T01:31:17.147Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "\n# Check PostgreSQL connection\n$env:PGPASSWORD = \"erp_password\"\npsql -U erp_user -h localhost -d erp_nam_phuong -c \"\\dt\" 2>&1 | Select-Object -First 40\n",
+      "description": "Check PostgreSQL tables"
+    },
+    "timestamp": "2026-06-04T01:31:20.646Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "C:\\Users\\TUF\\AppData\\Local\\Temp\\check_pg.py",
+      "content": "import sys\nsys.stdout.reconfigure(encoding=\"utf-8\")\n\ntry:\n    import psycopg2\n    conn = psycopg2.connect(\n        host=\"localhost\", port=5432,\n        database=\"erp_nam_phuong\",\n        user=\"erp_user\", password=\"erp_password\"\n    )\n    cur = conn.cursor()\n    cur.execute(\"SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename\")\n    tables = [r[0] for r in cur.fetchall()]\n    print(\"Tables:\", tables)\n\n    cur.execute(\"SELECT id, ma_vai_tro, ten_vai_tro FROM roles ORDER BY id\")\n    print(\"Roles:\", cur.fetchall())\n\n    cur.execute(\"SELECT column_name FROM information_schema.columns WHERE table_name='customers' ORDER BY ordinal_position\")\n    print(\"Customer cols:\", [r[0] for r in cur.fetchall()])\n\n    cur.execute(\"SELECT COUNT(*) FROM customers\")\n    print(\"Customer count:\", cur.fetchone())\n\n    conn.close()\nexcept Exception as e:\n    print(\"Error:\", e)\n"
+    },
+    "timestamp": "2026-06-04T01:31:29.089Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "python \"C:\\Users\\TUF\\AppData\\Local\\Temp\\check_pg.py\"",
+      "description": "Check PostgreSQL structure"
+    },
+    "timestamp": "2026-06-04T01:31:34.140Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "C:\\Users\\TUF\\AppData\\Local\\Temp\\check_pg2.py",
+      "content": "import sys\nsys.stdout.reconfigure(encoding=\"utf-8\")\nimport psycopg2\nconn = psycopg2.connect(\n    host=\"localhost\", port=5432,\n    database=\"erp_nam_phuong\",\n    user=\"erp_user\", password=\"erp_password\"\n)\ncur = conn.cursor()\n\n# Check existing users with SALE_ADMIN role\ncur.execute(\"\"\"\n    SELECT u.id, u.username, u.ho_ten, r.ma_vai_tro\n    FROM users u\n    JOIN roles r ON u.role_id = r.id\n    WHERE r.ma_vai_tro IN ('SALE_ADMIN', 'TRUONG_PHONG_SALE_ADMIN', 'KINH_DOANH_NHAN_VIEN', 'KINH_DOANH_TO_TRUONG')\n    ORDER BY u.id\n\"\"\")\nprint(\"Existing sale users:\", cur.fetchall())\n\n# Check nv_phu_trach_id usage\ncur.execute(\"SELECT nv_phu_trach_id, COUNT(*) FROM customers GROUP BY nv_phu_trach_id ORDER BY nv_phu_trach_id\")\nprint(\"KH per NV:\", cur.fetchall())\n\n# Check customer groups table\ncur.execute(\"SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE '%nhom%'\")\nprint(\"Nhom tables:\", cur.fetchall())\n\n# Check if customers have nhom_kh column\ncur.execute(\"SELECT column_name FROM information_schema.columns WHERE table_name='customers' AND column_name LIKE '%nhom%'\")\nprint(\"Nhom cols in customers:\", cur.fetchall())\n\nconn.close()\n"
+    },
+    "timestamp": "2026-06-04T01:31:52.151Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "python \"C:\\Users\\TUF\\AppData\\Local\\Temp\\check_pg2.py\"",
+      "description": "Check existing sale users and customer group structure"
+    },
+    "timestamp": "2026-06-04T01:31:57.059Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -rn \"nhom_kh\\|NhomKhachHang\\|customer_group\\|nhom_khach\" d:/NAM_PHUONG_SOFTWARE/DU\\ LIEU\\ MPS/erp-nam-phuong/backend/app/ 2>/dev/null | head -20",
+      "description": "Search for customer group concept in codebase"
+    },
+    "timestamp": "2026-06-04T01:32:19.568Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "python -c \"\nimport openpyxl, sys\nsys.stdout.reconfigure(encoding='utf-8')\nimport glob\nfiles = glob.glob('C:/Users/TUF/Downloads/*nhom*')\nprint('Files:', files)\nif files:\n    wb = openpyxl.load_workbook(files[0])\n    ws = wb.active\n    for i, row in enumerate(ws.iter_rows(values_only=True)):\n        if i >= 15: break\n        print(row)\n\"",
+      "description": "Check customer group Excel file"
+    },
+    "timestamp": "2026-06-04T01:32:21.333Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "C:\\Users\\TUF\\AppData\\Local\\Temp\\check_match.py",
+      "content": "import sys, glob, openpyxl, psycopg2\nsys.stdout.reconfigure(encoding=\"utf-8\")\n\nconn = psycopg2.connect(\n    host=\"localhost\", port=5432,\n    database=\"erp_nam_phuong\",\n    user=\"erp_user\", password=\"erp_password\"\n)\ncur = conn.cursor()\n\n# Get all ma_kh from DB\ncur.execute(\"SELECT ma_kh, ten_viet_tat FROM customers WHERE ma_kh IS NOT NULL\")\ndb_customers = {r[0]: r[1] for r in cur.fetchall()}\nprint(f\"DB: {len(db_customers)} customers with ma_kh\")\nprint(\"Sample DB ma_kh:\", list(db_customers.keys())[:10])\n\n# Get Excel data\nfiles = glob.glob(\"C:/Users/TUF/Downloads/*theo_NV*\")\nwb = openpyxl.load_workbook([f for f in files if \"~\" not in f][0])\nws = wb.active\n\nexcel_ma_kh = set()\nmissing_in_db = []\nfor row in ws.iter_rows(min_row=2, values_only=True):\n    ma_kh, ten_kh, chi_nhanh, team, ten_nv = row\n    if ma_kh:\n        excel_ma_kh.add(str(ma_kh).strip())\n        if str(ma_kh).strip() not in db_customers:\n            missing_in_db.append((ma_kh, ten_kh, ten_nv))\n\nprint(f\"\\nExcel: {len(excel_ma_kh)} unique ma_kh\")\nprint(f\"Missing in DB: {len(missing_in_db)}\")\nif missing_in_db[:5]:\n    print(\"Sample missing:\", missing_in_db[:5])\n\n# Check overlap\noverlap = excel_ma_kh & set(db_customers.keys())\nprint(f\"Match: {len(overlap)}\")\n\nconn.close()\n"
+    },
+    "timestamp": "2026-06-04T01:32:57.236Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "python \"C:\\Users\\TUF\\AppData\\Local\\Temp\\check_match.py\"",
+      "description": "Check ma_kh overlap between Excel and DB"
+    },
+    "timestamp": "2026-06-04T01:33:02.498Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"hash_password\\|bcrypt\\|pwd_context\\|CryptContext\" d:/NAM_PHUONG_SOFTWARE/DU\\ LIEU\\ MPS/erp-nam-phuong/backend/app/deps.py d:/NAM_PHUONG_SOFTWARE/DU\\ LIEU\\ MPS/erp-nam-phuong/backend/app/routers/auth.py 2>/dev/null | head -20",
+      "description": "Check password hashing method"
+    },
+    "timestamp": "2026-06-04T01:33:34.070Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "C:\\Users\\TUF\\AppData\\Local\\Temp\\create_sale_admins.py",
+      "content": "\"\"\"\nTạo tài khoản SALE_ADMIN + gán nv_phu_trach_id cho khách hàng\ntheo file danh_sách_khách_hàng_theo_NV.xlsx\n\"\"\"\nimport sys, glob, openpyxl, psycopg2, bcrypt\nsys.stdout.reconfigure(encoding=\"utf-8\")\n\n# --- Config ---\nDB_CONN = dict(host=\"localhost\", port=5432, database=\"erp_nam_phuong\",\n               user=\"erp_user\", password=\"erp_password\")\nDEFAULT_PASSWORD = \"123456\"\nROLE_SALE_ADMIN_ID = 9   # SALE_ADMIN\n\n# NV name → username mapping (no accent)\nNV_USERNAME = {\n    \"An\":     \"an\",\n    \"Gấm\":    \"gam\",\n    \"Ngọc 2\": \"ngoc2\",\n    \"Ngọc 3\": \"ngoc3\",\n    \"Phúc\":   \"phuc\",\n    \"Sang\":   \"sang\",\n    \"Trang\":  \"trang\",\n    \"Tuấn\":   \"tuan\",\n    \"Uyên\":   \"uyen\",\n}\n\ndef hash_pw(plain: str) -> str:\n    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=14)).decode()\n\ndef main():\n    # Read Excel\n    files = [f for f in glob.glob(\"C:/Users/TUF/Downloads/*theo_NV*\") if \"~\" not in f]\n    wb = openpyxl.load_workbook(files[0])\n    ws = wb.active\n\n    # Build map: ma_kh → ten_nv\n    kh_nv_map = {}\n    for row in ws.iter_rows(min_row=2, values_only=True):\n        ma_kh, ten_kh, chi_nhanh, team, ten_nv = row\n        if ma_kh and ten_nv:\n            kh_nv_map[str(ma_kh).strip()] = str(ten_nv).strip()\n\n    print(f\"Excel: {len(kh_nv_map)} KH có NV\")\n\n    conn = psycopg2.connect(**DB_CONN)\n    cur = conn.cursor()\n\n    # --- Step 1: Create user accounts ---\n    print(\"\\n=== Tạo tài khoản ===\")\n    nv_user_id = {}  # ten_nv → user_id\n\n    for ten_nv, username in NV_USERNAME.items():\n        # Check if user already exists\n        cur.execute(\"SELECT id, username FROM users WHERE username = %s\", (username,))\n        existing = cur.fetchone()\n        if existing:\n            print(f\"  [{username}] ĐÃ TỒN TẠI (id={existing[0]}) — bỏ qua\")\n            nv_user_id[ten_nv] = existing[0]\n            continue\n\n        pw_hash = hash_pw(DEFAULT_PASSWORD)\n        cur.execute(\"\"\"\n            INSERT INTO users (username, ho_ten, password_hash, role_id, trang_thai, created_at, updated_at)\n            VALUES (%s, %s, %s, %s, true, NOW(), NOW())\n            RETURNING id\n        \"\"\", (username, ten_nv, pw_hash, ROLE_SALE_ADMIN_ID))\n        user_id = cur.fetchone()[0]\n        nv_user_id[ten_nv] = user_id\n        print(f\"  [{username}] TẠO MỚI id={user_id} | {ten_nv} | SALE_ADMIN\")\n\n    conn.commit()\n\n    # --- Step 2: Gán nv_phu_trach_id cho customers ---\n    print(\"\\n=== Gán NV phụ trách ===\")\n    matched = 0\n    not_found_db = []\n    no_user = []\n\n    for ma_kh, ten_nv in kh_nv_map.items():\n        user_id = nv_user_id.get(ten_nv)\n        if not user_id:\n            no_user.append((ma_kh, ten_nv))\n            continue\n\n        cur.execute(\"\"\"\n            UPDATE customers SET nv_phu_trach_id = %s\n            WHERE ma_kh = %s\n        \"\"\", (user_id, ma_kh))\n        if cur.rowcount > 0:\n            matched += 1\n        else:\n            not_found_db.append((ma_kh, ten_nv))\n\n    conn.commit()\n\n    print(f\"  Gán thành công: {matched} KH\")\n    print(f\"  Không tìm thấy trong DB: {len(not_found_db)} KH\")\n    if not_found_db[:5]:\n        print(f\"  Ví dụ: {not_found_db[:5]}\")\n    if no_user:\n        print(f\"  NV không map được username: {no_user[:5]}\")\n\n    # --- Summary ---\n    print(\"\\n=== Tóm tắt ===\")\n    cur.execute(\"\"\"\n        SELECT u.username, u.ho_ten, COUNT(c.id) as so_kh\n        FROM users u\n        LEFT JOIN customers c ON c.nv_phu_trach_id = u.id\n        WHERE u.username IN %s\n        GROUP BY u.id, u.username, u.ho_ten\n        ORDER BY u.ho_ten\n    \"\"\", (tuple(NV_USERNAME.values()),))\n    for row in cur.fetchall():\n        print(f\"  {row[0]} ({row[1]}): {row[2]} KH\")\n\n    conn.close()\n    print(\"\\nDone.\")\n\nif __name__ == \"__main__\":\n    main()\n"
+    },
+    "timestamp": "2026-06-04T01:33:56.272Z"
+  },
+  {
+    "name": "AskUserQuestion",
+    "input": {
+      "questions": [
+        {
+          "question": "Script sẽ tạo 9 tài khoản (An, Gấm, Ngọc 2, Ngọc 3, Phúc, Sang, Trang, Tuấn, Uyên) với role SALE_ADMIN, password mặc định 123456. Tên đăng nhập sẽ là: an, gam, ngoc2, ngoc3, phuc, sang, trang, tuan, uyen. Sau đó gán 806 KH từ Excel vào đúng NV phụ trách. Anh muốn dùng role nào?",
+          "header": "Role tài khoản",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "SALE_ADMIN (Recommended)",
+              "description": "Role id=9, đã tồn tại trong hệ thống, phù hợp nhất cho nhân viên kinh doanh"
+            },
+            {
+              "label": "KINH_DOANH_NHAN_VIEN",
+              "description": "Role id=22, dành cho nhân viên phòng kinh doanh"
+            }
+          ]
+        },
+        {
+          "question": "\"Nhóm khách hàng tương ứng\" — anh muốn thực hiện theo cách nào?",
+          "header": "Nhóm KH",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Gán nv_phu_trach_id (Recommended)",
+              "description": "Cập nhật cột nv_phu_trach_id trong bảng customers — đơn giản, không cần bảng mới, sale admin xem được KH của mình"
+            },
+            {
+              "label": "Tạo bảng nhom_khach_hang mới",
+              "description": "Tạo bảng nhom_khach_hang, gán mỗi NV một nhóm, link customers vào nhóm — phức tạp hơn nhưng có thể phân nhóm linh hoạt"
+            }
+          ]
+        }
+      ]
+    },
+    "timestamp": "2026-06-04T01:34:34.748Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "cd \"d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\"; python \"C:\\Users\\TUF\\AppData\\Local\\Temp\\create_sale_admins.py\"",
+      "description": "Create sale admin accounts and assign customers"
+    },
+    "timestamp": "2026-06-04T01:36:36.150Z"
+  },
+  {
+    "name": "AskUserQuestion",
+    "input": {
+      "questions": [
+        {
+          "question": "Gán thủ công theo cách nào?",
+          "header": "Cách gán",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "UI trên ERP (Recommended)",
+              "description": "Thêm dropdown chọn NV phụ trách trên trang danh sách/chi tiết khách hàng — dễ dùng cho nhân viên"
+            },
+            {
+              "label": "Script SQL trực tiếp",
+              "description": "Chạy lệnh SQL UPDATE customers SET nv_phu_trach_id = ... WHERE ma_kh = ... — nhanh cho 1 lần"
+            }
+          ]
+        }
+      ]
+    },
+    "timestamp": "2026-06-04T01:37:41.603Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find \"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/frontend/src\" -name \"*.tsx\" | grep -i \"customer\\|khach\" 2>/dev/null",
+      "description": "Find customer frontend pages"
+    },
+    "timestamp": "2026-06-04T01:38:02.833Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -rn \"nv_phu_trach\\|nhan_vien_sale\" \"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/backend/app/routers/customers.py\" 2>/dev/null | head -20",
+      "description": "Check customers router for nv_phu_trach field"
+    },
+    "timestamp": "2026-06-04T01:38:04.091Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\customers.py"
+    },
+    "timestamp": "2026-06-04T01:38:06.733Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"nv_phu_trach\\|CustomerCreate\\|CustomerUpdate\\|CustomerResponse\" \"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/backend/app/schemas/master.py\" 2>/dev/null | head -40",
+      "description": "Check customer schemas"
+    },
+    "timestamp": "2026-06-04T01:38:11.145Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "limit": 80
+    },
+    "timestamp": "2026-06-04T01:38:12.156Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "offset": 80,
+      "limit": 120
+    },
+    "timestamp": "2026-06-04T01:38:16.656Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"nv_phu_trach\\|CustomerBase\\|CustomerUpdate\\|nhan_vien\" \"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/backend/app/schemas/master.py\" 2>/dev/null | head -30",
+      "description": "Check customer schema fields"
+    },
+    "timestamp": "2026-06-04T01:38:18.210Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\schemas\\master.py",
+      "limit": 80
+    },
+    "timestamp": "2026-06-04T01:38:22.120Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "offset": 200
+    },
+    "timestamp": "2026-06-04T01:38:23.097Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cat \"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/backend/app/services/customer_service.py\" 2>/dev/null | head -80",
+      "description": "Check customer service implementation"
+    },
+    "timestamp": "2026-06-04T01:38:34.157Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"nv_phu_trach\\|sale_admin\\|SALE_ADMIN\" \"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/frontend/src/api/customers.ts\" 2>/dev/null; ls \"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/frontend/src/api/\" 2>/dev/null",
+      "description": "Check frontend API types"
+    },
+    "timestamp": "2026-06-04T01:38:35.451Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\api\\customers.ts"
+    },
+    "timestamp": "2026-06-04T01:38:38.966Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\api\\usersApi.ts"
+    },
+    "timestamp": "2026-06-04T01:38:53.370Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"SALE_ADMIN\\|sale_admin\\|sale-users\\|nv_phu_trach\" \"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/backend/app/routers/auth.py\" 2>/dev/null | head -20",
+      "description": "Check auth router for user listing endpoints"
+    },
+    "timestamp": "2026-06-04T01:38:54.401Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"def list_users\\|@router.get.*users\\|phan_xuong\\|role_id\\|trang_thai\" \"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/backend/app/routers/auth.py\" 2>/dev/null | head -30",
+      "description": "Check users list endpoint params"
+    },
+    "timestamp": "2026-06-04T01:38:59.330Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\auth.py",
+      "limit": 100
+    },
+    "timestamp": "2026-06-04T01:39:02.204Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "grep -n \"def list_users\\|@router.get\\|@router.post\\|role_code\\|ma_vai_tro\" \"d:/NAM_PHUONG_SOFTWARE/DU LIEU MPS/erp-nam-phuong/backend/app/routers/users.py\" 2>/dev/null | head -30",
+      "description": "Check users router listing endpoint"
+    },
+    "timestamp": "2026-06-04T01:39:06.331Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\users.py",
+      "limit": 90
+    },
+    "timestamp": "2026-06-04T01:39:09.013Z"
+  },
+  {
+    "name": "ToolSearch",
+    "input": {
+      "query": "select:TodoWrite",
+      "max_results": 1
+    },
+    "timestamp": "2026-06-04T01:39:42.833Z"
+  },
+  {
+    "name": "TodoWrite",
+    "input": {
+      "todos": [
+        {
+          "content": "Backend: thêm nv_phu_trach_id vào CustomerShort, CustomerUpdate, CustomerResponse schemas",
+          "activeForm": "Cập nhật schemas/master.py",
+          "status": "in_progress"
+        },
+        {
+          "content": "Backend: thêm endpoint GET /api/customers/sale-users + filter nv_phu_trach_id cho list",
+          "activeForm": "Cập nhật routers/customers.py",
+          "status": "pending"
+        },
+        {
+          "content": "Frontend: cập nhật Customer type + customersApi",
+          "activeForm": "Cập nhật api/customers.ts",
+          "status": "pending"
+        },
+        {
+          "content": "Frontend: thêm cột NV phụ trách + dropdown filter + form field vào CustomerList.tsx",
+          "activeForm": "Cập nhật CustomerList.tsx",
+          "status": "pending"
+        }
+      ]
+    },
+    "timestamp": "2026-06-04T01:39:50.623Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\schemas\\master.py",
+      "old_string": "class CustomerBase(BaseModel):\n    ma_kh: str\n    ten_viet_tat: str\n    ten_don_vi: str | None = None\n    dia_chi: str | None = None\n    dia_chi_giao_hang: str | None = None\n    dien_thoai: str | None = None\n    ma_so_thue: str | None = None\n    nguoi_dai_dien: str | None = None\n    nguoi_lien_he: str | None = None\n    so_dien_thoai_lh: str | None = None\n    no_tran: Decimal = Decimal(\"0\")\n    so_ngay_no: int = 0\n    xep_loai: str | None = None\n    la_khach_vip: bool = False\n    ghi_chu: str | None = None\n\n\nclass CustomerCreate(CustomerBase):\n    pass\n\n\nclass CustomerUpdate(BaseModel):\n    ten_viet_tat: str | None = None\n    ten_don_vi: str | None = None\n    dia_chi: str | None = None\n    dia_chi_giao_hang: str | None = None\n    dien_thoai: str | None = None\n    ma_so_thue: str | None = None\n    nguoi_dai_dien: str | None = None\n    nguoi_lien_he: str | None = None\n    so_dien_thoai_lh: str | None = None\n    no_tran: Decimal | None = None\n    so_ngay_no: int | None = None\n    xep_loai: str | None = None\n    la_khach_vip: bool | None = None\n    ghi_chu: str | None = None\n    trang_thai: bool | None = None\n\n\nclass CustomerResponse(CustomerBase):\n    id: int\n    trang_thai: bool\n    created_at: datetime\n\n    class Config:\n        from_attributes = True\n\n\nclass CustomerShort(BaseModel):\n    id: int\n    ma_kh: str\n    ten_viet_tat: str\n    ten_don_vi: str | None\n    dien_thoai: str | None\n\n    class Config:\n        from_attributes = True",
+      "new_string": "class CustomerBase(BaseModel):\n    ma_kh: str\n    ten_viet_tat: str\n    ten_don_vi: str | None = None\n    dia_chi: str | None = None\n    dia_chi_giao_hang: str | None = None\n    dien_thoai: str | None = None\n    ma_so_thue: str | None = None\n    nguoi_dai_dien: str | None = None\n    nguoi_lien_he: str | None = None\n    so_dien_thoai_lh: str | None = None\n    no_tran: Decimal = Decimal(\"0\")\n    so_ngay_no: int = 0\n    xep_loai: str | None = None\n    la_khach_vip: bool = False\n    ghi_chu: str | None = None\n\n\nclass CustomerCreate(CustomerBase):\n    pass\n\n\nclass CustomerUpdate(BaseModel):\n    ten_viet_tat: str | None = None\n    ten_don_vi: str | None = None\n    dia_chi: str | None = None\n    dia_chi_giao_hang: str | None = None\n    dien_thoai: str | None = None\n    ma_so_thue: str | None = None\n    nguoi_dai_dien: str | None = None\n    nguoi_lien_he: str | None = None\n    so_dien_thoai_lh: str | None = None\n    no_tran: Decimal | None = None\n    so_ngay_no: int | None = None\n    xep_loai: str | None = None\n    la_khach_vip: bool | None = None\n    ghi_chu: str | None = None\n    trang_thai: bool | None = None\n    nv_phu_trach_id: int | None = None\n\n\nclass CustomerResponse(CustomerBase):\n    id: int\n    trang_thai: bool\n    nv_phu_trach_id: int | None = None\n    created_at: datetime\n\n    class Config:\n        from_attributes = True\n\n\nclass CustomerShort(BaseModel):\n    id: int\n    ma_kh: str\n    ten_viet_tat: str\n    ten_don_vi: str | None\n    dien_thoai: str | None\n    nv_phu_trach_id: int | None = None\n\n    class Config:\n        from_attributes = True"
+    },
+    "timestamp": "2026-06-04T01:40:06.471Z"
+  },
+  {
+    "name": "TodoWrite",
+    "input": {
+      "todos": [
+        {
+          "content": "Backend: thêm nv_phu_trach_id vào CustomerShort, CustomerUpdate, CustomerResponse schemas",
+          "activeForm": "Cập nhật schemas/master.py",
+          "status": "completed"
+        },
+        {
+          "content": "Backend: thêm endpoint GET /api/customers/sale-users + filter nv_phu_trach_id cho list",
+          "activeForm": "Cập nhật routers/customers.py",
+          "status": "in_progress"
+        },
+        {
+          "content": "Frontend: cập nhật Customer type + customersApi",
+          "activeForm": "Cập nhật api/customers.ts",
+          "status": "pending"
+        },
+        {
+          "content": "Frontend: thêm cột NV phụ trách + dropdown filter + form field vào CustomerList.tsx",
+          "activeForm": "Cập nhật CustomerList.tsx",
+          "status": "pending"
+        }
+      ]
+    },
+    "timestamp": "2026-06-04T01:40:13.508Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\customers.py",
+      "old_string": "from fastapi import APIRouter, Depends, File, Query, UploadFile\nfrom sqlalchemy.orm import Session\nfrom app.database import get_db\nfrom app.deps import get_current_user, require_permissions\nfrom app.models.auth import User\nfrom app.models.master import Customer",
+      "new_string": "from fastapi import APIRouter, Depends, File, Query, UploadFile\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom app.database import get_db\nfrom app.deps import get_current_user, require_permissions\nfrom app.models.auth import Role, User\nfrom app.models.master import Customer"
+    },
+    "timestamp": "2026-06-04T01:40:17.743Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\customers.py",
+      "old_string": "@router.get(\"\", response_model=PagedResponse)\ndef list_customers(\n    search: str = Query(default=\"\", description=\"Tìm theo tên hoặc mã\"),\n    page: int = Query(default=1, ge=1),\n    page_size: int = Query(default=20, ge=1, le=1000),\n    trang_thai: bool = Query(default=True),\n    db: Session = Depends(get_db),\n    _: User = Depends(get_current_user),\n):\n    service = CustomerService(db)\n    return service.get_customers_paginated(search, page, page_size, trang_thai)",
+      "new_string": "class SaleUserOut(BaseModel):\n    id: int\n    ho_ten: str\n    username: str\n\n\n@router.get(\"/sale-users\", response_model=list[SaleUserOut])\ndef get_sale_users(\n    db: Session = Depends(get_db),\n    _: User = Depends(get_current_user),\n):\n    \"\"\"Trả về danh sách nhân viên có role SALE_ADMIN để chọn NV phụ trách.\"\"\"\n    users = (\n        db.query(User)\n        .join(Role, User.role_id == Role.id)\n        .filter(Role.ma_vai_tro == \"SALE_ADMIN\", User.trang_thai.is_(True))\n        .order_by(User.ho_ten)\n        .all()\n    )\n    return [SaleUserOut(id=u.id, ho_ten=u.ho_ten, username=u.username) for u in users]\n\n\n@router.get(\"\", response_model=PagedResponse)\ndef list_customers(\n    search: str = Query(default=\"\", description=\"Tìm theo tên hoặc mã\"),\n    page: int = Query(default=1, ge=1),\n    page_size: int = Query(default=20, ge=1, le=1000),\n    trang_thai: bool = Query(default=True),\n    nv_phu_trach_id: int | None = Query(default=None, description=\"Lọc theo NV phụ trách\"),\n    db: Session = Depends(get_db),\n    _: User = Depends(get_current_user),\n):\n    service = CustomerService(db)\n    return service.get_customers_paginated(search, page, page_size, trang_thai, nv_phu_trach_id)"
+    },
+    "timestamp": "2026-06-04T01:40:28.919Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\services\\customer_service.py",
+      "old_string": "    def get_customers_paginated(\n        self,\n        search: str = \"\",\n        page: int = 1,\n        page_size: int = 20,\n        trang_thai: bool = True,\n    ) -> PagedResponse:\n        q = self.db.query(Customer).filter(Customer.trang_thai == trang_thai)\n        if search:\n            like = f\"%{search}%\"\n            q = q.filter(\n                Customer.ma_kh.ilike(like)\n                | Customer.ten_viet_tat.ilike(like)\n                | Customer.ten_don_vi.ilike(like)\n                | Customer.ma_so_thue.ilike(like)\n            )\n        total = q.count()\n        items = q.order_by(Customer.ten_viet_tat).offset((page - 1) * page_size).limit(page_size).all()\n        return PagedResponse(\n            items=[CustomerShort.model_validate(c) for c in items],\n            total=total,\n            page=page,\n            page_size=page_size,\n            total_pages=(total + page_size - 1) // page_size,\n        )",
+      "new_string": "    def get_customers_paginated(\n        self,\n        search: str = \"\",\n        page: int = 1,\n        page_size: int = 20,\n        trang_thai: bool = True,\n        nv_phu_trach_id: int | None = None,\n    ) -> PagedResponse:\n        q = self.db.query(Customer).filter(Customer.trang_thai == trang_thai)\n        if search:\n            like = f\"%{search}%\"\n            q = q.filter(\n                Customer.ma_kh.ilike(like)\n                | Customer.ten_viet_tat.ilike(like)\n                | Customer.ten_don_vi.ilike(like)\n                | Customer.ma_so_thue.ilike(like)\n            )\n        if nv_phu_trach_id is not None:\n            q = q.filter(Customer.nv_phu_trach_id == nv_phu_trach_id)\n        total = q.count()\n        items = q.order_by(Customer.ten_viet_tat).offset((page - 1) * page_size).limit(page_size).all()\n        return PagedResponse(\n            items=[CustomerShort.model_validate(c) for c in items],\n            total=total,\n            page=page,\n            page_size=page_size,\n            total_pages=(total + page_size - 1) // page_size,\n        )"
+    },
+    "timestamp": "2026-06-04T01:40:40.071Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\services\\customer_service.py"
+    },
+    "timestamp": "2026-06-04T01:40:42.735Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\services\\customer_service.py",
+      "old_string": "    def get_customers_paginated(\n        self,\n        search: str = \"\",\n        page: int = 1,\n        page_size: int = 20,\n        trang_thai: bool = True,\n    ) -> PagedResponse:\n        q = self.db.query(Customer).filter(Customer.trang_thai == trang_thai)\n        if search:\n            like = f\"%{search}%\"\n            q = q.filter(\n                Customer.ma_kh.ilike(like)\n                | Customer.ten_viet_tat.ilike(like)\n                | Customer.ten_don_vi.ilike(like)\n                | Customer.ma_so_thue.ilike(like)\n            )\n        total = q.count()",
+      "new_string": "    def get_customers_paginated(\n        self,\n        search: str = \"\",\n        page: int = 1,\n        page_size: int = 20,\n        trang_thai: bool = True,\n        nv_phu_trach_id: int | None = None,\n    ) -> PagedResponse:\n        q = self.db.query(Customer).filter(Customer.trang_thai == trang_thai)\n        if search:\n            like = f\"%{search}%\"\n            q = q.filter(\n                Customer.ma_kh.ilike(like)\n                | Customer.ten_viet_tat.ilike(like)\n                | Customer.ten_don_vi.ilike(like)\n                | Customer.ma_so_thue.ilike(like)\n            )\n        if nv_phu_trach_id is not None:\n            q = q.filter(Customer.nv_phu_trach_id == nv_phu_trach_id)\n        total = q.count()"
+    },
+    "timestamp": "2026-06-04T01:40:50.476Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\services\\customer_service.py",
+      "old_string": "    def update_customer(self, customer_id: int, data: CustomerUpdate) -> CustomerResponse:\n        customer = self.db.query(Customer).filter(Customer.id == customer_id).first()\n        if not customer:\n            raise HTTPException(status_code=404, detail=\"Không tìm thấy khách hàng\")\n        for field, value in data.model_dump(exclude_none=True).items():\n            setattr(customer, field, value)\n        self.db.commit()\n        self.db.refresh(customer)\n        return CustomerResponse.model_validate(customer)",
+      "new_string": "    def update_customer(self, customer_id: int, data: CustomerUpdate) -> CustomerResponse:\n        customer = self.db.query(Customer).filter(Customer.id == customer_id).first()\n        if not customer:\n            raise HTTPException(status_code=404, detail=\"Không tìm thấy khách hàng\")\n        # exclude_unset so that explicit None (e.g. clearing nv_phu_trach_id) is applied\n        for field, value in data.model_dump(exclude_unset=True).items():\n            setattr(customer, field, value)\n        self.db.commit()\n        self.db.refresh(customer)\n        return CustomerResponse.model_validate(customer)"
+    },
+    "timestamp": "2026-06-04T01:40:58.962Z"
+  },
+  {
+    "name": "TodoWrite",
+    "input": {
+      "todos": [
+        {
+          "content": "Backend: thêm nv_phu_trach_id vào CustomerShort, CustomerUpdate, CustomerResponse schemas",
+          "activeForm": "Cập nhật schemas/master.py",
+          "status": "completed"
+        },
+        {
+          "content": "Backend: thêm endpoint GET /api/customers/sale-users + filter nv_phu_trach_id cho list",
+          "activeForm": "Cập nhật routers/customers.py",
+          "status": "completed"
+        },
+        {
+          "content": "Frontend: cập nhật Customer type + customersApi",
+          "activeForm": "Cập nhật api/customers.ts",
+          "status": "in_progress"
+        },
+        {
+          "content": "Frontend: thêm cột NV phụ trách + dropdown filter + form field vào CustomerList.tsx",
+          "activeForm": "Cập nhật CustomerList.tsx",
+          "status": "pending"
+        }
+      ]
+    },
+    "timestamp": "2026-06-04T01:41:06.551Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\api\\customers.ts",
+      "old_string": "export interface Customer {\n  id: number\n  ma_kh: string\n  ten_viet_tat: string\n  ten_don_vi: string | null\n  dien_thoai: string | null\n  dia_chi: string | null\n  dia_chi_giao_hang: string | null\n  ma_so_thue: string | null\n  no_tran: number\n  so_ngay_no: number\n  trang_thai: boolean\n}\n\nexport const customersApi = {\n  list: (params?: { search?: string; page?: number; page_size?: number }) =>\n    client.get<PagedResponse<Customer>>('/customers', { params }),\n  all: () => client.get<Customer[]>('/customers/all'),\n  get: (id: number) => client.get<Customer>(`/customers/${id}`),\n  create: (data: Partial<Customer>) => client.post<Customer>('/customers', data),\n  update: (id: number, data: Partial<Customer>) => client.put<Customer>(`/customers/${id}`, data),\n  import: (file: File, commit: boolean) => {\n    const fd = new FormData(); fd.append('file', file); fd.append('commit', String(commit))\n    return client.post<Record<string, unknown>>('/customers/import-excel', fd)\n  },\n}",
+      "new_string": "export interface Customer {\n  id: number\n  ma_kh: string\n  ten_viet_tat: string\n  ten_don_vi: string | null\n  dien_thoai: string | null\n  dia_chi: string | null\n  dia_chi_giao_hang: string | null\n  ma_so_thue: string | null\n  no_tran: number\n  so_ngay_no: number\n  trang_thai: boolean\n  nv_phu_trach_id: number | null\n}\n\nexport interface SaleUser {\n  id: number\n  ho_ten: string\n  username: string\n}\n\nexport const customersApi = {\n  list: (params?: { search?: string; page?: number; page_size?: number; nv_phu_trach_id?: number }) =>\n    client.get<PagedResponse<Customer>>('/customers', { params }),\n  all: () => client.get<Customer[]>('/customers/all'),\n  get: (id: number) => client.get<Customer>(`/customers/${id}`),\n  create: (data: Partial<Customer>) => client.post<Customer>('/customers', data),\n  update: (id: number, data: Partial<Customer>) => client.put<Customer>(`/customers/${id}`, data),\n  saleUsers: () => client.get<SaleUser[]>('/customers/sale-users'),\n  import: (file: File, commit: boolean) => {\n    const fd = new FormData(); fd.append('file', file); fd.append('commit', String(commit))\n    return client.post<Record<string, unknown>>('/customers/import-excel', fd)\n  },\n}"
+    },
+    "timestamp": "2026-06-04T01:41:17.557Z"
+  },
+  {
+    "name": "TodoWrite",
+    "input": {
+      "todos": [
+        {
+          "content": "Backend: thêm nv_phu_trach_id vào CustomerShort, CustomerUpdate, CustomerResponse schemas",
+          "activeForm": "Cập nhật schemas/master.py",
+          "status": "completed"
+        },
+        {
+          "content": "Backend: thêm endpoint GET /api/customers/sale-users + filter nv_phu_trach_id cho list",
+          "activeForm": "Cập nhật routers/customers.py",
+          "status": "completed"
+        },
+        {
+          "content": "Frontend: cập nhật Customer type + customersApi",
+          "activeForm": "Cập nhật api/customers.ts",
+          "status": "completed"
+        },
+        {
+          "content": "Frontend: thêm cột NV phụ trách + dropdown filter + form field vào CustomerList.tsx",
+          "activeForm": "Cập nhật CustomerList.tsx",
+          "status": "in_progress"
+        }
+      ]
+    },
+    "timestamp": "2026-06-04T01:41:27.204Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "old_string": "import { useState } from 'react'\nimport type { ApiError } from '../../api/types'\nimport { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'\nimport {\n  Card, Table, Button, Space, Modal, Form, Input, InputNumber,\n  Select, Tag, message, Typography, Row, Col, Switch,\n} from 'antd'\nimport { PlusOutlined, EditOutlined } from '@ant-design/icons'\nimport type { ColumnsType } from 'antd/es/table'\nimport { customersApi, type Customer } from '../../api/customers'\nimport ImportExcelDialog from '../../components/ImportExcelDialog'\nimport MSTLookupButton from '../../components/MSTLookupButton'\nimport EmptyState from \"../../components/EmptyState\"",
+      "new_string": "import { useState } from 'react'\nimport type { ApiError } from '../../api/types'\nimport { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'\nimport {\n  Card, Table, Button, Space, Modal, Form, Input, InputNumber,\n  Select, Tag, message, Typography, Row, Col, Switch,\n} from 'antd'\nimport { PlusOutlined, EditOutlined } from '@ant-design/icons'\nimport type { ColumnsType } from 'antd/es/table'\nimport { customersApi, type Customer, type SaleUser } from '../../api/customers'\nimport ImportExcelDialog from '../../components/ImportExcelDialog'\nimport MSTLookupButton from '../../components/MSTLookupButton'\nimport EmptyState from \"../../components/EmptyState\""
+    },
+    "timestamp": "2026-06-04T01:41:35.355Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "old_string": "  const [search, setSearch] = useState('')\n  const [searchInput, setSearchInput] = useState('')\n  const [filterActive, setFilterActive] = useState<boolean | undefined>(true)\n  const [page, setPage] = useState(1)\n  const [importVisible, setImportVisible] = useState(false)\n\n  const { data, isLoading } = useQuery({\n    queryKey: ['customers', search, filterActive, page],\n    queryFn: () =>\n      customersApi.list({ search: search || undefined, page, page_size: 20 }).then(r => r.data),\n  })",
+      "new_string": "  const [search, setSearch] = useState('')\n  const [searchInput, setSearchInput] = useState('')\n  const [filterActive, setFilterActive] = useState<boolean | undefined>(true)\n  const [filterNv, setFilterNv] = useState<number | undefined>(undefined)\n  const [page, setPage] = useState(1)\n  const [importVisible, setImportVisible] = useState(false)\n\n  const { data, isLoading } = useQuery({\n    queryKey: ['customers', search, filterActive, filterNv, page],\n    queryFn: () =>\n      customersApi.list({ search: search || undefined, page, page_size: 20, nv_phu_trach_id: filterNv }).then(r => r.data),\n  })\n\n  const { data: saleUsers = [] } = useQuery({\n    queryKey: ['sale-users'],\n    queryFn: () => customersApi.saleUsers().then(r => r.data),\n  })\n\n  const saleUserMap = Object.fromEntries((saleUsers as SaleUser[]).map(u => [u.id, u.ho_ten]))"
+    },
+    "timestamp": "2026-06-04T01:41:43.591Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "old_string": "    {\n      title: 'Xếp loại',\n      dataIndex: 'xep_loai',\n      width: 80,\n      align: 'center',\n      render: (v: string) => v ? <Tag color=\"blue\">{v}</Tag> : '—',\n    },\n    {\n      title: 'Trạng thái',",
+      "new_string": "    {\n      title: 'NV phụ trách',\n      dataIndex: 'nv_phu_trach_id',\n      width: 110,\n      render: (v: number | null) => v ? <Tag color=\"purple\">{saleUserMap[v] ?? `#${v}`}</Tag> : '—',\n    },\n    {\n      title: 'Xếp loại',\n      dataIndex: 'xep_loai',\n      width: 80,\n      align: 'center',\n      render: (v: string) => v ? <Tag color=\"blue\">{v}</Tag> : '—',\n    },\n    {\n      title: 'Trạng thái',"
+    },
+    "timestamp": "2026-06-04T01:41:50.839Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "old_string": "              <Select\n                value={filterActive === undefined ? 'all' : filterActive ? 'active' : 'inactive'}\n                style={{ width: 160 }}\n                onChange={v => {\n                  setFilterActive(v === 'all' ? undefined : v === 'active')\n                  setPage(1)\n                }}\n                options={[\n                  { value: 'active', label: 'Đang hoạt động' },\n                  { value: 'all', label: 'Tất cả' },\n                  { value: 'inactive', label: 'Ngừng hoạt động' },\n                ]}\n              />",
+      "new_string": "              <Select\n                value={filterActive === undefined ? 'all' : filterActive ? 'active' : 'inactive'}\n                style={{ width: 160 }}\n                onChange={v => {\n                  setFilterActive(v === 'all' ? undefined : v === 'active')\n                  setPage(1)\n                }}\n                options={[\n                  { value: 'active', label: 'Đang hoạt động' },\n                  { value: 'all', label: 'Tất cả' },\n                  { value: 'inactive', label: 'Ngừng hoạt động' },\n                ]}\n              />\n              <Select\n                allowClear\n                placeholder=\"NV phụ trách\"\n                style={{ width: 140 }}\n                value={filterNv}\n                onChange={v => { setFilterNv(v); setPage(1) }}\n                options={(saleUsers as SaleUser[]).map(u => ({ value: u.id, label: u.ho_ten }))}\n              />"
+    },
+    "timestamp": "2026-06-04T01:41:59.853Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "old_string": "          <Row gutter={12}>\n            <Col span={12}>\n              <Form.Item label=\"Ghi chú\" name=\"ghi_chu\">\n                <Input.TextArea rows={2} placeholder=\"Ghi chú thêm\" />\n              </Form.Item>\n            </Col>\n            <Col span={6}>\n              <Form.Item label=\"Khách VIP\" name=\"khach_vip\" valuePropName=\"checked\">\n                <Switch />\n              </Form.Item>\n            </Col>\n            {editing && (\n              <Col span={6}>\n                <Form.Item label=\"Trạng thái\" name=\"trang_thai\" valuePropName=\"checked\">\n                  <Switch checkedChildren=\"Hoạt động\" unCheckedChildren=\"Ngừng\" />\n                </Form.Item>\n              </Col>\n            )}\n          </Row>",
+      "new_string": "          <Row gutter={12}>\n            <Col span={12}>\n              <Form.Item label=\"NV phụ trách\" name=\"nv_phu_trach_id\">\n                <Select\n                  allowClear\n                  placeholder=\"Chọn nhân viên phụ trách\"\n                  options={(saleUsers as SaleUser[]).map(u => ({ value: u.id, label: u.ho_ten }))}\n                />\n              </Form.Item>\n            </Col>\n            <Col span={6}>\n              <Form.Item label=\"Xếp loại\" name=\"xep_loai\">\n                <Select\n                  allowClear\n                  placeholder=\"Chọn xếp loại\"\n                  options={[\n                    { value: 'A', label: 'A - Ưu tiên cao' },\n                    { value: 'B', label: 'B - Trung bình' },\n                    { value: 'C', label: 'C - Thấp' },\n                  ]}\n                />\n              </Form.Item>\n            </Col>\n            <Col span={6}>\n              <Form.Item label=\"Khách VIP\" name=\"khach_vip\" valuePropName=\"checked\">\n                <Switch />\n              </Form.Item>\n            </Col>\n          </Row>\n\n          <Row gutter={12}>\n            <Col span={12}>\n              <Form.Item label=\"Ghi chú\" name=\"ghi_chu\">\n                <Input.TextArea rows={2} placeholder=\"Ghi chú thêm\" />\n              </Form.Item>\n            </Col>\n            {editing && (\n              <Col span={6}>\n                <Form.Item label=\"Trạng thái\" name=\"trang_thai\" valuePropName=\"checked\">\n                  <Switch checkedChildren=\"Hoạt động\" unCheckedChildren=\"Ngừng\" />\n                </Form.Item>\n              </Col>\n            )}\n          </Row>"
+    },
+    "timestamp": "2026-06-04T01:42:18.100Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "offset": 275,
+      "limit": 60
+    },
+    "timestamp": "2026-06-04T01:42:23.235Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "old_string": "          <Row gutter={12}>\n            <Col span={8}>\n              <Form.Item label=\"Nợ trần (VND)\" name=\"no_tran\">\n                <InputNumber\n                  style={{ width: '100%' }}\n                  min={0}\n                  step={1000000}\n                  formatter={v => `${v}`.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')}\n                  placeholder=\"0\"\n                />\n              </Form.Item>\n            </Col>\n            <Col span={8}>\n              <Form.Item label=\"Số ngày nợ\" name=\"so_ngay_no\">\n                <InputNumber style={{ width: '100%' }} min={0} placeholder=\"30\" />\n              </Form.Item>\n            </Col>\n            <Col span={8}>\n              <Form.Item label=\"Xếp loại\" name=\"xep_loai\">\n                <Select\n                  allowClear\n                  placeholder=\"Chọn xếp loại\"\n                  options={[\n                    { value: 'A', label: 'A - Ưu tiên cao' },\n                    { value: 'B', label: 'B - Trung bình' },\n                    { value: 'C', label: 'C - Thấp' },\n                  ]}\n                />\n              </Form.Item>\n            </Col>\n          </Row>",
+      "new_string": "          <Row gutter={12}>\n            <Col span={12}>\n              <Form.Item label=\"Nợ trần (VND)\" name=\"no_tran\">\n                <InputNumber\n                  style={{ width: '100%' }}\n                  min={0}\n                  step={1000000}\n                  formatter={v => `${v}`.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')}\n                  placeholder=\"0\"\n                />\n              </Form.Item>\n            </Col>\n            <Col span={12}>\n              <Form.Item label=\"Số ngày nợ\" name=\"so_ngay_no\">\n                <InputNumber style={{ width: '100%' }} min={0} placeholder=\"30\" />\n              </Form.Item>\n            </Col>\n          </Row>"
+    },
+    "timestamp": "2026-06-04T01:42:33.895Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src\\pages\\danhmuc\\CustomerList.tsx",
+      "offset": 318,
+      "limit": 80
+    },
+    "timestamp": "2026-06-04T01:42:38.120Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "cd \"d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\"; npx tsc --noEmit 2>&1 | Select-Object -First 30",
+      "description": "TypeScript type check"
+    },
+    "timestamp": "2026-06-04T01:42:41.451Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "cd \"d:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\"; npx vite build 2>&1 | Select-Object -Last 15",
+      "description": "Vite build check",
+      "timeout": 60000
+    },
+    "timestamp": "2026-06-04T01:52:12.474Z"
+  },
+  {
+    "name": "TodoWrite",
+    "input": {
+      "todos": [
+        {
+          "content": "Backend: thêm nv_phu_trach_id vào CustomerShort, CustomerUpdate, CustomerResponse schemas",
+          "activeForm": "Cập nhật schemas/master.py",
+          "status": "completed"
+        },
+        {
+          "content": "Backend: thêm endpoint GET /api/customers/sale-users + filter nv_phu_trach_id cho list",
+          "activeForm": "Cập nhật routers/customers.py",
+          "status": "completed"
+        },
+        {
+          "content": "Frontend: cập nhật Customer type + customersApi",
+          "activeForm": "Cập nhật api/customers.ts",
+          "status": "completed"
+        },
+        {
+          "content": "Frontend: thêm cột NV phụ trách + dropdown filter + form field vào CustomerList.tsx",
+          "activeForm": "Cập nhật CustomerList.tsx",
+          "status": "completed"
+        }
+      ]
+    },
+    "timestamp": "2026-06-04T01:53:48.868Z"
+  },
+  {
+    "name": "Write",
+    "input": {
+      "file_path": "C:\\Users\\TUF\\AppData\\Local\\Temp\\analyze_excel.py",
+      "content": "import sys, glob, openpyxl\nsys.stdout.reconfigure(encoding=\"utf-8\")\n\nfiles = [f for f in glob.glob(\"C:/Users/TUF/Downloads/*theo_NV*\") if \"~\" not in f]\nwb = openpyxl.load_workbook(files[0])\nws = wb.active\n\nprint(f\"Total rows (excluding header): {ws.max_row - 1}\")\nprint(f\"Columns: {[ws.cell(1, c).value for c in range(1, ws.max_column + 1)]}\")\nprint()\n\n# Categorize all rows\nno_nv = []\nhas_nv = {}\nfor row in ws.iter_rows(min_row=2, values_only=True):\n    ma_kh, ten_kh, chi_nhanh, team, ten_nv = row\n    if ten_nv is None or str(ten_nv).strip() == \"\":\n        no_nv.append((ma_kh, ten_kh, chi_nhanh, team))\n    else:\n        nv = str(ten_nv).strip()\n        if nv not in has_nv:\n            has_nv[nv] = []\n        has_nv[nv].append(ma_kh)\n\nprint(f\"KH CÓ NV: {sum(len(v) for v in has_nv.values())}\")\nprint(f\"KH KHÔNG CÓ NV (ten_nv=None): {len(no_nv)}\")\nprint()\nprint(\"--- NV breakdown ---\")\nfor nv, khs in sorted(has_nv.items()):\n    print(f\"  {nv}: {len(khs)} KH\")\nprint()\nprint(f\"--- {len(no_nv)} KH không có NV (20 đầu) ---\")\nfor r in no_nv[:20]:\n    print(f\"  ma_kh={r[0]!r:10s} chi_nhanh={r[2]!r:15s} team={r[3]}\")\n"
+    },
+    "timestamp": "2026-06-04T01:54:35.461Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "python \"C:\\Users\\TUF\\AppData\\Local\\Temp\\analyze_excel.py\"",
+      "description": "Analyze full Excel file"
+    },
+    "timestamp": "2026-06-04T01:54:47.310Z"
+  }
+]

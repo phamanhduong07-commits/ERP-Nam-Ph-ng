@@ -14,15 +14,23 @@ export interface Customer {
   no_tran: number
   so_ngay_no: number
   trang_thai: boolean
+  nv_ids: number[]
+}
+
+export interface SaleUser {
+  id: number
+  ho_ten: string
+  username: string
 }
 
 export const customersApi = {
-  list: (params?: { search?: string; page?: number; page_size?: number }) =>
+  list: (params?: { search?: string; page?: number; page_size?: number; nv_id?: number }) =>
     client.get<PagedResponse<Customer>>('/customers', { params }),
   all: () => client.get<Customer[]>('/customers/all'),
   get: (id: number) => client.get<Customer>(`/customers/${id}`),
   create: (data: Partial<Customer>) => client.post<Customer>('/customers', data),
   update: (id: number, data: Partial<Customer>) => client.put<Customer>(`/customers/${id}`, data),
+  saleUsers: () => client.get<SaleUser[]>('/customers/sale-users'),
   import: (file: File, commit: boolean) => {
     const fd = new FormData(); fd.append('file', file); fd.append('commit', String(commit))
     return client.post<Record<string, unknown>>('/customers/import-excel', fd)

@@ -297,7 +297,7 @@ def create_po(body: POCreate, db: Session = Depends(get_db), current_user: User 
     return _po_to_dict(po, db)
 
 
-@router.get("/{po_id}")
+@router.get("/{po_id:int}")
 def get_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
@@ -306,7 +306,7 @@ def get_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_curr
     return _po_to_dict(po, db)
 
 
-@router.get("/{po_id}/print", response_class=HTMLResponse)
+@router.get("/{po_id:int}/print", response_class=HTMLResponse)
 def print_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.query(PurchaseOrder).options(selectinload(PurchaseOrder.items)).filter(PurchaseOrder.id == po_id).first()
     if not po:
@@ -399,7 +399,7 @@ def print_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_cu
     return HTMLResponse(content=page)
 
 
-@router.get("/{po_id}/export-excel")
+@router.get("/{po_id:int}/export-excel")
 def export_po_excel(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     from app.services.excel_export_service import build_xlsx
     from app.models.system import ExcelTemplate
@@ -468,7 +468,7 @@ def export_po_excel(po_id: int, db: Session = Depends(get_db), _: User = Depends
     )
 
 
-@router.put("/{po_id}")
+@router.put("/{po_id:int}")
 def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
@@ -523,7 +523,7 @@ def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db), _: User
     return _po_to_dict(po, db)
 
 
-@router.post("/{po_id}/duyet")
+@router.post("/{po_id:int}/duyet")
 def duyet_po(po_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     role_code = current_user.role.ma_vai_tro if current_user.role else None
     if role_code not in ("GIAM_DOC", "GIAM_DOC_THUONG_MAI", "ADMIN"):
@@ -542,7 +542,7 @@ def duyet_po(po_id: int, db: Session = Depends(get_db), current_user: User = Dep
     return {"ok": True, "trang_thai": po.trang_thai}
 
 
-@router.post("/{po_id}/gui-ncc")
+@router.post("/{po_id:int}/gui-ncc")
 def gui_ncc_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
@@ -554,7 +554,7 @@ def gui_ncc_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_
     return {"ok": True, "trang_thai": po.trang_thai}
 
 
-@router.post("/{po_id}/huy")
+@router.post("/{po_id:int}/huy")
 def huy_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
@@ -574,7 +574,7 @@ def huy_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_curr
     return {"ok": True, "trang_thai": po.trang_thai}
 
 
-@router.delete("/{po_id}")
+@router.delete("/{po_id:int}")
 def delete_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.get(PurchaseOrder, po_id)
     if not po:

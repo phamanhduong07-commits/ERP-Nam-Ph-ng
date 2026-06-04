@@ -8,6 +8,7 @@ import dayjs from 'dayjs'
 import { DownloadOutlined } from '@ant-design/icons'
 import { purchaseApi, DoiSoatKhoRow, DoiSoatKhoSummary, TRANG_THAI_PO, TRANG_THAI_PO_COLOR } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
+import { warehouseApi, GoodsReceipt, GoodsReceiptItem } from '../../api/warehouse'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 
@@ -43,6 +44,16 @@ export default function DoiSoatKhoPage() {
   const { data: suppliers = [] } = useQuery({
     queryKey: ['suppliers-all'],
     queryFn: () => suppliersApi.all().then(r => r.data),
+  })
+
+  const { data: nhapNhanhRows = [], isFetching: loadingNhapNhanh } = useQuery({
+    queryKey: ['doi-soat-nhap-nhanh', { supplier_id: supplierId, tu_ngay: params.tu_ngay, den_ngay: params.den_ngay }],
+    queryFn: () => warehouseApi.listGoodsReceipts({
+      trang_thai: 'nhap_nhanh',
+      supplier_id: supplierId,
+      tu_ngay: params.tu_ngay,
+      den_ngay: params.den_ngay,
+    }).then(r => r.data),
   })
 
   const totalDat = useMemo(() => rows.reduce((s, r) => s + r.thanh_tien_dat, 0), [rows])
@@ -136,6 +147,29 @@ export default function DoiSoatKhoPage() {
     { title: 'Tiền đã nhận', dataIndex: 'tong_tien_da_nhan', width: 150, align: 'right', render: fmtVND },
   ]
 
+  const colsNhapNhanh: ColumnsType<GoodsReceipt> = [
+    { title: 'Số phiếu', dataIndex: 'so_phieu', width: 140 },
+    { title: 'Ngày nhập', dataIndex: 'ngay_nhap', width: 110, render: v => v ?? '-' },
+    { title: 'Nhà CC', width: 160, render: (_, r) => (r as any).ten_ncc ?? '-' },
+    { title: 'Xưởng', width: 140, render: (_, r) => (r as any).ten_phan_xuong ?? '-' },
+    { title: 'Kho nhập', width: 160, render: (_, r) => (r as any).ten_kho ?? '-' },
+    { title: 'Tổng giá trị', dataIndex: 'tong_gia_tri', width: 130, align: 'right', render: v => fmtVND(Number(v)) },
+    {
+      title: 'Tên hàng', width: 200, render: (_, r) => {
+        const items: GoodsReceiptItem[] = r.items ?? []
+        if (items.length === 0) return '-'
+        return items.map(it => it.ten_hang || '-').join(', ')
+      },
+    },
+    {
+      title: 'SL nhập', width: 100, align: 'right', render: (_, r) => {
+        const items: GoodsReceiptItem[] = r.items ?? []
+        const total = items.reduce((s, it) => s + Number(it.so_luong || 0), 0)
+        return total > 0 ? total.toLocaleString('vi-VN') : '-'
+      },
+    },
+  ]
+
   return (
     <div style={{ padding: 16 }}>
       <h2 style={{ marginBottom: 12 }}>Đối soát kho — PO vs GR</h2>
@@ -201,13 +235,15 @@ export default function DoiSoatKhoPage() {
         activeKey={activeTab}
         onChange={setActiveTab}
         tabBarExtraContent={
-          <Button
-            icon={<DownloadOutlined />}
-            size="small"
-            onClick={activeTab === 'chi-tiet' ? exportChiTiet : exportTongHop}
-          >
-            Xuất Excel
-          </Button>
+          activeTab !== 'nhap-nhanh' && (
+            <Button
+              icon={<DownloadOutlined />}
+              size="small"
+              onClick={activeTab === 'chi-tiet' ? exportChiTiet : exportTongHop}
+            >
+              Xuất Excel
+            </Button>
+          )
         }
         items={[
           {
@@ -241,6 +277,43 @@ export default function DoiSoatKhoPage() {
                     </Table.Summary.Row>
                   </Table.Summary>
                 )}
+              />
+            ),
+          },
+          {
+            key: 'nhap-nhanh',
+            label: `Nhập nhanh (${nhapNhanhRows.length})`,
+            children: (
+              <Table<GoodsReceipt>
+                rowKey="id"
+                columns={colsNhapNhanh}
+                dataSource={nhapNhanhRows}
+                loading={loadingNhapNhanh}
+                size="small"
+                scroll={{ x: 1000 }}
+                pagination={{ pageSize: 50, showSizeChanger: true }}
+                expandable={{
+                  expandedRowRender: (r) => {
+                    const items: GoodsReceiptItem[] = r.items ?? []
+                    if (items.length === 0) return <span style={{ color: '#999' }}>Chưa có mục hàng</span>
+                    return (
+                      <Table
+                        rowKey="id"
+                        size="small"
+                        dataSource={items}
+                        pagination={false}
+                        columns={[
+                          { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+                          { title: 'ĐVT', dataIndex: 'don_vi_tinh', width: 70 },
+                          { title: 'SL', dataIndex: 'so_luong', width: 90, align: 'right', render: v => Number(v).toLocaleString('vi-VN') },
+                          { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, align: 'right', render: v => fmtVND(Number(v)) },
+                          { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 120, align: 'right', render: v => fmtVND(Number(v)) },
+                        ] satisfies ColumnsType<GoodsReceiptItem>}
+                      />
+                    )
+                  },
+                  rowExpandable: (r) => (r.items?.length ?? 0) > 0,
+                }}
               />
             ),
           },

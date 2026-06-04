@@ -12,6 +12,7 @@ from app.models.accounting import (
     DebtLedgerEntry, OpeningBalance, JournalEntry, JournalEntryLine,
     CustomerRefundVoucher, WorkshopPayroll, FixedAsset,
     ProductCost, ProductionCostAllocation, ProductionCostInput, ProductionCostPeriod,
+    AccountingPeriodLock,
 )
 from app.models.auth import AuditLog
 from app.models.master import Customer, Supplier, PhanXuong
@@ -123,6 +124,160 @@ class AccountingService:
     def __init__(self, db: Session):
         self.db = db
 
+    def _period_lock_query(self, thang: int, nam: int, phap_nhan_id: int):
+        return self.db.query(AccountingPeriodLock).filter(
+            AccountingPeriodLock.thang == thang,
+            AccountingPeriodLock.nam == nam,
+            AccountingPeriodLock.phap_nhan_id == phap_nhan_id,
+        )
+
+    def _active_period_lock(self, thang: int, nam: int, phap_nhan_id: int) -> AccountingPeriodLock | None:
+        return self._period_lock_query(thang, nam, phap_nhan_id).filter(
+            AccountingPeriodLock.trang_thai == "locked",
+        ).first()
+
+    def _ensure_period_open(
+        self,
+        ngay: date,
+        phap_nhan_id: int | None,
+        action: str = "ghi so",
+    ) -> None:
+        if not phap_nhan_id:
+            return
+        lock = self._active_period_lock(ngay.month, ngay.year, phap_nhan_id)
+        if lock:
+            raise HTTPException(
+                400,
+                f"Ky {ngay.month:02d}/{ngay.year} cua phap nhan #{phap_nhan_id} da khoa so, "
+                f"khong the {action}. Mo khoa ky truoc khi thao tac.",
+            )
+
+    def _ensure_period_range_open(
+        self,
+        tu_ngay: date,
+        den_ngay: date,
+        phap_nhan_id: int | None,
+        action: str = "ghi so",
+    ) -> None:
+        if not phap_nhan_id:
+            return
+        if den_ngay < tu_ngay:
+            raise HTTPException(400, "Khoang ngay khong hop le")
+        cursor = date(tu_ngay.year, tu_ngay.month, 1)
+        end = date(den_ngay.year, den_ngay.month, 1)
+        while cursor <= end:
+            self._ensure_period_open(cursor, phap_nhan_id, action)
+            cursor = date(cursor.year + 1, 1, 1) if cursor.month == 12 else date(cursor.year, cursor.month + 1, 1)
+
+    def list_period_locks(
+        self,
+        phap_nhan_id: int | None = None,
+        nam: int | None = None,
+    ) -> list[AccountingPeriodLock]:
+        q = self.db.query(AccountingPeriodLock)
+        if phap_nhan_id:
+            q = q.filter(AccountingPeriodLock.phap_nhan_id == phap_nhan_id)
+        if nam:
+            q = q.filter(AccountingPeriodLock.nam == nam)
+        return q.order_by(
+            AccountingPeriodLock.nam.desc(),
+            AccountingPeriodLock.thang.desc(),
+            AccountingPeriodLock.id.desc(),
+        ).all()
+
+    def _lock_period_no_commit(
+        self,
+        thang: int,
+        nam: int,
+        phap_nhan_id: int,
+        user_id: int | None,
+        closing_entry_id: int | None = None,
+        ly_do_khoa: str | None = None,
+    ) -> AccountingPeriodLock:
+        existing = self._period_lock_query(thang, nam, phap_nhan_id).first()
+        now = datetime.now(timezone.utc)
+        if existing:
+            if existing.trang_thai == "locked":
+                raise HTTPException(400, f"Ky {thang:02d}/{nam} da khoa so")
+            old_status = existing.trang_thai
+            existing.trang_thai = "locked"
+            existing.locked_by = user_id
+            existing.locked_at = now
+            existing.unlocked_by = None
+            existing.unlocked_at = None
+            existing.ly_do_khoa = ly_do_khoa
+            existing.ly_do_mo_khoa = None
+            existing.closing_entry_id = closing_entry_id
+            existing.updated_at = now
+            lock = existing
+            action = "relock"
+            old_data = {"trang_thai": old_status}
+        else:
+            lock = AccountingPeriodLock(
+                thang=thang,
+                nam=nam,
+                phap_nhan_id=phap_nhan_id,
+                trang_thai="locked",
+                closing_entry_id=closing_entry_id,
+                locked_by=user_id,
+                locked_at=now,
+                ly_do_khoa=ly_do_khoa,
+            )
+            self.db.add(lock)
+            action = "lock"
+            old_data = None
+        self.db.flush()
+        self._audit(
+            action,
+            "accounting_period_locks",
+            lock.id,
+            user_id=user_id,
+            du_lieu_cu=old_data,
+            du_lieu_moi={
+                "thang": thang,
+                "nam": nam,
+                "phap_nhan_id": phap_nhan_id,
+                "trang_thai": lock.trang_thai,
+                "closing_entry_id": closing_entry_id,
+                "ly_do_khoa": ly_do_khoa,
+            },
+        )
+        return lock
+
+    def unlock_period(
+        self,
+        thang: int,
+        nam: int,
+        phap_nhan_id: int,
+        user_id: int | None,
+        ly_do_mo_khoa: str,
+    ) -> AccountingPeriodLock:
+        lock = self._active_period_lock(thang, nam, phap_nhan_id)
+        if not lock:
+            raise HTTPException(404, f"Khong tim thay ky dang khoa {thang:02d}/{nam}")
+        old_data = {"trang_thai": lock.trang_thai, "locked_at": lock.locked_at.isoformat() if lock.locked_at else None}
+        now = datetime.now(timezone.utc)
+        lock.trang_thai = "reopened"
+        lock.unlocked_by = user_id
+        lock.unlocked_at = now
+        lock.ly_do_mo_khoa = ly_do_mo_khoa
+        lock.updated_at = now
+        self._audit(
+            "unlock",
+            "accounting_period_locks",
+            lock.id,
+            user_id=user_id,
+            du_lieu_cu=old_data,
+            du_lieu_moi={
+                "trang_thai": lock.trang_thai,
+                "unlocked_at": lock.unlocked_at.isoformat(),
+                "ly_do_mo_khoa": ly_do_mo_khoa,
+            },
+        )
+        self.db.commit()
+        self.db.refresh(lock)
+        return lock
+
     def ensure_core_chart_of_accounts(self) -> dict:
         created = 0
         updated = 0
@@ -160,6 +315,220 @@ class AccountingService:
             "updated": updated,
             "internal_accounts": sorted(INTERNAL_ACCOUNTS),
             "vat_accounts": sorted(VAT_ACCOUNTS),
+        }
+
+    def get_dimension_audit(
+        self,
+        tu_ngay: date | None = None,
+        den_ngay: date | None = None,
+        phap_nhan_id: int | None = None,
+        phan_xuong_id: int | None = None,
+        limit: int = 200,
+    ) -> dict:
+        issues: list[dict] = []
+        px_cache: dict[int, PhanXuong | None] = {}
+
+        def px_of(px_id: int | None) -> PhanXuong | None:
+            if not px_id:
+                return None
+            if px_id not in px_cache:
+                px_cache[px_id] = self.db.get(PhanXuong, px_id)
+            return px_cache[px_id]
+
+        def in_range(query, column):
+            if tu_ngay:
+                query = query.filter(column >= tu_ngay)
+            if den_ngay:
+                query = query.filter(column <= den_ngay)
+            return query
+
+        def apply_dimension_filters(query, model, include_missing: bool = True):
+            if phap_nhan_id and hasattr(model, "phap_nhan_id"):
+                if include_missing:
+                    query = query.filter(or_(model.phap_nhan_id == phap_nhan_id, model.phap_nhan_id.is_(None)))
+                else:
+                    query = query.filter(model.phap_nhan_id == phap_nhan_id)
+            if phan_xuong_id and hasattr(model, "phan_xuong_id"):
+                query = query.filter(model.phan_xuong_id == phan_xuong_id)
+            return query
+
+        def add_issue(
+            severity: str,
+            category: str,
+            table: str,
+            record_id: int | None,
+            message: str,
+            *,
+            record_code: str | None = None,
+            ngay: date | None = None,
+            phap_nhan_id_value: int | None = None,
+            phan_xuong_id_value: int | None = None,
+            expected_phap_nhan_id: int | None = None,
+        ) -> None:
+            if len(issues) >= limit:
+                return
+            issues.append({
+                "severity": severity,
+                "category": category,
+                "table": table,
+                "record_id": record_id,
+                "record_code": record_code,
+                "ngay": ngay,
+                "phap_nhan_id": phap_nhan_id_value,
+                "phan_xuong_id": phan_xuong_id_value,
+                "expected_phap_nhan_id": expected_phap_nhan_id,
+                "message": message,
+            })
+
+        def check_missing_phap_nhan(table: str, record, date_attr: str, code_attr: str | None = None) -> None:
+            if getattr(record, "phap_nhan_id", None) is None:
+                add_issue(
+                    "error",
+                    "missing_phap_nhan",
+                    table,
+                    getattr(record, "id", None),
+                    "Chung tu chua co phap_nhan_id nen khong the loc bao cao/ket chuyen theo phap nhan chinh xac.",
+                    record_code=getattr(record, code_attr, None) if code_attr else None,
+                    ngay=getattr(record, date_attr, None),
+                    phan_xuong_id_value=getattr(record, "phan_xuong_id", None),
+                )
+
+        def check_workshop_owner(table: str, record, date_attr: str, code_attr: str | None = None) -> None:
+            px_id = getattr(record, "phan_xuong_id", None)
+            pn_id = getattr(record, "phap_nhan_id", None)
+            if px_id is None:
+                return
+            px = px_of(px_id)
+            expected = px.phap_nhan_id if px else None
+            if expected and pn_id and expected != pn_id:
+                add_issue(
+                    "error",
+                    "mismatch_phap_nhan_xuong",
+                    table,
+                    getattr(record, "id", None),
+                    "Phap nhan tren chung tu khac phap nhan quan ly phan xuong.",
+                    record_code=getattr(record, code_attr, None) if code_attr else None,
+                    ngay=getattr(record, date_attr, None),
+                    phap_nhan_id_value=pn_id,
+                    phan_xuong_id_value=px_id,
+                    expected_phap_nhan_id=expected,
+                )
+
+        journal_q = apply_dimension_filters(
+            in_range(self.db.query(JournalEntry), JournalEntry.ngay_but_toan),
+            JournalEntry,
+        ).order_by(JournalEntry.ngay_but_toan.desc(), JournalEntry.id.desc()).limit(limit)
+        for entry in journal_q.all():
+            check_missing_phap_nhan("journal_entries", entry, "ngay_but_toan", "so_but_toan")
+            check_workshop_owner("journal_entries", entry, "ngay_but_toan", "so_but_toan")
+            if Decimal(str(entry.tong_no or 0)) != Decimal(str(entry.tong_co or 0)):
+                add_issue(
+                    "error",
+                    "unbalanced_journal",
+                    "journal_entries",
+                    entry.id,
+                    "But toan header khong can tong No/Co.",
+                    record_code=entry.so_but_toan,
+                    ngay=entry.ngay_but_toan,
+                    phap_nhan_id_value=entry.phap_nhan_id,
+                    phan_xuong_id_value=entry.phan_xuong_id,
+                )
+            for line in entry.lines:
+                line_pn = line.phap_nhan_id or entry.phap_nhan_id
+                line_px = line.phan_xuong_id or entry.phan_xuong_id
+                if entry.phap_nhan_id and line.phap_nhan_id and line.phap_nhan_id != entry.phap_nhan_id:
+                    add_issue(
+                        "warning",
+                        "line_header_phap_nhan_mismatch",
+                        "journal_entry_lines",
+                        line.id,
+                        "Dong but toan co phap_nhan_id khac header.",
+                        record_code=entry.so_but_toan,
+                        ngay=entry.ngay_but_toan,
+                        phap_nhan_id_value=line.phap_nhan_id,
+                        phan_xuong_id_value=line_px,
+                        expected_phap_nhan_id=entry.phap_nhan_id,
+                    )
+                px = px_of(line_px)
+                expected = px.phap_nhan_id if px else None
+                if expected and line_pn and expected != line_pn:
+                    add_issue(
+                        "error",
+                        "line_phap_nhan_xuong_mismatch",
+                        "journal_entry_lines",
+                        line.id,
+                        "Dong but toan khac phap nhan quan ly phan xuong.",
+                        record_code=entry.so_but_toan,
+                        ngay=entry.ngay_but_toan,
+                        phap_nhan_id_value=line_pn,
+                        phan_xuong_id_value=line_px,
+                        expected_phap_nhan_id=expected,
+                    )
+
+        checks = [
+            ("sales_invoices", SalesInvoice, SalesInvoice.ngay_hoa_don, "ngay_hoa_don", "so_hoa_don"),
+            ("purchase_invoices", PurchaseInvoice, PurchaseInvoice.ngay_lap, "ngay_lap", "so_hoa_don"),
+            ("cash_receipts", CashReceipt, CashReceipt.ngay_phieu, "ngay_phieu", "so_phieu"),
+            ("cash_payments", CashPayment, CashPayment.ngay_phieu, "ngay_phieu", "so_phieu"),
+            ("opening_balances", OpeningBalance, OpeningBalance.ky_mo_so, "ky_mo_so", None),
+            ("workshop_payroll", WorkshopPayroll, WorkshopPayroll.thang, "thang", "so_phieu"),
+            ("fixed_assets", FixedAsset, FixedAsset.ngay_mua, "ngay_mua", "ma_ts"),
+        ]
+        for table, model, date_column, date_attr, code_attr in checks:
+            q = apply_dimension_filters(in_range(self.db.query(model), date_column), model)
+            for row in q.order_by(date_column.desc(), model.id.desc()).limit(limit).all():
+                check_missing_phap_nhan(table, row, date_attr, code_attr)
+                if hasattr(row, "phan_xuong_id"):
+                    check_workshop_owner(table, row, date_attr, code_attr)
+                    if table in {"workshop_payroll", "fixed_assets"} and getattr(row, "phan_xuong_id", None) is None:
+                        add_issue(
+                            "warning",
+                            "missing_phan_xuong",
+                            table,
+                            row.id,
+                            "Chung tu chi phi xuong chua co phan_xuong_id.",
+                            record_code=getattr(row, code_attr, None) if code_attr else None,
+                            ngay=getattr(row, date_attr, None),
+                            phap_nhan_id_value=getattr(row, "phap_nhan_id", None),
+                        )
+
+        period_q = self.db.query(ProductionCostPeriod)
+        if tu_ngay:
+            period_q = period_q.filter(ProductionCostPeriod.den_ngay >= tu_ngay)
+        if den_ngay:
+            period_q = period_q.filter(ProductionCostPeriod.tu_ngay <= den_ngay)
+        period_q = apply_dimension_filters(period_q, ProductionCostPeriod)
+        for period in period_q.order_by(ProductionCostPeriod.den_ngay.desc(), ProductionCostPeriod.id.desc()).limit(limit).all():
+            check_missing_phap_nhan("production_cost_periods", period, "den_ngay", "ma_ky")
+            check_workshop_owner("production_cost_periods", period, "den_ngay", "ma_ky")
+            if period.phan_xuong_id is None:
+                add_issue(
+                    "warning",
+                    "missing_phan_xuong",
+                    "production_cost_periods",
+                    period.id,
+                    "Ky gia thanh chua gan phan_xuong_id, chi phi co the bi gom toan he thong.",
+                    record_code=period.ma_ky,
+                    ngay=period.den_ngay,
+                    phap_nhan_id_value=period.phap_nhan_id,
+                )
+
+        by_severity: dict[str, int] = {}
+        by_category: dict[str, int] = {}
+        for issue in issues:
+            by_severity[issue["severity"]] = by_severity.get(issue["severity"], 0) + 1
+            by_category[issue["category"]] = by_category.get(issue["category"], 0) + 1
+
+        return {
+            "tu_ngay": tu_ngay,
+            "den_ngay": den_ngay,
+            "phap_nhan_id": phap_nhan_id,
+            "phan_xuong_id": phan_xuong_id,
+            "total": len(issues),
+            "limited": len(issues) >= limit,
+            "by_severity": by_severity,
+            "by_category": by_category,
+            "items": issues,
         }
 
     def _audit(
@@ -267,6 +636,7 @@ class AccountingService:
     def create_cash_receipt(self, data: CashReceiptCreate, user_id: int) -> CashReceipt:
         self.ensure_core_chart_of_accounts()
         # Validate số tiền không vượt con_lai
+        invoice = None
         if data.sales_invoice_id:
             invoice = self.db.get(SalesInvoice, data.sales_invoice_id)
             if not invoice:
@@ -278,6 +648,8 @@ class AccountingService:
                 raise HTTPException(
                     400, f"Số tiền ({data.so_tien:,.0f}) vượt quá còn lại ({remaining:,.0f})"
                 )
+        phap_nhan_id = data.phap_nhan_id or (invoice.phap_nhan_id if invoice else None)
+        self._ensure_period_open(data.ngay_phieu, phap_nhan_id, "tao phieu thu")
 
         receipt = CashReceipt(
             so_phieu=self._gen_so_phieu("PT", CashReceipt),
@@ -291,7 +663,7 @@ class AccountingService:
             so_tien=data.so_tien,
             tk_no=data.tk_no,
             tk_co=data.tk_co,
-            phap_nhan_id=data.phap_nhan_id,
+            phap_nhan_id=phap_nhan_id,
             created_by=user_id,
         )
         self.db.add(receipt)
@@ -383,6 +755,8 @@ class AccountingService:
         user_id: int | None = None,
     ) -> JournalEntry:
         self.ensure_core_chart_of_accounts()
+        if loai_but_toan != "ket_chuyen":
+            self._ensure_period_open(ngay, phap_nhan_id, "hach toan")
         tong_no, tong_co = self._validate_journal_entry(
             loai_but_toan=loai_but_toan,
             chung_tu_loai=chung_tu_loai,
@@ -638,6 +1012,7 @@ class AccountingService:
             raise HTTPException(404, "Không tìm thấy hóa đơn mua")
         if inv.trang_thai == "huy":
             return inv
+        self._ensure_period_open(inv.ngay_lap, inv.phap_nhan_id, "huy hoa don mua")
         if float(inv.da_thanh_toan or 0) > 0:
             raise HTTPException(400, "Không thể hủy hóa đơn đã có thanh toán")
         self._reverse_journal_entries("purchase_invoices", inv.id, user_id=user_id, ly_do=ly_do)
@@ -698,6 +1073,7 @@ class AccountingService:
         )
         reversed_entries = []
         for orig in originals:
+            self._ensure_period_open(orig.ngay_but_toan, orig.phap_nhan_id, "dao nguoc but toan")
             reversed_lines = [
                 {
                     'so_tk': line.so_tk,
@@ -813,6 +1189,7 @@ class AccountingService:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
         if receipt.trang_thai != "cho_duyet":
             raise HTTPException(400, "Phiếu thu không ở trạng thái Chờ duyệt")
+        self._ensure_period_open(receipt.ngay_phieu, receipt.phap_nhan_id, "duyet phieu thu")
         receipt.trang_thai = "da_duyet"
         receipt.nguoi_duyet_id = user_id
         receipt.ngay_duyet = datetime.now(timezone.utc)
@@ -840,6 +1217,7 @@ class AccountingService:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
         if receipt.trang_thai == "huy":
             return receipt
+        self._ensure_period_open(receipt.ngay_phieu, receipt.phap_nhan_id, "huy phieu thu")
 
         # Đảo ngược bút toán nếu đã duyệt
         was_approved = receipt.trang_thai == "da_duyet"
@@ -943,6 +1321,7 @@ class AccountingService:
         ten_don_vi = data.ten_don_vi or getattr(supplier, "ten_don_vi", supplier.ten_viet_tat)
         ma_so_thue = data.ma_so_thue or getattr(supplier, "ma_so_thue", None)
         phap_nhan_id, phan_xuong_id = self._purchase_invoice_dimensions(data)
+        self._ensure_period_open(data.ngay_lap, phap_nhan_id, "tao hoa don mua")
 
         inv = PurchaseInvoice(
             so_hoa_don=data.so_hoa_don,
@@ -1164,6 +1543,7 @@ class AccountingService:
 
         phap_nhan_id = data.phap_nhan_id or (inv.phap_nhan_id if inv else None)
         phan_xuong_id = data.phan_xuong_id or (inv.phan_xuong_id if inv else None)
+        self._ensure_period_open(data.ngay_phieu, phap_nhan_id, "tao phieu chi")
 
         payment = CashPayment(
             so_phieu=self._gen_so_phieu("PC", CashPayment),
@@ -1221,6 +1601,7 @@ class AccountingService:
         next_state = transitions.get(p.trang_thai)
         if not next_state:
             raise HTTPException(400, f"Không thể chuyển trạng thái từ {p.trang_thai}")
+        self._ensure_period_open(p.ngay_phieu, p.phap_nhan_id, "duyet phieu chi")
         old_status = p.trang_thai
         p.trang_thai = next_state
         try:
@@ -1258,6 +1639,7 @@ class AccountingService:
             raise HTTPException(404, "Không tìm thấy phiếu chi")
         if p.trang_thai == "huy":
             return p
+        self._ensure_period_open(p.ngay_phieu, p.phap_nhan_id, "huy phieu chi")
         was_approved = p.trang_thai == "da_duyet"
         if was_approved:
             self._reverse_journal_entries("phieu_chi", p.id, user_id=user_id, ly_do=ly_do)
@@ -1864,6 +2246,7 @@ class AccountingService:
     # SỔ DƯ ĐẦU KỲ
     # ─────────────────────────────────────────────
     def create_opening_balance(self, data: OpeningBalanceCreate, user_id: int) -> OpeningBalance:
+        self._ensure_period_open(data.ky_mo_so, data.phap_nhan_id, "tao so du dau ky")
         ob = OpeningBalance(
             ky_mo_so=data.ky_mo_so,
             doi_tuong=data.doi_tuong,
@@ -2426,6 +2809,7 @@ class AccountingService:
             raise HTTPException(404, "Không tìm thấy phiếu hoàn tiền")
         if v.trang_thai != "nhap":
             raise HTTPException(400, "Chỉ có thể sửa phiếu ở trạng thái Nháp")
+        self._ensure_period_open(v.ngay, v.phap_nhan_id, "sua phieu hoan tien")
         for field, value in data.model_dump(exclude_none=True).items():
             setattr(v, field, value)
         self.db.commit()
@@ -2441,6 +2825,7 @@ class AccountingService:
             raise HTTPException(400, "Chưa chọn hình thức hoàn tiền (bù trừ / hoàn tiền mặt/CK)")
         if v.hinh_thuc == "hoan_tien" and not v.tk_hoan_tien:
             raise HTTPException(400, "Chưa chọn tài khoản hoàn tiền (111 hoặc 112)")
+        self._ensure_period_open(v.ngay, v.phap_nhan_id, "duyet phieu hoan tien")
 
         so_tien = float(v.so_tien)
         ngay = v.ngay
@@ -2502,6 +2887,7 @@ class AccountingService:
             raise HTTPException(404, "Không tìm thấy phiếu hoàn tiền")
         if v.trang_thai == "huy":
             return self.get_customer_refund(voucher_id)
+        self._ensure_period_open(v.ngay, v.phap_nhan_id, "huy phieu hoan tien")
         if v.trang_thai == "da_duyet":
             self._reverse_journal_entries("phieu_hoan_tien", v.id)
             self.db.query(DebtLedgerEntry).filter(
@@ -3078,11 +3464,13 @@ class AccountingService:
     # BẢNG LƯƠNG XƯỞNG
     # ─────────────────────────────────────────────
     def create_workshop_payroll(self, data: WorkshopPayrollCreate, user_id: int) -> WorkshopPayroll:
+        phap_nhan_id = data.phap_nhan_id or self._phap_nhan_from_phan_xuong(data.phan_xuong_id)
+        self._ensure_period_open(data.thang, phap_nhan_id, "tao bang luong xuong")
         wp = WorkshopPayroll(
             so_phieu=self._gen_so_phieu("WPR", WorkshopPayroll),
             thang=data.thang,
             phan_xuong_id=data.phan_xuong_id,
-            phap_nhan_id=data.phap_nhan_id,
+            phap_nhan_id=phap_nhan_id,
             tong_luong=data.tong_luong,
             tong_thuong=data.tong_thuong,
             tong_bao_hiem=data.tong_bao_hiem,
@@ -3098,6 +3486,7 @@ class AccountingService:
         wp = self.db.get(WorkshopPayroll, wp_id)
         if not wp:
             raise HTTPException(404, "Không tìm thấy bảng lương")
+        self._ensure_period_open(wp.thang, wp.phap_nhan_id, "duyet bang luong xuong")
         if wp.bo_qua_hach_toan:
             wp.trang_thai = "da_duyet"
             self.db.commit()
@@ -3116,7 +3505,7 @@ class AccountingService:
                 "so_tien_no": 0, "so_tien_co": float(wp.tong_bao_hiem),
             })
         self._create_journal_entry(
-            ngay=date.today(),
+            ngay=wp.thang,
             dien_giai=f"Lương xưởng tháng {wp.thang} - {wp.so_phieu}",
             loai_but_toan="luong_nhan_cong",
             chung_tu_loai="workshop_payroll",
@@ -3142,6 +3531,7 @@ class AccountingService:
     # KHẤU HAO TÀI SẢN CỐ ĐỊNH
     # ─────────────────────────────────────────────
     def create_fixed_asset(self, data: FixedAssetCreate) -> FixedAsset:
+        self._ensure_period_open(data.ngay_mua, data.phap_nhan_id, "tao tai san co dinh")
         fa = FixedAsset(**data.model_dump())
         self.db.add(fa)
         self.db.commit()
@@ -3163,6 +3553,8 @@ class AccountingService:
         return q.order_by(FixedAsset.ngay_mua.desc()).all()
 
     def run_monthly_depreciation(self, thang: int, nam: int, phap_nhan_id: int, user_id: int):
+        depreciation_date = date(nam, thang, calendar.monthrange(nam, thang)[1])
+        self._ensure_period_open(depreciation_date, phap_nhan_id, "chay khau hao")
         # 0. Kiểm tra đã chạy chưa
         existing = self.db.query(JournalEntry).filter(
             JournalEntry.loai_but_toan == "khau_hao_ts",
@@ -3205,7 +3597,7 @@ class AccountingService:
             
             # Hạch toán: Nợ TK chi phí (154/642) / Có 214
             self._create_journal_entry(
-                ngay=date(nam, thang, calendar.monthrange(nam, thang)[1]),
+                ngay=depreciation_date,
                 dien_giai=f"Khấu hao TS: {asset.ten_ts} - Tháng {thang}/{nam}",
                 loai_but_toan="khau_hao_ts",
                 chung_tu_loai="fixed_asset",
@@ -3239,6 +3631,7 @@ class AccountingService:
         user_id: int
     ):
         """Phân bổ chi phí chung cho các phân xưởng"""
+        self._ensure_period_range_open(tu_ngay, den_ngay, phap_nhan_id, "phan bo chi phi")
         # 1. Tính tổng chi phí chưa phân bổ (phan_xuong_id is NULL) cho tài khoản này
         total_unallocated = self.db.query(func.sum(JournalEntryLine.so_tien_no))\
             .join(JournalEntry)\
@@ -3370,6 +3763,7 @@ class AccountingService:
             if not px:
                 raise HTTPException(404, "Khong tim thay phan xuong")
             phap_nhan_id = phap_nhan_id or px.phap_nhan_id
+        self._ensure_period_range_open(data.tu_ngay, data.den_ngay, phap_nhan_id, "tao ky gia thanh")
         ma_ky = data.ma_ky or (
             f"GT-{data.tu_ngay.strftime('%Y%m%d')}-{data.den_ngay.strftime('%Y%m%d')}"
             f"-{phap_nhan_id or 'ALL'}-{data.phan_xuong_id or 'ALL'}"
@@ -3447,6 +3841,7 @@ class AccountingService:
 
     def collect_production_cost_inputs(self, period_id: int, user_id: int) -> dict:
         period = self._cost_period_or_404(period_id)
+        self._ensure_period_range_open(period.tu_ngay, period.den_ngay, period.phap_nhan_id, "gom du lieu gia thanh")
         if period.trang_thai == "da_chot":
             raise HTTPException(400, "Ky gia thanh da chot, khong duoc gom lai du lieu")
 
@@ -3664,6 +4059,7 @@ class AccountingService:
 
     def calculate_production_cost_period(self, period_id: int, user_id: int) -> dict:
         period = self._cost_period_or_404(period_id)
+        self._ensure_period_range_open(period.tu_ngay, period.den_ngay, period.phap_nhan_id, "tinh gia thanh")
         if period.trang_thai == "da_chot":
             raise HTTPException(400, "Ky gia thanh da chot")
         preview = self.preview_production_cost_allocations(period_id)
@@ -3715,6 +4111,7 @@ class AccountingService:
 
     def close_production_cost_period(self, period_id: int, user_id: int) -> dict:
         period = self._cost_period_or_404(period_id)
+        self._ensure_period_range_open(period.tu_ngay, period.den_ngay, period.phap_nhan_id, "chot gia thanh")
         if period.trang_thai == "da_chot":
             return self._cost_period_payload(period, include_details=True)
         preview = self.preview_production_cost_allocations(period_id)
@@ -3909,6 +4306,377 @@ class AccountingService:
             "thue_gtgt_phai_nop":   thue_gtgt_ra - thue_gtgt_vao,
         }
 
+    def get_vat_audit(
+        self,
+        thang: int,
+        nam: int,
+        phap_nhan_id: int | None = None,
+        limit: int = 200,
+    ) -> dict:
+        first_day = date(nam, thang, 1)
+        last_day = date(nam, thang, calendar.monthrange(nam, thang)[1])
+        allowed_rates = {Decimal("0"), Decimal("5"), Decimal("8"), Decimal("10")}
+        issues: list[dict] = []
+
+        def money(value) -> Decimal:
+            return Decimal(str(value or 0)).quantize(Decimal("0.01"))
+
+        def rounded_vat(base, rate) -> Decimal:
+            return Decimal(round(Decimal(str(base or 0)) * Decimal(str(rate or 0)) / Decimal("100"), 0)).quantize(Decimal("0.01"))
+
+        def add_issue(
+            severity: str,
+            category: str,
+            direction: str,
+            table: str,
+            record_id: int,
+            message: str,
+            *,
+            record_code: str | None = None,
+            ngay: date | None = None,
+            phap_nhan_id_value: int | None = None,
+            expected_amount: Decimal | None = None,
+            actual_amount: Decimal | None = None,
+            journal_amount: Decimal | None = None,
+        ) -> None:
+            if len(issues) >= limit:
+                return
+            issues.append({
+                "severity": severity,
+                "category": category,
+                "direction": direction,
+                "table": table,
+                "record_id": record_id,
+                "record_code": record_code,
+                "ngay": ngay,
+                "phap_nhan_id": phap_nhan_id_value,
+                "expected_amount": expected_amount,
+                "actual_amount": actual_amount,
+                "journal_amount": journal_amount,
+                "difference": (
+                    (actual_amount - expected_amount)
+                    if expected_amount is not None and actual_amount is not None
+                    else None
+                ),
+                "message": message,
+            })
+
+        def vat_journal_amount(chung_tu_loai: str, chung_tu_id: int, so_tk: str, side: str) -> Decimal:
+            row = (
+                self.db.query(
+                    func.coalesce(func.sum(JournalEntryLine.so_tien_no), 0).label("no"),
+                    func.coalesce(func.sum(JournalEntryLine.so_tien_co), 0).label("co"),
+                )
+                .join(JournalEntry, JournalEntry.id == JournalEntryLine.entry_id)
+                .filter(
+                    JournalEntry.chung_tu_loai == chung_tu_loai,
+                    JournalEntry.chung_tu_id == chung_tu_id,
+                    JournalEntryLine.so_tk == so_tk,
+                )
+                .one()
+            )
+            no = money(row.no)
+            co = money(row.co)
+            return no - co if side == "no" else co - no
+
+        sales_q = self.db.query(SalesInvoice).filter(
+            SalesInvoice.ngay_hoa_don >= first_day,
+            SalesInvoice.ngay_hoa_don <= last_day,
+            SalesInvoice.trang_thai != "huy",
+        )
+        if phap_nhan_id:
+            sales_q = sales_q.filter(or_(SalesInvoice.phap_nhan_id == phap_nhan_id, SalesInvoice.phap_nhan_id.is_(None)))
+
+        purchase_q = self.db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.ngay_lap >= first_day,
+            PurchaseInvoice.ngay_lap <= last_day,
+            PurchaseInvoice.trang_thai != "huy",
+            PurchaseInvoice.co_vat.is_(True),
+        )
+        if phap_nhan_id:
+            purchase_q = purchase_q.filter(or_(PurchaseInvoice.phap_nhan_id == phap_nhan_id, PurchaseInvoice.phap_nhan_id.is_(None)))
+
+        sales_count = 0
+        purchase_count = 0
+        for inv in sales_q.order_by(SalesInvoice.ngay_hoa_don, SalesInvoice.id).limit(limit).all():
+            sales_count += 1
+            expected = rounded_vat(inv.tong_tien_hang, inv.ty_le_vat)
+            actual = money(inv.tien_vat)
+            if not inv.phap_nhan_id:
+                add_issue("error", "missing_phap_nhan", "output", "sales_invoices", inv.id, "Hoa don ban ra thieu phap_nhan_id.", record_code=inv.so_hoa_don, ngay=inv.ngay_hoa_don)
+            if not inv.so_hoa_don:
+                add_issue("error", "missing_invoice_no", "output", "sales_invoices", inv.id, "Hoa don ban ra chua co so hoa don.", ngay=inv.ngay_hoa_don, phap_nhan_id_value=inv.phap_nhan_id)
+            if actual > 0 and not inv.ma_so_thue:
+                add_issue("warning", "missing_tax_code", "output", "sales_invoices", inv.id, "Hoa don ban ra co VAT nhung thieu MST khach hang.", record_code=inv.so_hoa_don, ngay=inv.ngay_hoa_don, phap_nhan_id_value=inv.phap_nhan_id)
+            if abs(actual - expected) > Decimal("1"):
+                add_issue("error", "vat_formula_mismatch", "output", "sales_invoices", inv.id, "Tien VAT dau ra lech cong thuc tien hang x thue suat.", record_code=inv.so_hoa_don, ngay=inv.ngay_hoa_don, phap_nhan_id_value=inv.phap_nhan_id, expected_amount=expected, actual_amount=actual)
+            if actual > 0 and not inv.bo_qua_hach_toan:
+                journal_vat = vat_journal_amount("hoa_don_ban", inv.id, "3331", "co")
+                if abs(journal_vat - actual) > Decimal("1"):
+                    add_issue("error", "vat_journal_mismatch", "output", "sales_invoices", inv.id, "VAT dau ra tren but toan 3331 khong khop hoa don.", record_code=inv.so_hoa_don, ngay=inv.ngay_hoa_don, phap_nhan_id_value=inv.phap_nhan_id, expected_amount=actual, actual_amount=journal_vat, journal_amount=journal_vat)
+
+        for inv in purchase_q.order_by(PurchaseInvoice.ngay_lap, PurchaseInvoice.id).limit(limit).all():
+            purchase_count += 1
+            expected = rounded_vat(inv.tong_tien_hang, inv.thue_suat)
+            actual = money(inv.tien_thue)
+            rate = Decimal(str(inv.thue_suat or 0))
+            if not inv.phap_nhan_id:
+                add_issue("error", "missing_phap_nhan", "input", "purchase_invoices", inv.id, "Hoa don mua vao thieu phap_nhan_id.", record_code=inv.so_hoa_don, ngay=inv.ngay_lap)
+            if not inv.so_hoa_don:
+                add_issue("error", "missing_invoice_no", "input", "purchase_invoices", inv.id, "Hoa don mua vao chua co so hoa don.", ngay=inv.ngay_lap, phap_nhan_id_value=inv.phap_nhan_id)
+            if actual > 0 and not inv.ma_so_thue:
+                add_issue("warning", "missing_tax_code", "input", "purchase_invoices", inv.id, "Hoa don mua vao co VAT nhung thieu MST nha cung cap.", record_code=inv.so_hoa_don, ngay=inv.ngay_lap, phap_nhan_id_value=inv.phap_nhan_id)
+            if rate not in allowed_rates:
+                add_issue("warning", "unexpected_vat_rate", "input", "purchase_invoices", inv.id, "Thue suat mua vao khong nam trong 0/5/8/10%.", record_code=inv.so_hoa_don, ngay=inv.ngay_lap, phap_nhan_id_value=inv.phap_nhan_id, actual_amount=rate)
+            if abs(actual - expected) > Decimal("1"):
+                add_issue("error", "vat_formula_mismatch", "input", "purchase_invoices", inv.id, "Tien VAT dau vao lech cong thuc tien hang x thue suat.", record_code=inv.so_hoa_don, ngay=inv.ngay_lap, phap_nhan_id_value=inv.phap_nhan_id, expected_amount=expected, actual_amount=actual)
+            if actual > 0 and not inv.bo_qua_hach_toan:
+                journal_vat = vat_journal_amount("purchase_invoices", inv.id, "1331", "no")
+                if abs(journal_vat - actual) > Decimal("1"):
+                    add_issue("error", "vat_journal_mismatch", "input", "purchase_invoices", inv.id, "VAT dau vao tren but toan 1331 khong khop hoa don.", record_code=inv.so_hoa_don, ngay=inv.ngay_lap, phap_nhan_id_value=inv.phap_nhan_id, expected_amount=actual, actual_amount=journal_vat, journal_amount=journal_vat)
+
+        by_severity: dict[str, int] = {}
+        by_category: dict[str, int] = {}
+        for issue in issues:
+            by_severity[issue["severity"]] = by_severity.get(issue["severity"], 0) + 1
+            by_category[issue["category"]] = by_category.get(issue["category"], 0) + 1
+
+        return {
+            "thang": thang,
+            "nam": nam,
+            "phap_nhan_id": phap_nhan_id,
+            "total": len(issues),
+            "limited": len(issues) >= limit,
+            "by_severity": by_severity,
+            "by_category": by_category,
+            "summary": {
+                "sales_invoice_count": sales_count,
+                "purchase_invoice_count": purchase_count,
+            },
+            "items": issues,
+        }
+
+    def get_closing_readiness(
+        self,
+        thang: int,
+        nam: int,
+        phap_nhan_id: int,
+        limit: int = 50,
+    ) -> dict:
+        """Checklist truoc khi ket chuyen/khoa so."""
+        first_day = date(nam, thang, 1)
+        last_day = date(nam, thang, calendar.monthrange(nam, thang)[1])
+        checks: list[dict] = []
+
+        def sample_row(row, code_attr: str, date_attr: str) -> dict:
+            return {
+                "id": getattr(row, "id", None),
+                "code": getattr(row, code_attr, None),
+                "date": getattr(row, date_attr, None),
+                "status": getattr(row, "trang_thai", None),
+            }
+
+        def add_check(
+            key: str,
+            label: str,
+            *,
+            errors: int = 0,
+            warnings: int = 0,
+            message: str,
+            items: list[dict] | None = None,
+        ) -> None:
+            checks.append({
+                "key": key,
+                "label": label,
+                "status": "fail" if errors > 0 else "warn" if warnings > 0 else "pass",
+                "errors": errors,
+                "warnings": warnings,
+                "message": message,
+                "items": items or [],
+            })
+
+        active_lock = self._active_period_lock(thang, nam, phap_nhan_id)
+        add_check(
+            "period_lock",
+            "Trang thai khoa so",
+            errors=1 if active_lock else 0,
+            message=(
+                f"Ky {thang:02d}/{nam} da khoa so."
+                if active_lock
+                else f"Ky {thang:02d}/{nam} dang mo."
+            ),
+            items=[{
+                "id": active_lock.id,
+                "code": f"{active_lock.thang:02d}/{active_lock.nam}",
+                "date": active_lock.locked_at,
+                "status": active_lock.trang_thai,
+            }] if active_lock else [],
+        )
+
+        dimension_audit = self.get_dimension_audit(
+            tu_ngay=first_day,
+            den_ngay=last_day,
+            phap_nhan_id=phap_nhan_id,
+            limit=limit,
+        )
+        dimension_errors = dimension_audit["by_severity"].get("error", 0)
+        dimension_warnings = dimension_audit["by_severity"].get("warning", 0)
+        add_check(
+            "dimension_audit",
+            "Phap nhan va xuong",
+            errors=dimension_errors,
+            warnings=dimension_warnings,
+            message=(
+                "Co loi phap nhan/xuong can xu ly."
+                if dimension_errors
+                else "Co canh bao phap nhan/xuong."
+                if dimension_warnings
+                else "Khong co loi phap nhan/xuong trong ky."
+            ),
+            items=dimension_audit["items"][:5],
+        )
+
+        vat_audit = self.get_vat_audit(thang=thang, nam=nam, phap_nhan_id=phap_nhan_id, limit=limit)
+        vat_errors = vat_audit["by_severity"].get("error", 0)
+        vat_warnings = vat_audit["by_severity"].get("warning", 0)
+        add_check(
+            "vat_audit",
+            "VAT dau vao/dau ra",
+            errors=vat_errors,
+            warnings=vat_warnings,
+            message=(
+                "Co loi VAT can xu ly truoc khi chot."
+                if vat_errors
+                else "Co canh bao VAT."
+                if vat_warnings
+                else "VAT trong ky hop le theo audit."
+            ),
+            items=vat_audit["items"][:5],
+        )
+
+        pending_specs = [
+            (
+                "cash_receipts",
+                "Phieu thu chua duyet",
+                CashReceipt,
+                self.db.query(CashReceipt).filter(
+                    CashReceipt.ngay_phieu >= first_day,
+                    CashReceipt.ngay_phieu <= last_day,
+                    CashReceipt.phap_nhan_id == phap_nhan_id,
+                    ~CashReceipt.trang_thai.in_(["da_duyet", "huy"]),
+                ),
+                "so_phieu",
+                "ngay_phieu",
+            ),
+            (
+                "cash_payments",
+                "Phieu chi chua duyet",
+                CashPayment,
+                self.db.query(CashPayment).filter(
+                    CashPayment.ngay_phieu >= first_day,
+                    CashPayment.ngay_phieu <= last_day,
+                    CashPayment.phap_nhan_id == phap_nhan_id,
+                    ~CashPayment.trang_thai.in_(["da_duyet", "huy"]),
+                ),
+                "so_phieu",
+                "ngay_phieu",
+            ),
+            (
+                "customer_refunds",
+                "Phieu hoan tien chua duyet",
+                CustomerRefundVoucher,
+                self.db.query(CustomerRefundVoucher).filter(
+                    CustomerRefundVoucher.ngay >= first_day,
+                    CustomerRefundVoucher.ngay <= last_day,
+                    CustomerRefundVoucher.phap_nhan_id == phap_nhan_id,
+                    ~CustomerRefundVoucher.trang_thai.in_(["da_duyet", "huy"]),
+                ),
+                "so_phieu",
+                "ngay",
+            ),
+            (
+                "workshop_payroll",
+                "Bang luong xuong chua duyet",
+                WorkshopPayroll,
+                self.db.query(WorkshopPayroll).filter(
+                    WorkshopPayroll.thang >= first_day,
+                    WorkshopPayroll.thang <= last_day,
+                    WorkshopPayroll.phap_nhan_id == phap_nhan_id,
+                    ~WorkshopPayroll.trang_thai.in_(["da_duyet", "huy"]),
+                ),
+                "so_phieu",
+                "thang",
+            ),
+        ]
+        pending_items: list[dict] = []
+        pending_total = 0
+        for source, label, model, query, code_attr, date_attr in pending_specs:
+            count = query.count()
+            pending_total += count
+            for row in query.order_by(desc(model.id)).limit(5).all():
+                pending_items.append(sample_row(row, code_attr, date_attr) | {"source": source, "label": label})
+        add_check(
+            "pending_documents",
+            "Chung tu cho xu ly",
+            errors=pending_total,
+            message=(
+                f"Con {pending_total} chung tu chua duyet/chua chot."
+                if pending_total
+                else "Khong con chung tu ke toan cho xu ly trong ky."
+            ),
+            items=pending_items[:10],
+        )
+
+        cost_periods = self.db.query(ProductionCostPeriod).filter(
+            ProductionCostPeriod.tu_ngay <= last_day,
+            ProductionCostPeriod.den_ngay >= first_day,
+            ProductionCostPeriod.phap_nhan_id == phap_nhan_id,
+            ProductionCostPeriod.trang_thai != "da_chot",
+        )
+        cost_count = cost_periods.count()
+        add_check(
+            "production_costing",
+            "Gia thanh san xuat",
+            warnings=cost_count,
+            message=(
+                f"Con {cost_count} ky gia thanh chua chot."
+                if cost_count
+                else "Khong co ky gia thanh dang mo trong ky."
+            ),
+            items=[
+                {"id": row.id, "code": row.ma_ky, "date": row.den_ngay, "status": row.trang_thai}
+                for row in cost_periods.order_by(desc(ProductionCostPeriod.id)).limit(5).all()
+            ],
+        )
+
+        overdue = self.get_debt_overdue_alerts(as_of_date=last_day, phap_nhan_id=phap_nhan_id, limit=5)
+        overdue_count = overdue["ar"]["count"] + overdue["ap"]["count"]
+        add_check(
+            "overdue_debt",
+            "Cong no qua han",
+            warnings=overdue_count,
+            message=(
+                f"Co {overdue_count} doi tuong cong no qua han."
+                if overdue_count
+                else "Khong co cong no qua han tinh den cuoi ky."
+            ),
+            items=(overdue["ar"]["items"][:5] + overdue["ap"]["items"][:5])[:10],
+        )
+
+        total_errors = sum(check["errors"] for check in checks)
+        total_warnings = sum(check["warnings"] for check in checks)
+        return {
+            "thang": thang,
+            "nam": nam,
+            "phap_nhan_id": phap_nhan_id,
+            "tu_ngay": first_day,
+            "den_ngay": last_day,
+            "can_close": total_errors == 0,
+            "total_errors": total_errors,
+            "total_warnings": total_warnings,
+            "checks": checks,
+        }
+
     def get_production_costing(self, tu_ngay: date, den_ngay: date, phan_xuong_id: int | None = None):
         """Báo cáo Giá thành Sản xuất thực tế (Actual Production Costing)."""
         from app.models.production import ProductionOrder
@@ -4008,6 +4776,12 @@ class AccountingService:
         """Thực hiện bút toán kết chuyển doanh thu, chi phí cuối tháng"""
         last_day = calendar.monthrange(nam, thang)[1]
         closing_date = date(nam, thang, last_day)
+        if self._active_period_lock(thang, nam, phap_nhan_id):
+            raise HTTPException(
+                400,
+                f"Ky {thang:02d}/{nam} cua phap nhan #{phap_nhan_id} da khoa so. "
+                "Mo khoa ky truoc khi chay lai ket chuyen.",
+            )
 
         # 1. Xóa bút toán kết chuyển cũ nếu có (cho phép chạy lại)
         from sqlalchemy.exc import CompileError
@@ -4155,12 +4929,22 @@ class AccountingService:
         # Cập nhật tổng Nợ/Có trên header
         entry.tong_no = sum(l.so_tien_no for l in lines)
         entry.tong_co = sum(l.so_tien_co for l in lines)
+        lock = self._lock_period_no_commit(
+            thang=thang,
+            nam=nam,
+            phap_nhan_id=phap_nhan_id,
+            user_id=user_id,
+            closing_entry_id=entry.id,
+            ly_do_khoa=f"Ket chuyen thang {thang:02d}/{nam}",
+        )
 
         self.db.commit()
         return {
             "status": "success",
             "entry_id": entry.id,
             "so_but_toan": entry.so_but_toan,
+            "period_lock_id": lock.id,
+            "period_lock_status": lock.trang_thai,
             "doanh_thu": float(tong_doanh_thu),
             "chi_phi": float(tong_chi_phi),
             "lai_lo": float(lai_lo),

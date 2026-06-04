@@ -16,11 +16,23 @@ Pattern:
 from datetime import date, timedelta
 from decimal import Decimal
 
-from app.models.accounting import BankTransaction, CashReceipt, CashPayment, DebtLedgerEntry, JournalEntry, PurchaseInvoice
+import pytest
+from fastapi import HTTPException
+
+from app.models.accounting import (
+    AccountingPeriodLock,
+    BankTransaction,
+    CashReceipt,
+    CashPayment,
+    DebtLedgerEntry,
+    JournalEntry,
+    PurchaseInvoice,
+)
 from app.models.auth import AuditLog
 from app.models.billing import SalesInvoice
 from app.models.master import Customer, PhanXuong, PhapNhan, Supplier, Warehouse
 from app.models.production import ProductionOrder, ProductionOrderItem
+from app.schemas.accounting import FixedAssetCreate, OpeningBalanceCreate, WorkshopPayrollCreate
 from app.models.warehouse_doc import MaterialIssue, MaterialIssueItem, ProductionOutput
 
 
@@ -176,6 +188,257 @@ def test_list_journal_entries_filter_by_loai(client, db_session):
 
 
 # ─── Phiếu thu (CashReceipt) ─────────────────────────────────────────────────
+
+def test_period_closing_locks_period_and_blocks_manual_journal(client, db_session):
+    from app.services.accounting_service import AccountingService
+
+    pn = _make_phap_nhan(db_session, "PN_LOCK")
+    db_session.commit()
+
+    result = AccountingService(db_session).perform_closing(
+        thang=1,
+        nam=2026,
+        phap_nhan_id=pn.id,
+        user_id=1,
+    )
+
+    lock = db_session.get(AccountingPeriodLock, result["period_lock_id"])
+    assert lock is not None
+    assert lock.trang_thai == "locked"
+    assert lock.closing_entry_id == result["entry_id"]
+
+    payload = {
+        "ngay_but_toan": "2026-01-15",
+        "dien_giai": "But toan sau khoa so",
+        "phap_nhan_id": pn.id,
+        "lines": [
+            {"so_tk": "111", "so_tien_no": 1000000, "so_tien_co": 0},
+            {"so_tk": "131", "so_tien_no": 0, "so_tien_co": 1000000},
+        ],
+    }
+    res = client.post("/api/accounting/journal-entries", json=payload)
+    assert res.status_code == 400, res.text
+    assert "da khoa so" in res.json()["detail"]
+
+
+def test_unlock_period_allows_reclosing(client, db_session):
+    from app.services.accounting_service import AccountingService
+
+    pn = _make_phap_nhan(db_session, "PN_UNLOCK")
+    db_session.commit()
+
+    first = AccountingService(db_session).perform_closing(
+        thang=2,
+        nam=2026,
+        phap_nhan_id=pn.id,
+        user_id=1,
+    )
+
+    blocked = client.post(
+        "/api/accounting/reports/perform-closing",
+        params={"thang": 2, "nam": 2026, "phap_nhan_id": pn.id},
+    )
+    assert blocked.status_code == 400, blocked.text
+
+    unlocked = client.post(
+        "/api/accounting/period-locks/unlock",
+        params={
+            "thang": 2,
+            "nam": 2026,
+            "phap_nhan_id": pn.id,
+            "ly_do_mo_khoa": "Sua so lieu test",
+        },
+    )
+    assert unlocked.status_code == 200, unlocked.text
+    assert unlocked.json()["trang_thai"] == "reopened"
+
+    rerun = client.post(
+        "/api/accounting/reports/perform-closing",
+        params={"thang": 2, "nam": 2026, "phap_nhan_id": pn.id},
+    )
+    assert rerun.status_code == 200, rerun.text
+    assert rerun.json()["period_lock_id"] == first["period_lock_id"]
+
+    count = (
+        db_session.query(JournalEntry)
+        .filter(
+            JournalEntry.loai_but_toan == "ket_chuyen",
+            JournalEntry.phap_nhan_id == pn.id,
+        )
+        .count()
+    )
+    assert count == 1
+
+
+def test_period_lock_blocks_remaining_accounting_flows(db_session):
+    from app.services.accounting_service import AccountingService
+
+    pn = _make_phap_nhan(db_session, "PN_LOCK_MORE")
+    px = _make_phan_xuong(db_session, pn, "PX_LOCK_MORE")
+    db_session.commit()
+
+    svc = AccountingService(db_session)
+
+    svc.perform_closing(thang=4, nam=2026, phap_nhan_id=pn.id, user_id=1)
+    with pytest.raises(HTTPException):
+        svc.create_opening_balance(
+            OpeningBalanceCreate(
+                ky_mo_so=date(2026, 4, 1),
+                doi_tuong="khach_hang",
+                so_du_dau_ky=Decimal("1000000"),
+                phap_nhan_id=pn.id,
+            ),
+            user_id=1,
+        )
+
+    payroll = svc.create_workshop_payroll(
+        WorkshopPayrollCreate(
+            thang=date(2026, 2, 1),
+            phan_xuong_id=px.id,
+            phap_nhan_id=pn.id,
+            tong_luong=Decimal("5000000"),
+        ),
+        user_id=1,
+    )
+    svc.perform_closing(thang=2, nam=2026, phap_nhan_id=pn.id, user_id=1)
+    with pytest.raises(HTTPException):
+        svc.approve_workshop_payroll(payroll.id, user_id=1)
+
+    svc.perform_closing(thang=5, nam=2026, phap_nhan_id=pn.id, user_id=1)
+    with pytest.raises(HTTPException):
+        svc.create_workshop_payroll(
+            WorkshopPayrollCreate(
+                thang=date(2026, 5, 1),
+                phan_xuong_id=px.id,
+                phap_nhan_id=pn.id,
+                tong_luong=Decimal("5000000"),
+            ),
+            user_id=1,
+        )
+
+    asset = svc.create_fixed_asset(
+        FixedAssetCreate(
+            ma_ts="TS-LOCK-001",
+            ten_ts="May test khoa so",
+            ngay_mua=date(2025, 12, 1),
+            nguyen_gia=Decimal("12000000"),
+            so_thang_khau_hao=12,
+            phan_xuong_id=px.id,
+            phap_nhan_id=pn.id,
+            tk_chi_phi="154",
+        )
+    )
+    assert asset.id is not None
+
+    svc.perform_closing(thang=3, nam=2026, phap_nhan_id=pn.id, user_id=1)
+    with pytest.raises(HTTPException):
+        svc.run_monthly_depreciation(thang=3, nam=2026, phap_nhan_id=pn.id, user_id=1)
+
+
+def test_closing_readiness_blocks_pending_accounting_documents(db_session):
+    from app.services.accounting_service import AccountingService
+
+    pn = _make_phap_nhan(db_session, "PN_READY")
+    kh = _make_customer(db_session, "KH_READY")
+    receipt = CashReceipt(
+        so_phieu="PT-READY-001",
+        ngay_phieu=date(2026, 6, 10),
+        customer_id=kh.id,
+        so_tien=Decimal("1000000"),
+        tk_no="111",
+        tk_co="131",
+        trang_thai="cho_duyet",
+        phap_nhan_id=pn.id,
+    )
+    db_session.add(receipt)
+    db_session.commit()
+
+    svc = AccountingService(db_session)
+    readiness = svc.get_closing_readiness(thang=6, nam=2026, phap_nhan_id=pn.id)
+
+    assert readiness["can_close"] is False
+    pending_check = next(check for check in readiness["checks"] if check["key"] == "pending_documents")
+    assert pending_check["status"] == "fail"
+    assert pending_check["errors"] == 1
+    assert pending_check["items"][0]["code"] == "PT-READY-001"
+
+    receipt.trang_thai = "da_duyet"
+    db_session.commit()
+    readiness = svc.get_closing_readiness(thang=6, nam=2026, phap_nhan_id=pn.id)
+    assert readiness["can_close"] is True
+
+
+def test_dimension_audit_flags_missing_phap_nhan_and_workshop_mismatch(client, db_session):
+    pn_doc = _make_phap_nhan(db_session, "PN_DIM_DOC")
+    pn_px = _make_phap_nhan(db_session, "PN_DIM_PX")
+    px = _make_phan_xuong(db_session, pn_px, "PX_DIM")
+    kh = _make_customer(db_session, "KH_DIM")
+
+    inv = SalesInvoice(
+        so_hoa_don="HD-DIM-001",
+        ngay_hoa_don=date.today(),
+        customer_id=kh.id,
+        ten_don_vi="KH DIM",
+        tong_tien_hang=Decimal("1000000"),
+        tien_vat=Decimal("100000"),
+        tong_cong=Decimal("1100000"),
+        da_thanh_toan=Decimal("0"),
+        trang_thai="da_phat_hanh",
+        phap_nhan_id=None,
+    )
+    entry = JournalEntry(
+        so_but_toan="BT-DIM-001",
+        ngay_but_toan=date.today(),
+        dien_giai="Dimension mismatch",
+        loai_but_toan="tong_hop",
+        tong_no=Decimal("100000"),
+        tong_co=Decimal("100000"),
+        phap_nhan_id=pn_doc.id,
+        phan_xuong_id=px.id,
+    )
+    db_session.add_all([inv, entry])
+    db_session.commit()
+
+    res = client.get(
+        f"/api/accounting/audit/dimensions?tu_ngay={date.today().isoformat()}"
+        f"&den_ngay={date.today().isoformat()}&limit=20"
+    )
+    assert res.status_code == 200, res.text
+    data = res.json()
+    categories = {item["category"] for item in data["items"]}
+    assert "missing_phap_nhan" in categories
+    assert "mismatch_phap_nhan_xuong" in categories
+    assert data["by_severity"]["error"] >= 2
+
+
+def test_vat_audit_flags_invoice_no_and_formula_mismatch(client, db_session):
+    pn = _make_phap_nhan(db_session, "PN_VAT_AUD")
+    kh = _make_customer(db_session, "KH_VAT_AUD")
+    inv = SalesInvoice(
+        so_hoa_don=None,
+        ngay_hoa_don=date(2026, 1, 15),
+        customer_id=kh.id,
+        ten_don_vi="KH VAT AUD",
+        ma_so_thue="0100000000",
+        tong_tien_hang=Decimal("1000000"),
+        ty_le_vat=Decimal("10"),
+        tien_vat=Decimal("50000"),
+        tong_cong=Decimal("1050000"),
+        da_thanh_toan=Decimal("0"),
+        trang_thai="da_phat_hanh",
+        phap_nhan_id=pn.id,
+    )
+    db_session.add(inv)
+    db_session.commit()
+
+    res = client.get(f"/api/accounting/reports/vat-audit?thang=1&nam=2026&phap_nhan_id={pn.id}")
+    assert res.status_code == 200, res.text
+    data = res.json()
+    categories = {item["category"] for item in data["items"]}
+    assert "missing_invoice_no" in categories
+    assert "vat_formula_mismatch" in categories
+    assert data["by_severity"]["error"] >= 2
+
 
 def test_create_cash_receipt_returns_cho_duyet(client, db_session):
     """Tạo phiếu thu → trạng thái 'cho_duyet', số tiền đúng, so_phieu dạng PT..."""

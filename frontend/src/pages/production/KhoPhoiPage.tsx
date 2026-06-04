@@ -289,18 +289,22 @@ export default function KhoPhoiPage() {
       align: 'right' as const,
       render: (_: number, row: KhoRow) => {
         if (row.cong_doan === 'cd2') {
+          // ton_kho_tai_cd2/ton_kho_tai_nguon chỉ có từ cd2.py endpoint (old)
+          // phieu_phoi.py endpoint groups by warehouse: cd2 warehouse item → ton_kho IS the CD2 stock
+          const cd2Stock = row.ton_kho_tai_cd2 ?? row.ton_kho
+          const hgStock = row.ton_kho_tai_nguon ?? 0
           return (
             <Space direction="vertical" size={0} style={{ lineHeight: 1.4 }}>
               <Text style={{ fontSize: 11, color: '#888' }}>
                 HG:{' '}
-                <Text strong style={{ fontSize: 12, color: row.ton_kho_tai_nguon > 0 ? '#fa8c16' : '#bbb' }}>
-                  {fmtN(row.ton_kho_tai_nguon)}
+                <Text strong style={{ fontSize: 12, color: hgStock > 0 ? '#fa8c16' : '#bbb' }}>
+                  {fmtN(hgStock)}
                 </Text>
               </Text>
               <Text style={{ fontSize: 11, color: '#888' }}>
                 CD2:{' '}
-                <Text strong style={{ fontSize: 12, color: row.ton_kho_tai_cd2 > 0 ? '#389e0d' : '#bbb' }}>
-                  {fmtN(row.ton_kho_tai_cd2)}
+                <Text strong style={{ fontSize: 12, color: cd2Stock > 0 ? '#389e0d' : '#bbb' }}>
+                  {fmtN(cd2Stock)}
                 </Text>
               </Text>
             </Space>
@@ -339,9 +343,9 @@ export default function KhoPhoiPage() {
         // Còn phôi tại kho nguồn (HG) chưa chuyển → hiện nút Chuyển kho
         const conPhoi_TaiNguon = row.ton_kho_tai_nguon > 0
         // Có thể đẩy vào queue in/định hình:
-        //   - CD2 xưởng: phôi phải đã đến CD2 (ton_kho_tai_cd2 > 0)
-        //   - cd1_cd2 xưởng (HG, NT): dùng trực tiếp phôi tại chỗ (ton_kho > 0)
-        const canPrint = isCD2 ? row.ton_kho_tai_cd2 > 0 : row.ton_kho > 0
+        //   - CD2 warehouse item: dùng ton_kho_tai_cd2 nếu có (old endpoint), fallback ton_kho (new endpoint)
+        //   - cd1_cd2 warehouse item (HG, NT): dùng trực tiếp ton_kho
+        const canPrint = isCD2 ? (row.ton_kho_tai_cd2 ?? row.ton_kho) > 0 : row.ton_kho > 0
 
         if (row.phieu_in_hien_tai) {
           return (
@@ -529,11 +533,11 @@ export default function KhoPhoiPage() {
                               icon={<SwapOutlined />}
                               style={{ background: '#fa8c16', borderColor: '#fa8c16' }}
                               onClick={() => {
-                                const rows = (data ?? []).filter(r =>
-                                  selectedRowKeys.includes(r.production_order_id) &&
-                                  r.cong_doan === 'cd2' &&
-                                  r.ton_kho_tai_nguon > 0
-                                )
+                                const selectedKeys = new Set(selectedRowKeys.map(String))
+                                const rows = (data ?? []).filter(r => {
+                                  const key = `${r.production_order_id}_${r.warehouse_id ?? 'x'}`
+                                  return selectedKeys.has(key) && r.cong_doan === 'cd2' && (r.ton_kho_tai_nguon ?? 0) > 0
+                                })
                                 if (!rows.length) { message.warning('Không có LSX nào hợp lệ để chuyển kho (cần có phôi tại kho nguồn)'); return }
                                 const dstIds = new Set(rows.map(r => r.phan_xuong_id))
                                 if (dstIds.size > 1) {
@@ -551,7 +555,7 @@ export default function KhoPhoiPage() {
                     </Row>
 
                     <Table<KhoRow>
-                      rowKey="production_order_id"
+                      rowKey={(r) => `${r.production_order_id}_${r.warehouse_id ?? 'x'}`}
                       size="small"
                       loading={isLoading}
                       dataSource={filteredData}
@@ -563,7 +567,7 @@ export default function KhoPhoiPage() {
                         selectedRowKeys,
                         onChange: setSelectedRowKeys,
                         getCheckboxProps: (row: KhoRow) => ({
-                          disabled: row.cong_doan !== 'cd2' || row.ton_kho_tai_nguon <= 0,
+                          disabled: row.cong_doan !== 'cd2' || (row.ton_kho_tai_nguon ?? 0) <= 0,
                         }),
                       }}
                       onRow={(row) => ({

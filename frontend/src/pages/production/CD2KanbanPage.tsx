@@ -667,7 +667,8 @@ export default function CD2KanbanPage() {
 
   const { data: kanban, isLoading, isError, error } = useQuery({
     queryKey: ['cd2-kanban', phanXuongId],
-    queryFn: () => cd2Api.getKanban(phanXuongId ? { phan_xuong_id: phanXuongId } : undefined).then(r => r.data),
+    queryFn: () => cd2Api.getKanban({ phan_xuong_id: phanXuongId! }).then(r => r.data),
+    enabled: !!phanXuongId,
     retry: 1,
     // refetchInterval removed in favor of WebSockets
   })
@@ -873,6 +874,35 @@ export default function CD2KanbanPage() {
         setLocalColumns(kanban.columns)
         invalidate()
       })
+  }
+
+  if (!phanXuongId) {
+    return (
+      <div style={{ paddingBottom: 24 }}>
+        <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+          <Col>
+            <Space>
+              <PrinterOutlined style={{ fontSize: 20, color: '#1677ff' }} />
+              <Typography.Title level={4} style={{ margin: 0 }}>
+                Kanban Công Đoạn 2 — Máy In
+              </Typography.Title>
+              <CD2WorkshopSelector
+                value={phanXuongId}
+                onChange={handleXuongChange}
+                phanXuongList={phanXuongList}
+              />
+            </Space>
+          </Col>
+        </Row>
+        <Alert
+          type="info"
+          message="Vui lòng chọn xưởng"
+          description="Chọn xưởng ở trên để xem Kanban máy in của xưởng đó."
+          showIcon
+          style={{ margin: '40px auto', maxWidth: 480 }}
+        />
+      </div>
+    )
   }
 
   if (isLoading && !kanban) {

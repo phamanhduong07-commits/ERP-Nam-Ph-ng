@@ -170,6 +170,37 @@ export interface ImportLogResponse {
   items: ImportLogItem[]
 }
 
+export interface VATAuditItem {
+  severity: 'error' | 'warning' | string
+  category: string
+  direction: 'input' | 'output' | string
+  table: string
+  record_id: number
+  record_code: string | null
+  ngay: string | null
+  phap_nhan_id: number | null
+  expected_amount: number | null
+  actual_amount: number | null
+  journal_amount: number | null
+  difference: number | null
+  message: string
+}
+
+export interface VATAuditResponse {
+  thang: number
+  nam: number
+  phap_nhan_id: number | null
+  total: number
+  limited: boolean
+  by_severity: Record<string, number>
+  by_category: Record<string, number>
+  summary: {
+    sales_invoice_count: number
+    purchase_invoice_count: number
+  }
+  items: VATAuditItem[]
+}
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 export const reportsApi = {
@@ -217,6 +248,9 @@ export const reportsApi = {
   getVATSummary: (params: { thang: number; nam: number; phap_nhan_id?: number }) =>
     client.get('/accounting/reports/vat-summary', { params }).then(r => r.data),
 
+  getVATAudit: (params: { thang: number; nam: number; phap_nhan_id?: number; limit?: number }): Promise<VATAuditResponse> =>
+    client.get('/accounting/reports/vat-audit', { params }).then(r => r.data),
+
   getTaxTrialBalance: (params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number }) =>
     client.get('/accounting/reports/trial-balance-tax', { params }).then(r => r.data),
 
@@ -251,4 +285,3 @@ export const importLogsApi = {
   }): Promise<ImportLogItem> =>
     client.post('/import-logs', null, { params }).then(r => r.data),
 }
-

@@ -130,6 +130,25 @@ def list_accounting_audit_logs(
     return {"total": total, "page": page, "page_size": page_size, "items": items}
 
 
+@router.get("/audit/dimensions")
+def get_accounting_dimension_audit(
+    tu_ngay: date | None = Query(None),
+    den_ngay: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
+    phan_xuong_id: int | None = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    return AccountingService(db).get_dimension_audit(
+        tu_ngay=tu_ngay,
+        den_ngay=den_ngay,
+        phap_nhan_id=phap_nhan_id,
+        phan_xuong_id=phan_xuong_id,
+        limit=limit,
+    )
+
+
 @router.get("/documents/{bang}/{ban_ghi_id}/audit")
 def get_document_audit(
     bang: str,
@@ -1149,6 +1168,49 @@ def perform_closing(
     return AccountingService(db).perform_closing(thang, nam, phap_nhan_id, current_user.id)
 
 
+@router.get("/reports/closing-readiness")
+def get_closing_readiness(
+    thang: int = Query(..., ge=1, le=12),
+    nam: int = Query(..., ge=2000),
+    phap_nhan_id: int = Query(...),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Checklist truoc khi ket chuyen/khoa so."""
+    return AccountingService(db).get_closing_readiness(thang, nam, phap_nhan_id, limit)
+
+
+@router.get("/period-locks")
+def list_period_locks(
+    phap_nhan_id: int | None = Query(None),
+    nam: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Danh sach ky ke toan da khoa/mo theo phap nhan."""
+    return AccountingService(db).list_period_locks(phap_nhan_id=phap_nhan_id, nam=nam)
+
+
+@router.post("/period-locks/unlock")
+def unlock_period(
+    thang: int = Query(..., ge=1, le=12),
+    nam: int = Query(..., ge=2000),
+    phap_nhan_id: int = Query(...),
+    ly_do_mo_khoa: str = Query(..., min_length=3),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    """Mo khoa ky ke toan de sua/chay lai ket chuyen co audit log."""
+    return AccountingService(db).unlock_period(
+        thang=thang,
+        nam=nam,
+        phap_nhan_id=phap_nhan_id,
+        user_id=current_user.id,
+        ly_do_mo_khoa=ly_do_mo_khoa,
+    )
+
+
 # ─────────────────────────────────────────────
 # IN PHIẾU
 # ─────────────────────────────────────────────
@@ -1708,6 +1770,19 @@ def get_vat_summary(
 ):
     """Tổng hợp thuế GTGT theo tháng — đầu ra/đầu vào/số phải nộp (mẫu 01/GTGT)."""
     return AccountingService(db).get_vat_summary(thang, nam, phap_nhan_id)
+
+
+@router.get("/reports/vat-audit")
+def get_vat_audit(
+    thang: int = Query(..., ge=1, le=12),
+    nam: int = Query(..., ge=2020),
+    phap_nhan_id: int | None = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Kiem soat du lieu VAT truoc khi ke khai."""
+    return AccountingService(db).get_vat_audit(thang, nam, phap_nhan_id, limit)
 
 
 # ─────────────────────────────────────────────

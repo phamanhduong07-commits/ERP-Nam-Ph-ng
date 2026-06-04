@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, File, Query, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_permissions
-from app.models.auth import User
+from app.models.auth import Role, User
 from app.models.master import Customer
 from app.services.customer_service import CustomerService
 from app.services.excel_import_service import (
@@ -40,17 +41,40 @@ CUSTOMER_IMPORT_FIELDS = [
 ]
 
 
+class SaleUserOut(BaseModel):
+    id: int
+    ho_ten: str
+    username: str
+
+
+@router.get("/sale-users", response_model=list[SaleUserOut])
+def get_sale_users(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Trả về danh sách nhân viên có role SALE_ADMIN để chọn NV phụ trách."""
+    users = (
+        db.query(User)
+        .join(Role, User.role_id == Role.id)
+        .filter(Role.ma_vai_tro == "SALE_ADMIN", User.trang_thai.is_(True))
+        .order_by(User.ho_ten)
+        .all()
+    )
+    return [SaleUserOut(id=u.id, ho_ten=u.ho_ten, username=u.username) for u in users]
+
+
 @router.get("", response_model=PagedResponse)
 def list_customers(
     search: str = Query(default="", description="Tìm theo tên hoặc mã"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=1000),
     trang_thai: bool = Query(default=True),
+    nv_id: int | None = Query(default=None, description="Lọc theo NV phụ trách"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     service = CustomerService(db)
-    return service.get_customers_paginated(search, page, page_size, trang_thai)
+    return service.get_customers_paginated(search, page, page_size, trang_thai, nv_id)
 
 
 @router.get("/all", response_model=list[CustomerShort])

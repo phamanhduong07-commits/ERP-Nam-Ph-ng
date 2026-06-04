@@ -46,6 +46,7 @@ export const usersApi = {
     client.get<NhanVien[]>('/users', { params }),
   create: (data: UserCreatePayload) => client.post<NhanVien>('/users', data),
   update: (id: number, data: UserUpdatePayload) => client.put<NhanVien>(`/users/${id}`, data),
+  deactivate: (id: number) => client.delete(`/users/${id}`),
   resetPassword: (id: number, password: string) =>
     client.post(`/users/${id}/reset-password`, { password }),
 }

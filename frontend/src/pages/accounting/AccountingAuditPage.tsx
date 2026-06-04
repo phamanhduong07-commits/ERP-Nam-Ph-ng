@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Drawer, Input, InputNumber, Row, Select, Space, Table, Tag, Typography,
+  Alert, Button, Card, Col, DatePicker, Drawer, Input, InputNumber, Row, Select, Space, Statistic, Table, Tag, Typography,
 } from 'antd'
 import { AuditOutlined, EyeOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { Dayjs } from 'dayjs'
 import {
   accountingAuditApi,
+  AccountingDimensionAuditItem,
   AccountingAuditLog,
   AccountingAuditLogParams,
 } from '../../api/accounting'
@@ -56,10 +57,57 @@ export default function AccountingAuditPage() {
     queryFn: () => accountingAuditApi.list(params),
   })
 
+  const dimensionParams = useMemo(() => ({
+    tu_ngay: params.tu_ngay,
+    den_ngay: params.den_ngay,
+    limit: 100,
+  }), [params.tu_ngay, params.den_ngay])
+
+  const { data: dimensionAudit, isLoading: isDimensionLoading, refetch: refetchDimension } = useQuery({
+    queryKey: ['accounting-dimension-audit', dimensionParams],
+    queryFn: () => accountingAuditApi.dimensions(dimensionParams),
+  })
+
   const tableLabelMap = useMemo(
     () => Object.fromEntries(TABLE_OPTIONS.map(item => [item.value, item.label])),
     [],
   )
+
+  const dimensionColumns: ColumnsType<AccountingDimensionAuditItem> = [
+    {
+      title: 'Muc do',
+      dataIndex: 'severity',
+      width: 90,
+      render: v => <Tag color={v === 'error' ? 'red' : 'orange'}>{v === 'error' ? 'Loi' : 'Canh bao'}</Tag>,
+    },
+    {
+      title: 'Ngay',
+      dataIndex: 'ngay',
+      width: 110,
+      render: v => v ? dayjs(v).format('DD/MM/YYYY') : '-',
+    },
+    {
+      title: 'Bang',
+      dataIndex: 'table',
+      width: 170,
+      render: v => tableLabelMap[v] || v,
+    },
+    {
+      title: 'Chung tu',
+      width: 150,
+      render: (_, record) => record.record_code || (record.record_id ? `#${record.record_id}` : '-'),
+    },
+    {
+      title: 'PN / PX',
+      width: 130,
+      render: (_, record) => `${record.phap_nhan_id ?? '-'} / ${record.phan_xuong_id ?? '-'}`,
+    },
+    {
+      title: 'Can xu ly',
+      dataIndex: 'message',
+      ellipsis: true,
+    },
+  ]
 
   const columns: ColumnsType<AccountingAuditLog> = [
     {
@@ -173,6 +221,57 @@ export default function AccountingAuditPage() {
             </Button>
           </Col>
         </Row>
+      </Card>
+
+      <Card
+        size="small"
+        style={{ marginBottom: 16 }}
+        title="Kiem soat phap nhan / xuong"
+        extra={(
+          <Button size="small" icon={<ReloadOutlined />} onClick={() => refetchDimension()} loading={isDimensionLoading}>
+            Tai lai
+          </Button>
+        )}
+      >
+        <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+          <Col xs={12} md={6}>
+            <Statistic title="Tong canh bao" value={dimensionAudit?.total || 0} />
+          </Col>
+          <Col xs={12} md={6}>
+            <Statistic title="Loi" value={dimensionAudit?.by_severity?.error || 0} valueStyle={{ color: '#cf1322' }} />
+          </Col>
+          <Col xs={12} md={6}>
+            <Statistic title="Canh bao" value={dimensionAudit?.by_severity?.warning || 0} valueStyle={{ color: '#d48806' }} />
+          </Col>
+          <Col xs={12} md={6}>
+            <Statistic title="Gioi han" value={dimensionAudit?.limited ? 'Co' : 'Khong'} />
+          </Col>
+        </Row>
+        {dimensionAudit?.total ? (
+          <Alert
+            showIcon
+            type={(dimensionAudit.by_severity?.error || 0) > 0 ? 'error' : 'warning'}
+            message="Co du lieu ke toan can xu ly truoc khi khoa so hoac len bao cao theo phap nhan."
+            style={{ marginBottom: 12 }}
+          />
+        ) : (
+          <Alert
+            showIcon
+            type="success"
+            message="Chua phat hien loi phap nhan/xuong trong khoang ngay dang loc."
+            style={{ marginBottom: 12 }}
+          />
+        )}
+        <Table
+          locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
+          rowKey={(record) => `${record.table}-${record.record_id ?? 'none'}-${record.category}-${record.message}`}
+          size="small"
+          loading={isDimensionLoading}
+          dataSource={dimensionAudit?.items || []}
+          columns={dimensionColumns}
+          scroll={{ x: 900 }}
+          pagination={{ pageSize: 10, showSizeChanger: false }}
+        />
       </Card>
 
       <Table

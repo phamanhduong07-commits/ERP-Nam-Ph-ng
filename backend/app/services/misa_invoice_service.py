@@ -14,7 +14,7 @@ _token_cache: dict[str, Any] = {"token": None, "expires_at": None}
 
 def _get_token() -> str:
     """Lấy access token, tự refresh khi hết hạn."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if _token_cache["token"] and _token_cache["expires_at"] and now < _token_cache["expires_at"]:
         return _token_cache["token"]
 

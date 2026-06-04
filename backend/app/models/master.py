@@ -147,13 +147,32 @@ class Customer(Base):
     def so_dien_thoai(self) -> str | None:
         return self.dien_thoai or self.so_dien_thoai_lh
 
+    nhan_vien: Mapped[list["CustomerNhanVien"]] = relationship(
+        "CustomerNhanVien", back_populates="customer", cascade="all, delete-orphan"
+    )
+    sales_orders: Mapped[list["SalesOrder"]] = relationship("SalesOrder", back_populates="customer", foreign_keys="[SalesOrder.customer_id]")
+    products: Mapped[list["Product"]] = relationship("Product", back_populates="khach_hang", foreign_keys="[Product.ma_kh_id]")
+    sales_returns: Mapped[list["SalesReturn"]] = relationship("SalesReturn", back_populates="customer")
+
+
+class CustomerNhanVien(Base):
+    """Junction table: 1 KH - nhiều NV theo dõi."""
+    __tablename__ = "customer_nhan_vien"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    customer: Mapped["Customer"] = relationship("Customer", back_populates="nhan_vien")
+
+    __table_args__ = (
+        __import__("sqlalchemy").UniqueConstraint("customer_id", "user_id", name="uq_customer_nhan_vien"),
+    )
+
     @property
     def email(self) -> None:
         return None
-
-    sales_orders: Mapped[list["SalesOrder"]] = relationship("SalesOrder", back_populates="customer")
-    products: Mapped[list["Product"]] = relationship("Product", back_populates="khach_hang")
-    sales_returns: Mapped[list["SalesReturn"]] = relationship("SalesReturn", back_populates="customer")
 
 
 class PaperMaterial(Base):
@@ -328,6 +347,12 @@ class Product(Base):
 
     khach_hang: Mapped["Customer | None"] = relationship("Customer", back_populates="products")
     sales_order_items: Mapped[list["SalesOrderItem"]] = relationship("SalesOrderItem", back_populates="product")
+
+    @property
+    def ten_khach_hang(self) -> str | None:
+        if not self.khach_hang:
+            return None
+        return self.khach_hang.ten_viet_tat or self.khach_hang.ten_don_vi or None
 
 
 class DonViTinh(Base):

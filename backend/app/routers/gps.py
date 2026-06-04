@@ -129,7 +129,7 @@ def _parse_gps_time(raw: str | None) -> datetime | None:
     """Parse GPS TimeUpdate string (Vietnam time UTC+7) → naive UTC datetime.
 
     GPS Bình Minh trả về nhiều format khác nhau — thử tuần tự.
-    Fallback None nếu không parse được → caller dùng datetime.utcnow().
+    Fallback None nếu không parse được → caller dùng datetime.now(timezone.utc).
     """
     if not raw:
         return None
@@ -176,7 +176,7 @@ async def _check_drain_realtime(vehicles: list[dict], db: Session) -> None:
         dinh_muc = _xe_dinh_muc_cache.get(plate_norm, 0.0)
 
         gps_ts = _parse_gps_time(v.get("time_update"))
-        curr_ts = (gps_ts or datetime.utcnow()).replace(tzinfo=timezone.utc)
+        curr_ts = (gps_ts or datetime.now(timezone.utc)).replace(tzinfo=timezone.utc)
 
         prev = _prev_snap.get(plate)
         _prev_snap[plate] = {
@@ -308,7 +308,7 @@ def _try_save_snapshots(vehicles: list[dict], db: Session) -> None:
         # Dùng GPS TimeUpdate (giờ thực GPS device) thay vì server time,
         # giúp fill detection chính xác. Fallback utcnow() nếu field thiếu/sai format.
         gps_ts = _parse_gps_time(v.get("time_update"))
-        created_utc = gps_ts if gps_ts else datetime.utcnow()
+        created_utc = gps_ts if gps_ts else datetime.now(timezone.utc)
 
         xe_id = _xe_plate_cache.get(_normalize_plate(plate))
         to_insert.append(GpsSnapshot(
@@ -1623,7 +1623,7 @@ async def binhminh_sync(
             nl_tieu_thu=float(r.get("NhienLieuTieuThu") or 0),
             dung_tich_binh=float(r.get("DungTichBinh") or 0),
             fills_json=_json.dumps(fills, ensure_ascii=False) if fills else None,
-            synced_at=datetime.utcnow(),
+            synced_at=datetime.now(timezone.utc),
         ).on_conflict_do_update(
             constraint="uq_binhminh_daily_plate_date",
             set_={
@@ -1632,7 +1632,7 @@ async def binhminh_sync(
                 "nl_tieu_thu": float(r.get("NhienLieuTieuThu") or 0),
                 "dung_tich_binh": float(r.get("DungTichBinh") or 0),
                 "fills_json": _json.dumps(fills, ensure_ascii=False) if fills else None,
-                "synced_at": datetime.utcnow(),
+                "synced_at": datetime.now(timezone.utc),
             },
         )
         db.execute(stmt)

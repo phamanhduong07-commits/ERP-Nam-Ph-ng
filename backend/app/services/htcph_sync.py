@@ -452,7 +452,7 @@ def _upsert(db: Session, htcph_data: dict) -> dict:
                     existing.gia_ban = gia_ban
                     existing.gia_mua = gia_mua
                     existing.khong_tinh_nxt = khong_tinh_nxt
-                    existing.updated_at = datetime.utcnow()
+                    existing.updated_at = datetime.now(timezone.utc)
                     stats["updated"] += 1
                 else:
                     stats["skipped"] += 1
@@ -533,7 +533,7 @@ def _upsert(db: Session, htcph_data: dict) -> dict:
         so_dong_bo_qua=stats["skipped"],
         trang_thai=status,
         chi_tiet_loi=json.dumps(error_details[:100], ensure_ascii=False) if error_details else None,
-        thoi_gian=datetime.utcnow(),
+        thoi_gian=datetime.now(timezone.utc),
     )
     db.add(log)
     db.commit()

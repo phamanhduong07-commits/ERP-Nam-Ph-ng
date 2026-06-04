@@ -1,13 +1,38 @@
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
-from app.models.master import Customer
+from sqlalchemy import exists
+from sqlalchemy.orm import Session, selectinload
+from app.models.master import Customer, CustomerNhanVien
 from app.schemas.master import CustomerCreate, CustomerUpdate, CustomerResponse, CustomerShort
 from app.schemas.sales import PagedResponse
+
+
+def _nv_ids(customer: Customer) -> list[int]:
+    return [cnv.user_id for cnv in customer.nhan_vien]
+
+
+def _to_short(c: Customer) -> CustomerShort:
+    return CustomerShort(
+        id=c.id,
+        ma_kh=c.ma_kh,
+        ten_viet_tat=c.ten_viet_tat,
+        ten_don_vi=c.ten_don_vi,
+        dien_thoai=c.dien_thoai,
+        nv_ids=_nv_ids(c),
+    )
+
+
+def _to_response(c: Customer) -> CustomerResponse:
+    data = CustomerResponse.model_validate(c)
+    data.nv_ids = _nv_ids(c)
+    return data
 
 
 class CustomerService:
     def __init__(self, db: Session):
         self.db = db
+
+    def _load_opts(self):
+        return selectinload(Customer.nhan_vien)
 
     def get_customers_paginated(
         self,
@@ -15,8 +40,9 @@ class CustomerService:
         page: int = 1,
         page_size: int = 20,
         trang_thai: bool = True,
+        nv_id: int | None = None,
     ) -> PagedResponse:
-        q = self.db.query(Customer).filter(Customer.trang_thai == trang_thai)
+        q = self.db.query(Customer).options(self._load_opts()).filter(Customer.trang_thai == trang_thai)
         if search:
             like = f"%{search}%"
             q = q.filter(
@@ -25,10 +51,17 @@ class CustomerService:
                 | Customer.ten_don_vi.ilike(like)
                 | Customer.ma_so_thue.ilike(like)
             )
+        if nv_id is not None:
+            q = q.filter(
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id == nv_id)
+                )
+            )
         total = q.count()
         items = q.order_by(Customer.ten_viet_tat).offset((page - 1) * page_size).limit(page_size).all()
         return PagedResponse(
-            items=[CustomerShort.model_validate(c) for c in items],
+            items=[_to_short(c) for c in items],
             total=total,
             page=page,
             page_size=page_size,
@@ -36,14 +69,25 @@ class CustomerService:
         )
 
     def get_all_active_customers(self) -> list[CustomerShort]:
-        customers = self.db.query(Customer).filter(Customer.trang_thai.is_(True)).order_by(Customer.ten_viet_tat).all()
-        return [CustomerShort.model_validate(c) for c in customers]
+        customers = (
+            self.db.query(Customer)
+            .options(self._load_opts())
+            .filter(Customer.trang_thai.is_(True))
+            .order_by(Customer.ten_viet_tat)
+            .all()
+        )
+        return [_to_short(c) for c in customers]
 
     def get_customer_by_id(self, customer_id: int) -> CustomerResponse:
-        customer = self.db.query(Customer).filter(Customer.id == customer_id).first()
+        customer = (
+            self.db.query(Customer)
+            .options(self._load_opts())
+            .filter(Customer.id == customer_id)
+            .first()
+        )
         if not customer:
             raise HTTPException(status_code=404, detail="Không tìm thấy khách hàng")
-        return CustomerResponse.model_validate(customer)
+        return _to_response(customer)
 
     def create_customer(self, data: CustomerCreate) -> CustomerResponse:
         if self.db.query(Customer).filter(Customer.ma_kh == data.ma_kh).first():
@@ -52,14 +96,32 @@ class CustomerService:
         self.db.add(customer)
         self.db.commit()
         self.db.refresh(customer)
-        return CustomerResponse.model_validate(customer)
+        return _to_response(customer)
 
     def update_customer(self, customer_id: int, data: CustomerUpdate) -> CustomerResponse:
-        customer = self.db.query(Customer).filter(Customer.id == customer_id).first()
+        customer = (
+            self.db.query(Customer)
+            .options(self._load_opts())
+            .filter(Customer.id == customer_id)
+            .first()
+        )
         if not customer:
             raise HTTPException(status_code=404, detail="Không tìm thấy khách hàng")
-        for field, value in data.model_dump(exclude_none=True).items():
+
+        payload = data.model_dump(exclude_unset=True)
+        nv_ids = payload.pop("nv_ids", None)
+
+        for field, value in payload.items():
             setattr(customer, field, value)
+
+        # Sync junction table when nv_ids explicitly provided
+        if nv_ids is not None:
+            self.db.query(CustomerNhanVien).filter(
+                CustomerNhanVien.customer_id == customer_id
+            ).delete()
+            for uid in nv_ids:
+                self.db.add(CustomerNhanVien(customer_id=customer_id, user_id=uid))
+
         self.db.commit()
         self.db.refresh(customer)
-        return CustomerResponse.model_validate(customer)
+        return _to_response(customer)

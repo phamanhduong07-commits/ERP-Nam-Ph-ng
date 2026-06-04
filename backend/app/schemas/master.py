@@ -41,11 +41,13 @@ class CustomerUpdate(BaseModel):
     la_khach_vip: bool | None = None
     ghi_chu: str | None = None
     trang_thai: bool | None = None
+    nv_ids: list[int] | None = None
 
 
 class CustomerResponse(CustomerBase):
     id: int
     trang_thai: bool
+    nv_ids: list[int] = []
     created_at: datetime
 
     class Config:
@@ -58,6 +60,7 @@ class CustomerShort(BaseModel):
     ten_viet_tat: str
     ten_don_vi: str | None
     dien_thoai: str | None
+    nv_ids: list[int] = []
 
     class Config:
         from_attributes = True

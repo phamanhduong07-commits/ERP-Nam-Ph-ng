@@ -143,7 +143,7 @@ export default function ProductList() {
     { title: 'Mã AMIS', dataIndex: 'ma_amis', width: 110 },
     { title: 'Mã hàng', dataIndex: 'ma_hang', width: 110, render: (v: string | null) => v ?? '—' },
     { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
-    { title: 'Khách hàng', dataIndex: 'ten_kh', width: 150, render: (v: string) => v ?? '—' },
+    { title: 'Khách hàng', dataIndex: 'ten_khach_hang', width: 150, render: (v: string) => v ?? '—' },
     {
       title: 'D×R×C',
       width: 120,

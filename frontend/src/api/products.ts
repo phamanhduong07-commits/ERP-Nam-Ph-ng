@@ -47,11 +47,11 @@ export interface ProductFull extends Product {
   phan_xuong: string | null
   loai: string | null
   ghi_chu: string | null
-  ten_kh?: string
+  ten_khach_hang?: string
   created_at: string
 }
 
-export type ProductFullCreate = Omit<ProductFull, 'id' | 'ten_kh' | 'created_at'>
+export type ProductFullCreate = Omit<ProductFull, 'id' | 'ten_khach_hang' | 'created_at'>
 
 export const productsApi = {
   list: (params?: { search?: string; ma_kh_id?: number; so_lop?: number; page?: number; page_size?: number }) =>

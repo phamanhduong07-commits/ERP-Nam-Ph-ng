@@ -9,7 +9,10 @@ All tests use `client` + `db_session` fixtures from conftest.py (SQLite in-memor
 from datetime import date
 from decimal import Decimal
 
-from app.models.accounting import CashReceipt, ChartOfAccounts, JournalEntry
+import pytest
+from fastapi import HTTPException
+
+from app.models.accounting import AccountingPeriodLock, CashReceipt, ChartOfAccounts, JournalEntry
 from app.models.billing import SalesInvoice
 from app.models.master import Customer, PhapNhan
 
@@ -180,7 +183,7 @@ def test_cash_receipt_full_payment_closes_invoice(client, db_session):
 # GROUP 2 — Period closing idempotency
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_period_closing_idempotent(db_session):
+def test_period_closing_locks_and_requires_unlock_before_reclosing(db_session):
     """Gọi perform_closing hai lần cho cùng tháng/năm → chỉ có đúng 1 JournalEntry 'ket_chuyen'.
 
     Vì không có phát sinh doanh thu/chi phí thực tế trong tháng, perform_closing
@@ -195,10 +198,24 @@ def test_period_closing_idempotent(db_session):
     svc = AccountingService(db_session)
 
     # First call
-    svc.perform_closing(thang=1, nam=2026, phap_nhan_id=pn.id, user_id=1)
+    first = svc.perform_closing(thang=1, nam=2026, phap_nhan_id=pn.id, user_id=1)
+    lock = db_session.get(AccountingPeriodLock, first["period_lock_id"])
+    assert lock is not None
+    assert lock.trang_thai == "locked"
 
     # Second call for the same period — should replace, not duplicate
-    svc.perform_closing(thang=1, nam=2026, phap_nhan_id=pn.id, user_id=1)
+    with pytest.raises(HTTPException):
+        svc.perform_closing(thang=1, nam=2026, phap_nhan_id=pn.id, user_id=1)
+
+    svc.unlock_period(
+        thang=1,
+        nam=2026,
+        phap_nhan_id=pn.id,
+        user_id=1,
+        ly_do_mo_khoa="Sua so lieu test",
+    )
+    rerun = svc.perform_closing(thang=1, nam=2026, phap_nhan_id=pn.id, user_id=1)
+    assert rerun["period_lock_id"] == first["period_lock_id"]
 
     count = (
         db_session.query(JournalEntry)

@@ -1,16 +1,30 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, Form, Input, Modal, Row, Select, Space, Switch, Table, Tag, Typography, message,
+  Button, Card, Col, Form, Input, Modal, Popconfirm, Row, Select, Space, Switch, Table, Tag, Typography, message,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { EditOutlined, KeyOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, KeyOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { rolesApi } from '../../api/permissions'
 import { usersApi, type NhanVien, type UserCreatePayload, type UserUpdatePayload } from '../../api/usersApi'
 import { cd2Api } from '../../api/cd2'
 import EmptyState from "../../components/EmptyState"
 import { phapNhanApi } from '../../api/phap_nhan'
+import { useAuthStore } from '../../store/auth'
+
+const DEPARTMENT_MAP: Record<string, string[]> = {
+  TRUONG_PHONG_SALE_ADMIN: ['TRUONG_PHONG_SALE_ADMIN', 'SALE_ADMIN'],
+  KINH_DOANH_TO_TRUONG:    ['KINH_DOANH_TO_TRUONG',    'KINH_DOANH_NHAN_VIEN'],
+  KE_TOAN_TRUONG:          ['KE_TOAN_TRUONG',           'KE_TOAN_CONG_NO', 'KETOAN_NHAN_VIEN'],
+  NHAN_SU_TO_TRUONG:       ['NHAN_SU_TO_TRUONG',        'NHAN_SU_NHAN_VIEN'],
+  KHO_TO_TRUONG:           ['KHO_TO_TRUONG',            'KHO_NHAN_VIEN'],
+  THIET_KE_TO_TRUONG:      ['THIET_KE_TO_TRUONG',       'THIET_KE_NHAN_VIEN'],
+  BGD_TO_TRUONG:           ['BGD_TO_TRUONG',            'BGD_NHAN_VIEN'],
+  SAN_XUAT_GIAM_SAT:       ['SAN_XUAT_GIAM_SAT',        'SAN_XUAT_TO_TRUONG', 'SAN_XUAT_THO'],
+}
+
+const FULL_ACCESS = ['ADMIN', 'GIAM_DOC']
 
 const { Title } = Typography
 
@@ -39,6 +53,8 @@ type UserFormValues = {
 
 export default function UserList() {
   const qc = useQueryClient()
+  const currentUser = useAuthStore(s => s.user)
+  const currentRole = currentUser?.role ?? ''
   const [form] = Form.useForm<UserFormValues>()
   const [passwordForm] = Form.useForm<{ password: string }>()
   const [search, setSearch] = useState('')
@@ -63,6 +79,13 @@ export default function UserList() {
     queryKey: ['roles', 'active'],
     queryFn: () => rolesApi.active().then(r => r.data),
   })
+
+  const allowedRoles = useMemo(() => {
+    if (FULL_ACCESS.includes(currentRole)) return roles
+    const team = DEPARTMENT_MAP[currentRole]
+    if (!team) return []
+    return roles.filter(r => team.includes(r.ma_vai_tro))
+  }, [roles, currentRole])
 
   const { data: machines = [] } = useQuery({
     queryKey: ['machines-all'],
@@ -110,6 +133,15 @@ export default function UserList() {
       qc.invalidateQueries({ queryKey: ['users'] })
     },
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Không lưu được tài khoản'),
+  })
+
+  const deactivateMutation = useMutation({
+    mutationFn: (id: number) => usersApi.deactivate(id),
+    onSuccess: () => {
+      message.success('Đã vô hiệu hóa tài khoản')
+      qc.invalidateQueries({ queryKey: ['users'] })
+    },
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Không vô hiệu hóa được'),
   })
 
   const resetPasswordMutation = useMutation({
@@ -200,6 +232,17 @@ export default function UserList() {
         <Space>
           <Button icon={<EditOutlined />} size="small" onClick={() => openEdit(record)} />
           <Button icon={<KeyOutlined />} size="small" onClick={() => setResetTarget(record)} />
+          {record.trang_thai && record.id !== currentUser?.id && (
+            <Popconfirm
+              title={`Vô hiệu hóa tài khoản "${record.username}"?`}
+              onConfirm={() => deactivateMutation.mutate(record.id)}
+              okText="Vô hiệu hóa"
+              okButtonProps={{ danger: true }}
+              cancelText="Hủy"
+            >
+              <Button icon={<DeleteOutlined />} size="small" danger />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -277,7 +320,7 @@ export default function UserList() {
             )}
             <Col span={12}>
               <Form.Item name="role_id" label="Vai trò" rules={[{ required: true, message: 'Chọn vai trò' }]}>
-                <Select options={roles.map(r => ({ value: r.id, label: `${r.ten_vai_tro} (${r.ma_vai_tro})` }))} />
+                <Select options={allowedRoles.map(r => ({ value: r.id, label: `${r.ten_vai_tro} (${r.ma_vai_tro})` }))} />
               </Form.Item>
             </Col>
             <Col span={12}>

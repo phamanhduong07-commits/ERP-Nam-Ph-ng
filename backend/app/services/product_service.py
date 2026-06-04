@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from app.models.master import Product
 from app.schemas.master import ProductCreate, ProductUpdate, ProductResponse, ProductShort
 from app.schemas.sales import PagedResponse
@@ -17,7 +17,7 @@ class ProductService:
         page: int = 1,
         page_size: int = 20,
     ) -> PagedResponse:
-        q = self.db.query(Product).filter(Product.trang_thai.is_(True))
+        q = self.db.query(Product).options(selectinload(Product.khach_hang)).filter(Product.trang_thai.is_(True))
         if search:
             like = f"%{search}%"
             q = q.filter(
@@ -41,14 +41,14 @@ class ProductService:
         )
 
     def get_products_by_customer(self, customer_id: int) -> list[ProductResponse]:
-        products = self.db.query(Product).filter(
+        products = self.db.query(Product).options(selectinload(Product.khach_hang)).filter(
             Product.ma_kh_id == customer_id,
             Product.trang_thai.is_(True)
         ).order_by(Product.ten_hang).all()
         return [ProductResponse.model_validate(p) for p in products]
 
     def get_product_by_id(self, product_id: int) -> ProductResponse:
-        product = self.db.query(Product).filter(Product.id == product_id).first()
+        product = self.db.query(Product).options(selectinload(Product.khach_hang)).filter(Product.id == product_id).first()
         if not product:
             raise HTTPException(status_code=404, detail="Không tìm thấy sản phẩm")
         return ProductResponse.model_validate(product)

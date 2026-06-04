@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text

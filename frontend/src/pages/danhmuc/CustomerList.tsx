@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { customersApi, type Customer } from '../../api/customers'
+import { customersApi, type Customer, type SaleUser } from '../../api/customers'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import MSTLookupButton from '../../components/MSTLookupButton'
 import EmptyState from "../../components/EmptyState"
@@ -22,14 +22,22 @@ export default function CustomerList() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [filterActive, setFilterActive] = useState<boolean | undefined>(true)
+  const [filterNv, setFilterNv] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
   const [importVisible, setImportVisible] = useState(false)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['customers', search, filterActive, page],
+    queryKey: ['customers', search, filterActive, filterNv, page],
     queryFn: () =>
-      customersApi.list({ search: search || undefined, page, page_size: 20 }).then(r => r.data),
+      customersApi.list({ search: search || undefined, page, page_size: 20, nv_id: filterNv }).then(r => r.data),
   })
+
+  const { data: saleUsers = [] } = useQuery({
+    queryKey: ['sale-users'],
+    queryFn: () => customersApi.saleUsers().then(r => r.data),
+  })
+
+  const saleUserMap = Object.fromEntries((saleUsers as SaleUser[]).map(u => [u.id, u.ho_ten]))
 
   const createMut = useMutation({
     mutationFn: (d: Partial<Customer>) => customersApi.create(d),
@@ -93,6 +101,15 @@ export default function CustomerList() {
       render: (v: number) => v ? v.toLocaleString('vi-VN') : '—',
     },
     {
+      title: 'NV phụ trách',
+      dataIndex: 'nv_ids',
+      width: 150,
+      render: (ids: number[]) =>
+        ids?.length
+          ? ids.map(id => <Tag key={id} color="purple">{saleUserMap[id] ?? `#${id}`}</Tag>)
+          : '—',
+    },
+    {
       title: 'Xếp loại',
       dataIndex: 'xep_loai',
       width: 80,
@@ -150,6 +167,14 @@ export default function CustomerList() {
                   { value: 'all', label: 'Tất cả' },
                   { value: 'inactive', label: 'Ngừng hoạt động' },
                 ]}
+              />
+              <Select
+                allowClear
+                placeholder="NV phụ trách"
+                style={{ width: 140 }}
+                value={filterNv}
+                onChange={v => { setFilterNv(v); setPage(1) }}
+                options={(saleUsers as SaleUser[]).map(u => ({ value: u.id, label: u.ho_ten }))}
               />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm khách hàng
@@ -273,7 +298,7 @@ export default function CustomerList() {
           </Row>
 
           <Row gutter={12}>
-            <Col span={8}>
+            <Col span={12}>
               <Form.Item label="Nợ trần (VND)" name="no_tran">
                 <InputNumber
                   style={{ width: '100%' }}
@@ -284,12 +309,25 @@ export default function CustomerList() {
                 />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col span={12}>
               <Form.Item label="Số ngày nợ" name="so_ngay_no">
                 <InputNumber style={{ width: '100%' }} min={0} placeholder="30" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+          </Row>
+
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item label="NV phụ trách" name="nv_ids">
+                <Select
+                  mode="multiple"
+                  allowClear
+                  placeholder="Chọn 1 hoặc nhiều NV..."
+                  options={(saleUsers as SaleUser[]).map(u => ({ value: u.id, label: u.ho_ten }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
               <Form.Item label="Xếp loại" name="xep_loai">
                 <Select
                   allowClear
@@ -302,17 +340,17 @@ export default function CustomerList() {
                 />
               </Form.Item>
             </Col>
+            <Col span={6}>
+              <Form.Item label="Khách VIP" name="khach_vip" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </Col>
           </Row>
 
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item label="Ghi chú" name="ghi_chu">
                 <Input.TextArea rows={2} placeholder="Ghi chú thêm" />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item label="Khách VIP" name="khach_vip" valuePropName="checked">
-                <Switch />
               </Form.Item>
             </Col>
             {editing && (

@@ -620,7 +620,9 @@ export interface JournalEntryCreate {
 export interface JournalEntryListParams {
   tu_ngay?: string
   den_ngay?: string
+  loai_but_toan?: string
   phap_nhan_id?: number
+  phan_xuong_id?: number
   chung_tu_loai?: string
   chung_tu_id?: number
   page?: number
@@ -656,6 +658,87 @@ export interface AccountingAuditLogResponse {
   items: AccountingAuditLog[]
 }
 
+export interface AccountingDimensionAuditItem {
+  severity: 'error' | 'warning' | string
+  category: string
+  table: string
+  record_id: number | null
+  record_code: string | null
+  ngay: string | null
+  phap_nhan_id: number | null
+  phan_xuong_id: number | null
+  expected_phap_nhan_id: number | null
+  message: string
+}
+
+export interface AccountingDimensionAuditResponse {
+  tu_ngay: string | null
+  den_ngay: string | null
+  phap_nhan_id: number | null
+  phan_xuong_id: number | null
+  total: number
+  limited: boolean
+  by_severity: Record<string, number>
+  by_category: Record<string, number>
+  items: AccountingDimensionAuditItem[]
+}
+
+export interface AccountingDimensionAuditParams {
+  tu_ngay?: string
+  den_ngay?: string
+  phap_nhan_id?: number
+  phan_xuong_id?: number
+  limit?: number
+}
+
+export interface AccountingPeriodLock {
+  id: number
+  thang: number
+  nam: number
+  phap_nhan_id: number
+  trang_thai: 'locked' | 'reopened' | string
+  closing_entry_id?: number | null
+  locked_by?: number | null
+  unlocked_by?: number | null
+  locked_at?: string | null
+  unlocked_at?: string | null
+  ly_do_khoa?: string | null
+  ly_do_mo_khoa?: string | null
+}
+
+export interface PeriodClosingResult {
+  status: string
+  entry_id: number
+  so_but_toan: string
+  period_lock_id: number
+  period_lock_status: string
+  doanh_thu: number
+  chi_phi: number
+  lai_lo: number
+}
+
+export interface ClosingReadinessCheck {
+  key: string
+  label: string
+  status: 'pass' | 'warn' | 'fail' | string
+  errors: number
+  warnings: number
+  message: string
+  items: Array<Record<string, unknown>>
+}
+
+export interface ClosingReadinessResponse {
+  thang: number
+  nam: number
+  phap_nhan_id: number
+  tu_ngay: string
+  den_ngay: string
+  can_close: boolean
+  total_errors: number
+  total_warnings: number
+  checks: ClosingReadinessCheck[]
+}
+
 export interface TrialBalanceRow {
   so_tk: string
   ten_tk: string
@@ -686,11 +769,24 @@ export const journalApi = {
   create: (data: JournalEntryCreate) => client.post('/accounting/journal-entries', data).then(r => r.data),
 }
 
+export const periodClosingApi = {
+  performClosing: (params: { thang: number; nam: number; phap_nhan_id: number }): Promise<PeriodClosingResult> =>
+    client.post('/accounting/reports/perform-closing', null, { params }).then(r => r.data),
+  readiness: (params: { thang: number; nam: number; phap_nhan_id: number; limit?: number }): Promise<ClosingReadinessResponse> =>
+    client.get('/accounting/reports/closing-readiness', { params }).then(r => r.data),
+  listLocks: (params?: { phap_nhan_id?: number; nam?: number }): Promise<AccountingPeriodLock[]> =>
+    client.get('/accounting/period-locks', { params }).then(r => r.data),
+  unlock: (params: { thang: number; nam: number; phap_nhan_id: number; ly_do_mo_khoa: string }): Promise<AccountingPeriodLock> =>
+    client.post('/accounting/period-locks/unlock', null, { params }).then(r => r.data),
+}
+
 export const accountingAuditApi = {
   list: (params?: AccountingAuditLogParams): Promise<AccountingAuditLogResponse> =>
     client.get('/accounting/audit-logs', { params }).then(r => r.data),
   document: (bang: string, banGhiId: string | number): Promise<AccountingAuditLog[]> =>
     client.get(`/accounting/documents/${bang}/${banGhiId}/audit`).then(r => r.data),
+  dimensions: (params?: AccountingDimensionAuditParams): Promise<AccountingDimensionAuditResponse> =>
+    client.get('/accounting/audit/dimensions', { params }).then(r => r.data),
 }
 
 export interface ProductionCostInput {
