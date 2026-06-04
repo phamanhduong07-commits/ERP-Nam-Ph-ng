@@ -337,3 +337,17 @@ class GiayRoll(Base):
     paper_material = relationship("PaperMaterial")
     warehouse = relationship("Warehouse")
     goods_receipt = relationship("GoodsReceipt")
+
+
+class OcrSupplierExample(Base):
+    """Ảnh mẫu phiếu xuất NCC dùng cho few-shot OCR."""
+    __tablename__ = "ocr_supplier_examples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ten_ncc: Mapped[str] = mapped_column(String(255), nullable=False)
+    ten_ncc_chuan: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    img_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    extracted_json: Mapped[str] = mapped_column(Text, nullable=False)
+    ghi_chu: Mapped[str | None] = mapped_column(String(255))
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

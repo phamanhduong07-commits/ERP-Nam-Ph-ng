@@ -605,51 +605,57 @@ def extract_image_ocr(
     import json
     from pathlib import Path
     from sqlalchemy import text as _sql
-    from app.utils.ocr import extract_delivery_slip, identify_supplier
-    from app.routers.ocr_examples import get_examples_for_supplier
-
-    gr = db.get(GoodsReceipt, gr_id)
-    if not gr:
-        raise HTTPException(404, "Không tìm thấy phiếu")
-
-    media_row = db.execute(
-        _sql("SELECT filepath FROM erp_media WHERE module='goods_receipts' AND record_id=:rid ORDER BY id DESC LIMIT 1"),
-        {"rid": str(gr_id)},
-    ).fetchone()
-    if not media_row:
-        raise HTTPException(404, "Phiếu này chưa có ảnh — bảo vệ cần upload ảnh trước")
-
-    upload_base = Path(__file__).parent.parent.parent / "uploads"
-    img_path = upload_base / media_row.filepath
-    if not img_path.is_file():
-        raise HTTPException(404, f"File ảnh không tìm thấy trên server: {media_row.filepath}")
 
     try:
-        # Bước 1: Nhận diện NCC (nhanh) — chỉ chạy nếu DB có ảnh mẫu
-        from app.models.warehouse_doc import OcrSupplierExample
-        has_examples = db.query(OcrSupplierExample.id).limit(1).scalar() is not None
+        gr = db.get(GoodsReceipt, gr_id)
+        if not gr:
+            raise HTTPException(404, "Không tìm thấy phiếu")
+
+        media_row = db.execute(
+            _sql("SELECT filepath FROM erp_media WHERE module='goods_receipts' AND record_id=:rid ORDER BY id DESC LIMIT 1"),
+            {"rid": str(gr_id)},
+        ).fetchone()
+        if not media_row:
+            raise HTTPException(404, "Phiếu này chưa có ảnh — bảo vệ cần upload ảnh trước")
+
+        upload_base = Path(__file__).parent.parent.parent / "uploads"
+        img_path = upload_base / media_row.filepath
+        if not img_path.is_file():
+            raise HTTPException(404, f"File ảnh không tìm thấy trên server: {media_row.filepath}")
+
+        from app.utils.ocr import extract_delivery_slip, identify_supplier
+
+        # Bước 1: Nhận diện NCC + few-shot (nếu import được)
         few_shot = []
         detected_supplier = None
-        if has_examples:
-            detected_supplier = identify_supplier(str(img_path))
-            if detected_supplier:
-                few_shot = get_examples_for_supplier(detected_supplier, db, limit=3)
+        try:
+            from app.routers.ocr_examples import get_examples_for_supplier
+            from app.models.warehouse_doc import OcrSupplierExample
+            has_examples = db.query(OcrSupplierExample.id).limit(1).scalar() is not None
+            if has_examples:
+                detected_supplier = identify_supplier(str(img_path))
+                if detected_supplier:
+                    few_shot = get_examples_for_supplier(detected_supplier, db, limit=3)
+        except ImportError:
+            pass  # few-shot chưa sẵn sàng → zero-shot
 
-        # Bước 2: OCR chính — few-shot nếu có mẫu, zero-shot nếu chưa
+        # Bước 2: OCR chính
         result = extract_delivery_slip(str(img_path), few_shot_examples=few_shot or None)
         if detected_supplier:
             result["detected_supplier"] = detected_supplier
 
+        gr.ocr_extracted_data = json.dumps(result.get("extracted", {}), ensure_ascii=False)
+        db.commit()
+        return result
+
+    except HTTPException:
+        raise
     except RuntimeError as e:
         raise HTTPException(503, str(e))
     except Exception as e:
+        import traceback
         logger.error("OCR lỗi không mong muốn: %s", e, exc_info=True)
-        raise HTTPException(500, f"Lỗi OCR: {type(e).__name__}")
-
-    gr.ocr_extracted_data = json.dumps(result.get("extracted", {}), ensure_ascii=False)
-    db.commit()
-
-    return result
+        raise HTTPException(500, f"Lỗi OCR: {type(e).__name__}: {str(e)[:200]}\n{traceback.format_exc()[-300:]}")
 
 
 @router.post("/goods-receipts/{gr_id}/complete")

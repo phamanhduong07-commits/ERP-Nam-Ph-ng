@@ -520,7 +520,6 @@ def extract_delivery_image_ocr(
     import json
     from pathlib import Path
     from sqlalchemy import text as _sql
-    from app.utils.ocr import extract_phieu_giao_hang
 
     do = db.get(DeliveryOrder, do_id)
     if not do:
@@ -539,6 +538,7 @@ def extract_delivery_image_ocr(
         raise HTTPException(404, f"File ảnh không tìm thấy trên server: {media_row.filepath}")
 
     try:
+        from app.utils.ocr import extract_phieu_giao_hang
         result = extract_phieu_giao_hang(str(img_path))
     except RuntimeError as e:
         raise HTTPException(503, str(e))

@@ -8,7 +8,7 @@ import {
 import {
   PlusOutlined, DeleteOutlined, CheckCircleOutlined, EyeOutlined,
   FileTextOutlined, InboxOutlined, FileDoneOutlined, AuditOutlined,
-  CheckOutlined, CloseOutlined, WarningOutlined,
+  CheckOutlined, CloseOutlined, WarningOutlined, ScanOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, GoodsReceipt, CreateGoodsReceiptPayload } from '../../api/warehouse'
@@ -20,6 +20,7 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, fmtVND } from '../../utils/exportUtils'
 import PhotoCapture from '../../components/PhotoCapture'
 import EmptyState from "../../components/EmptyState"
+import HoanThienGiayModal from '../../components/HoanThienGiayModal'
 
 const { Title, Text } = Typography
 
@@ -88,6 +89,8 @@ export default function GoodsReceiptPage() {
   const [selectedPOId, setSelectedPOId] = useState<number | undefined>()
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
   const [detailDrawer, setDetailDrawer] = useState<GoodsReceipt | null>(null)
+  const [ocrResult, setOcrResult] = useState<Record<number, any>>({})
+  const [hoanThienId, setHoanThienId] = useState<number | null>(null)
   const [matchingGrId, setMatchingGrId] = useState<number | null>(null)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -178,6 +181,15 @@ export default function GoodsReceiptPage() {
     }
     return rawGrList
   }, [rawGrList, shortcutFilter])
+
+  const ocrMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.extractImageOcr(id).then(r => r.data),
+    onSuccess: (data, id) => {
+      setOcrResult(prev => ({ ...prev, [id]: data.extracted ?? {} }))
+      message.success('Đọc ảnh xong')
+    },
+    onError: (e: ApiError) => message.error(e?.response?.data?.detail || 'Lỗi đọc ảnh'),
+  })
 
   const approveMut = useMutation({
     mutationFn: (id: number) => warehouseApi.approveGoodsReceipt(id),
@@ -706,6 +718,36 @@ export default function GoodsReceiptPage() {
               readOnly={detailDrawer.trang_thai === 'da_duyet'}
             />
 
+            {detailDrawer.has_invoice_image && (
+              <div style={{ marginTop: 8 }}>
+                <Button
+                  icon={<ScanOutlined />}
+                  loading={ocrMut.isPending}
+                  onClick={() => ocrMut.mutate(detailDrawer.id)}
+                  size="small"
+                >
+                  Đọc hình AI
+                </Button>
+                {ocrResult[detailDrawer.id] && (() => {
+                  const ext = ocrResult[detailDrawer.id]
+                  return (
+                    <Card size="small" style={{ marginTop: 8, background: '#f6ffed', borderColor: '#b7eb8f' }}>
+                      <Typography.Text strong style={{ display: 'block', marginBottom: 4 }}>Kết quả OCR</Typography.Text>
+                      {ext.ten_ncc && <div><Text type="secondary">NCC: </Text><Text>{ext.ten_ncc}</Text></div>}
+                      {ext.so_xe && <div><Text type="secondary">Số xe: </Text><Text>{ext.so_xe}</Text></div>}
+                      {ext.ngay_xuat && <div><Text type="secondary">Ngày xuất: </Text><Text>{ext.ngay_xuat}</Text></div>}
+                      {ext.tong_kg && <div><Text type="secondary">Tổng KG: </Text><Text strong>{ext.tong_kg} kg</Text></div>}
+                      {(ext.hang_hoa?.length ?? 0) > 0 && (
+                        <div><Text type="secondary">{ext.hang_hoa.length} dòng hàng — </Text>
+                          <Text>{ext.hang_hoa.map((h: any) => `${h.kho_mm ?? '?'}mm×${h.gsm ?? '?'}gsm ${h.trong_luong_kg ?? '?'}kg`).join(', ')}</Text>
+                        </div>
+                      )}
+                    </Card>
+                  )
+                })()}
+              </div>
+            )}
+
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>
                 {detailDrawer.trang_thai === 'da_duyet' && (
@@ -715,6 +757,14 @@ export default function GoodsReceiptPage() {
                     onClick={() => openCreateInvoice(detailDrawer.id)}
                   >
                     Tạo hóa đơn mua
+                  </Button>
+                )}
+                {detailDrawer.trang_thai === 'nhap_nhanh' && (
+                  <Button
+                    icon={<InboxOutlined />}
+                    onClick={() => { setHoanThienId(detailDrawer.id); setDetailDrawer(null) }}
+                  >
+                    Hoàn thiện phiếu
                   </Button>
                 )}
                 {(detailDrawer.trang_thai === 'nhap' || detailDrawer.trang_thai === 'nhap_nhanh') && (
@@ -977,6 +1027,17 @@ export default function GoodsReceiptPage() {
           </>
         ) : null}
       </Modal>
+
+      {hoanThienId && (
+        <HoanThienGiayModal
+          grId={hoanThienId}
+          onClose={() => setHoanThienId(null)}
+          onSuccess={() => {
+            setHoanThienId(null)
+            qc.invalidateQueries({ queryKey: ['goods-receipts'] })
+          }}
+        />
+      )}
     </div>
   )
 }

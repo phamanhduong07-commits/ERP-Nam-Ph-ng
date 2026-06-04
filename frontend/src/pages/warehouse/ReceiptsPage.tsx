@@ -52,6 +52,7 @@ export default function ReceiptsPage() {
   const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
   const [filterNCC, setFilterNCC] = useState<number | undefined>()
   const [filterXuong, setFilterXuong] = useState<number | undefined>()
+  const [expandedImages, setExpandedImages] = useState<Record<number, string>>({})
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [selectedPO, setSelectedPO] = useState<number | undefined>()
@@ -484,12 +485,21 @@ export default function ReceiptsPage() {
     },
   ]
 
+  const handleLoadInvoiceImage = async (id: number) => {
+    if (expandedImages[id]) return
+    const detail = await warehouseApi.getGoodsReceipt(id).then(res => res.data)
+    if (detail.invoice_image) setExpandedImages(prev => ({ ...prev, [id]: detail.invoice_image! }))
+  }
+
   const expandedRowRender = (r: GoodsReceipt) => (
     <div>
-      {r.invoice_image && (
+      {r.has_invoice_image && (
         <div style={{ marginBottom: 8 }}>
           <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>Phiếu xuất kho NCC:</Text>
-          <Image src={r.invoice_image} height={48} style={{ cursor: 'pointer', borderRadius: 4, border: '1px solid #d9d9d9' }} />
+          {expandedImages[r.id]
+            ? <Image src={expandedImages[r.id]} height={48} style={{ cursor: 'pointer', borderRadius: 4, border: '1px solid #d9d9d9' }} />
+            : <Button size="small" icon={<FileImageOutlined />} onClick={() => handleLoadInvoiceImage(r.id)}>Xem ảnh phiếu</Button>
+          }
         </div>
       )}
       <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}
