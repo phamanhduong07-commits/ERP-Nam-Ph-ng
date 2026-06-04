@@ -20,7 +20,7 @@ class Vehicle(Base):
     dinh_muc_dau: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)  # Lít/100km
 
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class Department(Base):
@@ -40,7 +40,7 @@ class Department(Base):
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
 
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     parent: Mapped["Department | None"] = relationship("Department", remote_side=[id], backref="children")
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong")
@@ -110,12 +110,12 @@ class Employee(Base):
 
     trang_thai: Mapped[str] = mapped_column(String(20), default="dang_lam")  # dang_lam | tam_nghi | da_nghi
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     # Quan hệ
     phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan")
@@ -151,7 +151,7 @@ class LaborContract(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
 
     trang_thai: Mapped[str] = mapped_column(String(20), default="hieu_luc")  # hieu_luc | het_han | tam_dung
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     employee: Mapped["Employee"] = relationship("Employee", back_populates="contracts")
 
@@ -178,12 +178,12 @@ class AttendanceLog(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="hop_le")
     ghi_chu: Mapped[str | None] = mapped_column(Text)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     employee: Mapped["Employee"] = relationship("Employee")
 
@@ -213,7 +213,7 @@ class LeaveRequest(Base):
     y_kien_duyet: Mapped[str | None] = mapped_column(Text)
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     employee: Mapped["Employee"] = relationship("Employee")
     dept_approver: Mapped["User | None"] = relationship("User", foreign_keys=[nguoi_duyet_dept_id])
@@ -234,7 +234,7 @@ class EmployeeHistory(Base):
     ly_do: Mapped[str | None] = mapped_column(Text)
     ngay_hieu_luc: Mapped[date] = mapped_column(Date, default=date.today)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
 
     employee: Mapped["Employee"] = relationship("Employee")
@@ -253,7 +253,7 @@ class EmployeeDocument(Base):
     file_path: Mapped[str] = mapped_column(String(500))
     ngay_het_han: Mapped[date | None] = mapped_column(Date)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     employee: Mapped["Employee"] = relationship("Employee")
 
@@ -278,7 +278,7 @@ class FuelLog(Base):
     so_km_dau: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)  # (t-1)
 
     ghi_chu: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     vehicle: Mapped["Vehicle | None"] = relationship()
     xe: Mapped["Xe | None"] = relationship("Xe")
@@ -312,8 +312,8 @@ class PayrollConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong")
 
 
@@ -363,7 +363,7 @@ class PayrollRun(Base):
 
     trang_thai: Mapped[str] = mapped_column(String(20), default="du_thao")  # du_thao | da_chot | da_thanh_toan
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     employee: Mapped["Employee"] = relationship("Employee")
 
@@ -377,7 +377,7 @@ class PayrollHoliday(Base):
     ten_ngay_le: Mapped[str] = mapped_column(String(150), nullable=False)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class RewardDiscipline(Base):
@@ -404,7 +404,7 @@ class RewardDiscipline(Base):
 
     trang_thai: Mapped[str] = mapped_column(String(20), default="moi")  # moi | da_duyet | huy
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
 
     employee: Mapped["Employee"] = relationship("Employee")

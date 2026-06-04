@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -19,7 +19,7 @@ class InventoryBalance(Base):
     ton_luong_truoc: Mapped[Decimal | None] = mapped_column(Numeric(14, 3), nullable=True)
     gia_tri_ton: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     don_gia_binh_quan: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=0)
-    cap_nhat_luc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    cap_nhat_luc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         UniqueConstraint(
@@ -33,7 +33,7 @@ class InventoryTransaction(Base):
     __tablename__ = "inventory_transactions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    ngay_giao_dich: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    ngay_giao_dich: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
     paper_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_materials.id"))
     other_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("other_materials.id"))
@@ -48,7 +48,7 @@ class InventoryTransaction(Base):
     chung_tu_id: Mapped[int | None] = mapped_column(Integer)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class PaperRoll(Base):
@@ -67,9 +67,9 @@ class PaperRoll(Base):
     ngay_nhap: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ngay_xuat_gan_nhat: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))

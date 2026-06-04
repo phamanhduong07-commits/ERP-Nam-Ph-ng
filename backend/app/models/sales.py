@@ -33,12 +33,12 @@ class SalesOrder(Base):
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     customer: Mapped["Customer"] = relationship("Customer", back_populates="sales_orders", foreign_keys=[customer_id])
     items: Mapped[list["SalesOrderItem"]] = relationship(
@@ -159,12 +159,12 @@ class SalesReturn(Base):
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     sales_order: Mapped["SalesOrder"] = relationship("SalesOrder", back_populates="returns")
     delivery_order: Mapped["DeliveryOrder | None"] = relationship(
@@ -258,12 +258,12 @@ class Quote(Base):
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     customer: Mapped["Customer"] = relationship("Customer", foreign_keys=[customer_id])
     nv_phu_trach: Mapped["User | None"] = relationship("User", foreign_keys=[nv_phu_trach_id])
@@ -433,7 +433,7 @@ class QuoteHistory(Base):
     changed_by: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"))
     changed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     action: Mapped[str] = mapped_column(String(30), nullable=False)
     # created | updated | submitted | approved | cancelled | extended
     old_status: Mapped[str | None] = mapped_column(String(30))

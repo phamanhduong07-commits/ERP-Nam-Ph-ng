@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -13,7 +13,7 @@ class Permission(Base):
     mo_ta: Mapped[str | None] = mapped_column(Text)
     nhom: Mapped[str | None] = mapped_column(String(50))
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     role_permissions: Mapped[list["RolePermission"]] = relationship(
         "RolePermission", back_populates="permission", cascade="all, delete-orphan")
@@ -27,7 +27,7 @@ class RolePermission(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     role_id: Mapped[int] = mapped_column(Integer, ForeignKey("roles.id"), nullable=False)
     permission_id: Mapped[int] = mapped_column(Integer, ForeignKey("permissions.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     role: Mapped["Role"] = relationship("Role", back_populates="role_permissions")
     permission: Mapped["Permission"] = relationship("Permission", back_populates="role_permissions")
@@ -41,7 +41,7 @@ class Role(Base):
     ten_vai_tro: Mapped[str] = mapped_column(String(100), nullable=False)
     mo_ta: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     users: Mapped[list["User"]] = relationship("User", back_populates="role")
     role_permissions: Mapped[list["RolePermission"]] = relationship(
@@ -64,12 +64,12 @@ class User(Base):
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     machine_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     lan_dang_nhap_cuoi: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     role: Mapped["Role"] = relationship("Role", back_populates="users")
     phan_xuong_obj: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys="User.phan_xuong_id")
@@ -87,7 +87,7 @@ class UserPermission(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     permission_id: Mapped[int] = mapped_column(Integer, ForeignKey("permissions.id", ondelete="CASCADE"), nullable=False)
     granted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id], back_populates="user_permissions")
     permission: Mapped["Permission"] = relationship("Permission", back_populates="user_permissions")
@@ -105,4 +105,4 @@ class AuditLog(Base):
     du_lieu_cu: Mapped[dict | None] = mapped_column(JSON)
     du_lieu_moi: Mapped[dict | None] = mapped_column(JSON)
     ip_address: Mapped[str | None] = mapped_column(String(45))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

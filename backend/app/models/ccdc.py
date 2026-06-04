@@ -14,7 +14,7 @@ class NhomCCDC(Base):
     ten_nhom: Mapped[str] = mapped_column(String(150), nullable=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     items: Mapped[list["CongCuDungCu"]] = relationship("CongCuDungCu", back_populates="nhom")
 
@@ -38,12 +38,12 @@ class CongCuDungCu(Base):
     trang_thai: Mapped[str] = mapped_column(String(30), default="dang_su_dung")
     # dang_su_dung | da_thanh_ly | mat | bao_hanh
     ghi_chu: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     nhom: Mapped["NhomCCDC | None"] = relationship("NhomCCDC", back_populates="items")
     phieu_xuat_items: Mapped[list["PhieuXuatCCDCItem"]] = relationship(
@@ -65,7 +65,7 @@ class PhieuXuatCCDC(Base):
     # cho_duyet | da_duyet | huy
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     items: Mapped[list["PhieuXuatCCDCItem"]] = relationship(
         "PhieuXuatCCDCItem", back_populates="phieu", cascade="all, delete-orphan"

@@ -30,12 +30,12 @@ class ProductionOrder(Base):
     phoi_phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     nv_theo_doi_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     sales_order: Mapped["SalesOrder | None"] = relationship(
         "SalesOrder", foreign_keys=[sales_order_id])  # type: ignore[name-defined]
@@ -133,7 +133,7 @@ class MayDungLog(Base):
     ly_do: Mapped[str] = mapped_column(String(30), nullable=False, default="khac")
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     production_order: Mapped["ProductionOrder"] = relationship("ProductionOrder")
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong")  # type: ignore[name-defined]

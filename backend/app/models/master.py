@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy import (
     Boolean, DateTime, Float, ForeignKey, Integer, Numeric,
@@ -25,7 +25,7 @@ class PhanXuong(Base):
         Integer, ForeignKey("phap_nhan.id"), nullable=True
     )
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     phap_nhan: Mapped["PhapNhan | None"] = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
 
@@ -48,7 +48,7 @@ class Warehouse(Base):
     suc_chua: Mapped[float | None] = mapped_column(Float, nullable=True)
     don_vi_suc_chua: Mapped[str | None] = mapped_column(String(20), nullable=True)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     phan_xuong_obj: Mapped["PhanXuong | None"] = relationship("PhanXuong", back_populates="warehouses")
 
@@ -63,7 +63,7 @@ class MaterialGroup(Base):
     bo_phan: Mapped[str | None] = mapped_column(String(50))
     phan_xuong: Mapped[str | None] = mapped_column(String(50))
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     paper_materials: Mapped[list["PaperMaterial"]] = relationship("PaperMaterial", back_populates="nhom")
     other_materials: Mapped[list["OtherMaterial"]] = relationship("OtherMaterial", back_populates="nhom")
@@ -86,12 +86,12 @@ class Supplier(Base):
     ma_ncc_amis: Mapped[str | None] = mapped_column(String(50))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     @hybrid_property
     def ten_nha_cung_cap(self) -> str:
@@ -128,12 +128,12 @@ class Customer(Base):
     hoa_don_ngay: Mapped[int] = mapped_column(Integer, default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     @hybrid_property
     def ten_khach_hang(self) -> str:
@@ -188,12 +188,12 @@ class PaperMaterial(Base):
     la_cuon: Mapped[bool] = mapped_column(Boolean, default=True)
     su_dung: Mapped[bool] = mapped_column(Boolean, default=True)
     khong_tinh_nxt: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     nhom: Mapped["MaterialGroup"] = relationship("MaterialGroup", back_populates="paper_materials")
     nsx: Mapped["Supplier | None"] = relationship("Supplier", back_populates="paper_materials")
@@ -217,12 +217,12 @@ class OtherMaterial(Base):
     khong_tinh_nxt: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     nhom: Mapped["MaterialGroup"] = relationship("MaterialGroup", back_populates="other_materials")
     ncc: Mapped["Supplier | None"] = relationship("Supplier", back_populates="other_materials")
@@ -254,12 +254,12 @@ class CauTrucThongDung(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     thu_tu: Mapped[int] = mapped_column(Integer, default=0)   # display order
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
 
 class Product(Base):
@@ -311,12 +311,12 @@ class Product(Base):
     khong_tinh_nxt: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
             timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow)
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
 
     @hybrid_property
     def ten_san_pham(self) -> str:
@@ -337,7 +337,7 @@ class DonViTinh(Base):
     ky_hieu: Mapped[str | None] = mapped_column(String(20))
     ghi_chu: Mapped[str | None] = mapped_column(String(200))
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class ViTri(Base):
@@ -348,7 +348,7 @@ class ViTri(Base):
     loai: Mapped[str | None] = mapped_column(String(50))  # 'nhan_vien', 'kho', 'san_xuat'
     ghi_chu: Mapped[str | None] = mapped_column(String(200))
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class Xe(Base):
@@ -362,7 +362,7 @@ class Xe(Base):
     km_bao_duong_gan_nhat: Mapped[float | None] = mapped_column(Float, nullable=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class TaiXe(Base):
@@ -375,7 +375,7 @@ class TaiXe(Base):
     he_so_chuyen: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=1)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     employee = relationship("Employee")
 
 
@@ -388,7 +388,7 @@ class LoXe(Base):
     he_so_chuyen: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=Decimal("0.3"))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     employee = relationship("Employee")
 
 
@@ -421,7 +421,7 @@ class DonGiaVanChuyen(Base):
     dvt: Mapped[str] = mapped_column(String(20), default="chuyến")
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class BankAccount(Base):
@@ -439,7 +439,7 @@ class BankAccount(Base):
     so_du_dau: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     phap_nhan = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
 
@@ -462,7 +462,7 @@ class PhapNhan(Base):
     logo_path: Mapped[str | None] = mapped_column(String(255))       # path logo: "logos/namphuong.png"
     mau_sac_chinh: Mapped[str | None] = mapped_column(String(7))     # hex color: "#E65100"
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     # Xưởng CD1+CD2 cung cấp phôi sóng cho lệnh SX của pháp nhân này
     phoi_phan_xuong_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("phan_xuong.id", use_alter=True, name="fk_phap_nhan_phan_xuong"), nullable=True

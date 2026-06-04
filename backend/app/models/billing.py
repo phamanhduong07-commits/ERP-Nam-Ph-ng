@@ -41,7 +41,7 @@ class SalesInvoice(Base):
     anh_phieu_giao: Mapped[str | None] = mapped_column(Text)   # đường dẫn ảnh phiếu giao có chữ ký
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     phap_nhan = relationship("PhapNhan")
 
@@ -50,7 +50,7 @@ class SalesInvoice(Base):
         return self.phap_nhan.ten_phap_nhan if self.phap_nhan else None
 
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
     )
 
     customer = relationship("Customer")
@@ -73,7 +73,7 @@ class InvoiceAdjustmentLog(Base):
     invoice_id: Mapped[int] = mapped_column(Integer, ForeignKey(
         "sales_invoices.id", ondelete="CASCADE"), nullable=False)
     adjusted_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    adjusted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    adjusted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     loai: Mapped[str] = mapped_column(String(30), nullable=False)
     # truoc_ket_chuyen | sau_ket_chuyen
     ghi_chu: Mapped[str] = mapped_column(Text, nullable=False)

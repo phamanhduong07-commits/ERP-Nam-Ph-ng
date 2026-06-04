@@ -28,7 +28,7 @@ class GoodsReceipt(Base):
     hd_tong_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     po = relationship("PurchaseOrder")
     supplier = relationship("Supplier")
@@ -82,7 +82,7 @@ class MaterialIssue(Base):
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     production_order = relationship("ProductionOrder")
     warehouse = relationship("Warehouse")
@@ -129,7 +129,7 @@ class ProductionOutput(Base):
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     production_order = relationship("ProductionOrder")
     warehouse = relationship("Warehouse")
@@ -182,7 +182,7 @@ class DeliveryOrder(Base):
     phi_khac: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     sales_order = relationship("SalesOrder")
     customer = relationship("Customer")
@@ -241,7 +241,7 @@ class PhieuChuyenKho(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     warehouse_xuat = relationship("Warehouse", foreign_keys=[warehouse_xuat_id])
     warehouse_nhap = relationship("Warehouse", foreign_keys=[warehouse_nhap_id])
@@ -283,7 +283,7 @@ class StockAdjustment(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     warehouse = relationship("Warehouse")
     creator = relationship("User")
@@ -332,7 +332,7 @@ class GiayRoll(Base):
     trong_luong_con_lai: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, default=0)
     trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="trong_kho")
     # trong_kho | dang_dung | da_dung
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     paper_material = relationship("PaperMaterial")
     warehouse = relationship("Warehouse")

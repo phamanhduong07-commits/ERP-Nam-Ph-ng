@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, ForeignKey, Integer, String, Text, DateTime, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,8 +16,8 @@ class PrintTemplate(Base):
     html_content = Column(Text, nullable=False)
     css_content = Column(Text)
     variables_meta = Column(JSON)  # Lưu danh sách các biến khả dụng: { "so_phieu": "Số phiếu", "ngay": "Ngày" }
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class ExcelTemplate(Base):
@@ -38,8 +38,8 @@ class ExcelTemplate(Base):
     # { "accent_color": "#1B5E20", "alt_row_color": "#F1F8E9",
     #   "orientation": "portrait", "show_company_header": true, "freeze_header": true }
     style_config = Column(JSON, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class SystemSetting(Base):
@@ -50,7 +50,7 @@ class SystemSetting(Base):
     key = Column(String(100), unique=True, nullable=False)
     value = Column(Text)
     description = Column(String(255))
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class AgentSession(Base):
@@ -61,5 +61,5 @@ class AgentSession(Base):
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     history_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     last_active: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )

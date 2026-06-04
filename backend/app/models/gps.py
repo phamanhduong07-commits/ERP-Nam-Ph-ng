@@ -13,7 +13,7 @@ class GpsSnapshot(Base):
     bien_so: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     xe_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("xe.id"), nullable=True, index=True)
     ngay: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -42,7 +42,7 @@ class GpsBinhMinhDaily(Base):
     dung_tich_binh: Mapped[float] = mapped_column(Float, default=0)
     # JSON list: [{"so_lit": 110.0, "gio": "12:34:13", "dia_diem": "...", "loai": "Tăng"}]
     fills_json: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class DrainAlertLog(Base):
@@ -60,4 +60,4 @@ class DrainAlertLog(Base):
     phan_loai: Mapped[str] = mapped_column(String(30), default="rut_khi_dung")
     muc_canh_bao: Mapped[str] = mapped_column(String(20), default="cao")
     trang_thai: Mapped[str] = mapped_column(String(20), default="moi")  # moi/dang_xu_ly/da_xu_ly
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

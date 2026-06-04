@@ -18,7 +18,7 @@ class CustomerInteraction(Base):
     ngay_nhac_nho: Mapped[date | None] = mapped_column(Date)
     nguoi_phu_trach_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     customer = relationship("Customer", foreign_keys=[customer_id])
     nguoi_phu_trach = relationship("User", foreign_keys=[nguoi_phu_trach_id])

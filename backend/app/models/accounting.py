@@ -3,6 +3,7 @@ from decimal import Decimal
 from sqlalchemy import (
     Boolean, Computed, Date, DateTime, ForeignKey,
     Integer, JSON, Numeric, SmallInteger, String, Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -39,7 +40,7 @@ class JournalEntry(Base):
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     phap_nhan = relationship("PhapNhan")
     phan_xuong = relationship("PhanXuong")
@@ -102,9 +103,9 @@ class PurchaseInvoice(Base):
     # nhap | da_tt_mot_phan | da_tt_du | qua_han | huy
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
     )
 
     supplier = relationship("Supplier")
@@ -141,7 +142,7 @@ class CashReceipt(Base):
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     customer = relationship("Customer")
     invoice: Mapped["SalesInvoice | None"] = relationship("SalesInvoice", back_populates="receipts")
@@ -173,7 +174,7 @@ class CashPayment(Base):
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     supplier = relationship("Supplier")
     phap_nhan = relationship("PhapNhan")
@@ -202,7 +203,7 @@ class DebtLedgerEntry(Base):
     chung_tu_id: Mapped[int | None] = mapped_column(Integer)
     so_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     customer = relationship("Customer")
     supplier = relationship("Supplier")
@@ -228,7 +229,7 @@ class CustomerRefundVoucher(Base):
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     customer = relationship("Customer")
     sales_return = relationship("SalesReturn")
@@ -250,7 +251,7 @@ class OpeningBalance(Base):
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     customer = relationship("Customer")
     supplier = relationship("Supplier")
@@ -278,7 +279,7 @@ class WorkshopPayroll(Base):
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     phan_xuong = relationship("PhanXuong")
     phap_nhan = relationship("PhapNhan")
@@ -310,7 +311,7 @@ class FixedAsset(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="dang_su_dung")  # dang_su_dung | da_kh_het | thanh_ly
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     phan_xuong = relationship("PhanXuong")
     phap_nhan = relationship("PhapNhan")
@@ -336,7 +337,7 @@ class BankTransaction(Base):
     matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     matched_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     import_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     bank_account = relationship("BankAccount")
     phap_nhan = relationship("PhapNhan")
@@ -364,7 +365,7 @@ class ProductionCostPeriod(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     closed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     phap_nhan = relationship("PhapNhan")
@@ -398,7 +399,7 @@ class ProductionCostInput(Base):
     so_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     so_luong: Mapped[Decimal] = mapped_column(Numeric(18, 3), default=0)
     dien_giai: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     period = relationship("ProductionCostPeriod", back_populates="inputs")
     production_order = relationship("ProductionOrder")
@@ -425,7 +426,7 @@ class ProductionCostAllocation(Base):
     chi_phi_sxc: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     tong_chi_phi: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     gia_thanh_don_vi: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     period = relationship("ProductionCostPeriod", back_populates="allocations")
     production_order = relationship("ProductionOrder")
@@ -448,13 +449,43 @@ class ProductCost(Base):
     san_luong: Mapped[Decimal] = mapped_column(Numeric(18, 3), default=0)
     tong_chi_phi: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     gia_thanh_don_vi: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     period = relationship("ProductionCostPeriod", back_populates="product_costs")
     production_order = relationship("ProductionOrder")
     product = relationship("Product")
     phap_nhan = relationship("PhapNhan")
     phan_xuong = relationship("PhanXuong")
+
+
+class AccountingPeriodLock(Base):
+    """Accounting period lock by legal entity and month."""
+    __tablename__ = "accounting_period_locks"
+    __table_args__ = (
+        UniqueConstraint("thang", "nam", "phap_nhan_id", name="uq_accounting_period_lock_period_entity"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    thang: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    nam: Mapped[int] = mapped_column(Integer, nullable=False)
+    phap_nhan_id: Mapped[int] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=False, index=True)
+    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="locked")
+    closing_entry_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("journal_entries.id"), nullable=True)
+    locked_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    unlocked_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    locked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    unlocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ly_do_khoa: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ly_do_mo_khoa: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    phap_nhan = relationship("PhapNhan")
+    closing_entry = relationship("JournalEntry", foreign_keys=[closing_entry_id])
+    locker = relationship("User", foreign_keys=[locked_by])
+    unlocker = relationship("User", foreign_keys=[unlocked_by])
 
 
 class HoaDonDienTu(Base):
@@ -495,7 +526,7 @@ class HoaDonDienTu(Base):
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     sales_order = relationship("SalesOrder", foreign_keys=[sales_order_id])
     customer = relationship("Customer", foreign_keys=[customer_id])

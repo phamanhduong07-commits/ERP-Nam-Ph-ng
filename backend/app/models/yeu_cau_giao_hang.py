@@ -20,7 +20,7 @@ class YeuCauGiaoHang(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="moi")
     # moi | da_sap_xe | da_tao_phieu | huy
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     customer = relationship("Customer")
     creator = relationship("User")

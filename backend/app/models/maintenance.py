@@ -17,7 +17,7 @@ class MaintenanceMachine(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="dang_dung")
     # dang_dung | ngung | sua_chua
     ghi_chu: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     phan_xuong = relationship("PhanXuong")
     schedules: Mapped[list["MaintenanceSchedule"]] = relationship(
@@ -45,7 +45,7 @@ class MaintenanceSchedule(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="dung_han")
     # dung_han | qua_han | sap_den_han
     ghi_chu: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     machine: Mapped["MaintenanceMachine"] = relationship("MaintenanceMachine", back_populates="schedules")
 
@@ -74,7 +74,7 @@ class MaintenanceLog(Base):
     tong_chi_phi: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     phieu_chi_id: Mapped[int | None] = mapped_column(Integer)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     machine: Mapped["MaintenanceMachine"] = relationship("MaintenanceMachine", back_populates="maintenance_logs")
     schedule: Mapped["MaintenanceSchedule | None"] = relationship("MaintenanceSchedule")

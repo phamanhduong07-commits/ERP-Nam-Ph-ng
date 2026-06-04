@@ -25,6 +25,10 @@ from app.routers import (
     phieu_phoi, cd2, warehouse, purchase_orders, purchase_returns,
     phap_nhan, dashboard, theo_doi, yeu_cau_giao_hang,
 )
+from app.routers import (
+    goods_receipts, material_issues, production_outputs, delivery_orders,
+    stock_transfers, stock_adjustments, inventory_reports,
+)
 from app.routers import purchase_requisitions
 from app.routers import may_dung_log
 from app.routers import billing, accounting
@@ -191,6 +195,14 @@ app.include_router(phieu_phoi.router)
 app.include_router(may_dung_log.router, prefix="/api")
 app.include_router(cd2.router)
 app.include_router(warehouse.router)
+# Warehouse routers split out of warehouse.py — all share /api/warehouse prefix
+app.include_router(goods_receipts.router)
+app.include_router(material_issues.router)
+app.include_router(production_outputs.router)
+app.include_router(delivery_orders.router)
+app.include_router(stock_transfers.router)
+app.include_router(stock_adjustments.router)
+app.include_router(inventory_reports.router)
 app.include_router(purchase_orders.router)
 app.include_router(purchase_returns.router)
 app.include_router(purchase_requisitions.router)

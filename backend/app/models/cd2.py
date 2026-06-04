@@ -17,7 +17,7 @@ class Machine(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     phan_xuong_obj = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
     logs: Mapped[list["ProductionLog"]] = relationship("ProductionLog", back_populates="machine_obj")
@@ -41,7 +41,7 @@ class ProductionLog(Base):
 
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     machine_obj: Mapped["Machine"] = relationship("Machine", back_populates="logs")
     production_order = relationship("ProductionOrder")
@@ -84,7 +84,7 @@ class ScanLog(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     gio_bat_dau: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     gio_ket_thuc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
 
     may_scan_obj: Mapped["MayScan"] = relationship("MayScan", back_populates="scan_logs")
@@ -176,7 +176,7 @@ class PhieuIn(Base):
     phieu_goc_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
 
     may_in_obj: Mapped["MayIn | None"] = relationship("MayIn", back_populates="phieu_ins")
@@ -228,7 +228,7 @@ class ShiftConfig(Base):
     gio_ket_thuc: Mapped[str | None] = mapped_column(String(10))
     nghi_1: Mapped[int | None] = mapped_column(Integer)
     nghi_2: Mapped[int | None] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     may_in_obj: Mapped["MayIn"] = relationship("MayIn")
     shift_ca_obj: Mapped["ShiftCa"] = relationship("ShiftCa", back_populates="configs")
@@ -246,7 +246,7 @@ class PrinterUser(Base):
     machine_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("may_in.id"), nullable=True)
     may_sau_in_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("may_sau_in.id"), nullable=True)
     may_scan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("may_scan.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     may_in_obj: Mapped["MayIn | None"] = relationship("MayIn", foreign_keys=[machine_id])
     may_sau_in_obj: Mapped["MaySauIn | None"] = relationship("MaySauIn", foreign_keys=[may_sau_in_id])
@@ -264,4 +264,4 @@ class PushSubscription(Base):
     # máy đang dùng (may_in hoặc may_sau_in, không FK cứng để linh hoạt)
     may_in_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     may_sau_in_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
