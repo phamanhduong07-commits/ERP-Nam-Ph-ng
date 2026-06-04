@@ -52,7 +52,7 @@ export default function Login() {
       background: 'linear-gradient(135deg, #1b168e 0%, #15116f 62%, #ff8200 100%)',
       padding: 24,
     }}>
-      <Card style={{ width: 420, boxShadow: '0 16px 44px rgba(8, 12, 56, 0.28)', border: '1px solid rgba(255,255,255,0.72)' }}>
+      <Card style={{ width: '100%', maxWidth: 420, boxShadow: '0 16px 44px rgba(8, 12, 56, 0.28)', border: '1px solid rgba(255,255,255,0.72)' }}>
         <Space className="np-login-brand" direction="vertical" style={{ width: '100%', textAlign: 'center' }} size={4}>
           <img
             src={namPhuongLogo}

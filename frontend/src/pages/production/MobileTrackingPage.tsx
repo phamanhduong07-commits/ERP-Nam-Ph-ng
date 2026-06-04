@@ -17,6 +17,7 @@ import dayjs from 'dayjs'
 import { useAuthStore } from '../../store/auth'
 import { cd2Api, MayIn, MaySauIn, PhieuIn, WorkerSession, WorkerDayStats, TRANG_THAI_COLORS, TRANG_THAI_LABELS, TrackPayload } from '../../api/cd2'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
+import { storage } from '../../utils/storage'
 import QrScannerModal from '../../components/QrScannerModal'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { socket } from '../../utils/socket'
@@ -265,10 +266,7 @@ export default function MobileTrackingPage() {
   const machineIdFromUrl = searchParams.get('machine_id')
 
   const workerSession = useMemo<WorkerSession | null>(() => {
-    try {
-      const raw = localStorage.getItem('cd2_worker_session')
-      return raw ? JSON.parse(raw) : null
-    } catch { return null }
+    return storage.get<WorkerSession>('cd2_worker_session')
   }, [])
 
   // Sau in mode: kiosk worker được gán vào máy sau in (định hình)
@@ -815,7 +813,7 @@ export default function MobileTrackingPage() {
   }
 
   function handleWorkerLogout() {
-    localStorage.removeItem('cd2_worker_session')
+    storage.remove('cd2_worker_session')
     navigate('/cd2/machine-login')
   }
 

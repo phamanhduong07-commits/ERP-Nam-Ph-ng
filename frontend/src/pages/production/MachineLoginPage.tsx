@@ -62,7 +62,7 @@ export default function MachineLoginPage() {
       background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
       padding: 24,
     }}>
-      <Card style={{ width: 380, borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+      <Card style={{ width: '100%', maxWidth: 380, borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <Title level={3} style={{ marginBottom: 4 }}>CD2 — Đăng nhập máy</Title>
           <Text type="secondary">Công nhân đăng nhập để bắt đầu ca làm việc</Text>

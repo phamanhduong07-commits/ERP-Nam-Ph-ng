@@ -19,6 +19,7 @@ import MayScanSettingsModal from './MayScanSettingsModal'
 import QrScannerModal from '../../components/QrScannerModal'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { socket } from '../../utils/socket'
+import { storage } from '../../utils/storage'
 
 const { Title, Text } = Typography
 const SCAN_COLOR = '#0891b2'
@@ -40,10 +41,7 @@ export default function ScanMayPage() {
 
   // Worker session (kiosk login)
   const workerSession = useMemo<WorkerSession | null>(() => {
-    try {
-      const raw = localStorage.getItem('cd2_worker_session')
-      return raw ? JSON.parse(raw) : null
-    } catch { return null }
+    return storage.get<WorkerSession>('cd2_worker_session')
   }, [])
 
   const [selectedMachine, setSelectedMachine] = useState<number | null>(machineIdFromUrl)
@@ -198,7 +196,7 @@ export default function ScanMayPage() {
   }
 
   function handleWorkerLogout() {
-    localStorage.removeItem('cd2_worker_session')
+    storage.remove('cd2_worker_session')
     navigate('/cd2/machine-login')
   }
 
