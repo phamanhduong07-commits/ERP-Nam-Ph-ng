@@ -18,7 +18,7 @@ import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { purchaseApi } from '../../api/purchase'
 import type { POItem } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
-import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
+import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId, downloadBlob } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import EmptyState from "../../components/EmptyState"
 
@@ -378,6 +378,15 @@ export default function NhapGiayPage() {
     smartPrintPdf('GOODS_RECEIPT', printData, r.phap_nhan_id_for_print ?? undefined)
   }
 
+  const handleExportReceiptExcel = async (id: number, soPhieu: string) => {
+    try {
+      const blob = await warehouseApi.exportGoodsReceiptExcel(id)
+      downloadBlob(blob, `PNK_${soPhieu || id}.xlsx`)
+    } catch {
+      message.error('Không thể xuất Excel. Kiểm tra lại cấu hình mẫu Excel GOODS_RECEIPT.')
+    }
+  }
+
   const handleExportExcel = () => {
     const resolvedPhapNhanId = resolveSinglePhapNhanId(receiptList)
     if (!receiptList.length) {
@@ -437,7 +446,13 @@ export default function NhapGiayPage() {
               Hoàn thiện
             </Button>
           ) : (
-            <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintReceipt(r)} />
+            <>
+              <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintReceipt(r)} />
+              <Tooltip title="Xuất Excel phiếu">
+                <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }}
+                  onClick={() => handleExportReceiptExcel(r.id, r.so_phieu)} />
+              </Tooltip>
+            </>
           )}
           <Popconfirm title="Duyệt phiếu? Giá mua giấy sẽ được cập nhật." onConfirm={() => approveMut.mutate(r.id)}
             disabled={r.trang_thai !== 'nhap'}>

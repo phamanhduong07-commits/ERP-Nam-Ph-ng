@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons'
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
-import { systemApi, PrintTemplate, ExcelTemplate } from '../../api/system'
+import { systemApi, PrintTemplate, ExcelTemplate, ExcelColumnConfig, ExcelHeaderField, ExcelFooterConfig, ExcelStyleConfig } from '../../api/system'
 import { phapNhanApi, PhapNhan } from '../../api/phap-nhan'
 import { DragOutlined } from '@ant-design/icons'
 import EmptyState from "../../components/EmptyState"
@@ -988,12 +988,44 @@ export default function PrintTemplatePage() {
   )
 }
 
+// ─── Available meta keys per doc type for header_config selection ────────────
+const DOC_META_KEYS: Record<string, { key: string; label: string }[]> = {
+  GOODS_RECEIPT: [
+    { key: 'document_number', label: 'Số phiếu' },
+    { key: 'document_date', label: 'Ngày nhập' },
+    { key: 'supplier_name', label: 'Nhà cung cấp' },
+    { key: 'warehouse_name', label: 'Kho nhập' },
+    { key: 'loai_nhap', label: 'Loại nhập' },
+    { key: 'so_xe', label: 'Số xe' },
+    { key: 'ghi_chu', label: 'Ghi chú' },
+  ],
+  MATERIAL_ISSUE: [
+    { key: 'document_number', label: 'Số phiếu' },
+    { key: 'document_date', label: 'Ngày xuất' },
+    { key: 'warehouse_name', label: 'Kho xuất' },
+    { key: 'so_lenh', label: 'Lệnh SX' },
+    { key: 'ghi_chu', label: 'Ghi chú' },
+  ],
+  PURCHASE_ORDER: [
+    { key: 'document_number', label: 'Số PO' },
+    { key: 'document_date', label: 'Ngày PO' },
+    { key: 'supplier_name', label: 'Nhà cung cấp' },
+    { key: 'dieu_khoan_tt', label: 'Điều khoản TT' },
+    { key: 'ghi_chu', label: 'Ghi chú' },
+  ],
+}
+
 function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
   const qc = useQueryClient()
   const [form] = Form.useForm()
   const [editModal, setEditModal] = useState<ExcelTemplate | null>(null)
   const [selectedPhapNhanId, setSelectedPhapNhanId] = useState<number | null>(null)
   const [availableColumns, setAvailableColumns] = useState<DocColumn[]>([])
+  const [availableMetaKeys, setAvailableMetaKeys] = useState<{ key: string; label: string }[]>([])
+  // Local state for sub-configs (Form.Item can't easily handle nested objects)
+  const [styleConfig, setStyleConfig] = useState<ExcelStyleConfig>({})
+  const [headerConfig, setHeaderConfig] = useState<ExcelHeaderField[]>([])
+  const [footerConfig, setFooterConfig] = useState<ExcelFooterConfig>({})
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['excel-templates'],
@@ -1001,13 +1033,14 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
   })
 
   const saveMut = useMutation({
-    mutationFn: (vals: { ma_mau: string; ten_mau: string; column_config?: DocColumn[]; [key: string]: unknown }) => {
-      if (!vals.column_config?.length) {
-        throw new Error('Mẫu Excel cần có ít nhất một cột')
-      }
+    mutationFn: (vals: { ma_mau: string; ten_mau: string; column_config?: ExcelColumnConfig[] }) => {
+      if (!vals.column_config?.length) throw new Error('Mẫu Excel cần có ít nhất một cột')
       return systemApi.updateExcelTemplate(vals.ma_mau, {
         ...vals,
-        phap_nhan_id: selectedPhapNhanId ?? undefined
+        phap_nhan_id: selectedPhapNhanId ?? undefined,
+        header_config: headerConfig,
+        footer_config: footerConfig,
+        style_config: styleConfig,
       })
     },
     onSuccess: () => {
@@ -1015,77 +1048,82 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
       setEditModal(null)
       qc.invalidateQueries({ queryKey: ['excel-templates'] })
     },
-    onError: (e: { response?: { data?: { detail?: string } }; message?: string }) => message.error(e?.response?.data?.detail ?? e?.message ?? 'Lỗi lưu mẫu Excel')
+    onError: (e: { response?: { data?: { detail?: string } }; message?: string }) =>
+      message.error(e?.response?.data?.detail ?? e?.message ?? 'Lỗi lưu mẫu Excel'),
   })
 
   const deleteMut = useMutation({
     mutationFn: (tpl: ExcelTemplate) => systemApi.deleteExcelTemplate(tpl.ma_mau, tpl.phap_nhan_id),
-    onSuccess: () => {
-      message.success('Đã xóa mẫu Excel')
-      qc.invalidateQueries({ queryKey: ['excel-templates'] })
-    }
+    onSuccess: () => { message.success('Đã xóa'); qc.invalidateQueries({ queryKey: ['excel-templates'] }) },
   })
 
-  const columns = [
-    { title: 'Mã mẫu', dataIndex: 'ma_mau', key: 'ma_mau' },
+  const openEdit = (record: ExcelTemplate) => {
+    setEditModal(record)
+    form.setFieldsValue({ ma_mau: record.ma_mau, ten_mau: record.ten_mau, column_config: record.column_config })
+    setSelectedPhapNhanId(record.phap_nhan_id ?? null)
+    setStyleConfig(record.style_config ?? { show_company_header: true, freeze_header: true, orientation: 'portrait', accent_color: '#1B5E20', alt_row_color: '#F1F8E9' })
+    setHeaderConfig(record.header_config ?? [])
+    setFooterConfig(record.footer_config ?? { show_total: false, sum_columns: [], show_signatures: false, signatures: [] })
+    const schema = DOC_TYPE_SCHEMAS[record.ma_mau]
+    if (schema) setAvailableColumns(schema.defaultColumns)
+    setAvailableMetaKeys(DOC_META_KEYS[record.ma_mau] ?? [])
+  }
+
+  const tableColumns = [
+    { title: 'Mã mẫu', dataIndex: 'ma_mau', key: 'ma_mau', width: 160 },
     { title: 'Tên mẫu', dataIndex: 'ten_mau', key: 'ten_mau' },
-    { 
-      title: 'Pháp nhân', 
-      dataIndex: 'phap_nhan_id', 
+    {
+      title: 'Pháp nhân',
+      dataIndex: 'phap_nhan_id',
+      width: 140,
       render: (id: number) => {
         const pn = phapNhans.find(p => p.id === id)
-        return pn ? <Tag color="blue">{pn.ten_viet_tat || pn.ten_phap_nhan}</Tag> : <Tag color="default">Mặc định</Tag>
-      }
+        return pn ? <Tag color="blue">{pn.ten_viet_tat || pn.ten_phap_nhan}</Tag> : <Tag>Mặc định</Tag>
+      },
     },
+    { title: 'Cột', dataIndex: 'column_config', width: 60, render: (c: ExcelColumnConfig[]) => c?.length || 0 },
     {
-      title: 'Số cột',
-      dataIndex: 'column_config',
-      render: (cfg: DocColumn[]) => cfg?.length || 0
-    },
-    {
-      title: 'Thao tác',
-      key: 'action',
-      render: (_: unknown, record: ExcelTemplate) => (
+      title: 'Thao tác', key: 'action', width: 140,
+      render: (_: unknown, r: ExcelTemplate) => (
         <Space>
-          <Button icon={<EditOutlined />} onClick={() => {
-            setEditModal(record)
-            form.setFieldsValue(record)
-            setSelectedPhapNhanId(record.phap_nhan_id ?? null)
-            const schema = DOC_TYPE_SCHEMAS[record.ma_mau]
-            if (schema) setAvailableColumns(schema.defaultColumns)
-          }}>Sửa</Button>
-          <Button danger icon={<DeleteOutlined />} onClick={() => Modal.confirm({
-            title: 'Xóa mẫu Excel?',
-            onOk: () => deleteMut.mutate(record)
-          })} />
+          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>Sửa</Button>
+          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => Modal.confirm({ title: 'Xóa mẫu?', onOk: () => deleteMut.mutate(r) })} />
         </Space>
-      )
-    }
+      ),
+    },
   ]
 
+  const sumColOptions = (form.getFieldValue('column_config') as ExcelColumnConfig[] ?? []).map(c => ({ label: c.label, value: c.key }))
+
   return (
-    <Card 
-      title={<Title level={4} style={{ margin: 0 }}>📊 Cấu hình xuất dữ liệu Excel</Title>}
+    <Card
+      title={<Title level={4} style={{ margin: 0 }}>📊 Mẫu xuất Excel</Title>}
       extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => {
         setEditModal({ ma_mau: '', ten_mau: '', column_config: [] })
         form.resetFields()
         setSelectedPhapNhanId(null)
-      }}>Thêm mẫu Excel</Button>}
+        setStyleConfig({ show_company_header: true, freeze_header: true, orientation: 'portrait', accent_color: '#1B5E20', alt_row_color: '#F1F8E9' })
+        setHeaderConfig([])
+        setFooterConfig({ show_total: false, sum_columns: [], show_signatures: false, signatures: [] })
+        setAvailableColumns([])
+        setAvailableMetaKeys([])
+      }}>Thêm mẫu</Button>}
     >
-      <Table dataSource={templates} columns={columns} loading={isLoading} rowKey={r => `${r.ma_mau}_${r.phap_nhan_id || 0}`} pagination={false} />
+      <Table dataSource={templates} columns={tableColumns} loading={isLoading} rowKey={r => `${r.ma_mau}_${r.phap_nhan_id || 0}`} pagination={false} size="small" />
 
       <Modal
-        title="Thiết kế Cột Excel"
+        title="Thiết kế mẫu Excel"
         open={!!editModal}
         onCancel={() => setEditModal(null)}
         onOk={() => form.submit()}
-        width={800}
+        width={860}
+        style={{ top: 20 }}
       >
         <Form form={form} layout="vertical" onFinish={saveMut.mutate}>
-          <Row gutter={16}>
+          <Row gutter={12}>
             <Col span={12}>
               <Form.Item name="ma_mau" label="Loại chứng từ" rules={[{ required: true }]}>
-                <Select 
+                <Select
                   options={Object.entries(DOC_TYPE_SCHEMAS).map(([k, s]) => ({ label: s.label, value: k }))}
                   onChange={(val) => {
                     const schema = DOC_TYPE_SCHEMAS[val]
@@ -1093,86 +1131,356 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
                       setAvailableColumns(schema.defaultColumns)
                       form.setFieldsValue({ ten_mau: `Xuất Excel ${schema.label}` })
                     }
+                    setAvailableMetaKeys(DOC_META_KEYS[val] ?? [])
                   }}
                 />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item label="Pháp nhân">
-                <Select value={selectedPhapNhanId} onChange={setSelectedPhapNhanId} options={[{label: 'Dùng chung (Mặc định)', value: null}, ...phapNhans.map(p => ({ label: p.ten_phap_nhan, value: p.id }))]} />
+                <Select
+                  value={selectedPhapNhanId}
+                  onChange={setSelectedPhapNhanId}
+                  options={[{ label: 'Dùng chung (Mặc định)', value: null }, ...phapNhans.map(p => ({ label: p.ten_phap_nhan, value: p.id }))]}
+                />
               </Form.Item>
             </Col>
           </Row>
           <Form.Item name="ten_mau" label="Tên mẫu" rules={[{ required: true }]}><Input /></Form.Item>
-          
-          <Divider orientation="left">Cấu hình cột</Divider>
-          <Form.Item name="column_config">
-            <ExcelColumnDesigner availableColumns={availableColumns} />
-          </Form.Item>
+
+          <Tabs
+            size="small"
+            items={[
+              {
+                key: 'cols',
+                label: '📋 Cột dữ liệu',
+                children: (
+                  <Form.Item name="column_config">
+                    <ExcelColumnDesigner availableColumns={availableColumns} />
+                  </Form.Item>
+                ),
+              },
+              {
+                key: 'header',
+                label: '📄 Header phiếu',
+                children: (
+                  <ExcelHeaderDesigner
+                    value={headerConfig}
+                    onChange={setHeaderConfig}
+                    availableKeys={availableMetaKeys}
+                  />
+                ),
+              },
+              {
+                key: 'footer',
+                label: '✍️ Footer & Chữ ký',
+                children: (
+                  <ExcelFooterDesigner
+                    value={footerConfig}
+                    onChange={setFooterConfig}
+                    columnOptions={sumColOptions}
+                  />
+                ),
+              },
+              {
+                key: 'style',
+                label: '🎨 Cài đặt',
+                children: (
+                  <ExcelStyleDesigner value={styleConfig} onChange={setStyleConfig} />
+                ),
+              },
+            ]}
+          />
         </Form>
       </Modal>
     </Card>
   )
 }
 
-type ExcelColConfig = DocColumn & { width?: number }
-function ExcelColumnDesigner({ value = [], onChange, availableColumns }: { value?: ExcelColConfig[], onChange?: (v: ExcelColConfig[]) => void, availableColumns: DocColumn[] }) {
+// ─── ExcelColumnDesigner ─────────────────────────────────────────────────────
+function ExcelColumnDesigner({ value = [], onChange, availableColumns }: {
+  value?: ExcelColumnConfig[]
+  onChange?: (v: ExcelColumnConfig[]) => void
+  availableColumns: DocColumn[]
+}) {
   const toggleColumn = (col: DocColumn) => {
     const exists = value.find(c => c.key === col.key)
-    if (exists) {
-      onChange?.(value.filter(c => c.key !== col.key))
-    } else {
-      onChange?.([...value, { ...col, width: 15 }])
-    }
+    if (exists) onChange?.(value.filter(c => c.key !== col.key))
+    else onChange?.([...value, { key: col.key, label: col.label, width: 15 }])
   }
 
-  const updateCol = (key: string, field: string, val: string | number) => {
+  const updateCol = (key: string, field: string, val: string | number | null) => {
     onChange?.(value.map(c => c.key === key ? { ...c, [field]: val } : c))
   }
 
+  const moveCol = (index: number, dir: -1 | 1) => {
+    const arr = [...value]
+    const target = index + dir
+    if (target < 0 || target >= arr.length) return
+    ;[arr[index], arr[target]] = [arr[target], arr[index]]
+    onChange?.(arr)
+  }
+
   return (
-    <div style={{ background: '#f5f5f5', padding: 16, borderRadius: 8 }}>
-      <Text strong>Cột có sẵn:</Text>
-      <div style={{ margin: '8px 0 16px' }}>
-        <Space wrap>
+    <div style={{ background: '#f5f5f5', padding: 12, borderRadius: 8 }}>
+      <Text strong style={{ fontSize: 12 }}>Cột có sẵn (click để thêm/bỏ):</Text>
+      <div style={{ margin: '8px 0 12px' }}>
+        <Space wrap size="small">
           {availableColumns.map(c => (
-            <Button 
-              key={c.key} 
-              size="small" 
+            <Button key={c.key} size="small"
               type={value.find(v => v.key === c.key) ? 'primary' : 'default'}
-              onClick={() => toggleColumn(c)}
-            >
+              onClick={() => toggleColumn(c)}>
               {c.label}
             </Button>
           ))}
         </Space>
       </div>
-
-      <Table 
-        size="small"
-        dataSource={value}
-        pagination={false}
-        rowKey="key"
+      <Table size="small" dataSource={value} pagination={false} rowKey="key"
         columns={[
-          { 
-            title: 'Sắp xếp', 
-            width: 50, 
-            render: () => <DragOutlined style={{ cursor: 'move' }} /> 
+          {
+            title: '', width: 60,
+            render: (_: unknown, __: ExcelColumnConfig, idx: number) => (
+              <Space size={2}>
+                <Button size="small" type="text" onClick={() => moveCol(idx, -1)} disabled={idx === 0}>↑</Button>
+                <Button size="small" type="text" onClick={() => moveCol(idx, 1)} disabled={idx === value.length - 1}>↓</Button>
+              </Space>
+            ),
           },
-          { title: 'Trường dữ liệu', dataIndex: 'key', key: 'key' },
-          { 
-            title: 'Tiêu đề Excel', 
-            dataIndex: 'label', 
-            render: (text, record) => <Input size="small" value={text} onChange={e => updateCol(record.key, 'label', e.target.value)} />
+          { title: 'Trường', dataIndex: 'key', key: 'key', width: 130 },
+          {
+            title: 'Tiêu đề',
+            dataIndex: 'label',
+            render: (text: string, r: ExcelColumnConfig) =>
+              <Input size="small" value={text} onChange={e => updateCol(r.key, 'label', e.target.value)} />,
           },
-          { 
-            title: 'Độ rộng', 
-            dataIndex: 'width', 
-            width: 100,
-            render: (val, record) => <InputNumber size="small" min={5} max={100} value={val} onChange={v => updateCol(record.key, 'width', v)} />
-          }
+          {
+            title: 'Độ rộng', dataIndex: 'width', width: 90,
+            render: (val: number, r: ExcelColumnConfig) =>
+              <InputNumber size="small" min={5} max={100} value={val} onChange={v => updateCol(r.key, 'width', v)} />,
+          },
+          {
+            title: '', width: 40,
+            render: (_: unknown, r: ExcelColumnConfig) =>
+              <Button size="small" danger type="text" onClick={() => onChange?.(value.filter(c => c.key !== r.key))}>✕</Button>,
+          },
         ]}
       />
+    </div>
+  )
+}
+
+// ─── ExcelHeaderDesigner ──────────────────────────────────────────────────────
+function ExcelHeaderDesigner({ value, onChange, availableKeys }: {
+  value: ExcelHeaderField[]
+  onChange: (v: ExcelHeaderField[]) => void
+  availableKeys: { key: string; label: string }[]
+}) {
+  const toggle = (k: { key: string; label: string }) => {
+    const exists = value.find(f => f.key === k.key)
+    if (exists) onChange(value.filter(f => f.key !== k.key))
+    else onChange([...value, { key: k.key, label: k.label }])
+  }
+  const updateLabel = (key: string, label: string) => {
+    onChange(value.map(f => f.key === key ? { ...f, label } : f))
+  }
+  const move = (i: number, dir: -1 | 1) => {
+    const arr = [...value]
+    const t = i + dir
+    if (t < 0 || t >= arr.length) return
+    ;[arr[i], arr[t]] = [arr[t], arr[i]]
+    onChange(arr)
+  }
+
+  return (
+    <div style={{ padding: 4 }}>
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        Các trường thông tin hiển thị trên đầu phiếu (trước bảng dữ liệu). Được sắp xếp 2 cột trái/phải.
+      </Text>
+      <div style={{ margin: '10px 0' }}>
+        <Text strong style={{ fontSize: 12 }}>Trường có sẵn:</Text>
+        <div style={{ marginTop: 6 }}>
+          <Space wrap size="small">
+            {availableKeys.map(k => (
+              <Button key={k.key} size="small"
+                type={value.find(f => f.key === k.key) ? 'primary' : 'default'}
+                onClick={() => toggle(k)}>
+                {k.label}
+              </Button>
+            ))}
+          </Space>
+        </div>
+      </div>
+      {value.length > 0 && (
+        <Table size="small" dataSource={value} pagination={false} rowKey="key"
+          columns={[
+            {
+              title: 'Thứ tự', width: 60,
+              render: (_: unknown, __: ExcelHeaderField, idx: number) => (
+                <Space size={2}>
+                  <Button size="small" type="text" onClick={() => move(idx, -1)} disabled={idx === 0}>↑</Button>
+                  <Button size="small" type="text" onClick={() => move(idx, 1)} disabled={idx === value.length - 1}>↓</Button>
+                </Space>
+              ),
+            },
+            { title: 'Trường', dataIndex: 'key', width: 160 },
+            {
+              title: 'Nhãn hiển thị',
+              dataIndex: 'label',
+              render: (text: string, r: ExcelHeaderField) =>
+                <Input size="small" value={text} onChange={e => updateLabel(r.key, e.target.value)} />,
+            },
+            {
+              title: '', width: 40,
+              render: (_: unknown, r: ExcelHeaderField) =>
+                <Button size="small" danger type="text" onClick={() => onChange(value.filter(f => f.key !== r.key))}>✕</Button>,
+            },
+          ]}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── ExcelFooterDesigner ──────────────────────────────────────────────────────
+function ExcelFooterDesigner({ value, onChange, columnOptions }: {
+  value: ExcelFooterConfig
+  onChange: (v: ExcelFooterConfig) => void
+  columnOptions: { label: string; value: string }[]
+}) {
+  const set = (patch: Partial<ExcelFooterConfig>) => onChange({ ...value, ...patch })
+  const [newSig, setNewSig] = useState('')
+
+  return (
+    <div style={{ padding: 4 }}>
+      <Row gutter={16}>
+        <Col span={12}>
+          <div style={{ marginBottom: 16 }}>
+            <Text strong>Dòng tổng cộng</Text>
+            <div style={{ marginTop: 8 }}>
+              <Space>
+                <Switch checked={!!value.show_total} onChange={v => set({ show_total: v })} />
+                <Text>Hiển thị dòng tổng</Text>
+              </Space>
+            </div>
+            {value.show_total && (
+              <div style={{ marginTop: 8 }}>
+                <Text style={{ fontSize: 12 }} type="secondary">Cột nào được tính tổng:</Text>
+                <Select
+                  mode="multiple"
+                  size="small"
+                  style={{ width: '100%', marginTop: 4 }}
+                  value={value.sum_columns ?? []}
+                  options={columnOptions}
+                  onChange={v => set({ sum_columns: v })}
+                  placeholder="Chọn cột số..."
+                />
+              </div>
+            )}
+          </div>
+        </Col>
+        <Col span={12}>
+          <div>
+            <Text strong>Chữ ký</Text>
+            <div style={{ marginTop: 8 }}>
+              <Space>
+                <Switch checked={!!value.show_signatures} onChange={v => set({ show_signatures: v })} />
+                <Text>Hiển thị ô chữ ký</Text>
+              </Space>
+            </div>
+            {value.show_signatures && (
+              <div style={{ marginTop: 8 }}>
+                {(value.signatures ?? []).map((sig, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                    <Input
+                      size="small"
+                      value={sig}
+                      onChange={e => {
+                        const sigs = [...(value.signatures ?? [])]
+                        sigs[i] = e.target.value
+                        set({ signatures: sigs })
+                      }}
+                    />
+                    <Button size="small" danger type="text"
+                      onClick={() => set({ signatures: (value.signatures ?? []).filter((_, j) => j !== i) })}>✕</Button>
+                  </div>
+                ))}
+                <Space.Compact size="small" style={{ marginTop: 4, width: '100%' }}>
+                  <Input
+                    value={newSig}
+                    onChange={e => setNewSig(e.target.value)}
+                    placeholder="Tên ô chữ ký..."
+                    onPressEnter={() => { if (newSig.trim()) { set({ signatures: [...(value.signatures ?? []), newSig.trim()] }); setNewSig('') } }}
+                  />
+                  <Button onClick={() => { if (newSig.trim()) { set({ signatures: [...(value.signatures ?? []), newSig.trim()] }); setNewSig('') } }}>+</Button>
+                </Space.Compact>
+              </div>
+            )}
+          </div>
+        </Col>
+      </Row>
+    </div>
+  )
+}
+
+// ─── ExcelStyleDesigner ───────────────────────────────────────────────────────
+function ExcelStyleDesigner({ value, onChange }: {
+  value: ExcelStyleConfig
+  onChange: (v: ExcelStyleConfig) => void
+}) {
+  const set = (patch: Partial<ExcelStyleConfig>) => onChange({ ...value, ...patch })
+
+  return (
+    <div style={{ padding: 4 }}>
+      <Row gutter={16}>
+        <Col span={12}>
+          <div style={{ marginBottom: 12 }}>
+            <Text strong style={{ fontSize: 12 }}>Màu header cột</Text>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+              <input type="color" value={value.accent_color || '#1B5E20'}
+                onChange={e => set({ accent_color: e.target.value })}
+                style={{ width: 40, height: 32, border: 'none', cursor: 'pointer', padding: 2 }} />
+              <Input size="small" value={value.accent_color || '#1B5E20'}
+                onChange={e => set({ accent_color: e.target.value })}
+                style={{ width: 90, fontFamily: 'monospace' }} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <Text strong style={{ fontSize: 12 }}>Màu dòng xen kẽ</Text>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
+              <input type="color" value={value.alt_row_color || '#F1F8E9'}
+                onChange={e => set({ alt_row_color: e.target.value })}
+                style={{ width: 40, height: 32, border: 'none', cursor: 'pointer', padding: 2 }} />
+              <Input size="small" value={value.alt_row_color || '#F1F8E9'}
+                onChange={e => set({ alt_row_color: e.target.value })}
+                style={{ width: 90, fontFamily: 'monospace' }} />
+              <Button size="small" type="link" onClick={() => set({ alt_row_color: '' })}>Bỏ</Button>
+            </div>
+          </div>
+        </Col>
+        <Col span={12}>
+          <div style={{ marginBottom: 12 }}>
+            <Text strong style={{ fontSize: 12 }}>Hướng trang</Text>
+            <div style={{ marginTop: 6 }}>
+              <Radio.Group value={value.orientation || 'portrait'} onChange={e => set({ orientation: e.target.value })} size="small">
+                <Radio.Button value="portrait">Dọc (Portrait)</Radio.Button>
+                <Radio.Button value="landscape">Ngang (Landscape)</Radio.Button>
+              </Radio.Group>
+            </div>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <Space direction="vertical" size={6}>
+              <Space>
+                <Switch checked={value.show_company_header !== false} onChange={v => set({ show_company_header: v })} size="small" />
+                <Text style={{ fontSize: 12 }}>Hiển thị thông tin công ty</Text>
+              </Space>
+              <Space>
+                <Switch checked={value.freeze_header !== false} onChange={v => set({ freeze_header: v })} size="small" />
+                <Text style={{ fontSize: 12 }}>Cố định dòng tiêu đề (Freeze pane)</Text>
+              </Space>
+            </Space>
+          </div>
+        </Col>
+      </Row>
     </div>
   )
 }

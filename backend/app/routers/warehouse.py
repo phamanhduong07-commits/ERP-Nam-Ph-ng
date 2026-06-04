@@ -1,4 +1,5 @@
-﻿import io
+﻿import html as _html_mod
+import io
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from io import BytesIO
@@ -39,6 +40,7 @@ from app.services.carton_metrics import production_item_metrics
 from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_bool, parse_decimal, parse_text,
 )
+from app.models.system import PrintTemplate, SystemSetting
 from app.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -1362,6 +1364,168 @@ def get_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depen
     return _gr_to_dict(r, db)
 
 
+@router.get("/goods-receipts/{gr_id}/print", response_class=HTMLResponse)
+def print_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    gr = db.query(GoodsReceipt).options(selectinload(GoodsReceipt.items)).filter(GoodsReceipt.id == gr_id).first()
+    if not gr:
+        raise HTTPException(404, "Không tìm thấy phiếu nhập")
+
+    phap_nhan_id = gr.phap_nhan_id
+    if not phap_nhan_id and gr.warehouse_id:
+        wh = db.get(Warehouse, gr.warehouse_id)
+        if wh and wh.phan_xuong_id:
+            px = db.get(PhanXuong, wh.phan_xuong_id)
+            if px:
+                phap_nhan_id = px.phap_nhan_id
+
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "GOODS_RECEIPT")
+    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None
+    if not tpl:
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in GOODS_RECEIPT — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
+    settings = {s.key: s.value for s in db.query(SystemSetting).all()}
+    sup = db.get(Supplier, gr.supplier_id) if gr.supplier_id else None
+    wh_obj = db.get(Warehouse, gr.warehouse_id) if gr.warehouse_id else None
+
+    rows = ""
+    tong = Decimal("0")
+    for i, it in enumerate(gr.items, 1):
+        thanh_tien = Decimal(str(it.thanh_tien or 0))
+        tong += thanh_tien
+        rows += (
+            f"<tr>"
+            f"<td style='text-align:center'>{i}</td>"
+            f"<td>{_html_mod.escape(it.ten_hang or '')}</td>"
+            f"<td style='text-align:center'>{_html_mod.escape(it.dvt or '')}</td>"
+            f"<td style='text-align:center'>{it.kho_mm or ''}</td>"
+            f"<td style='text-align:center'>{it.so_lop or ''}</td>"
+            f"<td style='text-align:center'>{_html_mod.escape(it.ky_hieu_cuon or '')}</td>"
+            f"<td style='text-align:center'>{it.so_cuon or ''}</td>"
+            f"<td style='text-align:right'>{float(it.so_luong):,.3f}</td>"
+            f"<td style='text-align:right'>{int(Decimal(str(it.don_gia or 0))):,}</td>"
+            f"<td style='text-align:right'>{int(thanh_tien):,}</td>"
+            f"</tr>"
+        )
+    body_html = (
+        "<table style='width:100%;border-collapse:collapse;font-size:10pt'>"
+        "<thead><tr style='background:#1B5E20;color:#fff'>"
+        "<th style='width:4%;padding:4px;border:1px solid #ccc'>STT</th>"
+        "<th style='padding:4px;border:1px solid #ccc'>Tên hàng</th>"
+        "<th style='width:7%;padding:4px;border:1px solid #ccc'>ĐVT</th>"
+        "<th style='width:7%;padding:4px;border:1px solid #ccc'>Khổ</th>"
+        "<th style='width:5%;padding:4px;border:1px solid #ccc'>ĐL</th>"
+        "<th style='width:9%;padding:4px;border:1px solid #ccc'>Ký hiệu</th>"
+        "<th style='width:7%;padding:4px;border:1px solid #ccc'>Số cuộn</th>"
+        "<th style='width:9%;padding:4px;border:1px solid #ccc'>Số lượng</th>"
+        "<th style='width:10%;padding:4px;border:1px solid #ccc'>Đơn giá</th>"
+        "<th style='width:11%;padding:4px;border:1px solid #ccc'>Thành tiền</th>"
+        "</tr></thead><tbody>"
+        + rows
+        + "</tbody></table>"
+    )
+
+    replacements = {
+        "{{document_number}}": _html_mod.escape(gr.so_phieu or ""),
+        "{{document_date}}": str(gr.ngay_nhap) if gr.ngay_nhap else "",
+        "{{supplier_name}}": _html_mod.escape(sup.ten_viet_tat if sup else ""),
+        "{{warehouse_name}}": _html_mod.escape(wh_obj.ten_kho if wh_obj else ""),
+        "{{body_html}}": body_html,
+        "{{tong_tien}}": f"{int(tong):,}",
+        "{{tong_tien_chu}}": f"<b>Tổng cộng: {int(tong):,} đồng</b>",
+        "{{company_name}}": _html_mod.escape(settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"),
+        "{{company_details}}": _html_mod.escape(settings.get("company_details") or ""),
+        "{{logo_img}}": f'<img src="{settings["logo_url"]}" />' if settings.get("logo_url") else "",
+    }
+    content = tpl.html_content
+    for k, v in replacements.items():
+        content = content.replace(k, v)
+    page = (
+        "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
+        f"<title>Phiếu nhập kho {_html_mod.escape(gr.so_phieu or '')}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>"
+        "<button onclick='window.print()' style='padding:7px 18px;background:#1B5E20;color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In phiếu</button>"
+        "<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>"
+        "</div>"
+        f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)
+
+
+@router.get("/goods-receipts/{gr_id}/export-excel")
+def export_goods_receipt_excel(gr_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    from app.services.excel_export_service import build_xlsx
+    gr = db.query(GoodsReceipt).options(selectinload(GoodsReceipt.items)).filter(GoodsReceipt.id == gr_id).first()
+    if not gr:
+        raise HTTPException(404, "Không tìm thấy phiếu nhập")
+
+    phap_nhan_id = gr.phap_nhan_id
+    if not phap_nhan_id and gr.warehouse_id:
+        wh = db.get(Warehouse, gr.warehouse_id)
+        if wh and wh.phan_xuong_id:
+            px = db.get(PhanXuong, wh.phan_xuong_id)
+            if px:
+                phap_nhan_id = px.phap_nhan_id
+
+    from app.models.system import ExcelTemplate
+    tpl_q = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "GOODS_RECEIPT")
+    tpl = tpl_q.filter(ExcelTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None
+    if not tpl:
+        tpl = tpl_q.filter(ExcelTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel GOODS_RECEIPT")
+
+    sup = db.get(Supplier, gr.supplier_id) if gr.supplier_id else None
+    wh_obj = db.get(Warehouse, gr.warehouse_id) if gr.warehouse_id else None
+    pn = db.get(PhapNhan, phap_nhan_id) if phap_nhan_id else None
+
+    meta = {
+        "document_number": gr.so_phieu or "",
+        "document_date": str(gr.ngay_nhap) if gr.ngay_nhap else "",
+        "supplier_name": sup.ten_viet_tat if sup else "",
+        "warehouse_name": wh_obj.ten_kho if wh_obj else "",
+        "loai_nhap": gr.loai_nhap or "",
+        "so_xe": gr.so_xe or "",
+        "ghi_chu": gr.ghi_chu or "",
+    }
+    company_info = {
+        "ten": (pn.ten_phap_nhan if pn else ""),
+        "dia_chi": getattr(pn, "dia_chi", "") or "",
+        "dien_thoai": getattr(pn, "so_dien_thoai", "") or "",
+        "ma_so_thue": getattr(pn, "ma_so_thue", "") or "",
+    }
+
+    items_data = [
+        {
+            "stt": i,
+            "ten_hang": it.ten_hang or "",
+            "dvt": it.dvt or "",
+            "kho_mm": float(it.kho_mm) if it.kho_mm else "",
+            "so_lop": it.so_lop or "",
+            "ky_hieu_cuon": it.ky_hieu_cuon or "",
+            "so_cuon": it.so_cuon or "",
+            "so_luong": float(it.so_luong),
+            "don_gia": float(it.don_gia),
+            "thanh_tien": float(it.thanh_tien),
+            "dinh_luong_thuc_te": float(it.dinh_luong_thuc_te) if it.dinh_luong_thuc_te else "",
+            "do_am": float(it.do_am) if it.do_am else "",
+            "ghi_chu": it.ghi_chu or "",
+        }
+        for i, it in enumerate(gr.items, 1)
+    ]
+
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, company_info)
+    filename = f"PNK_{gr.so_phieu or gr_id}.xlsx"
+    return StreamingResponse(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/goods-receipts/{gr_id}/tao-phieu-qc", status_code=201)
 def tao_phieu_qc(
     gr_id: int,
@@ -2067,6 +2231,145 @@ def get_material_issue(mi_id: int, db: Session = Depends(get_db), _: User = Depe
     if not r:
         raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
     return _mi_to_dict(r, db)
+
+
+@router.get("/material-issues/{mi_id}/print", response_class=HTMLResponse)
+def print_material_issue(mi_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    mi = db.query(MaterialIssue).options(selectinload(MaterialIssue.items)).filter(MaterialIssue.id == mi_id).first()
+    if not mi:
+        raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
+
+    wh = db.get(Warehouse, mi.warehouse_id) if mi.warehouse_id else None
+    lsx = db.get(ProductionOrder, mi.production_order_id) if mi.production_order_id else None
+    phap_nhan_id = (lsx.phap_nhan_id if lsx and lsx.phap_nhan_id else None)
+    if not phap_nhan_id and wh and wh.phan_xuong_id:
+        px = db.get(PhanXuong, wh.phan_xuong_id)
+        if px:
+            phap_nhan_id = px.phap_nhan_id
+
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "MATERIAL_ISSUE")
+    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None
+    if not tpl:
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in MATERIAL_ISSUE — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
+    settings = {s.key: s.value for s in db.query(SystemSetting).all()}
+
+    rows = ""
+    for i, it in enumerate(mi.items, 1):
+        tien = Decimal(str(it.don_gia or 0)) * Decimal(str(it.so_luong_thuc_xuat or 0))
+        rows += (
+            f"<tr>"
+            f"<td style='text-align:center'>{i}</td>"
+            f"<td>{_html_mod.escape(it.ten_hang or '')}</td>"
+            f"<td style='text-align:center'>{_html_mod.escape(it.dvt or '')}</td>"
+            f"<td style='text-align:right'>{float(it.so_luong_ke_hoach):,.3f}</td>"
+            f"<td style='text-align:right'>{float(it.so_luong_thuc_xuat):,.3f}</td>"
+            f"<td style='text-align:right'>{int(Decimal(str(it.don_gia or 0))):,}</td>"
+            f"<td style='text-align:right'>{int(tien):,}</td>"
+            f"</tr>"
+        )
+    body_html = (
+        "<table style='width:100%;border-collapse:collapse;font-size:10pt'>"
+        "<thead><tr style='background:#1B5E20;color:#fff'>"
+        "<th style='width:4%;padding:4px;border:1px solid #ccc'>STT</th>"
+        "<th style='padding:4px;border:1px solid #ccc'>Tên NVL</th>"
+        "<th style='width:7%;padding:4px;border:1px solid #ccc'>ĐVT</th>"
+        "<th style='width:11%;padding:4px;border:1px solid #ccc'>SL kế hoạch</th>"
+        "<th style='width:11%;padding:4px;border:1px solid #ccc'>SL thực xuất</th>"
+        "<th style='width:10%;padding:4px;border:1px solid #ccc'>Đơn giá</th>"
+        "<th style='width:11%;padding:4px;border:1px solid #ccc'>Thành tiền</th>"
+        "</tr></thead><tbody>"
+        + rows
+        + "</tbody></table>"
+    )
+
+    replacements = {
+        "{{document_number}}": _html_mod.escape(mi.so_phieu or ""),
+        "{{document_date}}": str(mi.ngay_xuat) if mi.ngay_xuat else "",
+        "{{warehouse_name}}": _html_mod.escape(wh.ten_kho if wh else ""),
+        "{{so_lenh}}": _html_mod.escape(lsx.so_lenh if lsx else ""),
+        "{{body_html}}": body_html,
+        "{{company_name}}": _html_mod.escape(settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"),
+        "{{company_details}}": _html_mod.escape(settings.get("company_details") or ""),
+        "{{logo_img}}": f'<img src="{settings["logo_url"]}" />' if settings.get("logo_url") else "",
+    }
+    content = tpl.html_content
+    for k, v in replacements.items():
+        content = content.replace(k, v)
+    page = (
+        "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
+        f"<title>Phiếu xuất NVL {_html_mod.escape(mi.so_phieu or '')}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>"
+        "<button onclick='window.print()' style='padding:7px 18px;background:#1B5E20;color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In phiếu</button>"
+        "<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>"
+        "</div>"
+        f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)
+
+
+@router.get("/material-issues/{mi_id}/export-excel")
+def export_material_issue_excel(mi_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    from app.services.excel_export_service import build_xlsx
+    mi = db.query(MaterialIssue).options(selectinload(MaterialIssue.items)).filter(MaterialIssue.id == mi_id).first()
+    if not mi:
+        raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
+
+    wh = db.get(Warehouse, mi.warehouse_id) if mi.warehouse_id else None
+    lsx = db.get(ProductionOrder, mi.production_order_id) if mi.production_order_id else None
+    phap_nhan_id = (lsx.phap_nhan_id if lsx and lsx.phap_nhan_id else None)
+    if not phap_nhan_id and wh and wh.phan_xuong_id:
+        px = db.get(PhanXuong, wh.phan_xuong_id)
+        if px:
+            phap_nhan_id = px.phap_nhan_id
+
+    from app.models.system import ExcelTemplate
+    tpl_q = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "MATERIAL_ISSUE")
+    tpl = tpl_q.filter(ExcelTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None
+    if not tpl:
+        tpl = tpl_q.filter(ExcelTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel MATERIAL_ISSUE")
+
+    pn = db.get(PhapNhan, phap_nhan_id) if phap_nhan_id else None
+    meta = {
+        "document_number": mi.so_phieu or "",
+        "document_date": str(mi.ngay_xuat) if mi.ngay_xuat else "",
+        "warehouse_name": wh.ten_kho if wh else "",
+        "so_lenh": lsx.so_lenh if lsx else "",
+        "ghi_chu": mi.ghi_chu or "",
+    }
+    company_info = {
+        "ten": (pn.ten_phap_nhan if pn else ""),
+        "dia_chi": getattr(pn, "dia_chi", "") or "",
+        "dien_thoai": getattr(pn, "so_dien_thoai", "") or "",
+        "ma_so_thue": getattr(pn, "ma_so_thue", "") or "",
+    }
+    items_data = [
+        {
+            "stt": i,
+            "ten_hang": it.ten_hang or "",
+            "dvt": it.dvt or "",
+            "so_luong_ke_hoach": float(it.so_luong_ke_hoach),
+            "so_luong_thuc_xuat": float(it.so_luong_thuc_xuat),
+            "don_gia": float(it.don_gia),
+            "thanh_tien": float(Decimal(str(it.don_gia or 0)) * Decimal(str(it.so_luong_thuc_xuat or 0))),
+            "ghi_chu": it.ghi_chu or "",
+        }
+        for i, it in enumerate(mi.items, 1)
+    ]
+
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, company_info)
+    filename = f"XNVL_{mi.so_phieu or mi_id}.xlsx"
+    return StreamingResponse(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/material-issues", status_code=201)

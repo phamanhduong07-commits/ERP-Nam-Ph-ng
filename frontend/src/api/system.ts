@@ -9,11 +9,40 @@ export interface PrintTemplate {
   variables_meta?: Record<string, unknown>
 }
 
+export interface ExcelHeaderField {
+  key: string
+  label: string
+}
+
+export interface ExcelFooterConfig {
+  show_total?: boolean
+  sum_columns?: string[]
+  show_signatures?: boolean
+  signatures?: string[]
+}
+
+export interface ExcelStyleConfig {
+  accent_color?: string
+  alt_row_color?: string
+  orientation?: 'portrait' | 'landscape'
+  show_company_header?: boolean
+  freeze_header?: boolean
+}
+
+export interface ExcelColumnConfig {
+  key: string
+  label: string
+  width?: number
+}
+
 export interface ExcelTemplate {
   ma_mau: string
   ten_mau: string
   phap_nhan_id?: number
-  column_config: unknown[]
+  column_config: ExcelColumnConfig[]
+  header_config?: ExcelHeaderField[]
+  footer_config?: ExcelFooterConfig
+  style_config?: ExcelStyleConfig
 }
 
 export const systemApi = {

@@ -236,4 +236,7 @@ export const purchaseApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
   },
+
+  exportPOExcel: (id: number) =>
+    client.get(`/purchase-orders/${id}/export-excel`, { responseType: 'blob' }).then(r => r.data as Blob),
 }

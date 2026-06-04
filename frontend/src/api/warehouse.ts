@@ -885,4 +885,10 @@ export const warehouseApi = {
 
   taoPhieuQC: (grId: number) =>
     client.post<{ qc_phieu_id: number; so_phieu: string }>(`/warehouse/goods-receipts/${grId}/tao-phieu-qc`),
+
+  exportGoodsReceiptExcel: (id: number) =>
+    client.get(`/warehouse/goods-receipts/${id}/export-excel`, { responseType: 'blob' }).then(r => r.data as Blob),
+
+  exportMaterialIssueExcel: (id: number) =>
+    client.get(`/warehouse/material-issues/${id}/export-excel`, { responseType: 'blob' }).then(r => r.data as Blob),
 }

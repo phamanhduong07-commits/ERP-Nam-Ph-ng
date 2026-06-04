@@ -24,6 +24,9 @@ class ExcelTemplateIn(BaseModel):
     ten_mau: str
     phap_nhan_id: Optional[int] = None
     column_config: List[dict]
+    header_config: Optional[List[dict]] = None
+    footer_config: Optional[dict] = None
+    style_config: Optional[dict] = None
 
 
 class SystemSettingIn(BaseModel):
@@ -89,6 +92,7 @@ def update_template(
 
 
 @router.delete("/templates/{ma_mau}")
+
 def delete_template(
     ma_mau: str,
     phap_nhan_id: Optional[int] = None,
@@ -158,6 +162,9 @@ def update_excel_template(
 
     tpl.ten_mau = body.ten_mau
     tpl.column_config = body.column_config
+    tpl.header_config = body.header_config
+    tpl.footer_config = body.footer_config
+    tpl.style_config = body.style_config
 
     db.commit()
     return {"ok": True}

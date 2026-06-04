@@ -1,7 +1,9 @@
-﻿from datetime import date, datetime, timedelta, timezone
+﻿import html as _html_mod
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -13,6 +15,7 @@ from app.models.inventory import InventoryBalance, InventoryTransaction
 from app.models.accounting import PurchaseInvoice
 from app.deps import get_current_user, require_permissions
 from app.models.auth import User
+from app.models.system import PrintTemplate, SystemSetting
 from fastapi import File, UploadFile
 from app.services.purchase_order_import_service import import_purchase_orders_excel
 from app.services.excel_import_service import build_template_response, ImportField
@@ -301,6 +304,168 @@ def get_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_curr
         logger.warning("purchase_order id=%s not found", po_id)
         raise HTTPException(404, "Không tìm thấy PO")
     return _po_to_dict(po, db)
+
+
+@router.get("/{po_id}/print", response_class=HTMLResponse)
+def print_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    po = db.query(PurchaseOrder).options(selectinload(PurchaseOrder.items)).filter(PurchaseOrder.id == po_id).first()
+    if not po:
+        raise HTTPException(404, "Không tìm thấy PO")
+
+    phap_nhan_id = po.phap_nhan_id
+    if not phap_nhan_id and po.phan_xuong_id:
+        px = db.get(PhanXuong, po.phan_xuong_id)
+        if px:
+            phap_nhan_id = px.phap_nhan_id
+
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PURCHASE_ORDER")
+    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None
+    if not tpl:
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in PURCHASE_ORDER — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
+    settings = {s.key: s.value for s in db.query(SystemSetting).all()}
+    sup = db.get(Supplier, po.supplier_id) if po.supplier_id else None
+
+    rows = ""
+    tong = Decimal("0")
+    for i, it in enumerate(po.items, 1):
+        tong += Decimal(str(it.thanh_tien or 0))
+        ten = it.ten_hang or ""
+        if not ten and it.paper_material_id:
+            pm = db.get(PaperMaterial, it.paper_material_id)
+            ten = pm.ten if pm else ""
+        elif not ten and it.other_material_id:
+            om = db.get(OtherMaterial, it.other_material_id)
+            ten = om.ten if om else ""
+        rows += (
+            f"<tr>"
+            f"<td style='text-align:center'>{i}</td>"
+            f"<td>{_html_mod.escape(ten)}</td>"
+            f"<td style='text-align:center'>{_html_mod.escape(it.dvt or '')}</td>"
+            f"<td style='text-align:center'>{it.kho_mm or ''}</td>"
+            f"<td style='text-align:center'>{it.so_cuon or ''}</td>"
+            f"<td style='text-align:right'>{float(it.so_luong):,.3f}</td>"
+            f"<td style='text-align:right'>{int(Decimal(str(it.don_gia or 0))):,}</td>"
+            f"<td style='text-align:right'>{int(Decimal(str(it.thanh_tien or 0))):,}</td>"
+            f"</tr>"
+        )
+    body_html = (
+        "<table style='width:100%;border-collapse:collapse;font-size:10pt'>"
+        "<thead><tr style='background:#1B5E20;color:#fff'>"
+        "<th style='width:4%;padding:4px;border:1px solid #ccc'>STT</th>"
+        "<th style='padding:4px;border:1px solid #ccc'>Tên hàng</th>"
+        "<th style='width:7%;padding:4px;border:1px solid #ccc'>ĐVT</th>"
+        "<th style='width:7%;padding:4px;border:1px solid #ccc'>Khổ</th>"
+        "<th style='width:7%;padding:4px;border:1px solid #ccc'>Số cuộn</th>"
+        "<th style='width:10%;padding:4px;border:1px solid #ccc'>Số lượng</th>"
+        "<th style='width:11%;padding:4px;border:1px solid #ccc'>Đơn giá</th>"
+        "<th style='width:12%;padding:4px;border:1px solid #ccc'>Thành tiền</th>"
+        "</tr></thead><tbody>"
+        + rows
+        + f"<tr style='font-weight:bold;background:#E8F5E9'>"
+        f"<td colspan='7' style='text-align:right;padding:4px;border:1px solid #ccc'>Tổng cộng:</td>"
+        f"<td style='text-align:right;padding:4px;border:1px solid #ccc'>{int(tong):,}</td></tr>"
+        + "</tbody></table>"
+    )
+
+    replacements = {
+        "{{document_number}}": _html_mod.escape(po.so_po or ""),
+        "{{document_date}}": po.ngay_po.isoformat() if po.ngay_po else "",
+        "{{supplier_name}}": _html_mod.escape(sup.ten_viet_tat if sup else ""),
+        "{{body_html}}": body_html,
+        "{{tong_tien}}": f"{int(tong):,}",
+        "{{ghi_chu}}": _html_mod.escape(po.ghi_chu or ""),
+        "{{dieu_khoan_tt}}": _html_mod.escape(po.dieu_khoan_tt or ""),
+        "{{company_name}}": _html_mod.escape(settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"),
+        "{{company_details}}": _html_mod.escape(settings.get("company_details") or ""),
+        "{{logo_img}}": f'<img src="{settings["logo_url"]}" />' if settings.get("logo_url") else "",
+    }
+    content = tpl.html_content
+    for k, v in replacements.items():
+        content = content.replace(k, v)
+    page = (
+        "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
+        f"<title>Đơn mua hàng {_html_mod.escape(po.so_po or '')}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>"
+        "<button onclick='window.print()' style='padding:7px 18px;background:#1B5E20;color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In đơn hàng</button>"
+        "<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>"
+        "</div>"
+        f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)
+
+
+@router.get("/{po_id}/export-excel")
+def export_po_excel(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    from app.services.excel_export_service import build_xlsx
+    from app.models.system import ExcelTemplate
+    from fastapi.responses import StreamingResponse as _SR
+    po = db.query(PurchaseOrder).options(selectinload(PurchaseOrder.items)).filter(PurchaseOrder.id == po_id).first()
+    if not po:
+        raise HTTPException(404, "Không tìm thấy PO")
+
+    phap_nhan_id = po.phap_nhan_id
+    if not phap_nhan_id and po.phan_xuong_id:
+        px = db.get(PhanXuong, po.phan_xuong_id)
+        if px:
+            phap_nhan_id = px.phap_nhan_id
+
+    tpl_q = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "PURCHASE_ORDER")
+    tpl = tpl_q.filter(ExcelTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None
+    if not tpl:
+        tpl = tpl_q.filter(ExcelTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel PURCHASE_ORDER")
+
+    sup = db.get(Supplier, po.supplier_id) if po.supplier_id else None
+    pn = db.get(PhapNhan, phap_nhan_id) if phap_nhan_id else None
+
+    meta = {
+        "document_number": po.so_po or "",
+        "document_date": po.ngay_po.isoformat() if po.ngay_po else "",
+        "supplier_name": sup.ten_viet_tat if sup else "",
+        "ghi_chu": po.ghi_chu or "",
+        "dieu_khoan_tt": po.dieu_khoan_tt or "",
+    }
+    company_info = {
+        "ten": (pn.ten_phap_nhan if pn else ""),
+        "dia_chi": getattr(pn, "dia_chi", "") or "",
+        "dien_thoai": getattr(pn, "so_dien_thoai", "") or "",
+        "ma_so_thue": getattr(pn, "ma_so_thue", "") or "",
+    }
+
+    items_data = []
+    for i, it in enumerate(po.items, 1):
+        ten = it.ten_hang or ""
+        if not ten and it.paper_material_id:
+            pm = db.get(PaperMaterial, it.paper_material_id)
+            ten = pm.ten if pm else ""
+        elif not ten and it.other_material_id:
+            om = db.get(OtherMaterial, it.other_material_id)
+            ten = om.ten if om else ""
+        items_data.append({
+            "stt": i,
+            "ten_hang": ten,
+            "dvt": it.dvt or "",
+            "kho_mm": float(it.kho_mm) if it.kho_mm else "",
+            "so_cuon": it.so_cuon or "",
+            "so_luong": float(it.so_luong),
+            "don_gia": float(it.don_gia),
+            "thanh_tien": float(it.thanh_tien),
+            "ghi_chu": it.ghi_chu or "",
+        })
+
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, company_info)
+    filename = f"PO_{po.so_po or po_id}.xlsx"
+    return _SR(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.put("/{po_id}")

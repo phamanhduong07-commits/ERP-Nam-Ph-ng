@@ -21,14 +21,23 @@ class PrintTemplate(Base):
 
 
 class ExcelTemplate(Base):
-    """Lưu trữ cấu hình cột cho việc xuất file Excel"""
+    """Lưu trữ cấu hình cột và layout cho việc xuất file Excel"""
     __tablename__ = "excel_templates"
 
     id = Column(Integer, primary_key=True)
-    ma_mau = Column(String(50), nullable=False)  # ví dụ: 'delivery_order', 'inventory'
-    phap_nhan_id = Column(Integer, nullable=True)  # ID của pháp nhân (NULL nếu dùng chung)
+    ma_mau = Column(String(50), nullable=False)
+    phap_nhan_id = Column(Integer, nullable=True)
     ten_mau = Column(String(100), nullable=False)
-    column_config = Column(JSON, nullable=False)  # [{ "key": "field", "label": "Header", "width": 15 }]
+    # [{ "key": "field", "label": "Header", "width": 15 }]
+    column_config = Column(JSON, nullable=False)
+    # [{ "key": "document_number", "label": "Số phiếu" }, ...]  — info rows above table
+    header_config = Column(JSON, nullable=True)
+    # { "show_total": true, "sum_columns": ["so_luong", "thanh_tien"],
+    #   "show_signatures": true, "signatures": ["Người lập", "Thủ kho"] }
+    footer_config = Column(JSON, nullable=True)
+    # { "accent_color": "#1B5E20", "alt_row_color": "#F1F8E9",
+    #   "orientation": "portrait", "show_company_header": true, "freeze_header": true }
+    style_config = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -12,7 +12,7 @@ import {
 } from '@ant-design/icons'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import dayjs from 'dayjs'
-import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, smartPrintPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
+import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, smartPrintPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 import {
   purchaseApi, PurchaseOrder, POItem, CreatePOPayload,
   TRANG_THAI_PO, TRANG_THAI_PO_COLOR,
@@ -341,6 +341,10 @@ export default function POListPage() {
               />
             </Tooltip>
           )}
+          <Tooltip title="Xuất Excel phiếu">
+            <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }}
+              onClick={() => handleExportPOExcel(r.id, r.so_po)} />
+          </Tooltip>
         </Space>
       ),
     },
@@ -398,6 +402,15 @@ export default function POListPage() {
       message.error(err?.message || (err as ApiError)?.response?.data?.detail || 'Xuat Excel don mua hang that bai')
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const handleExportPOExcel = async (id: number, soPo: string) => {
+    try {
+      const blob = await purchaseApi.exportPOExcel(id)
+      downloadBlob(blob, `PO_${soPo || id}.xlsx`)
+    } catch {
+      message.error('Không thể xuất Excel. Kiểm tra lại cấu hình mẫu Excel PURCHASE_ORDER.')
     }
   }
 

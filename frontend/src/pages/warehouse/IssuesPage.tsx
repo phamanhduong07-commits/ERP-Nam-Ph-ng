@@ -3,7 +3,7 @@ import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
-  Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Divider,
+  Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message, Divider,
 } from 'antd'
 import { FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined, ExportOutlined, MinusCircleOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -12,7 +12,7 @@ import { warehousesApi } from '../../api/warehouses'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { productionOrdersApi } from '../../api/productionOrders'
-import { exportToExcel, printDocument, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
+import { exportToExcel, printDocument, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId, downloadBlob } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import EmptyState from "../../components/EmptyState"
 
@@ -164,6 +164,15 @@ export default function IssuesPage() {
     smartPrintPdf('MATERIAL_ISSUE', printData, r.phap_nhan_id)
   }
 
+  const handleExportIssueExcel = async (id: number, soPhieu: string) => {
+    try {
+      const blob = await warehouseApi.exportMaterialIssueExcel(id)
+      downloadBlob(blob, `XNVL_${soPhieu || id}.xlsx`)
+    } catch {
+      message.error('Không thể xuất Excel. Kiểm tra lại cấu hình mẫu Excel MATERIAL_ISSUE.')
+    }
+  }
+
   const handleExportExcel = () => {
     const resolvedPhapNhanId = resolveSinglePhapNhanId(issueList)
     if (!issueList.length) {
@@ -209,6 +218,10 @@ export default function IssuesPage() {
       render: (_: unknown, r: MaterialIssue) => (
         <Space size={4}>
           <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintIssue(r)} />
+          <Tooltip title="Xuất Excel phiếu">
+            <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }}
+              onClick={() => handleExportIssueExcel(r.id, r.so_phieu)} />
+          </Tooltip>
           <Popconfirm title="Xoá phiếu xuất này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
             disabled={r.trang_thai === 'da_xuat'}>
             <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_xuat'} />

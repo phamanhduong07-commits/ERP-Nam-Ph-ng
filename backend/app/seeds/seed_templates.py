@@ -297,6 +297,20 @@ TEMPLATES = [
         }
     },
     {
+        "ma_mau": "PURCHASE_ORDER",
+        "ten_mau": "Đơn Mua Hàng",
+        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div><div class="doc-footer" style="margin-top:8px;font-style:italic">Điều khoản thanh toán: {{dieu_khoan_tt}}</div><div class="doc-footer">{{ghi_chu}}</div>',
+        "variables_meta": {
+            "document_number": "Số PO",
+            "document_date": "Ngày PO",
+            "supplier_name": "Nhà cung cấp",
+            "body_html": "Bảng hàng hóa",
+            "tong_tien": "Tổng tiền",
+            "dieu_khoan_tt": "Điều khoản thanh toán",
+            "ghi_chu": "Ghi chú"
+        }
+    },
+    {
         "ma_mau": "WAREHOUSE_TRANSFER",
         "ten_mau": "Phiếu Chuyển Kho",
         "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div>' + '<div class="doc-footer">{{footer_html}}</div>',
