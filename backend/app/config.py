@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     HTCPH_PASSWORD: str = ""
     HTCPH_DB: str = "HTCPH"
 
+    # Gemini Vision API — OCR đọc ảnh phiếu
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+
     # SerpAPI for lead crawler
     SERPAPI_KEY: str = ""
 
