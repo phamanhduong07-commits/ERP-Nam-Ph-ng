@@ -81,7 +81,6 @@ class PayrollService:
         to_dt = datetime.combine(to_date, time.max)
         logs = db.query(ScanLog).options(
             joinedload(ScanLog.may_scan_obj),
-            joinedload(ScanLog.production_order),
         ).filter(
             ScanLog.created_at >= from_dt,
             ScanLog.created_at <= to_dt
