@@ -9,7 +9,7 @@ import {
 import {
   FileExcelOutlined, FileImageOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
   CheckCircleOutlined, DollarOutlined, ThunderboltOutlined, UploadOutlined, RollbackOutlined,
-  AuditOutlined, ScanOutlined, FormOutlined,
+  AuditOutlined, ScanOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
@@ -19,9 +19,10 @@ import { purchaseApi } from '../../api/purchase'
 import type { POItem } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId, downloadBlob } from '../../utils/exportUtils'
-import { mediaApi } from '../../api/media'
+
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import EmptyState from "../../components/EmptyState"
+import HoanThienGiayModal from '../../components/HoanThienGiayModal'
 
 const { Title, Text } = Typography
 
@@ -53,9 +54,8 @@ export default function NhapGiayPage() {
   const [chonNLSearch, setChonNLSearch] = useState('')
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null)
   const [invoicePreviewUrl, setInvoicePreviewUrl] = useState<string | null>(null)
-  const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
+  const [hoanThienId, setHoanThienId] = useState<number | null>(null)
   const [ocrResult, setOcrResult] = useState<Record<number, any>>({})
-  const [ocrModalLoading, setOcrModalLoading] = useState(false)
 
   // Reactive watches — hooks must be at top level
   const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
@@ -152,27 +152,13 @@ export default function NhapGiayPage() {
     setOpen(false)
     setInvoiceFile(null)
     setInvoicePreviewUrl(null)
-    setEditingDraftId(null)
     form.resetFields()
     setSelectedPO(undefined)
     setFormPxId(null)
   }
 
-  const handleOpenDraft = async (r: GoodsReceipt) => {
-    // Load detail để lấy invoice_image (list không trả về base64)
-    const detail = await warehouseApi.getGoodsReceipt(r.id).then(res => res.data)
-    setEditingDraftId(r.id)
-    if (detail.invoice_image) setInvoicePreviewUrl(detail.invoice_image)
-    form.setFieldsValue({
-      so_xe: detail.so_xe,
-      ngay_nhap: detail.ngay_nhap ? dayjs(detail.ngay_nhap) : undefined,
-      supplier_id: detail.supplier_id,
-      warehouse_id: detail.warehouse_id,
-      hd_tong_kg: detail.hd_tong_kg,
-      ghi_chu: detail.ghi_chu,
-      items: [],
-    })
-    setOpen(true)
+  const handleOpenDraft = (r: GoodsReceipt) => {
+    setHoanThienId(r.id)
   }
 
   const createMut = useMutation({
@@ -321,31 +307,18 @@ export default function NhapGiayPage() {
       let invoice_image: string | null = null
       if (invoiceFile) invoice_image = await fileToBase64(invoiceFile)
 
-      if (editingDraftId) {
-        // Hoàn thiện phiếu nháp từ quick capture
-        completeMut.mutate({
-          id: editingDraftId,
-          data: {
-            warehouse_id: v.warehouse_id || null,
-            ghi_chu: v.ghi_chu || null,
-            hd_tong_kg: v.hd_tong_kg || null,
-            items,
-          },
-        })
-      } else {
-        createMut.mutate({
-          ngay_nhap: v.ngay_nhap.format('YYYY-MM-DD'),
-          po_id: v.po_id || null,
-          supplier_id: v.supplier_id,
-          warehouse_id: v.warehouse_id,
-          loai_nhap: 'MUA_HANG',
-          ghi_chu: v.ghi_chu || null,
-          so_xe: v.so_xe || null,
-          invoice_image,
-          hd_tong_kg: v.hd_tong_kg || null,
-          items,
-        })
-      }
+      createMut.mutate({
+        ngay_nhap: v.ngay_nhap.format('YYYY-MM-DD'),
+        po_id: v.po_id || null,
+        supplier_id: v.supplier_id,
+        warehouse_id: v.warehouse_id,
+        loai_nhap: 'MUA_HANG',
+        ghi_chu: v.ghi_chu || null,
+        so_xe: v.so_xe || null,
+        invoice_image,
+        hd_tong_kg: v.hd_tong_kg || null,
+        items,
+      })
     } catch { /* validation inline */ }
   }
 
@@ -634,12 +607,12 @@ export default function NhapGiayPage() {
         width="98vw"
         style={{ top: 8, padding: 0 }}
         styles={{ body: { padding: '12px 16px', height: 'calc(100vh - 120px)', overflow: 'hidden' } }}
-        title={editingDraftId ? '✏️ Hoàn thiện phiếu nhập giấy cuộn' : 'Tạo phiếu nhập giấy cuộn'}
+        title="Tạo phiếu nhập giấy cuộn"
         footer={
           <Space>
             <Button onClick={handleClose}>Huỷ</Button>
-            <Button type="primary" loading={createMut.isPending || completeMut.isPending} onClick={handleSubmit}>
-              {editingDraftId ? 'Hoàn thiện & cập nhật tồn kho' : 'Lưu phiếu nhập'}
+            <Button type="primary" loading={createMut.isPending} onClick={handleSubmit}>
+              Lưu phiếu nhập
             </Button>
           </Space>
         }
@@ -657,36 +630,6 @@ export default function NhapGiayPage() {
               {invoicePreviewUrl && (
                 <Button size="small" danger onClick={() => { setInvoiceFile(null); setInvoicePreviewUrl(null) }}>Xoá</Button>
               )}
-              {editingDraftId && (
-                <Button
-                  size="small"
-                  icon={<ScanOutlined />}
-                  loading={ocrModalLoading}
-                  style={{ color: '#722ed1', borderColor: '#722ed1' }}
-                  onClick={async () => {
-                    setOcrModalLoading(true)
-                    try {
-                      // Upload file lên erp_media nếu user vừa chọn file mới
-                      if (invoiceFile) {
-                        await mediaApi.upload('goods_receipts', editingDraftId, invoiceFile, 'Phiếu xuất NCC')
-                      }
-                      const res = await warehouseApi.extractImageOcr(editingDraftId).then(r => r.data)
-                      const ext = res.extracted ?? {}
-                      setOcrResult(prev => ({ ...prev, [editingDraftId]: ext }))
-                      if (ext.so_xe) form.setFieldValue('so_xe', ext.so_xe)
-                      if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
-                      message.success('Đọc ảnh xong')
-                    } catch (e: unknown) {
-                      const err = e as ApiError
-                      message.error(err?.response?.data?.detail || 'Lỗi đọc ảnh')
-                    } finally {
-                      setOcrModalLoading(false)
-                    }
-                  }}
-                >
-                  Đọc ảnh (AI)
-                </Button>
-              )}
             </div>
             <div style={{ flex: 1, overflow: 'auto', background: '#fafafa', border: '1px dashed #d9d9d9', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {invoicePreviewUrl ? (
@@ -699,44 +642,6 @@ export default function NhapGiayPage() {
                 </div>
               )}
             </div>
-            {editingDraftId && ocrResult[editingDraftId] && (() => {
-              const ext = ocrResult[editingDraftId]
-              return (
-                <div style={{ marginTop: 8, background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 4, padding: '8px 10px', fontSize: 12 }}>
-                  <div style={{ fontWeight: 600, color: '#52c41a', marginBottom: 4 }}>✅ OCR đã đọc xong</div>
-                  {ext.ten_ncc && <div>NCC: <strong>{ext.ten_ncc}</strong></div>}
-                  {ext.so_xe && <div>Số xe: <strong>{ext.so_xe}</strong></div>}
-                  {ext.tong_kg && <div>Tổng KG: <strong>{ext.tong_kg} kg</strong></div>}
-                  {(ext.hang_hoa?.length ?? 0) > 0 && <div>{ext.hang_hoa.length} dòng hàng đã đọc</div>}
-                  <Button
-                    size="small"
-                    type="primary"
-                    icon={<FormOutlined />}
-                    style={{ marginTop: 6 }}
-                    onClick={() => {
-                      if (ext.so_xe) form.setFieldValue('so_xe', ext.so_xe)
-                      if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
-                      if ((ext.hang_hoa?.length ?? 0) > 0) {
-                        form.setFieldValue('items', ext.hang_hoa.map((h: any) => ({
-                          mat_id: null,
-                          ten_hang: h.ten || '',
-                          so_luong: h.trong_luong_kg ?? null,
-                          dvt: 'Kg',
-                          don_gia: 0,
-                          kho_mm: h.kho_mm ?? null,
-                          so_cuon: h.so_cuon ?? null,
-                          ky_hieu_cuon: h.ky_hieu ?? null,
-                          ket_qua_kiem_tra: 'DAT',
-                        })))
-                        message.success(`Đã điền ${ext.hang_hoa.length} dòng hàng vào form`)
-                      }
-                    }}
-                  >
-                    Điền vào form
-                  </Button>
-                </div>
-              )
-            })()}
           </Col>
 
           {/* RIGHT: FORM */}
@@ -958,6 +863,18 @@ export default function NhapGiayPage() {
           ]}
         />
       </Modal>
+
+      {hoanThienId && (
+        <HoanThienGiayModal
+          grId={hoanThienId}
+          onClose={() => setHoanThienId(null)}
+          onSuccess={() => {
+            setHoanThienId(null)
+            qc.invalidateQueries({ queryKey: ['goods-receipts-giay'] })
+            qc.invalidateQueries({ queryKey: ['ton-kho'] })
+          }}
+        />
+      )}
     </div>
   )
 }
