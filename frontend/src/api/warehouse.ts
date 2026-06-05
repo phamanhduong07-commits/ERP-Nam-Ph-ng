@@ -832,7 +832,7 @@ export const warehouseApi = {
 
   // Kho theo xưởng
   listTheoPhanXuong: () => client.get<PhanXuongWithWarehouses[]>('/warehouse/theo-phan-xuong'),
-  getTonKhoTpLsx: (params?: { ten_khach?: string; so_lenh?: string; nv_theo_doi_id?: number; tu_ngay?: string; den_ngay?: string }) =>
+  getTonKhoTpLsx: (params?: { ten_khach?: string; so_lenh?: string; ten_hang?: string; nv_theo_doi_id?: number; tu_ngay?: string; den_ngay?: string }) =>
     client.get<TonKhoTPRow[]>('/warehouse/ton-kho-tp-lsx', { params }),
   initWarehousesForPhanXuong: (pxId: number) =>
     client.post<{ id: number; ma_kho: string; ten_kho: string; created: boolean }[]>(

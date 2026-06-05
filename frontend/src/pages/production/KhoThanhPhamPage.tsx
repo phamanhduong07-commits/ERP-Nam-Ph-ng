@@ -32,12 +32,14 @@ export default function KhoThanhPhamPage() {
   // Server-side filters
   const [filterKhach, setFilterKhach] = useState('')
   const [filterSoLenh, setFilterSoLenh] = useState('')
+  const [filterTenHang, setFilterTenHang] = useState('')
   const [filterNvId, setFilterNvId] = useState<number | undefined>()
   const [filterDates, setFilterDates] = useState<[string | undefined, string | undefined]>([undefined, undefined])
 
   const filterParams = {
     ten_khach: filterKhach || undefined,
     so_lenh: filterSoLenh || undefined,
+    ten_hang: filterTenHang || undefined,
     nv_theo_doi_id: filterNvId,
     tu_ngay: filterDates[0],
     den_ngay: filterDates[1],
@@ -103,6 +105,7 @@ export default function KhoThanhPhamPage() {
   const clearAllFilters = () => {
     setFilterKhach('')
     setFilterSoLenh('')
+    setFilterTenHang('')
     setFilterNvId(undefined)
     setFilterDates([undefined, undefined])
     setFilterPhapNhan(null)
@@ -444,6 +447,17 @@ export default function KhoThanhPhamPage() {
               style={{ width: 150 }}
               value={filterSoLenh}
               onChange={e => setFilterSoLenh(e.target.value)}
+            />
+          </Col>
+          <Col>
+            <Input
+              size="small"
+              placeholder="Tên hàng"
+              prefix={<SearchOutlined />}
+              allowClear
+              style={{ width: 180 }}
+              value={filterTenHang}
+              onChange={e => setFilterTenHang(e.target.value)}
             />
           </Col>
           <Col>

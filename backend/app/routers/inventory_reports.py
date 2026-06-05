@@ -127,6 +127,7 @@ def get_giao_dich(
 def ton_kho_tp_lsx(
     ten_khach: Optional[str] = Query(default=None),
     so_lenh: Optional[str] = Query(default=None),
+    ten_hang: Optional[str] = Query(default=None),
     nv_theo_doi_id: Optional[int] = Query(default=None),
     tu_ngay: Optional[str] = Query(default=None),
     den_ngay: Optional[str] = Query(default=None),
@@ -343,6 +344,8 @@ def ton_kho_tp_lsx(
         if ten_khach and (not ten_khach_hang or ten_khach.lower() not in ten_khach_hang.lower()):
             continue
         if so_lenh and so_lenh.lower() not in o.so_lenh.lower():
+            continue
+        if ten_hang and (not (first_item and first_item.ten_hang) or ten_hang.lower() not in first_item.ten_hang.lower()):
             continue
         if nv_theo_doi_id and o.nv_theo_doi_id != nv_theo_doi_id:
             continue
