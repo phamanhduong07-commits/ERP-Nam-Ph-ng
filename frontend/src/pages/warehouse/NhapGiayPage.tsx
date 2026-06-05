@@ -515,33 +515,31 @@ export default function NhapGiayPage() {
 
   const expandedRowRender = (r: GoodsReceipt) => (
     <div>
-      {r.has_invoice_image && (
-        <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>Phiếu xuất NCC:</Text>
-          {expandedImages[r.id]
-            ? <Image src={expandedImages[r.id]} height={48} style={{ cursor: 'pointer', borderRadius: 4, border: '1px solid #d9d9d9' }} />
-            : <Button size="small" icon={<FileImageOutlined />} onClick={() => handleLoadInvoiceImage(r.id)}>Xem ảnh phiếu</Button>
-          }
-          <Button
-            size="small"
-            icon={<ScanOutlined />}
-            loading={ocrMut.isPending && ocrMut.variables === r.id}
-            onClick={() => ocrMut.mutate(r.id)}
-          >
-            Đọc hình AI
-          </Button>
-          {ocrResult[r.id] && (() => {
-            const ext = ocrResult[r.id]
-            return (
-              <span style={{ fontSize: 12, color: '#52c41a' }}>
-                {ext.ten_ncc && <span>NCC: <b>{ext.ten_ncc}</b> · </span>}
-                {ext.tong_kg && <span>Tổng: <b>{ext.tong_kg}kg</b> · </span>}
-                {(ext.hang_hoa?.length ?? 0) > 0 && <span>{ext.hang_hoa.length} dòng</span>}
-              </span>
-            )
-          })()}
-        </div>
-      )}
+      <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>Phiếu xuất NCC:</Text>
+        {expandedImages[r.id]
+          ? <Image src={expandedImages[r.id]} height={48} style={{ cursor: 'pointer', borderRadius: 4, border: '1px solid #d9d9d9' }} />
+          : <Button size="small" icon={<FileImageOutlined />} onClick={() => handleLoadInvoiceImage(r.id)}>Xem ảnh phiếu</Button>
+        }
+        <Button
+          size="small"
+          icon={<ScanOutlined />}
+          loading={ocrMut.isPending && ocrMut.variables === r.id}
+          onClick={() => ocrMut.mutate(r.id)}
+        >
+          Đọc hình AI
+        </Button>
+        {ocrResult[r.id] && (() => {
+          const ext = ocrResult[r.id]
+          return (
+            <span style={{ fontSize: 12, color: '#52c41a' }}>
+              {ext.ten_ncc && <span>NCC: <b>{ext.ten_ncc}</b> · </span>}
+              {ext.tong_kg && <span>Tổng: <b>{ext.tong_kg}kg</b> · </span>}
+              {(ext.hang_hoa?.length ?? 0) > 0 && <span>{ext.hang_hoa.length} dòng</span>}
+            </span>
+          )
+        })()}
+      </div>
       <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}
         columns={[
           { title: 'Tên hàng', dataIndex: 'ten_hang' },

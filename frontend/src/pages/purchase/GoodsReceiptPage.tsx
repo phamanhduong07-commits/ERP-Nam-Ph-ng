@@ -718,8 +718,7 @@ export default function GoodsReceiptPage() {
               readOnly={detailDrawer.trang_thai === 'da_duyet'}
             />
 
-            {detailDrawer.has_invoice_image && (
-              <div style={{ marginTop: 8 }}>
+            <div style={{ marginTop: 8 }}>
                 <Button
                   icon={<ScanOutlined />}
                   loading={ocrMut.isPending}
@@ -745,8 +744,7 @@ export default function GoodsReceiptPage() {
                     </Card>
                   )
                 })()}
-              </div>
-            )}
+            </div>
 
             <div style={{ marginTop: 16, textAlign: 'right' }}>
               <Space>
