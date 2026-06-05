@@ -306,6 +306,234 @@ def get_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_curr
     return _po_to_dict(po, db)
 
 
+_LOAI_LAN_LABEL = {
+    "lan_thuong": "Lằn thường",
+    "lan_toc_do_cao": "Lằn TC cao",
+    "lan_cat": "Lằn cắt",
+    "lan_am_duong": "Lằn âm dương",
+    "lan_am": "Lằn âm",
+    "lan_duong": "Lằn dương",
+}
+
+_TH = "<th style='padding:4px;border:1px solid #ccc;text-align:center'>"
+_TH_END = "</th>"
+_DEFAULT_COLOR = "#1677ff"
+
+
+def _cau_truc_from_spec(s: dict) -> str:
+    so_lop = s.get("so_lop") or 0
+    to_hop = s.get("to_hop_song") or ""
+    mat = s.get("mat") or ""
+    if not so_lop or not mat:
+        return "—"
+    parts = [mat]
+    if so_lop >= 3 and s.get("song_1"):
+        parts.append(f"{s['song_1']}{to_hop[0] if len(to_hop) > 0 else 'B'}")
+        parts.append(s.get("mat_1") or "?")
+    if so_lop >= 5 and s.get("song_2"):
+        parts.append(f"{s['song_2']}{to_hop[1] if len(to_hop) > 1 else 'C'}")
+        parts.append(s.get("mat_2") or "?")
+    if so_lop >= 7 and s.get("song_3"):
+        parts.append(f"{s['song_3']}{to_hop[2] if len(to_hop) > 2 else 'D'}")
+        parts.append(s.get("mat_3") or "?")
+    return "/".join(parts)
+
+
+def _dinh_luong_from_spec(s: dict) -> str:
+    """Build định lượng: mat_dl-song1_dl-mat1_dl-song2_dl-mat2_dl (ví dụ: 140-125-125-125-120)"""
+    so_lop = s.get("so_lop") or 0
+    parts = []
+    if s.get("mat_dl"):
+        parts.append(str(int(s["mat_dl"])))
+    if so_lop >= 3:
+        if s.get("song_1_dl"):
+            parts.append(str(int(s["song_1_dl"])))
+        if s.get("mat_1_dl"):
+            parts.append(str(int(s["mat_1_dl"])))
+    if so_lop >= 5:
+        if s.get("song_2_dl"):
+            parts.append(str(int(s["song_2_dl"])))
+        if s.get("mat_2_dl"):
+            parts.append(str(int(s["mat_2_dl"])))
+    if so_lop >= 7:
+        if s.get("song_3_dl"):
+            parts.append(str(int(s["song_3_dl"])))
+        if s.get("mat_3_dl"):
+            parts.append(str(int(s["mat_3_dl"])))
+    return "-".join(parts) if parts else "—"
+
+
+def _qccl_from_spec(s: dict) -> str:
+    loai_lan_raw = s.get("loai_lan") or ""
+    loai_lan_label = _LOAI_LAN_LABEL.get(loai_lan_raw, loai_lan_raw)
+    parts = [
+        s.get("c_tham") or "",
+        s.get("can_man") or "",
+        loai_lan_label,
+        s.get("qccl") or "",
+    ]
+    return " ".join(p for p in parts if p) or "—"
+
+
+def _build_body_rows(items, tong: Decimal) -> str:
+    """<tr> rows cho tbody của template (11 cột chuẩn): STT, Tên hàng, Quy cách,
+    Khổ×Cắt, Số lượng, Lớp, Sóng, ĐVT, Đơn giá, Thành tiền, Ghi chú."""
+    _TD = "style='border:1px solid #ddd;padding:6px 8px'"
+    _TDC = "style='border:1px solid #ddd;padding:6px 8px;text-align:center'"
+    _TDR = "style='border:1px solid #ddd;padding:6px 8px;text-align:right'"
+    rows = ""
+    for i, it in enumerate(items, 1):
+        spec = getattr(it, "phoi_spec", None) or {}
+        if spec:
+            dai = spec.get("dai") or ""
+            rong = spec.get("rong") or ""
+            cao = spec.get("cao") or ""
+            quy_cach = f"{dai}×{rong}×{cao}" if all([dai, rong, cao]) else (it.ten_hang or "")
+            kho_tt = spec.get("kho_tt") or ""
+            dai_tt = spec.get("dai_tt") or ""
+            kho_cat = f"{kho_tt}×{dai_tt}" if kho_tt and dai_tt else ""
+            so_lop = spec.get("so_lop") or ""
+            song = spec.get("to_hop_song") or ""
+        else:
+            quy_cach = str(it.kho_mm) if getattr(it, "kho_mm", None) else ""
+            kho_cat = ""
+            so_lop = ""
+            song = ""
+        rows += (
+            f"<tr>"
+            f"<td {_TDC}>{i}</td>"
+            f"<td {_TD}><strong>{_html_mod.escape(it.ten_hang or '')}</strong></td>"
+            f"<td {_TDC}>{_html_mod.escape(quy_cach)}</td>"
+            f"<td {_TDC}>{_html_mod.escape(str(kho_cat))}</td>"
+            f"<td {_TDR}>{float(it.so_luong or 0):,.0f}</td>"
+            f"<td {_TDC}>{so_lop}</td>"
+            f"<td {_TDC}>{_html_mod.escape(str(song))}</td>"
+            f"<td {_TDC}>{_html_mod.escape(it.dvt or '')}</td>"
+            f"<td {_TDR}>{int(Decimal(str(it.don_gia or 0))):,}</td>"
+            f"<td {_TDR}>{int(Decimal(str(it.thanh_tien or 0))):,}</td>"
+            f"<td {_TD}></td>"
+            f"</tr>"
+        )
+    rows += (
+        f"<tr style='font-weight:bold;background:#f0f7ff'>"
+        f"<td colspan='9' {_TDR}>Tổng cộng:</td>"
+        f"<td {_TDR}>{int(tong):,}</td>"
+        f"<td {_TD}></td>"
+        f"</tr>"
+    )
+    return rows
+
+
+def _build_body_html_phoi(items, tong: Decimal, color: str = _DEFAULT_COLOR) -> str:
+    _accent = f"background:{color};color:#fff"
+    th = _TH
+    header = (
+        f"<thead><tr style='{_accent}'>"
+        f"{th}STT{_TH_END}"
+        f"{th}Sản phẩm{_TH_END}"
+        f"{th}Khổ giấy{_TH_END}"
+        f"{th}Số dao{_TH_END}"
+        f"{th}Khổ TT × Cắt{_TH_END}"
+        f"{th}Lớp{_TH_END}"
+        f"{th}Tổ hợp{_TH_END}"
+        f"{th}Định lượng{_TH_END}"
+        f"{th}QC Cán lằn{_TH_END}"
+        f"{th}SL tấm{_TH_END}"
+        f"{th}Đơn giá{_TH_END}"
+        f"{th}Thành tiền{_TH_END}"
+        f"</tr></thead>"
+    )
+    td = "style='padding:4px;border:1px solid #ccc'"
+    tdc = "style='padding:4px;border:1px solid #ccc;text-align:center'"
+    tdr = "style='padding:4px;border:1px solid #ccc;text-align:right'"
+    rows = ""
+    for i, it in enumerate(items, 1):
+        s = it.phoi_spec or {}
+        ten = (s.get("ten_san_pham") or it.ten_hang or "")
+        kho_giay = s.get("kho_giay") or ""
+        so_dao = s.get("so_dao") or ""
+        kho_tt = s.get("kho_tt") or ""
+        dai_tt = s.get("dai_tt") or ""
+        kho_tt_cat = f"{kho_tt} × {dai_tt}" if kho_tt and dai_tt else "—"
+        so_lop = s.get("so_lop") or ""
+        to_hop = s.get("to_hop_song") or ""
+        cau_truc = _dinh_luong_from_spec(s) if s else "—"
+        qccl = _qccl_from_spec(s) if s else "—"
+        rows += (
+            f"<tr>"
+            f"<td {tdc}>{i}</td>"
+            f"<td {td}><strong>{_html_mod.escape(ten)}</strong></td>"
+            f"<td {tdc}>{kho_giay}</td>"
+            f"<td {tdc}>{so_dao}</td>"
+            f"<td {tdc}>{kho_tt_cat}</td>"
+            f"<td {tdc}>{so_lop}</td>"
+            f"<td {tdc}>{_html_mod.escape(str(to_hop))}</td>"
+            f"<td {td}><code style='font-size:9pt'>{_html_mod.escape(cau_truc)}</code></td>"
+            f"<td {td} style='font-size:9.5pt'>{_html_mod.escape(qccl)}</td>"
+            f"<td {tdr}>{float(it.so_luong):,.0f}</td>"
+            f"<td {tdr}>{int(Decimal(str(it.don_gia or 0))):,}</td>"
+            f"<td {tdr}>{int(Decimal(str(it.thanh_tien or 0))):,}</td>"
+            f"</tr>"
+        )
+    rows += (
+        f"<tr style='font-weight:bold;background:#f0f4ff'>"
+        f"<td colspan='11' style='text-align:right;padding:4px;border:1px solid #ccc'>Tổng cộng:</td>"
+        f"<td style='text-align:right;padding:4px;border:1px solid #ccc'>{int(tong):,}</td>"
+        f"</tr>"
+    )
+    return (
+        f"<table style='width:100%;border-collapse:collapse;font-size:9.5pt'>"
+        f"{header}<tbody>{rows}</tbody></table>"
+    )
+
+
+def _build_body_html_standard(items, tong: Decimal, color: str = _DEFAULT_COLOR) -> str:
+    _accent = f"background:{color};color:#fff"
+    th = _TH
+    header = (
+        f"<thead><tr style='{_accent}'>"
+        f"<th style='width:4%;padding:4px;border:1px solid #ccc;text-align:center'>STT</th>"
+        f"<th style='padding:4px;border:1px solid #ccc'>Tên hàng</th>"
+        f"<th style='width:7%;padding:4px;border:1px solid #ccc;text-align:center'>ĐVT</th>"
+        f"<th style='width:7%;padding:4px;border:1px solid #ccc;text-align:center'>Khổ (mm)</th>"
+        f"<th style='width:7%;padding:4px;border:1px solid #ccc;text-align:center'>Số cuộn</th>"
+        f"<th style='width:10%;padding:4px;border:1px solid #ccc;text-align:center'>Số lượng</th>"
+        f"<th style='width:11%;padding:4px;border:1px solid #ccc;text-align:center'>Đơn giá</th>"
+        f"<th style='width:12%;padding:4px;border:1px solid #ccc;text-align:center'>Thành tiền</th>"
+        f"</tr></thead>"
+    )
+    td = "style='padding:4px;border:1px solid #ccc'"
+    tdc = "style='padding:4px;border:1px solid #ccc;text-align:center'"
+    tdr = "style='padding:4px;border:1px solid #ccc;text-align:right'"
+    rows = ""
+    for i, it in enumerate(items, 1):
+        ten = it.ten_hang or ""
+        if not ten and it.paper_material_id:
+            pass  # resolved by caller
+        rows += (
+            f"<tr>"
+            f"<td {tdc}>{i}</td>"
+            f"<td {td}>{_html_mod.escape(ten)}</td>"
+            f"<td {tdc}>{_html_mod.escape(it.dvt or '')}</td>"
+            f"<td {tdc}>{it.kho_mm or ''}</td>"
+            f"<td {tdc}>{it.so_cuon or ''}</td>"
+            f"<td {tdr}>{float(it.so_luong):,.3f}</td>"
+            f"<td {tdr}>{int(Decimal(str(it.don_gia or 0))):,}</td>"
+            f"<td {tdr}>{int(Decimal(str(it.thanh_tien or 0))):,}</td>"
+            f"</tr>"
+        )
+    rows += (
+        f"<tr style='font-weight:bold;background:#f0f4ff'>"
+        f"<td colspan='7' style='text-align:right;padding:4px;border:1px solid #ccc'>Tổng cộng:</td>"
+        f"<td style='text-align:right;padding:4px;border:1px solid #ccc'>{int(tong):,}</td>"
+        f"</tr>"
+    )
+    return (
+        f"<table style='width:100%;border-collapse:collapse;font-size:10pt'>"
+        f"{header}<tbody>{rows}</tbody></table>"
+    )
+
+
 @router.get("/{po_id:int}/print", response_class=HTMLResponse)
 def print_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     po = db.query(PurchaseOrder).options(selectinload(PurchaseOrder.items)).filter(PurchaseOrder.id == po_id).first()
@@ -318,69 +546,58 @@ def print_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_cu
         if px:
             phap_nhan_id = px.phap_nhan_id
 
-    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PURCHASE_ORDER")
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "purchase_order")
     tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None
     if not tpl:
-        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
-    if not tpl:
-        raise HTTPException(404, "Chưa có mẫu in PURCHASE_ORDER — vui lòng cấu hình trong Hệ thống > Mẫu in")
+        raise HTTPException(404, f"Chưa có mẫu in purchase_order cho pháp nhân này — vui lòng tạo trong Hệ thống > Cấu hình biểu mẫu in")
 
     settings = {s.key: s.value for s in db.query(SystemSetting).all()}
     sup = db.get(Supplier, po.supplier_id) if po.supplier_id else None
 
-    rows = ""
-    tong = Decimal("0")
-    for i, it in enumerate(po.items, 1):
-        tong += Decimal(str(it.thanh_tien or 0))
-        ten = it.ten_hang or ""
-        if not ten and it.paper_material_id:
-            pm = db.get(PaperMaterial, it.paper_material_id)
-            ten = pm.ten if pm else ""
-        elif not ten and it.other_material_id:
-            om = db.get(OtherMaterial, it.other_material_id)
-            ten = om.ten if om else ""
-        rows += (
-            f"<tr>"
-            f"<td style='text-align:center'>{i}</td>"
-            f"<td>{_html_mod.escape(ten)}</td>"
-            f"<td style='text-align:center'>{_html_mod.escape(it.dvt or '')}</td>"
-            f"<td style='text-align:center'>{it.kho_mm or ''}</td>"
-            f"<td style='text-align:center'>{it.so_cuon or ''}</td>"
-            f"<td style='text-align:right'>{float(it.so_luong):,.3f}</td>"
-            f"<td style='text-align:right'>{int(Decimal(str(it.don_gia or 0))):,}</td>"
-            f"<td style='text-align:right'>{int(Decimal(str(it.thanh_tien or 0))):,}</td>"
-            f"</tr>"
-        )
-    body_html = (
-        "<table style='width:100%;border-collapse:collapse;font-size:10pt'>"
-        "<thead><tr style='background:#1B5E20;color:#fff'>"
-        "<th style='width:4%;padding:4px;border:1px solid #ccc'>STT</th>"
-        "<th style='padding:4px;border:1px solid #ccc'>Tên hàng</th>"
-        "<th style='width:7%;padding:4px;border:1px solid #ccc'>ĐVT</th>"
-        "<th style='width:7%;padding:4px;border:1px solid #ccc'>Khổ</th>"
-        "<th style='width:7%;padding:4px;border:1px solid #ccc'>Số cuộn</th>"
-        "<th style='width:10%;padding:4px;border:1px solid #ccc'>Số lượng</th>"
-        "<th style='width:11%;padding:4px;border:1px solid #ccc'>Đơn giá</th>"
-        "<th style='width:12%;padding:4px;border:1px solid #ccc'>Thành tiền</th>"
-        "</tr></thead><tbody>"
-        + rows
-        + f"<tr style='font-weight:bold;background:#E8F5E9'>"
-        f"<td colspan='7' style='text-align:right;padding:4px;border:1px solid #ccc'>Tổng cộng:</td>"
-        f"<td style='text-align:right;padding:4px;border:1px solid #ccc'>{int(tong):,}</td></tr>"
-        + "</tbody></table>"
-    )
+    # Resolve ten_hang for standard items
+    for it in po.items:
+        if not it.ten_hang:
+            if it.paper_material_id:
+                pm = db.get(PaperMaterial, it.paper_material_id)
+                it.ten_hang = pm.ten if pm else ""
+            elif it.other_material_id:
+                om = db.get(OtherMaterial, it.other_material_id)
+                it.ten_hang = om.ten if om else ""
+
+    tong = sum((Decimal(str(it.thanh_tien or 0)) for it in po.items), Decimal("0"))
+    try:
+        import json as _json
+        _ec = _json.loads(tpl.variables_meta.get("easy_config", "{}") if tpl.variables_meta else "{}")
+        _color = _ec.get("headerColor") or _DEFAULT_COLOR
+    except Exception:
+        _color = _DEFAULT_COLOR
+    has_phoi = any(getattr(it, "phoi_spec", None) for it in po.items)
+    body_html = _build_body_html_phoi(po.items, tong, _color) if has_phoi else _build_body_html_standard(po.items, tong, _color)
+    sup_name = _html_mod.escape(sup.ten_viet_tat if sup else "")
+    sup_addr = _html_mod.escape(getattr(sup, "dia_chi", "") or "") if sup else ""
+    pn = db.get(PhapNhan, phap_nhan_id) if phap_nhan_id else None
+    logo_src = f"/{pn.logo_path}" if pn and pn.logo_path else ""
+    pn_name = _html_mod.escape(pn.ten_phap_nhan if pn else (settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"))
+    pn_details = _html_mod.escape(pn.dia_chi if pn and pn.dia_chi else (settings.get("company_details") or ""))
 
     replacements = {
         "{{document_number}}": _html_mod.escape(po.so_po or ""),
         "{{document_date}}": po.ngay_po.isoformat() if po.ngay_po else "",
-        "{{supplier_name}}": _html_mod.escape(sup.ten_viet_tat if sup else ""),
+        "{{supplier_name}}": sup_name,
+        "{{customer_name}}": sup_name,
+        "{{delivery_address}}": sup_addr,
+        "{{warehouse_name}}": "",
+        "{{subtitle}}": "ĐƠN MUA HÀNG",
+        "{{SUBTITLE}}": "ĐƠN MUA HÀNG",
         "{{body_html}}": body_html,
+        "{{footer_html}}": "",
         "{{tong_tien}}": f"{int(tong):,}",
         "{{ghi_chu}}": _html_mod.escape(po.ghi_chu or ""),
         "{{dieu_khoan_tt}}": _html_mod.escape(po.dieu_khoan_tt or ""),
-        "{{company_name}}": _html_mod.escape(settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"),
-        "{{company_details}}": _html_mod.escape(settings.get("company_details") or ""),
-        "{{logo_img}}": f'<img src="{settings["logo_url"]}" />' if settings.get("logo_url") else "",
+        "{{company_name}}": pn_name,
+        "{{company_details}}": pn_details,
+        "{{logo_img}}": f'<img src="{logo_src}" style="max-width:100%;max-height:80px;object-fit:contain"/>' if logo_src else "",
+        "{{logo_src}}": logo_src,
     }
     content = tpl.html_content
     for k, v in replacements.items():

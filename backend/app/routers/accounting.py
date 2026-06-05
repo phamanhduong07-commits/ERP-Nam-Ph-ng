@@ -1291,44 +1291,15 @@ HINH_THUC_LABEL = {
     "khac": "Khác",
 }
 
-_PRINT_CSS = """
-@page {{ size: A5 portrait; margin: 10mm 10mm; }}
-* {{ box-sizing: border-box; margin: 0; padding: 0; }}
-body {{ font-family: 'Times New Roman', serif; font-size: 10pt; color: #111; }}
-.no-print {{ margin-bottom: 8px; }}
-@media print {{ .no-print {{ display: none; }} }}
-.header {{ display: flex; justify-content: space-between; align-items: flex-start; }}
-.company-name {{ font-size: 11pt; font-weight: bold; color: {accent}; }}
-.company-info {{ font-size: 8pt; line-height: 1.5; color: #333; }}
-.mau {{ font-size: 8pt; text-align: right; color: #555; }}
-.divider {{ border: none; border-top: 2px solid {accent}; margin: 6px 0; }}
-.title {{ text-align: center; margin: 6px 0; }}
-.title h2 {{ font-size: 15pt; font-weight: bold; letter-spacing: 2px; color: #111; text-transform: uppercase; }}
-.title .so {{ font-size: 9pt; color: #333; margin-top: 2px; }}
-.title .ngay {{ font-style: italic; font-size: 9pt; color: #333; }}
-.info-block {{ font-size: 10pt; line-height: 1.9; margin: 8px 0; }}
-.row {{ display: flex; margin: 2px 0; }}
-.row .label {{ min-width: 110px; font-weight: bold; flex-shrink: 0; }}
-.row .dots {{ flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; }}
-.amount-box {{ border: 1.5px solid {accent}; border-radius: 3px; padding: 6px 10px;
-               text-align: center; font-size: 13pt; font-weight: bold;
-               color: {accent}; margin: 8px 0; }}
-.chu {{ font-size: 9.5pt; margin: 4px 0; }}
-.tk-row {{ display: flex; gap: 20px; font-size: 9pt; margin: 4px 0; }}
-.sig-table {{ width: 100%; border-collapse: collapse; margin-top: 14px; }}
-.sig-table td {{ border: none; text-align: center; vertical-align: top; width: 20%; padding: 2px; }}
-.sig-label {{ font-weight: bold; font-size: 9pt; }}
-.sig-sub {{ font-style: italic; font-size: 8pt; color: #555; }}
-.sig-name {{ margin-top: 28px; font-weight: bold; font-size: 9pt; }}
-"""
-
-
 @router.get("/receipts/{receipt_id}/print", response_class=HTMLResponse)
 def print_receipt(
     receipt_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    import html as _html_mod
+    from app.models.system import PrintTemplate, SystemSetting
+
     r = db.get(CashReceipt, receipt_id)
     if not r:
         raise HTTPException(404, "Không tìm thấy phiếu thu")
@@ -1337,72 +1308,56 @@ def print_receipt(
         db.get(PhapNhan, r.phap_nhan_id) if r.phap_nhan_id
         else db.query(PhapNhan).filter(PhapNhan.trang_thai.is_(True)).first()
     )
-    accent = (pn.mau_sac_chinh if pn and pn.mau_sac_chinh else "#1565C0")
-    ten_cty = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
-    dia_chi_cty = pn.dia_chi if pn else ""
-    mst_cty = pn.ma_so_thue if pn else ""
-    dt_cty = pn.so_dien_thoai if pn else ""
-    ten_kh = r.customer.ten_viet_tat if r.customer else ""
-    dia_chi_kh = r.customer.dia_chi if r.customer else ""
-    hinh_thuc = HINH_THUC_LABEL.get(r.hinh_thuc_tt, r.hinh_thuc_tt)
-    so_tien_chu = _so_thanh_chu(float(r.so_tien))
 
-    html = f"""<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<title>Phiếu thu {r.so_phieu}</title>
-<style>{_PRINT_CSS.format(accent=accent)}</style>
-</head>
-<body>
-<div class="no-print">
-  <button onclick="window.print()" style="padding:6px 16px;background:{accent};color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10pt;">
-    🖨 In phiếu
-  </button>
-</div>
-<div class="header">
-  <div>
-    <div class="company-name">{ten_cty}</div>
-    <div class="company-info">
-      {"Địa chỉ: " + dia_chi_cty + "<br>" if dia_chi_cty else ""}{"MST: " + mst_cty + " &nbsp;|&nbsp; " if mst_cty else ""}{"ĐT: " + dt_cty if dt_cty else ""} </div>
-  </div>
-  <div class="mau">
-    Mẫu số: 01-TT<br>
-    (Ban hành theo TT 200/2014/TT-BTC)
-  </div>
-</div>
-<hr class="divider">
-<div class="title">
-  <h2>Phiếu thu</h2>
-  <div class="so">Số: {r.so_phieu}</div>
-  <div class="ngay">{_ngay_str(r.ngay_phieu)}</div>
-</div>
-<div class="info-block">
-  <div class="row"><span class="label">Họ tên người nộp:</span><span class="dots">{ten_kh}</span></div>
-  <div class="row"><span class="label">Địa chỉ:</span><span class="dots">{dia_chi_kh or ''}</span></div>
-  <div class="row"><span class="label">Lý do nộp:</span><span class="dots">{r.dien_giai or ''}</span></div>
-  <div class="row"><span class="label">Hình thức TT:</span><span class="dots">{hinh_thuc}</span></div>
-  {"<div class='row'><span class='label'>Số TK / Tham chiếu:</span><span class='dots'>" + (r.so_tai_khoan or '') + (' / ' + r.so_tham_chieu if r.so_tham_chieu else '') + "</span></div>" if r.so_tai_khoan or r.so_tham_chieu else ''}
-</div>
-<div class="amount-box">{float(r.so_tien):,.0f} đồng</div>
-<div class="chu">Viết bằng chữ: <em>{so_tien_chu}</em></div>
-<div class="tk-row">
-  <span>TK Nợ: <strong>{r.tk_no}</strong></span>
-  <span>TK Có: <strong>{r.tk_co}</strong></span>
-  <span>Chứng từ gốc: 1 bản</span>
-</div>
-<table class="sig-table">
-  <tr>
-    <td><div class="sig-label">Giám đốc</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">KT trưởng</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">Người nộp tiền</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">Người lập phiếu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">Thủ quỹ</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-  </tr>
-</table>
-</body>
-</html>"""
-    return HTMLResponse(content=html)
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "CASH_RECEIPT")
+    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == pn.id).first() if pn else None
+    if not tpl:
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in CASH_RECEIPT — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
+    settings = {s.key: s.value for s in db.query(SystemSetting).all()}
+    accent = pn.mau_sac_chinh if pn and pn.mau_sac_chinh else "#1565C0"
+    ten_cty = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+    parts = []
+    if pn and pn.dia_chi: parts.append(f"Địa chỉ: {pn.dia_chi}")
+    if pn and pn.ma_so_thue: parts.append(f"MST: {pn.ma_so_thue}")
+    if pn and pn.so_dien_thoai: parts.append(f"ĐT: {pn.so_dien_thoai}")
+    ten_kh = r.customer.ten_viet_tat if r.customer else ""
+    hinh_thuc = HINH_THUC_LABEL.get(r.hinh_thuc_tt, r.hinh_thuc_tt or "")
+
+    replacements = {
+        "{{document_number}}": _html_mod.escape(r.so_phieu or ""),
+        "{{document_date}}": _ngay_str(r.ngay_phieu),
+        "{{company_name}}": _html_mod.escape(ten_cty),
+        "{{company_details}}": _html_mod.escape(" | ".join(parts)),
+        "{{logo_img}}": f'<img src="{settings["logo_url"]}" style="max-height:50px"/>' if settings.get("logo_url") else "",
+        "{{accent}}": accent,
+        "{{nguoi_nop}}": _html_mod.escape(ten_kh),
+        "{{khach_hang}}": _html_mod.escape(ten_kh),
+        "{{dia_chi_kh}}": _html_mod.escape(r.customer.dia_chi if r.customer else ""),
+        "{{ly_do_thu}}": _html_mod.escape(r.dien_giai or ""),
+        "{{hinh_thuc}}": _html_mod.escape(hinh_thuc),
+        "{{so_tien}}": f"{float(r.so_tien):,.0f} đồng",
+        "{{so_tien_bang_chu}}": _so_thanh_chu(float(r.so_tien)),
+        "{{tk_no}}": _html_mod.escape(r.tk_no or ""),
+        "{{tk_co}}": _html_mod.escape(r.tk_co or ""),
+    }
+    content = tpl.html_content
+    for k, v in replacements.items():
+        content = content.replace(k, v)
+    page = (
+        "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
+        f"<title>Phiếu thu {_html_mod.escape(r.so_phieu or '')}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>"
+        "<button onclick='window.print()' style='padding:7px 18px;background:#1565C0;color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In phiếu</button>"
+        "<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>"
+        "</div>"
+        f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)
 
 
 @router.get("/payments/{payment_id}/print", response_class=HTMLResponse)
@@ -1411,6 +1366,9 @@ def print_payment(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    import html as _html_mod
+    from app.models.system import PrintTemplate, SystemSetting
+
     p = db.get(CashPayment, payment_id)
     if not p:
         raise HTTPException(404, "Không tìm thấy phiếu chi")
@@ -1419,72 +1377,56 @@ def print_payment(
         db.get(PhapNhan, p.phap_nhan_id) if p.phap_nhan_id
         else db.query(PhapNhan).filter(PhapNhan.trang_thai.is_(True)).first()
     )
-    accent = (pn.mau_sac_chinh if pn and pn.mau_sac_chinh else "#B71C1C")
-    ten_cty = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
-    dia_chi_cty = pn.dia_chi if pn else ""
-    mst_cty = pn.ma_so_thue if pn else ""
-    dt_cty = pn.so_dien_thoai if pn else ""
-    ten_ncc = p.supplier.ten_viet_tat if p.supplier else ""
-    dia_chi_ncc = p.supplier.dia_chi if p.supplier else ""
-    hinh_thuc = HINH_THUC_LABEL.get(p.hinh_thuc_tt, p.hinh_thuc_tt)
-    so_tien_chu = _so_thanh_chu(float(p.so_tien))
 
-    html = f"""<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<title>Phiếu chi {p.so_phieu}</title>
-<style>{_PRINT_CSS.format(accent=accent)}</style>
-</head>
-<body>
-<div class="no-print">
-  <button onclick="window.print()" style="padding:6px 16px;background:{accent};color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10pt;">
-    🖨 In phiếu
-  </button>
-</div>
-<div class="header">
-  <div>
-    <div class="company-name">{ten_cty}</div>
-    <div class="company-info">
-      {"Địa chỉ: " + dia_chi_cty + "<br>" if dia_chi_cty else ""}{"MST: " + mst_cty + " &nbsp;|&nbsp; " if mst_cty else ""}{"ĐT: " + dt_cty if dt_cty else ""} </div>
-  </div>
-  <div class="mau">
-    Mẫu số: 02-TT<br>
-    (Ban hành theo TT 200/2014/TT-BTC)
-  </div>
-</div>
-<hr class="divider">
-<div class="title">
-  <h2>Phiếu chi</h2>
-  <div class="so">Số: {p.so_phieu}</div>
-  <div class="ngay">{_ngay_str(p.ngay_phieu)}</div>
-</div>
-<div class="info-block">
-  <div class="row"><span class="label">Họ tên người nhận:</span><span class="dots">{ten_ncc}</span></div>
-  <div class="row"><span class="label">Địa chỉ:</span><span class="dots">{dia_chi_ncc or ''}</span></div>
-  <div class="row"><span class="label">Lý do chi:</span><span class="dots">{p.dien_giai or ''}</span></div>
-  <div class="row"><span class="label">Hình thức TT:</span><span class="dots">{hinh_thuc}</span></div>
-  {"<div class='row'><span class='label'>Số TK / Tham chiếu:</span><span class='dots'>" + (p.so_tai_khoan or '') + (' / ' + p.so_tham_chieu if p.so_tham_chieu else '') + "</span></div>" if p.so_tai_khoan or p.so_tham_chieu else ''}
-</div>
-<div class="amount-box">{float(p.so_tien):,.0f} đồng</div>
-<div class="chu">Viết bằng chữ: <em>{so_tien_chu}</em></div>
-<div class="tk-row">
-  <span>TK Nợ: <strong>{p.tk_no}</strong></span>
-  <span>TK Có: <strong>{p.tk_co}</strong></span>
-  <span>Chứng từ gốc: 1 bản</span>
-</div>
-<table class="sig-table">
-  <tr>
-    <td><div class="sig-label">Giám đốc</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">KT trưởng</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">Người nhận tiền</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">Người lập phiếu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">Thủ quỹ</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-  </tr>
-</table>
-</body>
-</html>"""
-    return HTMLResponse(content=html)
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "CASH_PAYMENT")
+    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == pn.id).first() if pn else None
+    if not tpl:
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in CASH_PAYMENT — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
+    settings = {s.key: s.value for s in db.query(SystemSetting).all()}
+    accent = pn.mau_sac_chinh if pn and pn.mau_sac_chinh else "#B71C1C"
+    ten_cty = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+    parts = []
+    if pn and pn.dia_chi: parts.append(f"Địa chỉ: {pn.dia_chi}")
+    if pn and pn.ma_so_thue: parts.append(f"MST: {pn.ma_so_thue}")
+    if pn and pn.so_dien_thoai: parts.append(f"ĐT: {pn.so_dien_thoai}")
+    ten_ncc = p.supplier.ten_viet_tat if p.supplier else ""
+    hinh_thuc = HINH_THUC_LABEL.get(p.hinh_thuc_tt, p.hinh_thuc_tt or "")
+
+    replacements = {
+        "{{document_number}}": _html_mod.escape(p.so_phieu or ""),
+        "{{document_date}}": _ngay_str(p.ngay_phieu),
+        "{{company_name}}": _html_mod.escape(ten_cty),
+        "{{company_details}}": _html_mod.escape(" | ".join(parts)),
+        "{{logo_img}}": f'<img src="{settings["logo_url"]}" style="max-height:50px"/>' if settings.get("logo_url") else "",
+        "{{accent}}": accent,
+        "{{nguoi_nhan}}": _html_mod.escape(ten_ncc),
+        "{{nha_cung_cap}}": _html_mod.escape(ten_ncc),
+        "{{dia_chi_ncc}}": _html_mod.escape(p.supplier.dia_chi if p.supplier else ""),
+        "{{ly_do_chi}}": _html_mod.escape(p.dien_giai or ""),
+        "{{hinh_thuc}}": _html_mod.escape(hinh_thuc),
+        "{{so_tien}}": f"{float(p.so_tien):,.0f} đồng",
+        "{{so_tien_bang_chu}}": _so_thanh_chu(float(p.so_tien)),
+        "{{tk_no}}": _html_mod.escape(p.tk_no or ""),
+        "{{tk_co}}": _html_mod.escape(p.tk_co or ""),
+    }
+    content = tpl.html_content
+    for k, v in replacements.items():
+        content = content.replace(k, v)
+    page = (
+        "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
+        f"<title>Phiếu chi {_html_mod.escape(p.so_phieu or '')}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>"
+        "<button onclick='window.print()' style='padding:7px 18px;background:#B71C1C;color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In phiếu</button>"
+        "<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>"
+        "</div>"
+        f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)
 
 
 @router.get("/ar/reconciliation/{customer_id}")
@@ -1561,48 +1503,38 @@ def export_trial_balance(
     _: User = Depends(get_current_user),
 ):
     """Xuất bảng CĐPS ra Excel."""
+    from app.services.excel_export_service import build_xlsx
+    from app.models.system import ExcelTemplate
+
+    tpl = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "TRIAL_BALANCE").first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel TRIAL_BALANCE")
+
     rows = AccountingService(db).get_trial_balance(tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id)
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "CDPS"
-
-    header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill("solid", fgColor="1565C0")
-    header_align = Alignment(horizontal="center", vertical="center")
-
-    headers = [
-        "Số TK", "Tên TK",
-        "Dư đầu kỳ Nợ", "Dư đầu kỳ Có",
-        "Phát sinh Nợ", "Phát sinh Có",
-        "Dư cuối kỳ Nợ", "Dư cuối kỳ Có",
-    ]
-    for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = header_align
-
+    items_data = []
     for row_data in rows:
         so_du_dau = float(row_data.get("so_du_dau", 0) or 0)
         so_du_cuoi = float(row_data.get("so_du_cuoi", 0) or 0)
-        dau_no = so_du_dau if so_du_dau > 0 else 0
-        dau_co = abs(so_du_dau) if so_du_dau < 0 else 0
-        cuoi_no = so_du_cuoi if so_du_cuoi > 0 else 0
-        cuoi_co = abs(so_du_cuoi) if so_du_cuoi < 0 else 0
-        ws.append([
-            row_data.get("so_tk", ""),
-            row_data.get("ten_tk", ""),
-            dau_no,
-            dau_co,
-            float(row_data.get("phat_sinh_no", 0) or 0),
-            float(row_data.get("phat_sinh_co", 0) or 0),
-            cuoi_no,
-            cuoi_co,
-        ])
+        items_data.append({
+            "so_tk": row_data.get("so_tk", ""),
+            "ten_tk": row_data.get("ten_tk", ""),
+            "du_dau_no": so_du_dau if so_du_dau > 0 else 0,
+            "du_dau_co": abs(so_du_dau) if so_du_dau < 0 else 0,
+            "phat_sinh_no": float(row_data.get("phat_sinh_no", 0) or 0),
+            "phat_sinh_co": float(row_data.get("phat_sinh_co", 0) or 0),
+            "du_cuoi_no": so_du_cuoi if so_du_cuoi > 0 else 0,
+            "du_cuoi_co": abs(so_du_cuoi) if so_du_cuoi < 0 else 0,
+        })
 
+    meta = {"document_number": f"CĐPS {tu_ngay} – {den_ngay}"}
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, {})
     filename = f"cdps_{tu_ngay}_{den_ngay}.xlsx"
-    return _wb_stream(wb, filename)
+    return StreamingResponse(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ─────────────────────────────────────────────
@@ -1656,43 +1588,39 @@ def export_production_costing(
     _: User = Depends(get_current_user),
 ):
     """Xuất báo cáo Giá thành Sản xuất ra Excel."""
+    from app.services.excel_export_service import build_xlsx
+    from app.models.system import ExcelTemplate
+
+    tpl = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "PRODUCTION_COSTING").first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel PRODUCTION_COSTING")
+
     rows = AccountingService(db).get_production_costing(tu_ngay, den_ngay, phan_xuong_id)
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Gia Thanh SX"
-
-    header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill("solid", fgColor="1B5E20")
-    header_align = Alignment(horizontal="center", vertical="center")
-
-    headers = [
-        "Số lệnh", "Tên hàng", "ĐVT", "Số lượng",
-        "CP NVL", "CP Nhân công", "CP Chung",
-        "Tổng chi phí", "Giá thành đơn vị", "Giá chuẩn",
+    items_data = [
+        {
+            "so_lenh": row_data.get("so_lenh", ""),
+            "ten_hang": row_data.get("ten_hang", ""),
+            "dvt": row_data.get("dvt", ""),
+            "so_luong": row_data.get("so_luong", 0),
+            "cp_nvl": row_data.get("cp_nvl", 0),
+            "cp_nhan_cong": row_data.get("cp_nhan_cong", 0),
+            "cp_chung": row_data.get("cp_chung", 0),
+            "tong_chi_phi": row_data.get("tong_chi_phi", 0),
+            "gia_thanh_don_vi": row_data.get("gia_thanh_don_vi", 0),
+            "standard_cost": row_data.get("standard_cost", 0),
+        }
+        for row_data in rows
     ]
-    for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = header_align
 
-    for row_data in rows:
-        ws.append([
-            row_data.get("so_lenh", ""),
-            row_data.get("ten_hang", ""),
-            row_data.get("dvt", ""),
-            row_data.get("so_luong", 0),
-            row_data.get("cp_nvl", 0),
-            row_data.get("cp_nhan_cong", 0),
-            row_data.get("cp_chung", 0),
-            row_data.get("tong_chi_phi", 0),
-            row_data.get("gia_thanh_don_vi", 0),
-            row_data.get("standard_cost", 0),
-        ])
-
+    meta = {"document_number": f"Giá thành SX {tu_ngay} – {den_ngay}"}
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, {})
     filename = f"gia_thanh_{tu_ngay}_{den_ngay}.xlsx"
-    return _wb_stream(wb, filename)
+    return StreamingResponse(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/reports/workshop-pnl-export")
@@ -1707,41 +1635,43 @@ def export_workshop_pnl(
     if not phan_xuong_id:
         raise HTTPException(400, "Vui lòng chọn phân xưởng")
 
+    from app.services.excel_export_service import build_xlsx
+    from app.models.system import ExcelTemplate
+
     data = AccountingService(db).get_workshop_pnl(phan_xuong_id, tu_ngay, den_ngay)
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Workshop PNL"
+    tpl = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "WORKSHOP_PNL").first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel WORKSHOP_PNL — vui lòng cấu hình trong Hệ thống > Mẫu Excel")
 
-    header_fill = PatternFill("solid", fgColor="1B5E20")
-
-    ws.cell(row=1, column=1, value="Chỉ tiêu").font = Font(bold=True, color="FFFFFF")
-    ws.cell(row=1, column=1).fill = header_fill
-    ws.cell(row=1, column=2, value="Giá trị (VNĐ)").font = Font(bold=True, color="FFFFFF")
-    ws.cell(row=1, column=2).fill = header_fill
-
-    pnl_rows = [
-        ("Doanh thu ngoại", data.get("doanh_thu_ngoai", 0)),
-        ("Doanh thu nội bộ", data.get("doanh_thu_noi_bo", 0)),
-        ("Tổng doanh thu", data.get("tong_doanh_thu", 0)),
-        ("Giá vốn ngoại", data.get("gia_von_ngoai", 0)),
-        ("Giá vốn nội bộ", data.get("gia_von_noi_bo", 0)),
-        ("Tổng giá vốn", data.get("tong_gia_von", 0)),
-        ("Lợi nhuận gộp", data.get("loi_nhuan_gop", 0)),
-        ("Biến động định mức", data.get("bien_dong_dinh_muc", 0)),
-        ("CP nhân công", data.get("cp_nhan_cong", 0)),
-        ("CP khấu hao", data.get("cp_khau_hao", 0)),
-        ("CP phân bổ", data.get("cp_phan_bo", 0)),
-        ("CP bán hàng", data.get("cp_ban_hang", 0)),
-        ("CP quản lý", data.get("cp_quan_ly", 0)),
-        ("Lợi nhuận thuần", data.get("loi_nhuan_thuan", 0)),
+    pnl_keys = [
+        ("doanh_thu_ngoai", "Doanh thu ngoại"),
+        ("doanh_thu_noi_bo", "Doanh thu nội bộ"),
+        ("tong_doanh_thu", "Tổng doanh thu"),
+        ("gia_von_ngoai", "Giá vốn ngoại"),
+        ("gia_von_noi_bo", "Giá vốn nội bộ"),
+        ("tong_gia_von", "Tổng giá vốn"),
+        ("loi_nhuan_gop", "Lợi nhuận gộp"),
+        ("bien_dong_dinh_muc", "Biến động định mức"),
+        ("cp_nhan_cong", "CP nhân công"),
+        ("cp_khau_hao", "CP khấu hao"),
+        ("cp_phan_bo", "CP phân bổ"),
+        ("cp_ban_hang", "CP bán hàng"),
+        ("cp_quan_ly", "CP quản lý"),
+        ("loi_nhuan_thuan", "Lợi nhuận thuần"),
     ]
-
-    for label, value in pnl_rows:
-        ws.append([label, float(value) if value is not None else 0])
-
+    items_data = [
+        {"chi_tieu": label, "gia_tri": float(data.get(key, 0) or 0)}
+        for key, label in pnl_keys
+    ]
+    meta = {"document_number": f"PNL Phân xưởng {tu_ngay} – {den_ngay}"}
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, {})
     filename = f"workshop_pnl_{tu_ngay}_{den_ngay}.xlsx"
-    return _wb_stream(wb, filename)
+    return StreamingResponse(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ─────────────────────────────────────────────

@@ -34,13 +34,19 @@ def _thin_border() -> Border:
     return Border(left=thin, right=thin, top=thin, bottom=thin)
 
 
-def build_xlsx(
+def build_xlsx_sheet(
+    wb: "Workbook",
     template: Any,       # ExcelTemplate ORM instance
     items: list[dict],   # rows of data
     meta: dict,          # doc-level info: so_phieu, ngay, ncc, kho, ...
     company_info: dict,  # ten, dia_chi, dien_thoai, ma_so_thue
-) -> bytes:
-    """Return xlsx bytes for the given template + data."""
+    sheet_name: str | None = None,
+) -> None:
+    """Add one sheet to an existing Workbook (wb) using template + data.
+
+    Call this to build multi-sheet workbooks — create a Workbook(), then call
+    build_xlsx_sheet() once per sheet, then serialize to bytes yourself.
+    """
     col_cfg: list[dict] = template.column_config or []
     hdr_cfg: list[dict] = template.header_config or []
     ftr_cfg: dict = template.footer_config or {}
@@ -53,9 +59,14 @@ def build_xlsx(
     freeze = sty_cfg.get("freeze_header", True)
     orientation = sty_cfg.get("orientation", "portrait")
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = template.ten_mau[:31]
+    title = sheet_name or template.ten_mau[:31]
+
+    # Reuse the active sheet if it is still blank (first call), else create new
+    if wb.active and wb.active.max_row == 1 and wb.active.max_column == 1 and wb.active.cell(1, 1).value is None:
+        ws = wb.active
+        ws.title = title
+    else:
+        ws = wb.create_sheet(title=title)
 
     # Page setup
     ws.page_setup.orientation = orientation
@@ -237,6 +248,16 @@ def build_xlsx(
             f"A{table_header_row}:{get_column_letter(len(col_cfg))}{table_header_row}"
         )
 
+
+def build_xlsx(
+    template: Any,       # ExcelTemplate ORM instance
+    items: list[dict],   # rows of data
+    meta: dict,          # doc-level info: so_phieu, ngay, ncc, kho, ...
+    company_info: dict,  # ten, dia_chi, dien_thoai, ma_so_thue
+) -> bytes:
+    """Return xlsx bytes for the given template + data."""
+    wb = Workbook()
+    build_xlsx_sheet(wb, template, items, meta, company_info)
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)

@@ -8,7 +8,7 @@ import {
 } from 'antd'
 import {
   PlusOutlined, DeleteOutlined, CheckCircleOutlined, ShopOutlined, MinusCircleOutlined,
-  FileExcelOutlined, FilePdfOutlined, FileTextOutlined, UploadOutlined, WarningOutlined,
+  FileExcelOutlined, FilePdfOutlined, FileTextOutlined, UploadOutlined, WarningOutlined, PrinterOutlined,
 } from '@ant-design/icons'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import dayjs from 'dayjs'
@@ -22,6 +22,7 @@ import { otherMaterialsApi } from '../../api/otherMaterials'
 import { suppliersApi } from '../../api/suppliers'
 import { purchaseInvoiceApi } from '../../api/accounting'
 import { warehouseApi, TonKhoGiayRow, TonKhoNVLRow } from '../../api/warehouse'
+import apiClient from '../../api/client'
 import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
@@ -345,6 +346,10 @@ export default function POListPage() {
             <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }}
               onClick={() => handleExportPOExcel(r.id, r.so_po)} />
           </Tooltip>
+          <Tooltip title="In / Xuất PDF đơn mua hàng">
+            <Button size="small" icon={<PrinterOutlined />}
+              onClick={() => handlePrintPO(r.id)} />
+          </Tooltip>
         </Space>
       ),
     },
@@ -411,6 +416,16 @@ export default function POListPage() {
       downloadBlob(blob, `PO_${soPo || id}.xlsx`)
     } catch {
       message.error('Không thể xuất Excel. Kiểm tra lại cấu hình mẫu Excel PURCHASE_ORDER.')
+    }
+  }
+
+  const handlePrintPO = async (id: number) => {
+    try {
+      const res = await apiClient.get<string>(`/purchase-orders/${id}/print`, { responseType: 'text' })
+      const w = window.open('', '_blank')
+      if (w) { w.document.write(res.data); w.document.close() }
+    } catch {
+      message.error('Không thể in đơn mua hàng')
     }
   }
 

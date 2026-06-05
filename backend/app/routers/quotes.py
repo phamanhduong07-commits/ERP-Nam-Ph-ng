@@ -1,4 +1,4 @@
-﻿from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
 import html
@@ -1210,9 +1210,13 @@ def export_quotes_excel(
     _: User = Depends(get_current_user),
 ):
     from fastapi.responses import StreamingResponse
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment
-    from io import BytesIO
+    from app.services.excel_export_service import build_xlsx
+    from app.models.system import ExcelTemplate
+
+    tpl_q = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "SALES_QUOTE_LIST")
+    tpl = tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel SALES_QUOTE_LIST")
 
     _auto_expire_quotes(db)
     q = db.query(Quote).options(
@@ -1241,44 +1245,31 @@ def export_quotes_excel(
 
     quotes_data = q.order_by(Quote.created_at.desc()).all()
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Báo giá"
-
-    headers = ["Số báo giá", "Ngày BG", "Khách hàng", "Trạng thái", "Ngày hết hạn", "Tổng cộng", "Số dòng", "Người lập"]
-    header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill(start_color="E65100", end_color="E65100", fill_type="solid")
-    for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal="center")
-
     STATUS_MAP = {
         "moi": "Mới", "cho_duyet": "Chờ duyệt", "da_duyet": "Đã duyệt",
         "het_han": "Hết hạn", "huy": "Huỷ"
     }
-    for row_idx, qt in enumerate(quotes_data, 2):
-        ws.cell(row=row_idx, column=1, value=qt.so_bao_gia)
-        ws.cell(row=row_idx, column=2, value=qt.ngay_bao_gia.strftime("%d/%m/%Y") if qt.ngay_bao_gia else "")
-        ws.cell(row=row_idx, column=3, value=qt.customer.ten_viet_tat if qt.customer else "")
-        ws.cell(row=row_idx, column=4, value=STATUS_MAP.get(qt.trang_thai, qt.trang_thai))
-        ws.cell(row=row_idx, column=5, value=qt.ngay_het_han.strftime("%d/%m/%Y") if qt.ngay_het_han else "")
-        ws.cell(row=row_idx, column=6, value=int(qt.tong_cong or 0))
-        ws.cell(row=row_idx, column=7, value=len(qt.items))
-        ws.cell(row=row_idx, column=8, value=qt.creator.ho_ten if qt.creator else "")
+    items_data = [
+        {
+            "stt": idx,
+            "so_bao_gia": qt.so_bao_gia,
+            "ngay_bao_gia": qt.ngay_bao_gia.strftime("%d/%m/%Y") if qt.ngay_bao_gia else "",
+            "ten_khach_hang": qt.customer.ten_viet_tat if qt.customer else "",
+            "trang_thai": STATUS_MAP.get(qt.trang_thai, qt.trang_thai),
+            "ngay_het_han": qt.ngay_het_han.strftime("%d/%m/%Y") if qt.ngay_het_han else "",
+            "tong_cong": int(qt.tong_cong or 0),
+            "so_dong": len(qt.items),
+            "nguoi_lap": qt.creator.ho_ten if qt.creator else "",
+        }
+        for idx, qt in enumerate(quotes_data, 1)
+    ]
 
-    for col in ws.columns:
-        max_len = max((len(str(cell.value or "")) for cell in col), default=10)
-        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
-
-    buf = BytesIO()
-    wb.save(buf)
-    buf.seek(0)
+    meta = {"document_number": "Danh sách báo giá"}
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, {})
     return StreamingResponse(
-        buf,
+        iter([xlsx_bytes]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=bao_gia.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=danh_sach_bao_gia.xlsx"},
     )
 
 

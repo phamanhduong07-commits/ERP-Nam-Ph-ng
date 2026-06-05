@@ -7,7 +7,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, case
 from sqlalchemy.orm import Session, selectinload, joinedload
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
 
 from app.database import get_db
 from app.deps import get_current_user
@@ -576,47 +575,6 @@ def get_delivery_report(
 
 # ── Helpers xuất Excel ────────────────────────────────────────────────────────
 
-_HEADER_FILL = PatternFill("solid", fgColor="E65100")
-_HEADER_FONT = Font(bold=True, color="FFFFFF")
-_HEADER_ALIGN = Alignment(horizontal="center", vertical="center", wrap_text=True)
-
-
-def _make_workbook(sheet_name: str, headers: list[str], rows: list[list]) -> Workbook:
-    """Tạo workbook Excel với header màu cam Nam Phương và dữ liệu."""
-    wb = Workbook()
-    ws = wb.active
-    ws.title = sheet_name[:31]
-
-    # Header row
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = _HEADER_FONT
-        cell.fill = _HEADER_FILL
-        cell.alignment = _HEADER_ALIGN
-
-    # Data rows
-    for row in rows:
-        ws.append(row)
-
-    # Auto column width (capped at 40 chars)
-    for col in ws.columns:
-        max_len = max(
-            (len(str(c.value)) if c.value is not None else 0) for c in col
-        )
-        ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
-
-    return wb
-
-
-def _stream_workbook(wb: Workbook, filename: str) -> StreamingResponse:
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
 
 
 # ── 7. Export: Báo cáo doanh thu ─────────────────────────────────────────────
@@ -629,33 +587,39 @@ def export_revenue_excel(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Xuất báo cáo doanh thu ra file Excel."""
-    # Lấy data từ endpoint gốc (reuse logic)
+    """Xuất báo cáo doanh thu ra file Excel (multi-sheet)."""
+    from app.services.excel_export_service import build_xlsx_sheet
+    from app.models.system import ExcelTemplate
+
+    tpl1 = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "REVENUE_BY_PERIOD").first()
+    tpl2 = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "REVENUE_TOP_CUSTOMERS").first()
+    if not tpl1:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel REVENUE_BY_PERIOD")
+    if not tpl2:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel REVENUE_TOP_CUSTOMERS")
+
     result = get_revenue_report(tu_ngay=tu_ngay, den_ngay=den_ngay, nhom=nhom, db=db, _=_)
+    meta = {"document_number": f"Doanh thu {tu_ngay} – {den_ngay}"}
 
-    # Sheet 1: Doanh thu theo kỳ
-    wb = _make_workbook(
-        "Theo kỳ",
-        ["Kỳ", "Doanh thu (đ)"],
-        [[r["ky"], r["doanh_thu"]] for r in result["theo_ky"]],
-    )
+    period_items = [{"ky": r["ky"], "doanh_thu": r["doanh_thu"]} for r in result["theo_ky"]]
+    top_items = [
+        {"stt": i, "ten_khach_hang": r["ten_khach_hang"], "so_don": r["so_don"], "doanh_thu": r["doanh_thu"]}
+        for i, r in enumerate(result["top_khach_hang"], 1)
+    ]
 
-    # Sheet 2: Top khách hàng
-    ws2 = wb.create_sheet("Top khách hàng")
-    headers2 = ["#", "Khách hàng", "Số đơn", "Doanh thu (đ)"]
-    ws2.append(headers2)
-    for cell in ws2[1]:
-        cell.font = _HEADER_FONT
-        cell.fill = _HEADER_FILL
-        cell.alignment = _HEADER_ALIGN
-    for i, r in enumerate(result["top_khach_hang"], 1):
-        ws2.append([i, r["ten_khach_hang"], r["so_don"], r["doanh_thu"]])
-    for col in ws2.columns:
-        max_len = max((len(str(c.value)) if c.value is not None else 0) for c in col)
-        ws2.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+    wb = Workbook()
+    build_xlsx_sheet(wb, tpl1, period_items, meta, {}, sheet_name="Theo kỳ")
+    build_xlsx_sheet(wb, tpl2, top_items, meta, {}, sheet_name="Top khách hàng")
 
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
     filename = f"doanh_thu_{tu_ngay}_{den_ngay}.xlsx"
-    return _stream_workbook(wb, filename)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ── 8. Export: Báo cáo xuất-nhập-tồn kho ─────────────────────────────────────
@@ -669,26 +633,38 @@ def export_inventory_movement_excel(
     _: User = Depends(get_current_user),
 ):
     """Xuất báo cáo xuất-nhập-tồn kho ra file Excel."""
+    from app.services.excel_export_service import build_xlsx
+    from app.models.system import ExcelTemplate
+
+    tpl = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "INVENTORY_MOVEMENT").first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel INVENTORY_MOVEMENT")
+
     result = get_inventory_movement(
         tu_ngay=tu_ngay, den_ngay=den_ngay,
         warehouse_id=warehouse_id, db=db, _=_,
     )
-    rows_data = [
-        [
-            r["ten_kho"], r["ten_hang"], r["don_vi"],
-            r["ton_dau_ky"], r["nhap_trong_ky"],
-            r["xuat_trong_ky"], r["ton_cuoi_ky"], r["gia_tri_ton"],
-        ]
+    items_data = [
+        {
+            "ten_kho": r["ten_kho"],
+            "ten_hang": r["ten_hang"],
+            "don_vi": r["don_vi"],
+            "ton_dau_ky": r["ton_dau_ky"],
+            "nhap_trong_ky": r["nhap_trong_ky"],
+            "xuat_trong_ky": r["xuat_trong_ky"],
+            "ton_cuoi_ky": r["ton_cuoi_ky"],
+            "gia_tri_ton": r["gia_tri_ton"],
+        }
         for r in result["rows"]
     ]
-    wb = _make_workbook(
-        "Xuất nhập tồn",
-        ["Kho", "Hàng hóa", "ĐVT", "Tồn đầu kỳ", "Nhập trong kỳ",
-         "Xuất trong kỳ", "Tồn cuối kỳ", "Giá trị tồn (đ)"],
-        rows_data,
-    )
+    meta = {"document_number": f"Xuất nhập tồn {tu_ngay} – {den_ngay}"}
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, {})
     filename = f"xuat_nhap_ton_{tu_ngay}_{den_ngay}.xlsx"
-    return _stream_workbook(wb, filename)
+    return StreamingResponse(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ── 9. Export: Báo cáo công nợ tổng hợp ─────────────────────────────────────
@@ -699,36 +675,48 @@ def export_debt_summary_excel(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Xuất báo cáo công nợ tổng hợp (AR + AP) ra file Excel."""
+    """Xuất báo cáo công nợ tổng hợp (AR + AP) ra file Excel (multi-sheet)."""
+    from app.services.excel_export_service import build_xlsx_sheet
+    from app.models.system import ExcelTemplate
+
+    tpl_ar = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "DEBT_SUMMARY_AR").first()
+    tpl_ap = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "DEBT_SUMMARY_AP").first()
+    if not tpl_ar:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel DEBT_SUMMARY_AR")
+    if not tpl_ap:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel DEBT_SUMMARY_AP")
+
     result = get_debt_summary(as_of_date=as_of_date, db=db, _=_)
+    meta = {"document_number": f"Công nợ tổng hợp"}
 
-    headers = ["Đối tượng", "Số HĐ", "Tổng phát sinh (đ)", "Đã thanh toán (đ)",
-               "Còn lại (đ)", "Trong hạn (đ)", "Quá hạn (đ)"]
-
-    def _debt_rows(rows: list[dict]) -> list[list]:
+    def _debt_items(rows: list[dict]) -> list[dict]:
         return [
-            [r["ten_doi_tuong"], r["so_hoa_don"], r["tong_phat_sinh"],
-             r["da_thanh_toan"], r["con_lai"], r["trong_han"], r["qua_han"]]
+            {
+                "ten_doi_tuong": r["ten_doi_tuong"],
+                "so_hoa_don": r["so_hoa_don"],
+                "tong_phat_sinh": r["tong_phat_sinh"],
+                "da_thanh_toan": r["da_thanh_toan"],
+                "con_lai": r["con_lai"],
+                "trong_han": r["trong_han"],
+                "qua_han": r["qua_han"],
+            }
             for r in rows
         ]
 
-    wb = _make_workbook("Phải thu (AR)", headers, _debt_rows(result["ar"]["rows"]))
+    wb = Workbook()
+    build_xlsx_sheet(wb, tpl_ar, _debt_items(result["ar"]["rows"]), meta, {}, sheet_name="Phải thu (AR)")
+    build_xlsx_sheet(wb, tpl_ap, _debt_items(result["ap"]["rows"]), meta, {}, sheet_name="Phải trả (AP)")
 
-    ws2 = wb.create_sheet("Phải trả (AP)")
-    ws2.append(headers)
-    for cell in ws2[1]:
-        cell.font = _HEADER_FONT
-        cell.fill = _HEADER_FILL
-        cell.alignment = _HEADER_ALIGN
-    for row in _debt_rows(result["ap"]["rows"]):
-        ws2.append(row)
-    for col in ws2.columns:
-        max_len = max((len(str(c.value)) if c.value is not None else 0) for c in col)
-        ws2.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
-
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
     today_str = result["as_of_date"].replace("-", "")
     filename = f"cong_no_{today_str}.xlsx"
-    return _stream_workbook(wb, filename)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ── 10. Export: Báo cáo năng suất sản xuất ───────────────────────────────────
@@ -742,28 +730,41 @@ def export_production_performance_excel(
     _: User = Depends(get_current_user),
 ):
     """Xuất báo cáo năng suất sản xuất ra file Excel."""
+    from app.services.excel_export_service import build_xlsx
+    from app.models.system import ExcelTemplate
+
+    tpl = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "PRODUCTION_PERFORMANCE").first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel PRODUCTION_PERFORMANCE")
+
     result = get_production_performance(
         tu_ngay=tu_ngay, den_ngay=den_ngay,
         phan_xuong_id=phan_xuong_id, db=db, _=_,
     )
-    rows_data = [
-        [
-            r["so_lenh"], r["ngay_lenh"] or "", r["trang_thai"],
-            r["ten_khach_hang"] or "", r["ten_phan_xuong"] or "",
-            r["tong_ke_hoach"], r["tong_hoan_thanh"], r["ty_le_hoan_thanh"],
-            r["ngay_ke_hoach_xong"] or "", r["ngay_thuc_te_xong"] or "",
-            r["tre_han"] if r["tre_han"] is not None else "",
-        ]
+    items_data = [
+        {
+            "so_lenh": r["so_lenh"],
+            "ngay_lenh": r["ngay_lenh"] or "",
+            "trang_thai": r["trang_thai"],
+            "ten_khach_hang": r["ten_khach_hang"] or "",
+            "ten_phan_xuong": r["ten_phan_xuong"] or "",
+            "tong_ke_hoach": r["tong_ke_hoach"],
+            "tong_hoan_thanh": r["tong_hoan_thanh"],
+            "ty_le_hoan_thanh": r["ty_le_hoan_thanh"],
+            "ngay_ke_hoach_xong": r["ngay_ke_hoach_xong"] or "",
+            "ngay_thuc_te_xong": r["ngay_thuc_te_xong"] or "",
+            "tre_han": r["tre_han"] if r["tre_han"] is not None else "",
+        }
         for r in result["rows"]
     ]
-    wb = _make_workbook(
-        "Năng suất SX",
-        ["Số lệnh", "Ngày lệnh", "Trạng thái", "Khách hàng", "Phân xưởng",
-         "KH (Thùng)", "Thực tế", "Tỉ lệ (%)", "Ngày KH xong", "Ngày TT xong", "Trễ (ngày)"],
-        rows_data,
-    )
+    meta = {"document_number": f"Năng suất SX {tu_ngay} – {den_ngay}"}
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, {})
     filename = f"nang_suat_sx_{tu_ngay}_{den_ngay}.xlsx"
-    return _stream_workbook(wb, filename)
+    return StreamingResponse(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ── 11. Export: Báo cáo tiến độ đơn hàng ─────────────────────────────────────
@@ -778,27 +779,40 @@ def export_order_progress_excel(
     _: User = Depends(get_current_user),
 ):
     """Xuất báo cáo tiến độ đơn hàng ra file Excel."""
+    from app.services.excel_export_service import build_xlsx
+    from app.models.system import ExcelTemplate
+
+    tpl = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "ORDER_PROGRESS").first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel ORDER_PROGRESS")
+
     result = get_order_progress(
         tu_ngay=tu_ngay, den_ngay=den_ngay,
         trang_thai=trang_thai, customer_id=customer_id, db=db, _=_,
     )
-    rows_data = [
-        [
-            r["so_don"], r["ngay_don"] or "", r["ngay_giao_du_kien"] or "",
-            r["trang_thai"], r["ten_khach_hang"] or "",
-            r["so_luong_dat"], r["so_luong_da_giao"], r["so_luong_con_lai"],
-            r["ty_le_giao"], r["tong_tien"],
-        ]
+    items_data = [
+        {
+            "so_don": r["so_don"],
+            "ngay_don": r["ngay_don"] or "",
+            "ngay_giao_du_kien": r["ngay_giao_du_kien"] or "",
+            "trang_thai": r["trang_thai"],
+            "ten_khach_hang": r["ten_khach_hang"] or "",
+            "so_luong_dat": r["so_luong_dat"],
+            "so_luong_da_giao": r["so_luong_da_giao"],
+            "so_luong_con_lai": r["so_luong_con_lai"],
+            "ty_le_giao": r["ty_le_giao"],
+            "tong_tien": r["tong_tien"],
+        }
         for r in result["rows"]
     ]
-    wb = _make_workbook(
-        "Tiến độ đơn hàng",
-        ["Số đơn", "Ngày đặt", "Ngày giao DK", "Trạng thái", "Khách hàng",
-         "SL đặt", "SL đã giao", "Còn lại", "Tỉ lệ (%)", "Tổng tiền (đ)"],
-        rows_data,
-    )
+    meta = {"document_number": f"Tiến độ đơn hàng {tu_ngay} – {den_ngay}"}
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, {})
     filename = f"tien_do_don_hang_{tu_ngay}_{den_ngay}.xlsx"
-    return _stream_workbook(wb, filename)
+    return StreamingResponse(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 # ── 12. Báo cáo chi phí / lợi nhuận theo LSX ─────────────────────────────────
@@ -957,47 +971,48 @@ def export_production_cost_excel(
     _: User = Depends(get_current_user),
 ):
     """Xuất Excel báo cáo chi phí / lợi nhuận theo LSX."""
+    from app.services.excel_export_service import build_xlsx
+    from app.models.system import ExcelTemplate
+
+    tpl = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "PRODUCTION_COST").first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel PRODUCTION_COST")
+
     rows, totals = _build_production_cost_rows(
         db, tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id, trang_thai
     )
 
-    headers = [
-        "Số lệnh", "Ngày lệnh", "Trạng thái", "Tên hàng", "Khách hàng",
-        "Số đơn", "Pháp nhân", "Phân xưởng",
-        "SL kế hoạch", "SL hoàn thành", "Diện tích (m²)",
-        "Doanh thu", "CP NVL", "CP Nhân công", "CP SXC", "Tổng CP",
-        "Đã phân bổ", "Lợi nhuận", "Tỉ lệ LN (%)",
-    ]
-    rows_data = [
-        [
-            r["so_lenh"], r["ngay_lenh"] or "", r["trang_thai"],
-            r["ten_hang"] or "", r["ten_khach"] or "", r["so_don"] or "",
-            r["ten_phap_nhan"] or "", r["ten_xuong"] or "",
-            r["so_luong_ke_hoach"], r["so_luong_hoan_thanh"], r["dien_tich"],
-            r["doanh_thu"], r["chi_phi_nvl"], r["chi_phi_nhan_cong"],
-            r["chi_phi_sxc"], r["tong_chi_phi"],
-            "Có" if r["da_phan_bo"] else "Chưa",
-            r["loi_nhuan"], r["ty_le_loi_nhuan"] if r["ty_le_loi_nhuan"] is not None else "",
-        ]
+    items_data = [
+        {
+            "so_lenh": r["so_lenh"],
+            "ngay_lenh": r["ngay_lenh"] or "",
+            "trang_thai": r["trang_thai"],
+            "ten_hang": r["ten_hang"] or "",
+            "ten_khach": r["ten_khach"] or "",
+            "so_don": r["so_don"] or "",
+            "ten_phap_nhan": r["ten_phap_nhan"] or "",
+            "ten_xuong": r["ten_xuong"] or "",
+            "so_luong_ke_hoach": r["so_luong_ke_hoach"],
+            "so_luong_hoan_thanh": r["so_luong_hoan_thanh"],
+            "dien_tich": r["dien_tich"],
+            "doanh_thu": r["doanh_thu"],
+            "chi_phi_nvl": r["chi_phi_nvl"],
+            "chi_phi_nhan_cong": r["chi_phi_nhan_cong"],
+            "chi_phi_sxc": r["chi_phi_sxc"],
+            "tong_chi_phi": r["tong_chi_phi"],
+            "da_phan_bo": "Có" if r["da_phan_bo"] else "Chưa",
+            "loi_nhuan": r["loi_nhuan"],
+            "ty_le_loi_nhuan": r["ty_le_loi_nhuan"] if r["ty_le_loi_nhuan"] is not None else "",
+        }
         for r in rows
     ]
 
-    wb = _make_workbook("Chi phí & Lợi nhuận LSX", headers, rows_data)
-
-    # Dòng tổng cuối
-    ws = wb.active
-    last_row = ws.max_row + 1
-    total_cells = ["", "", "", "", "", "", "", "", "", "", "",
-                   totals["tong_doanh_thu"], totals["tong_chi_phi_nvl"],
-                   totals["tong_chi_phi_nhan_cong"], totals["tong_chi_phi_sxc"],
-                   totals["tong_chi_phi"], "", totals["tong_loi_nhuan"],
-                   totals["ty_le_loi_nhuan"] if totals["ty_le_loi_nhuan"] is not None else ""]
-    total_cells[0] = "TỔNG CỘNG"
-    ws.append(total_cells)
-    bold_fill = PatternFill("solid", fgColor="FFF3E0")
-    for cell in ws[last_row]:
-        cell.font = Font(bold=True)
-        cell.fill = bold_fill
-
     suffix = f"_{tu_ngay}_{den_ngay}" if tu_ngay else ""
-    return _stream_workbook(wb, f"chi_phi_loi_nhuan_lsx{suffix}.xlsx")
+    meta = {"document_number": f"Chi phí & Lợi nhuận LSX{suffix.replace('_', ' ')}"}
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, {})
+    filename = f"chi_phi_loi_nhuan_lsx{suffix}.xlsx"
+    return StreamingResponse(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

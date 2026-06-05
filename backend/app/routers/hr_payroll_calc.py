@@ -4,8 +4,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import date
 import calendar
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
@@ -314,85 +312,49 @@ def export_payroll_excel(
 ):
     """Xuất bảng lương tháng ra Excel."""
     from fastapi import HTTPException
+    from app.services.excel_export_service import build_xlsx
+    from app.models.system import ExcelTemplate
+
+    tpl = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "PAYROLL").first()
+    if not tpl:
+        raise HTTPException(404, "Chưa cấu hình mẫu Excel PAYROLL")
+
     runs = db.query(PayrollRun).filter(
         PayrollRun.thang == thang,
         PayrollRun.nam == nam,
     ).all()
 
-    headers = [
-        "Mã NV", "Họ tên", "Chức vụ",
-        "Lương CB", "Lương SP", "Lương chuyến",
-        "Lương ngày công", "Phụ cấp",
-        "Tổng OT", "Thưởng",
-        "Tổng thu nhập", "Bảo hiểm", "Tạm ứng", "Thực lĩnh",
-        "Trạng thái",
-    ]
-
-    _FILL = PatternFill("solid", fgColor="1565C0")
-    _FONT = Font(bold=True, color="FFFFFF")
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = f"Luong {thang:02d}-{nam}"
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.fill = _FILL
-        cell.font = _FONT
-        cell.alignment = Alignment(horizontal="center")
-
+    items_data = []
     for r in runs:
-        ot_total = (
+        ot_total = float(
             (r.ot_tien_ngay_thuong or Decimal("0"))
             + (r.ot_tien_chu_nhat or Decimal("0"))
             + (r.ot_tien_chu_nhat_tang_ca or Decimal("0"))
             + (r.ot_tien_ngay_le or Decimal("0"))
         )
-        ws.append([
-            r.employee.ma_nv if r.employee else "",
-            r.employee.ho_ten if r.employee else "",
-            r.employee.chuc_vu.ten_chuc_vu if r.employee and r.employee.chuc_vu else "",
-            float(r.luong_co_ban or 0),
-            float(r.luong_san_pham or 0),
-            float(r.luong_chuyen or 0),
-            float(r.luong_theo_ngay_cong or 0),
-            float(r.phu_cap or 0),
-            float(ot_total),
-            float(r.thuong or 0),
-            float(r.tong_thu_nhap or 0),
-            float(r.bao_hiem or 0),
-            float(r.tam_ung or 0),
-            float(r.thuc_linh or 0),
-            r.trang_thai,
-        ])
+        items_data.append({
+            "ma_nv": r.employee.ma_nv if r.employee else "",
+            "ho_ten": r.employee.ho_ten if r.employee else "",
+            "chuc_vu": r.employee.chuc_vu.ten_chuc_vu if r.employee and r.employee.chuc_vu else "",
+            "luong_co_ban": float(r.luong_co_ban or 0),
+            "luong_san_pham": float(r.luong_san_pham or 0),
+            "luong_chuyen": float(r.luong_chuyen or 0),
+            "luong_theo_ngay_cong": float(r.luong_theo_ngay_cong or 0),
+            "phu_cap": float(r.phu_cap or 0),
+            "ot_total": ot_total,
+            "thuong": float(r.thuong or 0),
+            "tong_thu_nhap": float(r.tong_thu_nhap or 0),
+            "bao_hiem": float(r.bao_hiem or 0),
+            "tam_ung": float(r.tam_ung or 0),
+            "thuc_linh": float(r.thuc_linh or 0),
+            "trang_thai": r.trang_thai,
+        })
 
-    # Tổng cộng
-    total_row = ["", "", "TỔNG CỘNG"] + [""] * 3
-    numeric_cols = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-    row_data = ["", "", "TỔNG CỘNG"] + [0.0] * 12 + [""]
-    for r in runs:
-        ot_total = float(
-            (r.ot_tien_ngay_thuong or 0) + (r.ot_tien_chu_nhat or 0)
-            + (r.ot_tien_chu_nhat_tang_ca or 0) + (r.ot_tien_ngay_le or 0)
-        )
-        vals = [
-            float(r.luong_co_ban or 0), float(r.luong_san_pham or 0), float(r.luong_chuyen or 0),
-            float(r.luong_theo_ngay_cong or 0), float(r.phu_cap or 0), ot_total,
-            float(r.thuong or 0), float(r.tong_thu_nhap or 0), float(r.bao_hiem or 0),
-            float(r.tam_ung or 0), float(r.thuc_linh or 0),
-        ]
-        for i, v in enumerate(vals):
-            row_data[3 + i] += v
-    ws.append(row_data)
-    last_row = ws.max_row
-    for cell in ws[last_row]:
-        cell.font = Font(bold=True)
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
+    meta = {"document_number": f"Bảng lương tháng {thang:02d}/{nam}"}
+    xlsx_bytes = build_xlsx(tpl, items_data, meta, {})
     filename = f"bang_luong_{thang:02d}_{nam}.xlsx"
     return StreamingResponse(
-        buf,
+        iter([xlsx_bytes]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

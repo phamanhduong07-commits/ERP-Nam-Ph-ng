@@ -1212,22 +1212,7 @@ def can_giay_roll(
     return _giay_roll_to_dict(roll)
 
 
-@router.get("/giay-rolls/print-one/{roll_id}", response_class=HTMLResponse)
-def print_one_giay_roll_label(
-    roll_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-):
-    """Trả về trang HTML in tem cho 1 cuộn giấy cụ thể."""
-    roll = db.get(GiayRoll, roll_id)
-    if not roll:
-        raise HTTPException(404, "Không tìm thấy cuộn giấy")
-
-    gr = db.get(GoodsReceipt, roll.goods_receipt_id)
-    sup = db.get(Supplier, gr.supplier_id) if gr and gr.supplier_id else None
-    ten_ncc = sup.ten_viet_tat if sup else ""
-    ma_ncc = sup.ma_ncc if sup and hasattr(sup, "ma_ncc") else ""
-
+def _build_label_html(roll, ma_ncc: str, ten_ncc: str, so_phieu: str) -> str:
     pm = roll.paper_material
     ky_hieu = pm.ma_ky_hieu if pm else ""
     kho = f"{float(pm.kho):.0f}" if pm and pm.kho else ""
@@ -1236,75 +1221,72 @@ def print_one_giay_roll_label(
     nvl = (pm.ten_viet_tat or "") if pm else ""
     so_kg = f"{float(roll.trong_luong_ban_dau):,.0f}"
     ngay_str = roll.ngay_nhap.strftime("%d/%m/%Y") if roll.ngay_nhap else ""
-    so_phieu = gr.so_phieu if gr else ""
     barcode_val = roll.barcode
+    return (
+        f'<div class="label">'
+        f'<div class="company">CÔNG TY TNHH SX TM NAM PHƯƠNG</div>'
+        f'<div class="row-2col">'
+        f'<div class="field"><div class="lbl">Ký hiệu</div><div class="val big">{ky_hieu}</div></div>'
+        f'<div class="field"><div class="lbl">Khổ Giấy</div><div class="val big">{kho}</div></div>'
+        f'</div>'
+        f'<div class="field"><div class="lbl">Số KG</div><div class="val big">{so_kg}</div></div>'
+        f'<div class="field small"><span class="lbl">Mã chính</span> <span class="val">{ma_chinh}</span></div>'
+        f'<div class="row-2col small">'
+        f'<div><span class="lbl">ĐL</span> <span class="val">{dinh_luong}</span></div>'
+        f'<div><span class="lbl">Mã NCC</span> <span class="val">{ma_ncc or ten_ncc}</span></div>'
+        f'</div>'
+        f'<div class="row-2col small">'
+        f'<div><span class="lbl">Khổ</span> <span class="val">{kho}</span></div>'
+        f'<div><span class="lbl">NVL</span> <span class="val">{nvl}</span></div>'
+        f'</div>'
+        f'<div class="row-2col small">'
+        f'<div><span class="lbl">Ngày nhập</span> <span class="val">{ngay_str}</span></div>'
+        f'<div><span class="lbl">Số phiếu</span> <span class="val">{so_phieu}</span></div>'
+        f'</div>'
+        f'<div class="barcode-wrap">'
+        f'<svg class="barcode" jsbarcode-value="{barcode_val}" jsbarcode-format="CODE128"'
+        f' jsbarcode-width="2" jsbarcode-height="40" jsbarcode-fontsize="12"'
+        f' jsbarcode-displayvalue="true"></svg>'
+        f'</div></div>'
+    )
 
-    label_html = f"""
-    <div class="label">
-      <div class="company">CÔNG TY TNHH SX TM NAM PHƯƠNG</div>
-      <div class="row-2col">
-        <div class="field"><div class="lbl">Ký hiệu</div><div class="val big">{ky_hieu}</div></div>
-        <div class="field"><div class="lbl">Khổ Giấy</div><div class="val big">{kho}</div></div>
-      </div>
-      <div class="field"><div class="lbl">Số KG</div><div class="val big">{so_kg}</div></div>
-      <div class="field small"><span class="lbl">Mã chính</span> <span class="val">{ma_chinh}</span></div>
-      <div class="row-2col small">
-        <div><span class="lbl">ĐL</span> <span class="val">{dinh_luong}</span></div>
-        <div><span class="lbl">Mã NCC</span> <span class="val">{ma_ncc or ten_ncc}</span></div>
-      </div>
-      <div class="row-2col small">
-        <div><span class="lbl">Khổ</span> <span class="val">{kho}</span></div>
-        <div><span class="lbl">NVL</span> <span class="val">{nvl}</span></div>
-      </div>
-      <div class="row-2col small">
-        <div><span class="lbl">Ngày nhập</span> <span class="val">{ngay_str}</span></div>
-        <div><span class="lbl">Số phiếu</span> <span class="val">{so_phieu}</span></div>
-      </div>
-      <div class="barcode-wrap">
-        <svg class="barcode" jsbarcode-value="{barcode_val}" jsbarcode-format="CODE128"
-             jsbarcode-width="2" jsbarcode-height="40" jsbarcode-fontsize="12"
-             jsbarcode-displayvalue="true"></svg>
-      </div>
-    </div>"""
 
-    html = f"""<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="utf-8">
-<title>In tem — {barcode_val}</title>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-<style>
-  @media print {{ @page {{ size: 80mm 100mm; margin: 0; }} .no-print {{ display:none; }} }}
-  body {{ font-family: Arial, sans-serif; margin: 0; padding: 8px; background: #f5f5f5; }}
-  .label {{
-    width: 76mm; min-height: 94mm; border: 1px solid #333;
-    padding: 4mm 3mm; margin: 4mm auto; background: #fff;
-    box-sizing: border-box;
-  }}
-  .company {{ font-size: 9pt; font-weight: bold; text-align: center; margin-bottom: 3mm; }}
-  .field {{ margin: 1mm 0; }}
-  .row-2col {{ display: flex; gap: 4mm; }}
-  .row-2col > * {{ flex: 1; }}
-  .lbl {{ font-size: 8pt; color: #555; }}
-  .val {{ font-size: 10pt; font-weight: bold; }}
-  .big {{ font-size: 22pt; font-weight: 900; line-height: 1.1; }}
-  .small .lbl {{ font-size: 7.5pt; }}
-  .small .val {{ font-size: 8.5pt; }}
-  .barcode-wrap {{ text-align: center; margin-top: 3mm; }}
-  .barcode-wrap svg {{ max-width: 100%; }}
-  .no-print {{ text-align:center; margin: 12px; }}
-  .no-print button {{ padding: 8px 24px; font-size: 14px; cursor: pointer; }}
-</style>
-</head>
-<body>
-<div class="no-print">
-  <button onclick="window.print()">🖨️ In tem — {barcode_val}</button>
-</div>
-{label_html}
-<script>JsBarcode(".barcode").init();</script>
-</body>
-</html>"""
-    return html
+@router.get("/giay-rolls/print-one/{roll_id}", response_class=HTMLResponse)
+def print_one_giay_roll_label(
+    roll_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    roll = db.get(GiayRoll, roll_id)
+    if not roll:
+        raise HTTPException(404, "Không tìm thấy cuộn giấy")
+
+    from app.models.system import PrintTemplate
+    tpl = (db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PAPER_ROLL_LABEL",
+                                          PrintTemplate.phap_nhan_id.is_(None)).first()
+           or db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PAPER_ROLL_LABEL").first())
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in PAPER_ROLL_LABEL — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
+    gr = db.get(GoodsReceipt, roll.goods_receipt_id)
+    sup = db.get(Supplier, gr.supplier_id) if gr and gr.supplier_id else None
+    ten_ncc = sup.ten_viet_tat if sup else ""
+    ma_ncc = sup.ma_ncc if sup and hasattr(sup, "ma_ncc") else ""
+    so_phieu = gr.so_phieu if gr else ""
+
+    labels_html = _build_label_html(roll, ma_ncc, ten_ncc, so_phieu)
+    content = tpl.html_content.replace("{{labels_html}}", labels_html)
+    page = (
+        f"<!DOCTYPE html><html lang='vi'><head><meta charset='utf-8'>"
+        f"<title>In tem - {roll.barcode}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0'>"
+        f"<button onclick='window.print()' style='padding:7px 18px;font-size:14px;cursor:pointer'>🖨️ In tem - {roll.barcode}</button>"
+        "</div>"
+        f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)
 
 
 @router.get("/giay-rolls/print/{gr_id}", response_class=HTMLResponse)
@@ -1313,7 +1295,6 @@ def print_giay_roll_labels(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Trả về trang HTML in tem cho tất cả cuộn của phiếu nhập."""
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
         raise HTTPException(404, "Không tìm thấy phiếu nhập")
@@ -1325,87 +1306,30 @@ def print_giay_roll_labels(
     if not rolls:
         raise HTTPException(404, "Chưa tạo tem — gọi /from-receipt trước")
 
+    from app.models.system import PrintTemplate
+    tpl = (db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PAPER_ROLL_LABEL",
+                                          PrintTemplate.phap_nhan_id.is_(None)).first()
+           or db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PAPER_ROLL_LABEL").first())
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in PAPER_ROLL_LABEL — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
     sup = db.get(Supplier, gr.supplier_id) if gr.supplier_id else None
     ten_ncc = sup.ten_viet_tat if sup else ""
     ma_ncc = sup.ma_ncc if sup and hasattr(sup, "ma_ncc") else ""
 
-    labels_html = ""
-    for roll in rolls:
-        pm = roll.paper_material
-        ky_hieu = pm.ma_ky_hieu if pm else ""
-        kho = f"{float(pm.kho):.0f}" if pm and pm.kho else ""
-        ma_chinh = pm.ma_chinh if pm else ""
-        dinh_luong = f"{int(pm.dinh_luong)}" if pm and pm.dinh_luong else ""
-        nvl = (pm.ten_viet_tat or "") if pm else ""
-        so_kg = f"{float(roll.trong_luong_ban_dau):,.0f}"
-        ngay_str = roll.ngay_nhap.strftime("%d/%m/%Y") if roll.ngay_nhap else ""
-        barcode_val = roll.barcode
-
-        # Barcode SVG via JS (sẽ render phía client)
-        labels_html += f"""
-        <div class="label">
-          <div class="company">CÔNG TY TNHH SX TM NAM PHƯƠNG</div>
-          <div class="row-2col">
-            <div class="field"><div class="lbl">Ký hiệu</div><div class="val big">{ky_hieu}</div></div>
-            <div class="field"><div class="lbl">Khổ Giấy</div><div class="val big">{kho}</div></div>
-          </div>
-          <div class="field"><div class="lbl">Số KG</div><div class="val big">{so_kg}</div></div>
-          <div class="field small"><span class="lbl">Mã chính</span> <span class="val">{ma_chinh}</span></div>
-          <div class="row-2col small">
-            <div><span class="lbl">ĐL</span> <span class="val">{dinh_luong}</span></div>
-            <div><span class="lbl">Mã NCC</span> <span class="val">{ma_ncc or ten_ncc}</span></div>
-          </div>
-          <div class="row-2col small">
-            <div><span class="lbl">Khổ</span> <span class="val">{kho}</span></div>
-            <div><span class="lbl">NVL</span> <span class="val">{nvl}</span></div>
-          </div>
-          <div class="row-2col small">
-            <div><span class="lbl">Ngày nhập</span> <span class="val">{ngay_str}</span></div>
-            <div><span class="lbl">Số phiếu</span> <span class="val">{gr.so_phieu}</span></div>
-          </div>
-          <div class="barcode-wrap">
-            <svg class="barcode" jsbarcode-value="{barcode_val}" jsbarcode-format="CODE128"
-                 jsbarcode-width="2" jsbarcode-height="40" jsbarcode-fontsize="12"
-                 jsbarcode-displayvalue="true"></svg>
-          </div>
-        </div>"""
-
-    html = f"""<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="utf-8">
-<title>In tem cuộn giấy — {gr.so_phieu}</title>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-<style>
-  @media print {{ @page {{ size: 80mm 100mm; margin: 0; }} .no-print {{ display:none; }} }}
-  body {{ font-family: Arial, sans-serif; margin: 0; padding: 8px; background: #f5f5f5; }}
-  .label {{
-    width: 76mm; min-height: 94mm; border: 1px solid #333;
-    padding: 4mm 3mm; margin: 4mm auto; background: #fff;
-    page-break-after: always; box-sizing: border-box;
-  }}
-  .company {{ font-size: 9pt; font-weight: bold; text-align: center; margin-bottom: 3mm; }}
-  .field {{ margin: 1mm 0; }}
-  .row-2col {{ display: flex; gap: 4mm; }}
-  .row-2col > * {{ flex: 1; }}
-  .lbl {{ font-size: 8pt; color: #555; }}
-  .val {{ font-size: 10pt; font-weight: bold; }}
-  .big {{ font-size: 22pt; font-weight: 900; line-height: 1.1; }}
-  .small .lbl {{ font-size: 7.5pt; }}
-  .small .val {{ font-size: 8.5pt; }}
-  .barcode-wrap {{ text-align: center; margin-top: 3mm; }}
-  .barcode-wrap svg {{ max-width: 100%; }}
-  .no-print {{ text-align:center; margin: 12px; }}
-  .no-print button {{ padding: 8px 24px; font-size: 14px; cursor: pointer; }}
-</style>
-</head>
-<body>
-<div class="no-print">
-  <button onclick="window.print()">🖨️ In {len(rolls)} tem</button>
-  &nbsp;&nbsp;Phiếu: <strong>{gr.so_phieu}</strong> — {len(rolls)} cuộn
-</div>
-{labels_html}
-<script>JsBarcode(".barcode").init();</script>
-</body>
-</html>"""
-    return html
+    labels_html = "".join(
+        _build_label_html(roll, ma_ncc, ten_ncc, gr.so_phieu) for roll in rolls
+    )
+    content_html = tpl.html_content.replace("{{labels_html}}", labels_html)
+    page = (
+        f"<!DOCTYPE html><html lang='vi'><head><meta charset='utf-8'>"
+        f"<title>In tem cuon giay - {gr.so_phieu}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0'>"
+        f"<button onclick='window.print()' style='padding:7px 18px;font-size:14px;cursor:pointer'>🖨️ In {len(rolls)} tem</button>"
+        f" &nbsp;&nbsp;Phieu: <strong>{gr.so_phieu}</strong> - {len(rolls)} cuon"
+        "</div>"
+        f"{content_html}</body></html>"
+    )
+    return HTMLResponse(content=page)

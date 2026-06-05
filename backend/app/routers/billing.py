@@ -204,6 +204,10 @@ def print_adjustment_log(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ_ROLES)),
 ):
+    import html as _html_mod
+    import json
+    from app.models.system import PrintTemplate, SystemSetting
+
     lg = db.get(InvoiceAdjustmentLog, log_id)
     if not lg:
         raise HTTPException(404, "Không tìm thấy yêu cầu điều chỉnh")
@@ -211,7 +215,16 @@ def print_adjustment_log(
     if not inv:
         raise HTTPException(404, "Không tìm thấy hóa đơn")
 
-    import json
+    pn = inv.phap_nhan
+
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "INVOICE_ADJUSTMENT")
+    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == pn.id).first() if pn else None
+    if not tpl:
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in INVOICE_ADJUSTMENT — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
+    settings = {s.key: s.value for s in db.query(SystemSetting).all()}
     before = json.loads(lg.du_lieu_truoc) if lg.du_lieu_truoc else {}
     after = json.loads(lg.du_lieu_sau) if lg.du_lieu_sau else {}
 
@@ -221,14 +234,13 @@ def print_adjustment_log(
         except Exception:
             return str(v)
 
-    def ngay_str(d) -> str:
+    def _ngay(d) -> str:
         if not d:
             return "—"
-        s = str(d)
-        p = s.split("T")[0].split("-")
+        s = str(d).split("T")[0]
+        p = s.split("-")
         return f"Ngày {p[2]} tháng {p[1]} năm {p[0]}" if len(p) == 3 else s
 
-    pn = inv.phap_nhan
     accent = "#E65100"
     pn_name = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
     if pn and "VISUN" in pn.ma_phap_nhan.upper():
@@ -244,119 +256,60 @@ def print_adjustment_log(
 
     ten_kh = inv.ten_don_vi or (inv.customer.ten_viet_tat if inv.customer else "—")
     so_hd = inv.so_hoa_don or f"HĐ #{inv.id}"
-
     adjusted_by = lg.adjusted_by.ho_ten if lg.adjusted_by else f"User #{lg.adjusted_by_id}"
     approved_by = lg.approved_by.ho_ten if lg.approved_by else "—"
+    loai_label = "Trước kết chuyển" if lg.loai == "truoc_ket_chuyen" else "Sau kết chuyển"
 
-    html = f"""<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<title>Phiếu điều chỉnh #{lg.id}</title>
-<style>
-@page {{ size: A4 portrait; margin: 15mm 12mm; }}
-* {{ box-sizing: border-box; margin: 0; padding: 0; }}
-body {{ font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; }}
-.no-print {{ margin-bottom: 12px; }}
-@media print {{ .no-print {{ display: none; }} }}
-.header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }}
-.company-name {{ font-size: 13pt; font-weight: bold; color: {accent}; text-transform: uppercase; }}
-.company-info {{ font-size: 9pt; line-height: 1.6; color: #333; margin-top: 2px; }}
-.divider {{ border: none; border-top: 2px solid {accent}; margin: 8px 0; }}
-.title {{ text-align: center; margin: 10px 0 12px; }}
-.title h2 {{ font-size: 16pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }}
-.title .so {{ font-size: 10pt; color: #333; margin-top: 4px; }}
-.status-badge {{ display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 10pt;
-                 font-weight: bold; color: #fff; background: {tt_color}; }}
-.info-block {{ font-size: 10.5pt; line-height: 1.9; margin: 8px 0; }}
-.row {{ display: flex; margin: 2px 0; }}
-.row .label {{ min-width: 160px; font-weight: bold; flex-shrink: 0; }}
-.row .dots {{ flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; }}
-table.so-sanh {{ width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 10.5pt; }}
-table.so-sanh th {{ background: {accent}; color: #fff; padding: 6px 8px; border: 1px solid #ccc; text-align: center; }}
-table.so-sanh td {{ border: 1px solid #ccc; padding: 6px 8px; }}
-table.so-sanh tr.changed td {{ background: #fffbe6; font-weight: bold; }}
-.right {{ text-align: right; }}
-.center {{ text-align: center; }}
-.ly-do {{ border: 1px solid #ccc; border-radius: 4px; padding: 8px 12px; font-size: 10.5pt;
-           background: #fafafa; margin: 8px 0; min-height: 40px; }}
-.sig-table {{ width: 100%; border-collapse: collapse; margin-top: 24px; }}
-.sig-table td {{ border: none; text-align: center; vertical-align: top; padding: 2px; }}
-.sig-label {{ font-weight: bold; font-size: 10pt; }}
-.sig-sub {{ font-style: italic; font-size: 9pt; color: #555; }}
-.sig-name {{ margin-top: 40px; font-weight: bold; }}
-</style>
-</head>
-<body>
-<div class="no-print">
-  <button onclick="window.print()" style="padding:6px 16px;background:{accent};color:#fff;border:none;border-radius:3px;cursor:pointer;">
-    🖨 In phiếu điều chỉnh
-  </button>
-</div>
-<div class="header">
-  <div>
-    <div class="company-name">{pn_name}</div>
-    <div class="company-info">Bộ phận: Kế toán công nợ</div>
-  </div>
-  <div style="text-align:right;font-size:9pt;color:#555;">
-    Phiếu điều chỉnh số: <strong>ĐC-{lg.id:04d}</strong><br>
-    {ngay_str(str(lg.adjusted_at.date()) if lg.adjusted_at else "")}
-  </div>
-</div>
-<hr class="divider">
-<div class="title">
-  <h2>Phiếu yêu cầu điều chỉnh hóa đơn</h2>
-  <div class="so">
-    Hóa đơn: <strong>{so_hd}</strong> &nbsp;|&nbsp;
-    Loại: <strong>{'Trước kết chuyển' if lg.loai == 'truoc_ket_chuyen' else 'Sau kết chuyển'}</strong> &nbsp;|&nbsp;
-    Trạng thái: <span class="status-badge">{tt_label}</span>
-  </div>
-</div>
-<div class="info-block">
-  <div class="row"><span class="label">Khách hàng:</span><span class="dots">{ten_kh}</span></div>
-  <div class="row"><span class="label">Người yêu cầu:</span><span class="dots">{adjusted_by} — {ngay_str(str(lg.adjusted_at.date()) if lg.adjusted_at else "")}</span></div>
-  <div class="row"><span class="label">Người phê duyệt:</span><span class="dots">{approved_by}{(' — ' + ngay_str(str(lg.approved_at.date()))) if lg.approved_at else ''}</span></div>
-</div>
-<p style="font-weight:bold;margin:12px 0 4px;">Nội dung thay đổi:</p>
+    def _changed_cls(key):
+        return "changed" if before.get(key) != after.get(key) else ""
+
+    body_html = f"""
 <table class="so-sanh">
-  <thead>
-    <tr><th>Chỉ tiêu</th><th class="right">Trước điều chỉnh</th><th class="right">Sau điều chỉnh</th></tr>
-  </thead>
+  <thead><tr><th>Chỉ tiêu</th><th class="right">Trước điều chỉnh</th><th class="right">Sau điều chỉnh</th></tr></thead>
   <tbody>
-    <tr class="{'changed' if before.get('tong_tien_hang') != after.get('tong_tien_hang') else ''}">
-      <td>Tiền hàng</td>
-      <td class="right">{fmt(before.get('tong_tien_hang', '0'))} đ</td>
-      <td class="right">{fmt(after.get('tong_tien_hang', '0'))} đ</td>
-    </tr>
-    <tr class="{'changed' if before.get('ty_le_vat') != after.get('ty_le_vat') else ''}">
-      <td>Thuế VAT</td>
-      <td class="right">{before.get('ty_le_vat', '0')}%</td>
-      <td class="right">{after.get('ty_le_vat', '0')}%</td>
-    </tr>
-    <tr class="{'changed' if before.get('tien_vat') != after.get('tien_vat') else ''}">
-      <td>Tiền VAT</td>
-      <td class="right">{fmt(before.get('tien_vat', '0'))} đ</td>
-      <td class="right">{fmt(after.get('tien_vat', '0'))} đ</td>
-    </tr>
-    <tr style="font-weight:bold;background:#e6f4ff;" class="{'changed' if before.get('tong_cong') != after.get('tong_cong') else ''}">
-      <td>TỔNG CỘNG</td>
-      <td class="right">{fmt(before.get('tong_cong', '0'))} đ</td>
-      <td class="right">{fmt(after.get('tong_cong', '0'))} đ</td>
-    </tr>
+    <tr class="{_changed_cls('tong_tien_hang')}"><td>Tiền hàng</td><td class="right">{fmt(before.get('tong_tien_hang','0'))} đ</td><td class="right">{fmt(after.get('tong_tien_hang','0'))} đ</td></tr>
+    <tr class="{_changed_cls('ty_le_vat')}"><td>Thuế VAT</td><td class="right">{before.get('ty_le_vat','0')}%</td><td class="right">{after.get('ty_le_vat','0')}%</td></tr>
+    <tr class="{_changed_cls('tien_vat')}"><td>Tiền VAT</td><td class="right">{fmt(before.get('tien_vat','0'))} đ</td><td class="right">{fmt(after.get('tien_vat','0'))} đ</td></tr>
+    <tr class="{_changed_cls('tong_cong')}" style="font-weight:bold;background:#e6f4ff"><td>TỔNG CỘNG</td><td class="right">{fmt(before.get('tong_cong','0'))} đ</td><td class="right">{fmt(after.get('tong_cong','0'))} đ</td></tr>
   </tbody>
-</table>
-<p style="font-weight:bold;margin:8px 0 4px;">Lý do điều chỉnh:</p>
-<div class="ly-do">{lg.ghi_chu or '—'}</div>
-<table class="sig-table" style="margin-top:32px;">
-  <tr>
-    <td style="width:33%"><div class="sig-label">Người yêu cầu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{adjusted_by}</div></td>
-    <td style="width:33%"><div class="sig-label">Kế toán trưởng</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{approved_by if lg.trang_thai in ('approved','rejected') else ''}</div></td>
-    <td style="width:34%"><div class="sig-label">Giám đốc</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-  </tr>
-</table>
-</body>
-</html>"""
-    return HTMLResponse(content=html)
+</table>"""
+
+    replacements = {
+        "{{document_number}}": f"ĐC-{lg.id:04d}",
+        "{{document_date}}": _ngay(str(lg.adjusted_at.date()) if lg.adjusted_at else ""),
+        "{{company_name}}": _html_mod.escape(pn_name),
+        "{{company_details}}": "Bộ phận: Kế toán công nợ",
+        "{{logo_img}}": f'<img src="{settings["logo_url"]}" style="max-height:50px"/>' if settings.get("logo_url") else "",
+        "{{accent}}": accent,
+        "{{tt_color}}": tt_color,
+        "{{ten_kh}}": _html_mod.escape(ten_kh),
+        "{{so_hd}}": _html_mod.escape(so_hd),
+        "{{loai}}": loai_label,
+        "{{trang_thai}}": _html_mod.escape(tt_label),
+        "{{adjusted_by}}": _html_mod.escape(adjusted_by),
+        "{{adjusted_at}}": _ngay(str(lg.adjusted_at.date()) if lg.adjusted_at else ""),
+        "{{approved_by}}": _html_mod.escape(approved_by),
+        "{{approved_at}}": _ngay(str(lg.approved_at.date()) if lg.approved_at else ""),
+        "{{body_html}}": body_html,
+        "{{ly_do}}": _html_mod.escape(lg.ghi_chu or "—"),
+        "{{sig_approved_by}}": _html_mod.escape(approved_by if lg.trang_thai in ("approved", "rejected") else ""),
+        "{{sig_adjusted_by}}": _html_mod.escape(adjusted_by),
+    }
+    content = tpl.html_content
+    for k, v in replacements.items():
+        content = content.replace(k, v)
+    page = (
+        "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
+        f"<title>Phiếu điều chỉnh ĐC-{lg.id:04d}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>"
+        "<button onclick='window.print()' style='padding:7px 18px;background:#E65100;color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In phiếu điều chỉnh</button>"
+        "<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>"
+        "</div>"
+        f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)
 
 
 # ── Issue / Cancel ────────────────────────────────────────────────────────────
@@ -387,156 +340,106 @@ def print_invoice(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ_ROLES)),
 ):
+    import html as _html_mod
+    from app.models.system import PrintTemplate, SystemSetting
+
     inv = db.get(SalesInvoice, invoice_id)
     if not inv:
         raise HTTPException(404, "Không tìm thấy hóa đơn")
 
-    accent = "#E65100"
     pn = inv.phap_nhan
-    pn_name = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
-    pn_address = pn.dia_chi if pn else "123 Đường Nguyễn Văn Linh, Q.7, TP.HCM"
-    pn_mst = pn.ma_so_thue if pn else "0312345678"
-    pn_phone = pn.so_dien_thoai if pn else "(028) 3456 7890"
-    pn_email = getattr(pn, 'email', None) or "info@namphuong.vn"
 
-    logo_file = "logo_namphuong.png"
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "SALES_INVOICE")
+    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == pn.id).first() if pn else None
+    if not tpl:
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in SALES_INVOICE — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
+    settings = {s.key: s.value for s in db.query(SystemSetting).all()}
+
+    accent = "#E65100"
+    pn_name = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+    pn_address = pn.dia_chi if pn else ""
+    pn_mst = pn.ma_so_thue if pn else ""
+    pn_phone = pn.so_dien_thoai if pn else ""
+    pn_email = getattr(pn, "email", None) or ""
     if pn and "VISUN" in pn.ma_phap_nhan.upper():
-        logo_file = "logo_visunpack.png"
         accent = "#0277BD"
 
+    logo_src = settings.get("logo_url") or ""
     ten_kh = inv.ten_don_vi or (inv.customer.ten_viet_tat if inv.customer else "")
     dia_chi_kh = inv.dia_chi or (inv.customer.dia_chi if inv.customer else "")
     mst_kh = inv.ma_so_thue or (inv.customer.ma_so_thue if inv.customer else "")
-    hinh_thuc = {"CK": "Chuyển khoản", "TM": "Tiền mặt"}.get(inv.hinh_thuc_tt, inv.hinh_thuc_tt)
+    hinh_thuc = {"CK": "Chuyển khoản", "TM": "Tiền mặt"}.get(inv.hinh_thuc_tt, inv.hinh_thuc_tt or "")
+    so_hd = inv.so_hoa_don or "Chưa phát hành"
 
-    def ngay_str(d) -> str:
+    def _ngay(d) -> str:
         if not d:
             return ""
         s = str(d)
         p = s.split("-")
         return f"Ngày {p[2]} tháng {p[1]} năm {p[0]}" if len(p) == 3 else s
 
-    han_tt_str = ngay_str(inv.han_tt) if inv.han_tt else "Không có"
-    so_hd = inv.so_hoa_don or "Chưa phát hành"
+    mau_so_html = f"Mẫu số: {inv.mau_so}<br>Ký hiệu: {inv.ky_hieu}" if inv.mau_so else "Hóa đơn nội bộ"
 
-    html = f"""<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<title>Hóa đơn {so_hd}</title>
-<style>
-@page {{ size: A4 portrait; margin: 15mm 12mm; }}
-* {{ box-sizing: border-box; margin: 0; padding: 0; }}
-body {{ font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; }}
-.no-print {{ margin-bottom: 10px; }}
-@media print {{ .no-print {{ display: none; }} }}
-.header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }}
-.logo-container {{ width: 120px; flex-shrink: 0; }}
-.logo-container img {{ width: 100%; height: auto; }}
-.company-details {{ flex: 1; }}
-.company-name {{ font-size: 13pt; font-weight: bold; color: {accent}; text-transform: uppercase; }}
-.company-info {{ font-size: 9pt; line-height: 1.6; color: #333; margin-top: 2px; }}
-.mau {{ font-size: 9pt; text-align: right; color: #555; flex-shrink: 0; }}
-.divider {{ border: none; border-top: 2px solid {accent}; margin: 8px 0; }}
-.title {{ text-align: center; margin: 10px 0 8px; }}
-.title h2 {{ font-size: 18pt; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; }}
-.title .so {{ font-size: 10pt; color: #333; margin-top: 3px; }}
-.title .ky-hieu {{ font-size: 9pt; color: #555; }}
-.info-block {{ font-size: 10.5pt; line-height: 1.9; margin: 8px 0; }}
-.row {{ display: flex; margin: 2px 0; }}
-.row .label {{ min-width: 130px; font-weight: bold; flex-shrink: 0; }}
-.row .dots {{ flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; }}
-table.hang-hoa {{ width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10pt; }}
-table.hang-hoa th {{ background: {accent}; color: #fff; padding: 5px 4px; border: 1px solid #ccc; text-align: center; }}
-table.hang-hoa td {{ border: 1px solid #ccc; padding: 4px; }}
-.total-row td {{ font-weight: bold; background: #FFF3E0; }}
-.right {{ text-align: right; }}
-.center {{ text-align: center; }}
-.chu {{ font-size: 9.5pt; margin: 4px 0; }}
-.sig-table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-.sig-table td {{ border: none; text-align: center; vertical-align: top; width: 25%; padding: 2px; }}
-.sig-label {{ font-weight: bold; font-size: 10pt; }}
-.sig-sub {{ font-style: italic; font-size: 9pt; color: #555; }}
-.sig-name {{ margin-top: 40px; font-weight: bold; }}
-</style>
-</head>
-<body>
-<div class="no-print">
-  <button onclick="window.print()" style="padding:6px 16px;background:{accent};color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10pt;">
-    🖨 In hóa đơn
-  </button>
-</div>
-<div class="header">
-  <div class="logo-container">
-    <img src="/{logo_file}" alt="Logo">
-  </div>
-  <div class="company-details">
-    <div class="company-name">{pn_name}</div>
-    <div class="company-info">
-      Địa chỉ: {pn_address}<br>
-      MST: {pn_mst} &nbsp;|&nbsp; ĐT: {pn_phone} &nbsp;|&nbsp; Email: {pn_email}
-    </div>
-  </div>
-  <div class="mau">
-    {f"Mẫu số: {inv.mau_so}<br>Ký hiệu: {inv.ky_hieu}" if inv.mau_so else "Hóa đơn nội bộ"} </div>
-</div>
-<hr class="divider">
-<div class="title">
-  <h2>Hóa đơn giá trị gia tăng</h2>
-  <div class="so">Số: {so_hd}</div>
-  <div class="ky-hieu">{ngay_str(inv.ngay_hoa_don)}</div>
-</div>
-<div class="info-block">
-  <div class="row"><span class="label">Đơn vị mua hàng:</span><span class="dots">{ten_kh}</span></div>
-  <div class="row"><span class="label">Địa chỉ:</span><span class="dots">{dia_chi_kh}</span></div>
-  <div class="row"><span class="label">MST:</span><span class="dots">{mst_kh}</span></div>
-  <div class="row"><span class="label">Người mua hàng:</span><span class="dots">{inv.nguoi_mua_hang or ''}</span></div>
-  <div class="row"><span class="label">Hình thức TT:</span><span class="dots">{hinh_thuc}</span></div>
-  <div class="row"><span class="label">Hạn thanh toán:</span><span class="dots">{han_tt_str}</span></div>
-</div>
+    body_html = f"""
 <table class="hang-hoa">
   <thead>
     <tr>
-      <th style="width:5%">STT</th>
-      <th>Tên hàng hóa, dịch vụ</th>
-      <th style="width:10%">ĐVT</th>
-      <th class="right" style="width:15%">Đơn giá</th>
-      <th class="right" style="width:18%">Thành tiền</th>
+      <th style="width:5%">STT</th><th>Tên hàng hóa, dịch vụ</th>
+      <th style="width:10%">ĐVT</th><th style="width:15%" class="right">Đơn giá</th>
+      <th style="width:18%" class="right">Thành tiền</th>
     </tr>
   </thead>
   <tbody>
-    <tr>
-      <td class="center">1</td>
-      <td>Thùng carton (theo hợp đồng / đơn hàng)</td>
-      <td class="center">Thùng</td>
-      <td class="right">—</td>
-      <td class="right">{float(inv.tong_tien_hang):,.0f}</td>
-    </tr>
+    <tr><td class="center">1</td><td>Thùng carton (theo hợp đồng / đơn hàng)</td>
+        <td class="center">Thùng</td><td class="right">—</td>
+        <td class="right">{float(inv.tong_tien_hang):,.0f}</td></tr>
   </tbody>
   <tfoot>
-    <tr class="total-row">
-      <td colspan="4" class="right">Cộng tiền hàng:</td>
-      <td class="right">{float(inv.tong_tien_hang):,.0f}</td>
-    </tr>
-    <tr class="total-row">
-      <td colspan="4" class="right">Thuế VAT ({float(inv.ty_le_vat):.0f}%):</td>
-      <td class="right">{float(inv.tien_vat):,.0f}</td>
-    </tr>
-    <tr class="total-row">
-      <td colspan="4" class="right">TỔNG CỘNG:</td>
-      <td class="right" style="font-size:11pt">{float(inv.tong_cong):,.0f}</td>
-    </tr>
+    <tr class="total-row"><td colspan="4" class="right">Cộng tiền hàng:</td><td class="right">{float(inv.tong_tien_hang):,.0f}</td></tr>
+    <tr class="total-row"><td colspan="4" class="right">Thuế VAT ({float(inv.ty_le_vat):.0f}%):</td><td class="right">{float(inv.tien_vat):,.0f}</td></tr>
+    <tr class="total-row"><td colspan="4" class="right">TỔNG CỘNG:</td><td class="right" style="font-size:11pt">{float(inv.tong_cong):,.0f}</td></tr>
   </tfoot>
-</table>
-<div class="chu">Ghi chú: {inv.ghi_chu or ''}</div>
-<table class="sig-table">
-  <tr>
-    <td><div class="sig-label">Người mua hàng</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{inv.nguoi_mua_hang or ''}</div></td>
-    <td><div class="sig-label">Thủ kho</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">Kế toán</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">Người lập phiếu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-  </tr>
-</table>
-</body>
-</html>"""
-    return HTMLResponse(content=html)
+</table>"""
+
+    replacements = {
+        "{{document_number}}": _html_mod.escape(so_hd),
+        "{{document_date}}": _ngay(inv.ngay_hoa_don),
+        "{{company_name}}": _html_mod.escape(pn_name),
+        "{{company_details}}": _html_mod.escape(
+            f"Địa chỉ: {pn_address} | MST: {pn_mst} | ĐT: {pn_phone}" + (f" | Email: {pn_email}" if pn_email else "")
+        ),
+        "{{logo_img}}": f'<img src="{logo_src}" style="max-width:100%;height:auto"/>' if logo_src else "",
+        "{{logo_src}}": logo_src,
+        "{{accent}}": accent,
+        "{{mau_so}}": mau_so_html,
+        "{{ten_kh}}": _html_mod.escape(ten_kh),
+        "{{dia_chi_kh}}": _html_mod.escape(dia_chi_kh),
+        "{{mst_kh}}": _html_mod.escape(mst_kh),
+        "{{nguoi_mua_hang}}": _html_mod.escape(inv.nguoi_mua_hang or ""),
+        "{{hinh_thuc}}": _html_mod.escape(hinh_thuc),
+        "{{han_tt}}": _ngay(inv.han_tt) if inv.han_tt else "Không có",
+        "{{body_html}}": body_html,
+        "{{tong_tien_hang}}": f"{float(inv.tong_tien_hang):,.0f}",
+        "{{ty_le_vat}}": f"{float(inv.ty_le_vat):.0f}",
+        "{{tien_vat}}": f"{float(inv.tien_vat):,.0f}",
+        "{{tong_cong}}": f"{float(inv.tong_cong):,.0f}",
+        "{{ghi_chu}}": _html_mod.escape(inv.ghi_chu or ""),
+    }
+    content = tpl.html_content
+    for k, v in replacements.items():
+        content = content.replace(k, v)
+    page = (
+        "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
+        f"<title>Hóa đơn {_html_mod.escape(so_hd)}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>"
+        "<button onclick='window.print()' style='padding:7px 18px;background:#E65100;color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In hóa đơn</button>"
+        "<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>"
+        "</div>"
+        f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)

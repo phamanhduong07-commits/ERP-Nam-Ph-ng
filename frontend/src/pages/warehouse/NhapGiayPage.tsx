@@ -9,7 +9,7 @@ import {
 import {
   FileExcelOutlined, FileImageOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
   CheckCircleOutlined, DollarOutlined, ThunderboltOutlined, UploadOutlined, RollbackOutlined,
-  AuditOutlined,
+  AuditOutlined, ScanOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
@@ -53,6 +53,7 @@ export default function NhapGiayPage() {
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null)
   const [invoicePreviewUrl, setInvoicePreviewUrl] = useState<string | null>(null)
   const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
+  const [ocrResult, setOcrResult] = useState<Record<number, any>>({})
 
   // Reactive watches — hooks must be at top level
   const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
@@ -226,6 +227,15 @@ export default function NhapGiayPage() {
       const detail = (e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu QC'
       message.error(detail)
     },
+  })
+
+  const ocrMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.extractImageOcr(id).then(r => r.data),
+    onSuccess: (data, id) => {
+      setOcrResult(prev => ({ ...prev, [id]: data.extracted ?? {} }))
+      message.success('Đọc ảnh xong')
+    },
+    onError: (e: ApiError) => message.error(e?.response?.data?.detail || 'Lỗi đọc ảnh'),
   })
 
   const syncGiaBanMut = useMutation({
@@ -504,12 +514,30 @@ export default function NhapGiayPage() {
   const expandedRowRender = (r: GoodsReceipt) => (
     <div>
       {r.has_invoice_image && (
-        <div style={{ marginBottom: 8 }}>
-          <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>Phiếu xuất NCC:</Text>
+        <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>Phiếu xuất NCC:</Text>
           {expandedImages[r.id]
             ? <Image src={expandedImages[r.id]} height={48} style={{ cursor: 'pointer', borderRadius: 4, border: '1px solid #d9d9d9' }} />
             : <Button size="small" icon={<FileImageOutlined />} onClick={() => handleLoadInvoiceImage(r.id)}>Xem ảnh phiếu</Button>
           }
+          <Button
+            size="small"
+            icon={<ScanOutlined />}
+            loading={ocrMut.isPending && ocrMut.variables === r.id}
+            onClick={() => ocrMut.mutate(r.id)}
+          >
+            Đọc hình AI
+          </Button>
+          {ocrResult[r.id] && (() => {
+            const ext = ocrResult[r.id]
+            return (
+              <span style={{ fontSize: 12, color: '#52c41a' }}>
+                {ext.ten_ncc && <span>NCC: <b>{ext.ten_ncc}</b> · </span>}
+                {ext.tong_kg && <span>Tổng: <b>{ext.tong_kg}kg</b> · </span>}
+                {(ext.hang_hoa?.length ?? 0) > 0 && <span>{ext.hang_hoa.length} dòng</span>}
+              </span>
+            )
+          })()}
         </div>
       )}
       <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}

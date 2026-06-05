@@ -299,15 +299,119 @@ TEMPLATES = [
     {
         "ma_mau": "PURCHASE_ORDER",
         "ten_mau": "Đơn Mua Hàng",
-        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div><div class="doc-footer" style="margin-top:8px;font-style:italic">Điều khoản thanh toán: {{dieu_khoan_tt}}</div><div class="doc-footer">{{ghi_chu}}</div>',
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #222; }
+  .po-wrap { max-width: 210mm; margin: 0 auto; }
+
+  /* Header */
+  .po-head { display: flex; align-items: flex-start; gap: 14px; padding-bottom: 8px; border-bottom: 2px solid #1B5E20; margin-bottom: 12px; }
+  .po-logo img { max-width: 90px; max-height: 70px; object-fit: contain; }
+  .po-company { flex: 1; padding-left: 12px; }
+  .po-company-name { font-weight: 700; color: #1B5E20; font-size: 13pt; text-transform: uppercase; }
+  .po-company-details { font-size: 9pt; margin-top: 4px; line-height: 1.5; color: #444; }
+  .po-mau { text-align: right; font-size: 8pt; color: #666; min-width: 130px; }
+
+  /* Title */
+  .po-title { text-align: center; margin: 10px 0 12px; }
+  .po-title h2 { margin: 0; font-size: 17pt; font-weight: 700; letter-spacing: 2px; }
+  .po-title .po-docno { font-size: 9.5pt; color: #444; margin-top: 5px; }
+
+  /* Info block */
+  .po-info { margin-bottom: 10px; }
+  .po-info .row { display: flex; align-items: baseline; margin: 4px 0; font-size: 10.5pt; line-height: 1.7; }
+  .po-info .label { min-width: 135px; font-weight: 700; flex-shrink: 0; }
+  .po-info .dots { flex: 1; border-bottom: 1px dotted #888; min-height: 1em; padding-bottom: 1px; }
+  .po-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+
+  /* Table (bảng hàng được inject qua body_html — chỉ cần wrapper) */
+  .po-table-wrap { margin-top: 4px; }
+
+  /* Ghi chú + điều khoản */
+  .po-note { font-size: 9.5pt; color: #444; margin-top: 8px; line-height: 1.7; border-top: 1px dotted #ccc; padding-top: 6px; }
+
+  /* Chữ ký */
+  .po-sign { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  .po-sign td { border: none; text-align: center; vertical-align: top; width: 33.33%; padding: 0 4px; }
+  .po-sign .sig-label { font-weight: 700; font-size: 10.5pt; }
+  .po-sign .sig-sub { font-style: italic; font-size: 8.5pt; color: #666; margin-top: 2px; }
+  .po-sign .sig-space { height: 40px; }
+</style>
+<div class="po-wrap">
+
+  <div class="po-head">
+    <div class="po-logo">{{logo_img}}</div>
+    <div class="po-company">
+      <div class="po-company-name">{{company_name}}</div>
+      <div class="po-company-details">{{company_details}}</div>
+    </div>
+    <div class="po-mau">&nbsp;</div>
+  </div>
+
+  <div class="po-title">
+    <h2>ĐƠN MUA HÀNG</h2>
+    <div class="po-docno">
+      Số: <strong>{{document_number}}</strong>
+      &nbsp;&nbsp;|&nbsp;&nbsp;
+      Ngày: {{document_date}}
+    </div>
+  </div>
+
+  <div class="po-info">
+    <div class="row">
+      <div class="label">Nhà cung cấp:</div>
+      <div class="dots"><strong>{{supplier_name}}</strong></div>
+    </div>
+    <div class="po-info-grid">
+      <div class="row">
+        <div class="label">Điều khoản TT:</div>
+        <div class="dots">{{dieu_khoan_tt}}</div>
+      </div>
+      <div class="row">
+        <div class="label">Ghi chú:</div>
+        <div class="dots">{{ghi_chu}}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="po-table-wrap">
+    {{body_html}}
+  </div>
+
+  <table class="po-sign">
+    <tr>
+      <td>
+        <div class="sig-label">Giám đốc</div>
+        <div class="sig-sub">(Ký, họ tên, đóng dấu)</div>
+        <div class="sig-space"></div>
+      </td>
+      <td>
+        <div class="sig-label">Kế toán trưởng</div>
+        <div class="sig-sub">(Ký, họ tên)</div>
+        <div class="sig-space"></div>
+      </td>
+      <td>
+        <div class="sig-label">Người lập phiếu</div>
+        <div class="sig-sub">(Ký, họ tên)</div>
+        <div class="sig-space"></div>
+      </td>
+    </tr>
+  </table>
+
+</div>
+""",
         "variables_meta": {
             "document_number": "Số PO",
             "document_date": "Ngày PO",
             "supplier_name": "Nhà cung cấp",
-            "body_html": "Bảng hàng hóa",
-            "tong_tien": "Tổng tiền",
+            "body_html": "Bảng hàng hóa (STT | Tên | ĐVT | Khổ | Cuộn | SL | Đơn giá | Thành tiền)",
+            "tong_tien": "Tổng tiền (số nguyên)",
             "dieu_khoan_tt": "Điều khoản thanh toán",
-            "ghi_chu": "Ghi chú"
+            "ghi_chu": "Ghi chú",
+            "company_name": "Tên công ty",
+            "company_details": "Địa chỉ/SĐT/MST công ty",
+            "logo_img": "Logo HTML img tag"
         }
     },
     {
@@ -384,6 +488,129 @@ TEMPLATES = [
             "document_number": "Số lượng giao dịch",
             "body_html": "Nội dung bảng",
             "footer_html": "Thống kê tổng"
+        }
+    },
+    {
+        "ma_mau": "INVOICE_ADJUSTMENT",
+        "ten_mau": "Phiếu Yêu Cầu Điều Chỉnh Hóa Đơn",
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+  .company-name { font-size: 13pt; font-weight: bold; color: {{accent}}; text-transform: uppercase; }
+  .company-info { font-size: 9pt; line-height: 1.6; color: #333; margin-top: 2px; }
+  .divider { border: none; border-top: 2px solid {{accent}}; margin: 8px 0; }
+  .title { text-align: center; margin: 10px 0 12px; }
+  .title h2 { font-size: 16pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+  .title .so { font-size: 10pt; color: #333; margin-top: 4px; }
+  .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 10pt;
+                  font-weight: bold; color: #fff; background: {{tt_color}}; }
+  .info-block { font-size: 10.5pt; line-height: 1.9; margin: 8px 0; }
+  .row { display: flex; margin: 2px 0; }
+  .row .label { min-width: 160px; font-weight: bold; flex-shrink: 0; }
+  .row .dots { flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; }
+  table.so-sanh { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 10.5pt; }
+  table.so-sanh th { background: {{accent}}; color: #fff; padding: 6px 8px; border: 1px solid #ccc; text-align: center; }
+  table.so-sanh td { border: 1px solid #ccc; padding: 6px 8px; }
+  table.so-sanh tr.changed td { background: #fffbe6; font-weight: bold; }
+  .right { text-align: right; }
+  .ly-do { border: 1px solid #ccc; border-radius: 4px; padding: 8px 12px; font-size: 10.5pt;
+            background: #fafafa; margin: 8px 0; min-height: 40px; }
+  .sig-table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+  .sig-table td { border: none; text-align: center; vertical-align: top; padding: 2px; }
+  .sig-label { font-weight: bold; font-size: 10pt; }
+  .sig-sub { font-style: italic; font-size: 9pt; color: #555; }
+  .sig-name { margin-top: 40px; font-weight: bold; }
+</style>
+<div class="header">
+  <div>
+    <div class="company-name">{{company_name}}</div>
+    <div class="company-info">{{company_details}}</div>
+  </div>
+  <div style="text-align:right;font-size:9pt;color:#555;">
+    Phiếu điều chỉnh số: <strong>{{document_number}}</strong><br>
+    {{document_date}}
+  </div>
+</div>
+<hr class="divider">
+<div class="title">
+  <h2>Phiếu yêu cầu điều chỉnh hóa đơn</h2>
+  <div class="so">
+    Hóa đơn: <strong>{{so_hd}}</strong> &nbsp;|&nbsp;
+    Loại: <strong>{{loai}}</strong> &nbsp;|&nbsp;
+    Trạng thái: <span class="status-badge">{{trang_thai}}</span>
+  </div>
+</div>
+<div class="info-block">
+  <div class="row"><span class="label">Khách hàng:</span><span class="dots">{{ten_kh}}</span></div>
+  <div class="row"><span class="label">Người yêu cầu:</span><span class="dots">{{adjusted_by}} — {{adjusted_at}}</span></div>
+  <div class="row"><span class="label">Người phê duyệt:</span><span class="dots">{{approved_by}} {{approved_at}}</span></div>
+</div>
+<p style="font-weight:bold;margin:12px 0 4px;">Nội dung thay đổi:</p>
+{{body_html}}
+<p style="font-weight:bold;margin:8px 0 4px;">Lý do điều chỉnh:</p>
+<div class="ly-do">{{ly_do}}</div>
+<table class="sig-table" style="margin-top:32px;">
+  <tr>
+    <td style="width:33%"><div class="sig-label">Người yêu cầu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{{sig_adjusted_by}}</div></td>
+    <td style="width:33%"><div class="sig-label">Kế toán trưởng</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{{sig_approved_by}}</div></td>
+    <td style="width:34%"><div class="sig-label">Giám đốc</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
+  </tr>
+</table>
+""",
+        "variables_meta": {
+            "document_number": "Số phiếu điều chỉnh (ĐC-XXXX)",
+            "document_date": "Ngày yêu cầu",
+            "company_name": "Tên công ty",
+            "company_details": "Bộ phận",
+            "accent": "Màu accent (#E65100 hoặc #0277BD)",
+            "tt_color": "Màu badge trạng thái",
+            "ten_kh": "Tên khách hàng",
+            "so_hd": "Số hóa đơn",
+            "loai": "Loại điều chỉnh",
+            "trang_thai": "Trạng thái",
+            "adjusted_by": "Người yêu cầu",
+            "adjusted_at": "Ngày yêu cầu",
+            "approved_by": "Người duyệt",
+            "approved_at": "Ngày duyệt",
+            "body_html": "Bảng so sánh trước/sau",
+            "ly_do": "Lý do điều chỉnh",
+            "sig_adjusted_by": "Tên người yêu cầu (chữ ký)",
+            "sig_approved_by": "Tên người duyệt (chữ ký)"
+        }
+    },
+    {
+        "ma_mau": "PAPER_ROLL_LABEL",
+        "ten_mau": "Tem Cuộn Giấy (80×100mm, Barcode)",
+        "html_content": """
+<style>
+  @media print { @page { size: 80mm 100mm; margin: 0; } }
+  body { font-family: Arial, sans-serif; margin: 0; padding: 8px; background: #f5f5f5; }
+  .label {
+    width: 76mm; min-height: 94mm; border: 1px solid #333;
+    padding: 4mm 3mm; margin: 4mm auto; background: #fff;
+    page-break-after: always; box-sizing: border-box;
+  }
+  .company { font-size: 9pt; font-weight: bold; text-align: center; margin-bottom: 3mm; }
+  .field { margin: 1mm 0; }
+  .row-2col { display: flex; gap: 4mm; }
+  .row-2col > * { flex: 1; }
+  .lbl { font-size: 8pt; color: #555; }
+  .val { font-size: 10pt; font-weight: bold; }
+  .big { font-size: 22pt; font-weight: 900; line-height: 1.1; }
+  .small .lbl { font-size: 7.5pt; }
+  .small .val { font-size: 8.5pt; }
+  .barcode-wrap { text-align: center; margin-top: 3mm; }
+  .barcode-wrap svg { max-width: 100%; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+{{labels_html}}
+<script>JsBarcode(".barcode").init();</script>
+""",
+        "variables_meta": {
+            "labels_html": "HTML của tất cả tem (do router tạo, mỗi tem là 1 .label div với barcode SVG)",
         }
     }
 ]
@@ -574,6 +801,247 @@ EXCEL_TEMPLATES = [
             {"key": "gia_tri", "label": "Giá trị", "width": 16},
             {"key": "ghi_chu", "label": "Ghi chú", "width": 20}
         ]
+    },
+    {
+        "ma_mau": "SALES_QUOTE_LIST",
+        "ten_mau": "Danh sách Báo giá",
+        "column_config": [
+            {"key": "stt", "label": "STT", "width": 5},
+            {"key": "so_bao_gia", "label": "Số báo giá", "width": 18},
+            {"key": "ngay_bao_gia", "label": "Ngày BG", "width": 12},
+            {"key": "ten_khach_hang", "label": "Khách hàng", "width": 25},
+            {"key": "trang_thai", "label": "Trạng thái", "width": 12},
+            {"key": "ngay_het_han", "label": "Ngày hết hạn", "width": 12},
+            {"key": "tong_cong", "label": "Tổng cộng", "width": 16},
+            {"key": "so_dong", "label": "Số dòng", "width": 8},
+            {"key": "nguoi_lap", "label": "Người lập", "width": 18}
+        ],
+        "style_config": {
+            "accent_color": "#E65100",
+            "show_company_header": True,
+            "freeze_header": True
+        }
+    },
+    {
+        "ma_mau": "TRIAL_BALANCE",
+        "ten_mau": "Bảng Cân Đối Số Phát Sinh",
+        "column_config": [
+            {"key": "so_tk", "label": "Số TK", "width": 10},
+            {"key": "ten_tk", "label": "Tên TK", "width": 35},
+            {"key": "du_dau_no", "label": "Dư đầu kỳ Nợ", "width": 16},
+            {"key": "du_dau_co", "label": "Dư đầu kỳ Có", "width": 16},
+            {"key": "phat_sinh_no", "label": "Phát sinh Nợ", "width": 16},
+            {"key": "phat_sinh_co", "label": "Phát sinh Có", "width": 16},
+            {"key": "du_cuoi_no", "label": "Dư cuối kỳ Nợ", "width": 16},
+            {"key": "du_cuoi_co", "label": "Dư cuối kỳ Có", "width": 16}
+        ],
+        "style_config": {
+            "accent_color": "#1565C0"
+        }
+    },
+    {
+        "ma_mau": "PRODUCTION_COSTING",
+        "ten_mau": "Giá Thành Sản Xuất",
+        "column_config": [
+            {"key": "so_lenh", "label": "Số lệnh", "width": 14},
+            {"key": "ten_hang", "label": "Tên hàng", "width": 25},
+            {"key": "dvt", "label": "ĐVT", "width": 7},
+            {"key": "so_luong", "label": "Số lượng", "width": 10},
+            {"key": "cp_nvl", "label": "CP NVL", "width": 15},
+            {"key": "cp_nhan_cong", "label": "CP Nhân công", "width": 15},
+            {"key": "cp_chung", "label": "CP Chung", "width": 15},
+            {"key": "tong_chi_phi", "label": "Tổng chi phí", "width": 15},
+            {"key": "gia_thanh_don_vi", "label": "Giá thành đơn vị", "width": 18},
+            {"key": "standard_cost", "label": "Giá chuẩn", "width": 14}
+        ],
+        "style_config": {
+            "accent_color": "#1B5E20"
+        }
+    },
+    {
+        "ma_mau": "INVENTORY_MOVEMENT",
+        "ten_mau": "Báo Cáo Xuất Nhập Tồn",
+        "column_config": [
+            {"key": "ten_kho", "label": "Kho", "width": 15},
+            {"key": "ten_hang", "label": "Hàng hóa", "width": 25},
+            {"key": "don_vi", "label": "ĐVT", "width": 7},
+            {"key": "ton_dau_ky", "label": "Tồn đầu kỳ", "width": 12},
+            {"key": "nhap_trong_ky", "label": "Nhập trong kỳ", "width": 12},
+            {"key": "xuat_trong_ky", "label": "Xuất trong kỳ", "width": 12},
+            {"key": "ton_cuoi_ky", "label": "Tồn cuối kỳ", "width": 12},
+            {"key": "gia_tri_ton", "label": "Giá trị tồn", "width": 15}
+        ],
+        "style_config": {
+            "accent_color": "#E65100"
+        }
+    },
+    {
+        "ma_mau": "PRODUCTION_PERFORMANCE",
+        "ten_mau": "Báo Cáo Năng Suất Sản Xuất",
+        "column_config": [
+            {"key": "so_lenh", "label": "Số lệnh", "width": 14},
+            {"key": "ngay_lenh", "label": "Ngày lệnh", "width": 12},
+            {"key": "trang_thai", "label": "Trạng thái", "width": 12},
+            {"key": "ten_khach_hang", "label": "Khách hàng", "width": 22},
+            {"key": "ten_phan_xuong", "label": "Phân xưởng", "width": 18},
+            {"key": "tong_ke_hoach", "label": "KH (Thùng)", "width": 12},
+            {"key": "tong_hoan_thanh", "label": "Thực tế", "width": 12},
+            {"key": "ty_le_hoan_thanh", "label": "Tỉ lệ (%)", "width": 10},
+            {"key": "ngay_ke_hoach_xong", "label": "Ngày KH xong", "width": 14},
+            {"key": "ngay_thuc_te_xong", "label": "Ngày TT xong", "width": 14},
+            {"key": "tre_han", "label": "Trễ (ngày)", "width": 10}
+        ],
+        "style_config": {
+            "accent_color": "#1B5E20"
+        }
+    },
+    {
+        "ma_mau": "ORDER_PROGRESS",
+        "ten_mau": "Báo Cáo Tiến Độ Đơn Hàng",
+        "column_config": [
+            {"key": "so_don", "label": "Số đơn", "width": 14},
+            {"key": "ngay_don", "label": "Ngày đặt", "width": 12},
+            {"key": "ngay_giao_du_kien", "label": "Ngày giao DK", "width": 14},
+            {"key": "trang_thai", "label": "Trạng thái", "width": 12},
+            {"key": "ten_khach_hang", "label": "Khách hàng", "width": 22},
+            {"key": "so_luong_dat", "label": "SL đặt", "width": 12},
+            {"key": "so_luong_da_giao", "label": "SL đã giao", "width": 12},
+            {"key": "so_luong_con_lai", "label": "Còn lại", "width": 12},
+            {"key": "ty_le_giao", "label": "Tỉ lệ (%)", "width": 10},
+            {"key": "tong_tien", "label": "Tổng tiền", "width": 15}
+        ],
+        "style_config": {
+            "accent_color": "#E65100"
+        }
+    },
+    {
+        "ma_mau": "PRODUCTION_COST",
+        "ten_mau": "Chi Phí và Lợi Nhuận LSX",
+        "column_config": [
+            {"key": "so_lenh", "label": "Số lệnh", "width": 12},
+            {"key": "ngay_lenh", "label": "Ngày lệnh", "width": 10},
+            {"key": "trang_thai", "label": "Trạng thái", "width": 10},
+            {"key": "ten_hang", "label": "Tên hàng", "width": 20},
+            {"key": "ten_khach", "label": "Khách hàng", "width": 18},
+            {"key": "so_don", "label": "Số đơn", "width": 12},
+            {"key": "ten_phap_nhan", "label": "Pháp nhân", "width": 14},
+            {"key": "ten_xuong", "label": "Phân xưởng", "width": 14},
+            {"key": "so_luong_ke_hoach", "label": "SL kế hoạch", "width": 12},
+            {"key": "so_luong_hoan_thanh", "label": "SL hoàn thành", "width": 12},
+            {"key": "dien_tich", "label": "Diện tích (m²)", "width": 10},
+            {"key": "doanh_thu", "label": "Doanh thu", "width": 14},
+            {"key": "chi_phi_nvl", "label": "CP NVL", "width": 13},
+            {"key": "chi_phi_nhan_cong", "label": "CP Nhân công", "width": 14},
+            {"key": "chi_phi_sxc", "label": "CP SXC", "width": 13},
+            {"key": "tong_chi_phi", "label": "Tổng CP", "width": 13},
+            {"key": "da_phan_bo", "label": "Đã phân bổ", "width": 10},
+            {"key": "loi_nhuan", "label": "Lợi nhuận", "width": 14},
+            {"key": "ty_le_loi_nhuan", "label": "Tỉ lệ LN (%)", "width": 12}
+        ],
+        "style_config": {
+            "accent_color": "#1565C0"
+        }
+    },
+    {
+        "ma_mau": "PAYROLL",
+        "ten_mau": "Bảng Lương",
+        "column_config": [
+            {"key": "ma_nv", "label": "Mã NV", "width": 8},
+            {"key": "ho_ten", "label": "Họ tên", "width": 22},
+            {"key": "chuc_vu", "label": "Chức vụ", "width": 14},
+            {"key": "luong_co_ban", "label": "Lương CB", "width": 14},
+            {"key": "luong_san_pham", "label": "Lương SP", "width": 14},
+            {"key": "luong_chuyen", "label": "Lương chuyến", "width": 14},
+            {"key": "luong_theo_ngay_cong", "label": "Lương ngày công", "width": 14},
+            {"key": "phu_cap", "label": "Phụ cấp", "width": 12},
+            {"key": "ot_total", "label": "Tổng OT", "width": 12},
+            {"key": "thuong", "label": "Thưởng", "width": 12},
+            {"key": "tong_thu_nhap", "label": "Tổng thu nhập", "width": 14},
+            {"key": "bao_hiem", "label": "Bảo hiểm", "width": 12},
+            {"key": "tam_ung", "label": "Tạm ứng", "width": 12},
+            {"key": "thuc_linh", "label": "Thực lĩnh", "width": 14},
+            {"key": "trang_thai", "label": "Trạng thái", "width": 10}
+        ],
+        "footer_config": {
+            "show_total": True,
+            "sum_columns": [
+                "luong_co_ban", "luong_san_pham", "luong_chuyen",
+                "luong_theo_ngay_cong", "phu_cap", "ot_total", "thuong",
+                "tong_thu_nhap", "bao_hiem", "tam_ung", "thuc_linh"
+            ]
+        },
+        "style_config": {
+            "accent_color": "#1565C0"
+        }
+    },
+    {
+        "ma_mau": "REVENUE_BY_PERIOD",
+        "ten_mau": "Doanh Thu Theo Kỳ",
+        "column_config": [
+            {"key": "ky", "label": "Kỳ", "width": 20},
+            {"key": "doanh_thu", "label": "Doanh thu (đ)", "width": 18}
+        ],
+        "style_config": {
+            "accent_color": "#E65100"
+        }
+    },
+    {
+        "ma_mau": "REVENUE_TOP_CUSTOMERS",
+        "ten_mau": "Top Khách Hàng Doanh Thu",
+        "column_config": [
+            {"key": "stt", "label": "#", "width": 5},
+            {"key": "ten_khach_hang", "label": "Khách hàng", "width": 30},
+            {"key": "so_don", "label": "Số đơn", "width": 10},
+            {"key": "doanh_thu", "label": "Doanh thu (đ)", "width": 18}
+        ],
+        "style_config": {
+            "accent_color": "#E65100"
+        }
+    },
+    {
+        "ma_mau": "DEBT_SUMMARY_AR",
+        "ten_mau": "Công Nợ Phải Thu (AR)",
+        "column_config": [
+            {"key": "ten_doi_tuong", "label": "Đối tượng", "width": 28},
+            {"key": "so_hoa_don", "label": "Số HĐ", "width": 10},
+            {"key": "tong_phat_sinh", "label": "Tổng phát sinh", "width": 16},
+            {"key": "da_thanh_toan", "label": "Đã thanh toán", "width": 16},
+            {"key": "con_lai", "label": "Còn lại", "width": 16},
+            {"key": "trong_han", "label": "Trong hạn", "width": 16},
+            {"key": "qua_han", "label": "Quá hạn", "width": 16}
+        ],
+        "style_config": {
+            "accent_color": "#1565C0"
+        }
+    },
+    {
+        "ma_mau": "DEBT_SUMMARY_AP",
+        "ten_mau": "Công Nợ Phải Trả (AP)",
+        "column_config": [
+            {"key": "ten_doi_tuong", "label": "Đối tượng", "width": 28},
+            {"key": "so_hoa_don", "label": "Số HĐ", "width": 10},
+            {"key": "tong_phat_sinh", "label": "Tổng phát sinh", "width": 16},
+            {"key": "da_thanh_toan", "label": "Đã thanh toán", "width": 16},
+            {"key": "con_lai", "label": "Còn lại", "width": 16},
+            {"key": "trong_han", "label": "Trong hạn", "width": 16},
+            {"key": "qua_han", "label": "Quá hạn", "width": 16}
+        ],
+        "style_config": {
+            "accent_color": "#B71C1C"
+        }
+    },
+    {
+        "ma_mau": "WORKSHOP_PNL",
+        "ten_mau": "Báo Cáo Lãi/Lỗ Phân Xưởng",
+        "column_config": [
+            {"key": "chi_tieu", "label": "Chỉ tiêu", "width": 30},
+            {"key": "gia_tri", "label": "Giá trị (VNĐ)", "width": 20}
+        ],
+        "style_config": {
+            "accent_color": "#1B5E20",
+            "show_company_header": True,
+            "freeze_header": True
+        }
     }
 ]
 

@@ -553,6 +553,8 @@ def ton_kho_lsx(
             "tong_nhap": data["nhap"] + data["chuyen_den"],
             "tong_xuat": data["xuat"] + data["chuyen_di"],
             "ton_kho": ton_kho,
+            "ton_kho_tai_nguon": max(0.0, round(data["nhap"] - data["chuyen_di"], 3)),
+            "ton_kho_tai_cd2": max(0.0, round(data["chuyen_den"] - data["xuat"], 3)),
             "warehouse_id": wh_id,
             "ten_kho": wh.ten_kho,
             "chieu_kho": data["chieu_kho"],
