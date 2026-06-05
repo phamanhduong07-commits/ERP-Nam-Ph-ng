@@ -168,11 +168,14 @@ export default function TheoDonHangPage() {
 
   const filtered = useMemo(() => {
     let data = rows
-    if (filterKhach) data = data.filter(r => r.ten_khach_hang === filterKhach)
-    if (filterStage) data = data.filter(r => r.stage === filterStage)
-    if (filterQuaHan) data = data.filter(r => r.ngay_giao_hang && r.ngay_giao_hang < today && r.stage !== 'hoan_thanh')
-    if (debouncedSearch.trim()) {
-      const s = debouncedSearch.toLowerCase()
+    const s = debouncedSearch.trim().toLowerCase()
+    // Khi search cụ thể (≥6 ký tự) → bypass filterStage/filterKhach/filterQuaHan
+    if (!searchIsSpecific) {
+      if (filterKhach) data = data.filter(r => r.ten_khach_hang === filterKhach)
+      if (filterStage) data = data.filter(r => r.stage === filterStage)
+      if (filterQuaHan) data = data.filter(r => r.ngay_giao_hang && r.ngay_giao_hang < today && r.stage !== 'hoan_thanh')
+    }
+    if (s) {
       data = data.filter(r =>
         (r.so_lenh ?? '').toLowerCase().includes(s) ||
         (r.ten_khach_hang ?? '').toLowerCase().includes(s) ||
@@ -183,7 +186,7 @@ export default function TheoDonHangPage() {
       )
     }
     return data
-  }, [rows, debouncedSearch, filterKhach, filterStage, filterQuaHan, today])
+  }, [rows, debouncedSearch, searchIsSpecific, filterKhach, filterStage, filterQuaHan, today])
 
   // Drawer row derived from index — stable reference into filtered
   const drawerRow = drawerIdx >= 0 && drawerIdx < filtered.length ? filtered[drawerIdx] : null
