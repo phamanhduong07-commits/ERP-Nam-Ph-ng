@@ -116,16 +116,20 @@ export default function TheoDonHangPage() {
 
   const { data: phapNhanList = [] } = usePhapNhanList()
 
+  // Khi search theo mã LSX/đơn hàng cụ thể → bao gồm cả hoàn thành để không bị ẩn
+  const searchIsSpecific = debouncedSearch.trim().length >= 6
+  const effectiveIncludeHoanThanh = searchIsSpecific || includeHoanThanh
+
   const {
     data: rows = [], isLoading, refetch, dataUpdatedAt,
   } = useQuery<DonHangTheoDoiRow[]>({
-    queryKey: ['theo-doi-don-hang', phanXuongId, nvTheodoiId, phapNhanId, includeHoanThanh, dateRange],
+    queryKey: ['theo-doi-don-hang', phanXuongId, nvTheodoiId, phapNhanId, effectiveIncludeHoanThanh, dateRange],
     queryFn: () =>
       theoDoiApi.getDonHang({
         phan_xuong_id: phanXuongId,
         nv_theo_doi_id: nvTheodoiId,
         phap_nhan_id: phapNhanId,
-        include_hoan_thanh: includeHoanThanh,
+        include_hoan_thanh: effectiveIncludeHoanThanh,
         tu_ngay: dateRange[0],
         den_ngay: dateRange[1],
       }).then(r => r.data),
