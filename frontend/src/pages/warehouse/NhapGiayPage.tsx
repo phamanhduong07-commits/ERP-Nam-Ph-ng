@@ -649,13 +649,30 @@ export default function NhapGiayPage() {
 
           {/* LEFT: ẢNH PHIẾU XUẤT KHO NCC */}
           <Col span={9} style={{ height: '100%', display: 'flex', flexDirection: 'column', borderRight: '1px solid #f0f0f0', paddingRight: 12 }}>
-            <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Upload accept="image/*" showUploadList={false}
                 beforeUpload={file => { setInvoiceFile(file); setInvoicePreviewUrl(URL.createObjectURL(file)); return false }}>
                 <Button icon={<UploadOutlined />} size="small">Chọn ảnh phiếu xuất NCC</Button>
               </Upload>
               {invoicePreviewUrl && (
                 <Button size="small" danger onClick={() => { setInvoiceFile(null); setInvoicePreviewUrl(null) }}>Xoá</Button>
+              )}
+              {editingDraftId && (
+                <Button
+                  size="small"
+                  icon={<ScanOutlined />}
+                  loading={ocrMut.isPending}
+                  style={{ color: '#722ed1', borderColor: '#722ed1' }}
+                  onClick={() => ocrMut.mutate(editingDraftId, {
+                    onSuccess: (data) => {
+                      const ext = data.extracted ?? {}
+                      if (ext.so_xe) form.setFieldValue('so_xe', ext.so_xe)
+                      if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
+                    }
+                  })}
+                >
+                  Đọc ảnh (AI)
+                </Button>
               )}
             </div>
             <div style={{ flex: 1, overflow: 'auto', background: '#fafafa', border: '1px dashed #d9d9d9', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -669,6 +686,18 @@ export default function NhapGiayPage() {
                 </div>
               )}
             </div>
+            {editingDraftId && ocrResult[editingDraftId] && (() => {
+              const ext = ocrResult[editingDraftId]
+              return (
+                <div style={{ marginTop: 8, background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 4, padding: '8px 10px', fontSize: 12 }}>
+                  <div style={{ fontWeight: 600, color: '#52c41a', marginBottom: 4 }}>✅ OCR đã đọc xong</div>
+                  {ext.ten_ncc && <div>NCC: <strong>{ext.ten_ncc}</strong></div>}
+                  {ext.so_xe && <div>Số xe: <strong>{ext.so_xe}</strong></div>}
+                  {ext.tong_kg && <div>Tổng KG: <strong>{ext.tong_kg} kg</strong></div>}
+                  {(ext.hang_hoa?.length ?? 0) > 0 && <div>{ext.hang_hoa.length} dòng hàng đã đọc</div>}
+                </div>
+              )
+            })()}
           </Col>
 
           {/* RIGHT: FORM */}
