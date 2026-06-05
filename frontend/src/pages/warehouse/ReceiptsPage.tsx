@@ -675,7 +675,7 @@ export default function ReceiptsPage() {
                       if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
                       if ((ext.hang_hoa?.length ?? 0) > 0) {
                         form.setFieldValue('items', ext.hang_hoa.map((h: any) => ({
-                          loai_vat_tu: 'khac', mat_id: null,
+                          loai_vat_tu: 'tu_do', mat_id: null,
                           ten_hang: h.ten || '',
                           so_luong: h.so_luong ?? h.trong_luong_kg ?? h.so_cuon ?? null,
                           dvt: h.dvt || (h.so_cuon && !h.trong_luong_kg ? 'Cuộn' : 'Kg'),
