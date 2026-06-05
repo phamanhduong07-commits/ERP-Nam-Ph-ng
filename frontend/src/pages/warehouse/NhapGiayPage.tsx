@@ -19,6 +19,7 @@ import { purchaseApi } from '../../api/purchase'
 import type { POItem } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId, downloadBlob } from '../../utils/exportUtils'
+import { mediaApi } from '../../api/media'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import EmptyState from "../../components/EmptyState"
 
@@ -54,6 +55,7 @@ export default function NhapGiayPage() {
   const [invoicePreviewUrl, setInvoicePreviewUrl] = useState<string | null>(null)
   const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
   const [ocrResult, setOcrResult] = useState<Record<number, any>>({})
+  const [ocrModalLoading, setOcrModalLoading] = useState(false)
 
   // Reactive watches — hooks must be at top level
   const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
@@ -661,15 +663,28 @@ export default function NhapGiayPage() {
                 <Button
                   size="small"
                   icon={<ScanOutlined />}
-                  loading={ocrMut.isPending}
+                  loading={ocrModalLoading}
                   style={{ color: '#722ed1', borderColor: '#722ed1' }}
-                  onClick={() => ocrMut.mutate(editingDraftId, {
-                    onSuccess: (data) => {
-                      const ext = data.extracted ?? {}
+                  onClick={async () => {
+                    setOcrModalLoading(true)
+                    try {
+                      // Upload file lên erp_media nếu user vừa chọn file mới
+                      if (invoiceFile) {
+                        await mediaApi.upload('goods_receipts', editingDraftId, invoiceFile, 'Phiếu xuất NCC')
+                      }
+                      const res = await warehouseApi.extractImageOcr(editingDraftId).then(r => r.data)
+                      const ext = res.extracted ?? {}
+                      setOcrResult(prev => ({ ...prev, [editingDraftId]: ext }))
                       if (ext.so_xe) form.setFieldValue('so_xe', ext.so_xe)
                       if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
+                      message.success('Đọc ảnh xong')
+                    } catch (e: unknown) {
+                      const err = e as ApiError
+                      message.error(err?.response?.data?.detail || 'Lỗi đọc ảnh')
+                    } finally {
+                      setOcrModalLoading(false)
                     }
-                  })}
+                  }}
                 >
                   Đọc ảnh (AI)
                 </Button>
