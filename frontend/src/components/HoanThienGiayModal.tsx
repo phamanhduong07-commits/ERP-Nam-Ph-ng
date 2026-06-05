@@ -302,7 +302,7 @@ export default function HoanThienGiayModal({ grId, onClose, onSuccess }: Props) 
       >
         <Row style={{ height: '100%' }} gutter={12}>
           {/* LEFT: ẢNH + OCR */}
-          <Col span={9} style={{ height: '100%', display: 'flex', flexDirection: 'column', borderRight: '1px solid #f0f0f0', paddingRight: 12 }}>
+          <Col span={9} style={{ height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', borderRight: '1px solid #f0f0f0', paddingRight: 12 }}>
             <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Upload accept="image/*" showUploadList={false}
                 beforeUpload={file => { setInvoiceFile(file); setInvoicePreviewUrl(URL.createObjectURL(file)); setGrMediaUrl(null); return false }}>
@@ -318,7 +318,7 @@ export default function HoanThienGiayModal({ grId, onClose, onSuccess }: Props) 
                 </>
               )}
             </div>
-            <div style={{ flex: 1, overflow: 'auto', background: '#fafafa', border: '1px dashed #d9d9d9', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ height: 320, minHeight: 200, overflow: 'auto', background: '#fafafa', border: '1px dashed #d9d9d9', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {(invoicePreviewUrl || grMediaUrl) ? (
                 <Image src={invoicePreviewUrl || grMediaUrl!} style={{ maxWidth: '100%' }} preview={{ mask: 'Xem lớn' }} />
               ) : (
