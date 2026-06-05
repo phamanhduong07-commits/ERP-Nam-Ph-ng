@@ -32,6 +32,10 @@ STAGE_LABELS = {
     "dang_sau_in": "Đang sau in",
     "hoan_thanh": "Hoàn thành",
     "huy": "Huỷ",
+    # Tận dụng + Mua ngoài
+    "cho_phoi_td": "Chờ phôi tận dụng",
+    "nhap_tp_td": "Đã nhập TP",
+    "cho_mua_phoi": "Chờ mua phôi",
 }
 
 
@@ -41,10 +45,18 @@ def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None, ton_tp
     ton_kho = tong_nhap - xuat_map.get(po.id, 0.0)
     pi = pi_map.get(po.id)
 
+    ton_kho_tp_val = float(((ton_tp_map or {}).get(po.id) or {}).get("ton", 0))
+
     if pi:
         stage = pi.trang_thai
+    elif ton_kho_tp_val > 0 and getattr(po, "tan_dung", False):
+        stage = "nhap_tp_td"        # tận dụng đã nhập kho TP
     elif tong_nhap > 0:
-        stage = "co_phoi"
+        stage = "co_phoi"           # đã có phôi sóng
+    elif getattr(po, "tan_dung", False):
+        stage = "cho_phoi_td"       # tận dụng chưa xử lý
+    elif po.trang_thai == "mua_ngoai":
+        stage = "cho_mua_phoi"      # mua ngoài chưa có giấy về
     elif po.id in plan_set:
         stage = "cho_sx"
     else:
@@ -63,6 +75,7 @@ def _build_row(po, nhap_map, xuat_map, pi_map, plan_set, chuyen_map=None, ton_tp
         "so_lenh": po.so_lenh,
         "ngay_lenh": str(po.ngay_lenh) if po.ngay_lenh else None,
         "trang_thai_po": po.trang_thai,
+        "tan_dung": getattr(po, "tan_dung", False),
         "phan_xuong_id": po.phan_xuong_id,
         "ten_phan_xuong": po.phan_xuong.ten_xuong if po.phan_xuong else None,
         "phap_nhan_id": po.phap_nhan_id,

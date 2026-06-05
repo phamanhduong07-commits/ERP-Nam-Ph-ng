@@ -47,6 +47,8 @@ interface TanDungItem {
   cat: string | null
   so_luong_tam: number | null
   ghi_chu: string | null
+  tong_nhap_phoi: number
+  ton_kho_tp: number
 }
 
 interface PhanXuong {
@@ -241,6 +243,19 @@ export default function TanDungPlanPage() {
     { title: 'SL Tấm', dataIndex: 'so_luong_tam', key: 'so_luong_tam', width: 65, align: 'right',
       render: (v: number | null) => v != null ? Number(v).toLocaleString('vi-VN') : '' },
     { title: 'Ghi chú', dataIndex: 'ghi_chu', key: 'ghi_chu' },
+    {
+      title: 'Nhập kho',
+      key: 'nhap_kho_status',
+      width: 110,
+      align: 'center' as const,
+      render: (_: unknown, r: TanDungItem) => {
+        if (r.ton_kho_tp > 0)
+          return <Tag color="success" style={{ fontSize: 11 }}>✓ Nhập TP</Tag>
+        if (r.tong_nhap_phoi > 0)
+          return <Tag color="blue" style={{ fontSize: 11 }}>✓ Nhập phôi</Tag>
+        return <Tag color="default" style={{ fontSize: 11, color: '#999' }}>Chưa nhập</Tag>
+      },
+    },
     {
       title: 'Thao tác',
       key: 'action',

@@ -5,6 +5,7 @@ export interface DonHangTheoDoiRow {
   so_lenh: string | null
   ngay_lenh: string | null
   trang_thai_po: string
+  tan_dung: boolean
   phan_xuong_id: number | null
   ten_phan_xuong: string | null
   phap_nhan_id: number | null
@@ -74,6 +75,9 @@ export const STAGE_COLORS: Record<string, string> = {
   dang_sau_in:   'magenta',
   hoan_thanh:    'green',
   huy:           'red',
+  cho_phoi_td:   'lime',
+  nhap_tp_td:    'success',
+  cho_mua_phoi:  'purple',
 }
 
 export const theoDoiApi = {

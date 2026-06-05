@@ -4,12 +4,15 @@ from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
+from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
+from app.models.warehouse_doc import ProductionOutput
 
 router = APIRouter(prefix="/api/ke-hoach-tan-dung", tags=["ke-hoach-tan-dung"])
 
@@ -40,6 +43,8 @@ class TanDungItemOut(BaseModel):
     cat: str | None       # khổ phôi sau xẻ × dài
     so_luong_tam: int | None
     ghi_chu: str | None
+    tong_nhap_phoi: int = 0   # số tấm phôi đã nhập (PhieuNhapPhoiSong)
+    ton_kho_tp: float = 0.0   # số lượng TP đã nhập kho (ProductionOutput)
 
     class Config:
         from_attributes = True
@@ -129,6 +134,33 @@ def list_tan_dung(
 
     orders = q.order_by(ProductionOrder.ngay_lenh.desc()).all()
 
+    # Aggregate receipt data per production_order_id
+    po_ids = [o.id for o in orders]
+    nhap_phoi_map: dict[int, int] = {}
+    tp_map: dict[int, float] = {}
+    if po_ids:
+        nhap_agg = (
+            db.query(
+                PhieuNhapPhoiSong.production_order_id,
+                func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_tam), 0).label("tong_tam"),
+            )
+            .join(PhieuNhapPhoiSongItem, PhieuNhapPhoiSong.id == PhieuNhapPhoiSongItem.phieu_id)
+            .filter(PhieuNhapPhoiSong.production_order_id.in_(po_ids))
+            .group_by(PhieuNhapPhoiSong.production_order_id)
+            .all()
+        )
+        nhap_phoi_map = {r.production_order_id: int(r.tong_tam) for r in nhap_agg}
+        tp_agg = (
+            db.query(
+                ProductionOutput.production_order_id,
+                func.coalesce(func.sum(ProductionOutput.so_luong_nhap), 0).label("tong_nhap"),
+            )
+            .filter(ProductionOutput.production_order_id.in_(po_ids))
+            .group_by(ProductionOutput.production_order_id)
+            .all()
+        )
+        tp_map = {r.production_order_id: float(r.tong_nhap) for r in tp_agg}
+
     result: list[TanDungItemOut] = []
     for order in orders:
         kh = order.sales_order.customer if order.sales_order else None
@@ -171,6 +203,8 @@ def list_tan_dung(
                 cat=_cat(item),
                 so_luong_tam=math.ceil(float(item.so_luong_ke_hoach) / (item.be_so_con or 1)),
                 ghi_chu=item.ghi_chu or order.ghi_chu,
+                tong_nhap_phoi=nhap_phoi_map.get(order.id, 0),
+                ton_kho_tp=tp_map.get(order.id, 0.0),
             ))
 
     # Sắp xếp theo ngày giao hàng
