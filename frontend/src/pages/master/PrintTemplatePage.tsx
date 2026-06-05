@@ -384,9 +384,6 @@ export default function PrintTemplatePage() {
   }
 
   const buildHtmlFromConfig = () => {
-    const tableHeaderHtml = (easyConfig.selectedColumns || []).map((c: DocColumn) => `
-    <th style="border: 1px solid #ddd; padding: 8px; background: ${easyConfig.headerColor}; color: #fff;">${c.label}</th>`).join('')
-
     const logoHtml = `<div class="logo" style="width: ${easyConfig.logoSize}px; height: ${easyConfig.logoSize}px; display: flex; align-items: center; justify-content: center;">{{logo_img}}</div>`
     const companyNameHtml = easyConfig.showCompany ? `<div style="font-size: ${easyConfig.companyFontSize}px; font-weight: bold; color: ${easyConfig.headerColor}; line-height: 1.2;">{{company_name}}</div>` : ''
     const companyDetailsHtml = easyConfig.showContact ? `<div style="font-size: 11px;">Địa chỉ: ${activePhapNhan?.dia_chi || '...'}<br/>MST: ${activePhapNhan?.ma_so_thue || '...'} ${easyConfig.phoneOverride || activePhapNhan?.so_dien_thoai ? ` - SĐT: ${easyConfig.phoneOverride || activePhapNhan?.so_dien_thoai}` : ''} ${easyConfig.emailOverride || activePhapNhan?.email ? ` - Email: ${easyConfig.emailOverride || activePhapNhan?.email}` : ''}</div>` : ''
@@ -419,41 +416,6 @@ export default function PrintTemplatePage() {
         `).join('')}
       </div>
     `
-
-    const totalRowHtml = easyConfig.showTotal ? `
-      <tr style="font-weight: bold; background: #f9f9f9;">
-        <td colspan="${(easyConfig.selectedColumns || []).length - 1}" style="text-align: right; border: 1px solid #ddd; padding: 6px;">Tiền hàng:</td>
-        <td style="text-align: right; border: 1px solid #ddd; padding: 6px;">{{tong_tien_hang}} đ</td>
-      </tr>
-    ` : ''
-
-    const plateCostHtml = easyConfig.showPlateCost ? `
-      <tr style="display: {{chi_phi_bang_in_vis}};">
-        <td colspan="${(easyConfig.selectedColumns || []).length - 1}" style="text-align: right; border: 1px solid #ddd; padding: 6px;">CP Bảng in:</td>
-        <td style="text-align: right; border: 1px solid #ddd; padding: 6px;">{{chi_phi_bang_in}} đ</td>
-      </tr>
-    ` : ''
-
-    const mouldCostHtml = easyConfig.showMouldCost ? `
-      <tr style="display: {{chi_phi_khuon_vis}};">
-        <td colspan="${(easyConfig.selectedColumns || []).length - 1}" style="text-align: right; border: 1px solid #ddd; padding: 6px;">CP Khuôn:</td>
-        <td style="text-align: right; border: 1px solid #ddd; padding: 6px;">{{chi_phi_khuon}} đ</td>
-      </tr>
-    ` : ''
-
-    const transportCostHtml = easyConfig.showTransportCost ? `
-      <tr style="display: {{chi_phi_van_chuyen_vis}};">
-        <td colspan="${(easyConfig.selectedColumns || []).length - 1}" style="text-align: right; border: 1px solid #ddd; padding: 6px;">CP Vận chuyển:</td>
-        <td style="text-align: right; border: 1px solid #ddd; padding: 6px;">{{chi_phi_van_chuyen}} đ</td>
-      </tr>
-    ` : ''
-
-    const grandTotalHtml = easyConfig.showTotal ? `
-      <tr style="font-weight: bold; background: #fffbe6;">
-        <td colspan="${(easyConfig.selectedColumns || []).length - 1}" style="text-align: right; border: 1px solid #ddd; padding: 6px; font-size: 14px; color: ${easyConfig.headerColor};">TỔNG CỘNG:</td>
-        <td style="text-align: right; border: 1px solid #ddd; padding: 6px; font-size: 14px; color: ${easyConfig.headerColor};">{{tong_cong}} đ</td>
-      </tr>
-    ` : ''
 
     return `
 <style>
@@ -503,17 +465,7 @@ export default function PrintTemplatePage() {
   ${easyConfig.introText ? `<div style="margin-top: 15px; margin-bottom: 15px; font-size: 14px; line-height: 1.5;">${easyConfig.introText}</div>` : ''}
 
   ${easyConfig.showTable ? `
-  <table>
-    <thead><tr>${tableHeaderHtml}</tr></thead>
-    <tbody>
-      {{body_html}}
-      ${totalRowHtml}
-      ${plateCostHtml}
-      ${mouldCostHtml}
-      ${transportCostHtml}
-      ${grandTotalHtml}
-    </tbody>
-  </table>` : ''}
+  <div style="margin-top:8px">{{body_html}}</div>` : ''}
 
   ${easyConfig.customContent ? `<div style="margin-top: 10px; font-size: 14px; line-height: 1.5;">${easyConfig.customContent}</div>` : ''}
   
@@ -534,8 +486,8 @@ export default function PrintTemplatePage() {
     }
 
     const mockItems = [
-      { stt: 1, ten_hang: 'Thùng Carton 3 lớp A1', so_luong: '1,000', don_gia: '5,500', thanh_tien: '5,500,000', ma_sp: 'SP001', kich_thuoc: '30x20x10', dvt: 'Cái', ma_amis: 'NP-001', so_lop: '3', to_hop_song: 'B', gia_ban: '5,500', ghi_chu: 'Hàng gấp' },
-      { stt: 2, ten_hang: 'Phôi sóng BC 5 lớp', so_luong: '500', don_gia: '12,000', thanh_tien: '6,000,000', ma_sp: 'SP002', kich_thuoc: '100x120', dvt: 'm2', ma_amis: 'NP-002', so_lop: '5', to_hop_song: 'BC', gia_ban: '12,000', ghi_chu: '' },
+      { stt: 1, ten_hang: 'Thùng Carton 3 lớp A1', so_luong: '1,000', don_gia: '5,500', thanh_tien: '5,500,000', ma_sp: 'SP001', kich_thuoc: '30x20x10', dvt: 'Cái', ma_amis: 'NP-001', so_lop: '3', to_hop_song: 'B', gia_ban: '5,500', ghi_chu: 'Hàng gấp', cau_truc: 'K/B/K', qccl: 'Lằn thường' },
+      { stt: 2, ten_hang: 'Phôi sóng BC 5 lớp', so_luong: '500', don_gia: '12,000', thanh_tien: '6,000,000', ma_sp: 'SP002', kich_thuoc: '100x120', dvt: 'm2', ma_amis: 'NP-002', so_lop: '5', to_hop_song: 'BC', gia_ban: '12,000', ghi_chu: '', cau_truc: 'LB/98B/98/98C/LA', qccl: '20.2+50+20.2' },
     ]
 
     const bodyRows = mockItems.map(item => {
@@ -614,14 +566,17 @@ export default function PrintTemplatePage() {
         if (tpl && tpl.phap_nhan_id === selectedPhapNhanId) {
           form.setFieldsValue(tpl)
           if (tpl.variables_meta?.easy_config) {
-            try { setEasyConfig(JSON.parse(tpl.variables_meta.easy_config as string)) } catch(e) {}
+            try { setEasyConfig({ ...DEFAULT_CONFIG, ...JSON.parse(tpl.variables_meta.easy_config as string) }) } catch(e) {}
           }
-        } else {
-          message.info(`Mẫu hiện tại không khớp pháp nhân đang chọn.`)
         }
-      }).catch((e: { response?: { data?: { detail?: string } }; message?: string }) => {
-        message.error(e?.response?.data?.detail ?? 'Không tìm thấy mẫu đúng pháp nhân')
+        // Không có template cho pháp nhân này → giữ config hiện tại, cho phép tạo mới
+        setTimeout(updatePreview, 50)
+      }).catch(() => {
+        // Template chưa tồn tại cho pháp nhân này — không báo lỗi, cho phép tạo mới
+        setTimeout(updatePreview, 50)
       })
+    } else {
+      setTimeout(updatePreview, 50)
     }
   }, [selectedPhapNhanId])
 
@@ -911,6 +866,7 @@ export default function PrintTemplatePage() {
                                  { key: 'so_lsx', label: 'Số LSX' }, { key: 'ngay_po', label: 'Ngày PO' }, { key: 'kho_cat', label: 'Khổ×Cắt' },
                                  { key: 'so_luong', label: 'Số lượng' }, { key: 'dvt', label: 'ĐVT' },
                                  { key: 'total_m2', label: 'M2' }, { key: 'trong_luong', label: 'Kg' }, { key: 'the_tich', label: 'M3' },
+                                 { key: 'cau_truc', label: 'Kết cấu' }, { key: 'qccl', label: 'QC Cán lằn' },
                                  { key: 'gia_ban', label: 'Đơn giá' }, { key: 'thanh_tien', label: 'Thành tiền' }, { key: 'ghi_chu', label: 'Ghi chú' }
                                ].map(col => {
                                  const isSelected = (easyConfig.selectedColumns || []).some((c: DocColumn) => c.key === col.key)
