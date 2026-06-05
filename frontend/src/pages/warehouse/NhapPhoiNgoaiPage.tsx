@@ -506,12 +506,33 @@ export default function NhapPhoiNgoaiPage() {
                   <div style={{ fontWeight: 600, color: '#52c41a', marginBottom: 4 }}>✅ OCR đã đọc xong</div>
                   {ext.ten_ncc && <div>NCC: <strong>{ext.ten_ncc}</strong></div>}
                   {ext.so_xe && <div>Số xe: <strong>{ext.so_xe}</strong></div>}
-                  {ext.tong_kg && <div>Tổng: <strong>{ext.tong_kg} kg</strong></div>}
+                  {ext.tong_kg && <div>Tổng: <strong>{ext.tong_kg}</strong></div>}
                   <Space style={{ marginTop: 6 }}>
                     <Button size="small" type="primary" icon={<FormOutlined />} onClick={() => {
                       if (ext.so_xe) form.setFieldValue('so_xe', ext.so_xe)
                       if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
-                      message.success('Đã điền thông tin từ OCR')
+                      if ((ext.hang_hoa?.length ?? 0) > 0) {
+                        form.setFieldValue('items', ext.hang_hoa.map((h: any) => ({
+                          ten_hang: h.ten || '',
+                          so_luong: h.so_luong ?? h.so_cuon ?? h.trong_luong_kg ?? null,
+                          dvt: h.dvt || 'Tấm',
+                          don_gia: h.don_gia ?? 0,
+                          kho_mm: h.kho_mm ?? null,
+                          so_lop: null,
+                          ket_qua_kiem_tra: 'DAT',
+                        })))
+                        message.success(`Đã điền ${ext.hang_hoa.length} dòng phôi`)
+                      } else {
+                        message.success('Đã điền thông tin từ OCR')
+                      }
+                      if (ext.ten_ncc && suppliers.length) {
+                        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+                        const matched = suppliers.find(s =>
+                          norm(s.ten_viet_tat || s.ten_don_vi || '').includes(norm(ext.ten_ncc).slice(0, 6)) ||
+                          norm(ext.ten_ncc).includes(norm(s.ten_viet_tat || '').slice(0, 6))
+                        )
+                        if (matched) form.setFieldValue('supplier_id', matched.id)
+                      }
                     }}>Điền vào form</Button>
                     <Button size="small" icon={<StarOutlined />} loading={savingExample}
                       style={{ color: '#722ed1', borderColor: '#722ed1' }}
