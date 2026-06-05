@@ -512,7 +512,19 @@ export default function NhapPhoiNgoaiPage() {
                         if (!editingDraftId || !invoicePreviewUrl) { message.warning('Không có ảnh để lưu'); return }
                         setSavingExample(true)
                         try {
-                          const blob = await fetch(invoicePreviewUrl).then(r => r.blob())
+                          let blob: Blob
+                          if (invoiceFile) {
+                            blob = invoiceFile
+                          } else if (invoicePreviewUrl.startsWith('data:')) {
+                            const [header, data] = invoicePreviewUrl.split(',')
+                            const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg'
+                            const binary = atob(data)
+                            const arr = new Uint8Array(binary.length)
+                            for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i)
+                            blob = new Blob([arr], { type: mime })
+                          } else {
+                            blob = await fetch(invoicePreviewUrl).then(r => r.blob())
+                          }
                           const file = new File([blob], 'phieu_ncc.jpg', { type: blob.type || 'image/jpeg' })
                           const fd = new FormData()
                           fd.append('ten_ncc', ext.ten_ncc || 'Chưa xác định')
@@ -521,8 +533,9 @@ export default function NhapPhoiNgoaiPage() {
                           fd.append('file', file)
                           await ocrExamplesApi.create(fd)
                           message.success('Đã lưu làm ví dụ')
-                        } catch { message.error('Lỗi lưu ví dụ') }
-                        finally { setSavingExample(false) }
+                        } catch (e: unknown) {
+                          message.error((e as ApiError)?.response?.data?.detail || 'Lỗi lưu ví dụ')
+                        } finally { setSavingExample(false) }
                       }}>Lưu làm ví dụ</Button>
                   </Space>
                 </div>
