@@ -91,6 +91,7 @@ export interface DoiSoatKhoRow {
   po_trang_thai: string
   poi_id: number
   ten_hang: string
+  loai_hang: 'giay_cuon' | 'nvl_khac' | 'khac'
   dvt: string
   don_gia: number
   so_luong_dat: number
@@ -206,6 +207,7 @@ export const purchaseApi = {
     den_ngay?: string
     phan_xuong_id?: number
     trang_thai?: string
+    loai_hang?: string
   }) => client.get<DoiSoatKhoRow[]>('/purchase-orders/doi-soat-kho', { params }),
 
   doiSoatKhoSummary: (params?: {
@@ -213,6 +215,7 @@ export const purchaseApi = {
     tu_ngay?: string
     den_ngay?: string
     phan_xuong_id?: number
+    loai_hang?: string
   }) => client.get<DoiSoatKhoSummary[]>('/purchase-orders/doi-soat-kho/summary', { params }),
 
   duBaoNhuCau: (params?: {

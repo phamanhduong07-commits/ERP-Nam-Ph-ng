@@ -8,7 +8,7 @@ import dayjs from 'dayjs'
 import { DownloadOutlined } from '@ant-design/icons'
 import { purchaseApi, DoiSoatKhoRow, DoiSoatKhoSummary, TRANG_THAI_PO, TRANG_THAI_PO_COLOR } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
-import { warehouseApi, GoodsReceipt, GoodsReceiptItem } from '../../api/warehouse'
+import { warehouseApi, GoodsReceipt, GoodsReceiptItem, PhanXuong } from '../../api/warehouse'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 
@@ -17,15 +17,19 @@ const { RangePicker } = DatePicker
 export default function DoiSoatKhoPage() {
   const [supplierId, setSupplierId] = useState<number | undefined>()
   const [trangThai, setTrangThai] = useState<string | undefined>()
+  const [loaiHang, setLoaiHang] = useState<string | undefined>()
+  const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null)
   const [activeTab, setActiveTab] = useState('chi-tiet')
 
   const params = useMemo(() => ({
     supplier_id: supplierId,
     trang_thai: trangThai,
+    loai_hang: loaiHang,
+    phan_xuong_id: phanXuongId,
     tu_ngay: dateRange?.[0]?.format('YYYY-MM-DD'),
     den_ngay: dateRange?.[1]?.format('YYYY-MM-DD'),
-  }), [supplierId, trangThai, dateRange])
+  }), [supplierId, trangThai, loaiHang, phanXuongId, dateRange])
 
   const { data: rows = [], isFetching } = useQuery({
     queryKey: ['doi-soat-kho', params],
@@ -33,9 +37,11 @@ export default function DoiSoatKhoPage() {
   })
 
   const { data: summary = [], isFetching: loadingSummary } = useQuery({
-    queryKey: ['doi-soat-kho-summary', { supplier_id: supplierId, tu_ngay: params.tu_ngay, den_ngay: params.den_ngay }],
+    queryKey: ['doi-soat-kho-summary', { supplier_id: supplierId, phan_xuong_id: phanXuongId, loai_hang: loaiHang, tu_ngay: params.tu_ngay, den_ngay: params.den_ngay }],
     queryFn: () => purchaseApi.doiSoatKhoSummary({
       supplier_id: supplierId,
+      phan_xuong_id: phanXuongId,
+      loai_hang: loaiHang,
       tu_ngay: params.tu_ngay,
       den_ngay: params.den_ngay,
     }).then(r => r.data),
@@ -44,6 +50,11 @@ export default function DoiSoatKhoPage() {
   const { data: suppliers = [] } = useQuery({
     queryKey: ['suppliers-all'],
     queryFn: () => suppliersApi.all().then(r => r.data),
+  })
+
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong-all'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
   })
 
   const { data: nhapNhanhRows = [], isFetching: loadingNhapNhanh } = useQuery({
@@ -98,6 +109,14 @@ export default function DoiSoatKhoPage() {
     {
       title: 'TT PO', dataIndex: 'po_trang_thai', width: 110,
       render: (v: string) => <Tag color={TRANG_THAI_PO_COLOR[v] ?? 'default'}>{TRANG_THAI_PO[v] ?? v}</Tag>,
+    },
+    {
+      title: 'Loại', dataIndex: 'loai_hang', width: 100,
+      render: (v: string) => {
+        if (v === 'giay_cuon') return <Tag color="blue">Giấy cuộn</Tag>
+        if (v === 'nvl_khac') return <Tag color="orange">NVL khác</Tag>
+        return <Tag>Khác</Tag>
+      },
     },
     { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
     { title: 'ĐVT', dataIndex: 'dvt', width: 60 },
@@ -198,6 +217,30 @@ export default function DoiSoatKhoPage() {
             value={trangThai}
             onChange={setTrangThai}
           />
+          <Select
+            allowClear
+            placeholder="Loại hàng"
+            style={{ width: 140 }}
+            options={[
+              { value: 'giay_cuon', label: 'Giấy cuộn' },
+              { value: 'nvl_khac', label: 'NVL khác' },
+            ]}
+            value={loaiHang}
+            onChange={setLoaiHang}
+          />
+          <Select
+            allowClear
+            placeholder="Phân xưởng"
+            style={{ width: 180 }}
+            showSearch
+            optionFilterProp="label"
+            options={(phanXuongList as PhanXuong[]).map(px => ({
+              value: px.id,
+              label: px.ten_xuong,
+            }))}
+            value={phanXuongId}
+            onChange={setPhanXuongId}
+          />
           <RangePicker
             format="DD/MM/YYYY"
             value={dateRange as [dayjs.Dayjs, dayjs.Dayjs] | null}
@@ -256,24 +299,25 @@ export default function DoiSoatKhoPage() {
                 dataSource={rows}
                 loading={isFetching}
                 size="small"
-                scroll={{ x: 1200 }}
+                scroll={{ x: 1300 }}
                 pagination={{ pageSize: 50, showSizeChanger: true }}
                 summary={() => (
                   <Table.Summary fixed>
                     <Table.Summary.Row style={{ fontWeight: 600, background: '#fafafa' }}>
-                      <Table.Summary.Cell index={0} colSpan={7}>Tổng cộng</Table.Summary.Cell>
-                      <Table.Summary.Cell index={7} align="right">
+                      {/* cols 0-7: Số PO, Ngày PO, Nhà CC, Pháp nhân, TT PO, Loại, Tên hàng, ĐVT */}
+                      <Table.Summary.Cell index={0} colSpan={8}>Tổng cộng</Table.Summary.Cell>
+                      <Table.Summary.Cell index={8} align="right">
                         {rows.reduce((s, r) => s + r.so_luong_dat, 0).toLocaleString('vi-VN')}
                       </Table.Summary.Cell>
-                      <Table.Summary.Cell index={8} align="right">
+                      <Table.Summary.Cell index={9} align="right">
                         {rows.reduce((s, r) => s + r.so_luong_da_nhan, 0).toLocaleString('vi-VN')}
                       </Table.Summary.Cell>
-                      <Table.Summary.Cell index={9} align="right">
+                      <Table.Summary.Cell index={10} align="right">
                         {rows.reduce((s, r) => s + r.so_luong_con_lai, 0).toLocaleString('vi-VN')}
                       </Table.Summary.Cell>
-                      <Table.Summary.Cell index={10} />
-                      <Table.Summary.Cell index={11} align="right">{fmtVND(totalDat)}</Table.Summary.Cell>
-                      <Table.Summary.Cell index={12} align="right">{fmtVND(totalNhan)}</Table.Summary.Cell>
+                      <Table.Summary.Cell index={11} />
+                      <Table.Summary.Cell index={12} align="right">{fmtVND(totalDat)}</Table.Summary.Cell>
+                      <Table.Summary.Cell index={13} align="right">{fmtVND(totalNhan)}</Table.Summary.Cell>
                     </Table.Summary.Row>
                   </Table.Summary>
                 )}

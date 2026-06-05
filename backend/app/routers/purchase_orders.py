@@ -810,12 +810,14 @@ def doi_soat_kho(
     den_ngay: Optional[date] = None,
     phan_xuong_id: Optional[int] = None,
     trang_thai: Optional[str] = None,
+    loai_hang: Optional[str] = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     """Đối soát kho: so sánh số lượng đặt trong PO vs số lượng đã nhận theo GR.
 
     Trả về danh sách từng dòng PO với số lượng đặt, đã nhận, còn thiếu.
+    Chỉ tính GR có trang_thai='da_duyet' vào so_luong_da_nhan.
     """
     q = db.query(PurchaseOrder).order_by(PurchaseOrder.ngay_po.desc())
     if supplier_id:
@@ -830,19 +832,23 @@ def doi_soat_kho(
         q = q.filter(PurchaseOrder.ngay_po <= den_ngay)
 
     pos = (q.options(
-        selectinload(PurchaseOrder.items),  # one-to-many → selectinload avoids duplicate rows
+        selectinload(PurchaseOrder.items),
         joinedload(PurchaseOrder.supplier),
         joinedload(PurchaseOrder.phan_xuong).joinedload(PhanXuong.phap_nhan),
         joinedload(PurchaseOrder.phap_nhan),
-    ).limit(500).all())
+    ).all())
 
-    # Pre-aggregate GR totals per POItem — tránh N+1 query per dòng
+    # Pre-aggregate GR totals per POItem — chỉ tính GR đã duyệt, tránh N+1
     all_poi_ids = [poi.id for po in pos for poi in po.items]
     gr_totals_map: dict[int, Decimal] = {}
     if all_poi_ids:
         agg = (
             db.query(GoodsReceiptItem.po_item_id, func.sum(GoodsReceiptItem.so_luong))
-            .filter(GoodsReceiptItem.po_item_id.in_(all_poi_ids))
+            .join(GoodsReceipt, GoodsReceiptItem.receipt_id == GoodsReceipt.id)
+            .filter(
+                GoodsReceiptItem.po_item_id.in_(all_poi_ids),
+                GoodsReceipt.trang_thai == "da_duyet",
+            )
             .group_by(GoodsReceiptItem.po_item_id)
             .all()
         )
@@ -860,8 +866,11 @@ def doi_soat_kho(
             px_id, ten_px = None, None
             ten_pn = pn.ten_phap_nhan if pn else None
         for poi in po.items:
-            gr_total = gr_totals_map.get(poi.id, Decimal("0"))
+            loai = "giay_cuon" if poi.paper_material_id else ("nvl_khac" if poi.other_material_id else "khac")
+            if loai_hang and loai != loai_hang:
+                continue
 
+            gr_total = gr_totals_map.get(poi.id, Decimal("0"))
             so_luong_dat = float(poi.so_luong)
             so_luong_da_nhan = float(gr_total)
             so_luong_con_lai = max(so_luong_dat - so_luong_da_nhan, 0.0)
@@ -887,6 +896,7 @@ def doi_soat_kho(
                 "po_trang_thai": po.trang_thai,
                 "poi_id": poi.id,
                 "ten_hang": ten_hang,
+                "loai_hang": loai,
                 "dvt": poi.dvt,
                 "don_gia": float(poi.don_gia),
                 "so_luong_dat": so_luong_dat,
@@ -905,10 +915,11 @@ def doi_soat_kho_summary(
     tu_ngay: Optional[date] = None,
     den_ngay: Optional[date] = None,
     phan_xuong_id: Optional[int] = None,
+    loai_hang: Optional[str] = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Tổng hợp đối soát kho theo nhà cung cấp."""
+    """Tổng hợp đối soát kho theo nhà cung cấp. Chỉ tính GR đã duyệt."""
     q = db.query(PurchaseOrder)
     if supplier_id:
         q = q.filter(PurchaseOrder.supplier_id == supplier_id)
@@ -920,17 +931,21 @@ def doi_soat_kho_summary(
         q = q.filter(PurchaseOrder.ngay_po <= den_ngay)
 
     pos = q.options(
-        selectinload(PurchaseOrder.items),  # one-to-many → selectinload avoids duplicate rows
+        selectinload(PurchaseOrder.items),
         joinedload(PurchaseOrder.supplier),
     ).all()
 
-    # Pre-aggregate GR totals — tránh N+1 query per dòng PO item
+    # Pre-aggregate GR totals — chỉ tính GR đã duyệt, tránh N+1
     all_poi_ids = [poi.id for po in pos for poi in po.items]
     gr_totals_map: dict[int, Decimal] = {}
     if all_poi_ids:
         agg = (
             db.query(GoodsReceiptItem.po_item_id, func.sum(GoodsReceiptItem.so_luong))
-            .filter(GoodsReceiptItem.po_item_id.in_(all_poi_ids))
+            .join(GoodsReceipt, GoodsReceiptItem.receipt_id == GoodsReceipt.id)
+            .filter(
+                GoodsReceiptItem.po_item_id.in_(all_poi_ids),
+                GoodsReceipt.trang_thai == "da_duyet",
+            )
             .group_by(GoodsReceiptItem.po_item_id)
             .all()
         )
@@ -952,6 +967,9 @@ def doi_soat_kho_summary(
             }
         by_supplier[sid]["so_po_count"] += 1
         for poi in po.items:
+            loai = "giay_cuon" if poi.paper_material_id else ("nvl_khac" if poi.other_material_id else "khac")
+            if loai_hang and loai != loai_hang:
+                continue
             gr_total = gr_totals_map.get(poi.id, Decimal("0"))
             by_supplier[sid]["tong_dat"] += float(poi.so_luong)
             by_supplier[sid]["tong_da_nhan"] += float(gr_total)
