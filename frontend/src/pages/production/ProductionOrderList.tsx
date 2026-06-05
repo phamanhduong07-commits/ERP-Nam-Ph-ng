@@ -388,6 +388,8 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
           return <Tag color="orange" style={{ fontSize: 10 }}>KHSX Chờ</Tag>
         if (v === 'moi' && r.ke_hoach_trang_thai === 'da_xuat')
           return <Tag color="blue" style={{ fontSize: 10 }}>KHSX</Tag>
+        if (v === 'moi' && r.tan_dung)
+          return <Tag color="green" style={{ fontSize: 10 }}>Tận dụng</Tag>
         return <Tag color={TRANG_THAI_COLORS[v]} style={{ fontSize: 10 }}>{TRANG_THAI_LABELS[v] || v}</Tag>
       },
     },
@@ -490,7 +492,11 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
       width: 120,
-      render: (v) => <Tag color={TRANG_THAI_COLORS[v]}>{TRANG_THAI_LABELS[v] || v}</Tag>,
+      render: (v, r) => {
+        if (v === 'moi' && r.tan_dung)
+          return <Tag color="green">{TRANG_THAI_LABELS[v] || v} · Tận dụng</Tag>
+        return <Tag color={TRANG_THAI_COLORS[v]}>{TRANG_THAI_LABELS[v] || v}</Tag>
+      },
     },
     {
       title: 'Pháp nhân',
@@ -540,7 +546,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
               </Popconfirm>
             </Tooltip>
           )}
-          {['moi', 'dang_chay'].includes(r.trang_thai) && (
+          {['moi', 'dang_chay'].includes(r.trang_thai) && !r.tan_dung && !r.ke_hoach_trang_thai && (
             <Tooltip title="Mua phôi ngoài">
               <Popconfirm
                 title={`Chuyển lệnh ${r.so_lenh} sang mua phôi ngoài?`}

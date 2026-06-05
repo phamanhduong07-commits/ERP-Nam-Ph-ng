@@ -260,7 +260,10 @@ def get_available_items(
             .joinedload(ProductionOrder.sales_order)
             .joinedload(SalesOrder.customer),
         )
-        .filter(ProductionOrder.trang_thai.in_(["moi", "dang_chay"]))
+        .filter(
+            ProductionOrder.trang_thai.in_(["moi", "dang_chay"]),
+            ProductionOrder.tan_dung == False,  # noqa: E712
+        )
     )
 
     if tu_ngay:
@@ -460,6 +463,19 @@ def _add_line_to_plan(
             detail=f"Không tìm thấy dòng LSX #{line_data.production_order_item_id}",
         )
 
+    order = db.get(ProductionOrder, poi.production_order_id)
+    if order:
+        if order.tan_dung:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Lệnh {order.so_lenh} đang ở hướng 'Tận dụng phôi', không thể thêm vào Kế hoạch SX",
+            )
+        if order.trang_thai == "mua_ngoai":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Lệnh {order.so_lenh} đang ở hướng 'Mua phôi ngoài', không thể thêm vào Kế hoạch SX",
+            )
+
     # Tính so_dao và kho_tt
     so_dao = line_data.so_dao
     if line_data.kho1 and line_data.kho_giay and not so_dao:
@@ -536,6 +552,19 @@ def push_to_queue(
     ).first()
     if not poi:
         raise HTTPException(status_code=404, detail="Không tìm thấy dòng LSX")
+
+    order = db.get(ProductionOrder, poi.production_order_id)
+    if order:
+        if order.tan_dung:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Lệnh {order.so_lenh} đang ở hướng 'Tận dụng phôi', không thể thêm vào Kế hoạch chờ",
+            )
+        if order.trang_thai == "mua_ngoai":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Lệnh {order.so_lenh} đang ở hướng 'Mua phôi ngoài', không thể thêm vào Kế hoạch chờ",
+            )
 
     so_dao = data.so_dao
     if data.kho1 and data.kho_giay and not so_dao:

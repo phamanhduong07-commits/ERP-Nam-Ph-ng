@@ -439,6 +439,26 @@ class ProductionOrderService:
             raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
         if order.trang_thai == "huy":
             raise HTTPException(status_code=400, detail="Lệnh đã huỷ, không thể sửa")
+        if data.model_dump(exclude_unset=True).get("tan_dung") is True:
+            if order.trang_thai == "mua_ngoai":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Lệnh đang ở hướng 'Mua phôi ngoài', không thể đặt Tận dụng",
+                )
+            active_count = (
+                self.db.query(ProductionPlanLine)
+                .join(ProductionOrderItem, ProductionPlanLine.production_order_item_id == ProductionOrderItem.id)
+                .filter(
+                    ProductionOrderItem.production_order_id == order_id,
+                    ProductionPlanLine.trang_thai != "hoan_thanh",
+                )
+                .count()
+            )
+            if active_count:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Lệnh đang ở hướng 'Kế hoạch chờ', không thể đặt Tận dụng",
+                )
         for key, value in data.model_dump(exclude_unset=True).items():
             setattr(order, key, value)
         self.db.commit()

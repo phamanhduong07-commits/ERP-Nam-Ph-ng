@@ -402,11 +402,34 @@ def batch_set_tan_dung(
 ):
     if not payload.ids:
         return {"updated": 0}
+    target_ids = list(payload.ids)
+    if payload.tan_dung:
+        conflict_ids: set[int] = set()
+        mua_ngoai_rows = (
+            db.query(ProductionOrder.id)
+            .filter(ProductionOrder.id.in_(target_ids), ProductionOrder.trang_thai == "mua_ngoai")
+            .all()
+        )
+        conflict_ids.update(r[0] for r in mua_ngoai_rows)
+        plan_rows = (
+            db.query(ProductionOrderItem.production_order_id)
+            .join(ProductionPlanLine, ProductionPlanLine.production_order_item_id == ProductionOrderItem.id)
+            .filter(
+                ProductionOrderItem.production_order_id.in_(target_ids),
+                ProductionPlanLine.trang_thai != "hoan_thanh",
+            )
+            .distinct()
+            .all()
+        )
+        conflict_ids.update(r[0] for r in plan_rows)
+        target_ids = [i for i in target_ids if i not in conflict_ids]
+    if not target_ids:
+        return {"updated": 0}
     db.query(ProductionOrder).filter(
-        ProductionOrder.id.in_(payload.ids)
+        ProductionOrder.id.in_(target_ids)
     ).update({"tan_dung": payload.tan_dung}, synchronize_session=False)
     db.commit()
-    return {"updated": len(payload.ids)}
+    return {"updated": len(target_ids)}
 
 
 @router.post("", response_model=ProductionOrderResponse, status_code=201)
@@ -937,6 +960,25 @@ def chuyen_mua_phoi(
         raise HTTPException(
             status_code=400,
             detail=f"Lệnh đang ở '{order.trang_thai}', không thể chuyển sang mua phôi ngoài"
+        )
+    if order.tan_dung:
+        raise HTTPException(
+            status_code=400,
+            detail="Lệnh đang ở hướng 'Tận dụng phôi', không thể chuyển sang Mua phôi ngoài",
+        )
+    active_plan_count = (
+        db.query(ProductionPlanLine)
+        .join(ProductionOrderItem, ProductionPlanLine.production_order_item_id == ProductionOrderItem.id)
+        .filter(
+            ProductionOrderItem.production_order_id == order_id,
+            ProductionPlanLine.trang_thai != "hoan_thanh",
+        )
+        .count()
+    )
+    if active_plan_count:
+        raise HTTPException(
+            status_code=400,
+            detail="Lệnh đang ở hướng 'Kế hoạch chờ', không thể chuyển sang Mua phôi ngoài",
         )
 
     order.trang_thai = "mua_ngoai"

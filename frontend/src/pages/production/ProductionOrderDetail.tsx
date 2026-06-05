@@ -233,7 +233,10 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
     refetchOnWindowFocus: true,
   })
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['production-order', id] })
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['production-order', id] })
+    qc.invalidateQueries({ queryKey: ['production-orders'] })
+  }
 
   const { data: phapNhanList = [] } = useQuery({
     queryKey: ['phap-nhan-all'],
@@ -385,6 +388,12 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   if (isLoading || !order) return <Card loading />
 
   const canEdit = ['moi', 'dang_chay'].includes(order.trang_thai)
+  const isInPlan = order.items.some(i => i.queue_status != null && i.queue_status !== 'hoan_thanh')
+  const tanDungDisabledReason = order.trang_thai === 'mua_ngoai'
+    ? 'Lệnh đang ở hướng Mua phôi ngoài'
+    : isInPlan
+      ? 'Lệnh đang ở hướng Kế hoạch chờ'
+      : null
 
   const today = dayjs().startOf('day')
   const deadlineAlert = (() => {
@@ -899,13 +908,16 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   : <Typography.Text type="secondary">Chưa đặt</Typography.Text>}
               </Descriptions.Item>
               <Descriptions.Item label="Tận dụng phôi">
-                <Switch
-                  checked={order.tan_dung}
-                  checkedChildren="Tận dụng"
-                  unCheckedChildren="Bình thường"
-                  loading={updateSxMutation.isPending}
-                  onChange={(v) => updateSxMutation.mutate({ tan_dung: v })}
-                />
+                <Tooltip title={tanDungDisabledReason ?? undefined}>
+                  <Switch
+                    checked={order.tan_dung}
+                    checkedChildren="Tận dụng"
+                    unCheckedChildren="Bình thường"
+                    loading={updateSxMutation.isPending}
+                    disabled={!!tanDungDisabledReason}
+                    onChange={(v) => updateSxMutation.mutate({ tan_dung: v })}
+                  />
+                </Tooltip>
               </Descriptions.Item>
               <Descriptions.Item label="Bắt đầu (KH)">
                 {order.ngay_bat_dau_ke_hoach
@@ -1005,7 +1017,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                     </Button>
                   </Popconfirm>
                 )}
-                {['moi', 'dang_chay'].includes(order.trang_thai) && (
+                {['moi', 'dang_chay'].includes(order.trang_thai) && !order.tan_dung && !isInPlan && (
                   <Popconfirm
                     title="Chuyển sang mua phôi ngoài?"
                     description="Bộ phận mua hàng sẽ vào lên đơn mua phôi."
@@ -1080,7 +1092,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                     <Button size="small" danger icon={<CloseOutlined />}>Huỷ</Button>
                   </Popconfirm>
                 )}
-                {['moi', 'dang_chay'].includes(order.trang_thai) && (
+                {['moi', 'dang_chay'].includes(order.trang_thai) && !order.tan_dung && !isInPlan && (
                   <Popconfirm
                     title="Chuyển sang mua phôi ngoài?"
                     description="Bộ phận mua hàng sẽ vào lên đơn mua phôi."
