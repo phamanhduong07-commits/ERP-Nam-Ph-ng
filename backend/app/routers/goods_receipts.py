@@ -611,17 +611,37 @@ def extract_image_ocr(
         if not gr:
             raise HTTPException(404, "Không tìm thấy phiếu")
 
+        upload_base = Path(__file__).parent.parent.parent / "uploads"
+        img_path: Path | None = None
+
+        # Ưu tiên erp_media (file vật lý), fallback sang invoice_image (base64 DB)
         media_row = db.execute(
             _sql("SELECT filepath FROM erp_media WHERE module='goods_receipts' AND record_id=:rid ORDER BY id DESC LIMIT 1"),
             {"rid": str(gr_id)},
         ).fetchone()
-        if not media_row:
-            raise HTTPException(404, "Phiếu này chưa có ảnh — bảo vệ cần upload ảnh trước")
+        if media_row:
+            p = upload_base / media_row.filepath
+            if p.is_file():
+                img_path = p
 
-        upload_base = Path(__file__).parent.parent.parent / "uploads"
-        img_path = upload_base / media_row.filepath
-        if not img_path.is_file():
-            raise HTTPException(404, f"File ảnh không tìm thấy trên server: {media_row.filepath}")
+        if img_path is None and gr.invoice_image:
+            import base64, tempfile, mimetypes
+            raw = gr.invoice_image
+            if "," in raw:
+                header, data = raw.split(",", 1)
+                ext = ".jpg"
+                if "png" in header:
+                    ext = ".png"
+            else:
+                data, ext = raw, ".jpg"
+            img_bytes = base64.b64decode(data)
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+            tmp.write(img_bytes)
+            tmp.close()
+            img_path = Path(tmp.name)
+
+        if img_path is None:
+            raise HTTPException(404, "Phiếu này chưa có ảnh — bảo vệ cần upload ảnh trước")
 
         from app.utils.ocr import extract_delivery_slip, identify_supplier
 
