@@ -1029,6 +1029,7 @@ export default function GoodsReceiptPage() {
       {hoanThienId && (
         <HoanThienGiayModal
           grId={hoanThienId}
+          title="Hoàn thiện phiếu nhập kho mua hàng"
           onClose={() => setHoanThienId(null)}
           onSuccess={() => {
             setHoanThienId(null)

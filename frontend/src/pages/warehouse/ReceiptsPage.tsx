@@ -938,6 +938,7 @@ export default function ReceiptsPage() {
       {hoanThienId && (
         <HoanThienGiayModal
           grId={hoanThienId}
+          title="Hoàn thiện phiếu nhập NVL khác"
           onClose={() => setHoanThienId(null)}
           onSuccess={() => {
             setHoanThienId(null)

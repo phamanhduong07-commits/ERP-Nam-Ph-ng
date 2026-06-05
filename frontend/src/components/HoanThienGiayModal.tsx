@@ -33,9 +33,10 @@ interface Props {
   grId: number | null
   onClose: () => void
   onSuccess: () => void
+  title?: string
 }
 
-export default function HoanThienGiayModal({ grId, onClose, onSuccess }: Props) {
+export default function HoanThienGiayModal({ grId, onClose, onSuccess, title }: Props) {
   const qc = useQueryClient()
   const [form] = Form.useForm()
   const [formPxId, setFormPxId] = useState<number | null>(null)
@@ -277,7 +278,7 @@ export default function HoanThienGiayModal({ grId, onClose, onSuccess }: Props) 
         width="98vw"
         style={{ top: 8 }}
         styles={{ body: { padding: '12px 16px', height: 'calc(100vh - 120px)', overflow: 'hidden' } }}
-        title="✏️ Hoàn thiện phiếu nhập giấy cuộn"
+        title={`✏️ ${title ?? 'Hoàn thiện phiếu nhập giấy cuộn'}`}
         destroyOnClose
         footer={
           <Space>

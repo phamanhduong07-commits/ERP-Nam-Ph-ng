@@ -638,6 +638,7 @@ export default function NhapPhoiNgoaiPage() {
       {hoanThienId && (
         <HoanThienGiayModal
           grId={hoanThienId}
+          title="Hoàn thiện phiếu nhập phôi sóng"
           onClose={() => setHoanThienId(null)}
           onSuccess={() => {
             setHoanThienId(null)
