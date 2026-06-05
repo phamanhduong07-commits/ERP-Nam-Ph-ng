@@ -8,6 +8,8 @@ export interface NhanVien {
   so_dien_thoai: string | null
   role_id: number
   phan_xuong: string | null
+  phan_xuong_id: number | null
+  ten_phan_xuong: string | null
   phap_nhan_id: number | null
   ten_phap_nhan: string | null
   trang_thai: boolean
@@ -25,7 +27,7 @@ export interface UserCreatePayload {
   so_dien_thoai?: string | null
   password: string
   role_id: number
-  phan_xuong?: string | null
+  phan_xuong_id?: number | null
   phap_nhan_id?: number | null
   machine_id?: number | null
 }
@@ -35,7 +37,7 @@ export interface UserUpdatePayload {
   email?: string | null
   so_dien_thoai?: string | null
   role_id?: number
-  phan_xuong?: string | null
+  phan_xuong_id?: number | null
   phap_nhan_id?: number | null
   trang_thai?: boolean
   machine_id?: number | null

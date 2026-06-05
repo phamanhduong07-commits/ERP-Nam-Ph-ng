@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../../store/auth'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, Drawer, Input, InputNumber,
@@ -29,6 +30,8 @@ const fmtCurrency = (v: number | null | undefined) =>
 export default function KhoPhoiPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const userPerms = useAuthStore(s => s.user?.permissions ?? [])
+  const canWrite = userPerms.includes('inventory.transfer') || userPerms.includes('production_order.edit')
   const [pushingKey, setPushingKey] = useState<string | null>(null)
   const [chuyenRows, setChuyenRows] = useState<KhoRow[]>([])
   const [chuyenQtys, setChuyenQtys] = useState<Record<number, number>>({})
@@ -351,7 +354,7 @@ export default function KhoPhoiPage() {
           return (
             <Space size={4} wrap>
               <Tag color="cyan" style={{ fontSize: 11 }}>Đã đẩy sang CD2</Tag>
-              {isCD2 && conPhoi_TaiNguon && (
+              {canWrite && isCD2 && conPhoi_TaiNguon && (
                 <Button size="small" icon={<SwapOutlined />} onClick={() => openChuyenKho([row])} style={{ fontSize: 11 }}>
                   Chuyển kho
                 </Button>
@@ -361,6 +364,9 @@ export default function KhoPhoiPage() {
         }
         if (row.ton_kho <= 0) {
           return <Text type="secondary" style={{ fontSize: 11 }}>Hết tồn kho</Text>
+        }
+        if (!canWrite) {
+          return <Tag color="default" style={{ fontSize: 11 }}>Chỉ xem</Tag>
         }
         return (
           <Space size={4} wrap>
@@ -526,7 +532,7 @@ export default function KhoPhoiPage() {
                           <Text type="secondary" style={{ fontSize: 12 }}>
                             {filteredData.length} lệnh SX
                           </Text>
-                          {selectedRowKeys.length > 0 && (
+                          {canWrite && selectedRowKeys.length > 0 && (
                             <Button
                               size="small"
                               type="primary"

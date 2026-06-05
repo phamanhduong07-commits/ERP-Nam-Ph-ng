@@ -9,6 +9,7 @@ import { DeleteOutlined, EditOutlined, KeyOutlined, PlusOutlined, ReloadOutlined
 import { rolesApi } from '../../api/permissions'
 import { usersApi, type NhanVien, type UserCreatePayload, type UserUpdatePayload } from '../../api/usersApi'
 import { cd2Api } from '../../api/cd2'
+import { warehouseApi } from '../../api/warehouse'
 import EmptyState from "../../components/EmptyState"
 import { phapNhanApi } from '../../api/phap_nhan'
 import { useAuthStore } from '../../store/auth'
@@ -28,15 +29,6 @@ const FULL_ACCESS = ['ADMIN', 'GIAM_DOC']
 
 const { Title } = Typography
 
-const PHAN_XUONG_OPTIONS = [
-  { value: 'in', label: 'In' },
-  { value: 'boi_va_cat', label: 'Bồi và cắt' },
-  { value: 'song', label: 'Sóng' },
-  { value: 'thanh_pham', label: 'Thành phẩm' },
-  { value: 'kinh_doanh', label: 'Kinh doanh' },
-  { value: 'ke_toan', label: 'Kế toán' },
-  { value: 'quan_ly', label: 'Quản lý' },
-]
 
 type UserFormValues = {
   username: string
@@ -44,8 +36,9 @@ type UserFormValues = {
   email?: string
   so_dien_thoai?: string
   password?: string
+  new_password?: string
   role_id: number
-  phan_xuong?: string
+  phan_xuong_id?: number
   phap_nhan_id?: number
   trang_thai?: boolean
   machine_id?: number
@@ -59,7 +52,7 @@ export default function UserList() {
   const [passwordForm] = Form.useForm<{ password: string }>()
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
-  const [filterPhanXuong, setFilterPhanXuong] = useState<string | undefined>(undefined)
+  const [filterPhanXuong] = useState<string | undefined>(undefined)
   const [showInactive, setShowInactive] = useState(false)
   const [editing, setEditing] = useState<NhanVien | null>(null)
   const [open, setOpen] = useState(false)
@@ -97,20 +90,29 @@ export default function UserList() {
     queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
   })
 
+  const { data: phanXuongList = [] } = useQuery({
+    queryKey: ['phan-xuong-list'],
+    queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
+  })
+
   const saveMutation = useMutation({
-    mutationFn: (values: UserFormValues) => {
+    mutationFn: async (values: UserFormValues) => {
       if (editing) {
         const payload: UserUpdatePayload = {
           ho_ten: values.ho_ten,
           email: values.email || null,
           so_dien_thoai: values.so_dien_thoai || null,
           role_id: values.role_id,
-          phan_xuong: values.phan_xuong || null,
+          phan_xuong_id: values.phan_xuong_id || null,
           phap_nhan_id: values.phap_nhan_id || null,
           trang_thai: values.trang_thai ?? true,
           machine_id: values.machine_id || null,
         }
-        return usersApi.update(editing.id, payload)
+        await usersApi.update(editing.id, payload)
+        if (values.new_password) {
+          await usersApi.resetPassword(editing.id, values.new_password)
+        }
+        return
       }
       const payload: UserCreatePayload = {
         username: values.username,
@@ -119,7 +121,7 @@ export default function UserList() {
         so_dien_thoai: values.so_dien_thoai || null,
         password: values.password || '',
         role_id: values.role_id,
-        phan_xuong: values.phan_xuong || null,
+        phan_xuong_id: values.phan_xuong_id || null,
         phap_nhan_id: values.phap_nhan_id || null,
         machine_id: values.machine_id || null,
       }
@@ -169,7 +171,7 @@ export default function UserList() {
       email: record.email || undefined,
       so_dien_thoai: record.so_dien_thoai || undefined,
       role_id: record.role_id,
-      phan_xuong: record.phan_xuong || undefined,
+      phan_xuong_id: record.phan_xuong_id || undefined,
       phap_nhan_id: record.phap_nhan_id || undefined,
       trang_thai: record.trang_thai,
       machine_id: record.machine_id || undefined,
@@ -207,9 +209,9 @@ export default function UserList() {
     },
     {
       title: 'Phân xưởng',
-      dataIndex: 'phan_xuong',
-      width: 130,
-      render: (v: string | null) => v ? (PHAN_XUONG_OPTIONS.find(o => o.value === v)?.label ?? v) : '-',
+      dataIndex: 'ten_phan_xuong',
+      width: 140,
+      render: (v: string | null) => v ?? '-',
     },
     {
       title: 'Máy trực',
@@ -270,8 +272,7 @@ export default function UserList() {
                 allowClear
                 style={{ width: 170 }}
                 value={filterPhanXuong}
-                onChange={v => setFilterPhanXuong(v)}
-                options={PHAN_XUONG_OPTIONS}
+                options={phanXuongList.map(p => ({ value: p.ma_xuong, label: p.ten_xuong }))}
               />
               <Switch checked={showInactive} onChange={setShowInactive} checkedChildren="Tất cả" unCheckedChildren="Đang dùng" />
               <Button icon={<ReloadOutlined />} onClick={() => qc.invalidateQueries({ queryKey: ['users'] })} />
@@ -343,16 +344,32 @@ export default function UserList() {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="phan_xuong" label="Phân xưởng">
-                <Select allowClear options={PHAN_XUONG_OPTIONS} />
+              <Form.Item name="phan_xuong_id" label="Phân xưởng">
+                <Select
+                  allowClear
+                  placeholder="-- Chọn xưởng --"
+                  options={phanXuongList.map(p => ({ value: p.id, label: p.ten_xuong }))}
+                />
               </Form.Item>
             </Col>
             {editing && (
-              <Col span={12}>
-                <Form.Item name="trang_thai" label="Hoạt động" valuePropName="checked">
-                  <Switch />
-                </Form.Item>
-              </Col>
+              <>
+                <Col span={12}>
+                  <Form.Item name="trang_thai" label="Hoạt động" valuePropName="checked">
+                    <Switch />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="new_password"
+                    label="Mật khẩu mới"
+                    rules={[{ min: 6, message: 'Ít nhất 6 ký tự' }]}
+                    extra="Để trống nếu không đổi"
+                  >
+                    <Input.Password autoComplete="new-password" placeholder="Để trống = giữ nguyên" />
+                  </Form.Item>
+                </Col>
+              </>
             )}
             <Col span={24}>
                <Form.Item name="machine_id" label="Gán máy trực cố định (Cho công nhân)">

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nam-phuong-erp-v15';
+const CACHE_NAME = 'nam-phuong-erp-v16';
 
 // Install: skip waiting immediately, no pre-caching (assets change every build)
 self.addEventListener('install', () => {
@@ -48,8 +48,22 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
+  // Never intercept cross-origin requests (Google Fonts, CDN, etc.)
+  if (url.origin !== self.location.origin) return;
+
   // Never cache API calls or WebSocket upgrades
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws')) return;
+
+  // Navigation requests: fallback to cached index.html when offline
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() =>
+        caches.match('/') || caches.match('/index.html') ||
+        new Response('Offline', { status: 503, statusText: 'Service Unavailable' })
+      )
+    );
+    return;
+  }
 
   event.respondWith(
     fetch(event.request)

@@ -3,6 +3,7 @@ import type { ApiError } from '../api/types'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Layout, Menu, Avatar, Dropdown, Typography, Space, theme, Badge, Button, message,
+  Modal, Form, Input,
 } from 'antd'
 import type { MenuProps } from 'antd'
 import {
@@ -357,6 +358,9 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
+  const [changePwdOpen, setChangePwdOpen] = useState(false)
+  const [changePwdLoading, setChangePwdLoading] = useState(false)
+  const [changePwdForm] = Form.useForm()
   const location = useLocation()
   const navigate = useNavigate()
   const { user, logout, setAuth } = useAuthStore()
@@ -465,6 +469,25 @@ export default function AppLayout() {
       logout()
       navigate('/login')
     }
+    if (key === 'settings') {
+      changePwdForm.resetFields()
+      setChangePwdOpen(true)
+    }
+  }
+
+  const handleChangePwd = async () => {
+    const values = await changePwdForm.validateFields()
+    setChangePwdLoading(true)
+    try {
+      await authApi.changePassword(values.old_password, values.new_password)
+      message.success('Đổi mật khẩu thành công')
+      setChangePwdOpen(false)
+    } catch (err) {
+      const detail = (err as ApiError)?.response?.data?.detail
+      message.error(detail || 'Đổi mật khẩu thất bại')
+    } finally {
+      setChangePwdLoading(false)
+    }
   }
 
   return (
@@ -527,11 +550,13 @@ export default function AppLayout() {
           </Space>
 
           <Space size={20}>
-            <Dropdown menu={roleTestMenu}>
-              <Button type="dashed" icon={<ThunderboltOutlined />} danger>
-                🧪 Đổi Role Test
-              </Button>
-            </Dropdown>
+            {role === 'ADMIN' && (
+              <Dropdown menu={roleTestMenu}>
+                <Button type="dashed" icon={<ThunderboltOutlined />} danger>
+                  🧪 Đổi Role Test
+                </Button>
+              </Dropdown>
+            )}
 
             <Dropdown menu={{ items: userMenu, onClick: handleUserMenu }}>
               <Space style={{ cursor: 'pointer' }}>
@@ -544,6 +569,53 @@ export default function AppLayout() {
             </Dropdown>
           </Space>
         </Header>
+
+        <Modal
+          title="Đổi mật khẩu"
+          open={changePwdOpen}
+          onOk={handleChangePwd}
+          onCancel={() => setChangePwdOpen(false)}
+          confirmLoading={changePwdLoading}
+          okText="Xác nhận"
+          cancelText="Hủy"
+          destroyOnClose
+        >
+          <Form form={changePwdForm} layout="vertical" style={{ marginTop: 16 }}>
+            <Form.Item
+              name="old_password"
+              label="Mật khẩu hiện tại"
+              rules={[{ required: true, message: 'Nhập mật khẩu hiện tại' }]}
+            >
+              <Input.Password placeholder="Mật khẩu hiện tại" />
+            </Form.Item>
+            <Form.Item
+              name="new_password"
+              label="Mật khẩu mới"
+              rules={[
+                { required: true, message: 'Nhập mật khẩu mới' },
+                { min: 6, message: 'Tối thiểu 6 ký tự' },
+              ]}
+            >
+              <Input.Password placeholder="Mật khẩu mới (tối thiểu 6 ký tự)" />
+            </Form.Item>
+            <Form.Item
+              name="confirm_password"
+              label="Xác nhận mật khẩu mới"
+              dependencies={['new_password']}
+              rules={[
+                { required: true, message: 'Xác nhận mật khẩu mới' },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!value || getFieldValue('new_password') === value) return Promise.resolve()
+                    return Promise.reject(new Error('Mật khẩu xác nhận không khớp'))
+                  },
+                }),
+              ]}
+            >
+              <Input.Password placeholder="Nhập lại mật khẩu mới" />
+            </Form.Item>
+          </Form>
+        </Modal>
 
         <Content style={{ margin: 16, background: tk.colorBgLayout, overflow: 'initial' }}>
           <Outlet />

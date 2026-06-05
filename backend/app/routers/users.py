@@ -61,6 +61,8 @@ class UserResponse(BaseModel):
     role_name: str | None = None
     role_code: str | None = None
     phan_xuong: str | None = None
+    phan_xuong_id: int | None = None
+    ten_phan_xuong: str | None = None
     phap_nhan_id: int | None = None
     ten_phap_nhan: str | None = None
     machine_id: int | None = None
@@ -87,6 +89,8 @@ def _to_response(user: User) -> UserResponse:
         role_name=user.role.ten_vai_tro if user.role else None,
         role_code=user.role.ma_vai_tro if user.role else None,
         phan_xuong=user.phan_xuong,
+        phan_xuong_id=user.phan_xuong_id,
+        ten_phan_xuong=user.phan_xuong_obj.ten_xuong if user.phan_xuong_obj else None,
         phap_nhan_id=user.phap_nhan_id,
         ten_phap_nhan=user.phap_nhan.ten_phap_nhan if user.phap_nhan else None,
         machine_id=user.machine_id,
@@ -103,7 +107,7 @@ def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(_users_access),
 ):
-    q = db.query(User).options(selectinload(User.role), selectinload(User.phap_nhan))
+    q = db.query(User).options(selectinload(User.role), selectinload(User.phap_nhan), selectinload(User.phan_xuong_obj))
     if trang_thai is not None:
         q = q.filter(User.trang_thai == trang_thai)
     if search:
