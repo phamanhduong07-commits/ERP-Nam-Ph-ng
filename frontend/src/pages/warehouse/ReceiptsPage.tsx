@@ -8,7 +8,7 @@ import {
 import {
   FileExcelOutlined, FileImageOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
   InboxOutlined, MinusCircleOutlined, CheckCircleOutlined, DollarOutlined,
-  ThunderboltOutlined, UploadOutlined, ScanOutlined, FormOutlined,
+  ThunderboltOutlined, UploadOutlined, ScanOutlined, FormOutlined, StarOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
@@ -21,6 +21,7 @@ import { exportToExcel, printDocument, buildHtmlTable, smartExportExcel, smartPr
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import EmptyState from "../../components/EmptyState"
 import { mediaApi } from '../../api/media'
+import { ocrExamplesApi } from '../../api/ocrExamples'
 
 const { Title, Text } = Typography
 
@@ -67,6 +68,7 @@ export default function ReceiptsPage() {
   const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
   const [ocrResult, setOcrResult] = useState<Record<number, any>>({})
   const [ocrLoading, setOcrLoading] = useState(false)
+  const [savingExample, setSavingExample] = useState(false)
 
   // Reactive watches — must be at top level
   const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
@@ -691,6 +693,26 @@ export default function ReceiptsPage() {
                         if (matched) form.setFieldValue('supplier_id', matched.id)
                       }
                     }}>Điền vào form</Button>
+                    <Button size="small" icon={<StarOutlined />} loading={savingExample}
+                      style={{ color: '#722ed1', borderColor: '#722ed1' }}
+                      onClick={async () => {
+                        if (!editingDraftId) return
+                        setSavingExample(true)
+                        try {
+                          const src = invoicePreviewUrl
+                          if (!src) { message.warning('Không có ảnh để lưu'); return }
+                          const blob = await fetch(src).then(r => r.blob())
+                          const file = new File([blob], 'phieu_ncc.jpg', { type: blob.type || 'image/jpeg' })
+                          const fd = new FormData()
+                          fd.append('ten_ncc', ext.ten_ncc || 'Chưa xác định')
+                          fd.append('extracted_json', JSON.stringify(ext))
+                          fd.append('ghi_chu', `GR #${editingDraftId}`)
+                          fd.append('file', file)
+                          await ocrExamplesApi.create(fd)
+                          message.success('Đã lưu làm ví dụ — AI dùng cho lần đọc tiếp theo')
+                        } catch { message.error('Lỗi lưu ví dụ') }
+                        finally { setSavingExample(false) }
+                      }}>Lưu làm ví dụ</Button>
                   </Space>
                 </div>
               )

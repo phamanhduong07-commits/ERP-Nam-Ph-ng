@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import {
   FileExcelOutlined, FileImageOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
-  CheckCircleOutlined, UploadOutlined, AppstoreOutlined, ScanOutlined, FormOutlined,
+  CheckCircleOutlined, UploadOutlined, AppstoreOutlined, ScanOutlined, FormOutlined, StarOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
@@ -19,6 +19,7 @@ import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolve
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import EmptyState from "../../components/EmptyState"
 import { mediaApi } from '../../api/media'
+import { ocrExamplesApi } from '../../api/ocrExamples'
 
 const { Title, Text } = Typography
 
@@ -58,6 +59,7 @@ export default function NhapPhoiNgoaiPage() {
   const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
   const [ocrResult, setOcrResult] = useState<Record<number, any>>({})
   const [ocrLoading, setOcrLoading] = useState(false)
+  const [savingExample, setSavingExample] = useState(false)
 
   const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
   const hdTongKgWatch = Form.useWatch('hd_tong_kg', form)
@@ -498,13 +500,31 @@ export default function NhapPhoiNgoaiPage() {
                   {ext.ten_ncc && <div>NCC: <strong>{ext.ten_ncc}</strong></div>}
                   {ext.so_xe && <div>Số xe: <strong>{ext.so_xe}</strong></div>}
                   {ext.tong_kg && <div>Tổng: <strong>{ext.tong_kg} kg</strong></div>}
-                  {(ext.hang_hoa?.length ?? 0) > 0 && (
-                    <Button size="small" type="primary" icon={<FormOutlined />} style={{ marginTop: 6 }} onClick={() => {
+                  <Space style={{ marginTop: 6 }}>
+                    <Button size="small" type="primary" icon={<FormOutlined />} onClick={() => {
                       if (ext.so_xe) form.setFieldValue('so_xe', ext.so_xe)
                       if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
                       message.success('Đã điền thông tin từ OCR')
                     }}>Điền vào form</Button>
-                  )}
+                    <Button size="small" icon={<StarOutlined />} loading={savingExample}
+                      style={{ color: '#722ed1', borderColor: '#722ed1' }}
+                      onClick={async () => {
+                        if (!editingDraftId || !invoicePreviewUrl) { message.warning('Không có ảnh để lưu'); return }
+                        setSavingExample(true)
+                        try {
+                          const blob = await fetch(invoicePreviewUrl).then(r => r.blob())
+                          const file = new File([blob], 'phieu_ncc.jpg', { type: blob.type || 'image/jpeg' })
+                          const fd = new FormData()
+                          fd.append('ten_ncc', ext.ten_ncc || 'Chưa xác định')
+                          fd.append('extracted_json', JSON.stringify(ext))
+                          fd.append('ghi_chu', `GR #${editingDraftId}`)
+                          fd.append('file', file)
+                          await ocrExamplesApi.create(fd)
+                          message.success('Đã lưu làm ví dụ')
+                        } catch { message.error('Lỗi lưu ví dụ') }
+                        finally { setSavingExample(false) }
+                      }}>Lưu làm ví dụ</Button>
+                  </Space>
                 </div>
               )
             })()}
