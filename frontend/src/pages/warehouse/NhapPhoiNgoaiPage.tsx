@@ -66,6 +66,13 @@ export default function NhapPhoiNgoaiPage() {
   const calcTongTam = watchedItems.reduce((s: number, it: Record<string, unknown>) => s + (Number(it?.so_luong) || 0), 0)
   const kgLech = (hdTongKgWatch != null && hdTongKgWatch !== '') ? calcTongTam - Number(hdTongKgWatch) : null
   const isKhop = kgLech !== null && Math.abs(kgLech) < 1
+  const dominantDvt = (() => {
+    const dvts = watchedItems.map((it: Record<string, unknown>) => (it?.dvt as string) || 'Tấm').filter(Boolean)
+    if (!dvts.length) return 'Tấm'
+    const counts: Record<string, number> = {}
+    dvts.forEach(d => { counts[d] = (counts[d] || 0) + 1 })
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
+  })()
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses-all'],
@@ -622,22 +629,22 @@ export default function NhapPhoiNgoaiPage() {
               >
                 <Row gutter={16} align="middle">
                   <Col span={12}>
-                    <Form.Item name="hd_tong_kg" label="Tổng số tấm (hoặc kg) trên phiếu NCC" style={{ marginBottom: 0 }}>
-                      <InputNumber style={{ width: '100%' }} placeholder="Nhập từ phiếu NCC" min={0}
+                    <Form.Item name="hd_tong_kg" label={`Tổng ${dominantDvt} trên phiếu NCC`} style={{ marginBottom: 0 }}>
+                      <InputNumber style={{ width: '100%' }} placeholder={`Nhập tổng ${dominantDvt} từ phiếu NCC`} min={0}
                         formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
                     </Form.Item>
                     {kgLech !== null && (
                       <div style={{ color: Math.abs(kgLech) < 1 ? '#52c41a' : '#ff4d4f', fontSize: 12, marginTop: 4 }}>
-                        Tính được: <strong>{calcTongTam.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong>
-                        {Math.abs(kgLech) >= 1 && <span> | Lệch: <strong>{kgLech > 0 ? '+' : ''}{kgLech.toFixed(1)}</strong></span>}
+                        Tính được: <strong>{calcTongTam.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} {dominantDvt}</strong>
+                        {Math.abs(kgLech) >= 1 && <span> | Lệch: <strong>{kgLech > 0 ? '+' : ''}{kgLech.toFixed(1)} {dominantDvt}</strong></span>}
                       </div>
                     )}
                   </Col>
                   <Col span={12} style={{ fontSize: 13, color: '#555' }}>
                     <strong>{watchedItems.length}</strong> dòng phôi |{' '}
-                    <strong>{calcTongTam.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong> tổng số lượng
+                    <strong>{calcTongTam.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} {dominantDvt}</strong> tổng nhập
                     {(hdTongKgWatch == null || hdTongKgWatch === '') && (
-                      <div style={{ fontSize: 12, color: '#bbb', marginTop: 2 }}>Nhập tổng từ phiếu NCC để đối soát</div>
+                      <div style={{ fontSize: 12, color: '#bbb', marginTop: 2 }}>Nhập tổng {dominantDvt} từ phiếu NCC để đối soát</div>
                     )}
                   </Col>
                 </Row>
