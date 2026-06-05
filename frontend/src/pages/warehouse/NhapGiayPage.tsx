@@ -663,7 +663,7 @@ export default function NhapGiayPage() {
                   <Form.Item name="po_id" label="Liên kết đơn mua (tuỳ chọn)">
                     <Select placeholder="Chọn PO để auto-fill..." allowClear showSearch
                       filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                      options={poList.map(p => ({ value: p.id, label: `${p.so_po} — ${p.ten_ncc}` }))}
+                      options={poList.filter(p => p.loai_po === 'giay_cuon').map(p => ({ value: p.id, label: `${p.so_po} — ${p.ten_ncc}` }))}
                       onChange={v => v ? setSelectedPO(v) : setSelectedPO(undefined)}
                     />
                   </Form.Item>

@@ -597,7 +597,7 @@ export default function NhapPhoiNgoaiPage() {
                   <Form.Item name="po_id" label="Đặt hàng phôi (PO)">
                     <Select placeholder="Chọn PO phôi..." allowClear showSearch
                       filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                      options={poList.map(p => ({ value: p.id, label: `${p.so_po} — ${p.ten_ncc || ''}${p.ten_phan_xuong ? ' | ' + p.ten_phan_xuong : ''}` }))}
+                      options={poList.filter(p => p.loai_po !== 'giay_cuon').map(p => ({ value: p.id, label: `${p.so_po} — ${p.ten_ncc || ''}${p.ten_phan_xuong ? ' | ' + p.ten_phan_xuong : ''}` }))}
                       onChange={v => v ? setSelectedPO(v) : setSelectedPO(undefined)}
                     />
                   </Form.Item>
