@@ -18,6 +18,7 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import EmptyState from "../../components/EmptyState"
+import HoanThienGiayModal from '../../components/HoanThienGiayModal'
 
 const { Title, Text } = Typography
 
@@ -54,7 +55,7 @@ export default function NhapPhoiNgoaiPage() {
   const [formPxId, setFormPxId] = useState<number | null>(null)
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null)
   const [invoicePreviewUrl, setInvoicePreviewUrl] = useState<string | null>(null)
-  const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
+  const [hoanThienId, setHoanThienId] = useState<number | null>(null)
 
   const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
   const hdTongKgWatch = Form.useWatch('hd_tong_kg', form)
@@ -110,27 +111,13 @@ export default function NhapPhoiNgoaiPage() {
     setOpen(false)
     setInvoiceFile(null)
     setInvoicePreviewUrl(null)
-    setEditingDraftId(null)
     form.resetFields()
     setSelectedPO(undefined)
     setFormPxId(null)
   }
 
-  const handleOpenDraft = async (r: GoodsReceipt) => {
-    const detail = await warehouseApi.getGoodsReceipt(r.id).then(res => res.data)
-    setEditingDraftId(r.id)
-    if (detail.invoice_image) setInvoicePreviewUrl(detail.invoice_image)
-    form.setFieldsValue({
-      so_xe: detail.so_xe,
-      ngay_nhap: detail.ngay_nhap ? dayjs(detail.ngay_nhap) : undefined,
-      supplier_id: detail.supplier_id,
-      phap_nhan_id: detail.phap_nhan_id,
-      warehouse_id: detail.warehouse_id,
-      hd_tong_kg: detail.hd_tong_kg,
-      ghi_chu: detail.ghi_chu,
-      items: [],
-    })
-    setOpen(true)
+  const handleOpenDraft = (r: GoodsReceipt) => {
+    setHoanThienId(r.id)
   }
 
   const createMut = useMutation({
@@ -216,26 +203,19 @@ export default function NhapPhoiNgoaiPage() {
       let invoice_image: string | null = null
       if (invoiceFile) invoice_image = await fileToBase64(invoiceFile)
 
-      if (editingDraftId) {
-        completeMut.mutate({
-          id: editingDraftId,
-          data: { warehouse_id: v.warehouse_id || null, ghi_chu: v.ghi_chu || null, hd_tong_kg: v.hd_tong_kg || null, items },
-        })
-      } else {
-        createMut.mutate({
-          ngay_nhap: v.ngay_nhap.format('YYYY-MM-DD'),
-          po_id: v.po_id || null,
-          supplier_id: v.supplier_id,
-          warehouse_id: v.warehouse_id,
-          loai_nhap: 'PHOI_NGOAI',
-          phap_nhan_id: v.phap_nhan_id || null,
-          ghi_chu: v.ghi_chu || null,
-          so_xe: v.so_xe || null,
-          invoice_image,
-          hd_tong_kg: v.hd_tong_kg || null,
-          items,
-        } as CreateGoodsReceiptPayload)
-      }
+      createMut.mutate({
+        ngay_nhap: v.ngay_nhap.format('YYYY-MM-DD'),
+        po_id: v.po_id || null,
+        supplier_id: v.supplier_id,
+        warehouse_id: v.warehouse_id,
+        loai_nhap: 'PHOI_NGOAI',
+        phap_nhan_id: v.phap_nhan_id || null,
+        ghi_chu: v.ghi_chu || null,
+        so_xe: v.so_xe || null,
+        invoice_image,
+        hd_tong_kg: v.hd_tong_kg || null,
+        items,
+      } as CreateGoodsReceiptPayload)
     } catch { /* validation inline */ }
   }
 
@@ -399,7 +379,7 @@ export default function NhapPhoiNgoaiPage() {
               Xuất Excel
             </Button>
             <Button type="primary" icon={<PlusOutlined />}
-              onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setEditingDraftId(null); setOpen(true) }}>
+              onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setOpen(true) }}>
               Tạo phiếu nhập phôi
             </Button>
           </Space>
@@ -440,12 +420,12 @@ export default function NhapPhoiNgoaiPage() {
         width="98vw"
         style={{ top: 8, padding: 0 }}
         styles={{ body: { padding: '12px 16px', height: 'calc(100vh - 120px)', overflow: 'hidden' } }}
-        title={editingDraftId ? '✏️ Hoàn thiện phiếu nhập phôi sóng' : 'Tạo phiếu nhập phôi sóng (mua ngoài)'}
+        title="Tạo phiếu nhập phôi sóng (mua ngoài)"
         footer={
           <Space>
             <Button onClick={handleClose}>Huỷ</Button>
-            <Button type="primary" loading={createMut.isPending || completeMut.isPending} onClick={handleSubmit}>
-              {editingDraftId ? 'Hoàn thiện & cập nhật tồn kho' : 'Lưu phiếu nhập phôi'}
+            <Button type="primary" loading={createMut.isPending} onClick={handleSubmit}>
+              Lưu phiếu nhập phôi
             </Button>
           </Space>
         }
@@ -654,6 +634,18 @@ export default function NhapPhoiNgoaiPage() {
           </Col>
         </Row>
       </Modal>
+
+      {hoanThienId && (
+        <HoanThienGiayModal
+          grId={hoanThienId}
+          onClose={() => setHoanThienId(null)}
+          onSuccess={() => {
+            setHoanThienId(null)
+            qc.invalidateQueries({ queryKey: ['goods-receipts-phoi'] })
+            qc.invalidateQueries({ queryKey: ['ton-kho'] })
+          }}
+        />
+      )}
     </div>
   )
 }

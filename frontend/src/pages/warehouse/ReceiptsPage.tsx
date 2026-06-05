@@ -20,6 +20,7 @@ import { suppliersApi } from '../../api/suppliers'
 import { exportToExcel, printDocument, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import EmptyState from "../../components/EmptyState"
+import HoanThienGiayModal from '../../components/HoanThienGiayModal'
 
 const { Title, Text } = Typography
 
@@ -63,7 +64,7 @@ export default function ReceiptsPage() {
   const [chonNLSearch, setChonNLSearch] = useState('')
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null)
   const [invoicePreviewUrl, setInvoicePreviewUrl] = useState<string | null>(null)
-  const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
+  const [hoanThienId, setHoanThienId] = useState<number | null>(null)
 
   // Reactive watches — must be at top level
   const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
@@ -181,26 +182,13 @@ export default function ReceiptsPage() {
     setOpen(false)
     setInvoiceFile(null)
     setInvoicePreviewUrl(null)
-    setEditingDraftId(null)
     form.resetFields()
     setSelectedPO(undefined)
     setFormPxId(null)
   }
 
-  const handleOpenDraft = async (r: GoodsReceipt) => {
-    const detail = await warehouseApi.getGoodsReceipt(r.id).then(res => res.data)
-    setEditingDraftId(r.id)
-    if (detail.invoice_image) setInvoicePreviewUrl(detail.invoice_image)
-    form.setFieldsValue({
-      so_xe: detail.so_xe,
-      ngay_nhap: detail.ngay_nhap ? dayjs(detail.ngay_nhap) : undefined,
-      supplier_id: detail.supplier_id,
-      warehouse_id: detail.warehouse_id,
-      hd_tong_kg: detail.hd_tong_kg,
-      ghi_chu: detail.ghi_chu,
-      items: [],
-    })
-    setOpen(true)
+  const handleOpenDraft = (r: GoodsReceipt) => {
+    setHoanThienId(r.id)
   }
 
   const createMut = useMutation({
@@ -337,30 +325,18 @@ export default function ReceiptsPage() {
       let invoice_image: string | null = null
       if (invoiceFile) invoice_image = await fileToBase64(invoiceFile)
 
-      if (editingDraftId) {
-        completeMut.mutate({
-          id: editingDraftId,
-          data: {
-            warehouse_id: v.warehouse_id || null,
-            ghi_chu: v.ghi_chu || null,
-            hd_tong_kg: v.hd_tong_kg || null,
-            items,
-          },
-        })
-      } else {
-        createMut.mutate({
-          ngay_nhap: v.ngay_nhap.format('YYYY-MM-DD'),
-          po_id: v.po_id || null,
-          supplier_id: v.supplier_id,
-          warehouse_id: v.warehouse_id,
-          loai_nhap: v.loai_nhap || 'MUA_HANG',
-          ghi_chu: v.ghi_chu || null,
-          so_xe: v.so_xe || null,
-          invoice_image,
-          hd_tong_kg: v.hd_tong_kg || null,
-          items,
-        })
-      }
+      createMut.mutate({
+        ngay_nhap: v.ngay_nhap.format('YYYY-MM-DD'),
+        po_id: v.po_id || null,
+        supplier_id: v.supplier_id,
+        warehouse_id: v.warehouse_id,
+        loai_nhap: v.loai_nhap || 'MUA_HANG',
+        ghi_chu: v.ghi_chu || null,
+        so_xe: v.so_xe || null,
+        invoice_image,
+        hd_tong_kg: v.hd_tong_kg || null,
+        items,
+      })
     } catch { /* validation shown inline */ }
   }
 
@@ -543,7 +519,7 @@ export default function ReceiptsPage() {
             <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
               Xuất Excel
             </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setEditingDraftId(null); setOpen(true) }}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setOpen(true) }}>
               Tạo phiếu nhập
             </Button>
           </Space>
@@ -589,12 +565,12 @@ export default function ReceiptsPage() {
         width="98vw"
         style={{ top: 8, padding: 0 }}
         styles={{ body: { padding: '12px 16px', height: 'calc(100vh - 120px)', overflow: 'hidden' } }}
-        title={editingDraftId ? '✏️ Hoàn thiện phiếu nhập NVL khác' : 'Tạo phiếu nhập NVL khác'}
+        title="Tạo phiếu nhập NVL khác"
         footer={
           <Space>
             <Button onClick={handleClose}>Huỷ</Button>
-            <Button type="primary" loading={createMut.isPending || completeMut.isPending} onClick={handleSubmit}>
-              {editingDraftId ? 'Hoàn thiện & cập nhật tồn kho' : 'Lưu phiếu nhập'}
+            <Button type="primary" loading={createMut.isPending} onClick={handleSubmit}>
+              Lưu phiếu nhập
             </Button>
           </Space>
         }
@@ -958,6 +934,18 @@ export default function ReceiptsPage() {
           ]}
         />
       </Modal>
+
+      {hoanThienId && (
+        <HoanThienGiayModal
+          grId={hoanThienId}
+          onClose={() => setHoanThienId(null)}
+          onSuccess={() => {
+            setHoanThienId(null)
+            qc.invalidateQueries({ queryKey: ['goods-receipts-nvl'] })
+            qc.invalidateQueries({ queryKey: ['ton-kho'] })
+          }}
+        />
+      )}
     </div>
   )
 }
