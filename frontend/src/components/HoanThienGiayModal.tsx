@@ -151,6 +151,9 @@ export default function HoanThienGiayModal({ grId, onClose, onSuccess }: Props) 
     if (!grId) return
     setOcrLoading(true)
     try {
+      if (invoiceFile) {
+        await mediaApi.upload('goods_receipts', grId, invoiceFile, 'Phiếu xuất NCC')
+      }
       const res = await warehouseApi.extractImageOcr(grId)
       const ext = res.data.extracted ?? {}
       const hasData = ext.ten_ncc || ext.so_xe || ext.tong_kg || (ext.hang_hoa?.length ?? 0) > 0
