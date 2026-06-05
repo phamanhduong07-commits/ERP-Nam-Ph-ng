@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 GEMINI_API_KEY = settings.GEMINI_API_KEY
 GEMINI_MODEL = settings.GEMINI_MODEL
 
-_EXTRACT_PROMPT = """Đây là ảnh phiếu xuất hàng của nhà cung cấp giấy cuộn (phiếu xuất NCC).
+_EXTRACT_PROMPT = """Đây là ảnh phiếu xuất hàng / biên bản giao hàng của nhà cung cấp.
 Hãy trích xuất thông tin và trả về đúng định dạng JSON, KHÔNG có văn bản nào khác ngoài JSON:
 
 {
@@ -34,21 +34,27 @@ Hãy trích xuất thông tin và trả về đúng định dạng JSON, KHÔNG 
   "so_xe": "biển số xe hoặc null",
   "hang_hoa": [
     {
-      "ten": "tên hàng / loại giấy",
-      "kho_mm": <số nguyên mm hoặc null>,
-      "gsm": <số nguyên g/m² hoặc null>,
+      "ten": "tên hàng hóa",
+      "dvt": "đơn vị tính (Kg, Cuộn, Cái, m², thùng...) hoặc null",
+      "so_luong": <số lượng thực tế theo DVT hoặc null>,
+      "don_gia": <đơn giá số thực hoặc null>,
+      "kho_mm": <khổ rộng mm — chỉ có với giấy cuộn hoặc null>,
+      "gsm": <định lượng g/m² — chỉ có với giấy cuộn hoặc null>,
       "ky_hieu": "ký hiệu lô/cuộn hoặc null",
-      "so_cuon": <số nguyên hoặc null>,
-      "trong_luong_kg": <số thực kg hoặc null>
+      "so_cuon": <số cuộn nguyên — chỉ có với giấy cuộn hoặc null>,
+      "trong_luong_kg": <tổng kg lô này — chỉ có với giấy cuộn hoặc null>
     }
   ],
-  "tong_kg": <tổng kg số thực hoặc null>,
+  "tong_tien": <tổng tiền số thực hoặc null>,
+  "tong_kg": <tổng kg — chỉ điền nếu là giấy cuộn hoặc null>,
   "ghi_chu": "ghi chú hoặc null"
 }
 
 Lưu ý:
-- kho_mm thường xuất hiện sau "khổ", "K:", ví dụ "K: 1200" → kho_mm = 1200
-- gsm thường xuất hiện sau "ĐL", "đl", "g/m²", ví dụ "130 g/m²" → gsm = 130
+- dvt: đọc từ cột ĐVT/DVT trên phiếu. Ví dụ: Kg, Cuộn, Cái, Thùng, m²
+- so_luong: số lượng theo đơn vị DVT (không phải kg nếu DVT là Cuộn)
+- don_gia: đơn giá mỗi DVT
+- kho_mm: chỉ điền nếu phiếu là giấy cuộn, có cột Khổ/K:
 - Nếu có nhiều dòng hàng, tạo nhiều phần tử trong hang_hoa
 - Nếu không tìm thấy thông tin, để null
 - Chỉ trả về JSON thuần, không markdown, không giải thích"""

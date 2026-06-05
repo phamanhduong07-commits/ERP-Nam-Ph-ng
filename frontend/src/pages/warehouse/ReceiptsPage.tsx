@@ -674,10 +674,21 @@ export default function ReceiptsPage() {
                       if ((ext.hang_hoa?.length ?? 0) > 0) {
                         form.setFieldValue('items', ext.hang_hoa.map((h: any) => ({
                           loai_vat_tu: 'khac', mat_id: null,
-                          ten_hang: h.ten || '', so_luong: h.trong_luong_kg ?? null,
-                          dvt: h.dvt || 'Kg', don_gia: 0, ket_qua_kiem_tra: 'DAT',
+                          ten_hang: h.ten || '',
+                          so_luong: h.so_luong ?? h.trong_luong_kg ?? h.so_cuon ?? null,
+                          dvt: h.dvt || (h.so_cuon && !h.trong_luong_kg ? 'Cuộn' : 'Kg'),
+                          don_gia: h.don_gia ?? 0,
+                          ket_qua_kiem_tra: 'DAT',
                         })))
                         message.success(`Đã điền ${ext.hang_hoa.length} dòng`)
+                      }
+                      if (ext.ten_ncc && suppliers.length) {
+                        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+                        const matched = suppliers.find(s =>
+                          norm(s.ten_viet_tat || s.ten_don_vi || '').includes(norm(ext.ten_ncc).slice(0, 6)) ||
+                          norm(ext.ten_ncc).includes(norm(s.ten_viet_tat || '').slice(0, 6))
+                        )
+                        if (matched) form.setFieldValue('supplier_id', matched.id)
                       }
                     }}>Điền vào form</Button>
                   </Space>
