@@ -77,6 +77,13 @@ export default function ReceiptsPage() {
   const calcTongKg = watchedItems.reduce((s: number, it: Record<string, unknown>) => s + (Number(it?.so_luong) || 0), 0)
   const kgLech = (hdTongKgWatch != null && hdTongKgWatch !== '') ? calcTongKg - Number(hdTongKgWatch) : null
   const isKhop = kgLech !== null && Math.abs(kgLech) < 1
+  const dominantDvt = (() => {
+    const dvts = watchedItems.map((it: Record<string, unknown>) => (it?.dvt as string) || 'Kg').filter(Boolean)
+    if (!dvts.length) return 'Kg'
+    const counts: Record<string, number> = {}
+    dvts.forEach(d => { counts[d] = (counts[d] || 0) + 1 })
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
+  })()
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses-all'],
@@ -667,7 +674,7 @@ export default function ReceiptsPage() {
                   <div style={{ fontWeight: 600, color: '#52c41a', marginBottom: 4 }}>✅ OCR đã đọc xong</div>
                   {ext.ten_ncc && <div>NCC: <strong>{ext.ten_ncc}</strong></div>}
                   {ext.so_xe && <div>Số xe: <strong>{ext.so_xe}</strong></div>}
-                  {ext.tong_kg && <div>Tổng KG: <strong>{ext.tong_kg} kg</strong></div>}
+                  {ext.tong_kg && <div>Tổng KG: <strong>{ext.tong_kg}</strong></div>}
                   {(ext.hang_hoa?.length ?? 0) > 0 && <div>{ext.hang_hoa.length} dòng hàng</div>}
                   <Space style={{ marginTop: 6 }}>
                     <Button size="small" type="primary" icon={<FormOutlined />} onClick={() => {
@@ -813,19 +820,19 @@ export default function ReceiptsPage() {
               >
                 <Row gutter={16} align="middle">
                   <Col span={10}>
-                    <Form.Item name="hd_tong_kg" label="Tổng KG trên phiếu xuất NCC" style={{ marginBottom: 0 }}>
+                    <Form.Item name="hd_tong_kg" label={`Tổng ${dominantDvt} trên phiếu xuất NCC`} style={{ marginBottom: 0 }}>
                       <InputNumber
                         style={{ width: '100%' }}
-                        placeholder="Nhập tổng KG từ phiếu NCC"
+                        placeholder={`Nhập tổng ${dominantDvt} từ phiếu NCC`}
                         min={0}
                         formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                       />
                     </Form.Item>
                     {kgLech !== null && (
                       <div style={{ color: Math.abs(kgLech) < 1 ? '#52c41a' : '#ff4d4f', fontSize: 12, marginTop: 4 }}>
-                        Tính được: <strong>{calcTongKg.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} kg</strong>
+                        Tính được: <strong>{calcTongKg.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} {dominantDvt}</strong>
                         {Math.abs(kgLech) >= 1 && (
-                          <span> | Lệch: <strong>{kgLech > 0 ? '+' : ''}{kgLech.toFixed(1)} kg</strong></span>
+                          <span> | Lệch: <strong>{kgLech > 0 ? '+' : ''}{kgLech.toFixed(1)} {dominantDvt}</strong></span>
                         )}
                       </div>
                     )}
@@ -833,11 +840,11 @@ export default function ReceiptsPage() {
                   <Col span={14} style={{ paddingTop: kgLech !== null ? 0 : 4 }}>
                     <div style={{ fontSize: 13, color: '#555' }}>
                       <span style={{ fontWeight: 600 }}>{watchedItems.length}</span> mã hàng |{' '}
-                      <span style={{ fontWeight: 600 }}>{calcTongKg.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} kg</span> tổng nhập
+                      <span style={{ fontWeight: 600 }}>{calcTongKg.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} {dominantDvt}</span> tổng nhập
                     </div>
                     {hdTongKgWatch == null || hdTongKgWatch === '' ? (
                       <div style={{ fontSize: 12, color: '#bbb', marginTop: 2 }}>
-                        Nhập KG từ phiếu NCC để kiểm tra lệch
+                        Nhập {dominantDvt} từ phiếu NCC để kiểm tra lệch
                       </div>
                     ) : null}
                   </Col>
