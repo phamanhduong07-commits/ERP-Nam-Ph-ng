@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import {
   FileExcelOutlined, FileImageOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
-  CheckCircleOutlined, UploadOutlined, AppstoreOutlined,
+  CheckCircleOutlined, UploadOutlined, AppstoreOutlined, ScanOutlined, FormOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
@@ -18,7 +18,7 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import EmptyState from "../../components/EmptyState"
-import HoanThienGiayModal from '../../components/HoanThienGiayModal'
+import { mediaApi } from '../../api/media'
 
 const { Title, Text } = Typography
 
@@ -55,7 +55,9 @@ export default function NhapPhoiNgoaiPage() {
   const [formPxId, setFormPxId] = useState<number | null>(null)
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null)
   const [invoicePreviewUrl, setInvoicePreviewUrl] = useState<string | null>(null)
-  const [hoanThienId, setHoanThienId] = useState<number | null>(null)
+  const [editingDraftId, setEditingDraftId] = useState<number | null>(null)
+  const [ocrResult, setOcrResult] = useState<Record<number, any>>({})
+  const [ocrLoading, setOcrLoading] = useState(false)
 
   const watchedItems = (Form.useWatch('items', form) ?? []) as Record<string, unknown>[]
   const hdTongKgWatch = Form.useWatch('hd_tong_kg', form)
@@ -111,13 +113,22 @@ export default function NhapPhoiNgoaiPage() {
     setOpen(false)
     setInvoiceFile(null)
     setInvoicePreviewUrl(null)
+    setEditingDraftId(null)
     form.resetFields()
     setSelectedPO(undefined)
     setFormPxId(null)
   }
 
-  const handleOpenDraft = (r: GoodsReceipt) => {
-    setHoanThienId(r.id)
+  const handleOpenDraft = async (r: GoodsReceipt) => {
+    const detail = await warehouseApi.getGoodsReceipt(r.id).then(res => res.data)
+    setEditingDraftId(r.id)
+    if (detail.invoice_image) setInvoicePreviewUrl(detail.invoice_image)
+    form.setFieldsValue({
+      so_xe: detail.so_xe, ngay_nhap: detail.ngay_nhap ? dayjs(detail.ngay_nhap) : undefined,
+      supplier_id: detail.supplier_id, phap_nhan_id: detail.phap_nhan_id,
+      warehouse_id: detail.warehouse_id, hd_tong_kg: detail.hd_tong_kg, ghi_chu: detail.ghi_chu, items: [],
+    })
+    setOpen(true)
   }
 
   const createMut = useMutation({
@@ -203,19 +214,23 @@ export default function NhapPhoiNgoaiPage() {
       let invoice_image: string | null = null
       if (invoiceFile) invoice_image = await fileToBase64(invoiceFile)
 
-      createMut.mutate({
-        ngay_nhap: v.ngay_nhap.format('YYYY-MM-DD'),
-        po_id: v.po_id || null,
-        supplier_id: v.supplier_id,
-        warehouse_id: v.warehouse_id,
-        loai_nhap: 'PHOI_NGOAI',
-        phap_nhan_id: v.phap_nhan_id || null,
-        ghi_chu: v.ghi_chu || null,
-        so_xe: v.so_xe || null,
-        invoice_image,
-        hd_tong_kg: v.hd_tong_kg || null,
-        items,
-      } as CreateGoodsReceiptPayload)
+      if (editingDraftId) {
+        completeMut.mutate({ id: editingDraftId, data: { warehouse_id: v.warehouse_id || null, ghi_chu: v.ghi_chu || null, hd_tong_kg: v.hd_tong_kg || null, items } })
+      } else {
+        createMut.mutate({
+          ngay_nhap: v.ngay_nhap.format('YYYY-MM-DD'),
+          po_id: v.po_id || null,
+          supplier_id: v.supplier_id,
+          warehouse_id: v.warehouse_id,
+          loai_nhap: 'PHOI_NGOAI',
+          phap_nhan_id: v.phap_nhan_id || null,
+          ghi_chu: v.ghi_chu || null,
+          so_xe: v.so_xe || null,
+          invoice_image,
+          hd_tong_kg: v.hd_tong_kg || null,
+          items,
+        } as CreateGoodsReceiptPayload)
+      }
     } catch { /* validation inline */ }
   }
 
@@ -379,7 +394,7 @@ export default function NhapPhoiNgoaiPage() {
               Xuất Excel
             </Button>
             <Button type="primary" icon={<PlusOutlined />}
-              onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setOpen(true) }}>
+              onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setEditingDraftId(null); setOpen(true) }}>
               Tạo phiếu nhập phôi
             </Button>
           </Space>
@@ -420,11 +435,11 @@ export default function NhapPhoiNgoaiPage() {
         width="98vw"
         style={{ top: 8, padding: 0 }}
         styles={{ body: { padding: '12px 16px', height: 'calc(100vh - 120px)', overflow: 'hidden' } }}
-        title="Tạo phiếu nhập phôi sóng (mua ngoài)"
+        title={editingDraftId ? '✏️ Hoàn thiện phiếu nhập phôi sóng' : 'Tạo phiếu nhập phôi sóng (mua ngoài)'}
         footer={
           <Space>
             <Button onClick={handleClose}>Huỷ</Button>
-            <Button type="primary" loading={createMut.isPending} onClick={handleSubmit}>
+            <Button type="primary" loading={createMut.isPending || completeMut.isPending} onClick={handleSubmit}>
               Lưu phiếu nhập phôi
             </Button>
           </Space>
@@ -443,8 +458,28 @@ export default function NhapPhoiNgoaiPage() {
               {invoicePreviewUrl && (
                 <Button size="small" danger onClick={() => { setInvoiceFile(null); setInvoicePreviewUrl(null) }}>Xoá</Button>
               )}
+              {editingDraftId && (
+                <Button size="small" icon={<ScanOutlined />} loading={ocrLoading}
+                  style={{ color: '#722ed1', borderColor: '#722ed1' }}
+                  onClick={async () => {
+                    setOcrLoading(true)
+                    try {
+                      if (invoiceFile) await mediaApi.upload('goods_receipts', editingDraftId, invoiceFile, 'Phiếu xuất NCC')
+                      const res = await warehouseApi.extractImageOcr(editingDraftId).then(r => r.data)
+                      const ext = res.extracted ?? {}
+                      setOcrResult(prev => ({ ...prev, [editingDraftId]: ext }))
+                      if (ext.so_xe) form.setFieldValue('so_xe', ext.so_xe)
+                      if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
+                      message.success('Đọc ảnh xong')
+                    } catch (e: unknown) {
+                      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi đọc ảnh')
+                    } finally { setOcrLoading(false) }
+                  }}>
+                  Đọc ảnh (AI)
+                </Button>
+              )}
             </div>
-            <div style={{ flex: 1, overflow: 'auto', background: '#fafafa', border: '1px dashed #d9d9d9', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ height: 300, overflow: 'auto', background: '#fafafa', border: '1px dashed #d9d9d9', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {invoicePreviewUrl ? (
                 <Image src={invoicePreviewUrl} style={{ maxWidth: '100%', cursor: 'zoom-in' }} preview={{ mask: 'Xem lớn' }} />
               ) : (
@@ -455,6 +490,24 @@ export default function NhapPhoiNgoaiPage() {
                 </div>
               )}
             </div>
+            {editingDraftId && ocrResult[editingDraftId] && (() => {
+              const ext = ocrResult[editingDraftId]
+              return (
+                <div style={{ marginTop: 8, background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 4, padding: '8px 10px', fontSize: 12 }}>
+                  <div style={{ fontWeight: 600, color: '#52c41a', marginBottom: 4 }}>✅ OCR đã đọc xong</div>
+                  {ext.ten_ncc && <div>NCC: <strong>{ext.ten_ncc}</strong></div>}
+                  {ext.so_xe && <div>Số xe: <strong>{ext.so_xe}</strong></div>}
+                  {ext.tong_kg && <div>Tổng: <strong>{ext.tong_kg} kg</strong></div>}
+                  {(ext.hang_hoa?.length ?? 0) > 0 && (
+                    <Button size="small" type="primary" icon={<FormOutlined />} style={{ marginTop: 6 }} onClick={() => {
+                      if (ext.so_xe) form.setFieldValue('so_xe', ext.so_xe)
+                      if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
+                      message.success('Đã điền thông tin từ OCR')
+                    }}>Điền vào form</Button>
+                  )}
+                </div>
+              )
+            })()}
           </Col>
 
           {/* RIGHT: FORM */}
@@ -635,18 +688,6 @@ export default function NhapPhoiNgoaiPage() {
         </Row>
       </Modal>
 
-      {hoanThienId && (
-        <HoanThienGiayModal
-          grId={hoanThienId}
-          title="Hoàn thiện phiếu nhập phôi sóng"
-          onClose={() => setHoanThienId(null)}
-          onSuccess={() => {
-            setHoanThienId(null)
-            qc.invalidateQueries({ queryKey: ['goods-receipts-phoi'] })
-            qc.invalidateQueries({ queryKey: ['ton-kho'] })
-          }}
-        />
-      )}
     </div>
   )
 }
