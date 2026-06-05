@@ -99,8 +99,8 @@ export default function NhapPhoiNgoaiPage() {
   })
 
   const { data: poList = [] } = useQuery({
-    queryKey: ['purchase-orders-giay-cuon'],
-    queryFn: () => purchaseApi.list({ loai_po: 'giay_cuon', trang_thai: 'da_duyet' }).then(r => r.data),
+    queryKey: ['purchase-orders-da-duyet'],
+    queryFn: () => purchaseApi.list({ trang_thai: 'da_duyet' }).then(r => r.data),
     staleTime: 60_000,
   })
 
