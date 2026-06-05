@@ -152,7 +152,13 @@ export default function HoanThienGiayModal({ grId, onClose, onSuccess }: Props) 
     setOcrLoading(true)
     try {
       if (invoiceFile) {
+        // User chọn file mới → upload lên erp_media
         await mediaApi.upload('goods_receipts', grId, invoiceFile, 'Phiếu xuất NCC')
+      } else if (invoicePreviewUrl && !grMediaUrl) {
+        // Ảnh từ invoice_image (base64 trong DB) → convert sang File rồi upload
+        const blob = await fetch(invoicePreviewUrl).then(r => r.blob())
+        const file = new File([blob], 'phieu_xuat_ncc.jpg', { type: blob.type || 'image/jpeg' })
+        await mediaApi.upload('goods_receipts', grId, file, 'Phiếu xuất NCC')
       }
       const res = await warehouseApi.extractImageOcr(grId)
       const ext = res.data.extracted ?? {}
