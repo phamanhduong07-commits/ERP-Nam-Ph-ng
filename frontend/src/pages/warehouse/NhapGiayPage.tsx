@@ -9,7 +9,7 @@ import {
 import {
   FileExcelOutlined, FileImageOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
   CheckCircleOutlined, DollarOutlined, ThunderboltOutlined, UploadOutlined, RollbackOutlined,
-  AuditOutlined, ScanOutlined,
+  AuditOutlined, ScanOutlined, FormOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
@@ -708,6 +708,32 @@ export default function NhapGiayPage() {
                   {ext.so_xe && <div>Số xe: <strong>{ext.so_xe}</strong></div>}
                   {ext.tong_kg && <div>Tổng KG: <strong>{ext.tong_kg} kg</strong></div>}
                   {(ext.hang_hoa?.length ?? 0) > 0 && <div>{ext.hang_hoa.length} dòng hàng đã đọc</div>}
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<FormOutlined />}
+                    style={{ marginTop: 6 }}
+                    onClick={() => {
+                      if (ext.so_xe) form.setFieldValue('so_xe', ext.so_xe)
+                      if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
+                      if ((ext.hang_hoa?.length ?? 0) > 0) {
+                        form.setFieldValue('items', ext.hang_hoa.map((h: any) => ({
+                          mat_id: null,
+                          ten_hang: h.ten || '',
+                          so_luong: h.trong_luong_kg ?? null,
+                          dvt: 'Kg',
+                          don_gia: 0,
+                          kho_mm: h.kho_mm ?? null,
+                          so_cuon: h.so_cuon ?? null,
+                          ky_hieu_cuon: h.ky_hieu ?? null,
+                          ket_qua_kiem_tra: 'DAT',
+                        })))
+                        message.success(`Đã điền ${ext.hang_hoa.length} dòng hàng vào form`)
+                      }
+                    }}
+                  >
+                    Điền vào form
+                  </Button>
                 </div>
               )
             })()}
