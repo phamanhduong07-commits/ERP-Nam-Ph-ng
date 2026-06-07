@@ -68,7 +68,7 @@ export default function KhoLoiPage() {
 
   const { data: phapNhanList = [] } = useQuery<{ id: number; ten_viet_tat: string }[]>({
     queryKey: ['phap-nhan-list'],
-    queryFn: () => client.get<{ id: number; ten_viet_tat: string }[]>('/master/phap-nhan').then(r => r.data),
+    queryFn: () => client.get<{ id: number; ten_viet_tat: string }[]>('/phap-nhan').then(r => r.data),
     staleTime: 5 * 60 * 1000,
   })
 
