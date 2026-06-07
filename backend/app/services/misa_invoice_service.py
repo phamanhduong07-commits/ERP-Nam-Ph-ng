@@ -1,6 +1,6 @@
 """MISA meInvoice API client — Tích hợp hóa đơn điện tử"""
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 import requests

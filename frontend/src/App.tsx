@@ -54,9 +54,11 @@ const AddonRateList = lazy(() => import('./pages/danhmuc/AddonRateList'))
 const TemPaperPriceList = lazy(() => import('./pages/danhmuc/TemPaperPriceList'))
 const OffsetAddonPriceList = lazy(() => import('./pages/danhmuc/OffsetAddonPriceList'))
 const BomListPage = lazy(() => import('./pages/production/BomListPage'))
+const CostAnalysisPage = lazy(() => import('./pages/production/CostAnalysisPage'))
 const PhieuPhoiPage = lazy(() => import('./pages/production/PhieuPhoiPage'))
 const KhoPhoiPage = lazy(() => import('./pages/production/KhoPhoiPage'))
 const KhoThanhPhamPage = lazy(() => import('./pages/production/KhoThanhPhamPage'))
+const KhoLoiPage = lazy(() => import('./pages/production/KhoLoiPage'))
 const PhieuNhapPhoiSongPage = lazy(() => import('./pages/production/PhieuNhapPhoiSongPage'))
 const CD2KanbanPage = lazy(() => import('./pages/production/CD2KanbanPage'))
 const ScanMayPage = lazy(() => import('./pages/production/ScanMayPage'))
@@ -301,12 +303,14 @@ export default function App() {
             <Route path="production/tan-dung" element={<TanDungPlanPage />} />
             <Route path="production/queue" element={<ProductionQueuePage />} />
             <Route path="production/bom" element={<BomListPage />} />
+            <Route path="production/cost-analysis" element={<CostAnalysisPage />} />
             <Route path="production/phieu-phoi" element={<PhieuPhoiPage />} />
             <Route path="sales/theo-don-hang" element={<TheoDonHangPage />} />
             <Route path="sales/giao-hang" element={<GiaoHangPage />} />
             <Route path="production/phieu-nhap-phoi" element={<PhieuNhapPhoiSongPage />} />
             <Route path="production/kho-phoi" element={<KhoPhoiPage />} />
             <Route path="production/kho-thanh-pham" element={<ErrorBoundary><KhoThanhPhamPage /></ErrorBoundary>} />
+            <Route path="production/kho-loi" element={<ErrorBoundary><KhoLoiPage /></ErrorBoundary>} />
             <Route path="production/cd2" element={<CD2KanbanPage />} />
             <Route path="production/cd2/dashboard" element={<CD2DashboardPage />} />
             <Route path="production/cd2/may-in" element={<MayInQueuePage />} />

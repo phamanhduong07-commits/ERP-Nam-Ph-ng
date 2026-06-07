@@ -359,6 +359,153 @@ def delete_material_issue(mi_id: int, db: Session = Depends(get_db), current_use
     return {"ok": True}
 
 
+@router.post("/material-issues/{mi_id}/allocate")
+def allocate_material_issue(
+    mi_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "ADMIN", "GIAM_DOC")),
+):
+    """Phân bổ kg giấy thực xuất về từng LSX theo trọng số m² × hệ số lớp.
+
+    Kết quả ghi vào MaterialIssueItem.allocation_detail (JSON).
+    Có thể gọi lại để tính lại bất cứ lúc nào.
+    """
+    import json
+    from app.models.production import ProductionOrderItem
+    from app.models.bom import ProductionBOM, ProductionBOMItem
+    from app.models.master import PaperMaterial
+    from app.models.layer_allocation_coefficient import LayerAllocationCoefficient
+
+    mi = (
+        db.query(MaterialIssue)
+        .options(selectinload(MaterialIssue.items))
+        .filter(MaterialIssue.id == mi_id)
+        .first()
+    )
+    if not mi:
+        raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
+
+    lsx_list = (
+        db.query(ProductionOrderItem)
+        .filter(ProductionOrderItem.production_order_id == mi.production_order_id)
+        .all()
+    )
+    if not lsx_list:
+        raise HTTPException(400, "KHSX chưa có LSX nào — không thể phân bổ")
+
+    # Build: lsx_id → (lsx, bom_items)
+    lsx_bom_map: dict[int, tuple] = {}
+    for lsx in lsx_list:
+        bom = (
+            db.query(ProductionBOM)
+            .filter(
+                ProductionBOM.production_order_item_id == lsx.id,
+                ProductionBOM.trang_thai == "confirmed",
+            )
+            .order_by(ProductionBOM.id.desc())
+            .first()
+        )
+        if bom:
+            bom_items = (
+                db.query(ProductionBOMItem)
+                .filter(ProductionBOMItem.bom_id == bom.id)
+                .all()
+            )
+            lsx_bom_map[lsx.id] = (lsx, bom_items)
+
+    # Hệ số lookup: (loai_lop, flute_type) → he_so
+    coeffs = db.query(LayerAllocationCoefficient).all()
+    coeff_map: dict[tuple, Decimal] = {
+        (c.loai_lop, c.flute_type): c.he_so for c in coeffs
+    }
+
+    def _he_so(loai_lop: str, flute_type: str | None) -> Decimal:
+        return coeff_map.get((loai_lop, flute_type), Decimal("1.0"))
+
+    summary_items = []
+
+    for mi_item in mi.items:
+        if not mi_item.paper_material_id:
+            mi_item.allocation_detail = json.dumps([], ensure_ascii=False)
+            continue
+
+        pm = db.get(PaperMaterial, mi_item.paper_material_id)
+        if not pm or not pm.ma_ky_hieu:
+            mi_item.allocation_detail = json.dumps([], ensure_ascii=False)
+            continue
+
+        ma_ky_hieu = pm.ma_ky_hieu.strip().upper()
+
+        # Tìm tất cả BOM items khớp mã ký hiệu giấy này, trong tất cả LSX
+        candidates = []
+        for lsx_id, (lsx, bom_items) in lsx_bom_map.items():
+            for bi in bom_items:
+                if bi.ma_ky_hieu and bi.ma_ky_hieu.strip().upper() == ma_ky_hieu:
+                    if bi.dien_tich_1con and bi.dien_tich_1con > 0 and bi.so_luong_sx > 0:
+                        he_so = _he_so(bi.loai_lop, bi.flute_type)
+                        w = Decimal(str(bi.dien_tich_1con)) * Decimal(str(bi.so_luong_sx)) * he_so
+                        candidates.append({
+                            "lsx_id": lsx_id,
+                            "lsx_ten_hang": lsx.ten_hang,
+                            "bom_item_id": bi.id,
+                            "loai_lop": bi.loai_lop,
+                            "flute_type": bi.flute_type,
+                            "dien_tich_1con": float(bi.dien_tich_1con),
+                            "so_luong_sx": float(bi.so_luong_sx),
+                            "he_so": float(he_so),
+                            "w": w,
+                        })
+
+        total_w = sum(c["w"] for c in candidates)
+        kg_thuc = Decimal(str(mi_item.so_luong_thuc_xuat))
+        don_gia = Decimal(str(mi_item.don_gia))
+
+        detail_rows = []
+        for c in candidates:
+            if total_w > 0:
+                share = c["w"] / total_w
+                kg_phan_bo = (kg_thuc * share).quantize(Decimal("0.001"))
+            else:
+                share = Decimal("0")
+                kg_phan_bo = Decimal("0")
+            thanh_tien = (kg_phan_bo * don_gia).quantize(Decimal("0.01"))
+            detail_rows.append({
+                "lsx_id": c["lsx_id"],
+                "lsx_ten_hang": c["lsx_ten_hang"],
+                "bom_item_id": c["bom_item_id"],
+                "loai_lop": c["loai_lop"],
+                "flute_type": c["flute_type"],
+                "dien_tich_1con": c["dien_tich_1con"],
+                "so_luong_sx": c["so_luong_sx"],
+                "he_so": c["he_so"],
+                "w_m2": float(c["w"]),
+                "share_pct": float(share),
+                "kg_phan_bo": float(kg_phan_bo),
+                "thanh_tien": float(thanh_tien),
+            })
+
+        mi_item.allocation_detail = json.dumps(detail_rows, ensure_ascii=False)
+        summary_items.append({
+            "mi_item_id": mi_item.id,
+            "ten_hang": mi_item.ten_hang,
+            "kg_thuc": float(kg_thuc),
+            "lsx_count": len(detail_rows),
+            "total_kg_phan_bo": sum(r["kg_phan_bo"] for r in detail_rows),
+        })
+
+    db.commit()
+    logger.info("Allocated MI %s: %d items, %d LSX matched", mi.so_phieu, len(summary_items), len(lsx_bom_map))
+    return {
+        "ok": True,
+        "mi_id": mi.id,
+        "so_phieu": mi.so_phieu,
+        "allocated_items": len(summary_items),
+        "lsx_with_bom": len(lsx_bom_map),
+        "lsx_total": len(lsx_list),
+        "items": summary_items,
+    }
+
+
 def _mi_to_dict(mi: MaterialIssue, db: Session) -> dict:
     wh = db.get(Warehouse, mi.warehouse_id)
     lsx = db.get(ProductionOrder, mi.production_order_id)
@@ -367,6 +514,7 @@ def _mi_to_dict(mi: MaterialIssue, db: Session) -> dict:
         "id": mi.id,
         "so_phieu": mi.so_phieu,
         "ngay_xuat": str(mi.ngay_xuat),
+        "ca": mi.ca,
         "production_order_id": mi.production_order_id,
         "so_lenh": lsx.so_lenh if lsx else "",
         "warehouse_id": mi.warehouse_id,
@@ -384,6 +532,7 @@ def _mi_to_dict(mi: MaterialIssue, db: Session) -> dict:
             "so_luong_thuc_xuat": float(it.so_luong_thuc_xuat),
             "dvt": it.dvt,
             "don_gia": float(it.don_gia),
+            "allocation_detail": it.allocation_detail,
             "ghi_chu": it.ghi_chu,
         } for it in mi.items],
     }

@@ -78,6 +78,7 @@ class MaterialIssue(Base):
     ngay_xuat: Mapped[date] = mapped_column(Date, nullable=False)
     production_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=False)
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    ca: Mapped[str | None] = mapped_column(String(10))  # "sang" | "chieu" | "toi"
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")  # nhap | da_xuat | huy
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
@@ -104,6 +105,7 @@ class MaterialIssueItem(Base):
     so_luong_thuc_xuat: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0)
     dvt: Mapped[str] = mapped_column(String(20), default="Kg")
     don_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    allocation_detail: Mapped[str | None] = mapped_column(Text)  # JSON: kết quả phân bổ kg về từng LSX
     ghi_chu: Mapped[str | None] = mapped_column(Text)
 
     issue: Mapped["MaterialIssue"] = relationship("MaterialIssue", back_populates="items")

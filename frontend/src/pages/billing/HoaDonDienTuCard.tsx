@@ -4,8 +4,8 @@ import {
   Select, Space, Table, Tag, Tooltip, App,
 } from 'antd'
 import {
-  CheckCircleOutlined, DeleteOutlined, FileTextOutlined,
-  PlusOutlined, StopOutlined, SyncOutlined,
+  CheckCircleOutlined, DeleteOutlined, EyeOutlined, FileTextOutlined,
+  PrinterOutlined, PlusOutlined, StopOutlined, SyncOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
@@ -18,6 +18,8 @@ import type { SalesInvoice } from '../../api/billing'
 import type { DeliveryOrder, DeliveryOrderItem } from '../../api/deliveries'
 import { useAuthStore } from '../../store/auth'
 import { fmtVND } from '../../utils/exportUtils'
+import { printHoaDonDienTu } from '../../utils/printHoaDonDienTu'
+import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import EmptyState from "../../components/EmptyState"
 
 interface ApiError {
@@ -44,6 +46,9 @@ export default function HoaDonDienTuCard({ invoice, deliveryOrder }: Props) {
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showHuyModal, setShowHuyModal] = useState<HoaDonDienTu | null>(null)
+  const [viewModal, setViewModal] = useState<HoaDonDienTu | null>(null)
+
+  const printCompany = usePhapNhanForPrint(viewModal?.phap_nhan_id ?? invoice.phap_nhan_id)
   const [createForm] = Form.useForm()
   const [huyForm] = Form.useForm()
 
@@ -177,6 +182,9 @@ export default function HoaDonDienTuCard({ invoice, deliveryOrder }: Props) {
       width: 160,
       render: (_, r) => (
         <Space size="small">
+          <Tooltip title="Xem chi tiết">
+            <Button size="small" icon={<EyeOutlined />} onClick={() => setViewModal(r)} />
+          </Tooltip>
           {r.pdf_url && (
             <Tooltip title="Xem PDF">
               <Button size="small" icon={<FileTextOutlined />}
@@ -324,6 +332,65 @@ export default function HoaDonDienTuCard({ invoice, deliveryOrder }: Props) {
             <Input.TextArea rows={2} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Modal xem chi tiết HĐDT */}
+      <Modal
+        title={`Chi tiết HĐDT${viewModal?.so_hoa_don ? ` — ${viewModal.so_hoa_don}` : ' (Nháp)'}`}
+        open={!!viewModal}
+        onCancel={() => setViewModal(null)}
+        footer={
+          <Space>
+            <Button icon={<PrinterOutlined />}
+              onClick={() => viewModal && printHoaDonDienTu(viewModal, printCompany)}>
+              In hóa đơn
+            </Button>
+            {viewModal?.pdf_url && (
+              <Button icon={<FileTextOutlined />} onClick={() => window.open(viewModal.pdf_url!, '_blank')}>Xem PDF</Button>
+            )}
+          </Space>
+        }
+        width={700}
+        destroyOnClose
+      >
+        {viewModal && (
+          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 13 }}>
+              <div><span style={{ color: '#888' }}>Ngày lập: </span><strong>{dayjs(viewModal.ngay_lap).format('DD/MM/YYYY')}</strong></div>
+              <div><span style={{ color: '#888' }}>Loại HĐ: </span><strong>{{1:'01 — HĐ GTGT', 2:'02 — HĐ bán hàng', 7:'07 — Phiếu xuất kho'}[viewModal.loai_hd as unknown as number] ?? viewModal.loai_hd}</strong></div>
+              <div><span style={{ color: '#888' }}>Trạng thái: </span><Tag color={TRANG_THAI_HDT_COLOR[viewModal.trang_thai]}>{TRANG_THAI_HDT[viewModal.trang_thai]}</Tag></div>
+              {viewModal.ky_hieu && <div><span style={{ color: '#888' }}>Ký hiệu: </span><strong>{viewModal.ky_hieu}</strong></div>}
+            </div>
+            <div style={{ fontSize: 13 }}>
+              <div><span style={{ color: '#888' }}>Khách hàng: </span><strong>{viewModal.ten_khach_hang}</strong></div>
+              {viewModal.ma_so_thue_kh && <div><span style={{ color: '#888' }}>MST: </span>{viewModal.ma_so_thue_kh}</div>}
+              {viewModal.dia_chi_kh && <div><span style={{ color: '#888' }}>Địa chỉ: </span>{viewModal.dia_chi_kh}</div>}
+            </div>
+            {(viewModal.items ?? []).length > 0 && (
+              <Table
+                size="small"
+                dataSource={viewModal.items ?? []}
+                rowKey={(_, i) => i ?? 0}
+                pagination={false}
+                columns={[
+                  { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+                  { title: 'ĐVT', dataIndex: 'don_vi', width: 60 },
+                  { title: 'SL', dataIndex: 'so_luong', width: 70, align: 'right' as const },
+                  { title: 'Đơn giá', dataIndex: 'don_gia', width: 120, align: 'right' as const, render: (v: number) => fmtVND(v) },
+                  { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 120, align: 'right' as const, render: (v: number) => fmtVND(v) },
+                  { title: 'Thuế suất', dataIndex: 'thue_suat', width: 80, align: 'center' as const },
+                ]}
+              />
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 24, paddingTop: 8, borderTop: '1px solid #f0f0f0', fontSize: 13 }}>
+              <div><span style={{ color: '#888' }}>Tiền hàng: </span><strong>{fmtVND(viewModal.tong_tien_hang)}</strong></div>
+              <div><span style={{ color: '#888' }}>Thuế GTGT: </span><strong>{fmtVND(viewModal.tien_thue_gtgt)}</strong></div>
+              <div><span style={{ color: '#888' }}>Tổng cộng: </span><strong style={{ color: '#1677ff', fontSize: 14 }}>{fmtVND(viewModal.tong_cong)}</strong></div>
+            </div>
+            {viewModal.ghi_chu && <div style={{ fontSize: 12, color: '#888' }}>Ghi chú: {viewModal.ghi_chu}</div>}
+            {viewModal.ly_do_huy && <div style={{ fontSize: 12, color: '#f5222d' }}>Lý do hủy: {viewModal.ly_do_huy}</div>}
+          </Space>
+        )}
       </Modal>
 
       {/* Modal hủy HĐDT */}

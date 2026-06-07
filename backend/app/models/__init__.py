@@ -38,3 +38,4 @@ import app.models.system  # noqa: F401
 import app.models.warehouse_doc  # noqa: F401
 import app.models.yeu_cau_giao_hang  # noqa: F401
 import app.models.media  # noqa: F401
+import app.models.layer_allocation_coefficient  # noqa: F401

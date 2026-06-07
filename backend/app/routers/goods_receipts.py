@@ -671,7 +671,12 @@ def extract_image_ocr(
     except HTTPException:
         raise
     except RuntimeError as e:
-        raise HTTPException(503, str(e))
+        msg = str(e)
+        if "leaked" in msg.lower() or "PERMISSION_DENIED" in msg:
+            raise HTTPException(422, "Gemini API key không hợp lệ hoặc đã bị revoke. Vui lòng cập nhật GEMINI_API_KEY trong cấu hình.")
+        if "503" in msg or "UNAVAILABLE" in msg or "high demand" in msg.lower():
+            raise HTTPException(503, "Gemini API tạm thời quá tải. Vui lòng thử lại sau vài phút.")
+        raise HTTPException(503, msg)
     except Exception as e:
         import traceback
         logger.error("OCR lỗi không mong muốn: %s", e, exc_info=True)

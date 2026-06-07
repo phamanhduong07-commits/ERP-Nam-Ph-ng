@@ -501,6 +501,7 @@ class HoaDonDienTu(Base):
     loai_hd: Mapped[str] = mapped_column(String(5), default="1")  # 1=GTGT, 2=bán hàng, 7=xuất kho
 
     sales_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sales_orders.id"), nullable=True)
+    sales_invoice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sales_invoices.id"), nullable=True)
     customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id"), nullable=True)
 
     ten_khach_hang: Mapped[str] = mapped_column(String(255), nullable=False)

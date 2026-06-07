@@ -18,6 +18,7 @@ export interface HoaDonDienTu {
   ngay_lap: string
   loai_hd: string   // "1"=GTGT, "2"=bán hàng
   sales_order_id: number | null
+  sales_invoice_id: number | null
   customer_id: number | null
   ten_khach_hang: string
   ma_so_thue_kh: string | null

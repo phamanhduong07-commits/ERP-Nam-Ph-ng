@@ -403,6 +403,103 @@ def ton_kho_tp_lsx(
     return result
 
 
+@router.get("/kho-loi-tra-ve")
+def kho_loi_tra_ve(
+    phap_nhan_id: Optional[int] = Query(default=None),
+    phan_xuong_id: Optional[int] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Kho ảo: tổng hợp hàng lỗi (từ ProductionOutput) + hàng trả về xấu (SalesReturnItem)."""
+    pn_map = {p.id: p.ten_viet_tat for p in db.query(PhapNhan).all()}
+
+    # ── Hàng lỗi từ sản xuất ─────────────────────────────────────────────────
+    loi_q = (
+        db.query(ProductionOutput)
+        .options(
+            joinedload(ProductionOutput.production_order).joinedload(ProductionOrder.phan_xuong),
+            joinedload(ProductionOutput.production_order).joinedload(ProductionOrder.phap_nhan),
+            joinedload(ProductionOutput.production_order).joinedload(ProductionOrder.sales_order)
+                .joinedload(SalesOrder.customer),
+        )
+        .filter(ProductionOutput.so_luong_loi > 0)
+    )
+    if phan_xuong_id:
+        loi_q = loi_q.join(ProductionOrder, ProductionOrder.id == ProductionOutput.production_order_id)\
+            .filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
+    if phap_nhan_id:
+        loi_q = loi_q.join(ProductionOrder, ProductionOrder.id == ProductionOutput.production_order_id,
+                            isouter=True)\
+            .filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
+
+    hang_loi = []
+    for po in loi_q.all():
+        order = po.production_order
+        kh = order.sales_order.customer if order and order.sales_order else None
+        hang_loi.append({
+            "id": po.id,
+            "so_phieu": po.so_phieu,
+            "ngay_nhap": po.ngay_nhap.isoformat() if po.ngay_nhap else None,
+            "so_lenh": order.so_lenh if order else None,
+            "ten_hang": po.ten_hang,
+            "so_luong_loi": float(po.so_luong_loi),
+            "dvt": po.dvt or "Thùng",
+            "ten_khach_hang": kh.ten_viet_tat if kh else None,
+            "ten_phan_xuong": order.phan_xuong.ten_xuong if order and order.phan_xuong else None,
+            "ten_phap_nhan": pn_map.get(order.phap_nhan_id) if order else None,
+            "ghi_chu": po.ghi_chu,
+        })
+
+    # ── Hàng trả về xấu (hong/loi) đã duyệt ─────────────────────────────────
+    tra_q = (
+        db.query(SalesReturnItem)
+        .options(
+            joinedload(SalesReturnItem.sales_return).joinedload(SalesReturn.customer),
+        )
+        .join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id)
+        .filter(
+            SalesReturnItem.tinh_trang_hang.in_(["hong", "loi"]),
+            SalesReturn.trang_thai == "da_duyet",
+        )
+    )
+    if phan_xuong_id or phap_nhan_id:
+        # Lọc qua DeliveryOrderItem → ProductionOrder
+        tra_q = tra_q.join(
+            DeliveryOrderItem,
+            or_(
+                SalesReturnItem.delivery_order_item_id == DeliveryOrderItem.id,
+                and_(
+                    SalesReturnItem.delivery_order_item_id.is_(None),
+                    DeliveryOrderItem.delivery_id == SalesReturn.delivery_order_id,
+                    DeliveryOrderItem.sales_order_item_id == SalesReturnItem.sales_order_item_id,
+                ),
+            ),
+            isouter=True,
+        ).join(ProductionOrder, ProductionOrder.id == DeliveryOrderItem.production_order_id, isouter=True)
+        if phan_xuong_id:
+            tra_q = tra_q.filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
+        if phap_nhan_id:
+            tra_q = tra_q.filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
+
+    hang_tra_ve = []
+    for item in tra_q.all():
+        sr = item.sales_return
+        kh = sr.customer if sr else None
+        hang_tra_ve.append({
+            "id": item.id,
+            "so_phieu_tra": sr.so_phieu_tra if sr else None,
+            "ngay_tra": sr.ngay_tra.isoformat() if sr and sr.ngay_tra else None,
+            "so_luong_tra": float(item.so_luong_tra),
+            "tinh_trang_hang": item.tinh_trang_hang,
+            "dvt": "Thùng",
+            "ten_khach_hang": kh.ten_viet_tat if kh else None,
+            "ly_do_tra": item.ly_do_tra or (sr.ly_do_tra if sr else None),
+            "ghi_chu": item.ghi_chu,
+        })
+
+    return {"hang_loi": hang_loi, "hang_tra_ve": hang_tra_ve}
+
+
 # ── Tồn kho giấy cuộn ────────────────────────────────────────────────────────
 
 @router.get("/ton-kho-giay")

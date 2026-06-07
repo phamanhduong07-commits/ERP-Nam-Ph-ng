@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node -e \"const axios = require\\('./node_modules/axios'\\); const c = axios.create\\({baseURL:'/api'}\\); const req = c.getUri\\({url:'/api/qc-sheets'}\\); console.log\\('URL:', req\\);\")"
+      "Bash(node -e \"const axios = require\\('./node_modules/axios'\\); const c = axios.create\\({baseURL:'/api'}\\); const req = c.getUri\\({url:'/api/qc-sheets'}\\); console.log\\('URL:', req\\);\")",
+      "PowerShell(Start-Process -FilePath \"D:\\\\NAM_PHUONG_SOFTWARE\\\\DU LIEU MPS\\\\erp-nam-phuong\\\\deploy.bat\" -Verb RunAs; Start-Sleep -Seconds 15; $body = \"username=admin&password=admin123\"; $login = Invoke-WebRequest -Uri \"http://localhost:8001/api/auth/login\" -Method POST -ContentType \"application/x-www-form-urlencoded\" -Body $body -UseBasicParsing -ErrorAction SilentlyContinue; $token = \\($login.Content | ConvertFrom-Json\\).access_token; $r = Invoke-WebRequest -Uri \"http://localhost:8001/api/purchase-orders/15/print\" -Headers @{Authorization=\"Bearer $token\"} -UseBasicParsing -ErrorAction SilentlyContinue; $unfilled = [regex]::Matches\\($r.Content, '\\\\{\\\\{[^}]+\\\\}\\\\}'\\) | ForEach-Object { $_.Value } | Select-Object -Unique; if \\($unfilled\\) { \"Unfilled: $\\($unfilled -join ', '\\)\" } else { \"OK. Length: $\\($r.Content.Length\\)\" })"
     ]
   }
 }

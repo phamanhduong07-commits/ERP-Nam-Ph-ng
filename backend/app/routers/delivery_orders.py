@@ -541,7 +541,12 @@ def extract_delivery_image_ocr(
         from app.utils.ocr import extract_phieu_giao_hang
         result = extract_phieu_giao_hang(str(img_path))
     except RuntimeError as e:
-        raise HTTPException(503, str(e))
+        msg = str(e)
+        if "leaked" in msg.lower() or "PERMISSION_DENIED" in msg:
+            raise HTTPException(422, "Gemini API key không hợp lệ hoặc đã bị revoke. Vui lòng cập nhật GEMINI_API_KEY trong cấu hình.")
+        if "503" in msg or "UNAVAILABLE" in msg or "high demand" in msg.lower():
+            raise HTTPException(503, "Gemini API tạm thời quá tải. Vui lòng thử lại sau vài phút.")
+        raise HTTPException(503, msg)
     except Exception as e:
         logger.error("OCR delivery lỗi: %s", e, exc_info=True)
         raise HTTPException(500, f"Lỗi OCR: {type(e).__name__}")

@@ -1,5 +1,20 @@
 # CLAUDE.md — ERP Nam Phương (erp-nam-phuong)
 
+## QUAN TRỌNG — Restart service (PHẢI dùng cách này)
+
+Không dùng `sc.exe` trực tiếp — sẽ bị từ chối quyền. Dùng lệnh này:
+
+```powershell
+"" | Out-File "D:\NAM_PHUONG_SOFTWARE\.deploying" -Encoding utf8
+Start-Process powershell -Verb RunAs -ArgumentList "-Command sc.exe stop NamPhuong-ERP; Start-Sleep 4; sc.exe start NamPhuong-ERP" -Wait
+Start-Sleep 12
+Remove-Item "D:\NAM_PHUONG_SOFTWARE\.deploying" -ErrorAction SilentlyContinue
+```
+
+Bắt buộc tạo `.deploying` trước khi stop — để error watcher không báo false alarm.
+
+Hoặc chạy `D:\NAM_PHUONG_SOFTWARE\deploy.bat` → chọn **[2] ERP** (cách đơn giản nhất).
+
 ## Stack
 - **Frontend**: React 18 + TypeScript + Vite + Ant Design 5 + React Query + Zustand
 - **Backend**: Python FastAPI + SQLAlchemy + Alembic + SQLite/PostgreSQL

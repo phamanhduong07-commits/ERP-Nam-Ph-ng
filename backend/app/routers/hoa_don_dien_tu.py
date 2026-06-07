@@ -24,6 +24,7 @@ class HoaDonDienTuCreate(BaseModel):
     tien_thue_gtgt: Decimal = Decimal("0")
     customer_id: Optional[int] = None
     sales_order_id: Optional[int] = None
+    sales_invoice_id: Optional[int] = None
     ky_hieu: Optional[str] = None
     mau_so: Optional[str] = None
     ma_so_thue_kh: Optional[str] = None
@@ -42,6 +43,7 @@ class HoaDonDienTuUpdate(BaseModel):
     tien_thue_gtgt: Optional[Decimal] = None
     customer_id: Optional[int] = None
     sales_order_id: Optional[int] = None
+    sales_invoice_id: Optional[int] = None
     ky_hieu: Optional[str] = None
     mau_so: Optional[str] = None
     ma_so_thue_kh: Optional[str] = None
@@ -60,6 +62,7 @@ def _serialize(hdt: HoaDonDienTu) -> dict:
         "ngay_lap": hdt.ngay_lap.isoformat() if hdt.ngay_lap else None,
         "loai_hd": hdt.loai_hd,
         "sales_order_id": hdt.sales_order_id,
+        "sales_invoice_id": hdt.sales_invoice_id,
         "customer_id": hdt.customer_id,
         "ten_khach_hang": hdt.ten_khach_hang,
         "ma_so_thue_kh": hdt.ma_so_thue_kh,
@@ -87,6 +90,7 @@ def list_hdt(
     tu_ngay: Optional[date] = Query(None),
     den_ngay: Optional[date] = Query(None),
     phap_nhan_id: Optional[int] = Query(None),
+    sales_invoice_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -99,6 +103,8 @@ def list_hdt(
         q = q.filter(HoaDonDienTu.ngay_lap <= den_ngay)
     if phap_nhan_id:
         q = q.filter(HoaDonDienTu.phap_nhan_id == phap_nhan_id)
+    if sales_invoice_id:
+        q = q.filter(HoaDonDienTu.sales_invoice_id == sales_invoice_id)
     return [_serialize(h) for h in q.order_by(HoaDonDienTu.ngay_lap.desc()).all()]
 
 

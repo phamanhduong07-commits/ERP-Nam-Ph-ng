@@ -25,6 +25,7 @@ import { systemApi } from '../../api/system'
 import { usePhapNhanList } from '../../hooks/usePhapNhan'
 import { phapNhanApi } from '../../api/phap_nhan'
 import EmptyState from "../../components/EmptyState"
+import HoaDonDienTuCard from './HoaDonDienTuCard'
 
 const { Title, Text } = Typography
 
@@ -535,6 +536,9 @@ export default function SalesInvoiceDetailPage() {
           locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
         />
       </Card>
+
+      {/* Hóa đơn điện tử MISA */}
+      <HoaDonDienTuCard invoice={invoice} deliveryOrder={deliveryOrder} />
 
       {/* Lịch sử điều chỉnh */}
       {(invoice.adjustment_logs?.length > 0 || pendingLog) && (

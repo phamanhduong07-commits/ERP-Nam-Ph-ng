@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
@@ -44,7 +45,7 @@ def list_templates(db: Session = Depends(get_db), _: User = Depends(get_current_
 def get_template(ma_mau: str, phap_nhan_id: Optional[int] = None, strict: bool = False, db: Session = Depends(
         get_db), _: User = Depends(get_current_user)):
     key = ma_mau.lower()
-    query = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == key)
+    query = db.query(PrintTemplate).filter(func.lower(PrintTemplate.ma_mau) == key)
 
     if phap_nhan_id:
         tpl = query.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first()
@@ -122,7 +123,7 @@ def list_excel_templates(db: Session = Depends(get_db), _: User = Depends(get_cu
 def get_excel_template(ma_mau: str, phap_nhan_id: Optional[int] = None, strict: bool = False, db: Session = Depends(
         get_db), _: User = Depends(get_current_user)):
     key = ma_mau.lower()
-    query = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == key)
+    query = db.query(ExcelTemplate).filter(func.lower(ExcelTemplate.ma_mau) == key)
 
     if phap_nhan_id:
         tpl = query.filter(ExcelTemplate.phap_nhan_id == phap_nhan_id).first()
