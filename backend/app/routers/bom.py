@@ -867,13 +867,13 @@ def bom_from_production_item(
     )
 
 
-@router.get("/by-item/{production_order_item_id}", response_model=BomResponse)
+@router.get("/by-item/{production_order_item_id}", response_model=BomResponse | None)
 def get_bom_by_item(
     production_order_item_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Lấy BOM mới nhất của một dòng lệnh sản xuất."""
+    """Lấy BOM mới nhất của một dòng lệnh sản xuất. Trả null (200) nếu chưa có BOM."""
     bom = (
         db.query(ProductionBOM)
         .options(
@@ -885,10 +885,7 @@ def get_bom_by_item(
         .first()
     )
     if not bom:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Không tìm thấy BOM cho dòng LSX id={production_order_item_id}",
-        )
+        return None
     return _bom_to_response(bom)
 
 

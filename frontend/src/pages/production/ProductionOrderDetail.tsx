@@ -279,12 +279,12 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const bomStatusQueries = useQueries({
     queries: (order?.items ?? []).map(item => ({
       queryKey: ['bom-by-item', item.id] as const,
-      queryFn: () => bomApi.getByItem(item.id).then(r => ({
+      queryFn: () => bomApi.getByItem(item.id).then(r => r.data ? ({
         itemId: item.id,
         bomId: r.data.id,
         trang_thai: r.data.trang_thai,
         gia_ban_cuoi: r.data.gia_ban_cuoi,
-      })),
+      }) : null),
       retry: false,
       enabled: !!order,
       staleTime: Infinity,

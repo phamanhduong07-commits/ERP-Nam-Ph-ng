@@ -395,7 +395,7 @@ export const bomApi = {
     client.patch<BomSaved>(`/bom/${bomId}/confirm`),
 
   getByItem: (production_order_item_id: number) =>
-    client.get<BomSaved>(`/bom/by-item/${production_order_item_id}`),
+    client.get<BomSaved | null>(`/bom/by-item/${production_order_item_id}`),
 
   get: (bomId: number) => client.get<BomSaved>('/bom/' + bomId),
 
