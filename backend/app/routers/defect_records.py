@@ -30,6 +30,9 @@ router = APIRouter(prefix="/api/defect-records", tags=["defect-records"])
 # Nguồn lỗi hợp lệ khi nhập kho ảo qua endpoint thống nhất
 REF_TYPE_PRODUCTION_OUTPUT = "production_output"
 REF_TYPE_PHOI_ITEM = "phieu_nhap_phoi_song_item"
+# Hàng trả về bị hỏng/lỗi — tạo trực tiếp từ approve_return (sales_returns),
+# KHÔNG qua endpoint /nhap nên cố ý không nằm trong KHAU_BY_REF_TYPE.
+REF_TYPE_SALES_RETURN_ITEM = "sales_return_item"
 KHAU_BY_REF_TYPE = {
     REF_TYPE_PRODUCTION_OUTPUT: "tp",
     REF_TYPE_PHOI_ITEM: "cd1",
@@ -66,6 +69,8 @@ def _empty_context() -> dict:
         "ten_phap_nhan": None,
         "phan_xuong_id": None,
         "phap_nhan_id": None,
+        "ten_khach_hang": None,
+        "ly_do_tra": None,
     }
 
 
@@ -142,12 +147,45 @@ def _context_phoi_item(ref_id: int, db: Session) -> dict:
     }
 
 
+def _context_sales_return_item(ref_id: int, db: Session) -> dict:
+    """Ngữ cảnh cho hàng trả về lỗi: SalesReturnItem → SalesReturn / SalesOrderItem / Customer."""
+    from app.models.sales import SalesReturnItem, SalesReturn, SalesOrderItem
+    from app.models.master import Customer
+
+    sri = db.get(SalesReturnItem, ref_id)
+    if not sri:
+        return _empty_context()
+
+    sr = db.get(SalesReturn, sri.sales_return_id) if sri.sales_return_id else None
+    soi = db.get(SalesOrderItem, sri.sales_order_item_id) if sri.sales_order_item_id else None
+
+    ten_khach_hang = None
+    if sr and sr.customer_id:
+        cust = db.get(Customer, sr.customer_id)
+        if cust:
+            ten_khach_hang = cust.ten_viet_tat or cust.ten_don_vi
+
+    ctx = _empty_context()
+    ctx.update({
+        "so_lenh": sr.so_phieu_tra if sr else None,
+        "ten_hang": soi.ten_hang if soi else None,
+        "ngay": str(sr.ngay_tra) if sr and sr.ngay_tra else None,
+        "so_phieu": sr.so_phieu_tra if sr else None,
+        "dvt": (soi.dvt if soi else None) or "Thùng",
+        "ten_khach_hang": ten_khach_hang,
+        "ly_do_tra": sri.ly_do_tra,
+    })
+    return ctx
+
+
 def _resolve_context(entry: DefectRecord, db: Session) -> dict:
     """Lấy ngữ cảnh nguồn theo ref_type. ref_type lạ → context rỗng (không vỡ shape)."""
     if entry.ref_type == REF_TYPE_PRODUCTION_OUTPUT:
         return _context_production_output(entry.ref_id, db)
     if entry.ref_type == REF_TYPE_PHOI_ITEM:
         return _context_phoi_item(entry.ref_id, db)
+    if entry.ref_type == REF_TYPE_SALES_RETURN_ITEM:
+        return _context_sales_return_item(entry.ref_id, db)
     return _empty_context()
 
 
@@ -178,6 +216,8 @@ def _to_response(entry: DefectRecord, db: Session) -> dict:
         "ten_phap_nhan": ctx["ten_phap_nhan"],
         "phan_xuong_id": ctx["phan_xuong_id"],
         "phap_nhan_id": ctx["phap_nhan_id"],
+        "ten_khach_hang": ctx["ten_khach_hang"],
+        "ly_do_tra": ctx["ly_do_tra"],
         "production_order_id_tan_dung": entry.production_order_id_tan_dung,
         "so_lenh_tan_dung": lsx_td.so_lenh if lsx_td else None,
         "created_at": entry.created_at.isoformat() if entry.created_at else None,

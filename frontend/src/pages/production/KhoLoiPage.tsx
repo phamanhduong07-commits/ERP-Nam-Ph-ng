@@ -86,6 +86,28 @@ interface KhoLoiData {
   hang_tra_ve: HangTraVeRow[]
 }
 
+interface DefectRecordTraVeRow {
+  id: number
+  ref_type: string
+  ref_id: number
+  khau: string
+  so_luong: number
+  trang_thai: 'cho_xu_ly' | 'ban_phe' | 'tan_dung' | 'da_xu_ly' | 'huy'
+  ghi_chu: string | null
+  so_lenh: string | null
+  ten_hang: string | null
+  ngay: string | null
+  dvt: string | null
+  ten_khach_hang: string | null
+  ly_do_tra: string | null
+  ten_phan_xuong: string | null
+  ten_phap_nhan: string | null
+  phan_xuong_id: number | null
+  phap_nhan_id: number | null
+  created_at: string | null
+  updated_at: string | null
+}
+
 const TINH_TRANG_LABELS: Record<string, string> = { hong: 'Hỏng', loi: 'Lỗi', tot: 'Tốt' }
 const TINH_TRANG_COLORS: Record<string, string> = { hong: 'red', loi: 'orange', tot: 'green' }
 
@@ -292,6 +314,12 @@ export default function KhoLoiPage() {
   const { data: khoAoPhoiData = [], isLoading: khoAoPhoiLoading } = useQuery<HangLoiPhoiRow[]>({
     queryKey: ['kho-ao-phoi', filterParams],
     queryFn: () => khoAoPhoiApi.list(filterParams).then(r => r.data),
+    staleTime: 0,
+  })
+
+  const { data: khoAoTraVeData = [], isLoading: khoAoTraVeLoading } = useQuery<DefectRecordTraVeRow[]>({
+    queryKey: ['defect-records-tra-ve', filterParams],
+    queryFn: () => client.get<DefectRecordTraVeRow[]>('/defect-records', { params: { khau: 'tra_ve', ...filterParams } }).then(r => r.data),
     staleTime: 0,
   })
 
@@ -660,7 +688,7 @@ export default function KhoLoiPage() {
           },
           {
             key: 'tra',
-            label: `↩️ Hàng trả về xấu (${hangTraVe.length})`,
+            label: `↩️ Hàng trả về xấu (${hangTraVe.length + khoAoTraVeData.length})`,
             children: (
               <>
               <Row justify="end" style={{ marginBottom: 8 }}>
@@ -694,6 +722,121 @@ export default function KhoLoiPage() {
                   </Table.Summary.Row>
                 ) : null}
               />
+
+              {/* Hàng trả về lỗi/hỏng đang trong kho ảo chờ xử lý */}
+              {(khoAoTraVeData.length > 0 || khoAoTraVeLoading) && (
+                <>
+                <Divider style={{ margin: '16px 0 8px' }} />
+                <Row align="middle" style={{ marginBottom: 8 }}>
+                  <Col flex="auto">
+                    <Text strong style={{ color: '#cf1322' }}>
+                      Kho ảo — Hàng trả lỗi/hỏng chờ xử lý ({khoAoTraVeData.length})
+                    </Text>
+                  </Col>
+                </Row>
+                <Table<DefectRecordTraVeRow>
+                  rowKey="id"
+                  size="small"
+                  loading={khoAoTraVeLoading}
+                  dataSource={khoAoTraVeData}
+                  pagination={{ pageSize: 50, showSizeChanger: false, showTotal: t => `${t} dòng` }}
+                  scroll={{ x: 860 }}
+                  columns={[
+                    {
+                      title: 'Tên hàng',
+                      dataIndex: 'ten_hang',
+                      ellipsis: true,
+                      render: (v: string | null) => v ? <Text strong style={{ fontSize: 13 }}>{v}</Text> : <Text type="secondary">—</Text>,
+                    },
+                    {
+                      title: 'Số phiếu trả',
+                      dataIndex: 'so_lenh',
+                      width: 140,
+                      render: (v: string | null) => v ? <Text code style={{ fontSize: 12 }}>{v}</Text> : <Text type="secondary">—</Text>,
+                    },
+                    {
+                      title: 'Khách hàng',
+                      dataIndex: 'ten_khach_hang',
+                      width: 130,
+                      ellipsis: true,
+                      render: (v: string | null) => v ? <Text strong>{v}</Text> : <Text type="secondary">—</Text>,
+                    },
+                    {
+                      title: 'Lý do trả',
+                      dataIndex: 'ly_do_tra',
+                      width: 160,
+                      ellipsis: true,
+                      render: (v: string | null) => v ?? <Text type="secondary">—</Text>,
+                    },
+                    {
+                      title: 'Ngày trả',
+                      dataIndex: 'ngay',
+                      width: 95,
+                      render: (v: string | null) => <Text style={{ fontSize: 12 }}>{fmtDate(v)}</Text>,
+                    },
+                    {
+                      title: 'SL',
+                      dataIndex: 'so_luong',
+                      width: 85,
+                      align: 'right' as const,
+                      render: (v: number, r) => <Text strong style={{ color: '#cf1322' }}>{fmtN(v)} {r.dvt ?? 'Thùng'}</Text>,
+                    },
+                    {
+                      title: 'Trạng thái',
+                      dataIndex: 'trang_thai',
+                      width: 130,
+                      render: (v: string) => {
+                        const map: Record<string, [string, string]> = {
+                          cho_xu_ly: ['Chờ xử lý', 'red'],
+                          ban_phe: ['Bán phế phẩm', 'orange'],
+                          tan_dung: ['Tận dụng', 'blue'],
+                          da_xu_ly: ['Đã xử lý', 'green'],
+                          huy: ['Huỷ', 'default'],
+                        }
+                        const [label, color] = map[v] ?? [v, 'default']
+                        return <Tag color={color} style={{ fontSize: 11 }}>{label}</Tag>
+                      },
+                    },
+                    {
+                      title: 'Thao tác',
+                      width: 160,
+                      render: (_: unknown, r: DefectRecordTraVeRow) => {
+                        if (r.trang_thai !== 'cho_xu_ly') return null
+                        return (
+                          <Space size={4}>
+                            <Tooltip title="Đánh dấu bán phế phẩm">
+                              <Button
+                                size="small"
+                                danger
+                                disabled={!canTransfer}
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  client.patch(`/defect-records/${r.id}/trang-thai`, { trang_thai: 'ban_phe' })
+                                    .then(() => { message.success('Đã cập nhật'); queryClient.invalidateQueries({ queryKey: ['defect-records-tra-ve'] }) })
+                                    .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi cập nhật')))
+                                }}
+                              >Bán phế</Button>
+                            </Tooltip>
+                            <Tooltip title="Tận dụng vào sản phẩm khác">
+                              <Button
+                                size="small"
+                                disabled={!canTransfer}
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  client.patch(`/defect-records/${r.id}/trang-thai`, { trang_thai: 'tan_dung' })
+                                    .then(() => { message.success('Đã cập nhật'); queryClient.invalidateQueries({ queryKey: ['defect-records-tra-ve'] }) })
+                                    .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi cập nhật')))
+                                }}
+                              >Tận dụng</Button>
+                            </Tooltip>
+                          </Space>
+                        )
+                      },
+                    },
+                  ] as ColumnsType<DefectRecordTraVeRow>}
+                />
+                </>
+              )}
               </>
             ),
           },

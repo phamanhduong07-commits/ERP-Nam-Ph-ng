@@ -12,6 +12,7 @@ from app.models.production import ProductionOrderItem
 from app.models.warehouse_doc import DeliveryOrder, DeliveryOrderItem
 from app.models.accounting import CustomerRefundVoucher, DebtLedgerEntry
 from app.models.billing import SalesInvoice
+from app.models.defect_records import DefectRecord
 from app.services.accounting_service import AccountingService
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
@@ -527,12 +528,28 @@ def approve_return(
     if not warehouse_id:
         raise HTTPException(status_code=400, detail="Không thể xác định kho để nhập hàng trả lại")
 
-    # Nhập kho cho từng item trả lại
+    # Xử lý từng item trả lại theo tình trạng hàng:
+    #   - 'tot'        → nhập lại kho thành phẩm (tồn kho + log + bút toán 155/632)
+    #   - 'hong'/'loi' → KHÔNG nhập kho; đưa vào kho ảo hàng lỗi (defect_records, khâu 'tra_ve')
     for item in return_obj.items:
         sales_order_item = item.sales_order_item
         if not sales_order_item:
             continue
 
+        if item.tinh_trang_hang in ("hong", "loi"):
+            # Hàng hỏng/lỗi: không vào tồn kho — ghi nhận vào kho ảo hàng lỗi để xử lý sau
+            entry = DefectRecord(
+                ref_type="sales_return_item",
+                ref_id=item.id,
+                khau="tra_ve",
+                so_luong=item.so_luong_tra,
+                trang_thai="cho_xu_ly",
+                created_by=current_user.id,
+            )
+            db.add(entry)
+            continue
+
+        # Hàng tốt: nhập lại kho thành phẩm
         # Lấy thông tin sản phẩm
         ten_hang = sales_order_item.ten_hang or "Không xác định"
         dvt = sales_order_item.dvt or "Thùng"
@@ -562,6 +579,8 @@ def approve_return(
     wh = db.get(Warehouse, warehouse_id)
     phap_nhan_id_acc = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
     phan_xuong_id_acc = wh.phan_xuong_id if wh else None
+    # Chỉ hàng tốt mới nhập kho nên chỉ hàng tốt mới có bút toán giá vốn 155/632.
+    # Hàng hỏng/lỗi không vào tồn kho → không ghi 155/632 (đã vào kho ảo hàng lỗi).
     acc_items = [
         {
             "ten_hang": (item.sales_order_item.ten_hang if item.sales_order_item else "") or "Hàng trả về",
@@ -571,7 +590,7 @@ def approve_return(
             "tk_co": "632",
         }
         for item in return_obj.items
-        if item.so_luong_tra and item.don_gia_tra
+        if item.so_luong_tra and item.don_gia_tra and item.tinh_trang_hang == "tot"
     ]
     if acc_items:
         AccountingService(db).post_inventory_journal(
