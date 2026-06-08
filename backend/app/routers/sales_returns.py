@@ -721,8 +721,24 @@ def cancel_return(
                 warehouse_id = wh.id if wh else None
 
         if warehouse_id:
-            # Hủy nhập kho cho từng item
+            # Hủy nhập kho — chỉ hàng tốt.
+            # Hong/loi không vào kho khi duyệt nên không có gì để xuất.
+            # Kiểm tra hong/loi đã xử lý trong kho ảo chưa trước khi cho phép hủy.
             for item in return_obj.items:
+                if item.tinh_trang_hang in ("hong", "loi"):
+                    dr = db.query(DefectRecord).filter(
+                        DefectRecord.ref_type == "sales_return_item",
+                        DefectRecord.ref_id == item.id,
+                    ).first()
+                    if dr and dr.trang_thai not in ("cho_xu_ly", "huy"):
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Không thể hủy — hàng lỗi/hỏng đã được xử lý trong kho ảo. Hãy hoàn nguyên kho ảo trước.",
+                        )
+                    if dr:
+                        dr.trang_thai = "huy"
+                    continue  # hong/loi không có trong tồn kho — bỏ qua xuat_balance
+
                 sales_order_item = item.sales_order_item
                 if not sales_order_item:
                     continue
