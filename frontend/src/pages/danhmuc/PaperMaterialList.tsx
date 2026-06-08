@@ -25,9 +25,10 @@ export default function PaperMaterialList() {
   const [filterNhom, setFilterNhom] = useState<number | undefined>(undefined)
   const [filterNsx, setFilterNsx] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | undefined>(undefined)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['paper-materials', search, filterNhom, filterNsx, page],
+    queryKey: ['paper-materials', search, filterNhom, filterNsx, page, sortOrder],
     queryFn: () =>
       paperMaterialsFullApi.list({
         search: search || undefined,
@@ -35,6 +36,8 @@ export default function PaperMaterialList() {
         ma_nsx_id: filterNsx,
         page,
         page_size: 20,
+        sort_by: sortOrder ? 'gia_mua' : undefined,
+        sort_order: sortOrder,
       }).then(r => r.data),
   })
 
@@ -203,6 +206,17 @@ export default function PaperMaterialList() {
                 filterOption={(input, opt) =>
                   (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
                 }
+              />
+              <Select
+                placeholder="Giá mua"
+                allowClear
+                style={{ width: 140 }}
+                value={sortOrder}
+                onChange={v => { setSortOrder(v); setPage(1) }}
+                options={[
+                  { value: 'desc', label: 'Giá mua: cao → thấp' },
+                  { value: 'asc', label: 'Giá mua: thấp → cao' },
+                ]}
               />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm nguyên liệu

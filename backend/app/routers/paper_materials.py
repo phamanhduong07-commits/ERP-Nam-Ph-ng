@@ -177,6 +177,8 @@ def list_paper_materials(
     ma_nsx_id: int | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=5000),
+    sort_by: str = Query(default="ma_chinh"),
+    sort_order: str = Query(default="asc"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -193,7 +195,10 @@ def list_paper_materials(
     if ma_nsx_id is not None:
         q = q.filter(PaperMaterial.ma_nsx_id == ma_nsx_id)
     total = q.count()
-    items = q.order_by(PaperMaterial.ma_chinh).offset((page - 1) * page_size).limit(page_size).all()
+    _sort_cols = {"ma_chinh": PaperMaterial.ma_chinh, "gia_mua": PaperMaterial.gia_mua}
+    sort_col = _sort_cols.get(sort_by, PaperMaterial.ma_chinh)
+    order_expr = sort_col.desc() if sort_order == "desc" else sort_col.asc()
+    items = q.order_by(order_expr).offset((page - 1) * page_size).limit(page_size).all()
     return {
         "items": [
             {
