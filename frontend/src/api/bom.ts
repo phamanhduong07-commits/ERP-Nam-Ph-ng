@@ -333,6 +333,24 @@ export interface QuoteSpec {
   san_pham_kho: boolean
 }
 
+// ─── Pending BOM items (LSX without confirmed BOM) ───────────────────────────
+
+export interface PendingBomItem {
+  poi_id: number
+  production_order_id: number
+  so_lenh: string
+  ten_hang: string
+  ten_khach_hang: string | null
+  loai_thung: string | null
+  dai: number | null
+  rong: number | null
+  cao: number | null
+  so_lop: number | null
+  to_hop_song: string | null
+  so_luong_ke_hoach: number
+  has_draft: boolean
+}
+
 // ─── BOM Summary (for list page) ─────────────────────────────────────────────
 
 export interface BomSummaryItem {
@@ -363,6 +381,9 @@ export interface BomSummaryItem {
 export const bomApi = {
   listSummary: (params?: { trang_thai?: string; search?: string }) =>
     client.get<BomSummaryItem[]>('/bom/summary', { params }),
+
+  listPending: (params?: { search?: string; limit?: number }) =>
+    client.get<PendingBomItem[]>('/bom/pending', { params }),
 
   calculate: (request: BomCalculateRequest) =>
     client.post<BomCalculateResponse>('/bom/calculate', request),

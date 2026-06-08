@@ -7,8 +7,9 @@ import {
 } from '@ant-design/icons'
 import client from '../../api/client'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 interface GpsVehicle {
   gps_id: string
@@ -284,21 +285,9 @@ export default function GpsTrackingPage() {
   const stats = data ?? { total: 0, moving: 0, stopped: 0, overspeed: 0 }
 
   return (
-    <div style={{ padding: '16px 24px' }}>
-      {error && (
-        <Alert
-          type="error"
-          message={`Lỗi GPS: ${error}`}
-          showIcon
-          style={{ marginBottom: 12 }}
-          action={<Button size="small" onClick={handleManualRefresh}>Thử lại</Button>}
-        />
-      )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>
-          <CarOutlined style={{ marginRight: 8, color: '#1677ff' }} />
-          Theo dõi xe GPS — Thời gian thực
-        </Title>
+    <PageLayout
+      title="Theo dõi xe GPS — Thời gian thực"
+      actions={
         <Space>
           {lastFetch && (
             <Text type="secondary" style={{ fontSize: 12 }}>
@@ -313,7 +302,17 @@ export default function GpsTrackingPage() {
             Làm mới
           </Button>
         </Space>
-      </div>
+      }
+    >
+      {error && (
+        <Alert
+          type="error"
+          message={`Lỗi GPS: ${error}`}
+          showIcon
+          style={{ marginBottom: 12 }}
+          action={<Button size="small" onClick={handleManualRefresh}>Thử lại</Button>}
+        />
+      )}
 
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={6}>
@@ -387,6 +386,6 @@ export default function GpsTrackingPage() {
         .gps-row-overspeed { background-color: #fff2f0 !important; }
         .gps-row-stopped { background-color: #fffbe6 !important; }
       `}</style>
-    </div>
+    </PageLayout>
   )
 }

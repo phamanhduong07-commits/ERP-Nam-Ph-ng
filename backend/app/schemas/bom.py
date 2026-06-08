@@ -312,3 +312,20 @@ class BomSummaryItem(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PendingBomItem(BaseModel):
+    """LSX chưa có BOM confirmed — dùng cho tab 'Chưa có BOM'."""
+    poi_id: int
+    production_order_id: int
+    so_lenh: str
+    ten_hang: str
+    ten_khach_hang: str | None
+    loai_thung: str | None
+    dai: Decimal | None
+    rong: Decimal | None
+    cao: Decimal | None
+    so_lop: int | None
+    to_hop_song: str | None
+    so_luong_ke_hoach: Decimal
+    has_draft: bool

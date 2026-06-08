@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { BomCalculatorPanelProps } from './BomCalculatorPanel'
 import {
-  Button, Card, Drawer, Input, Select, Space, Table, Tag, Typography,
+  Badge, Button, Card, Drawer, Input, Select, Space, Table, Tabs, Tag, Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { CalculatorOutlined, FundOutlined, SearchOutlined, FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
+import { CalculatorOutlined, FundOutlined, SearchOutlined, FileExcelOutlined, FilePdfOutlined, PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { bomApi, vnd } from '../../api/bom'
-import type { BomSummaryItem } from '../../api/bom'
+import type { BomSummaryItem, PendingBomItem } from '../../api/bom'
 import BomCalculatorPanel from './BomCalculatorPanel'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import { UploadOutlined } from '@ant-design/icons'
@@ -25,10 +26,12 @@ const TRANG_THAI_CONFIG: Record<string, { label: string; color: string }> = {
 export default function BomListPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState<'has_bom' | 'pending'>('has_bom')
   const [search, setSearch] = useState('')
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
-  const [editingId, setEditingId] = useState<number | null>(null)   // BOM id
-  const [editingPoiId, setEditingPoiId] = useState<number | null>(null)  // production_order_item_id
+  const [editingId, setEditingId] = useState<number | null>(null)       // BOM id
+  const [editingPoiId, setEditingPoiId] = useState<number | null>(null) // production_order_item_id
+  const [editingInitial, setEditingInitial] = useState<BomCalculatorPanelProps['initialValues'] | null>(null)
   const [importVisible, setImportVisible] = useState(false)
 
   const { data, isLoading, refetch } = useQuery({
@@ -37,7 +40,14 @@ export default function BomListPage() {
     staleTime: 30_000,
   })
 
-  // Client-side search filter
+  const { data: pendingData, isLoading: pendingLoading, refetch: refetchPending } = useQuery({
+    queryKey: ['bom-pending', search],
+    queryFn: () => bomApi.listPending({ search: search || undefined }).then(r => r.data),
+    staleTime: 30_000,
+    enabled: activeTab === 'pending',
+  })
+
+  // Client-side search filter (has_bom tab)
   const rows = (data ?? []).filter(row => {
     if (!search) return true
     const s = search.toLowerCase()
@@ -49,14 +59,32 @@ export default function BomListPage() {
     )
   })
 
+  const pendingRows = pendingData ?? []
+
   const openEditor = (row: BomSummaryItem) => {
     setEditingId(row.id)
     setEditingPoiId(row.production_order_item_id)
+    setEditingInitial(null)
+  }
+
+  const openNewBom = (pending: PendingBomItem) => {
+    setEditingId(null)
+    setEditingPoiId(pending.poi_id)
+    setEditingInitial({
+      loai_thung: pending.loai_thung ?? undefined,
+      dai: pending.dai ?? undefined,
+      rong: pending.rong ?? undefined,
+      cao: pending.cao ?? undefined,
+      so_lop: pending.so_lop ?? undefined,
+      to_hop_song: pending.to_hop_song ?? undefined,
+      so_luong: Number(pending.so_luong_ke_hoach),
+    })
   }
 
   const closeEditor = () => {
     setEditingId(null)
     setEditingPoiId(null)
+    setEditingInitial(null)
   }
 
   const handleExportExcel = () => {
@@ -113,6 +141,7 @@ export default function BomListPage() {
       qc.invalidateQueries({ queryKey: ['bom-from-poi', editingPoiId] })
     }
     refetch()
+    refetchPending()
   }
 
   const columns: ColumnsType<BomSummaryItem> = [
@@ -240,69 +269,193 @@ export default function BomListPage() {
     },
   ]
 
+  // Columns for pending tab
+  const pendingColumns: ColumnsType<PendingBomItem> = [
+    {
+      title: 'Lệnh SX',
+      dataIndex: 'so_lenh',
+      width: 130,
+      render: v => <Text strong style={{ fontSize: 12 }}>{v}</Text>,
+    },
+    {
+      title: 'Mã hàng / Sản phẩm',
+      dataIndex: 'ten_hang',
+      ellipsis: true,
+      render: (v, r) => (
+        <Space direction="vertical" size={0}>
+          <Text style={{ fontSize: 13 }}>{v || '—'}</Text>
+          {(r.loai_thung || r.dai) && (
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {r.loai_thung}{r.loai_thung && r.dai ? ' · ' : ''}
+              {r.dai != null ? `${r.dai}×${r.rong}×${r.cao} cm` : ''}
+              {r.so_lop ? ` · ${r.so_lop} lớp` : ''}
+              {r.to_hop_song ? ` (${r.to_hop_song})` : ''}
+            </Text>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: 'Khách hàng',
+      dataIndex: 'ten_khach_hang',
+      width: 180,
+      ellipsis: true,
+      render: v => v ?? <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'SL kế hoạch',
+      dataIndex: 'so_luong_ke_hoach',
+      width: 110,
+      align: 'right',
+      render: v => vnd(Number(v)),
+    },
+    {
+      title: 'Trạng thái',
+      dataIndex: 'has_draft',
+      width: 110,
+      align: 'center',
+      render: (v: boolean) => v
+        ? <Tag color="processing">Có BOM nháp</Tag>
+        : <Tag color="warning">Chưa có BOM</Tag>,
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 200,
+      align: 'center',
+      render: (_, row) => (
+        <Space size={4}>
+          <Button
+            size="small"
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => openNewBom(row)}
+          >
+            Tạo BOM
+          </Button>
+          <Button
+            size="small"
+            icon={<FundOutlined />}
+            onClick={() => navigate(`/production/cost-analysis?khsx_id=${row.production_order_id}`)}
+          >
+            Phân tích
+          </Button>
+        </Space>
+      ),
+    },
+  ]
+
   // Find name of item being edited for drawer title
   const editingRow = data?.find(r => r.id === editingId)
+  const editingPendingRow = pendingRows.find(r => r.poi_id === editingPoiId && !editingId)
+  const drawerTitle = editingRow
+    ? `Định mức BOM — ${editingRow.ten_hang ?? ''}${editingRow.so_lenh ? ` · ${editingRow.so_lenh}` : ''}`
+    : editingPendingRow
+      ? `Tạo BOM — ${editingPendingRow.ten_hang}${editingPendingRow.so_lenh ? ` · ${editingPendingRow.so_lenh}` : ''}`
+      : 'Định mức BOM'
+
+  const toolbarExtra = (
+    <Space>
+      <Input
+        prefix={<SearchOutlined />}
+        placeholder="Tìm lệnh SX, mã hàng, khách hàng..."
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        allowClear
+        style={{ width: 280 }}
+      />
+      {activeTab === 'has_bom' && (
+        <Select
+          placeholder="Trạng thái"
+          value={filterTrangThai}
+          onChange={setFilterTrangThai}
+          allowClear
+          style={{ width: 130 }}
+          options={[
+            { value: 'draft',     label: 'Nháp' },
+            { value: 'confirmed', label: 'Đã duyệt' },
+          ]}
+        />
+      )}
+      {activeTab === 'has_bom' && (
+        <Button.Group>
+          <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>Excel</Button>
+          <Button icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf}>PDF</Button>
+        </Button.Group>
+      )}
+      <Button
+        icon={<UploadOutlined />}
+        onClick={() => setImportVisible(true)}
+      >
+        Import
+      </Button>
+    </Space>
+  )
 
   return (
     <div>
       <Card
         title="Định mức BOM"
-        extra={
-          <Space>
-            <Input
-              prefix={<SearchOutlined />}
-              placeholder="Tìm lệnh SX, mã hàng, khách hàng..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              allowClear
-              style={{ width: 280 }}
-            />
-            <Select
-              placeholder="Trạng thái"
-              value={filterTrangThai}
-              onChange={setFilterTrangThai}
-              allowClear
-              style={{ width: 130 }}
-              options={[
-                { value: 'draft',     label: 'Nháp' },
-                { value: 'confirmed', label: 'Đã duyệt' },
-              ]}
-            />
-            <Button.Group>
-              <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>Excel</Button>
-              <Button icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf}>PDF</Button>
-            </Button.Group>
-            <Button
-              icon={<UploadOutlined />}
-              onClick={() => setImportVisible(true)}
-            >
-              Import
-            </Button>
-          </Space>
-        }
+        extra={toolbarExtra}
+        bodyStyle={{ padding: 0 }}
       >
-        <Table
-                    locale={{ emptyText: <EmptyState size="small" /> }}
-                    columns={columns}
-          dataSource={rows}
-          rowKey="id"
-          loading={isLoading}
-          size="small"
-          pagination={{ pageSize: 50, showTotal: t => `${t} định mức` }}
-          scroll={{ x: 1300 }}
+        <Tabs
+          activeKey={activeTab}
+          onChange={v => setActiveTab(v as 'has_bom' | 'pending')}
+          style={{ padding: '0 16px' }}
+          items={[
+            {
+              key: 'has_bom',
+              label: (
+                <Space size={4}>
+                  Đã có BOM
+                  <Badge count={rows.length} showZero style={{ backgroundColor: '#1677ff' }} />
+                </Space>
+              ),
+              children: (
+                <Table
+                  locale={{ emptyText: <EmptyState size="small" /> }}
+                  columns={columns}
+                  dataSource={rows}
+                  rowKey="id"
+                  loading={isLoading}
+                  size="small"
+                  pagination={{ pageSize: 50, showTotal: t => `${t} định mức` }}
+                  scroll={{ x: 1300 }}
+                />
+              ),
+            },
+            {
+              key: 'pending',
+              label: (
+                <Space size={4}>
+                  Chưa có BOM
+                  <Badge count={pendingRows.length} showZero style={{ backgroundColor: '#faad14' }} />
+                </Space>
+              ),
+              children: (
+                <Table
+                  locale={{ emptyText: <EmptyState size="small" description="Tất cả lệnh SX đã có BOM" /> }}
+                  columns={pendingColumns}
+                  dataSource={pendingRows}
+                  rowKey="poi_id"
+                  loading={pendingLoading}
+                  size="small"
+                  pagination={{ pageSize: 50, showTotal: t => `${t} lệnh SX` }}
+                  scroll={{ x: 900 }}
+                />
+              ),
+            },
+          ]}
         />
       </Card>
 
       {/* Drawer — full BOM calculator / viewer */}
       <Drawer
-        open={!!editingId}
+        open={!!editingPoiId}
         onClose={closeEditor}
         width={Math.min(1200, window.innerWidth - 48)}
-        title={
-          editingRow
-            ? `Định mức BOM — ${editingRow.ten_hang ?? ''}${editingRow.so_lenh ? ` · ${editingRow.so_lenh}` : ''}`
-            : 'Định mức BOM'
-        }
+        title={drawerTitle}
         destroyOnClose
         bodyStyle={{ padding: 0 }}
       >
@@ -310,10 +463,10 @@ export default function BomListPage() {
           <BomCalculatorPanel
             key={editingPoiId}
             production_order_item_id={editingPoiId}
+            initialValues={editingInitial ?? undefined}
             onBomSaved={handleBomSaved}
           />
         ) : editingId ? (
-          /* BOM không gắn với POI — hiện thông báo */
           <div style={{ padding: 24 }}>
             <Text type="secondary">
               BOM này không gắn với dòng lệnh sản xuất nào. Không thể chỉnh sửa tại đây.

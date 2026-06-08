@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Table, Button, Modal, Form, Input, Space, Card, Typography, message, Tag, Switch, Row, Col, Select,
+  Table, Button, Modal, Form, Input, Space, Typography, message, Tag, Switch, Row, Col, Select,
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, BankOutlined, MailOutlined, PhoneOutlined } from '@ant-design/icons'
 import { phapNhanApi, PhapNhan } from '../../api/phap-nhan'
 import { warehouseApi } from '../../api/warehouse'
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 export default function PhapNhanPage() {
   const [modalOpen, setModalOpen] = useState(false)
@@ -111,9 +112,9 @@ export default function PhapNhanPage() {
   ]
 
   return (
-    <Card 
-      title={<Title level={4} style={{ margin: 0 }}>Quản lý Pháp nhân (Công ty)</Title>}
-      extra={
+    <PageLayout
+      title="Quản lý Pháp nhân (Công ty)"
+      actions={
         <Button type="primary" icon={<PlusOutlined />} onClick={() => {
           setEditing(null)
           form.resetFields()
@@ -225,7 +226,7 @@ export default function PhapNhanPage() {
           </Form.Item>
         </Form>
       </Modal>
-    </Card>
+    </PageLayout>
   )
 }
 

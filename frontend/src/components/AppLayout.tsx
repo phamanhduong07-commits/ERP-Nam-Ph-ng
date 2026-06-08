@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ApiError } from '../api/types'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -18,6 +18,7 @@ import { useAuthStore } from '../store/auth'
 import { authApi } from '../api/auth'
 import { productionPlansApi } from '../api/productionPlans'
 import CustomSidebarNav, { type NavItem, type FlyoutSection, type SubItem } from './CustomSidebarNav'
+import GlobalSearchModal from './GlobalSearchModal'
 const namPhuongLogo = '/logo_namphuong.png'
 
 const { Header, Sider, Content } = Layout
@@ -400,6 +401,20 @@ export default function AppLayout() {
   const userPermissions = user?.permissions || []
   const navItems = buildNavItems(queueCount).filter(item => canSee(item.permissions, role, userPermissions))
 
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  // Ctrl+K → open global search
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [])
+
   const selectedKeys = [location.pathname + location.search]
 
   const userMenu = [
@@ -449,6 +464,9 @@ export default function AppLayout() {
   }
 
   return (
+    <>
+    <a href="#main-content" className="skip-nav">Bỏ qua điều hướng</a>
+    <GlobalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     <Layout style={{ minHeight: '100vh' }}>
       <Sider
         trigger={null}
@@ -507,6 +525,27 @@ export default function AppLayout() {
               Hệ thống Quản trị ERP Nam Phương
             </Text>
           </Space>
+
+          {/* Global search button */}
+          <div
+            onClick={() => setSearchOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 14px', borderRadius: 8, cursor: 'pointer',
+              border: '1px solid #e7e9f2', background: '#f5f7ff',
+              color: '#60647a', fontSize: 13, userSelect: 'none',
+              minWidth: 200,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span style={{ flex: 1 }}>Tìm kiếm...</span>
+            <span style={{
+              fontSize: 11, padding: '1px 6px', borderRadius: 4,
+              background: '#e7e9f2', color: '#8c8fa3', fontFamily: 'monospace',
+            }}>Ctrl K</span>
+          </div>
 
           <Space size={20}>
             {role === 'ADMIN' && (
@@ -576,10 +615,13 @@ export default function AppLayout() {
           </Form>
         </Modal>
 
-        <Content style={{ margin: 16, background: tk.colorBgLayout, overflow: 'initial' }}>
-          <Outlet />
+        <Content id="main-content" style={{ margin: 16, background: tk.colorBgLayout, overflow: 'initial' }}>
+          <div key={location.pathname} className="np-page-enter">
+            <Outlet />
+          </div>
         </Content>
       </Layout>
     </Layout>
+    </>
   )
 }

@@ -11,8 +11,9 @@ import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import { paymentApi, CashPayment } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 const HINH_THUC_TT_LABEL: Record<string, string> = {
@@ -129,17 +130,17 @@ export default function CashPaymentListPage() {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Phiếu chi nhà cung cấp</Title>
+    <PageLayout
+      title="Phiếu chi nhà cung cấp"
+      actions={
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/accounting/payments/new')}>
             Tạo phiếu chi
           </Button>
         </Space>
-      </div>
-
+      }
+    >
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[12, 8]} align="middle">
           <Col>
@@ -196,6 +197,6 @@ export default function CashPaymentListPage() {
           onChange: p => setPage(p),
         }}
       />
-    </div>
+    </PageLayout>
   )
 }

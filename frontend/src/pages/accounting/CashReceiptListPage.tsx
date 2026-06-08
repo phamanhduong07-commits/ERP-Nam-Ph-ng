@@ -11,8 +11,9 @@ import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import { receiptApi, TRANG_THAI_PHIEU_THU, HINH_THUC_TT, CashReceipt } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 export default function CashReceiptListPage() {
@@ -104,17 +105,17 @@ export default function CashReceiptListPage() {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Phiếu thu</Title>
+    <PageLayout
+      title="Phiếu thu"
+      actions={
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/accounting/receipts/new')}>
             Tạo phiếu thu
           </Button>
         </Space>
-      </div>
-
+      }
+    >
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[12, 8]} align="middle">
           <Col>
@@ -167,6 +168,6 @@ export default function CashReceiptListPage() {
           onChange: p => setPage(p),
         }}
       />
-    </div>
+    </PageLayout>
   )
 }

@@ -26,14 +26,15 @@ from app.schemas.bom import (
     BomItemResponse,
     BomIndirectItemResponse,
     BomSummaryItem,
+    PendingBomItem,
     DimensionResult,
     AddonDetail,
     BomLayerResult,
     IndirectCostItem,
 )
 from app.models.sales import SalesOrder, Quote, QuoteItem
-from app.models.production import ProductionOrderItem
-from app.models.master import PaperMaterial, CauTrucThongDung
+from app.models.production import ProductionOrderItem, ProductionOrder
+from app.models.master import PaperMaterial, CauTrucThongDung, Customer
 from app.models.bom import ProductionBOM, ProductionBOMItem, ProductionBOMIndirectCostItem
 from app.models.auth import User
 from app.deps import get_current_user, require_permissions
@@ -1163,6 +1164,72 @@ def get_quote_spec(
         "can_mang": 0,
         "san_pham_kho": False,
     }
+
+
+@router.get("/pending", response_model=list[PendingBomItem])
+def list_pending_bom(
+    search: str | None = None,
+    limit: int = Query(default=200, le=500),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Danh sách LSX chưa có BOM confirmed — hiển thị trong tab 'Chưa có BOM'."""
+
+    # Batch: poi_id đã có BOM (confirmed hoặc draft)
+    bom_rows = (
+        db.query(ProductionBOM.production_order_item_id, ProductionBOM.trang_thai)
+        .filter(ProductionBOM.production_order_item_id.isnot(None))
+        .all()
+    )
+    confirmed_poi_ids: set[int] = {r[0] for r in bom_rows if r[1] == "confirmed"}
+    draft_poi_ids: set[int] = {r[0] for r in bom_rows if r[1] == "draft"}
+
+    pois = (
+        db.query(ProductionOrderItem)
+        .filter(ProductionOrderItem.id.notin_(confirmed_poi_ids))
+        .options(
+            joinedload(ProductionOrderItem.production_order)
+            .joinedload(ProductionOrder.sales_order)
+            .joinedload(SalesOrder.customer)
+        )
+        .join(ProductionOrder, ProductionOrder.id == ProductionOrderItem.production_order_id)
+        .order_by(ProductionOrder.created_at.desc(), ProductionOrderItem.id)
+        .limit(limit)
+        .all()
+    )
+
+    result = []
+    for poi in pois:
+        po = poi.production_order
+        so = po.sales_order if po else None
+        kh = so.customer if so else None
+        ten_kh = kh.ten_viet_tat if kh else None
+
+        if search:
+            s = search.lower()
+            if not (
+                s in (poi.ten_hang or '').lower()
+                or s in (po.so_lenh if po else '').lower()
+                or s in (ten_kh or '').lower()
+            ):
+                continue
+
+        result.append(PendingBomItem(
+            poi_id=poi.id,
+            production_order_id=po.id if po else 0,
+            so_lenh=po.so_lenh if po else '',
+            ten_hang=poi.ten_hang or '',
+            ten_khach_hang=ten_kh,
+            loai_thung=poi.loai_thung,
+            dai=poi.dai,
+            rong=poi.rong,
+            cao=poi.cao,
+            so_lop=poi.so_lop,
+            to_hop_song=poi.to_hop_song,
+            so_luong_ke_hoach=poi.so_luong_ke_hoach,
+            has_draft=poi.id in draft_poi_ids,
+        ))
+    return result
 
 
 @router.get("/summary", response_model=list[BomSummaryItem])
