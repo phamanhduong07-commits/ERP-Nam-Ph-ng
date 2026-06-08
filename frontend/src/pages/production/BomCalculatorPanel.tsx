@@ -520,8 +520,8 @@ export default function BomCalculatorPanel({
   useEffect(() => {
     const spec = quoteSpecQuery.data
     if (!spec || hasPrefilledRef.current) return
-    // Ưu tiên BOM đã lưu: nếu đang tải hoặc đã tải thành công → bỏ qua spec
-    if (existingBomQuery.isLoading || existingBomQuery.isSuccess) return
+    // Ưu tiên BOM đã lưu: nếu đang tải hoặc đã tải thành công VÀ có dữ liệu → bỏ qua spec
+    if (existingBomQuery.isLoading || (existingBomQuery.isSuccess && existingBomQuery.data != null)) return
 
     hasPrefilledRef.current = true
 
