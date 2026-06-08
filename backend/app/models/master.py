@@ -127,6 +127,11 @@ class Customer(Base):
     la_khach_vip: Mapped[bool] = mapped_column(Boolean, default=False)
     hoa_don_ngay: Mapped[int] = mapped_column(Integer, default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    email: Mapped[str | None] = mapped_column(String(150))
+    phap_nhan: Mapped[str | None] = mapped_column(String(100))
+    ke_toan_phu_trach: Mapped[str | None] = mapped_column(String(150))
+    dieu_khoan_tt: Mapped[str | None] = mapped_column(String(200))
+    sa_cskh: Mapped[str | None] = mapped_column(String(150))
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(

@@ -338,6 +338,7 @@ export interface QuoteSpec {
 export interface BomSummaryItem {
   id: number
   production_order_item_id: number | null
+  production_order_id: number | null
   ten_hang: string | null
   so_lenh: string | null
   ten_khach_hang: string | null

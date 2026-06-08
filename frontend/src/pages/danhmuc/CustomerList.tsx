@@ -29,7 +29,7 @@ export default function CustomerList() {
   const { data, isLoading } = useQuery({
     queryKey: ['customers', search, filterActive, filterNv, page],
     queryFn: () =>
-      customersApi.list({ search: search || undefined, page, page_size: 20, nv_id: filterNv }).then(r => r.data),
+      customersApi.list({ search: search || undefined, page, page_size: 20, nv_id: filterNv, trang_thai: filterActive }).then(r => r.data),
   })
 
   const { data: saleUsers = [] } = useQuery({
@@ -63,7 +63,7 @@ export default function CustomerList() {
   const openCreate = () => {
     setEditing(null)
     form.resetFields()
-    form.setFieldsValue({ trang_thai: true, khach_vip: false, no_tran: 0, so_ngay_no: 30 })
+    form.setFieldsValue({ trang_thai: true, la_khach_vip: false, no_tran: 0, so_ngay_no: 30 })
     setModalOpen(true)
   }
 
@@ -93,6 +93,13 @@ export default function CustomerList() {
     { title: 'Tên đơn vị', dataIndex: 'ten_don_vi', ellipsis: true },
     { title: 'Điện thoại', dataIndex: 'dien_thoai', width: 120 },
     { title: 'Mã số thuế', dataIndex: 'ma_so_thue', width: 130 },
+    { title: 'Email', dataIndex: 'email', width: 160, ellipsis: true },
+    { title: 'Pháp nhân', dataIndex: 'phap_nhan', width: 100 },
+    { title: 'Điều khoản TT', dataIndex: 'dieu_khoan_tt', width: 120 },
+    { title: 'Kế toán PT', dataIndex: 'ke_toan_phu_trach', width: 110 },
+    { title: 'SA-CSKH', dataIndex: 'sa_cskh', width: 100 },
+    { title: 'Số ngày nợ', dataIndex: 'so_ngay_no', width: 90, align: 'right' as const },
+    { title: 'Địa chỉ', dataIndex: 'dia_chi', width: 180, ellipsis: true },
     {
       title: 'Nợ trần',
       dataIndex: 'no_tran',
@@ -291,7 +298,7 @@ export default function CustomerList() {
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item label="SĐT liên hệ" name="sdt_lien_he">
+              <Form.Item label="SĐT liên hệ" name="so_dien_thoai_lh">
                 <Input placeholder="Số điện thoại liên hệ" />
               </Form.Item>
             </Col>
@@ -341,7 +348,7 @@ export default function CustomerList() {
               </Form.Item>
             </Col>
             <Col span={6}>
-              <Form.Item label="Khách VIP" name="khach_vip" valuePropName="checked">
+              <Form.Item label="Khách VIP" name="la_khach_vip" valuePropName="checked">
                 <Switch />
               </Form.Item>
             </Col>
@@ -360,6 +367,36 @@ export default function CustomerList() {
                 </Form.Item>
               </Col>
             )}
+          </Row>
+
+          <Row gutter={12}>
+            <Col span={8}>
+              <Form.Item label="Email" name="email">
+                <Input placeholder="Email liên hệ" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Pháp nhân" name="phap_nhan">
+                <Input placeholder="VD: Nam Phương, Visunpack" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Kế toán phụ trách" name="ke_toan_phu_trach">
+                <Input placeholder="Tên kế toán" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item label="Điều khoản thanh toán" name="dieu_khoan_tt">
+                <Input placeholder="VD: Net 30, Tiền mặt" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="SA - CSKH" name="sa_cskh">
+                <Input placeholder="Tên SA hoặc CSKH phụ trách" />
+              </Form.Item>
+            </Col>
           </Row>
         </Form>
       </Modal>

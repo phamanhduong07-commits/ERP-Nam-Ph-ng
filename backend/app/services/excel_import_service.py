@@ -204,7 +204,7 @@ async def import_excel(
             if user:
                 log = ImportLog(
                     user_id=user.id,
-                    ten_nguoi_import=user.full_name or user.username,
+                    ten_nguoi_import=user.ho_ten or user.username,
                     loai_du_lieu=loai_du_lieu,
                     ten_file=file.filename,
                     so_dong_thanh_cong=0,
@@ -228,7 +228,7 @@ async def import_excel(
         if user:
             log = ImportLog(
                 user_id=user.id,
-                ten_nguoi_import=user.full_name or user.username,
+                ten_nguoi_import=user.ho_ten or user.username,
                 loai_du_lieu=loai_du_lieu,
                 ten_file=file.filename,
                 so_dong_thanh_cong=created + updated,

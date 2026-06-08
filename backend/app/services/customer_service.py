@@ -61,7 +61,7 @@ class CustomerService:
         total = q.count()
         items = q.order_by(Customer.ten_viet_tat).offset((page - 1) * page_size).limit(page_size).all()
         return PagedResponse(
-            items=[_to_short(c) for c in items],
+            items=[_to_response(c) for c in items],
             total=total,
             page=page,
             page_size=page_size,

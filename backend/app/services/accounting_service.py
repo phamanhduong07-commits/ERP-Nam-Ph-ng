@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy import desc, func, and_, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.exc import CompileError as _CompileError
 
 from app.models.billing import SalesInvoice
@@ -3804,10 +3804,25 @@ class AccountingService:
                 }
                 for row in period.inputs
             ]
+            # Batch-load production orders to avoid N+1 and include so_lenh/ten_hang
+            alloc_po_ids = {row.production_order_id for row in period.allocations if row.production_order_id}
+            po_map: dict[int, tuple[str, str]] = {}
+            if alloc_po_ids:
+                pos = (
+                    self.db.query(ProductionOrder)
+                    .filter(ProductionOrder.id.in_(alloc_po_ids))
+                    .options(selectinload(ProductionOrder.items))
+                    .all()
+                )
+                for po in pos:
+                    ten = po.items[0].ten_hang if po.items else None
+                    po_map[po.id] = (po.so_lenh or "", ten or "")
             data["allocations"] = [
                 {
                     "id": row.id,
                     "production_order_id": row.production_order_id,
+                    "so_lenh": po_map.get(row.production_order_id, ("", ""))[0] if row.production_order_id else None,
+                    "ten_hang": po_map.get(row.production_order_id, ("", ""))[1] if row.production_order_id else None,
                     "product_id": row.product_id,
                     "san_luong": row.san_luong,
                     "ty_le": row.ty_le,

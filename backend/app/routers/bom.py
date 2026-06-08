@@ -1206,6 +1206,7 @@ def list_bom_summary(
         result.append(BomSummaryItem(
             id=bom.id,
             production_order_item_id=bom.production_order_item_id,
+            production_order_id=po.id if po else None,
             ten_hang=poi.ten_hang if poi else None,
             so_lenh=po.so_lenh if po else None,
             ten_khach_hang=ten_khach_hang,

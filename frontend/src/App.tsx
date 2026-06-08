@@ -69,6 +69,7 @@ const MayInQueuePage = lazy(() => import('./pages/production/MayInQueuePage'))
 const DinhHinhPage = lazy(() => import('./pages/production/DinhHinhPage'))
 const SauInKanbanPage = lazy(() => import('./pages/production/SauInKanbanPage'))
 const ShiftPage = lazy(() => import('./pages/production/ShiftPage'))
+const LenhTheoDoiPage = lazy(() => import('./pages/production/LenhTheoDoiPage'))
 const ConfigPage = lazy(() => import('./pages/production/ConfigPage'))
 const MobileTrackingPage = lazy(() => import('./pages/production/MobileTrackingPage'))
 const MachineLoginPage = lazy(() => import('./pages/production/MachineLoginPage'))
@@ -105,6 +106,7 @@ const PurchaseDashboardPage = lazy(() => import('./pages/purchase/PurchaseDashbo
 const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
+const DanhMucLanding = lazy(() => import('./pages/danhmuc/DanhMucLanding'))
 // Billing
 const SalesInvoiceListPage = lazy(() => import('./pages/billing/SalesInvoiceListPage'))
 const SalesInvoiceDetailPage = lazy(() => import('./pages/billing/SalesInvoiceDetailPage'))
@@ -182,6 +184,11 @@ const DoiSoatXangPage = lazy(() => import('./pages/logistics/DoiSoatXangPage'))
 const BaoDuongKmPage = lazy(() => import('./pages/logistics/BaoDuongKmPage'))
 const NhatKyXePage = lazy(() => import('./pages/logistics/NhatKyXePage'))
 const CanhBaoDauPage = lazy(() => import('./pages/logistics/CanhBaoDauPage'))
+
+// Module Hubs
+const ProductionHubPage = lazy(() => import('./pages/production/ProductionHubPage'))
+const WarehouseHubPage = lazy(() => import('./pages/warehouse/WarehouseHubPage'))
+const AccountingHubPage = lazy(() => import('./pages/accounting/AccountingHubPage'))
 
 // Reports - Workshop
 const WorkshopPNLPage = lazy(() => import('./pages/reports/WorkshopPNLPage'))
@@ -277,6 +284,7 @@ export default function App() {
             <Route path="quotes/new" element={<ErrorBoundary><QuoteForm /></ErrorBoundary>} />
             <Route path="quotes/:id" element={<ErrorBoundary><QuoteDetail /></ErrorBoundary>} />
             <Route path="quotes/:id/edit" element={<ErrorBoundary><QuoteForm /></ErrorBoundary>} />
+            <Route path="danhmuc" element={<DanhMucLanding />} />
             <Route path="danhmuc/cau-truc" element={<CauTrucList />} />
             <Route path="master/customers" element={<CustomerList />} />
             <Route path="master/suppliers" element={<SupplierList />} />
@@ -295,6 +303,10 @@ export default function App() {
             <Route path="master/tinh-thanh" element={<TinhThanhList />} />
             <Route path="master/phuong-xa" element={<PhuongXaList />} />
             <Route path="master/don-gia-van-chuyen" element={<DonGiaVanChuyenList />} />
+            <Route path="production/hub" element={<ErrorBoundary><ProductionHubPage /></ErrorBoundary>} />
+            <Route path="warehouse/hub" element={<ErrorBoundary><WarehouseHubPage /></ErrorBoundary>} />
+            <Route path="accounting/hub" element={<ErrorBoundary><AccountingHubPage /></ErrorBoundary>} />
+            <Route path="production/theo-doi" element={<LenhTheoDoiPage />} />
             <Route path="production/orders" element={<ProductionOrdersPage />} />
             <Route path="production/orders/new" element={<ProductionOrderCreate />} />
             <Route path="production/orders/:id" element={<ProductionOrderDetail />} />

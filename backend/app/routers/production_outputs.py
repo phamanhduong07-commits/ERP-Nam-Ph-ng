@@ -19,6 +19,7 @@ from app.models.warehouse_doc import (
     DeliveryOrderItem,
 )
 from app.services.accounting_service import AccountingService
+from app.services.defect_record_service import auto_defect_record
 from app.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -118,7 +119,7 @@ def create_production_output(
         ten_hang=ten_hang,
         so_luong_nhap=body.so_luong_nhap,
         so_luong_loi=body.so_luong_loi,
-        trang_thai_loi='cho_xu_ly' if body.so_luong_loi > 0 else None,
+        trang_thai_loi='da_nhap_kho_ao' if body.so_luong_loi > 0 else None,
         dvt=dvt,
         don_gia_xuat_xuong=body.don_gia_xuat_xuong,
         ghi_chu=body.ghi_chu,
@@ -168,6 +169,17 @@ def create_production_output(
                 "phap_nhan_id_no": phap_nhan_id,
                 "phap_nhan_id_co": producing_pn_id
             }]
+        )
+
+    # Auto-create DefectRecord ngay khi có hàng lỗi — không cần nút "Nhập kho ảo"
+    if out.so_luong_loi and out.so_luong_loi > 0:
+        auto_defect_record(
+            db,
+            ref_id=out.id,
+            ref_type="production_output",
+            khau="tp",
+            so_luong=out.so_luong_loi,
+            created_by=current_user.id,
         )
 
     db.commit()

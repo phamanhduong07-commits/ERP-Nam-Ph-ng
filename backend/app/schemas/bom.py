@@ -285,6 +285,7 @@ class BomSummaryItem(BaseModel):
     """Lightweight summary dùng cho trang danh sách Định mức BOM."""
     id: int
     production_order_item_id: int | None
+    production_order_id: int | None
     # Context từ quan hệ
     ten_hang: str | None
     so_lenh: str | None

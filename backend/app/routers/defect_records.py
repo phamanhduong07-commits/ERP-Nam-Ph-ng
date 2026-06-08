@@ -107,6 +107,8 @@ def _context_production_output(ref_id: int, db: Session) -> dict:
         "ten_phap_nhan": pn.ten_viet_tat if pn else None,
         "phan_xuong_id": order.phan_xuong_id if order else None,
         "phap_nhan_id": order.phap_nhan_id if order else None,
+        "ten_khach_hang": None,
+        "ly_do_tra": None,
     }
 
 
@@ -144,6 +146,8 @@ def _context_phoi_item(ref_id: int, db: Session) -> dict:
         "ten_phap_nhan": pn.ten_viet_tat if pn else None,
         "phan_xuong_id": order.phan_xuong_id if order else None,
         "phap_nhan_id": pn_id,
+        "ten_khach_hang": None,
+        "ly_do_tra": None,
     }
 
 

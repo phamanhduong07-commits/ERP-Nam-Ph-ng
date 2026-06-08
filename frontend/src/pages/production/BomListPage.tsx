@@ -4,7 +4,8 @@ import {
   Button, Card, Drawer, Input, Select, Space, Table, Tag, Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { CalculatorOutlined, SearchOutlined, FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
+import { CalculatorOutlined, FundOutlined, SearchOutlined, FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { bomApi, vnd } from '../../api/bom'
 import type { BomSummaryItem } from '../../api/bom'
@@ -23,6 +24,7 @@ const TRANG_THAI_CONFIG: Record<string, { label: string; color: string }> = {
 
 export default function BomListPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
   const [editingId, setEditingId] = useState<number | null>(null)   // BOM id
@@ -212,17 +214,28 @@ export default function BomListPage() {
     {
       title: '',
       key: 'action',
-      width: 110,
+      width: 160,
       align: 'center',
       render: (_, row) => (
-        <Button
-          size="small"
-          icon={<CalculatorOutlined />}
-          type={row.trang_thai === 'confirmed' ? 'default' : 'primary'}
-          onClick={() => openEditor(row)}
-        >
-          {row.trang_thai === 'confirmed' ? 'Xem' : 'Sửa BOM'}
-        </Button>
+        <Space size={4}>
+          <Button
+            size="small"
+            icon={<CalculatorOutlined />}
+            type={row.trang_thai === 'confirmed' ? 'default' : 'primary'}
+            onClick={() => openEditor(row)}
+          >
+            {row.trang_thai === 'confirmed' ? 'Xem' : 'Sửa BOM'}
+          </Button>
+          {row.production_order_id && (
+            <Button
+              size="small"
+              icon={<FundOutlined />}
+              onClick={() => navigate(`/production/cost-analysis?khsx_id=${row.production_order_id}`)}
+            >
+              Phân tích
+            </Button>
+          )}
+        </Space>
       ),
     },
   ]

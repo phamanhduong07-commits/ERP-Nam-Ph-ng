@@ -804,6 +804,8 @@ export interface ProductionCostInput {
 export interface ProductionCostAllocation {
   id?: number
   production_order_id: number | null
+  so_lenh: string | null
+  ten_hang: string | null
   product_id: number | null
   san_luong: number
   ty_le: number

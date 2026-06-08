@@ -15,6 +15,7 @@ import { systemApi, PrintTemplate, ExcelTemplate, ExcelColumnConfig, ExcelHeader
 import { phapNhanApi, PhapNhan } from '../../api/phap-nhan'
 import { DragOutlined } from '@ant-design/icons'
 import EmptyState from "../../components/EmptyState"
+import { useAuthStore } from '../../store/auth'
 
 const { Title, Text } = Typography
 
@@ -342,6 +343,10 @@ const DEFAULT_CONFIG = {
 
 export default function PrintTemplatePage() {
   const qc = useQueryClient()
+  const authUser = useAuthStore(state => state.user)
+  const isTruongPhong = authUser?.role === 'TRUONG_PHONG_SALE_ADMIN'
+  const SALES_CODES = new Set(['sales_order', 'sales_invoice', 'sales_quote', 'sales_order_detail', 'sales_quote_list', 'delivery_order'])
+  const canEditTemplate = (ma_mau: string) => !isTruongPhong || SALES_CODES.has(ma_mau.toLowerCase())
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['print-templates'],
     queryFn: systemApi.getTemplates,
@@ -628,51 +633,57 @@ export default function PrintTemplatePage() {
       width: 140,
       render: (_: unknown, record: PrintTemplate) => (
         <Space>
-          <Button
-            type="primary"
-            icon={<EditOutlined />}
-            onClick={() => {
-              setIsNewMode(false)
-              setEditModal(record)
-              form.setFieldsValue(record)
-              setSelectedPhapNhanId(record.phap_nhan_id ?? phapNhans[0]?.id ?? null)
-              const metaAny = record.variables_meta as Record<string, unknown> | undefined
-              const savedCols = metaAny?.columns as DocColumn[] | undefined
-              const savedEasyCfg: EasyConfig | null = (() => { try { return metaAny?.easy_config ? JSON.parse(metaAny.easy_config as string) : null } catch { return null } })()
-              setEasyConfig(savedEasyCfg ?? (savedCols ? { ...DEFAULT_CONFIG, selectedColumns: savedCols } : DEFAULT_CONFIG) as EasyConfig)
-            }}
-          >
-            Sửa
-          </Button>
-          <Button
-            icon={<CopyOutlined />}
-            onClick={() => {
-              setIsNewMode(true)
-              const copyRecord = { ...record, ten_mau: `${record.ten_mau} (Copy)` }
-              setEditModal(copyRecord)
-              form.setFieldsValue(copyRecord)
-              setSelectedPhapNhanId(record.phap_nhan_id ?? phapNhans[0]?.id ?? null)
-              const metaAny = record.variables_meta as Record<string, unknown> | undefined
-              const savedCols = metaAny?.columns as DocColumn[] | undefined
-              const savedEasyCfg: EasyConfig | null = (() => { try { return metaAny?.easy_config ? JSON.parse(metaAny.easy_config as string) : null } catch { return null } })()
-              setEasyConfig(savedEasyCfg ?? (savedCols ? { ...DEFAULT_CONFIG, selectedColumns: savedCols } : DEFAULT_CONFIG) as EasyConfig)
-              message.info('Đã sao chép cấu hình. Bạn có thể đổi Loại chứng từ hoặc Pháp nhân trước khi lưu.')
-            }}
-          >
-            Copy
-          </Button>
-          <Button
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => Modal.confirm({
-              title: 'Xóa biểu mẫu?',
-              content: `Xóa "${record.ten_mau}"? Thao tác không thể hoàn tác.`,
-              okType: 'danger',
-              okText: 'Xóa',
-              cancelText: 'Hủy',
-              onOk: () => deleteMut.mutate(record),
-            })}
-          />
+          {canEditTemplate(record.ma_mau) && (
+            <Button
+              type="primary"
+              icon={<EditOutlined />}
+              onClick={() => {
+                setIsNewMode(false)
+                setEditModal(record)
+                form.setFieldsValue(record)
+                setSelectedPhapNhanId(record.phap_nhan_id ?? phapNhans[0]?.id ?? null)
+                const metaAny = record.variables_meta as Record<string, unknown> | undefined
+                const savedCols = metaAny?.columns as DocColumn[] | undefined
+                const savedEasyCfg: EasyConfig | null = (() => { try { return metaAny?.easy_config ? JSON.parse(metaAny.easy_config as string) : null } catch { return null } })()
+                setEasyConfig(savedEasyCfg ?? (savedCols ? { ...DEFAULT_CONFIG, selectedColumns: savedCols } : DEFAULT_CONFIG) as EasyConfig)
+              }}
+            >
+              Sửa
+            </Button>
+          )}
+          {canEditTemplate(record.ma_mau) && (
+            <Button
+              icon={<CopyOutlined />}
+              onClick={() => {
+                setIsNewMode(true)
+                const copyRecord = { ...record, ten_mau: `${record.ten_mau} (Copy)` }
+                setEditModal(copyRecord)
+                form.setFieldsValue(copyRecord)
+                setSelectedPhapNhanId(record.phap_nhan_id ?? phapNhans[0]?.id ?? null)
+                const metaAny = record.variables_meta as Record<string, unknown> | undefined
+                const savedCols = metaAny?.columns as DocColumn[] | undefined
+                const savedEasyCfg: EasyConfig | null = (() => { try { return metaAny?.easy_config ? JSON.parse(metaAny.easy_config as string) : null } catch { return null } })()
+                setEasyConfig(savedEasyCfg ?? (savedCols ? { ...DEFAULT_CONFIG, selectedColumns: savedCols } : DEFAULT_CONFIG) as EasyConfig)
+                message.info('Đã sao chép cấu hình. Bạn có thể đổi Loại chứng từ hoặc Pháp nhân trước khi lưu.')
+              }}
+            >
+              Copy
+            </Button>
+          )}
+          {!isTruongPhong && (
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => Modal.confirm({
+                title: 'Xóa biểu mẫu?',
+                content: `Xóa "${record.ten_mau}"? Thao tác không thể hoàn tác.`,
+                okType: 'danger',
+                okText: 'Xóa',
+                cancelText: 'Hủy',
+                onOk: () => deleteMut.mutate(record),
+              })}
+            />
+          )}
         </Space>
       ),
     },
@@ -978,6 +989,10 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
   const [selectedPhapNhanId, setSelectedPhapNhanId] = useState<number | null>(null)
   const [availableColumns, setAvailableColumns] = useState<DocColumn[]>([])
   const [availableMetaKeys, setAvailableMetaKeys] = useState<{ key: string; label: string }[]>([])
+  const authUser = useAuthStore(state => state.user)
+  const isTruongPhong = authUser?.role === 'TRUONG_PHONG_SALE_ADMIN'
+  const SALES_CODES_XL = new Set(['sales_order', 'sales_invoice', 'sales_quote', 'sales_order_detail', 'sales_quote_list', 'delivery_order'])
+  const canEditXl = (ma_mau: string) => !isTruongPhong || SALES_CODES_XL.has(ma_mau.toLowerCase())
   // Local state for sub-configs (Form.Item can't easily handle nested objects)
   const [styleConfig, setStyleConfig] = useState<ExcelStyleConfig>({})
   const [headerConfig, setHeaderConfig] = useState<ExcelHeaderField[]>([])
@@ -1042,8 +1057,12 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
       title: 'Thao tác', key: 'action', width: 140,
       render: (_: unknown, r: ExcelTemplate) => (
         <Space>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>Sửa</Button>
-          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => Modal.confirm({ title: 'Xóa mẫu?', onOk: () => deleteMut.mutate(r) })} />
+          {canEditXl(r.ma_mau) && (
+            <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)}>Sửa</Button>
+          )}
+          {!isTruongPhong && (
+            <Button size="small" danger icon={<DeleteOutlined />} onClick={() => Modal.confirm({ title: 'Xóa mẫu?', onOk: () => deleteMut.mutate(r) })} />
+          )}
         </Space>
       ),
     },

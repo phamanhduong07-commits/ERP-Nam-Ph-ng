@@ -10,6 +10,7 @@ class CustomerBase(BaseModel):
     dia_chi: str | None = None
     dia_chi_giao_hang: str | None = None
     dien_thoai: str | None = None
+    fax: str | None = None
     ma_so_thue: str | None = None
     nguoi_dai_dien: str | None = None
     nguoi_lien_he: str | None = None
@@ -19,6 +20,11 @@ class CustomerBase(BaseModel):
     xep_loai: str | None = None
     la_khach_vip: bool = False
     ghi_chu: str | None = None
+    email: str | None = None
+    phap_nhan: str | None = None
+    ke_toan_phu_trach: str | None = None
+    dieu_khoan_tt: str | None = None
+    sa_cskh: str | None = None
 
 
 class CustomerCreate(CustomerBase):
@@ -31,6 +37,7 @@ class CustomerUpdate(BaseModel):
     dia_chi: str | None = None
     dia_chi_giao_hang: str | None = None
     dien_thoai: str | None = None
+    fax: str | None = None
     ma_so_thue: str | None = None
     nguoi_dai_dien: str | None = None
     nguoi_lien_he: str | None = None
@@ -40,6 +47,11 @@ class CustomerUpdate(BaseModel):
     xep_loai: str | None = None
     la_khach_vip: bool | None = None
     ghi_chu: str | None = None
+    email: str | None = None
+    phap_nhan: str | None = None
+    ke_toan_phu_trach: str | None = None
+    dieu_khoan_tt: str | None = None
+    sa_cskh: str | None = None
     trang_thai: bool | None = None
     nv_ids: list[int] | None = None
 

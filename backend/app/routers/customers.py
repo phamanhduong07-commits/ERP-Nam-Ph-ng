@@ -37,6 +37,11 @@ CUSTOMER_IMPORT_FIELDS = [
     ImportField("xep_loai", "Xep loai", parser=parse_text),
     ImportField("la_khach_vip", "Khach VIP", parser=parse_bool, default=False),
     ImportField("ghi_chu", "Ghi chu", parser=parse_text),
+    ImportField("email", "Email", parser=parse_text),
+    ImportField("phap_nhan", "Phap nhan", parser=parse_text, aliases=("PHAP NHAN", "Phap Nhan")),
+    ImportField("ke_toan_phu_trach", "Ke toan phu trach", parser=parse_text, aliases=("KE TOAN PHU TRACH",)),
+    ImportField("dieu_khoan_tt", "Dieu khoan TT", parser=parse_text, aliases=("DIEU KHOAN THANH TOAN",)),
+    ImportField("sa_cskh", "SA CSKH", parser=parse_text, aliases=("SA-CSKH",)),
     ImportField("trang_thai", "Trang thai", parser=parse_bool, default=True),
 ]
 

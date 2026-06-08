@@ -240,7 +240,14 @@ const ProductionCostingPage: React.FC = () => {
   ]
 
   const allocationColumns: ColumnsType<ProductionCostAllocation> = [
-    { title: 'Lệnh SX', dataIndex: 'production_order_id', width: 95, render: (v: number | null) => v ? `#${v}` : '-' },
+    {
+      title: 'Lệnh SX',
+      key: 'lenh_sx',
+      width: 160,
+      render: (_: unknown, record: ProductionCostAllocation) => record.so_lenh
+        ? <Space direction="vertical" size={0}><Text strong style={{ fontSize: 12 }}>{record.so_lenh}</Text><Text type="secondary" style={{ fontSize: 11 }}>{record.ten_hang || ''}</Text></Space>
+        : record.production_order_id ? `#${record.production_order_id}` : '-',
+    },
     { title: 'Sản lượng', dataIndex: 'san_luong', width: 115, align: 'right', render: (v: number) => numberText(v) },
     { title: 'Tỷ lệ', dataIndex: 'ty_le', width: 90, align: 'right', render: (v: number) => `${(Number(v || 0) * 100).toFixed(2)}%` },
     { title: 'NVL', dataIndex: 'chi_phi_nvl', width: 130, align: 'right', render: moneyText },

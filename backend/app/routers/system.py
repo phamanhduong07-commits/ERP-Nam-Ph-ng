@@ -8,6 +8,23 @@ from app.deps import get_current_user, require_roles
 from app.models.system import PrintTemplate, SystemSetting, ExcelTemplate
 from app.models.auth import User
 
+_SALES_TEMPLATE_CODES = frozenset({
+    "sales_order", "sales_invoice", "sales_quote",
+    "sales_order_detail", "sales_quote_list", "delivery_order",
+})
+
+
+def _assert_template_write(ma_mau: str, user) -> None:
+    role_code = user.role.ma_vai_tro if user.role else None
+    if role_code == "ADMIN":
+        return
+    if role_code == "TRUONG_PHONG_SALE_ADMIN" and ma_mau.lower() in _SALES_TEMPLATE_CODES:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Bạn không có quyền chỉnh sửa mẫu in này",
+    )
+
 router = APIRouter(prefix="/api/system", tags=["system"])
 
 
@@ -71,8 +88,9 @@ def update_template(
     ma_mau: str,
     body: PrintTemplateIn,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN"))
+    user: User = Depends(get_current_user)
 ):
+    _assert_template_write(ma_mau, user)
     key = ma_mau.lower()
     tpl = db.query(PrintTemplate).filter(
         PrintTemplate.ma_mau == key,
@@ -149,8 +167,9 @@ def update_excel_template(
     ma_mau: str,
     body: ExcelTemplateIn,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN"))
+    user: User = Depends(get_current_user)
 ):
+    _assert_template_write(ma_mau, user)
     key = ma_mau.lower()
     tpl = db.query(ExcelTemplate).filter(
         ExcelTemplate.ma_mau == key,

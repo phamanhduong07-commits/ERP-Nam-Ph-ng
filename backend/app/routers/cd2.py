@@ -26,6 +26,7 @@ from app.services.inventory_service import (
     get_workshop_warehouse as _get_workshop_warehouse,
 )
 from app.socket_manager import sio
+from app.services.defect_record_service import auto_defect_record
 
 router = APIRouter(prefix="/api/cd2", tags=["cd2"])
 
@@ -318,6 +319,7 @@ def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Op
 
     ten_hang = p.ten_hang or ""
     sl = Decimal(str(so_luong))
+    sl_loi = Decimal(str(p.so_luong_sau_in_loi or 0))
     out = ProductionOutput(
         so_phieu=f"TP-{ym}-{seq:04d}",
         ngay_nhap=date.today(),
@@ -326,7 +328,8 @@ def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Op
         product_id=product_id,
         ten_hang=ten_hang,
         so_luong_nhap=sl,
-        so_luong_loi=Decimal(str(p.so_luong_sau_in_loi or 0)),
+        so_luong_loi=sl_loi,
+        trang_thai_loi='da_nhap_kho_ao' if sl_loi > 0 else None,
         dvt="Thùng",
         don_gia_xuat_xuong=don_gia,
         ghi_chu=f"Tự động từ phiếu in {p.so_phieu}",
@@ -343,6 +346,15 @@ def _auto_nhap_thanh_pham(db: Session, p: PhieuIn, user_id: Optional[int]) -> Op
             product_id=product_id,
             ghi_chu=f"Hoàn thành định hình — {p.so_phieu}",
         )
+        if sl_loi > 0:
+            auto_defect_record(
+                db,
+                ref_id=out.id,
+                ref_type="production_output",
+                khau="tp",
+                so_luong=sl_loi,
+                created_by=user_id,
+            )
     except HTTPException:
         raise
     except Exception as exc:

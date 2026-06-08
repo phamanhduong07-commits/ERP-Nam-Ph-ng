@@ -14,6 +14,7 @@ from app.services.inventory_service import (
     get_phoi_source_warehouse as _get_phoi_source_warehouse,
 )
 from app.services.production_order_service import ProductionOrderService
+from app.services.defect_record_service import auto_defect_record
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.production_plan import ProductionPlanLine
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
@@ -265,6 +266,167 @@ def list_orders(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/lenh-summary")
+def list_lenh_summary(
+    tu_ngay: date | None = Query(default=None),
+    den_ngay: date | None = Query(default=None),
+    phan_xuong_id: int | None = Query(default=None),
+    phap_nhan_id: int | None = Query(default=None),
+    trang_thai: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from sqlalchemy import select, func, or_
+    from app.models.cd2 import PhieuIn
+    from app.models.warehouse_doc import ProductionOutput, DeliveryOrderItem
+    from app.models.sales import SalesReturnItem, SalesOrder as _SO
+    from app.models.master import Customer, PhapNhan as _PhapNhan, PhanXuong as _PX
+
+    # ── Correlated scalar subqueries ──────────────────────────────────────────
+    _id = ProductionOrder.id
+
+    sl_kh_sq = (
+        select(func.coalesce(func.sum(ProductionOrderItem.so_luong_ke_hoach), 0))
+        .where(ProductionOrderItem.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+    ten_hang_sq = (
+        select(func.max(ProductionOrderItem.ten_hang))
+        .where(ProductionOrderItem.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+    cd1_chay_sq = (
+        select(func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te), 0))
+        .select_from(PhieuNhapPhoiSongItem)
+        .join(PhieuNhapPhoiSong, PhieuNhapPhoiSong.id == PhieuNhapPhoiSongItem.phieu_id)
+        .where(PhieuNhapPhoiSong.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+    cd1_loi_sq = (
+        select(func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_loi), 0))
+        .select_from(PhieuNhapPhoiSongItem)
+        .join(PhieuNhapPhoiSong, PhieuNhapPhoiSong.id == PhieuNhapPhoiSongItem.phieu_id)
+        .where(PhieuNhapPhoiSong.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+    in_ok_sq = (
+        select(func.coalesce(func.sum(PhieuIn.so_luong_sau_in_ok), 0))
+        .where(PhieuIn.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+    in_loi_sq = (
+        select(func.coalesce(func.sum(PhieuIn.so_luong_sau_in_loi), 0))
+        .where(PhieuIn.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+    tp_ok_sq = (
+        select(func.coalesce(func.sum(ProductionOutput.so_luong_nhap), 0))
+        .where(ProductionOutput.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+    tp_loi_sq = (
+        select(func.coalesce(func.sum(ProductionOutput.so_luong_loi), 0))
+        .where(ProductionOutput.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+    giao_sq = (
+        select(func.coalesce(func.sum(DeliveryOrderItem.so_luong), 0))
+        .where(DeliveryOrderItem.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+    tra_sq = (
+        select(func.coalesce(func.sum(SalesReturnItem.so_luong_tra), 0))
+        .select_from(SalesReturnItem)
+        .join(DeliveryOrderItem, DeliveryOrderItem.id == SalesReturnItem.delivery_order_item_id)
+        .where(DeliveryOrderItem.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+    doanh_thu_sq = (
+        select(func.coalesce(func.sum(DeliveryOrderItem.thanh_tien), 0))
+        .where(DeliveryOrderItem.production_order_id == _id)
+        .correlate(ProductionOrder).scalar_subquery()
+    )
+
+    # ── Main query ────────────────────────────────────────────────────────────
+    stmt = (
+        db.query(
+            ProductionOrder.id,
+            ProductionOrder.so_lenh,
+            ProductionOrder.trang_thai,
+            ProductionOrder.ngay_lenh,
+            Customer.ten_viet_tat.label("ten_khach"),
+            _PX.ten_xuong.label("ten_phan_xuong"),
+            _PhapNhan.ten_phap_nhan.label("ten_phap_nhan"),
+            ten_hang_sq.label("ten_hang"),
+            sl_kh_sq.label("sl_ke_hoach"),
+            cd1_chay_sq.label("sl_cd1_chay"),
+            cd1_loi_sq.label("sl_cd1_loi"),
+            in_ok_sq.label("sl_in_ok"),
+            in_loi_sq.label("sl_in_loi"),
+            tp_ok_sq.label("sl_tp_ok"),
+            tp_loi_sq.label("sl_tp_loi"),
+            giao_sq.label("sl_giao"),
+            tra_sq.label("sl_tra"),
+            doanh_thu_sq.label("doanh_thu"),
+        )
+        .outerjoin(_SO, _SO.id == ProductionOrder.sales_order_id)
+        .outerjoin(Customer, Customer.id == _SO.customer_id)
+        .outerjoin(_PX, _PX.id == ProductionOrder.phan_xuong_id)
+        .outerjoin(_PhapNhan, _PhapNhan.id == ProductionOrder.phap_nhan_id)
+    )
+
+    if tu_ngay:
+        stmt = stmt.filter(ProductionOrder.ngay_lenh >= tu_ngay)
+    if den_ngay:
+        stmt = stmt.filter(ProductionOrder.ngay_lenh <= den_ngay)
+    if phan_xuong_id:
+        stmt = stmt.filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
+    if phap_nhan_id:
+        stmt = stmt.filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
+    if trang_thai:
+        stmt = stmt.filter(ProductionOrder.trang_thai == trang_thai)
+    if q:
+        ten_hang_match = (
+            select(ProductionOrderItem.id)
+            .where(
+                ProductionOrderItem.production_order_id == ProductionOrder.id,
+                ProductionOrderItem.ten_hang.ilike(f"%{q}%"),
+            )
+            .correlate(ProductionOrder).exists()
+        )
+        stmt = stmt.filter(
+            or_(ProductionOrder.so_lenh.ilike(f"%{q}%"), ten_hang_match)
+        )
+
+    rows = stmt.order_by(ProductionOrder.ngay_lenh.desc()).limit(300).all()
+
+    return [
+        {
+            "id": r.id,
+            "so_lenh": r.so_lenh,
+            "trang_thai": r.trang_thai,
+            "ngay_lenh": str(r.ngay_lenh) if r.ngay_lenh else None,
+            "ten_hang": r.ten_hang,
+            "ten_khach": r.ten_khach,
+            "ten_phan_xuong": (r.ten_phan_xuong or "").replace("Xưởng ", ""),
+            "ten_phap_nhan": r.ten_phap_nhan,
+            "sl_ke_hoach": float(r.sl_ke_hoach or 0),
+            "sl_cd1_chay": float(r.sl_cd1_chay or 0),
+            "sl_cd1_loi": float(r.sl_cd1_loi or 0),
+            "sl_in_ok": float(r.sl_in_ok or 0),
+            "sl_in_loi": float(r.sl_in_loi or 0),
+            "sl_tp_ok": float(r.sl_tp_ok or 0),
+            "sl_tp_loi": float(r.sl_tp_loi or 0),
+            "sl_giao": float(r.sl_giao or 0),
+            "sl_tra": float(r.sl_tra or 0),
+            "sl_con_kho": float((r.sl_tp_ok or 0) - (r.sl_giao or 0) + (r.sl_tra or 0)),
+            "doanh_thu": float(r.doanh_thu or 0),
+        }
+        for r in rows
+    ]
 
 
 @router.get("/{order_id:int}", response_model=ProductionOrderResponse)
@@ -781,7 +943,7 @@ def create_phieu_nhap_phoi_song(
             so_luong_ke_hoach=it.so_luong_ke_hoach,
             so_luong_thuc_te=it.so_luong_thuc_te,
             so_luong_loi=it.so_luong_loi,
-            trang_thai_loi='cho_xu_ly' if it.so_luong_loi and it.so_luong_loi > 0 else None,
+            trang_thai_loi='da_nhap_kho_ao' if it.so_luong_loi and it.so_luong_loi > 0 else None,
             chieu_kho=it.chieu_kho,
             chieu_cat=it.chieu_cat,
             so_tam=it.so_tam,
@@ -799,6 +961,19 @@ def create_phieu_nhap_phoi_song(
 
     db.commit()
     db.refresh(phieu)
+
+    # Auto-create DefectRecord cho từng item có phôi lỗi
+    for it in phieu.items:
+        if it.so_luong_loi and it.so_luong_loi > 0:
+            auto_defect_record(
+                db,
+                ref_id=it.id,
+                ref_type="phieu_nhap_phoi_song_item",
+                khau="cd1",
+                so_luong=it.so_luong_loi,
+                created_by=current_user.id,
+            )
+    db.commit()
 
     # Cập nhật tồn kho phôi vào kho đã resolve
     if warehouse_id:
