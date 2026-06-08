@@ -612,6 +612,110 @@ TEMPLATES = [
         "variables_meta": {
             "labels_html": "HTML của tất cả tem (do router tạo, mỗi tem là 1 .label div với barcode SVG)",
         }
+    },
+    {
+        "ma_mau": "PURCHASE_INVOICE",
+        "ten_mau": "Hóa Đơn Mua Hàng",
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  .pi { font-family: 'Times New Roman', serif; color: #222; font-size: 11pt; line-height: 1.5; }
+  .pi-head { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 2px solid #E65100; margin-bottom: 12px; }
+  .pi-logo { flex: 0 0 80px; }
+  .pi-logo img { max-width: 80px; max-height: 60px; object-fit: contain; }
+  .pi-company { flex: 1; }
+  .pi-company-name { font-weight: 700; color: #E65100; text-transform: uppercase; font-size: 13pt; }
+  .pi-company-details { font-size: 9pt; margin-top: 2px; color: #555; }
+  .pi-title { text-align: center; margin: 14px 0 10px; }
+  .pi-title h2 { margin: 0; font-size: 18pt; letter-spacing: 2px; color: #222; }
+  .pi-title .sub { font-size: 10pt; color: #555; margin-top: 4px; }
+  .pi-info { margin: 12px 0; }
+  .pi-row { display: flex; gap: 8px; margin: 5px 0; }
+  .pi-label { min-width: 150px; font-weight: 600; flex-shrink: 0; }
+  .pi-dots { flex: 1; border-bottom: 1px dotted #888; min-height: 1em; }
+  .pi-summary { border: 1.5px solid #E65100; border-radius: 4px; padding: 10px 16px; margin: 16px 0; background: #fff8f5; }
+  .pi-summary-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dotted #ddd; }
+  .pi-summary-row:last-child { border-bottom: none; font-weight: 700; font-size: 12pt; }
+  .pi-total-label { color: #555; }
+  .pi-total-val { font-weight: 600; }
+  .pi-total-final { color: #E65100; font-size: 13pt; }
+  .pi-payments table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  .pi-payments th { background: #E65100; color: #fff; padding: 4px 6px; }
+  .pi-payments td { border: 1px solid #ddd; padding: 4px 6px; }
+  .pi-note { font-size: 10pt; color: #555; margin-top: 10px; }
+  .pi-sig { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 32px; text-align: center; }
+  .pi-sig strong { display: block; margin-bottom: 4px; }
+  .pi-sig em { font-style: italic; font-size: 9pt; color: #777; }
+  .pi-sig-space { height: 48px; }
+</style>
+<div class="pi">
+  <div class="pi-head">
+    <div class="pi-logo">{{logo_img}}</div>
+    <div class="pi-company">
+      <div class="pi-company-name">{{company_name}}</div>
+      <div class="pi-company-details">{{company_details}}</div>
+    </div>
+  </div>
+  <div class="pi-title">
+    <h2>HÓA ĐƠN MUA HÀNG</h2>
+    <div class="sub">
+      Số: <strong>{{document_number}}</strong>
+      &nbsp;&nbsp;|&nbsp;&nbsp; Mẫu số: {{mau_so}} &nbsp; Ký hiệu: {{ky_hieu}}
+    </div>
+  </div>
+  <div class="pi-info">
+    <div class="pi-row"><div class="pi-label">Ngày lập:</div><div class="pi-dots">{{document_date}}</div>
+      <div class="pi-label" style="margin-left:20px">Hạn thanh toán:</div><div class="pi-dots">{{han_tt}}</div></div>
+    <div class="pi-row"><div class="pi-label">Nhà cung cấp:</div><div class="pi-dots">{{nha_cung_cap}}</div></div>
+    <div class="pi-row"><div class="pi-label">Mã số thuế NCC:</div><div class="pi-dots">{{ma_so_thue}}</div></div>
+  </div>
+  <div class="pi-summary">
+    <div class="pi-summary-row">
+      <span class="pi-total-label">Tiền hàng</span>
+      <span class="pi-total-val">{{tong_tien_hang}} đồng</span>
+    </div>
+    <div class="pi-summary-row">
+      <span class="pi-total-label">Thuế GTGT ({{thue_suat}}%)</span>
+      <span class="pi-total-val">{{tien_thue}} đồng</span>
+    </div>
+    <div class="pi-summary-row">
+      <span class="pi-total-label">Tổng thanh toán</span>
+      <span class="pi-total-final">{{tong_thanh_toan}} đồng</span>
+    </div>
+    <div class="pi-summary-row">
+      <span class="pi-total-label">Đã thanh toán</span>
+      <span class="pi-total-val">{{da_thanh_toan}} đồng</span>
+    </div>
+    <div class="pi-summary-row" style="border-top:1px solid #E65100;margin-top:4px;padding-top:6px">
+      <span class="pi-total-label">Còn lại</span>
+      <span class="pi-total-final">{{con_lai}} đồng</span>
+    </div>
+  </div>
+  <div class="pi-payments">{{payments_table}}</div>
+  <div class="pi-note">Ghi chú: {{ghi_chu}}</div>
+  <div class="pi-sig">
+    <div><strong>Người lập phiếu</strong><em>(Ký, họ tên)</em><div class="pi-sig-space"></div></div>
+    <div><strong>Giám đốc</strong><em>(Ký, họ tên)</em><div class="pi-sig-space"></div></div>
+  </div>
+</div>
+""",
+        "variables_meta": {
+            "document_number": "Số hóa đơn",
+            "mau_so": "Mẫu số",
+            "ky_hieu": "Ký hiệu",
+            "document_date": "Ngày lập",
+            "han_tt": "Hạn thanh toán",
+            "nha_cung_cap": "Tên nhà cung cấp",
+            "ma_so_thue": "MST nhà cung cấp",
+            "thue_suat": "Thuế suất (%)",
+            "tong_tien_hang": "Tiền hàng",
+            "tien_thue": "Tiền thuế",
+            "tong_thanh_toan": "Tổng thanh toán",
+            "da_thanh_toan": "Đã thanh toán",
+            "con_lai": "Còn lại",
+            "ghi_chu": "Ghi chú",
+            "payments_table": "Bảng phiếu chi"
+        }
     }
 ]
 

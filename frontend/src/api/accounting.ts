@@ -317,6 +317,11 @@ export const purchaseInvoiceApi = {
 
   fromGR: (grId: number, params?: { thue_suat?: number; co_vat?: boolean }): Promise<PurchaseInvoice> =>
     client.post(`/accounting/purchase-invoices/from-gr/${grId}`, null, { params }).then(r => r.data),
+
+  cancel: (id: number, ly_do?: string): Promise<PurchaseInvoice> =>
+    client.patch(`/accounting/purchase-invoices/${id}/cancel`, null, { params: ly_do ? { ly_do } : {} }).then(r => r.data),
+
+  printUrl: (id: number) => `/api/accounting/purchase-invoices/${id}/print`,
 }
 
 // ──────────────────────────────────────────────────────

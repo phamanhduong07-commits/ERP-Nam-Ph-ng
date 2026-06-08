@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Row, Select, Space, Switch, Table, Tag, Typography,
+  Button, Card, Col, DatePicker, Input, Row, Select, Space, Switch, Table, Tag, Typography,
 } from 'antd'
-import { FileExcelOutlined, WalletOutlined } from '@ant-design/icons'
+import { FileExcelOutlined, SearchOutlined, WalletOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
@@ -30,26 +30,28 @@ export default function PurchaseInvoiceListPage() {
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
   const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
+  const [filterSoHD, setFilterSoHD] = useState<string | undefined>()
   const [quaHanOnly, setQuaHanOnly] = useState(false)
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['purchase-invoices', tuNgay, denNgay, filterTrangThai, filterPhapNhan, quaHanOnly, page],
+    queryKey: ['purchase-invoices', tuNgay, denNgay, filterTrangThai, filterPhapNhan, filterSoHD, quaHanOnly, page],
     queryFn: () =>
       purchaseInvoiceApi.list({
         tu_ngay: tuNgay,
         den_ngay: denNgay,
         trang_thai: filterTrangThai,
         phap_nhan_id: filterPhapNhan,
+        so_hoa_don: filterSoHD || undefined,
         qua_han_only: quaHanOnly || undefined,
         page,
         page_size: 20,
       }),
   })
 
-  const invoices: PurchaseInvoice[] = data?.items ?? data ?? []
-  const total: number = data?.total ?? invoices.length
-  const tongConLai = invoices.reduce((s: number, i: PurchaseInvoice) => s + (i.con_lai ?? 0), 0)
+  const invoices: PurchaseInvoice[] = data?.items ?? []
+  const total: number = data?.total ?? 0
+  const tongConLai: number = data?.total_con_lai ?? 0
 
   const handleExcel = () => {
     const rows = invoices.map((i: PurchaseInvoice) => ({
@@ -168,6 +170,15 @@ export default function PurchaseInvoiceListPage() {
                 setDenNgay(v?.[1]?.format('YYYY-MM-DD'))
                 setPage(1)
               }}
+            />
+          </Col>
+          <Col>
+            <Input
+              style={{ width: 160 }}
+              placeholder="Số hóa đơn"
+              prefix={<SearchOutlined />}
+              allowClear
+              onChange={e => { setFilterSoHD(e.target.value || undefined); setPage(1) }}
             />
           </Col>
           <Col>

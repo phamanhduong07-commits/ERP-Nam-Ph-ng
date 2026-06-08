@@ -1495,6 +1495,7 @@ class AccountingService:
         den_ngay: date | None = None,
         qua_han_only: bool = False,
         phap_nhan_id: int | None = None,
+        so_hoa_don: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ):
@@ -1512,10 +1513,14 @@ class AccountingService:
             q = q.filter(PurchaseInvoice.trang_thai == "qua_han")
         if phap_nhan_id:
             q = q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
+        if so_hoa_don:
+            q = q.filter(PurchaseInvoice.so_hoa_don.ilike(f"%{so_hoa_don}%"))
 
         total = q.count()
+        from sqlalchemy import func as _func
+        total_con_lai = q.with_entities(_func.sum(PurchaseInvoice.con_lai)).scalar() or Decimal("0")
         items = q.order_by(desc(PurchaseInvoice.ngay_lap)).offset((page - 1) * page_size).limit(page_size).all()
-        return {"total": total, "page": page, "page_size": page_size, "items": items}
+        return {"total": total, "page": page, "page_size": page_size, "items": items, "total_con_lai": float(total_con_lai)}
 
     def get_purchase_invoice(self, inv_id: int) -> PurchaseInvoice:
         inv = (

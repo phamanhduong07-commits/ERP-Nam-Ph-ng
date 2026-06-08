@@ -503,6 +503,7 @@ def list_purchase_invoices(
     den_ngay: date | None = Query(None),
     qua_han_only: bool = Query(False),
     phap_nhan_id: int | None = Query(None),
+    so_hoa_don: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -512,7 +513,7 @@ def list_purchase_invoices(
         supplier_id=supplier_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
         qua_han_only=qua_han_only, phap_nhan_id=phap_nhan_id,
-        page=page, page_size=page_size,
+        so_hoa_don=so_hoa_don, page=page, page_size=page_size,
     )
 
 
@@ -569,6 +570,99 @@ def cancel_purchase_invoice(
 ):
     logger.info("cancel_purchase_invoice id=%s user=%s", inv_id, current_user.id)
     return AccountingService(db).cancel_purchase_invoice(inv_id, current_user.id, ly_do)
+
+
+@router.get("/purchase-invoices/{inv_id}/print", response_class=HTMLResponse)
+def print_purchase_invoice(
+    inv_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    import html as _html_mod
+    from app.models.system import PrintTemplate, SystemSetting
+
+    inv = db.query(PurchaseInvoice).options(
+        __import__("sqlalchemy.orm", fromlist=["joinedload"]).joinedload(PurchaseInvoice.payments)
+    ).filter(PurchaseInvoice.id == inv_id).first()
+    if not inv:
+        raise HTTPException(404, "Không tìm thấy hóa đơn mua")
+
+    pn: PhapNhan | None = (
+        db.get(PhapNhan, inv.phap_nhan_id) if inv.phap_nhan_id
+        else db.query(PhapNhan).filter(PhapNhan.trang_thai.is_(True)).first()
+    )
+
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PURCHASE_INVOICE")
+    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == pn.id).first() if pn else None
+    if not tpl:
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in PURCHASE_INVOICE — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
+    settings = {s.key: s.value for s in db.query(SystemSetting).all()}
+    accent = "#E65100"
+    ten_cty = pn.ten_phap_nhan if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+    parts = []
+    if pn and pn.dia_chi: parts.append(f"Địa chỉ: {pn.dia_chi}")
+    if pn and pn.ma_so_thue: parts.append(f"MST: {pn.ma_so_thue}")
+    if pn and pn.so_dien_thoai: parts.append(f"ĐT: {pn.so_dien_thoai}")
+
+    payments_rows = ""
+    for p in (inv.payments or []):
+        hinh_thuc = HINH_THUC_LABEL.get(p.hinh_thuc_tt, p.hinh_thuc_tt or "")
+        payments_rows += (
+            f"<tr><td>{_html_mod.escape(p.so_phieu or '')}</td>"
+            f"<td>{p.ngay_phieu.strftime('%d/%m/%Y') if p.ngay_phieu else ''}</td>"
+            f"<td>{_html_mod.escape(hinh_thuc)}</td>"
+            f"<td style='text-align:right'>{float(p.so_tien):,.0f}</td></tr>"
+        )
+    payments_table = (
+        f"<h4 style='margin:16px 0 6px'>Phiếu chi đã tạo</h4>"
+        f"<table style='width:100%;border-collapse:collapse;font-size:11px'>"
+        f"<thead><tr style='background:{accent};color:#fff'>"
+        f"<th style='padding:4px 6px;text-align:left'>Số phiếu</th>"
+        f"<th style='padding:4px 6px;text-align:left'>Ngày</th>"
+        f"<th style='padding:4px 6px;text-align:left'>Hình thức</th>"
+        f"<th style='padding:4px 6px;text-align:right'>Số tiền</th></tr></thead>"
+        f"<tbody>{payments_rows}</tbody></table>"
+    ) if payments_rows else ""
+
+    replacements = {
+        "{{document_number}}": _html_mod.escape(inv.so_hoa_don or f"#{inv.id}"),
+        "{{mau_so}}": _html_mod.escape(inv.mau_so or ""),
+        "{{ky_hieu}}": _html_mod.escape(inv.ky_hieu or ""),
+        "{{document_date}}": ngay_str(inv.ngay_lap),
+        "{{han_tt}}": ngay_str(inv.han_tt) if inv.han_tt else "-",
+        "{{company_name}}": _html_mod.escape(ten_cty),
+        "{{company_details}}": _html_mod.escape(" | ".join(parts)),
+        "{{logo_img}}": f'<img src="{_html_mod.escape(settings["logo_url"])}" style="max-height:50px"/>' if settings.get("logo_url") else "",
+        "{{accent}}": accent,
+        "{{nha_cung_cap}}": _html_mod.escape(inv.ten_don_vi or ""),
+        "{{ma_so_thue}}": _html_mod.escape(inv.ma_so_thue or ""),
+        "{{thue_suat}}": str(int(inv.thue_suat)),
+        "{{tong_tien_hang}}": f"{float(inv.tong_tien_hang):,.0f}",
+        "{{tien_thue}}": f"{float(inv.tien_thue):,.0f}",
+        "{{tong_thanh_toan}}": f"{float(inv.tong_thanh_toan):,.0f}",
+        "{{da_thanh_toan}}": f"{float(inv.da_thanh_toan):,.0f}",
+        "{{con_lai}}": f"{float(inv.con_lai):,.0f}",
+        "{{ghi_chu}}": _html_mod.escape(inv.ghi_chu or ""),
+        "{{payments_table}}": payments_table,
+    }
+    content = tpl.html_content
+    for k, v in replacements.items():
+        content = content.replace(k, v)
+    page = (
+        "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
+        f"<title>Hóa đơn mua {_html_mod.escape(inv.so_hoa_don or str(inv.id))}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>"
+        f"<button onclick='window.print()' style='padding:7px 18px;background:{accent};color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In phiếu</button>"
+        "<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>"
+        "</div>"
+        f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)
 
 
 # ─────────────────────────────────────────────

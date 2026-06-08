@@ -25,10 +25,10 @@ export default function PaperMaterialList() {
   const [filterNhom, setFilterNhom] = useState<number | undefined>(undefined)
   const [filterNsx, setFilterNsx] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | undefined>(undefined)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc' | undefined>(undefined)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['paper-materials', search, filterNhom, filterNsx, page, sortOrder],
+    queryKey: ['paper-materials', search, filterNhom, filterNsx, page, sortDir],
     queryFn: () =>
       paperMaterialsFullApi.list({
         search: search || undefined,
@@ -36,8 +36,8 @@ export default function PaperMaterialList() {
         ma_nsx_id: filterNsx,
         page,
         page_size: 20,
-        sort_by: sortOrder ? 'gia_mua' : undefined,
-        sort_order: sortOrder,
+        sort_by: sortDir ? 'gia_mua' : undefined,
+        sort_order: sortDir,
       }).then(r => r.data),
   })
 
@@ -142,6 +142,9 @@ export default function PaperMaterialList() {
       dataIndex: 'gia_mua',
       width: 110,
       align: 'right',
+      sorter: true,
+      sortDirections: ['descend', 'ascend'] as const,
+      sortOrder: sortDir === 'desc' ? 'descend' : sortDir === 'asc' ? 'ascend' : null,
       render: (v: number) => v?.toLocaleString('vi-VN'),
     },
     {
@@ -207,17 +210,6 @@ export default function PaperMaterialList() {
                   (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
                 }
               />
-              <Select
-                placeholder="Giá mua"
-                allowClear
-                style={{ width: 140 }}
-                value={sortOrder}
-                onChange={v => { setSortOrder(v); setPage(1) }}
-                options={[
-                  { value: 'desc', label: 'Giá mua: cao → thấp' },
-                  { value: 'asc', label: 'Giá mua: thấp → cao' },
-                ]}
-              />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm nguyên liệu
               </Button>
@@ -231,12 +223,18 @@ export default function PaperMaterialList() {
         </Row>
 
         <Table
-                    locale={{ emptyText: <EmptyState size="small" /> }}
-                    rowKey="id"
+          locale={{ emptyText: <EmptyState size="small" /> }}
+          rowKey="id"
           dataSource={items}
           columns={columns}
           loading={isLoading}
           size="small"
+          onChange={(_, __, sorter) => {
+            const s = Array.isArray(sorter) ? sorter[0] : sorter
+            if (s?.order === 'descend') { setSortDir('desc'); setPage(1) }
+            else if (s?.order === 'ascend') { setSortDir('asc'); setPage(1) }
+            else { setSortDir(undefined); setPage(1) }
+          }}
           pagination={{
             current: page,
             pageSize: 20,

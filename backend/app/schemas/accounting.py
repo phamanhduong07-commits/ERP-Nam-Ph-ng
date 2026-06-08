@@ -77,7 +77,7 @@ class PurchaseInvoiceListItem(BaseModel):
     da_thanh_toan: Decimal
     con_lai: Decimal
     trang_thai: Literal[
-        "nhap", "da_phat_hanh", "da_tt_mot_phan", "da_tt_du", "qua_han", "huy"
+        "nhap", "da_tt_mot_phan", "da_tt_du", "qua_han", "huy"
     ] = "nhap"
     po_id: int | None
     gr_id: int | None
