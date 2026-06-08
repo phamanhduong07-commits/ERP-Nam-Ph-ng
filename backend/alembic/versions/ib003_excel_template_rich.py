@@ -14,9 +14,17 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("excel_templates", sa.Column("header_config", sa.JSON(), nullable=True))
-    op.add_column("excel_templates", sa.Column("footer_config", sa.JSON(), nullable=True))
-    op.add_column("excel_templates", sa.Column("style_config", sa.JSON(), nullable=True))
+    conn = op.get_bind()
+    existing = {r[0] for r in conn.execute(sa.text(
+        "SELECT column_name FROM information_schema.columns WHERE table_name='excel_templates'"
+    ))}
+    for col_name, col_type in [
+        ("header_config", sa.JSON()),
+        ("footer_config", sa.JSON()),
+        ("style_config", sa.JSON()),
+    ]:
+        if col_name not in existing:
+            op.add_column("excel_templates", sa.Column(col_name, col_type, nullable=True))
 
 
 def downgrade():

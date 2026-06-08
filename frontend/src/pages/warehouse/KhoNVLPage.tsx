@@ -6,10 +6,12 @@ import {
   Space, Spin, Statistic, Table, Tag, Tooltip, Typography, message,
 } from 'antd'
 import {
-  InboxOutlined, PlusOutlined, ReloadOutlined, WarningOutlined,
+  DownloadOutlined, InboxOutlined, PlusOutlined, ReloadOutlined, WarningOutlined,
 } from '@ant-design/icons'
 import { warehouseApi } from '../../api/warehouse'
 import type { WarehouseSlot, WarehouseSlotNA, PhanXuongWithWarehouses, TonKho } from '../../api/warehouse'
+import { exportExcelWithTemplate } from '../../utils/exportUtils'
+import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
@@ -152,8 +154,12 @@ function WarehouseCard({
 
 export default function KhoNVLPage() {
   const queryClient = useQueryClient()
+  const { hasPermission } = usePermission()
+  const canInit = hasPermission('inventory.import')
+  const canView = hasPermission('inventory.view')
   const [selectedPxId, setSelectedPxId] = useState<number | 'all'>('all')
   const [detailSlot, setDetailSlot] = useState<WarehouseSlot | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const { data: list = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['kho-theo-xuong'],
@@ -198,6 +204,53 @@ export default function KhoNVLPage() {
     return sum + gcMH + nvlMH
   }, 0)
 
+  // Xuất Excel toàn bộ NVL tồn (giấy cuộn + NVL phụ). Fetch on-demand để không
+  // tải danh sách item dòng-chi-tiết khi mở trang (trang chỉ hiển thị tổng theo kho).
+  const handleExport = async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const pxId = selectedPxId === 'all' ? undefined : selectedPxId
+      const [giay, nvl] = await Promise.all([
+        warehouseApi.getTonKho({ loai: 'giay', phan_xuong_id: pxId }).then(r => r.data),
+        warehouseApi.getTonKho({ loai: 'khac', phan_xuong_id: pxId }).then(r => r.data),
+      ])
+      const items = [...giay, ...nvl]
+      if (!items.length) {
+        message.warning('Không có dữ liệu tồn kho để xuất')
+        return
+      }
+      const data = items.map((r, i) => ({
+        stt: i + 1,
+        ma_vt: r.ma_chinh ?? '',
+        ten_vt: r.ten_hang,
+        ten_kho: r.ten_kho,
+        don_vi: r.don_vi,
+        ton_luong: Math.round(r.ton_luong * 100) / 100,
+        gia_tri_ton: Math.round(r.gia_tri_ton),
+      }))
+      exportExcelWithTemplate(
+        `TonKho_NVL_${new Date().toISOString().slice(0, 10)}`,
+        'Tồn kho NVL',
+        data,
+        [
+          { key: 'stt', label: 'STT', width: 6 },
+          { key: 'ma_vt', label: 'Mã VT', width: 22 },
+          { key: 'ten_vt', label: 'Tên VT', width: 34 },
+          { key: 'ten_kho', label: 'Kho', width: 18 },
+          { key: 'don_vi', label: 'ĐVT', width: 8 },
+          { key: 'ton_luong', label: 'Tồn', width: 14 },
+          { key: 'gia_tri_ton', label: 'Giá trị ước tính', width: 18 },
+        ],
+      )
+      message.success(`Đã xuất ${data.length} mặt hàng`)
+    } catch {
+      message.error('Không thể xuất Excel — kiểm tra kết nối server')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const drawerSlotCfg = detailSlot
     ? LOAI_CONFIG[detailSlot.loai_kho as NvlLoai] ?? { label: detailSlot.loai_kho, color: '#1677ff' }
     : null
@@ -218,12 +271,24 @@ export default function KhoNVLPage() {
           <InboxOutlined style={{ fontSize: 22, color: '#1677ff' }} />
           <Title level={4} style={{ margin: 0 }}>Kho Nguyên Vật Liệu</Title>
         </Space>
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={() => queryClient.invalidateQueries({ queryKey: ['kho-theo-xuong'] })}
-        >
-          Làm mới
-        </Button>
+        <Space>
+          <Tooltip title={canView ? 'Xuất toàn bộ tồn kho NVL ra Excel' : 'Bạn không có quyền xem/xuất tồn kho'}>
+            <Button
+              icon={<DownloadOutlined />}
+              loading={exporting}
+              disabled={!canView}
+              onClick={handleExport}
+            >
+              Xuất Excel
+            </Button>
+          </Tooltip>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['kho-theo-xuong'] })}
+          >
+            Làm mới
+          </Button>
+        </Space>
       </div>
 
       {/* Thống kê tổng */}
@@ -336,14 +401,17 @@ export default function KhoNVLPage() {
                     </Space>
                   }
                   extra={
-                    <Button
-                      size="small"
-                      icon={<PlusOutlined />}
-                      loading={initMut.isPending}
-                      onClick={() => initMut.mutate(px.id)}
-                    >
-                      Khởi tạo kho
-                    </Button>
+                    <Tooltip title={canInit ? undefined : 'Bạn không có quyền khởi tạo kho'}>
+                      <Button
+                        size="small"
+                        icon={<PlusOutlined />}
+                        loading={initMut.isPending}
+                        disabled={!canInit}
+                        onClick={() => initMut.mutate(px.id)}
+                      >
+                        Khởi tạo kho
+                      </Button>
+                    </Tooltip>
                   }
                 >
                   <Row gutter={[16, 16]}>
@@ -357,7 +425,7 @@ export default function KhoNVLPage() {
                         <WarehouseCard
                           loai={loai}
                           slot={(px.warehouses as Record<string, WarehouseSlot | WarehouseSlotNA | null | undefined>)[loai]}
-                          onInit={() => initMut.mutate(px.id)}
+                          onInit={canInit ? () => initMut.mutate(px.id) : undefined}
                           onDetail={setDetailSlot}
                         />
                       </Col>

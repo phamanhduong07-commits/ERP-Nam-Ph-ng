@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
-from pydantic import BaseModel, field_validator, model_validator
+from typing import Literal
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ──────────────────────────────────────────────
@@ -75,7 +76,9 @@ class PurchaseInvoiceListItem(BaseModel):
     tong_thanh_toan: Decimal
     da_thanh_toan: Decimal
     con_lai: Decimal
-    trang_thai: str
+    trang_thai: Literal[
+        "nhap", "da_phat_hanh", "da_tt_mot_phan", "da_tt_du", "qua_han", "huy"
+    ] = "nhap"
     po_id: int | None
     gr_id: int | None
 
@@ -109,15 +112,24 @@ class CashReceiptCreate(BaseModel):
     customer_id: int
     sales_invoice_id: int | None = None
     ngay_phieu: date
-    hinh_thuc_tt: str = "chuyen_khoan"
-    so_tai_khoan: str | None = None
-    so_tham_chieu: str | None = None
-    dien_giai: str | None = None
+    hinh_thuc_tt: Literal[
+        "tien_mat", "chuyen_khoan", "TM", "CK", "bu_tru_cong_no", "khac"
+    ] = "chuyen_khoan"
+    so_tai_khoan: str | None = Field(None, max_length=500)
+    so_tham_chieu: str | None = Field(None, max_length=500)
+    dien_giai: str | None = Field(None, max_length=500)
     so_tien: Decimal
     tk_no: str = "112"
     tk_co: str = "131"
     phap_nhan_id: int | None = None
     phan_xuong_id: int | None = None
+
+    @field_validator("dien_giai", "so_tham_chieu", mode="before")
+    @classmethod
+    def strip_strings(cls, v):
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
     @field_validator("so_tien")
     @classmethod
@@ -146,7 +158,7 @@ class CashReceiptResponse(BaseModel):
     so_tien: Decimal
     tk_no: str
     tk_co: str
-    trang_thai: str
+    trang_thai: Literal["cho_duyet", "da_duyet", "huy"] = "cho_duyet"
     nguoi_duyet_id: int | None
     ngay_duyet: datetime | None
     created_at: datetime
@@ -164,15 +176,24 @@ class CashPaymentCreate(BaseModel):
     supplier_id: int
     purchase_invoice_id: int | None = None
     ngay_phieu: date
-    hinh_thuc_tt: str = "chuyen_khoan"
-    so_tai_khoan: str | None = None
-    so_tham_chieu: str | None = None
-    dien_giai: str | None = None
+    hinh_thuc_tt: Literal[
+        "tien_mat", "chuyen_khoan", "TM", "CK", "bu_tru_cong_no", "khac"
+    ] = "chuyen_khoan"
+    so_tai_khoan: str | None = Field(None, max_length=500)
+    so_tham_chieu: str | None = Field(None, max_length=500)
+    dien_giai: str | None = Field(None, max_length=500)
     so_tien: Decimal
     tk_no: str = "331"
     tk_co: str = "112"
     phap_nhan_id: int | None = None
     phan_xuong_id: int | None = None
+
+    @field_validator("dien_giai", "so_tham_chieu", mode="before")
+    @classmethod
+    def strip_strings(cls, v):
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
     @field_validator("so_tien")
     @classmethod
@@ -201,7 +222,7 @@ class CashPaymentResponse(BaseModel):
     so_tien: Decimal
     tk_no: str
     tk_co: str
-    trang_thai: str
+    trang_thai: Literal["cho_duyet", "da_duyet", "huy"] = "cho_duyet"
     nguoi_duyet_id: int | None
     ngay_duyet: datetime | None
     created_at: datetime
@@ -283,12 +304,20 @@ class BalanceByPeriod(BaseModel):
 
 class OpeningBalanceCreate(BaseModel):
     ky_mo_so: date
-    doi_tuong: str             # khach_hang | nha_cung_cap
+    doi_tuong: Literal["khach_hang", "nha_cung_cap", "quy_tien_mat"]
     customer_id: int | None = None
     supplier_id: int | None = None
     so_du_dau_ky: Decimal
     ghi_chu: str | None = None
     phap_nhan_id: int | None = None
+
+    @model_validator(mode="after")
+    def validate_doi_tuong_consistency(self) -> "OpeningBalanceCreate":
+        if self.doi_tuong == "khach_hang" and not self.customer_id:
+            raise ValueError("Phải cung cấp customer_id khi doi_tuong là 'khach_hang'")
+        if self.doi_tuong == "nha_cung_cap" and not self.supplier_id:
+            raise ValueError("Phải cung cấp supplier_id khi doi_tuong là 'nha_cung_cap'")
+        return self
 
 
 # ──────────────────────────────────────────────
@@ -512,6 +541,13 @@ class WorkshopPayrollCreate(BaseModel):
     tong_bao_hiem: Decimal = Decimal("0")
     ghi_chu: str | None = None
 
+    @field_validator("tong_luong", "tong_thuong", "tong_bao_hiem", mode="before")
+    @classmethod
+    def amounts_non_negative(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("Giá trị không được âm")
+        return v
+
 
 class WorkshopPayrollResponse(BaseModel):
     id: int
@@ -544,6 +580,29 @@ class OverheadAllocationRequest(BaseModel):
     so_tk: str
     phap_nhan_id: int
     allocations: list[AllocationItem]
+
+
+class OverheadAllocationResponse(BaseModel):
+    status: str
+    total_allocated: Decimal | None = None
+    journal_id: int | None = None
+    so_but_toan: str | None = None
+    message: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class ClosingResult(BaseModel):
+    status: str
+    entry_id: int | None = None
+    so_but_toan: str | None = None
+    period_lock_id: int | None = None
+    period_lock_status: str | None = None
+    doanh_thu: float | None = None
+    chi_phi: float | None = None
+    lai_lo: float | None = None
+
+    model_config = {"from_attributes": True}
 
 
 # ──────────────────────────────────────────────
@@ -619,6 +678,20 @@ class FixedAssetCreate(BaseModel):
     phan_xuong_id: int | None = None
     phap_nhan_id: int | None = None
     tk_chi_phi: str = "154"
+
+    @field_validator("nguyen_gia")
+    @classmethod
+    def nguyen_gia_must_be_positive(cls, v):
+        if v <= 0:
+            raise ValueError("Nguyên giá phải lớn hơn 0")
+        return v
+
+    @field_validator("so_thang_khau_hao")
+    @classmethod
+    def so_thang_must_be_positive(cls, v):
+        if v <= 0:
+            raise ValueError("Số tháng khấu hao phải lớn hơn 0")
+        return v
 
 
 class FixedAssetResponse(BaseModel):

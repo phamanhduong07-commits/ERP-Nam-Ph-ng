@@ -14,12 +14,14 @@ import {
 import { warehousesApi } from '../../api/warehouses'
 import { buildHtmlTable, exportToExcel, renderTemplateAndPrint, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
 export default function TransfersPage() {
   const companyInfo = usePhapNhanForPrint()
+  const { hasPermission } = usePermission()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -264,8 +266,8 @@ export default function TransfersPage() {
       render: (_: unknown, r: PhieuChuyenKho) => (
         <Space size={4}>
           <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailPhieu(r)} />
-          <Popconfirm title="Xoá phiếu chuyển này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }} disabled={r.trang_thai !== 'nhap'}>
-            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai !== 'nhap'} />
+          <Popconfirm title="Xoá phiếu chuyển này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }} disabled={r.trang_thai !== 'nhap' || !hasPermission('inventory.transfer')}>
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai !== 'nhap' || !hasPermission('inventory.transfer')} />
           </Popconfirm>
         </Space>
       ),
@@ -296,6 +298,7 @@ export default function TransfersPage() {
               Xuất Excel
             </Button>
             <Button icon={<PlusOutlined />}
+              disabled={!hasPermission('inventory.transfer')}
               onClick={() => { form.resetFields(); setSelectedKhoXuat(undefined); setSelectedKhoNhap(undefined); setOpen(true) }}
               style={{ background: '#722ed1', borderColor: '#722ed1', color: '#fff' }}>
               Tạo phiếu chuyển
@@ -347,6 +350,7 @@ export default function TransfersPage() {
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table dataSource={phieuList} columns={columns} rowKey="id" loading={isLoading} size="small"
+          locale={{ emptyText: <EmptyState /> }}
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 900 }} />
       </Card>
 

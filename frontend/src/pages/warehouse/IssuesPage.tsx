@@ -14,12 +14,14 @@ import { otherMaterialsApi } from '../../api/otherMaterials'
 import { productionOrdersApi } from '../../api/productionOrders'
 import { exportToExcel, printDocument, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId, downloadBlob } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
 export default function IssuesPage() {
   const companyInfo = usePhapNhanForPrint()
+  const { hasPermission } = usePermission()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -223,8 +225,8 @@ export default function IssuesPage() {
               onClick={() => handleExportIssueExcel(r.id, r.so_phieu)} />
           </Tooltip>
           <Popconfirm title="Xoá phiếu xuất này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
-            disabled={r.trang_thai === 'da_xuat'}>
-            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_xuat'} />
+            disabled={r.trang_thai === 'da_xuat' || !hasPermission('inventory.export')}>
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_xuat' || !hasPermission('inventory.export')} />
           </Popconfirm>
         </Space>
       ),
@@ -258,7 +260,8 @@ export default function IssuesPage() {
             <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
               Xuất Excel
             </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setFormPxId(null); setOpen(true) }}>
+            <Button type="primary" icon={<PlusOutlined />} disabled={!hasPermission('inventory.export')}
+              onClick={() => { form.resetFields(); setFormPxId(null); setOpen(true) }}>
               Tạo phiếu xuất
             </Button>
           </Space>
@@ -301,7 +304,7 @@ export default function IssuesPage() {
         footer={
           <Space>
             <Button onClick={() => setOpen(false)}>Huỷ</Button>
-            <Button type="primary" loading={createMut.isPending} onClick={handleSubmit}>Lưu phiếu xuất</Button>
+            <Button type="primary" loading={createMut.isPending} disabled={!hasPermission('inventory.export')} onClick={handleSubmit}>Lưu phiếu xuất</Button>
           </Space>
         }
       >

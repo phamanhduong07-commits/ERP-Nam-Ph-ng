@@ -12,6 +12,7 @@ import { warehouseApi } from '../../api/warehouse'
 import { phapNhanApi } from '../../api/phap_nhan'
 import type { WarehouseSlot, WarehouseSlotNA, PhanXuongWithWarehouses, TonKho } from '../../api/warehouse'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 const { Title, Text } = Typography
 
@@ -153,6 +154,7 @@ function WarehouseCard({
 }
 
 export default function KhoTheoXuongPage() {
+  const { hasPermission, isAdmin } = usePermission()
   const queryClient = useQueryClient()
   const [selectedPxId, setSelectedPxId] = useState<number | 'all'>('all')
   const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
@@ -300,14 +302,16 @@ export default function KhoTheoXuongPage() {
                   </Space>
                 }
                 extra={
-                  <Button
-                    size="small"
-                    icon={<PlusOutlined />}
-                    loading={initMut.isPending}
-                    onClick={() => initMut.mutate(px.id)}
-                  >
-                    Khởi tạo kho
-                  </Button>
+                  (hasPermission('inventory.view') || isAdmin) && (
+                    <Button
+                      size="small"
+                      icon={<PlusOutlined />}
+                      loading={initMut.isPending}
+                      onClick={() => initMut.mutate(px.id)}
+                    >
+                      Khởi tạo kho
+                    </Button>
+                  )
                 }
               >
                 <Row gutter={[12, 12]}>
@@ -316,7 +320,7 @@ export default function KhoTheoXuongPage() {
                       <WarehouseCard
                         loai={loai}
                         slot={(px.warehouses as Record<string, WarehouseSlot | WarehouseSlotNA | null>)[loai]}
-                        onInit={() => initMut.mutate(px.id)}
+                        onInit={(hasPermission('inventory.view') || isAdmin) ? () => initMut.mutate(px.id) : undefined}
                         onDetail={setDetailSlot}
                       />
                     </Col>

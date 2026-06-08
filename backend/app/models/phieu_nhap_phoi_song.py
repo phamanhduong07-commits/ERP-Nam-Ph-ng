@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+
 class PhieuNhapPhoiSong(Base):
     __tablename__ = "phieu_nhap_phoi_song"
 
@@ -48,6 +49,8 @@ class PhieuNhapPhoiSongItem(Base):
     so_luong_ke_hoach: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     so_luong_thuc_te: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     so_luong_loi: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))  # phôi lỗi/hư hao
+    trang_thai_loi: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # None=không có lỗi | 'cho_xu_ly' | 'da_nhap_kho_ao'
     chieu_kho: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))      # chiều khổ (cm)
     chieu_cat: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))      # chiều cắt (cm)
     so_tam: Mapped[int | None] = mapped_column(Integer)
@@ -57,3 +60,36 @@ class PhieuNhapPhoiSongItem(Base):
         "PhieuNhapPhoiSong", back_populates="items"
     )
     production_order_item = relationship("ProductionOrderItem")  # type: ignore[assignment]
+    hang_loi_phoi_kho_ao: Mapped["HangLoiPhoiKhoAo | None"] = relationship(
+        "HangLoiPhoiKhoAo", back_populates="phieu_item", uselist=False
+    )
+
+
+class HangLoiPhoiKhoAo(Base):
+    """Kho ảo phôi lỗi — chứa phôi lỗi từ CD1 trước khi xử lý (bán phế / tận dụng)."""
+    __tablename__ = "hang_loi_phoi_kho_ao"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    phieu_nhap_phoi_song_item_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("phieu_nhap_phoi_song_items.id"), unique=True, nullable=False
+    )
+    so_luong: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, server_default="cho_xu_ly")
+    # cho_xu_ly | ban_phe | tan_dung | da_xu_ly | huy
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    production_order_id_tan_dung: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("production_orders.id"), nullable=True
+    )
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    phieu_item: Mapped["PhieuNhapPhoiSongItem"] = relationship(
+        "PhieuNhapPhoiSongItem", back_populates="hang_loi_phoi_kho_ao"
+    )
+    lsx_tan_dung = relationship("ProductionOrder", foreign_keys=[production_order_id_tan_dung])
+    creator = relationship("User", foreign_keys=[created_by])

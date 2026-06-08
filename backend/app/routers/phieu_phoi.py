@@ -57,6 +57,7 @@ def _nhap_item_to_dict(it: PhieuNhapPhoiSongItem) -> dict:
         "so_luong_ke_hoach": float(it.so_luong_ke_hoach),
         "so_luong_thuc_te": sl_thuc,
         "so_luong_loi": sl_loi,
+        "trang_thai_loi": it.trang_thai_loi,
         "so_luong_nhap": sl_nhap,
         "chieu_kho": float(it.chieu_kho) if it.chieu_kho is not None else None,
         "chieu_cat": float(it.chieu_cat) if it.chieu_cat is not None else None,

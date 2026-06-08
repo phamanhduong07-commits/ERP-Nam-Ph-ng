@@ -13,6 +13,7 @@ import {
 import { warehousesApi } from '../../api/warehouses'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
@@ -29,6 +30,7 @@ function diffColor(v: number) {
 
 export default function StockAdjustmentsPage() {
   const companyInfo = usePhapNhanForPrint()
+  const { hasPermission } = usePermission()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -242,8 +244,8 @@ export default function StockAdjustmentsPage() {
       render: (_: unknown, r: StockAdjustment) => (
         <Space size={4}>
           <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintAdjustment(r)} />
-          <Popconfirm title="Xoa phieu kiem ke nay?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}>
-            <Button danger size="small" icon={<DeleteOutlined />} />
+          <Popconfirm title="Xoa phieu kiem ke nay?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }} disabled={!hasPermission('inventory.adjust')}>
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={!hasPermission('inventory.adjust')} />
           </Popconfirm>
         </Space>
       ),
@@ -275,6 +277,7 @@ export default function StockAdjustmentsPage() {
               Xuất Excel
             </Button>
             <Button type="primary" icon={<PlusOutlined />}
+              disabled={!hasPermission('inventory.adjust')}
               onClick={() => { form.resetFields(); setSelectedKho(undefined); setOpen(true) }}>
               Tạo phiếu kiểm kê
             </Button>

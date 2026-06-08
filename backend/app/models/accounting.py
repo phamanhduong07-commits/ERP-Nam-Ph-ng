@@ -30,14 +30,14 @@ class JournalEntry(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_but_toan: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
-    ngay_but_toan: Mapped[date] = mapped_column(Date, nullable=False)
+    ngay_but_toan: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     dien_giai: Mapped[str] = mapped_column(Text, nullable=False)
-    loai_but_toan: Mapped[str] = mapped_column(String(30), nullable=False)
+    loai_but_toan: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     tong_no: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     tong_co: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
-    chung_tu_loai: Mapped[str | None] = mapped_column(String(50))
+    chung_tu_loai: Mapped[str | None] = mapped_column(String(50), index=True)
     chung_tu_id: Mapped[int | None] = mapped_column(Integer)
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -54,7 +54,7 @@ class JournalEntryLine(Base):
     __tablename__ = "journal_entry_lines"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    entry_id: Mapped[int] = mapped_column(Integer, ForeignKey("journal_entries.id"), nullable=False)
+    entry_id: Mapped[int] = mapped_column(Integer, ForeignKey("journal_entries.id"), nullable=False, index=True)
     so_tk: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), nullable=False)
     dien_giai: Mapped[str | None] = mapped_column(Text)
     so_tien_no: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
@@ -76,10 +76,10 @@ class PurchaseInvoice(Base):
     so_hoa_don: Mapped[str | None] = mapped_column(String(50))        # số HĐ của NCC
     mau_so: Mapped[str | None] = mapped_column(String(50))
     ky_hieu: Mapped[str | None] = mapped_column(String(50))
-    ngay_lap: Mapped[date] = mapped_column(Date, nullable=False)       # ngày nhận/nhập hệ thống
+    ngay_lap: Mapped[date] = mapped_column(Date, nullable=False, index=True)       # ngày nhận/nhập hệ thống
     ngay_hoa_don: Mapped[date | None] = mapped_column(Date)           # ngày ghi trên HĐ
     han_tt: Mapped[date | None] = mapped_column(Date)
-    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
+    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False, index=True)
     po_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id"))
     gr_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goods_receipts.id"))
     # Snapshot NCC
@@ -95,10 +95,10 @@ class PurchaseInvoice(Base):
         Numeric(18, 2),
         Computed("tong_thanh_toan - da_thanh_toan", persisted=True),
     )
-    trang_thai: Mapped[str] = mapped_column(String(30), default="nhap")
+    trang_thai: Mapped[str] = mapped_column(String(30), default="nhap", index=True)
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     co_vat: Mapped[bool] = mapped_column(Boolean, default=True)
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     # nhap | da_tt_mot_phan | da_tt_du | qua_han | huy
     ghi_chu: Mapped[str | None] = mapped_column(Text)
@@ -125,8 +125,8 @@ class CashReceipt(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # PT-YYYYMM-XXXX
-    ngay_phieu: Mapped[date] = mapped_column(Date, nullable=False)
-    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False)
+    ngay_phieu: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
     sales_invoice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sales_invoices.id"))
     hinh_thuc_tt: Mapped[str] = mapped_column(String(20), default="CK")
     so_tai_khoan: Mapped[str | None] = mapped_column(String(100))
@@ -136,9 +136,9 @@ class CashReceipt(Base):
     # Tài khoản kế toán VAS
     tk_no: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="112")
     tk_co: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="131")
-    trang_thai: Mapped[str] = mapped_column(String(20), default="cho_duyet")
+    trang_thai: Mapped[str] = mapped_column(String(20), default="cho_duyet", index=True)
     # cho_duyet | da_duyet | huy
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -156,8 +156,8 @@ class CashPayment(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # PC-YYYYMM-XXXX
-    ngay_phieu: Mapped[date] = mapped_column(Date, nullable=False)
-    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
+    ngay_phieu: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False, index=True)
     purchase_invoice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_invoices.id"))
     hinh_thuc_tt: Mapped[str] = mapped_column(String(20), default="CK")
     so_tai_khoan: Mapped[str | None] = mapped_column(String(100))
@@ -167,9 +167,9 @@ class CashPayment(Base):
     # Tài khoản kế toán VAS
     tk_no: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="331")
     tk_co: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="112")
-    trang_thai: Mapped[str] = mapped_column(String(20), default="cho_chot")
+    trang_thai: Mapped[str] = mapped_column(String(20), default="cho_chot", index=True)
     # cho_chot | da_chot | da_duyet | huy
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -196,8 +196,8 @@ class DebtLedgerEntry(Base):
     # tang_no: phát sinh nợ (HĐ bán/mua) | giam_no: giảm nợ (phiếu thu/chi)
     doi_tuong: Mapped[str] = mapped_column(String(20), nullable=False)
     # khach_hang | nha_cung_cap
-    customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id"))
-    supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"))
+    customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id"), index=True)
+    supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"), index=True)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     chung_tu_loai: Mapped[str | None] = mapped_column(String(50))
     chung_tu_id: Mapped[int | None] = mapped_column(Integer)
@@ -265,8 +265,8 @@ class WorkshopPayroll(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # BL-YYYYMM-XX
     thang: Mapped[date] = mapped_column(Date, nullable=False)  # Ngày đầu tháng hoặc cuối tháng đại diện
-    phan_xuong_id: Mapped[int] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=False)
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phan_xuong_id: Mapped[int] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=False, index=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
 
     tong_luong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     tong_thuong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
@@ -302,13 +302,13 @@ class FixedAsset(Base):
     gia_tri_da_khau_hao: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
 
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
 
     tk_nguyen_gia: Mapped[str] = mapped_column(String(20), default="211")
     tk_khau_hao: Mapped[str] = mapped_column(String(20), default="214")
     tk_chi_phi: Mapped[str] = mapped_column(String(20), default="154")
 
-    trang_thai: Mapped[str] = mapped_column(String(20), default="dang_su_dung")  # dang_su_dung | da_kh_het | thanh_ly
+    trang_thai: Mapped[str] = mapped_column(String(20), default="dang_su_dung", index=True)  # dang_su_dung | da_kh_het | thanh_ly
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -323,15 +323,15 @@ class BankTransaction(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     bank_account_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("bank_accounts.id"), nullable=True)
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
-    ngay_giao_dich: Mapped[date] = mapped_column(Date, nullable=False)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
+    ngay_giao_dich: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     so_tai_khoan: Mapped[str | None] = mapped_column(String(100), nullable=True)
     so_tham_chieu: Mapped[str | None] = mapped_column(String(100), nullable=True)
     mo_ta: Mapped[str | None] = mapped_column(Text, nullable=True)
     thu: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     chi: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     so_du: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
-    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="chua_doi_soat")
+    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="chua_doi_soat", index=True)
     matched_chung_tu_loai: Mapped[str | None] = mapped_column(String(30), nullable=True)
     matched_chung_tu_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -353,10 +353,10 @@ class ProductionCostPeriod(Base):
     ten_ky: Mapped[str] = mapped_column(String(255), nullable=False)
     tu_ngay: Mapped[date] = mapped_column(Date, nullable=False)
     den_ngay: Mapped[date] = mapped_column(Date, nullable=False)
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
-    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True, index=True)
     tieu_thuc_pb: Mapped[str] = mapped_column(String(30), default="san_luong")
-    trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")
+    trang_thai: Mapped[str] = mapped_column(String(20), default="nhap", index=True)
     tong_nvl: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     tong_nhan_cong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     tong_sxc: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)

@@ -19,6 +19,8 @@ import { purchaseApi } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
 import { exportToExcel, printDocument, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import { usePermission } from '../../hooks/usePermission'
+import { getErrorMessage } from '../../utils/errorUtils'
 import EmptyState from "../../components/EmptyState"
 import { mediaApi } from '../../api/media'
 import { ocrExamplesApi } from '../../api/ocrExamples'
@@ -47,6 +49,8 @@ const fileToBase64 = (file: File): Promise<string> =>
 
 export default function ReceiptsPage() {
   const companyInfo = usePhapNhanForPrint()
+  const { hasPermission, canApprove } = usePermission()
+  const canImport = hasPermission('inventory.import')
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -224,7 +228,7 @@ export default function ReceiptsPage() {
       message.success('Đã tạo phiếu nhập kho')
       handleClose()
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi tạo phiếu')),
   })
 
   const completeMut = useMutation({
@@ -236,7 +240,7 @@ export default function ReceiptsPage() {
       message.success('Đã hoàn thiện phiếu — tồn kho đã cập nhật')
       handleClose()
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi hoàn thiện phiếu'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi hoàn thiện phiếu')),
   })
 
   const deleteMut = useMutation({
@@ -246,7 +250,7 @@ export default function ReceiptsPage() {
       qc.invalidateQueries({ queryKey: ['ton-kho'] })
       message.success('Đã xoá phiếu nhập')
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi xoá')),
   })
 
   const approveMut = useMutation({

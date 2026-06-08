@@ -7,8 +7,11 @@ import { CheckCircleFilled, ReloadOutlined, LeftOutlined } from '@ant-design/ico
 import dayjs from 'dayjs'
 import { warehouseApi, QuickCapturePayload } from '../../api/warehouse'
 import { useAuthStore } from '../../store/auth'
+import { usePermission } from '../../hooks/usePermission'
 
 const { Text } = Typography
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024 // 10MB
 
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -33,12 +36,14 @@ export default function NhapNhanhPage() {
   const cfg = LOAI_CONFIG[loaiParam] ?? LOAI_CONFIG['']
 
   const user = useAuthStore(s => s.user)
+  const { hasPermission } = usePermission()
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [done, setDone] = useState<{ soPhieu: string } | null>(null)
 
   const isNVL  = loaiParam === 'nvl'
   const isPhoi = loaiParam === 'phoi'
+  const canImport = hasPermission('inventory.import')
 
   const captureMut = useMutation({
     mutationFn: (data: QuickCapturePayload) => warehouseApi.quickCaptureGoodsReceipt(data),
@@ -48,14 +53,24 @@ export default function NhapNhanhPage() {
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
+    if (!file.type.startsWith('image/')) {
+      message.error('Chỉ chấp nhận tệp ảnh')
+      return
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      message.error('Ảnh vượt quá 10MB — chụp lại với độ phân giải thấp hơn')
+      return
+    }
     setImageFile(file)
     setPreviewUrl(URL.createObjectURL(file))
-    e.target.value = ''
   }
 
   const handleSubmit = async () => {
+    if (!hasPermission('inventory.import')) { message.error('Bạn không có quyền nhập kho'); return }
     if (!imageFile) { message.warning('Chưa chụp ảnh phiếu xuất NCC'); return }
+    if (imageFile.size > MAX_IMAGE_BYTES) { message.error('Ảnh vượt quá 10MB'); return }
     if (!user?.phap_nhan_id) { message.error('Tài khoản chưa gán nhà máy — liên hệ admin'); return }
     const invoice_image = await fileToBase64(imageFile)
     captureMut.mutate({
@@ -190,15 +205,15 @@ export default function NhapNhanhPage() {
           block
           size="large"
           loading={captureMut.isPending}
-          disabled={!imageFile}
+          disabled={!imageFile || !canImport}
           onClick={handleSubmit}
           style={{
             height: 56, fontSize: 19, borderRadius: 12, fontWeight: 700,
-            background: imageFile ? cfg.color : undefined,
-            borderColor: imageFile ? cfg.color : undefined,
+            background: imageFile && canImport ? cfg.color : undefined,
+            borderColor: imageFile && canImport ? cfg.color : undefined,
           }}
         >
-          {imageFile ? '✓ Gửi ghi nhận' : 'Chụp ảnh trước'}
+          {!canImport ? 'Không có quyền nhập kho' : imageFile ? '✓ Gửi ghi nhận' : 'Chụp ảnh trước'}
         </Button>
       </div>
 

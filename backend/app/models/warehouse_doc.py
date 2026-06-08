@@ -126,6 +126,8 @@ class ProductionOutput(Base):
     ten_hang: Mapped[str | None] = mapped_column(String(255))
     so_luong_nhap: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
     so_luong_loi: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0)
+    trang_thai_loi: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # None=không có lỗi | 'cho_xu_ly' | 'da_nhap_kho_ao'
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
     don_gia_xuat_xuong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -137,6 +139,7 @@ class ProductionOutput(Base):
     warehouse = relationship("Warehouse")
     product = relationship("Product")
     creator = relationship("User")
+    hang_loi_kho_ao: Mapped["HangLoiKhoAo | None"] = relationship("HangLoiKhoAo", back_populates="production_output", uselist=False)
 
 
 class DeliveryOrder(Base):
@@ -339,6 +342,33 @@ class GiayRoll(Base):
     paper_material = relationship("PaperMaterial")
     warehouse = relationship("Warehouse")
     goods_receipt = relationship("GoodsReceipt")
+
+
+class HangLoiKhoAo(Base):
+    """Kho ảo chứa hàng lỗi từ sản xuất — điểm chứa trước khi xử lý nghiệp vụ."""
+    __tablename__ = "hang_loi_kho_ao"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    production_output_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_outputs.id"), unique=True, nullable=False)
+    so_luong: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    trang_thai: Mapped[str] = mapped_column(String(20), default="cho_xu_ly")
+    # cho_xu_ly | dang_xu_ly | da_xu_ly | huy
+    nguyen_nhan: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bien_phap_xu_ly: Mapped[str | None] = mapped_column(Text, nullable=True)
+    nguoi_xu_ly_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    han_xu_ly: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    production_output: Mapped["ProductionOutput"] = relationship("ProductionOutput", back_populates="hang_loi_kho_ao")
+    nguoi_xu_ly = relationship("User", foreign_keys=[nguoi_xu_ly_id])
+    creator = relationship("User", foreign_keys=[created_by])
 
 
 class OcrSupplierExample(Base):

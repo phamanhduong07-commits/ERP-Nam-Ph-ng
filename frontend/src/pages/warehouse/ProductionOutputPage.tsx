@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { ApiError } from '../../api/types'
+import { usePermission } from '../../hooks/usePermission'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
@@ -18,6 +19,8 @@ const { Title, Text } = Typography
 
 export default function ProductionOutputPage() {
   const qc = useQueryClient()
+  const { hasPermission } = usePermission()
+  const canImport = hasPermission('inventory.import')
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
   const [filterKho, setFilterKho] = useState<number | undefined>()
@@ -46,19 +49,21 @@ export default function ProductionOutputPage() {
     }).then(r => r.data),
   })
 
-  const phapNhanOptions = Array.from(new Map(
+  const phapNhanOptions = useMemo(() => Array.from(new Map(
     warehouses.filter(w => w.phap_nhan_id).map(w => [w.phap_nhan_id, { value: w.phap_nhan_id!, label: w.ten_phap_nhan || `PN #${w.phap_nhan_id}` }])
-  ).values())
-  const xuongOptions = Array.from(new Map(
+  ).values()), [warehouses])
+
+  const xuongOptions = useMemo(() => Array.from(new Map(
     warehouses
       .filter(w => w.phan_xuong_id && (!filterPhapNhan || w.phap_nhan_id === filterPhapNhan))
       .map(w => [w.phan_xuong_id, { value: w.phan_xuong_id!, label: w.ten_xuong || `Xuong #${w.phan_xuong_id}` }])
-  ).values())
-  const warehouseOptions = warehouses
+  ).values()), [warehouses, filterPhapNhan])
+
+  const warehouseOptions = useMemo(() => warehouses
     .filter(w => w.trang_thai)
     .filter(w => !filterPhapNhan || w.phap_nhan_id === filterPhapNhan)
     .filter(w => !filterXuong || w.phan_xuong_id === filterXuong)
-    .map(w => ({ value: w.id, label: w.ten_kho }))
+    .map(w => ({ value: w.id, label: w.ten_kho })), [warehouses, filterPhapNhan, filterXuong])
 
   const createMut = useMutation({
     mutationFn: (data: CreateProductionOutputPayload) => warehouseApi.createProductionOutput(data),

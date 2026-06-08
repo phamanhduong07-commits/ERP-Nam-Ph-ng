@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../../store/auth'
+import { usePermission } from '../../hooks/usePermission'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, Drawer, Input, InputNumber,
@@ -30,8 +30,10 @@ const fmtCurrency = (v: number | null | undefined) =>
 export default function KhoPhoiPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const userPerms = useAuthStore(s => s.user?.permissions ?? [])
-  const canWrite = userPerms.includes('inventory.transfer') || userPerms.includes('production_order.edit')
+  const { hasPermission } = usePermission()
+  // Chuyển kho phôi cần quyền inventory.transfer; đẩy LSX sang công đoạn in/định hình
+  // là thao tác trên lệnh sản xuất nên chấp nhận thêm production_order.edit.
+  const canWrite = hasPermission('inventory.transfer') || hasPermission('production_order.edit')
   const [pushingKey, setPushingKey] = useState<string | null>(null)
   const [chuyenRows, setChuyenRows] = useState<KhoRow[]>([])
   const [chuyenQtys, setChuyenQtys] = useState<Record<number, number>>({})

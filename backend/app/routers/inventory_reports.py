@@ -410,44 +410,87 @@ def kho_loi_tra_ve(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Kho ảo: tổng hợp hàng lỗi (từ ProductionOutput) + hàng trả về xấu (SalesReturnItem)."""
+    """Kho ảo: tổng hợp hàng lỗi + hàng trả về xấu, đầy đủ thông tin như kho thực."""
+    from app.models.production import ProductionOrderItem
+
     pn_map = {p.id: p.ten_viet_tat for p in db.query(PhapNhan).all()}
+
+    def _item_specs(item) -> dict:
+        """Trích specs kỹ thuật từ ProductionOrderItem."""
+        if not item:
+            return {}
+        quy_cach = None
+        if item.dai and item.rong and item.cao:
+            quy_cach = f"{int(item.dai)}×{int(item.rong)}×{int(item.cao)}"
+        return {
+            "loai_thung": item.loai_thung,
+            "dai": float(item.dai) if item.dai else None,
+            "rong": float(item.rong) if item.rong else None,
+            "cao": float(item.cao) if item.cao else None,
+            "so_lop": item.so_lop,
+            "to_hop_song": item.to_hop_song,
+            "kho_tt": float(item.kho_tt) if item.kho_tt else None,
+            "dai_tt": float(item.dai_tt) if item.dai_tt else None,
+            "loai_in": item.loai_in,
+            "so_mau": item.so_mau,
+            "quy_cach": quy_cach,
+            "ngay_giao_hang": item.ngay_giao_hang.isoformat() if item.ngay_giao_hang else None,
+        }
 
     # ── Hàng lỗi từ sản xuất ─────────────────────────────────────────────────
     loi_q = (
         db.query(ProductionOutput)
         .options(
-            joinedload(ProductionOutput.production_order).joinedload(ProductionOrder.phan_xuong),
-            joinedload(ProductionOutput.production_order).joinedload(ProductionOrder.phap_nhan),
-            joinedload(ProductionOutput.production_order).joinedload(ProductionOrder.sales_order)
+            joinedload(ProductionOutput.production_order)
+                .joinedload(ProductionOrder.phan_xuong),
+            joinedload(ProductionOutput.production_order)
+                .joinedload(ProductionOrder.phap_nhan),
+            joinedload(ProductionOutput.production_order)
+                .joinedload(ProductionOrder.sales_order)
                 .joinedload(SalesOrder.customer),
+            joinedload(ProductionOutput.production_order)
+                .joinedload(ProductionOrder.nv_theo_doi),
+            joinedload(ProductionOutput.production_order)
+                .joinedload(ProductionOrder.items),
         )
         .filter(ProductionOutput.so_luong_loi > 0)
     )
     if phan_xuong_id:
-        loi_q = loi_q.join(ProductionOrder, ProductionOrder.id == ProductionOutput.production_order_id)\
-            .filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
-    if phap_nhan_id:
-        loi_q = loi_q.join(ProductionOrder, ProductionOrder.id == ProductionOutput.production_order_id,
-                            isouter=True)\
-            .filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
+        loi_q = loi_q.join(
+            ProductionOrder, ProductionOrder.id == ProductionOutput.production_order_id
+        ).filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
+    elif phap_nhan_id:
+        loi_q = loi_q.join(
+            ProductionOrder, ProductionOrder.id == ProductionOutput.production_order_id
+        ).filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
 
     hang_loi = []
     for po in loi_q.all():
         order = po.production_order
         kh = order.sales_order.customer if order and order.sales_order else None
+        so_don = order.sales_order.so_don if order and order.sales_order else None
+        first_item = order.items[0] if order and order.items else None
+        specs = _item_specs(first_item)
         hang_loi.append({
             "id": po.id,
             "so_phieu": po.so_phieu,
             "ngay_nhap": po.ngay_nhap.isoformat() if po.ngay_nhap else None,
+            "production_order_id": order.id if order else None,
             "so_lenh": order.so_lenh if order else None,
-            "ten_hang": po.ten_hang,
+            "ngay_lenh": order.ngay_lenh.isoformat() if order and order.ngay_lenh else None,
+            "so_don": so_don,
+            "ten_hang": po.ten_hang or (first_item.ten_hang if first_item else None),
+            "so_luong_ke_hoach": float(first_item.so_luong_ke_hoach) if first_item else None,
+            "so_luong_nhap": float(po.so_luong_nhap),
             "so_luong_loi": float(po.so_luong_loi),
             "dvt": po.dvt or "Thùng",
             "ten_khach_hang": kh.ten_viet_tat if kh else None,
+            "dia_chi_giao": order.sales_order.dia_chi_giao if order and order.sales_order else None,
+            "ten_nv_theo_doi": order.nv_theo_doi.ho_ten if order and order.nv_theo_doi else None,
             "ten_phan_xuong": order.phan_xuong.ten_xuong if order and order.phan_xuong else None,
             "ten_phap_nhan": pn_map.get(order.phap_nhan_id) if order else None,
             "ghi_chu": po.ghi_chu,
+            **specs,
         })
 
     # ── Hàng trả về xấu (hong/loi) đã duyệt ─────────────────────────────────
@@ -463,7 +506,6 @@ def kho_loi_tra_ve(
         )
     )
     if phan_xuong_id or phap_nhan_id:
-        # Lọc qua DeliveryOrderItem → ProductionOrder
         tra_q = tra_q.join(
             DeliveryOrderItem,
             or_(
@@ -481,20 +523,56 @@ def kho_loi_tra_ve(
         if phap_nhan_id:
             tra_q = tra_q.filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
 
+    # Lấy ProductionOrderItem qua sales_order_item_id để có specs
+    all_tra = tra_q.all()
+    soi_ids = [i.sales_order_item_id for i in all_tra if i.sales_order_item_id]
+    poi_by_soi: dict[int, ProductionOrderItem] = {}
+    if soi_ids:
+        for poi in db.query(ProductionOrderItem).filter(
+            ProductionOrderItem.sales_order_item_id.in_(soi_ids)
+        ).all():
+            if poi.sales_order_item_id not in poi_by_soi:
+                poi_by_soi[poi.sales_order_item_id] = poi
+
+    # Lấy ProductionOrder để biết pháp nhân/xưởng cho hàng trả
+    poi_order_ids = [v.production_order_id for v in poi_by_soi.values()]
+    order_by_id: dict[int, ProductionOrder] = {}
+    if poi_order_ids:
+        orders_q = (
+            db.query(ProductionOrder)
+            .options(
+                joinedload(ProductionOrder.phan_xuong),
+                joinedload(ProductionOrder.nv_theo_doi),
+            )
+            .filter(ProductionOrder.id.in_(poi_order_ids))
+        )
+        order_by_id = {o.id: o for o in orders_q.all()}
+
     hang_tra_ve = []
-    for item in tra_q.all():
+    for item in all_tra:
         sr = item.sales_return
         kh = sr.customer if sr else None
+        poi = poi_by_soi.get(item.sales_order_item_id) if item.sales_order_item_id else None
+        order = order_by_id.get(poi.production_order_id) if poi else None
+        specs = _item_specs(poi)
         hang_tra_ve.append({
             "id": item.id,
             "so_phieu_tra": sr.so_phieu_tra if sr else None,
             "ngay_tra": sr.ngay_tra.isoformat() if sr and sr.ngay_tra else None,
+            "sales_return_id": sr.id if sr else None,
+            "ten_hang": poi.ten_hang if poi else None,
             "so_luong_tra": float(item.so_luong_tra),
+            "don_gia_tra": float(item.don_gia_tra) if item.don_gia_tra else 0.0,
             "tinh_trang_hang": item.tinh_trang_hang,
             "dvt": "Thùng",
             "ten_khach_hang": kh.ten_viet_tat if kh else None,
             "ly_do_tra": item.ly_do_tra or (sr.ly_do_tra if sr else None),
+            "ten_phan_xuong": order.phan_xuong.ten_xuong if order and order.phan_xuong else None,
+            "ten_phap_nhan": pn_map.get(order.phap_nhan_id) if order else None,
+            "ten_nv_theo_doi": order.nv_theo_doi.ho_ten if order and order.nv_theo_doi else None,
+            "so_lenh": order.so_lenh if order else None,
             "ghi_chu": item.ghi_chu,
+            **specs,
         })
 
     return {"hang_loi": hang_loi, "hang_tra_ve": hang_tra_ve}

@@ -4,6 +4,7 @@ from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy import desc, func, and_, or_
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import CompileError as _CompileError
 
 from app.models.billing import SalesInvoice
 from app.models.accounting import (
@@ -1015,43 +1016,47 @@ class AccountingService:
         self._ensure_period_open(inv.ngay_lap, inv.phap_nhan_id, "huy hoa don mua")
         if float(inv.da_thanh_toan or 0) > 0:
             raise HTTPException(400, "Không thể hủy hóa đơn đã có thanh toán")
-        self._reverse_journal_entries("purchase_invoices", inv.id, user_id=user_id, ly_do=ly_do)
-        original_debt = self.db.query(DebtLedgerEntry).filter(
-            DebtLedgerEntry.chung_tu_loai == "hoa_don_mua",
-            DebtLedgerEntry.chung_tu_id == inv.id,
-            DebtLedgerEntry.loai == "tang_no",
-            DebtLedgerEntry.doi_tuong == "nha_cung_cap",
-        ).first()
-        existing_reversal = self.db.query(DebtLedgerEntry).filter(
-            DebtLedgerEntry.chung_tu_loai == "huy_hoa_don_mua",
-            DebtLedgerEntry.chung_tu_id == inv.id,
-            DebtLedgerEntry.loai == "giam_no",
-            DebtLedgerEntry.doi_tuong == "nha_cung_cap",
-        ).first()
-        if original_debt and not existing_reversal:
-            self.db.add(DebtLedgerEntry(
-                ngay=date.today(),
-                loai="giam_no",
-                doi_tuong="nha_cung_cap",
-                supplier_id=inv.supplier_id,
-                chung_tu_loai="huy_hoa_don_mua",
-                chung_tu_id=inv.id,
-                so_tien=original_debt.so_tien,
-                ghi_chu=f"Huy hoa don mua {inv.so_hoa_don or inv.id}",
-                phap_nhan_id=inv.phap_nhan_id,
-            ))
-        old_status = inv.trang_thai
-        inv.trang_thai = "huy"
-        self._audit(
-            "cancel",
-            "purchase_invoices",
-            inv.id,
-            user_id=user_id,
-            du_lieu_cu={"trang_thai": old_status},
-            du_lieu_moi={"trang_thai": "huy", "ly_do": ly_do},
-        )
-        self.db.commit()
-        self.db.refresh(inv)
+        try:
+            self._reverse_journal_entries("purchase_invoices", inv.id, user_id=user_id, ly_do=ly_do)
+            original_debt = self.db.query(DebtLedgerEntry).filter(
+                DebtLedgerEntry.chung_tu_loai == "hoa_don_mua",
+                DebtLedgerEntry.chung_tu_id == inv.id,
+                DebtLedgerEntry.loai == "tang_no",
+                DebtLedgerEntry.doi_tuong == "nha_cung_cap",
+            ).first()
+            existing_reversal = self.db.query(DebtLedgerEntry).filter(
+                DebtLedgerEntry.chung_tu_loai == "huy_hoa_don_mua",
+                DebtLedgerEntry.chung_tu_id == inv.id,
+                DebtLedgerEntry.loai == "giam_no",
+                DebtLedgerEntry.doi_tuong == "nha_cung_cap",
+            ).first()
+            if original_debt and not existing_reversal:
+                self.db.add(DebtLedgerEntry(
+                    ngay=date.today(),
+                    loai="giam_no",
+                    doi_tuong="nha_cung_cap",
+                    supplier_id=inv.supplier_id,
+                    chung_tu_loai="huy_hoa_don_mua",
+                    chung_tu_id=inv.id,
+                    so_tien=original_debt.so_tien,
+                    ghi_chu=f"Huy hoa don mua {inv.so_hoa_don or inv.id}",
+                    phap_nhan_id=inv.phap_nhan_id,
+                ))
+            old_status = inv.trang_thai
+            inv.trang_thai = "huy"
+            self._audit(
+                "cancel",
+                "purchase_invoices",
+                inv.id,
+                user_id=user_id,
+                du_lieu_cu={"trang_thai": old_status},
+                du_lieu_moi={"trang_thai": "huy", "ly_do": ly_do},
+            )
+            self.db.commit()
+            self.db.refresh(inv)
+        except Exception:
+            self.db.rollback()
+            raise
         logger.info("cancelled purchase_invoice id=%s so_hoa_don=%s", inv_id, inv.so_hoa_don)
         return inv
 
@@ -1184,7 +1189,15 @@ class AccountingService:
         )
 
     def approve_receipt(self, receipt_id: int, user_id: int) -> CashReceipt:
-        receipt = self.db.get(CashReceipt, receipt_id)
+        try:
+            receipt = (
+                self.db.query(CashReceipt)
+                .filter(CashReceipt.id == receipt_id)
+                .with_for_update()
+                .first()
+            )
+        except _CompileError:
+            receipt = self.db.get(CashReceipt, receipt_id)
         if not receipt:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
         if receipt.trang_thai != "cho_duyet":
@@ -1202,8 +1215,12 @@ class AccountingService:
             du_lieu_cu={"trang_thai": "cho_duyet"},
             du_lieu_moi={"trang_thai": receipt.trang_thai, "ngay_duyet": receipt.ngay_duyet.isoformat()},
         )
-        self.db.commit()
-        self.db.refresh(receipt)
+        try:
+            self.db.commit()
+            self.db.refresh(receipt)
+        except Exception:
+            self.db.rollback()
+            raise
         return receipt
 
     def cancel_receipt(
@@ -1212,7 +1229,15 @@ class AccountingService:
         user_id: int | None = None,
         ly_do: str | None = None,
     ) -> CashReceipt:
-        receipt = self.db.get(CashReceipt, receipt_id)
+        try:
+            receipt = (
+                self.db.query(CashReceipt)
+                .filter(CashReceipt.id == receipt_id)
+                .with_for_update()
+                .first()
+            )
+        except _CompileError:
+            receipt = self.db.get(CashReceipt, receipt_id)
         if not receipt:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
         if receipt.trang_thai == "huy":
@@ -1261,8 +1286,12 @@ class AccountingService:
             phap_nhan_id=receipt.phap_nhan_id,
         )
         self.db.add(entry)
-        self.db.commit()
-        self.db.refresh(receipt)
+        try:
+            self.db.commit()
+            self.db.refresh(receipt)
+        except Exception:
+            self.db.rollback()
+            raise
         return receipt
 
     def list_receipts(
@@ -1634,7 +1663,15 @@ class AccountingService:
         user_id: int | None = None,
         ly_do: str | None = None,
     ) -> CashPayment:
-        p = self.db.get(CashPayment, payment_id)
+        try:
+            p = (
+                self.db.query(CashPayment)
+                .filter(CashPayment.id == payment_id)
+                .with_for_update()
+                .first()
+            )
+        except _CompileError:
+            p = self.db.get(CashPayment, payment_id)
         if not p:
             raise HTTPException(404, "Không tìm thấy phiếu chi")
         if p.trang_thai == "huy":
@@ -1667,8 +1704,12 @@ class AccountingService:
             du_lieu_cu={"trang_thai": old_status},
             du_lieu_moi={"trang_thai": "huy", "ly_do": ly_do, "was_approved": was_approved},
         )
-        self.db.commit()
-        self.db.refresh(p)
+        try:
+            self.db.commit()
+            self.db.refresh(p)
+        except Exception:
+            self.db.rollback()
+            raise
         return p
 
     def list_payments(
@@ -1922,6 +1963,8 @@ class AccountingService:
         tu_ngay: date | None = None,
         den_ngay: date | None = None,
         phap_nhan_id: int | None = None,
+        page: int = 1,
+        page_size: int = 50,
     ) -> dict:
         start_date = tu_ngay or date(2000, 1, 1)
         end_date = den_ngay or date.today()
@@ -1940,7 +1983,13 @@ class AccountingService:
         if phap_nhan_id:
             q = q.filter(DebtLedgerEntry.phap_nhan_id == phap_nhan_id)
 
-        entries = q.order_by(DebtLedgerEntry.ngay, DebtLedgerEntry.id).all()
+        total = q.count()
+        entries = (
+            q.order_by(DebtLedgerEntry.ngay, DebtLedgerEntry.id)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
 
         # Batch preload để tránh N+1
         cust_ids = {e.customer_id for e in entries if e.customer_id}
@@ -2001,6 +2050,9 @@ class AccountingService:
             "phat_sinh_co": tong_co,
             "so_du_cuoi_ky": so_du_luy_ke,
             "rows": rows,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
         }
 
     def get_ap_ledger(
@@ -2257,9 +2309,13 @@ class AccountingService:
             phap_nhan_id=data.phap_nhan_id,
             created_by=user_id,
         )
-        self.db.add(ob)
-        self.db.commit()
-        self.db.refresh(ob)
+        try:
+            self.db.add(ob)
+            self.db.commit()
+            self.db.refresh(ob)
+        except Exception:
+            self.db.rollback()
+            raise
         return ob
 
     # ─────────────────────────────────────────────
@@ -3519,13 +3575,26 @@ class AccountingService:
         self.db.commit()
         return wp
 
-    def list_workshop_payroll(self, phan_xuong_id: int | None = None, phap_nhan_id: int | None = None) -> list[WorkshopPayroll]:
+    def list_workshop_payroll(
+        self,
+        phan_xuong_id: int | None = None,
+        phap_nhan_id: int | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
         q = self.db.query(WorkshopPayroll)
         if phan_xuong_id:
             q = q.filter(WorkshopPayroll.phan_xuong_id == phan_xuong_id)
         if phap_nhan_id:
             q = q.filter(WorkshopPayroll.phap_nhan_id == phap_nhan_id)
-        return q.order_by(WorkshopPayroll.created_at.desc()).all()
+        total = q.count()
+        items = (
+            q.order_by(WorkshopPayroll.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        return {"total": total, "page": page, "page_size": page_size, "items": items}
 
     # ─────────────────────────────────────────────
     # KHẤU HAO TÀI SẢN CỐ ĐỊNH
@@ -3805,7 +3874,9 @@ class AccountingService:
         phap_nhan_id: int | None = None,
         phan_xuong_id: int | None = None,
         trang_thai: str | None = None,
-    ) -> list[dict]:
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
         q = self.db.query(ProductionCostPeriod)
         if phap_nhan_id:
             q = q.filter(ProductionCostPeriod.phap_nhan_id == phap_nhan_id)
@@ -3813,10 +3884,19 @@ class AccountingService:
             q = q.filter(ProductionCostPeriod.phan_xuong_id == phan_xuong_id)
         if trang_thai:
             q = q.filter(ProductionCostPeriod.trang_thai == trang_thai)
-        return [
-            self._cost_period_payload(row)
-            for row in q.order_by(desc(ProductionCostPeriod.tu_ngay), desc(ProductionCostPeriod.id)).all()
-        ]
+        total = q.count()
+        rows = (
+            q.order_by(desc(ProductionCostPeriod.tu_ngay), desc(ProductionCostPeriod.id))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "items": [self._cost_period_payload(row) for row in rows],
+        }
 
     def get_production_cost_period(self, period_id: int) -> dict:
         return self._cost_period_payload(self._cost_period_or_404(period_id), include_details=True)

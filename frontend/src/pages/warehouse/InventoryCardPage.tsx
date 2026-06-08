@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag, Typography, message,
+  Alert, Button, Card, Col, DatePicker, Input, Row, Select, Space, Table, Tag, Tooltip, Typography, message,
 } from 'antd'
 import { FileExcelOutlined, FilePdfOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -9,7 +9,8 @@ import dayjs from 'dayjs'
 import { warehousesApi, type Warehouse } from '../../api/warehouses'
 import { warehouseApi, type GiaoDich } from '../../api/warehouse'
 import { phapNhanApi } from '../../api/phap_nhan'
-import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable } from '../../utils/exportUtils'
+import { smartExportExcel, smartPrintPdf, buildHtmlTable } from '../../utils/exportUtils'
+import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
@@ -50,7 +51,8 @@ export default function InventoryCardPage() {
   const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
   const [warehouseId, setWarehouseId] = useState<number | undefined>()
   const [search, setSearch] = useState('')
-  const [fetched, setFetched] = useState(false)
+  const { hasPermission } = usePermission()
+  const canView = hasPermission('inventory.view')
 
   const { data: whs } = useQuery({
     queryKey: ['warehouses-list'],
@@ -79,7 +81,9 @@ export default function InventoryCardPage() {
     ? phanXuongs.find(px => px.id === selectedWarehouse.phan_xuong_id)?.phap_nhan_id
     : null)
 
-  const { data: rows = [], isLoading, refetch } = useQuery<GiaoDich[]>({
+  // Tự động fetch khi bộ lọc (khoảng ngày, pháp nhân, xưởng, kho) đổi:
+  // React Query refetch khi queryKey thay đổi. Không cần bấm nút thủ công.
+  const { data: rows = [], isFetching, isError, isFetched, refetch } = useQuery<GiaoDich[]>({
     queryKey: ['giao-dich', range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD'), phapNhanId, phanXuongId, warehouseId],
     queryFn: () =>
       warehouseApi.getGiaoDich({
@@ -90,7 +94,6 @@ export default function InventoryCardPage() {
         phap_nhan_id: phapNhanId ?? undefined,
         limit: 1000,
       }).then(r => r.data),
-    enabled: fetched,
   })
 
   const filtered = useMemo(() => {
@@ -100,11 +103,6 @@ export default function InventoryCardPage() {
       r.ten_hang?.toLowerCase().includes(q) || r.ma_hang?.toLowerCase().includes(q),
     )
   }, [rows, search])
-
-  const handleView = () => {
-    setFetched(true)
-    refetch()
-  }
 
   const handleExcel = () => {
     if (!filtered.length) {
@@ -199,6 +197,12 @@ export default function InventoryCardPage() {
       title: 'Ngày',
       dataIndex: 'ngay_giao_dich',
       width: 100,
+      sorter: (a, b) => {
+        const ta = a.ngay_giao_dich ? dayjs(a.ngay_giao_dich).valueOf() : 0
+        const tb = b.ngay_giao_dich ? dayjs(b.ngay_giao_dich).valueOf() : 0
+        return ta - tb
+      },
+      defaultSortOrder: 'descend',
       render: v => v ? dayjs(v).format('DD/MM/YYYY') : '—',
     },
     { title: 'Mã hàng', dataIndex: 'ma_hang', width: 120, ellipsis: true },
@@ -219,6 +223,9 @@ export default function InventoryCardPage() {
       title: 'SL nhập',
       width: 100,
       align: 'right',
+      sorter: (a, b) =>
+        (NHAP_TYPES.has(a.loai_giao_dich) ? a.so_luong : 0) -
+        (NHAP_TYPES.has(b.loai_giao_dich) ? b.so_luong : 0),
       render: (_, r) => NHAP_TYPES.has(r.loai_giao_dich) ? (
         <Text style={{ color: '#1b168e' }}>{fmtQ(r.so_luong)}</Text>
       ) : '',
@@ -227,6 +234,9 @@ export default function InventoryCardPage() {
       title: 'SL xuất',
       width: 100,
       align: 'right',
+      sorter: (a, b) =>
+        (XUAT_TYPES.has(a.loai_giao_dich) ? a.so_luong : 0) -
+        (XUAT_TYPES.has(b.loai_giao_dich) ? b.so_luong : 0),
       render: (_, r) => XUAT_TYPES.has(r.loai_giao_dich) ? (
         <Text type="danger">{fmtQ(r.so_luong)}</Text>
       ) : '',
@@ -236,6 +246,7 @@ export default function InventoryCardPage() {
       dataIndex: 'ton_sau_giao_dich',
       width: 110,
       align: 'right',
+      sorter: (a, b) => a.ton_sau_giao_dich - b.ton_sau_giao_dich,
       render: v => <Text strong>{fmtQ(v)}</Text>,
     },
     {
@@ -268,8 +279,12 @@ export default function InventoryCardPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>Thẻ kho / Lịch sử nhập xuất tồn</Title>
         <Space>
-          <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!filtered.length}>Excel</Button>
-          <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!filtered.length}>In PDF</Button>
+          <Tooltip title={canView ? undefined : 'Bạn không có quyền xem/xuất tồn kho'}>
+            <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!canView || !filtered.length}>Excel</Button>
+          </Tooltip>
+          <Tooltip title={canView ? undefined : 'Bạn không có quyền xem/xuất tồn kho'}>
+            <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!canView || !filtered.length}>In PDF</Button>
+          </Tooltip>
         </Space>
       </div>
 
@@ -312,13 +327,24 @@ export default function InventoryCardPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <Button type="primary" icon={<SearchOutlined />} loading={isLoading} onClick={handleView}>
-            Xem thẻ kho
+          <Button type="primary" icon={<SearchOutlined />} loading={isFetching} onClick={() => refetch()}>
+            Làm mới
           </Button>
         </Space>
       </Card>
 
-      {fetched && (
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="Không tải được dữ liệu"
+          description="Không thể tải lịch sử nhập xuất tồn. Kiểm tra kết nối server rồi thử lại."
+          action={<Button size="small" danger onClick={() => refetch()}>Thử lại</Button>}
+        />
+      )}
+
+      {isFetched && !isError && (
         <Row gutter={16} style={{ marginBottom: 12 }}>
           <Col span={6}>
             <Card size="small">
@@ -341,16 +367,18 @@ export default function InventoryCardPage() {
         </Row>
       )}
 
-      <Table
-        rowKey="id"
-        size="small"
-        columns={columns}
-        dataSource={filtered}
-        loading={isLoading}
-        pagination={{ pageSize: 50, showTotal: t => `${t} giao dịch` }}
-        scroll={{ x: 1200 }}
-        locale={{ emptyText: <EmptyState size="small" preset={fetched ? "search" : "default"} /> }}
-      />
+      {!isError && (
+        <Table
+          rowKey="id"
+          size="small"
+          columns={columns}
+          dataSource={filtered}
+          loading={isFetching}
+          pagination={{ pageSize: 50, showTotal: t => `${t} giao dịch` }}
+          scroll={{ x: 1200 }}
+          locale={{ emptyText: <EmptyState size="small" preset={isFetched ? "search" : "default"} /> }}
+        />
+      )}
     </div>
   )
 }

@@ -215,6 +215,7 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
         { key: '/accounting/ccdc', label: <Link to="/accounting/ccdc">Tài sản & CCDC</Link> },
         { key: '/fixed-assets', label: <Link to="/fixed-assets">Tài sản cố định</Link> },
         { key: '/accounting/general-ledger', label: <Link to="/accounting/general-ledger">Sổ cái tài khoản</Link> },
+        { key: '/accounting/reports/production-costing', label: <Link to="/accounting/reports/production-costing">Giá thành sản phẩm</Link> },
       ],
     },
     {

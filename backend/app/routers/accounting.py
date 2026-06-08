@@ -22,6 +22,7 @@ from app.schemas.accounting import (
     CashPaymentResponse, OpeningBalanceCreate,
     WorkshopPayrollCreate,
     WorkshopPayrollResponse, OverheadAllocationRequest,
+    OverheadAllocationResponse, ClosingResult,
     ProductionCostPeriodCreate,
     FixedAssetCreate,
     FixedAssetResponse, ManualJournalEntryCreate,
@@ -29,10 +30,35 @@ from app.schemas.accounting import (
 from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_date, parse_decimal, parse_text,
 )
+from app.utils.format_utils import so_thanh_chu, ngay_str
+import logging
 import io
 import pandas as pd
+from enum import Enum as _Enum
+
+
+class ReceiptStatus(str, _Enum):
+    CHO_DUYET = "cho_duyet"
+    DA_DUYET = "da_duyet"
+    HUY = "huy"
+
+
+class PaymentStatus(str, _Enum):
+    CHO_CHOT = "cho_chot"
+    DA_CHOT = "da_chot"
+    DA_DUYET = "da_duyet"
+    HUY = "huy"
+
+
+class PurchaseInvoiceStatus(str, _Enum):
+    NHAP = "nhap"
+    DA_DUYET = "da_duyet"
+    HUY = "huy"
+
 
 router = APIRouter(prefix="/api/accounting", tags=["accounting"])
+
+logger = logging.getLogger(__name__)
 
 KE_TOAN_ROLES = ("KE_TOAN", "GIAM_DOC")
 ACCOUNTING_AUDIT_TABLES = {
@@ -228,7 +254,8 @@ def _validate_reconcile_target(db: Session, tx: BankTransaction, payload: dict) 
     obj = db.get(model, int(chung_tu_id))
     if not obj:
         raise HTTPException(404, "Khong tim thay chung tu doi soat")
-    if obj.trang_thai != "da_duyet":
+    approved_status = ReceiptStatus.DA_DUYET if chung_tu_loai == "phieu_thu" else PaymentStatus.DA_DUYET
+    if obj.trang_thai != approved_status:
         raise HTTPException(400, "Chi doi soat chung tu da duyet")
 
     tx_amount = Decimal(str(tx.thu or 0)) if tx.thu and tx.thu > 0 else Decimal(str(tx.chi or 0))
@@ -313,7 +340,7 @@ def get_bank_transaction_candidates(
     candidates = []
     if tx.thu and tx.thu > 0:
         q = db.query(CashReceipt).join(Customer, CashReceipt.customer_id == Customer.id).filter(
-            CashReceipt.trang_thai == "da_duyet",
+            CashReceipt.trang_thai == ReceiptStatus.DA_DUYET,
             CashReceipt.so_tien == amount,
         )
         if tx.phap_nhan_id:
@@ -322,7 +349,7 @@ def get_bank_transaction_candidates(
             candidates.append(_candidate_payload("phieu_thu", obj, obj.customer.ten_viet_tat if obj.customer else None))
     elif tx.chi and tx.chi > 0:
         q = db.query(CashPayment).join(Supplier, CashPayment.supplier_id == Supplier.id).filter(
-            CashPayment.trang_thai == "da_duyet",
+            CashPayment.trang_thai == PaymentStatus.DA_DUYET,
             CashPayment.so_tien == amount,
         )
         if tx.phap_nhan_id:
@@ -425,7 +452,7 @@ def list_receipts(
     )
 
 
-@router.post("/receipts", response_model=CashReceiptResponse)
+@router.post("/receipts", response_model=CashReceiptResponse, status_code=201)
 def create_receipt(
     data: CashReceiptCreate,
     db: Session = Depends(get_db),
@@ -449,6 +476,7 @@ def approve_receipt(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
+    logger.info("approve_receipt id=%s user=%s", receipt_id, current_user.id)
     return AccountingService(db).approve_receipt(receipt_id, current_user.id)
 
 
@@ -459,6 +487,7 @@ def cancel_receipt(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
+    logger.info("cancel_receipt id=%s user=%s", receipt_id, current_user.id)
     return AccountingService(db).cancel_receipt(receipt_id, current_user.id, ly_do)
 
 
@@ -487,7 +516,7 @@ def list_purchase_invoices(
     )
 
 
-@router.post("/purchase-invoices", response_model=PurchaseInvoiceResponse)
+@router.post("/purchase-invoices", response_model=PurchaseInvoiceResponse, status_code=201)
 def create_purchase_invoice(
     data: PurchaseInvoiceCreate,
     db: Session = Depends(get_db),
@@ -505,10 +534,10 @@ def get_purchase_invoice(
     return AccountingService(db).get_purchase_invoice(inv_id)
 
 
-@router.post("/purchase-invoices/from-po/{po_id}", response_model=PurchaseInvoiceResponse)
+@router.post("/purchase-invoices/from-po/{po_id}", response_model=PurchaseInvoiceResponse, status_code=201)
 def create_purchase_invoice_from_po(
     po_id: int,
-    thue_suat: Decimal = Query(Decimal("8"), description="VAT: 0, 5, 8, 10"),
+    thue_suat: Decimal = Query(Decimal("8"), ge=Decimal("0"), le=Decimal("100"), description="VAT: 0, 5, 8, 10"),
     co_vat: bool = Query(True, description="Co hoa don VAT hay khong"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
@@ -518,10 +547,10 @@ def create_purchase_invoice_from_po(
     )
 
 
-@router.post("/purchase-invoices/from-gr/{gr_id}", response_model=PurchaseInvoiceResponse)
+@router.post("/purchase-invoices/from-gr/{gr_id}", response_model=PurchaseInvoiceResponse, status_code=201)
 def create_purchase_invoice_from_gr(
     gr_id: int,
-    thue_suat: Decimal = Query(Decimal("8"), description="VAT: 0, 5, 8, 10"),
+    thue_suat: Decimal = Query(Decimal("8"), ge=Decimal("0"), le=Decimal("100"), description="VAT: 0, 5, 8, 10"),
     co_vat: bool = Query(True, description="Co hoa don VAT hay khong"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
@@ -531,13 +560,14 @@ def create_purchase_invoice_from_gr(
     )
 
 
-@router.post("/purchase-invoices/{inv_id}/huy", response_model=PurchaseInvoiceResponse)
+@router.patch("/purchase-invoices/{inv_id}/cancel", response_model=PurchaseInvoiceResponse)
 def cancel_purchase_invoice(
     inv_id: int,
     ly_do: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
+    logger.info("cancel_purchase_invoice id=%s user=%s", inv_id, current_user.id)
     return AccountingService(db).cancel_purchase_invoice(inv_id, current_user.id, ly_do)
 
 
@@ -565,7 +595,7 @@ def list_payments(
     )
 
 
-@router.post("/payments", response_model=CashPaymentResponse)
+@router.post("/payments", response_model=CashPaymentResponse, status_code=201)
 def create_payment(
     data: CashPaymentCreate,
     db: Session = Depends(get_db),
@@ -599,6 +629,7 @@ def cancel_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
+    logger.info("cancel_payment id=%s user=%s", payment_id, current_user.id)
     return AccountingService(db).cancel_payment(payment_id, current_user.id, ly_do)
 
 
@@ -655,10 +686,15 @@ def ar_ledger_entries(
     tu_ngay: date | None = Query(None),
     den_ngay: date | None = Query(None),
     phap_nhan_id: int | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_ar_ledger_entries(customer_id, tu_ngay, den_ngay, phap_nhan_id=phap_nhan_id)
+    return AccountingService(db).get_ar_ledger_entries(
+        customer_id, tu_ngay, den_ngay, phap_nhan_id=phap_nhan_id,
+        page=page, page_size=page_size,
+    )
 
 
 @router.get("/ap/ledger")
@@ -778,7 +814,7 @@ def doi_chieu_phai_tra(
         PurchaseInvoice.supplier_id,
         func.sum(PurchaseInvoice.tong_thanh_toan).label("tong_hd"),
         func.count(PurchaseInvoice.id).label("so_hoa_don"),
-    ).filter(PurchaseInvoice.trang_thai != "huy")
+    ).filter(PurchaseInvoice.trang_thai != PurchaseInvoiceStatus.HUY)
     if supplier_id:
         inv_q = inv_q.filter(PurchaseInvoice.supplier_id == supplier_id)
     if phap_nhan_id:
@@ -794,9 +830,16 @@ def doi_chieu_phai_tra(
 
     # Merge by supplier
     all_sup_ids = set(gr_by_sup) | set(inv_by_sup)
+    # Batch-load all suppliers up front to avoid an N+1 query inside the loop.
+    suppliers_map: dict[int, Supplier] = {}
+    if all_sup_ids:
+        suppliers_map = {
+            s.id: s
+            for s in db.query(Supplier).filter(Supplier.id.in_(all_sup_ids)).all()
+        }
     rows = []
     for sid in all_sup_ids:
-        sup = db.get(Supplier, sid)
+        sup = suppliers_map.get(sid)
         gr = gr_by_sup.get(sid, {"tong_gr": 0.0, "so_phieu_gr": 0})
         inv = inv_by_sup.get(sid, {"tong_hd": 0.0, "so_hoa_don": 0})
         tong_gr = gr["tong_gr"]
@@ -831,12 +874,13 @@ def doi_chieu_cong_no(
 # SỐ DƯ ĐẦU KỲ (nhập từ AMIS khi chuyển đổi)
 # ─────────────────────────────────────────────
 
-@router.post("/opening-balances")
+@router.post("/opening-balances", status_code=201)
 def create_opening_balance(
     data: OpeningBalanceCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
+    logger.info("create_opening_balance doi_tuong=%s user=%s", data.doi_tuong, current_user.id)
     return AccountingService(db).create_opening_balance(data, current_user.id)
 
 
@@ -880,6 +924,20 @@ async def import_opening_balances_ar(
     if not raw:
         raise HTTPException(400, "File rong")
     df = pd.read_excel(io.BytesIO(raw), dtype=object)
+
+    # Batch load all customers referenced in the file to avoid N+1 queries
+    all_ma_kh = {
+        str(src.get("Ma KH", "") or "").strip()
+        for _, src in df.iterrows()
+        if str(src.get("Ma KH", "") or "").strip()
+    }
+    kh_map: dict[str, Customer] = {}
+    if all_ma_kh:
+        kh_map = {
+            c.ma_kh: c
+            for c in db.query(Customer).filter(Customer.ma_kh.in_(all_ma_kh)).all()
+        }
+
     rows, created, errors_count = [], 0, 0
     objects_to_save = []
     for idx, src in df.iterrows():
@@ -905,7 +963,7 @@ async def import_opening_balances_ar(
             so_du = None
         if so_du is None:
             errs.append("So du: bat buoc")
-        kh = db.query(Customer).filter(Customer.ma_kh == ma_kh).first() if ma_kh else None
+        kh = kh_map.get(ma_kh) if ma_kh else None
         if ma_kh and not kh:
             errs.append(f"Ma KH: khong ton tai '{ma_kh}'")
         if errs:
@@ -935,6 +993,7 @@ async def import_opening_balances_ar(
             else:
                 db.add(OpeningBalance(**vals))
         db.commit()
+    logger.info("import_ob_ar commit=%s total=%s errors=%s user=%s", commit, len(rows), errors_count, current_user.id)
     return {"commit": commit, "total": len(rows), "created": created, "updated": 0,
             "skipped": 0, "errors": errors_count, "rows": rows[:200]}
 
@@ -952,6 +1011,20 @@ async def import_opening_balances_ap(
     if not raw:
         raise HTTPException(400, "File rong")
     df = pd.read_excel(io.BytesIO(raw), dtype=object)
+
+    # Batch load all suppliers referenced in the file to avoid N+1 queries
+    all_ma_ncc = {
+        str(src.get("Ma NCC", "") or "").strip()
+        for _, src in df.iterrows()
+        if str(src.get("Ma NCC", "") or "").strip()
+    }
+    ncc_map: dict[str, Supplier] = {}
+    if all_ma_ncc:
+        ncc_map = {
+            s.ma_ncc: s
+            for s in db.query(Supplier).filter(Supplier.ma_ncc.in_(all_ma_ncc)).all()
+        }
+
     rows, created, errors_count = [], 0, 0
     objects_to_save = []
     for idx, src in df.iterrows():
@@ -977,7 +1050,7 @@ async def import_opening_balances_ap(
             so_du = None
         if so_du is None:
             errs.append("So du: bat buoc")
-        ncc = db.query(Supplier).filter(Supplier.ma_ncc == ma_ncc).first() if ma_ncc else None
+        ncc = ncc_map.get(ma_ncc) if ma_ncc else None
         if ma_ncc and not ncc:
             errs.append(f"Ma NCC: khong ton tai '{ma_ncc}'")
         if errs:
@@ -1007,6 +1080,7 @@ async def import_opening_balances_ap(
             else:
                 db.add(OpeningBalance(**vals))
         db.commit()
+    logger.info("import_ob_ap commit=%s total=%s errors=%s user=%s", commit, len(rows), errors_count, current_user.id)
     return {"commit": commit, "total": len(rows), "created": created, "updated": 0,
             "skipped": 0, "errors": errors_count, "rows": rows[:200]}
 
@@ -1156,7 +1230,7 @@ def get_balance_sheet(
     return AccountingService(db).get_balance_sheet(ngay, phap_nhan_id)
 
 
-@router.post("/reports/perform-closing")
+@router.post("/reports/perform-closing", response_model=ClosingResult)
 def perform_closing(
     thang: int = Query(...),
     nam: int = Query(...),
@@ -1215,73 +1289,6 @@ def unlock_period(
 # IN PHIẾU
 # ─────────────────────────────────────────────
 
-def _so_thanh_chu(n: float) -> str:
-    """Chuyển số tiền VNĐ sang chữ tiếng Việt."""
-    n = int(round(n))
-    if n == 0:
-        return "Không đồng"
-
-    don_vi = ["", "nghìn", "triệu", "tỷ"]
-    chu_so = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"]
-
-    def doc_ba_chu_so(num: int, is_first: bool) -> str:
-        tram = num // 100
-        chuc = (num % 100) // 10
-        dv = num % 10
-        result = ""
-        if tram > 0:
-            result += chu_so[tram] + " trăm "
-        elif not is_first:
-            result += "không trăm "
-        if chuc == 0 and dv == 0:
-            return result.strip()
-        if chuc == 0:
-            if result:
-                result += "lẻ " + chu_so[dv]
-            else:
-                result += chu_so[dv]
-        elif chuc == 1:
-            result += "mười "
-            if dv == 5:
-                result += "lăm"
-            elif dv > 0:
-                result += chu_so[dv]
-        else:
-            result += chu_so[chuc] + " mươi "
-            if dv == 1:
-                result += "mốt"
-            elif dv == 5:
-                result += "lăm"
-            elif dv > 0:
-                result += chu_so[dv]
-        return result.strip()
-
-    parts = []
-    idx = 0
-    while n > 0:
-        nhom = n % 1000
-        if nhom != 0:
-            txt = doc_ba_chu_so(nhom, idx == 0 and n < 1000)
-            if don_vi[idx]:
-                txt += " " + don_vi[idx]
-            parts.append(txt)
-        n //= 1000
-        idx += 1
-
-    result = ", ".join(reversed(parts))
-    return result.capitalize() + " đồng"
-
-
-def _ngay_str(d) -> str:
-    if not d:
-        return ""
-    s = str(d)
-    parts = s.split("-")
-    if len(parts) == 3:
-        return f"Ngày {parts[2]} tháng {parts[1]} năm {parts[0]}"
-    return s
-
-
 HINH_THUC_LABEL = {
     "tien_mat": "Tiền mặt",
     "chuyen_khoan": "Chuyển khoản",
@@ -1328,10 +1335,10 @@ def print_receipt(
 
     replacements = {
         "{{document_number}}": _html_mod.escape(r.so_phieu or ""),
-        "{{document_date}}": _ngay_str(r.ngay_phieu),
+        "{{document_date}}": ngay_str(r.ngay_phieu),
         "{{company_name}}": _html_mod.escape(ten_cty),
         "{{company_details}}": _html_mod.escape(" | ".join(parts)),
-        "{{logo_img}}": f'<img src="{settings["logo_url"]}" style="max-height:50px"/>' if settings.get("logo_url") else "",
+        "{{logo_img}}": f'<img src="{_html_mod.escape(settings["logo_url"])}" style="max-height:50px"/>' if settings.get("logo_url") else "",
         "{{accent}}": accent,
         "{{nguoi_nop}}": _html_mod.escape(ten_kh),
         "{{khach_hang}}": _html_mod.escape(ten_kh),
@@ -1339,7 +1346,7 @@ def print_receipt(
         "{{ly_do_thu}}": _html_mod.escape(r.dien_giai or ""),
         "{{hinh_thuc}}": _html_mod.escape(hinh_thuc),
         "{{so_tien}}": f"{float(r.so_tien):,.0f} đồng",
-        "{{so_tien_bang_chu}}": _so_thanh_chu(float(r.so_tien)),
+        "{{so_tien_bang_chu}}": so_thanh_chu(float(r.so_tien)),
         "{{tk_no}}": _html_mod.escape(r.tk_no or ""),
         "{{tk_co}}": _html_mod.escape(r.tk_co or ""),
     }
@@ -1397,10 +1404,10 @@ def print_payment(
 
     replacements = {
         "{{document_number}}": _html_mod.escape(p.so_phieu or ""),
-        "{{document_date}}": _ngay_str(p.ngay_phieu),
+        "{{document_date}}": ngay_str(p.ngay_phieu),
         "{{company_name}}": _html_mod.escape(ten_cty),
         "{{company_details}}": _html_mod.escape(" | ".join(parts)),
-        "{{logo_img}}": f'<img src="{settings["logo_url"]}" style="max-height:50px"/>' if settings.get("logo_url") else "",
+        "{{logo_img}}": f'<img src="{_html_mod.escape(settings["logo_url"])}" style="max-height:50px"/>' if settings.get("logo_url") else "",
         "{{accent}}": accent,
         "{{nguoi_nhan}}": _html_mod.escape(ten_ncc),
         "{{nha_cung_cap}}": _html_mod.escape(ten_ncc),
@@ -1408,7 +1415,7 @@ def print_payment(
         "{{ly_do_chi}}": _html_mod.escape(p.dien_giai or ""),
         "{{hinh_thuc}}": _html_mod.escape(hinh_thuc),
         "{{so_tien}}": f"{float(p.so_tien):,.0f} đồng",
-        "{{so_tien_bang_chu}}": _so_thanh_chu(float(p.so_tien)),
+        "{{so_tien_bang_chu}}": so_thanh_chu(float(p.so_tien)),
         "{{tk_no}}": _html_mod.escape(p.tk_no or ""),
         "{{tk_co}}": _html_mod.escape(p.tk_co or ""),
     }
@@ -1723,14 +1730,18 @@ def get_vat_audit(
 def list_workshop_payroll(
     phan_xuong_id: int | None = Query(None),
     phap_nhan_id: int | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
     """Danh sách bảng lương xưởng"""
-    return AccountingService(db).list_workshop_payroll(phan_xuong_id, phap_nhan_id)
+    return AccountingService(db).list_workshop_payroll(
+        phan_xuong_id, phap_nhan_id, page=page, page_size=page_size,
+    )
 
 
-@router.post("/workshop-payroll", response_model=WorkshopPayrollResponse)
+@router.post("/workshop-payroll", response_model=WorkshopPayrollResponse, status_code=201)
 def create_workshop_payroll(
     data: WorkshopPayrollCreate,
     db: Session = Depends(get_db),
@@ -1775,10 +1786,10 @@ def list_journal_entries(
     total = q.count()
     items = q.order_by(desc(JournalEntry.ngay_but_toan), desc(JournalEntry.id))\
              .offset((page - 1) * page_size).limit(page_size).all()
-    return {"total": total, "items": items}
+    return {"total": total, "page": page, "page_size": page_size, "items": items}
 
 
-@router.post("/journal-entries")
+@router.post("/journal-entries", status_code=201)
 def create_manual_journal_entry(
     data: ManualJournalEntryCreate,
     db: Session = Depends(get_db),
@@ -1794,6 +1805,7 @@ def create_manual_journal_entry(
         lines=[line.model_dump() for line in data.lines],
         phap_nhan_id=data.phap_nhan_id,
         phan_xuong_id=data.phan_xuong_id,
+        user_id=current_user.id,
     )
 
 
@@ -1807,7 +1819,7 @@ def approve_workshop_payroll(
     return AccountingService(db).approve_workshop_payroll(wp_id, current_user.id)
 
 
-@router.post("/allocate-overhead")
+@router.post("/allocate-overhead", response_model=OverheadAllocationResponse)
 def allocate_overhead(
     data: OverheadAllocationRequest,
     db: Session = Depends(get_db),
@@ -1829,6 +1841,8 @@ def list_production_cost_periods(
     phap_nhan_id: int | None = Query(None),
     phan_xuong_id: int | None = Query(None),
     trang_thai: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -1836,6 +1850,8 @@ def list_production_cost_periods(
         phap_nhan_id=phap_nhan_id,
         phan_xuong_id=phan_xuong_id,
         trang_thai=trang_thai,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -1897,11 +1913,13 @@ def close_production_cost_period(
 # TÀI SẢN CỐ ĐỊNH & KHẤU HAO
 # ─────────────────────────────────────────────
 
-@router.get("/fixed-assets", response_model=list[FixedAssetResponse])
+@router.get("/fixed-assets")
 def list_fixed_assets(
     phan_xuong_id: int | None = Query(None),
     phap_nhan_id: int | None = Query(None),
     trang_thai: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -1913,7 +1931,19 @@ def list_fixed_assets(
         q = q.filter(FixedAsset.phap_nhan_id == phap_nhan_id)
     if trang_thai:
         q = q.filter(FixedAsset.trang_thai == trang_thai)
-    return q.order_by(FixedAsset.ngay_mua.desc()).all()
+    total = q.count()
+    items = (
+        q.order_by(FixedAsset.ngay_mua.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [FixedAssetResponse.model_validate(item) for item in items],
+    }
 
 
 @router.get("/fixed-assets/{asset_id}", response_model=FixedAssetResponse)
@@ -1929,7 +1959,7 @@ def get_fixed_asset(
     return asset
 
 
-@router.post("/fixed-assets", response_model=FixedAssetResponse)
+@router.post("/fixed-assets", response_model=FixedAssetResponse, status_code=201)
 def create_fixed_asset(
     data: FixedAssetCreate,
     db: Session = Depends(get_db),
@@ -1956,7 +1986,7 @@ def run_depreciation(
 # ─────────────────────────────────────────────
 
 @router.get("/fixed-assets/import-template")
-def get_fixed_asset_template():
+def get_fixed_asset_template(_: User = Depends(get_current_user)):
     from app.services.excel_import_service import build_template_response
     from app.services.accounting_import_service import FIXED_ASSET_FIELDS
     return build_template_response("Mau_Import_Tai_San.xlsx", FIXED_ASSET_FIELDS)
@@ -1980,7 +2010,7 @@ async def import_fixed_assets(
 
 
 @router.get("/workshop-payroll/import-template")
-def get_workshop_payroll_template():
+def get_workshop_payroll_template(_: User = Depends(get_current_user)):
     from app.services.excel_import_service import build_template_response
     from app.services.accounting_import_service import WORKSHOP_PAYROLL_FIELDS
     return build_template_response("Mau_Import_Luong_Xuong.xlsx", WORKSHOP_PAYROLL_FIELDS)

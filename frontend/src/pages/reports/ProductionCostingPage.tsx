@@ -20,11 +20,13 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CalculatorOutlined,
   CheckCircleOutlined,
   FileSearchOutlined,
+  FundOutlined,
   PlusOutlined,
   ReloadOutlined,
   SyncOutlined,
@@ -34,6 +36,7 @@ import {
   type ProductionCostAllocation,
   type ProductionCostInput,
   type ProductionCostPeriod,
+  type ProductionCostPeriodListResponse,
 } from '../../api/accounting'
 import { usePhanXuong, usePhapNhan } from '../../hooks/useMasterData'
 import { fmtVND } from '../../utils/exportUtils'
@@ -57,18 +60,18 @@ type CreatePeriodForm = {
 }
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
-  nhap: { label: 'Nhap', color: 'default' },
-  dang_tinh: { label: 'Dang tinh', color: 'processing' },
-  da_chot: { label: 'Da chot', color: 'green' },
-  huy: { label: 'Huy', color: 'red' },
+  nhap: { label: 'Nhập', color: 'default' },
+  dang_tinh: { label: 'Đang tính', color: 'processing' },
+  da_chot: { label: 'Đã chốt', color: 'green' },
+  huy: { label: 'Hủy', color: 'red' },
 }
 
 const SOURCE_META: Record<string, { label: string; color: string }> = {
   nvl: { label: 'NVL', color: 'blue' },
-  san_luong: { label: 'San luong', color: 'green' },
-  nhan_cong: { label: 'Nhan cong', color: 'orange' },
+  san_luong: { label: 'Sản lượng', color: 'green' },
+  nhan_cong: { label: 'Nhân công', color: 'orange' },
   sxc: { label: 'SXC', color: 'purple' },
-  khau_hao: { label: 'Khau hao', color: 'cyan' },
+  khau_hao: { label: 'Khấu hao', color: 'cyan' },
 }
 
 const numberText = (value: number | null | undefined, suffix = '') => {
@@ -76,7 +79,7 @@ const numberText = (value: number | null | undefined, suffix = '') => {
   return `${new Intl.NumberFormat('vi-VN').format(Number(value))}${suffix}`
 }
 
-const moneyText = (value: number | null | undefined) => `${fmtVND(value)} d`
+const moneyText = (value: number | null | undefined) => `${fmtVND(value)} đ`
 
 const ProductionCostingPage: React.FC = () => {
   const queryClient = useQueryClient()
@@ -99,16 +102,16 @@ const ProductionCostingPage: React.FC = () => {
   )
 
   const phapNhanName = (id: number | null | undefined) =>
-    id ? phapNhanList.find(item => item.id === id)?.ten_viet_tat || phapNhanList.find(item => item.id === id)?.ten_phap_nhan || `#${id}` : 'Tat ca'
+    id ? phapNhanList.find(item => item.id === id)?.ten_viet_tat || phapNhanList.find(item => item.id === id)?.ten_phap_nhan || `#${id}` : 'Tất cả'
   const phanXuongName = (id: number | null | undefined) =>
-    id ? phanXuongList.find(item => item.id === id)?.ten_xuong || `#${id}` : 'Tat ca'
+    id ? phanXuongList.find(item => item.id === id)?.ten_xuong || `#${id}` : 'Tất cả'
 
-  const periodsQuery = useQuery({
+  const periodsQuery = useQuery<ProductionCostPeriodListResponse>({
     queryKey: ['production-cost-periods', filters],
     queryFn: () => productionCostApi.list(filters),
   })
 
-  const periods = periodsQuery.data ?? []
+  const periods = periodsQuery.data?.items ?? []
   const currentPeriodId = selectedPeriodId ?? periods[0]?.id
 
   const detailQuery = useQuery({
@@ -147,44 +150,48 @@ const ProductionCostingPage: React.FC = () => {
         ghi_chu: values.ghi_chu?.trim() || null,
       }),
     onSuccess: async period => {
-      message.success('Da tao ky gia thanh')
+      message.success('Đã tạo kỳ giá thành')
       setCreateOpen(false)
       createForm.resetFields()
       setSelectedPeriodId(period.id)
       await refreshPeriod(period.id)
     },
+    onError: (err: Error) => message.error(`Lỗi tạo kỳ: ${err.message}`),
   })
 
   const collectMutation = useMutation({
     mutationFn: (id: number) => productionCostApi.collectInputs(id),
     onSuccess: async data => {
-      message.success(`Da thu thap ${data.created_inputs} dong du lieu`)
+      message.success(`Đã thu thập ${data.created_inputs} dòng dữ liệu`)
       setSelectedPeriodId(data.period.id)
       await refreshPeriod(data.period.id)
     },
+    onError: (err: Error) => message.error(`Lỗi lấy dữ liệu: ${err.message}`),
   })
 
   const calculateMutation = useMutation({
     mutationFn: (id: number) => productionCostApi.calculate(id),
     onSuccess: async period => {
-      message.success('Da tinh gia thanh')
+      message.success('Đã tính giá thành')
       setSelectedPeriodId(period.id)
       await refreshPeriod(period.id)
     },
+    onError: (err: Error) => message.error(`Lỗi tính giá thành: ${err.message}`),
   })
 
   const closeMutation = useMutation({
     mutationFn: (id: number) => productionCostApi.close(id),
     onSuccess: async period => {
-      message.success('Da chot ky gia thanh')
+      message.success('Đã chốt kỳ giá thành')
       setSelectedPeriodId(period.id)
       await refreshPeriod(period.id)
     },
+    onError: (err: Error) => message.error(`Lỗi chốt kỳ: ${err.message}`),
   })
 
   const periodColumns: ColumnsType<ProductionCostPeriod> = [
     {
-      title: 'Ky',
+      title: 'Kỳ',
       dataIndex: 'ma_ky',
       width: 180,
       fixed: 'left',
@@ -196,16 +203,16 @@ const ProductionCostingPage: React.FC = () => {
       ),
     },
     {
-      title: 'Thoi gian',
+      title: 'Thời gian',
       width: 170,
       render: (_, record) => `${dayjs(record.tu_ngay).format('DD/MM/YYYY')} - ${dayjs(record.den_ngay).format('DD/MM/YYYY')}`,
     },
-    { title: 'Phap nhan', dataIndex: 'phap_nhan_id', width: 140, render: phapNhanName },
-    { title: 'Phan xuong', dataIndex: 'phan_xuong_id', width: 150, render: phanXuongName },
-    { title: 'Chi phi', dataIndex: 'tong_chi_phi', width: 140, align: 'right', render: moneyText },
-    { title: 'San luong', dataIndex: 'tong_san_luong', width: 120, align: 'right', render: (v: number) => numberText(v) },
+    { title: 'Pháp nhân', dataIndex: 'phap_nhan_id', width: 140, render: phapNhanName },
+    { title: 'Phân xưởng', dataIndex: 'phan_xuong_id', width: 150, render: phanXuongName },
+    { title: 'Chi phí', dataIndex: 'tong_chi_phi', width: 140, align: 'right', render: moneyText },
+    { title: 'Sản lượng', dataIndex: 'tong_san_luong', width: 120, align: 'right', render: (v: number) => numberText(v) },
     {
-      title: 'Trang thai',
+      title: 'Trạng thái',
       dataIndex: 'trang_thai',
       width: 110,
       render: (value: string) => {
@@ -217,7 +224,7 @@ const ProductionCostingPage: React.FC = () => {
 
   const inputColumns: ColumnsType<ProductionCostInput> = [
     {
-      title: 'Nguon',
+      title: 'Nguồn',
       dataIndex: 'source_type',
       width: 115,
       render: (value: string) => {
@@ -225,22 +232,22 @@ const ProductionCostingPage: React.FC = () => {
         return <Tag color={meta.color}>{meta.label}</Tag>
       },
     },
-    { title: 'Lenh SX', dataIndex: 'production_order_id', width: 95, render: (v: number | null) => v ? `#${v}` : '-' },
-    { title: 'Bang nguon', dataIndex: 'source_table', width: 145, render: (v: string | null) => v || '-' },
-    { title: 'So tien', dataIndex: 'so_tien', width: 130, align: 'right', render: moneyText },
-    { title: 'So luong', dataIndex: 'so_luong', width: 110, align: 'right', render: (v: number | null) => v ? numberText(v) : '-' },
-    { title: 'Dien giai', dataIndex: 'dien_giai', ellipsis: true, render: (v: string | null) => v || '-' },
+    { title: 'Lệnh SX', dataIndex: 'production_order_id', width: 95, render: (v: number | null) => v ? `#${v}` : '-' },
+    { title: 'Bảng nguồn', dataIndex: 'source_table', width: 145, render: (v: string | null) => v || '-' },
+    { title: 'Số tiền', dataIndex: 'so_tien', width: 130, align: 'right', render: moneyText },
+    { title: 'Số lượng', dataIndex: 'so_luong', width: 110, align: 'right', render: (v: number | null) => v ? numberText(v) : '-' },
+    { title: 'Diễn giải', dataIndex: 'dien_giai', ellipsis: true, render: (v: string | null) => v || '-' },
   ]
 
   const allocationColumns: ColumnsType<ProductionCostAllocation> = [
-    { title: 'Lenh SX', dataIndex: 'production_order_id', width: 95, render: (v: number | null) => v ? `#${v}` : '-' },
-    { title: 'San luong', dataIndex: 'san_luong', width: 115, align: 'right', render: (v: number) => numberText(v) },
-    { title: 'Ty le', dataIndex: 'ty_le', width: 90, align: 'right', render: (v: number) => `${(Number(v || 0) * 100).toFixed(2)}%` },
+    { title: 'Lệnh SX', dataIndex: 'production_order_id', width: 95, render: (v: number | null) => v ? `#${v}` : '-' },
+    { title: 'Sản lượng', dataIndex: 'san_luong', width: 115, align: 'right', render: (v: number) => numberText(v) },
+    { title: 'Tỷ lệ', dataIndex: 'ty_le', width: 90, align: 'right', render: (v: number) => `${(Number(v || 0) * 100).toFixed(2)}%` },
     { title: 'NVL', dataIndex: 'chi_phi_nvl', width: 130, align: 'right', render: moneyText },
-    { title: 'Nhan cong', dataIndex: 'chi_phi_nhan_cong', width: 130, align: 'right', render: moneyText },
+    { title: 'Nhân công', dataIndex: 'chi_phi_nhan_cong', width: 130, align: 'right', render: moneyText },
     { title: 'SXC', dataIndex: 'chi_phi_sxc', width: 130, align: 'right', render: moneyText },
-    { title: 'Tong CP', dataIndex: 'tong_chi_phi', width: 140, align: 'right', render: (v: number) => <Text strong>{moneyText(v)}</Text> },
-    { title: 'Gia thanh/DV', dataIndex: 'gia_thanh_don_vi', width: 140, align: 'right', render: (v: number) => <Text strong>{moneyText(v)}</Text> },
+    { title: 'Tổng CP', dataIndex: 'tong_chi_phi', width: 140, align: 'right', render: (v: number) => <Text strong>{moneyText(v)}</Text> },
+    { title: 'Giá thành/ĐV', dataIndex: 'gia_thanh_don_vi', width: 140, align: 'right', render: (v: number) => <Text strong>{moneyText(v)}</Text> },
   ]
 
   const runPreview = async () => {
@@ -252,10 +259,10 @@ const ProductionCostingPage: React.FC = () => {
   const confirmClose = () => {
     if (!currentPeriod) return
     Modal.confirm({
-      title: 'Chot ky gia thanh?',
-      content: `Ky ${currentPeriod.ma_ky} se khoa du lieu tinh gia thanh va ghi audit.`,
-      okText: 'Chot ky',
-      cancelText: 'Huy',
+      title: 'Chốt kỳ giá thành?',
+      content: `Kỳ ${currentPeriod.ma_ky} sẽ khóa dữ liệu tính giá thành và ghi audit.`,
+      okText: 'Chốt kỳ',
+      cancelText: 'Hủy',
       okButtonProps: { danger: true },
       onOk: () => closeMutation.mutateAsync(currentPeriod.id),
     })
@@ -265,15 +272,36 @@ const ProductionCostingPage: React.FC = () => {
 
   return (
     <div style={{ padding: 24 }}>
-      <Space align="start" style={{ justifyContent: 'space-between', width: '100%', marginBottom: 16 }} wrap>
+      <Space align="start" style={{ justifyContent: 'space-between', width: '100%', marginBottom: 12 }} wrap>
         <div>
-          <Title level={3} style={{ margin: 0 }}>Gia thanh san xuat</Title>
-          <Text type="secondary">Quan ly ky tinh gia thanh theo phap nhan, phan xuong va du lieu san xuat thuc te.</Text>
+          <Title level={3} style={{ margin: 0 }}>Giá thành sản xuất</Title>
+          <Text type="secondary">Quản lý kỳ tính giá thành theo pháp nhân, phân xưởng và dữ liệu sản xuất thực tế.</Text>
         </div>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          Tao ky
+          Tạo kỳ
         </Button>
       </Space>
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message="Quy trình tính giá thành"
+        description={
+          <Space wrap>
+            <Text>① Duyệt BOM từng lệnh SX</Text>
+            <Text type="secondary">→</Text>
+            <Text>② Xuất vật tư có phân bổ thực tế</Text>
+            <Text type="secondary">→</Text>
+            <Text>③ Tạo kỳ và lấy dữ liệu SX</Text>
+            <Text type="secondary">→</Text>
+            <Text>④ Tính và chốt giá thành</Text>
+            <Link to="/production/cost-analysis">
+              <Button type="link" size="small" icon={<FundOutlined />}>Xem phân tích chi phí BOM vs TT</Button>
+            </Link>
+          </Space>
+        }
+      />
 
       <Card size="small" style={{ marginBottom: 12 }}>
         <Form
@@ -289,7 +317,7 @@ const ProductionCostingPage: React.FC = () => {
               allowClear
               showSearch
               loading={loadingPhapNhan}
-              placeholder="Phap nhan"
+              placeholder="Pháp nhân"
               optionFilterProp="label"
               options={phapNhanOptions}
               style={{ width: 190 }}
@@ -300,7 +328,7 @@ const ProductionCostingPage: React.FC = () => {
               allowClear
               showSearch
               loading={loadingPhanXuong}
-              placeholder="Phan xuong"
+              placeholder="Phân xưởng"
               optionFilterProp="label"
               options={phanXuongOptions}
               style={{ width: 190 }}
@@ -309,14 +337,14 @@ const ProductionCostingPage: React.FC = () => {
           <Form.Item name="trang_thai">
             <Select
               allowClear
-              placeholder="Trang thai"
+              placeholder="Trạng thái"
               options={Object.entries(STATUS_META).map(([value, meta]) => ({ value, label: meta.label }))}
               style={{ width: 150 }}
             />
           </Form.Item>
           <Form.Item>
             <Space>
-              <Button htmlType="submit" icon={<FileSearchOutlined />}>Loc</Button>
+              <Button htmlType="submit" icon={<FileSearchOutlined />}>Lọc</Button>
               <Button
                 icon={<ReloadOutlined />}
                 onClick={() => {
@@ -325,7 +353,7 @@ const ProductionCostingPage: React.FC = () => {
                   setFilters({})
                 }}
               >
-                Dat lai
+                Đặt lại
               </Button>
             </Space>
           </Form.Item>
@@ -352,7 +380,7 @@ const ProductionCostingPage: React.FC = () => {
 
       <Card
         size="small"
-        title={currentPeriod ? `${currentPeriod.ma_ky} - ${currentPeriod.ten_ky}` : 'Chi tiet ky gia thanh'}
+        title={currentPeriod ? `${currentPeriod.ma_ky} — ${currentPeriod.ten_ky}` : 'Chi tiết kỳ giá thành'}
         extra={
           <Space wrap>
             <Button
@@ -361,7 +389,7 @@ const ProductionCostingPage: React.FC = () => {
               loading={collectMutation.isPending}
               onClick={() => currentPeriodId && collectMutation.mutate(currentPeriodId)}
             >
-              Lay du lieu SX
+              Lấy dữ liệu SX
             </Button>
             <Button
               icon={<FileSearchOutlined />}
@@ -369,7 +397,7 @@ const ProductionCostingPage: React.FC = () => {
               loading={previewQuery.isFetching}
               onClick={runPreview}
             >
-              Preview
+              Xem trước
             </Button>
             <Button
               type="primary"
@@ -378,7 +406,7 @@ const ProductionCostingPage: React.FC = () => {
               loading={calculateMutation.isPending}
               onClick={() => currentPeriodId && calculateMutation.mutate(currentPeriodId)}
             >
-              Tinh gia thanh
+              Tính giá thành
             </Button>
             <Button
               danger
@@ -387,38 +415,43 @@ const ProductionCostingPage: React.FC = () => {
               loading={closeMutation.isPending}
               onClick={confirmClose}
             >
-              Chot ky
+              Chốt kỳ
             </Button>
           </Space>
         }
       >
         {!currentPeriod ? (
-          <Alert type="info" showIcon message="Chua co ky nao" description="Tao ky tinh gia thanh hoac dieu chinh bo loc de xem du lieu." />
+          <Alert
+            type="info"
+            showIcon
+            message="Chưa có kỳ nào được chọn"
+            description="Tạo kỳ tính giá thành hoặc điều chỉnh bộ lọc để xem dữ liệu."
+          />
         ) : (
           <Space direction="vertical" size={12} style={{ width: '100%' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
               <div style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 6 }}>
-                <Statistic title="Tong chi phi" value={currentPeriod.tong_chi_phi} formatter={v => moneyText(Number(v))} />
+                <Statistic title="Tổng chi phí" value={currentPeriod.tong_chi_phi} formatter={v => moneyText(Number(v))} />
               </div>
               <div style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 6 }}>
                 <Statistic title="NVL" value={currentPeriod.tong_nvl} formatter={v => moneyText(Number(v))} />
               </div>
               <div style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 6 }}>
-                <Statistic title="Nhan cong" value={currentPeriod.tong_nhan_cong} formatter={v => moneyText(Number(v))} />
+                <Statistic title="Nhân công" value={currentPeriod.tong_nhan_cong} formatter={v => moneyText(Number(v))} />
               </div>
               <div style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 6 }}>
                 <Statistic title="SXC" value={currentPeriod.tong_sxc} formatter={v => moneyText(Number(v))} />
               </div>
               <div style={{ border: '1px solid #f0f0f0', padding: 12, borderRadius: 6 }}>
-                <Statistic title="San luong" value={currentPeriod.tong_san_luong} formatter={v => numberText(Number(v))} />
+                <Statistic title="Sản lượng" value={currentPeriod.tong_san_luong} formatter={v => numberText(Number(v))} />
               </div>
             </div>
 
             <Space wrap>
-              <Text type="secondary">Phap nhan:</Text><Text strong>{phapNhanName(currentPeriod.phap_nhan_id)}</Text>
-              <Text type="secondary">Phan xuong:</Text><Text strong>{phanXuongName(currentPeriod.phan_xuong_id)}</Text>
-              <Text type="secondary">Tieu thuc:</Text><Tag color="blue">San luong</Tag>
-              <Text type="secondary">Trang thai:</Text>
+              <Text type="secondary">Pháp nhân:</Text><Text strong>{phapNhanName(currentPeriod.phap_nhan_id)}</Text>
+              <Text type="secondary">Phân xưởng:</Text><Text strong>{phanXuongName(currentPeriod.phan_xuong_id)}</Text>
+              <Text type="secondary">Tiêu thức:</Text><Tag color="blue">Sản lượng</Tag>
+              <Text type="secondary">Trạng thái:</Text>
               <Tag color={(STATUS_META[currentPeriod.trang_thai] ?? STATUS_META.nhap).color}>
                 {(STATUS_META[currentPeriod.trang_thai] ?? STATUS_META.nhap).label}
               </Tag>
@@ -428,7 +461,7 @@ const ProductionCostingPage: React.FC = () => {
               items={[
                 {
                   key: 'inputs',
-                  label: `Du lieu dau vao (${currentPeriod.inputs?.length ?? 0})`,
+                  label: `Dữ liệu đầu vào (${currentPeriod.inputs?.length ?? 0})`,
                   children: (
                     <Table<ProductionCostInput>
                       rowKey="id"
@@ -443,7 +476,7 @@ const ProductionCostingPage: React.FC = () => {
                 },
                 {
                   key: 'allocations',
-                  label: `Phan bo (${currentPeriod.allocations?.length ?? 0})`,
+                  label: `Phân bổ (${currentPeriod.allocations?.length ?? 0})`,
                   children: (
                     <Table<ProductionCostAllocation>
                       rowKey={record => `${record.production_order_id}-${record.product_id}-${record.san_luong}`}
@@ -463,11 +496,11 @@ const ProductionCostingPage: React.FC = () => {
       </Card>
 
       <Modal
-        title="Tao ky tinh gia thanh"
+        title="Tạo kỳ tính giá thành"
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={() => createForm.submit()}
-        okText="Tao ky"
+        okText="Tạo kỳ"
         confirmLoading={createMutation.isPending}
         destroyOnClose
       >
@@ -477,29 +510,29 @@ const ProductionCostingPage: React.FC = () => {
           initialValues={{ range: [dayjs().startOf('month'), dayjs().endOf('month')] }}
           onFinish={values => createMutation.mutate(values)}
         >
-          <Form.Item name="range" label="Khoang ngay" rules={[{ required: true, message: 'Chon khoang ngay' }]}>
+          <Form.Item name="range" label="Khoảng ngày" rules={[{ required: true, message: 'Chọn khoảng ngày' }]}>
             <RangePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
           </Form.Item>
-          <Form.Item name="ma_ky" label="Ma ky">
-            <Input placeholder="Tu dong neu de trong" />
+          <Form.Item name="ma_ky" label="Mã kỳ">
+            <Input placeholder="Tự động nếu để trống" />
           </Form.Item>
-          <Form.Item name="ten_ky" label="Ten ky">
-            <Input placeholder="Tu dong neu de trong" />
+          <Form.Item name="ten_ky" label="Tên kỳ">
+            <Input placeholder="Tự động nếu để trống" />
           </Form.Item>
-          <Form.Item name="phap_nhan_id" label="Phap nhan">
+          <Form.Item name="phap_nhan_id" label="Pháp nhân">
             <Select allowClear showSearch optionFilterProp="label" options={phapNhanOptions} loading={loadingPhapNhan} />
           </Form.Item>
-          <Form.Item name="phan_xuong_id" label="Phan xuong">
+          <Form.Item name="phan_xuong_id" label="Phân xưởng">
             <Select allowClear showSearch optionFilterProp="label" options={phanXuongOptions} loading={loadingPhanXuong} />
           </Form.Item>
-          <Form.Item name="ghi_chu" label="Ghi chu">
+          <Form.Item name="ghi_chu" label="Ghi chú">
             <Input.TextArea rows={3} />
           </Form.Item>
         </Form>
       </Modal>
 
       <Drawer
-        title="Preview phan bo chi phi"
+        title="Xem trước phân bổ chi phí"
         width={920}
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
@@ -509,8 +542,8 @@ const ProductionCostingPage: React.FC = () => {
             <Alert key={item} type="warning" showIcon message={item} />
           ))}
           <Space wrap>
-            <Statistic title="Chua phan bo" value={previewQuery.data?.unallocated_cost ?? 0} formatter={v => moneyText(Number(v))} />
-            <Statistic title="Dong phan bo" value={previewQuery.data?.allocations.length ?? 0} />
+            <Statistic title="Chưa phân bổ" value={previewQuery.data?.unallocated_cost ?? 0} formatter={v => moneyText(Number(v))} />
+            <Statistic title="Dòng phân bổ" value={previewQuery.data?.allocations.length ?? 0} />
           </Space>
           <Table<ProductionCostAllocation>
             rowKey={record => `${record.production_order_id}-${record.product_id}-${record.san_luong}`}

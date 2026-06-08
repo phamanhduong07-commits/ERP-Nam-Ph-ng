@@ -7,6 +7,7 @@ import { EyeOutlined, GoldOutlined, InfoCircleOutlined, PlusOutlined, SearchOutl
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
+import { usePermission } from '../../hooks/usePermission'
 import client from '../../api/client'
 import { warehouseApi } from '../../api/warehouse'
 import type { TonKhoTPRow, PhanXuong } from '../../api/warehouse'
@@ -24,6 +25,10 @@ const fmtN = (v: number | null | undefined) =>
 
 export default function KhoThanhPhamPage() {
   const navigate = useNavigate()
+  const { hasPermission } = usePermission()
+  // Trang Kho Thành Phẩm chỉ phát sinh thao tác ghi duy nhất: tạo phiếu trả hàng.
+  // Xoá/duyệt phiếu trả nằm ở trang chi tiết Sales Returns, không có ở đây.
+  const canCreateReturn = hasPermission('inventory.phoi_tp')
   const [activeMainTab, setActiveMainTab] = useState<'stock' | 'returns'>('stock')
   const [activeXuong, setActiveXuong] = useState<string>('all')
   const [filterPhapNhan, setFilterPhapNhan] = useState<string | null>(null)
@@ -333,7 +338,12 @@ export default function KhoThanhPhamPage() {
         </Col>
         <Col>
           <Space>
-            <Button size="small" icon={<PlusOutlined />} onClick={() => navigate('/sales/returns/create')}>
+            <Button
+              size="small"
+              icon={<PlusOutlined />}
+              disabled={!canCreateReturn}
+              onClick={() => navigate('/sales/returns/create')}
+            >
               Tạo phiếu trả
             </Button>
             <Button size="small" onClick={() => { refetch(); refetchReturns() }}>Làm mới</Button>
@@ -366,7 +376,13 @@ export default function KhoThanhPhamPage() {
                 description="Chưa có phiếu hàng trả về"
               >
                 <Space>
-                  <Button size="small" icon={<PlusOutlined />} type="primary" onClick={() => navigate('/sales/returns/create')}>
+                  <Button
+                    size="small"
+                    icon={<PlusOutlined />}
+                    type="primary"
+                    disabled={!canCreateReturn}
+                    onClick={() => navigate('/sales/returns/create')}
+                  >
                     Tạo phiếu trả
                   </Button>
                   <Button size="small" onClick={() => refetchReturns()}>Làm mới</Button>

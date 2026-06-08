@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import type { ApiError } from '../../api/types'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   Button, Card, Form, Input, List, Result, Skeleton, Tag, Typography, message,
@@ -7,6 +6,8 @@ import {
 import {
   CameraOutlined, CheckCircleFilled, LeftOutlined, ReloadOutlined,
 } from '@ant-design/icons'
+import { usePermission } from '../../hooks/usePermission'
+import { getErrorMessage } from '../../utils/errorUtils'
 import dayjs from 'dayjs'
 import client from '../../api/client'
 
@@ -34,6 +35,7 @@ interface MobileDO {
 }
 
 export default function GiaoHangMobilePage() {
+  const { hasPermission } = usePermission()
   const [selected, setSelected] = useState<MobileDO | null>(null)
   const [done, setDone] = useState<{ soPhieu: string; tenKhach: string } | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -59,12 +61,22 @@ export default function GiaoHangMobilePage() {
       setDone({ soPhieu: selected!.so_phieu, tenKhach: selected!.ten_khach })
     },
     onError: (e: unknown) =>
-      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xác nhận giao hàng'),
+      message.error(getErrorMessage(e, 'Lỗi xác nhận giao hàng')),
   })
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      message.error('Chỉ chấp nhận ảnh JPG, PNG, WebP')
+      e.target.value = ''
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      message.error('Ảnh không được vượt quá 10 MB')
+      e.target.value = ''
+      return
+    }
     setImageFile(file)
     setPreviewUrl(URL.createObjectURL(file))
     e.target.value = ''
@@ -203,6 +215,7 @@ export default function GiaoHangMobilePage() {
               type="primary"
               block size="large"
               loading={uploading || confirmMut.isPending}
+              disabled={!hasPermission('inventory.export')}
               onClick={handleSubmit}
               style={{ height: 56, fontSize: 20, borderRadius: 12, fontWeight: 700, background: '#1677ff' }}
             >

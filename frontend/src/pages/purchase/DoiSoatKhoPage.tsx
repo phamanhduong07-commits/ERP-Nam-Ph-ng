@@ -10,11 +10,13 @@ import { purchaseApi, DoiSoatKhoRow, DoiSoatKhoSummary, TRANG_THAI_PO, TRANG_THA
 import { suppliersApi } from '../../api/suppliers'
 import { warehouseApi, GoodsReceipt, GoodsReceiptItem, PhanXuong } from '../../api/warehouse'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
+import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
 
 const { RangePicker } = DatePicker
 
 export default function DoiSoatKhoPage() {
+  const { hasPermission } = usePermission()
   const [supplierId, setSupplierId] = useState<number | undefined>()
   const [trangThai, setTrangThai] = useState<string | undefined>()
   const [loaiHang, setLoaiHang] = useState<string | undefined>()
@@ -169,9 +171,9 @@ export default function DoiSoatKhoPage() {
   const colsNhapNhanh: ColumnsType<GoodsReceipt> = [
     { title: 'Số phiếu', dataIndex: 'so_phieu', width: 140 },
     { title: 'Ngày nhập', dataIndex: 'ngay_nhap', width: 110, render: v => v ?? '-' },
-    { title: 'Nhà CC', width: 160, render: (_, r) => (r as any).ten_ncc ?? '-' },
-    { title: 'Xưởng', width: 140, render: (_, r) => (r as any).ten_phan_xuong ?? '-' },
-    { title: 'Kho nhập', width: 160, render: (_, r) => (r as any).ten_kho ?? '-' },
+    { title: 'Nhà CC', width: 160, render: (_, r) => (r as { ten_ncc?: string }).ten_ncc ?? '-' },
+    { title: 'Xưởng', width: 140, render: (_, r) => (r as { ten_phan_xuong?: string }).ten_phan_xuong ?? '-' },
+    { title: 'Kho nhập', width: 160, render: (_, r) => (r as { ten_kho?: string }).ten_kho ?? '-' },
     { title: 'Tổng giá trị', dataIndex: 'tong_gia_tri', width: 130, align: 'right', render: v => fmtVND(Number(v)) },
     {
       title: 'Tên hàng', width: 200, render: (_, r) => {
@@ -282,6 +284,7 @@ export default function DoiSoatKhoPage() {
             <Button
               icon={<DownloadOutlined />}
               size="small"
+              disabled={!hasPermission('inventory.view')}
               onClick={activeTab === 'chi-tiet' ? exportChiTiet : exportTongHop}
             >
               Xuất Excel

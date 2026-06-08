@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Image, Input, InputNumber,
@@ -17,11 +16,25 @@ import { suppliersApi } from '../../api/suppliers'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import { usePermission } from '../../hooks/usePermission'
+import { getErrorMessage } from '../../utils/errorUtils'
 import EmptyState from "../../components/EmptyState"
 import { mediaApi } from '../../api/media'
 import { ocrExamplesApi } from '../../api/ocrExamples'
 
 const { Title, Text } = Typography
+
+/** Thông số kỹ thuật của một dòng phôi trong PO item (phoi_spec). */
+interface PhoiSpecItem {
+  so_tam?: number
+  kho_mm?: number
+  dai_mm?: number
+  so_lop?: number
+  /** Khổ thực tế (chiều rộng tấm) — nguồn cho kho_mm khi map từ PO. */
+  kho_tt?: number
+  /** Dài thực tế (chiều dài tấm) — nguồn cho dai_mm khi map từ PO. */
+  dai_tt?: number
+}
 
 const SO_LOP_OPTIONS = [
   { value: 3, label: '3 lớp' },
@@ -45,6 +58,8 @@ const fileToBase64 = (file: File): Promise<string> =>
 
 export default function NhapPhoiNgoaiPage() {
   const companyInfo = usePhapNhanForPrint()
+  const { hasPermission, canApprove } = usePermission()
+  const canImport = hasPermission('inventory.import')
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -148,7 +163,7 @@ export default function NhapPhoiNgoaiPage() {
       message.success('Đã tạo phiếu nhập phôi')
       handleClose()
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi tạo phiếu')),
   })
 
   const completeMut = useMutation({
@@ -160,7 +175,7 @@ export default function NhapPhoiNgoaiPage() {
       message.success('Đã hoàn thiện phiếu — tồn kho phôi đã cập nhật')
       handleClose()
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi hoàn thiện phiếu'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi hoàn thiện phiếu')),
   })
 
   const deleteMut = useMutation({
@@ -170,7 +185,7 @@ export default function NhapPhoiNgoaiPage() {
       qc.invalidateQueries({ queryKey: ['ton-kho'] })
       message.success('Đã xoá phiếu')
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi xoá')),
   })
 
   const approveMut = useMutation({
@@ -179,7 +194,7 @@ export default function NhapPhoiNgoaiPage() {
       qc.invalidateQueries({ queryKey: ['goods-receipts-phoi'] })
       message.success('Đã duyệt phiếu nhập phôi')
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi duyệt'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi duyệt')),
   })
 
   useEffect(() => {
@@ -192,9 +207,9 @@ export default function NhapPhoiNgoaiPage() {
         dvt: it.dvt || 'Tấm',
         don_gia: it.don_gia,
         po_item_id: it.id,
-        so_lop: (it.phoi_spec as Record<string, unknown> | null)?.so_lop || null,
-        kho_mm: (it.phoi_spec as Record<string, unknown> | null)?.kho_tt || null,   // kho_tt = chiều rộng tấm phôi thực tế
-        dai_mm: (it.phoi_spec as Record<string, unknown> | null)?.dai_tt || null,   // dai_tt = chiều dài tấm phôi thực tế
+        so_lop: (it.phoi_spec as PhoiSpecItem | null)?.so_lop || null,
+        kho_mm: (it.phoi_spec as PhoiSpecItem | null)?.kho_tt || null,   // kho_tt = chiều rộng tấm phôi thực tế
+        dai_mm: (it.phoi_spec as PhoiSpecItem | null)?.dai_tt || null,   // dai_tt = chiều dài tấm phôi thực tế
         ket_qua_kiem_tra: 'DAT',
       })),
     })
@@ -338,13 +353,13 @@ export default function NhapPhoiNgoaiPage() {
             <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintReceipt(r)} />
           )}
           <Popconfirm title="Duyệt phiếu nhập phôi?" onConfirm={() => approveMut.mutate(r.id)}
-            disabled={r.trang_thai !== 'nhap'}>
+            disabled={r.trang_thai !== 'nhap' || !canApprove}>
             <Button size="small" icon={<CheckCircleOutlined />} style={{ color: '#52c41a', borderColor: '#52c41a' }}
-              disabled={r.trang_thai !== 'nhap'} />
+              disabled={r.trang_thai !== 'nhap' || !canApprove} />
           </Popconfirm>
           <Popconfirm title="Xoá phiếu nhập phôi?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
-            disabled={r.trang_thai === 'da_duyet'}>
-            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_duyet'} />
+            disabled={r.trang_thai === 'da_duyet' || !canImport}>
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_duyet' || !canImport} />
           </Popconfirm>
         </Space>
       ),
@@ -402,7 +417,7 @@ export default function NhapPhoiNgoaiPage() {
             <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
               Xuất Excel
             </Button>
-            <Button type="primary" icon={<PlusOutlined />}
+            <Button type="primary" icon={<PlusOutlined />} disabled={!canImport}
               onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setEditingDraftId(null); setOpen(true) }}>
               Tạo phiếu nhập phôi
             </Button>
@@ -434,6 +449,7 @@ export default function NhapPhoiNgoaiPage() {
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table dataSource={receiptList} columns={columns} rowKey="id" loading={isLoading} size="small"
+          locale={{ emptyText: <EmptyState preset="document" size="small" /> }}
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 1000 }} />
       </Card>
 
@@ -448,7 +464,7 @@ export default function NhapPhoiNgoaiPage() {
         footer={
           <Space>
             <Button onClick={handleClose}>Huỷ</Button>
-            <Button type="primary" loading={createMut.isPending || completeMut.isPending} onClick={handleSubmit}>
+            <Button type="primary" loading={createMut.isPending || completeMut.isPending} onClick={handleSubmit} disabled={!canImport}>
               Lưu phiếu nhập phôi
             </Button>
           </Space>
@@ -481,7 +497,7 @@ export default function NhapPhoiNgoaiPage() {
                       if (ext.tong_kg) form.setFieldValue('hd_tong_kg', ext.tong_kg)
                       message.success('Đọc ảnh xong')
                     } catch (e: unknown) {
-                      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi đọc ảnh')
+                      message.error(getErrorMessage(e, 'Lỗi đọc ảnh'))
                     } finally { setOcrLoading(false) }
                   }}>
                   Đọc ảnh (AI)
@@ -562,7 +578,7 @@ export default function NhapPhoiNgoaiPage() {
                           await ocrExamplesApi.create(fd)
                           message.success('Đã lưu làm ví dụ')
                         } catch (e: unknown) {
-                          message.error((e as ApiError)?.response?.data?.detail || 'Lỗi lưu ví dụ')
+                          message.error(getErrorMessage(e, 'Lỗi lưu ví dụ'))
                         } finally { setSavingExample(false) }
                       }}>Lưu làm ví dụ</Button>
                   </Space>
@@ -597,7 +613,7 @@ export default function NhapPhoiNgoaiPage() {
                   <Form.Item name="po_id" label="Đặt hàng phôi (PO)">
                     <Select placeholder="Chọn PO phôi..." allowClear showSearch
                       filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                      options={poList.filter(p => p.loai_po !== 'giay_cuon').map(p => ({ value: p.id, label: `${p.so_po} — ${p.ten_ncc || ''}${p.ten_phan_xuong ? ' | ' + p.ten_phan_xuong : ''}` }))}
+                      options={poList.filter(p => p.loai_po === 'giay_tam').map(p => ({ value: p.id, label: `${p.so_po} — ${p.ten_ncc || ''}${p.ten_phan_xuong ? ' | ' + p.ten_phan_xuong : ''}` }))}
                       onChange={v => v ? setSelectedPO(v) : setSelectedPO(undefined)}
                     />
                   </Form.Item>
@@ -694,17 +710,20 @@ export default function NhapPhoiNgoaiPage() {
                             </Form.Item>
                           </Col>
                           <Col span={5}>
-                            <Form.Item name={[name, 'kho_mm']} label="Chiều rộng (mm)" style={{ marginBottom: 4 }}>
-                              <InputNumber size="small" min={0} style={{ width: '100%' }} placeholder="mm" />
+                            <Form.Item name={[name, 'kho_mm']} label="Chiều rộng (mm)" style={{ marginBottom: 4 }}
+                              rules={[{ type: 'number', min: 1, message: 'Phải > 0' }]}>
+                              <InputNumber size="small" min={1} style={{ width: '100%' }} placeholder="mm" />
                             </Form.Item>
                           </Col>
                           <Col span={5}>
-                            <Form.Item name={[name, 'dai_mm']} label="Chiều dài (mm)" style={{ marginBottom: 4 }}>
-                              <InputNumber size="small" min={0} style={{ width: '100%' }} placeholder="mm" />
+                            <Form.Item name={[name, 'dai_mm']} label="Chiều dài (mm)" style={{ marginBottom: 4 }}
+                              rules={[{ type: 'number', min: 1, message: 'Phải > 0' }]}>
+                              <InputNumber size="small" min={1} style={{ width: '100%' }} placeholder="mm" />
                             </Form.Item>
                           </Col>
                           <Col span={4}>
-                            <Form.Item name={[name, 'so_tam']} label="Số tấm" style={{ marginBottom: 4 }}>
+                            <Form.Item name={[name, 'so_tam']} label="Số tấm" style={{ marginBottom: 4 }}
+                              rules={[{ type: 'number', min: 1, message: 'Phải > 0' }]}>
                               <InputNumber size="small" min={1} precision={0} style={{ width: '100%' }} />
                             </Form.Item>
                           </Col>

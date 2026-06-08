@@ -6,8 +6,10 @@ import {
 } from 'antd'
 import {
   SearchOutlined, WarningOutlined, DatabaseOutlined,
-  ThunderboltOutlined, FormOutlined, ClockCircleOutlined,
+  ThunderboltOutlined, FormOutlined, ClockCircleOutlined, DownloadOutlined,
 } from '@ant-design/icons'
+import { usePermission } from '../../hooks/usePermission'
+import { exportExcelWithTemplate } from '../../utils/exportUtils'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { warehouseApi, type TonKhoGiayRow, type GoodsReceipt } from '../../api/warehouse'
@@ -50,6 +52,7 @@ function formatVnd(n: number) {
 
 export default function KhoGiayCuonPage() {
   const navigate = useNavigate()
+  const { hasPermission } = usePermission()
   const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
   const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
   const [search, setSearch] = useState('')
@@ -334,9 +337,31 @@ export default function KhoGiayCuonPage() {
           Kho Giấy cuộn
         </Title>
         <Space>
+          <Tooltip title="Xuất danh sách tồn kho giấy">
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={() => exportExcelWithTemplate(
+                'ton-kho-giay-cuon.xlsx',
+                'Tồn kho',
+                grouped,
+                [
+                  { key: 'ma_chinh',    label: 'Mã chính',          width: 14 },
+                  { key: 'ten',         label: 'Tên giấy',           width: 28 },
+                  { key: 'kho',         label: 'Khổ (mm)',           width: 12 },
+                  { key: 'dinh_luong',  label: 'Định lượng (gsm)',   width: 16 },
+                  { key: 'ton_tong',    label: 'Tồn (kg)',           width: 12 },
+                  { key: 'so_cuon_tong',label: 'Số cuộn',            width: 10 },
+                  { key: 'gia_tri_tong',label: 'Giá trị (đ)',        width: 16 },
+                ],
+              )}
+            >
+              Xuất Excel
+            </Button>
+          </Tooltip>
           <Tooltip title="Ghi nhận nhanh xe vào cổng (bảo vệ / thủ kho)">
             <Button
               icon={<ThunderboltOutlined />}
+              disabled={!hasPermission('inventory.import')}
               onClick={() => navigate('/warehouse/nhap-giay', { state: { openQuick: true } })}
             >
               Nhập nhanh
@@ -346,6 +371,7 @@ export default function KhoGiayCuonPage() {
             <Button
               type="primary"
               icon={<FormOutlined />}
+              disabled={!hasPermission('inventory.import')}
               onClick={() => navigate('/warehouse/nhap-giay')}
             >
               Nhập đầy đủ

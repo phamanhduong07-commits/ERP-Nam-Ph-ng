@@ -19,6 +19,7 @@ import {
 import { warehouseApi, PhanXuongWithWarehouses, WarehouseSlot, TonKho, TonKhoGiayRow, GiayRoll } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { phapNhanApi } from '../../api/phap_nhan'
+import { usePermission } from '../../hooks/usePermission'
 import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
@@ -262,6 +263,9 @@ function RollsExpand({ pmId, whId }: { pmId: number | null; whId: number }) {
 
 function ChiTietTab() {
   const qc = useQueryClient()
+  const { hasPermission } = usePermission()
+  const canImport = hasPermission('inventory.import')
+  const canView = hasPermission('inventory.view')
   const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
   const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
   const [warehouseId, setWarehouseId] = useState<number | undefined>()
@@ -483,12 +487,15 @@ function ChiTietTab() {
             <Button size="small" icon={<AppstoreOutlined />}
               type={viewMode === 'cards' ? 'primary' : 'default'}
               onClick={() => setViewMode('cards')} />
-            <Button size="small" icon={<UploadOutlined />}
-              onClick={() => { if (!warehouseId) return message.warning('Chọn kho để import'); setImportVisible(true) }}>
-              Import tồn đầu
-            </Button>
-            <Tooltip title="Xuất Excel">
-              <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
+            <Tooltip title={canImport ? 'Import tồn kho đầu kỳ' : 'Bạn không có quyền nhập kho'}>
+              <Button size="small" icon={<UploadOutlined />}
+                disabled={!canImport}
+                onClick={() => { if (!warehouseId) return message.warning('Chọn kho để import'); setImportVisible(true) }}>
+                Import tồn đầu
+              </Button>
+            </Tooltip>
+            <Tooltip title={canView ? 'Xuất Excel' : 'Bạn không có quyền xem/xuất tồn kho'}>
+              <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} disabled={!canView} onClick={handleExportExcel} />
             </Tooltip>
           </Space>
         </Col>

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Image, Input, InputNumber,
@@ -21,6 +20,8 @@ import { suppliersApi } from '../../api/suppliers'
 import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId, downloadBlob } from '../../utils/exportUtils'
 
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
+import { usePermission } from '../../hooks/usePermission'
+import { getErrorMessage } from '../../utils/errorUtils'
 import EmptyState from "../../components/EmptyState"
 import HoanThienGiayModal from '../../components/HoanThienGiayModal'
 
@@ -37,6 +38,8 @@ const fileToBase64 = (file: File): Promise<string> =>
 export default function NhapGiayPage() {
   const navigate = useNavigate()
   const companyInfo = usePhapNhanForPrint()
+  const { hasPermission, canApprove } = usePermission()
+  const canImport = hasPermission('inventory.import')
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -170,7 +173,7 @@ export default function NhapGiayPage() {
       message.success('Đã tạo phiếu nhập giấy cuộn')
       handleClose()
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi tạo phiếu')),
   })
 
   const completeMut = useMutation({
@@ -182,7 +185,7 @@ export default function NhapGiayPage() {
       message.success('Đã hoàn thiện phiếu — tồn kho đã cập nhật')
       handleClose()
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi hoàn thiện phiếu'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi hoàn thiện phiếu')),
   })
 
   const deleteMut = useMutation({
@@ -192,7 +195,7 @@ export default function NhapGiayPage() {
       qc.invalidateQueries({ queryKey: ['ton-kho'] })
       message.success('Đã xoá phiếu nhập')
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi xoá')),
   })
 
   const approveMut = useMutation({
@@ -201,7 +204,7 @@ export default function NhapGiayPage() {
       qc.invalidateQueries({ queryKey: ['goods-receipts-giay'] })
       message.success('Đã duyệt — giá mua giấy đã cập nhật')
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi duyệt phiếu'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi duyệt phiếu')),
   })
 
   const taoQCMut = useMutation({
@@ -211,10 +214,7 @@ export default function NhapGiayPage() {
       message.success(`Đã tạo phiếu QC: ${res.data.so_phieu}`)
       navigate(`/quality/giay-cuon?id=${res.data.qc_phieu_id}`)
     },
-    onError: (e: unknown) => {
-      const detail = (e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu QC'
-      message.error(detail)
-    },
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi tạo phiếu QC')),
   })
 
   const ocrMut = useMutation({
@@ -223,7 +223,7 @@ export default function NhapGiayPage() {
       setOcrResult(prev => ({ ...prev, [id]: data.extracted ?? {} }))
       message.success('Đọc ảnh xong')
     },
-    onError: (e: ApiError) => message.error(e?.response?.data?.detail || 'Lỗi đọc ảnh'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi đọc ảnh')),
   })
 
   const syncGiaBanMut = useMutation({
@@ -248,7 +248,7 @@ export default function NhapGiayPage() {
         width: 600,
       })
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi cập nhật giá bán'),
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi cập nhật giá bán')),
   })
 
   useEffect(() => {
@@ -441,9 +441,9 @@ export default function NhapGiayPage() {
             </>
           )}
           <Popconfirm title="Duyệt phiếu? Giá mua giấy sẽ được cập nhật." onConfirm={() => approveMut.mutate(r.id)}
-            disabled={r.trang_thai !== 'nhap'}>
+            disabled={r.trang_thai !== 'nhap' || !canApprove}>
             <Button size="small" icon={<CheckCircleOutlined />} style={{ color: '#52c41a', borderColor: '#52c41a' }}
-              disabled={r.trang_thai !== 'nhap'} />
+              disabled={r.trang_thai !== 'nhap' || !canApprove} />
           </Popconfirm>
           {r.trang_thai === 'da_duyet' && (
             <>
@@ -472,8 +472,8 @@ export default function NhapGiayPage() {
             </>
           )}
           <Popconfirm title="Xoá phiếu?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
-            disabled={r.trang_thai === 'da_duyet'}>
-            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_duyet'} />
+            disabled={r.trang_thai === 'da_duyet' || !canImport}>
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_duyet' || !canImport} />
           </Popconfirm>
         </Space>
       ),
@@ -558,7 +558,7 @@ export default function NhapGiayPage() {
             <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
               Xuất Excel
             </Button>
-            <Button type="primary" icon={<PlusOutlined />}
+            <Button type="primary" icon={<PlusOutlined />} disabled={!canImport}
               onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setOpen(true) }}>
               Tạo phiếu nhập
             </Button>
@@ -611,7 +611,7 @@ export default function NhapGiayPage() {
         footer={
           <Space>
             <Button onClick={handleClose}>Huỷ</Button>
-            <Button type="primary" loading={createMut.isPending} onClick={handleSubmit}>
+            <Button type="primary" loading={createMut.isPending} onClick={handleSubmit} disabled={!canImport}>
               Lưu phiếu nhập
             </Button>
           </Space>

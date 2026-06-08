@@ -14,8 +14,12 @@ import apiClient from '../../api/client'
 import QrScannerModal from '../../components/QrScannerModal'
 import { warehouseApi, type GiayRoll } from '../../api/warehouse'
 import { useAuthStore } from '../../store/auth'
+import { usePermission } from '../../hooks/usePermission'
 
 const { Title, Text } = Typography
+
+const HISTORY_STORAGE_KEY = 'can_cuon_history'
+const HISTORY_LIMIT = 5
 
 const STATUS_COLOR: Record<string, string> = {
   trong_kho: 'blue',
@@ -40,6 +44,8 @@ export default function CanCuonGiayPage() {
   const location  = useLocation()
   const navigate  = useNavigate()
   const { user, logout } = useAuthStore()
+  const { hasPermission } = usePermission()
+  const canImport = hasPermission('inventory.import')
   const isStandalone = location.pathname === '/kho-cuon-giay'
 
   const handleLogout = () => {
@@ -53,7 +59,15 @@ export default function CanCuonGiayPage() {
   const [kgConLai, setKgConLai]     = useState<number | null>(null)
   const [scanning, setScanning]     = useState(false)
   const [lookupError, setLookupError] = useState<string | null>(null)
-  const [history, setHistory]       = useState<HistoryEntry[]>([])
+  const [history, setHistory]       = useState<HistoryEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem(HISTORY_STORAGE_KEY)
+      const parsed: unknown = saved ? JSON.parse(saved) : []
+      return Array.isArray(parsed) ? (parsed as HistoryEntry[]) : []
+    } catch {
+      return []
+    }
+  })
   const inputRef                    = useRef<HTMLInputElement | null>(null)
   const kgInputRef                  = useRef<InputNumberRef>(null)
 
@@ -100,13 +114,22 @@ export default function CanCuonGiayPage() {
     mutationFn: ({ id, kg }: { id: number; kg: number }) =>
       warehouseApi.canGiayRoll(id, kg).then(r => r.data),
     onSuccess: (updated) => {
-      setHistory(prev => [{
+      const entry: HistoryEntry = {
         barcode: updated.barcode,
         ma_chinh: updated.ma_chinh,
         kg_truoc: roll?.trong_luong_con_lai ?? 0,
         kg_sau: updated.trong_luong_con_lai,
         timestamp: new Date().toLocaleTimeString('vi-VN'),
-      }, ...prev.slice(0, 4)])
+      }
+      setHistory(prev => {
+        const newHistory = [entry, ...prev].slice(0, HISTORY_LIMIT)
+        try {
+          localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(newHistory))
+        } catch {
+          // localStorage có thể đầy hoặc bị chặn (private mode) — bỏ qua, không chặn UI.
+        }
+        return newHistory
+      })
       message.success(`✓ Đã ghi: ${updated.barcode} — còn ${updated.trong_luong_con_lai} kg`)
       resetForm()
     },
@@ -122,6 +145,28 @@ export default function CanCuonGiayPage() {
     setTimeout(() => inputRef.current?.focus(), 100)
   }, [])
 
+  // Gửi cân: kiểm tra quyền + giá trị hợp lệ trước khi gọi API.
+  const submitCan = useCallback(() => {
+    if (!canImport) {
+      message.error('Bạn không có quyền nhập kho.')
+      return
+    }
+    if (!roll) return
+    if (kgConLai == null || Number.isNaN(kgConLai)) {
+      message.error('Vui lòng nhập số kg còn lại.')
+      return
+    }
+    if (kgConLai < 0) {
+      message.error('Số kg còn lại không được nhỏ hơn 0.')
+      return
+    }
+    if (kgConLai > roll.trong_luong_ban_dau) {
+      message.error(`Số kg còn lại không được lớn hơn trọng lượng lúc nhập (${roll.trong_luong_ban_dau} kg).`)
+      return
+    }
+    canMut.mutate({ id: roll.id, kg: kgConLai })
+  }, [canImport, roll, kgConLai, canMut])
+
   const handleBarcodeSubmit = useCallback((bc: string) => {
     const trimmed = bc.trim()
     if (!trimmed) return
@@ -136,8 +181,17 @@ export default function CanCuonGiayPage() {
         warehouseApi.printGiayRollLabelOne(r.id),
         { responseType: 'text' },
       )
-      const w = window.open('', '_blank')
-      if (w) { w.document.write(res.data); w.document.close() }
+      // An toàn hơn document.write: render HTML qua Blob URL, không inject trực tiếp vào DOM.
+      const blob = new Blob([res.data], { type: 'text/html; charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const w = window.open(url, '_blank')
+      if (w) {
+        w.onload = () => URL.revokeObjectURL(url)
+      } else {
+        // Popup bị chặn → giải phóng URL ngay để tránh rò rỉ bộ nhớ.
+        URL.revokeObjectURL(url)
+        message.warning('Trình duyệt chặn cửa sổ in. Vui lòng cho phép popup rồi thử lại.')
+      }
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string }
       message.error((err as ApiError)?.response?.data?.detail || err?.message || 'Lỗi in tem')
@@ -320,9 +374,8 @@ export default function CanCuonGiayPage() {
               size="large"
               style={{ width: '100%', marginTop: 4, fontSize: 22 }}
               placeholder="Nhập kg còn lại..."
-              onPressEnter={() => {
-                if (kgConLai != null) canMut.mutate({ id: roll.id, kg: kgConLai })
-              }}
+              disabled={!canImport}
+              onPressEnter={submitCan}
             />
             {kgConLai != null && (
               <Text type="secondary" style={{ fontSize: 12 }}>
@@ -340,8 +393,9 @@ export default function CanCuonGiayPage() {
               icon={<CheckCircleFilled />}
               style={{ flex: 1, fontSize: 16, height: 48 }}
               loading={canMut.isPending}
-              disabled={kgConLai == null}
-              onClick={() => kgConLai != null && canMut.mutate({ id: roll.id, kg: kgConLai })}
+              disabled={kgConLai == null || !canImport}
+              title={!canImport ? 'Bạn không có quyền nhập kho' : undefined}
+              onClick={submitCan}
               block
             >
               Xác nhận

@@ -854,9 +854,16 @@ export interface ProductionCostPreview {
   unallocated_cost: number
 }
 
+export interface ProductionCostPeriodListResponse {
+  total: number
+  page: number
+  page_size: number
+  items: ProductionCostPeriod[]
+}
+
 export const productionCostApi = {
   list: (params?: { phap_nhan_id?: number; phan_xuong_id?: number; trang_thai?: string }) =>
-    client.get<ProductionCostPeriod[]>('/accounting/production-cost-periods', { params }).then(r => r.data),
+    client.get<ProductionCostPeriodListResponse>('/accounting/production-cost-periods', { params }).then(r => r.data),
   create: (data: ProductionCostPeriodCreate) =>
     client.post<ProductionCostPeriod>('/accounting/production-cost-periods', data).then(r => r.data),
   get: (id: number) =>

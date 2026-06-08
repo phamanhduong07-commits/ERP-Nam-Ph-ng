@@ -41,6 +41,9 @@ from app.routers import system as system_router
 from app.routers import media as media_router
 from app.agent import router as agent_router
 from app.routers import quality_control as quality_control_router
+from app.routers import kho_ao as kho_ao_router
+from app.routers import kho_ao_phoi as kho_ao_phoi_router
+from app.routers import defect_records as defect_records_router
 from app.routers import maintenance as maintenance_router
 from app.routers import crm as crm_router
 from app.routers import fixed_assets as fixed_assets_router
@@ -209,6 +212,9 @@ app.include_router(delivery_orders.router)
 app.include_router(stock_transfers.router)
 app.include_router(stock_adjustments.router)
 app.include_router(inventory_reports.router)
+app.include_router(kho_ao_router.router)
+app.include_router(kho_ao_phoi_router.router)
+app.include_router(defect_records_router.router)
 app.include_router(purchase_orders.router)
 app.include_router(purchase_returns.router)
 app.include_router(purchase_requisitions.router)
