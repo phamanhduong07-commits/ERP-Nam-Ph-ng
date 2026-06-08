@@ -727,10 +727,10 @@ export const quotesApi = {
   calculateItemPrice: (item: QuoteItem) =>
     client.post<{ gia_ban: number; gia_phoi: number; gia_noi_bo: number }>('/quotes/calculate-item-price', { item }),
 
-  taoDonHang: (id: number, item_ids?: number[]) =>
+  taoDonHang: (id: number, item_overrides?: { id: number; so_luong: number }[]) =>
     client.post<{ so_don: string; order_id: number; message: string }>(
       `/quotes/${id}/tao-don-hang`,
-      item_ids ? { item_ids } : {}
+      item_overrides ? { item_overrides } : {}
     ),
 
   giaHan: (id: number, ngay_het_han: string) =>

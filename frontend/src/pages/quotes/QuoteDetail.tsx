@@ -14,6 +14,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { quotesApi, QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, LOAI_IN_OPTIONS, getSongType, buildPaperSymbol } from '../../api/quotes'
 import type { Quote, QuoteItem } from '../../api/quotes'
+import TaoDonHangModal from './components/TaoDonHangModal'
 import { printDocument, buildDocumentHtml, downloadAsPdf } from '../../utils/exportUtils'
 import type { PrintDocumentOptions } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
@@ -365,6 +366,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   const queryClient = useQueryClient()
   const [previewItem, setPreviewItem] = useState<QuoteItem | null>(null)
   const [giaHanModal, setGiaHanModal] = useState(false)
+  const [taoDonModal, setTaoDonModal] = useState(false)
   const [giaHanDate, setGiaHanDate] = useState<Dayjs | null>(null)
   const [isPrintLoading, setIsPrintLoading] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
@@ -440,9 +442,11 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   })
 
   const taoDonHangMutation = useMutation({
-    mutationFn: () => quotesApi.taoDonHang(Number(id)),
+    mutationFn: (overrides: { id: number; so_luong: number }[]) =>
+      quotesApi.taoDonHang(Number(id), overrides),
     onSuccess: (res) => {
       message.success(`Đã tạo đơn hàng ${res.data.so_don}`)
+      setTaoDonModal(false)
       navigate(`/sales/orders/${res.data.order_id}`)
     },
     onError: (err: unknown) => {
@@ -716,20 +720,14 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
               </Popconfirm>
             )}
             {trangThai === 'da_duyet' && (
-              <Popconfirm
-                title="Lập đơn hàng từ báo giá này?"
-                onConfirm={() => taoDonHangMutation.mutate()}
-                okText="Lập đơn"
+              <Button
+                size={embedded ? 'small' : 'middle'}
+                type="primary"
+                icon={<FileAddOutlined />}
+                onClick={() => setTaoDonModal(true)}
               >
-                <Button
-                  size={embedded ? 'small' : 'middle'}
-                  type="primary"
-                  icon={<FileAddOutlined />}
-                  loading={taoDonHangMutation.isPending}
-                >
-                  Lập đơn hàng
-                </Button>
-              </Popconfirm>
+                Lập đơn hàng
+              </Button>
             )}
             {trangThai === 'het_han' && (
               <Button
@@ -897,6 +895,14 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
           />
         </Space>
       </Modal>
+
+      <TaoDonHangModal
+        open={taoDonModal}
+        items={quote.items}
+        loading={taoDonHangMutation.isPending}
+        onCancel={() => setTaoDonModal(false)}
+        onOk={(overrides) => taoDonHangMutation.mutate(overrides)}
+      />
 
       <Card title="Tổng hợp chi phí">
         <Row gutter={[16, 8]} style={{ maxWidth: 500 }}>

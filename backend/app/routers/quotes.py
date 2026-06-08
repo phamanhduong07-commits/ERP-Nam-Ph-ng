@@ -49,6 +49,15 @@ class QuoteItemPriceResponse(BaseModel):
     warnings: List[str] = []
 
 
+class TaoDonHangItemOverride(BaseModel):
+    id: int
+    so_luong: Decimal
+
+
+class TaoDonHangRequest(BaseModel):
+    item_overrides: Optional[List[TaoDonHangItemOverride]] = None
+
+
 QUOTE_IMPORT_FIELDS = [
     ImportField("so_bao_gia", "Số báo giá", parser=parse_text, help_text="Để trống để tạo số mới dạng BG26-05-0001"),
     ImportField("ngay_bao_gia", "Ngày báo giá", required=True, parser=parse_date, help_text="DD/MM/YYYY"),
@@ -1117,11 +1126,14 @@ def copy_quote(
 @router.post("/{quote_id}/tao-don-hang", response_model=dict)
 def tao_don_hang_tu_bao_gia(
     quote_id: int,
-    item_ids: Optional[List[int]] = Body(None, embed=True),
+    body: TaoDonHangRequest = Body(default=TaoDonHangRequest()),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Chuyển báo giá đã duyệt thành đơn hàng. item_ids=None → lấy tất cả."""
+    """Chuyển báo giá đã duyệt thành đơn hàng.
+    item_overrides=None → lấy tất cả items với SL từ BG.
+    item_overrides=[{id, so_luong}] → chỉ lấy items có id trong list, dùng so_luong từ override.
+    """
     from app.services.sales_order_service import SalesOrderService
     quote = _load_quote(quote_id, db)
     if quote.trang_thai != "da_duyet":
@@ -1130,9 +1142,13 @@ def tao_don_hang_tu_bao_gia(
             detail="Chỉ lập đơn từ báo giá ở trạng thái Đã duyệt"
         )
 
+    override_map: dict[int, Decimal] = {}
+    if body.item_overrides is not None:
+        override_map = {ov.id: ov.so_luong for ov in body.item_overrides}
+
     selected_items = [
         qi for qi in sorted(quote.items, key=lambda x: x.stt)
-        if item_ids is None or qi.id in item_ids
+        if body.item_overrides is None or qi.id in override_map
     ]
     if not selected_items:
         raise HTTPException(status_code=400, detail="Cần chọn ít nhất 1 mặt hàng")
@@ -1154,11 +1170,12 @@ def tao_don_hang_tu_bao_gia(
     try:
         tong_tien = Decimal("0")
         for qi in selected_items:
+            so_luong = override_map.get(qi.id, qi.so_luong)
             item = SalesOrderItem(
                 product_id=qi.product_id,
                 quote_item_id=qi.id,
                 ten_hang=qi.ten_hang,
-                so_luong=qi.so_luong,
+                so_luong=so_luong,
                 dvt=qi.dvt,
                 don_gia=qi.gia_ban,
                 ghi_chu_san_pham=qi.ghi_chu,
@@ -1179,7 +1196,7 @@ def tao_don_hang_tu_bao_gia(
                 phan_xuong_id=qi.phan_xuong_id,
             )
             order.items.append(item)
-            tong_tien += qi.so_luong * qi.gia_ban
+            tong_tien += so_luong * qi.gia_ban
 
         order.tong_tien = tong_tien
         db.add(order)

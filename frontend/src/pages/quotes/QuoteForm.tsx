@@ -29,6 +29,7 @@ import QuoteToolbar from './components/QuoteToolbar'
 import QuoteHeaderForm from './components/QuoteHeaderForm'
 import QuoteItemEditor from './components/QuoteItemEditor'
 import QuoteItemsTable from './components/QuoteItemsTable'
+import TaoDonHangModal from './components/TaoDonHangModal'
 
 const { Text } = Typography
 
@@ -75,7 +76,6 @@ export default function QuoteForm() {
   const [productOptions, setProductOptions] = useState<{ value: number; label: string; record: ProductFull }[]>([])
   const [productSearching, setProductSearching] = useState(false)
   const [selectItemsModal, setSelectItemsModal] = useState(false)
-  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([])
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
   const [saveToProductLoading, setSaveToProductLoading] = useState(false)
 
@@ -276,7 +276,8 @@ export default function QuoteForm() {
   })
 
   const taoDonMutation = useMutation({
-    mutationFn: (ids: number[]) => quotesApi.taoDonHang(Number(id), ids.length < items.length ? ids : undefined),
+    mutationFn: (overrides: { id: number; so_luong: number }[]) =>
+      quotesApi.taoDonHang(Number(id), overrides),
     onSuccess: (res) => {
       message.success(`Đã tạo đơn hàng ${res.data.so_don}`)
       setSelectItemsModal(false)
@@ -720,10 +721,7 @@ export default function QuoteForm() {
         onApprove={() => approveMutation.mutate()}
         items={items}
         isCreatingOrder={taoDonMutation.isPending}
-        onOpenCreateOrder={() => {
-          setSelectedItemIds(items.map(it => it.id).filter(Boolean) as number[])
-          setSelectItemsModal(true)
-        }}
+        onOpenCreateOrder={() => setSelectItemsModal(true)}
         lastSavedAt={lastSavedAt}
       />
 
@@ -826,46 +824,13 @@ export default function QuoteForm() {
         }}
       />
 
-      {/* Chọn mặt hàng để lập đơn */}
-      <Modal
-        title="Chọn mặt hàng để lập đơn hàng"
+      <TaoDonHangModal
         open={selectItemsModal}
+        items={items}
+        loading={taoDonMutation.isPending}
         onCancel={() => setSelectItemsModal(false)}
-        onOk={() => taoDonMutation.mutate(selectedItemIds)}
-        okText="Lập đơn" cancelText="Huỷ"
-        confirmLoading={taoDonMutation.isPending}
-        okButtonProps={{ disabled: selectedItemIds.length === 0 }}
-        width={700}
-      >
-        <div style={{ marginBottom: 8 }}>
-          <Space>
-            <Button size="small" onClick={() => setSelectedItemIds(items.map(it => it.id).filter(Boolean) as number[])}>Chọn tất cả</Button>
-            <Button size="small" onClick={() => setSelectedItemIds([])}>Bỏ chọn tất cả</Button>
-            <Text type="secondary">Đã chọn {selectedItemIds.length}/{items.length} mặt hàng</Text>
-          </Space>
-        </div>
-        <Table
-          locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-          size="small"
-          pagination={false}
-          dataSource={items}
-          rowKey={r => String(r.id ?? r.stt)}
-          rowSelection={{
-            type: 'checkbox',
-            selectedRowKeys: selectedItemIds,
-            onChange: (keys) => setSelectedItemIds(keys as number[]),
-            getCheckboxProps: (r) => ({ disabled: !r.id }),
-          }}
-          columns={[
-            { title: 'STT', dataIndex: 'stt', width: 48, align: 'center' },
-            { title: 'Mã hàng', dataIndex: 'ma_amis', width: 100, render: (v: string) => v ? <Text code style={{ fontSize: 11 }}>{v}</Text> : '—' },
-            { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
-            { title: 'SL', dataIndex: 'so_luong', width: 60, align: 'right' },
-            { title: 'Giá bán', dataIndex: 'gia_ban', width: 110, align: 'right',
-              render: (v: number) => v ? <Text style={{ color: '#f5222d' }}>{v.toLocaleString('vi-VN')}</Text> : '—' },
-          ]}
-        />
-      </Modal>
+        onOk={(overrides) => taoDonMutation.mutate(overrides)}
+      />
     </div>
   )
 }
