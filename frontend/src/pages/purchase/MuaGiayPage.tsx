@@ -148,7 +148,7 @@ function TabDonMuaGiay() {
   const paperMats = currentSupplierId ? paperByNSX : (paperPage?.items ?? [])
 
   const materialGroups = Array.from(
-    new Map(paperByNSX.filter(m => m.ma_nhom_id && m.ten_nhom).map(m => [m.ma_nhom_id, { id: m.ma_nhom_id, ten_nhom: m.ten_nhom }])).values()
+    new Map(paperMats.filter(m => m.ma_nhom_id && m.ten_nhom).map(m => [m.ma_nhom_id, { id: m.ma_nhom_id, ten_nhom: m.ten_nhom }])).values()
   )
 
   const filteredChonNL = () => {

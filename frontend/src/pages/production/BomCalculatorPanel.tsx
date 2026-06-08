@@ -175,15 +175,17 @@ const emptyLayer = (): BomLayerInput => ({
 function usePaperOptions() {
   const [mkList, setMkList] = useState<string[]>([])
   const [byMk, setByMk] = useState<Record<string, number[]>>({})
+  const [giaBanMap, setGiaBanMap] = useState<Record<string, number>>({})
 
   useEffect(() => {
     paperMaterialsApi.options().then(res => {
       setMkList(res.data.ma_ky_hieu)
       setByMk(res.data.by_mk)
+      setGiaBanMap(res.data.gia_ban_map ?? {})
     }).catch(() => {})
   }, [])
 
-  return { mkList, byMk }
+  return { mkList, byMk, giaBanMap }
 }
 
 // ─── Layer Row ────────────────────────────────────────────────────────────────
@@ -195,12 +197,18 @@ interface LayerRowProps {
   onChange: (v: BomLayerInput) => void
   mkList: string[]
   byMk: Record<string, number[]>
+  giaBanMap: Record<string, number>
 }
 
-function LayerRow({ label, isSong, value, onChange, mkList, byMk }: LayerRowProps) {
+function LayerRow({ label, isSong, value, onChange, mkList, byMk, giaBanMap }: LayerRowProps) {
   const dlOptions = value.ma_ky_hieu && byMk[value.ma_ky_hieu]
     ? byMk[value.ma_ky_hieu].map(n => ({ value: n, label: `${n} g/m²` }))
     : []
+
+  const lookupGia = (mk: string | null, dl: number | null): number => {
+    if (!mk || !dl) return 0
+    return giaBanMap[`${mk}|${dl}`] ?? giaBanMap[`${mk}|`] ?? 0
+  }
 
   return (
     <Row gutter={4} align="middle" style={{ marginBottom: 6 }}>
@@ -222,7 +230,7 @@ function LayerRow({ label, isSong, value, onChange, mkList, byMk }: LayerRowProp
           filterOption={(input, opt) =>
             (opt?.value as string ?? '').toLowerCase().includes(input.toLowerCase())
           }
-          onChange={v => onChange({ ...value, ma_ky_hieu: v ?? null, dinh_luong: null })}
+          onChange={v => onChange({ ...value, ma_ky_hieu: v ?? null, dinh_luong: null, don_gia_kg: 0 })}
         />
       </Col>
       <Col span={5}>
@@ -233,7 +241,10 @@ function LayerRow({ label, isSong, value, onChange, mkList, byMk }: LayerRowProp
           placeholder="g/m²"
           value={value.dinh_luong ?? undefined}
           options={dlOptions.length ? dlOptions : undefined}
-          onChange={v => onChange({ ...value, dinh_luong: v ?? null })}
+          onChange={v => {
+            const gia = lookupGia(value.ma_ky_hieu, v ?? null)
+            onChange({ ...value, dinh_luong: v ?? null, don_gia_kg: gia || value.don_gia_kg })
+          }}
           notFoundContent={value.ma_ky_hieu ? '—' : 'Chọn mã trước'}
         >
           {!dlOptions.length && value.dinh_luong == null && (
@@ -313,7 +324,7 @@ export default function BomCalculatorPanel({
   initialValues,
   onBomSaved,
 }: BomCalculatorPanelProps) {
-  const { mkList, byMk } = usePaperOptions()
+  const { mkList, byMk, giaBanMap } = usePaperOptions()
 
   // Fetch live addon rates for formula hints (falls back to defaults if not seeded)
   const { data: addonRates = [] } = useQuery({
@@ -558,11 +569,10 @@ export default function BomCalculatorPanel({
       if (idx < layerKeys.length) {
         const key = layerKeys[idx]
         const fallback = initialValues?.[key]
-        newLayers[key] = {
-          ma_ky_hieu: layer.ma_ky_hieu || fallback?.ma_ky_hieu || null,
-          dinh_luong: layer.dinh_luong || fallback?.dinh_luong || null,
-          don_gia_kg: 0,
-        }
+        const mk = layer.ma_ky_hieu || fallback?.ma_ky_hieu || null
+        const dl = layer.dinh_luong || fallback?.dinh_luong || null
+        const gia = mk && dl ? (giaBanMap[`${mk}|${dl}`] ?? giaBanMap[`${mk}|`] ?? 0) : 0
+        newLayers[key] = { ma_ky_hieu: mk, dinh_luong: dl, don_gia_kg: gia }
       }
     })
     // Nếu spec không có đủ layers, bổ sung từ initialValues
@@ -603,6 +613,48 @@ export default function BomCalculatorPanel({
       })
     }
   }, [quoteSpecQuery.data, existingBomQuery.isLoading, existingBomQuery.isSuccess, initialValues]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Khi giaBanMap load sau layers: fill giá cho lớp nào còn don_gia_kg=0, rồi re-tính
+  useEffect(() => {
+    if (!Object.keys(giaBanMap).length) return
+    let changed = false
+    const updatedLayers = { ...layers }
+    for (const key of Object.keys(updatedLayers) as LayerKey[]) {
+      const l = updatedLayers[key]
+      if (l.ma_ky_hieu && l.dinh_luong && !l.don_gia_kg) {
+        const gia = giaBanMap[`${l.ma_ky_hieu}|${l.dinh_luong}`] ?? giaBanMap[`${l.ma_ky_hieu}|`] ?? 0
+        if (gia) { updatedLayers[key] = { ...l, don_gia_kg: gia }; changed = true }
+      }
+    }
+    if (!changed) return
+    setLayers(updatedLayers)
+    if (!dai || !rong || !cao) return
+    const defs = layerDefs(soLop, toHopSong)
+    const songs = toHopSong ? toHopSong.split('') : []
+    let songIdx = 0
+    const layersArr: BomLayerApiInput[] = []
+    for (const def of defs) {
+      const l = updatedLayers[def.key]
+      if (!l.dinh_luong || l.dinh_luong <= 0) return
+      layersArr.push({
+        vi_tri_lop: def.label, loai_lop: def.isSong ? 'song' : 'mat',
+        flute_type: def.isSong ? (songs[songIdx] ?? null) : null,
+        ma_ky_hieu: l.ma_ky_hieu ?? '', paper_material_id: l.paper_material_id ?? null,
+        dinh_luong: l.dinh_luong, don_gia_kg: l.don_gia_kg,
+      })
+      if (def.isSong) songIdx++
+    }
+    calcMutation.mutate({
+      loai_thung: loaiThung, dai, rong, cao, so_lop: soLop, to_hop_song: toHopSong,
+      layers: layersArr, so_luong: soLuong,
+      chong_tham: chongTham, in_flexo_mau: inFlexoMau, in_flexo_phu_nen: phuNen,
+      in_ky_thuat_so: inKTS, chap_xa: chapXa, boi, be_so_con: beSoCon, dan, ghim,
+      can_mang: canMang, san_pham_kho: sanPhamKho,
+      ty_le_loi_nhuan: tyLeLN !== undefined ? tyLeLN / 100 : undefined,
+      hoa_hong_kd_pct: hoaHongKDPct / 100, hoa_hong_kh_pct: hoaHongKHPct / 100,
+      chi_phi_khac: chiPhiKhac, chiet_khau: chietKhau,
+    })
+  }, [giaBanMap]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildRequest = useCallback((): BomCalculateRequest | null => {
     if (!dai || !rong || !cao) {
@@ -679,7 +731,7 @@ export default function BomCalculatorPanel({
 
   const bomCols: ColumnsType<BomLayerResult> = [
     {
-      title: 'Vị trí',
+      title: 'Vị trí lớp',
       dataIndex: 'vi_tri_lop',
       width: 110,
       render: (v: string, r: BomLayerResult) => (
@@ -691,15 +743,17 @@ export default function BomCalculatorPanel({
         </Space>
       ),
     },
-    { title: 'Mã', dataIndex: 'ma_ky_hieu', width: 90,
+    { title: 'Mã KH', dataIndex: 'ma_ky_hieu', width: 80,
       render: (v: string) => <Tag style={{ fontSize: 11 }}>{v || '—'}</Tag> },
-    { title: 'ĐL (g/m²)', dataIndex: 'dinh_luong', width: 90, align: 'right' },
-    { title: 'TL/thùng (kg)', dataIndex: 'trong_luong_1con', width: 110, align: 'right',
-      render: (v: number) => v?.toFixed(4) ?? '—' },
-    { title: 'SL cần (kg)', dataIndex: 'trong_luong_can_tong', width: 100, align: 'right',
-      render: (v: number) => v ? vnd(v) : '—' },
+    { title: 'ĐL (g/m²)', dataIndex: 'dinh_luong', width: 80, align: 'right' },
     { title: 'Đơn giá (đ/kg)', dataIndex: 'don_gia_kg', width: 110, align: 'right',
       render: (v: number) => vnd(v) },
+    { title: 'TL/thùng (kg)', dataIndex: 'trong_luong_1con', width: 105, align: 'right',
+      render: (v: number) => v?.toFixed(4) ?? '—' },
+    { title: 'CP/thùng (đ)', dataIndex: 'chi_phi_1con', width: 110, align: 'right',
+      render: (v: number) => <Text style={{ color: '#1677ff' }}>{vnd(v)}</Text> },
+    { title: 'SL cần (kg)', dataIndex: 'trong_luong_can_tong', width: 100, align: 'right',
+      render: (v: number) => v ? vnd(v) : '—' },
     { title: 'Thành tiền (đ)', dataIndex: 'thanh_tien', width: 120, align: 'right',
       render: (v: number) => <Text strong style={{ color: '#f5222d' }}>{vnd(v)}</Text> },
   ]
@@ -845,6 +899,7 @@ export default function BomCalculatorPanel({
             onChange={v => { setLayer(key, v); setResult(null) }}
             mkList={mkList}
             byMk={byMk}
+            giaBanMap={giaBanMap}
           />
         ))}
       </Card>
@@ -1092,42 +1147,32 @@ export default function BomCalculatorPanel({
 
             {/* A. Chi phí giấy */}
             <SectionHeader letter="A" label="Chi phí giấy" total={result.chi_phi_giay} />
-            <div style={{ paddingLeft: 8, paddingBottom: 4 }}>
-              <Row gutter={0} style={{ marginBottom: 4, padding: '3px 0', borderBottom: '1px solid #e8e8e8' }}>
-                {['Vị trí lớp', 'Mã KH', 'ĐL (g/m²)', 'Đơn giá (đ/kg)', 'TL/thùng (kg)', 'Thành tiền (đ/thùng)'].map((h, i) => (
-                  <Col key={i} span={i === 0 ? 5 : i === 5 ? 5 : 4}>
-                    <Text style={{ fontSize: 11, color: '#8c8c8c' }}>{h}</Text>
-                  </Col>
-                ))}
-              </Row>
-              {result.bom_layers.map((bl, idx) => (
-                <Row key={idx} gutter={0} style={{ padding: '3px 0', borderBottom: '1px solid #f5f5f5' }}>
-                  <Col span={5}>
-                    <Space size={4}>
-                      {bl.loai_lop === 'song'
-                        ? <Tag color="blue" style={{ fontSize: 10 }}>~</Tag>
-                        : <Tag style={{ fontSize: 10 }}>M</Tag>}
-                      <Text style={{ fontSize: 12 }}>{bl.vi_tri_lop}</Text>
-                    </Space>
-                  </Col>
-                  <Col span={4}>
-                    <Text code style={{ fontSize: 11 }}>{bl.ma_ky_hieu || '—'}</Text>
-                  </Col>
-                  <Col span={4}>
-                    <Text style={{ fontSize: 12 }}>{bl.dinh_luong}</Text>
-                  </Col>
-                  <Col span={4}>
-                    <Text style={{ fontSize: 12 }}>{vnd(bl.don_gia_kg)}</Text>
-                  </Col>
-                  <Col span={4}>
-                    <Text style={{ fontSize: 12 }}>{bl.trong_luong_1con.toFixed(4)}</Text>
-                  </Col>
-                  <Col span={5} style={{ textAlign: 'right' }}>
-                    <Text strong style={{ fontSize: 12, color: '#1677ff' }}>{vnd(bl.chi_phi_1con)} đ</Text>
-                  </Col>
-                </Row>
-              ))}
-            </div>
+            <Table<BomLayerResult>
+              rowKey={(_, i) => `layer-${i}`}
+              dataSource={result.bom_layers}
+              columns={bomCols}
+              pagination={false}
+              size="small"
+              scroll={{ x: 820 }}
+              style={{ marginBottom: 8 }}
+              summary={(rows) => {
+                const totalKg = rows.reduce((s, r) => s + (r.trong_luong_can_tong ?? 0), 0)
+                const totalTT = rows.reduce((s, r) => s + (r.thanh_tien ?? 0), 0)
+                return (
+                  <Table.Summary.Row>
+                    <Table.Summary.Cell index={0} colSpan={6}>
+                      <Text strong>Tổng cộng</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={6} align="right">
+                      <Text strong>{vnd(totalKg)} kg</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={7} align="right">
+                      <Text strong style={{ color: '#f5222d' }}>{vnd(totalTT)} đ</Text>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                )
+              }}
+            />
 
             {/* B. Chi phí gián tiếp */}
             <SectionHeader
@@ -1273,45 +1318,6 @@ export default function BomCalculatorPanel({
                 </Text>
               </Col>
             </Row>
-          </Card>
-
-          {/* ── Bảng vật liệu (BOM) ───────────────────────────────── */}
-          <Card
-            title={
-              <Space>
-                <span>Bảng vật liệu (BOM) — kế hoạch nguyên liệu</span>
-                <Tag color="geekblue">{result.bom_layers.length} lớp</Tag>
-              </Space>
-            }
-            size="small"
-            style={{ marginBottom: 12 }}
-          >
-            <Table<BomLayerResult>
-              rowKey={(r, i) => `${r.vi_tri_lop}-${i}`}
-              dataSource={result.bom_layers}
-              columns={bomCols}
-              pagination={false}
-              size="small"
-              scroll={{ x: 700 }}
-              summary={(rows) => {
-                const totalKg = rows.reduce((s, r) => s + (r.trong_luong_can_tong ?? 0), 0)
-                const totalTT = rows.reduce((s, r) => s + (r.thanh_tien ?? 0), 0)
-                return (
-                  <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={4}>
-                      <Text strong>Tổng cộng</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={4} align="right">
-                      <Text strong>{vnd(totalKg)} kg</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={5} />
-                    <Table.Summary.Cell index={6} align="right">
-                      <Text strong style={{ color: '#f5222d' }}>{vnd(totalTT)} đ</Text>
-                    </Table.Summary.Cell>
-                  </Table.Summary.Row>
-                )
-              }}
-            />
           </Card>
 
           {/* ── Tính ngược từ giá bán mục tiêu ───────────────────── */}
