@@ -35,6 +35,7 @@ import app.models.purchase_requisition  # noqa: F401
 import app.models.quality  # noqa: F401
 import app.models.sales  # noqa: F401
 import app.models.system  # noqa: F401
+import app.models.tai_khoan_ngam_dinh  # noqa: F401
 import app.models.warehouse_doc  # noqa: F401
 import app.models.defect_records  # noqa: F401
 import app.models.yeu_cau_giao_hang  # noqa: F401

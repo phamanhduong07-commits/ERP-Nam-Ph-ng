@@ -109,6 +109,17 @@ const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
 const DanhMucLanding = lazy(() => import('./pages/danhmuc/DanhMucLanding'))
+// Danh mục mới (kế toán, nhân sự, tài sản)
+const DieuKhoanThanhToanList = lazy(() => import('./pages/danhmuc/DieuKhoanThanhToanList'))
+const MucThuChiList = lazy(() => import('./pages/danhmuc/MucThuChiList'))
+const KhoanMucChiPhiList = lazy(() => import('./pages/danhmuc/KhoanMucChiPhiList'))
+const LoaiTaisanCoDinhList = lazy(() => import('./pages/danhmuc/LoaiTaisanCoDinhList'))
+const KyHieuChamCongList = lazy(() => import('./pages/danhmuc/KyHieuChamCongList'))
+const BieuThueThuNhapPage = lazy(() => import('./pages/danhmuc/BieuThueThuNhapPage'))
+const NhomDoiTuongList = lazy(() => import('./pages/danhmuc/NhomDoiTuongList'))
+const ChartOfAccountsPage = lazy(() => import('./pages/danhmuc/ChartOfAccountsPage'))
+const TaiKhoanNgamDinhPage = lazy(() => import('./pages/danhmuc/TaiKhoanNgamDinhPage'))
+const LoaiTienList = lazy(() => import('./pages/danhmuc/LoaiTienList'))
 // Billing
 const SalesInvoiceListPage = lazy(() => import('./pages/billing/SalesInvoiceListPage'))
 const SalesInvoiceDetailPage = lazy(() => import('./pages/billing/SalesInvoiceDetailPage'))
@@ -306,6 +317,16 @@ export default function App() {
             <Route path="master/tinh-thanh" element={<TinhThanhList />} />
             <Route path="master/phuong-xa" element={<PhuongXaList />} />
             <Route path="master/don-gia-van-chuyen" element={<DonGiaVanChuyenList />} />
+            <Route path="master/dieu-khoan-thanh-toan" element={<ErrorBoundary><DieuKhoanThanhToanList /></ErrorBoundary>} />
+            <Route path="master/muc-thu-chi" element={<ErrorBoundary><MucThuChiList /></ErrorBoundary>} />
+            <Route path="master/khoan-muc-chi-phi" element={<ErrorBoundary><KhoanMucChiPhiList /></ErrorBoundary>} />
+            <Route path="master/loai-tai-san-co-dinh" element={<ErrorBoundary><LoaiTaisanCoDinhList /></ErrorBoundary>} />
+            <Route path="master/ky-hieu-cham-cong" element={<ErrorBoundary><KyHieuChamCongList /></ErrorBoundary>} />
+            <Route path="master/bieu-thue-thu-nhap" element={<ErrorBoundary><BieuThueThuNhapPage /></ErrorBoundary>} />
+            <Route path="master/nhom-doi-tuong" element={<ErrorBoundary><NhomDoiTuongList /></ErrorBoundary>} />
+            <Route path="master/chart-of-accounts" element={<ErrorBoundary><ChartOfAccountsPage /></ErrorBoundary>} />
+            <Route path="master/tai-khoan-ngam-dinh" element={<ErrorBoundary><TaiKhoanNgamDinhPage /></ErrorBoundary>} />
+            <Route path="master/loai-tien" element={<ErrorBoundary><LoaiTienList /></ErrorBoundary>} />
             <Route path="production/hub" element={<ErrorBoundary><ProductionHubPage /></ErrorBoundary>} />
             <Route path="warehouse/hub" element={<ErrorBoundary><WarehouseHubPage /></ErrorBoundary>} />
             <Route path="accounting/hub" element={<ErrorBoundary><AccountingHubPage /></ErrorBoundary>} />

@@ -60,6 +60,12 @@ from app.routers import offset_addon_prices as offset_addon_prices_router
 from app.routers import sync_htcph as sync_htcph_router
 from app.routers import layer_allocation_coefficients as lac_router
 from app.routers import cost_analysis as cost_analysis_router
+from app.routers import (
+    dieu_khoan_thanh_toan, muc_thu_chi, khoan_muc_chi_phi, loai_tai_san_co_dinh,
+    ky_hieu_cham_cong, bieu_thue_thu_nhap, nhom_doi_tuong, tai_khoan_ngam_dinh,
+    loai_tien,
+)
+from app.routers import chart_of_accounts as chart_of_accounts_danhmuc
 from app.services.htcph_sync import run_daily_sync
 from app.database import SessionLocal as _SessionLocal
 
@@ -256,6 +262,17 @@ app.include_router(offset_addon_prices_router.router, prefix="/api")
 app.include_router(sync_htcph_router.router)
 app.include_router(lac_router.router)
 app.include_router(cost_analysis_router.router)
+# ── Danh mục mới (kế toán, nhân sự, tài sản) ──────────────────────────────────
+app.include_router(dieu_khoan_thanh_toan.router)
+app.include_router(muc_thu_chi.router)
+app.include_router(khoan_muc_chi_phi.router)
+app.include_router(loai_tai_san_co_dinh.router)
+app.include_router(ky_hieu_cham_cong.router)
+app.include_router(bieu_thue_thu_nhap.router)
+app.include_router(nhom_doi_tuong.router)
+app.include_router(chart_of_accounts_danhmuc.router)
+app.include_router(tai_khoan_ngam_dinh.router)
+app.include_router(loai_tien.router)
 
 
 @app.exception_handler(IntegrityError)

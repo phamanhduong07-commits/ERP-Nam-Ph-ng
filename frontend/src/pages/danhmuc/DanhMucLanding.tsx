@@ -22,6 +22,7 @@ const COLUMNS: Group[][] = [
       links: [
         { label: 'Khách hàng', to: '/master/customers', permissions: ['master.customers.view', 'master.customers.manage', 'customer.view'] },
         { label: 'Nhà cung cấp', to: '/master/suppliers', permissions: ['master.suppliers.view', 'master.suppliers.manage'] },
+        { label: 'Nhóm khách hàng / NCC', to: '/master/nhom-doi-tuong' },
         { label: 'Tài khoản hệ thống', to: '/master/users', permissions: ['master.users.view', 'master.users.manage', 'team.manage_permissions'] },
       ],
     },
@@ -32,12 +33,23 @@ const COLUMNS: Group[][] = [
         { label: 'Phí gia công / Tỷ lệ lãi', to: '/master/addon-rates', permissions: ['master.other.manage'] },
         { label: 'Giá giấy tem offset', to: '/master/tem-paper-prices', permissions: ['master.other.manage'] },
         { label: 'Giá dịch vụ offset', to: '/master/offset-addon-prices', permissions: ['master.other.manage'] },
+        { label: 'Khoản mục chi phí', to: '/master/khoan-muc-chi-phi', permissions: ['master.other.manage'] },
+        { label: 'Điều khoản thanh toán', to: '/master/dieu-khoan-thanh-toan', permissions: ['master.other.manage'] },
+        { label: 'Mục thu/chi', to: '/master/muc-thu-chi', permissions: ['master.other.manage'] },
       ],
     },
     {
-      title: 'Ngân hàng',
+      title: 'Ngân hàng & Tiền tệ',
       links: [
         { label: 'Tài khoản ngân hàng', to: '/master/bank-accounts', permissions: ['accounting.manage', 'accounting.view'] },
+        { label: 'Loại tiền', to: '/master/loai-tien', permissions: ['accounting.manage', 'accounting.view'] },
+      ],
+    },
+    {
+      title: 'Tài khoản',
+      links: [
+        { label: 'Hệ thống tài khoản', to: '/master/chart-of-accounts', permissions: ['accounting.manage', 'accounting.view'] },
+        { label: 'Tài khoản ngầm định', to: '/master/tai-khoan-ngam-dinh', permissions: ['accounting.manage'] },
       ],
     },
   ],
@@ -61,6 +73,12 @@ const COLUMNS: Group[][] = [
       ],
     },
     {
+      title: 'Tài sản',
+      links: [
+        { label: 'Loại tài sản cố định', to: '/master/loai-tai-san-co-dinh', permissions: ['master.other.manage'] },
+      ],
+    },
+    {
       title: 'Địa lý',
       links: [
         { label: 'Đơn vị tính', to: '/master/don-vi-tinh', permissions: ['master.other.view', 'master.other.manage'] },
@@ -75,6 +93,8 @@ const COLUMNS: Group[][] = [
       links: [
         { label: 'Pháp nhân', to: '/danhmuc/phap-nhan', permissions: ['master.other.manage'] },
         { label: 'Phân xưởng', to: '/master/phan-xuong', permissions: ['master.other.manage'] },
+        { label: 'Phòng ban', to: '/hr/departments' },
+        { label: 'Nhân viên', to: '/hr/employees' },
       ],
     },
     {
@@ -92,6 +112,13 @@ const COLUMNS: Group[][] = [
         { label: 'Phân quyền', to: '/master/roles', permissions: ['permission.view', 'permission.manage'] },
         { label: 'Biểu mẫu in', to: '/master/print-templates', permissions: ['master.other.view', 'master.other.manage', 'sales_order.view'] },
         { label: 'Lịch sử Import', to: '/reports/import-history', permissions: ['master.import', 'sales.import'] },
+      ],
+    },
+    {
+      title: 'Tiền lương',
+      links: [
+        { label: 'Ký hiệu chấm công', to: '/master/ky-hieu-cham-cong', permissions: ['hr.manage'] },
+        { label: 'Biểu thuế thu nhập', to: '/master/bieu-thue-thu-nhap', permissions: ['hr.manage'] },
       ],
     },
   ],
