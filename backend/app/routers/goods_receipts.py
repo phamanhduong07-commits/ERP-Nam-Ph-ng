@@ -1239,13 +1239,12 @@ def can_giay_roll(
 
 
 def _barcode_svg(value: str) -> str:
-    """Generate inline CODE128 SVG barcode (no external dependencies)."""
+    """Generate inline CODE128 SVG barcode — scales to container width."""
     try:
         import barcode as _bc
-        import io
+        import io, re
         from barcode.writer import SVGWriter
-        writer = SVGWriter()
-        b = _bc.get("code128", value, writer=writer)
+        b = _bc.get("code128", value, writer=SVGWriter())
         buf = io.BytesIO()
         b.write(buf, options={
             "module_width": 0.28,
@@ -1259,14 +1258,24 @@ def _barcode_svg(value: str) -> str:
         idx = svg.find("<svg")
         if idx == -1:
             return ""
-        # Remove fixed width/height so it scales with CSS
-        import re
-        svg_tag = svg[idx:]
-        svg_tag = re.sub(r'\s+width="[^"]*"', ' width="100%"', svg_tag)
-        svg_tag = re.sub(r'\s+height="[^"]*"', '', svg_tag)
-        return svg_tag
+        svg = svg[idx:]
+        # Parse original mm dimensions for viewBox
+        w_match = re.search(r'<svg[^>]+width="([0-9.]+)mm"', svg)
+        h_match = re.search(r'<svg[^>]+height="([0-9.]+)mm"', svg)
+        if w_match and h_match:
+            w_mm = float(w_match.group(1))
+            h_mm = float(h_match.group(1))
+            # Replace only the <svg ...> opening tag attrs, keep inner elements untouched
+            svg = re.sub(
+                r'<svg[^>]+>',
+                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w_mm} {h_mm}" '
+                f'preserveAspectRatio="xMidYMid meet" width="100%" height="auto">',
+                svg, count=1,
+            )
+        return svg
     except Exception:
-        return f'<div style="font-family:monospace;font-size:9pt;text-align:center;padding:4px;border:1px solid #999">{value}</div>'
+        return (f'<div style="font-family:monospace;font-size:9pt;text-align:center;'
+                f'padding:4px;border:1px solid #999">{value}</div>')
 
 
 def _build_label_html(roll, ma_ncc: str, ten_ncc: str, so_phieu: str) -> str:
