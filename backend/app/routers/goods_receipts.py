@@ -1264,7 +1264,7 @@ def _barcode_img(value: str) -> str:
 
 
 def _build_label_html(roll, ma_ncc: str, ten_ncc: str, so_phieu: str) -> str:
-    pm = roll.paper_material
+    pm         = roll.paper_material
     ky_hieu    = (pm.ma_ky_hieu or "") if pm else ""
     kho        = f"{float(pm.kho):.0f}" if pm and pm.kho else ""
     ma_chinh   = (pm.ma_chinh or "") if pm else ""
@@ -1272,40 +1272,38 @@ def _build_label_html(roll, ma_ncc: str, ten_ncc: str, so_phieu: str) -> str:
     nvl        = (pm.ten_viet_tat or "") if pm else ""
     so_kg      = f"{float(roll.trong_luong_ban_dau):,.0f}"
     ngay_str   = roll.ngay_nhap.strftime("%d/%m/%Y") if roll.ngay_nhap else ""
-    ncc_str    = ma_ncc or ten_ncc or ""
-    phieu_ncc  = " | ".join(x for x in [so_phieu, ncc_str] if x)
+
+    # Mã NCC: ưu tiên từ Supplier, fallback derive từ ma_chinh (NCC.NHOM.CODE.DL.KHO)
+    ma_ncc_show = ma_ncc or (ma_chinh.split(".")[0] if ma_chinh and "." in ma_chinh else "")
+
+    # Số phiếu: bỏ giá trị seed ảo
+    phieu_show = so_phieu if so_phieu and so_phieu != "SEED-IB" else (roll.so_phieu_nhap or "")
+    if phieu_show == "SEED-IB":
+        phieu_show = ""
 
     barcode_img = _barcode_img(roll.barcode)
 
-    # Build optional meta row (only if at least one field has value)
-    meta_parts = []
-    if ma_chinh:
-        meta_parts.append(f'<div><span class="lbl">Mã</span><div class="val">{ma_chinh}</div></div>')
-    if nvl:
-        meta_parts.append(f'<div><span class="lbl">NVL</span><div class="val">{nvl}</div></div>')
-    meta_row = f'<div class="row2 sm">{"".join(meta_parts)}</div>' if meta_parts else ""
+    def _cell(label: str, value: str) -> str:
+        return f'<div><div class="dlbl">{label}</div><div class="dval">{value}</div></div>'
 
-    ngay_ncc_parts = []
-    if ngay_str:
-        ngay_ncc_parts.append(f'<div><span class="lbl">Ngày nhập</span><div class="val">{ngay_str}</div></div>')
-    if phieu_ncc:
-        ngay_ncc_parts.append(f'<div><span class="lbl">Phiếu / NCC</span><div class="val">{phieu_ncc}</div></div>')
-    ngay_ncc_row = f'<div class="row2 sm">{"".join(ngay_ncc_parts)}</div>' if ngay_ncc_parts else ""
+    detail_cells = [
+        _cell("ĐL", dinh_luong),
+        _cell("Mã NCC", ma_ncc_show),
+        _cell("Khổ", kho),
+        _cell("Ngày nhập", ngay_str),
+        _cell("NVL", nvl),
+        _cell("Số phiếu", phieu_show),
+    ]
 
     return (
         f'<div class="label">'
-        f'<div class="co">CTY TNHH SX TM NAM PHƯƠNG</div>'
+        f'<div class="co">CÔNG TY TNHH SX TM NAM PHƯƠNG</div>'
         f'<div class="hr"></div>'
-        f'<div class="row2">'
-        f'<div><span class="lbl">Ký hiệu</span><div class="big">{ky_hieu}</div></div>'
-        f'<div><span class="lbl">Khổ (mm)</span><div class="big">{kho}</div></div>'
-        f'</div>'
-        f'<div class="row2">'
-        f'<div><span class="lbl">ĐL (g/m²)</span><div class="med">{dinh_luong}</div></div>'
-        f'<div><span class="lbl">Số kg</span><div class="med">{so_kg} kg</div></div>'
-        f'</div>'
-        f'{meta_row}'
-        f'{ngay_ncc_row}'
+        f'<div class="brow"><span class="blbl">Ký hiệu</span><span class="bval">{ky_hieu}</span></div>'
+        f'<div class="brow"><span class="blbl">Khổ Giấy</span><span class="bval">{kho}</span></div>'
+        f'<div class="brow"><span class="blbl">Số KG</span><span class="bval">{so_kg}</span></div>'
+        f'<div class="mrow"><span class="mlbl">Mã chính</span><span class="mval">{ma_chinh}</span></div>'
+        f'<div class="dgrid">{"".join(detail_cells)}</div>'
         f'<div class="bc">{barcode_img}</div>'
         f'</div>'
     )
