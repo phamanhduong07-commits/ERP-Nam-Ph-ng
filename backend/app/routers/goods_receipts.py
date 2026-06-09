@@ -1238,41 +1238,26 @@ def can_giay_roll(
     return _giay_roll_to_dict(roll)
 
 
-def _barcode_svg(value: str) -> str:
-    """Generate inline CODE128 SVG barcode — scales to container width."""
+def _barcode_img(value: str) -> str:
+    """Generate CODE128 barcode as base64 PNG — renders in all browsers."""
     try:
         import barcode as _bc
-        import io, re
-        from barcode.writer import SVGWriter
-        b = _bc.get("code128", value, writer=SVGWriter())
+        import io, base64
+        from barcode.writer import ImageWriter
+        b = _bc.get("code128", value, writer=ImageWriter())
         buf = io.BytesIO()
         b.write(buf, options={
-            "module_width": 0.28,
+            "module_width": 0.4,
             "module_height": 12.0,
-            "font_size": 7,
-            "text_distance": 1.5,
-            "quiet_zone": 2.0,
+            "font_size": 10,
+            "text_distance": 3.5,
+            "quiet_zone": 3.0,
             "write_text": True,
+            "dpi": 200,
         })
-        svg = buf.getvalue().decode("utf-8")
-        idx = svg.find("<svg")
-        if idx == -1:
-            return ""
-        svg = svg[idx:]
-        # Parse original mm dimensions for viewBox
-        w_match = re.search(r'<svg[^>]+width="([0-9.]+)mm"', svg)
-        h_match = re.search(r'<svg[^>]+height="([0-9.]+)mm"', svg)
-        if w_match and h_match:
-            w_mm = float(w_match.group(1))
-            h_mm = float(h_match.group(1))
-            # Replace only the <svg ...> opening tag attrs, keep inner elements untouched
-            svg = re.sub(
-                r'<svg[^>]+>',
-                f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w_mm} {h_mm}" '
-                f'preserveAspectRatio="xMidYMid meet" width="100%" height="auto">',
-                svg, count=1,
-            )
-        return svg
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        return (f'<img src="data:image/png;base64,{b64}" '
+                f'style="width:100%;height:auto;display:block;" alt="{value}">')
     except Exception:
         return (f'<div style="font-family:monospace;font-size:9pt;text-align:center;'
                 f'padding:4px;border:1px solid #999">{value}</div>')
@@ -1288,7 +1273,7 @@ def _build_label_html(roll, ma_ncc: str, ten_ncc: str, so_phieu: str) -> str:
     so_kg    = f"{float(roll.trong_luong_ban_dau):,.0f}"
     ngay_str = roll.ngay_nhap.strftime("%d/%m/%Y") if roll.ngay_nhap else ""
     ncc_str  = ma_ncc or ten_ncc or ""
-    barcode_svg = _barcode_svg(roll.barcode)
+    barcode_img = _barcode_img(roll.barcode)
     return (
         f'<div class="label">'
         f'<div class="co">CTY TNHH SX TM NAM PHƯƠNG</div>'
@@ -1309,7 +1294,7 @@ def _build_label_html(roll, ma_ncc: str, ten_ncc: str, so_phieu: str) -> str:
         f'  <div><span class="lbl">Ngày nhập</span><div class="val">{ngay_str}</div></div>'
         f'  <div><span class="lbl">Số phiếu / NCC</span><div class="val">{so_phieu or ncc_str}</div></div>'
         f'</div>'
-        f'<div class="bc">{barcode_svg}</div>'
+        f'<div class="bc">{barcode_img}</div>'
         f'</div>'
     )
 
