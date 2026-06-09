@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 import bcrypt as _bcrypt
@@ -2376,7 +2376,7 @@ def get_machines_status(phan_xuong_id: Optional[int] = None, db: Session = Depen
         if last_scan:
             last_event_time = last_scan.created_at
             # Giả định: Nếu có scan trong 30p qua thì coi là đang chạy
-            if (datetime.now() - last_scan.created_at).total_seconds() < 1800:
+            if (datetime.now(timezone.utc) - last_scan.created_at).total_seconds() < 1800:
                 status = "RUNNING"
             current_order = last_scan.so_lsx
             operator = last_scan.nguoi_sx
