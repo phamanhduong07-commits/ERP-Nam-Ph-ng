@@ -52,6 +52,7 @@ function buildNavItems(queueCount: number): NavItem[] {
             { key: '/sales/returns', to: '/sales/returns', label: <Link to="/sales/returns">Trả hàng bán</Link> },
             { key: '/sales/theo-don-hang', to: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link> },
             { key: '/sales/giao-hang', to: '/sales/giao-hang', label: <Link to="/sales/giao-hang">🚚 Giao hàng</Link> },
+            { key: '/billing/invoices', to: '/billing/invoices', label: <Link to="/billing/invoices">Hóa đơn VAT</Link> },
           ],
         },
       ],
