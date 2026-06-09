@@ -191,7 +191,7 @@ function buildNavItems(queueCount: number): NavItem[] {
           items: [
             { key: '/accounting/journal-entries', to: '/accounting/journal-entries', label: <Link to="/accounting/journal-entries">Bút toán tổng hợp</Link> },
             { key: '/accounting/audit-logs', to: '/accounting/audit-logs', label: <Link to="/accounting/audit-logs">Nhật ký audit kế toán</Link> },
-            { key: '/accounting/hoa-don-dien-tu', to: '/accounting/hoa-don-dien-tu', label: <Link to="/accounting/hoa-don-dien-tu">Hóa đơn điện tử</Link> },
+            { key: '/accounting/hoa-don-dien-tu', to: '/accounting/hoa-don-dien-tu', label: <Link to="/accounting/hoa-don-dien-tu">Hóa đơn điện tử</Link>, permissions: ['accounting.hoa_don_dien_tu', 'accounting.manage'] },
             { key: '/accounting/workshop-management', to: '/accounting/workshop-management', label: <Link to="/accounting/workshop-management">Quản trị xưởng (Lương)</Link> },
             { key: '/accounting/ccdc', to: '/accounting/ccdc', label: <Link to="/accounting/ccdc">Tài sản & CCDC</Link> },
             { key: '/fixed-assets', to: '/fixed-assets', label: <Link to="/fixed-assets">Tài sản cố định</Link> },

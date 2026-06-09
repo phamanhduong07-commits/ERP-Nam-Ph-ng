@@ -25,6 +25,7 @@ NEW_PERMISSIONS = [
     ("accounting.ccdc",            "Tai san & CCDC",                      "Ke Toan"),
     ("accounting.workshop_mgmt",   "Quan tri xuong (Luong)",              "Ke Toan"),
     ("accounting.manage",          "Quan ly Ke toan (Admin)",             "Ke Toan"),
+    ("accounting.hoa_don_dien_tu", "Xem / Quan ly Hoa don dien tu",      "Ke Toan"),
 
     # Nhan su (HRM)
     ("hr.view",                    "Xem module Nhan su",                  "Nhan Su"),

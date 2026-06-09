@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
-  Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message,
+  Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message, Divider,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -56,6 +57,7 @@ function deadlineStyle(ngay: string | null | undefined, active: boolean): React.
 
 export default function YMHListPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [form] = Form.useForm()
   const [poForm] = Form.useForm()
 
@@ -73,6 +75,8 @@ export default function YMHListPage() {
   const [poRecord, setPoRecord] = useState<PurchaseRequisition | null>(null)
   const [rejectRecord, setRejectRecord] = useState<PurchaseRequisition | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [poItemPrices, setPoItemPrices] = useState<Record<number, number>>({})
+  const [poDuKienNhan, setPoDuKienNhan] = useState<dayjs.Dayjs | null>(null)
 
   const { data: phapNhanList = [] } = useQuery({
     queryKey: ['phap-nhan-active'],
@@ -240,6 +244,8 @@ export default function YMHListPage() {
       message.success(`Đã tạo PO ${res.data.so_po}`)
       setPoRecord(null)
       poForm.resetFields()
+      setPoItemPrices({})
+      navigate('/purchasing/orders')
     },
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo PO'),
   })
@@ -309,22 +315,35 @@ export default function YMHListPage() {
   }
 
   async function handleCreatePO() {
-    if (!poRecord) return
+    const rec = poRecord
+    if (!rec) return
     const values = await poForm.validateFields()
+    const ngayDuKienNhan = values.ngay_du_kien_nhan ? dayjs(values.ngay_du_kien_nhan).format('YYYY-MM-DD') : null
     taoPOMutation.mutate({
-      id: poRecord.id,
+      id: rec.id,
       data: {
         supplier_id: values.supplier_id,
         ngay_po: dayjs(values.ngay_po).format('YYYY-MM-DD'),
-        ngay_du_kien_nhan: values.ngay_du_kien_nhan ? dayjs(values.ngay_du_kien_nhan).format('YYYY-MM-DD') : null,
+        ngay_du_kien_nhan: ngayDuKienNhan,
         dieu_khoan_tt: values.dieu_khoan_tt ?? null,
         ghi_chu: values.ghi_chu ?? null,
+        items_override: rec.items.map(it => ({
+          ymh_item_id: it.id ?? 0,
+          don_gia: poItemPrices[it.id ?? 0] ?? it.don_gia_du_kien,
+        })),
       },
     })
   }
 
   const columns: ColumnsType<PurchaseRequisition> = [
-    { title: 'Số YMH', dataIndex: 'so_ymh', width: 145, render: v => <Text strong>{v}</Text> },
+    {
+      title: 'Số YMH', dataIndex: 'so_ymh', width: 145,
+      render: (v, r) => (
+        <Button type="link" style={{ padding: 0, fontWeight: 600 }} onClick={() => navigate(`/purchasing/ymh/${r.id}`)}>
+          {v}
+        </Button>
+      ),
+    },
     { title: 'Ngày YC', dataIndex: 'ngay_yeu_cau', width: 105 },
     { title: 'Pháp nhân', dataIndex: 'ten_phap_nhan', width: 130, render: v => v ?? '-' },
     { title: 'Xưởng', dataIndex: 'ten_phan_xuong', width: 140, render: v => v ?? '-' },
@@ -406,7 +425,12 @@ export default function YMHListPage() {
           )}
           {r.trang_thai === 'duyet_gd' && (
             <Tooltip title="Tạo PO">
-              <Button size="small" type="primary" icon={<FileAddOutlined />} onClick={() => setPoRecord(r)} />
+              <Button size="small" type="primary" icon={<FileAddOutlined />} onClick={() => {
+                const init: Record<number, number> = {}
+                r.items.forEach(it => { if (it.id != null) init[it.id] = it.don_gia_du_kien })
+                setPoItemPrices(init)
+                setPoRecord(r)
+              }} />
             </Tooltip>
           )}
           {!['huy', 'tu_choi', 'tao_po'].includes(r.trang_thai) && (
@@ -812,10 +836,11 @@ export default function YMHListPage() {
       <Modal
         title={`Tạo PO từ ${poRecord?.so_ymh ?? ''}`}
         open={!!poRecord}
-        onCancel={() => { setPoRecord(null); poForm.resetFields() }}
+        onCancel={() => { setPoRecord(null); poForm.resetFields(); setPoItemPrices({}); setPoDuKienNhan(null) }}
         onOk={handleCreatePO}
         confirmLoading={taoPOMutation.isPending}
         okText="Tạo PO"
+        width={720}
       >
         <Form form={poForm} layout="vertical" initialValues={{ ngay_po: dayjs() }}>
           <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true, message: 'Chọn nhà cung cấp' }]}>
@@ -834,7 +859,11 @@ export default function YMHListPage() {
             </Col>
             <Col span={12}>
               <Form.Item name="ngay_du_kien_nhan" label="Ngày dự kiến nhận">
-                <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+                <DatePicker
+                  format="DD/MM/YYYY"
+                  style={{ width: '100%' }}
+                  onChange={v => setPoDuKienNhan(v)}
+                />
               </Form.Item>
             </Col>
           </Row>
@@ -845,6 +874,73 @@ export default function YMHListPage() {
             <Input.TextArea rows={2} placeholder={`Tạo từ ${poRecord?.so_ymh ?? 'YMH'}`} />
           </Form.Item>
         </Form>
+
+        {poRecord && poRecord.items.length > 0 && (() => {
+          const lateItems = poDuKienNhan
+            ? poRecord.items.filter(it => it.ngay_can && dayjs(it.ngay_can).isBefore(poDuKienNhan, 'day'))
+            : []
+          const tong = poRecord.items.reduce((s, it) => s + (poItemPrices[it.id ?? 0] ?? it.don_gia_du_kien) * it.so_luong, 0)
+          return (
+            <>
+              <Divider orientation="left" style={{ margin: '8px 0' }}>Dòng hàng & đơn giá</Divider>
+              {lateItems.length > 0 && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 8 }}
+                  message={`${lateItems.length} dòng hàng cần sớm hơn ngày giao dự kiến`}
+                  description={lateItems.map(it => `${it.ten_hang}: cần ${dayjs(it.ngay_can!).format('DD/MM/YYYY')}`).join(', ')}
+                />
+              )}
+              <Table
+                size="small"
+                pagination={false}
+                dataSource={poRecord.items}
+                rowKey={(_, i) => String(i)}
+                summary={() => (
+                  <Table.Summary.Row>
+                    <Table.Summary.Cell index={0} colSpan={4} align="right">
+                      <Text strong>Tổng cộng</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={4} align="right">
+                      <Text strong>{fmtVND(tong)}</Text>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                )}
+                columns={[
+                  { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+                  { title: 'SL', dataIndex: 'so_luong', width: 70, align: 'right', render: v => Number(v).toLocaleString() },
+                  { title: 'ĐVT', dataIndex: 'dvt', width: 55 },
+                  {
+                    title: 'Đơn giá',
+                    width: 130,
+                    align: 'right',
+                    render: (_, it) => (
+                      <InputNumber
+                        size="small"
+                        style={{ width: '100%' }}
+                        formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                        parser={v => Number(v?.replace(/,/g, '') ?? 0) as unknown as number}
+                        value={poItemPrices[it.id ?? 0] ?? it.don_gia_du_kien}
+                        onChange={val => {
+                          const id = it.id ?? 0
+                          setPoItemPrices(prev => ({ ...prev, [id]: val ?? 0 }))
+                        }}
+                        min={0}
+                      />
+                    ),
+                  },
+                  {
+                    title: 'Thành tiền',
+                    width: 110,
+                    align: 'right',
+                    render: (_, it) => fmtVND((poItemPrices[it.id ?? 0] ?? it.don_gia_du_kien) * it.so_luong),
+                  },
+                ]}
+              />
+            </>
+          )
+        })()}
       </Modal>
     </div>
   )

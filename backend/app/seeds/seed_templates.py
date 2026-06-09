@@ -23,27 +23,164 @@ TEMPLATES = [
     {
         "ma_mau": "SALES_ORDER",
         "ten_mau": "Đơn Bán Hàng",
-        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div>' + '<div class="doc-footer">Tổng tiền hàng: {{tong_tien_hang}}</div>',
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.5; }
+  .hdr { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 8px; border-bottom: 2px solid #E65100; margin-bottom: 10px; }
+  .hdr-left { display: flex; align-items: flex-start; gap: 12px; }
+  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }
+  .co-name { font-size: 13pt; font-weight: bold; color: #E65100; text-transform: uppercase; }
+  .co-info { font-size: 9pt; color: #444; line-height: 1.5; margin-top: 3px; }
+  .ttl { text-align: center; margin: 10px 0 10px; }
+  .ttl h2 { font-size: 17pt; font-weight: bold; letter-spacing: 2px; }
+  .ttl .no { font-size: 9.5pt; color: #444; margin-top: 5px; }
+  .info { font-size: 10.5pt; line-height: 1.9; margin-bottom: 8px; }
+  .r { display: flex; margin: 2px 0; }
+  .r .lbl { min-width: 160px; font-weight: bold; flex-shrink: 0; }
+  .r .val { flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; min-height: 1.2em; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-top: 8px; }
+  table th { background: #E65100; color: #fff; padding: 5px 6px; border: 1px solid #ccc; text-align: center; }
+  table td { border: 1px solid #ddd; padding: 4px 6px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .total-row td { font-weight: bold; background: #FFF3E0; }
+  .totals { text-align: right; margin-top: 6px; font-size: 10.5pt; }
+  .totals div { margin: 2px 0; }
+  .sig { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  .sig td { border: none; text-align: center; vertical-align: top; }
+  .s-title { font-weight: bold; font-size: 10.5pt; }
+  .s-sub { font-style: italic; font-size: 8.5pt; color: #555; margin-top: 2px; }
+  .s-space { height: 48px; }
+</style>
+<div class="hdr">
+  <div class="hdr-left">
+    <div class="logo">{{logo_img}}</div>
+    <div>
+      <div class="co-name">{{company_name}}</div>
+      <div class="co-info">{{company_details}}</div>
+    </div>
+  </div>
+</div>
+<div class="ttl">
+  <h2>{{subtitle}}</h2>
+  <div class="no">Số: <strong>{{document_number}}</strong> &nbsp;|&nbsp; Ngày: {{document_date}}</div>
+</div>
+<div class="info">
+  <div class="r"><span class="lbl">Khách hàng:</span><span class="val"><strong>{{customer_name}}</strong></span></div>
+  <div class="r"><span class="lbl">Địa chỉ giao hàng:</span><span class="val">{{delivery_address}}</span></div>
+</div>
+{{body_html}}
+<div class="totals">
+  <div>Tổng tiền hàng: <strong>{{tong_tien_hang}} đ</strong></div>
+  <div>Tổng cộng: <strong>{{tong_cong}} đ</strong></div>
+</div>
+<table class="sig">
+  <tr>
+    <td style="width:50%">
+      <div class="s-title">Người mua hàng</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:50%">
+      <div class="s-title">Người bán hàng</div>
+      <div class="s-sub">(Ký, họ tên, đóng dấu)</div>
+      <div class="s-space"></div>
+    </td>
+  </tr>
+</table>
+""",
         "variables_meta": {
             "document_number": "Số đơn hàng",
             "document_date": "Ngày đơn",
             "customer_name": "Tên khách hàng",
             "delivery_address": "Địa chỉ giao",
-            "body_html": "Bảng sản phẩm",
-            "tong_tien_hang": "Tổng tiền"
+            "body_html": "Bảng sản phẩm (buildHtmlTable)",
+            "tong_tien_hang": "Tổng tiền hàng",
+            "tong_cong": "Tổng cộng (gồm phí)"
         }
     },
     {
         "ma_mau": "SALES_INVOICE",
         "ten_mau": "Hóa Đơn Bán Hàng",
-        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div>' + '<div class="doc-footer">Thanh toán: {{total_thanh_tien}}</div>',
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.5; }
+  .hdr { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 8px; border-bottom: 2px solid #E65100; margin-bottom: 10px; }
+  .hdr-left { display: flex; align-items: flex-start; gap: 12px; }
+  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }
+  .co-name { font-size: 13pt; font-weight: bold; color: #E65100; text-transform: uppercase; }
+  .co-info { font-size: 9pt; color: #444; line-height: 1.5; margin-top: 3px; }
+  .ttl { text-align: center; margin: 10px 0 10px; }
+  .ttl h2 { font-size: 17pt; font-weight: bold; letter-spacing: 2px; }
+  .ttl .no { font-size: 9.5pt; color: #444; margin-top: 5px; }
+  .info { font-size: 10.5pt; line-height: 1.9; margin-bottom: 8px; }
+  .r { display: flex; margin: 2px 0; }
+  .r .lbl { min-width: 160px; font-weight: bold; flex-shrink: 0; }
+  .r .val { flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; min-height: 1.2em; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-top: 8px; }
+  table th { background: #E65100; color: #fff; padding: 5px 6px; border: 1px solid #ccc; text-align: center; }
+  table td { border: 1px solid #ddd; padding: 4px 6px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .total-row td { font-weight: bold; background: #FFF3E0; }
+  .grand-total { text-align: right; margin-top: 8px; font-size: 11pt; padding: 6px 8px; background: #FFF3E0; border: 1px solid #E65100; border-radius: 3px; font-weight: bold; display: inline-block; float: right; }
+  .clearfix::after { content: ''; display: table; clear: both; }
+  .sig { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  .sig td { border: none; text-align: center; vertical-align: top; }
+  .s-title { font-weight: bold; font-size: 10.5pt; }
+  .s-sub { font-style: italic; font-size: 8.5pt; color: #555; margin-top: 2px; }
+  .s-space { height: 48px; }
+</style>
+<div class="hdr">
+  <div class="hdr-left">
+    <div class="logo">{{logo_img}}</div>
+    <div>
+      <div class="co-name">{{company_name}}</div>
+      <div class="co-info">{{company_details}}</div>
+    </div>
+  </div>
+</div>
+<div class="ttl">
+  <h2>{{subtitle}}</h2>
+  <div class="no">Số: <strong>{{document_number}}</strong> &nbsp;|&nbsp; Ngày: {{document_date}}</div>
+</div>
+<div class="info">
+  <div class="r"><span class="lbl">Tên đơn vị mua hàng:</span><span class="val"><strong>{{customer_name}}</strong></span></div>
+  <div class="r"><span class="lbl">Địa chỉ:</span><span class="val">{{delivery_address}}</span></div>
+  <div class="r"><span class="lbl">Kho xuất:</span><span class="val">{{warehouse_name}}</span></div>
+</div>
+{{body_html}}
+<div class="clearfix">
+  <div class="grand-total">Tiền hàng: {{total_thanh_tien}} đ</div>
+</div>
+<table class="sig">
+  <tr>
+    <td style="width:50%">
+      <div class="s-title">Người mua hàng</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:50%">
+      <div class="s-title">Người bán hàng</div>
+      <div class="s-sub">(Ký, họ tên, đóng dấu)</div>
+      <div class="s-space"></div>
+    </td>
+  </tr>
+</table>
+""",
         "variables_meta": {
+            "subtitle": "Tiêu đề phiếu (mẫu số hoặc 'HÓA ĐƠN BÁN HÀNG')",
             "document_number": "Số hóa đơn",
             "document_date": "Ngày hóa đơn",
             "customer_name": "Tên khách hàng",
-            "delivery_address": "Địa chỉ",
-            "body_html": "Bảng chi tiết hàng hóa",
-            "total_thanh_tien": "Tổng tiền"
+            "delivery_address": "Địa chỉ giao",
+            "warehouse_name": "Kho xuất hàng",
+            "body_html": "Bảng chi tiết hàng hóa (buildHtmlTable)",
+            "total_thanh_tien": "Tổng tiền thanh toán"
         }
     },
     {
@@ -274,21 +411,169 @@ TEMPLATES = [
     {
         "ma_mau": "GOODS_RECEIPT",
         "ten_mau": "Phiếu Nhập Kho",
-        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div>' + '<div class="doc-footer">{{tong_tien_chu}}</div>',
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.5; }
+  .hdr { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 2px solid #1B5E20; margin-bottom: 10px; }
+  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }
+  .co-name { font-size: 13pt; font-weight: bold; color: #1B5E20; text-transform: uppercase; }
+  .co-info { font-size: 9pt; color: #444; line-height: 1.5; margin-top: 3px; }
+  .ttl { text-align: center; margin: 10px 0 10px; }
+  .ttl h2 { font-size: 17pt; font-weight: bold; letter-spacing: 2px; }
+  .ttl .no { font-size: 9.5pt; color: #444; margin-top: 5px; }
+  .info { font-size: 10.5pt; line-height: 1.9; margin-bottom: 8px; }
+  .r { display: flex; margin: 2px 0; }
+  .r .lbl { min-width: 160px; font-weight: bold; flex-shrink: 0; }
+  .r .val { flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; min-height: 1.2em; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 8px; }
+  table th { background: #1B5E20; color: #fff; padding: 5px 6px; border: 1px solid #ccc; text-align: center; }
+  table td { border: 1px solid #ddd; padding: 4px 6px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .total-row td { font-weight: bold; background: #E8F5E9; }
+  .chu { font-size: 10pt; font-style: italic; margin-top: 6px; }
+  .sig { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  .sig td { border: none; text-align: center; vertical-align: top; }
+  .s-title { font-weight: bold; font-size: 10.5pt; }
+  .s-sub { font-style: italic; font-size: 8.5pt; color: #555; margin-top: 2px; }
+  .s-space { height: 48px; }
+</style>
+<div class="hdr">
+  <div class="logo">{{logo_img}}</div>
+  <div>
+    <div class="co-name">{{company_name}}</div>
+    <div class="co-info">{{company_details}}</div>
+  </div>
+</div>
+<div class="ttl">
+  <h2>{{subtitle}}</h2>
+  <div class="no">Số: <strong>{{document_number}}</strong> &nbsp;|&nbsp; Ngày: {{document_date}}</div>
+</div>
+<div class="info">
+  <div class="g2">
+    <div class="r"><span class="lbl">Nhà cung cấp:</span><span class="val"><strong>{{supplier_name}}</strong></span></div>
+    <div class="r"><span class="lbl">Kho nhập:</span><span class="val">{{warehouse_name}}</span></div>
+  </div>
+</div>
+{{body_html}}
+<div class="chu">Tổng cộng: <strong>{{tong_tien}}</strong> đồng</div>
+<div class="chu">Viết bằng chữ: {{tong_tien_chu}}</div>
+<table class="sig">
+  <tr>
+    <td style="width:25%">
+      <div class="s-title">Thủ kho</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:25%">
+      <div class="s-title">KT kho</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:25%">
+      <div class="s-title">Người giao</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:25%">
+      <div class="s-title">Người lập phiếu</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+  </tr>
+</table>
+""",
         "variables_meta": {
+            "subtitle": "Tiêu đề (PHIẾU NHẬP KHO / PHIẾU NHẬP GIẤY CUỘN)",
             "document_number": "Số phiếu",
             "document_date": "Ngày nhập",
             "supplier_name": "Nhà cung cấp",
             "warehouse_name": "Kho nhập",
-            "body_html": "Bảng hàng hóa",
-            "tong_tien_chu": "Tổng tiền bằng chữ/số"
+            "body_html": "Bảng hàng hóa chi tiết",
+            "tong_tien": "Tổng tiền (số)",
+            "tong_tien_chu": "Tổng tiền bằng chữ"
         }
     },
     {
         "ma_mau": "MATERIAL_ISSUE",
         "ten_mau": "Phiếu Xuất Nguyên Vật Liệu",
-        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div>',
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.5; }
+  .hdr { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 2px solid #1B5E20; margin-bottom: 10px; }
+  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }
+  .co-name { font-size: 13pt; font-weight: bold; color: #1B5E20; text-transform: uppercase; }
+  .co-info { font-size: 9pt; color: #444; line-height: 1.5; margin-top: 3px; }
+  .ttl { text-align: center; margin: 10px 0 10px; }
+  .ttl h2 { font-size: 17pt; font-weight: bold; letter-spacing: 2px; }
+  .ttl .no { font-size: 9.5pt; color: #444; margin-top: 5px; }
+  .info { font-size: 10.5pt; line-height: 1.9; margin-bottom: 8px; }
+  .r { display: flex; margin: 2px 0; }
+  .r .lbl { min-width: 160px; font-weight: bold; flex-shrink: 0; }
+  .r .val { flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; min-height: 1.2em; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 8px; }
+  table th { background: #1B5E20; color: #fff; padding: 5px 6px; border: 1px solid #ccc; text-align: center; }
+  table td { border: 1px solid #ddd; padding: 4px 6px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .total-row td { font-weight: bold; background: #E8F5E9; }
+  .sig { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  .sig td { border: none; text-align: center; vertical-align: top; }
+  .s-title { font-weight: bold; font-size: 10.5pt; }
+  .s-sub { font-style: italic; font-size: 8.5pt; color: #555; margin-top: 2px; }
+  .s-space { height: 48px; }
+</style>
+<div class="hdr">
+  <div class="logo">{{logo_img}}</div>
+  <div>
+    <div class="co-name">{{company_name}}</div>
+    <div class="co-info">{{company_details}}</div>
+  </div>
+</div>
+<div class="ttl">
+  <h2>{{subtitle}}</h2>
+  <div class="no">Số: <strong>{{document_number}}</strong> &nbsp;|&nbsp; Ngày: {{document_date}}</div>
+</div>
+<div class="info">
+  <div class="g2">
+    <div class="r"><span class="lbl">Kho xuất:</span><span class="val">{{warehouse_name}}</span></div>
+    <div class="r"><span class="lbl">Số lệnh SX:</span><span class="val">{{so_lenh}}</span></div>
+  </div>
+</div>
+{{body_html}}
+<table class="sig">
+  <tr>
+    <td style="width:25%">
+      <div class="s-title">Thủ kho</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:25%">
+      <div class="s-title">KT kho</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:25%">
+      <div class="s-title">Người nhận</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:25%">
+      <div class="s-title">Người lập phiếu</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+  </tr>
+</table>
+""",
         "variables_meta": {
+            "subtitle": "Tiêu đề (PHIẾU XUẤT NGUYÊN VẬT LIỆU)",
             "document_number": "Số phiếu",
             "document_date": "Ngày xuất",
             "warehouse_name": "Kho xuất",
@@ -417,42 +702,263 @@ TEMPLATES = [
     {
         "ma_mau": "WAREHOUSE_TRANSFER",
         "ten_mau": "Phiếu Chuyển Kho",
-        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div>' + '<div class="doc-footer">{{footer_html}}</div>',
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.5; }
+  .hdr { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 2px solid #1B5E20; margin-bottom: 10px; }
+  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }
+  .co-name { font-size: 13pt; font-weight: bold; color: #1B5E20; text-transform: uppercase; }
+  .co-info { font-size: 9pt; color: #444; line-height: 1.5; margin-top: 3px; }
+  .ttl { text-align: center; margin: 10px 0 10px; }
+  .ttl h2 { font-size: 17pt; font-weight: bold; letter-spacing: 2px; }
+  .ttl .no { font-size: 9.5pt; color: #444; margin-top: 5px; }
+  .info { font-size: 10.5pt; line-height: 1.9; margin-bottom: 8px; }
+  .r { display: flex; margin: 2px 0; }
+  .r .lbl { min-width: 160px; font-weight: bold; flex-shrink: 0; }
+  .r .val { flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; min-height: 1.2em; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-top: 8px; }
+  table th { background: #1B5E20; color: #fff; padding: 5px 6px; border: 1px solid #ccc; text-align: center; }
+  table td { border: 1px solid #ddd; padding: 4px 6px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .total-row td { font-weight: bold; background: #E8F5E9; }
+  .note { font-size: 10pt; font-style: italic; color: #444; margin-top: 8px; }
+  .sig { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  .sig td { border: none; text-align: center; vertical-align: top; }
+  .s-title { font-weight: bold; font-size: 10.5pt; }
+  .s-sub { font-style: italic; font-size: 8.5pt; color: #555; margin-top: 2px; }
+  .s-space { height: 48px; }
+</style>
+<div class="hdr">
+  <div class="logo">{{logo_img}}</div>
+  <div>
+    <div class="co-name">{{company_name}}</div>
+    <div class="co-info">{{company_details}}</div>
+  </div>
+</div>
+<div class="ttl">
+  <h2>{{subtitle}}</h2>
+  <div class="no">Số: <strong>{{document_number}}</strong> &nbsp;|&nbsp; Ngày: {{document_date}}</div>
+</div>
+<div class="info">
+  <div class="g2">
+    <div class="r"><span class="lbl">Kho xuất:</span><span class="val"><strong>{{customer_name}}</strong></span></div>
+    <div class="r"><span class="lbl">Kho nhập:</span><span class="val"><strong>{{delivery_address}}</strong></span></div>
+  </div>
+</div>
+{{body_html}}
+<div class="note">Ghi chú: {{footer_html}}</div>
+<table class="sig">
+  <tr>
+    <td style="width:33%">
+      <div class="s-title">Thủ kho xuất</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:33%">
+      <div class="s-title">Thủ kho nhập</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:33%">
+      <div class="s-title">Người lập phiếu</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+  </tr>
+</table>
+""",
         "variables_meta": {
+            "subtitle": "Tiêu đề (PHIẾU CHUYỂN KHO)",
             "document_number": "Số phiếu",
             "document_date": "Ngày chuyển",
-            "customer_name": "Kho xuất (nguồn)",
-            "delivery_address": "Kho nhận (đích)",
-            "body_html": "Bảng hàng hóa chuyển",
+            "customer_name": "Kho xuất + phân xưởng",
+            "delivery_address": "Kho nhập + phân xưởng",
+            "body_html": "Bảng hàng hóa chuyển (buildHtmlTable)",
             "footer_html": "Ghi chú"
         }
     },
     {
         "ma_mau": "PRODUCTION_PHOI_RECEIPT",
         "ten_mau": "Phiếu Nhập Phôi Sóng",
-        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div>',
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.5; }
+  .hdr { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 2px solid #1B5E20; margin-bottom: 10px; }
+  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }
+  .co-name { font-size: 13pt; font-weight: bold; color: #1B5E20; text-transform: uppercase; }
+  .co-info { font-size: 9pt; color: #444; line-height: 1.5; margin-top: 3px; }
+  .ttl { text-align: center; margin: 10px 0 10px; }
+  .ttl h2 { font-size: 17pt; font-weight: bold; letter-spacing: 2px; }
+  .ttl .no { font-size: 9.5pt; color: #444; margin-top: 5px; }
+  .info { font-size: 10.5pt; line-height: 1.9; margin-bottom: 8px; }
+  .r { display: flex; margin: 2px 0; }
+  .r .lbl { min-width: 160px; font-weight: bold; flex-shrink: 0; }
+  .r .val { flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; min-height: 1.2em; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-top: 8px; }
+  table th { background: #1B5E20; color: #fff; padding: 5px 6px; border: 1px solid #ccc; text-align: center; }
+  table td { border: 1px solid #ddd; padding: 4px 6px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .total-row td { font-weight: bold; background: #E8F5E9; }
+  .sig { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  .sig td { border: none; text-align: center; vertical-align: top; }
+  .s-title { font-weight: bold; font-size: 10.5pt; }
+  .s-sub { font-style: italic; font-size: 8.5pt; color: #555; margin-top: 2px; }
+  .s-space { height: 48px; }
+</style>
+<div class="hdr">
+  <div class="logo">{{logo_img}}</div>
+  <div>
+    <div class="co-name">{{company_name}}</div>
+    <div class="co-info">{{company_details}}</div>
+  </div>
+</div>
+<div class="ttl">
+  <h2>{{subtitle}}</h2>
+  <div class="no">Số: <strong>{{document_number}}</strong> &nbsp;|&nbsp; Ngày: {{document_date}}</div>
+</div>
+<div class="info">
+  <div class="g2">
+    <div class="r"><span class="lbl">Số lệnh SX:</span><span class="val"><strong>{{so_lenh}}</strong></span></div>
+    <div class="r"><span class="lbl">Ca:</span><span class="val">{{ca}}</span></div>
+  </div>
+  <div class="r"><span class="lbl">Khách hàng:</span><span class="val">{{customer_name}}</span></div>
+  <div class="g3">
+    <div class="r"><span class="lbl">Giờ bắt đầu:</span><span class="val">{{gio_bat_dau}}</span></div>
+    <div class="r"><span class="lbl">Giờ kết thúc:</span><span class="val">{{gio_ket_thuc}}</span></div>
+    <div class="r"><span class="lbl">Thời gian:</span><span class="val">{{duration}}</span></div>
+  </div>
+</div>
+{{body_html}}
+<table class="sig">
+  <tr>
+    <td style="width:33%">
+      <div class="s-title">Thủ kho</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:33%">
+      <div class="s-title">Quản đốc</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:33%">
+      <div class="s-title">Người lập phiếu</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+  </tr>
+</table>
+""",
         "variables_meta": {
+            "subtitle": "Tiêu đề (PHIẾU NHẬP PHÔI SÓNG)",
             "document_number": "Số phiếu",
             "document_date": "Ngày",
             "so_lenh": "Số lệnh SX",
             "ca": "Ca sản xuất",
-            "gio_bat_dau": "Giờ BD",
-            "gio_ket_thuc": "Giờ KT",
+            "customer_name": "Khách hàng/đơn vị",
+            "gio_bat_dau": "Giờ bắt đầu",
+            "gio_ket_thuc": "Giờ kết thúc",
             "duration": "Thời gian thực hiện",
-            "body_html": "Bảng chi tiết phôi"
+            "body_html": "Bảng chi tiết phôi (buildHtmlTable)"
         }
     },
     {
         "ma_mau": "PRODUCTION_ORDER",
         "ten_mau": "Lệnh Sản Xuất (Detail)",
-        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div>' + '<div class="doc-footer">{{ghi_chu}}</div>',
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.5; }
+  .hdr { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 2px solid #1B5E20; margin-bottom: 10px; }
+  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }
+  .co-name { font-size: 13pt; font-weight: bold; color: #1B5E20; text-transform: uppercase; }
+  .co-info { font-size: 9pt; color: #444; line-height: 1.5; margin-top: 3px; }
+  .ttl { text-align: center; margin: 10px 0 10px; }
+  .ttl h2 { font-size: 17pt; font-weight: bold; letter-spacing: 2px; }
+  .ttl .no { font-size: 9.5pt; color: #444; margin-top: 5px; }
+  .info { font-size: 10.5pt; line-height: 1.9; margin-bottom: 8px; }
+  .r { display: flex; margin: 2px 0; }
+  .r .lbl { min-width: 160px; font-weight: bold; flex-shrink: 0; }
+  .r .val { flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; min-height: 1.2em; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-top: 8px; }
+  table th { background: #1B5E20; color: #fff; padding: 5px 6px; border: 1px solid #ccc; text-align: center; }
+  table td { border: 1px solid #ddd; padding: 4px 6px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .total-row td { font-weight: bold; background: #E8F5E9; }
+  .note-box { border: 1px solid #ccc; border-radius: 3px; padding: 6px 10px; margin-top: 8px; font-size: 10pt; min-height: 32px; }
+  .note-lbl { font-weight: bold; font-size: 9.5pt; margin-bottom: 2px; }
+  .sig { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  .sig td { border: none; text-align: center; vertical-align: top; }
+  .s-title { font-weight: bold; font-size: 10.5pt; }
+  .s-sub { font-style: italic; font-size: 8.5pt; color: #555; margin-top: 2px; }
+  .s-space { height: 48px; }
+</style>
+<div class="hdr">
+  <div class="logo">{{logo_img}}</div>
+  <div>
+    <div class="co-name">{{company_name}}</div>
+    <div class="co-info">{{company_details}}</div>
+  </div>
+</div>
+<div class="ttl">
+  <h2>{{subtitle}}</h2>
+  <div class="no">Số: <strong>{{document_number}}</strong> &nbsp;|&nbsp; Ngày: {{document_date}}</div>
+</div>
+<div class="info">
+  <div class="g2">
+    <div class="r"><span class="lbl">Số đơn hàng:</span><span class="val"><strong>{{so_don}}</strong></span></div>
+    <div class="r"><span class="lbl">Ngày HT kế hoạch:</span><span class="val">{{ngay_hoan_thanh_kh}}</span></div>
+  </div>
+  <div class="g2">
+    <div class="r"><span class="lbl">Trạng thái:</span><span class="val">{{trang_thai}}</span></div>
+  </div>
+</div>
+{{body_html}}
+<div style="margin-top:10px">
+  <div class="note-lbl">Ghi chú:</div>
+  <div class="note-box">{{ghi_chu}}</div>
+</div>
+<table class="sig">
+  <tr>
+    <td style="width:33%">
+      <div class="s-title">Giám đốc</div>
+      <div class="s-sub">(Ký, họ tên, đóng dấu)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:33%">
+      <div class="s-title">Quản đốc</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:33%">
+      <div class="s-title">Người lập</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+  </tr>
+</table>
+""",
         "variables_meta": {
+            "subtitle": "Tiêu đề (LỆNH SẢN XUẤT)",
             "document_number": "Số lệnh",
             "document_date": "Ngày lệnh",
-            "so_don": "Số đơn hàng",
-            "ngay_hoan_thanh_kh": "Ngày HT kế hoạch",
-            "body_html": "Bảng chi tiết sản phẩm",
-            "ghi_chu": "Ghi chú lệnh"
+            "so_don": "Số đơn hàng liên kết",
+            "ngay_hoan_thanh_kh": "Ngày hoàn thành kế hoạch",
+            "trang_thai": "Trạng thái lệnh",
+            "body_html": "Bảng chi tiết sản phẩm (buildHtmlTable)",
+            "ghi_chu": "Ghi chú lệnh SX"
         }
     },
     {
@@ -467,27 +973,128 @@ TEMPLATES = [
     {
         "ma_mau": "STOCK_ADJUSTMENT",
         "ten_mau": "Biên bản kiểm kê tồn kho",
-        "css_content": ".table { width: 100%; border-collapse: collapse; } .table th, .table td { border: 1px solid #ddd; padding: 8px; }",
-        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div>' + '<div class="doc-footer">Lý do: {{ly_do}}<br/>Ghi chú: {{ghi_chu}}</div>',
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.5; }
+  .hdr { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 2px solid #37474F; margin-bottom: 10px; }
+  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }
+  .co-name { font-size: 13pt; font-weight: bold; color: #37474F; text-transform: uppercase; }
+  .co-info { font-size: 9pt; color: #444; line-height: 1.5; margin-top: 3px; }
+  .ttl { text-align: center; margin: 10px 0 10px; }
+  .ttl h2 { font-size: 16pt; font-weight: bold; letter-spacing: 1px; }
+  .ttl .no { font-size: 9.5pt; color: #444; margin-top: 5px; }
+  .info { font-size: 10.5pt; line-height: 1.9; margin-bottom: 8px; }
+  .r { display: flex; margin: 2px 0; }
+  .r .lbl { min-width: 160px; font-weight: bold; flex-shrink: 0; }
+  .r .val { flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; min-height: 1.2em; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 8px; }
+  table th { background: #37474F; color: #fff; padding: 5px 6px; border: 1px solid #ccc; text-align: center; }
+  table td { border: 1px solid #ddd; padding: 4px 6px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .total-row td { font-weight: bold; background: #ECEFF1; }
+  .note-row { margin-top: 8px; font-size: 10pt; font-style: italic; }
+  .sig { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  .sig td { border: none; text-align: center; vertical-align: top; }
+  .s-title { font-weight: bold; font-size: 10.5pt; }
+  .s-sub { font-style: italic; font-size: 8.5pt; color: #555; margin-top: 2px; }
+  .s-space { height: 48px; }
+</style>
+<div class="hdr">
+  <div class="logo">{{logo_img}}</div>
+  <div>
+    <div class="co-name">{{company_name}}</div>
+    <div class="co-info">{{company_details}}</div>
+  </div>
+</div>
+<div class="ttl">
+  <h2>{{subtitle}}</h2>
+  <div class="no">Số: <strong>{{document_number}}</strong> &nbsp;|&nbsp; Ngày: {{document_date}}</div>
+</div>
+<div class="info">
+  <div class="g2">
+    <div class="r"><span class="lbl">Kho kiểm kê:</span><span class="val"><strong>{{warehouse_name}}</strong></span></div>
+    <div class="r"><span class="lbl">Lý do kiểm kê:</span><span class="val">{{ly_do}}</span></div>
+  </div>
+</div>
+{{body_html}}
+<div class="note-row">Ghi chú: {{ghi_chu}}</div>
+<table class="sig">
+  <tr>
+    <td style="width:33%">
+      <div class="s-title">Giám đốc</div>
+      <div class="s-sub">(Ký, họ tên, đóng dấu)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:33%">
+      <div class="s-title">Kế toán trưởng</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:33%">
+      <div class="s-title">Thủ kho / Người lập</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+  </tr>
+</table>
+""",
         "variables_meta": {
-            "document_number": "Số phiếu",
-            "document_date": "Ngày",
+            "subtitle": "Tiêu đề (BIÊN BẢN KIỂM KÊ TỒN KHO)",
+            "document_number": "Số biên bản",
+            "document_date": "Ngày kiểm kê",
             "warehouse_name": "Kho kiểm kê",
-            "ly_do": "Lý do",
+            "ly_do": "Lý do kiểm kê",
             "ghi_chu": "Ghi chú",
-            "body_html": "Nội dung bảng"
+            "body_html": "Bảng tồn kho (buildHtmlTable)"
         }
     },
     {
         "ma_mau": "STOCK_CARD",
         "ten_mau": "Thẻ kho / Lịch sử XNT",
-        "css_content": ".table { width: 100%; border-collapse: collapse; font-size: 11px; } .table th, .table td { border: 1px solid #ddd; padding: 4px; }",
-        "html_content": DEFAULT_HEADER + '<div class="doc-body">{{body_html}}</div>' + '<div class="doc-footer">{{footer_html}}</div>',
+        "html_content": """
+<style>
+  @page { size: A4 landscape; margin: 12mm 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 10pt; color: #111; line-height: 1.5; }
+  .hdr { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 6px; border-bottom: 2px solid #37474F; margin-bottom: 8px; }
+  .logo img { max-width: 70px; max-height: 55px; object-fit: contain; }
+  .co-name { font-size: 12pt; font-weight: bold; color: #37474F; text-transform: uppercase; }
+  .co-info { font-size: 8.5pt; color: #444; line-height: 1.5; margin-top: 3px; }
+  .ttl { text-align: center; margin: 8px 0 8px; }
+  .ttl h2 { font-size: 15pt; font-weight: bold; letter-spacing: 1px; }
+  .ttl .no { font-size: 9pt; color: #444; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  table th { background: #37474F; color: #fff; padding: 4px 5px; border: 1px solid #ccc; text-align: center; }
+  table td { border: 1px solid #ddd; padding: 3px 5px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .total-row td { font-weight: bold; background: #ECEFF1; }
+  .footer-stats { margin-top: 8px; font-size: 10pt; }
+</style>
+<div class="hdr">
+  <div class="logo">{{logo_img}}</div>
+  <div>
+    <div class="co-name">{{company_name}}</div>
+    <div class="co-info">{{company_details}}</div>
+  </div>
+</div>
+<div class="ttl">
+  <h2>{{subtitle}}</h2>
+  <div class="no">Kỳ: {{document_date}} &nbsp;|&nbsp; Tổng: {{document_number}} giao dịch</div>
+</div>
+{{body_html}}
+<div class="footer-stats">{{footer_html}}</div>
+""",
         "variables_meta": {
-            "document_date": "Khoảng thời gian",
+            "subtitle": "Tiêu đề (THẺ KHO / LỊCH SỬ NHẬP XUẤT TỒN)",
+            "document_date": "Khoảng thời gian (VD: 01/01 – 31/01/2026)",
             "document_number": "Số lượng giao dịch",
-            "body_html": "Nội dung bảng",
-            "footer_html": "Thống kê tổng"
+            "body_html": "Bảng lịch sử giao dịch (buildHtmlTable)",
+            "footer_html": "Thống kê tổng nhập/xuất/tồn"
         }
     },
     {

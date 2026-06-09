@@ -135,6 +135,7 @@ def print_material_issue(mi_id: int, db: Session = Depends(get_db), _: User = De
     )
 
     replacements = {
+        "{{subtitle}}": "PHIẾU XUẤT NGUYÊN VẬT LIỆU",
         "{{document_number}}": _html_mod.escape(mi.so_phieu or ""),
         "{{document_date}}": str(mi.ngay_xuat) if mi.ngay_xuat else "",
         "{{warehouse_name}}": _html_mod.escape(wh.ten_kho if wh else ""),

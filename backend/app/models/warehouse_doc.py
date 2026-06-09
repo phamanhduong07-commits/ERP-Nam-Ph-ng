@@ -12,21 +12,22 @@ class GoodsReceipt(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # GR-YYYYMM-XXXX
     ngay_nhap: Mapped[date] = mapped_column(Date, nullable=False)
-    po_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id"))
-    supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=True)
-    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    po_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id"))  # idx_gr_po exists
+    supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=True, index=True)
+    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False, index=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
-    loai_nhap: Mapped[str] = mapped_column(String(30), default="MUA_HANG")
-    # MUA_HANG | TRA_SX | DIEU_CHINH | CHUYEN_KHO
+    loai_nhap: Mapped[str] = mapped_column(String(30), default="MUA_HANG", index=True)
+    # MUA_HANG | TRA_SX | DIEU_CHINH | CHUYEN_KHO | PHOI_NGOAI
     tong_gia_tri: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
-    trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")  # nhap | da_duyet
+    trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")  # idx_gr_trang_thai exists
+    # nhap | nhap_nhanh | da_duyet
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     so_xe: Mapped[str | None] = mapped_column(String(30))
     invoice_image: Mapped[str | None] = mapped_column(Text)
     ocr_extracted_data: Mapped[str | None] = mapped_column(Text)
     hd_tong_kg: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
@@ -45,9 +46,9 @@ class GoodsReceiptItem(Base):
     __tablename__ = "goods_receipt_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    receipt_id: Mapped[int] = mapped_column(Integer, ForeignKey("goods_receipts.id"), nullable=False)
-    po_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_order_items.id"))
-    paper_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_materials.id"))
+    receipt_id: Mapped[int] = mapped_column(Integer, ForeignKey("goods_receipts.id"), nullable=False)  # idx_gr_items_receipt exists
+    po_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_order_items.id"))  # idx_gr_items_po_item exists
+    paper_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_materials.id"), index=True)
     other_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("other_materials.id"))
     ten_hang: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     so_luong: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)

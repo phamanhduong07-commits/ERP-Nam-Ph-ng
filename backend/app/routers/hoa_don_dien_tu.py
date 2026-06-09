@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.accounting import HoaDonDienTu
 import app.services.misa_invoice_service as misa_svc
@@ -92,7 +92,7 @@ def list_hdt(
     phap_nhan_id: Optional[int] = Query(None),
     sales_invoice_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_permissions("accounting.hoa_don_dien_tu")),
 ):
     q = db.query(HoaDonDienTu)
     if trang_thai:
@@ -109,7 +109,7 @@ def list_hdt(
 
 
 @router.get("/{id}", response_model=dict)
-def get_hdt(id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def get_hdt(id: int, db: Session = Depends(get_db), user: User = Depends(require_permissions("accounting.hoa_don_dien_tu"))):
     hdt = db.get(HoaDonDienTu, id)
     if not hdt:
         raise HTTPException(404, "Hóa đơn không tồn tại")
@@ -117,7 +117,7 @@ def get_hdt(id: int, db: Session = Depends(get_db), user: User = Depends(get_cur
 
 
 @router.post("", response_model=dict, status_code=201)
-def create_hdt(body: HoaDonDienTuCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def create_hdt(body: HoaDonDienTuCreate, db: Session = Depends(get_db), user: User = Depends(require_permissions("accounting.hoa_don_dien_tu"))):
     hdt = HoaDonDienTu(**body.model_dump())
     hdt.created_by = user.id
     hdt.trang_thai = "nhap"
@@ -128,7 +128,7 @@ def create_hdt(body: HoaDonDienTuCreate, db: Session = Depends(get_db), user: Us
 
 
 @router.put("/{id}", response_model=dict)
-def update_hdt(id: int, body: HoaDonDienTuUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def update_hdt(id: int, body: HoaDonDienTuUpdate, db: Session = Depends(get_db), user: User = Depends(require_permissions("accounting.hoa_don_dien_tu"))):
     hdt = db.get(HoaDonDienTu, id)
     if not hdt:
         raise HTTPException(404, "Hóa đơn không tồn tại")
@@ -142,7 +142,7 @@ def update_hdt(id: int, body: HoaDonDienTuUpdate, db: Session = Depends(get_db),
 
 
 @router.delete("/{id}")
-def delete_hdt(id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def delete_hdt(id: int, db: Session = Depends(get_db), user: User = Depends(require_permissions("accounting.hoa_don_dien_tu"))):
     hdt = db.get(HoaDonDienTu, id)
     if not hdt:
         raise HTTPException(404, "Hóa đơn không tồn tại")
@@ -154,7 +154,7 @@ def delete_hdt(id: int, db: Session = Depends(get_db), user: User = Depends(get_
 
 
 @router.post("/{id}/phat-hanh", response_model=dict)
-def phat_hanh(id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def phat_hanh(id: int, db: Session = Depends(get_db), user: User = Depends(require_permissions("accounting.hoa_don_dien_tu"))):
     """Gửi HĐ lên MISA để ký số và phát hành."""
     hdt = db.get(HoaDonDienTu, id)
     if not hdt:
@@ -220,7 +220,7 @@ def huy_hdt(
     id: int,
     body: dict,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_permissions("accounting.hoa_don_dien_tu")),
 ):
     """Hủy hóa đơn đã phát hành — cần ly_do."""
     hdt = db.get(HoaDonDienTu, id)
@@ -246,7 +246,7 @@ def huy_hdt(
 
 
 @router.post("/{id}/sync-status", response_model=dict)
-def sync_status(id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def sync_status(id: int, db: Session = Depends(get_db), user: User = Depends(require_permissions("accounting.hoa_don_dien_tu"))):
     """Đồng bộ trạng thái từ MISA."""
     hdt = db.get(HoaDonDienTu, id)
     if not hdt:

@@ -20,9 +20,9 @@ class PurchaseReturn(Base):
     so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     # PTH-YYYYMM-XXXX (trả hàng) | PGG-YYYYMM-XXXX (giảm giá)
     ngay: Mapped[date] = mapped_column(Date, nullable=False)
-    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
-    po_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id"))
-    gr_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goods_receipts.id"))
+    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False, index=True)
+    po_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id"), index=True)
+    gr_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goods_receipts.id"), index=True)
     invoice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_invoices.id"))
     loai: Mapped[str] = mapped_column(String(20), nullable=False, default="tra_hang")
     # tra_hang | giam_gia
@@ -32,7 +32,7 @@ class PurchaseReturn(Base):
     tien_thue: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     tong_thanh_toan: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
-    trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")
+    trang_thai: Mapped[str] = mapped_column(String(20), default="nhap", index=True)
     # nhap | da_duyet | huy
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -75,11 +75,11 @@ class PurchaseOrder(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_po: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     ngay_po: Mapped[date] = mapped_column(Date, nullable=False)
-    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
-    trang_thai: Mapped[str] = mapped_column(String(30), default="moi")
+    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)  # idx_po_supplier exists
+    trang_thai: Mapped[str] = mapped_column(String(30), default="moi")  # idx_po_trang_thai exists
     # moi | da_duyet | da_gui_ncc | dang_giao | hoan_thanh | huy
-    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), index=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), index=True)
     loai_po: Mapped[str] = mapped_column(String(20), default="chung")
     # chung | giay_cuon | nvl_khac
     ngay_du_kien_nhan: Mapped[date | None] = mapped_column(Date)
@@ -128,8 +128,8 @@ class PurchaseOrderItem(Base):
     __tablename__ = "purchase_order_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    po_id: Mapped[int] = mapped_column(Integer, ForeignKey("purchase_orders.id"), nullable=False)
-    paper_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_materials.id"))
+    po_id: Mapped[int] = mapped_column(Integer, ForeignKey("purchase_orders.id"), nullable=False, index=True)
+    paper_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_materials.id"), index=True)
     other_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("other_materials.id"))
     ten_hang: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     so_luong: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)

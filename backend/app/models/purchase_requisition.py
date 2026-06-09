@@ -12,9 +12,9 @@ class PurchaseRequisition(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_ymh: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # YMH-YYYYMM-XXXX
     ngay_yeu_cau: Mapped[date] = mapped_column(Date, nullable=False)
-    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"))
-    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
-    trang_thai: Mapped[str] = mapped_column(String(30), default="nhap")
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), index=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), index=True)
+    trang_thai: Mapped[str] = mapped_column(String(30), default="nhap", index=True)
     # nhap → cho_duyet → duyet_pb → duyet_gd → tao_po
     # nhap / cho_duyet / duyet_pb / duyet_gd → huy | tu_choi
     nguoi_yeu_cau_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -45,7 +45,7 @@ class PurchaseRequisitionItem(Base):
     __tablename__ = "purchase_requisition_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    ymh_id: Mapped[int] = mapped_column(Integer, ForeignKey("purchase_requisitions.id"), nullable=False)
+    ymh_id: Mapped[int] = mapped_column(Integer, ForeignKey("purchase_requisitions.id"), nullable=False, index=True)
     paper_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_materials.id"))
     other_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("other_materials.id"))
     ten_hang: Mapped[str] = mapped_column(String(255), nullable=False, default="")

@@ -30,6 +30,7 @@ export interface PurchaseRequisition {
   ngay_duyet_pb: string | null
   ngay_duyet_gd: string | null
   po_id: number | null
+  so_po_linked: string | null
   ghi_chu: string | null
   ly_do_tu_choi: string | null
   tong_du_kien: number
@@ -64,6 +65,7 @@ export interface TaoPoPayload {
   ngay_du_kien_nhan?: string | null
   dieu_khoan_tt?: string | null
   ghi_chu?: string | null
+  items_override?: { ymh_item_id: number; don_gia: number }[]
 }
 
 export const TRANG_THAI_YMH: Record<string, string> = {
@@ -129,4 +131,6 @@ export const ymhApi = {
     client.post<{ ok: boolean }>(`/purchase-requisitions/${id}/huy`),
 
   delete: (id: number) => client.delete(`/purchase-requisitions/${id}`),
+
+  print: (id: number) => client.get<string>(`/purchase-requisitions/${id}/print`, { responseType: 'text' }),
 }

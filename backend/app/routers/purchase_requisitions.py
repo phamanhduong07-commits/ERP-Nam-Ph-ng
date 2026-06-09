@@ -48,12 +48,18 @@ class YMHReject(BaseModel):
     ly_do: str = ""
 
 
+class ItemPriceOverride(BaseModel):
+    ymh_item_id: int
+    don_gia: Decimal
+
+
 class YMHCreatePO(BaseModel):
     supplier_id: int
     ngay_po: date
     ngay_du_kien_nhan: Optional[date] = None
     dieu_khoan_tt: Optional[str] = None
     ghi_chu: Optional[str] = None
+    items_override: list[ItemPriceOverride] = []
 
 
 def _gen_so_ymh(db: Session) -> str:
@@ -200,6 +206,7 @@ def _serialize_ymh(ymh: PurchaseRequisition, db: Session) -> dict:
         "ngay_duyet_pb": ymh.ngay_duyet_pb.isoformat() if ymh.ngay_duyet_pb else None,
         "ngay_duyet_gd": ymh.ngay_duyet_gd.isoformat() if ymh.ngay_duyet_gd else None,
         "po_id": ymh.po_id,
+        "so_po_linked": db.get(PurchaseOrder, ymh.po_id).so_po if ymh.po_id else None,
         "ghi_chu": ymh.ghi_chu,
         "ly_do_tu_choi": ymh.ly_do_tu_choi,
         "tong_du_kien": tong_du_kien,
@@ -458,9 +465,10 @@ def tao_po_tu_ymh(
     db.add(po)
     db.flush()
 
+    override_map = {x.ymh_item_id: x.don_gia for x in body.items_override}
     tong_tien = Decimal("0")
     for item in ymh.items:
-        don_gia = item.don_gia_du_kien or Decimal("0")
+        don_gia = override_map.get(item.id, item.don_gia_du_kien or Decimal("0"))
         thanh_tien = item.so_luong * don_gia
         tong_tien += thanh_tien
         db.add(
@@ -499,6 +507,151 @@ def huy_ymh(
     ymh.trang_thai = "huy"
     db.commit()
     return {"ok": True}
+
+
+@router.get("/{ymh_id}/print")
+def print_ymh(
+    ymh_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from fastapi.responses import HTMLResponse
+    from app.models.master import Supplier
+    ymh = db.get(PurchaseRequisition, ymh_id)
+    if not ymh:
+        raise HTTPException(404, "Không tìm thấy YMH")
+
+    px = db.get(PhanXuong, ymh.phan_xuong_id) if ymh.phan_xuong_id else None
+    pn = db.get(PhapNhan, ymh.phap_nhan_id) if ymh.phap_nhan_id else None
+    ten_phap_nhan = (pn.ten_viet_tat or pn.ten_phap_nhan) if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+
+    rows_html = ""
+    tong = Decimal("0")
+    for i, it in enumerate(ymh.items, 1):
+        ten = it.ten_hang or ""
+        if not ten and it.paper_material_id:
+            pm = db.get(PaperMaterial, it.paper_material_id)
+            ten = pm.ten if pm else ""
+        if not ten and it.other_material_id:
+            om = db.get(OtherMaterial, it.other_material_id)
+            ten = om.ten if om else ""
+        don_gia = it.don_gia_du_kien or Decimal("0")
+        thanh_tien = it.so_luong * don_gia
+        tong += thanh_tien
+        ngay_can_str = it.ngay_can.strftime("%d/%m/%Y") if it.ngay_can else ""
+        rows_html += f"""
+        <tr>
+          <td class="center">{i}</td>
+          <td>{ten}</td>
+          <td class="center">{it.dvt}</td>
+          <td class="right">{float(it.so_luong):,.3f}</td>
+          <td class="right">{int(don_gia):,}</td>
+          <td class="right">{int(thanh_tien):,}</td>
+          <td class="center">{ngay_can_str}</td>
+          <td>{it.ghi_chu or ''}</td>
+        </tr>"""
+
+    ngay_str = ""
+    if ymh.ngay_yeu_cau:
+        d = ymh.ngay_yeu_cau
+        ngay_str = f"Ngày {d.day:02d} tháng {d.month:02d} năm {d.year}"
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page {{ size: A4 portrait; margin: 15mm 12mm; }}
+  * {{ box-sizing: border-box; }}
+  body {{ font-family: 'Times New Roman', serif; font-size: 11pt; margin: 0; }}
+  button {{ display: none; }}
+  @media print {{ button {{ display: none; }} }}
+  .header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }}
+  .company-name {{ font-weight: bold; font-size: 13pt; color: #4A148C; }}
+  .company-info {{ font-size: 8.5pt; line-height: 1.5; }}
+  .mau {{ font-size: 8pt; text-align: right; color: #555; }}
+  .divider {{ border: none; border-top: 2px solid #4A148C; margin: 6px 0 10px; }}
+  .title {{ text-align: center; margin-bottom: 10px; }}
+  .title h2 {{ margin: 0; font-size: 16pt; letter-spacing: 2px; text-transform: uppercase; }}
+  .title .so {{ font-size: 9pt; margin-top: 2px; }}
+  .title .date {{ font-size: 9pt; font-style: italic; }}
+  .info-block {{ font-size: 10.5pt; line-height: 1.9; margin-bottom: 10px; }}
+  .row {{ display: flex; margin: 3px 0; }}
+  .row .label {{ min-width: 140px; font-weight: bold; flex-shrink: 0; }}
+  .row .dots {{ flex: 1; border-bottom: 1px dotted #888; padding-bottom: 1px; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10pt; }}
+  th {{ background: #4A148C; color: #fff; border: 1px solid #ccc; padding: 5px 4px; text-align: center; }}
+  td {{ border: 1px solid #ccc; padding: 4px; }}
+  .center {{ text-align: center; }}
+  .right {{ text-align: right; }}
+  .total-row td {{ font-weight: bold; background: #F3E5F5; }}
+  .chu {{ font-size: 9.5pt; margin-bottom: 4px; }}
+  .sig-table {{ width: 100%; border: none; margin-top: 20px; }}
+  .sig-table td {{ border: none; text-align: center; vertical-align: top; width: 25%; }}
+  .sig-label {{ font-weight: bold; }}
+  .sig-sub {{ font-style: italic; font-size: 8.5pt; color: #555; }}
+  .sig-name {{ margin-top: 40px; font-weight: bold; }}
+</style>
+</head>
+<body>
+<button onclick="window.print()" style="display:block;margin-bottom:10px;padding:6px 16px;background:#4A148C;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11pt;">In phiếu</button>
+
+<div class="header">
+  <div>
+    <div class="company-name">{ten_phap_nhan}</div>
+    <div class="company-info">Địa chỉ: TP. Hồ Chí Minh<br>ĐT: (028) xxxx xxxx</div>
+  </div>
+  <div class="mau">Biểu mẫu nội bộ</div>
+</div>
+<hr class="divider">
+
+<div class="title">
+  <h2>Phiếu yêu cầu mua hàng</h2>
+  <div class="so">Số: <strong>{ymh.so_ymh}</strong></div>
+  <div class="date">{ngay_str}</div>
+</div>
+
+<div class="info-block">
+  <div class="row"><span class="label">Đơn vị yêu cầu</span><span class="dots">&nbsp;{px.ten_xuong if px else ''}</span></div>
+  <div class="row"><span class="label">Người yêu cầu</span><span class="dots">&nbsp;{_user_name(ymh.nguoi_yeu_cau) or ''}</span></div>
+  <div class="row"><span class="label">Ghi chú</span><span class="dots">&nbsp;{ymh.ghi_chu or ''}</span></div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:35px">STT</th>
+      <th>Tên hàng</th>
+      <th style="width:55px">ĐVT</th>
+      <th style="width:80px">Số lượng</th>
+      <th style="width:100px">Đơn giá DK</th>
+      <th style="width:110px">Thành tiền</th>
+      <th style="width:90px">Ngày cần</th>
+      <th style="width:120px">Ghi chú</th>
+    </tr>
+  </thead>
+  <tbody>
+    {rows_html}
+  </tbody>
+  <tfoot>
+    <tr class="total-row">
+      <td colspan="5" class="right">TỔNG CỘNG</td>
+      <td class="right">{int(tong):,}</td>
+      <td colspan="2"></td>
+    </tr>
+  </tfoot>
+</table>
+
+<div class="chu">Tổng tiền dự kiến: <strong>{int(tong):,} đồng</strong></div>
+
+<table class="sig-table">
+  <tr>
+    <td><div class="sig-label">Người yêu cầu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{_user_name(ymh.nguoi_yeu_cau) or ''}</div></td>
+    <td><div class="sig-label">Phụ trách phòng ban</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{_user_name(ymh.nguoi_duyet_pb) or ''}</div></td>
+    <td><div class="sig-label">Phòng mua hàng</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
+    <td><div class="sig-label">Giám đốc</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{_user_name(ymh.nguoi_duyet_gd) or ''}</div></td>
+  </tr>
+</table>
+</body></html>"""
+    return HTMLResponse(content=html)
 
 
 @router.delete("/{ymh_id}")

@@ -104,6 +104,7 @@ const GoodsReceiptPage = lazy(() => import('./pages/purchase/GoodsReceiptPage'))
 const DoiSoatKhoPage = lazy(() => import('./pages/purchase/DoiSoatKhoPage'))
 const DuBaoNhuCauPage = lazy(() => import('./pages/purchase/DuBaoNhuCauPage'))
 const YMHListPage = lazy(() => import('./pages/purchase/YMHListPage'))
+const YMHDetailPage = lazy(() => import('./pages/purchase/YMHDetailPage'))
 const PurchaseDashboardPage = lazy(() => import('./pages/purchase/PurchaseDashboardPage'))
 const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
@@ -379,6 +380,7 @@ export default function App() {
             <Route path="purchasing/doi-soat-kho" element={<ErrorBoundary><DoiSoatKhoPage /></ErrorBoundary>} />
             <Route path="purchasing/du-bao-nhu-cau" element={<ErrorBoundary><DuBaoNhuCauPage /></ErrorBoundary>} />
             <Route path="purchasing/ymh" element={<ErrorBoundary><YMHListPage /></ErrorBoundary>} />
+            <Route path="purchasing/ymh/:id" element={<ErrorBoundary><YMHDetailPage /></ErrorBoundary>} />
             <Route path="purchasing/dashboard" element={<ErrorBoundary><PurchaseDashboardPage /></ErrorBoundary>} />
             <Route path="purchasing/returns" element={<ErrorBoundary><PurchaseReturnPage /></ErrorBoundary>} />
             <Route path="purchasing/reports" element={<ErrorBoundary><PurchaseReportPage /></ErrorBoundary>} />
