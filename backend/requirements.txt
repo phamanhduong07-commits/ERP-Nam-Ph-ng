@@ -18,3 +18,4 @@ google-genai>=1.0.0
 python-socketio==5.11.0
 fastapi-socketio==0.0.10
 slowapi==0.1.9
+python-barcode==0.16.1

@@ -1238,42 +1238,70 @@ def can_giay_roll(
     return _giay_roll_to_dict(roll)
 
 
+def _barcode_svg(value: str) -> str:
+    """Generate inline CODE128 SVG barcode (no external dependencies)."""
+    try:
+        import barcode as _bc
+        import io
+        from barcode.writer import SVGWriter
+        writer = SVGWriter()
+        b = _bc.get("code128", value, writer=writer)
+        buf = io.BytesIO()
+        b.write(buf, options={
+            "module_width": 0.28,
+            "module_height": 12.0,
+            "font_size": 7,
+            "text_distance": 1.5,
+            "quiet_zone": 2.0,
+            "write_text": True,
+        })
+        svg = buf.getvalue().decode("utf-8")
+        idx = svg.find("<svg")
+        if idx == -1:
+            return ""
+        # Remove fixed width/height so it scales with CSS
+        import re
+        svg_tag = svg[idx:]
+        svg_tag = re.sub(r'\s+width="[^"]*"', ' width="100%"', svg_tag)
+        svg_tag = re.sub(r'\s+height="[^"]*"', '', svg_tag)
+        return svg_tag
+    except Exception:
+        return f'<div style="font-family:monospace;font-size:9pt;text-align:center;padding:4px;border:1px solid #999">{value}</div>'
+
+
 def _build_label_html(roll, ma_ncc: str, ten_ncc: str, so_phieu: str) -> str:
     pm = roll.paper_material
-    ky_hieu = pm.ma_ky_hieu if pm else ""
-    kho = f"{float(pm.kho):.0f}" if pm and pm.kho else ""
-    ma_chinh = pm.ma_chinh if pm else ""
+    ky_hieu  = (pm.ma_ky_hieu or "") if pm else ""
+    kho      = f"{float(pm.kho):.0f}" if pm and pm.kho else ""
+    ma_chinh = (pm.ma_chinh or "") if pm else ""
     dinh_luong = f"{int(pm.dinh_luong)}" if pm and pm.dinh_luong else ""
-    nvl = (pm.ten_viet_tat or "") if pm else ""
-    so_kg = f"{float(roll.trong_luong_ban_dau):,.0f}"
+    nvl      = (pm.ten_viet_tat or "") if pm else ""
+    so_kg    = f"{float(roll.trong_luong_ban_dau):,.0f}"
     ngay_str = roll.ngay_nhap.strftime("%d/%m/%Y") if roll.ngay_nhap else ""
-    barcode_val = roll.barcode
+    ncc_str  = ma_ncc or ten_ncc or ""
+    barcode_svg = _barcode_svg(roll.barcode)
     return (
         f'<div class="label">'
-        f'<div class="company">CÔNG TY TNHH SX TM NAM PHƯƠNG</div>'
-        f'<div class="row-2col">'
-        f'<div class="field"><div class="lbl">Ký hiệu</div><div class="val big">{ky_hieu}</div></div>'
-        f'<div class="field"><div class="lbl">Khổ Giấy</div><div class="val big">{kho}</div></div>'
+        f'<div class="co">CTY TNHH SX TM NAM PHƯƠNG</div>'
+        f'<div class="hr"></div>'
+        f'<div class="row2">'
+        f'  <div><span class="lbl">Ký hiệu</span><div class="big">{ky_hieu}</div></div>'
+        f'  <div><span class="lbl">Khổ (mm)</span><div class="big">{kho}</div></div>'
         f'</div>'
-        f'<div class="field"><div class="lbl">Số KG</div><div class="val big">{so_kg}</div></div>'
-        f'<div class="field small"><span class="lbl">Mã chính</span> <span class="val">{ma_chinh}</span></div>'
-        f'<div class="row-2col small">'
-        f'<div><span class="lbl">ĐL</span> <span class="val">{dinh_luong}</span></div>'
-        f'<div><span class="lbl">Mã NCC</span> <span class="val">{ma_ncc or ten_ncc}</span></div>'
+        f'<div class="row2">'
+        f'  <div><span class="lbl">ĐL (g/m²)</span><div class="med">{dinh_luong}</div></div>'
+        f'  <div><span class="lbl">Số kg</span><div class="med">{so_kg} kg</div></div>'
         f'</div>'
-        f'<div class="row-2col small">'
-        f'<div><span class="lbl">Khổ</span> <span class="val">{kho}</span></div>'
-        f'<div><span class="lbl">NVL</span> <span class="val">{nvl}</span></div>'
+        f'<div class="row2 sm">'
+        f'  <div><span class="lbl">Mã chính</span><div class="val">{ma_chinh}</div></div>'
+        f'  <div><span class="lbl">NVL</span><div class="val">{nvl}</div></div>'
         f'</div>'
-        f'<div class="row-2col small">'
-        f'<div><span class="lbl">Ngày nhập</span> <span class="val">{ngay_str}</span></div>'
-        f'<div><span class="lbl">Số phiếu</span> <span class="val">{so_phieu}</span></div>'
+        f'<div class="row2 sm">'
+        f'  <div><span class="lbl">Ngày nhập</span><div class="val">{ngay_str}</div></div>'
+        f'  <div><span class="lbl">Số phiếu / NCC</span><div class="val">{so_phieu or ncc_str}</div></div>'
         f'</div>'
-        f'<div class="barcode-wrap">'
-        f'<svg class="barcode" jsbarcode-value="{barcode_val}" jsbarcode-format="CODE128"'
-        f' jsbarcode-width="2" jsbarcode-height="40" jsbarcode-fontsize="12"'
-        f' jsbarcode-displayvalue="true"></svg>'
-        f'</div></div>'
+        f'<div class="bc">{barcode_svg}</div>'
+        f'</div>'
     )
 
 
