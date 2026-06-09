@@ -2,22 +2,24 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Input, Modal } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
+import { usePermission } from '../hooks/usePermission'
 
 type SearchItem = {
   label: string
   to: string
   module: string
+  permissions?: string[]
 }
 
 const INDEX: SearchItem[] = [
   { label: 'Tổng quan', to: '/dashboard', module: 'Dashboard' },
   // Bán hàng
-  { label: 'Báo giá', to: '/quotes', module: 'Bán hàng' },
-  { label: 'Đơn hàng', to: '/sales/orders', module: 'Bán hàng' },
-  { label: 'Trả hàng bán', to: '/sales/returns', module: 'Bán hàng' },
-  { label: 'Theo dõi đơn hàng', to: '/sales/theo-don-hang', module: 'Bán hàng' },
-  { label: 'Giao hàng', to: '/sales/giao-hang', module: 'Bán hàng' },
-  { label: 'Hóa đơn VAT', to: '/billing/invoices', module: 'Bán hàng' },
+  { label: 'Báo giá', to: '/quotes', module: 'Bán hàng', permissions: ['sales_order.approve'] },
+  { label: 'Đơn hàng', to: '/sales/orders', module: 'Bán hàng', permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve'] },
+  { label: 'Trả hàng bán', to: '/sales/returns', module: 'Bán hàng', permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve'] },
+  { label: 'Theo dõi đơn hàng', to: '/sales/theo-don-hang', module: 'Bán hàng', permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve'] },
+  { label: 'Giao hàng', to: '/sales/giao-hang', module: 'Bán hàng', permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve'] },
+  { label: 'Hóa đơn VAT', to: '/billing/invoices', module: 'Bán hàng', permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve'] },
   // Sản xuất
   { label: 'Lệnh sản xuất', to: '/production/orders', module: 'Sản xuất' },
   { label: 'Theo dõi LSX', to: '/production/theo-doi', module: 'Sản xuất' },
@@ -25,7 +27,7 @@ const INDEX: SearchItem[] = [
   { label: 'Kế hoạch tận dụng', to: '/production/tan-dung', module: 'Sản xuất' },
   { label: 'KH SX chờ', to: '/production/queue', module: 'Sản xuất' },
   { label: 'Định mức (BOM)', to: '/production/bom', module: 'Sản xuất' },
-  { label: 'Phân tích chi phí', to: '/production/cost-analysis', module: 'Sản xuất' },
+  { label: 'Phân tích chi phí', to: '/production/cost-analysis', module: 'Sản xuất', permissions: ['production.cost_analysis'] },
   { label: 'Kho phôi sóng', to: '/production/kho-phoi', module: 'Sản xuất' },
   { label: 'Kho thành phẩm', to: '/production/kho-thanh-pham', module: 'Sản xuất' },
   { label: 'Kho hàng lỗi', to: '/production/kho-loi', module: 'Sản xuất' },
@@ -89,16 +91,16 @@ const INDEX: SearchItem[] = [
   { label: 'Đối soát xăng', to: '/logistics/doi-soat-xang', module: 'Logistics' },
   { label: 'Nhật ký xe', to: '/logistics/nhat-ky-xe', module: 'Logistics' },
   // Báo cáo
-  { label: 'Tổng hợp công nợ', to: '/reports/debt-summary', module: 'Báo cáo' },
-  { label: 'Doanh thu', to: '/reports/revenue', module: 'Báo cáo' },
-  { label: 'Tồn kho (BC)', to: '/reports/inventory', module: 'Báo cáo' },
-  { label: 'Hiệu suất sản xuất', to: '/reports/production-performance', module: 'Báo cáo' },
-  { label: 'Tiến độ đơn hàng', to: '/reports/order-progress', module: 'Báo cáo' },
-  { label: 'Báo cáo giao hàng', to: '/reports/delivery', module: 'Báo cáo' },
-  { label: 'Tổng hợp VAT', to: '/reports/vat-summary', module: 'Báo cáo' },
-  { label: 'Cân đối thuế', to: '/reports/tax-trial-balance', module: 'Báo cáo' },
+  { label: 'Tổng hợp công nợ', to: '/reports/debt-summary', module: 'Báo cáo', permissions: ['report.cong_no'] },
+  { label: 'Doanh thu', to: '/reports/revenue', module: 'Báo cáo', permissions: ['report.export'] },
+  { label: 'Tồn kho (BC)', to: '/reports/inventory', module: 'Báo cáo', permissions: ['report.inventory'] },
+  { label: 'Hiệu suất sản xuất', to: '/reports/production-performance', module: 'Báo cáo', permissions: ['report.view'] },
+  { label: 'Tiến độ đơn hàng', to: '/reports/order-progress', module: 'Báo cáo', permissions: ['report.view'] },
+  { label: 'Báo cáo giao hàng', to: '/reports/delivery', module: 'Báo cáo', permissions: ['report.export'] },
+  { label: 'Tổng hợp VAT', to: '/reports/vat-summary', module: 'Báo cáo', permissions: ['accounting.view'] },
+  { label: 'Cân đối thuế', to: '/reports/tax-trial-balance', module: 'Báo cáo', permissions: ['accounting.view'] },
   // Danh mục
-  { label: 'Khách hàng', to: '/master/customers', module: 'Danh mục' },
+  { label: 'Khách hàng', to: '/master/customers', module: 'Danh mục', permissions: ['master.customers.view', 'master.customers.manage', 'customer.view'] },
   { label: 'Nhà cung cấp', to: '/master/suppliers', module: 'Danh mục' },
   { label: 'Sản phẩm', to: '/master/products', module: 'Danh mục' },
   { label: 'Người dùng', to: '/master/users', module: 'Danh mục' },
@@ -117,6 +119,7 @@ export default function GlobalSearchModal({ open, onClose }: Props) {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const inputRef = useRef<{ focus?: () => void } | null>(null)
+  const { hasAnyPermission, isAdmin } = usePermission()
 
   useEffect(() => {
     if (open) {
@@ -127,9 +130,13 @@ export default function GlobalSearchModal({ open, onClose }: Props) {
     }
   }, [open])
 
+  const allowed = INDEX.filter(item =>
+    !item.permissions || isAdmin || hasAnyPermission(item.permissions)
+  )
+
   const results = query.trim().length < 1
-    ? INDEX.slice(0, 12)
-    : INDEX.filter(item =>
+    ? allowed.slice(0, 12)
+    : allowed.filter(item =>
         item.label.toLowerCase().includes(query.toLowerCase()) ||
         item.module.toLowerCase().includes(query.toLowerCase())
       ).slice(0, 20)

@@ -20,6 +20,7 @@ import { useAuthStore } from '../../store/auth'
 import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -38,6 +39,8 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
   const isEmbedded = !!onSelect
   const persistFilters = !isEmbedded || !!primaryList
   const currentUser = useAuthStore((s) => s.user)
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
 
   // ── Restore filters từ sessionStorage (chỉ primary list) ──
   const savedFilters = persistFilters
@@ -295,18 +298,18 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
       width: 75,
       align: 'center',
     },
-    {
+    ...(canViewPrice ? [{
       title: 'Tổng tiền',
       dataIndex: 'tong_tien_sau_giam',
       width: 130,
-      align: 'right',
-      render: (v) => fmtVND(v),
-    },
+      align: 'right' as const,
+      render: (v: number) => fmtVND(v),
+    }] : []),
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
       width: 120,
-      render: (v) => (
+      render: (v: string) => (
         <Tag color={TRANG_THAI_COLORS[v]}>{TRANG_THAI_LABELS[v] || v}</Tag>
       ),
     },

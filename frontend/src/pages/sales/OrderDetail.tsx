@@ -27,6 +27,7 @@ import { warehouseApi } from '../../api/warehouse'
 import BomCalculatorPanel from '../production/BomCalculatorPanel'
 import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 const { Title, Text } = Typography
 
@@ -45,6 +46,8 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
   const [lenhForm] = Form.useForm()
   const [bomItemId, setBomItemId] = useState<number | null>(null)
   const [previewItem, setPreviewItem] = useState<SalesOrderItem | null>(null)
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['sales-order', id],
@@ -289,20 +292,22 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
       align: 'right',
       render: (v, r) => `${fmtVND(v)} ${r.dvt}`,
     },
-    {
-      title: 'Đơn giá',
-      dataIndex: 'don_gia',
-      width: 110,
-      align: 'right',
-      render: (v) => fmtVND(v),
-    },
-    {
-      title: 'Thành tiền',
-      dataIndex: 'thanh_tien',
-      width: 120,
-      align: 'right',
-      render: (v) => <Text strong>{fmtVND(v)}</Text>,
-    },
+    ...(canViewPrice ? [
+      {
+        title: 'Đơn giá',
+        dataIndex: 'don_gia',
+        width: 110,
+        align: 'right' as const,
+        render: (v: number) => fmtVND(v),
+      },
+      {
+        title: 'Thành tiền',
+        dataIndex: 'thanh_tien',
+        width: 120,
+        align: 'right' as const,
+        render: (v: number) => <Text strong>{fmtVND(v)}</Text>,
+      },
+    ] : []),
     {
       title: 'Ngày giao',
       dataIndex: 'ngay_giao_hang',
@@ -592,7 +597,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
             rowExpandable: (r) => !!(r.mat_dl || r.song_1_dl),
             showExpandColumn: true,
           }}
-          summary={() => (
+          summary={canViewPrice ? () => (
             <Table.Summary fixed>
               <Table.Summary.Row>
                 <Table.Summary.Cell index={0} colSpan={9} align="right">
@@ -645,7 +650,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 </Table.Summary.Row>
               )}
             </Table.Summary>
-          )}
+          ) : undefined}
         />
 
         <Divider />
@@ -813,6 +818,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 </Row>
               </div>
 
+              {canViewPrice && (
               <div style={{ background: '#fff7e6', padding: '12px 16px', marginBottom: 12 }}>
                 <Text strong style={{ color: '#ad4e00', fontSize: 12 }}>TÀI CHÍNH</Text>
                 <Divider style={{ margin: '8px 0' }} />
@@ -831,6 +837,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                   </Col>
                 </Row>
               </div>
+              )}
             </div>
           )
         })()}

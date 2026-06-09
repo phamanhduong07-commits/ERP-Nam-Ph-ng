@@ -15,6 +15,7 @@ import ImportExcelDialog from '../../components/ImportExcelDialog'
 import { UploadOutlined } from '@ant-design/icons'
 import { exportToExcel, printToPdf, fmtVND, buildHtmlTable } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 const { Text } = Typography
 
@@ -24,6 +25,8 @@ const TRANG_THAI_CONFIG: Record<string, { label: string; color: string }> = {
 }
 
 export default function BomListPage() {
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'has_bom' | 'pending'>('has_bom')
@@ -214,15 +217,15 @@ export default function BomListPage() {
       align: 'right',
       render: v => v != null ? `${vnd(Number(v))} đ` : '—',
     },
-    {
+    ...(canViewPrice ? [{
       title: 'Giá bán cuối (đ/thùng)',
       dataIndex: 'gia_ban_cuoi',
       width: 145,
-      align: 'right',
-      render: v => v != null
+      align: 'right' as const,
+      render: (v: number | null) => v != null
         ? <Text strong style={{ color: '#1677ff' }}>{vnd(Number(v))} đ</Text>
         : <Text type="secondary">—</Text>,
-    },
+    }] : []),
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
@@ -255,7 +258,7 @@ export default function BomListPage() {
           >
             {row.trang_thai === 'confirmed' ? 'Xem' : 'Sửa BOM'}
           </Button>
-          {row.production_order_id && (
+          {row.production_order_id && canViewPrice && (
             <Button
               size="small"
               icon={<FundOutlined />}
@@ -333,13 +336,15 @@ export default function BomListPage() {
           >
             Tạo BOM
           </Button>
-          <Button
-            size="small"
-            icon={<FundOutlined />}
-            onClick={() => navigate(`/production/cost-analysis?khsx_id=${row.production_order_id}`)}
-          >
-            Phân tích
-          </Button>
+          {canViewPrice && (
+            <Button
+              size="small"
+              icon={<FundOutlined />}
+              onClick={() => navigate(`/production/cost-analysis?khsx_id=${row.production_order_id}`)}
+            >
+              Phân tích
+            </Button>
+          )}
         </Space>
       ),
     },

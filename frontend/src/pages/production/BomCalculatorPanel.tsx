@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import type { ApiError } from '../../api/types'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
@@ -201,6 +202,8 @@ interface LayerRowProps {
 }
 
 function LayerRow({ label, isSong, value, onChange, mkList, byMk, giaBanMap }: LayerRowProps) {
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const dlOptions = value.ma_ky_hieu && byMk[value.ma_ky_hieu]
     ? byMk[value.ma_ky_hieu].map(n => ({ value: n, label: `${n} g/m²` }))
     : []
@@ -212,13 +215,13 @@ function LayerRow({ label, isSong, value, onChange, mkList, byMk, giaBanMap }: L
 
   return (
     <Row gutter={4} align="middle" style={{ marginBottom: 6 }}>
-      <Col span={6}>
+      <Col span={canViewPrice ? 6 : 8}>
         <Text style={{ fontSize: 12 }}>
           {isSong ? <Tag color="blue" style={{ marginRight: 4, fontSize: 11 }}>~</Tag> : null}
           {label}
         </Text>
       </Col>
-      <Col span={7}>
+      <Col span={canViewPrice ? 7 : 8}>
         <Select
           size="small"
           style={{ width: '100%' }}
@@ -233,7 +236,7 @@ function LayerRow({ label, isSong, value, onChange, mkList, byMk, giaBanMap }: L
           onChange={v => onChange({ ...value, ma_ky_hieu: v ?? null, dinh_luong: null, don_gia_kg: 0 })}
         />
       </Col>
-      <Col span={5}>
+      <Col span={canViewPrice ? 5 : 8}>
         <Select
           size="small"
           style={{ width: '100%' }}
@@ -252,17 +255,19 @@ function LayerRow({ label, isSong, value, onChange, mkList, byMk, giaBanMap }: L
           )}
         </Select>
       </Col>
-      <Col span={6}>
-        <InputNumber
-          size="small"
-          style={{ width: '100%' }}
-          placeholder="đ/kg"
-          value={value.don_gia_kg || undefined}
-          min={0}
-          formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-          onChange={v => onChange({ ...value, don_gia_kg: v ?? 0 })}
-        />
-      </Col>
+      {canViewPrice && (
+        <Col span={6}>
+          <InputNumber
+            size="small"
+            style={{ width: '100%' }}
+            placeholder="đ/kg"
+            value={value.don_gia_kg || undefined}
+            min={0}
+            formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            onChange={v => onChange({ ...value, don_gia_kg: v ?? 0 })}
+          />
+        </Col>
+      )}
     </Row>
   )
 }
@@ -324,6 +329,8 @@ export default function BomCalculatorPanel({
   initialValues,
   onBomSaved,
 }: BomCalculatorPanelProps) {
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const { mkList, byMk, giaBanMap } = usePaperOptions()
 
   // Fetch live addon rates for formula hints (falls back to defaults if not seeded)
@@ -746,16 +753,22 @@ export default function BomCalculatorPanel({
     { title: 'Mã KH', dataIndex: 'ma_ky_hieu', width: 80,
       render: (v: string) => <Tag style={{ fontSize: 11 }}>{v || '—'}</Tag> },
     { title: 'ĐL (g/m²)', dataIndex: 'dinh_luong', width: 80, align: 'right' },
-    { title: 'Đơn giá (đ/kg)', dataIndex: 'don_gia_kg', width: 110, align: 'right',
-      render: (v: number) => vnd(v) },
-    { title: 'TL/thùng (kg)', dataIndex: 'trong_luong_1con', width: 105, align: 'right',
+    ...(canViewPrice ? [
+      { title: 'Đơn giá (đ/kg)', dataIndex: 'don_gia_kg', width: 110, align: 'right' as const,
+        render: (v: number) => vnd(v) },
+    ] : []),
+    { title: 'TL/thùng (kg)', dataIndex: 'trong_luong_1con', width: 105, align: 'right' as const,
       render: (v: number) => v?.toFixed(4) ?? '—' },
-    { title: 'CP/thùng (đ)', dataIndex: 'chi_phi_1con', width: 110, align: 'right',
-      render: (v: number) => <Text style={{ color: '#1677ff' }}>{vnd(v)}</Text> },
-    { title: 'SL cần (kg)', dataIndex: 'trong_luong_can_tong', width: 100, align: 'right',
+    ...(canViewPrice ? [
+      { title: 'CP/thùng (đ)', dataIndex: 'chi_phi_1con', width: 110, align: 'right' as const,
+        render: (v: number) => <Text style={{ color: '#1677ff' }}>{vnd(v)}</Text> },
+    ] : []),
+    { title: 'SL cần (kg)', dataIndex: 'trong_luong_can_tong', width: 100, align: 'right' as const,
       render: (v: number) => v ? vnd(v) : '—' },
-    { title: 'Thành tiền (đ)', dataIndex: 'thanh_tien', width: 120, align: 'right',
-      render: (v: number) => <Text strong style={{ color: '#f5222d' }}>{vnd(v)}</Text> },
+    ...(canViewPrice ? [
+      { title: 'Thành tiền (đ)', dataIndex: 'thanh_tien', width: 120, align: 'right' as const,
+        render: (v: number) => <Text strong style={{ color: '#f5222d' }}>{vnd(v)}</Text> },
+    ] : []),
   ]
 
   return (
@@ -884,10 +897,10 @@ export default function BomCalculatorPanel({
         extra={<Text type="secondary" style={{ fontSize: 12 }}>Mã KH · Định lượng · Đơn giá (đ/kg)</Text>}
       >
         <Row gutter={4} style={{ marginBottom: 4 }}>
-          <Col span={6}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Vị trí lớp</Text></Col>
-          <Col span={7}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Mã ký hiệu</Text></Col>
-          <Col span={5}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Định lượng</Text></Col>
-          <Col span={6}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Đơn giá (đ/kg)</Text></Col>
+          <Col span={canViewPrice ? 6 : 8}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Vị trí lớp</Text></Col>
+          <Col span={canViewPrice ? 7 : 8}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Mã ký hiệu</Text></Col>
+          <Col span={canViewPrice ? 5 : 8}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Định lượng</Text></Col>
+          {canViewPrice && <Col span={6}><Text style={{ fontSize: 11, color: '#8c8c8c' }}>Đơn giá (đ/kg)</Text></Col>}
         </Row>
         <Divider style={{ margin: '4px 0 8px' }} />
         {currentDefs.map(({ key, label, isSong }) => (
@@ -974,41 +987,51 @@ export default function BomCalculatorPanel({
                 formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
             </Form.Item>
           </Col>
-          <Col xs={12} sm={8} md={4}>
-            <Form.Item label="Tỷ lệ lợi nhuận (%)" tooltip="Để trống = dùng mặc định" style={{ marginBottom: 0 }}>
-              <InputNumber style={{ width: '100%' }} min={0} max={100}
-                value={tyLeLN} onChange={v => { setTyLeLN(v ?? undefined); setResult(null) }}
-                placeholder="Mặc định" addonAfter="%" />
-            </Form.Item>
-          </Col>
-          <Col xs={12} sm={8} md={4}>
-            <Form.Item label="Hoa hồng KD (%)" style={{ marginBottom: 0 }}>
-              <InputNumber style={{ width: '100%' }} min={0} max={100} step={0.5}
-                value={hoaHongKDPct} onChange={v => { setHoaHongKDPct(v ?? 0); setResult(null) }}
-                addonAfter="%" />
-            </Form.Item>
-          </Col>
-          <Col xs={12} sm={8} md={4}>
-            <Form.Item label="Hoa hồng KH (%)" style={{ marginBottom: 0 }}>
-              <InputNumber style={{ width: '100%' }} min={0} max={100} step={0.5}
-                value={hoaHongKHPct} onChange={v => { setHoaHongKHPct(v ?? 0); setResult(null) }}
-                addonAfter="%" />
-            </Form.Item>
-          </Col>
-          <Col xs={12} sm={8} md={4}>
-            <Form.Item label="Chi phí khác (đ)" style={{ marginBottom: 0 }}>
-              <InputNumber style={{ width: '100%' }} min={0} value={chiPhiKhac}
-                onChange={v => { setChiPhiKhac(v ?? 0); setResult(null) }}
-                formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
-            </Form.Item>
-          </Col>
-          <Col xs={12} sm={8} md={4}>
-            <Form.Item label="Chiết khấu (đ)" style={{ marginBottom: 0 }}>
-              <InputNumber style={{ width: '100%' }} min={0} value={chietKhau}
-                onChange={v => { setChietKhau(v ?? 0); setResult(null) }}
-                formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
-            </Form.Item>
-          </Col>
+          {canViewPrice && (
+            <Col xs={12} sm={8} md={4}>
+              <Form.Item label="Tỷ lệ lợi nhuận (%)" tooltip="Để trống = dùng mặc định" style={{ marginBottom: 0 }}>
+                <InputNumber style={{ width: '100%' }} min={0} max={100}
+                  value={tyLeLN} onChange={v => { setTyLeLN(v ?? undefined); setResult(null) }}
+                  placeholder="Mặc định" addonAfter="%" />
+              </Form.Item>
+            </Col>
+          )}
+          {canViewPrice && (
+            <Col xs={12} sm={8} md={4}>
+              <Form.Item label="Hoa hồng KD (%)" style={{ marginBottom: 0 }}>
+                <InputNumber style={{ width: '100%' }} min={0} max={100} step={0.5}
+                  value={hoaHongKDPct} onChange={v => { setHoaHongKDPct(v ?? 0); setResult(null) }}
+                  addonAfter="%" />
+              </Form.Item>
+            </Col>
+          )}
+          {canViewPrice && (
+            <Col xs={12} sm={8} md={4}>
+              <Form.Item label="Hoa hồng KH (%)" style={{ marginBottom: 0 }}>
+                <InputNumber style={{ width: '100%' }} min={0} max={100} step={0.5}
+                  value={hoaHongKHPct} onChange={v => { setHoaHongKHPct(v ?? 0); setResult(null) }}
+                  addonAfter="%" />
+              </Form.Item>
+            </Col>
+          )}
+          {canViewPrice && (
+            <Col xs={12} sm={8} md={4}>
+              <Form.Item label="Chi phí khác (đ)" style={{ marginBottom: 0 }}>
+                <InputNumber style={{ width: '100%' }} min={0} value={chiPhiKhac}
+                  onChange={v => { setChiPhiKhac(v ?? 0); setResult(null) }}
+                  formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
+              </Form.Item>
+            </Col>
+          )}
+          {canViewPrice && (
+            <Col xs={12} sm={8} md={4}>
+              <Form.Item label="Chiết khấu (đ)" style={{ marginBottom: 0 }}>
+                <InputNumber style={{ width: '100%' }} min={0} value={chietKhau}
+                  onChange={v => { setChietKhau(v ?? 0); setResult(null) }}
+                  formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
+              </Form.Item>
+            </Col>
+          )}
         </Row>
       </Card>
 
@@ -1078,13 +1101,15 @@ export default function BomCalculatorPanel({
             size="small"
             style={{ marginBottom: 12 }}
             extra={
-              <Button
-                size="small"
-                icon={<PrinterOutlined />}
-                onClick={() => window.print()}
-              >
-                In phiếu
-              </Button>
+              canViewPrice ? (
+                <Button
+                  size="small"
+                  icon={<PrinterOutlined />}
+                  onClick={() => window.print()}
+                >
+                  In phiếu
+                </Button>
+              ) : null
             }
           >
             {/* Header info */}
@@ -1160,60 +1185,65 @@ export default function BomCalculatorPanel({
                 const totalTT = rows.reduce((s, r) => s + (r.thanh_tien ?? 0), 0)
                 return (
                   <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={6}>
+                    <Table.Summary.Cell index={0} colSpan={canViewPrice ? 6 : 4}>
                       <Text strong>Tổng cộng</Text>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={6} align="right">
+                    <Table.Summary.Cell index={canViewPrice ? 6 : 4} align="right">
                       <Text strong>{vnd(totalKg)} kg</Text>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={7} align="right">
-                      <Text strong style={{ color: '#f5222d' }}>{vnd(totalTT)} đ</Text>
-                    </Table.Summary.Cell>
+                    {canViewPrice && (
+                      <Table.Summary.Cell index={7} align="right">
+                        <Text strong style={{ color: '#f5222d' }}>{vnd(totalTT)} đ</Text>
+                      </Table.Summary.Cell>
+                    )}
                   </Table.Summary.Row>
                 )
               }}
             />
 
-            {/* B. Chi phí gián tiếp */}
-            <SectionHeader
-              letter="B"
-              label={`Chi phí gián tiếp (${soLop} lớp · ${
-                result.gian_tiep_breakdown?.length > 0
-                  ? new Intl.NumberFormat('vi-VN').format(
-                      Math.round(result.gian_tiep_breakdown.reduce((s, i) => s + i.don_gia_m2, 0))
-                    )
-                  : soLop === 3 ? '898' : soLop === 5 ? '1.178' : '1.800'
-              } đ/m²)`}
-              total={result.chi_phi_gian_tiep}
-            />
-            {result.gian_tiep_breakdown && result.gian_tiep_breakdown.length > 0 && (
-              <div style={{ paddingLeft: 8, paddingBottom: 4 }}>
-                <Row gutter={0} style={{ marginBottom: 4, padding: '3px 0', borderBottom: '1px solid #e8e8e8' }}>
-                  {['Khoản mục', 'Đơn giá (đ/m²)', `Diện tích (m²)`, 'Thành tiền (đ/thùng)'].map((h, i) => (
-                    <Col key={i} span={i === 0 ? 8 : i === 3 ? 6 : 5}>
-                      <Text style={{ fontSize: 11, color: '#8c8c8c' }}>{h}</Text>
-                    </Col>
-                  ))}
-                </Row>
-                {result.gian_tiep_breakdown.map((item) => (
-                  <Row key={item.ten} gutter={0} style={{ padding: '3px 0', borderBottom: '1px solid #f5f5f5' }}>
-                    <Col span={8}><Text style={{ fontSize: 12 }}>{item.ten}</Text></Col>
-                    <Col span={5}><Text style={{ fontSize: 12 }}>{item.don_gia_m2}</Text></Col>
-                    <Col span={5}><Text style={{ fontSize: 12 }}>{result.dimensions.dien_tich?.toFixed(4)}</Text></Col>
-                    <Col span={6} style={{ textAlign: 'right' }}>
-                      <Text strong style={{ fontSize: 12, color: '#1d39c4' }}>{vnd(item.thanh_tien)} đ</Text>
-                    </Col>
-                  </Row>
-                ))}
-              </div>
+            {/* B. Chi phí gián tiếp — ẩn với KE_HOACH */}
+            {canViewPrice && (
+              <>
+                <SectionHeader
+                  letter="B"
+                  label={`Chi phí gián tiếp (${soLop} lớp · ${
+                    result.gian_tiep_breakdown?.length > 0
+                      ? new Intl.NumberFormat('vi-VN').format(
+                          Math.round(result.gian_tiep_breakdown.reduce((s, i) => s + i.don_gia_m2, 0))
+                        )
+                      : soLop === 3 ? '898' : soLop === 5 ? '1.178' : '1.800'
+                  } đ/m²)`}
+                  total={result.chi_phi_gian_tiep}
+                />
+                {result.gian_tiep_breakdown && result.gian_tiep_breakdown.length > 0 && (
+                  <div style={{ paddingLeft: 8, paddingBottom: 4 }}>
+                    <Row gutter={0} style={{ marginBottom: 4, padding: '3px 0', borderBottom: '1px solid #e8e8e8' }}>
+                      {['Khoản mục', 'Đơn giá (đ/m²)', `Diện tích (m²)`, 'Thành tiền (đ/thùng)'].map((h, i) => (
+                        <Col key={i} span={i === 0 ? 8 : i === 3 ? 6 : 5}>
+                          <Text style={{ fontSize: 11, color: '#8c8c8c' }}>{h}</Text>
+                        </Col>
+                      ))}
+                    </Row>
+                    {result.gian_tiep_breakdown.map((item) => (
+                      <Row key={item.ten} gutter={0} style={{ padding: '3px 0', borderBottom: '1px solid #f5f5f5' }}>
+                        <Col span={8}><Text style={{ fontSize: 12 }}>{item.ten}</Text></Col>
+                        <Col span={5}><Text style={{ fontSize: 12 }}>{item.don_gia_m2}</Text></Col>
+                        <Col span={5}><Text style={{ fontSize: 12 }}>{result.dimensions.dien_tich?.toFixed(4)}</Text></Col>
+                        <Col span={6} style={{ textAlign: 'right' }}>
+                          <Text strong style={{ fontSize: 12, color: '#1d39c4' }}>{vnd(item.thanh_tien)} đ</Text>
+                        </Col>
+                      </Row>
+                    ))}
+                  </div>
+                )}
+                {/* C. Lợi nhuận */}
+                <SectionHeader
+                  letter="C"
+                  label={`Lợi nhuận (${(result.ty_le_loi_nhuan * 100).toFixed(1)}% × (A+B))`}
+                  total={result.loi_nhuan}
+                />
+              </>
             )}
-
-            {/* C. Lợi nhuận */}
-            <SectionHeader
-              letter="C"
-              label={`Lợi nhuận (${(result.ty_le_loi_nhuan * 100).toFixed(1)}% × (A+B))`}
-              total={result.loi_nhuan}
-            />
 
             {/* D. Chi phí dịch vụ */}
             <SectionHeader letter="D" label="Chi phí dịch vụ / gia công" total={result.chi_phi_addon} />
@@ -1255,73 +1285,72 @@ export default function BomCalculatorPanel({
               total={result.chi_phi_hao_hut}
             />
 
-            <Divider style={{ margin: '10px 0 6px' }} />
-
-            {/* = Giá bán cơ bản */}
-            <Row
-              justify="space-between"
-              align="middle"
-              style={{ padding: '7px 10px', background: '#f0f5ff', borderRadius: 4, marginBottom: 4 }}
-            >
-              <Col>
-                <Text strong style={{ fontSize: 14 }}>= GIÁ BÁN CƠ BẢN (p = A+B+C+D+E)</Text>
-              </Col>
-              <Col>
-                <Text strong style={{ fontSize: 14, color: '#1677ff' }}>{vnd(result.gia_ban_co_ban)} đ</Text>
-              </Col>
-            </Row>
-
-            {/* Hoa hồng + CP khác + chiết khấu */}
-            {result.hoa_hong_kd > 0 && (
-              <AccRow label={`Hoa hồng KD (${(hoaHongKDPct).toFixed(1)}%)`} value={result.hoa_hong_kd} prefix="+ " />
+            {canViewPrice && (
+              <>
+                <Divider style={{ margin: '10px 0 6px' }} />
+                {/* = Giá bán cơ bản */}
+                <Row
+                  justify="space-between"
+                  align="middle"
+                  style={{ padding: '7px 10px', background: '#f0f5ff', borderRadius: 4, marginBottom: 4 }}
+                >
+                  <Col>
+                    <Text strong style={{ fontSize: 14 }}>= GIÁ BÁN CƠ BẢN (p = A+B+C+D+E)</Text>
+                  </Col>
+                  <Col>
+                    <Text strong style={{ fontSize: 14, color: '#1677ff' }}>{vnd(result.gia_ban_co_ban)} đ</Text>
+                  </Col>
+                </Row>
+                {result.hoa_hong_kd > 0 && (
+                  <AccRow label={`Hoa hồng KD (${(hoaHongKDPct).toFixed(1)}%)`} value={result.hoa_hong_kd} prefix="+ " />
+                )}
+                {result.hoa_hong_kh > 0 && (
+                  <AccRow label={`Hoa hồng KH (${(hoaHongKHPct).toFixed(1)}%)`} value={result.hoa_hong_kh} prefix="+ " />
+                )}
+                {result.chi_phi_khac > 0 && (
+                  <AccRow label="Chi phí khác" value={result.chi_phi_khac} prefix="+ " />
+                )}
+                {result.chiet_khau > 0 && (
+                  <AccRow label="Chiết khấu" value={result.chiet_khau} prefix="- " color="#f5222d" />
+                )}
+                <Divider style={{ margin: '6px 0' }} />
+                {/* Giá bán cuối */}
+                <Row
+                  justify="space-between"
+                  align="middle"
+                  style={{ padding: '10px 12px', background: '#e6f4ff', borderRadius: 6, marginBottom: 6 }}
+                >
+                  <Col>
+                    <Text strong style={{ fontSize: 16 }}>GIÁ BÁN CUỐI</Text>
+                  </Col>
+                  <Col>
+                    <Text strong style={{ fontSize: 20, color: '#0050b3' }}>
+                      {vnd(result.gia_ban_cuoi)} đ / thùng
+                    </Text>
+                  </Col>
+                </Row>
+                <Row
+                  justify="space-between"
+                  align="middle"
+                  style={{ padding: '8px 12px', background: '#f6ffed', borderRadius: 6 }}
+                >
+                  <Col>
+                    <Text style={{ fontSize: 14 }}>
+                      TỔNG TIỀN ({new Intl.NumberFormat('vi-VN').format(soLuong)} thùng)
+                    </Text>
+                  </Col>
+                  <Col>
+                    <Text strong style={{ fontSize: 16, color: '#389e0d' }}>
+                      {vnd(result.gia_ban_cuoi * soLuong)} đ
+                    </Text>
+                  </Col>
+                </Row>
+              </>
             )}
-            {result.hoa_hong_kh > 0 && (
-              <AccRow label={`Hoa hồng KH (${(hoaHongKHPct).toFixed(1)}%)`} value={result.hoa_hong_kh} prefix="+ " />
-            )}
-            {result.chi_phi_khac > 0 && (
-              <AccRow label="Chi phí khác" value={result.chi_phi_khac} prefix="+ " />
-            )}
-            {result.chiet_khau > 0 && (
-              <AccRow label="Chiết khấu" value={result.chiet_khau} prefix="- " color="#f5222d" />
-            )}
-
-            <Divider style={{ margin: '6px 0' }} />
-
-            {/* Giá bán cuối */}
-            <Row
-              justify="space-between"
-              align="middle"
-              style={{ padding: '10px 12px', background: '#e6f4ff', borderRadius: 6, marginBottom: 6 }}
-            >
-              <Col>
-                <Text strong style={{ fontSize: 16 }}>GIÁ BÁN CUỐI</Text>
-              </Col>
-              <Col>
-                <Text strong style={{ fontSize: 20, color: '#0050b3' }}>
-                  {vnd(result.gia_ban_cuoi)} đ / thùng
-                </Text>
-              </Col>
-            </Row>
-            <Row
-              justify="space-between"
-              align="middle"
-              style={{ padding: '8px 12px', background: '#f6ffed', borderRadius: 6 }}
-            >
-              <Col>
-                <Text style={{ fontSize: 14 }}>
-                  TỔNG TIỀN ({new Intl.NumberFormat('vi-VN').format(soLuong)} thùng)
-                </Text>
-              </Col>
-              <Col>
-                <Text strong style={{ fontSize: 16, color: '#389e0d' }}>
-                  {vnd(result.gia_ban_cuoi * soLuong)} đ
-                </Text>
-              </Col>
-            </Row>
           </Card>
 
           {/* ── Tính ngược từ giá bán mục tiêu ───────────────────── */}
-          <Card
+          {canViewPrice && <Card
             title={
               <Space>
                 <span>🔁 Tính ngược từ giá bán mục tiêu</span>
@@ -1456,10 +1485,10 @@ export default function BomCalculatorPanel({
                 </div>
               </div>
             )}
-          </Card>
+          </Card>}
 
           {/* ── Nút lưu hoạch toán ────────────────────────────────── */}
-          <Card size="small" style={{ textAlign: 'center', borderColor: '#52c41a' }}>
+          {canViewPrice && <Card size="small" style={{ textAlign: 'center', borderColor: '#52c41a' }}>
             <Space direction="vertical" size={6}>
               <Title level={5} style={{ margin: 0, color: '#237804' }}>
                 Xác nhận lưu dữ liệu hoạch toán
@@ -1479,7 +1508,7 @@ export default function BomCalculatorPanel({
                 {savedBomId ? `Lưu lại (đã lưu #${savedBomId})` : 'Lưu hoạch toán'}
               </Button>
             </Space>
-          </Card>
+          </Card>}
         </>
       )}
     </div>
