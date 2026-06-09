@@ -76,6 +76,7 @@ async function openPrintByMaterial(materialId: number, warehouseId?: number) {
 export default function KhoGiayCuonPage() {
   const navigate = useNavigate()
   const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
   const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
   const [search, setSearch] = useState('')
@@ -340,8 +341,10 @@ export default function KhoGiayCuonPage() {
         </Space>
       ),
     },
-    { title: 'Đơn giá BQ',  dataIndex: 'don_gia_binh_quan', width: 130, align: 'right', render: v => v ? formatVnd(v) + '/kg' : '—' },
-    { title: 'Giá trị tồn', dataIndex: 'gia_tri_ton',     width: 140, align: 'right', render: v => formatVnd(v) },
+    ...(canViewPrice ? [
+      { title: 'Đơn giá BQ',  dataIndex: 'don_gia_binh_quan', width: 130, align: 'right' as const, render: (v: number) => v ? formatVnd(v) + '/kg' : '—' },
+      { title: 'Giá trị tồn', dataIndex: 'gia_tri_ton',     width: 140, align: 'right' as const, render: (v: number) => formatVnd(v) },
+    ] : []),
     {
       title: 'Ngày nhập gần nhất',
       dataIndex: 'ngay_nhap_gan_nhat',

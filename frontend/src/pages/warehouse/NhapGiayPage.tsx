@@ -41,6 +41,7 @@ export default function NhapGiayPage() {
   const companyInfo = usePhapNhanForPrint()
   const { hasPermission, canApprove } = usePermission()
   const canImport = hasPermission('inventory.import')
+  const canViewPrice = hasPermission('production.cost_analysis')
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -437,8 +438,8 @@ export default function NhapGiayPage() {
         const kg = (r.items || []).reduce((s: number, it) => s + Number(it.so_luong || 0), 0)
         return <Text>{kg.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} kg</Text>
       } },
-    { title: 'Tổng tiền', dataIndex: 'tong_gia_tri', width: 140, align: 'right' as const,
-      render: (v: number) => <Text strong>{v.toLocaleString('vi-VN', { maximumFractionDigits: 0 })}đ</Text> },
+    ...(canViewPrice ? [{ title: 'Tổng tiền', dataIndex: 'tong_gia_tri', width: 140, align: 'right' as const,
+      render: (v: number) => <Text strong>{v.toLocaleString('vi-VN', { maximumFractionDigits: 0 })}đ</Text> }] : []),
     { title: 'TT', dataIndex: 'trang_thai', width: 105,
       render: (v: string) => {
         if (v === 'nhap_nhanh') return <Tag color="orange">Chờ nhập</Tag>
@@ -555,10 +556,12 @@ export default function NhapGiayPage() {
               : <Text type="secondary" style={{ fontSize: 11 }}>—</Text> },
           { title: 'Số lượng (kg)', dataIndex: 'so_luong', width: 120, align: 'right' as const,
             render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) },
-          { title: 'Đơn giá', dataIndex: 'don_gia', width: 120, align: 'right' as const,
-            render: (v: number) => v > 0 ? v.toLocaleString('vi-VN') + 'đ' : '—' },
-          { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 130, align: 'right' as const,
-            render: (v: number) => <Text strong>{(v || 0).toLocaleString('vi-VN')}đ</Text> },
+          ...(canViewPrice ? [
+            { title: 'Đơn giá', dataIndex: 'don_gia', width: 120, align: 'right' as const,
+              render: (v: number) => v > 0 ? v.toLocaleString('vi-VN') + 'đ' : '—' },
+            { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 130, align: 'right' as const,
+              render: (v: number) => <Text strong>{(v || 0).toLocaleString('vi-VN')}đ</Text> },
+          ] : []),
           { title: 'KQ KT', dataIndex: 'ket_qua_kiem_tra', width: 100,
             render: (v: string) => (
               <Tag color={v === 'DAT' ? 'green' : v === 'KHONG_DAT' ? 'red' : 'orange'}>

@@ -50,6 +50,7 @@ const fileToBase64 = (file: File): Promise<string> =>
 export default function ReceiptsPage() {
   const companyInfo = usePhapNhanForPrint()
   const { hasPermission, canApprove } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const canImport = hasPermission('inventory.import')
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -448,8 +449,8 @@ export default function ReceiptsPage() {
     { title: 'Nhà CC', dataIndex: 'ten_ncc', width: 150 },
     { title: 'Loại nhập', dataIndex: 'loai_nhap', width: 120,
       render: (v: string) => <Tag color="blue">{v}</Tag> },
-    { title: 'Tổng tiền', dataIndex: 'tong_gia_tri', width: 140, align: 'right' as const,
-      render: (v: number) => <Text strong>{v.toLocaleString('vi-VN', { maximumFractionDigits: 0 })}đ</Text> },
+    ...(canViewPrice ? [{ title: 'Tổng tiền', dataIndex: 'tong_gia_tri', width: 140, align: 'right' as const,
+      render: (v: number) => <Text strong>{v.toLocaleString('vi-VN', { maximumFractionDigits: 0 })}đ</Text> }] : []),
     { title: 'TT', dataIndex: 'trang_thai', width: 105,
       render: (v: string) => {
         if (v === 'nhap_nhanh') return <Tag color="orange">Chờ nhập</Tag>
@@ -516,10 +517,12 @@ export default function ReceiptsPage() {
           { title: 'ĐVT', dataIndex: 'dvt', width: 60 },
           { title: 'Số lượng', dataIndex: 'so_luong', width: 100, align: 'right' as const,
             render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) },
-          { title: 'Đơn giá', dataIndex: 'don_gia', width: 120, align: 'right' as const,
-            render: (v: number) => v > 0 ? v.toLocaleString('vi-VN') + 'đ' : '—' },
-          { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 130, align: 'right' as const,
-            render: (v: number) => <Text strong>{(v || 0).toLocaleString('vi-VN')}đ</Text> },
+          ...(canViewPrice ? [
+            { title: 'Đơn giá', dataIndex: 'don_gia', width: 120, align: 'right' as const,
+              render: (v: number) => v > 0 ? v.toLocaleString('vi-VN') + 'đ' : '—' },
+            { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 130, align: 'right' as const,
+              render: (v: number) => <Text strong>{(v || 0).toLocaleString('vi-VN')}đ</Text> },
+          ] : []),
           { title: 'Khổ', dataIndex: 'kho_mm', width: 70, align: 'center' as const,
             render: (v: number | null) => v ? `${v}cm` : '—' },
           { title: 'Số cuộn', dataIndex: 'so_cuon', width: 80, align: 'right' as const,

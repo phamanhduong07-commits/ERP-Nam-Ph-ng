@@ -155,6 +155,7 @@ function WarehouseCard({
 export default function KhoNVLPage() {
   const queryClient = useQueryClient()
   const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const canInit = hasPermission('inventory.import')
   const canView = hasPermission('inventory.view')
   const [selectedPxId, setSelectedPxId] = useState<number | 'all'>('all')
@@ -537,7 +538,7 @@ export default function KhoNVLPage() {
                       </Space>
                     ),
                   },
-                  {
+                  ...(canViewPrice ? [{
                     title: 'Đơn giá BQ',
                     dataIndex: 'don_gia_binh_quan',
                     width: 120,
@@ -545,7 +546,7 @@ export default function KhoNVLPage() {
                     render: (v: number) => v > 0
                       ? <Text style={{ fontSize: 12 }}>{fmtMoney(v)}</Text>
                       : <Text type="secondary">—</Text>,
-                  },
+                  }] : []),
                   {
                     title: 'Giá trị tồn',
                     dataIndex: 'gia_tri_ton',
