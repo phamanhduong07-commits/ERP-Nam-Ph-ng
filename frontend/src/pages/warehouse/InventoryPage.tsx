@@ -990,6 +990,10 @@ function GiayCuonTab() {
           scroll={{ x: 700, y: 600 }}
           bordered
           locale={{ emptyText: <EmptyState size="small" /> }}
+          expandable={{
+            expandedRowRender: (r: TonKho) => <RollsExpand pmId={r.paper_material_id} whId={r.warehouse_id} />,
+            rowExpandable: (r: TonKho) => r.paper_material_id != null,
+          }}
           summary={() => (
             <Table.Summary.Row style={{ background: '#f6ffed' }}>
               <Table.Summary.Cell index={0} colSpan={3} align="right">
