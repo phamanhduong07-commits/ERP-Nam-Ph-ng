@@ -20,6 +20,7 @@ export default function OtherMaterialList() {
   const queryClient = useQueryClient()
   const { hasPermission } = usePermission()
   const canViewPrice = hasPermission('production.cost_analysis')
+  const canManage = hasPermission('master.materials.manage')
   const [form] = Form.useForm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<OtherMaterial | null>(null)
@@ -140,9 +141,9 @@ export default function OtherMaterialList() {
       title: '',
       key: 'act',
       width: 60,
-      render: (_: unknown, r: OtherMaterial) => (
+      render: (_: unknown, r: OtherMaterial) => canManage ? (
         <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-      ),
+      ) : null,
     },
   ]
 
@@ -190,9 +191,11 @@ export default function OtherMaterialList() {
                   (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
                 }
               />
-              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-                Thêm vật tư
-              </Button>
+              {canManage && (
+                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                  Thêm vật tư
+                </Button>
+              )}
               <ImportExcelButton
                 endpoint="/other-materials"
                 templateFilename="mau_import_vat_tu_phu.xlsx"

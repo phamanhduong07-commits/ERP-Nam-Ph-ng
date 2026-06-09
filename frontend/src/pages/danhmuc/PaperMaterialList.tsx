@@ -20,6 +20,7 @@ export default function PaperMaterialList() {
   const queryClient = useQueryClient()
   const { hasPermission } = usePermission()
   const canViewPrice = hasPermission('production.cost_analysis')
+  const canManage = hasPermission('master.materials.manage')
   const [form] = Form.useForm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<PaperMaterial | null>(null)
@@ -163,9 +164,9 @@ export default function PaperMaterialList() {
       title: '',
       key: 'act',
       width: 60,
-      render: (_: unknown, r: PaperMaterial) => (
+      render: (_: unknown, r: PaperMaterial) => canManage ? (
         <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-      ),
+      ) : null,
     },
   ]
 
@@ -213,9 +214,11 @@ export default function PaperMaterialList() {
                   (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
                 }
               />
-              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-                Thêm nguyên liệu
-              </Button>
+              {canManage && (
+                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                  Thêm nguyên liệu
+                </Button>
+              )}
               <ImportExcelButton
                 endpoint="/paper-materials"
                 templateFilename="mau_import_nguyen_lieu_giay.xlsx"

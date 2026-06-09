@@ -28,6 +28,7 @@ export default function ProductList() {
   const queryClient = useQueryClient()
   const { hasPermission } = usePermission()
   const canViewPrice = hasPermission('production.cost_analysis')
+  const canManage = hasPermission('master.products.manage')
   const [form] = Form.useForm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<ProductFull | null>(null)
@@ -183,9 +184,9 @@ export default function ProductList() {
       title: '',
       key: 'act',
       width: 60,
-      render: (_: unknown, r: ProductFull) => (
+      render: (_: unknown, r: ProductFull) => canManage ? (
         <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-      ),
+      ) : null,
     },
   ]
 
@@ -221,9 +222,11 @@ export default function ProductList() {
                   (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
                 }
               />
-              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-                Thêm sản phẩm
-              </Button>
+              {canManage && (
+                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                  Thêm sản phẩm
+                </Button>
+              )}
               <Button onClick={() => setImportVisible(true)}>
                 Import Excel
               </Button>
