@@ -19,6 +19,13 @@ from app.schemas.sales import PagedResponse
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
+_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+
+
+def _get_scope(current_user: User) -> int | None:
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    return current_user.id if role_code in _SALE_STAFF_ROLES else None
+
 
 PRODUCT_IMPORT_FIELDS = [
     ImportField("ma_amis", "Ma AMIS", required=True, parser=parse_text, help_text="Ma san pham duy nhat"),
@@ -61,10 +68,10 @@ def list_products(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     service = ProductService(db)
-    return service.get_products_paginated(search, ma_kh_id, so_lop, page, page_size)
+    return service.get_products_paginated(search, ma_kh_id, so_lop, page, page_size, _get_scope(current_user))
 
 
 @router.get("/by-customer/{customer_id}", response_model=list[ProductShort])

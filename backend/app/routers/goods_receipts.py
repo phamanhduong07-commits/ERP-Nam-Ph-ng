@@ -271,6 +271,7 @@ def print_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Dep
         "{{company_name}}": _html_mod.escape(settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"),
         "{{company_details}}": _html_mod.escape(settings.get("company_details") or ""),
         "{{logo_img}}": f'<img src="{settings["logo_url"]}" />' if settings.get("logo_url") else "",
+        "{{subtitle}}": "PHIẾU NHẬP KHO",
     }
     content = tpl.html_content
     for k, v in replacements.items():
@@ -1310,6 +1311,49 @@ def print_one_giay_roll_label(
         f"<button onclick='window.print()' style='padding:7px 18px;font-size:14px;cursor:pointer'>🖨️ In tem - {roll.barcode}</button>"
         "</div>"
         f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)
+
+
+@router.get("/giay-rolls/print-by-material/{material_id}", response_class=HTMLResponse)
+def print_giay_roll_labels_by_material(
+    material_id: int,
+    warehouse_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = (db.query(GiayRoll)
+           .filter(GiayRoll.paper_material_id == material_id,
+                   GiayRoll.trang_thai == "trong_kho"))
+    if warehouse_id:
+        q = q.filter(GiayRoll.warehouse_id == warehouse_id)
+    rolls = q.order_by(GiayRoll.id).all()
+    if not rolls:
+        raise HTTPException(404, "Không có cuộn giấy đang tồn kho")
+
+    from app.models.system import PrintTemplate
+    tpl = (db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PAPER_ROLL_LABEL",
+                                          PrintTemplate.phap_nhan_id.is_(None)).first()
+           or db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PAPER_ROLL_LABEL").first())
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in PAPER_ROLL_LABEL — vui lòng cấu hình trong Hệ thống > Mẫu in")
+
+    labels_html = "".join(
+        _build_label_html(roll, "", "", roll.so_phieu_nhap or "") for roll in rolls
+    )
+    content_html = tpl.html_content.replace("{{labels_html}}", labels_html)
+    pm = rolls[0].paper_material
+    title = pm.ma_chinh if pm else str(material_id)
+    page = (
+        f"<!DOCTYPE html><html lang='vi'><head><meta charset='utf-8'>"
+        f"<title>In tem - {title}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0'>"
+        f"<button onclick='window.print()' style='padding:7px 18px;font-size:14px;cursor:pointer'>🖨️ In {len(rolls)} tem</button>"
+        f" &nbsp;&nbsp;Mã: <strong>{title}</strong> — {len(rolls)} cuộn đang tồn kho"
+        "</div>"
+        f"{content_html}</body></html>"
     )
     return HTMLResponse(content=page)
 

@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, case
+from sqlalchemy import exists, func, case, or_
 from sqlalchemy.orm import Session, selectinload, joinedload
 from openpyxl import Workbook
 
@@ -14,7 +14,7 @@ from app.models.auth import User
 from app.models.billing import SalesInvoice
 from app.models.accounting import PurchaseInvoice, ProductionCostAllocation
 from app.models.sales import SalesOrder, SalesOrderItem
-from app.models.master import Customer, Warehouse
+from app.models.master import Customer, CustomerNhanVien, Warehouse
 from app.models.inventory import InventoryTransaction, InventoryBalance
 from app.models.master import PaperMaterial, OtherMaterial, Product
 from app.models.production import ProductionOrder, ProductionOrderItem
@@ -55,9 +55,28 @@ def get_debt_summary(
     as_of_date: Optional[str] = Query(None, description="Ngày tính (YYYY-MM-DD), mặc định hôm nay"),
     phap_nhan_id: Optional[int] = Query(None, description="Lọc theo pháp nhân"),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     today = date.fromisoformat(as_of_date) if as_of_date else date.today()
+
+    # ── Scope theo nhân viên phụ trách (SALE_ADMIN chỉ thấy KH của mình) ─────
+    _SCOPED_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    scoped_customer_ids = None
+    if role_code in _SCOPED_ROLES:
+        scoped_customer_ids = (
+            db.query(Customer.id)
+            .filter(
+                or_(
+                    Customer.nv_phu_trach_id == current_user.id,
+                    exists().where(
+                        (CustomerNhanVien.customer_id == Customer.id)
+                        & (CustomerNhanVien.user_id == current_user.id)
+                    ),
+                )
+            )
+            .scalar_subquery()
+        )
 
     # ── AR (phải thu) ─────────────────────────────────────────────────────────
     ar_q = db.query(
@@ -73,6 +92,8 @@ def get_debt_summary(
     ).filter(SalesInvoice.trang_thai.notin_(["huy"]), SalesInvoice.con_lai > 0)
     if phap_nhan_id is not None:
         ar_q = ar_q.filter(SalesInvoice.phap_nhan_id == phap_nhan_id)
+    if scoped_customer_ids is not None:
+        ar_q = ar_q.filter(SalesInvoice.customer_id.in_(scoped_customer_ids))
     ar_rows = (
         ar_q
         .group_by(SalesInvoice.customer_id, SalesInvoice.ten_don_vi)

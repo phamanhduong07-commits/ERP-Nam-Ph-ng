@@ -1,8 +1,25 @@
 from fastapi import HTTPException
+from sqlalchemy import exists, or_
 from sqlalchemy.orm import Session, selectinload
-from app.models.master import Product
+from app.models.master import Customer, CustomerNhanVien, Product
 from app.schemas.master import ProductCreate, ProductUpdate, ProductResponse, ProductShort
 from app.schemas.sales import PagedResponse
+
+
+def _customer_scope_subquery(db: Session, scope_user_id: int):
+    return (
+        db.query(Customer.id)
+        .filter(
+            or_(
+                Customer.nv_phu_trach_id == scope_user_id,
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id == scope_user_id)
+                ),
+            )
+        )
+        .scalar_subquery()
+    )
 
 
 class ProductService:
@@ -16,8 +33,16 @@ class ProductService:
         so_lop: int = None,
         page: int = 1,
         page_size: int = 20,
+        scope_user_id: int | None = None,
     ) -> PagedResponse:
         q = self.db.query(Product).options(selectinload(Product.khach_hang)).filter(Product.trang_thai.is_(True))
+        if scope_user_id is not None:
+            if ma_kh_id:
+                # Đã filter theo customer cụ thể — chỉ cần verify customer đó trong scope
+                allowed = _customer_scope_subquery(self.db, scope_user_id)
+                q = q.filter(Product.ma_kh_id.in_(allowed))
+            else:
+                q = q.filter(Product.ma_kh_id.in_(_customer_scope_subquery(self.db, scope_user_id)))
         if search:
             like = f"%{search}%"
             q = q.filter(

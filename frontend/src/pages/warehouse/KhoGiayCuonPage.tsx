@@ -6,13 +6,14 @@ import {
 } from 'antd'
 import {
   SearchOutlined, WarningOutlined, DatabaseOutlined,
-  ThunderboltOutlined, FormOutlined, ClockCircleOutlined, DownloadOutlined,
+  ThunderboltOutlined, FormOutlined, ClockCircleOutlined, DownloadOutlined, PrinterOutlined,
 } from '@ant-design/icons'
 import { usePermission } from '../../hooks/usePermission'
 import { exportExcelWithTemplate } from '../../utils/exportUtils'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { warehouseApi, type TonKhoGiayRow, type GoodsReceipt } from '../../api/warehouse'
+import apiClient from '../../api/client'
 import { phapNhanApi } from '../../api/phap_nhan'
 import EmptyState from "../../components/EmptyState"
 
@@ -48,6 +49,28 @@ function formatKg(n: number) {
 }
 function formatVnd(n: number) {
   return n.toLocaleString('vi-VN', { maximumFractionDigits: 0 }) + ' ₫'
+}
+
+async function openPrintByMaterial(materialId: number, warehouseId?: number) {
+  try {
+    const res = await apiClient.get<string>(
+      warehouseApi.printGiayRollsByMaterial(materialId, warehouseId),
+      { responseType: 'text' },
+    )
+    const blob = new Blob([res.data], { type: 'text/html; charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const w = window.open(url, '_blank')
+    if (w) {
+      w.onload = () => URL.revokeObjectURL(url)
+    } else {
+      URL.revokeObjectURL(url)
+      // eslint-disable-next-line no-alert
+      alert('Trình duyệt chặn cửa sổ in. Vui lòng cho phép popup.')
+    }
+  } catch {
+    // eslint-disable-next-line no-alert
+    alert('Không in được tem — kiểm tra kết nối server.')
+  }
 }
 
 export default function KhoGiayCuonPage() {
@@ -325,6 +348,21 @@ export default function KhoGiayCuonPage() {
       width: 130,
       align: 'center',
       render: v => v ? <Text type="secondary" style={{ fontSize: 11 }}>{v}</Text> : '—',
+    },
+    {
+      title: '',
+      width: 60,
+      align: 'center' as const,
+      render: (_: unknown, r: TonKhoGiayRow) => (
+        <Tooltip title={`In tem tất cả cuộn đang tồn — ${r.ten_kho}`}>
+          <Button
+            size="small"
+            icon={<PrinterOutlined />}
+            style={{ color: '#722ed1', borderColor: '#722ed1' }}
+            onClick={() => openPrintByMaterial(r.paper_material_id, r.warehouse_id)}
+          />
+        </Tooltip>
+      ),
     },
   ]
 

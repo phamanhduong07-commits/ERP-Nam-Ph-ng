@@ -11,6 +11,7 @@ import {
   AuditOutlined, ScanOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import apiClient from '../../api/client'
 import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
@@ -364,6 +365,27 @@ export default function NhapGiayPage() {
     smartPrintPdf('GOODS_RECEIPT', printData, r.phap_nhan_id_for_print ?? undefined)
   }
 
+  const handlePrintLabels = async (r: GoodsReceipt) => {
+    try {
+      const res = await apiClient.get<string>(
+        warehouseApi.printGiayRollLabels(r.id),
+        { responseType: 'text' },
+      )
+      const blob = new Blob([res.data], { type: 'text/html; charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const w = window.open(url, '_blank')
+      if (w) {
+        w.onload = () => URL.revokeObjectURL(url)
+      } else {
+        URL.revokeObjectURL(url)
+        message.warning('Trình duyệt chặn cửa sổ in. Vui lòng cho phép popup rồi thử lại.')
+      }
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } }; message?: string }
+      message.error(err?.response?.data?.detail || err?.message || 'Lỗi in tem')
+    }
+  }
+
   const handleExportReceiptExcel = async (id: number, soPhieu: string) => {
     try {
       const blob = await warehouseApi.exportGoodsReceiptExcel(id)
@@ -447,6 +469,11 @@ export default function NhapGiayPage() {
           </Popconfirm>
           {r.trang_thai === 'da_duyet' && (
             <>
+              <Tooltip title="In tem tất cả cuộn trong phiếu">
+                <Button size="small" icon={<PrinterOutlined />}
+                  style={{ color: '#722ed1', borderColor: '#722ed1' }}
+                  onClick={() => handlePrintLabels(r)} />
+              </Tooltip>
               <Tooltip title="Cập nhật giá bán = giá mua × 1.05">
                 <Popconfirm title="Cập nhật giá bán ×1.05?" onConfirm={() => syncGiaBanMut.mutate(r.id)}>
                   <Button size="small" icon={<DollarOutlined />}

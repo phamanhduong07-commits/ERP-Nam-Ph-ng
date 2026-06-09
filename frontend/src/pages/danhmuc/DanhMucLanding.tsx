@@ -45,7 +45,7 @@ const COLUMNS: Group[][] = [
     {
       title: 'Vật tư, Hàng hóa',
       links: [
-        { label: 'Hàng hóa', to: '/master/products', permissions: ['master.products.view', 'master.products.manage'] },
+        { label: 'Hàng hóa', to: '/master/products', permissions: ['master.products.view', 'master.products.manage', 'customer.view'] },
         { label: 'Nhóm nguyên liệu', to: '/master/material-groups', permissions: ['master.materials.view', 'master.materials.manage'] },
         { label: 'Nguyên liệu giấy', to: '/master/paper-materials', permissions: ['master.materials.view', 'master.materials.manage'] },
         { label: 'Nguyên liệu khác', to: '/master/other-materials', permissions: ['master.materials.view', 'master.materials.manage'] },

@@ -5,6 +5,7 @@ import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
@@ -121,6 +122,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # ─── Socket.io ────────────────────────────────────────────────────────────────
 # Mount Socket.io ASGI app vào đường dẫn /ws
 app.mount("/ws/socket.io", socket_app)
+
+# ─── Compression ──────────────────────────────────────────────────────────────
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # ─── CORS ─────────────────────────────────────────────────────────────────────
 _origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
@@ -283,13 +287,19 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 if os.path.exists("dist"):
     app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
 
+    _NO_CACHE_HEADERS = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
         # Trả file tĩnh nếu tồn tại, ngược lại serve index.html cho SPA
         file_path = os.path.join("dist", full_path)
         if full_path and os.path.isfile(file_path):
             return FileResponse(file_path)
-        return FileResponse("dist/index.html")
+        return FileResponse("dist/index.html", headers=_NO_CACHE_HEADERS)
 
     @app.exception_handler(404)
     async def not_found_exception_handler(request, exc):
@@ -297,5 +307,5 @@ if os.path.exists("dist"):
             detail = getattr(exc, "detail", None) or "Not found"
             return JSONResponse({"detail": detail}, status_code=404)
         if os.path.exists("dist/index.html"):
-            return FileResponse("dist/index.html")
+            return FileResponse("dist/index.html", headers=_NO_CACHE_HEADERS)
         return JSONResponse({"detail": "Not found"}, status_code=404)

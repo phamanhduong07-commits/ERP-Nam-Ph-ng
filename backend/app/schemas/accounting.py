@@ -222,7 +222,7 @@ class CashPaymentResponse(BaseModel):
     so_tien: Decimal
     tk_no: str
     tk_co: str
-    trang_thai: Literal["cho_duyet", "da_duyet", "huy"] = "cho_duyet"
+    trang_thai: Literal["cho_chot", "da_chot", "da_duyet", "huy"] = "cho_chot"
     nguoi_duyet_id: int | None
     ngay_duyet: datetime | None
     created_at: datetime

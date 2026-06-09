@@ -12,6 +12,11 @@ import { storage } from './utils/storage'
 
 dayjs.locale('vi')
 
+// Auto-reload khi chunk JS cũ không tải được sau deploy mới
+window.addEventListener('vite:preloadError', () => {
+  window.location.reload()
+})
+
 // Dọn rác localStorage đã hết TTL khi app khởi động
 storage.purgeExpired()
 

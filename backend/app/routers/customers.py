@@ -20,6 +20,14 @@ from app.schemas.sales import PagedResponse
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
 
+# Roles thấy data của riêng mình (không thấy toàn bộ)
+_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+
+
+def _get_scope(current_user: User) -> int | None:
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    return current_user.id if role_code in _SALE_STAFF_ROLES else None
+
 
 CUSTOMER_IMPORT_FIELDS = [
     ImportField("ma_kh", "Ma KH", required=True, parser=parse_text, help_text="Ma khach hang duy nhat"),
@@ -76,19 +84,19 @@ def list_customers(
     trang_thai: bool = Query(default=True),
     nv_id: int | None = Query(default=None, description="Lọc theo NV phụ trách"),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     service = CustomerService(db)
-    return service.get_customers_paginated(search, page, page_size, trang_thai, nv_id)
+    return service.get_customers_paginated(search, page, page_size, trang_thai, nv_id, _get_scope(current_user))
 
 
 @router.get("/all", response_model=list[CustomerShort])
 def get_all_customers(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     service = CustomerService(db)
-    return service.get_all_active_customers()
+    return service.get_all_active_customers(_get_scope(current_user))
 
 
 @router.get("/import-template")
@@ -121,10 +129,10 @@ async def import_customers(
 def get_customer(
     customer_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     service = CustomerService(db)
-    return service.get_customer_by_id(customer_id)
+    return service.get_customer_by_id(customer_id, _get_scope(current_user))
 
 
 @router.post("", response_model=CustomerResponse, status_code=201)

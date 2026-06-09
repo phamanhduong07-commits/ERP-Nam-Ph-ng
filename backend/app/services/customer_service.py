@@ -1,9 +1,20 @@
 from fastapi import HTTPException
-from sqlalchemy import exists
+from sqlalchemy import exists, or_
 from sqlalchemy.orm import Session, selectinload
 from app.models.master import Customer, CustomerNhanVien
 from app.schemas.master import CustomerCreate, CustomerUpdate, CustomerResponse, CustomerShort
 from app.schemas.sales import PagedResponse
+
+
+def _scope_filter(scope_user_id: int):
+    """Filter: customer phụ trách bởi user này (nv_phu_trach_id hoặc junction table)."""
+    return or_(
+        Customer.nv_phu_trach_id == scope_user_id,
+        exists().where(
+            (CustomerNhanVien.customer_id == Customer.id)
+            & (CustomerNhanVien.user_id == scope_user_id)
+        ),
+    )
 
 
 def _nv_ids(customer: Customer) -> list[int]:
@@ -41,8 +52,11 @@ class CustomerService:
         page_size: int = 20,
         trang_thai: bool = True,
         nv_id: int | None = None,
+        scope_user_id: int | None = None,
     ) -> PagedResponse:
         q = self.db.query(Customer).options(self._load_opts()).filter(Customer.trang_thai == trang_thai)
+        if scope_user_id is not None:
+            q = q.filter(_scope_filter(scope_user_id))
         if search:
             like = f"%{search}%"
             q = q.filter(
@@ -68,17 +82,18 @@ class CustomerService:
             total_pages=(total + page_size - 1) // page_size,
         )
 
-    def get_all_active_customers(self) -> list[CustomerShort]:
-        customers = (
+    def get_all_active_customers(self, scope_user_id: int | None = None) -> list[CustomerShort]:
+        q = (
             self.db.query(Customer)
             .options(self._load_opts())
             .filter(Customer.trang_thai.is_(True))
-            .order_by(Customer.ten_viet_tat)
-            .all()
         )
+        if scope_user_id is not None:
+            q = q.filter(_scope_filter(scope_user_id))
+        customers = q.order_by(Customer.ten_viet_tat).all()
         return [_to_short(c) for c in customers]
 
-    def get_customer_by_id(self, customer_id: int) -> CustomerResponse:
+    def get_customer_by_id(self, customer_id: int, scope_user_id: int | None = None) -> CustomerResponse:
         customer = (
             self.db.query(Customer)
             .options(self._load_opts())
@@ -87,6 +102,14 @@ class CustomerService:
         )
         if not customer:
             raise HTTPException(status_code=404, detail="Không tìm thấy khách hàng")
+        if scope_user_id is not None:
+            from sqlalchemy import func
+            in_scope = self.db.query(Customer).filter(
+                Customer.id == customer_id,
+                _scope_filter(scope_user_id),
+            ).first()
+            if not in_scope:
+                raise HTTPException(status_code=403, detail="Không có quyền xem khách hàng này")
         return _to_response(customer)
 
     def create_customer(self, data: CustomerCreate) -> CustomerResponse:

@@ -62,17 +62,18 @@ function buildNavItems(queueCount: number): NavItem[] {
       icon: <ShopOutlined />,
       label: 'Sản xuất',
       hubTo: '/production/hub',
-      permissions: ['production_order.view', 'production_order.create', 'production_order.edit'],
+      permissions: ['production_order.view', 'production_order.create', 'production_order.edit', 'cd2.view'],
       flyoutSections: [
         {
           items: [
-            { key: '/production/orders', to: '/production/orders', label: <Link to="/production/orders">Lệnh sản xuất</Link> },
-            { key: '/production/theo-doi', to: '/production/theo-doi', label: <Link to="/production/theo-doi">Theo dõi LSX</Link> },
-            { key: '/production/plans', to: '/production/plans', label: <Link to="/production/plans">Kế hoạch sản xuất</Link> },
-            { key: '/production/tan-dung', to: '/production/tan-dung', label: <Link to="/production/tan-dung">Kế hoạch tận dụng</Link> },
+            { key: '/production/orders', to: '/production/orders', label: <Link to="/production/orders">Lệnh sản xuất</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/theo-doi', to: '/production/theo-doi', label: <Link to="/production/theo-doi">Theo dõi LSX</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/plans', to: '/production/plans', label: <Link to="/production/plans">Kế hoạch sản xuất</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/tan-dung', to: '/production/tan-dung', label: <Link to="/production/tan-dung">Kế hoạch tận dụng</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
             {
               key: '/production/queue',
               to: '/production/queue',
+              permissions: ['production_order.view', 'production_order.create', 'production_order.edit'],
               label: (
                 <Link to="/production/queue">
                   <Space>
@@ -82,25 +83,25 @@ function buildNavItems(queueCount: number): NavItem[] {
                 </Link>
               ),
             },
-            { key: '/production/bom', to: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link> },
-            { key: '/production/cost-analysis', to: '/production/cost-analysis', label: <Link to="/production/cost-analysis">Phân tích chi phí</Link> },
-            { key: '/production/may-song', to: '/production/may-song', label: <Link to="/production/may-song">🌊 Máy Sóng</Link> },
+            { key: '/production/bom', to: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cost-analysis', to: '/production/cost-analysis', label: <Link to="/production/cost-analysis">Phân tích chi phí</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/may-song', to: '/production/may-song', label: <Link to="/production/may-song">🌊 Máy Sóng</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
           ],
         },
         {
           sectionLabel: 'Công đoạn 2 (CD2)',
           items: [
-            { key: '/production/cd2/dashboard', to: '/production/cd2/dashboard', label: <Link to="/production/cd2/dashboard">📈 Dashboard</Link> },
-            { key: '/production/cd2', to: '/production/cd2', label: <Link to="/production/cd2">🗂 Kanban máy in</Link> },
-            { key: '/production/cd2/sauin-kanban', to: '/production/cd2/sauin-kanban', label: <Link to="/production/cd2/sauin-kanban">🏭 Kanban TP</Link> },
-            { key: '/production/cd2/may-in', to: '/production/cd2/may-in', label: <Link to="/production/cd2/may-in">📋 Queue máy in</Link> },
-            { key: '/production/cd2/history', to: '/production/cd2/history', label: <Link to="/production/cd2/history">📊 Thống kê sản lượng</Link> },
-            { key: '/production/cd2/worker', to: '/production/cd2/worker', label: <Link to="/production/cd2/worker">👷 Máy in của tôi</Link> },
-            { key: '/cd2/machine-login', to: '/cd2/machine-login', label: <Link to="/cd2/machine-login">🔑 Đăng nhập máy</Link> },
-            { key: '/production/cd2/scan', to: '/production/cd2/scan', label: <Link to="/production/cd2/scan">📊 Scan sản lượng</Link> },
-            { key: '/production/cd2/mobile-tracking', to: '/production/cd2/mobile-tracking', label: <Link to="/production/cd2/mobile-tracking">📱 Mobile (kiosk)</Link> },
-            { key: '/production/cd2/shift', to: '/production/cd2/shift', label: <Link to="/production/cd2/shift">⏰ Quản lý ca</Link> },
-            { key: '/production/cd2/config', to: '/production/cd2/config', label: <Link to="/production/cd2/config">⚙ Cấu hình CD2</Link> },
+            { key: '/production/cd2/dashboard', to: '/production/cd2/dashboard', label: <Link to="/production/cd2/dashboard">📈 Dashboard</Link>, permissions: ['cd2.view', 'production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cd2', to: '/production/cd2', label: <Link to="/production/cd2">🗂 Kanban máy in</Link>, permissions: ['cd2.view', 'production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cd2/sauin-kanban', to: '/production/cd2/sauin-kanban', label: <Link to="/production/cd2/sauin-kanban">🏭 Kanban TP</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cd2/may-in', to: '/production/cd2/may-in', label: <Link to="/production/cd2/may-in">📋 Queue máy in</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cd2/history', to: '/production/cd2/history', label: <Link to="/production/cd2/history">📊 Thống kê sản lượng</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cd2/worker', to: '/production/cd2/worker', label: <Link to="/production/cd2/worker">👷 Máy in của tôi</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/cd2/machine-login', to: '/cd2/machine-login', label: <Link to="/cd2/machine-login">🔑 Đăng nhập máy</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cd2/scan', to: '/production/cd2/scan', label: <Link to="/production/cd2/scan">📊 Scan sản lượng</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cd2/mobile-tracking', to: '/production/cd2/mobile-tracking', label: <Link to="/production/cd2/mobile-tracking">📱 Mobile (kiosk)</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cd2/shift', to: '/production/cd2/shift', label: <Link to="/production/cd2/shift">⏰ Quản lý ca</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cd2/config', to: '/production/cd2/config', label: <Link to="/production/cd2/config">⚙ Cấu hình CD2</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
           ],
         },
       ],
@@ -263,25 +264,26 @@ function buildNavItems(queueCount: number): NavItem[] {
         {
           sectionLabel: 'Báo cáo Quản trị',
           items: [
-            { key: '/accounting/reports/workshop-pnl', to: '/accounting/reports/workshop-pnl', label: <Link to="/accounting/reports/workshop-pnl">Lãi lỗ Phân xưởng</Link> },
-            { key: '/accounting/reports/production-costing', to: '/accounting/reports/production-costing', label: <Link to="/accounting/reports/production-costing">Giá thành sản phẩm</Link> },
-            { key: '/reports/revenue', to: '/reports/revenue', label: <Link to="/reports/revenue">Doanh thu</Link> },
-            { key: '/reports/production-performance', to: '/reports/production-performance', label: <Link to="/reports/production-performance">Hiệu suất SX</Link> },
+            { key: '/accounting/reports/workshop-pnl', to: '/accounting/reports/workshop-pnl', label: <Link to="/accounting/reports/workshop-pnl">Lãi lỗ Phân xưởng</Link>, permissions: ['report.view', 'report.export'] },
+            { key: '/accounting/reports/production-costing', to: '/accounting/reports/production-costing', label: <Link to="/accounting/reports/production-costing">Giá thành sản phẩm</Link>, permissions: ['report.view', 'report.export'] },
+            { key: '/reports/revenue', to: '/reports/revenue', label: <Link to="/reports/revenue">Doanh thu</Link>, permissions: ['report.view', 'report.export'] },
+            { key: '/reports/production-performance', to: '/reports/production-performance', label: <Link to="/reports/production-performance">Hiệu suất SX</Link>, permissions: ['report.view', 'report.export'] },
           ],
         },
         {
           sectionLabel: 'Báo cáo Thuế',
           items: [
-            { key: '/accounting/trial-balance', to: '/accounting/trial-balance', label: <Link to="/accounting/trial-balance">Cân đối phát sinh</Link> },
-            { key: '/reports/tax-trial-balance', to: '/reports/tax-trial-balance', label: <Link to="/reports/tax-trial-balance">Bảng CĐPS (Thuế)</Link> },
-            { key: '/reports/vat-summary', to: '/reports/vat-summary', label: <Link to="/reports/vat-summary">Tờ khai thuế GTGT</Link> },
+            { key: '/accounting/trial-balance', to: '/accounting/trial-balance', label: <Link to="/accounting/trial-balance">Cân đối phát sinh</Link>, permissions: ['report.view', 'accounting.view'] },
+            { key: '/reports/tax-trial-balance', to: '/reports/tax-trial-balance', label: <Link to="/reports/tax-trial-balance">Bảng CĐPS (Thuế)</Link>, permissions: ['report.view', 'accounting.view'] },
+            { key: '/reports/vat-summary', to: '/reports/vat-summary', label: <Link to="/reports/vat-summary">Tờ khai thuế GTGT</Link>, permissions: ['report.view', 'accounting.view'] },
           ],
         },
         {
+          sectionLabel: 'Kho & Công nợ',
           items: [
-            { key: '/reports/debt-summary', to: '/reports/debt-summary', label: <Link to="/reports/debt-summary">Tổng hợp công nợ</Link> },
-            { key: '/reports/inventory', to: '/reports/inventory', label: <Link to="/reports/inventory">Nhập-Xuất-Tồn kho</Link> },
-            { key: '/reports/phoi-thanh-pham', to: '/reports/phoi-thanh-pham', label: <Link to="/reports/phoi-thanh-pham">Tồn phôi & Thành phẩm</Link> },
+            { key: '/reports/inventory', to: '/reports/inventory', label: <Link to="/reports/inventory">Nhập-Xuất-Tồn kho</Link>, permissions: ['report.inventory'] },
+            { key: '/reports/phoi-thanh-pham', to: '/reports/phoi-thanh-pham', label: <Link to="/reports/phoi-thanh-pham">Tồn phôi & Thành phẩm</Link>, permissions: ['report.phoi_thanh_pham'] },
+            { key: '/reports/debt-summary', to: '/reports/debt-summary', label: <Link to="/reports/debt-summary">Tổng hợp công nợ</Link>, permissions: ['report.cong_no'] },
           ],
         },
       ],
@@ -399,7 +401,10 @@ export default function AppLayout() {
 
   const role = user?.role ?? 'ADMIN'
   const userPermissions = user?.permissions || []
-  const navItems = buildNavItems(queueCount).filter(item => canSee(item.permissions, role, userPermissions))
+  const hasSxPerm = canSee(['production_order.view', 'production_order.create', 'production_order.edit'], role, userPermissions)
+  const navItems = buildNavItems(queueCount)
+    .filter(item => canSee(item.permissions, role, userPermissions))
+    .map(item => (item.key === 'san-xuat' && !hasSxPerm) ? { ...item, hubTo: undefined } : item)
 
   const [searchOpen, setSearchOpen] = useState(false)
 

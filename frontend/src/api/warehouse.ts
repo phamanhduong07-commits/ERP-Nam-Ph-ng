@@ -866,6 +866,8 @@ export const warehouseApi = {
     `/warehouse/giay-rolls/print/${grId}`,
   printGiayRollLabelOne: (rollId: number) =>
     `/warehouse/giay-rolls/print-one/${rollId}`,
+  printGiayRollsByMaterial: (materialId: number, warehouseId?: number) =>
+    `/warehouse/giay-rolls/print-by-material/${materialId}${warehouseId ? `?warehouse_id=${warehouseId}` : ''}`,
 
   getDuTruGiay: (params?: { weeks?: number }) =>
     client.get<DuTruGiayRow[]>('/warehouse/du-tru-giay', { params }),

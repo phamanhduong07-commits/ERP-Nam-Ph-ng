@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { lazy, Suspense, useEffect, useState } from 'react'
+import { Spin } from 'antd'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): void
@@ -250,7 +251,7 @@ export default function App() {
           </button>
         </div>
       )}
-      <Suspense fallback={<div style={{ padding: 24 }}>Đang tải...</div>}>
+      <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}><Spin size="large" /></div>}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/production/cd2/mobile-tracking" element={<WorkerOrPrivateRoute><ErrorBoundary><MobileTrackingPage /></ErrorBoundary></WorkerOrPrivateRoute>} />
