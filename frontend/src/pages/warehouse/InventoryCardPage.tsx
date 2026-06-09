@@ -12,8 +12,9 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { smartExportExcel, smartPrintPdf, buildHtmlTable } from '../../utils/exportUtils'
 import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 const LOAI_GD_LABEL: Record<string, string> = {
@@ -275,9 +276,9 @@ export default function InventoryCardPage() {
   const totalXuat = filtered.filter(r => XUAT_TYPES.has(r.loai_giao_dich)).reduce((s, r) => s + r.so_luong, 0)
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Thẻ kho / Lịch sử nhập xuất tồn</Title>
+    <PageLayout
+      title="Thẻ kho / Lịch sử nhập xuất tồn"
+      actions={
         <Space>
           <Tooltip title={canView ? undefined : 'Bạn không có quyền xem/xuất tồn kho'}>
             <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!canView || !filtered.length}>Excel</Button>
@@ -286,8 +287,8 @@ export default function InventoryCardPage() {
             <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!canView || !filtered.length}>In PDF</Button>
           </Tooltip>
         </Space>
-      </div>
-
+      }
+    >
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space wrap>
           <RangePicker
@@ -379,6 +380,6 @@ export default function InventoryCardPage() {
           locale={{ emptyText: <EmptyState size="small" preset={isFetched ? "search" : "default"} /> }}
         />
       )}
-    </div>
+    </PageLayout>
   )
 }

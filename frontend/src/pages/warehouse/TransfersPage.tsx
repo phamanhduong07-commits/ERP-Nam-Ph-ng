@@ -16,8 +16,9 @@ import { buildHtmlTable, exportToExcel, renderTemplateAndPrint, smartExportExcel
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 export default function TransfersPage() {
   const companyInfo = usePhapNhanForPrint()
@@ -287,26 +288,22 @@ export default function TransfersPage() {
   )
 
   return (
-    <div style={{ paddingBottom: 24 }}>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col>
-          <Space><SwapOutlined style={{ fontSize: 20, color: '#722ed1' }} /><Title level={4} style={{ margin: 0 }}>Chuyển kho liên xưởng</Title></Space>
-        </Col>
-        <Col>
-          <Space>
-            <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
-              Xuất Excel
-            </Button>
-            <Button icon={<PlusOutlined />}
-              disabled={!hasPermission('inventory.transfer')}
-              onClick={() => { form.resetFields(); setSelectedKhoXuat(undefined); setSelectedKhoNhap(undefined); setOpen(true) }}
-              style={{ background: '#722ed1', borderColor: '#722ed1', color: '#fff' }}>
-              Tạo phiếu chuyển
-            </Button>
-          </Space>
-        </Col>
-      </Row>
-
+    <PageLayout
+      title="Chuyển kho liên xưởng"
+      actions={
+        <Space>
+          <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
+            Xuất Excel
+          </Button>
+          <Button icon={<PlusOutlined />}
+            disabled={!hasPermission('inventory.transfer')}
+            onClick={() => { form.resetFields(); setSelectedKhoXuat(undefined); setSelectedKhoNhap(undefined); setOpen(true) }}
+            style={{ background: '#722ed1', borderColor: '#722ed1', color: '#fff' }}>
+            Tạo phiếu chuyển
+          </Button>
+        </Space>
+      }
+    >
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[8, 8]}>
           <Col xs={12} sm={6}>
@@ -606,6 +603,6 @@ export default function TransfersPage() {
           </>
         )}
       </Drawer>
-    </div>
+    </PageLayout>
   )
 }

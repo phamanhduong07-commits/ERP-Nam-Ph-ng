@@ -4,8 +4,9 @@ import { reportsApi } from '../../api/reports'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import { SearchOutlined } from '@ant-design/icons'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 const LegalEntityCashflowPage: React.FC = () => {
   const { phapNhanList } = usePhapNhan()
@@ -48,9 +49,8 @@ const LegalEntityCashflowPage: React.FC = () => {
   ] : []
 
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={3}>Báo cáo Dòng tiền Pháp nhân</Title>
-      
+    <PageLayout title="Báo cáo Dòng tiền Pháp nhân">
+
       <Card style={{ marginBottom: 24 }}>
         <Form layout="inline" onFinish={onFinish}>
           <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true }]}>
@@ -92,7 +92,7 @@ const LegalEntityCashflowPage: React.FC = () => {
           </Card>
         </>
       )}
-    </div>
+    </PageLayout>
   )
 }
 

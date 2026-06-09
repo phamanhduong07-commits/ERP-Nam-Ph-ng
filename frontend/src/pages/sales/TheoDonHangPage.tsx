@@ -17,8 +17,9 @@ import { usePhapNhanList } from '../../hooks/usePhapNhan'
 import { exportToExcel } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import { storage, TTL } from '../../utils/storage'
+import PageLayout from '../../components/PageLayout'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState<T>(value)
@@ -352,13 +353,12 @@ export default function TheoDonHangPage() {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
+    <PageLayout title="Theo dõi đơn hàng">
       <style>{`
         .row-no-lsx > td { background: #fffbe6 !important; }
         .row-qua-han > td { background: #fff1f0 !important; }
         .row-sap-den > td { background: #fff7e6 !important; }
       `}</style>
-      <Title level={4} style={{ marginBottom: 16 }}>Theo dõi đơn hàng</Title>
       <Card>
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
 
@@ -751,6 +751,6 @@ export default function TheoDonHangPage() {
           )
         })()}
       </Drawer>
-    </div>
+    </PageLayout>
   )
 }

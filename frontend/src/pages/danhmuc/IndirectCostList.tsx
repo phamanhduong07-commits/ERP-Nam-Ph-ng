@@ -11,8 +11,9 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { indirectCostsApi, IndirectCostMasterItem } from '../../api/bom'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 const LAY_COUNT_LABEL: Record<number, { color: string; label: string }> = {
   3: { color: 'default', label: '3 lớp' },
@@ -140,10 +141,12 @@ export default function IndirectCostList() {
 
   if (items.length === 0 && !isLoading) {
     return (
-      <div style={{ padding: 24 }}>
+      <PageLayout title="Chi phí gián tiếp sản xuất">
         <Card>
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <Title level={5} type="secondary">Chưa có dữ liệu chi phí gián tiếp</Title>
+            <Text type="secondary" style={{ display: 'block', fontSize: 16, marginBottom: 8 }}>
+              Chưa có dữ liệu chi phí gián tiếp
+            </Text>
             <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
               Bấm "Khởi tạo mặc định" để seed dữ liệu từ hệ thống.
             </Text>
@@ -157,34 +160,31 @@ export default function IndirectCostList() {
             </Button>
           </div>
         </Card>
-      </div>
+      </PageLayout>
     )
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col>
-          <Title level={4} style={{ margin: 0 }}>Chi phí gián tiếp sản xuất</Title>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            Đơn giá tính trên m² giấy carton — ảnh hưởng trực tiếp đến giá thành sản phẩm
-          </Text>
-        </Col>
-        <Col>
-          <Popconfirm
-            title="Reset toàn bộ về giá trị mặc định?"
-            description="Mọi thay đổi trước đó sẽ bị mất."
-            onConfirm={() => seedMut.mutate()}
-            okText="Reset"
-            cancelText="Hủy"
-            okButtonProps={{ danger: true }}
-          >
-            <Button icon={<ReloadOutlined />} loading={seedMut.isPending}>
-              Reset mặc định
-            </Button>
-          </Popconfirm>
-        </Col>
-      </Row>
+    <PageLayout
+      title="Chi phí gián tiếp sản xuất"
+      actions={
+        <Popconfirm
+          title="Reset toàn bộ về giá trị mặc định?"
+          description="Mọi thay đổi trước đó sẽ bị mất."
+          onConfirm={() => seedMut.mutate()}
+          okText="Reset"
+          cancelText="Hủy"
+          okButtonProps={{ danger: true }}
+        >
+          <Button icon={<ReloadOutlined />} loading={seedMut.isPending}>
+            Reset mặc định
+          </Button>
+        </Popconfirm>
+      }
+    >
+      <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 16 }}>
+        Đơn giá tính trên m² giấy carton — ảnh hưởng trực tiếp đến giá thành sản phẩm
+      </Text>
 
       <Row gutter={16}>
         {grouped.map(({ lop, items: lopItems, total }) => {
@@ -238,6 +238,6 @@ export default function IndirectCostList() {
           Dữ liệu BOM đã lưu trước đó không bị ảnh hưởng.
         </Text>
       </Card>
-    </div>
+    </PageLayout>
   )
 }

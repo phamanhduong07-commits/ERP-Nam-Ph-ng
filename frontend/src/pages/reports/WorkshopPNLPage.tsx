@@ -5,8 +5,9 @@ import { usePhanXuong } from '../../hooks/useMasterData'
 import { downloadBlob } from '../../utils/exportUtils'
 import { PrinterOutlined, SearchOutlined, InfoCircleOutlined, DownloadOutlined } from '@ant-design/icons'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 const WorkshopPNLPage: React.FC = () => {
   const { phanXuongList } = usePhanXuong()
@@ -105,9 +106,8 @@ const WorkshopPNLPage: React.FC = () => {
   ] : []
 
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={3}>Báo cáo Lãi/Lỗ Quản trị Phân xưởng</Title>
-      
+    <PageLayout title="Báo cáo Lãi/Lỗ Quản trị Phân xưởng">
+
       <Card style={{ marginBottom: 24 }}>
         <Form form={form} layout="inline" onFinish={onFinish}>
           <Form.Item name="phan_xuong_id" label="Phân xưởng">
@@ -167,7 +167,7 @@ const WorkshopPNLPage: React.FC = () => {
           </Card>
         </>
       )}
-    </div>
+    </PageLayout>
   )
 }
 

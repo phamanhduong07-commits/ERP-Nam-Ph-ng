@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Button, Card, DatePicker, Select, Space, Table, Tag, Typography,
+  Button, Card, DatePicker, Select, Space, Table, Tag,
 } from 'antd'
 import { FileExcelOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -10,8 +10,8 @@ import dayjs from 'dayjs'
 import { customerRefundApi, CustomerRefundVoucher, TRANG_THAI_HOAN_TIEN } from '../../api/accounting'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title } = Typography
 const { RangePicker } = DatePicker
 
 const HINH_THUC_LABELS: Record<string, string> = {
@@ -103,14 +103,14 @@ export default function CustomerRefundListPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Phiếu hoàn tiền khách hàng</Title>
+    <PageLayout
+      title="Phiếu hoàn tiền khách hàng"
+      actions={
         <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
           Xuất Excel
         </Button>
-      </div>
-
+      }
+    >
       <Card size="small" style={{ marginBottom: 12 }}>
         <Space wrap>
           <RangePicker
@@ -149,6 +149,6 @@ export default function CustomerRefundListPage() {
         onRow={r => ({ onClick: () => navigate(`/accounting/customer-refunds/${r.id}`) })}
         rowClassName={r => r.trang_thai === 'nhap' ? '' : ''}
       />
-    </div>
+    </PageLayout>
   )
 }

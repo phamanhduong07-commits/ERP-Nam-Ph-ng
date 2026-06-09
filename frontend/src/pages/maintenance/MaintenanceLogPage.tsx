@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import {
   Table, Button, Space, Tag, Drawer, Form, Input, InputNumber, DatePicker,
-  Select, message, Typography, Row, Col, Card, Descriptions, Statistic,
+  Select, message, Row, Col, Card, Descriptions, Statistic,
 } from 'antd'
 import { PlusOutlined, ToolOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import axios from 'axios'
 import EmptyState from "../../components/EmptyState"
-
-const { Title } = Typography
+import PageLayout from '../../components/PageLayout'
 
 interface Machine {
   id: number
@@ -123,19 +122,14 @@ export default function MaintenanceLogPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col>
-          <Title level={4} style={{ margin: 0 }}>Nhật ký bảo trì</Title>
-        </Col>
-        <Col flex={1} />
-        <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
-            Ghi nhật ký
-          </Button>
-        </Col>
-      </Row>
-
+    <PageLayout
+      title="Nhật ký bảo trì"
+      actions={
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
+          Ghi nhật ký
+        </Button>
+      }
+    >
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={6}>
           <Card>
@@ -243,6 +237,6 @@ export default function MaintenanceLogPage() {
           </Descriptions>
         )}
       </Drawer>
-    </div>
+    </PageLayout>
   )
 }

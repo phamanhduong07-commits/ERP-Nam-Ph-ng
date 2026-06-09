@@ -11,8 +11,9 @@ import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import { purchaseInvoiceApi, PurchaseInvoice } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 const INVOICE_STATUS: Record<string, { label: string; color: string }> = {
@@ -49,7 +50,7 @@ export default function PurchaseInvoiceListPage() {
       }),
   })
 
-  const invoices: PurchaseInvoice[] = data?.items ?? []
+  const invoices: PurchaseInvoice[] = Array.isArray(data?.items) ? data.items : []
   const total: number = data?.total ?? 0
   const tongConLai: number = data?.total_con_lai ?? 0
 
@@ -148,17 +149,17 @@ export default function PurchaseInvoiceListPage() {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Hóa đơn mua hàng</Title>
+    <PageLayout
+      title="Hóa đơn mua hàng"
+      actions={
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
           <Button icon={<WalletOutlined />} onClick={() => navigate('/accounting/payments')}>
             Phiếu chi
           </Button>
         </Space>
-      </div>
-
+      }
+    >
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[12, 8]} align="middle">
           <Col>
@@ -232,6 +233,6 @@ export default function PurchaseInvoiceListPage() {
         rowClassName={r => r.trang_thai === 'qua_han' ? 'row-overdue' : ''}
       />
       <style>{`.row-overdue td { background: #fff1f0 !important; }`}</style>
-    </div>
+    </PageLayout>
   )
 }

@@ -9,8 +9,9 @@ import dayjs from 'dayjs'
 import { reportsApi, DeliveryReportRow } from '../../api/reports'
 import { exportToExcel } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 const STATUS_COLORS: Record<string, string> = {
@@ -86,12 +87,13 @@ export default function DeliveryReportPage() {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Báo cáo vận chuyển giao hàng</Title>
+    <PageLayout
+      title="Báo cáo vận chuyển giao hàng"
+      actions={
         <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data}
           style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
-      </div>
+      }
+    >
 
       <Card size="small" style={{ marginBottom: 16 }}>
         <RangePicker format="DD/MM/YYYY"
@@ -146,6 +148,6 @@ export default function DeliveryReportPage() {
           </Card>
         </Col>
       </Row>
-    </div>
+    </PageLayout>
   )
 }

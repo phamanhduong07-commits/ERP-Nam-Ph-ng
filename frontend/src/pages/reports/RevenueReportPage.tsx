@@ -10,8 +10,9 @@ import dayjs from 'dayjs'
 import { reportsApi, RevenueKyRow, RevenueCustomerRow } from '../../api/reports'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 function MiniBar({ value, max }: { value: number; max: number }) {
@@ -92,16 +93,17 @@ export default function RevenueReportPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Báo cáo doanh thu</Title>
+    <PageLayout
+      title="Báo cáo doanh thu"
+      actions={
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data}>Excel</Button>
           <Button icon={<DownloadOutlined />} onClick={handleExportServer} disabled={!data}
             style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
           <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!data}>In</Button>
         </Space>
-      </div>
+      }
+    >
 
       {/* Filter */}
       <Card size="small" style={{ marginBottom: 16 }}>
@@ -188,6 +190,6 @@ export default function RevenueReportPage() {
           </Card>
         </Col>
       </Row>
-    </div>
+    </PageLayout>
   )
 }

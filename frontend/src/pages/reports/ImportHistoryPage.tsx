@@ -10,8 +10,9 @@ import dayjs from 'dayjs'
 import { importLogsApi, ImportLogItem } from '../../api/reports'
 import { exportToExcel } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 const LOAI_OPTIONS = [
@@ -111,12 +112,13 @@ export default function ImportHistoryPage() {
   const totalErr = data?.items.reduce((s, r) => s + r.so_dong_loi, 0) ?? 0
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Lịch sử import dữ liệu</Title>
+    <PageLayout
+      title="Lịch sử import dữ liệu"
+      actions={
         <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data?.items.length}
           style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
-      </div>
+      }
+    >
 
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space wrap>
@@ -132,21 +134,20 @@ export default function ImportHistoryPage() {
       </Card>
 
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={8}>
-          <Card size="small"><Statistic title="Số lần import" value={data?.total ?? 0} /></Card>
-        </Col>
-        <Col xs={8}>
-          <Card size="small">
-            <Statistic title="Tổng dòng thành công" value={totalSuccess}
-              valueStyle={{ color: '#52c41a' }} />
-          </Card>
-        </Col>
-        <Col xs={8}>
-          <Card size="small">
-            <Statistic title="Tổng dòng lỗi" value={totalErr}
-              valueStyle={{ color: totalErr > 0 ? '#ff4d4f' : '#666' }} />
-          </Card>
-        </Col>
+        {[0, 1, 2].map(i => (
+          <Col key={i} xs={8}>
+            <Card size="small">
+              {isLoading
+                ? <div className="np-skeleton" style={{ height: 46, borderRadius: 4 }} />
+                : i === 0
+                  ? <Statistic title="Số lần import" value={data?.total ?? 0} />
+                  : i === 1
+                    ? <Statistic title="Tổng dòng thành công" value={totalSuccess} valueStyle={{ color: '#52c41a' }} />
+                    : <Statistic title="Tổng dòng lỗi" value={totalErr} valueStyle={{ color: totalErr > 0 ? '#ff4d4f' : '#666' }} />
+              }
+            </Card>
+          </Col>
+        ))}
       </Row>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
@@ -167,6 +168,6 @@ export default function ImportHistoryPage() {
           rowClassName={r => r.trang_thai === 'failed' ? 'ant-table-row-danger' : ''}
         />
       </Card>
-    </div>
+    </PageLayout>
   )
 }

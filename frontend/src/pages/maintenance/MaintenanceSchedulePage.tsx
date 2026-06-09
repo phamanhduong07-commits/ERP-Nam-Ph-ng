@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import {
   Table, Button, Space, Tag, Drawer, Form, Input, InputNumber, DatePicker,
-  Select, message, Popconfirm, Typography, Row, Col, Card, Badge,
+  Select, message, Popconfirm, Card, Badge,
 } from 'antd'
 import { PlusOutlined, CheckOutlined, WarningOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import axios from 'axios'
 import EmptyState from "../../components/EmptyState"
-
-const { Title } = Typography
+import PageLayout from '../../components/PageLayout'
 
 interface Machine {
   id: number
@@ -126,31 +125,26 @@ export default function MaintenanceSchedulePage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col>
-          <Title level={4} style={{ margin: 0 }}>Lịch bảo trì máy</Title>
-        </Col>
-        <Col flex={1} />
-        <Col>
-          <Space>
-            {overdueCount > 0 && (
-              <Badge count={overdueCount} color="red">
-                <Tag color="red">Quá hạn</Tag>
-              </Badge>
-            )}
-            {soonCount > 0 && (
-              <Badge count={soonCount} color="orange">
-                <Tag color="orange">Sắp đến hạn</Tag>
-              </Badge>
-            )}
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
-              Thêm lịch
-            </Button>
-          </Space>
-        </Col>
-      </Row>
-
+    <PageLayout
+      title="Lịch bảo trì máy"
+      actions={
+        <Space>
+          {overdueCount > 0 && (
+            <Badge count={overdueCount} color="red">
+              <Tag color="red">Quá hạn</Tag>
+            </Badge>
+          )}
+          {soonCount > 0 && (
+            <Badge count={soonCount} color="orange">
+              <Tag color="orange">Sắp đến hạn</Tag>
+            </Badge>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
+            Thêm lịch
+          </Button>
+        </Space>
+      }
+    >
       <Card>
         <Table
                     locale={{ emptyText: <EmptyState size="small" /> }}
@@ -201,6 +195,6 @@ export default function MaintenanceSchedulePage() {
           </Form.Item>
         </Form>
       </Drawer>
-    </div>
+    </PageLayout>
   )
 }

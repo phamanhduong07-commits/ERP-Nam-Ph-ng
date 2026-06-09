@@ -17,8 +17,9 @@ import { PrinterOutlined, SearchOutlined } from '@ant-design/icons'
 import { reportsApi, VATAuditItem, VATAuditResponse } from '../../api/reports'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from '../../components/EmptyState'
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 interface VATData {
   doanh_thu_chiu_thue: number
@@ -196,8 +197,7 @@ const VATSummaryPage: React.FC = () => {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={3}>Báo cáo tổng hợp thuế GTGT</Title>
+    <PageLayout title="Báo cáo tổng hợp thuế GTGT">
 
       <Card style={{ marginBottom: 24 }}>
         <Form layout="inline" onFinish={onFinish}>
@@ -304,7 +304,7 @@ const VATSummaryPage: React.FC = () => {
           </Card>
         </>
       )}
-    </div>
+    </PageLayout>
   )
 }
 

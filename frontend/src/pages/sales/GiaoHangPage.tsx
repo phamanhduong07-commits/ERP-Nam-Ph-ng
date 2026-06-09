@@ -1,16 +1,14 @@
 import React from 'react'
-import { Typography, Card } from 'antd'
+import { Card } from 'antd'
 import TabGiaoHang from '../production/TabGiaoHang'
-
-const { Title } = Typography
+import PageLayout from '../../components/PageLayout'
 
 export default function GiaoHangPage() {
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={4} style={{ marginBottom: 16 }}>🚚 Quản lý Giao hàng & Bán hàng</Title>
+    <PageLayout title="🚚 Quản lý Giao hàng & Bán hàng">
       <Card>
         <TabGiaoHang />
       </Card>
-    </div>
+    </PageLayout>
   )
 }

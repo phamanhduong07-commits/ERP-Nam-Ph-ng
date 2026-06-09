@@ -41,8 +41,9 @@ import PhieuNhapPhoiSongModal, { phoiSessionKey } from './PhieuNhapPhoiSongModal
 import { usePhapNhanList } from '../../hooks/usePhapNhan'
 import { systemApi } from '../../api/system'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -1322,8 +1323,7 @@ export default function PhieuPhoiPage() {
   const [searchParams] = useSearchParams()
   const defaultTab = searchParams.get('tab') ?? 'nhap'
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={4} style={{ marginBottom: 16 }}>Quản lý phiếu phôi sóng</Title>
+    <PageLayout title="Quản lý phiếu phôi sóng">
       <Card>
         <Tabs
           defaultActiveKey={defaultTab}
@@ -1333,6 +1333,6 @@ export default function PhieuPhoiPage() {
           ]}
         />
       </Card>
-    </div>
+    </PageLayout>
   )
 }

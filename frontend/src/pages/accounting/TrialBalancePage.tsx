@@ -3,9 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Card, Table, Typography, Space, Button, DatePicker, Row, Col, Statistic, Tooltip, Select
 } from 'antd'
-import { 
-  FileSearchOutlined, FilePdfOutlined, FileExcelOutlined, 
-  SearchOutlined, AccountBookOutlined 
+import {
+  FileSearchOutlined, FilePdfOutlined, FileExcelOutlined,
+  SearchOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { arApi, TrialBalanceRow } from '../../api/accounting'
@@ -13,8 +13,9 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { fmtVND, printToPdf, buildHtmlTable, exportToExcel, downloadBlob } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 export default function TrialBalancePage() {
@@ -124,46 +125,39 @@ export default function TrialBalancePage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col>
-          <Space>
-            <AccountBookOutlined style={{ fontSize: 24, color: '#1677ff' }} />
-            <Title level={3} style={{ margin: 0 }}>Bảng cân đối số phát sinh</Title>
-          </Space>
-        </Col>
-        <Col>
-          <Space>
-            <Select
-              style={{ width: 180 }}
-              placeholder="Tất cả Pháp nhân"
-              allowClear
-              value={phapNhanId}
-              onChange={setPhapNhanId}
-              options={listPhapNhan.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
-            />
-            <Select
-              style={{ width: 180 }}
-              placeholder="Tất cả Xưởng"
-              allowClear
-              value={phanXuongId}
-              onChange={setPhanXuongId}
-              options={listPhanXuong.map(px => ({ value: px.id, label: px.ten_xuong }))}
-            />
-            <RangePicker 
-              value={dates} 
-              onChange={(v) => v && setDates(v as [dayjs.Dayjs, dayjs.Dayjs])} 
-              format="DD/MM/YYYY" 
-            />
-            <Button type="primary" icon={<SearchOutlined />} onClick={() => refetch()} loading={isLoading}>
-              Xem báo cáo
-            </Button>
-            <Button icon={<FilePdfOutlined />} onClick={handleExportPdf}>Xuất PDF</Button>
-            <Button icon={<FileExcelOutlined />} onClick={handleExportExcel} loading={exportLoading}>Xuất Excel</Button>
-          </Space>
-        </Col>
-      </Row>
-
+    <PageLayout
+      title="Bảng cân đối số phát sinh"
+      actions={
+        <Space>
+          <Select
+            style={{ width: 180 }}
+            placeholder="Tất cả Pháp nhân"
+            allowClear
+            value={phapNhanId}
+            onChange={setPhapNhanId}
+            options={listPhapNhan.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+          />
+          <Select
+            style={{ width: 180 }}
+            placeholder="Tất cả Xưởng"
+            allowClear
+            value={phanXuongId}
+            onChange={setPhanXuongId}
+            options={listPhanXuong.map(px => ({ value: px.id, label: px.ten_xuong }))}
+          />
+          <RangePicker
+            value={dates}
+            onChange={(v) => v && setDates(v as [dayjs.Dayjs, dayjs.Dayjs])}
+            format="DD/MM/YYYY"
+          />
+          <Button type="primary" icon={<SearchOutlined />} onClick={() => refetch()} loading={isLoading}>
+            Xem báo cáo
+          </Button>
+          <Button icon={<FilePdfOutlined />} onClick={handleExportPdf}>Xuất PDF</Button>
+          <Button icon={<FileExcelOutlined />} onClick={handleExportExcel} loading={exportLoading}>Xuất Excel</Button>
+        </Space>
+      }
+    >
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={12}>
           <Card size="small">
@@ -200,6 +194,6 @@ export default function TrialBalancePage() {
           )}
         />
       </Card>
-    </div>
+    </PageLayout>
   )
 }

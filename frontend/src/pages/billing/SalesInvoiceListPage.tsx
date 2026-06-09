@@ -18,8 +18,9 @@ import {
 } from '../../api/billing'
 import { salesOrdersApi, SalesOrderListItem, TRANG_THAI_COLORS as SO_STATUS_COLORS } from '../../api/salesOrders'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 export default function SalesInvoiceListPage() {
@@ -201,9 +202,9 @@ export default function SalesInvoiceListPage() {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Hóa đơn bán hàng</Title>
+    <PageLayout
+      title="Hóa đơn bán hàng"
+      actions={
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
           <Button icon={<FilePdfOutlined />} onClick={handlePrint}>In</Button>
@@ -217,8 +218,8 @@ export default function SalesInvoiceListPage() {
             Tạo hóa đơn
           </Button>
         </Space>
-      </div>
-
+      }
+    >
       {/* Filter bar */}
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[12, 8]} align="middle">
@@ -327,6 +328,6 @@ export default function SalesInvoiceListPage() {
           ]}
         />
       </Modal>
-    </div>
+    </PageLayout>
   )
 }

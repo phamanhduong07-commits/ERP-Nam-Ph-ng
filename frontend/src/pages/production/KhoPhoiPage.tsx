@@ -19,8 +19,9 @@ import type { Warehouse } from '../../api/warehouses'
 import { warehouseApi } from '../../api/warehouse'
 import type { TonKho, PhanXuong } from '../../api/warehouse'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 const fmtN = (v: number | null | undefined) =>
   v != null ? new Intl.NumberFormat('vi-VN').format(v) : '—'
@@ -449,8 +450,7 @@ export default function KhoPhoiPage() {
   const totalTonLuong = tonKhoDetail.reduce((s, r) => s + (r.ton_luong ?? 0), 0)
 
   return (
-    <div style={{ padding: 24 }}>
-      <Title level={4} style={{ marginBottom: 16 }}>Kho Phôi Sóng</Title>
+    <PageLayout title="Kho Phôi Sóng">
       <Card>
         <div style={{ paddingTop: 16 }}>
                   {/* Header */}
@@ -833,6 +833,6 @@ export default function KhoPhoiPage() {
           </Space>
         )}
       </Drawer>
-    </div>
+    </PageLayout>
   )
 }

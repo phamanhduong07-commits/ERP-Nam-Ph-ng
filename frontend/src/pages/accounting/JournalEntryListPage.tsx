@@ -2,18 +2,19 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Table, Card, Button, Typography, Space, Tag, DatePicker, Row, Col, Input, Select
+  Table, Card, Button, Typography, Space, Tag, DatePicker, Input, Select
 } from 'antd'
 import {
-  PlusOutlined, SearchOutlined, FileTextOutlined
+  PlusOutlined, SearchOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { journalApi, JournalEntryListParams } from '../../api/accounting'
 import { fmtVND } from '../../utils/exportUtils'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 export default function JournalEntryListPage() {
@@ -83,25 +84,18 @@ export default function JournalEntryListPage() {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 20 }}>
-        <Col>
-          <Space>
-            <FileTextOutlined style={{ fontSize: 28, color: '#1b168e' }} />
-            <Title level={3} style={{ margin: 0 }}>Bút toán tổng hợp</Title>
-          </Space>
-        </Col>
-        <Col>
-          <Button 
-            type="primary" 
-            icon={<PlusOutlined />} 
-            onClick={() => navigate('/accounting/journal-entries/new')}
-          >
-            Tạo bút toán mới
-          </Button>
-        </Col>
-      </Row>
-
+    <PageLayout
+      title="Bút toán tổng hợp"
+      actions={
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => navigate('/accounting/journal-entries/new')}
+        >
+          Tạo bút toán mới
+        </Button>
+      }
+    >
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space wrap>
           <RangePicker 
@@ -144,6 +138,6 @@ export default function JournalEntryListPage() {
         }}
         size="small"
       />
-    </div>
+    </PageLayout>
   )
 }

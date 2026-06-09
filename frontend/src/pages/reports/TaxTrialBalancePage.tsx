@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
-import { Card, Table, Form, DatePicker, Select, Button, Typography, Space } from 'antd'
+import { Card, Table, Form, DatePicker, Select, Button, Typography } from 'antd'
 import { reportsApi } from '../../api/reports'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import { SearchOutlined, DownloadOutlined } from '@ant-design/icons'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 const TaxTrialBalancePage: React.FC = () => {
   const { phapNhanList } = usePhapNhan()
@@ -64,14 +65,11 @@ const TaxTrialBalancePage: React.FC = () => {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <Space direction="vertical" size={2} style={{ marginBottom: 16 }}>
-        <Title level={3}>Bảng Cân đối Số phát sinh (Báo cáo Thuế/BCTC)</Title>
-        <Text type="secondary">
-          Hệ thống tự động loại bỏ các tài khoản nội bộ (5112, 6322, 1368, 3368) để phục vụ mục đích kê khai thuế.
-        </Text>
-      </Space>
-      
+    <PageLayout title="Bảng Cân đối Số phát sinh (Báo cáo Thuế/BCTC)">
+      <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+        Hệ thống tự động loại bỏ các tài khoản nội bộ (5112, 6322, 1368, 3368) để phục vụ mục đích kê khai thuế.
+      </Text>
+
       <Card style={{ marginBottom: 24 }}>
         <Form layout="inline" onFinish={onFinish}>
           <Form.Item name="range" label="Thời gian" rules={[{ required: true }]}>
@@ -101,7 +99,7 @@ const TaxTrialBalancePage: React.FC = () => {
           rowKey="so_tk"
         />
       </Card>
-    </div>
+    </PageLayout>
   )
 }
 

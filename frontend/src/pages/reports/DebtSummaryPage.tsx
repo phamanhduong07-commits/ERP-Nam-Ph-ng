@@ -11,8 +11,9 @@ import { reportsApi, DebtRow, DebtSummaryResponse } from '../../api/reports'
 import { debtAlertsApi, type DebtOverdueAlertItem } from '../../api/accounting'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 function fmtM(v?: number) {
   return fmtVND(v ?? 0)
@@ -249,9 +250,9 @@ export default function DebtSummaryPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Báo cáo công nợ tổng hợp</Title>
+    <PageLayout
+      title="Báo cáo công nợ tổng hợp"
+      actions={
         <Space>
           <Text type="secondary">Tính đến ngày:</Text>
           <DatePicker
@@ -263,7 +264,8 @@ export default function DebtSummaryPage() {
             style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
           <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!data}>In / PDF</Button>
         </Space>
-      </div>
+      }
+    >
 
       <OverdueAlertsPanel asOfDate={asOfDate} />
 
@@ -291,6 +293,6 @@ export default function DebtSummaryPage() {
           },
         ]}
       />
-    </div>
+    </PageLayout>
   )
 }

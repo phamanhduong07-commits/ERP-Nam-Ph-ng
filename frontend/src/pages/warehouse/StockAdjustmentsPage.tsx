@@ -5,7 +5,7 @@ import {
   Alert, Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
   Popconfirm, Row, Select, Space, Table, Tag, Typography, message,
 } from 'antd'
-import { AuditOutlined, DeleteOutlined, FileExcelOutlined, PrinterOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons'
+import { DeleteOutlined, FileExcelOutlined, PrinterOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   CreateStockAdjustmentPayload, StockAdjustment, StockAdjustmentItem, TonKho, warehouseApi,
@@ -15,8 +15,9 @@ import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolve
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 function fmtNum(v: number) {
   return Number(v || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 })
@@ -266,25 +267,21 @@ export default function StockAdjustmentsPage() {
   )
 
   return (
-    <div style={{ paddingBottom: 24 }}>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col>
-          <Space><AuditOutlined style={{ fontSize: 20, color: '#1677ff' }} /><Title level={4} style={{ margin: 0 }}>Kiểm kê / điều chỉnh tồn</Title></Space>
-        </Col>
-        <Col>
-          <Space>
-            <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
-              Xuất Excel
-            </Button>
-            <Button type="primary" icon={<PlusOutlined />}
-              disabled={!hasPermission('inventory.adjust')}
-              onClick={() => { form.resetFields(); setSelectedKho(undefined); setOpen(true) }}>
-              Tạo phiếu kiểm kê
-            </Button>
-          </Space>
-        </Col>
-      </Row>
-
+    <PageLayout
+      title="Kiểm kê / điều chỉnh tồn"
+      actions={
+        <Space>
+          <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
+            Xuất Excel
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />}
+            disabled={!hasPermission('inventory.adjust')}
+            onClick={() => { form.resetFields(); setSelectedKho(undefined); setOpen(true) }}>
+            Tạo phiếu kiểm kê
+          </Button>
+        </Space>
+      }
+    >
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[8, 8]}>
           <Col xs={12} sm={6}>
@@ -447,6 +444,6 @@ export default function StockAdjustmentsPage() {
           </Form.List>
         </Form>
       </Drawer>
-    </div>
+    </PageLayout>
   )
 }

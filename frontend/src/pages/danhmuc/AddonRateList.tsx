@@ -11,8 +11,9 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { addonRatesApi, AddonRateItem } from '../../api/bom'
 import EmptyState from "../../components/EmptyState"
+import PageLayout from '../../components/PageLayout'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 const NHOM_LABELS: Record<string, string> = {
   d1: 'Chống thấm',
@@ -169,10 +170,12 @@ export default function AddonRateList() {
 
   if (items.length === 0 && !isLoading) {
     return (
-      <div style={{ padding: 24 }}>
+      <PageLayout title="Phí gia công / dịch vụ thêm">
         <Card>
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <Title level={5} type="secondary">Chưa có dữ liệu phí gia công</Title>
+            <Text type="secondary" style={{ display: 'block', fontSize: 16, marginBottom: 8 }}>
+              Chưa có dữ liệu phí gia công
+            </Text>
             <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
               Bấm "Khởi tạo mặc định" để seed dữ liệu từ hệ thống.
             </Text>
@@ -186,34 +189,31 @@ export default function AddonRateList() {
             </Button>
           </div>
         </Card>
-      </div>
+      </PageLayout>
     )
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col>
-          <Title level={4} style={{ margin: 0 }}>Phí gia công / dịch vụ thêm</Title>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            Đơn giá các dịch vụ gia công — ảnh hưởng trực tiếp đến giá thành sản phẩm
-          </Text>
-        </Col>
-        <Col>
-          <Popconfirm
-            title="Reset toàn bộ về giá trị mặc định?"
-            description="Mọi thay đổi trước đó sẽ bị mất."
-            onConfirm={() => seedMut.mutate()}
-            okText="Reset"
-            cancelText="Hủy"
-            okButtonProps={{ danger: true }}
-          >
-            <Button icon={<ReloadOutlined />} loading={seedMut.isPending}>
-              Reset mặc định
-            </Button>
-          </Popconfirm>
-        </Col>
-      </Row>
+    <PageLayout
+      title="Phí gia công / dịch vụ thêm"
+      actions={
+        <Popconfirm
+          title="Reset toàn bộ về giá trị mặc định?"
+          description="Mọi thay đổi trước đó sẽ bị mất."
+          onConfirm={() => seedMut.mutate()}
+          okText="Reset"
+          cancelText="Hủy"
+          okButtonProps={{ danger: true }}
+        >
+          <Button icon={<ReloadOutlined />} loading={seedMut.isPending}>
+            Reset mặc định
+          </Button>
+        </Popconfirm>
+      }
+    >
+      <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 16 }}>
+        Đơn giá các dịch vụ gia công — ảnh hưởng trực tiếp đến giá thành sản phẩm
+      </Text>
 
       <Row gutter={[16, 16]}>
         {grouped.map(({ nhom, label, items: nhomItems }) => {
@@ -299,6 +299,6 @@ export default function AddonRateList() {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </PageLayout>
   )
 }
