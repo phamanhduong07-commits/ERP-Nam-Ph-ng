@@ -12,11 +12,14 @@ import { materialGroupsApi } from '../../api/materialGroups'
 import { suppliersApi } from '../../api/suppliers'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 const { Title } = Typography
 
 export default function OtherMaterialList() {
   const queryClient = useQueryClient()
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const [form] = Form.useForm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<OtherMaterial | null>(null)
@@ -116,13 +119,13 @@ export default function OtherMaterialList() {
     { title: 'Nhóm', dataIndex: 'ten_nhom', width: 130, render: (v: string) => v ?? '—' },
     { title: 'NCC', dataIndex: 'ten_ncc', width: 130, render: (v: string) => v ?? '—' },
     { title: 'DVT', dataIndex: 'dvt', width: 70 },
-    {
+    ...(canViewPrice ? [{
       title: 'Giá mua',
       dataIndex: 'gia_mua',
       width: 110,
-      align: 'right',
+      align: 'right' as const,
       render: (v: number) => v?.toLocaleString('vi-VN'),
-    },
+    }] : []),
     { title: 'Phân xưởng', dataIndex: 'phan_xuong', width: 120, render: (v: string | null) => v ?? '—' },
     {
       title: 'Trạng thái',

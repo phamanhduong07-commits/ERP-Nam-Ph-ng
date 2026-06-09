@@ -12,11 +12,14 @@ import { materialGroupsApi } from '../../api/materialGroups'
 import { suppliersApi } from '../../api/suppliers'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 const { Title } = Typography
 
 export default function PaperMaterialList() {
   const queryClient = useQueryClient()
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const [form] = Form.useForm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<PaperMaterial | null>(null)
@@ -137,16 +140,16 @@ export default function PaperMaterialList() {
     },
     { title: 'Nhóm', dataIndex: 'ten_nhom', width: 130, render: (v: string) => v ?? '—' },
     { title: 'NSX', dataIndex: 'ten_nsx', width: 130, render: (v: string) => v ?? '—' },
-    {
+    ...(canViewPrice ? [{
       title: 'Giá mua',
       dataIndex: 'gia_mua',
       width: 110,
-      align: 'right',
+      align: 'right' as const,
       sorter: true,
-      sortDirections: ['descend', 'ascend'] as const,
-      sortOrder: sortDir === 'desc' ? 'descend' : sortDir === 'asc' ? 'ascend' : null,
+      sortDirections: ['descend', 'ascend'] as ('descend' | 'ascend')[],
+      sortOrder: (sortDir === 'desc' ? 'descend' : sortDir === 'asc' ? 'ascend' : undefined) as 'descend' | 'ascend' | undefined,
       render: (v: number) => v?.toLocaleString('vi-VN'),
-    },
+    }] : []),
     {
       title: 'Sử dụng',
       dataIndex: 'su_dung',

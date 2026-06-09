@@ -12,6 +12,7 @@ import { customersApi } from '../../api/customers'
 import { LOAI_THUNG_OPTIONS } from '../../api/quotes'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 const { Title } = Typography
 
@@ -25,6 +26,8 @@ const LOAI_THUNG_GROUPED = [
 
 export default function ProductList() {
   const queryClient = useQueryClient()
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const [form] = Form.useForm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<ProductFull | null>(null)
@@ -160,13 +163,13 @@ export default function ProductList() {
       render: (v: number) => <Tag color="blue">{v}L</Tag>,
     },
     { title: 'DVT', dataIndex: 'dvt', width: 60 },
-    {
+    ...(canViewPrice ? [{
       title: 'Giá bán',
       dataIndex: 'gia_ban',
       width: 110,
-      align: 'right',
+      align: 'right' as const,
       render: (v: number) => v?.toLocaleString('vi-VN'),
-    },
+    }] : []),
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
