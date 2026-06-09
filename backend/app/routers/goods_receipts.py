@@ -1297,13 +1297,16 @@ def _build_label_html(roll, ma_ncc: str, ten_ncc: str, so_phieu: str) -> str:
 
     return (
         f'<div class="label">'
-        f'<div class="co">CÔNG TY TNHH SX TM NAM PHƯƠNG</div>'
-        f'<div class="hr"></div>'
+        f'<div class="top"><div class="co">CÔNG TY TNHH SX TM NAM PHƯƠNG</div><div class="hr"></div></div>'
+        f'<div class="bigs">'
         f'<div class="brow"><span class="blbl">Ký hiệu</span><span class="bval">{ky_hieu}</span></div>'
         f'<div class="brow"><span class="blbl">Khổ Giấy</span><span class="bval">{kho}</span></div>'
         f'<div class="brow"><span class="blbl">Số KG</span><span class="bval">{so_kg}</span></div>'
+        f'</div>'
+        f'<div class="meta">'
         f'<div class="mrow"><span class="mlbl">Mã chính</span><span class="mval">{ma_chinh}</span></div>'
         f'<div class="dgrid">{"".join(detail_cells)}</div>'
+        f'</div>'
         f'<div class="bc">{barcode_img}</div>'
         f'</div>'
     )
