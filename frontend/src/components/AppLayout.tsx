@@ -43,16 +43,15 @@ function buildNavItems(queueCount: number): NavItem[] {
       key: 'ban-hang',
       icon: <ShoppingCartOutlined />,
       label: 'Bán hàng',
-      permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve'],
+      permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve', 'production_order.view'],
       flyoutSections: [
         {
           items: [
-            { key: '/quotes', to: '/quotes', label: <Link to="/quotes">Báo giá</Link> },
+            { key: '/quotes', to: '/quotes', label: <Link to="/quotes">Báo giá</Link>, permissions: ['sales_order.approve'] },
             { key: '/sales/orders', to: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link> },
             { key: '/sales/returns', to: '/sales/returns', label: <Link to="/sales/returns">Trả hàng bán</Link> },
             { key: '/sales/theo-don-hang', to: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link> },
             { key: '/sales/giao-hang', to: '/sales/giao-hang', label: <Link to="/sales/giao-hang">🚚 Giao hàng</Link> },
-            { key: '/billing/invoices', to: '/billing/invoices', label: <Link to="/billing/invoices">Hóa đơn VAT</Link> },
           ],
         },
       ],
@@ -84,7 +83,7 @@ function buildNavItems(queueCount: number): NavItem[] {
               ),
             },
             { key: '/production/bom', to: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
-            { key: '/production/cost-analysis', to: '/production/cost-analysis', label: <Link to="/production/cost-analysis">Phân tích chi phí</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/cost-analysis', to: '/production/cost-analysis', label: <Link to="/production/cost-analysis">Phân tích chi phí</Link>, permissions: ['production.cost_analysis'] },
             { key: '/production/may-song', to: '/production/may-song', label: <Link to="/production/may-song">🌊 Máy Sóng</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
           ],
         },
@@ -264,18 +263,18 @@ function buildNavItems(queueCount: number): NavItem[] {
         {
           sectionLabel: 'Báo cáo Quản trị',
           items: [
-            { key: '/accounting/reports/workshop-pnl', to: '/accounting/reports/workshop-pnl', label: <Link to="/accounting/reports/workshop-pnl">Lãi lỗ Phân xưởng</Link>, permissions: ['report.view', 'report.export'] },
-            { key: '/accounting/reports/production-costing', to: '/accounting/reports/production-costing', label: <Link to="/accounting/reports/production-costing">Giá thành sản phẩm</Link>, permissions: ['report.view', 'report.export'] },
-            { key: '/reports/revenue', to: '/reports/revenue', label: <Link to="/reports/revenue">Doanh thu</Link>, permissions: ['report.view', 'report.export'] },
-            { key: '/reports/production-performance', to: '/reports/production-performance', label: <Link to="/reports/production-performance">Hiệu suất SX</Link>, permissions: ['report.view', 'report.export'] },
+            { key: '/accounting/reports/workshop-pnl', to: '/accounting/reports/workshop-pnl', label: <Link to="/accounting/reports/workshop-pnl">Lãi lỗ Phân xưởng</Link>, permissions: ['report.export'] },
+            { key: '/accounting/reports/production-costing', to: '/accounting/reports/production-costing', label: <Link to="/accounting/reports/production-costing">Giá thành sản phẩm</Link>, permissions: ['report.export'] },
+            { key: '/reports/revenue', to: '/reports/revenue', label: <Link to="/reports/revenue">Doanh thu</Link>, permissions: ['report.export'] },
+            { key: '/reports/production-performance', to: '/reports/production-performance', label: <Link to="/reports/production-performance">Hiệu suất SX</Link>, permissions: ['report.view'] },
           ],
         },
         {
           sectionLabel: 'Báo cáo Thuế',
           items: [
-            { key: '/accounting/trial-balance', to: '/accounting/trial-balance', label: <Link to="/accounting/trial-balance">Cân đối phát sinh</Link>, permissions: ['report.view', 'accounting.view'] },
-            { key: '/reports/tax-trial-balance', to: '/reports/tax-trial-balance', label: <Link to="/reports/tax-trial-balance">Bảng CĐPS (Thuế)</Link>, permissions: ['report.view', 'accounting.view'] },
-            { key: '/reports/vat-summary', to: '/reports/vat-summary', label: <Link to="/reports/vat-summary">Tờ khai thuế GTGT</Link>, permissions: ['report.view', 'accounting.view'] },
+            { key: '/accounting/trial-balance', to: '/accounting/trial-balance', label: <Link to="/accounting/trial-balance">Cân đối phát sinh</Link>, permissions: ['accounting.view'] },
+            { key: '/reports/tax-trial-balance', to: '/reports/tax-trial-balance', label: <Link to="/reports/tax-trial-balance">Bảng CĐPS (Thuế)</Link>, permissions: ['accounting.view'] },
+            { key: '/reports/vat-summary', to: '/reports/vat-summary', label: <Link to="/reports/vat-summary">Tờ khai thuế GTGT</Link>, permissions: ['accounting.view'] },
           ],
         },
         {
@@ -564,10 +563,7 @@ export default function AppLayout() {
             <Dropdown menu={{ items: userMenu, onClick: handleUserMenu }}>
               <Space style={{ cursor: 'pointer' }}>
                 <Avatar style={{ background: '#ff8200' }} icon={<UserOutlined />} />
-                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
-                  <Text strong>{user?.ho_ten}</Text>
-                  <Text type="secondary" style={{ fontSize: 11 }}>{user?.role}</Text>
-                </div>
+                <Text strong>{user?.ho_ten}</Text>
               </Space>
             </Dropdown>
           </Space>
