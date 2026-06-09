@@ -69,6 +69,8 @@ class OtherMaterialCreate(BaseModel):
     ton_toi_da: Decimal | None = None
     phan_xuong: str | None = None
     ma_ncc_id: int | None = None
+    quy_cach: str | None = None
+    tieu_chuan_ky_thuat: str | None = None
     ghi_chu: str | None = None
     trang_thai: bool = True
 
@@ -84,6 +86,8 @@ class OtherMaterialUpdate(BaseModel):
     ton_toi_da: Decimal | None = None
     phan_xuong: str | None = None
     ma_ncc_id: int | None = None
+    quy_cach: str | None = None
+    tieu_chuan_ky_thuat: str | None = None
     ghi_chu: str | None = None
     trang_thai: bool | None = None
 
@@ -102,6 +106,8 @@ class OtherMaterialResponse(BaseModel):
     phan_xuong: str | None = None
     ma_ncc_id: int | None = None
     ten_ncc: str | None = None
+    quy_cach: str | None = None
+    tieu_chuan_ky_thuat: str | None = None
     ghi_chu: str | None = None
     trang_thai: bool
     created_at: datetime

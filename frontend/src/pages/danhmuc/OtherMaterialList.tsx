@@ -3,7 +3,7 @@ import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
-  Select, Tag, message, Typography, Row, Col, Switch,
+  Select, Tag, message, Typography, Row, Col, Switch, Tabs,
 } from 'antd'
 import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -104,6 +104,8 @@ export default function OtherMaterialList() {
       ton_toi_da: vals.ton_toi_da ?? null,
       phan_xuong: vals.phan_xuong || null,
       ma_ncc_id: vals.ma_ncc_id ?? null,
+      quy_cach: vals.quy_cach || null,
+      tieu_chuan_ky_thuat: vals.tieu_chuan_ky_thuat || null,
       ghi_chu: vals.ghi_chu || null,
       trang_thai: vals.trang_thai ?? true,
     }
@@ -235,102 +237,137 @@ export default function OtherMaterialList() {
         destroyOnClose
       >
         <Form form={form} layout="vertical" size="small">
-          <Row gutter={12}>
-            <Col span={8}>
-              <Form.Item label="Mã chính" name="ma_chinh" rules={[{ required: true, message: 'Nhập mã chính' }]}>
-                <Input disabled={!!editing} placeholder="VD: VT001" />
-              </Form.Item>
-            </Col>
-            <Col span={16}>
-              <Form.Item label="Tên" name="ten" rules={[{ required: true, message: 'Nhập tên vật tư' }]}>
-                <Input placeholder="Tên vật tư" />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Tabs defaultActiveKey="1" items={[
+            {
+              key: '1',
+              label: 'Thông tin chung',
+              children: (
+                <>
+                  <Row gutter={12}>
+                    <Col span={8}>
+                      <Form.Item label="Mã chính" name="ma_chinh" rules={[{ required: true, message: 'Nhập mã chính' }]}>
+                        <Input disabled={!!editing} placeholder="VD: VT001" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={16}>
+                      <Form.Item label="Tên" name="ten" rules={[{ required: true, message: 'Nhập tên vật tư' }]}>
+                        <Input placeholder="Tên vật tư" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item label="Mã AMIS" name="ma_amis">
-                <Input placeholder="Mã trên hệ thống AMIS" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Nhóm" name="ma_nhom_id" rules={[{ required: true, message: 'Chọn nhóm' }]}>
-                <Select
-                  showSearch
-                  placeholder="Chọn nhóm vật tư"
-                  options={nhomOptions}
-                  filterOption={(input, opt) =>
-                    (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
-                  }
-                />
-              </Form.Item>
-            </Col>
-          </Row>
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item label="Mã AMIS" name="ma_amis">
+                        <Input placeholder="Mã trên hệ thống AMIS" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="Nhóm" name="ma_nhom_id" rules={[{ required: true, message: 'Chọn nhóm' }]}>
+                        <Select
+                          showSearch
+                          placeholder="Chọn nhóm vật tư"
+                          options={nhomOptions}
+                          filterOption={(input, opt) =>
+                            (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+                          }
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item label="NCC" name="ma_ncc_id">
-                <Select
-                  showSearch
-                  allowClear
-                  placeholder="Chọn nhà cung cấp"
-                  options={nccOptions}
-                  filterOption={(input, opt) =>
-                    (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
-                  }
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="DVT" name="dvt">
-                <Input placeholder="Đơn vị tính (VD: Cái, Kg, Lít...)" />
-              </Form.Item>
-            </Col>
-          </Row>
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item label="NCC" name="ma_ncc_id">
+                        <Select
+                          showSearch
+                          allowClear
+                          placeholder="Chọn nhà cung cấp"
+                          options={nccOptions}
+                          filterOption={(input, opt) =>
+                            (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+                          }
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="DVT" name="dvt">
+                        <Input placeholder="Đơn vị tính (VD: Cái, Kg, Lít...)" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
-          <Row gutter={12}>
-            {canViewPrice && (
-            <Col span={8}>
-              <Form.Item label="Giá mua (VND)" name="gia_mua">
-                <InputNumber
-                  style={{ width: '100%' }}
-                  min={0}
-                  step={1000}
-                  formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                  placeholder="0"
-                />
-              </Form.Item>
-            </Col>
-            )}
-            <Col span={8}>
-              <Form.Item label="Tồn tối thiểu" name="ton_toi_thieu">
-                <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="Tồn tối đa" name="ton_toi_da">
-                <InputNumber style={{ width: '100%' }} min={0} placeholder="Không giới hạn" />
-              </Form.Item>
-            </Col>
-          </Row>
+                  <Row gutter={12}>
+                    {canViewPrice && (
+                    <Col span={8}>
+                      <Form.Item label="Giá mua (VND)" name="gia_mua">
+                        <InputNumber
+                          style={{ width: '100%' }}
+                          min={0}
+                          step={1000}
+                          formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                          placeholder="0"
+                        />
+                      </Form.Item>
+                    </Col>
+                    )}
+                    <Col span={8}>
+                      <Form.Item label="Tồn tối thiểu" name="ton_toi_thieu">
+                        <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label="Tồn tối đa" name="ton_toi_da">
+                        <InputNumber style={{ width: '100%' }} min={0} placeholder="Không giới hạn" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item label="Phân xưởng" name="phan_xuong">
-                <Input placeholder="Phân xưởng sử dụng" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Ghi chú" name="ghi_chu">
-                <Input placeholder="Ghi chú thêm" />
-              </Form.Item>
-            </Col>
-          </Row>
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item label="Phân xưởng" name="phan_xuong">
+                        <Input placeholder="Phân xưởng sử dụng" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item label="Ghi chú" name="ghi_chu">
+                        <Input placeholder="Ghi chú thêm" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
 
-          <Form.Item label="Trạng thái" name="trang_thai" valuePropName="checked">
-            <Switch checkedChildren="Hoạt động" unCheckedChildren="Ngừng" />
-          </Form.Item>
+                  <Form.Item label="Trạng thái" name="trang_thai" valuePropName="checked">
+                    <Switch checkedChildren="Hoạt động" unCheckedChildren="Ngừng" />
+                  </Form.Item>
+                </>
+              ),
+            },
+            {
+              key: '2',
+              label: 'Kỹ thuật',
+              children: (
+                <>
+                  <Row gutter={12}>
+                    <Col span={24}>
+                      <Form.Item label="Quy cách / Kích thước" name="quy_cach">
+                        <Input placeholder="VD: 50mm × 100m, Φ12mm, 25kg/bao..." />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={12}>
+                    <Col span={24}>
+                      <Form.Item label="Tiêu chuẩn kỹ thuật" name="tieu_chuan_ky_thuat">
+                        <Input.TextArea
+                          rows={6}
+                          placeholder="Mô tả tiêu chuẩn kỹ thuật, yêu cầu chất lượng, thông số kỹ thuật..."
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </>
+              ),
+            },
+          ]} />
         </Form>
       </Modal>
     </div>

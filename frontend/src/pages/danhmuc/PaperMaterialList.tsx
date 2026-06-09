@@ -107,6 +107,14 @@ export default function PaperMaterialList() {
       ma_ky_hieu: vals.ma_ky_hieu || null,
       dinh_luong: vals.dinh_luong ?? null,
       ma_nsx_id: vals.ma_nsx_id ?? null,
+      tieu_chuan_dinh_luong: vals.tieu_chuan_dinh_luong ?? null,
+      sai_so_pct: vals.sai_so_pct ?? null,
+      do_buc_tieu_chuan: vals.do_buc_tieu_chuan ?? null,
+      do_nen_vong_tc: vals.do_nen_vong_tc ?? null,
+      do_cobb_tieu_chuan: vals.do_cobb_tieu_chuan ?? null,
+      do_day_tieu_chuan: vals.do_day_tieu_chuan ?? null,
+      do_buc_tb: vals.do_buc_tb ?? null,
+      do_nen_vong_tb: vals.do_nen_vong_tb ?? null,
       gia_mua: vals.gia_mua ?? 0,
       gia_ban: vals.gia_ban ?? 0,
       ton_toi_thieu: vals.ton_toi_thieu ?? 0,
@@ -410,17 +418,17 @@ export default function PaperMaterialList() {
 
                     <Row gutter={12}>
                       <Col span={8}>
-                        <Form.Item label="TC định lượng" name="tc_dinh_luong">
+                        <Form.Item label="TC định lượng (g/m²)" name="tieu_chuan_dinh_luong">
                           <InputNumber style={{ width: '100%' }} min={0} />
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item label="Độ bục TC" name="do_buc_tc">
-                          <InputNumber style={{ width: '100%' }} min={0} />
+                        <Form.Item label="Sai số (%)" name="sai_so_pct">
+                          <InputNumber style={{ width: '100%' }} min={0} max={100} step={0.5} />
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item label="Độ nén vòng TC" name="do_nen_vong_tc">
+                        <Form.Item label="Độ bục TC (kPa)" name="do_buc_tieu_chuan">
                           <InputNumber style={{ width: '100%' }} min={0} />
                         </Form.Item>
                       </Col>
@@ -428,13 +436,31 @@ export default function PaperMaterialList() {
 
                     <Row gutter={12}>
                       <Col span={8}>
-                        <Form.Item label="Độ cobb TC" name="do_cobb_tc">
+                        <Form.Item label="Độ nén vòng TC (N)" name="do_nen_vong_tc">
                           <InputNumber style={{ width: '100%' }} min={0} />
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item label="Độ dày TC (mm)" name="do_day_tc">
-                          <InputNumber style={{ width: '100%' }} min={0} step={0.01} />
+                        <Form.Item label="Độ cobb TC (g/m²)" name="do_cobb_tieu_chuan">
+                          <InputNumber style={{ width: '100%' }} min={0} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item label="Độ dày TC (mm)" name="do_day_tieu_chuan">
+                          <InputNumber style={{ width: '100%' }} min={0} step={0.001} />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Row gutter={12}>
+                      <Col span={8}>
+                        <Form.Item label="Độ bục TB (kPa)" name="do_buc_tb">
+                          <InputNumber style={{ width: '100%' }} min={0} />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item label="Độ nén vòng TB (N)" name="do_nen_vong_tb">
+                          <InputNumber style={{ width: '100%' }} min={0} />
                         </Form.Item>
                       </Col>
                     </Row>

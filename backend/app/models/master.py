@@ -239,6 +239,8 @@ class OtherMaterial(Base):
     phan_xuong: Mapped[str | None] = mapped_column(String(50))
     ma_ncc_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"))
     khong_tinh_nxt: Mapped[bool] = mapped_column(Boolean, default=False)
+    quy_cach: Mapped[str | None] = mapped_column(String(200))
+    tieu_chuan_ky_thuat: Mapped[str | None] = mapped_column(Text)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

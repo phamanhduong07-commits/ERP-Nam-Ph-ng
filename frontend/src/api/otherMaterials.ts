@@ -13,6 +13,8 @@ export interface OtherMaterial {
   ton_toi_da: number | null
   phan_xuong: string | null
   ma_ncc_id: number | null
+  quy_cach: string | null
+  tieu_chuan_ky_thuat: string | null
   ghi_chu: string | null
   trang_thai: boolean
   ten_nhom?: string

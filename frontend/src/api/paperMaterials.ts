@@ -13,6 +13,14 @@ export interface PaperMaterial {
   ma_ky_hieu: string | null
   dinh_luong: number | null
   ma_nsx_id: number | null
+  tieu_chuan_dinh_luong: number | null
+  sai_so_pct: number | null
+  do_buc_tieu_chuan: number | null
+  do_nen_vong_tc: number | null
+  do_cobb_tieu_chuan: number | null
+  do_day_tieu_chuan: number | null
+  do_buc_tb: number | null
+  do_nen_vong_tb: number | null
   gia_mua: number
   gia_ban: number
   ton_toi_thieu: number
