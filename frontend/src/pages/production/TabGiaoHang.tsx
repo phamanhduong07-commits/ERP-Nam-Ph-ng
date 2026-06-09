@@ -23,6 +23,7 @@ import { usePhapNhanForPrint, usePhapNhanList } from '../../hooks/usePhapNhan'
 import { COMPANY_CONFIGS, exportExcelWithTemplate } from '../../utils/exportUtils'
 import { systemApi } from '../../api/system'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 const GH_FILTER_KEY = 'gh-do-filter'
 
@@ -51,6 +52,8 @@ const fmtMoney = (v: number) =>
   v ? new Intl.NumberFormat('vi-VN').format(v) : '0'
 
 export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] }) {
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const { message } = App.useApp()
   const companyInfo = usePhapNhanForPrint()
   const navigate = useNavigate()
@@ -1172,8 +1175,8 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
     { title: 'Lơ xe', dataIndex: 'ten_lo_xe', width: 110 },
     { title: 'Lơ xe 2', dataIndex: 'ten_lo_xe_2', width: 110,
       render: (v: string | null) => v || <Text type="secondary">—</Text> },
-    { title: 'Tổng TT', dataIndex: 'tong_thanh_toan', width: 120, align: 'right' as const,
-      render: (v: number) => <Text strong>{fmtMoney(v)}đ</Text> },
+    ...(canViewPrice ? [{ title: 'Tổng TT', dataIndex: 'tong_thanh_toan', width: 120, align: 'right' as const,
+      render: (v: number) => <Text strong>{fmtMoney(v)}đ</Text> }] : []),
     { title: 'Công nợ', dataIndex: 'trang_thai_cong_no', width: 120,
       render: (v: string) => <Tag color={CONG_NO_COLORS[v]}>{CONG_NO_LABELS[v] || v}</Tag> },
     { title: 'Trạng thái', dataIndex: 'trang_thai', width: 110,
@@ -1697,7 +1700,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                   <Table.Summary.Cell index={3} align="right">{fmtN(detailOrder.items.reduce((s, it) => s + it.so_luong, 0))}</Table.Summary.Cell>
                   <Table.Summary.Cell index={4} align="right">{detailOrder.tong_dien_tich ? detailOrder.tong_dien_tich.toFixed(3) : '—'}</Table.Summary.Cell>
                   <Table.Summary.Cell index={5} align="right">{detailOrder.tong_trong_luong ? detailOrder.tong_trong_luong.toFixed(3) : '—'}</Table.Summary.Cell>
-                  <Table.Summary.Cell index={6} align="right"><Typography.Text type="danger" strong>{fmtMoney(detailOrder.tong_thanh_toan)}</Typography.Text></Table.Summary.Cell>
+                  {canViewPrice && <Table.Summary.Cell index={6} align="right"><Typography.Text type="danger" strong>{fmtMoney(detailOrder.tong_thanh_toan)}</Typography.Text></Table.Summary.Cell>}
                 </Table.Summary.Row>
               )}
               columns={[
@@ -1707,12 +1710,12 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                 { title: 'Số lượng', dataIndex: 'so_luong', width: 90, align: 'right' as const, render: (v: number) => <Typography.Text strong>{fmtN(v)}</Typography.Text> },
                 { title: 'M²', dataIndex: 'dien_tich', width: 80, align: 'right' as const, render: (v: number) => v ? v.toFixed(2) : '—' },
                 { title: 'Kg', dataIndex: 'trong_luong', width: 80, align: 'right' as const, render: (v: number) => v ? v.toFixed(2) : '—' },
-                { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 110, align: 'right' as const, render: (v: number) => v ? <Typography.Text>{fmtMoney(v)}</Typography.Text> : '—' },
+                ...(canViewPrice ? [{ title: 'Thành tiền', dataIndex: 'thanh_tien', width: 110, align: 'right' as const, render: (v: number) => v ? <Typography.Text>{fmtMoney(v)}</Typography.Text> : '—' }] : []),
                 { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true },
               ]}
             />
 
-            {(detailOrder.tong_tien_hang > 0 || detailOrder.tien_van_chuyen > 0) && (
+            {canViewPrice && (detailOrder.tong_tien_hang > 0 || detailOrder.tien_van_chuyen > 0) && (
               <Descriptions bordered column={1} size="small">
                 {detailOrder.tong_tien_hang > 0 && <Descriptions.Item label="Tổng tiền hàng"><Typography.Text>{fmtMoney(detailOrder.tong_tien_hang)} đ</Typography.Text></Descriptions.Item>}
                 {detailOrder.tien_van_chuyen > 0 && <Descriptions.Item label="Tiền vận chuyển">{fmtMoney(detailOrder.tien_van_chuyen)} đ</Descriptions.Item>}
@@ -1988,7 +1991,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                 />
               )
             },
-            !isRequest && {
+            !isRequest && canViewPrice && {
               title: 'Đơn giá', width: 140,
               render: (_: unknown, row: Record<string, unknown>, idx: number) => (
                 <InputNumber
@@ -1997,7 +2000,7 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                 />
               )
             },
-            !isRequest && { title: 'Thành tiền', width: 140, render: (_: unknown, row: Record<string, unknown>) => fmtMoney(Number(row.thanh_tien)), align: 'right' },
+            !isRequest && canViewPrice && { title: 'Thành tiền', width: 140, render: (_: unknown, row: Record<string, unknown>) => fmtMoney(Number(row.thanh_tien)), align: 'right' },
           ].filter(Boolean) as ColumnsType<Record<string, unknown>>}
           summary={() => !isRequest ? (
             <Table.Summary.Row>

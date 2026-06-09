@@ -32,6 +32,7 @@ import { bomApi } from '../../api/bom'
 import { exportToExcel, printToPdf, fmtVND, fmtDate, fmtNum, fmtDim, buildHtmlTable, printProductionTag, smartExportExcel, smartPrintPdf } from '../../utils/exportUtils'
 import PhotoCapture from '../../components/PhotoCapture'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 
 const { Title, Text } = Typography
@@ -216,6 +217,8 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
   const id = orderId ?? (params.id ? Number(params.id) : undefined)
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
 
   const [editingProgress, setEditingProgress] = useState<Record<number, number>>({})
   const [editingBomItemId, setEditingBomItemId] = useState<number | null>(null)
@@ -613,7 +616,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
             </Text>
           </div>
         )}
-        {r.gia_ban_muc_tieu != null && (
+        {canViewPrice && r.gia_ban_muc_tieu != null && (
           <Text type="secondary" style={{ fontSize: 11 }}>
             Giá mục tiêu: {new Intl.NumberFormat('vi-VN').format(r.gia_ban_muc_tieu)} đ
           </Text>
@@ -900,13 +903,13 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                   ? <Tag color="default">{khoNhapPhoiDuKien}</Tag>
                   : <Typography.Text type="secondary">—</Typography.Text>}
               </Descriptions.Item>
-              <Descriptions.Item label="Giá nội bộ (đ/tấm)">
+              {canViewPrice && <Descriptions.Item label="Giá nội bộ (đ/tấm)">
                 {order.don_gia_noi_bo != null
                   ? <Typography.Text strong style={{ color: '#fa8c16' }}>
                       {new Intl.NumberFormat('vi-VN').format(Number(order.don_gia_noi_bo))} đ
                     </Typography.Text>
                   : <Typography.Text type="secondary">Chưa đặt</Typography.Text>}
-              </Descriptions.Item>
+              </Descriptions.Item>}
               <Descriptions.Item label="Tận dụng phôi">
                 <Tooltip title={tanDungDisabledReason ?? undefined}>
                   <Switch
@@ -1277,7 +1280,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
                 </Drawer>
 
                 {/* ── Tổng kết lãi/lỗ toàn đơn hàng ─────────────────────── */}
-                {(bomResults.length > 0 || !bomAllLoaded) && (
+                {canViewPrice && (bomResults.length > 0 || !bomAllLoaded) && (
                   <Card
                     size="small"
                     style={{

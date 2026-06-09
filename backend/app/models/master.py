@@ -212,6 +212,7 @@ class PaperMaterial(Base):
     la_cuon: Mapped[bool] = mapped_column(Boolean, default=True)
     su_dung: Mapped[bool] = mapped_column(Boolean, default=True)
     khong_tinh_nxt: Mapped[bool] = mapped_column(Boolean, default=False)
+    tieu_chuan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tieu_chuan_ky_thuat.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
@@ -221,6 +222,7 @@ class PaperMaterial(Base):
 
     nhom: Mapped["MaterialGroup"] = relationship("MaterialGroup", back_populates="paper_materials")
     nsx: Mapped["Supplier | None"] = relationship("Supplier", back_populates="paper_materials")
+    tieu_chuan: Mapped["TieuChuanKyThuat | None"] = relationship("TieuChuanKyThuat", back_populates="paper_materials")
 
 
 class OtherMaterial(Base):
@@ -241,6 +243,7 @@ class OtherMaterial(Base):
     khong_tinh_nxt: Mapped[bool] = mapped_column(Boolean, default=False)
     quy_cach: Mapped[str | None] = mapped_column(String(200))
     tieu_chuan_ky_thuat: Mapped[str | None] = mapped_column(Text)
+    tieu_chuan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tieu_chuan_ky_thuat.id", ondelete="SET NULL"))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -252,6 +255,26 @@ class OtherMaterial(Base):
 
     nhom: Mapped["MaterialGroup"] = relationship("MaterialGroup", back_populates="other_materials")
     ncc: Mapped["Supplier | None"] = relationship("Supplier", back_populates="other_materials")
+    tieu_chuan: Mapped["TieuChuanKyThuat | None"] = relationship("TieuChuanKyThuat", back_populates="other_materials")
+
+
+class TieuChuanKyThuat(Base):
+    """Danh mục tiêu chuẩn kỹ thuật — dùng chung cho nhiều sản phẩm/nguyên liệu"""
+    __tablename__ = "tieu_chuan_ky_thuat"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ma_tc: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    ten: Mapped[str] = mapped_column(String(255), nullable=False)
+    mo_ta: Mapped[str | None] = mapped_column(Text)
+    ap_dung_cho: Mapped[str] = mapped_column(String(20), default="tat_ca")  # giay | nvl | tat_ca
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc))
+
+    paper_materials: Mapped[list["PaperMaterial"]] = relationship("PaperMaterial", back_populates="tieu_chuan")
+    other_materials: Mapped[list["OtherMaterial"]] = relationship("OtherMaterial", back_populates="tieu_chuan")
 
 
 class CauTrucThongDung(Base):

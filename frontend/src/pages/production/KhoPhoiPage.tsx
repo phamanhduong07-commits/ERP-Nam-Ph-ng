@@ -35,6 +35,7 @@ export default function KhoPhoiPage() {
   // Chuyển kho phôi cần quyền inventory.transfer; đẩy LSX sang công đoạn in/định hình
   // là thao tác trên lệnh sản xuất nên chấp nhận thêm production_order.edit.
   const canWrite = hasPermission('inventory.transfer') || hasPermission('production_order.edit')
+  const canViewPrice = hasPermission('production.cost_analysis')
   const [pushingKey, setPushingKey] = useState<string | null>(null)
   const [chuyenRows, setChuyenRows] = useState<KhoRow[]>([])
   const [chuyenQtys, setChuyenQtys] = useState<Record<number, number>>({})
@@ -788,7 +789,7 @@ export default function KhoPhoiPage() {
                     </Space>
                   ),
                 },
-                {
+                ...(canViewPrice ? [{
                   title: 'Đơn giá BQ',
                   dataIndex: 'don_gia_binh_quan',
                   width: 110,
@@ -796,7 +797,7 @@ export default function KhoPhoiPage() {
                   render: (v: number) => v > 0
                     ? <Text style={{ fontSize: 12 }}>{fmtCurrency(v)}</Text>
                     : <Text type="secondary">—</Text>,
-                },
+                }] : []),
                 {
                   title: 'Giá trị tồn',
                   dataIndex: 'gia_tri_ton',

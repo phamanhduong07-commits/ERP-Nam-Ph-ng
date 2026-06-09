@@ -85,7 +85,7 @@ const ReportingHubPage: React.FC = () => {
       icon: <AreaChartOutlined />,
       path: '/accounting/reports/production-costing',
       color: '#1890ff',
-      permissions: ['report.view', 'report.export'],
+      permissions: ['report.export'],
     },
     {
       title: 'Lãi lỗ Phân xưởng',
@@ -93,7 +93,7 @@ const ReportingHubPage: React.FC = () => {
       icon: <PieChartOutlined />,
       path: '/accounting/reports/workshop-pnl',
       color: '#722ed1',
-      permissions: ['report.view', 'report.export'],
+      permissions: ['report.export'],
     },
     {
       title: 'Hiệu suất Sản xuất',
@@ -101,7 +101,7 @@ const ReportingHubPage: React.FC = () => {
       icon: <LineChartOutlined />,
       path: '/reports/production-performance',
       color: '#52c41a',
-      permissions: ['report.view', 'report.export'],
+      permissions: ['report.view'],
     },
     {
       title: 'Doanh thu & Lợi nhuận',
@@ -109,7 +109,7 @@ const ReportingHubPage: React.FC = () => {
       icon: <DollarOutlined />,
       path: '/reports/revenue',
       color: '#faad14',
-      permissions: ['report.view', 'report.export'],
+      permissions: ['report.export'],
     },
   ]
 
@@ -120,7 +120,7 @@ const ReportingHubPage: React.FC = () => {
       icon: <AuditOutlined />,
       path: '/accounting/trial-balance',
       color: '#13c2c2',
-      permissions: ['report.view', 'accounting.view'],
+      permissions: ['accounting.view'],
     },
     {
       title: 'Bảng CĐPS (Thuế)',
@@ -128,7 +128,7 @@ const ReportingHubPage: React.FC = () => {
       icon: <SafetyCertificateOutlined />,
       path: '/reports/tax-trial-balance',
       color: '#f5222d',
-      permissions: ['report.view', 'accounting.view'],
+      permissions: ['accounting.view'],
     },
     {
       title: 'Báo cáo Thuế GTGT',
@@ -136,7 +136,7 @@ const ReportingHubPage: React.FC = () => {
       icon: <ContainerOutlined />,
       path: '/reports/vat-summary',
       color: '#eb2f96',
-      permissions: ['report.view', 'accounting.view'],
+      permissions: ['accounting.view'],
     },
   ]
 

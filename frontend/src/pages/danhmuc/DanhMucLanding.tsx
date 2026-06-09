@@ -50,6 +50,7 @@ const COLUMNS: Group[][] = [
         { label: 'Nguyên liệu giấy', to: '/master/paper-materials', permissions: ['master.materials.view', 'master.materials.manage'] },
         { label: 'Nguyên liệu khác', to: '/master/other-materials', permissions: ['master.materials.view', 'master.materials.manage'] },
         { label: 'Kết cấu thông dụng', to: '/danhmuc/cau-truc', permissions: ['master.materials.view', 'master.materials.manage'] },
+        { label: 'Tiêu chuẩn kỹ thuật', to: '/danhmuc/tieu-chuan-ky-thuat', permissions: ['master.materials.view', 'master.materials.manage'] },
       ],
     },
     {

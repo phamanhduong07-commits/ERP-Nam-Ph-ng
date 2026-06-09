@@ -32,6 +32,7 @@ const SupplierList = lazy(() => import('./pages/danhmuc/SupplierList'))
 const MaterialGroupList = lazy(() => import('./pages/danhmuc/MaterialGroupList'))
 const PaperMaterialList = lazy(() => import('./pages/danhmuc/PaperMaterialList'))
 const OtherMaterialList = lazy(() => import('./pages/danhmuc/OtherMaterialList'))
+const TieuChuanKyThuatList = lazy(() => import('./pages/danhmuc/TieuChuanKyThuatList'))
 const WarehouseList = lazy(() => import('./pages/danhmuc/WarehouseList'))
 const ProductList = lazy(() => import('./pages/danhmuc/ProductList'))
 const UserList = lazy(() => import('./pages/danhmuc/UserList'))
@@ -287,6 +288,7 @@ export default function App() {
             <Route path="quotes/:id/edit" element={<ErrorBoundary><QuoteForm /></ErrorBoundary>} />
             <Route path="danhmuc" element={<DanhMucLanding />} />
             <Route path="danhmuc/cau-truc" element={<CauTrucList />} />
+            <Route path="danhmuc/tieu-chuan-ky-thuat" element={<TieuChuanKyThuatList />} />
             <Route path="master/customers" element={<CustomerList />} />
             <Route path="master/suppliers" element={<SupplierList />} />
             <Route path="master/material-groups" element={<MaterialGroupList />} />

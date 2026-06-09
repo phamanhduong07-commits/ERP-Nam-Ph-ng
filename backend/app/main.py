@@ -17,7 +17,7 @@ from app.config import settings
 from app.database import Base, engine, ensure_schema
 from app.routers import (
     auth, customers, products, sales_orders, sales_returns, quotes, paper_materials, cau_truc,
-    suppliers, material_groups, other_materials, warehouses, users,
+    suppliers, material_groups, other_materials, warehouses, users, tieu_chuan_ky_thuat,
     don_vi_tinh, vi_tri, xe, tai_xe, lo_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
     production_orders, bom, production_plans, indirect_costs, addon_rates, permissions,
     hr, logistics_hr, hr_payroll_calc, hr_reward, hr_self_service,
@@ -188,6 +188,7 @@ app.include_router(cau_truc.router)
 app.include_router(suppliers.router)
 app.include_router(material_groups.router)
 app.include_router(other_materials.router)
+app.include_router(tieu_chuan_ky_thuat.router)
 app.include_router(warehouses.router)
 app.include_router(users.router)
 app.include_router(don_vi_tinh.router)

@@ -1,6 +1,6 @@
 from app.models.master import (  # noqa: F401
     PhanXuong, Warehouse, MaterialGroup, Supplier, Customer,
-    PaperMaterial, OtherMaterial, CauTrucThongDung, Product, PhapNhan,
+    PaperMaterial, OtherMaterial, TieuChuanKyThuat, CauTrucThongDung, Product, PhapNhan,
     BankAccount,
     LoXe, TaiXe, Xe, DonGiaVanChuyen,
     DonViTinh, ViTri, TinhThanh, PhuongXa,

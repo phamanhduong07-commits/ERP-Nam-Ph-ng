@@ -71,6 +71,7 @@ class OtherMaterialCreate(BaseModel):
     ma_ncc_id: int | None = None
     quy_cach: str | None = None
     tieu_chuan_ky_thuat: str | None = None
+    tieu_chuan_id: int | None = None
     ghi_chu: str | None = None
     trang_thai: bool = True
 
@@ -88,6 +89,7 @@ class OtherMaterialUpdate(BaseModel):
     ma_ncc_id: int | None = None
     quy_cach: str | None = None
     tieu_chuan_ky_thuat: str | None = None
+    tieu_chuan_id: int | None = None
     ghi_chu: str | None = None
     trang_thai: bool | None = None
 
@@ -108,6 +110,8 @@ class OtherMaterialResponse(BaseModel):
     ten_ncc: str | None = None
     quy_cach: str | None = None
     tieu_chuan_ky_thuat: str | None = None
+    tieu_chuan_id: int | None = None
+    ten_tieu_chuan: str | None = None
     ghi_chu: str | None = None
     trang_thai: bool
     created_at: datetime
@@ -120,6 +124,7 @@ def _to_response(obj: OtherMaterial) -> OtherMaterialResponse:
     data = OtherMaterialResponse.model_validate(obj)
     data.ten_nhom = obj.nhom.ten_nhom if obj.nhom else None
     data.ten_ncc = obj.ncc.ten_viet_tat if obj.ncc else None
+    data.ten_tieu_chuan = obj.tieu_chuan.ten if obj.tieu_chuan else None
     return data
 
 

@@ -10,6 +10,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { paperMaterialsFullApi, type PaperMaterial, type PaperMaterialCreate } from '../../api/paperMaterials'
 import { materialGroupsApi } from '../../api/materialGroups'
 import { suppliersApi } from '../../api/suppliers'
+import { tieuChuanApi } from '../../api/tieuChuanKyThuat'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
@@ -30,6 +31,7 @@ export default function PaperMaterialList() {
   const [filterNsx, setFilterNsx] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
   const [sortDir, setSortDir] = useState<'asc' | 'desc' | undefined>(undefined)
+  const [tcSearch, setTcSearch] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['paper-materials', search, filterNhom, filterNsx, page, sortDir],
@@ -53,6 +55,11 @@ export default function PaperMaterialList() {
   const { data: nsxList = [] } = useQuery({
     queryKey: ['suppliers-all'],
     queryFn: () => suppliersApi.all().then(r => r.data),
+  })
+
+  const { data: tcList = [] } = useQuery({
+    queryKey: ['tieu-chuan-search-paper', tcSearch],
+    queryFn: () => tieuChuanApi.search({ q: tcSearch, ap_dung_cho: 'giay', limit: 30 }).then(r => r.data),
   })
 
   const createMut = useMutation({
@@ -115,6 +122,7 @@ export default function PaperMaterialList() {
       do_day_tieu_chuan: vals.do_day_tieu_chuan ?? null,
       do_buc_tb: vals.do_buc_tb ?? null,
       do_nen_vong_tb: vals.do_nen_vong_tb ?? null,
+      tieu_chuan_id: vals.tieu_chuan_id ?? null,
       gia_mua: vals.gia_mua ?? 0,
       gia_ban: vals.gia_ban ?? 0,
       ton_toi_thieu: vals.ton_toi_thieu ?? 0,
@@ -398,6 +406,22 @@ export default function PaperMaterialList() {
                 label: 'Kỹ thuật',
                 children: (
                   <>
+                    <Row gutter={12}>
+                      <Col span={24}>
+                        <Form.Item label="Tiêu chuẩn kỹ thuật (từ danh mục)" name="tieu_chuan_id">
+                          <Select
+                            showSearch
+                            allowClear
+                            placeholder="Chọn hoặc tìm tiêu chuẩn..."
+                            filterOption={false}
+                            onSearch={v => setTcSearch(v)}
+                            options={tcList.map(t => ({ value: t.id, label: `${t.ma_tc} — ${t.ten}` }))}
+                            style={{ width: '100%' }}
+                          />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
                     <Row gutter={12}>
                       <Col span={8}>
                         <Form.Item label="Mã ký hiệu" name="ma_ky_hieu">

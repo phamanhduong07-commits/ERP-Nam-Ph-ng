@@ -48,6 +48,7 @@ class PaperMaterialCreate(BaseModel):
     gia_dinh_muc: Decimal | None = Decimal("0")
     ton_toi_thieu: Decimal | None = Decimal("0")
     ton_toi_da: Decimal | None = None
+    tieu_chuan_id: int | None = None
     la_cuon: bool = True
     su_dung: bool = True
 
@@ -77,6 +78,7 @@ class PaperMaterialUpdate(BaseModel):
     gia_dinh_muc: Decimal | None = None
     ton_toi_thieu: Decimal | None = None
     ton_toi_da: Decimal | None = None
+    tieu_chuan_id: int | None = None
     la_cuon: bool | None = None
     su_dung: bool | None = None
 
@@ -108,6 +110,8 @@ class PaperMaterialResponse(BaseModel):
     gia_dinh_muc: Decimal | None = None
     ton_toi_thieu: Decimal | None = None
     ton_toi_da: Decimal | None = None
+    tieu_chuan_id: int | None = None
+    ten_tieu_chuan: str | None = None
     la_cuon: bool
     su_dung: bool
     ten_nhom: str | None = None
@@ -145,6 +149,7 @@ def _to_response(obj: PaperMaterial) -> PaperMaterialResponse:
     data = PaperMaterialResponse.model_validate(obj)
     data.ten_nhom = obj.nhom.ten_nhom if obj.nhom else None
     data.ten_nsx = obj.nsx.ten_viet_tat if obj.nsx else None
+    data.ten_tieu_chuan = obj.tieu_chuan.ten if obj.tieu_chuan else None
     return data
 
 

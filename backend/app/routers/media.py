@@ -20,8 +20,8 @@ from app.models.media import ErpMedia
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
-ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
-MAX_SIZE_MB = 15
+ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"}
+MAX_SIZE_MB = 20
 UPLOAD_BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "uploads", "media")
 
 _MODULE_RE = re.compile(r"^[a-z][a-z0-9_]{1,62}$")
@@ -50,7 +50,7 @@ async def upload_media(
     # Validate MIME
     content_type = file.content_type or ""
     if content_type not in ALLOWED_MIME:
-        raise HTTPException(400, f"Chỉ chấp nhận ảnh JPEG/PNG/WebP/HEIC. Nhận được: {content_type}")
+        raise HTTPException(400, f"Chỉ chấp nhận ảnh JPEG/PNG/WebP/HEIC hoặc PDF. Nhận được: {content_type}")
 
     # Đọc nội dung & kiểm tra kích thước
     data = await file.read()

@@ -15,14 +15,16 @@ export interface OtherMaterial {
   ma_ncc_id: number | null
   quy_cach: string | null
   tieu_chuan_ky_thuat: string | null
+  tieu_chuan_id: number | null
   ghi_chu: string | null
   trang_thai: boolean
   ten_nhom?: string
   ten_ncc?: string
+  ten_tieu_chuan?: string | null
   created_at: string
 }
 
-export type OtherMaterialCreate = Omit<OtherMaterial, 'id' | 'ten_nhom' | 'ten_ncc' | 'created_at'>
+export type OtherMaterialCreate = Omit<OtherMaterial, 'id' | 'ten_nhom' | 'ten_ncc' | 'ten_tieu_chuan' | 'created_at'>
 
 export interface OtherMaterialSearchResult {
   value: string   // ma_chinh

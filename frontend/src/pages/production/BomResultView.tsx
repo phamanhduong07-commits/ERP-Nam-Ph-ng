@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { bomApi, vnd } from '../../api/bom'
 import type { BomLayerResult } from '../../api/bom'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 interface Props {
   productionOrderItemId: number
@@ -17,25 +18,25 @@ const SOURCE_CONFIG = {
   product:   { label: 'Từ thông tin sản phẩm',     color: 'default'  as const },
 }
 
-const layerColumns: ColumnsType<BomLayerResult> = [
-  { title: 'Vị trí lớp',     dataIndex: 'vi_tri_lop',         width: 110 },
-  { title: 'Mã KH',          dataIndex: 'ma_ky_hieu',         width: 80  },
-  { title: 'ĐL (g/m²)',      dataIndex: 'dinh_luong',         width: 90,  align: 'right', render: v => Number(v).toFixed(0) },
-  { title: 'TL/thùng (kg)',  dataIndex: 'trong_luong_1con',   width: 110, align: 'right', render: v => Number(v).toFixed(4) },
+const BASE_LAYER_COLUMNS: ColumnsType<BomLayerResult> = [
+  { title: 'Vị trí lớp',     dataIndex: 'vi_tri_lop',           width: 110 },
+  { title: 'Mã KH',          dataIndex: 'ma_ky_hieu',           width: 80  },
+  { title: 'ĐL (g/m²)',      dataIndex: 'dinh_luong',           width: 90,  align: 'right', render: v => Number(v).toFixed(0) },
+  { title: 'TL/thùng (kg)',  dataIndex: 'trong_luong_1con',     width: 110, align: 'right', render: v => Number(v).toFixed(4) },
   { title: 'SL cần (kg)',    dataIndex: 'trong_luong_can_tong', width: 105, align: 'right', render: v => Number(v).toFixed(2) },
-  { title: 'Đơn giá/kg',    dataIndex: 'don_gia_kg',          width: 105, align: 'right', render: v => vnd(Number(v)) },
-  {
-    title: 'Thành tiền',
-    dataIndex: 'thanh_tien',
-    width: 115,
-    align: 'right',
-    render: v => <Text strong>{vnd(Number(v))}</Text>,
-  },
+]
+const PRICE_LAYER_COLUMNS: ColumnsType<BomLayerResult> = [
+  { title: 'Đơn giá/kg', dataIndex: 'don_gia_kg', width: 105, align: 'right', render: v => vnd(Number(v)) },
+  { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 115, align: 'right', render: v => <Text strong>{vnd(Number(v))}</Text> },
 ]
 
 type CostRow = { key: string; label: string; value: number; bold?: boolean; indent?: boolean; separator?: boolean }
 
 export default function BomResultView({ productionOrderItemId }: Props) {
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
+  const layerColumns = canViewPrice ? [...BASE_LAYER_COLUMNS, ...PRICE_LAYER_COLUMNS] : BASE_LAYER_COLUMNS
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['bom-from-poi', productionOrderItemId],
     queryFn: () => bomApi.fromProductionItem(productionOrderItemId).then(r => r.data),
@@ -201,17 +202,17 @@ export default function BomResultView({ productionOrderItemId }: Props) {
                   {data.bom_layers.reduce((s, l) => s + Number(l.trong_luong_can_tong), 0).toFixed(2)} kg
                 </Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={5} />
-              <Table.Summary.Cell index={6} align="right">
+              {canViewPrice && <Table.Summary.Cell index={5} />}
+              {canViewPrice && <Table.Summary.Cell index={6} align="right">
                 <Text strong>{vnd(data.chi_phi_giay)} đ</Text>
-              </Table.Summary.Cell>
+              </Table.Summary.Cell>}
             </Table.Summary.Row>
           )}
         />
       </Card>
 
       {/* ── Chi phí & Lãi lỗ ─────────────────────────────────────────────── */}
-      <Row gutter={10}>
+      {canViewPrice && <Row gutter={10}>
         <Col xs={24} md={14}>
           <Card size="small" title="Bảng biến phí">
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -316,7 +317,7 @@ export default function BomResultView({ productionOrderItemId }: Props) {
             </table>
           </Card>
         </Col>
-      </Row>
+      </Row>}
     </div>
   )
 }

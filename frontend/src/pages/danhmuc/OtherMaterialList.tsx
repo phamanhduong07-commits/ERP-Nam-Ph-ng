@@ -10,6 +10,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { otherMaterialsApi, type OtherMaterial, type OtherMaterialCreate } from '../../api/otherMaterials'
 import { materialGroupsApi } from '../../api/materialGroups'
 import { suppliersApi } from '../../api/suppliers'
+import { tieuChuanApi } from '../../api/tieuChuanKyThuat'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
@@ -29,6 +30,7 @@ export default function OtherMaterialList() {
   const [filterNhom, setFilterNhom] = useState<number | undefined>(undefined)
   const [filterNcc, setFilterNcc] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
+  const [tcSearch, setTcSearch] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['other-materials', search, filterNhom, filterNcc, page],
@@ -50,6 +52,11 @@ export default function OtherMaterialList() {
   const { data: nccList = [] } = useQuery({
     queryKey: ['suppliers-all'],
     queryFn: () => suppliersApi.all().then(r => r.data),
+  })
+
+  const { data: tcList = [] } = useQuery({
+    queryKey: ['tieu-chuan-search', tcSearch],
+    queryFn: () => tieuChuanApi.search({ q: tcSearch, ap_dung_cho: 'nvl', limit: 30 }).then(r => r.data),
   })
 
   const createMut = useMutation({
@@ -106,6 +113,7 @@ export default function OtherMaterialList() {
       ma_ncc_id: vals.ma_ncc_id ?? null,
       quy_cach: vals.quy_cach || null,
       tieu_chuan_ky_thuat: vals.tieu_chuan_ky_thuat || null,
+      tieu_chuan_id: vals.tieu_chuan_id ?? null,
       ghi_chu: vals.ghi_chu || null,
       trang_thai: vals.trang_thai ?? true,
     }
@@ -349,6 +357,21 @@ export default function OtherMaterialList() {
                 <>
                   <Row gutter={12}>
                     <Col span={24}>
+                      <Form.Item label="Tiêu chuẩn kỹ thuật (từ danh mục)" name="tieu_chuan_id">
+                        <Select
+                          showSearch
+                          allowClear
+                          placeholder="Chọn hoặc tìm tiêu chuẩn..."
+                          filterOption={false}
+                          onSearch={v => setTcSearch(v)}
+                          options={tcList.map(t => ({ value: t.id, label: `${t.ma_tc} — ${t.ten}` }))}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={12}>
+                    <Col span={24}>
                       <Form.Item label="Quy cách / Kích thước" name="quy_cach">
                         <Input placeholder="VD: 50mm × 100m, Φ12mm, 25kg/bao..." />
                       </Form.Item>
@@ -356,9 +379,9 @@ export default function OtherMaterialList() {
                   </Row>
                   <Row gutter={12}>
                     <Col span={24}>
-                      <Form.Item label="Tiêu chuẩn kỹ thuật" name="tieu_chuan_ky_thuat">
+                      <Form.Item label="Ghi chú kỹ thuật" name="tieu_chuan_ky_thuat">
                         <Input.TextArea
-                          rows={6}
+                          rows={5}
                           placeholder="Mô tả tiêu chuẩn kỹ thuật, yêu cầu chất lượng, thông số kỹ thuật..."
                         />
                       </Form.Item>

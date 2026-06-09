@@ -16,6 +16,7 @@ import { warehouseApi } from '../../api/warehouse'
 import { calcBoxDimensions } from '../../api/quotes'
 import type { Product } from '../../api/products'
 import EmptyState from "../../components/EmptyState"
+import { usePermission } from '../../hooks/usePermission'
 
 const { Title, Text } = Typography
 
@@ -50,6 +51,8 @@ function calcSoTam(line: ProdLine): number | null {
 }
 
 export default function ProductionOrderCreate() {
+  const { hasPermission } = usePermission()
+  const canViewPrice = hasPermission('production.cost_analysis')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const initSalesOrderId = searchParams.get('sales_order_id')
@@ -380,7 +383,7 @@ export default function ProductionOrderCreate() {
                     )}
                   </Form.Item>
                 </Col>
-                <Col span={8}>
+                {canViewPrice && <Col span={8}>
                   <Form.Item
                     name="don_gia_noi_bo"
                     label="Giá nội bộ (đ/tấm)"
@@ -395,7 +398,7 @@ export default function ProductionOrderCreate() {
                       placeholder="VD: 50,000"
                     />
                   </Form.Item>
-                </Col>
+                </Col>}
                 <Col span={16}>
                   <Form.Item name="ghi_chu" label="Ghi chú">
                     <Input.TextArea rows={2} placeholder="Ghi chú lệnh SX..." />

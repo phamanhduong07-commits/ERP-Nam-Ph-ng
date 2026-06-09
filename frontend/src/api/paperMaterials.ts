@@ -21,6 +21,7 @@ export interface PaperMaterial {
   do_day_tieu_chuan: number | null
   do_buc_tb: number | null
   do_nen_vong_tb: number | null
+  tieu_chuan_id: number | null
   gia_mua: number
   gia_ban: number
   ton_toi_thieu: number
@@ -29,10 +30,11 @@ export interface PaperMaterial {
   su_dung: boolean
   ten_nhom?: string
   ten_nsx?: string
+  ten_tieu_chuan?: string | null
   created_at: string
 }
 
-export type PaperMaterialCreate = Omit<PaperMaterial, 'id' | 'ten_nhom' | 'ten_nsx' | 'created_at'>
+export type PaperMaterialCreate = Omit<PaperMaterial, 'id' | 'ten_nhom' | 'ten_nsx' | 'ten_tieu_chuan' | 'created_at'>
 
 export const paperMaterialsFullApi = {
   list: (params?: { search?: string; ma_nhom_id?: number; ma_nsx_id?: number; page?: number; page_size?: number; sort_by?: string; sort_order?: string }) =>
