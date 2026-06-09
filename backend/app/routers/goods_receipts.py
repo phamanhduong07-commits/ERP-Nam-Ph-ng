@@ -1247,11 +1247,11 @@ def _barcode_img(value: str) -> str:
         b = _bc.get("code128", value, writer=ImageWriter())
         buf = io.BytesIO()
         b.write(buf, options={
-            "module_width": 0.4,
-            "module_height": 12.0,
-            "font_size": 10,
-            "text_distance": 3.5,
-            "quiet_zone": 3.0,
+            "module_width": 0.5,
+            "module_height": 18.0,
+            "font_size": 12,
+            "text_distance": 4.0,
+            "quiet_zone": 4.0,
             "write_text": True,
             "dpi": 200,
         })
@@ -1265,35 +1265,47 @@ def _barcode_img(value: str) -> str:
 
 def _build_label_html(roll, ma_ncc: str, ten_ncc: str, so_phieu: str) -> str:
     pm = roll.paper_material
-    ky_hieu  = (pm.ma_ky_hieu or "") if pm else ""
-    kho      = f"{float(pm.kho):.0f}" if pm and pm.kho else ""
-    ma_chinh = (pm.ma_chinh or "") if pm else ""
+    ky_hieu    = (pm.ma_ky_hieu or "") if pm else ""
+    kho        = f"{float(pm.kho):.0f}" if pm and pm.kho else ""
+    ma_chinh   = (pm.ma_chinh or "") if pm else ""
     dinh_luong = f"{int(pm.dinh_luong)}" if pm and pm.dinh_luong else ""
-    nvl      = (pm.ten_viet_tat or "") if pm else ""
-    so_kg    = f"{float(roll.trong_luong_ban_dau):,.0f}"
-    ngay_str = roll.ngay_nhap.strftime("%d/%m/%Y") if roll.ngay_nhap else ""
-    ncc_str  = ma_ncc or ten_ncc or ""
+    nvl        = (pm.ten_viet_tat or "") if pm else ""
+    so_kg      = f"{float(roll.trong_luong_ban_dau):,.0f}"
+    ngay_str   = roll.ngay_nhap.strftime("%d/%m/%Y") if roll.ngay_nhap else ""
+    ncc_str    = ma_ncc or ten_ncc or ""
+    phieu_ncc  = " | ".join(x for x in [so_phieu, ncc_str] if x)
+
     barcode_img = _barcode_img(roll.barcode)
+
+    # Build optional meta row (only if at least one field has value)
+    meta_parts = []
+    if ma_chinh:
+        meta_parts.append(f'<div><span class="lbl">Mã</span><div class="val">{ma_chinh}</div></div>')
+    if nvl:
+        meta_parts.append(f'<div><span class="lbl">NVL</span><div class="val">{nvl}</div></div>')
+    meta_row = f'<div class="row2 sm">{"".join(meta_parts)}</div>' if meta_parts else ""
+
+    ngay_ncc_parts = []
+    if ngay_str:
+        ngay_ncc_parts.append(f'<div><span class="lbl">Ngày nhập</span><div class="val">{ngay_str}</div></div>')
+    if phieu_ncc:
+        ngay_ncc_parts.append(f'<div><span class="lbl">Phiếu / NCC</span><div class="val">{phieu_ncc}</div></div>')
+    ngay_ncc_row = f'<div class="row2 sm">{"".join(ngay_ncc_parts)}</div>' if ngay_ncc_parts else ""
+
     return (
         f'<div class="label">'
         f'<div class="co">CTY TNHH SX TM NAM PHƯƠNG</div>'
         f'<div class="hr"></div>'
         f'<div class="row2">'
-        f'  <div><span class="lbl">Ký hiệu</span><div class="big">{ky_hieu}</div></div>'
-        f'  <div><span class="lbl">Khổ (mm)</span><div class="big">{kho}</div></div>'
+        f'<div><span class="lbl">Ký hiệu</span><div class="big">{ky_hieu}</div></div>'
+        f'<div><span class="lbl">Khổ (mm)</span><div class="big">{kho}</div></div>'
         f'</div>'
         f'<div class="row2">'
-        f'  <div><span class="lbl">ĐL (g/m²)</span><div class="med">{dinh_luong}</div></div>'
-        f'  <div><span class="lbl">Số kg</span><div class="med">{so_kg} kg</div></div>'
+        f'<div><span class="lbl">ĐL (g/m²)</span><div class="med">{dinh_luong}</div></div>'
+        f'<div><span class="lbl">Số kg</span><div class="med">{so_kg} kg</div></div>'
         f'</div>'
-        f'<div class="row2 sm">'
-        f'  <div><span class="lbl">Mã chính</span><div class="val">{ma_chinh}</div></div>'
-        f'  <div><span class="lbl">NVL</span><div class="val">{nvl}</div></div>'
-        f'</div>'
-        f'<div class="row2 sm">'
-        f'  <div><span class="lbl">Ngày nhập</span><div class="val">{ngay_str}</div></div>'
-        f'  <div><span class="lbl">Số phiếu / NCC</span><div class="val">{so_phieu or ncc_str}</div></div>'
-        f'</div>'
+        f'{meta_row}'
+        f'{ngay_ncc_row}'
         f'<div class="bc">{barcode_img}</div>'
         f'</div>'
     )
