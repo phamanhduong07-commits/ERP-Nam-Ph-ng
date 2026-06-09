@@ -14,9 +14,10 @@ import EmptyState from '../../components/EmptyState'
 import {
   DatabaseOutlined, FileExcelOutlined, FilePdfOutlined,
   WarningOutlined, UploadOutlined, SyncOutlined,
-  InboxOutlined, DollarOutlined, AppstoreOutlined, UnorderedListOutlined,
+  InboxOutlined, DollarOutlined, AppstoreOutlined, UnorderedListOutlined, PrinterOutlined,
 } from '@ant-design/icons'
 import { warehouseApi, PhanXuongWithWarehouses, WarehouseSlot, TonKho, TonKhoGiayRow, GiayRoll } from '../../api/warehouse'
+import apiClient from '../../api/client'
 import { warehousesApi } from '../../api/warehouses'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { usePermission } from '../../hooks/usePermission'
@@ -232,6 +233,20 @@ function DashboardTab() {
 }
 
 // ─── Chi tiết Tab ─────────────────────────────────────────────────────────────
+async function openPrintRoll(rollId: number) {
+  try {
+    const res = await apiClient.get<string>(
+      warehouseApi.printGiayRollLabelOne(rollId),
+      { responseType: 'text' },
+    )
+    const blob = new Blob([res.data], { type: 'text/html; charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const w = window.open(url, '_blank')
+    if (w) w.onload = () => URL.revokeObjectURL(url)
+    else { URL.revokeObjectURL(url); alert('Trình duyệt chặn popup. Vui lòng cho phép.') }
+  } catch { alert('Không in được tem.') }
+}
+
 function RollsExpand({ pmId, whId }: { pmId: number | null; whId: number }) {
   const { data: rolls = [], isLoading } = useQuery({
     queryKey: ['giay-rolls-expand', pmId, whId],
@@ -256,6 +271,14 @@ function RollsExpand({ pmId, whId }: { pmId: number | null; whId: number }) {
           render: (v: string | null) => v ? <Text code style={{ fontSize: 11 }}>{v}</Text> : '—' },
         { title: 'Ngày nhập', dataIndex: 'ngay_nhap', width: 110,
           render: (v: string | null) => v ? <Text type="secondary" style={{ fontSize: 11 }}>{v}</Text> : '—' },
+        { title: '', width: 52, align: 'center' as const,
+          render: (_: unknown, r: GiayRoll) => (
+            <Tooltip title={`In tem cuộn ${r.barcode}`}>
+              <Button size="small" icon={<PrinterOutlined />}
+                style={{ color: '#722ed1', borderColor: '#722ed1' }}
+                onClick={() => openPrintRoll(r.id)} />
+            </Tooltip>
+          )},
       ]}
     />
   )
