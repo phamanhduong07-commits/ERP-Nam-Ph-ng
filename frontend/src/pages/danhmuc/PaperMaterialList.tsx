@@ -332,28 +332,32 @@ export default function PaperMaterialList() {
                           <Input placeholder="Kg" />
                         </Form.Item>
                       </Col>
-                      <Col span={9}>
-                        <Form.Item label="Giá mua (VND)" name="gia_mua">
-                          <InputNumber
-                            style={{ width: '100%' }}
-                            min={0}
-                            step={1000}
-                            formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                            placeholder="0"
-                          />
-                        </Form.Item>
-                      </Col>
-                      <Col span={9}>
-                        <Form.Item label="Giá bán (VND)" name="gia_ban">
-                          <InputNumber
-                            style={{ width: '100%' }}
-                            min={0}
-                            step={1000}
-                            formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                            placeholder="0"
-                          />
-                        </Form.Item>
-                      </Col>
+                      {canViewPrice && (
+                        <Col span={9}>
+                          <Form.Item label="Giá mua (VND)" name="gia_mua">
+                            <InputNumber
+                              style={{ width: '100%' }}
+                              min={0}
+                              step={1000}
+                              formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                              placeholder="0"
+                            />
+                          </Form.Item>
+                        </Col>
+                      )}
+                      {canViewPrice && (
+                        <Col span={9}>
+                          <Form.Item label="Giá bán (VND)" name="gia_ban">
+                            <InputNumber
+                              style={{ width: '100%' }}
+                              min={0}
+                              step={1000}
+                              formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                              placeholder="0"
+                            />
+                          </Form.Item>
+                        </Col>
+                      )}
                     </Row>
 
                     <Row gutter={12}>

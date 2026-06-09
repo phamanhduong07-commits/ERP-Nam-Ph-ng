@@ -337,17 +337,19 @@ export default function ProductList() {
                 <InputNumber style={{ width: '100%' }} min={0} max={10} placeholder="0" />
               </Form.Item>
             </Col>
-            <Col span={8}>
-              <Form.Item label="Giá bán (VND)" name="gia_ban">
-                <InputNumber
-                  style={{ width: '100%' }}
-                  min={0}
-                  step={1000}
-                  formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                  placeholder="0"
-                />
-              </Form.Item>
-            </Col>
+            {canViewPrice && (
+              <Col span={8}>
+                <Form.Item label="Giá bán (VND)" name="gia_ban">
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    min={0}
+                    step={1000}
+                    formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    placeholder="0"
+                  />
+                </Form.Item>
+              </Col>
+            )}
           </Row>
 
           <Row gutter={12}>

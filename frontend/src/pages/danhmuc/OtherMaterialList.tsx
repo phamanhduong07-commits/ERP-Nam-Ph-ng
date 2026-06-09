@@ -290,6 +290,7 @@ export default function OtherMaterialList() {
           </Row>
 
           <Row gutter={12}>
+            {canViewPrice && (
             <Col span={8}>
               <Form.Item label="Giá mua (VND)" name="gia_mua">
                 <InputNumber
@@ -301,6 +302,7 @@ export default function OtherMaterialList() {
                 />
               </Form.Item>
             </Col>
+            )}
             <Col span={8}>
               <Form.Item label="Tồn tối thiểu" name="ton_toi_thieu">
                 <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
