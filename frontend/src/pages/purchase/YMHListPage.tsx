@@ -22,6 +22,7 @@ import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { suppliersApi } from '../../api/suppliers'
 import { productsApi } from '../../api/products'
+import { customersApi } from '../../api/customers'
 import EmptyState from "../../components/EmptyState"
 
 const { RangePicker } = DatePicker
@@ -113,13 +114,19 @@ export default function YMHListPage() {
   const otherMats = otherPage?.items ?? []
 
   const [productSearch, setProductSearch] = useState('')
+  const [productCustomerFilter, setProductCustomerFilter] = useState<number | undefined>()
   const { data: productsPage, isFetching: productsFetching } = useQuery({
-    queryKey: ['products-for-ymh', productSearch],
-    queryFn: () => productsApi.list({ search: productSearch || undefined, page_size: 100 }).then(r => r.data),
+    queryKey: ['products-for-ymh', productSearch, productCustomerFilter],
+    queryFn: () => productsApi.list({ search: productSearch || undefined, ma_kh_id: productCustomerFilter, page_size: 100 }).then(r => r.data),
     staleTime: 60_000,
-    enabled: true,
   })
   const products = productsPage?.items ?? []
+
+  const { data: customersAll = [] } = useQuery({
+    queryKey: ['customers-all-for-ymh'],
+    queryFn: () => customersApi.all().then(r => r.data),
+    staleTime: 300_000,
+  })
 
   const filteredXuongList = useMemo(() => {
     if (!filterPhapNhan) return phanXuongList
@@ -778,6 +785,19 @@ export default function YMHListPage() {
                               const label = loai === 'ban_in' ? 'Bản in' : 'Khuôn bế'
                               return (
                                 <Space direction="vertical" style={{ width: '100%' }}>
+                                  <Select
+                                    allowClear
+                                    showSearch
+                                    optionFilterProp="label"
+                                    placeholder="Lọc theo khách hàng (tùy chọn)"
+                                    style={{ width: '100%' }}
+                                    onChange={(v: number | undefined) => { setProductCustomerFilter(v); setProductSearch('') }}
+                                    onClear={() => { setProductCustomerFilter(undefined); setProductSearch('') }}
+                                    options={customersAll.filter(c => c.trang_thai).map(c => ({
+                                      value: c.id,
+                                      label: `${c.ma_kh} - ${c.ten_viet_tat}`,
+                                    }))}
+                                  />
                                   <Form.Item name={[name, 'san_pham_id']} label="Mã hàng" rules={[{ required: true, message: `Chọn mã hàng cho ${label}` }]} style={{ marginBottom: 4 }}>
                                     <Select
                                       allowClear
