@@ -611,7 +611,8 @@ export default function ProductionQueuePage() {
   const promoteFromPoolMut = useMutation({
     mutationFn: (lineId: number) => productionPlansApi.promoteFromPool(lineId),
     onSuccess: (res) => {
-      message.success(`Đã đưa vào ${res.data.so_ke_hoach}`)
+      const { so_ke_hoach, created } = res.data
+      message.success(created ? `Tạo mới ${so_ke_hoach} và đưa lệnh vào` : `Đã ghép vào ${so_ke_hoach} (có sẵn)`)
       qc.invalidateQueries({ queryKey: ['production-queue'] })
     },
     onError: (e: { response?: { data?: { detail?: string } } }) =>
@@ -655,8 +656,13 @@ export default function ProductionQueuePage() {
     if (!selectedPoolLines.length) return
     setIsBatchLoading(true)
     try {
-      await Promise.all(selectedPoolLines.map(r => productionPlansApi.promoteFromPool(r.id)))
-      message.success(`Đã đưa ${selectedPoolLines.length} lệnh lên KHSX`)
+      const results = await Promise.all(selectedPoolLines.map(r => productionPlansApi.promoteFromPool(r.id)))
+      const newPlans = results.filter(r => r.data.created).length
+      const existing = results.length - newPlans
+      const parts = []
+      if (existing) parts.push(`ghép vào ${existing} KH có sẵn`)
+      if (newPlans) parts.push(`tạo mới ${newPlans} KH`)
+      message.success(`Đã đưa ${selectedPoolLines.length} lệnh lên KHSX — ${parts.join(', ')}`)
       setSelectedKeys([])
       qc.invalidateQueries({ queryKey: ['production-queue'] })
     } catch {

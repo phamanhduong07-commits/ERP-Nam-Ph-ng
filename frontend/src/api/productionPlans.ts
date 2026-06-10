@@ -300,7 +300,7 @@ export const productionPlansApi = {
     client.patch<{ updated: number }>('/production-plans/queue/reorder', items),
 
   promoteFromPool: (lineId: number) =>
-    client.patch<{ ok: boolean; plan_id: number; so_ke_hoach: string }>(
+    client.patch<{ ok: boolean; plan_id: number; so_ke_hoach: string; created: boolean }>(
       `/production-plans/lines/${lineId}/promote-from-pool`
     ),
 }

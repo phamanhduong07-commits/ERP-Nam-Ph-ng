@@ -1086,6 +1086,7 @@ def promote_pool_line(
         )
 
     # Tạo nhap plan mới nếu không tìm thấy
+    plan_created = False
     if not target_plan:
         target_plan = ProductionPlan(
             so_ke_hoach=_generate_so_ke_hoach(db),
@@ -1096,7 +1097,8 @@ def promote_pool_line(
         )
         db.add(target_plan)
         db.flush()
+        plan_created = True
 
     line.plan_id = target_plan.id
     db.commit()
-    return {"ok": True, "plan_id": target_plan.id, "so_ke_hoach": target_plan.so_ke_hoach}
+    return {"ok": True, "plan_id": target_plan.id, "so_ke_hoach": target_plan.so_ke_hoach, "created": plan_created}
