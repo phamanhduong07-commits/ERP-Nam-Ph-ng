@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
+from app.utils.template import apply_template, standard_vars
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from sqlalchemy.orm import Session
@@ -637,6 +638,7 @@ def print_purchase_invoice(
     ) if payments_rows else ""
 
     replacements = {
+        **standard_vars(subtitle="HÓA ĐƠN MUA VÀO", customer_name=_html_mod.escape(inv.ten_don_vi or "")),
         "{{document_number}}": _html_mod.escape(inv.so_hoa_don or f"#{inv.id}"),
         "{{mau_so}}": _html_mod.escape(inv.mau_so or ""),
         "{{ky_hieu}}": _html_mod.escape(inv.ky_hieu or ""),
@@ -657,9 +659,7 @@ def print_purchase_invoice(
         "{{ghi_chu}}": _html_mod.escape(inv.ghi_chu or ""),
         "{{payments_table}}": payments_table,
     }
-    content = tpl.html_content
-    for k, v in replacements.items():
-        content = content.replace(k, v)
+    content = apply_template(tpl.html_content, replacements)
     page = (
         "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
         f"<title>Hóa đơn mua {_html_mod.escape(inv.so_hoa_don or str(inv.id))}</title>"
@@ -1437,6 +1437,7 @@ def print_receipt(
     hinh_thuc = HINH_THUC_LABEL.get(r.hinh_thuc_tt, r.hinh_thuc_tt or "")
 
     replacements = {
+        **standard_vars(subtitle="PHIẾU THU", customer_name=_html_mod.escape(ten_kh), delivery_address=_html_mod.escape((r.customer.dia_chi or "") if r.customer else "")),
         "{{document_number}}": _html_mod.escape(r.so_phieu or ""),
         "{{document_date}}": ngay_str(r.ngay_phieu),
         "{{company_name}}": _html_mod.escape(ten_cty),
@@ -1453,9 +1454,7 @@ def print_receipt(
         "{{tk_no}}": _html_mod.escape(r.tk_no or ""),
         "{{tk_co}}": _html_mod.escape(r.tk_co or ""),
     }
-    content = tpl.html_content
-    for k, v in replacements.items():
-        content = content.replace(k, v)
+    content = apply_template(tpl.html_content, replacements)
     page = (
         "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
         f"<title>Phiếu thu {_html_mod.escape(r.so_phieu or '')}</title>"
@@ -1506,6 +1505,7 @@ def print_payment(
     hinh_thuc = HINH_THUC_LABEL.get(p.hinh_thuc_tt, p.hinh_thuc_tt or "")
 
     replacements = {
+        **standard_vars(subtitle="PHIẾU CHI", customer_name=_html_mod.escape(ten_ncc), delivery_address=_html_mod.escape((p.supplier.dia_chi or "") if p.supplier else "")),
         "{{document_number}}": _html_mod.escape(p.so_phieu or ""),
         "{{document_date}}": ngay_str(p.ngay_phieu),
         "{{company_name}}": _html_mod.escape(ten_cty),
@@ -1522,9 +1522,7 @@ def print_payment(
         "{{tk_no}}": _html_mod.escape(p.tk_no or ""),
         "{{tk_co}}": _html_mod.escape(p.tk_co or ""),
     }
-    content = tpl.html_content
-    for k, v in replacements.items():
-        content = content.replace(k, v)
+    content = apply_template(tpl.html_content, replacements)
     page = (
         "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
         f"<title>Phiếu chi {_html_mod.escape(p.so_phieu or '')}</title>"

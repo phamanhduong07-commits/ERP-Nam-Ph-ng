@@ -5,6 +5,7 @@ Shares the /api/warehouse prefix; mounted alongside warehouse.router.
 """
 import html as _html_mod
 from datetime import date, datetime, timezone
+from app.utils.template import apply_template, standard_vars
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -141,7 +142,7 @@ def print_material_issue(mi_id: int, db: Session = Depends(get_db), _: User = De
     )
 
     replacements = {
-        "{{subtitle}}": "PHIẾU XUẤT NGUYÊN VẬT LIỆU",
+        **standard_vars(subtitle="PHIẾU XUẤT NGUYÊN VẬT LIỆU"),
         "{{document_number}}": _html_mod.escape(mi.so_phieu or ""),
         "{{document_date}}": str(mi.ngay_xuat) if mi.ngay_xuat else "",
         "{{warehouse_name}}": _html_mod.escape(wh.ten_kho if wh else ""),
@@ -151,9 +152,7 @@ def print_material_issue(mi_id: int, db: Session = Depends(get_db), _: User = De
         "{{company_details}}": _html_mod.escape(settings.get("company_details") or ""),
         "{{logo_img}}": f'<img src="{logo_src}" style="max-height:50px;max-width:100%;object-fit:contain"/>' if logo_src else "",
     }
-    content = tpl.html_content
-    for k, v in replacements.items():
-        content = content.replace(k, v)
+    content = apply_template(tpl.html_content, replacements)
     page = (
         "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
         f"<title>Phiếu xuất NVL {_html_mod.escape(mi.so_phieu or '')}</title>"

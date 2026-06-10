@@ -824,3 +824,10 @@
 {"timestamp":"2026-06-09T21:27:35-07:00","rating":5,"session_id":"1e3be61c-a1f0-44cc-a36b-332fa93fd1fc","source":"implicit","sentiment_summary":"Inference failed: Process exited with code 1","confidence":0.3}
 {"timestamp":"2026-06-09T21:29:38-07:00","rating":5,"session_id":"1e3be61c-a1f0-44cc-a36b-332fa93fd1fc","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
 {"timestamp":"2026-06-09T21:29:50-07:00","rating":5,"session_id":"80f406c3-ce3d-43f2-b3cf-02646f8603f9","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-09T21:34:43-07:00","rating":5,"session_id":"80f406c3-ce3d-43f2-b3cf-02646f8603f9","source":"implicit","sentiment_summary":"Inference failed: Timeout after 15000ms","confidence":0.3}
+{"timestamp":"2026-06-09T21:47:53-07:00","rating":5,"session_id":"80f406c3-ce3d-43f2-b3cf-02646f8603f9","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-09T21:57:44-07:00","rating":5,"session_id":"80f406c3-ce3d-43f2-b3cf-02646f8603f9","source":"implicit","sentiment_summary":"Inference failed: Timeout after 15000ms","confidence":0.3}
+{"timestamp":"2026-06-09T22:02:42-07:00","rating":5,"session_id":"4276bfdb-a69a-49d7-99b5-75ec8d268da9","source":"implicit","sentiment_summary":"Inference failed: Timeout after 15000ms","confidence":0.3}
+{"timestamp":"2026-06-09T22:03:47-07:00","rating":5,"session_id":"1e3be61c-a1f0-44cc-a36b-332fa93fd1fc","source":"implicit","sentiment_summary":"Inference failed: Timeout after 15000ms","confidence":0.3}
+{"timestamp":"2026-06-09T22:04:36-07:00","rating":5,"session_id":"1e3be61c-a1f0-44cc-a36b-332fa93fd1fc","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-09T22:06:04-07:00","rating":5,"session_id":"4276bfdb-a69a-49d7-99b5-75ec8d268da9","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}

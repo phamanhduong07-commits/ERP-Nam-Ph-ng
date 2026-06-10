@@ -3,6 +3,7 @@ from decimal import Decimal
 from io import BytesIO
 import html
 import unicodedata
+from app.utils.template import apply_template, standard_vars
 from typing import Optional, List
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, UploadFile
@@ -1359,8 +1360,8 @@ def print_quote(
     ngay_het_han = quote.ngay_het_han.strftime("%d/%m/%Y") if quote.ngay_het_han else ""
     nguoi_lap = quote.creator.ho_ten if quote.creator else ""
 
-    html = tpl.html_content
     replacements = {
+        **standard_vars(subtitle="BÁO GIÁ"),
         "{{logo_img}}": logo_img,
         "{{company_name}}": html.escape(company_name),
         "{{company_details}}": html.escape(company_details),
@@ -1389,8 +1390,7 @@ def print_quote(
         "{{dieu_khoan}}": quote.dieu_khoan or "",
         "{{nguoi_lap}}": html.escape(nguoi_lap),
     }
-    for placeholder, value in replacements.items():
-        html = html.replace(placeholder, value)
+    html = apply_template(tpl.html_content, replacements)
 
     so_bao_gia = quote.so_bao_gia or ""
     page = (

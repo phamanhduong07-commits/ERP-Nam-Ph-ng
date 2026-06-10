@@ -556,9 +556,8 @@ export default function PrintTemplatePage() {
       <html>
         <head>
           <style>
-            @page { size: ${easyConfig.pageSize} ${easyConfig.orientation}; margin: 10mm; }
-            body { font-family: sans-serif; padding: 20px; background: #fff; margin: 0; width: 100%; box-sizing: border-box; }
-            table { width: 100%; border-collapse: collapse; }
+            * { box-sizing: border-box; }
+            body { margin: 0; padding: 10mm; background: #fff; }
           </style>
         </head>
         <body>${html}</body>

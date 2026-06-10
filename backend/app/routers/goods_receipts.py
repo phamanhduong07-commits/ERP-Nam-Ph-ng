@@ -6,6 +6,7 @@ Shares the /api/warehouse prefix; mounted alongside warehouse.router.
 import html as _html_mod
 from datetime import date, datetime
 from decimal import Decimal
+from app.utils.template import apply_template, standard_vars
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -266,6 +267,7 @@ def print_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Dep
     )
 
     replacements = {
+        **standard_vars(subtitle="PHIẾU NHẬP KHO", customer_name=_html_mod.escape(sup.ten_viet_tat if sup else "")),
         "{{document_number}}": _html_mod.escape(gr.so_phieu or ""),
         "{{document_date}}": str(gr.ngay_nhap) if gr.ngay_nhap else "",
         "{{supplier_name}}": _html_mod.escape(sup.ten_viet_tat if sup else ""),
@@ -276,11 +278,8 @@ def print_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Dep
         "{{company_name}}": _html_mod.escape(settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"),
         "{{company_details}}": _html_mod.escape(settings.get("company_details") or ""),
         "{{logo_img}}": f'<img src="{logo_src}" style="max-height:50px;max-width:100%;object-fit:contain"/>' if logo_src else "",
-        "{{subtitle}}": "PHIẾU NHẬP KHO",
     }
-    content = tpl.html_content
-    for k, v in replacements.items():
-        content = content.replace(k, v)
+    content = apply_template(tpl.html_content, replacements)
     page = (
         "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
         f"<title>Phiếu nhập kho {_html_mod.escape(gr.so_phieu or '')}</title>"

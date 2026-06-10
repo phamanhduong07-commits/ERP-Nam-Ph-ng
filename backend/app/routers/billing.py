@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse
+from app.utils.template import apply_template, standard_vars
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -285,6 +286,7 @@ def print_adjustment_log(
 </table>"""
 
     replacements = {
+        **standard_vars(subtitle="PHIẾU ĐIỀU CHỈNH", customer_name=_html_mod.escape(ten_kh)),
         "{{document_number}}": f"ĐC-{lg.id:04d}",
         "{{document_date}}": _ngay(str(lg.adjusted_at.date()) if lg.adjusted_at else ""),
         "{{company_name}}": _html_mod.escape(pn_name),
@@ -305,9 +307,7 @@ def print_adjustment_log(
         "{{sig_approved_by}}": _html_mod.escape(approved_by if lg.trang_thai in ("approved", "rejected") else ""),
         "{{sig_adjusted_by}}": _html_mod.escape(adjusted_by),
     }
-    content = tpl.html_content
-    for k, v in replacements.items():
-        content = content.replace(k, v)
+    content = apply_template(tpl.html_content, replacements)
     page = (
         "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
         f"<title>Phiếu điều chỉnh ĐC-{lg.id:04d}</title>"
@@ -418,6 +418,7 @@ def print_invoice(
 </table>"""
 
     replacements = {
+        **standard_vars(subtitle="HÓA ĐƠN BÁN HÀNG", customer_name=_html_mod.escape(ten_kh), delivery_address=_html_mod.escape(dia_chi_kh)),
         "{{document_number}}": _html_mod.escape(so_hd),
         "{{document_date}}": _ngay(inv.ngay_hoa_don),
         "{{company_name}}": _html_mod.escape(pn_name),
@@ -441,9 +442,7 @@ def print_invoice(
         "{{tong_cong}}": f"{float(inv.tong_cong):,.0f}",
         "{{ghi_chu}}": _html_mod.escape(inv.ghi_chu or ""),
     }
-    content = tpl.html_content
-    for k, v in replacements.items():
-        content = content.replace(k, v)
+    content = apply_template(tpl.html_content, replacements)
     page = (
         "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
         f"<title>Hóa đơn {_html_mod.escape(so_hd)}</title>"

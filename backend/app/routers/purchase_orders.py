@@ -1,5 +1,6 @@
-﻿import html as _html_mod
+import html as _html_mod
 from datetime import date, datetime, timedelta, timezone
+from app.utils.template import apply_template, standard_vars
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -603,9 +604,7 @@ def print_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_cu
         "{{logo_img}}": f'<img src="{logo_src}" style="max-width:100%;max-height:80px;object-fit:contain"/>' if logo_src else "",
         "{{logo_src}}": logo_src,
     }
-    content = tpl.html_content
-    for k, v in replacements.items():
-        content = content.replace(k, v)
+    content = apply_template(tpl.html_content, replacements)
     page = (
         "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
         f"<title>Đơn mua hàng {_html_mod.escape(po.so_po or '')}</title>"

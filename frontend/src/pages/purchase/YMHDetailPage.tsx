@@ -268,6 +268,7 @@ export default function YMHDetailPage() {
         if (v === 'ban_in') return <Tag color="orange">Bản In</Tag>
         if (v === 'khuon_be') return <Tag color="purple">Khuôn Bế</Tag>
         if (v === 'muc_in') return <Tag color="magenta">Mực In</Tag>
+        if (v === 'dich_vu') return <Tag color="cyan">Dịch Vụ</Tag>
         return <Tag>NVL</Tag>
       },
     },

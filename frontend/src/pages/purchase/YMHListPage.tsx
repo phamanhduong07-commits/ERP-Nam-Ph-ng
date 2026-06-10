@@ -29,7 +29,7 @@ const { RangePicker } = DatePicker
 const { Text, Title } = Typography
 
 type FormItem = {
-  loai_vat_tu?: 'giay' | 'khac' | 'tu_do' | 'ban_in' | 'khuon_be' | 'muc_in'
+  loai_vat_tu?: 'giay' | 'khac' | 'tu_do' | 'ban_in' | 'khuon_be' | 'muc_in' | 'dich_vu'
   mat_id?: number
   san_pham_id?: number
   ten_hang?: string
@@ -40,7 +40,7 @@ type FormItem = {
   ghi_chu?: string | null
 }
 
-const DVT_OPTIONS = ['Kg', 'Tấn', 'Cuộn', 'Tờ', 'Cái', 'Bộ', 'Hộp', 'Lít'].map(v => ({ value: v, label: v }))
+const DVT_OPTIONS = ['Kg', 'Tấn', 'Cuộn', 'Tờ', 'Cái', 'Bộ', 'Hộp', 'Lít', 'Lần', 'Gói', 'Năm', 'Tháng', 'Người'].map(v => ({ value: v, label: v }))
 const DIEU_KHOAN_OPTIONS = ['COD', 'NET15', 'NET30', 'NET45', 'NET60', 'TT trước'].map(v => ({ value: v, label: v }))
 
 const ACTIVE_STATUSES = ['nhap', 'cho_duyet', 'duyet_pb', 'duyet_gd']
@@ -312,7 +312,7 @@ export default function YMHListPage() {
       don_gia_du_kien: Number(it.don_gia_du_kien || 0),
       ngay_can: it.ngay_can ? dayjs(it.ngay_can).format('YYYY-MM-DD') : null,
       ghi_chu: it.ghi_chu ?? null,
-      loai_item: (it.loai_vat_tu === 'ban_in' || it.loai_vat_tu === 'khuon_be' || it.loai_vat_tu === 'muc_in') ? it.loai_vat_tu : 'nvl',
+      loai_item: (['ban_in', 'khuon_be', 'muc_in', 'dich_vu'] as const).includes(it.loai_vat_tu as never) ? it.loai_vat_tu as string : 'nvl',
       san_pham_id: (it.loai_vat_tu === 'ban_in' || it.loai_vat_tu === 'khuon_be' || it.loai_vat_tu === 'muc_in') ? (it.san_pham_id ?? null) : null,
     }))
     return {
@@ -732,6 +732,7 @@ export default function YMHListPage() {
                               { value: 'ban_in', label: 'Bản in' },
                               { value: 'khuon_be', label: 'Khuôn bế' },
                               { value: 'muc_in', label: 'Mực in' },
+                              { value: 'dich_vu', label: 'Dịch vụ' },
                             ]}
                             onChange={() => {
                               const items: FormItem[] = form.getFieldValue('items') || []
@@ -836,6 +837,13 @@ export default function YMHListPage() {
                                       </Form.Item>
                                     )}
                                 </Space>
+                              )
+                            }
+                            if (loai === 'dich_vu') {
+                              return (
+                                <Form.Item name={[name, 'ten_hang']} label="Tên dịch vụ" rules={[{ required: true, message: 'Nhập tên dịch vụ' }]} style={{ marginBottom: 4 }}>
+                                  <Input placeholder="VD: Bảo hiểm cháy nổ, Khám sức khỏe định kỳ..." />
+                                </Form.Item>
                               )
                             }
                             return (

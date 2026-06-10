@@ -1,8 +1,9 @@
-﻿from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
 from typing import Literal
+from app.utils.template import apply_template, standard_vars
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, model_validator
@@ -31,7 +32,7 @@ class YMHItemCreate(BaseModel):
     don_gia_du_kien: Decimal = Decimal("0")
     ngay_can: Optional[date] = None
     ghi_chu: Optional[str] = None
-    loai_item: Literal["nvl", "ban_in", "khuon_be", "muc_in"] = "nvl"
+    loai_item: Literal["nvl", "ban_in", "khuon_be", "muc_in", "dich_vu"] = "nvl"
     san_pham_id: Optional[int] = None
 
     @model_validator(mode="after")
@@ -745,6 +746,43 @@ def _build_ymh_nvl(items: list, color: str) -> tuple[str, Decimal]:
     return html, tong
 
 
+def _build_ymh_dich_vu(items: list, color: str) -> tuple[str, Decimal]:
+    """Bảng dịch vụ — bảo hiểm, khám sức khỏe, v.v."""
+    accent = f"background:{color};color:#fff"
+    header = (
+        f"<thead><tr style='{accent}'>"
+        + _th("STT", "4%") + _th("Tên dịch vụ", "", "left")
+        + _th("ĐVT", "8%") + _th("Số lượng", "10%")
+        + _th("Đơn giá DK", "13%") + _th("Thành tiền", "13%")
+        + _th("Ngày cần", "10%") + _th("Ghi chú", "15%", "left")
+        + "</tr></thead>"
+    )
+    rows = ""
+    tong = Decimal("0")
+    for i, it in enumerate(items, 1):
+        don_gia = it.don_gia_du_kien or Decimal("0")
+        thanh_tien = it.so_luong * don_gia
+        tong += thanh_tien
+        ngay = it.ngay_can.strftime("%d/%m/%Y") if it.ngay_can else ""
+        rows += (
+            f"<tr>"
+            f"<td {_TDC}>{i}</td><td {_TD}>{_html_mod.escape(it.ten_hang or '')}</td>"
+            f"<td {_TDC}>{_html_mod.escape(it.dvt or '')}</td>"
+            f"<td {_TDR}>{float(it.so_luong):,.2f}</td>"
+            f"<td {_TDR}>{int(don_gia):,}</td><td {_TDR}>{int(thanh_tien):,}</td>"
+            f"<td {_TDC}>{ngay}</td><td {_TD}>{_html_mod.escape(it.ghi_chu or '')}</td>"
+            f"</tr>"
+        )
+    rows += (
+        f"<tr style='font-weight:bold;background:#f5f5f5'>"
+        f"<td colspan='5' {_TDR}>Tổng cộng:</td>"
+        f"<td {_TDR}>{int(tong):,}</td>"
+        f"<td colspan='2' {_TD}></td></tr>"
+    )
+    html = f"<table style='width:100%;border-collapse:collapse;font-size:10pt'>{header}<tbody>{rows}</tbody></table>"
+    return html, tong
+
+
 def _build_ymh_cong_cu(items: list, color: str) -> tuple[str, Decimal]:
     """Bảng bản in / khuôn bế — hiện mã sản phẩm, loại công cụ."""
     accent = f"background:{color};color:#fff"
@@ -830,7 +868,7 @@ def print_ymh(
     settings = {s.key: s.value for s in db.query(SystemSetting).all()}
 
     pn_name = _html_mod.escape(
-        (pn.ten_viet_tat or pn.ten_phap_nhan)
+        (pn.ten_phap_nhan or pn.ten_viet_tat)
         if pn
         else (settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ")
     )
@@ -861,6 +899,7 @@ def print_ymh(
     items_giay = [it for it in ymh.items if it.paper_material_id]
     items_nvl = [it for it in ymh.items if not it.paper_material_id and it.loai_item == "nvl"]
     items_cong_cu = [it for it in ymh.items if it.loai_item in ("ban_in", "khuon_be", "muc_in")]
+    items_dich_vu = [it for it in ymh.items if it.loai_item == "dich_vu"]
 
     # Build multi-section body_html
     body_parts = []
@@ -881,6 +920,11 @@ def print_ymh(
         tong += t
         body_parts.append(_ymh_section_label("Công cụ sản xuất (Bản in / Khuôn bế)", _color) + tbl)
 
+    if items_dich_vu:
+        tbl, t = _build_ymh_dich_vu(items_dich_vu, _color)
+        tong += t
+        body_parts.append(_ymh_section_label("Dịch vụ", _color) + tbl)
+
     # Grand total row when multiple sections
     if len(body_parts) > 1:
         body_parts.append(
@@ -895,8 +939,9 @@ def print_ymh(
     ngay_str = ""
     if ymh.ngay_yeu_cau:
         d = ymh.ngay_yeu_cau
-        ngay_str = f"Ngày {d.day:02d} tháng {d.month:02d} năm {d.year}"
+        ngay_str = f"{d.day:02d} tháng {d.month:02d} năm {d.year}"
 
+    don_vi = _html_mod.escape(px.ten_xuong if px else "")
     replacements = {
         "{{document_number}}": _html_mod.escape(ymh.so_ymh or ""),
         "{{document_date}}": ngay_str,
@@ -904,7 +949,7 @@ def print_ymh(
         "{{company_details}}": pn_details,
         "{{logo_img}}": logo_img,
         "{{logo_src}}": logo_src,
-        "{{don_vi_yeu_cau}}": _html_mod.escape(px.ten_xuong if px else ""),
+        "{{don_vi_yeu_cau}}": don_vi,
         "{{nguoi_yeu_cau}}": _html_mod.escape(_user_name(ymh.nguoi_yeu_cau) or ""),
         "{{ghi_chu}}": _html_mod.escape(ymh.ghi_chu or ""),
         "{{body_html}}": body_html,
@@ -912,10 +957,14 @@ def print_ymh(
         "{{sig_nguoi_yeu_cau}}": _html_mod.escape(_user_name(ymh.nguoi_yeu_cau) or ""),
         "{{sig_duyet_pb}}": _html_mod.escape(_user_name(ymh.nguoi_duyet_pb) or ""),
         "{{sig_duyet_gd}}": _html_mod.escape(_user_name(ymh.nguoi_duyet_gd) or ""),
+        # Biến generic từ template designer — map sang trường tương ứng của YMH
+        "{{subtitle}}": "PHIẾU YÊU CẦU MUA HÀNG",
+        "{{SUBTITLE}}": "PHIẾU YÊU CẦU MUA HÀNG",
+        "{{customer_name}}": don_vi,
+        "{{delivery_address}}": "",
+        "{{footer_html}}": "",
     }
-    content = tpl.html_content
-    for k, v in replacements.items():
-        content = content.replace(k, v)
+    content = apply_template(tpl.html_content, replacements)
 
     page = (
         "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
