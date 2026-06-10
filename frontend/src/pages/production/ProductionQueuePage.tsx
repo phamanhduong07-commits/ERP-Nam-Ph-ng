@@ -976,6 +976,7 @@ export default function ProductionQueuePage() {
               }}
               pagination={{ pageSize: 50, showSizeChanger: false, showTotal: (t, [s, e]) => `${s}-${e} / ${t}` }}
               size="small"
+              tableLayout="fixed"
               scroll={{ x: 1460 }}
               rowClassName={r => r.trang_thai === 'dang_chay' ? 'ant-table-row-selected' : ''}
             />
