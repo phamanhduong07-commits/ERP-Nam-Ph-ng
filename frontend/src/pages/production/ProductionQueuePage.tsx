@@ -416,6 +416,11 @@ export default function ProductionQueuePage() {
     return Array.from(map.values())
   }, [selectedRows])
 
+  const selectedPoolLines = useMemo(
+    () => selectedRows.filter(r => r.plan_trang_thai === 'nhap' && r.so_ke_hoach === POOL_PLAN_SO && r.trang_thai === 'cho'),
+    [selectedRows],
+  )
+
   // Xác định tập dòng dùng để tính vật liệu: ưu tiên tích chọn, fallback lọc tất cả khi có filter
   const hasFilter = Object.values(filteredInfo).some(v => v && v.length > 0)
   // Filtered lines (apply filter manually for planning panel)
@@ -641,6 +646,21 @@ export default function ProductionQueuePage() {
       qc.invalidateQueries({ queryKey: ['tan-dung-plan'] })
     } catch {
       message.error('Cập nhật thất bại')
+    } finally {
+      setIsBatchLoading(false)
+    }
+  }
+
+  const handleBatchPromote = async () => {
+    if (!selectedPoolLines.length) return
+    setIsBatchLoading(true)
+    try {
+      await Promise.all(selectedPoolLines.map(r => productionPlansApi.promoteFromPool(r.id)))
+      message.success(`Đã đưa ${selectedPoolLines.length} lệnh lên KHSX`)
+      setSelectedKeys([])
+      qc.invalidateQueries({ queryKey: ['production-queue'] })
+    } catch {
+      message.error('Có lỗi khi đưa lệnh lên KHSX')
     } finally {
       setIsBatchLoading(false)
     }
@@ -1052,6 +1072,18 @@ export default function ProductionQueuePage() {
                     </Button>
                   </Popconfirm>
                 ))}
+                {selectedPoolLines.length > 0 && (
+                  <Popconfirm
+                    title={`Đưa ${selectedPoolLines.length} lệnh hàng chờ lên KHSX?`}
+                    description="Hệ thống tự ghép vào kế hoạch cùng xưởng hôm nay."
+                    onConfirm={handleBatchPromote}
+                    okText="Xác nhận"
+                  >
+                    <Button size="small" type="primary" icon={<SendOutlined />} loading={isBatchLoading}>
+                      Lên KHSX ({selectedPoolLines.length})
+                    </Button>
+                  </Popconfirm>
+                )}
                 <Popconfirm
                   title={`Đánh dấu ${selectedKeys.length} lệnh SX là "Tận dụng phôi"?`}
                   description="Các lệnh này sẽ xuất hiện trong trang Kế hoạch tận dụng."
