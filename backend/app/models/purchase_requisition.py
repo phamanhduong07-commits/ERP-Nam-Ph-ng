@@ -54,7 +54,28 @@ class PurchaseRequisitionItem(Base):
     don_gia_du_kien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ngay_can: Mapped[date | None] = mapped_column(Date)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    loai_item: Mapped[str] = mapped_column(String(20), default="nvl")  # nvl | ban_in | khuon_be
+    san_pham_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
 
     ymh: Mapped["PurchaseRequisition"] = relationship("PurchaseRequisition", back_populates="items")
     paper_material = relationship("PaperMaterial")
     other_material = relationship("OtherMaterial")
+    san_pham = relationship("Product")
+
+
+class CongCuSanXuat(Base):
+    """Công cụ sản xuất — bản in / khuôn bế gắn với mã hàng cụ thể"""
+    __tablename__ = "cong_cu_san_xuat"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    san_pham_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    loai_cong_cu: Mapped[str] = mapped_column(String(20), nullable=False)  # ban_in | khuon_be
+    trang_thai: Mapped[str] = mapped_column(String(20), default="co_san")  # co_san | dat_mua | hong
+    so_luong: Mapped[int] = mapped_column(Integer, default=1)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    ymh_item_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_requisition_items.id"), nullable=True)
+    po_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    san_pham = relationship("Product")
+    ymh_item = relationship("PurchaseRequisitionItem")

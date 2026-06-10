@@ -260,6 +260,24 @@ export default function YMHDetailPage() {
 
   const itemColumns: ColumnsType<PurchaseRequisition['items'][number]> = [
     { title: 'STT', width: 56, align: 'center', render: (_v, _r, i) => i + 1 },
+    {
+      title: 'Loại',
+      dataIndex: 'loai_item',
+      width: 90,
+      render: (v: string | null | undefined) => {
+        if (v === 'ban_in') return <Tag color="orange">Bản In</Tag>
+        if (v === 'khuon_be') return <Tag color="purple">Khuôn Bế</Tag>
+        return <Tag>NVL</Tag>
+      },
+    },
+    {
+      title: 'Sản phẩm',
+      dataIndex: 'ten_san_pham',
+      width: 140,
+      ellipsis: true,
+      render: (v: string | null | undefined, r: PurchaseRequisition['items'][number]) =>
+        (r.loai_item === 'ban_in' || r.loai_item === 'khuon_be') ? (v || '-') : null,
+    },
     { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true, render: v => v || '-' },
     { title: 'ĐVT', dataIndex: 'dvt', width: 70 },
     { title: 'Số lượng', dataIndex: 'so_luong', width: 110, align: 'right', render: (v: number) => fmtVND(v) },

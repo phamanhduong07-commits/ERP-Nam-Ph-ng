@@ -2,17 +2,22 @@
 from decimal import Decimal
 from typing import Optional
 
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, model_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+
+import html as _html_mod
 
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
-from app.models.master import OtherMaterial, PaperMaterial, PhanXuong, PhapNhan, Supplier
+from app.models.master import OtherMaterial, PaperMaterial, PhanXuong, PhapNhan, Supplier, Product
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
-from app.models.purchase_requisition import PurchaseRequisition, PurchaseRequisitionItem
+from app.models.purchase_requisition import PurchaseRequisition, PurchaseRequisitionItem, CongCuSanXuat
+from app.models.system import PrintTemplate, SystemSetting
 
 router = APIRouter(prefix="/api/purchase-requisitions", tags=["purchase-requisitions"])
 
@@ -26,6 +31,14 @@ class YMHItemCreate(BaseModel):
     don_gia_du_kien: Decimal = Decimal("0")
     ngay_can: Optional[date] = None
     ghi_chu: Optional[str] = None
+    loai_item: Literal["nvl", "ban_in", "khuon_be"] = "nvl"
+    san_pham_id: Optional[int] = None
+
+    @model_validator(mode="after")
+    def validate_tooling_san_pham(self) -> "YMHItemCreate":
+        if self.loai_item in ("ban_in", "khuon_be") and not self.san_pham_id:
+            raise ValueError("Bản in / khuôn bế phải chọn sản phẩm liên quan (san_pham_id)")
+        return self
 
 
 class YMHCreate(BaseModel):
@@ -156,6 +169,8 @@ def _add_ymh_items(db: Session, ymh_id: int, items: list[YMHItemCreate]) -> None
                 don_gia_du_kien=don_gia,
                 ngay_can=item.ngay_can,
                 ghi_chu=item.ghi_chu,
+                loai_item=item.loai_item,
+                san_pham_id=item.san_pham_id,
             )
         )
 
@@ -173,6 +188,9 @@ def _serialize_ymh(ymh: PurchaseRequisition, db: Session) -> dict:
         if not ten_hang and it.other_material_id:
             om = db.get(OtherMaterial, it.other_material_id)
             ten_hang = om.ten if om else ""
+        ten_san_pham: str | None = None
+        if it.san_pham_id and it.san_pham:
+            ten_san_pham = it.san_pham.ten_hang or it.san_pham.ma_hang
         items.append(
             {
                 "id": it.id,
@@ -184,6 +202,9 @@ def _serialize_ymh(ymh: PurchaseRequisition, db: Session) -> dict:
                 "don_gia_du_kien": float(it.don_gia_du_kien or 0),
                 "ngay_can": it.ngay_can.isoformat() if it.ngay_can else None,
                 "ghi_chu": it.ghi_chu,
+                "loai_item": it.loai_item if it.loai_item else "nvl",
+                "san_pham_id": it.san_pham_id,
+                "ten_san_pham": ten_san_pham,
             }
         )
 
@@ -279,6 +300,114 @@ def create_ymh(
     db.commit()
     db.refresh(ymh)
     return _serialize_ymh(ymh, db)
+
+
+# ─── Tooling registry endpoints (must come BEFORE /{ymh_id} to avoid routing conflict) ──
+
+
+class CongCuCreate(BaseModel):
+    san_pham_id: int
+    loai_cong_cu: Literal["ban_in", "khuon_be"]
+    trang_thai: Literal["co_san", "dat_mua", "hong"] = "co_san"
+    so_luong: int = 1
+    ghi_chu: Optional[str] = None
+    ymh_item_id: Optional[int] = None
+    po_id: Optional[int] = None
+
+
+@router.get("/tooling-check")
+def tooling_check(
+    san_pham_id: int,
+    loai: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(CongCuSanXuat).filter(CongCuSanXuat.san_pham_id == san_pham_id)
+    if loai:
+        q = q.filter(CongCuSanXuat.loai_cong_cu == loai)
+    records = q.all()
+    return [
+        {
+            "id": r.id,
+            "san_pham_id": r.san_pham_id,
+            "loai_cong_cu": r.loai_cong_cu,
+            "trang_thai": r.trang_thai,
+            "so_luong": r.so_luong,
+            "ghi_chu": r.ghi_chu,
+            "ymh_item_id": r.ymh_item_id,
+            "po_id": r.po_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in records
+    ]
+
+
+@router.get("/cong-cu")
+def list_cong_cu(
+    san_pham_id: Optional[int] = None,
+    loai_cong_cu: Optional[str] = None,
+    trang_thai: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(CongCuSanXuat)
+    if san_pham_id:
+        q = q.filter(CongCuSanXuat.san_pham_id == san_pham_id)
+    if loai_cong_cu:
+        q = q.filter(CongCuSanXuat.loai_cong_cu == loai_cong_cu)
+    if trang_thai:
+        q = q.filter(CongCuSanXuat.trang_thai == trang_thai)
+    records = q.order_by(CongCuSanXuat.id.desc()).all()
+    return [
+        {
+            "id": r.id,
+            "san_pham_id": r.san_pham_id,
+            "ten_san_pham": r.san_pham.ten_hang if r.san_pham else None,
+            "loai_cong_cu": r.loai_cong_cu,
+            "trang_thai": r.trang_thai,
+            "so_luong": r.so_luong,
+            "ghi_chu": r.ghi_chu,
+            "ymh_item_id": r.ymh_item_id,
+            "po_id": r.po_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in records
+    ]
+
+
+@router.post("/cong-cu", status_code=201)
+def create_cong_cu(
+    body: CongCuCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ADMIN", "MANAGER")),
+):
+    sp = db.get(Product, body.san_pham_id)
+    if not sp:
+        raise HTTPException(404, "Không tìm thấy sản phẩm")
+    record = CongCuSanXuat(
+        san_pham_id=body.san_pham_id,
+        loai_cong_cu=body.loai_cong_cu,
+        trang_thai=body.trang_thai,
+        so_luong=body.so_luong,
+        ghi_chu=body.ghi_chu,
+        ymh_item_id=body.ymh_item_id,
+        po_id=body.po_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return {
+        "id": record.id,
+        "san_pham_id": record.san_pham_id,
+        "ten_san_pham": sp.ten_hang,
+        "loai_cong_cu": record.loai_cong_cu,
+        "trang_thai": record.trang_thai,
+        "so_luong": record.so_luong,
+        "ghi_chu": record.ghi_chu,
+        "ymh_item_id": record.ymh_item_id,
+        "po_id": record.po_id,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+    }
 
 
 @router.get("/{ymh_id}")
@@ -509,21 +638,50 @@ def huy_ymh(
     return {"ok": True}
 
 
-@router.get("/{ymh_id}/print")
+@router.get("/{ymh_id}/print", response_class=HTMLResponse)
 def print_ymh(
     ymh_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    from fastapi.responses import HTMLResponse
-    from app.models.master import Supplier
     ymh = db.get(PurchaseRequisition, ymh_id)
     if not ymh:
         raise HTTPException(404, "Không tìm thấy YMH")
 
+    phap_nhan_id = ymh.phap_nhan_id
+    if not phap_nhan_id and ymh.phan_xuong_id:
+        px_tmp = db.get(PhanXuong, ymh.phan_xuong_id)
+        if px_tmp:
+            phap_nhan_id = px_tmp.phap_nhan_id
+
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PURCHASE_REQUISITION")
+    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None
+    if not tpl:
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(
+            404,
+            "Chưa có mẫu in PURCHASE_REQUISITION — vui lòng cấu hình trong Hệ thống > Mẫu in",
+        )
+
     px = db.get(PhanXuong, ymh.phan_xuong_id) if ymh.phan_xuong_id else None
-    pn = db.get(PhapNhan, ymh.phap_nhan_id) if ymh.phap_nhan_id else None
-    ten_phap_nhan = (pn.ten_viet_tat or pn.ten_phap_nhan) if pn else "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+    pn = db.get(PhapNhan, phap_nhan_id) if phap_nhan_id else None
+    settings = {s.key: s.value for s in db.query(SystemSetting).all()}
+
+    pn_name = _html_mod.escape(
+        (pn.ten_viet_tat or pn.ten_phap_nhan)
+        if pn
+        else (settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ")
+    )
+    pn_details = _html_mod.escape(
+        (pn.dia_chi or "") if pn else (settings.get("company_details") or "")
+    )
+    logo_src = f"/{pn.logo_path}" if pn and pn.logo_path else ""
+    logo_img = (
+        f'<img src="{logo_src}" style="max-width:100%;max-height:80px;object-fit:contain"/>'
+        if logo_src
+        else ""
+    )
 
     rows_html = ""
     tong = Decimal("0")
@@ -539,119 +697,77 @@ def print_ymh(
         thanh_tien = it.so_luong * don_gia
         tong += thanh_tien
         ngay_can_str = it.ngay_can.strftime("%d/%m/%Y") if it.ngay_can else ""
-        rows_html += f"""
-        <tr>
-          <td class="center">{i}</td>
-          <td>{ten}</td>
-          <td class="center">{it.dvt}</td>
-          <td class="right">{float(it.so_luong):,.3f}</td>
-          <td class="right">{int(don_gia):,}</td>
-          <td class="right">{int(thanh_tien):,}</td>
-          <td class="center">{ngay_can_str}</td>
-          <td>{it.ghi_chu or ''}</td>
-        </tr>"""
+        rows_html += (
+            f"<tr>"
+            f"<td class='center'>{i}</td>"
+            f"<td>{_html_mod.escape(ten)}</td>"
+            f"<td class='center'>{_html_mod.escape(it.dvt or '')}</td>"
+            f"<td class='right'>{float(it.so_luong):,.3f}</td>"
+            f"<td class='right'>{int(don_gia):,}</td>"
+            f"<td class='right'>{int(thanh_tien):,}</td>"
+            f"<td class='center'>{ngay_can_str}</td>"
+            f"<td>{_html_mod.escape(it.ghi_chu or '')}</td>"
+            f"</tr>"
+        )
+
+    body_html = (
+        "<table>"
+        "<thead><tr>"
+        "<th style='width:35px'>STT</th>"
+        "<th>Tên hàng</th>"
+        "<th style='width:55px'>ĐVT</th>"
+        "<th style='width:80px'>Số lượng</th>"
+        "<th style='width:100px'>Đơn giá DK</th>"
+        "<th style='width:110px'>Thành tiền</th>"
+        "<th style='width:90px'>Ngày cần</th>"
+        "<th style='width:120px'>Ghi chú</th>"
+        "</tr></thead>"
+        f"<tbody>{rows_html}</tbody>"
+        "<tfoot><tr class='total-row'>"
+        "<td colspan='5' class='right'>TỔNG CỘNG</td>"
+        f"<td class='right'>{int(tong):,}</td>"
+        "<td colspan='2'></td>"
+        "</tr></tfoot>"
+        "</table>"
+    )
 
     ngay_str = ""
     if ymh.ngay_yeu_cau:
         d = ymh.ngay_yeu_cau
         ngay_str = f"Ngày {d.day:02d} tháng {d.month:02d} năm {d.year}"
 
-    html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>
-  @page {{ size: A4 portrait; margin: 15mm 12mm; }}
-  * {{ box-sizing: border-box; }}
-  body {{ font-family: 'Times New Roman', serif; font-size: 11pt; margin: 0; }}
-  button {{ display: none; }}
-  @media print {{ button {{ display: none; }} }}
-  .header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }}
-  .company-name {{ font-weight: bold; font-size: 13pt; color: #4A148C; }}
-  .company-info {{ font-size: 8.5pt; line-height: 1.5; }}
-  .mau {{ font-size: 8pt; text-align: right; color: #555; }}
-  .divider {{ border: none; border-top: 2px solid #4A148C; margin: 6px 0 10px; }}
-  .title {{ text-align: center; margin-bottom: 10px; }}
-  .title h2 {{ margin: 0; font-size: 16pt; letter-spacing: 2px; text-transform: uppercase; }}
-  .title .so {{ font-size: 9pt; margin-top: 2px; }}
-  .title .date {{ font-size: 9pt; font-style: italic; }}
-  .info-block {{ font-size: 10.5pt; line-height: 1.9; margin-bottom: 10px; }}
-  .row {{ display: flex; margin: 3px 0; }}
-  .row .label {{ min-width: 140px; font-weight: bold; flex-shrink: 0; }}
-  .row .dots {{ flex: 1; border-bottom: 1px dotted #888; padding-bottom: 1px; }}
-  table {{ width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10pt; }}
-  th {{ background: #4A148C; color: #fff; border: 1px solid #ccc; padding: 5px 4px; text-align: center; }}
-  td {{ border: 1px solid #ccc; padding: 4px; }}
-  .center {{ text-align: center; }}
-  .right {{ text-align: right; }}
-  .total-row td {{ font-weight: bold; background: #F3E5F5; }}
-  .chu {{ font-size: 9.5pt; margin-bottom: 4px; }}
-  .sig-table {{ width: 100%; border: none; margin-top: 20px; }}
-  .sig-table td {{ border: none; text-align: center; vertical-align: top; width: 25%; }}
-  .sig-label {{ font-weight: bold; }}
-  .sig-sub {{ font-style: italic; font-size: 8.5pt; color: #555; }}
-  .sig-name {{ margin-top: 40px; font-weight: bold; }}
-</style>
-</head>
-<body>
-<button onclick="window.print()" style="display:block;margin-bottom:10px;padding:6px 16px;background:#4A148C;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11pt;">In phiếu</button>
+    replacements = {
+        "{{document_number}}": _html_mod.escape(ymh.so_ymh or ""),
+        "{{document_date}}": ngay_str,
+        "{{company_name}}": pn_name,
+        "{{company_details}}": pn_details,
+        "{{logo_img}}": logo_img,
+        "{{logo_src}}": logo_src,
+        "{{don_vi_yeu_cau}}": _html_mod.escape(px.ten_xuong if px else ""),
+        "{{nguoi_yeu_cau}}": _html_mod.escape(_user_name(ymh.nguoi_yeu_cau) or ""),
+        "{{ghi_chu}}": _html_mod.escape(ymh.ghi_chu or ""),
+        "{{body_html}}": body_html,
+        "{{tong_du_kien}}": f"{int(tong):,} đồng",
+        "{{sig_nguoi_yeu_cau}}": _html_mod.escape(_user_name(ymh.nguoi_yeu_cau) or ""),
+        "{{sig_duyet_pb}}": _html_mod.escape(_user_name(ymh.nguoi_duyet_pb) or ""),
+        "{{sig_duyet_gd}}": _html_mod.escape(_user_name(ymh.nguoi_duyet_gd) or ""),
+    }
+    content = tpl.html_content
+    for k, v in replacements.items():
+        content = content.replace(k, v)
 
-<div class="header">
-  <div>
-    <div class="company-name">{ten_phap_nhan}</div>
-    <div class="company-info">Địa chỉ: TP. Hồ Chí Minh<br>ĐT: (028) xxxx xxxx</div>
-  </div>
-  <div class="mau">Biểu mẫu nội bộ</div>
-</div>
-<hr class="divider">
-
-<div class="title">
-  <h2>Phiếu yêu cầu mua hàng</h2>
-  <div class="so">Số: <strong>{ymh.so_ymh}</strong></div>
-  <div class="date">{ngay_str}</div>
-</div>
-
-<div class="info-block">
-  <div class="row"><span class="label">Đơn vị yêu cầu</span><span class="dots">&nbsp;{px.ten_xuong if px else ''}</span></div>
-  <div class="row"><span class="label">Người yêu cầu</span><span class="dots">&nbsp;{_user_name(ymh.nguoi_yeu_cau) or ''}</span></div>
-  <div class="row"><span class="label">Ghi chú</span><span class="dots">&nbsp;{ymh.ghi_chu or ''}</span></div>
-</div>
-
-<table>
-  <thead>
-    <tr>
-      <th style="width:35px">STT</th>
-      <th>Tên hàng</th>
-      <th style="width:55px">ĐVT</th>
-      <th style="width:80px">Số lượng</th>
-      <th style="width:100px">Đơn giá DK</th>
-      <th style="width:110px">Thành tiền</th>
-      <th style="width:90px">Ngày cần</th>
-      <th style="width:120px">Ghi chú</th>
-    </tr>
-  </thead>
-  <tbody>
-    {rows_html}
-  </tbody>
-  <tfoot>
-    <tr class="total-row">
-      <td colspan="5" class="right">TỔNG CỘNG</td>
-      <td class="right">{int(tong):,}</td>
-      <td colspan="2"></td>
-    </tr>
-  </tfoot>
-</table>
-
-<div class="chu">Tổng tiền dự kiến: <strong>{int(tong):,} đồng</strong></div>
-
-<table class="sig-table">
-  <tr>
-    <td><div class="sig-label">Người yêu cầu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{_user_name(ymh.nguoi_yeu_cau) or ''}</div></td>
-    <td><div class="sig-label">Phụ trách phòng ban</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{_user_name(ymh.nguoi_duyet_pb) or ''}</div></td>
-    <td><div class="sig-label">Phòng mua hàng</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
-    <td><div class="sig-label">Giám đốc</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{_user_name(ymh.nguoi_duyet_gd) or ''}</div></td>
-  </tr>
-</table>
-</body></html>"""
-    return HTMLResponse(content=html)
+    page = (
+        "<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>"
+        f"<title>Phiếu YCMH {_html_mod.escape(ymh.so_ymh or '')}</title>"
+        "<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>"
+        "</head><body>"
+        "<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>"
+        "<button onclick='window.print()' style='padding:7px 18px;background:#4A148C;color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In phiếu YCMH</button>"
+        "<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>"
+        "</div>"
+        f"{content}</body></html>"
+    )
+    return HTMLResponse(content=page)
 
 
 @router.delete("/{ymh_id}")

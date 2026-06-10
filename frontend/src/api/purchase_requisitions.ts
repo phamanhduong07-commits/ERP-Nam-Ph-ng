@@ -10,6 +10,32 @@ export interface YMHItem {
   don_gia_du_kien: number
   ngay_can?: string | null
   ghi_chu?: string | null
+  loai_item?: string
+  san_pham_id?: number | null
+  ten_san_pham?: string | null
+}
+
+export interface ToolingRecord {
+  id: number
+  san_pham_id: number
+  ten_san_pham?: string | null
+  loai_cong_cu: 'ban_in' | 'khuon_be'
+  trang_thai: 'co_san' | 'dat_mua' | 'hong'
+  so_luong: number
+  ghi_chu?: string | null
+  ymh_item_id?: number | null
+  po_id?: number | null
+  created_at?: string | null
+}
+
+export interface CreateToolingPayload {
+  san_pham_id: number
+  loai_cong_cu: 'ban_in' | 'khuon_be'
+  trang_thai?: 'co_san' | 'dat_mua' | 'hong'
+  so_luong?: number
+  ghi_chu?: string | null
+  ymh_item_id?: number | null
+  po_id?: number | null
 }
 
 export interface PurchaseRequisition {
@@ -133,4 +159,15 @@ export const ymhApi = {
   delete: (id: number) => client.delete(`/purchase-requisitions/${id}`),
 
   print: (id: number) => client.get<string>(`/purchase-requisitions/${id}/print`, { responseType: 'text' }),
+
+  toolingCheck: (san_pham_id: number, loai?: string) =>
+    client.get<ToolingRecord[]>('/purchase-requisitions/tooling-check', {
+      params: { san_pham_id, loai },
+    }),
+
+  listCongCu: (params?: { san_pham_id?: number; loai_cong_cu?: string; trang_thai?: string }) =>
+    client.get<ToolingRecord[]>('/purchase-requisitions/cong-cu', { params }),
+
+  createCongCu: (data: CreateToolingPayload) =>
+    client.post<ToolingRecord>('/purchase-requisitions/cong-cu', data),
 }
