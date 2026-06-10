@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Tag, Button, Space, Typography, Row, Col,
   Statistic, Popconfirm, message, Tooltip, Badge, Divider, Alert, Drawer,
+  Input, InputNumber, Popover,
 } from 'antd'
 import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import {
@@ -82,6 +83,96 @@ function calcLayerKgs(r: QueueLine): LayerDef[] {
       : 0
     return { ...l, kg }
   })
+}
+
+// ─── Map posIdx → field name ──────────────────────────────────────────────────
+
+const LAYER_FIELDS: Record<number, { maField: string; dlField: string }> = {
+  0: { maField: 'mat',    dlField: 'mat_dl' },
+  1: { maField: 'song_1', dlField: 'song_1_dl' },
+  2: { maField: 'mat_1',  dlField: 'mat_1_dl' },
+  3: { maField: 'song_2', dlField: 'song_2_dl' },
+  4: { maField: 'mat_2',  dlField: 'mat_2_dl' },
+  5: { maField: 'song_3', dlField: 'song_3_dl' },
+  6: { maField: 'mat_3',  dlField: 'mat_3_dl' },
+}
+
+interface LayerEditBlockProps {
+  layer: LayerDef
+  orderId: number | null
+  itemId: number
+  onSaved: () => void
+}
+
+function LayerEditBlock({ layer, orderId, itemId, onSaved }: LayerEditBlockProps) {
+  const [open, setOpen] = useState(false)
+  const [maVal, setMaVal] = useState(layer.ma ?? '')
+  const [dlVal, setDlVal] = useState<number | null>(layer.dl)
+
+  const saveMut = useMutation({
+    mutationFn: () => {
+      if (!orderId) throw new Error('Không có order ID')
+      const { maField, dlField } = LAYER_FIELDS[layer.posIdx]
+      return productionOrdersApi.updateItemSxParams(orderId, itemId, {
+        [maField]: maVal.trim() || null,
+        [dlField]: dlVal,
+      })
+    },
+    onSuccess: () => { message.success('Đã cập nhật'); setOpen(false); onSaved() },
+    onError: () => message.error('Lỗi cập nhật'),
+  })
+
+  const handleOpenChange = (v: boolean) => {
+    if (v) { setMaVal(layer.ma ?? ''); setDlVal(layer.dl) }
+    setOpen(v)
+  }
+
+  const popContent = (
+    <Space direction="vertical" size={6} style={{ width: 150 }}>
+      <Input
+        size="small" value={maVal} placeholder="Mã ký hiệu (LB, 87...)"
+        onChange={e => setMaVal(e.target.value)}
+        onPressEnter={() => saveMut.mutate()}
+      />
+      <InputNumber
+        size="small" style={{ width: '100%' }} value={dlVal}
+        placeholder="ĐL (g/m²)" min={0} max={600}
+        onChange={v => setDlVal(v as number | null)}
+      />
+      <Space size={4}>
+        <Button size="small" type="primary" loading={saveMut.isPending} onClick={() => saveMut.mutate()}>Lưu</Button>
+        <Button size="small" onClick={() => setOpen(false)}>Hủy</Button>
+      </Space>
+    </Space>
+  )
+
+  return (
+    <Popover
+      open={open} onOpenChange={handleOpenChange} trigger="click"
+      title={<span style={{ fontSize: 12 }}>{layer.label}</span>}
+      content={popContent}
+    >
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 2,
+        background: layer.ma ? (layer.isSong ? '#e6f4ff' : '#f6ffed') : '#fafafa',
+        border: `1px solid ${layer.ma ? (layer.isSong ? '#91caff' : '#95de64') : '#e0e0e0'}`,
+        borderRadius: 4, padding: '1px 5px', cursor: 'pointer',
+        fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
+      }}>
+        <span style={{ fontWeight: 700, color: layer.isSong ? '#1677ff' : '#389e0d' }}>
+          {layer.lbl}
+        </span>
+        {layer.ma ? (
+          <>
+            <span style={{ color: '#262626', marginLeft: 3 }}>{layer.ma}</span>
+            {layer.dl != null && <span style={{ color: '#8c8c8c', marginLeft: 2 }}>{layer.dl}g</span>}
+          </>
+        ) : (
+          <span style={{ color: '#bfbfbf', marginLeft: 2, fontStyle: 'italic' }}>—</span>
+        )}
+      </div>
+    </Popover>
+  )
 }
 
 // ─── Kg summary — KHÔNG gộp lớp: mỗi (posIdx, ma, dl) là 1 dòng riêng ────────
@@ -563,29 +654,22 @@ export default function ProductionQueuePage() {
       render: v => <Text strong style={{ fontSize: 12 }}>{Number(v).toLocaleString('vi-VN')}</Text>,
     },
     {
-      // Từng lớp riêng: [tag lớp] mã  dl g
       title: 'Kết cấu giấy',
-      width: 185,
+      width: 280,
       render: (_, r) => {
-        const layers = calcLayerKgs(r).filter(l => l.ma)
+        const layers = calcLayerKgs(r)
         if (!layers.length) return <Text type="secondary">—</Text>
         return (
-          <Space direction="vertical" size={2}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
             {layers.map((l, i) => (
-              <Space key={i} size={4} align="center">
-                <Tag
-                  color={l.isSong ? 'blue' : 'green'}
-                  style={{ fontSize: 10, padding: '0 4px', margin: 0, lineHeight: '16px', minWidth: 30, textAlign: 'center' }}
-                >
-                  {l.lbl}
-                </Tag>
-                <Text style={{ fontSize: 11, fontWeight: 500 }}>{l.ma}</Text>
-                {l.dl != null && (
-                  <Text type="secondary" style={{ fontSize: 10 }}>{l.dl}g</Text>
-                )}
-              </Space>
+              <LayerEditBlock
+                key={i} layer={l}
+                orderId={r.production_order_id}
+                itemId={r.production_order_item_id}
+                onSaved={() => qc.invalidateQueries({ queryKey: ['production-queue'] })}
+              />
             ))}
-          </Space>
+          </div>
         )
       },
     },
