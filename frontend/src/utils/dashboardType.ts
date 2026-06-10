@@ -5,6 +5,7 @@ export type DashboardType =
   | 'accounting'
   | 'production'
   | 'warehouse'
+  | 'purchase'
   | 'default'
 
 const ROLE_DASHBOARD_MAP: Record<string, DashboardType> = {
@@ -29,6 +30,7 @@ const ROLE_DASHBOARD_MAP: Record<string, DashboardType> = {
   KETOAN_TO_TRUONG: 'accounting',
   KE_TOAN_CONG_NO: 'accounting',
   KETOAN_NHAN_VIEN: 'accounting',
+  KE_TOAN_MUA_HANG: 'accounting',
 
   // Sản Xuất
   SAN_XUAT_GIAM_SAT: 'production',
@@ -38,6 +40,10 @@ const ROLE_DASHBOARD_MAP: Record<string, DashboardType> = {
   // Kho
   KHO_TO_TRUONG: 'warehouse',
   KHO_NHAN_VIEN: 'warehouse',
+
+  // Mua hàng
+  MUA_HANG_TRUONG_PHONG: 'purchase',
+  MUA_HANG_NHAN_VIEN: 'purchase',
 }
 
 export function getDashboardType(role: string | null | undefined): DashboardType {

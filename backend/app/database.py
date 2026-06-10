@@ -74,8 +74,10 @@ def ensure_schema() -> None:
     Hàm này chỉ còn xử lý:
       1. Data seed phan_xuong (idempotent — chỉ chạy khi bảng trống)
       2. Đảm bảo Hóc Môn / Củ Chi có phoi_tu_phan_xuong_id trỏ về Hoàng Gia
+      3. Đảm bảo agent_sessions tồn tại (failsafe nếu migration chưa chạy)
     """
     _seed_phan_xuong()
+    _ensure_agent_sessions()
 
     # Idempotent: chỉ set khi chưa có giá trị
     with engine.begin() as conn:
@@ -86,4 +88,25 @@ def ensure_schema() -> None:
             )
             WHERE ma_xuong IN ('hoc_mon', 'cu_chi')
               AND phoi_tu_phan_xuong_id IS NULL
+        """))
+
+
+def _ensure_agent_sessions() -> None:
+    """Tạo bảng agent_sessions nếu chưa có — failsafe khi alembic chưa chạy."""
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS agent_sessions (
+                session_id   TEXT PRIMARY KEY,
+                user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                history_json JSONB NOT NULL DEFAULT '[]',
+                last_active  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_agent_sessions_user_id
+            ON agent_sessions (user_id)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_agent_sessions_last_active
+            ON agent_sessions (last_active)
         """))

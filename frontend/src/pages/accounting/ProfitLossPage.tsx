@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
-  Card, Typography, Space, Button, DatePicker, Row, Col, Statistic, Select, List, Divider, Skeleton
+  Alert, Card, Typography, Space, Button, DatePicker, Row, Col, Statistic, Select, List, Skeleton, Modal, message,
 } from 'antd'
-import { 
-  FilePdfOutlined, FileExcelOutlined, 
+import {
+  FilePdfOutlined, BankOutlined,
   SearchOutlined, PieChartOutlined, ArrowUpOutlined, ArrowDownOutlined
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -16,6 +16,9 @@ import { fmtVND, printToPdf } from '../../utils/exportUtils'
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
+// Quý hiện tại
+const currentQuarter = Math.ceil((dayjs().month() + 1) / 3)
+
 export default function ProfitLossPage() {
   const [dates, setDates] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
     dayjs().startOf('month'),
@@ -23,6 +26,8 @@ export default function ProfitLossPage() {
   ])
   const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
   const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
+  const [citQuy, setCitQuy] = useState<number>(currentQuarter)
+  const [citNam, setCitNam] = useState<number>(dayjs().year())
 
   // Lay danh muc phap nhan
   const { data: listPhapNhan = [] } = useQuery({
@@ -45,6 +50,35 @@ export default function ProfitLossPage() {
       phan_xuong_id: phanXuongId,
     })
   })
+
+  const { data: citPreview, isLoading: citLoading, refetch: refetchCit } = useQuery({
+    queryKey: ['cit-preview', citQuy, citNam, phapNhanId],
+    queryFn: () => arApi.previewCIT({ quy: citQuy, nam: citNam, phap_nhan_id: phapNhanId! }),
+    enabled: !!phapNhanId,
+  })
+
+  const provisionMutation = useMutation({
+    mutationFn: () => arApi.provisionCIT({ quy: citQuy, nam: citNam, phap_nhan_id: phapNhanId! }),
+    onSuccess: (result) => {
+      message.success(`Đã tạo bút toán ${result.so_but_toan} — Thuế TNDN: ${fmtVND(result.thue_tndn)}`)
+      refetchCit()
+      refetch()
+    },
+    onError: (err: { response?: { data?: { detail?: string } }; message?: string }) => {
+      message.error(err.response?.data?.detail || err.message || 'Lỗi trích lập')
+    },
+  })
+
+  const handleProvisionCIT = () => {
+    if (!phapNhanId) { message.warning('Chọn pháp nhân trước'); return }
+    Modal.confirm({
+      title: `Trích lập thuế TNDN Q${citQuy}/${citNam}?`,
+      content: `Tạo bút toán Nợ 821 / Có 3334: ${fmtVND(citPreview?.thue_tndn_uoc_tinh ?? 0)}`,
+      okText: 'Trích lập',
+      cancelText: 'Hủy',
+      onOk: () => provisionMutation.mutateAsync(),
+    })
+  }
 
   const handleExportPdf = () => {
     if (!pnl) return
@@ -133,7 +167,6 @@ export default function ProfitLossPage() {
               Cập nhật
             </Button>
             <Button icon={<FilePdfOutlined />} onClick={handleExportPdf}>PDF</Button>
-            <Button icon={<FileExcelOutlined />}>Excel</Button>
           </Space>
         </Col>
       </Row>
@@ -183,9 +216,9 @@ export default function ProfitLossPage() {
               dataSource={pnlItems}
               renderItem={(item) => (
                 <List.Item style={{ padding: '16px 0' }}>
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
                     width: '100%',
                     paddingLeft: item.indent * 24,
                     fontWeight: item.bold ? 'bold' : 'normal',
@@ -198,6 +231,73 @@ export default function ProfitLossPage() {
                 </List.Item>
               )}
             />
+          </Card>
+
+          <Card
+            title={<Space><BankOutlined />Trích lập thuế TNDN theo quý</Space>}
+            style={{ marginTop: 24 }}
+            extra={
+              <Space>
+                <Select
+                  value={citQuy}
+                  onChange={setCitQuy}
+                  style={{ width: 80 }}
+                  options={[1, 2, 3, 4].map(q => ({ value: q, label: `Q${q}` }))}
+                />
+                <Select
+                  value={citNam}
+                  onChange={setCitNam}
+                  style={{ width: 90 }}
+                  options={Array.from({ length: 6 }, (_, i) => dayjs().year() - i).map(y => ({ value: y, label: String(y) }))}
+                />
+                <Button
+                  type="primary"
+                  icon={<BankOutlined />}
+                  loading={provisionMutation.isPending}
+                  disabled={!phapNhanId || citPreview?.da_ton_tai}
+                  onClick={handleProvisionCIT}
+                >
+                  Trích lập
+                </Button>
+              </Space>
+            }
+          >
+            {!phapNhanId ? (
+              <Alert type="info" showIcon message="Chọn pháp nhân để xem ước tính thuế TNDN theo quý." />
+            ) : citLoading ? (
+              <Skeleton active paragraph={{ rows: 2 }} />
+            ) : citPreview ? (
+              <Row gutter={16}>
+                <Col span={6}>
+                  <Statistic title="Kỳ" value={`Q${citPreview.quy}/${citPreview.nam}`} />
+                </Col>
+                <Col span={6}>
+                  <Statistic
+                    title="LN trước thuế"
+                    value={citPreview.loi_nhuan_truoc_thue}
+                    suffix="đ"
+                    valueStyle={{ color: citPreview.loi_nhuan_truoc_thue >= 0 ? '#3f8600' : '#cf1322' }}
+                  />
+                </Col>
+                <Col span={6}>
+                  <Statistic
+                    title={`Thuế TNDN ước tính (${citPreview.thue_suat}%)`}
+                    value={citPreview.thue_tndn_uoc_tinh}
+                    suffix="đ"
+                    valueStyle={{ color: '#d46b08' }}
+                  />
+                </Col>
+                <Col span={6}>
+                  {citPreview.da_ton_tai ? (
+                    <Alert type="success" showIcon message={`Đã trích lập — ${citPreview.so_but_toan}`} />
+                  ) : citPreview.loi_nhuan_truoc_thue <= 0 ? (
+                    <Alert type="warning" showIcon message="LN ≤ 0, không cần trích lập" />
+                  ) : (
+                    <Alert type="info" showIcon message="Chưa trích lập" />
+                  )}
+                </Col>
+              </Row>
+            ) : null}
           </Card>
         </>
       )}

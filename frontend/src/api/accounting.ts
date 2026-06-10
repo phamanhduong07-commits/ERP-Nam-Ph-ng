@@ -374,6 +374,16 @@ export const arApi = {
   getPnl: (params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number | null; phan_xuong_id?: number | null }) =>
     client.get('/accounting/reports/pnl', { params }).then(r => r.data),
 
+  previewCIT: (params: { quy: number; nam: number; phap_nhan_id: number }) =>
+    client.get('/accounting/tax/cit-preview', { params }).then(r => r.data as {
+      quy: number; nam: number; tu_ngay: string; den_ngay: string;
+      loi_nhuan_truoc_thue: number; thue_suat: number; thue_tndn_uoc_tinh: number;
+      da_ton_tai: boolean; so_but_toan: string;
+    }),
+
+  provisionCIT: (params: { quy: number; nam: number; phap_nhan_id: number }) =>
+    client.post('/accounting/tax/provision-cit', null, { params }).then(r => r.data),
+
   getBalanceSheet: (params: { ngay: string; phap_nhan_id?: number | null }) =>
     client.get('/accounting/reports/balance-sheet', { params }).then(r => r.data),
 

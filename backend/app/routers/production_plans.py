@@ -2,6 +2,7 @@ import math
 from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload, aliased
 from sqlalchemy import case
 from app.database import get_db
@@ -538,6 +539,28 @@ def get_queue(
     filtered.sort(key=lambda ln: (ln.ngay_chay or date(2099, 1, 1), ln.thu_tu, ln.id))
 
     return [_build_queue_line(ln, plan_by_id[ln.plan_id]) for ln in filtered]
+
+
+class _ReorderItem(BaseModel):
+    id: int
+    thu_tu: int
+
+
+@router.patch("/queue/reorder")
+def reorder_queue(
+    items: list[_ReorderItem],
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Cập nhật thứ tự (thu_tu) cho nhiều dòng KHSX cùng lúc."""
+    ids = [it.id for it in items]
+    lines = db.query(ProductionPlanLine).filter(ProductionPlanLine.id.in_(ids)).all()
+    line_map = {ln.id: ln for ln in lines}
+    for it in items:
+        if it.id in line_map:
+            line_map[it.id].thu_tu = it.thu_tu
+    db.commit()
+    return {"updated": len(lines)}
 
 
 @router.post("/push-to-queue", response_model=QueueLineResponse, status_code=201)

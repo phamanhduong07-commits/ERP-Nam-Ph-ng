@@ -55,14 +55,18 @@ def chat(
                 user.username, user_role, session_id, req.message)
 
     t0 = time.time()
-    reply = orchestrator.chat(
-        message=req.message,
-        history=history,
-        db=db,
-        user_role=user_role,
-        user_name=user_name,
-        user_id=user.id,
-    )
+    try:
+        reply = orchestrator.chat(
+            message=req.message,
+            history=history,
+            db=db,
+            user_role=user_role,
+            user_name=user_name,
+            user_id=user.id,
+        )
+    except Exception as exc:
+        logger.exception("[Agent] chat error session=%s", session_id)
+        raise HTTPException(status_code=500, detail=f"Agent error: {type(exc).__name__}: {exc}") from exc
     elapsed = round((time.time() - t0) * 1000)
     logger.info("[Agent] done in %dms session=%s", elapsed, session_id)
 

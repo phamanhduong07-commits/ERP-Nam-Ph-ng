@@ -295,6 +295,9 @@ export const productionPlansApi = {
 
   getBaoCao: (id: number) =>
     client.get<KhsxBaoCaoResponse>(`/production-plans/${id}/bao-cao`),
+
+  reorderQueue: (items: { id: number; thu_tu: number }[]) =>
+    client.patch<{ updated: number }>('/production-plans/queue/reorder', items),
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

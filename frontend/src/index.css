@@ -402,6 +402,17 @@ body,
   border-radius: 4px;
 }
 
+/* ── Bảng — thanh cuộn ngang luôn truy cập được ── */
+/*
+ * Khi bảng có nhiều hàng mà không set scroll.y, thanh cuộn ngang nằm tận đáy trang.
+ * Giới hạn max-height theo viewport để scrollbar luôn trong tầm nhìn.
+ * Offset ~250px = header(64) + page toolbar(56) + filter(40) + pagination(32) + padding(58).
+ */
+.ant-layout-content .ant-table-wrapper .ant-table-content {
+  max-height: calc(100vh - 250px);
+  overflow: auto !important;
+}
+
 /* ── Chặn scroll ngang toàn bộ app ── */
 html {
   overflow-x: hidden;

@@ -116,8 +116,8 @@ export default function PeriodClosingPage() {
     mutationFn: periodClosingApi.performClosing,
     onSuccess: (result) => {
       Modal.success({
-        title: 'Da ket chuyen va khoa so',
-        content: `But toan ${result.so_but_toan}. Lai/lo trong ky: ${fmtVND(result.lai_lo)}.`,
+        title: 'Đã kết chuyển và khóa sổ',
+        content: `Bút toán ${result.so_but_toan}. Lãi/lỗ trong kỳ: ${fmtVND(result.lai_lo)}.`,
       })
       refetchHistory()
       refetchLocks()
@@ -131,7 +131,7 @@ export default function PeriodClosingPage() {
   const unlockMutation = useMutation({
     mutationFn: periodClosingApi.unlock,
     onSuccess: () => {
-      message.success('Da mo khoa ky ke toan')
+      message.success('Đã mở khóa kỳ kế toán')
       setUnlockTarget(null)
       setUnlockReason('')
       refetchLocks()
@@ -144,19 +144,19 @@ export default function PeriodClosingPage() {
 
   const handleClosing = () => {
     if (!phapNhanId) {
-      message.warning('Vui long chon phap nhan')
+      message.warning('Vui lòng chọn pháp nhân')
       return
     }
     if (readiness && !readiness.can_close) {
-      message.error('Ky nay con loi chan khoa so, vui long xu ly checklist truoc')
+      message.error('Kỳ này còn lỗi chặn khóa sổ, vui lòng xử lý checklist trước')
       return
     }
     Modal.confirm({
-      title: `Ket chuyen va khoa so ${month.format('MM/YYYY')}?`,
+      title: `Kết chuyển và khóa sổ ${month.format('MM/YYYY')}?`,
       icon: <ExclamationCircleOutlined />,
-      content: 'He thong se tao but toan ket chuyen doanh thu/chi phi va khoa ky nay. Muon sua so lieu sau do phai mo khoa co ly do.',
-      okText: 'Chay ket chuyen',
-      cancelText: 'Huy',
+      content: 'Hệ thống sẽ tạo bút toán kết chuyển doanh thu/chi phí và khóa kỳ này. Muốn sửa số liệu sau đó phải mở khóa có lý do.',
+      okText: 'Chạy kết chuyển',
+      cancelText: 'Hủy',
       onOk: () => closingMutation.mutate({
         thang: selectedPeriod.thang,
         nam: selectedPeriod.nam,
@@ -168,7 +168,7 @@ export default function PeriodClosingPage() {
   const confirmUnlock = () => {
     if (!unlockTarget || !phapNhanId) return
     if (unlockReason.trim().length < 3) {
-      message.warning('Vui long nhap ly do mo khoa')
+      message.warning('Vui lòng nhập lý do mở khóa')
       return
     }
     unlockMutation.mutate({
@@ -185,35 +185,35 @@ export default function PeriodClosingPage() {
 
   const lockColumns: ColumnsType<AccountingPeriodLock> = [
     {
-      title: 'Ky',
+      title: 'Kỳ',
       render: (_, row) => `${String(row.thang).padStart(2, '0')}/${row.nam}`,
       width: 90,
     },
     {
-      title: 'Trang thai',
+      title: 'Trạng thái',
       dataIndex: 'trang_thai',
       render: (value: string) => (
         <Tag color={value === 'locked' ? 'red' : 'green'} icon={value === 'locked' ? <LockOutlined /> : <UnlockOutlined />}>
-          {value === 'locked' ? 'Da khoa' : 'Da mo'}
+          {value === 'locked' ? 'Đã khóa' : 'Đã mở'}
         </Tag>
       ),
       width: 130,
     },
     {
-      title: 'Khoa luc',
+      title: 'Khóa lúc',
       dataIndex: 'locked_at',
       render: (value?: string | null) => value ? dayjs(value).format('DD/MM/YYYY HH:mm') : '-',
       width: 160,
     },
     {
-      title: 'Ly do',
+      title: 'Lý do',
       render: (_, row) => row.trang_thai === 'locked' ? row.ly_do_khoa || '-' : row.ly_do_mo_khoa || '-',
     },
     {
       title: '',
       render: (_, row) => row.trang_thai === 'locked' ? (
         <Button size="small" icon={<UnlockOutlined />} onClick={() => setUnlockTarget(row)}>
-          Mo khoa
+          Mở khóa
         </Button>
       ) : null,
       width: 110,
@@ -222,63 +222,63 @@ export default function PeriodClosingPage() {
 
   const readinessColumns: ColumnsType<ClosingReadinessCheck> = [
     {
-      title: 'Hang muc',
+      title: 'Hạng mục',
       dataIndex: 'label',
       width: 190,
     },
     {
-      title: 'Trang thai',
+      title: 'Trạng thái',
       dataIndex: 'status',
       width: 120,
       render: (value: string) => {
         const color = value === 'fail' ? 'red' : value === 'warn' ? 'gold' : 'green'
-        const label = value === 'fail' ? 'Loi' : value === 'warn' ? 'Canh bao' : 'Dat'
+        const label = value === 'fail' ? 'Lỗi' : value === 'warn' ? 'Cảnh báo' : 'Đạt'
         return <Tag color={color}>{label}</Tag>
       },
     },
     {
-      title: 'Loi',
+      title: 'Lỗi',
       dataIndex: 'errors',
       align: 'right',
       width: 70,
     },
     {
-      title: 'Canh bao',
+      title: 'Cảnh báo',
       dataIndex: 'warnings',
       align: 'right',
       width: 90,
     },
     {
-      title: 'Ket qua',
+      title: 'Kết quả',
       dataIndex: 'message',
     },
   ]
 
   const historyColumns: ColumnsType<JournalEntryRow> = [
     {
-      title: 'Ngay',
+      title: 'Ngày',
       dataIndex: 'ngay_but_toan',
       render: (value?: string) => value ? dayjs(value).format('DD/MM/YYYY') : '-',
       width: 110,
     },
     {
-      title: 'So but toan',
+      title: 'Số bút toán',
       dataIndex: 'so_but_toan',
       width: 150,
     },
     {
-      title: 'Dien giai',
+      title: 'Diễn giải',
       dataIndex: 'dien_giai',
     },
     {
-      title: 'Tong No',
+      title: 'Tổng Nợ',
       dataIndex: 'tong_no',
       render: (value?: number) => fmtVND(value || 0),
       align: 'right',
       width: 140,
     },
     {
-      title: 'Tong Co',
+      title: 'Tổng Có',
       dataIndex: 'tong_co',
       render: (value?: number) => fmtVND(value || 0),
       align: 'right',
@@ -293,8 +293,8 @@ export default function PeriodClosingPage() {
           <Space size="middle">
             <LockOutlined style={{ fontSize: 32, color: '#cf1322' }} />
             <div>
-              <Title level={2} style={{ margin: 0 }}>Ket chuyen va khoa so</Title>
-              <Text type="secondary">Chot lai/lo theo phap nhan, khoa ky va luu audit mo khoa.</Text>
+              <Title level={2} style={{ margin: 0 }}>Kết chuyển và khóa sổ</Title>
+              <Text type="secondary">Chốt lãi/lỗ theo pháp nhân, khóa kỳ và lưu audit mở khóa.</Text>
             </div>
           </Space>
         </Col>
@@ -302,20 +302,20 @@ export default function PeriodClosingPage() {
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={8}>
-          <Card title="Thuc hien">
+          <Card title="Thực hiện">
             <Form layout="vertical">
-              <Form.Item label="Phap nhan" required>
+              <Form.Item label="Pháp nhân" required>
                 <Select
-                  placeholder="Chon phap nhan"
+                  placeholder="Chọn pháp nhân"
                   value={phapNhanId}
                   onChange={setPhapNhanId}
                   options={listPhapNhan.map((p) => ({
                     value: p.id,
-                    label: p.ten_viet_tat || p.ten_phap_nhan || `Phap nhan #${p.id}`,
+                    label: p.ten_viet_tat || p.ten_phap_nhan || `Pháp nhân #${p.id}`,
                   }))}
                 />
               </Form.Item>
-              <Form.Item label="Ky ke toan" required>
+              <Form.Item label="Kỳ kế toán" required>
                 <DatePicker
                   picker="month"
                   value={month}
@@ -330,32 +330,32 @@ export default function PeriodClosingPage() {
               <Alert
                 type="warning"
                 showIcon
-                message="Ky nay da khoa so"
-                description="Can mo khoa co ly do truoc khi sua chung tu hoac chay lai ket chuyen."
+                message="Kỳ này đã khóa sổ"
+                description="Cần mở khóa có lý do trước khi sửa chứng từ hoặc chạy lại kết chuyển."
                 style={{ marginBottom: 16 }}
               />
             ) : readinessErrors > 0 ? (
               <Alert
                 type="error"
                 showIcon
-                message="Chua du dieu kien khoa so"
-                description={`Con ${readinessErrors} loi can xu ly trong checklist.`}
+                message="Chưa đủ điều kiện khóa sổ"
+                description={`Còn ${readinessErrors} lỗi cần xử lý trong checklist.`}
                 style={{ marginBottom: 16 }}
               />
             ) : readinessWarnings > 0 ? (
               <Alert
                 type="warning"
                 showIcon
-                message="Co canh bao truoc khi khoa so"
-                description={`Co ${readinessWarnings} canh bao nen xem lai truoc khi chot.`}
+                message="Có cảnh báo trước khi khóa sổ"
+                description={`Có ${readinessWarnings} cảnh báo nên xem lại trước khi chốt.`}
                 style={{ marginBottom: 16 }}
               />
             ) : (
               <Alert
                 type="success"
                 showIcon
-                message="San sang khoa so"
-                description="Checklist truoc khi khoa so khong co loi chan."
+                message="Sẵn sàng khóa sổ"
+                description="Checklist trước khi khóa sổ không có lỗi chặn."
                 style={{ marginBottom: 16 }}
               />
             )}
@@ -370,7 +370,7 @@ export default function PeriodClosingPage() {
               loading={closingMutation.isPending}
               onClick={handleClosing}
             >
-              Chay ket chuyen va khoa so
+              Chạy kết chuyển và khóa sổ
             </Button>
           </Card>
         </Col>
@@ -379,31 +379,31 @@ export default function PeriodClosingPage() {
           <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
             <Col xs={24} sm={8}>
               <Card>
-                <Statistic title="Ky dang xem" value={month.format('MM/YYYY')} prefix={<HistoryOutlined />} />
+                <Statistic title="Kỳ đang xem" value={month.format('MM/YYYY')} prefix={<HistoryOutlined />} />
               </Card>
             </Col>
             <Col xs={24} sm={8}>
               <Card>
-                <Statistic title="Trang thai ky" value={selectedLock ? 'Da khoa' : 'Dang mo'} prefix={selectedLock ? <LockOutlined /> : <UnlockOutlined />} />
+                <Statistic title="Trạng thái kỳ" value={selectedLock ? 'Đã khóa' : 'Đang mở'} prefix={selectedLock ? <LockOutlined /> : <UnlockOutlined />} />
               </Card>
             </Col>
             <Col xs={24} sm={8}>
               <Card>
-                <Statistic title="Loi checklist" value={readinessErrors} valueStyle={{ color: readinessErrors ? '#cf1322' : '#3f8600' }} prefix={<CheckCircleOutlined />} />
+                <Statistic title="Lỗi checklist" value={readinessErrors} valueStyle={{ color: readinessErrors ? '#cf1322' : '#3f8600' }} prefix={<CheckCircleOutlined />} />
               </Card>
             </Col>
           </Row>
 
-          <Card title="Checklist truoc khi khoa so" style={{ marginBottom: 16 }}>
+          <Card title="Checklist trước khi khóa sổ" style={{ marginBottom: 16 }}>
             <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
               <Col xs={24} sm={8}>
-                <Statistic title="Ket luan" value={readiness?.can_close ? 'Dat' : 'Chua dat'} />
+                <Statistic title="Kết luận" value={readiness?.can_close ? 'Đạt' : 'Chưa đạt'} />
               </Col>
               <Col xs={24} sm={8}>
-                <Statistic title="Loi chan" value={readinessErrors} valueStyle={{ color: readinessErrors ? '#cf1322' : '#3f8600' }} />
+                <Statistic title="Lỗi chặn" value={readinessErrors} valueStyle={{ color: readinessErrors ? '#cf1322' : '#3f8600' }} />
               </Col>
               <Col xs={24} sm={8}>
-                <Statistic title="Canh bao" value={readinessWarnings} valueStyle={{ color: readinessWarnings ? '#d48806' : undefined }} />
+                <Statistic title="Cảnh báo" value={readinessWarnings} valueStyle={{ color: readinessWarnings ? '#d48806' : undefined }} />
               </Col>
             </Row>
             <Table
@@ -416,7 +416,7 @@ export default function PeriodClosingPage() {
             />
           </Card>
 
-          <Card title="Khoa so theo ky" style={{ marginBottom: 16 }}>
+          <Card title="Khóa sổ theo kỳ" style={{ marginBottom: 16 }}>
             <Table
               size="small"
               dataSource={periodLocks}
@@ -427,7 +427,7 @@ export default function PeriodClosingPage() {
             />
           </Card>
 
-          <Card title="Lich su but toan ket chuyen">
+          <Card title="Lịch sử bút toán kết chuyển">
             <Table
               size="small"
               dataSource={historyRows}
@@ -441,10 +441,10 @@ export default function PeriodClosingPage() {
       </Row>
 
       <Modal
-        title={unlockTarget ? `Mo khoa ky ${String(unlockTarget.thang).padStart(2, '0')}/${unlockTarget.nam}` : 'Mo khoa ky'}
+        title={unlockTarget ? `Mở khóa kỳ ${String(unlockTarget.thang).padStart(2, '0')}/${unlockTarget.nam}` : 'Mở khóa kỳ'}
         open={!!unlockTarget}
-        okText="Mo khoa"
-        cancelText="Huy"
+        okText="Mở khóa"
+        cancelText="Hủy"
         confirmLoading={unlockMutation.isPending}
         onOk={confirmUnlock}
         onCancel={() => {
@@ -456,7 +456,7 @@ export default function PeriodClosingPage() {
           rows={4}
           value={unlockReason}
           onChange={(event) => setUnlockReason(event.target.value)}
-          placeholder="Nhap ly do mo khoa"
+          placeholder="Nhập lý do mở khóa"
         />
       </Modal>
     </div>

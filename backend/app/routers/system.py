@@ -7,6 +7,7 @@ from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.system import PrintTemplate, SystemSetting, ExcelTemplate
 from app.models.auth import User
+from app.utils.template import TEMPLATE_VARS
 
 _SALES_TEMPLATE_CODES = frozenset({
     "sales_order", "sales_invoice", "sales_quote",
@@ -51,6 +52,27 @@ class SystemSettingIn(BaseModel):
     key: str
     value: str
     description: Optional[str] = None
+
+
+@router.get("/template-vars")
+def get_template_vars(
+    ma_mau: Optional[str] = None,
+    _: User = Depends(get_current_user),
+):
+    """
+    Trả về danh sách biến {{...}} hỗ trợ cho từng loại mẫu in.
+    ?ma_mau=quote → chỉ vars của loại đó
+    (không có param) → toàn bộ registry
+    """
+    if ma_mau:
+        key = ma_mau.lower()
+        vars_list = TEMPLATE_VARS.get(key)
+        if vars_list is None:
+            raise HTTPException(404, f"Không có registry cho loại mẫu '{key}'")
+        return {"ma_mau": key, "variables": vars_list}
+    return {
+        k: v for k, v in TEMPLATE_VARS.items()
+    }
 
 
 @router.get("/templates", response_model=List[PrintTemplateIn])

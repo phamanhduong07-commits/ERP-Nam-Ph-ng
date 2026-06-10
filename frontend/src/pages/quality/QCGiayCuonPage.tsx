@@ -153,7 +153,7 @@ function CreateDrawer({
 
   const handlePmSelect = useCallback(async (id: number) => {
     try {
-      const res = await client.get<PaperTC>(`/api/qc-giay-cuon/tieu-chuan/${id}`)
+      const res = await client.get<PaperTC>(`/qc-giay-cuon/tieu-chuan/${id}`)
       setTc(res.data)
       // Pre-fill kho_tc từ TC nếu chưa nhập
       if (res.data.kho != null) {

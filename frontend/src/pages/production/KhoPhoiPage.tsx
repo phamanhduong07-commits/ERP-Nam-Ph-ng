@@ -140,11 +140,15 @@ export default function KhoPhoiPage() {
   const openChuyenKho = (rows: KhoRow[]) => {
     if (!rows.length) return
     setChuyenRows(rows)
-    // Dùng ton_kho_tai_nguon (còn tại kho HG chưa chuyển) làm mặc định — không phải ton_kho tổng hệ thống
-    setChuyenQtys(Object.fromEntries(rows.map(r => [r.production_order_id, r.ton_kho_tai_nguon])))
+    // CD2 items: dùng ton_kho_tai_nguon (còn tại kho HG chưa chuyển)
+    // Non-CD2 items (HG, NT): dùng ton_kho
+    setChuyenQtys(Object.fromEntries(rows.map(r => [r.production_order_id, r.ton_kho_tai_nguon || r.ton_kho])))
     setChuyenDonGia(Object.fromEntries(rows.map(r => [r.production_order_id, r.don_gia_noi_bo ?? 0])))
     setChuyenSrcId(rows[0].warehouse_id)
-    const defaultDst = findPhoiKho(rows[0].phan_xuong_id)
+    // CD2 items: auto-set dst là kho phôi của phan_xuong đích
+    // Non-CD2 (HG, NT): không auto-set — user tự chọn kho đích
+    const isCD2Item = rows[0].cong_doan === 'cd2'
+    const defaultDst = isCD2Item ? findPhoiKho(rows[0].phan_xuong_id) : null
     setChuyenDstId(defaultDst?.id ?? null)
   }
 
@@ -347,8 +351,10 @@ export default function KhoPhoiPage() {
         const targetKho = isCD2 ? findPhoiKho(row.phan_xuong_id) : null
         const sourceKho = allWarehouses.find((w: Warehouse) => w.id === row.warehouse_id)
         const daChuyen = row.tong_chuyen_phoi > 0
-        // Còn phôi tại kho nguồn (HG) chưa chuyển → hiện nút Chuyển kho
+        // CD2 items: còn phôi tại kho nguồn (HG) chưa chuyển
+        // Non-CD2 (HG, NT): dùng ton_kho trực tiếp
         const conPhoi_TaiNguon = row.ton_kho_tai_nguon > 0
+        const canShowTransferBtn = isCD2 ? conPhoi_TaiNguon : row.ton_kho > 0
         // Có thể đẩy vào queue in/định hình:
         //   - CD2 warehouse item: dùng ton_kho_tai_cd2 nếu có (old endpoint), fallback ton_kho (new endpoint)
         //   - cd1_cd2 warehouse item (HG, NT): dùng trực tiếp ton_kho
@@ -358,7 +364,7 @@ export default function KhoPhoiPage() {
           return (
             <Space size={4} wrap>
               <Tag color="cyan" style={{ fontSize: 11 }}>Đã đẩy sang CD2</Tag>
-              {canWrite && isCD2 && conPhoi_TaiNguon && (
+              {canWrite && canShowTransferBtn && (
                 <Button size="small" icon={<SwapOutlined />} onClick={() => openChuyenKho([row])} style={{ fontSize: 11 }}>
                   Chuyển kho
                 </Button>
@@ -374,11 +380,13 @@ export default function KhoPhoiPage() {
         }
         return (
           <Space size={4} wrap>
-            {isCD2 && conPhoi_TaiNguon && (
+            {canShowTransferBtn && (
               <Tooltip
-                title={sourceKho && targetKho
-                  ? `${sourceKho.ten_kho} → ${targetKho.ten_kho}`
-                  : targetKho ? '' : `Xưởng ${row.ten_phan_xuong} chưa có kho PHOI`}
+                title={isCD2
+                  ? (sourceKho && targetKho
+                      ? `${sourceKho.ten_kho} → ${targetKho.ten_kho}`
+                      : targetKho ? '' : `Xưởng ${row.ten_phan_xuong} chưa có kho PHOI`)
+                  : ''}
               >
                 <Button
                   size="small"
@@ -545,7 +553,10 @@ export default function KhoPhoiPage() {
                                 const selectedKeys = new Set(selectedRowKeys.map(String))
                                 const rows = (data ?? []).filter(r => {
                                   const key = `${r.production_order_id}_${r.warehouse_id ?? 'x'}`
-                                  return selectedKeys.has(key) && r.cong_doan === 'cd2' && (r.ton_kho_tai_nguon ?? 0) > 0
+                                  const hasStock = r.cong_doan === 'cd2'
+                                    ? (r.ton_kho_tai_nguon ?? 0) > 0
+                                    : r.ton_kho > 0
+                                  return selectedKeys.has(key) && hasStock
                                 })
                                 if (!rows.length) { message.warning('Không có LSX nào hợp lệ để chuyển kho (cần có phôi tại kho nguồn)'); return }
                                 const dstIds = new Set(rows.map(r => r.phan_xuong_id))
@@ -576,7 +587,9 @@ export default function KhoPhoiPage() {
                         selectedRowKeys,
                         onChange: setSelectedRowKeys,
                         getCheckboxProps: (row: KhoRow) => ({
-                          disabled: row.cong_doan !== 'cd2' || (row.ton_kho_tai_nguon ?? 0) <= 0,
+                          disabled: row.cong_doan === 'cd2'
+                            ? (row.ton_kho_tai_nguon ?? 0) <= 0
+                            : row.ton_kho <= 0,
                         }),
                       }}
                       onRow={(row) => ({
@@ -659,11 +672,14 @@ export default function KhoPhoiPage() {
                   render: (v: string | null) => v || 'Phôi sóng',
                 },
                 {
-                  title: 'Tại HG (tấm)',
-                  dataIndex: 'ton_kho_tai_nguon',
+                  title: 'Tại nguồn (tấm)',
                   width: 90,
                   align: 'right' as const,
-                  render: (v: number) => <Text type="secondary" style={{ fontSize: 11 }}>{fmtN(v)}</Text>,
+                  render: (_: unknown, row: KhoRow) => (
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      {fmtN(row.ton_kho_tai_nguon || row.ton_kho)}
+                    </Text>
+                  ),
                 },
                 {
                   title: 'SL chuyển (tấm)',
@@ -673,7 +689,7 @@ export default function KhoPhoiPage() {
                       size="small"
                       style={{ width: '100%' }}
                       min={1}
-                      max={row.ton_kho_tai_nguon}
+                      max={row.ton_kho_tai_nguon || row.ton_kho}
                       value={chuyenQtys[row.production_order_id] ?? row.ton_kho_tai_nguon}
                       onChange={v => setChuyenQtys(prev => ({
                         ...prev,
@@ -714,7 +730,7 @@ export default function KhoPhoiPage() {
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={2} align="right">
                     <Text strong style={{ fontSize: 12 }}>
-                      {fmtN(chuyenRows.reduce((s, r) => s + r.ton_kho_tai_nguon, 0))}
+                      {fmtN(chuyenRows.reduce((s, r) => s + (r.ton_kho_tai_nguon || r.ton_kho), 0))}
                     </Text>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={3}>

@@ -96,11 +96,27 @@ def _get_db():
         db.close()
 
 
+async def _warmup_ollama() -> None:
+    """Pre-load Ollama model vào VRAM khi ERP khởi động — tránh cold start 100s cho user đầu tiên."""
+    import httpx
+    from app.config import settings
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            await client.post(
+                f"{settings.OLLAMA_URL.rstrip('/')}/api/generate",
+                json={"model": settings.OLLAMA_MODEL, "prompt": "", "keep_alive": "60m", "stream": False},
+            )
+        logger.info("Ollama warmup done: model=%s loaded into VRAM", settings.OLLAMA_MODEL)
+    except Exception as exc:
+        logger.warning("Ollama warmup skipped: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ───────────────────────────────────────────────────────────────
     _gps_task = asyncio.create_task(gps_poller_loop())
     _htcph_task = asyncio.create_task(run_daily_sync(_get_db))
+    asyncio.create_task(_warmup_ollama())
     logger.info("GPS background poller scheduled")
     logger.info("HTCPH daily sync scheduled (next run: 02:00)")
     yield

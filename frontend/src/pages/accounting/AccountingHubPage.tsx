@@ -9,6 +9,7 @@ const GROUPS: HubGroup[] = [
       { icon: '💸', label: 'Phiếu chi', to: '/accounting/payments' },
       { icon: '📒', label: 'Sổ quỹ tiền mặt', to: '/accounting/cash-book' },
       { icon: '🏦', label: 'Sổ tiền gửi NH', to: '/accounting/bank-ledger' },
+      { icon: '🔄', label: 'Đối soát ngân hàng', to: '/accounting/bank-reconciliation' },
     ],
   },
   {
@@ -35,7 +36,22 @@ const GROUPS: HubGroup[] = [
     title: 'Hóa đơn & Thuế',
     items: [
       { icon: '🧾', label: 'Hóa đơn điện tử', to: '/accounting/hoa-don-dien-tu' },
+      { icon: '🛒', label: 'Hóa đơn mua hàng', to: '/accounting/purchase-invoices' },
       { icon: '💹', label: 'Giá thành sản phẩm', to: '/accounting/reports/production-costing' },
+    ],
+  },
+  {
+    title: 'Báo cáo tài chính',
+    items: [
+      { icon: '📊', label: 'Báo cáo lãi/lỗ', to: '/accounting/profit-loss' },
+      { icon: '🏛️', label: 'Bảng cân đối kế toán', to: '/accounting/balance-sheet' },
+    ],
+  },
+  {
+    title: 'Quản lý kỳ kế toán',
+    items: [
+      { icon: '🔐', label: 'Khóa sổ kỳ kế toán', to: '/accounting/period-closing', permissions: ['accounting.manage'] },
+      { icon: '📥', label: 'Số dư đầu kỳ', to: '/accounting/opening-balances', permissions: ['accounting.import'] },
     ],
   },
   {

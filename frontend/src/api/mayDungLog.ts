@@ -48,5 +48,5 @@ export const mayDungLogApi = {
     tu_ngay?: string
     den_ngay?: string
     ly_do?: string
-  }) => client.get<MayDungLog[]>('/api/may-dung-log', { params }),
+  }) => client.get<MayDungLog[]>('/may-dung-log', { params }),
 }

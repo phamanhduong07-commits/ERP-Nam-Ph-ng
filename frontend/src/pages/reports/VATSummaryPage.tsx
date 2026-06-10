@@ -13,7 +13,7 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { PrinterOutlined, SearchOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileExcelOutlined, PrinterOutlined, SearchOutlined } from '@ant-design/icons'
 import { reportsApi, VATAuditItem, VATAuditResponse } from '../../api/reports'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from '../../components/EmptyState'
@@ -111,12 +111,41 @@ function printVATReport(
   }
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 const VATSummaryPage: React.FC = () => {
   const { phapNhanList } = usePhapNhan()
   const [loading, setLoading] = useState(false)
+  const [exportingOutput, setExportingOutput] = useState(false)
+  const [exportingInput, setExportingInput] = useState(false)
   const [data, setData] = useState<VATData | null>(null)
   const [audit, setAudit] = useState<VATAuditResponse | null>(null)
-  const [period, setPeriod] = useState<{ thang: number; nam: number; phapNhanName: string } | null>(null)
+  const [period, setPeriod] = useState<{ thang: number; nam: number; phap_nhan_id?: number; phapNhanName: string } | null>(null)
+
+  const handleExportOutput = async () => {
+    if (!period) return
+    setExportingOutput(true)
+    try {
+      const blob = await reportsApi.exportVatOutput({ thang: period.thang, nam: period.nam, phap_nhan_id: period.phap_nhan_id })
+      downloadBlob(blob, `bang_ke_dau_ra_${String(period.thang).padStart(2, '0')}_${period.nam}.xlsx`)
+    } catch { /* ignore */ } finally { setExportingOutput(false) }
+  }
+
+  const handleExportInput = async () => {
+    if (!period) return
+    setExportingInput(true)
+    try {
+      const blob = await reportsApi.exportVatInput({ thang: period.thang, nam: period.nam, phap_nhan_id: period.phap_nhan_id })
+      downloadBlob(blob, `bang_ke_dau_vao_${String(period.thang).padStart(2, '0')}_${period.nam}.xlsx`)
+    } catch { /* ignore */ } finally { setExportingInput(false) }
+  }
 
   const onFinish = async (values: FormValues) => {
     setLoading(true)
@@ -131,7 +160,7 @@ const VATSummaryPage: React.FC = () => {
       ])
       setData(summaryRes)
       setAudit(auditRes)
-      setPeriod({ thang, nam, phapNhanName })
+      setPeriod({ thang, nam, phap_nhan_id: values.phap_nhan_id, phapNhanName })
     } catch (error) {
       console.error(error)
     } finally {
@@ -213,14 +242,36 @@ const VATSummaryPage: React.FC = () => {
             <Button type="primary" icon={<SearchOutlined />} htmlType="submit" loading={loading}>Xem báo cáo</Button>
           </Form.Item>
           {data && period && (
-            <Form.Item>
-              <Button
-                icon={<PrinterOutlined />}
-                onClick={() => printVATReport(data, period.thang, period.nam, period.phapNhanName)}
-              >
-                In mẫu kê khai
-              </Button>
-            </Form.Item>
+            <>
+              <Form.Item>
+                <Button
+                  icon={<PrinterOutlined />}
+                  onClick={() => printVATReport(data, period.thang, period.nam, period.phapNhanName)}
+                >
+                  In mẫu kê khai
+                </Button>
+              </Form.Item>
+              <Form.Item>
+                <Button
+                  icon={<FileExcelOutlined />}
+                  loading={exportingOutput}
+                  onClick={handleExportOutput}
+                  style={{ color: '#1565C0', borderColor: '#1565C0' }}
+                >
+                  Bảng kê đầu ra
+                </Button>
+              </Form.Item>
+              <Form.Item>
+                <Button
+                  icon={<DownloadOutlined />}
+                  loading={exportingInput}
+                  onClick={handleExportInput}
+                  style={{ color: '#1B5E20', borderColor: '#1B5E20' }}
+                >
+                  Bảng kê đầu vào
+                </Button>
+              </Form.Item>
+            </>
           )}
         </Form>
       </Card>

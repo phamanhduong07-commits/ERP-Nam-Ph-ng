@@ -297,6 +297,56 @@ DOC_TYPE_SCHEMAS.GOODS_RECEIPT_PURCHASE = {
   label: 'Phiếu nhập kho mua hàng',
 }
 
+// Biến template hỗ trợ per loại chứng từ — hiện trong panel hint khi thiết kế
+type TemplateVar = { var: string; desc: string }
+const UNIVERSAL_VARS: TemplateVar[] = [
+  { var: '{{company_name}}', desc: 'Tên công ty (pháp nhân)' },
+  { var: '{{subtitle}}', desc: 'Tiêu đề phụ (VD: BÁO GIÁ)' },
+  { var: '{{SUBTITLE}}', desc: 'Tiêu đề phụ (uppercase alias)' },
+  { var: '{{document_number}}', desc: 'Số chứng từ (tự động)' },
+  { var: '{{document_date}}', desc: 'Ngày lập (DD tháng MM năm YYYY)' },
+  { var: '{{customer_name}}', desc: 'Tên khách hàng / NCC / đơn vị' },
+  { var: '{{delivery_address}}', desc: 'Địa chỉ / thông tin bổ sung' },
+  { var: '{{items_html}}', desc: 'Bảng hàng hóa (HTML)' },
+  { var: '{{total_amount}}', desc: 'Tổng tiền (số)' },
+  { var: '{{total_text}}', desc: 'Tổng tiền bằng chữ' },
+  { var: '{{footer_html}}', desc: 'Footer tùy chỉnh' },
+]
+const FRONTEND_VAR_REGISTRY: Record<string, TemplateVar[]> = {
+  SALES_QUOTE: [...UNIVERSAL_VARS,
+    { var: '{{sales_rep}}', desc: 'Nhân viên kinh doanh' },
+    { var: '{{dieu_khoan}}', desc: 'Điều khoản báo giá' },
+    { var: '{{vat_amount}}', desc: 'Tiền VAT' },
+    { var: '{{grand_total}}', desc: 'Tổng cộng (đã VAT)' },
+  ],
+  SALES_INVOICE: [...UNIVERSAL_VARS,
+    { var: '{{vat_amount}}', desc: 'Tiền VAT' },
+    { var: '{{grand_total}}', desc: 'Tổng cộng (đã VAT)' },
+    { var: '{{company_address}}', desc: 'Địa chỉ công ty' },
+    { var: '{{company_tax_code}}', desc: 'MST công ty' },
+  ],
+  PURCHASE_ORDER: [...UNIVERSAL_VARS,
+    { var: '{{company_address}}', desc: 'Địa chỉ công ty' },
+    { var: '{{company_phone}}', desc: 'SĐT công ty' },
+    { var: '{{company_tax_code}}', desc: 'MST công ty' },
+  ],
+  GOODS_RECEIPT: [...UNIVERSAL_VARS],
+  GOODS_RECEIPT_PURCHASE: [...UNIVERSAL_VARS],
+  MATERIAL_ISSUE: [...UNIVERSAL_VARS],
+  CASH_RECEIPT: [...UNIVERSAL_VARS,
+    { var: '{{purpose}}', desc: 'Lý do thu tiền' },
+  ],
+  CASH_PAYMENT: [...UNIVERSAL_VARS,
+    { var: '{{purpose}}', desc: 'Lý do chi tiền' },
+  ],
+  PURCHASE_REQUISITION: [...UNIVERSAL_VARS,
+    { var: '{{department}}', desc: 'Phòng ban yêu cầu' },
+    { var: '{{requester}}', desc: 'Người đề nghị' },
+    { var: '{{purpose}}', desc: 'Lý do / mục đích' },
+    { var: '{{phan_xuong}}', desc: 'Tên phân xưởng' },
+  ],
+}
+
 const DEFAULT_CONFIG = {
   logoPos: 'left',
   headerColor: '#1677ff',
@@ -365,6 +415,7 @@ export default function PrintTemplatePage() {
   type EasyConfig = typeof DEFAULT_CONFIG & { selectedColumns: DocColumn[]; signatures: DocSignature[] }
   const [easyConfig, setEasyConfig] = useState<EasyConfig>(DEFAULT_CONFIG as EasyConfig)
   const [form] = Form.useForm()
+  const watchedMaMau = Form.useWatch('ma_mau', form)
   const [previewHtml, setPreviewHtml] = useState('')
   const [activeTab, setActiveTab] = useState('easy')
 
@@ -957,6 +1008,35 @@ export default function PrintTemplatePage() {
                 })()}
               </div>
             </div>
+            {/* Panel biến template hỗ trợ */}
+            {(() => {
+              const key = (watchedMaMau || editModal?.ma_mau || '').toUpperCase()
+              const vars = FRONTEND_VAR_REGISTRY[key] || UNIVERSAL_VARS
+              return (
+                <Collapse style={{ marginTop: 8 }} size="small" ghost>
+                  <Collapse.Panel
+                    header={<Text style={{ fontSize: 12 }}><CodeOutlined /> Biến hỗ trợ — click để copy ({vars.length})</Text>}
+                    key="vars"
+                  >
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
+                      {vars.map(v => (
+                        <Tag
+                          key={v.var}
+                          style={{ cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}
+                          title={v.desc}
+                          onClick={() => navigator.clipboard.writeText(v.var).then(() => message.success(`Copied: ${v.var}`, 1))}
+                        >
+                          {v.var}
+                        </Tag>
+                      ))}
+                    </div>
+                    <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 4 }}>
+                      Click → copy → paste vào HTML editor (tab Mã nguồn)
+                    </Text>
+                  </Collapse.Panel>
+                </Collapse>
+              )
+            })()}
           </Col>
         </Row>
       </Modal>

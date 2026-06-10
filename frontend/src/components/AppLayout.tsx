@@ -43,7 +43,7 @@ function buildNavItems(queueCount: number): NavItem[] {
       key: 'ban-hang',
       icon: <ShoppingCartOutlined />,
       label: 'Bán hàng',
-      permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve', 'production_order.view'],
+      permissions: ['sales_order.view', 'sales_order.create', 'sales_order.edit', 'sales_order.approve'],
       flyoutSections: [
         {
           items: [
@@ -141,7 +141,8 @@ function buildNavItems(queueCount: number): NavItem[] {
       key: 'mua-hang',
       icon: <ShopOutlined />,
       label: 'Mua hàng',
-      permissions: ['purchase.import', 'inventory.import'],
+      hubTo: '/purchasing/hub',
+      permissions: ['purchase.view', 'purchase.orders', 'purchase.goods_receipts', 'purchase.import', 'inventory.import'],
       flyoutSections: [
         {
           items: [
@@ -165,39 +166,55 @@ function buildNavItems(queueCount: number): NavItem[] {
       icon: <AccountBookOutlined />,
       label: 'Kế toán - Tài chính',
       hubTo: '/accounting/hub',
-      permissions: ['accounting.import'],
+      permissions: ['accounting.import', 'accounting.view', 'accounting.payments', 'accounting.receipts', 'accounting.ap_ledger', 'accounting.ar_ledger'],
       flyoutSections: [
         {
           sectionLabel: 'Quỹ & Ngân hàng',
           items: [
-            { key: '/accounting/receipts', to: '/accounting/receipts', label: <Link to="/accounting/receipts">Phiếu thu</Link> },
-            { key: '/accounting/payments', to: '/accounting/payments', label: <Link to="/accounting/payments">Phiếu chi</Link> },
-            { key: '/accounting/cash-book', to: '/accounting/cash-book', label: <Link to="/accounting/cash-book">Sổ quỹ tiền mặt</Link> },
-            { key: '/accounting/bank-ledger', to: '/accounting/bank-ledger', label: <Link to="/accounting/bank-ledger">Sổ tiền gửi NH</Link> },
+            { key: '/accounting/receipts', to: '/accounting/receipts', label: <Link to="/accounting/receipts">Phiếu thu</Link>, permissions: ['accounting.receipts'] },
+            { key: '/accounting/payments', to: '/accounting/payments', label: <Link to="/accounting/payments">Phiếu chi</Link>, permissions: ['accounting.payments'] },
+            { key: '/accounting/cash-book', to: '/accounting/cash-book', label: <Link to="/accounting/cash-book">Sổ quỹ tiền mặt</Link>, permissions: ['accounting.cash_book'] },
+            { key: '/accounting/bank-ledger', to: '/accounting/bank-ledger', label: <Link to="/accounting/bank-ledger">Sổ tiền gửi NH</Link>, permissions: ['accounting.bank_ledger'] },
+            { key: '/accounting/bank-reconciliation', to: '/accounting/bank-reconciliation', label: <Link to="/accounting/bank-reconciliation">Đối soát ngân hàng</Link>, permissions: ['accounting.bank_ledger'] },
           ],
         },
         {
           sectionLabel: 'Công nợ',
           items: [
-            { key: '/accounting/ar-ledger', to: '/accounting/ar-ledger', label: <Link to="/accounting/ar-ledger">Sổ công nợ phải thu</Link> },
-            { key: '/accounting/ap-ledger', to: '/accounting/ap-ledger', label: <Link to="/accounting/ap-ledger">Sổ công nợ phải trả</Link> },
-            { key: '/accounting/ar-reconciliation', to: '/accounting/ar-reconciliation', label: <Link to="/accounting/ar-reconciliation">Đối soát công nợ</Link> },
-            { key: '/accounting/ap-reconciliation', to: '/accounting/ap-reconciliation', label: <Link to="/accounting/ap-reconciliation">Đối chiếu công nợ NCC</Link> },
-            { key: '/accounting/customer-refunds', to: '/accounting/customer-refunds', label: <Link to="/accounting/customer-refunds">Hoàn tiền trả hàng</Link> },
-            { key: '/billing/adjustments', to: '/billing/adjustments', label: <Link to="/billing/adjustments">Duyệt điều chỉnh HĐ</Link> },
+            { key: '/accounting/ar-ledger', to: '/accounting/ar-ledger', label: <Link to="/accounting/ar-ledger">Sổ công nợ phải thu</Link>, permissions: ['accounting.ar_ledger'] },
+            { key: '/accounting/ap-ledger', to: '/accounting/ap-ledger', label: <Link to="/accounting/ap-ledger">Sổ công nợ phải trả</Link>, permissions: ['accounting.ap_ledger'] },
+            { key: '/accounting/ar-reconciliation', to: '/accounting/ar-reconciliation', label: <Link to="/accounting/ar-reconciliation">Đối soát công nợ</Link>, permissions: ['accounting.ar_ledger'] },
+            { key: '/accounting/ap-reconciliation', to: '/accounting/ap-reconciliation', label: <Link to="/accounting/ap-reconciliation">Đối chiếu công nợ NCC</Link>, permissions: ['accounting.ap_ledger'] },
+            { key: '/accounting/customer-refunds', to: '/accounting/customer-refunds', label: <Link to="/accounting/customer-refunds">Hoàn tiền trả hàng</Link>, permissions: ['accounting.manage'] },
+            { key: '/billing/adjustments', to: '/billing/adjustments', label: <Link to="/billing/adjustments">Duyệt điều chỉnh HĐ</Link>, permissions: ['accounting.manage'] },
           ],
         },
         {
           sectionLabel: 'Sổ sách & Kế toán',
           items: [
-            { key: '/accounting/journal-entries', to: '/accounting/journal-entries', label: <Link to="/accounting/journal-entries">Bút toán tổng hợp</Link> },
-            { key: '/accounting/audit-logs', to: '/accounting/audit-logs', label: <Link to="/accounting/audit-logs">Nhật ký audit kế toán</Link> },
+            { key: '/accounting/journal-entries', to: '/accounting/journal-entries', label: <Link to="/accounting/journal-entries">Bút toán tổng hợp</Link>, permissions: ['accounting.journal'] },
+            { key: '/accounting/general-ledger', to: '/accounting/general-ledger', label: <Link to="/accounting/general-ledger">Sổ cái tài khoản</Link>, permissions: ['accounting.general_ledger'] },
+            { key: '/accounting/audit-logs', to: '/accounting/audit-logs', label: <Link to="/accounting/audit-logs">Nhật ký audit kế toán</Link>, permissions: ['accounting.import', 'accounting.manage'] },
             { key: '/accounting/hoa-don-dien-tu', to: '/accounting/hoa-don-dien-tu', label: <Link to="/accounting/hoa-don-dien-tu">Hóa đơn điện tử</Link>, permissions: ['accounting.hoa_don_dien_tu', 'accounting.manage'] },
-            { key: '/accounting/workshop-management', to: '/accounting/workshop-management', label: <Link to="/accounting/workshop-management">Quản trị xưởng (Lương)</Link> },
-            { key: '/accounting/ccdc', to: '/accounting/ccdc', label: <Link to="/accounting/ccdc">Tài sản & CCDC</Link> },
-            { key: '/fixed-assets', to: '/fixed-assets', label: <Link to="/fixed-assets">Tài sản cố định</Link> },
-            { key: '/accounting/general-ledger', to: '/accounting/general-ledger', label: <Link to="/accounting/general-ledger">Sổ cái tài khoản</Link> },
-            { key: '/accounting/reports/production-costing', to: '/accounting/reports/production-costing', label: <Link to="/accounting/reports/production-costing">Giá thành sản phẩm</Link> },
+            { key: '/accounting/purchase-invoices', to: '/accounting/purchase-invoices', label: <Link to="/accounting/purchase-invoices">Hóa đơn mua hàng</Link>, permissions: ['accounting.manage'] },
+            { key: '/accounting/workshop-management', to: '/accounting/workshop-management', label: <Link to="/accounting/workshop-management">Quản trị xưởng (Lương)</Link>, permissions: ['accounting.workshop_mgmt'] },
+            { key: '/accounting/ccdc', to: '/accounting/ccdc', label: <Link to="/accounting/ccdc">Tài sản & CCDC</Link>, permissions: ['accounting.ccdc'] },
+            { key: '/fixed-assets', to: '/fixed-assets', label: <Link to="/fixed-assets">Tài sản cố định</Link>, permissions: ['accounting.ccdc', 'accounting.manage'] },
+            { key: '/accounting/reports/production-costing', to: '/accounting/reports/production-costing', label: <Link to="/accounting/reports/production-costing">Giá thành sản phẩm</Link>, permissions: ['accounting.manage', 'report.phoi_thanh_pham'] },
+          ],
+        },
+        {
+          sectionLabel: 'Báo cáo tài chính',
+          items: [
+            { key: '/accounting/profit-loss', to: '/accounting/profit-loss', label: <Link to="/accounting/profit-loss">Báo cáo lãi/lỗ</Link>, permissions: ['accounting.view'] },
+            { key: '/accounting/balance-sheet', to: '/accounting/balance-sheet', label: <Link to="/accounting/balance-sheet">Bảng cân đối kế toán</Link>, permissions: ['accounting.view'] },
+          ],
+        },
+        {
+          sectionLabel: 'Quản lý kỳ kế toán',
+          items: [
+            { key: '/accounting/period-closing', to: '/accounting/period-closing', label: <Link to="/accounting/period-closing">Khóa sổ kỳ kế toán</Link>, permissions: ['accounting.manage'] },
+            { key: '/accounting/opening-balances', to: '/accounting/opening-balances', label: <Link to="/accounting/opening-balances">Số dư đầu kỳ</Link>, permissions: ['accounting.import'] },
           ],
         },
       ],

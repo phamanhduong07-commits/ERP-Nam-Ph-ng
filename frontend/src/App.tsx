@@ -106,6 +106,7 @@ const DuBaoNhuCauPage = lazy(() => import('./pages/purchase/DuBaoNhuCauPage'))
 const YMHListPage = lazy(() => import('./pages/purchase/YMHListPage'))
 const YMHDetailPage = lazy(() => import('./pages/purchase/YMHDetailPage'))
 const PurchaseDashboardPage = lazy(() => import('./pages/purchase/PurchaseDashboardPage'))
+const PurchaseHubPage = lazy(() => import('./pages/purchase/PurchaseHubPage'))
 const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
@@ -373,6 +374,7 @@ export default function App() {
             <Route path="warehouse/transfers" element={<TransfersPage />} />
             <Route path="warehouse/stock-adjustments" element={<StockAdjustmentsPage />} />
             <Route path="warehouse/the-kho" element={<InventoryCardPage />} />
+            <Route path="purchasing/hub" element={<ErrorBoundary><PurchaseHubPage /></ErrorBoundary>} />
             <Route path="purchasing/giay-cuon" element={<ErrorBoundary><MuaGiayPage /></ErrorBoundary>} />
             <Route path="purchasing/nvl-khac" element={<ErrorBoundary><MuaNVLPage /></ErrorBoundary>} />
             <Route path="purchasing/orders" element={<POListPage />} />

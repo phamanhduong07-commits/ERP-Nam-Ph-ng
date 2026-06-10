@@ -17,10 +17,10 @@ interface LoaiTien {
 }
 
 const api = {
-  list: () => client.get<LoaiTien[]>('/api/loai-tien').then(r => r.data),
-  create: (d: Omit<LoaiTien, 'id' | 'updated_at'>) => client.post('/api/loai-tien', d),
-  update: (id: number, d: Partial<LoaiTien>) => client.put(`/api/loai-tien/${id}`, d),
-  remove: (id: number) => client.delete(`/api/loai-tien/${id}`),
+  list: () => client.get<LoaiTien[]>('/loai-tien').then(r => r.data),
+  create: (d: Omit<LoaiTien, 'id' | 'updated_at'>) => client.post('/loai-tien', d),
+  update: (id: number, d: Partial<LoaiTien>) => client.put(`/loai-tien/${id}`, d),
+  remove: (id: number) => client.delete(`/loai-tien/${id}`),
 };
 
 const fmt = (v: number | null) =>

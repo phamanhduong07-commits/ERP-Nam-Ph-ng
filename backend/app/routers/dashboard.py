@@ -81,6 +81,17 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         .filter(PurchaseOrder.trang_thai.in_(["da_duyet", "da_gui_ncc", "dang_giao"]))
         .count()
     )
+    gr_cho_duyet = db.query(GoodsReceipt).filter(GoodsReceipt.trang_thai.in_(["nhap", "nhap_nhanh"])).count()
+    gr_hom_nay = db.query(GoodsReceipt).filter(GoodsReceipt.ngay_nhap == today).count()
+    hd_qua_han = (
+        db.query(PurchaseInvoice)
+        .filter(
+            PurchaseInvoice.trang_thai.in_(["chua_tt", "da_tt_mot_phan", "qua_han"]),
+            PurchaseInvoice.han_tt != None,
+            PurchaseInvoice.han_tt < today,
+        )
+        .count()
+    )
     phieu_nhap_hom_nay = db.query(GoodsReceipt).filter(GoodsReceipt.ngay_nhap == today).count()
     phieu_xuat_nvl_hom_nay = db.query(MaterialIssue).filter(MaterialIssue.ngay_xuat == today).count()
     phieu_giao_hom_nay = db.query(DeliveryOrder).filter(DeliveryOrder.ngay_xuat == today).count()
@@ -239,6 +250,9 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         "purchase": {
             "po_cho_duyet": po_cho_duyet,
             "po_dang_ve": po_dang_ve,
+            "gr_cho_duyet": gr_cho_duyet,
+            "gr_hom_nay": gr_hom_nay,
+            "hd_qua_han": hd_qua_han,
         },
         "accounting": {
             "phieu_thu_cho_duyet": phieu_thu_cho_duyet,

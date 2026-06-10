@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import React from 'react'
 import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -12,10 +13,20 @@ import {
   DeleteOutlined,
   ReloadOutlined, ClockCircleOutlined, ThunderboltOutlined,
   FileTextOutlined, CalculatorOutlined, InfoCircleOutlined,
-  UnorderedListOutlined, SendOutlined,
+  UnorderedListOutlined, SendOutlined, HolderOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { TableRowSelection } from 'antd/es/table/interface'
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+  type DragEndEvent, type Modifier,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+const restrictToVerticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 import dayjs from 'dayjs'
 import { productionPlansApi } from '../../api/productionPlans'
 import type { QueueLine } from '../../api/productionPlans'
@@ -258,6 +269,45 @@ function calcKgByMa(rows: QueueLine[]): KgByMaEntry[] {
   return Array.from(map.values()).sort((a, b) => a.ma.localeCompare(b.ma))
 }
 
+// ─── Draggable row ────────────────────────────────────────────────────────────
+
+interface DraggableRowProps extends React.HTMLAttributes<HTMLTableRowElement> {
+  'data-row-key': string
+}
+
+function DraggableRow({ children, ...props }: DraggableRowProps) {
+  const {
+    attributes, listeners, setNodeRef, setActivatorNodeRef,
+    transform, transition, isDragging,
+  } = useSortable({ id: props['data-row-key'] })
+
+  const style: React.CSSProperties = {
+    ...props.style,
+    transform: CSS.Translate.toString(transform),
+    transition,
+    ...(isDragging ? { position: 'relative', zIndex: 9999, background: '#e6f4ff' } : {}),
+  }
+
+  return (
+    <tr {...props} ref={setNodeRef} style={style} {...attributes}>
+      {React.Children.map(children, child => {
+        if ((child as React.ReactElement).key === 'sort') {
+          return React.cloneElement(child as React.ReactElement, {
+            children: (
+              <HolderOutlined
+                ref={setActivatorNodeRef}
+                style={{ touchAction: 'none', cursor: 'grab', color: '#bfbfbf', fontSize: 14 }}
+                {...listeners}
+              />
+            ),
+          })
+        }
+        return child
+      })}
+    </tr>
+  )
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ProductionQueuePage() {
@@ -266,6 +316,9 @@ export default function ProductionQueuePage() {
 
   // Antd table filter state
   const [filteredInfo, setFilteredInfo] = useState<Record<string, FilterValue | null>>({})
+
+  // Ordered lines for drag-and-drop (synced from query)
+  const [orderedLines, setOrderedLines] = useState<QueueLine[]>([])
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
   const [tonDetailOpen, setTonDetailOpen] = useState(false)
   const [isBatchLoading, setIsBatchLoading] = useState(false)
@@ -285,6 +338,33 @@ export default function ProductionQueuePage() {
     queryFn: () => productionPlansApi.getQueue().then(r => r.data),
     refetchInterval: 30_000,
   })
+
+  // Sync ordered list when query refreshes
+  useEffect(() => { setOrderedLines(allLines) }, [allLines])
+
+  // dnd-kit sensors (require 5px distance to distinguish click from drag)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+
+  const reorderMut = useMutation({
+    mutationFn: (items: { id: number; thu_tu: number }[]) =>
+      productionPlansApi.reorderQueue(items),
+    onError: () => {
+      message.error('Lưu thứ tự thất bại')
+      setOrderedLines(allLines) // rollback
+    },
+  })
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return
+    setOrderedLines(prev => {
+      const oldIdx = prev.findIndex(l => String(l.id) === String(active.id))
+      const newIdx = prev.findIndex(l => String(l.id) === String(over.id))
+      if (oldIdx < 0 || newIdx < 0) return prev
+      const next = arrayMove(prev, oldIdx, newIdx)
+      reorderMut.mutate(next.map((l, i) => ({ id: l.id, thu_tu: i + 1 })))
+      return next
+    })
+  }
 
   // Các giá trị unique để build bộ lọc cột
   const khoOptions = useMemo(() => {
@@ -496,6 +576,12 @@ export default function ProductionQueuePage() {
 
   // ── columns ───────────────────────────────────────────────────────────────
   const columns: ColumnsType<QueueLine> = [
+    {
+      key: 'sort',
+      width: 32,
+      align: 'center',
+      render: () => null,  // replaced by DraggableRow
+    },
     {
       title: 'STT',
       dataIndex: 'thu_tu',
@@ -956,24 +1042,37 @@ export default function ProductionQueuePage() {
         {/* Table */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <Card bodyStyle={{ padding: 0 }}>
-            <Table
-                            locale={{ emptyText: <EmptyState size="small" /> }}
-                            columns={columns}
-              dataSource={allLines}
-              rowKey="id"
-              loading={isLoading}
-              rowSelection={rowSelection}
-              onChange={handleTableChange}
-              expandable={{
-                expandedRowRender,
-                rowExpandable: r => !!(r.mat || r.song_1),
-              }}
-              pagination={{ pageSize: 50, showSizeChanger: false, showTotal: (t, [s, e]) => `${s}-${e} / ${t}` }}
-              size="small"
-              tableLayout="fixed"
-              scroll={{ x: 1460 }}
-              rowClassName={r => r.trang_thai === 'dang_chay' ? 'ant-table-row-selected' : ''}
-            />
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              modifiers={[restrictToVerticalAxis]}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={orderedLines.map(l => String(l.id))}
+                strategy={verticalListSortingStrategy}
+              >
+                <Table
+                  locale={{ emptyText: <EmptyState size="small" /> }}
+                  columns={columns}
+                  dataSource={orderedLines}
+                  rowKey="id"
+                  loading={isLoading}
+                  rowSelection={rowSelection}
+                  onChange={handleTableChange}
+                  expandable={{
+                    expandedRowRender,
+                    rowExpandable: r => !!(r.mat || r.song_1),
+                  }}
+                  components={{ body: { row: DraggableRow } }}
+                  pagination={{ pageSize: 50, showSizeChanger: false, showTotal: (t, [s, e]) => `${s}-${e} / ${t}` }}
+                  size="small"
+                  tableLayout="fixed"
+                  scroll={{ x: 1492 }}
+                  rowClassName={r => r.trang_thai === 'dang_chay' ? 'ant-table-row-selected' : ''}
+                />
+              </SortableContext>
+            </DndContext>
           </Card>
         </div>
 

@@ -173,7 +173,7 @@ export default function AgentPage() {
               <Text strong style={{ fontSize: 15 }}>Trợ lý ERP Nam Phương</Text>
               <br />
               <Text type="secondary" style={{ fontSize: 12 }}>
-                Hỏi bằng tiếng Việt tự nhiên — Claude claude-sonnet-4-6
+                Hỏi bằng tiếng Việt tự nhiên — Ollama local (gemma4)
               </Text>
             </div>
           </Space>

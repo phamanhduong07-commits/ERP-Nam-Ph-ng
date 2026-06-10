@@ -251,6 +251,12 @@ export const reportsApi = {
   getVATAudit: (params: { thang: number; nam: number; phap_nhan_id?: number; limit?: number }): Promise<VATAuditResponse> =>
     client.get('/accounting/reports/vat-audit', { params }).then(r => r.data),
 
+  exportVatOutput: (params: { thang: number; nam: number; phap_nhan_id?: number }): Promise<Blob> =>
+    client.get('/accounting/reports/vat-export-output', { params, responseType: 'blob' }).then(r => r.data),
+
+  exportVatInput: (params: { thang: number; nam: number; phap_nhan_id?: number }): Promise<Blob> =>
+    client.get('/accounting/reports/vat-export-input', { params, responseType: 'blob' }).then(r => r.data),
+
   getTaxTrialBalance: (params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number }) =>
     client.get('/accounting/reports/trial-balance-tax', { params }).then(r => r.data),
 

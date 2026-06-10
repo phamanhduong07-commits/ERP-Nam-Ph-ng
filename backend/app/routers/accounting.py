@@ -1823,6 +1823,69 @@ def get_vat_audit(
     return AccountingService(db).get_vat_audit(thang, nam, phap_nhan_id, limit)
 
 
+@router.get("/reports/vat-export-output")
+def export_vat_output(
+    thang: int = Query(..., ge=1, le=12),
+    nam: int = Query(..., ge=2020),
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất bảng kê 01-1/GTGT (hóa đơn bán ra) dạng Excel."""
+    data = AccountingService(db).export_vat_output_excel(thang, nam, phap_nhan_id)
+    filename = f"bang_ke_dau_ra_{thang:02d}_{nam}.xlsx"
+    return StreamingResponse(
+        iter([data]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/reports/vat-export-input")
+def export_vat_input(
+    thang: int = Query(..., ge=1, le=12),
+    nam: int = Query(..., ge=2020),
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Xuất bảng kê 01-2/GTGT (hóa đơn mua vào) dạng Excel."""
+    data = AccountingService(db).export_vat_input_excel(thang, nam, phap_nhan_id)
+    filename = f"bang_ke_dau_vao_{thang:02d}_{nam}.xlsx"
+    return StreamingResponse(
+        iter([data]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/tax/cit-preview")
+def preview_cit(
+    quy: int = Query(..., ge=1, le=4),
+    nam: int = Query(..., ge=2020),
+    phap_nhan_id: int = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Preview thuế TNDN theo quý — không tạo bút toán."""
+    return AccountingService(db).preview_cit(quy, nam, phap_nhan_id)
+
+
+@router.post("/tax/provision-cit", status_code=201)
+def provision_cit(
+    quy: int = Query(..., ge=1, le=4),
+    nam: int = Query(..., ge=2020),
+    phap_nhan_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Trích lập thuế TNDN theo quý. Tạo bút toán Nợ 821 / Có 3334."""
+    try:
+        return AccountingService(db).provision_cit(quy, nam, phap_nhan_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # ─────────────────────────────────────────────
 # BẢNG LƯƠNG XƯỞNG
 # ─────────────────────────────────────────────

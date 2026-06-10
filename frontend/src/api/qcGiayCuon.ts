@@ -109,20 +109,20 @@ export type QCGiayCuonListParams = {
 
 export const qcGiayCuonApi = {
   list: (params?: QCGiayCuonListParams) =>
-    client.get<QCGiayCuon[]>('/api/qc-giay-cuon', { params }).then(r => r.data),
+    client.get<QCGiayCuon[]>('/qc-giay-cuon', { params }).then(r => r.data),
 
   get: (id: number) =>
-    client.get<QCGiayCuon>(`/api/qc-giay-cuon/${id}`).then(r => r.data),
+    client.get<QCGiayCuon>(`/qc-giay-cuon/${id}`).then(r => r.data),
 
   create: (payload: QCGiayCuonCreatePayload) =>
-    client.post<QCGiayCuon>('/api/qc-giay-cuon', payload).then(r => r.data),
+    client.post<QCGiayCuon>('/qc-giay-cuon', payload).then(r => r.data),
 
   update: (id: number, payload: QCGiayCuonUpdatePayload) =>
-    client.patch<QCGiayCuon>(`/api/qc-giay-cuon/${id}`, payload).then(r => r.data),
+    client.patch<QCGiayCuon>(`/qc-giay-cuon/${id}`, payload).then(r => r.data),
 
   delete: (id: number) =>
-    client.delete(`/api/qc-giay-cuon/${id}`),
+    client.delete(`/qc-giay-cuon/${id}`),
 
   stats: (params?: Omit<QCGiayCuonListParams, 'skip' | 'limit'>) =>
-    client.get<QCGiayCuonStats>('/api/qc-giay-cuon/stats', { params }).then(r => r.data),
+    client.get<QCGiayCuonStats>('/qc-giay-cuon/stats', { params }).then(r => r.data),
 }

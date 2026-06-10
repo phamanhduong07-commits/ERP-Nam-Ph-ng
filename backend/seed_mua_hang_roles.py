@@ -24,16 +24,17 @@ NEW_ROLES = [
             "purchase.reports",
             "purchase.manage",
             "purchase.import",
-            # Kho — chỉ xem (tiếp nhận hàng về kho)
+            # Kho — nhập/xuất/chuyển/kiểm kê (hoạt động nghiệp vụ mua hàng)
             "inventory.view",
+            "inventory.import",
+            "inventory.export",
+            "inventory.transfer",
+            "inventory.adjust",
             # Danh mục NCC + vật tư — quản lý
             "master.suppliers.view",
             "master.suppliers.manage",
             "master.materials.view",
             "master.materials.manage",
-            # Báo cáo
-            "report.view",
-            "report.export",
             # Kế toán — xem công nợ NCC để đối soát
             "accounting.ap_ledger",
         ],
@@ -49,13 +50,14 @@ NEW_ROLES = [
             "purchase.goods_receipts",
             "purchase.returns",
             "purchase.reports",
-            # Kho — chỉ xem
+            # Kho — nhập/xuất/chuyển (nhân viên không điều chỉnh)
             "inventory.view",
+            "inventory.import",
+            "inventory.export",
+            "inventory.transfer",
             # Danh mục — chỉ xem
             "master.suppliers.view",
             "master.materials.view",
-            # Báo cáo — chỉ xem
-            "report.view",
         ],
     },
 ]

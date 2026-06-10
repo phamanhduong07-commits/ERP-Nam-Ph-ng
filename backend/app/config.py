@@ -47,8 +47,8 @@ class Settings(BaseSettings):
 
     # Ollama local AI
     OLLAMA_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "gemma4:latest"
-    OLLAMA_TIMEOUT_SECONDS: float = 60.0
+    OLLAMA_MODEL: str = "qwen2.5-coder:7b"
+    OLLAMA_TIMEOUT_SECONDS: float = 180.0
 
     # CD2 MES integration
     CD2_URL: str = "http://cd2-namphuong.mypacksoft.com:38981"

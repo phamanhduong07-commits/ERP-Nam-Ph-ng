@@ -22,6 +22,33 @@ from .tool_executor import execute_tool
 CONFIRM_WORDS = ("co", "ok", "yes", "dong y", "xac nhan", "thuc hien")
 WRITE_PREFIXES = ("create_", "update_")
 
+# Patterns that indicate the model fabricated ERP data without calling a tool
+_HALLUCINATION_PATTERNS = [
+    r"\d+\s*(đơn hàng|đơn mua|lệnh\s*sx|lệnh sản xuất|báo giá|khách hàng)",
+    r"doanh thu.{0,40}\d{6,}",
+    r"\d{1,3}(,\d{3}){1,}(đ|đồng| VND)",
+    r"hôm nay có \d+",
+    r"tháng \d+/\d{4}.{0,30}\d{6,}",
+    r"\d+\s*(tồn kho|sản phẩm|nhà cung cấp|nhân viên)",
+]
+
+_DATA_KEYWORDS = [
+    "đơn hàng", "đơn mua", "lệnh sx", "lệnh sản xuất",
+    "doanh thu", "tồn kho", "báo giá",
+    "chờ duyệt", "đang chạy", "bao nhiêu", "thống kê",
+    "tổng tiền", "số lượng", "hôm nay", "tháng này",
+]
+
+
+def _is_data_query(text: str) -> bool:
+    t = text.lower()
+    return any(kw in t for kw in _DATA_KEYWORDS)
+
+
+def _has_hallucinated_data(reply: str) -> bool:
+    r = reply.lower()
+    return any(re.search(p, r) for p in _HALLUCINATION_PATTERNS)
+
 
 def chat_with_ollama(
     message: str,
@@ -36,7 +63,8 @@ def chat_with_ollama(
         [turn.get("content", "") for turn in history[-4:] if turn.get("role") == "user"] + [message]
     )
 
-    for _ in range(settings.AGENT_MAX_ITERATIONS):
+    tool_called = False
+    for iteration in range(settings.AGENT_MAX_ITERATIONS):
         raw = _ollama_chat(messages)
         command = _parse_json_command(raw)
 
@@ -44,7 +72,21 @@ def chat_with_ollama(
             return raw.strip() or "Xin loi, toi chua xu ly duoc yeu cau nay."
 
         if command.get("reply"):
-            return str(command["reply"]).strip()
+            reply_text = str(command["reply"]).strip()
+            # Guard: reject if model fabricated ERP data without calling any tool
+            if not tool_called and _has_hallucinated_data(reply_text):
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "CẢNH BÁO: Bạn vừa trả lời với số liệu cụ thể mà chưa gọi tool nào. "
+                        "TUYỆT ĐỐI không được tự bịa số liệu (số đơn hàng, doanh thu, tồn kho...). "
+                        "Hãy gọi tool phù hợp để lấy dữ liệu thật từ hệ thống. "
+                        "Nếu câu hỏi không cần dữ liệu cụ thể, trả lời chung chung không có con số."
+                    ),
+                })
+                continue
+            return reply_text
 
         tool_name = command.get("tool")
         tool_input = command.get("input") or {}
@@ -59,6 +101,7 @@ def chat_with_ollama(
                 "Ban xac nhan thuc hien khong?"
             )
 
+        tool_called = True
         result = execute_tool(tool_name, tool_input, db, executed_by=user_id)
         messages.append({"role": "assistant", "content": raw})
         messages.append({
@@ -101,10 +144,13 @@ def _build_ollama_messages(
     system_text = (
         SYSTEM_PROMPT
         + f"\n\nNguoi dung hien tai: {user_name} (vai tro: {user_role})."
-        + "\n\nBan dang chay tren Ollama local. Bat buoc tra ve DUNG MOT JSON object, khong markdown."
-        + "\nNeu can du lieu ERP, tra: {\"tool\":\"ten_tool\",\"input\":{...}}."
-        + "\nNeu da du thong tin de tra loi, tra: {\"reply\":\"cau tra loi tieng Viet ngan gon\"}."
-        + "\nKhong tu che so lieu ERP. Hay dung tool de lay du lieu that."
+        + "\n\n== QUAN TRONG - QUY TAC STRICT CHO OLLAMA =="
+        + "\nBat buoc tra ve DUNG MOT JSON object, khong markdown, khong text ngoai JSON."
+        + "\nNeu can du lieu ERP (so don hang, doanh thu, ton kho, lenh SX, bao gia...), "
+        + "PHAI goi tool truoc: {\"tool\":\"ten_tool\",\"input\":{...}}."
+        + "\nNeu da du thong tin de tra loi, tra: {\"reply\":\"cau tra loi tieng Viet\"}."
+        + "\n!!! TUYET DOI KHONG duoc tu dua ra so lieu cu the (so don hang, tien, so luong) "
+        + "ma khong lay tu tool. Neu khong co tool phu hop, noi 'Toi chua co du lieu cho yeu cau nay'."
         + "\nDanh sach tool:\n"
         + json.dumps(tools_for_prompt, ensure_ascii=False)
     )
@@ -125,6 +171,7 @@ def _ollama_chat(messages: list[dict]) -> str:
         "messages": messages,
         "stream": False,
         "format": "json",
+        "keep_alive": "60m",
         "options": {
             "temperature": 0.1,
             "num_predict": 1024,

@@ -5049,3 +5049,260 @@ class AccountingService:
             "chi_phi": float(tong_chi_phi),
             "lai_lo": float(lai_lo),
         }
+
+    # ─────────────────────────────────────────────
+    # THUẾ TNDN — TRÍCH LẬP THEO QUÝ
+    # ─────────────────────────────────────────────
+
+    def _ensure_tk(self, so_tk: str, ten_tk: str, loai_tk: str) -> None:
+        """Tạo TK trong ChartOfAccounts nếu chưa có."""
+        from app.models.accounting import ChartOfAccounts
+        if not self.db.query(ChartOfAccounts).filter_by(so_tk=so_tk).first():
+            self.db.add(ChartOfAccounts(so_tk=so_tk, ten_tk=ten_tk, loai_tk=loai_tk, cap=1, trang_thai=True))
+            self.db.flush()
+
+    def preview_cit(self, quy: int, nam: int, phap_nhan_id: int) -> dict:
+        """Preview thuế TNDN theo quý — không tạo bút toán."""
+        thang_dau = (quy - 1) * 3 + 1
+        thang_cuoi = quy * 3
+        tu_ngay = date(nam, thang_dau, 1)
+        den_ngay = date(nam, thang_cuoi, calendar.monthrange(nam, thang_cuoi)[1])
+        pnl = self.get_pnl(tu_ngay, den_ngay, phap_nhan_id)
+        loi_nhuan_truoc_thue = pnl["tong_loi_nhuan_truoc_thue"]
+        thue_tndn = max(Decimal("0"), (loi_nhuan_truoc_thue * Decimal("0.20")).quantize(Decimal("1")))
+        so_but_toan = f"TNDN-{phap_nhan_id}-Q{quy}-{nam}"
+        da_ton_tai = self.db.query(JournalEntry).filter(
+            JournalEntry.so_but_toan == so_but_toan,
+        ).first() is not None
+        return {
+            "quy": quy,
+            "nam": nam,
+            "tu_ngay": str(tu_ngay),
+            "den_ngay": str(den_ngay),
+            "loi_nhuan_truoc_thue": float(loi_nhuan_truoc_thue),
+            "thue_suat": 20,
+            "thue_tndn_uoc_tinh": float(thue_tndn),
+            "da_ton_tai": da_ton_tai,
+            "so_but_toan": so_but_toan,
+        }
+
+    def provision_cit(self, quy: int, nam: int, phap_nhan_id: int, user_id: int) -> dict:
+        """Trích lập thuế TNDN theo quý. Nợ 821 / Có 3334."""
+        thang_dau = (quy - 1) * 3 + 1
+        thang_cuoi = quy * 3
+        tu_ngay = date(nam, thang_dau, 1)
+        den_ngay = date(nam, thang_cuoi, calendar.monthrange(nam, thang_cuoi)[1])
+        pnl = self.get_pnl(tu_ngay, den_ngay, phap_nhan_id)
+        loi_nhuan_truoc_thue = pnl["tong_loi_nhuan_truoc_thue"]
+        if loi_nhuan_truoc_thue <= 0:
+            raise ValueError("Lợi nhuận trước thuế ≤ 0, không cần trích lập thuế TNDN")
+        thue_tndn = (loi_nhuan_truoc_thue * Decimal("0.20")).quantize(Decimal("1"))
+        so_but_toan = f"TNDN-{phap_nhan_id}-Q{quy}-{nam}"
+        dien_giai = f"Trích lập thuế TNDN quý {quy}/{nam}"
+        if self.db.query(JournalEntry).filter(JournalEntry.so_but_toan == so_but_toan).first():
+            raise ValueError(f"Bút toán {so_but_toan} đã tồn tại, không trích lập lại")
+        # Đảm bảo TK tồn tại
+        self._ensure_tk("821", "Chi phí thuế thu nhập doanh nghiệp", "chi_phi")
+        self._ensure_tk("3334", "Thuế thu nhập doanh nghiệp phải nộp", "cong_no")
+        entry = JournalEntry(
+            so_but_toan=so_but_toan,
+            ngay_but_toan=den_ngay,
+            dien_giai=dien_giai,
+            loai_but_toan="thue_tndn",
+            tong_no=thue_tndn,
+            tong_co=thue_tndn,
+            chung_tu_loai="cit_provision",
+            phap_nhan_id=phap_nhan_id,
+            created_by=user_id,
+        )
+        self.db.add(entry)
+        self.db.flush()
+        for so_tk, no, co in [("821", thue_tndn, Decimal("0")), ("3334", Decimal("0"), thue_tndn)]:
+            self.db.add(JournalEntryLine(
+                entry_id=entry.id,
+                so_tk=so_tk,
+                so_tien_no=no,
+                so_tien_co=co,
+                dien_giai=dien_giai,
+                phap_nhan_id=phap_nhan_id,
+            ))
+        self.db.commit()
+        return {
+            "status": "created",
+            "so_but_toan": so_but_toan,
+            "entry_id": entry.id,
+            "quy": quy,
+            "nam": nam,
+            "tu_ngay": str(tu_ngay),
+            "den_ngay": str(den_ngay),
+            "loi_nhuan_truoc_thue": float(loi_nhuan_truoc_thue),
+            "thue_suat": 20,
+            "thue_tndn": float(thue_tndn),
+        }
+
+    # ─────────────────────────────────────────────
+    # BẢNG KÊ VAT EXCEL (01-1/GTGT và 01-2/GTGT)
+    # ─────────────────────────────────────────────
+
+    def export_vat_output_excel(self, thang: int, nam: int, phap_nhan_id: int | None = None) -> bytes:
+        """Xuất bảng kê 01-1/GTGT (hóa đơn bán ra) dạng Excel."""
+        import io
+        from openpyxl import Workbook as WB
+        from openpyxl.styles import Font as XFont, PatternFill, Alignment as XAlign
+        from app.models.billing import SalesInvoice as SI
+
+        first_day = date(nam, thang, 1)
+        last_day = date(nam, thang, calendar.monthrange(nam, thang)[1])
+        q = self.db.query(SI).filter(
+            SI.ngay_hoa_don >= first_day,
+            SI.ngay_hoa_don <= last_day,
+            SI.trang_thai != "huy",
+        ).order_by(SI.ngay_hoa_don, SI.id)
+        if phap_nhan_id:
+            q = q.filter(SI.phap_nhan_id == phap_nhan_id)
+        rows = q.all()
+
+        wb = WB()
+        ws = wb.active
+        ws.title = "01-1-GTGT"
+        ws.merge_cells("A1:J1")
+        ws["A1"] = "BẢNG KÊ HÓA ĐƠN, CHỨNG TỪ HÀNG HÓA, DỊCH VỤ BÁN RA"
+        ws["A1"].font = XFont(bold=True, size=13)
+        ws["A1"].alignment = XAlign(horizontal="center")
+        ws.merge_cells("A2:J2")
+        ws["A2"] = f"Tháng {thang:02d}/{nam} — Mẫu 01-1/GTGT"
+        ws["A2"].alignment = XAlign(horizontal="center")
+        ws.append([])
+        headers = ["STT", "Ngày HĐ", "Mẫu số", "Ký hiệu", "Số HĐ",
+                   "Tên người mua", "MST người mua", "Doanh số chưa thuế", "Thuế suất (%)", "Tiền thuế GTGT"]
+        ws.append(headers)
+        hdr_row = 4
+        hdr_fill = PatternFill("solid", fgColor="1565C0")
+        hdr_font = XFont(bold=True, color="FFFFFF")
+        for ci in range(1, 11):
+            c = ws.cell(row=hdr_row, column=ci)
+            c.fill = hdr_fill
+            c.font = hdr_font
+            c.alignment = XAlign(horizontal="center")
+
+        total_ds = Decimal("0")
+        total_thue = Decimal("0")
+        for i, inv in enumerate(rows, 1):
+            ws.append([
+                i,
+                inv.ngay_hoa_don.strftime("%d/%m/%Y") if inv.ngay_hoa_don else "",
+                inv.mau_so or "",
+                inv.ky_hieu or "",
+                inv.so_hoa_don or "",
+                inv.ten_don_vi or "",
+                inv.ma_so_thue or "",
+                float(inv.tong_tien_hang or 0),
+                float(inv.ty_le_vat or 0),
+                float(inv.tien_vat or 0),
+            ])
+            total_ds += Decimal(str(inv.tong_tien_hang or 0))
+            total_thue += Decimal(str(inv.tien_vat or 0))
+
+        total_r = hdr_row + len(rows) + 1
+        ws.cell(row=total_r, column=1).value = "TỔNG CỘNG"
+        ws.cell(row=total_r, column=8).value = float(total_ds)
+        ws.cell(row=total_r, column=10).value = float(total_thue)
+        for ci in range(1, 11):
+            ws.cell(row=total_r, column=ci).font = XFont(bold=True)
+
+        for ci, w in enumerate([6, 12, 14, 12, 18, 35, 18, 20, 12, 20], 1):
+            ws.column_dimensions[ws.cell(row=1, column=ci).column_letter].width = w
+        num_fmt = '#,##0'
+        for r in ws.iter_rows(min_row=hdr_row + 1, max_row=total_r, min_col=8, max_col=8):
+            for c in r:
+                c.number_format = num_fmt
+        for r in ws.iter_rows(min_row=hdr_row + 1, max_row=total_r, min_col=10, max_col=10):
+            for c in r:
+                c.number_format = num_fmt
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.getvalue()
+
+    def export_vat_input_excel(self, thang: int, nam: int, phap_nhan_id: int | None = None) -> bytes:
+        """Xuất bảng kê 01-2/GTGT (hóa đơn mua vào) dạng Excel."""
+        import io
+        from openpyxl import Workbook as WB
+        from openpyxl.styles import Font as XFont, PatternFill, Alignment as XAlign
+
+        first_day = date(nam, thang, 1)
+        last_day = date(nam, thang, calendar.monthrange(nam, thang)[1])
+        q = self.db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.ngay_lap >= first_day,
+            PurchaseInvoice.ngay_lap <= last_day,
+            PurchaseInvoice.trang_thai != "huy",
+            PurchaseInvoice.co_vat.is_(True),
+        ).order_by(PurchaseInvoice.ngay_lap, PurchaseInvoice.id)
+        if phap_nhan_id:
+            q = q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
+        rows = q.all()
+
+        wb = WB()
+        ws = wb.active
+        ws.title = "01-2-GTGT"
+        ws.merge_cells("A1:J1")
+        ws["A1"] = "BẢNG KÊ HÓA ĐƠN, CHỨNG TỪ HÀNG HÓA, DỊCH VỤ MUA VÀO"
+        ws["A1"].font = XFont(bold=True, size=13)
+        ws["A1"].alignment = XAlign(horizontal="center")
+        ws.merge_cells("A2:J2")
+        ws["A2"] = f"Tháng {thang:02d}/{nam} — Mẫu 01-2/GTGT"
+        ws["A2"].alignment = XAlign(horizontal="center")
+        ws.append([])
+        headers = ["STT", "Ngày HĐ", "Mẫu số", "Ký hiệu", "Số HĐ",
+                   "Tên người bán", "MST người bán", "Giá trị HHDV mua vào", "Thuế suất (%)", "Thuế GTGT được khấu trừ"]
+        ws.append(headers)
+        hdr_row = 4
+        hdr_fill = PatternFill("solid", fgColor="1B5E20")
+        hdr_font = XFont(bold=True, color="FFFFFF")
+        for ci in range(1, 11):
+            c = ws.cell(row=hdr_row, column=ci)
+            c.fill = hdr_fill
+            c.font = hdr_font
+            c.alignment = XAlign(horizontal="center")
+
+        total_gt = Decimal("0")
+        total_thue = Decimal("0")
+        for i, inv in enumerate(rows, 1):
+            ngay = inv.ngay_hoa_don or inv.ngay_lap
+            ws.append([
+                i,
+                ngay.strftime("%d/%m/%Y") if ngay else "",
+                inv.mau_so or "",
+                inv.ky_hieu or "",
+                inv.so_hoa_don or "",
+                inv.ten_don_vi or "",
+                inv.ma_so_thue or "",
+                float(inv.tong_tien_hang or 0),
+                float(inv.thue_suat or 0),
+                float(inv.tien_thue or 0),
+            ])
+            total_gt += Decimal(str(inv.tong_tien_hang or 0))
+            total_thue += Decimal(str(inv.tien_thue or 0))
+
+        total_r = hdr_row + len(rows) + 1
+        ws.cell(row=total_r, column=1).value = "TỔNG CỘNG"
+        ws.cell(row=total_r, column=8).value = float(total_gt)
+        ws.cell(row=total_r, column=10).value = float(total_thue)
+        for ci in range(1, 11):
+            ws.cell(row=total_r, column=ci).font = XFont(bold=True)
+
+        for ci, w in enumerate([6, 12, 14, 12, 18, 35, 18, 20, 12, 20], 1):
+            ws.column_dimensions[ws.cell(row=1, column=ci).column_letter].width = w
+        num_fmt = '#,##0'
+        for r in ws.iter_rows(min_row=hdr_row + 1, max_row=total_r, min_col=8, max_col=8):
+            for c in r:
+                c.number_format = num_fmt
+        for r in ws.iter_rows(min_row=hdr_row + 1, max_row=total_r, min_col=10, max_col=10):
+            for c in r:
+                c.number_format = num_fmt
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.getvalue()

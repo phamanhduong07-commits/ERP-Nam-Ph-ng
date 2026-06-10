@@ -56,20 +56,20 @@ export interface UpdateKetQuaPayload {
 
 export const qualityApi = {
   list: (params?: Record<string, string | number | null | undefined>) =>
-    client.get<QCSheet[]>('/api/qc-sheets', { params }).then(r => r.data),
+    client.get<QCSheet[]>('/qc-sheets', { params }).then(r => r.data),
 
   get: (id: number) =>
-    client.get<QCSheet>(`/api/qc-sheets/${id}`).then(r => r.data),
+    client.get<QCSheet>(`/qc-sheets/${id}`).then(r => r.data),
 
   create: (payload: CreateQCSheetPayload) =>
-    client.post<QCSheet>('/api/qc-sheets', payload).then(r => r.data),
+    client.post<QCSheet>('/qc-sheets', payload).then(r => r.data),
 
   updateKetQua: (id: number, payload: UpdateKetQuaPayload) =>
-    client.patch<QCSheet>(`/api/qc-sheets/${id}/ket-qua`, payload).then(r => r.data),
+    client.patch<QCSheet>(`/qc-sheets/${id}/ket-qua`, payload).then(r => r.data),
 
   delete: (id: number) =>
-    client.delete(`/api/qc-sheets/${id}`),
+    client.delete(`/qc-sheets/${id}`),
 
   stats: (params?: Record<string, string | null | undefined>) =>
-    client.get<QCStats>('/api/qc-sheets/stats', { params }).then(r => r.data),
+    client.get<QCStats>('/qc-sheets/stats', { params }).then(r => r.data),
 }

@@ -51,6 +51,9 @@ export interface DashboardStats {
   purchase?: {
     po_cho_duyet: number
     po_dang_ve: number
+    gr_cho_duyet: number
+    gr_hom_nay: number
+    hd_qua_han: number
   }
   kpi?: {
     backlog_lsx: number

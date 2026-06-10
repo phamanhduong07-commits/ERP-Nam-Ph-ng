@@ -9,12 +9,13 @@ import {
 import {
   PlusOutlined, DeleteOutlined, CheckCircleOutlined, ShopOutlined, MinusCircleOutlined,
   FileExcelOutlined, FilePdfOutlined, FileTextOutlined, UploadOutlined, WarningOutlined, PrinterOutlined,
+  EditOutlined,
 } from '@ant-design/icons'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import dayjs from 'dayjs'
 import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, smartPrintPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 import {
-  purchaseApi, PurchaseOrder, POItem, CreatePOPayload,
+  purchaseApi, PurchaseOrder, POItem, CreatePOPayload, UpdatePOPayload,
   TRANG_THAI_PO, TRANG_THAI_PO_COLOR,
 } from '../../api/purchase'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
@@ -42,6 +43,7 @@ export default function POListPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null)
   const [form] = Form.useForm()
   const _pf = loadPOFilters()
   const [search, setSearch] = useState<string>(_pf.search ?? '')
@@ -160,6 +162,18 @@ export default function POListPage() {
     onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi tạo PO'),
   })
 
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdatePOPayload }) => purchaseApi.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] })
+      message.success('Đã cập nhật đơn mua hàng')
+      setOpen(false)
+      setEditingPO(null)
+      form.resetFields()
+    },
+    onError: (e: { response?: { data?: { detail?: string } } }) => message.error(e?.response?.data?.detail || 'Lỗi cập nhật PO'),
+  })
+
   const approveMut = useMutation({
     mutationFn: (id: number) => purchaseApi.approve(id),
     onSuccess: () => {
@@ -231,6 +245,30 @@ export default function POListPage() {
     })
   }
 
+  const handleEdit = (po: PurchaseOrder) => {
+    setEditingPO(po)
+    const items = po.items.map(it => {
+      if (it.paper_material_id) {
+        return { loai_vat_tu: 'giay', mat_id: it.paper_material_id, ten_hang: it.ten_hang, so_luong: it.so_luong, dvt: it.dvt || 'Kg', don_gia: it.don_gia, ghi_chu: it.ghi_chu ?? null }
+      }
+      if (it.other_material_id) {
+        return { loai_vat_tu: 'khac', mat_id: it.other_material_id, ten_hang: it.ten_hang, so_luong: it.so_luong, dvt: it.dvt || 'Kg', don_gia: it.don_gia, ghi_chu: it.ghi_chu ?? null }
+      }
+      return { loai_vat_tu: 'tu_do', ten_hang: it.ten_hang, so_luong: it.so_luong, dvt: it.dvt || 'Kg', don_gia: it.don_gia, ghi_chu: it.ghi_chu ?? null }
+    })
+    form.setFieldsValue({
+      supplier_id: po.supplier_id,
+      ngay_po: dayjs(po.ngay_po),
+      phan_xuong_id: po.phan_xuong_id ?? undefined,
+      loai_po: po.loai_po || 'chung',
+      ngay_du_kien_nhan: po.ngay_du_kien_nhan ? dayjs(po.ngay_du_kien_nhan) : null,
+      dieu_khoan_tt: po.dieu_khoan_tt ?? undefined,
+      ghi_chu: po.ghi_chu ?? '',
+      items,
+    })
+    setOpen(true)
+  }
+
   const handleMatSelect = (itemName: number, loai: string, matId: number) => {
     const mat = loai === 'giay' ? paperMats.find(m => m.id === matId) : otherMats.find(m => m.id === matId)
     if (!mat) return
@@ -256,16 +294,30 @@ export default function POListPage() {
         ghi_chu: it.ghi_chu || null,
       }))
       if (!items.length) { message.warning('Thêm ít nhất 1 dòng hàng'); return }
-      createMut.mutate({
-        supplier_id: v.supplier_id,
-        ngay_po: v.ngay_po.format('YYYY-MM-DD'),
-        phan_xuong_id: v.phan_xuong_id || null,
-        loai_po: v.loai_po || 'chung',
-        ngay_du_kien_nhan: v.ngay_du_kien_nhan ? v.ngay_du_kien_nhan.format('YYYY-MM-DD') : null,
-        dieu_khoan_tt: v.dieu_khoan_tt || null,
-        ghi_chu: v.ghi_chu || null,
-        items,
-      })
+      if (editingPO) {
+        updateMut.mutate({
+          id: editingPO.id,
+          data: {
+            phan_xuong_id: v.phan_xuong_id || null,
+            loai_po: v.loai_po || 'chung',
+            ngay_du_kien_nhan: v.ngay_du_kien_nhan ? v.ngay_du_kien_nhan.format('YYYY-MM-DD') : null,
+            dieu_khoan_tt: v.dieu_khoan_tt || null,
+            ghi_chu: v.ghi_chu || null,
+            items,
+          },
+        })
+      } else {
+        createMut.mutate({
+          supplier_id: v.supplier_id,
+          ngay_po: v.ngay_po.format('YYYY-MM-DD'),
+          phan_xuong_id: v.phan_xuong_id || null,
+          loai_po: v.loai_po || 'chung',
+          ngay_du_kien_nhan: v.ngay_du_kien_nhan ? v.ngay_du_kien_nhan.format('YYYY-MM-DD') : null,
+          dieu_khoan_tt: v.dieu_khoan_tt || null,
+          ghi_chu: v.ghi_chu || null,
+          items,
+        })
+      }
     } catch { /* validation shown inline */ }
   }
 
@@ -308,6 +360,11 @@ export default function POListPage() {
             <Popconfirm title="Duyệt đơn mua hàng này?" onConfirm={() => approveMut.mutate(r.id)}>
               <Button size="small" type="primary" icon={<CheckCircleOutlined />}>Duyệt</Button>
             </Popconfirm>
+          )}
+          {r.trang_thai === 'moi' && (
+            <Tooltip title="Sửa đơn mua hàng">
+              <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(r)} />
+            </Tooltip>
           )}
           {r.trang_thai === 'da_duyet' && (
             <Tooltip title="Gửi NCC">
@@ -484,7 +541,7 @@ export default function POListPage() {
             <Tooltip title="Xuất PDF">
               <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} loading={isExporting} disabled={isExporting} />
             </Tooltip>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true) }}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setEditingPO(null); setOpen(true) }}>
               Tạo đơn mua
             </Button>
             <Button
@@ -568,11 +625,17 @@ export default function POListPage() {
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 900 }} />
       </Card>
 
-      <Drawer open={open} onClose={() => setOpen(false)} title="Tạo đơn mua hàng" width={820}
+      <Drawer
+        open={open}
+        onClose={() => { setOpen(false); setEditingPO(null); form.resetFields() }}
+        title={editingPO ? `Sửa đơn mua hàng — ${editingPO.so_po}` : 'Tạo đơn mua hàng'}
+        width={820}
         footer={
           <Space>
-            <Button onClick={() => setOpen(false)}>Huỷ</Button>
-            <Button type="primary" loading={createMut.isPending} onClick={handleSubmit}>Lưu đơn mua</Button>
+            <Button onClick={() => { setOpen(false); setEditingPO(null); form.resetFields() }}>Huỷ</Button>
+            <Button type="primary" loading={createMut.isPending || updateMut.isPending} onClick={handleSubmit}>
+              {editingPO ? 'Cập nhật' : 'Lưu đơn mua'}
+            </Button>
           </Space>
         }
       >
@@ -580,14 +643,14 @@ export default function POListPage() {
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true, message: 'Chọn NCC' }]}>
-                <Select placeholder="Chọn nhà cung cấp..." showSearch
+                <Select placeholder="Chọn nhà cung cấp..." showSearch disabled={!!editingPO}
                   filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
                   options={suppliers.map(s => ({ value: s.id, label: s.ten_viet_tat || s.ten_don_vi || s.ma_ncc }))} />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="ngay_po" label="Ngày PO" rules={[{ required: true }]}>
-                <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+                <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" disabled={!!editingPO} />
               </Form.Item>
             </Col>
           </Row>

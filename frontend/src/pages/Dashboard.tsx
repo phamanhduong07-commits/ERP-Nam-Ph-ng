@@ -11,6 +11,7 @@ import DashboardSalesStaff from './dashboards/DashboardSalesStaff'
 import DashboardAccounting from './dashboards/DashboardAccounting'
 import DashboardProduction from './dashboards/DashboardProduction'
 import DashboardWarehouse from './dashboards/DashboardWarehouse'
+import DashboardPurchase from './dashboards/DashboardPurchase'
 import DashboardDefault from './dashboards/DashboardDefault'
 
 export default function Dashboard() {
@@ -41,6 +42,8 @@ export default function Dashboard() {
       return <DashboardProduction stats={stats} userName={userName} />
     case 'warehouse':
       return <DashboardWarehouse stats={stats} userName={userName} />
+    case 'purchase':
+      return <DashboardPurchase stats={stats} userName={userName} />
     default:
       return <DashboardDefault userName={userName} />
   }
