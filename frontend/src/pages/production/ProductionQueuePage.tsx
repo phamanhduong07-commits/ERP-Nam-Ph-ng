@@ -39,6 +39,8 @@ import EmptyState from "../../components/EmptyState"
 
 const { Text, Title } = Typography
 
+const POOL_PLAN_SO = 'KHSX-POOL'
+
 const TRANG_THAI_CFG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   cho:       { label: 'Chờ',        color: 'default',    icon: <ClockCircleOutlined /> },
   dang_chay: { label: 'Đang chạy', color: 'processing', icon: <ThunderboltOutlined /> },
@@ -405,7 +407,7 @@ export default function ProductionQueuePage() {
   const selectedNhapPlans = useMemo(() => {
     const map = new Map<number, { plan_id: number; so_ke_hoach: string; count: number }>()
     selectedRows.forEach(r => {
-      if (r.plan_trang_thai === 'nhap') {
+      if (r.plan_trang_thai === 'nhap' && r.so_ke_hoach !== POOL_PLAN_SO) {
         const cur = map.get(r.plan_id)
         if (cur) cur.count++
         else map.set(r.plan_id, { plan_id: r.plan_id, so_ke_hoach: r.so_ke_hoach, count: 1 })
@@ -604,7 +606,7 @@ export default function ProductionQueuePage() {
   const nhapPlans = useMemo(() => {
     const map = new Map<number, { plan_id: number; so_ke_hoach: string; count: number }>()
     allLines.forEach(l => {
-      if (l.plan_trang_thai === 'nhap') {
+      if (l.plan_trang_thai === 'nhap' && l.so_ke_hoach !== POOL_PLAN_SO) {
         const cur = map.get(l.plan_id)
         if (cur) cur.count++
         else map.set(l.plan_id, { plan_id: l.plan_id, so_ke_hoach: l.so_ke_hoach, count: 1 })
@@ -879,7 +881,10 @@ export default function ProductionQueuePage() {
         return (
           <Space direction="vertical" size={2}>
             <Tag color={cfg.color} icon={cfg.icon}>{cfg.label}</Tag>
-            {r.plan_trang_thai === 'nhap' && (
+            {r.plan_trang_thai === 'nhap' && r.so_ke_hoach === POOL_PLAN_SO && (
+              <Tag color="default" style={{ fontSize: 10, lineHeight: '14px', color: '#8c8c8c' }}>Hàng chờ</Tag>
+            )}
+            {r.plan_trang_thai === 'nhap' && r.so_ke_hoach !== POOL_PLAN_SO && (
               <Tag color="warning" style={{ fontSize: 10, lineHeight: '14px' }}>Chưa chốt KH</Tag>
             )}
           </Space>
@@ -893,7 +898,7 @@ export default function ProductionQueuePage() {
       fixed: 'right',
       render: (_, r) => (
         <Space size={4} wrap>
-          {r.plan_trang_thai === 'nhap' && r.trang_thai === 'cho' && (
+          {r.plan_trang_thai === 'nhap' && r.trang_thai === 'cho' && r.so_ke_hoach !== POOL_PLAN_SO && (
             <Tooltip title={`Chốt kế hoạch ${r.so_ke_hoach} — xuất hiện bên KHSX`}>
               <Popconfirm
                 title={`Chốt kế hoạch ${r.so_ke_hoach}?`}

@@ -40,6 +40,23 @@ def _generate_so_ke_hoach(db: Session) -> str:
     return f"{prefix}{seq:03d}"
 
 
+QUEUE_POOL_SO = "KHSX-POOL"
+
+
+def _get_or_create_pool_plan(db: Session) -> "ProductionPlan":
+    plan = db.query(ProductionPlan).filter(ProductionPlan.so_ke_hoach == QUEUE_POOL_SO).first()
+    if not plan:
+        plan = ProductionPlan(
+            so_ke_hoach=QUEUE_POOL_SO,
+            ngay_ke_hoach=date.today(),
+            ghi_chu="Hàng chờ — LSX gỡ khỏi kế hoạch",
+            trang_thai="nhap",
+        )
+        db.add(plan)
+        db.flush()
+    return plan
+
+
 def _calc_kho_tt(kho1: Decimal | None, so_dao: int | None) -> Decimal | None:
     if kho1 is not None and so_dao is not None:
         return Decimal(str(round(float(kho1) * so_dao + 1.8, 2)))
@@ -333,6 +350,7 @@ def list_plans(
     _: User = Depends(get_current_user),
 ):
     q = db.query(ProductionPlan).options(joinedload(ProductionPlan.creator))
+    q = q.filter(ProductionPlan.so_ke_hoach != QUEUE_POOL_SO)
 
     if search:
         q = q.filter(ProductionPlan.so_ke_hoach.ilike(f"%{search}%"))
@@ -729,6 +747,8 @@ def delete_plan(
     plan = db.query(ProductionPlan).filter(ProductionPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Không tìm thấy kế hoạch")
+    if plan.so_ke_hoach == QUEUE_POOL_SO:
+        raise HTTPException(status_code=400, detail="Không thể xóa kế hoạch hàng chờ hệ thống")
     if plan.trang_thai != "nhap":
         raise HTTPException(status_code=400, detail="Chỉ xóa được kế hoạch ở trạng thái Nháp")
     db.delete(plan)
@@ -839,7 +859,11 @@ def delete_line(
             detail=f"LSX {order.so_lenh} đang chạy — không thể gỡ khỏi kế hoạch",
         )
 
-    db.delete(line)
+    pool = _get_or_create_pool_plan(db)
+    line.plan_id = pool.id
+    line.trang_thai = "cho"
+    line.ngay_chay = None
+    line.thu_tu = 0
     db.commit()
     return _build_plan_response(_load_plan(plan_id, db))
 
