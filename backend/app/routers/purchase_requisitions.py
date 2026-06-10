@@ -31,12 +31,12 @@ class YMHItemCreate(BaseModel):
     don_gia_du_kien: Decimal = Decimal("0")
     ngay_can: Optional[date] = None
     ghi_chu: Optional[str] = None
-    loai_item: Literal["nvl", "ban_in", "khuon_be"] = "nvl"
+    loai_item: Literal["nvl", "ban_in", "khuon_be", "muc_in"] = "nvl"
     san_pham_id: Optional[int] = None
 
     @model_validator(mode="after")
     def validate_tooling_san_pham(self) -> "YMHItemCreate":
-        if self.loai_item in ("ban_in", "khuon_be") and not self.san_pham_id:
+        if self.loai_item in ("ban_in", "khuon_be", "muc_in") and not self.san_pham_id:
             raise ValueError("Bản in / khuôn bế phải chọn sản phẩm liên quan (san_pham_id)")
         return self
 
@@ -307,7 +307,7 @@ def create_ymh(
 
 class CongCuCreate(BaseModel):
     san_pham_id: int
-    loai_cong_cu: Literal["ban_in", "khuon_be"]
+    loai_cong_cu: Literal["ban_in", "khuon_be", "muc_in"]
     trang_thai: Literal["co_san", "dat_mua", "hong"] = "co_san"
     so_luong: int = 1
     ghi_chu: Optional[str] = None
@@ -676,7 +676,12 @@ def print_ymh(
     pn_details = _html_mod.escape(
         (pn.dia_chi or "") if pn else (settings.get("company_details") or "")
     )
-    logo_src = f"/{pn.logo_path}" if pn and pn.logo_path else ""
+    if pn and pn.ma_phap_nhan:
+        logo_src = f"/api/phap-nhan/logo/{pn.ma_phap_nhan}"
+    elif pn and pn.logo_path:
+        logo_src = f"/{pn.logo_path}"
+    else:
+        logo_src = ""
     logo_img = (
         f'<img src="{logo_src}" style="max-width:100%;max-height:80px;object-fit:contain"/>'
         if logo_src

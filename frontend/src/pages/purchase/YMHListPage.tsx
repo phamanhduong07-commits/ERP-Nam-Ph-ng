@@ -29,7 +29,7 @@ const { RangePicker } = DatePicker
 const { Text, Title } = Typography
 
 type FormItem = {
-  loai_vat_tu?: 'giay' | 'khac' | 'tu_do' | 'ban_in' | 'khuon_be'
+  loai_vat_tu?: 'giay' | 'khac' | 'tu_do' | 'ban_in' | 'khuon_be' | 'muc_in'
   mat_id?: number
   san_pham_id?: number
   ten_hang?: string
@@ -312,8 +312,8 @@ export default function YMHListPage() {
       don_gia_du_kien: Number(it.don_gia_du_kien || 0),
       ngay_can: it.ngay_can ? dayjs(it.ngay_can).format('YYYY-MM-DD') : null,
       ghi_chu: it.ghi_chu ?? null,
-      loai_item: (it.loai_vat_tu === 'ban_in' || it.loai_vat_tu === 'khuon_be') ? it.loai_vat_tu : 'nvl',
-      san_pham_id: (it.loai_vat_tu === 'ban_in' || it.loai_vat_tu === 'khuon_be') ? (it.san_pham_id ?? null) : null,
+      loai_item: (it.loai_vat_tu === 'ban_in' || it.loai_vat_tu === 'khuon_be' || it.loai_vat_tu === 'muc_in') ? it.loai_vat_tu : 'nvl',
+      san_pham_id: (it.loai_vat_tu === 'ban_in' || it.loai_vat_tu === 'khuon_be' || it.loai_vat_tu === 'muc_in') ? (it.san_pham_id ?? null) : null,
     }))
     return {
       ngay_yeu_cau: dayjs(values.ngay_yeu_cau as string).format('YYYY-MM-DD'),
@@ -731,6 +731,7 @@ export default function YMHListPage() {
                               { value: 'tu_do', label: 'Tự do' },
                               { value: 'ban_in', label: 'Bản in' },
                               { value: 'khuon_be', label: 'Khuôn bế' },
+                              { value: 'muc_in', label: 'Mực in' },
                             ]}
                             onChange={() => {
                               const items: FormItem[] = form.getFieldValue('items') || []
@@ -781,8 +782,8 @@ export default function YMHListPage() {
                                 </Form.Item>
                               )
                             }
-                            if (loai === 'ban_in' || loai === 'khuon_be') {
-                              const label = loai === 'ban_in' ? 'Bản in' : 'Khuôn bế'
+                            if (loai === 'ban_in' || loai === 'khuon_be' || loai === 'muc_in') {
+                              const label = loai === 'ban_in' ? 'Bản in' : loai === 'khuon_be' ? 'Khuôn bế' : 'Mực in'
                               return (
                                 <Space direction="vertical" style={{ width: '100%' }}>
                                   <Select

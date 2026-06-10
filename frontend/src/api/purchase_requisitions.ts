@@ -19,7 +19,7 @@ export interface ToolingRecord {
   id: number
   san_pham_id: number
   ten_san_pham?: string | null
-  loai_cong_cu: 'ban_in' | 'khuon_be'
+  loai_cong_cu: 'ban_in' | 'khuon_be' | 'muc_in'
   trang_thai: 'co_san' | 'dat_mua' | 'hong'
   so_luong: number
   ghi_chu?: string | null
@@ -30,7 +30,7 @@ export interface ToolingRecord {
 
 export interface CreateToolingPayload {
   san_pham_id: number
-  loai_cong_cu: 'ban_in' | 'khuon_be'
+  loai_cong_cu: 'ban_in' | 'khuon_be' | 'muc_in'
   trang_thai?: 'co_san' | 'dat_mua' | 'hong'
   so_luong?: number
   ghi_chu?: string | null

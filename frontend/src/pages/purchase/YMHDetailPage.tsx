@@ -267,6 +267,7 @@ export default function YMHDetailPage() {
       render: (v: string | null | undefined) => {
         if (v === 'ban_in') return <Tag color="orange">Bản In</Tag>
         if (v === 'khuon_be') return <Tag color="purple">Khuôn Bế</Tag>
+        if (v === 'muc_in') return <Tag color="magenta">Mực In</Tag>
         return <Tag>NVL</Tag>
       },
     },
@@ -276,7 +277,7 @@ export default function YMHDetailPage() {
       width: 140,
       ellipsis: true,
       render: (v: string | null | undefined, r: PurchaseRequisition['items'][number]) =>
-        (r.loai_item === 'ban_in' || r.loai_item === 'khuon_be') ? (v || '-') : null,
+        (r.loai_item === 'ban_in' || r.loai_item === 'khuon_be' || r.loai_item === 'muc_in') ? (v || '-') : null,
     },
     { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true, render: v => v || '-' },
     { title: 'ĐVT', dataIndex: 'dvt', width: 70 },
