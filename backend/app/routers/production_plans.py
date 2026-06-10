@@ -1007,33 +1007,96 @@ def toggle_mua_phoi_ngoai(
     return {"id": line.id, "mua_phoi_ngoai": line.mua_phoi_ngoai}
 
 
-# ─── Move line to another plan ────────────────────────────────────────────────
+# ─── Promote pool line back to KHSX (auto-resolve xưởng) ─────────────────────
 
-class MoveToPlanBody(BaseModel):
-    plan_id: int
-
-
-@router.patch("/lines/{line_id}/move-to-plan")
-def move_line_to_plan(
+@router.patch("/lines/{line_id}/promote-from-pool")
+def promote_pool_line(
     line_id: int,
-    body: MoveToPlanBody,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    """
+    Đưa line từ pool hàng chờ về một nhap plan thực sự.
+    Tự xác định CD1 xưởng từ LSX → tìm nhap plan cùng xưởng hôm nay → tạo mới nếu không có.
+    """
     line = db.query(ProductionPlanLine).filter(ProductionPlanLine.id == line_id).first()
     if not line:
         raise HTTPException(status_code=404, detail="Không tìm thấy lệnh")
+
+    current_plan = db.get(ProductionPlan, line.plan_id)
+    if not current_plan or current_plan.so_ke_hoach != QUEUE_POOL_SO:
+        raise HTTPException(status_code=400, detail="Lệnh không nằm trong hàng chờ pool")
     if line.trang_thai == "dang_chay":
         raise HTTPException(status_code=400, detail="Không thể di chuyển lệnh đang chạy")
 
-    target = db.query(ProductionPlan).filter(ProductionPlan.id == body.plan_id).first()
-    if not target:
-        raise HTTPException(status_code=404, detail="Không tìm thấy kế hoạch")
-    if target.trang_thai != "nhap":
-        raise HTTPException(status_code=400, detail="Chỉ có thể thêm vào kế hoạch Nháp")
-    if target.so_ke_hoach == QUEUE_POOL_SO:
-        raise HTTPException(status_code=400, detail="Không thể thêm vào kế hoạch hàng chờ hệ thống")
+    # Resolve CD1 xưởng từ LSX (giống logic noi_sx trong list_plans)
+    poi = db.get(ProductionOrderItem, line.production_order_item_id)
+    order = db.get(ProductionOrder, poi.production_order_id) if poi else None
+    cd1_xuong: str | None = None
+    if order and order.phan_xuong_id:
+        px = db.get(PhanXuong, order.phan_xuong_id)
+        if px:
+            if px.cong_doan == "cd1_cd2":
+                cd1_xuong = px.ten_xuong
+            elif px.phoi_tu_phan_xuong_id:
+                px1 = db.get(PhanXuong, px.phoi_tu_phan_xuong_id)
+                cd1_xuong = px1.ten_xuong if px1 else None
 
-    line.plan_id = target.id
+    today = date.today()
+    target_plan: ProductionPlan | None = None
+
+    # Tìm nhap plan hôm nay có cùng CD1 xưởng
+    if cd1_xuong:
+        _PX = aliased(PhanXuong)
+        _PX1 = aliased(PhanXuong)
+        same_xuong_ids = (
+            db.query(ProductionPlanLine.plan_id)
+            .join(ProductionOrderItem, ProductionOrderItem.id == ProductionPlanLine.production_order_item_id)
+            .join(ProductionOrder, ProductionOrder.id == ProductionOrderItem.production_order_id)
+            .join(_PX, _PX.id == ProductionOrder.phan_xuong_id)
+            .outerjoin(_PX1, _PX1.id == _PX.phoi_tu_phan_xuong_id)
+            .filter(
+                case((_PX.cong_doan == "cd1_cd2", _PX.ten_xuong), else_=_PX1.ten_xuong) == cd1_xuong
+            )
+            .subquery()
+        )
+        target_plan = (
+            db.query(ProductionPlan)
+            .filter(
+                ProductionPlan.id.in_(same_xuong_ids),
+                ProductionPlan.trang_thai == "nhap",
+                ProductionPlan.so_ke_hoach != QUEUE_POOL_SO,
+                ProductionPlan.ngay_ke_hoach == today,
+            )
+            .order_by(ProductionPlan.id.desc())
+            .first()
+        )
+
+    # Fallback: nhap plan hôm nay bất kỳ (không phải pool)
+    if not target_plan:
+        target_plan = (
+            db.query(ProductionPlan)
+            .filter(
+                ProductionPlan.trang_thai == "nhap",
+                ProductionPlan.so_ke_hoach != QUEUE_POOL_SO,
+                ProductionPlan.ngay_ke_hoach == today,
+            )
+            .order_by(ProductionPlan.id.desc())
+            .first()
+        )
+
+    # Tạo nhap plan mới nếu không tìm thấy
+    if not target_plan:
+        target_plan = ProductionPlan(
+            so_ke_hoach=_generate_so_ke_hoach(db),
+            ngay_ke_hoach=today,
+            ghi_chu="Tạo từ hàng chờ" + (f" — {cd1_xuong}" if cd1_xuong else ""),
+            trang_thai="nhap",
+            created_by=current_user.id,
+        )
+        db.add(target_plan)
+        db.flush()
+
+    line.plan_id = target_plan.id
     db.commit()
-    return {"ok": True, "plan_id": target.id, "so_ke_hoach": target.so_ke_hoach}
+    return {"ok": True, "plan_id": target_plan.id, "so_ke_hoach": target_plan.so_ke_hoach}

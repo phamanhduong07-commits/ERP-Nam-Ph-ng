@@ -10,7 +10,7 @@ import {
 } from 'antd'
 import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import {
-  DeleteOutlined, PlusOutlined,
+  DeleteOutlined,
   ReloadOutlined, ClockCircleOutlined, ThunderboltOutlined,
   FileTextOutlined, CalculatorOutlined, InfoCircleOutlined,
   UnorderedListOutlined, SendOutlined, HolderOutlined,
@@ -602,35 +602,15 @@ export default function ProductionQueuePage() {
       message.error((e as ApiError)?.response?.data?.detail || 'Lỗi chốt kế hoạch'),
   })
 
-  // ── move pool line to plan ────────────────────────────────────────────────
-  const [movePopoverLine, setMovePopoverLine] = useState<number | null>(null)
-  const [moveTargetPlanId, setMoveTargetPlanId] = useState<number | null>(null)
-
-  const { data: nhapPlansData } = useQuery({
-    queryKey: ['production-plans-nhap'],
-    queryFn: () => productionPlansApi.list({ trang_thai: 'nhap', page_size: 100 }).then(r => r.data),
-    enabled: movePopoverLine !== null,
-    staleTime: 10_000,
-  })
-  const nhapPlanOptions = useMemo(
-    () => (nhapPlansData?.items ?? [])
-      .filter(p => p.so_ke_hoach !== POOL_PLAN_SO)
-      .map(p => ({ value: p.id, label: p.so_ke_hoach })),
-    [nhapPlansData],
-  )
-
-  const moveLineMut = useMutation({
-    mutationFn: ({ lineId, planId }: { lineId: number; planId: number }) =>
-      productionPlansApi.moveLineToPlan(lineId, planId),
+  // ── promote pool line to KHSX ─────────────────────────────────────────────
+  const promoteFromPoolMut = useMutation({
+    mutationFn: (lineId: number) => productionPlansApi.promoteFromPool(lineId),
     onSuccess: (res) => {
-      message.success(`Đã thêm vào ${res.data.so_ke_hoach}`)
-      setMovePopoverLine(null)
-      setMoveTargetPlanId(null)
+      message.success(`Đã đưa vào ${res.data.so_ke_hoach}`)
       qc.invalidateQueries({ queryKey: ['production-queue'] })
-      qc.invalidateQueries({ queryKey: ['production-plans-nhap'] })
     },
     onError: (e: { response?: { data?: { detail?: string } } }) =>
-      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi di chuyển lệnh'),
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi'),
   })
 
   // Nhóm các plan còn nhap (chưa chốt) từ queue lines
@@ -945,49 +925,18 @@ export default function ProductionQueuePage() {
             </Tooltip>
           )}
           {r.plan_trang_thai === 'nhap' && r.so_ke_hoach === POOL_PLAN_SO && r.trang_thai === 'cho' && (
-            <Popover
-              open={movePopoverLine === r.id}
-              onOpenChange={(open) => {
-                if (!open) { setMovePopoverLine(null); setMoveTargetPlanId(null) }
-              }}
-              trigger="click"
-              title="Thêm vào kế hoạch SX"
-              content={
-                <Space direction="vertical" style={{ width: 220 }}>
-                  <Select
-                    style={{ width: '100%' }}
-                    placeholder="Chọn kế hoạch Nháp..."
-                    options={nhapPlanOptions}
-                    value={moveTargetPlanId}
-                    onChange={setMoveTargetPlanId}
-                    size="small"
-                    notFoundContent="Không có kế hoạch Nháp"
-                  />
-                  <Button
-                    type="primary"
-                    size="small"
-                    block
-                    disabled={!moveTargetPlanId}
-                    loading={moveLineMut.isPending}
-                    onClick={() => {
-                      if (moveTargetPlanId) moveLineMut.mutate({ lineId: r.id, planId: moveTargetPlanId })
-                    }}
-                  >
-                    Xác nhận
-                  </Button>
-                </Space>
-              }
-            >
-              <Tooltip title="Thêm vào kế hoạch SX">
-                <Button
-                  size="small"
-                  icon={<PlusOutlined />}
-                  onClick={() => { setMovePopoverLine(r.id); setMoveTargetPlanId(null) }}
-                >
-                  Thêm KH
+            <Tooltip title="Hệ thống tự xác định xưởng và ghép vào KHSX hôm nay">
+              <Popconfirm
+                title="Đưa lệnh về KHSX?"
+                description="Tự ghép vào kế hoạch cùng xưởng hôm nay (hoặc tạo mới)."
+                onConfirm={() => promoteFromPoolMut.mutate(r.id)}
+                okText="Xác nhận"
+              >
+                <Button size="small" type="primary" icon={<SendOutlined />} loading={promoteFromPoolMut.isPending}>
+                  Lên KHSX
                 </Button>
-              </Tooltip>
-            </Popover>
+              </Popconfirm>
+            </Tooltip>
           )}
           {r.trang_thai === 'cho' && (
             <Tooltip title="Xóa khỏi hàng chờ">

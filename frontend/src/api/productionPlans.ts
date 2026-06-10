@@ -299,10 +299,9 @@ export const productionPlansApi = {
   reorderQueue: (items: { id: number; thu_tu: number }[]) =>
     client.patch<{ updated: number }>('/production-plans/queue/reorder', items),
 
-  moveLineToPlan: (lineId: number, planId: number) =>
+  promoteFromPool: (lineId: number) =>
     client.patch<{ ok: boolean; plan_id: number; so_ke_hoach: string }>(
-      `/production-plans/lines/${lineId}/move-to-plan`,
-      { plan_id: planId }
+      `/production-plans/lines/${lineId}/promote-from-pool`
     ),
 }
 
