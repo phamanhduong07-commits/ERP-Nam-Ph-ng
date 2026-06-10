@@ -100,6 +100,8 @@ def update_template(
     if not tpl:
         tpl = PrintTemplate(ma_mau=key, phap_nhan_id=body.phap_nhan_id)
         db.add(tpl)
+    else:
+        tpl.ma_mau = key  # normalize existing lowercase records to uppercase
 
     tpl.ten_mau = body.ten_mau
     tpl.html_content = body.html_content

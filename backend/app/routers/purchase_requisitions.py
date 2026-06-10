@@ -815,7 +815,7 @@ def print_ymh(
         if px_tmp:
             phap_nhan_id = px_tmp.phap_nhan_id
 
-    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PURCHASE_REQUISITION")
+    tpl_q = db.query(PrintTemplate).filter(func.upper(PrintTemplate.ma_mau) == "PURCHASE_REQUISITION")
     tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None
     if not tpl:
         tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()

@@ -162,12 +162,55 @@ export async function smartExportExcel(
  * The user saves as PDF from the browser's print dialog.
  * This approach gives perfect Vietnamese text rendering.
  */
+// Auto-print script: chờ tất cả ảnh load xong trước khi gọi window.print()
+const AUTO_PRINT_SCRIPT = `
+  (function() {
+    function doPrint() { window.print(); }
+    var imgs = Array.from(document.querySelectorAll('img'));
+    if (!imgs.length) { setTimeout(doPrint, 100); return; }
+    var pending = imgs.length;
+    function onDone() { pending--; if (pending <= 0) setTimeout(doPrint, 100); }
+    imgs.forEach(function(img) {
+      if (img.complete && img.naturalWidth > 0) { onDone(); }
+      else { img.addEventListener('load', onDone); img.addEventListener('error', onDone); }
+    });
+    // Fallback nếu ảnh không bao giờ fire event (hiếm)
+    setTimeout(doPrint, 3000);
+  })();
+`
+
 export function printToPdf(title: string, html: string, landscape = false, companyInfo?: PrintCompanyInfo) {
   const win = window.open('', '_blank', 'width=1050,height=780')
   if (!win) {
     alert('Vui lòng cho phép popup để xuất PDF')
     return
   }
+
+  // Template-mode: template đã tự chứa @page + CSS đầy đủ — không inject wrapper CSS
+  // để tránh conflict font/table/margin với thiết kế của người dùng.
+  const isTemplateDriven = html.includes('@page') || html.includes('class="print-page"')
+
+  if (isTemplateDriven) {
+    win.document.write(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; background: #fff; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  ${html}
+  <script>${AUTO_PRINT_SCRIPT}<\/script>
+</body>
+</html>`)
+    win.document.close()
+    return
+  }
+
   const theme = getPrintThemeVars(companyInfo)
   win.document.write(`<!DOCTYPE html>
 <html lang="vi">
@@ -175,11 +218,11 @@ export function printToPdf(title: string, html: string, landscape = false, compa
   <meta charset="UTF-8">
   <title>${title}</title>
   <style>
-	    :root {
-	      --primary: ${theme.primary};
-	      --accent: ${theme.accent};
-	      --footer-accent: ${theme.footer};
-	    }
+    :root {
+      --primary: ${theme.primary};
+      --accent: ${theme.accent};
+      --footer-accent: ${theme.footer};
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, 'Helvetica Neue', sans-serif; font-size: 11px; color: #222; padding: 10mm; }
     h2  { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
@@ -222,11 +265,7 @@ export function printToPdf(title: string, html: string, landscape = false, compa
 </head>
 <body>
   ${html}
-  <script>
-    window.addEventListener('load', function() {
-      setTimeout(function() { window.print(); }, 400);
-    });
-  <\/script>
+  <script>${AUTO_PRINT_SCRIPT}<\/script>
 </body>
 </html>`)
   win.document.close()

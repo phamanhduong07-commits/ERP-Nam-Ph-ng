@@ -1,0 +1,460 @@
+[
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find \"D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\" -type f -name \"*.py\" | xargs grep -l \"ycmh\\|yeu_cau_mua_hang\\|YCMH\" 2>/dev/null | head -20"
+    },
+    "timestamp": "2026-06-10T01:54:20.231Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "find \"D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\" -type f | grep -i \"ycmh\\|yeu_cau_mua\" 2>/dev/null | head -20"
+    },
+    "timestamp": "2026-06-10T01:54:20.842Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/*ycmh*",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong"
+    },
+    "timestamp": "2026-06-10T01:54:48.892Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/*yeu_cau_mua*",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong"
+    },
+    "timestamp": "2026-06-10T01:54:49.372Z"
+  },
+  {
+    "name": "Grep",
+    "input": {
+      "pattern": "ycmh|yeu.cau.mua.hang|YCMH|purchase.request",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong",
+      "-i": true,
+      "output_mode": "files_with_matches"
+    },
+    "timestamp": "2026-06-10T01:54:52.645Z"
+  },
+  {
+    "name": "Grep",
+    "input": {
+      "pattern": "ycmh|yeu.cau.mua|YCMH",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend",
+      "-i": true,
+      "output_mode": "files_with_matches"
+    },
+    "timestamp": "2026-06-10T01:55:15.986Z"
+  },
+  {
+    "name": "Grep",
+    "input": {
+      "pattern": "ycmh|yeu.cau.mua|YCMH",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend",
+      "-i": true,
+      "output_mode": "files_with_matches"
+    },
+    "timestamp": "2026-06-10T01:55:16.698Z"
+  },
+  {
+    "name": "Grep",
+    "input": {
+      "pattern": "YCMH|yeu_cau_mua",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\README.md",
+      "-i": true,
+      "output_mode": "content"
+    },
+    "timestamp": "2026-06-10T01:55:20.761Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/print_templates/**",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend"
+    },
+    "timestamp": "2026-06-10T01:55:21.343Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/*.html",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend"
+    },
+    "timestamp": "2026-06-10T01:55:23.931Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/templates/**",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend"
+    },
+    "timestamp": "2026-06-10T01:55:24.527Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/routers/mua_hang*",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app"
+    },
+    "timestamp": "2026-06-10T01:55:32.203Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/routers/*.py",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app"
+    },
+    "timestamp": "2026-06-10T01:55:32.602Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_requisitions.py"
+    },
+    "timestamp": "2026-06-10T01:55:37.040Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/*purchase_req*",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\frontend\\src"
+    },
+    "timestamp": "2026-06-10T01:55:37.610Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\docs\\phieu_in_print_template_guide.md"
+    },
+    "timestamp": "2026-06-10T01:55:45.553Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/static/print_templates/**",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend"
+    },
+    "timestamp": "2026-06-10T01:55:46.249Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/PrintTemplate*",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend"
+    },
+    "timestamp": "2026-06-10T01:55:50.041Z"
+  },
+  {
+    "name": "Glob",
+    "input": {
+      "pattern": "**/seed_templates*",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend"
+    },
+    "timestamp": "2026-06-10T01:55:50.511Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py"
+    },
+    "timestamp": "2026-06-10T01:55:53.818Z"
+  },
+  {
+    "name": "Grep",
+    "input": {
+      "pattern": "def print_po|PURCHASE_ORDER|ma_mau|PrintTemplate|render_template",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_orders.py",
+      "output_mode": "content",
+      "-n": true
+    },
+    "timestamp": "2026-06-10T01:56:02.646Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_orders.py",
+      "offset": 535,
+      "limit": 100
+    },
+    "timestamp": "2026-06-10T01:56:05.225Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "C:\\Users\\TUF\\.claude\\projects\\d--NAM-PHUONG-SOFTWARE-DU-LIEU-MPS-erp-nam-phuong\\memory\\project_print_template_audit.md"
+    },
+    "timestamp": "2026-06-10T01:56:22.501Z"
+  },
+  {
+    "name": "Grep",
+    "input": {
+      "pattern": "ma_mau.*purchase|PURCHASE_REQUISITION|ymh",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "-i": true,
+      "output_mode": "content",
+      "-n": true
+    },
+    "timestamp": "2026-06-10T01:56:23.860Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "offset": 1700,
+      "limit": 91
+    },
+    "timestamp": "2026-06-10T01:56:57.499Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "offset": 1111,
+      "limit": 80
+    },
+    "timestamp": "2026-06-10T01:57:02.654Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "offset": 1190,
+      "limit": 80
+    },
+    "timestamp": "2026-06-10T01:57:08.389Z"
+  },
+  {
+    "name": "Grep",
+    "input": {
+      "pattern": "^EXCEL_TEMPLATES|^TEMPLATES\\s*=",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "output_mode": "content",
+      "-n": true
+    },
+    "timestamp": "2026-06-10T01:57:44.396Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "offset": 1315,
+      "limit": 20
+    },
+    "timestamp": "2026-06-10T01:57:50.469Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "old_string": "    }\n]\n\nEXCEL_TEMPLATES = [",
+      "new_string": "    },\n    {\n        \"ma_mau\": \"PURCHASE_REQUISITION\",\n        \"ten_mau\": \"Phiếu Yêu Cầu Mua Hàng (YCMH)\",\n        \"html_content\": \"\"\"\n<style>\n  @page { size: A4 portrait; margin: 15mm 12mm; }\n  * { box-sizing: border-box; }\n  body { font-family: 'Times New Roman', serif; font-size: 11pt; margin: 0; }\n  .hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }\n  .co-name { font-weight: bold; font-size: 13pt; color: #4A148C; }\n  .co-info { font-size: 8.5pt; line-height: 1.5; }\n  .mau { font-size: 8pt; text-align: right; color: #555; }\n  .divider { border: none; border-top: 2px solid #4A148C; margin: 6px 0 10px; }\n  .title { text-align: center; margin-bottom: 10px; }\n  .title h2 { margin: 0; font-size: 16pt; letter-spacing: 2px; text-transform: uppercase; }\n  .title .so { font-size: 9pt; margin-top: 2px; }\n  .title .date { font-size: 9pt; font-style: italic; }\n  .info-block { font-size: 10.5pt; line-height: 1.9; margin-bottom: 10px; }\n  .row { display: flex; margin: 3px 0; }\n  .row .label { min-width: 140px; font-weight: bold; flex-shrink: 0; }\n  .row .dots { flex: 1; border-bottom: 1px dotted #888; padding-bottom: 1px; }\n  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10pt; }\n  th { background: #4A148C; color: #fff; border: 1px solid #ccc; padding: 5px 4px; text-align: center; }\n  td { border: 1px solid #ccc; padding: 4px; }\n  .center { text-align: center; }\n  .right { text-align: right; }\n  .total-row td { font-weight: bold; background: #F3E5F5; }\n  .chu { font-size: 9.5pt; margin-bottom: 4px; }\n  .sig-table { width: 100%; border-collapse: collapse; margin-top: 20px; }\n  .sig-table td { border: none; text-align: center; vertical-align: top; width: 25%; }\n  .sig-label { font-weight: bold; }\n  .sig-sub { font-style: italic; font-size: 8.5pt; color: #555; }\n  .sig-name { margin-top: 40px; font-weight: bold; }\n</style>\n<div class=\"hdr\">\n  <div>\n    <div class=\"co-name\">{{company_name}}</div>\n    <div class=\"co-info\">{{company_details}}</div>\n  </div>\n  <div class=\"mau\">Biểu mẫu nội bộ</div>\n</div>\n<hr class=\"divider\">\n<div class=\"title\">\n  <h2>Phiếu yêu cầu mua hàng</h2>\n  <div class=\"so\">Số: <strong>{{document_number}}</strong></div>\n  <div class=\"date\">{{document_date}}</div>\n</div>\n<div class=\"info-block\">\n  <div class=\"row\"><span class=\"label\">Đơn vị yêu cầu</span><span class=\"dots\">&nbsp;{{don_vi_yeu_cau}}</span></div>\n  <div class=\"row\"><span class=\"label\">Người yêu cầu</span><span class=\"dots\">&nbsp;{{nguoi_yeu_cau}}</span></div>\n  <div class=\"row\"><span class=\"label\">Ghi chú</span><span class=\"dots\">&nbsp;{{ghi_chu}}</span></div>\n</div>\n{{body_html}}\n<div class=\"chu\">Tổng tiền dự kiến: <strong>{{tong_du_kien}}</strong></div>\n<table class=\"sig-table\">\n  <tr>\n    <td><div class=\"sig-label\">Người yêu cầu</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\">{{sig_nguoi_yeu_cau}}</div></td>\n    <td><div class=\"sig-label\">Phụ trách phòng ban</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\">{{sig_duyet_pb}}</div></td>\n    <td><div class=\"sig-label\">Phòng mua hàng</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\"></div></td>\n    <td><div class=\"sig-label\">Giám đốc</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\">{{sig_duyet_gd}}</div></td>\n  </tr>\n</table>\n\"\"\",\n        \"variables_meta\": {\n            \"document_number\": \"Số YMH (YMH-YYYYMM-XXXX)\",\n            \"document_date\": \"Ngày yêu cầu (Ngày DD tháng MM năm YYYY)\",\n            \"company_name\": \"Tên pháp nhân\",\n            \"company_details\": \"Địa chỉ / Điện thoại pháp nhân\",\n            \"logo_img\": \"Logo img tag (không dùng trong template này)\",\n            \"don_vi_yeu_cau\": \"Tên phân xưởng / đơn vị yêu cầu\",\n            \"nguoi_yeu_cau\": \"Họ tên người yêu cầu\",\n            \"ghi_chu\": \"Ghi chú YMH\",\n            \"body_html\": \"Bảng danh sách hàng (STT|Tên hàng|ĐVT|SL|Đơn giá DK|Thành tiền|Ngày cần|Ghi chú) + tfoot tổng\",\n            \"tong_du_kien\": \"Tổng tiền dự kiến (X,XXX,XXX đồng)\",\n            \"sig_nguoi_yeu_cau\": \"Tên người yêu cầu (vùng chữ ký)\",\n            \"sig_duyet_pb\": \"Tên người duyệt phòng ban (vùng chữ ký)\",\n            \"sig_duyet_gd\": \"Tên giám đốc duyệt (vùng chữ ký)\"\n        }\n    }\n]\n\nEXCEL_TEMPLATES = ["
+    },
+    "timestamp": "2026-06-10T01:58:31.416Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_requisitions.py",
+      "old_string": "from app.database import get_db\nfrom app.deps import get_current_user, require_roles\nfrom app.models.auth import User\nfrom app.models.master import OtherMaterial, PaperMaterial, PhanXuong, PhapNhan, Supplier\nfrom app.models.purchase import PurchaseOrder, PurchaseOrderItem\nfrom app.models.purchase_requisition import PurchaseRequisition, PurchaseRequisitionItem",
+      "new_string": "import html as _html_mod\n\nfrom app.database import get_db\nfrom app.deps import get_current_user, require_roles\nfrom app.models.auth import User\nfrom app.models.master import OtherMaterial, PaperMaterial, PhanXuong, PhapNhan, Supplier\nfrom app.models.purchase import PurchaseOrder, PurchaseOrderItem\nfrom app.models.purchase_requisition import PurchaseRequisition, PurchaseRequisitionItem\nfrom app.models.system import PrintTemplate, SystemSetting"
+    },
+    "timestamp": "2026-06-10T01:58:39.953Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_requisitions.py",
+      "old_string": "@router.get(\"/{ymh_id}/print\")\ndef print_ymh(\n    ymh_id: int,\n    db: Session = Depends(get_db),\n    _: User = Depends(get_current_user),\n):\n    from fastapi.responses import HTMLResponse\n    from app.models.master import Supplier\n    ymh = db.get(PurchaseRequisition, ymh_id)\n    if not ymh:\n        raise HTTPException(404, \"Không tìm thấy YMH\")\n\n    px = db.get(PhanXuong, ymh.phan_xuong_id) if ymh.phan_xuong_id else None\n    pn = db.get(PhapNhan, ymh.phap_nhan_id) if ymh.phap_nhan_id else None\n    ten_phap_nhan = (pn.ten_viet_tat or pn.ten_phap_nhan) if pn else \"CÔNG TY TNHH NAM PHƯƠNG BAO BÌ\"\n\n    rows_html = \"\"\n    tong = Decimal(\"0\")\n    for i, it in enumerate(ymh.items, 1):\n        ten = it.ten_hang or \"\"\n        if not ten and it.paper_material_id:\n            pm = db.get(PaperMaterial, it.paper_material_id)\n            ten = pm.ten if pm else \"\"\n        if not ten and it.other_material_id:\n            om = db.get(OtherMaterial, it.other_material_id)\n            ten = om.ten if om else \"\"\n        don_gia = it.don_gia_du_kien or Decimal(\"0\")\n        thanh_tien = it.so_luong * don_gia\n        tong += thanh_tien\n        ngay_can_str = it.ngay_can.strftime(\"%d/%m/%Y\") if it.ngay_can else \"\"\n        rows_html += f\"\"\"\n        <tr>\n          <td class=\"center\">{i}</td>\n          <td>{ten}</td>\n          <td class=\"center\">{it.dvt}</td>\n          <td class=\"right\">{float(it.so_luong):,.3f}</td>\n          <td class=\"right\">{int(don_gia):,}</td>\n          <td class=\"right\">{int(thanh_tien):,}</td>\n          <td class=\"center\">{ngay_can_str}</td>\n          <td>{it.ghi_chu or ''}</td>\n        </tr>\"\"\"\n\n    ngay_str = \"\"\n    if ymh.ngay_yeu_cau:\n        d = ymh.ngay_yeu_cau\n        ngay_str = f\"Ngày {d.day:02d} tháng {d.month:02d} năm {d.year}\"\n\n    html = f\"\"\"<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">\n<style>\n  @page {{ size: A4 portrait; margin: 15mm 12mm; }}\n  * {{ box-sizing: border-box; }}\n  body {{ font-family: 'Times New Roman', serif; font-size: 11pt; margin: 0; }}\n  button {{ display: none; }}\n  @media print {{ button {{ display: none; }} }}\n  .header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }}\n  .company-name {{ font-weight: bold; font-size: 13pt; color: #4A148C; }}\n  .company-info {{ font-size: 8.5pt; line-height: 1.5; }}\n  .mau {{ font-size: 8pt; text-align: right; color: #555; }}\n  .divider {{ border: none; border-top: 2px solid #4A148C; margin: 6px 0 10px; }}\n  .title {{ text-align: center; margin-bottom: 10px; }}\n  .title h2 {{ margin: 0; font-size: 16pt; letter-spacing: 2px; text-transform: uppercase; }}\n  .title .so {{ font-size: 9pt; margin-top: 2px; }}\n  .title .date {{ font-size: 9pt; font-style: italic; }}\n  .info-block {{ font-size: 10.5pt; line-height: 1.9; margin-bottom: 10px; }}\n  .row {{ display: flex; margin: 3px 0; }}\n  .row .label {{ min-width: 140px; font-weight: bold; flex-shrink: 0; }}\n  .row .dots {{ flex: 1; border-bottom: 1px dotted #888; padding-bottom: 1px; }}\n  table {{ width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10pt; }}\n  th {{ background: #4A148C; color: #fff; border: 1px solid #ccc; padding: 5px 4px; text-align: center; }}\n  td {{ border: 1px solid #ccc; padding: 4px; }}\n  .center {{ text-align: center; }}\n  .right {{ text-align: right; }}\n  .total-row td {{ font-weight: bold; background: #F3E5F5; }}\n  .chu {{ font-size: 9.5pt; margin-bottom: 4px; }}\n  .sig-table {{ width: 100%; border: none; margin-top: 20px; }}\n  .sig-table td {{ border: none; text-align: center; vertical-align: top; width: 25%; }}\n  .sig-label {{ font-weight: bold; }}\n  .sig-sub {{ font-style: italic; font-size: 8.5pt; color: #555; }}\n  .sig-name {{ margin-top: 40px; font-weight: bold; }}\n</style>\n</head>\n<body>\n<button onclick=\"window.print()\" style=\"display:block;margin-bottom:10px;padding:6px 16px;background:#4A148C;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11pt;\">In phiếu</button>\n\n<div class=\"header\">\n  <div>\n    <div class=\"company-name\">{ten_phap_nhan}</div>\n    <div class=\"company-info\">Địa chỉ: TP. Hồ Chí Minh<br>ĐT: (028) xxxx xxxx</div>\n  </div>\n  <div class=\"mau\">Biểu mẫu nội bộ</div>\n</div>\n<hr class=\"divider\">\n\n<div class=\"title\">\n  <h2>Phiếu yêu cầu mua hàng</h2>\n  <div class=\"so\">Số: <strong>{ymh.so_ymh}</strong></div>\n  <div class=\"date\">{ngay_str}</div>\n</div>\n\n<div class=\"info-block\">\n  <div class=\"row\"><span class=\"label\">Đơn vị yêu cầu</span><span class=\"dots\">&nbsp;{px.ten_xuong if px else ''}</span></div>\n  <div class=\"row\"><span class=\"label\">Người yêu cầu</span><span class=\"dots\">&nbsp;{_user_name(ymh.nguoi_yeu_cau) or ''}</span></div>\n  <div class=\"row\"><span class=\"label\">Ghi chú</span><span class=\"dots\">&nbsp;{ymh.ghi_chu or ''}</span></div>\n</div>\n\n<table>\n  <thead>\n    <tr>\n      <th style=\"width:35px\">STT</th>\n      <th>Tên hàng</th>\n      <th style=\"width:55px\">ĐVT</th>\n      <th style=\"width:80px\">Số lượng</th>\n      <th style=\"width:100px\">Đơn giá DK</th>\n      <th style=\"width:110px\">Thành tiền</th>\n      <th style=\"width:90px\">Ngày cần</th>\n      <th style=\"width:120px\">Ghi chú</th>\n    </tr>\n  </thead>\n  <tbody>\n    {rows_html}\n  </tbody>\n  <tfoot>\n    <tr class=\"total-row\">\n      <td colspan=\"5\" class=\"right\">TỔNG CỘNG</td>\n      <td class=\"right\">{int(tong):,}</td>\n      <td colspan=\"2\"></td>\n    </tr>\n  </tfoot>\n</table>\n\n<div class=\"chu\">Tổng tiền dự kiến: <strong>{int(tong):,} đồng</strong></div>\n\n<table class=\"sig-table\">\n  <tr>\n    <td><div class=\"sig-label\">Người yêu cầu</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\">{_user_name(ymh.nguoi_yeu_cau) or ''}</div></td>\n    <td><div class=\"sig-label\">Phụ trách phòng ban</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\">{_user_name(ymh.nguoi_duyet_pb) or ''}</div></td>\n    <td><div class=\"sig-label\">Phòng mua hàng</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\"></div></td>\n    <td><div class=\"sig-label\">Giám đốc</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\">{_user_name(ymh.nguoi_duyet_gd) or ''}</div></td>\n  </tr>\n</table>\n</body></html>\"\"\"\n    return HTMLResponse(content=html)",
+      "new_string": "@router.get(\"/{ymh_id}/print\", response_class=HTMLResponse)\ndef print_ymh(\n    ymh_id: int,\n    db: Session = Depends(get_db),\n    _: User = Depends(get_current_user),\n):\n    from fastapi.responses import HTMLResponse\n    ymh = db.get(PurchaseRequisition, ymh_id)\n    if not ymh:\n        raise HTTPException(404, \"Không tìm thấy YMH\")\n\n    phap_nhan_id = ymh.phap_nhan_id\n    if not phap_nhan_id and ymh.phan_xuong_id:\n        px_tmp = db.get(PhanXuong, ymh.phan_xuong_id)\n        if px_tmp:\n            phap_nhan_id = px_tmp.phap_nhan_id\n\n    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == \"PURCHASE_REQUISITION\")\n    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None\n    if not tpl:\n        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()\n    if not tpl:\n        raise HTTPException(404, \"Chưa có mẫu in PURCHASE_REQUISITION — vui lòng cấu hình trong Hệ thống > Mẫu in\")\n\n    px = db.get(PhanXuong, ymh.phan_xuong_id) if ymh.phan_xuong_id else None\n    pn = db.get(PhapNhan, phap_nhan_id) if phap_nhan_id else None\n    settings = {s.key: s.value for s in db.query(SystemSetting).all()}\n\n    pn_name = _html_mod.escape(\n        (pn.ten_viet_tat or pn.ten_phap_nhan) if pn else (settings.get(\"company_name\") or \"CÔNG TY TNHH NAM PHƯƠNG BAO BÌ\")\n    )\n    pn_details = _html_mod.escape(\n        (pn.dia_chi or \"\") if pn else (settings.get(\"company_details\") or \"\")\n    )\n    logo_src = f\"/{pn.logo_path}\" if pn and pn.logo_path else \"\"\n    logo_img = f'<img src=\"{logo_src}\" style=\"max-width:100%;max-height:80px;object-fit:contain\"/>' if logo_src else \"\"\n\n    rows_html = \"\"\n    tong = Decimal(\"0\")\n    for i, it in enumerate(ymh.items, 1):\n        ten = it.ten_hang or \"\"\n        if not ten and it.paper_material_id:\n            pm = db.get(PaperMaterial, it.paper_material_id)\n            ten = pm.ten if pm else \"\"\n        if not ten and it.other_material_id:\n            om = db.get(OtherMaterial, it.other_material_id)\n            ten = om.ten if om else \"\"\n        don_gia = it.don_gia_du_kien or Decimal(\"0\")\n        thanh_tien = it.so_luong * don_gia\n        tong += thanh_tien\n        ngay_can_str = it.ngay_can.strftime(\"%d/%m/%Y\") if it.ngay_can else \"\"\n        rows_html += (\n            f\"<tr>\"\n            f\"<td class='center'>{i}</td>\"\n            f\"<td>{_html_mod.escape(ten)}</td>\"\n            f\"<td class='center'>{_html_mod.escape(it.dvt or '')}</td>\"\n            f\"<td class='right'>{float(it.so_luong):,.3f}</td>\"\n            f\"<td class='right'>{int(don_gia):,}</td>\"\n            f\"<td class='right'>{int(thanh_tien):,}</td>\"\n            f\"<td class='center'>{ngay_can_str}</td>\"\n            f\"<td>{_html_mod.escape(it.ghi_chu or '')}</td>\"\n            f\"</tr>\"\n        )\n\n    body_html = (\n        \"<table>\"\n        \"<thead><tr>\"\n        \"<th style='width:35px'>STT</th>\"\n        \"<th>Tên hàng</th>\"\n        \"<th style='width:55px'>ĐVT</th>\"\n        \"<th style='width:80px'>Số lượng</th>\"\n        \"<th style='width:100px'>Đơn giá DK</th>\"\n        \"<th style='width:110px'>Thành tiền</th>\"\n        \"<th style='width:90px'>Ngày cần</th>\"\n        \"<th style='width:120px'>Ghi chú</th>\"\n        \"</tr></thead>\"\n        f\"<tbody>{rows_html}</tbody>\"\n        \"<tfoot><tr class='total-row'>\"\n        \"<td colspan='5' class='right'>TỔNG CỘNG</td>\"\n        f\"<td class='right'>{int(tong):,}</td>\"\n        \"<td colspan='2'></td>\"\n        \"</tr></tfoot>\"\n        \"</table>\"\n    )\n\n    ngay_str = \"\"\n    if ymh.ngay_yeu_cau:\n        d = ymh.ngay_yeu_cau\n        ngay_str = f\"Ngày {d.day:02d} tháng {d.month:02d} năm {d.year}\"\n\n    replacements = {\n        \"{{document_number}}\": _html_mod.escape(ymh.so_ymh or \"\"),\n        \"{{document_date}}\": ngay_str,\n        \"{{company_name}}\": pn_name,\n        \"{{company_details}}\": pn_details,\n        \"{{logo_img}}\": logo_img,\n        \"{{logo_src}}\": logo_src,\n        \"{{don_vi_yeu_cau}}\": _html_mod.escape(px.ten_xuong if px else \"\"),\n        \"{{nguoi_yeu_cau}}\": _html_mod.escape(_user_name(ymh.nguoi_yeu_cau) or \"\"),\n        \"{{ghi_chu}}\": _html_mod.escape(ymh.ghi_chu or \"\"),\n        \"{{body_html}}\": body_html,\n        \"{{tong_du_kien}}\": f\"{int(tong):,} đồng\",\n        \"{{sig_nguoi_yeu_cau}}\": _html_mod.escape(_user_name(ymh.nguoi_yeu_cau) or \"\"),\n        \"{{sig_duyet_pb}}\": _html_mod.escape(_user_name(ymh.nguoi_duyet_pb) or \"\"),\n        \"{{sig_duyet_gd}}\": _html_mod.escape(_user_name(ymh.nguoi_duyet_gd) or \"\"),\n    }\n    content = tpl.html_content\n    for k, v in replacements.items():\n        content = content.replace(k, v)\n\n    page = (\n        \"<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>\"\n        f\"<title>Phiếu YCMH {_html_mod.escape(ymh.so_ymh or '')}</title>\"\n        \"<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>\"\n        \"</head><body>\"\n        \"<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>\"\n        \"<button onclick='window.print()' style='padding:7px 18px;background:#4A148C;color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In phiếu YCMH</button>\"\n        \"<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>\"\n        \"</div>\"\n        f\"{content}</body></html>\"\n    )\n    return HTMLResponse(content=page)"
+    },
+    "timestamp": "2026-06-10T01:59:38.008Z"
+  },
+  {
+    "name": "Grep",
+    "input": {
+      "pattern": "def print_ymh|@router.get.*print",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_requisitions.py",
+      "output_mode": "content",
+      "-n": true
+    },
+    "timestamp": "2026-06-10T01:59:43.865Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_requisitions.py",
+      "offset": 526,
+      "limit": 130
+    },
+    "timestamp": "2026-06-10T01:59:46.534Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_requisitions.py",
+      "offset": 655,
+      "limit": 40
+    },
+    "timestamp": "2026-06-10T01:59:50.415Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_requisitions.py",
+      "old_string": "@router.get(\"/{ymh_id}/print\")\ndef print_ymh(\n    ymh_id: int,\n    db: Session = Depends(get_db),\n    _: User = Depends(get_current_user),\n):\n    from fastapi.responses import HTMLResponse\n    from app.models.master import Supplier\n    ymh = db.get(PurchaseRequisition, ymh_id)\n    if not ymh:\n        raise HTTPException(404, \"Không tìm thấy YMH\")\n\n    px = db.get(PhanXuong, ymh.phan_xuong_id) if ymh.phan_xuong_id else None\n    pn = db.get(PhapNhan, ymh.phap_nhan_id) if ymh.phap_nhan_id else None\n    ten_phap_nhan = (pn.ten_viet_tat or pn.ten_phap_nhan) if pn else \"CÔNG TY TNHH NAM PHƯƠNG BAO BÌ\"\n\n    rows_html = \"\"\n    tong = Decimal(\"0\")\n    for i, it in enumerate(ymh.items, 1):\n        ten = it.ten_hang or \"\"\n        if not ten and it.paper_material_id:\n            pm = db.get(PaperMaterial, it.paper_material_id)\n            ten = pm.ten if pm else \"\"\n        if not ten and it.other_material_id:\n            om = db.get(OtherMaterial, it.other_material_id)\n            ten = om.ten if om else \"\"\n        don_gia = it.don_gia_du_kien or Decimal(\"0\")\n        thanh_tien = it.so_luong * don_gia\n        tong += thanh_tien\n        ngay_can_str = it.ngay_can.strftime(\"%d/%m/%Y\") if it.ngay_can else \"\"\n        rows_html += f\"\"\"\n        <tr>\n          <td class=\"center\">{i}</td>\n          <td>{ten}</td>\n          <td class=\"center\">{it.dvt}</td>\n          <td class=\"right\">{float(it.so_luong):,.3f}</td>\n          <td class=\"right\">{int(don_gia):,}</td>\n          <td class=\"right\">{int(thanh_tien):,}</td>\n          <td class=\"center\">{ngay_can_str}</td>\n          <td>{it.ghi_chu or ''}</td>\n        </tr>\"\"\"\n\n    ngay_str = \"\"\n    if ymh.ngay_yeu_cau:\n        d = ymh.ngay_yeu_cau\n        ngay_str = f\"Ngày {d.day:02d} tháng {d.month:02d} năm {d.year}\"\n\n    html = f\"\"\"<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">\n<style>\n  @page {{ size: A4 portrait; margin: 15mm 12mm; }}\n  * {{ box-sizing: border-box; }}\n  body {{ font-family: 'Times New Roman', serif; font-size: 11pt; margin: 0; }}\n  button {{ display: none; }}\n  @media print {{ button {{ display: none; }} }}\n  .header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }}\n  .company-name {{ font-weight: bold; font-size: 13pt; color: #4A148C; }}\n  .company-info {{ font-size: 8.5pt; line-height: 1.5; }}\n  .mau {{ font-size: 8pt; text-align: right; color: #555; }}\n  .divider {{ border: none; border-top: 2px solid #4A148C; margin: 6px 0 10px; }}\n  .title {{ text-align: center; margin-bottom: 10px; }}\n  .title h2 {{ margin: 0; font-size: 16pt; letter-spacing: 2px; text-transform: uppercase; }}\n  .title .so {{ font-size: 9pt; margin-top: 2px; }}\n  .title .date {{ font-size: 9pt; font-style: italic; }}\n  .info-block {{ font-size: 10.5pt; line-height: 1.9; margin-bottom: 10px; }}\n  .row {{ display: flex; margin: 3px 0; }}\n  .row .label {{ min-width: 140px; font-weight: bold; flex-shrink: 0; }}\n  .row .dots {{ flex: 1; border-bottom: 1px dotted #888; padding-bottom: 1px; }}\n  table {{ width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10pt; }}\n  th {{ background: #4A148C; color: #fff; border: 1px solid #ccc; padding: 5px 4px; text-align: center; }}\n  td {{ border: 1px solid #ccc; padding: 4px; }}\n  .center {{ text-align: center; }}\n  .right {{ text-align: right; }}\n  .total-row td {{ font-weight: bold; background: #F3E5F5; }}\n  .chu {{ font-size: 9.5pt; margin-bottom: 4px; }}\n  .sig-table {{ width: 100%; border: none; margin-top: 20px; }}\n  .sig-table td {{ border: none; text-align: center; vertical-align: top; width: 25%; }}\n  .sig-label {{ font-weight: bold; }}\n  .sig-sub {{ font-style: italic; font-size: 8.5pt; color: #555; }}\n  .sig-name {{ margin-top: 40px; font-weight: bold; }}\n</style>\n</head>\n<body>\n<button onclick=\"window.print()\" style=\"display:block;margin-bottom:10px;padding:6px 16px;background:#4A148C;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11pt;\">In phiếu</button>\n\n<div class=\"header\">\n  <div>\n    <div class=\"company-name\">{ten_phap_nhan}</div>\n    <div class=\"company-info\">Địa chỉ: TP. Hồ Chí Minh<br>ĐT: (028) xxxx xxxx</div>\n  </div>\n  <div class=\"mau\">Biểu mẫu nội bộ</div>\n</div>\n<hr class=\"divider\">\n\n<div class=\"title\">\n  <h2>Phiếu yêu cầu mua hàng</h2>\n  <div class=\"so\">Số: <strong>{ymh.so_ymh}</strong></div>\n  <div class=\"date\">{ngay_str}</div>\n</div>\n\n<div class=\"info-block\">\n  <div class=\"row\"><span class=\"label\">Đơn vị yêu cầu</span><span class=\"dots\">&nbsp;{px.ten_xuong if px else ''}</span></div>\n  <div class=\"row\"><span class=\"label\">Người yêu cầu</span><span class=\"dots\">&nbsp;{_user_name(ymh.nguoi_yeu_cau) or ''}</span></div>\n  <div class=\"row\"><span class=\"label\">Ghi chú</span><span class=\"dots\">&nbsp;{ymh.ghi_chu or ''}</span></div>\n</div>\n\n<table>\n  <thead>\n    <tr>\n      <th style=\"width:35px\">STT</th>\n      <th>Tên hàng</th>\n      <th style=\"width:55px\">ĐVT</th>\n      <th style=\"width:80px\">Số lượng</th>\n      <th style=\"width:100px\">Đơn giá DK</th>\n      <th style=\"width:110px\">Thành tiền</th>\n      <th style=\"width:90px\">Ngày cần</th>\n      <th style=\"width:120px\">Ghi chú</th>\n    </tr>\n  </thead>\n  <tbody>\n    {rows_html}\n  </tbody>\n  <tfoot>\n    <tr class=\"total-row\">\n      <td colspan=\"5\" class=\"right\">TỔNG CỘNG</td>\n      <td class=\"right\">{int(tong):,}</td>\n      <td colspan=\"2\"></td>\n    </tr>\n  </tfoot>\n</table>\n\n<div class=\"chu\">Tổng tiền dự kiến: <strong>{int(tong):,} đồng</strong></div>\n\n<table class=\"sig-table\">\n  <tr>\n    <td><div class=\"sig-label\">Người yêu cầu</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\">{_user_name(ymh.nguoi_yeu_cau) or ''}</div></td>\n    <td><div class=\"sig-label\">Phụ trách phòng ban</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\">{_user_name(ymh.nguoi_duyet_pb) or ''}</div></td>\n    <td><div class=\"sig-label\">Phòng mua hàng</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\"></div></td>\n    <td><div class=\"sig-label\">Giám đốc</div><div class=\"sig-sub\">(Ký, họ tên)</div><div class=\"sig-name\">{_user_name(ymh.nguoi_duyet_gd) or ''}</div></td>\n  </tr>\n</table>\n</body></html>\"\"\"\n    return HTMLResponse(content=html)",
+      "new_string": "@router.get(\"/{ymh_id}/print\", response_class=HTMLResponse)\ndef print_ymh(\n    ymh_id: int,\n    db: Session = Depends(get_db),\n    _: User = Depends(get_current_user),\n):\n    from fastapi.responses import HTMLResponse\n\n    ymh = db.get(PurchaseRequisition, ymh_id)\n    if not ymh:\n        raise HTTPException(404, \"Không tìm thấy YMH\")\n\n    phap_nhan_id = ymh.phap_nhan_id\n    if not phap_nhan_id and ymh.phan_xuong_id:\n        px_tmp = db.get(PhanXuong, ymh.phan_xuong_id)\n        if px_tmp:\n            phap_nhan_id = px_tmp.phap_nhan_id\n\n    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == \"PURCHASE_REQUISITION\")\n    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None\n    if not tpl:\n        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()\n    if not tpl:\n        raise HTTPException(\n            404,\n            \"Chưa có mẫu in PURCHASE_REQUISITION — vui lòng cấu hình trong Hệ thống > Mẫu in\",\n        )\n\n    px = db.get(PhanXuong, ymh.phan_xuong_id) if ymh.phan_xuong_id else None\n    pn = db.get(PhapNhan, phap_nhan_id) if phap_nhan_id else None\n    settings = {s.key: s.value for s in db.query(SystemSetting).all()}\n\n    pn_name = _html_mod.escape(\n        (pn.ten_viet_tat or pn.ten_phap_nhan)\n        if pn\n        else (settings.get(\"company_name\") or \"CÔNG TY TNHH NAM PHƯƠNG BAO BÌ\")\n    )\n    pn_details = _html_mod.escape(\n        (pn.dia_chi or \"\") if pn else (settings.get(\"company_details\") or \"\")\n    )\n    logo_src = f\"/{pn.logo_path}\" if pn and pn.logo_path else \"\"\n    logo_img = (\n        f'<img src=\"{logo_src}\" style=\"max-width:100%;max-height:80px;object-fit:contain\"/>'\n        if logo_src\n        else \"\"\n    )\n\n    rows_html = \"\"\n    tong = Decimal(\"0\")\n    for i, it in enumerate(ymh.items, 1):\n        ten = it.ten_hang or \"\"\n        if not ten and it.paper_material_id:\n            pm = db.get(PaperMaterial, it.paper_material_id)\n            ten = pm.ten if pm else \"\"\n        if not ten and it.other_material_id:\n            om = db.get(OtherMaterial, it.other_material_id)\n            ten = om.ten if om else \"\"\n        don_gia = it.don_gia_du_kien or Decimal(\"0\")\n        thanh_tien = it.so_luong * don_gia\n        tong += thanh_tien\n        ngay_can_str = it.ngay_can.strftime(\"%d/%m/%Y\") if it.ngay_can else \"\"\n        rows_html += (\n            f\"<tr>\"\n            f\"<td class='center'>{i}</td>\"\n            f\"<td>{_html_mod.escape(ten)}</td>\"\n            f\"<td class='center'>{_html_mod.escape(it.dvt or '')}</td>\"\n            f\"<td class='right'>{float(it.so_luong):,.3f}</td>\"\n            f\"<td class='right'>{int(don_gia):,}</td>\"\n            f\"<td class='right'>{int(thanh_tien):,}</td>\"\n            f\"<td class='center'>{ngay_can_str}</td>\"\n            f\"<td>{_html_mod.escape(it.ghi_chu or '')}</td>\"\n            f\"</tr>\"\n        )\n\n    body_html = (\n        \"<table>\"\n        \"<thead><tr>\"\n        \"<th style='width:35px'>STT</th>\"\n        \"<th>Tên hàng</th>\"\n        \"<th style='width:55px'>ĐVT</th>\"\n        \"<th style='width:80px'>Số lượng</th>\"\n        \"<th style='width:100px'>Đơn giá DK</th>\"\n        \"<th style='width:110px'>Thành tiền</th>\"\n        \"<th style='width:90px'>Ngày cần</th>\"\n        \"<th style='width:120px'>Ghi chú</th>\"\n        \"</tr></thead>\"\n        f\"<tbody>{rows_html}</tbody>\"\n        \"<tfoot><tr class='total-row'>\"\n        \"<td colspan='5' class='right'>TỔNG CỘNG</td>\"\n        f\"<td class='right'>{int(tong):,}</td>\"\n        \"<td colspan='2'></td>\"\n        \"</tr></tfoot>\"\n        \"</table>\"\n    )\n\n    ngay_str = \"\"\n    if ymh.ngay_yeu_cau:\n        d = ymh.ngay_yeu_cau\n        ngay_str = f\"Ngày {d.day:02d} tháng {d.month:02d} năm {d.year}\"\n\n    replacements = {\n        \"{{document_number}}\": _html_mod.escape(ymh.so_ymh or \"\"),\n        \"{{document_date}}\": ngay_str,\n        \"{{company_name}}\": pn_name,\n        \"{{company_details}}\": pn_details,\n        \"{{logo_img}}\": logo_img,\n        \"{{logo_src}}\": logo_src,\n        \"{{don_vi_yeu_cau}}\": _html_mod.escape(px.ten_xuong if px else \"\"),\n        \"{{nguoi_yeu_cau}}\": _html_mod.escape(_user_name(ymh.nguoi_yeu_cau) or \"\"),\n        \"{{ghi_chu}}\": _html_mod.escape(ymh.ghi_chu or \"\"),\n        \"{{body_html}}\": body_html,\n        \"{{tong_du_kien}}\": f\"{int(tong):,} đồng\",\n        \"{{sig_nguoi_yeu_cau}}\": _html_mod.escape(_user_name(ymh.nguoi_yeu_cau) or \"\"),\n        \"{{sig_duyet_pb}}\": _html_mod.escape(_user_name(ymh.nguoi_duyet_pb) or \"\"),\n        \"{{sig_duyet_gd}}\": _html_mod.escape(_user_name(ymh.nguoi_duyet_gd) or \"\"),\n    }\n    content = tpl.html_content\n    for k, v in replacements.items():\n        content = content.replace(k, v)\n\n    page = (\n        \"<!DOCTYPE html><html lang='vi'><head><meta charset='UTF-8'>\"\n        f\"<title>Phiếu YCMH {_html_mod.escape(ymh.so_ymh or '')}</title>\"\n        \"<style>body{margin:0;padding:0}@media print{.no-print{display:none!important}}</style>\"\n        \"</head><body>\"\n        \"<div class='no-print' style='padding:10px;background:#f0f0f0;display:flex;gap:10px'>\"\n        \"<button onclick='window.print()' style='padding:7px 18px;background:#4A148C;color:#fff;border:none;border-radius:4px;cursor:pointer'>🖨️ In phiếu YCMH</button>\"\n        \"<button onclick='window.close()' style='padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer'>Đóng</button>\"\n        \"</div>\"\n        f\"{content}</body></html>\"\n    )\n    return HTMLResponse(content=page)"
+    },
+    "timestamp": "2026-06-10T02:00:45.539Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\" && python -m app.seeds.seed_templates 2>&1 | tail -5"
+    },
+    "timestamp": "2026-06-10T02:00:51.031Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\" && python -c \"\nfrom app.database import SessionLocal\nfrom app.models.system import PrintTemplate\ndb = SessionLocal()\nt = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == 'PURCHASE_REQUISITION').first()\nprint('Found:', t.ma_mau if t else 'NOT FOUND')\nprint('Ten mau:', t.ten_mau if t else '')\ndb.close()\n\""
+    },
+    "timestamp": "2026-06-10T02:00:57.047Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\" && python -c \"import app.routers.purchase_requisitions; print('OK')\""
+    },
+    "timestamp": "2026-06-10T02:01:02.955Z"
+  },
+  {
+    "name": "Read",
+    "input": {
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_requisitions.py",
+      "offset": 1,
+      "limit": 22
+    },
+    "timestamp": "2026-06-10T02:01:07.394Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_requisitions.py",
+      "old_string": "from fastapi import APIRouter, Depends, HTTPException, Query",
+      "new_string": "from fastapi import APIRouter, Depends, HTTPException, Query\nfrom fastapi.responses import HTMLResponse"
+    },
+    "timestamp": "2026-06-10T02:01:10.659Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\routers\\purchase_requisitions.py",
+      "old_string": "    from fastapi.responses import HTMLResponse\n\n    ymh = db.get(PurchaseRequisition, ymh_id)",
+      "new_string": "    ymh = db.get(PurchaseRequisition, ymh_id)"
+    },
+    "timestamp": "2026-06-10T02:01:15.792Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\" && python -c \"import app.routers.purchase_requisitions; print('OK')\""
+    },
+    "timestamp": "2026-06-10T02:01:21.950Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "\"\" | Out-File \"D:\\NAM_PHUONG_SOFTWARE\\.deploying\" -Encoding utf8; Start-Process powershell -Verb RunAs -ArgumentList \"-Command sc.exe stop NamPhuong-ERP; Start-Sleep 4; sc.exe start NamPhuong-ERP\" -Wait; Start-Sleep 12; Remove-Item \"D:\\NAM_PHUONG_SOFTWARE\\.deploying\" -ErrorAction SilentlyContinue; echo \"Done\""
+    },
+    "timestamp": "2026-06-10T02:01:27.349Z"
+  },
+  {
+    "name": "PowerShell",
+    "input": {
+      "command": "\"\" | Out-File \"D:\\NAM_PHUONG_SOFTWARE\\.deploying\" -Encoding utf8; Start-Process powershell -Verb RunAs -ArgumentList \"-Command sc.exe stop NamPhuong-ERP; Start-Sleep 4; sc.exe start NamPhuong-ERP\" -Wait; Start-Sleep 12; Remove-Item \"D:\\NAM_PHUONG_SOFTWARE\\.deploying\" -ErrorAction SilentlyContinue; echo \"Done\"",
+      "description": "Restart ERP service"
+    },
+    "timestamp": "2026-06-10T02:01:31.840Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8001/api/purchase-requisitions 2>&1 | head -1"
+    },
+    "timestamp": "2026-06-10T02:02:14.320Z"
+  },
+  {
+    "name": "Grep",
+    "input": {
+      "pattern": "PURCHASE_REQUISITION|logo_img|co-name|hdr",
+      "path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "output_mode": "content",
+      "-n": true,
+      "-C": 2
+    },
+    "timestamp": "2026-06-10T02:16:29.551Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "old_string": "  .hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }\n  .co-name { font-weight: bold; font-size: 13pt; color: #4A148C; }\n  .co-info { font-size: 8.5pt; line-height: 1.5; }\n  .mau { font-size: 8pt; text-align: right; color: #555; }",
+      "new_string": "  .hdr { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 2px solid #4A148C; margin-bottom: 10px; }\n  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }\n  .hdr-info { flex: 1; }\n  .co-name { font-weight: bold; font-size: 13pt; color: #4A148C; }\n  .co-info { font-size: 8.5pt; line-height: 1.5; }\n  .mau { font-size: 8pt; text-align: right; color: #555; min-width: 120px; }"
+    },
+    "timestamp": "2026-06-10T02:16:45.068Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "old_string": "  .divider { border: none; border-top: 2px solid #4A148C; margin: 6px 0 10px; }",
+      "new_string": "  .divider { display: none; }"
+    },
+    "timestamp": "2026-06-10T02:16:50.323Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "old_string": "<div class=\"hdr\">\n  <div>\n    <div class=\"co-name\">{{company_name}}</div>\n    <div class=\"co-info\">{{company_details}}</div>\n  </div>\n  <div class=\"mau\">Biểu mẫu nội bộ</div>\n</div>\n<hr class=\"divider\">",
+      "new_string": "<div class=\"hdr\">\n  <div class=\"logo\">{{logo_img}}</div>\n  <div class=\"hdr-info\">\n    <div class=\"co-name\">{{company_name}}</div>\n    <div class=\"co-info\">{{company_details}}</div>\n  </div>\n  <div class=\"mau\">Biểu mẫu nội bộ</div>\n</div>"
+    },
+    "timestamp": "2026-06-10T02:16:55.932Z"
+  },
+  {
+    "name": "Edit",
+    "input": {
+      "replace_all": false,
+      "file_path": "D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\\app\\seeds\\seed_templates.py",
+      "old_string": "            \"logo_img\": \"Logo img tag (không dùng trong template này)\",",
+      "new_string": "            \"logo_img\": \"Logo img tag của pháp nhân\","
+    },
+    "timestamp": "2026-06-10T02:17:00.449Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\" && python -m app.seeds.seed_templates 2>&1 | tail -3"
+    },
+    "timestamp": "2026-06-10T02:17:04.397Z"
+  },
+  {
+    "name": "Bash",
+    "input": {
+      "command": "cd \"D:\\NAM_PHUONG_SOFTWARE\\DU LIEU MPS\\erp-nam-phuong\\backend\" && python -c \"\nfrom app.database import SessionLocal\nfrom app.models.system import PrintTemplate\ndb = SessionLocal()\nt = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == 'PURCHASE_REQUISITION').first()\nhas_logo = '{{logo_img}}' in (t.html_content or '')\nprint('logo_img in template:', has_logo)\ndb.close()\n\""
+    },
+    "timestamp": "2026-06-10T02:17:10.301Z"
+  }
+]
