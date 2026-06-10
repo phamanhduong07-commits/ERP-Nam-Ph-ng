@@ -515,15 +515,12 @@ export default function ProductionQueuePage() {
         : '—',
     },
     {
-      title: 'Tên hàng / KH',
-      width: 155,
+      title: 'Mã KH',
+      width: 80,
       render: (_, r) => (
-        <Space direction="vertical" size={0}>
-          <Text style={{ fontSize: 11 }}>{r.ten_hang || '—'}</Text>
-          {r.ten_khach_hang && (
-            <Text type="secondary" style={{ fontSize: 10 }}>{r.ma_kh} · {r.ten_khach_hang}</Text>
-          )}
-        </Space>
+        <Tooltip title={r.ten_hang || undefined}>
+          <Text style={{ fontSize: 11 }}>{r.ma_kh || '—'}</Text>
+        </Tooltip>
       ),
     },
     {
