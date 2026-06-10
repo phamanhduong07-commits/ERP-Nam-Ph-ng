@@ -944,6 +944,43 @@ def sync_gia_ban(gr_id: int, db: Session = Depends(get_db), _: User = Depends(re
     return {"ok": True, "updated": updated}
 
 
+class GoodsReceiptUpdateIn(BaseModel):
+    ngay_nhap: Optional[date] = None
+    supplier_id: Optional[int] = None
+    ghi_chu: Optional[str] = None
+    so_xe: Optional[str] = None
+    hd_tong_kg: Optional[Decimal] = None
+
+
+@router.put("/goods-receipts/{gr_id}")
+def update_goods_receipt(
+    gr_id: int,
+    body: GoodsReceiptUpdateIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    gr = db.get(GoodsReceipt, gr_id)
+    if not gr:
+        raise HTTPException(404, "Không tìm thấy phiếu nhập")
+    if gr.trang_thai != "nhap":
+        raise HTTPException(400, "Chỉ sửa được phiếu ở trạng thái Nhập")
+    if body.ngay_nhap is not None:
+        gr.ngay_nhap = body.ngay_nhap
+    if body.supplier_id is not None:
+        if not db.get(Supplier, body.supplier_id):
+            raise HTTPException(404, "Không tìm thấy nhà cung cấp")
+        gr.supplier_id = body.supplier_id
+    if body.ghi_chu is not None:
+        gr.ghi_chu = body.ghi_chu
+    if body.so_xe is not None:
+        gr.so_xe = body.so_xe
+    if body.hd_tong_kg is not None:
+        gr.hd_tong_kg = body.hd_tong_kg
+    db.commit()
+    db.refresh(gr)
+    return _gr_to_dict(gr, db)
+
+
 @router.delete("/goods-receipts/{gr_id}")
 def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "ADMIN"))):
     gr = db.get(GoodsReceipt, gr_id)

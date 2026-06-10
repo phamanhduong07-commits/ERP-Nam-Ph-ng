@@ -757,6 +757,48 @@ def adjust_delivery_items(
     }
 
 
+class DeliveryOrderUpdateIn(BaseModel):
+    ngay_xuat: Optional[date] = None
+    dia_chi_giao: Optional[str] = None
+    nguoi_nhan: Optional[str] = None
+    xe_van_chuyen: Optional[str] = None
+    xe_id: Optional[int] = None
+    tai_xe_id: Optional[int] = None
+    lo_xe: Optional[str] = None
+    lo_xe_id: Optional[int] = None
+    lo_xe_id_2: Optional[int] = None
+    lo_xe_2: Optional[str] = None
+    so_seal: Optional[str] = None
+    gui_kem_theo: Optional[str] = None
+    don_gia_vc_id: Optional[int] = None
+    tien_van_chuyen: Optional[Decimal] = None
+    co_hang_ve: Optional[bool] = None
+    cau_duong: Optional[Decimal] = None
+    sua_chua: Optional[Decimal] = None
+    tien_com: Optional[Decimal] = None
+    phi_khac: Optional[Decimal] = None
+    ghi_chu: Optional[str] = None
+
+
+@router.put("/deliveries/{do_id}")
+def update_delivery_header(
+    do_id: int,
+    body: DeliveryOrderUpdateIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    do = db.get(DeliveryOrder, do_id)
+    if not do:
+        raise HTTPException(404, "Không tìm thấy phiếu giao hàng")
+    if do.trang_thai != "nhap":
+        raise HTTPException(400, "Chỉ sửa được phiếu ở trạng thái Nhập")
+    for field, val in body.model_dump(exclude_none=True).items():
+        setattr(do, field, val)
+    db.commit()
+    db.refresh(do)
+    return _do_to_dict(do, db)
+
+
 @router.delete("/deliveries/{do_id}")
 def delete_delivery(do_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "ADMIN"))):
     do = db.get(DeliveryOrder, do_id)

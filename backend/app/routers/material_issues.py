@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.deps import get_current_user, require_roles
@@ -324,6 +325,35 @@ def create_material_issue(
             items=journal_lines_mi,
         )
 
+    db.commit()
+    db.refresh(mi)
+    return _mi_to_dict(mi, db)
+
+
+class MaterialIssueUpdateIn(BaseModel):
+    ngay_xuat: Optional[date] = None
+    ca: Optional[str] = None
+    ghi_chu: Optional[str] = None
+
+
+@router.put("/material-issues/{mi_id}")
+def update_material_issue(
+    mi_id: int,
+    body: MaterialIssueUpdateIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    mi = db.get(MaterialIssue, mi_id)
+    if not mi:
+        raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
+    if mi.trang_thai != "nhap":
+        raise HTTPException(400, "Chỉ sửa được phiếu ở trạng thái Nhập")
+    if body.ngay_xuat is not None:
+        mi.ngay_xuat = body.ngay_xuat
+    if body.ca is not None:
+        mi.ca = body.ca
+    if body.ghi_chu is not None:
+        mi.ghi_chu = body.ghi_chu
     db.commit()
     db.refresh(mi)
     return _mi_to_dict(mi, db)
