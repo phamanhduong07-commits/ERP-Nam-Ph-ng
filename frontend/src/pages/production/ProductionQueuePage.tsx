@@ -160,9 +160,6 @@ function LayerEditBlock({ layer, orderId, itemId, onSaved }: LayerEditBlockProps
         borderRadius: 4, padding: '1px 5px', cursor: 'pointer',
         fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
       }}>
-        <span style={{ fontWeight: 700, color: layer.isSong ? '#1677ff' : '#389e0d' }}>
-          {layer.lbl}
-        </span>
         {layer.ma ? (
           <>
             <span style={{ color: '#262626', marginLeft: 3 }}>{layer.ma}</span>
