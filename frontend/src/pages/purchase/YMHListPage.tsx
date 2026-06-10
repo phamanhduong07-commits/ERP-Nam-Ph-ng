@@ -21,14 +21,16 @@ import { warehouseApi } from '../../api/warehouse'
 import { paperMaterialsFullApi } from '../../api/paperMaterials'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { suppliersApi } from '../../api/suppliers'
+import { productsApi } from '../../api/products'
 import EmptyState from "../../components/EmptyState"
 
 const { RangePicker } = DatePicker
 const { Text, Title } = Typography
 
 type FormItem = {
-  loai_vat_tu?: 'giay' | 'khac' | 'tu_do'
+  loai_vat_tu?: 'giay' | 'khac' | 'tu_do' | 'ban_in' | 'khuon_be'
   mat_id?: number
+  san_pham_id?: number
   ten_hang?: string
   so_luong?: number
   dvt?: string
@@ -109,6 +111,13 @@ export default function YMHListPage() {
     staleTime: 300_000,
   })
   const otherMats = otherPage?.items ?? []
+
+  const { data: productsPage } = useQuery({
+    queryKey: ['products-for-ymh'],
+    queryFn: () => productsApi.list({ page_size: 2000 }).then(r => r.data),
+    staleTime: 300_000,
+  })
+  const products = productsPage?.items ?? []
 
   const filteredXuongList = useMemo(() => {
     if (!filterPhapNhan) return phanXuongList
@@ -294,6 +303,8 @@ export default function YMHListPage() {
       don_gia_du_kien: Number(it.don_gia_du_kien || 0),
       ngay_can: it.ngay_can ? dayjs(it.ngay_can).format('YYYY-MM-DD') : null,
       ghi_chu: it.ghi_chu ?? null,
+      loai_item: (it.loai_vat_tu === 'ban_in' || it.loai_vat_tu === 'khuon_be') ? it.loai_vat_tu : 'nvl',
+      san_pham_id: (it.loai_vat_tu === 'ban_in' || it.loai_vat_tu === 'khuon_be') ? (it.san_pham_id ?? null) : null,
     }))
     return {
       ngay_yeu_cau: dayjs(values.ngay_yeu_cau as string).format('YYYY-MM-DD'),
@@ -709,11 +720,13 @@ export default function YMHListPage() {
                               { value: 'giay', label: 'Giấy cuộn' },
                               { value: 'khac', label: 'NVL khác' },
                               { value: 'tu_do', label: 'Tự do' },
+                              { value: 'ban_in', label: 'Bản in' },
+                              { value: 'khuon_be', label: 'Khuôn bế' },
                             ]}
                             onChange={() => {
                               const items: FormItem[] = form.getFieldValue('items') || []
                               const updated = [...items]
-                              updated[name] = { ...updated[name], mat_id: undefined, ten_hang: '', dvt: 'Kg', don_gia_du_kien: 0 }
+                              updated[name] = { ...updated[name], mat_id: undefined, san_pham_id: undefined, ten_hang: '', dvt: 'Cái', don_gia_du_kien: 0 }
                               form.setFieldValue('items', updated)
                             }}
                           />
@@ -757,6 +770,28 @@ export default function YMHListPage() {
                                     onClear={() => clearMaterialSelect(name)}
                                   />
                                 </Form.Item>
+                              )
+                            }
+                            if (loai === 'ban_in' || loai === 'khuon_be') {
+                              const label = loai === 'ban_in' ? 'Bản in' : 'Khuôn bế'
+                              return (
+                                <Space direction="vertical" style={{ width: '100%' }}>
+                                  <Form.Item name={[name, 'san_pham_id']} label="Mã hàng" rules={[{ required: true, message: `Chọn mã hàng cho ${label}` }]} style={{ marginBottom: 4 }}>
+                                    <Select
+                                      allowClear
+                                      showSearch
+                                      optionFilterProp="label"
+                                      placeholder="Chọn mã hàng sản phẩm"
+                                      options={products.filter(p => p.trang_thai).map(p => ({
+                                        value: p.id,
+                                        label: `${p.ma_hang ?? p.ma_amis} - ${p.ten_hang}`,
+                                      }))}
+                                    />
+                                  </Form.Item>
+                                  <Form.Item name={[name, 'ten_hang']} label={label} rules={[{ required: true, message: `Nhập mô tả ${label}` }]} style={{ marginBottom: 4 }}>
+                                    <Input placeholder={`Mô tả ${label} cần đặt`} />
+                                  </Form.Item>
+                                </Space>
                               )
                             }
                             return (
