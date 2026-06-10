@@ -651,7 +651,7 @@ export default function PrintTemplatePage() {
                 setIsNewMode(false)
                 setEditModal(record)
                 form.setFieldsValue(record)
-                setSelectedPhapNhanId(record.phap_nhan_id ?? phapNhans[0]?.id ?? null)
+                setSelectedPhapNhanId(record.phap_nhan_id ?? null)
                 const metaAny = record.variables_meta as Record<string, unknown> | undefined
                 const savedCols = metaAny?.columns as DocColumn[] | undefined
                 const savedEasyCfg: EasyConfig | null = (() => { try { return metaAny?.easy_config ? JSON.parse(metaAny.easy_config as string) : null } catch { return null } })()
@@ -669,7 +669,7 @@ export default function PrintTemplatePage() {
                 const copyRecord = { ...record, ten_mau: `${record.ten_mau} (Copy)` }
                 setEditModal(copyRecord)
                 form.setFieldsValue(copyRecord)
-                setSelectedPhapNhanId(record.phap_nhan_id ?? phapNhans[0]?.id ?? null)
+                setSelectedPhapNhanId(record.phap_nhan_id ?? null)
                 const metaAny = record.variables_meta as Record<string, unknown> | undefined
                 const savedCols = metaAny?.columns as DocColumn[] | undefined
                 const savedEasyCfg: EasyConfig | null = (() => { try { return metaAny?.easy_config ? JSON.parse(metaAny.easy_config as string) : null } catch { return null } })()
