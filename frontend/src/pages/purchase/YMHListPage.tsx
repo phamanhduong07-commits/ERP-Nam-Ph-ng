@@ -794,7 +794,7 @@ export default function YMHListPage() {
                                     style={{ width: '100%' }}
                                     onChange={(v: number | undefined) => { setProductCustomerFilter(v); setProductSearch('') }}
                                     onClear={() => { setProductCustomerFilter(undefined); setProductSearch('') }}
-                                    options={customersAll.filter(c => c.trang_thai).map(c => ({
+                                    options={customersAll.map(c => ({
                                       value: c.id,
                                       label: `${c.ma_kh} - ${c.ten_viet_tat}`,
                                     }))}
