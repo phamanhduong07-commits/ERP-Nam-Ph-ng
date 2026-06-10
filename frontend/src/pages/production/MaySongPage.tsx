@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Col, DatePicker, Divider, Form, Input, InputNumber,
+  Alert, Button, Col, DatePicker, Divider, Form, Input, InputNumber,
   message, Modal, Popconfirm, Progress, Row, Segmented, Select, Space, Spin, Table, Tabs, Tag,
   TimePicker, Tooltip, Typography,
 } from 'antd'
-import { CaretRightOutlined, CopyOutlined, PauseOutlined, PrinterOutlined, ReloadOutlined } from '@ant-design/icons'
+import { CaretRightOutlined, CopyOutlined, PauseOutlined, PrinterOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
@@ -14,7 +14,7 @@ import {
 import type {
   ProductionOrder, ProductionOrderItem, ProductionOrderListItem,
   PhieuNhapPhoiSong, PhieuNhapPhoiSongListItem, PhieuNhapPhoiSongPayload,
-  PauseOrderPayload, ResumeOrderPayload,
+  PauseOrderPayload, ResumeOrderPayload, NgungPhoiSongResponse,
 } from '../../api/productionOrders'
 import { productionPlansApi } from '../../api/productionPlans'
 import type { PlanLineResponse } from '../../api/productionPlans'
@@ -456,6 +456,212 @@ function ModalHoanThanh({ orderId, order, orderLoading, planLine, submitting, on
   )
 }
 
+// ─── Modal: Ngưng & Tạo Lệnh Bù ─────────────────────────────────────────────
+interface ModalNgungProps {
+  orderId: number | null
+  order: ProductionOrder | null
+  orderLoading: boolean
+  planLine: PlanLineResponse | null
+  submitting: boolean
+  onClose: () => void
+  onSubmit: (orderId: number, data: PhieuNhapPhoiSongPayload) => void
+}
+function ModalNgungPhoiSong({ orderId, order, orderLoading, planLine, submitting, onClose, onSubmit }: ModalNgungProps) {
+  const [form] = Form.useForm()
+  const slTTWatch = Form.useWatch<number>('so_luong_thuc_te', form)
+  return (
+    <Modal
+      title={`Ngưng & Tạo Lệnh Bù — ${order?.so_lenh ?? '...'}`}
+      open={orderId !== null}
+      onCancel={() => { onClose(); form.resetFields() }}
+      onOk={() => form.submit()}
+      okText={<><StopOutlined /> Ngưng & Tạo bù</>}
+      okButtonProps={{ danger: true }}
+      confirmLoading={submitting}
+      width={500}
+      destroyOnHidden
+    >
+      {orderLoading ? (
+        <div style={{ textAlign: 'center', padding: 32 }}><Spin size="large" /></div>
+      ) : order ? (
+        <>
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message="Lệnh SX bù sẽ được tạo tự động cho phần còn lại"
+            description={`Lệnh gốc sẽ kết thúc. Một lệnh mới (${order.so_lenh}-B1) sẽ được tạo với số lượng còn thiếu, trạng thái Mới.`}
+          />
+          <div style={{ marginBottom: 14, padding: '8px 12px', background: '#fff7e6', border: '1px solid #ffd591', borderRadius: 6 }}>
+            <Text strong style={{ fontSize: 14 }}>{order.items[0]?.ten_hang ?? '—'}</Text>
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                KH: {order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0).toLocaleString()} thùng
+                {planLine?.kho1 ? ` | Khổ: ${planLine.kho1} cm` : ''}
+                {planLine?.dai_tt ? ` | Cắt: ${Number(planLine.dai_tt) * (planLine.so_lan_cat ?? 1)} cm` : ''}
+              </Text>
+            </div>
+          </div>
+          <Form form={form} layout="vertical" size="middle"
+            onFinish={(values) => {
+              if (!order || !orderId) return
+              const oi = order.items[0]
+              const khoCm = planLine?.kho1 ?? (getKhoMm(oi) != null ? getKhoMm(oi)! / 10 : null)
+              const catCm = planLine?.dai_tt ?? (getCatMm(oi) != null ? getCatMm(oi)! / 10 : null)
+              const soDao = planLine?.so_dao ?? null
+              const slTT = values.so_luong_thuc_te as number
+              const soTam = (values.so_tam_thuc_te as number | null) ?? (soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi, slTT) ?? null))
+              onSubmit(orderId, {
+                ngay: (values.ngay as dayjs.Dayjs)?.format('YYYY-MM-DD') ?? dayjs().format('YYYY-MM-DD'),
+                ca: values.ca as string,
+                ghi_chu: (values.ghi_chu as string | null) ?? null,
+                gio_bat_dau: values.gio_bat_dau ? (values.gio_bat_dau as dayjs.Dayjs).format('HH:mm') : null,
+                gio_ket_thuc: values.gio_ket_thuc ? (values.gio_ket_thuc as dayjs.Dayjs).format('HH:mm') : null,
+                items: order.items.map((orderItem, idx) => ({
+                  production_order_item_id: orderItem.id,
+                  so_luong_ke_hoach: Number(orderItem.so_luong_ke_hoach),
+                  so_luong_thuc_te: idx === 0 ? slTT : 0,
+                  so_luong_loi: idx === 0 ? ((values.so_luong_loi as number | null) ?? null) : null,
+                  chieu_kho: idx === 0 ? khoCm : null,
+                  chieu_cat: idx === 0 ? catCm : null,
+                  so_tam: idx === 0 ? soTam : null,
+                })),
+              })
+            }}
+          >
+            <Row gutter={10}>
+              <Col span={6}>
+                <Form.Item name="ngay" label="Ngày" initialValue={dayjs()}>
+                  <DatePicker style={{ width: '100%' }} format="DD/MM" />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="ca" label="Ca" initialValue={detectCa()} rules={[{ required: true, message: 'Chọn ca' }]}>
+                  <Select
+                    options={['Ca 1', 'Ca 2', 'Ca 3', 'Ca đêm'].map(c => ({ value: c, label: c }))}
+                    onChange={(v: string) => form.setFieldValue('gio_bat_dau', detectGioBD(v))}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="gio_bat_dau" label="Giờ BĐ" initialValue={detectGioBD(detectCa())}>
+                  <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item name="gio_ket_thuc" label="Giờ KT" initialValue={dayjs()}>
+                  <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+            {(() => {
+              const slKH  = order.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
+              const oi0   = order.items[0]
+              const soDao = planLine?.so_dao ?? null
+              const calcTam = (slTT: number) =>
+                soDao != null ? Math.ceil(slTT / soDao) : (calcSoTam(oi0, slTT) ?? 0)
+              const initSlTT = Math.round(slKH * 0.5)
+              const initTam  = calcTam(initSlTT)
+              const initCon  = oi0 ? calcSoCon(initTam, oi0, soDao) : null
+              const slTT  = slTTWatch ?? 0
+              const pct   = slKH > 0 ? Math.min(100, Math.round((slTT / slKH) * 100)) : 0
+              const conLai = Math.max(0, slKH - slTT)
+              return (
+                <>
+                  <Row gutter={10} align="bottom">
+                    <Col span={8}>
+                      <Form.Item name="so_luong_thuc_te" label="Số thùng đạt"
+                        rules={[
+                          { required: true, message: 'Nhập SL thực tế' },
+                          { validator: (_, v) => v > 0 ? Promise.resolve() : Promise.reject('Phải > 0') },
+                          { validator: (_, v) => v < slKH ? Promise.resolve() : Promise.reject('Phải < KH — dùng Hoàn thành') },
+                        ]}
+                        initialValue={initSlTT}
+                        style={{ marginBottom: 4 }}
+                      >
+                        <InputNumber
+                          min={1} max={slKH - 1} style={{ width: '100%' }} size="large"
+                          onChange={(v) => {
+                            const slTTNew = Number(v ?? 0)
+                            if (slTTNew > 0 && oi0) {
+                              const tam = calcTam(slTTNew)
+                              form.setFieldValue('so_tam_thuc_te', tam)
+                              form.setFieldValue('so_con_thuc_te', calcSoCon(tam, oi0, soDao))
+                            }
+                          }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item name="so_tam_thuc_te" label="Số phôi"
+                        initialValue={initTam || null}
+                        style={{ marginBottom: 4 }}
+                      >
+                        <InputNumber
+                          min={0} style={{ width: '100%' }} size="large"
+                          onChange={(v) => {
+                            const soTamNew = Number(v ?? 0)
+                            if (soTamNew > 0 && oi0) {
+                              form.setFieldValue('so_luong_thuc_te', tamToThung(soTamNew, oi0, soDao))
+                              form.setFieldValue('so_con_thuc_te', calcSoCon(soTamNew, oi0, soDao))
+                            }
+                          }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item name="so_con_thuc_te" label="Số con"
+                        initialValue={initCon || null}
+                        style={{ marginBottom: 4 }}
+                      >
+                        <InputNumber
+                          min={0} style={{ width: '100%' }} size="large"
+                          onChange={(v) => {
+                            const soConNew = Number(v ?? 0)
+                            if (soConNew > 0 && oi0) {
+                              const thung = conToThung(soConNew, oi0, soDao)
+                              const tam   = calcTam(thung)
+                              form.setFieldValue('so_luong_thuc_te', thung)
+                              form.setFieldValue('so_tam_thuc_te', tam)
+                            }
+                          }}
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  {slKH > 0 && slTT > 0 && (
+                    <>
+                      <Progress percent={pct} size="small" style={{ marginBottom: 4 }}
+                        strokeColor={pct >= 100 ? '#52c41a' : '#fa8c16'}
+                        format={p => `${p}% (${slTT.toLocaleString()}/${slKH.toLocaleString()})`}
+                      />
+                      {conLai > 0 && (
+                        <div style={{ marginBottom: 8, padding: '4px 10px', background: '#fff1f0', border: '1px solid #ffa39e', borderRadius: 4, fontSize: 12 }}>
+                          <Text type="danger">Lệnh bù sẽ nhận: <strong>{conLai.toLocaleString()} thùng</strong> còn lại</Text>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )
+            })()}
+            <Row gutter={10}>
+              <Col span={12}>
+                <Form.Item name="so_luong_loi" label="Phôi lỗi (nếu có)">
+                  <InputNumber min={0} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item name="ghi_chu" label="Ghi chú" style={{ marginBottom: 0 }}>
+              <Input.TextArea rows={2} />
+            </Form.Item>
+          </Form>
+        </>
+      ) : null}
+    </Modal>
+  )
+}
+
 // ─── Modal: Kiểm tra & In tem ─────────────────────────────────────────────────
 interface ModalInTemProps {
   state: InTemState | null
@@ -670,6 +876,7 @@ export default function MaySongPage() {
   const [searchHang, setSearchHang]     = useState('')
   const [filterStatus, setFilterStatus]  = useState<string>('all')
   const [hoanthanhId, setHoanthanhId]   = useState<number | null>(null)
+  const [ngungId, setNgungId]           = useState<number | null>(null)
   const [pauseTarget, setPauseTarget]   = useState<StatusTarget | null>(null)
   const [inTemState, setInTemState]     = useState<InTemState | null>(null)
   const [inTemLoading, setInTemLoading] = useState(false)
@@ -761,6 +968,15 @@ export default function MaySongPage() {
     ? (khDetail?.lines.find(l => l.so_lenh === hoanthanhOrder.so_lenh) ?? null)
     : null
 
+  const { data: ngungOrder, isLoading: ngungOrderLoading } = useQuery({
+    queryKey: ['may-song-order', ngungId],
+    queryFn: () => productionOrdersApi.get(ngungId!).then(r => r.data),
+    enabled: ngungId !== null,
+  })
+  const ngungPlanLine: PlanLineResponse | null = ngungOrder
+    ? (khDetail?.lines.find(l => l.so_lenh === ngungOrder.so_lenh) ?? null)
+    : null
+
   const { data: allPhieu = [], isLoading: phieuLoading, refetch: refetchPhieu } = useQuery({
     queryKey: ['all-phieu', histTuNgay, histDenNgay],
     queryFn: () =>
@@ -827,6 +1043,19 @@ export default function MaySongPage() {
       setHoanthanhId(null)
     },
     onError: () => message.error('Lỗi khi lưu phiếu, vui lòng thử lại'),
+  })
+
+  const ngungMut = useMutation({
+    mutationFn: (vars: { orderId: number; data: PhieuNhapPhoiSongPayload }) =>
+      productionOrdersApi.ngungPhoiSong(vars.orderId, vars.data).then(r => r.data as NgungPhoiSongResponse),
+    onSuccess: (res) => {
+      const soLenhBu = res.lsx_bu.so_lenh
+      const conLai = res.lsx_bu.items.reduce((s, i) => s + Number(i.so_luong_ke_hoach), 0)
+      message.success(`Đã ngưng — lệnh bù ${soLenhBu} (${conLai.toLocaleString()} thùng) đã tạo!`, 5)
+      invalidateList()
+      setNgungId(null)
+    },
+    onError: () => message.error('Lỗi khi ngưng, vui lòng thử lại'),
   })
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
@@ -1103,6 +1332,12 @@ export default function MaySongPage() {
               <Button size="small" type="primary"
                 onClick={() => handleComplete(r)}>
                 Hoàn thành
+              </Button>
+            )}
+            {(st === 'dang_chay' || st === 'tam_dung') && (
+              <Button size="small" danger icon={<StopOutlined />}
+                onClick={() => setNgungId(r.id)}>
+                Ngưng & Tạo bù
               </Button>
             )}
             <Button
@@ -1651,6 +1886,16 @@ export default function MaySongPage() {
         submitting={createPhieu.isPending || completeMut.isPending}
         onClose={() => setHoanthanhId(null)}
         onSubmit={(orderId, data) => createPhieu.mutate({ orderId, data })}
+      />
+
+      <ModalNgungPhoiSong
+        orderId={ngungId}
+        order={ngungOrder ?? null}
+        orderLoading={ngungOrderLoading}
+        planLine={ngungPlanLine}
+        submitting={ngungMut.isPending}
+        onClose={() => setNgungId(null)}
+        onSubmit={(orderId, data) => ngungMut.mutate({ orderId, data })}
       />
 
       <ModalInTem

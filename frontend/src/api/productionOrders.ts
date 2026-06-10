@@ -258,6 +258,12 @@ export interface PhieuNhapPhoiSongListItem extends PhieuNhapPhoiSong {
   tong_so_luong_loi: number
 }
 
+export interface NgungPhoiSongResponse {
+  lsx_goc: ProductionOrder
+  lsx_bu: ProductionOrder
+  phieu_nhap: PhieuNhapPhoiSong
+}
+
 export const productionOrdersApi = {
   list: (params?: {
     search?: string
@@ -307,6 +313,9 @@ export const productionOrdersApi = {
 
   createPhieu: (orderId: number, data: PhieuNhapPhoiSongPayload) =>
     client.post<PhieuNhapPhoiSong>(`/production-orders/${orderId}/phieu-nhap-phoi-song`, data),
+
+  ngungPhoiSong: (orderId: number, data: PhieuNhapPhoiSongPayload) =>
+    client.post<NgungPhoiSongResponse>(`/production-orders/${orderId}/ngung-phoi-song`, data),
 
   listPhieu: (orderId: number) =>
     client.get<PhieuNhapPhoiSong[]>(`/production-orders/${orderId}/phieu-nhap-phoi-song`),

@@ -1002,6 +1002,186 @@ def create_phieu_nhap_phoi_song(
     return _phieu_to_dict(phieu)
 
 
+def _generate_so_lenh_bu(db: Session, so_lenh_goc: str) -> str:
+    """Tạo số lệnh bù: {so_lenh_goc}-B1, -B2, ..."""
+    for i in range(1, 100):
+        candidate = f"{so_lenh_goc}-B{i}"
+        exists = db.query(ProductionOrder).filter(ProductionOrder.so_lenh == candidate).first()
+        if not exists:
+            return candidate
+    raise HTTPException(status_code=400, detail="Không thể tạo số lệnh bù (quá nhiều lần bù)")
+
+
+@router.post("/{order_id:int}/ngung-phoi-song", status_code=201)
+def ngung_phoi_song_tao_lenh_bu(
+    order_id: int,
+    data: PhieuBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ngưng SX phôi sóng sớm → tạo PhieuNhapPhoiSong cho thực tế + LSX bù cho phần còn lại."""
+    order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).with_for_update().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lệnh sản xuất")
+    if order.trang_thai not in ("dang_chay", "tam_dung"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Lệnh phải ở trạng thái 'dang_chay' hoặc 'tam_dung', hiện tại: '{order.trang_thai}'"
+        )
+
+    tong_ke_hoach = sum(Decimal(str(i.so_luong_ke_hoach)) for i in order.items)
+    tong_thuc_te = sum(Decimal(str(it.so_luong_thuc_te or 0)) for it in data.items)
+
+    if tong_thuc_te <= 0:
+        raise HTTPException(status_code=400, detail="Phải nhập số lượng thực tế (> 0) trước khi ngưng")
+    if tong_thuc_te >= tong_ke_hoach:
+        raise HTTPException(
+            status_code=400,
+            detail="Số lượng đạt đã bằng/vượt kế hoạch — hãy dùng Hoàn thành thay vì Ngưng"
+        )
+
+    # Resolve kho phôi
+    warehouse_id = data.warehouse_id
+    if not warehouse_id:
+        src_wh = _get_phoi_source_warehouse(
+            db, phan_xuong_id=order.phan_xuong_id, phap_nhan_id=order.phap_nhan_id
+        )
+        warehouse_id = src_wh.id if src_wh else None
+
+    # 1. Tạo phiếu nhập phôi sóng (số lượng thực tế)
+    so_phieu = _generate_so_phieu(db)
+    phieu = PhieuNhapPhoiSong(
+        so_phieu=so_phieu,
+        production_order_id=order_id,
+        loai=None,
+        ngay=data.ngay,
+        ca=data.ca,
+        ghi_chu=data.ghi_chu,
+        gio_bat_dau=data.gio_bat_dau,
+        gio_ket_thuc=data.gio_ket_thuc,
+        warehouse_id=warehouse_id,
+        created_by=current_user.id,
+    )
+    item_map = {it.production_order_item_id: it for it in data.items}
+    for it in data.items:
+        phieu.items.append(PhieuNhapPhoiSongItem(
+            production_order_item_id=it.production_order_item_id,
+            so_luong_ke_hoach=it.so_luong_ke_hoach,
+            so_luong_thuc_te=it.so_luong_thuc_te,
+            so_luong_loi=it.so_luong_loi,
+            trang_thai_loi='da_nhap_kho_ao' if it.so_luong_loi and it.so_luong_loi > 0 else None,
+            chieu_kho=it.chieu_kho,
+            chieu_cat=it.chieu_cat,
+            so_tam=it.so_tam,
+            ghi_chu=it.ghi_chu,
+        ))
+    db.add(phieu)
+
+    # 2. Tạo lệnh SX bù cho phần còn lại
+    so_lenh_bu = _generate_so_lenh_bu(db, order.so_lenh)
+    lenh_bu = ProductionOrder(
+        so_lenh=so_lenh_bu,
+        ngay_lenh=date.today(),
+        sales_order_id=order.sales_order_id,
+        trang_thai="moi",
+        ngay_bat_dau_ke_hoach=order.ngay_bat_dau_ke_hoach,
+        ngay_hoan_thanh_ke_hoach=order.ngay_hoan_thanh_ke_hoach,
+        ghi_chu=order.ghi_chu,
+        so_po_kh=order.so_po_kh,
+        don_gia_noi_bo=order.don_gia_noi_bo,
+        tan_dung=order.tan_dung,
+        phan_xuong_id=order.phan_xuong_id,
+        phap_nhan_id=order.phap_nhan_id,
+        kho_sx_id=order.kho_sx_id,
+        phoi_phan_xuong_id=order.phoi_phan_xuong_id,
+        nv_theo_doi_id=order.nv_theo_doi_id,
+        phieu_goc_id=order.id,
+        created_by=current_user.id,
+    )
+    for orig_item in order.items:
+        tt_item = item_map.get(orig_item.id)
+        tt = Decimal(str(tt_item.so_luong_thuc_te or 0)) if tt_item else Decimal("0")
+        con_lai = Decimal(str(orig_item.so_luong_ke_hoach)) - tt
+        if con_lai <= 0:
+            continue
+        lenh_bu.items.append(ProductionOrderItem(
+            sales_order_item_id=orig_item.sales_order_item_id,
+            product_id=orig_item.product_id,
+            ten_hang=orig_item.ten_hang,
+            so_luong_ke_hoach=con_lai,
+            so_luong_hoan_thanh=Decimal("0"),
+            dvt=orig_item.dvt,
+            ngay_giao_hang=orig_item.ngay_giao_hang,
+            ghi_chu=orig_item.ghi_chu,
+            loai_thung=orig_item.loai_thung,
+            dai=orig_item.dai, rong=orig_item.rong, cao=orig_item.cao,
+            so_lop=orig_item.so_lop,
+            to_hop_song=orig_item.to_hop_song,
+            mat=orig_item.mat, mat_dl=orig_item.mat_dl,
+            song_1=orig_item.song_1, song_1_dl=orig_item.song_1_dl,
+            mat_1=orig_item.mat_1, mat_1_dl=orig_item.mat_1_dl,
+            song_2=orig_item.song_2, song_2_dl=orig_item.song_2_dl,
+            mat_2=orig_item.mat_2, mat_2_dl=orig_item.mat_2_dl,
+            song_3=orig_item.song_3, song_3_dl=orig_item.song_3_dl,
+            mat_3=orig_item.mat_3, mat_3_dl=orig_item.mat_3_dl,
+            loai_in=orig_item.loai_in, so_mau=orig_item.so_mau,
+            loai_lan=orig_item.loai_lan, c_tham=orig_item.c_tham, can_man=orig_item.can_man,
+            kho_tt=orig_item.kho_tt, dai_tt=orig_item.dai_tt,
+            so_lan_cat=orig_item.so_lan_cat, be_so_con=orig_item.be_so_con,
+            qccl=orig_item.qccl, dien_tich=orig_item.dien_tich,
+            gia_ban_muc_tieu=orig_item.gia_ban_muc_tieu,
+            mua_phoi_ngoai=orig_item.mua_phoi_ngoai,
+        ))
+    db.add(lenh_bu)
+
+    # 3. Đánh dấu lệnh gốc hoàn thành
+    order.trang_thai = "hoan_thanh"
+    order.ngay_hoan_thanh_thuc_te = data.ngay
+    _sync_so_trang_thai(db, order)
+
+    db.commit()
+    db.refresh(phieu)
+    db.refresh(lenh_bu)
+
+    # Auto-create DefectRecord
+    for it in phieu.items:
+        if it.so_luong_loi and it.so_luong_loi > 0:
+            auto_defect_record(
+                db, ref_id=it.id, ref_type="phieu_nhap_phoi_song_item",
+                khau="cd1", so_luong=it.so_luong_loi, created_by=current_user.id,
+            )
+    db.commit()
+
+    # Cập nhật tồn kho phôi
+    if warehouse_id:
+        from app.services.inventory_service import get_or_create_balance, nhap_balance, log_tx
+        items_db = db.query(PhieuNhapPhoiSongItem).filter(
+            PhieuNhapPhoiSongItem.phieu_id == phieu.id
+        ).all()
+        for it in items_db:
+            sl_nhap = Decimal(str(it.so_tam or 0))
+            if sl_nhap <= 0:
+                continue
+            poi = db.get(ProductionOrderItem, it.production_order_item_id)
+            ten_hang = (poi.ten_hang if poi else None) or "Phôi sóng"
+            don_gia = Decimal("0")
+            if poi and poi.gia_ban_muc_tieu and poi.gia_ban_muc_tieu > 0:
+                net_boxes = Decimal(str(it.so_luong_thuc_te or 0)) - Decimal(str(it.so_luong_loi or 0))
+                if net_boxes > 0:
+                    don_gia = (poi.gia_ban_muc_tieu * net_boxes) / sl_nhap
+            balance = get_or_create_balance(db, warehouse_id, ten_hang=ten_hang, don_vi="Tấm")
+            nhap_balance(balance, sl_nhap, don_gia)
+            log_tx(db, warehouse_id, "NHAP_PHOI", sl_nhap, don_gia,
+                   balance.ton_luong, "phieu_nhap_phoi_song", phieu.id, current_user.id)
+        db.commit()
+
+    return {
+        "lsx_goc": _build_response(_load_order(order_id, db), db),
+        "lsx_bu": _build_response(_load_order(lenh_bu.id, db), db),
+        "phieu_nhap": _phieu_to_dict(phieu),
+    }
+
+
 @router.get("/phieu-nhap-phoi-song")
 def list_all_phieu_nhap_phoi_song(
     tu_ngay: date | None = None,
