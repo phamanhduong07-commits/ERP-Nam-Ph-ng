@@ -965,8 +965,14 @@ export default function ProductionQueuePage() {
             </Tooltip>
           )}
           {r.trang_thai === 'cho' && (
-            <Tooltip title="Xóa khỏi hàng chờ">
-              <Popconfirm title="Xóa dòng này?" onConfirm={() => deleteMut.mutate({ planId: r.plan_id, lineId: r.id })} okText="Xóa" okButtonProps={{ danger: true }}>
+            <Tooltip title={r.so_ke_hoach === POOL_PLAN_SO ? 'Xóa khỏi hàng chờ' : 'Gỡ khỏi KH → về hàng chờ'}>
+              <Popconfirm
+                title={r.so_ke_hoach === POOL_PLAN_SO ? 'Xóa khỏi hàng chờ?' : 'Gỡ khỏi kế hoạch?'}
+                description={r.so_ke_hoach !== POOL_PLAN_SO ? 'Lệnh sẽ về hàng chờ, không bị xóa.' : undefined}
+                onConfirm={() => deleteMut.mutate({ planId: r.plan_id, lineId: r.id })}
+                okText={r.so_ke_hoach === POOL_PLAN_SO ? 'Xóa' : 'Gỡ'}
+                okButtonProps={{ danger: true }}
+              >
                 <Button size="small" danger icon={<DeleteOutlined />} />
               </Popconfirm>
             </Tooltip>
