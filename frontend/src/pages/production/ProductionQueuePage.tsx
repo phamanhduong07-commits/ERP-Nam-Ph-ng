@@ -123,8 +123,9 @@ function LayerEditBlock({ layer, orderId, itemId, onSaved }: LayerEditBlockProps
   })
 
   const handleOpenChange = (v: boolean) => {
-    if (v) { setMaVal(layer.ma ?? ''); setDlVal(layer.dl) }
-    setOpen(v)
+    if (!v) return  // chỉ cho mở, không tự đóng khi click ra ngoài
+    setMaVal(layer.ma ?? ''); setDlVal(layer.dl)
+    setOpen(true)
   }
 
   const popContent = (
