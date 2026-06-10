@@ -495,14 +495,24 @@ export default function PrintTemplatePage() {
       { stt: 2, ten_hang: 'Phôi sóng BC 5 lớp', so_luong: '500', don_gia: '12,000', thanh_tien: '6,000,000', ma_sp: 'SP002', kich_thuoc: '100x120', dvt: 'm2', ma_amis: 'NP-002', so_lop: '5', to_hop_song: 'BC', gia_ban: '12,000', ghi_chu: '', cau_truc: 'LB/98B/98/98C/LA', qccl: '20.2+50+20.2' },
     ]
 
+    const selectedCols: DocColumn[] = easyConfig.selectedColumns || []
+    const theadHtml = selectedCols.length
+      ? `<thead><tr>${selectedCols.map((col: DocColumn) => {
+          const isNumeric = ['so_luong', 'don_gia', 'thanh_tien', 'gia_ban'].includes(col.key)
+          return `<th style="border:1px solid #ddd;padding:8px;background:${easyConfig.headerColor};color:#fff;text-align:${isNumeric ? 'right' : 'left'}">${col.label}</th>`
+        }).join('')}</tr></thead>`
+      : ''
     const bodyRows = mockItems.map(item => {
-      const tds = (easyConfig.selectedColumns || []).map((col: DocColumn) => {
+      const tds = selectedCols.map((col: DocColumn) => {
         const val = item[col.key as keyof typeof item] || '...'
         const isNumeric = ['so_luong', 'don_gia', 'thanh_tien', 'gia_ban'].includes(col.key)
-        return `<td style="border:1px solid #ddd; padding:8px; text-align:${isNumeric ? 'right' : 'left'}">${val}</td>`
+        return `<td style="border:1px solid #ddd;padding:8px;text-align:${isNumeric ? 'right' : 'left'}">${val}</td>`
       }).join('')
       return `<tr>${tds}</tr>`
     }).join('')
+    const bodyHtml = selectedCols.length
+      ? `<table style="width:100%;border-collapse:collapse">${theadHtml}<tbody>${bodyRows}</tbody></table>`
+      : ''
 
     const mockData = {
       company_name: activePhapNhan?.ten_phap_nhan || 'CÔNG TY TNHH NAM PHƯƠNG',
@@ -534,7 +544,7 @@ export default function PrintTemplatePage() {
       tong_cong: '14,420,000',
       dieu_khoan: 'Thanh toán chuyển khoản trong vòng 30 ngày.',
       status: 'MỚI',
-      body_html: bodyRows,
+      body_html: bodyHtml,
       footer_html: ''
     }
 
