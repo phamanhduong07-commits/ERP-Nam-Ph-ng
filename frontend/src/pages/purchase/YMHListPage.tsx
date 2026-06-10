@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, AutoComplete, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
+  Alert, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
   Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message, Divider,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -41,7 +41,6 @@ type FormItem = {
 }
 
 const DVT_OPTIONS = ['Kg', 'Tấn', 'Cuộn', 'Tờ', 'Cái', 'Bộ', 'Hộp', 'Lít'].map(v => ({ value: v, label: v }))
-const MUC_IN_OPTIONS = ['Mực đen', 'Mực xanh', 'Mực đỏ', 'Mực vàng', 'Mực trắng', 'Mực bạc', 'Mực UV', 'Mực nước'].map(v => ({ value: v }))
 const DIEU_KHOAN_OPTIONS = ['COD', 'NET15', 'NET30', 'NET45', 'NET60', 'TT trước'].map(v => ({ value: v, label: v }))
 
 const ACTIVE_STATUSES = ['nhap', 'cho_duyet', 'duyet_pb', 'duyet_gd']
@@ -306,7 +305,7 @@ export default function YMHListPage() {
   function toPayload(values: Record<string, unknown>): CreateYmhPayload {
     const items = ((values.items as FormItem[] | undefined) ?? []).map((it: FormItem) => ({
       paper_material_id: it.loai_vat_tu === 'giay' ? (it.mat_id || null) : null,
-      other_material_id: it.loai_vat_tu === 'khac' ? (it.mat_id || null) : null,
+      other_material_id: (it.loai_vat_tu === 'khac' || it.loai_vat_tu === 'muc_in') ? (it.mat_id || null) : null,
       ten_hang: it.ten_hang ?? '',
       so_luong: Number(it.so_luong || 0),
       dvt: it.dvt ?? 'Kg',
@@ -814,11 +813,28 @@ export default function YMHListPage() {
                                       }))}
                                     />
                                   </Form.Item>
-                                  <Form.Item name={[name, 'ten_hang']} label={label} rules={[{ required: true, message: `Nhập mô tả ${label}` }]} style={{ marginBottom: 4 }}>
-                                    {loai === 'muc_in'
-                                      ? <AutoComplete options={MUC_IN_OPTIONS} filterOption={(input, opt) => (opt?.value ?? '').toLowerCase().includes(input.toLowerCase())} placeholder="Chọn hoặc nhập loại mực" />
-                                      : <Input placeholder={`Mô tả ${label} cần đặt`} />}
-                                  </Form.Item>
+                                  {loai === 'muc_in'
+                                    ? (
+                                      <Form.Item name={[name, 'other_material_id']} label="Mực in" rules={[{ required: true, message: 'Chọn loại mực từ danh mục NVL' }]} style={{ marginBottom: 4 }}>
+                                        <Select
+                                          allowClear
+                                          showSearch
+                                          optionFilterProp="label"
+                                          placeholder="Chọn mực từ danh mục NVL"
+                                          options={otherMats.filter(m => m.trang_thai).map(m => ({
+                                            value: m.id,
+                                            label: `${m.ma_chinh} - ${m.ten}`,
+                                          }))}
+                                          onChange={id => id ? handleMaterialSelect(name, 'khac', id) : clearMaterialSelect(name)}
+                                          onClear={() => clearMaterialSelect(name)}
+                                        />
+                                      </Form.Item>
+                                    )
+                                    : (
+                                      <Form.Item name={[name, 'ten_hang']} label={label} rules={[{ required: true, message: `Nhập mô tả ${label}` }]} style={{ marginBottom: 4 }}>
+                                        <Input placeholder={`Mô tả ${label} cần đặt`} />
+                                      </Form.Item>
+                                    )}
                                 </Space>
                               )
                             }
