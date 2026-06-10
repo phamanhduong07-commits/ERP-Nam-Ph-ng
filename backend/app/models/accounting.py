@@ -226,6 +226,7 @@ class CustomerRefundVoucher(Base):
     dien_giai: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")  # nhap | da_duyet | huy
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -234,6 +235,7 @@ class CustomerRefundVoucher(Base):
     customer = relationship("Customer")
     sales_return = relationship("SalesReturn")
     phap_nhan = relationship("PhapNhan", foreign_keys=[phap_nhan_id])
+    phan_xuong = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
     nguoi_duyet = relationship("User", foreign_keys=[nguoi_duyet_id])
     creator = relationship("User", foreign_keys=[created_by])
 
