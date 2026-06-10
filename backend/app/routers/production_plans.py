@@ -1005,3 +1005,35 @@ def toggle_mua_phoi_ngoai(
     line.mua_phoi_ngoai = bool(body.get("mua_phoi_ngoai", False))
     db.commit()
     return {"id": line.id, "mua_phoi_ngoai": line.mua_phoi_ngoai}
+
+
+# ─── Move line to another plan ────────────────────────────────────────────────
+
+class MoveToPlanBody(BaseModel):
+    plan_id: int
+
+
+@router.patch("/lines/{line_id}/move-to-plan")
+def move_line_to_plan(
+    line_id: int,
+    body: MoveToPlanBody,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    line = db.query(ProductionPlanLine).filter(ProductionPlanLine.id == line_id).first()
+    if not line:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lệnh")
+    if line.trang_thai == "dang_chay":
+        raise HTTPException(status_code=400, detail="Không thể di chuyển lệnh đang chạy")
+
+    target = db.query(ProductionPlan).filter(ProductionPlan.id == body.plan_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Không tìm thấy kế hoạch")
+    if target.trang_thai != "nhap":
+        raise HTTPException(status_code=400, detail="Chỉ có thể thêm vào kế hoạch Nháp")
+    if target.so_ke_hoach == QUEUE_POOL_SO:
+        raise HTTPException(status_code=400, detail="Không thể thêm vào kế hoạch hàng chờ hệ thống")
+
+    line.plan_id = target.id
+    db.commit()
+    return {"ok": True, "plan_id": target.id, "so_ke_hoach": target.so_ke_hoach}

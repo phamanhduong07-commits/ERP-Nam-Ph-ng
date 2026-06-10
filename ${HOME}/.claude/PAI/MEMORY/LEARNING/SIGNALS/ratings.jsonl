@@ -922,3 +922,6 @@
 {"timestamp":"2026-06-10T08:51:32-07:00","rating":5,"session_id":"0fa076da-fff1-4b6a-9730-609a249fa0ba","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
 {"timestamp":"2026-06-10T08:53:11-07:00","rating":5,"session_id":"0fa076da-fff1-4b6a-9730-609a249fa0ba","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
 {"timestamp":"2026-06-10T08:53:14-07:00","rating":5,"session_id":"7982b2de-a948-4c96-a6b1-5c7eff82cea0","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-10T08:56:31-07:00","rating":5,"session_id":"7982b2de-a948-4c96-a6b1-5c7eff82cea0","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-10T08:58:47-07:00","rating":5,"session_id":"0fa076da-fff1-4b6a-9730-609a249fa0ba","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-10T09:00:46-07:00","rating":5,"session_id":"7982b2de-a948-4c96-a6b1-5c7eff82cea0","source":"implicit","sentiment_summary":"Inference failed: Timeout after 15000ms","confidence":0.3}

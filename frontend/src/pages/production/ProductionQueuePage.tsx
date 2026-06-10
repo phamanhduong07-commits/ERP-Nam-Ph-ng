@@ -10,7 +10,7 @@ import {
 } from 'antd'
 import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import {
-  DeleteOutlined,
+  DeleteOutlined, PlusOutlined,
   ReloadOutlined, ClockCircleOutlined, ThunderboltOutlined,
   FileTextOutlined, CalculatorOutlined, InfoCircleOutlined,
   UnorderedListOutlined, SendOutlined, HolderOutlined,
@@ -602,6 +602,37 @@ export default function ProductionQueuePage() {
       message.error((e as ApiError)?.response?.data?.detail || 'Lỗi chốt kế hoạch'),
   })
 
+  // ── move pool line to plan ────────────────────────────────────────────────
+  const [movePopoverLine, setMovePopoverLine] = useState<number | null>(null)
+  const [moveTargetPlanId, setMoveTargetPlanId] = useState<number | null>(null)
+
+  const { data: nhapPlansData } = useQuery({
+    queryKey: ['production-plans-nhap'],
+    queryFn: () => productionPlansApi.list({ trang_thai: 'nhap', page_size: 100 }).then(r => r.data),
+    enabled: movePopoverLine !== null,
+    staleTime: 10_000,
+  })
+  const nhapPlanOptions = useMemo(
+    () => (nhapPlansData?.items ?? [])
+      .filter(p => p.so_ke_hoach !== POOL_PLAN_SO)
+      .map(p => ({ value: p.id, label: p.so_ke_hoach })),
+    [nhapPlansData],
+  )
+
+  const moveLineMut = useMutation({
+    mutationFn: ({ lineId, planId }: { lineId: number; planId: number }) =>
+      productionPlansApi.moveLineToPlan(lineId, planId),
+    onSuccess: (res) => {
+      message.success(`Đã thêm vào ${res.data.so_ke_hoach}`)
+      setMovePopoverLine(null)
+      setMoveTargetPlanId(null)
+      qc.invalidateQueries({ queryKey: ['production-queue'] })
+      qc.invalidateQueries({ queryKey: ['production-plans-nhap'] })
+    },
+    onError: (e: { response?: { data?: { detail?: string } } }) =>
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi di chuyển lệnh'),
+  })
+
   // Nhóm các plan còn nhap (chưa chốt) từ queue lines
   const nhapPlans = useMemo(() => {
     const map = new Map<number, { plan_id: number; so_ke_hoach: string; count: number }>()
@@ -912,6 +943,51 @@ export default function ProductionQueuePage() {
                 </Button>
               </Popconfirm>
             </Tooltip>
+          )}
+          {r.plan_trang_thai === 'nhap' && r.so_ke_hoach === POOL_PLAN_SO && r.trang_thai === 'cho' && (
+            <Popover
+              open={movePopoverLine === r.id}
+              onOpenChange={(open) => {
+                if (!open) { setMovePopoverLine(null); setMoveTargetPlanId(null) }
+              }}
+              trigger="click"
+              title="Thêm vào kế hoạch SX"
+              content={
+                <Space direction="vertical" style={{ width: 220 }}>
+                  <Select
+                    style={{ width: '100%' }}
+                    placeholder="Chọn kế hoạch Nháp..."
+                    options={nhapPlanOptions}
+                    value={moveTargetPlanId}
+                    onChange={setMoveTargetPlanId}
+                    size="small"
+                    notFoundContent="Không có kế hoạch Nháp"
+                  />
+                  <Button
+                    type="primary"
+                    size="small"
+                    block
+                    disabled={!moveTargetPlanId}
+                    loading={moveLineMut.isPending}
+                    onClick={() => {
+                      if (moveTargetPlanId) moveLineMut.mutate({ lineId: r.id, planId: moveTargetPlanId })
+                    }}
+                  >
+                    Xác nhận
+                  </Button>
+                </Space>
+              }
+            >
+              <Tooltip title="Thêm vào kế hoạch SX">
+                <Button
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={() => { setMovePopoverLine(r.id); setMoveTargetPlanId(null) }}
+                >
+                  Thêm KH
+                </Button>
+              </Tooltip>
+            </Popover>
           )}
           {r.trang_thai === 'cho' && (
             <Tooltip title="Xóa khỏi hàng chờ">
