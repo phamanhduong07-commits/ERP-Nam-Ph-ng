@@ -377,6 +377,7 @@ async def get_gps_vehicles(
             "speed": speed,
             "fuel_pct": v.get("Fuel"),
             "driver_name": v.get("DriverName"),
+            "driver_license": (v.get("Liciense") or "").strip() or None,  # BM typo as-is
             "address": v.get("Address"),
             "vehicle_type": v.get("VehicleType"),
             "capacity": v.get("SheeatsOrTons"),
@@ -387,7 +388,20 @@ async def get_gps_vehicles(
             "is_overspeed": is_overspeed,
             "stop_time": v.get("StopTime"),
             "stop_counter": v.get("StopCounter"),
+            "begin_stop": v.get("BeginStop"),
             "day_driving_time": v.get("DayDrivingTime"),
+            "driving_time": v.get("DrivingTime"),
+            "over_4h_count": v.get("Over4h"),
+            "over_10h_count": v.get("Over10h"),
+            "overspeed_count": v.get("OverSpeedCount"),
+            # Hardware / sensors
+            "vin": v.get("Vin") or None,
+            "voltage": v.get("InputPower"),  # Điện áp (V)
+            "has_gps": v.get("Gps"),
+            "has_gsm": v.get("Gsm"),
+            "key_on": v.get("Key"),     # Máy nổ
+            "door_open": v.get("Door"),
+            "ac_on": v.get("ACOnOff"),
             "status": status,
             # ERP enrichment
             "xe_id": xe_erp.id if xe_erp else None,
