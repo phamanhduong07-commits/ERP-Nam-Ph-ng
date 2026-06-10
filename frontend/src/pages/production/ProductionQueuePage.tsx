@@ -656,12 +656,12 @@ export default function ProductionQueuePage() {
     },
     {
       title: 'Kết cấu giấy',
-      width: 280,
+      width: 360,
       render: (_, r) => {
         const layers = calcLayerKgs(r)
         if (!layers.length) return <Text type="secondary">—</Text>
         return (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 3 }}>
             {layers.map((l, i) => (
               <LayerEditBlock
                 key={i} layer={l}
