@@ -91,9 +91,9 @@ def update_template(
     user: User = Depends(get_current_user)
 ):
     _assert_template_write(ma_mau, user)
-    key = ma_mau.lower()
+    key = ma_mau.upper()  # normalize to uppercase to match how print endpoints query
     tpl = db.query(PrintTemplate).filter(
-        PrintTemplate.ma_mau == key,
+        func.upper(PrintTemplate.ma_mau) == key,
         PrintTemplate.phap_nhan_id == body.phap_nhan_id
     ).first()
 
