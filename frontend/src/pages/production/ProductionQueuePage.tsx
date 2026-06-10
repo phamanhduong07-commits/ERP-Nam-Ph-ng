@@ -32,6 +32,7 @@ import { productionPlansApi } from '../../api/productionPlans'
 import type { QueueLine } from '../../api/productionPlans'
 import { productionOrdersApi } from '../../api/productionOrders'
 import { warehouseApi } from '../../api/warehouse'
+import type { GiayRoll } from '../../api/warehouse'
 import { LOAI_LAN_LABELS } from '../../api/quotes'
 import { fmtN } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
@@ -322,11 +323,11 @@ export default function ProductionQueuePage() {
 
   // Filters for "Kg theo mã giấy" panel
   const [panelFilterMa, setPanelFilterMa] = useState('')
-  const [panelFilterKho, setPanelFilterKho] = useState<number | null>(null)
   const [panelFilterDl, setPanelFilterDl] = useState<number | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
   const [tonDetailOpen, setTonDetailOpen] = useState(false)
   const [isBatchLoading, setIsBatchLoading] = useState(false)
+  const [expandedRollRows, setExpandedRollRows] = useState<Set<string>>(new Set())
 
   const handleTableChange = (
     _pagination: unknown,
@@ -438,35 +439,40 @@ export default function ProductionQueuePage() {
   const totalMT      = mtByKho.reduce((s, e) => s + e.totalMT, 0)
   const showPanel    = planningRows.length > 0
 
-  // Options for panel filters
-  const panelKhoOptions = useMemo(() => {
-    const s = new Set<number>()
-    planningRows.forEach(r => { if (r.kho_giay) s.add(Number(r.kho_giay)) })
-    return Array.from(s).sort((a, b) => a - b)
-  }, [planningRows])
-
+  // Unique ĐL options (for filter)
   const panelDlOptions = useMemo(() => {
     const s = new Set<number>()
     kgByMa.forEach(e => { if (e.dl != null) s.add(e.dl) })
     return Array.from(s).sort((a, b) => a - b)
   }, [kgByMa])
 
-  // Filtered kgByMa for display
-  const kgByMaDisplay = useMemo(() => {
-    // If khổ filter: recompute from khổ-filtered rows so kg reflects only those lines
-    const rows = panelFilterKho != null
-      ? planningRows.filter(r => Number(r.kho_giay) === panelFilterKho)
-      : planningRows
-    let result = calcKgByMa(rows)
-    if (panelFilterMa.trim()) {
-      const q = panelFilterMa.trim().toLowerCase()
-      result = result.filter(e => e.ma.toLowerCase().includes(q))
+  // Kg by kho group (auto-grouped, filter by ma/dl only)
+  const kgByKhoGroups = useMemo(() => {
+    const khoMap = new Map<number, QueueLine[]>()
+    for (const r of planningRows) {
+      const kho = Number(r.kho_giay) || 0
+      if (!kho) continue
+      const arr = khoMap.get(kho) ?? []
+      arr.push(r)
+      khoMap.set(kho, arr)
     }
-    if (panelFilterDl != null) {
-      result = result.filter(e => e.dl === panelFilterDl)
-    }
-    return result
-  }, [planningRows, panelFilterKho, panelFilterMa, panelFilterDl])
+    return Array.from(khoMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([kho, rows]) => {
+        let kgList = calcKgByMa(rows)
+        if (panelFilterMa.trim()) {
+          const q = panelFilterMa.trim().toLowerCase()
+          kgList = kgList.filter(e => e.ma.toLowerCase().includes(q))
+        }
+        if (panelFilterDl != null) {
+          kgList = kgList.filter(e => e.dl === panelFilterDl)
+        }
+        const soLenh = rows.length
+        const totalKgGroup = Math.round(kgList.reduce((s, e) => s + e.totalKg, 0))
+        return { kho, kgList, soLenh, totalKgGroup }
+      })
+      .filter(g => g.kgList.length > 0)
+  }, [planningRows, panelFilterMa, panelFilterDl])
 
   // ── tồn kho giấy để đối chiếu ────────────────────────────────────────────
   const { data: tonKhoGiay = [] } = useQuery({
@@ -475,13 +481,15 @@ export default function ProductionQueuePage() {
     staleTime: 60_000,
   })
 
-  // Gộp tồn kho theo ma_ky_hieu (cộng dồn nhiều kho)
-  const inventoryByMa = useMemo(() => {
+  // Gộp tồn kho theo (ma + kho_cm) — dl bỏ khỏi key vì lệnh SX có thể dùng dl khác lot
+  const inventoryByMaKho = useMemo(() => {
     const map = new Map<string, { ton_luong: number; so_cuon: number }>()
     for (const row of tonKhoGiay) {
-      const key = row.ma_ky_hieu || row.ma_chinh
-      if (!key) continue
-      const ex = map.get(key)
+      const ma = row.ma_ky_hieu || row.ma_chinh
+      if (!ma) continue
+      const khoCm = row.kho ? Math.round(row.kho) : ''
+      const key   = `${ma}||${khoCm}`
+      const ex    = map.get(key)
       if (ex) {
         ex.ton_luong += row.ton_luong
         ex.so_cuon   += row.so_cuon
@@ -491,6 +499,30 @@ export default function ProductionQueuePage() {
     }
     return map
   }, [tonKhoGiay])
+
+  // ── per-roll data khi mở drawer ───────────────────────────────────────────
+  const { data: allRollsRaw = [] } = useQuery({
+    queryKey: ['giay-rolls-active'],
+    queryFn: () => warehouseApi.listGiayRolls().then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const activeRolls = useMemo(
+    () => allRollsRaw.filter(r => r.trang_thai === 'trong_kho' || r.trang_thai === 'dang_dung'),
+    [allRollsRaw]
+  )
+
+  const rollsByKyHieu = useMemo(() => {
+    const map = new Map<string, GiayRoll[]>()
+    for (const r of activeRolls) {
+      const key = r.ky_hieu ?? ''
+      if (!key) continue
+      const arr = map.get(key) ?? []
+      arr.push(r)
+      map.set(key, arr)
+    }
+    return map
+  }, [activeRolls])
 
   // ── drawer: tồn chi tiết theo mã ký hiệu ─────────────────────────────────
   const maInPlan = useMemo(() => new Set(kgByMa.map(e => e.ma)), [kgByMa])
@@ -510,29 +542,30 @@ export default function ProductionQueuePage() {
     canKg: number
     tonKg: number
     soCuon: number
+    trangThai?: string
     children?: TonDetailRow[]
   }
 
   const tonDetailRows = useMemo((): TonDetailRow[] => {
     return Array.from(maInPlan).sort().map(ma => {
-      const childRows: TonDetailRow[] = tonKhoGiay
-        .filter(r => r.ma_chinh === ma)
+      const rolls = (rollsByKyHieu.get(ma) ?? [])
         .sort((a, b) =>
+          ((a.kho ?? 0) - (b.kho ?? 0)) ||
           ((a.dinh_luong ?? 0) - (b.dinh_luong ?? 0)) ||
-          (a.ma_ky_hieu ?? '').localeCompare(b.ma_ky_hieu ?? ''))
-        .map((r, i) => ({
-          key: `${ma}-${i}`,
-          ma: r.ma_ky_hieu ?? r.ma_chinh ?? '—',
-          dl: r.dinh_luong,
-          khoMm: r.kho,
-          tenKho: r.ten_kho,
-          canKg: 0,
-          tonKg: r.ton_luong,
-          soCuon: r.so_cuon,
-          children: undefined,
-        }))
-      const totalTon  = childRows.reduce((s, c) => s + c.tonKg, 0)
-      const totalCuon = childRows.reduce((s, c) => s + c.soCuon, 0)
+          a.barcode.localeCompare(b.barcode)
+        )
+      const childRows: TonDetailRow[] = rolls.map(r => ({
+        key: `roll-${r.id}`,
+        ma: r.barcode,
+        dl: r.dinh_luong,
+        khoMm: r.kho,
+        tenKho: r.ten_kho,
+        canKg: 0,
+        tonKg: r.trong_luong_con_lai,
+        soCuon: 1,
+        trangThai: r.trang_thai,
+      }))
+      const totalTon = childRows.reduce((s, c) => s + c.tonKg, 0)
       return {
         key: `hdr-${ma}`,
         ma,
@@ -541,11 +574,11 @@ export default function ProductionQueuePage() {
         tenKho: null,
         canKg:  canKgByMa.get(ma) ?? 0,
         tonKg:  totalTon,
-        soCuon: totalCuon,
+        soCuon: childRows.length,
         children: childRows.length > 0 ? childRows : undefined,
       }
     })
-  }, [tonKhoGiay, maInPlan, canKgByMa])
+  }, [rollsByKyHieu, maInPlan, canKgByMa])
 
   // ── mutations ─────────────────────────────────────────────────────────────
 
@@ -1194,56 +1227,31 @@ export default function ProductionQueuePage() {
 
               <Divider style={{ margin: '14px 0' }} />
 
-              {/* ── Kg theo mã giấy (gộp tất cả lớp) ── */}
+              {/* ── Kg theo mã giấy — tự động tập hợp theo khổ ── */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <div style={{ width: 4, height: 16, background: '#52c41a', borderRadius: 2 }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#389e0d', flex: 1 }}>Kg theo mã giấy</span>
                 {kgByMa.length > 0 && (
-                  <Button
-                    size="small"
-                    icon={<UnorderedListOutlined />}
-                    onClick={() => setTonDetailOpen(true)}
-                    style={{ fontSize: 11 }}
-                  >
+                  <Button size="small" icon={<UnorderedListOutlined />} onClick={() => setTonDetailOpen(true)} style={{ fontSize: 11 }}>
                     Chi tiết KH
                   </Button>
                 )}
               </div>
 
-              {/* Filter row */}
+              {/* Filter: mã + ĐL (khổ tự động nhóm) */}
               {kgByMa.length > 0 && (
                 <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
                   <Input
-                    size="small"
-                    placeholder="Mã giấy"
-                    allowClear
-                    value={panelFilterMa}
-                    onChange={e => setPanelFilterMa(e.target.value)}
-                    style={{ width: 90 }}
+                    size="small" placeholder="Mã giấy" allowClear value={panelFilterMa}
+                    onChange={e => setPanelFilterMa(e.target.value)} style={{ width: 100 }}
                   />
                   <Select
-                    size="small"
-                    placeholder="Khổ"
-                    allowClear
-                    value={panelFilterKho ?? undefined}
-                    onChange={(v: number | undefined) => setPanelFilterKho(v ?? null)}
-                    style={{ width: 80 }}
-                    options={panelKhoOptions.map(k => ({ label: `${k} cm`, value: k }))}
-                  />
-                  <Select
-                    size="small"
-                    placeholder="ĐL"
-                    allowClear
-                    value={panelFilterDl ?? undefined}
-                    onChange={(v: number | undefined) => setPanelFilterDl(v ?? null)}
-                    style={{ width: 88 }}
+                    size="small" placeholder="ĐL" allowClear value={panelFilterDl ?? undefined}
+                    onChange={(v: number | undefined) => setPanelFilterDl(v ?? null)} style={{ width: 90 }}
                     options={panelDlOptions.map(d => ({ label: `${d} g`, value: d }))}
                   />
-                  {(panelFilterMa || panelFilterKho != null || panelFilterDl != null) && (
-                    <Button
-                      size="small"
-                      onClick={() => { setPanelFilterMa(''); setPanelFilterKho(null); setPanelFilterDl(null) }}
-                    >✕</Button>
+                  {(panelFilterMa || panelFilterDl != null) && (
+                    <Button size="small" onClick={() => { setPanelFilterMa(''); setPanelFilterDl(null) }}>✕</Button>
                   )}
                 </div>
               )}
@@ -1252,67 +1260,128 @@ export default function ProductionQueuePage() {
                 <div style={{ padding: '10px 0', textAlign: 'center', color: '#aaa', fontSize: 13 }}>
                   Chưa có dữ liệu kết cấu giấy
                 </div>
-              ) : kgByMaDisplay.length === 0 ? (
+              ) : kgByKhoGroups.length === 0 ? (
                 <div style={{ padding: '10px 0', textAlign: 'center', color: '#aaa', fontSize: 13 }}>
                   Không có kết quả phù hợp
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ background: '#f6ffed' }}>
-                      <th style={{ padding: '6px 8px', border: '1px solid #b7eb8f' }}>Mã giấy</th>
-                      <th style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'center' }}>ĐL</th>
-                      <th style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right' }}>Cần (kg)</th>
-                      <th style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right' }}>Tồn (kg)</th>
-                      <th style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'center' }}>Cuộn</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {kgByMaDisplay.map((p, i) => {
-                      const inv = inventoryByMa.get(p.ma)
-                      const canKg = Math.round(p.totalKg)
-                      const tonKg = inv ? Math.round(inv.ton_luong) : null
-                      const du = tonKg !== null && tonKg >= canKg
-                      const thieu = tonKg !== null && tonKg < canKg
-                      const rowBg = thieu ? '#fff1f0' : du ? '#f6ffed' : (i % 2 === 0 ? '#fff' : '#f9f9f9')
-                      return (
-                        <tr key={i} style={{ background: rowBg }}>
-                          <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', fontWeight: 600, fontSize: 13 }}>{p.ma}</td>
-                          <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'center', color: '#8c8c8c' }}>
-                            {p.dl != null ? p.dl : '—'}
-                          </td>
-                          <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700, color: '#389e0d', fontSize: 13 }}>
-                            {canKg.toLocaleString('vi-VN')}
-                          </td>
-                          <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 600,
-                            color: thieu ? '#cf1322' : du ? '#389e0d' : '#8c8c8c' }}>
-                            {tonKg !== null ? tonKg.toLocaleString('vi-VN') : <span style={{ color: '#bfbfbf' }}>—</span>}
-                          </td>
-                          <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'center', color: '#595959' }}>
-                            {inv ? (
-                              <Tooltip title={`${inv.so_cuon} cuộn`}>
-                                <span style={{ fontWeight: 600 }}>{inv.so_cuon}</span>
-                              </Tooltip>
-                            ) : <span style={{ color: '#bfbfbf' }}>—</span>}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: '#f6ffed' }}>
-                      <td colSpan={2} style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700 }}>
-                        {(panelFilterMa || panelFilterKho != null || panelFilterDl != null)
-                          ? `Tổng lọc (${kgByMaDisplay.length})`
-                          : 'Tổng cộng'}
-                      </td>
-                      <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 800, color: '#fa8c16', fontSize: 14 }}>
-                        {Math.round(kgByMaDisplay.reduce((s, p) => s + p.totalKg, 0)).toLocaleString('vi-VN')} kg
-                      </td>
-                      <td colSpan={2} style={{ border: '1px solid #b7eb8f' }} />
-                    </tr>
-                  </tfoot>
-                </table>
+                <div>
+                  {kgByKhoGroups.map(group => (
+                    <div key={group.kho} style={{ marginBottom: 10 }}>
+                      {/* Group header */}
+                      <div style={{
+                        background: '#e6f4ff', borderRadius: '4px 4px 0 0',
+                        padding: '5px 8px', display: 'flex', justifyContent: 'space-between',
+                        border: '1px solid #bae0ff', borderBottom: 'none',
+                      }}>
+                        <span style={{ fontWeight: 700, color: '#1677ff', fontSize: 12 }}>
+                          Khổ {group.kho} cm · {group.soLenh} lệnh
+                        </span>
+                        <span style={{ color: '#595959', fontSize: 12, fontWeight: 600 }}>
+                          {group.totalKgGroup.toLocaleString('vi-VN')} kg
+                        </span>
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ background: '#f6ffed' }}>
+                            <th style={{ padding: '5px 7px', border: '1px solid #b7eb8f' }}>Mã</th>
+                            <th style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'center' }}>ĐL</th>
+                            <th style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'right' }}>Cần (kg)</th>
+                            <th style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'right' }}>Tồn (kg)</th>
+                            <th style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'center' }}>Cuộn</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.kgList.map((p, i) => {
+                            const inv = inventoryByMaKho.get(`${p.ma}||${group.kho}`)
+                            const canKg = Math.round(p.totalKg)
+                            const tonKg = inv ? Math.round(inv.ton_luong) : null
+                            const du    = tonKg !== null && tonKg >= canKg
+                            const thieu = tonKg !== null && tonKg < canKg
+                            const rowBg = thieu ? '#fff1f0' : du ? '#f6ffed' : (i % 2 === 0 ? '#fff' : '#f9f9f9')
+                            const rowKey = `${p.ma}||${group.kho}`
+                            const isExpanded = expandedRollRows.has(rowKey)
+                            const rolls = inv
+                              ? (rollsByKyHieu.get(p.ma) ?? [])
+                                  .filter(r => Math.round(r.kho ?? 0) === group.kho)
+                                  .sort((a, b) => b.trong_luong_con_lai - a.trong_luong_con_lai)
+                              : []
+                            return (
+                              <React.Fragment key={i}>
+                                <tr
+                                  style={{ background: rowBg, cursor: rolls.length > 0 ? 'pointer' : 'default' }}
+                                  onClick={() => {
+                                    if (!rolls.length) return
+                                    setExpandedRollRows(prev => {
+                                      const next = new Set(prev)
+                                      next.has(rowKey) ? next.delete(rowKey) : next.add(rowKey)
+                                      return next
+                                    })
+                                  }}
+                                >
+                                  <td style={{ padding: '5px 7px', border: '1px solid #b7eb8f', fontWeight: 600, fontSize: 13 }}>{p.ma}</td>
+                                  <td style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'center', color: '#8c8c8c' }}>
+                                    {p.dl != null ? p.dl : '—'}
+                                  </td>
+                                  <td style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700, color: '#389e0d', fontSize: 13 }}>
+                                    {canKg.toLocaleString('vi-VN')}
+                                  </td>
+                                  <td style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 600,
+                                    color: thieu ? '#cf1322' : du ? '#389e0d' : '#8c8c8c' }}>
+                                    {tonKg !== null ? tonKg.toLocaleString('vi-VN') : <span style={{ color: '#bfbfbf' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'center', color: '#595959' }}>
+                                    {inv ? (
+                                      <span style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                        {inv.so_cuon}
+                                        {rolls.length > 0 && (
+                                          <span style={{ fontSize: 9, color: '#1677ff', lineHeight: 1 }}>{isExpanded ? '▲' : '▼'}</span>
+                                        )}
+                                      </span>
+                                    ) : <span style={{ color: '#bfbfbf' }}>—</span>}
+                                  </td>
+                                </tr>
+                                {isExpanded && rolls.map(roll => (
+                                  <tr key={`roll-${roll.id}`} style={{ background: '#f0f5ff' }}>
+                                    <td colSpan={2} style={{ padding: '3px 7px 3px 16px', border: '1px solid #d6e4ff', fontSize: 11, fontFamily: 'monospace', color: '#595959' }}>
+                                      {roll.barcode}
+                                      {roll.trang_thai === 'dang_dung' && (
+                                        <span style={{ marginLeft: 5, fontSize: 9, color: '#1677ff' }}>●đang dùng</span>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: '3px 7px', border: '1px solid #d6e4ff' }} />
+                                    <td style={{ padding: '3px 7px', border: '1px solid #d6e4ff', textAlign: 'right', fontWeight: 600, color: '#1677ff', fontSize: 12 }}>
+                                      {Math.round(roll.trong_luong_con_lai).toLocaleString('vi-VN')}
+                                    </td>
+                                    <td style={{ padding: '3px 7px', border: '1px solid #d6e4ff' }} />
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            )
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{ background: '#f0fbe6' }}>
+                            <td colSpan={2} style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700 }}>Tổng</td>
+                            <td style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 800, color: '#fa8c16', fontSize: 13 }}>
+                              {group.totalKgGroup.toLocaleString('vi-VN')} kg
+                            </td>
+                            <td colSpan={2} style={{ border: '1px solid #b7eb8f' }} />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ))}
+                  {/* Grand total */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 2px', borderTop: '2px solid #b7eb8f' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#595959', marginRight: 8 }}>
+                      {(panelFilterMa || panelFilterDl != null) ? 'Tổng lọc:' : 'Tổng cộng:'}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: '#fa8c16' }}>
+                      {kgByKhoGroups.reduce((s, g) => s + g.totalKgGroup, 0).toLocaleString('vi-VN')} kg
+                    </span>
+                  </div>
+                </div>
               )}
 
               <Divider style={{ margin: '14px 0 10px' }} />
@@ -1388,29 +1457,36 @@ export default function ProductionQueuePage() {
         expandable={{ defaultExpandAllRows: true }}
         columns={[
           {
-            title: 'Mã giấy / Ký hiệu',
+            title: 'Mã / Barcode',
             dataIndex: 'ma',
             key: 'ma',
-            width: 150,
+            width: 170,
             render: (val: string, row) =>
               row.children !== undefined
                 ? <span style={{ fontWeight: 800, fontSize: 14, color: '#1d1d1d' }}>{val}</span>
-                : <span style={{ color: '#595959' }}>{val}</span>,
+                : (
+                  <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#595959' }}>
+                    {val}
+                    {row.trangThai === 'dang_dung' && (
+                      <Tag color="processing" style={{ marginLeft: 4, fontSize: 9, padding: '0 3px', lineHeight: '14px' }}>đang dùng</Tag>
+                    )}
+                  </span>
+                ),
           },
           {
             title: 'ĐL (g/m²)',
             dataIndex: 'dl',
             key: 'dl',
             align: 'center',
-            width: 80,
+            width: 75,
             render: (val: number | null) => val != null ? val : <span style={{ color: '#bfbfbf' }}>—</span>,
           },
           {
-            title: 'Khổ (mm)',
+            title: 'Khổ (cm)',
             dataIndex: 'khoMm',
             key: 'khoMm',
             align: 'center',
-            width: 80,
+            width: 75,
             render: (val: number | null) => val != null ? val : <span style={{ color: '#bfbfbf' }}>—</span>,
           },
           {
@@ -1425,7 +1501,7 @@ export default function ProductionQueuePage() {
             dataIndex: 'canKg',
             key: 'canKg',
             align: 'right',
-            width: 90,
+            width: 85,
             render: (val: number, row) =>
               row.children !== undefined
                 ? <span style={{ fontWeight: 700, color: '#389e0d' }}>{Math.round(val).toLocaleString('vi-VN')}</span>
@@ -1441,13 +1517,14 @@ export default function ProductionQueuePage() {
               if (row.children !== undefined) {
                 const isLow = val < row.canKg
                 const color = val === 0 ? '#bfbfbf' : isLow ? '#cf1322' : '#389e0d'
-                return (
-                  <span style={{ fontWeight: 700, color }}>
-                    {Math.round(val).toLocaleString('vi-VN')}
-                  </span>
-                )
+                return <span style={{ fontWeight: 700, color }}>{Math.round(val).toLocaleString('vi-VN')}</span>
               }
-              return <span>{Math.round(val).toLocaleString('vi-VN')}</span>
+              // leaf = 1 cuộn
+              return (
+                <span style={{ fontWeight: 600, color: val > 0 ? '#1677ff' : '#bfbfbf' }}>
+                  {val > 0 ? Math.round(val).toLocaleString('vi-VN') : '—'}
+                </span>
+              )
             },
           },
           {
@@ -1455,8 +1532,11 @@ export default function ProductionQueuePage() {
             dataIndex: 'soCuon',
             key: 'soCuon',
             align: 'center',
-            width: 60,
-            render: (val: number) => val > 0 ? val : <span style={{ color: '#bfbfbf' }}>—</span>,
+            width: 55,
+            render: (val: number, row) =>
+              row.children !== undefined
+                ? <span style={{ fontWeight: 600 }}>{val}</span>
+                : <span style={{ color: '#bfbfbf' }}>—</span>,
           },
         ]}
         summary={() => (

@@ -1036,7 +1036,7 @@ async def move_phieu(
     if body.may_in_id and body.may_in_id != prev_may_in_id:
         ten_hang = p.ten_hang or p.so_phieu or "Lệnh mới"
         _send_push_to_machine(db, body.may_in_id, None,
-                              "Có lệnh mới!", f"{ten_hang} — {p.so_lsx or p.so_phieu}")
+                              "Có lệnh mới!", f"{ten_hang} — {p.so_don or p.so_phieu}")
     # Phat tin hieu WebSocket cho Dashboard
     await sio.emit("machine_status_update", {
         "machine_id": p.may_in_id,
