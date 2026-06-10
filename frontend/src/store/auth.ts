@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { UserInfo } from '../api/auth'
+import { connectSocket, disconnectSocket } from '../utils/socket'
 
 interface AuthState {
   token: string | null
@@ -27,9 +28,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.setItem('refresh_token', refreshToken)
     localStorage.setItem('user', JSON.stringify(user))
     set({ token, refreshToken, user })
+    // Sau login: connect socket (backend giờ bắt buộc token)
+    connectSocket()
   },
 
   logout: () => {
+    // Disconnect socket trước khi clear token
+    disconnectSocket()
     localStorage.removeItem('token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('user')
