@@ -166,7 +166,7 @@ function LayerEditBlock({ layer, orderId, itemId, onSaved }: LayerEditBlockProps
         {layer.ma ? (
           <>
             <span style={{ color: '#262626', marginLeft: 3 }}>{layer.ma}</span>
-            {layer.dl != null && <span style={{ color: '#8c8c8c', marginLeft: 2 }}>{layer.dl}g</span>}
+            {layer.dl != null && <span style={{ color: '#8c8c8c', marginLeft: 2 }}>{Number(layer.dl)}g</span>}
           </>
         ) : (
           <span style={{ color: '#bfbfbf', marginLeft: 2, fontStyle: 'italic' }}>—</span>
@@ -657,11 +657,12 @@ export default function ProductionQueuePage() {
     {
       title: 'Kết cấu giấy',
       width: 360,
+      onCell: () => ({ style: { maxWidth: 360, overflow: 'hidden', padding: '4px 6px' } }),
       render: (_, r) => {
         const layers = calcLayerKgs(r)
         if (!layers.length) return <Text type="secondary">—</Text>
         return (
-          <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 3 }}>
+          <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 3, overflow: 'hidden' }}>
             {layers.map((l, i) => (
               <LayerEditBlock
                 key={i} layer={l}
