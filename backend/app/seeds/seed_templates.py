@@ -1323,6 +1323,87 @@ TEMPLATES = [
             "ghi_chu": "Ghi chú",
             "payments_table": "Bảng phiếu chi"
         }
+    },
+    {
+        "ma_mau": "PURCHASE_REQUISITION",
+        "ten_mau": "Phiếu Yêu Cầu Mua Hàng (YCMH)",
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; margin: 0; }
+  .hdr { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 2px solid #4A148C; margin-bottom: 10px; }
+  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }
+  .hdr-info { flex: 1; }
+  .co-name { font-weight: bold; font-size: 13pt; color: #4A148C; }
+  .co-info { font-size: 8.5pt; line-height: 1.5; }
+  .mau { font-size: 8pt; text-align: right; color: #555; min-width: 120px; }
+  .divider { display: none; }
+  .title { text-align: center; margin-bottom: 10px; }
+  .title h2 { margin: 0; font-size: 16pt; letter-spacing: 2px; text-transform: uppercase; }
+  .title .so { font-size: 9pt; margin-top: 2px; }
+  .title .date { font-size: 9pt; font-style: italic; }
+  .info-block { font-size: 10.5pt; line-height: 1.9; margin-bottom: 10px; }
+  .row { display: flex; margin: 3px 0; }
+  .row .label { min-width: 140px; font-weight: bold; flex-shrink: 0; }
+  .row .dots { flex: 1; border-bottom: 1px dotted #888; padding-bottom: 1px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10pt; }
+  th { background: #4A148C; color: #fff; border: 1px solid #ccc; padding: 5px 4px; text-align: center; }
+  td { border: 1px solid #ccc; padding: 4px; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  .total-row td { font-weight: bold; background: #F3E5F5; }
+  .chu { font-size: 9.5pt; margin-bottom: 4px; }
+  .sig-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  .sig-table td { border: none; text-align: center; vertical-align: top; width: 25%; }
+  .sig-label { font-weight: bold; }
+  .sig-sub { font-style: italic; font-size: 8.5pt; color: #555; }
+  .sig-name { margin-top: 40px; font-weight: bold; }
+</style>
+<div class="hdr">
+  <div class="logo">{{logo_img}}</div>
+  <div class="hdr-info">
+    <div class="co-name">{{company_name}}</div>
+    <div class="co-info">{{company_details}}</div>
+  </div>
+  <div class="mau">Biểu mẫu nội bộ</div>
+</div>
+<div class="title">
+  <h2>Phiếu yêu cầu mua hàng</h2>
+  <div class="so">Số: <strong>{{document_number}}</strong></div>
+  <div class="date">{{document_date}}</div>
+</div>
+<div class="info-block">
+  <div class="row"><span class="label">Đơn vị yêu cầu</span><span class="dots">&nbsp;{{don_vi_yeu_cau}}</span></div>
+  <div class="row"><span class="label">Người yêu cầu</span><span class="dots">&nbsp;{{nguoi_yeu_cau}}</span></div>
+  <div class="row"><span class="label">Ghi chú</span><span class="dots">&nbsp;{{ghi_chu}}</span></div>
+</div>
+{{body_html}}
+<div class="chu">Tổng tiền dự kiến: <strong>{{tong_du_kien}}</strong></div>
+<table class="sig-table">
+  <tr>
+    <td><div class="sig-label">Người yêu cầu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{{sig_nguoi_yeu_cau}}</div></td>
+    <td><div class="sig-label">Phụ trách phòng ban</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{{sig_duyet_pb}}</div></td>
+    <td><div class="sig-label">Phòng mua hàng</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name"></div></td>
+    <td><div class="sig-label">Giám đốc</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">{{sig_duyet_gd}}</div></td>
+  </tr>
+</table>
+""",
+        "variables_meta": {
+            "document_number": "Số YMH (YMH-YYYYMM-XXXX)",
+            "document_date": "Ngày yêu cầu (Ngày DD tháng MM năm YYYY)",
+            "company_name": "Tên pháp nhân",
+            "company_details": "Địa chỉ / Điện thoại pháp nhân",
+            "logo_img": "Logo img tag của pháp nhân",
+            "don_vi_yeu_cau": "Tên phân xưởng / đơn vị yêu cầu",
+            "nguoi_yeu_cau": "Họ tên người yêu cầu",
+            "ghi_chu": "Ghi chú YMH",
+            "body_html": "Bảng danh sách hàng (STT|Tên hàng|ĐVT|SL|Đơn giá DK|Thành tiền|Ngày cần|Ghi chú) + tfoot tổng",
+            "tong_du_kien": "Tổng tiền dự kiến (X,XXX,XXX đồng)",
+            "sig_nguoi_yeu_cau": "Tên người yêu cầu (vùng chữ ký)",
+            "sig_duyet_pb": "Tên người duyệt phòng ban (vùng chữ ký)",
+            "sig_duyet_gd": "Tên giám đốc duyệt (vùng chữ ký)"
+        }
     }
 ]
 
@@ -1761,24 +1842,28 @@ def seed():
     db = SessionLocal()
     try:
         for t in TEMPLATES:
-            exists = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == t["ma_mau"]).first()
-            if not exists:
-                tpl = PrintTemplate(**t)
-                db.add(tpl)
+            pn_id = t.get("phap_nhan_id")
+            q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == t["ma_mau"])
+            if pn_id is None:
+                q = q.filter(PrintTemplate.phap_nhan_id.is_(None))
             else:
-                # Update existing
-                for key, val in t.items():
-                    setattr(exists, key, val)
+                q = q.filter(PrintTemplate.phap_nhan_id == pn_id)
+            exists = q.first()
+            if not exists:
+                db.add(PrintTemplate(**t))
+            # else: không overwrite — user có thể đã customize html_content/variables_meta
 
         for t in EXCEL_TEMPLATES:
-            exists = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == t["ma_mau"]).first()
-            if not exists:
-                tpl = ExcelTemplate(**t)
-                db.add(tpl)
+            pn_id = t.get("phap_nhan_id")
+            q = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == t["ma_mau"])
+            if pn_id is None:
+                q = q.filter(ExcelTemplate.phap_nhan_id.is_(None))
             else:
-                # Update existing
-                for key, val in t.items():
-                    setattr(exists, key, val)
+                q = q.filter(ExcelTemplate.phap_nhan_id == pn_id)
+            exists = q.first()
+            if not exists:
+                db.add(ExcelTemplate(**t))
+            # else: không overwrite
 
         db.commit()
         print("Seed templates thành công!")

@@ -105,6 +105,11 @@ def print_material_issue(mi_id: int, db: Session = Depends(get_db), _: User = De
         raise HTTPException(404, "Chưa có mẫu in MATERIAL_ISSUE — vui lòng cấu hình trong Hệ thống > Mẫu in")
 
     settings = {s.key: s.value for s in db.query(SystemSetting).all()}
+    pn = db.get(PhapNhan, phap_nhan_id) if phap_nhan_id else None
+    logo_src = (
+        f"/api/phap-nhan/logo/{pn.ma_phap_nhan}" if pn and pn.ma_phap_nhan
+        else settings.get("logo_url") or ""
+    )
 
     rows = ""
     for i, it in enumerate(mi.items, 1):
@@ -144,7 +149,7 @@ def print_material_issue(mi_id: int, db: Session = Depends(get_db), _: User = De
         "{{body_html}}": body_html,
         "{{company_name}}": _html_mod.escape(settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"),
         "{{company_details}}": _html_mod.escape(settings.get("company_details") or ""),
-        "{{logo_img}}": f'<img src="{settings["logo_url"]}" />' if settings.get("logo_url") else "",
+        "{{logo_img}}": f'<img src="{logo_src}" style="max-height:50px;max-width:100%;object-fit:contain"/>' if logo_src else "",
     }
     content = tpl.html_content
     for k, v in replacements.items():

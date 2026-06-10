@@ -20,7 +20,17 @@ from app.schemas.billing import (
     SalesInvoiceResponse,
 )
 
+import html as _html_mod
+
 router = APIRouter(prefix="/api/billing", tags=["billing"])
+
+
+def _logo_img(pn, settings: dict) -> str:
+    src = (
+        f"/api/phap-nhan/logo/{pn.ma_phap_nhan}" if pn and pn.ma_phap_nhan
+        else settings.get("logo_url") or ""
+    )
+    return f'<img src="{_html_mod.escape(src)}" style="max-height:50px;max-width:100%;object-fit:contain"/>' if src else ""
 
 # ── Role groups ──────────────────────────────────────────────────────────────
 CREATE_ROLES = ("KE_TOAN_CONG_NO", "KE_TOAN", "KE_TOAN_TRUONG", "GIAM_DOC")
@@ -279,7 +289,7 @@ def print_adjustment_log(
         "{{document_date}}": _ngay(str(lg.adjusted_at.date()) if lg.adjusted_at else ""),
         "{{company_name}}": _html_mod.escape(pn_name),
         "{{company_details}}": "Bộ phận: Kế toán công nợ",
-        "{{logo_img}}": f'<img src="{settings["logo_url"]}" style="max-height:50px"/>' if settings.get("logo_url") else "",
+        "{{logo_img}}": _logo_img(pn, settings),
         "{{accent}}": accent,
         "{{tt_color}}": tt_color,
         "{{ten_kh}}": _html_mod.escape(ten_kh),
@@ -367,7 +377,10 @@ def print_invoice(
     if pn and "VISUN" in pn.ma_phap_nhan.upper():
         accent = "#0277BD"
 
-    logo_src = settings.get("logo_url") or ""
+    logo_src = (
+        f"/api/phap-nhan/logo/{pn.ma_phap_nhan}" if pn and pn.ma_phap_nhan
+        else settings.get("logo_url") or ""
+    )
     ten_kh = inv.ten_don_vi or (inv.customer.ten_viet_tat if inv.customer else "")
     dia_chi_kh = inv.dia_chi or (inv.customer.dia_chi if inv.customer else "")
     mst_kh = inv.ma_so_thue or (inv.customer.ma_so_thue if inv.customer else "")

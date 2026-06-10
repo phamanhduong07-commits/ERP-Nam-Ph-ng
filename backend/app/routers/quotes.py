@@ -1297,15 +1297,22 @@ def print_quote(
     _: User = Depends(get_current_user),
 ):
     quote = _load_quote(quote_id, db)
-    tpl = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "SALES_QUOTE").first()
+    pn = quote.phap_nhan if quote.phap_nhan_id else None
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "SALES_QUOTE")
+    tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == pn.id).first() if pn else None
+    if not tpl:
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
     if not tpl:
         raise HTTPException(status_code=404, detail="Không tìm thấy mẫu in SALES_QUOTE")
 
     settings = {s.key: s.value for s in db.query(SystemSetting).all()}
-    company_name = settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
-    company_details = settings.get("company_details") or ""
-    logo_url = settings.get("logo_url") or ""
-    logo_img = f'<img src="{logo_url}" />' if logo_url else ""
+    logo_src = (
+        f"/api/phap-nhan/logo/{pn.ma_phap_nhan}" if pn and pn.ma_phap_nhan
+        else settings.get("logo_url") or ""
+    )
+    logo_img = f'<img src="{logo_src}" style="max-height:50px;max-width:100%;object-fit:contain"/>' if logo_src else ""
+    company_name = (pn.ten_phap_nhan if pn else None) or settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+    company_details = (pn.dia_chi if pn else None) or settings.get("company_details") or ""
 
     rows = ""
     for i, item in enumerate(quote.items, 1):

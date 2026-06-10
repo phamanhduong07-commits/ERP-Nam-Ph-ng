@@ -31,8 +31,17 @@ from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_date, parse_decimal, parse_text,
 )
 from app.utils.format_utils import so_thanh_chu, ngay_str
+import html as _html_mod
 import logging
 import io
+
+
+def _logo_img(pn, settings: dict) -> str:
+    src = (
+        f"/api/phap-nhan/logo/{pn.ma_phap_nhan}" if pn and pn.ma_phap_nhan
+        else settings.get("logo_url") or ""
+    )
+    return f'<img src="{_html_mod.escape(src)}" style="max-height:50px;max-width:100%;object-fit:contain"/>' if src else ""
 import pandas as pd
 from enum import Enum as _Enum
 
@@ -635,7 +644,7 @@ def print_purchase_invoice(
         "{{han_tt}}": ngay_str(inv.han_tt) if inv.han_tt else "-",
         "{{company_name}}": _html_mod.escape(ten_cty),
         "{{company_details}}": _html_mod.escape(" | ".join(parts)),
-        "{{logo_img}}": f'<img src="{_html_mod.escape(settings["logo_url"])}" style="max-height:50px"/>' if settings.get("logo_url") else "",
+        "{{logo_img}}": _logo_img(pn, settings),
         "{{accent}}": accent,
         "{{nha_cung_cap}}": _html_mod.escape(inv.ten_don_vi or ""),
         "{{ma_so_thue}}": _html_mod.escape(inv.ma_so_thue or ""),
@@ -1432,7 +1441,7 @@ def print_receipt(
         "{{document_date}}": ngay_str(r.ngay_phieu),
         "{{company_name}}": _html_mod.escape(ten_cty),
         "{{company_details}}": _html_mod.escape(" | ".join(parts)),
-        "{{logo_img}}": f'<img src="{_html_mod.escape(settings["logo_url"])}" style="max-height:50px"/>' if settings.get("logo_url") else "",
+        "{{logo_img}}": _logo_img(pn, settings),
         "{{accent}}": accent,
         "{{nguoi_nop}}": _html_mod.escape(ten_kh),
         "{{khach_hang}}": _html_mod.escape(ten_kh),
@@ -1501,7 +1510,7 @@ def print_payment(
         "{{document_date}}": ngay_str(p.ngay_phieu),
         "{{company_name}}": _html_mod.escape(ten_cty),
         "{{company_details}}": _html_mod.escape(" | ".join(parts)),
-        "{{logo_img}}": f'<img src="{_html_mod.escape(settings["logo_url"])}" style="max-height:50px"/>' if settings.get("logo_url") else "",
+        "{{logo_img}}": _logo_img(pn, settings),
         "{{accent}}": accent,
         "{{nguoi_nhan}}": _html_mod.escape(ten_ncc),
         "{{nha_cung_cap}}": _html_mod.escape(ten_ncc),

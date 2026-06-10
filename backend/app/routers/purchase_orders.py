@@ -576,7 +576,11 @@ def print_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_cu
     sup_name = _html_mod.escape(sup.ten_viet_tat if sup else "")
     sup_addr = _html_mod.escape(getattr(sup, "dia_chi", "") or "") if sup else ""
     pn = db.get(PhapNhan, phap_nhan_id) if phap_nhan_id else None
-    logo_src = f"/{pn.logo_path}" if pn and pn.logo_path else ""
+    logo_src = (
+        f"/api/phap-nhan/logo/{pn.ma_phap_nhan}" if pn and pn.ma_phap_nhan
+        else f"/{pn.logo_path}" if pn and pn.logo_path
+        else ""
+    )
     pn_name = _html_mod.escape(pn.ten_phap_nhan if pn else (settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"))
     pn_details = _html_mod.escape(pn.dia_chi if pn and pn.dia_chi else (settings.get("company_details") or ""))
 
