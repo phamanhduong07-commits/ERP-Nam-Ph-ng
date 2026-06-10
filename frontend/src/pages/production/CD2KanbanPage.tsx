@@ -1001,7 +1001,11 @@ export default function CD2KanbanPage() {
         </div>
 
         <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
-          {activePhieu ? <KanbanCard phieu={activePhieu} overlay /> : null}
+          {activePhieu ? (
+            <div style={{ width: 210 }}>
+              <KanbanCard phieu={activePhieu} overlay />
+            </div>
+          ) : null}
         </DragOverlay>
       </DndContext>
 
