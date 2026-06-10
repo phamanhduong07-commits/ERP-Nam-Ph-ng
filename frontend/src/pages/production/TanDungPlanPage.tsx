@@ -550,7 +550,7 @@ export default function TanDungPlanPage() {
               </Row>
               <Row gutter={12}>
                 <Col span={12}>
-                  <Form.Item name="so_luong_nhap" label="Số lượng nhập (thùng)" rules={[{ required: true, min: 1 }]}>
+                  <Form.Item name="so_luong_nhap" label="Số lượng nhập (thùng)" rules={[{ required: true, type: 'number', min: 1, message: 'Số lượng nhập phải ≥ 1' }]}>
                     <InputNumber min={0} style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
