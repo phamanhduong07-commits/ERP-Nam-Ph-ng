@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
+  Alert, AutoComplete, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
   Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message, Divider,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -41,6 +41,7 @@ type FormItem = {
 }
 
 const DVT_OPTIONS = ['Kg', 'Tấn', 'Cuộn', 'Tờ', 'Cái', 'Bộ', 'Hộp', 'Lít'].map(v => ({ value: v, label: v }))
+const MUC_IN_OPTIONS = ['Mực đen', 'Mực xanh', 'Mực đỏ', 'Mực vàng', 'Mực trắng', 'Mực bạc', 'Mực UV', 'Mực nước'].map(v => ({ value: v }))
 const DIEU_KHOAN_OPTIONS = ['COD', 'NET15', 'NET30', 'NET45', 'NET60', 'TT trước'].map(v => ({ value: v, label: v }))
 
 const ACTIVE_STATUSES = ['nhap', 'cho_duyet', 'duyet_pb', 'duyet_gd']
@@ -814,7 +815,9 @@ export default function YMHListPage() {
                                     />
                                   </Form.Item>
                                   <Form.Item name={[name, 'ten_hang']} label={label} rules={[{ required: true, message: `Nhập mô tả ${label}` }]} style={{ marginBottom: 4 }}>
-                                    <Input placeholder={`Mô tả ${label} cần đặt`} />
+                                    {loai === 'muc_in'
+                                      ? <AutoComplete options={MUC_IN_OPTIONS} filterOption={(input, opt) => (opt?.value ?? '').toLowerCase().includes(input.toLowerCase())} placeholder="Chọn hoặc nhập loại mực" />
+                                      : <Input placeholder={`Mô tả ${label} cần đặt`} />}
                                   </Form.Item>
                                 </Space>
                               )
