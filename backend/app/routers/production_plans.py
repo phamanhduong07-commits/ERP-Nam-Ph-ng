@@ -804,6 +804,18 @@ def delete_line(
     if not line:
         raise HTTPException(status_code=404, detail="Không tìm thấy dòng kế hoạch")
 
+    order = (
+        db.query(ProductionOrder)
+        .join(ProductionOrderItem, ProductionOrderItem.production_order_id == ProductionOrder.id)
+        .filter(ProductionOrderItem.id == line.production_order_item_id)
+        .first()
+    )
+    if order and order.trang_thai == "dang_chay":
+        raise HTTPException(
+            status_code=400,
+            detail=f"LSX {order.so_lenh} đang chạy — không thể gỡ khỏi kế hoạch",
+        )
+
     db.delete(line)
     db.commit()
     return _build_plan_response(_load_plan(plan_id, db))

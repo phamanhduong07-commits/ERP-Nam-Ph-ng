@@ -959,8 +959,8 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                         </Popconfirm>
                       )}
                       {canEdit && (
-                        <Popconfirm title="Xóa dòng này?" onConfirm={() => deleteLineMut.mutate(r.id)} okText="Xóa" okButtonProps={{ danger: true }}>
-                          <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                        <Popconfirm title="Gỡ LSX này khỏi kế hoạch? LSX sẽ về trạng thái chờ KHSX." onConfirm={() => deleteLineMut.mutate(r.id)} okText="Gỡ khỏi KH" okButtonProps={{ danger: true }}>
+                          <Button size="small" type="text" danger icon={<DeleteOutlined />} title="Gỡ khỏi kế hoạch" />
                         </Popconfirm>
                       )}
                       {r.trang_thai === 'hoan_thanh' && (
