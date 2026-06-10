@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, model_validator
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 import html as _html_mod
 
@@ -638,13 +638,174 @@ def huy_ymh(
     return {"ok": True}
 
 
+# ─── Print helpers ────────────────────────────────────────────────────────────
+
+_TD  = "style='padding:4px;border:1px solid #ccc'"
+_TDC = "style='padding:4px;border:1px solid #ccc;text-align:center'"
+_TDR = "style='padding:4px;border:1px solid #ccc;text-align:right'"
+_TH_STYLE = "style='padding:4px;border:1px solid #ccc;text-align:center'"
+
+
+def _th(label: str, width: str = "", align: str = "center") -> str:
+    w = f"width:{width};" if width else ""
+    return f"<th style='{w}padding:4px;border:1px solid #ccc;text-align:{align}'>{label}</th>"
+
+
+def _ymh_section_label(title: str, color: str) -> str:
+    return (
+        f"<div style='margin-top:18px;margin-bottom:4px;font-weight:bold;"
+        f"color:{color};font-size:10.5pt;border-left:4px solid {color};padding-left:8px'>"
+        f"{title}</div>"
+    )
+
+
+def _build_ymh_giay(items: list, color: str) -> tuple[str, Decimal]:
+    """Bảng giấy cuộn — hiện Mã giấy, Khổ (mm), Định lượng (g/m²), Ký hiệu."""
+    accent = f"background:{color};color:#fff"
+    header = (
+        f"<thead><tr style='{accent}'>"
+        + _th("STT", "4%") + _th("Tên hàng", "20%", "left")
+        + _th("Mã giấy", "8%") + _th("Khổ (mm)", "7%")
+        + _th("ĐL (g/m²)", "7%") + _th("Ký hiệu", "8%")
+        + _th("ĐVT", "5%") + _th("Số lượng", "9%")
+        + _th("Đơn giá DK", "10%") + _th("Thành tiền", "10%")
+        + _th("Ngày cần", "8%") + _th("Ghi chú", "", "left")
+        + "</tr></thead>"
+    )
+    rows = ""
+    tong = Decimal("0")
+    for i, it in enumerate(items, 1):
+        pm = it.paper_material
+        ten = it.ten_hang or (pm.ten if pm else "")
+        ma_giay = (pm.ma_chinh or "") if pm else ""
+        kho = f"{float(pm.kho):,.0f}" if pm and pm.kho else ""
+        dl = f"{float(pm.dinh_luong):,.0f}" if pm and pm.dinh_luong else ""
+        ky_hieu = (pm.ma_ky_hieu or "") if pm else ""
+        don_gia = it.don_gia_du_kien or Decimal("0")
+        thanh_tien = it.so_luong * don_gia
+        tong += thanh_tien
+        ngay = it.ngay_can.strftime("%d/%m/%Y") if it.ngay_can else ""
+        rows += (
+            f"<tr>"
+            f"<td {_TDC}>{i}</td><td {_TD}>{_html_mod.escape(ten)}</td>"
+            f"<td {_TDC}>{_html_mod.escape(ma_giay)}</td><td {_TDC}>{kho}</td>"
+            f"<td {_TDC}>{dl}</td><td {_TDC}>{_html_mod.escape(ky_hieu)}</td>"
+            f"<td {_TDC}>{_html_mod.escape(it.dvt or 'Kg')}</td>"
+            f"<td {_TDR}>{float(it.so_luong):,.3f}</td>"
+            f"<td {_TDR}>{int(don_gia):,}</td><td {_TDR}>{int(thanh_tien):,}</td>"
+            f"<td {_TDC}>{ngay}</td><td {_TD}>{_html_mod.escape(it.ghi_chu or '')}</td>"
+            f"</tr>"
+        )
+    rows += (
+        f"<tr style='font-weight:bold;background:#f5f5f5'>"
+        f"<td colspan='9' {_TDR}>Tổng cộng:</td>"
+        f"<td {_TDR}>{int(tong):,}</td>"
+        f"<td colspan='2' {_TD}></td></tr>"
+    )
+    html = f"<table style='width:100%;border-collapse:collapse;font-size:9.5pt'>{header}<tbody>{rows}</tbody></table>"
+    return html, tong
+
+
+def _build_ymh_nvl(items: list, color: str) -> tuple[str, Decimal]:
+    """Bảng NVL khác — cột đơn giản."""
+    accent = f"background:{color};color:#fff"
+    header = (
+        f"<thead><tr style='{accent}'>"
+        + _th("STT", "4%") + _th("Tên hàng", "", "left")
+        + _th("ĐVT", "7%") + _th("Số lượng", "10%")
+        + _th("Đơn giá DK", "12%") + _th("Thành tiền", "12%")
+        + _th("Ngày cần", "10%") + _th("Ghi chú", "15%", "left")
+        + "</tr></thead>"
+    )
+    rows = ""
+    tong = Decimal("0")
+    for i, it in enumerate(items, 1):
+        om = it.other_material
+        ten = it.ten_hang or (om.ten if om else "")
+        don_gia = it.don_gia_du_kien or Decimal("0")
+        thanh_tien = it.so_luong * don_gia
+        tong += thanh_tien
+        ngay = it.ngay_can.strftime("%d/%m/%Y") if it.ngay_can else ""
+        rows += (
+            f"<tr>"
+            f"<td {_TDC}>{i}</td><td {_TD}>{_html_mod.escape(ten)}</td>"
+            f"<td {_TDC}>{_html_mod.escape(it.dvt or '')}</td>"
+            f"<td {_TDR}>{float(it.so_luong):,.3f}</td>"
+            f"<td {_TDR}>{int(don_gia):,}</td><td {_TDR}>{int(thanh_tien):,}</td>"
+            f"<td {_TDC}>{ngay}</td><td {_TD}>{_html_mod.escape(it.ghi_chu or '')}</td>"
+            f"</tr>"
+        )
+    rows += (
+        f"<tr style='font-weight:bold;background:#f5f5f5'>"
+        f"<td colspan='5' {_TDR}>Tổng cộng:</td>"
+        f"<td {_TDR}>{int(tong):,}</td>"
+        f"<td colspan='2' {_TD}></td></tr>"
+    )
+    html = f"<table style='width:100%;border-collapse:collapse;font-size:10pt'>{header}<tbody>{rows}</tbody></table>"
+    return html, tong
+
+
+def _build_ymh_cong_cu(items: list, color: str) -> tuple[str, Decimal]:
+    """Bảng bản in / khuôn bế — hiện mã sản phẩm, loại công cụ."""
+    accent = f"background:{color};color:#fff"
+    header = (
+        f"<thead><tr style='{accent}'>"
+        + _th("STT", "4%") + _th("Tên hàng / Mã SP", "", "left")
+        + _th("Loại", "9%") + _th("ĐVT", "6%")
+        + _th("Số lượng", "9%") + _th("Đơn giá DK", "12%")
+        + _th("Thành tiền", "12%") + _th("Ngày cần", "10%")
+        + _th("Ghi chú", "15%", "left")
+        + "</tr></thead>"
+    )
+    _LOAI = {"ban_in": "Bản in", "khuon_be": "Khuôn bế", "muc_in": "Mực in"}
+    rows = ""
+    tong = Decimal("0")
+    for i, it in enumerate(items, 1):
+        sp = it.san_pham
+        ten = it.ten_hang or (
+            f"{sp.ten_san_pham} ({sp.ma_san_pham})" if sp else ""
+        )
+        don_gia = it.don_gia_du_kien or Decimal("0")
+        thanh_tien = it.so_luong * don_gia
+        tong += thanh_tien
+        ngay = it.ngay_can.strftime("%d/%m/%Y") if it.ngay_can else ""
+        loai_label = _LOAI.get(it.loai_item or "", it.loai_item or "")
+        rows += (
+            f"<tr>"
+            f"<td {_TDC}>{i}</td><td {_TD}>{_html_mod.escape(ten)}</td>"
+            f"<td {_TDC}>{_html_mod.escape(loai_label)}</td>"
+            f"<td {_TDC}>{_html_mod.escape(it.dvt or 'Cái')}</td>"
+            f"<td {_TDR}>{float(it.so_luong):,.0f}</td>"
+            f"<td {_TDR}>{int(don_gia):,}</td><td {_TDR}>{int(thanh_tien):,}</td>"
+            f"<td {_TDC}>{ngay}</td><td {_TD}>{_html_mod.escape(it.ghi_chu or '')}</td>"
+            f"</tr>"
+        )
+    rows += (
+        f"<tr style='font-weight:bold;background:#f5f5f5'>"
+        f"<td colspan='6' {_TDR}>Tổng cộng:</td>"
+        f"<td {_TDR}>{int(tong):,}</td>"
+        f"<td colspan='2' {_TD}></td></tr>"
+    )
+    html = f"<table style='width:100%;border-collapse:collapse;font-size:10pt'>{header}<tbody>{rows}</tbody></table>"
+    return html, tong
+
+
 @router.get("/{ymh_id}/print", response_class=HTMLResponse)
 def print_ymh(
     ymh_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    ymh = db.get(PurchaseRequisition, ymh_id)
+    ymh = (
+        db.query(PurchaseRequisition)
+        .options(
+            selectinload(PurchaseRequisition.items).selectinload(PurchaseRequisitionItem.paper_material),
+            selectinload(PurchaseRequisition.items).selectinload(PurchaseRequisitionItem.other_material),
+            selectinload(PurchaseRequisition.items).selectinload(PurchaseRequisitionItem.san_pham),
+        )
+        .filter(PurchaseRequisition.id == ymh_id)
+        .first()
+    )
     if not ymh:
         raise HTTPException(404, "Không tìm thấy YMH")
 
@@ -688,52 +849,47 @@ def print_ymh(
         else ""
     )
 
-    rows_html = ""
+    # Read accent color from template easy_config
+    try:
+        import json as _json
+        _ec = _json.loads(tpl.variables_meta.get("easy_config", "{}") if tpl.variables_meta else "{}")
+        _color = _ec.get("headerColor") or "#4A148C"
+    except Exception:
+        _color = "#4A148C"
+
+    # Group items by type
+    items_giay = [it for it in ymh.items if it.paper_material_id]
+    items_nvl = [it for it in ymh.items if not it.paper_material_id and it.loai_item == "nvl"]
+    items_cong_cu = [it for it in ymh.items if it.loai_item in ("ban_in", "khuon_be", "muc_in")]
+
+    # Build multi-section body_html
+    body_parts = []
     tong = Decimal("0")
-    for i, it in enumerate(ymh.items, 1):
-        ten = it.ten_hang or ""
-        if not ten and it.paper_material_id:
-            pm = db.get(PaperMaterial, it.paper_material_id)
-            ten = pm.ten if pm else ""
-        if not ten and it.other_material_id:
-            om = db.get(OtherMaterial, it.other_material_id)
-            ten = om.ten if om else ""
-        don_gia = it.don_gia_du_kien or Decimal("0")
-        thanh_tien = it.so_luong * don_gia
-        tong += thanh_tien
-        ngay_can_str = it.ngay_can.strftime("%d/%m/%Y") if it.ngay_can else ""
-        rows_html += (
-            f"<tr>"
-            f"<td class='center'>{i}</td>"
-            f"<td>{_html_mod.escape(ten)}</td>"
-            f"<td class='center'>{_html_mod.escape(it.dvt or '')}</td>"
-            f"<td class='right'>{float(it.so_luong):,.3f}</td>"
-            f"<td class='right'>{int(don_gia):,}</td>"
-            f"<td class='right'>{int(thanh_tien):,}</td>"
-            f"<td class='center'>{ngay_can_str}</td>"
-            f"<td>{_html_mod.escape(it.ghi_chu or '')}</td>"
-            f"</tr>"
+
+    if items_giay:
+        tbl, t = _build_ymh_giay(items_giay, _color)
+        tong += t
+        body_parts.append(_ymh_section_label("Giấy cuộn", _color) + tbl)
+
+    if items_nvl:
+        tbl, t = _build_ymh_nvl(items_nvl, _color)
+        tong += t
+        body_parts.append(_ymh_section_label("Nguyên vật liệu khác", _color) + tbl)
+
+    if items_cong_cu:
+        tbl, t = _build_ymh_cong_cu(items_cong_cu, _color)
+        tong += t
+        body_parts.append(_ymh_section_label("Công cụ sản xuất (Bản in / Khuôn bế)", _color) + tbl)
+
+    # Grand total row when multiple sections
+    if len(body_parts) > 1:
+        body_parts.append(
+            f"<div style='margin-top:10px;text-align:right;font-weight:bold;font-size:11pt'>"
+            f"Tổng cộng tất cả: <span style='color:{_color}'>{int(tong):,} đồng</span></div>"
         )
 
-    body_html = (
-        "<table>"
-        "<thead><tr>"
-        "<th style='width:35px'>STT</th>"
-        "<th>Tên hàng</th>"
-        "<th style='width:55px'>ĐVT</th>"
-        "<th style='width:80px'>Số lượng</th>"
-        "<th style='width:100px'>Đơn giá DK</th>"
-        "<th style='width:110px'>Thành tiền</th>"
-        "<th style='width:90px'>Ngày cần</th>"
-        "<th style='width:120px'>Ghi chú</th>"
-        "</tr></thead>"
-        f"<tbody>{rows_html}</tbody>"
-        "<tfoot><tr class='total-row'>"
-        "<td colspan='5' class='right'>TỔNG CỘNG</td>"
-        f"<td class='right'>{int(tong):,}</td>"
-        "<td colspan='2'></td>"
-        "</tr></tfoot>"
-        "</table>"
+    body_html = "".join(body_parts) if body_parts else (
+        "<p style='color:#999;font-style:italic'>Không có mục nào trong phiếu.</p>"
     )
 
     ngay_str = ""
