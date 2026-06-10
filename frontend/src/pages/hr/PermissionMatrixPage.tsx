@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Checkbox, Typography, Space, Row, Col, Spin, App, List, Divider, Layout, Modal } from 'antd'
+import { Button, Card, Checkbox, Typography, Space, Row, Col, Spin, App, List, Layout, Modal } from 'antd'
 import { SaveOutlined, ReloadOutlined, SafetyOutlined } from '@ant-design/icons'
 import { permissionsApi, rolesApi } from '../../api/permissions'
 

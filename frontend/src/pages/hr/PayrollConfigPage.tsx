@@ -41,28 +41,44 @@ export default function PayrollConfigPage() {
     mutationFn: (data: any) => data.id ? hrApi.updatePayrollConfig(data.id, data) : hrApi.createPayrollConfig(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['hr-payroll-configs'] })
-      message.success('Da luu cau hinh')
+      message.success('Đã lưu cấu hình')
       setEditing(null)
       form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Loi luu du lieu'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi lưu dữ liệu'),
   })
 
-  const handleAddDefault = () => {
+  const handleAddDefault = async () => {
     const defaults = [
-      { ma_hang: 'MAY_SONG_CD1', ten_hang: 'May song (CD1)', cong_doan: 'MAY_SONG_CD1', phan_tram_luong_sp: 100, don_gia: 60, loai: 'san_pham' },
-      { ma_hang: 'XA', ten_hang: 'Xa', cong_doan: 'XA', phan_tram_luong_sp: 100, don_gia: 68, loai: 'san_pham' },
+      { ma_hang: 'MAY_SONG_CD1', ten_hang: 'Máy sóng (CD1)', cong_doan: 'MAY_SONG_CD1', phan_tram_luong_sp: 100, don_gia: 60, loai: 'san_pham' },
+      { ma_hang: 'XA', ten_hang: 'Xả', cong_doan: 'XA', phan_tram_luong_sp: 100, don_gia: 68, loai: 'san_pham' },
       { ma_hang: 'IN', ten_hang: 'In', cong_doan: 'IN', phan_tram_luong_sp: 100, don_gia: 122, loai: 'san_pham' },
-      { ma_hang: 'CAN_MANG', ten_hang: 'Can mang', cong_doan: 'CAN_MANG', phan_tram_luong_sp: 100, don_gia: 100, loai: 'san_pham' },
-      { ma_hang: 'THANH_PHAM', ten_hang: 'Thanh pham', cong_doan: 'THANH_PHAM', phan_tram_luong_sp: 100, don_gia: 204, loai: 'san_pham' },
-      { ma_hang: 'ALL', ten_hang: 'Tong san luong xuong', cong_doan: 'ALL', phan_tram_luong_sp: 100, don_gia: 100, loai: 'san_pham' },
+      { ma_hang: 'CAN_MANG', ten_hang: 'Cán màng', cong_doan: 'CAN_MANG', phan_tram_luong_sp: 100, don_gia: 100, loai: 'san_pham' },
+      { ma_hang: 'THANH_PHAM', ten_hang: 'Thành phẩm', cong_doan: 'THANH_PHAM', phan_tram_luong_sp: 100, don_gia: 204, loai: 'san_pham' },
+      { ma_hang: 'ALL', ten_hang: 'Tổng sản lượng xưởng', cong_doan: 'ALL', phan_tram_luong_sp: 100, don_gia: 100, loai: 'san_pham' },
     ]
-
-    defaults.forEach(d => {
-      if (!configs.find((c: any) => c.ma_hang === d.ma_hang)) {
-        saveMut.mutate(d)
+    const toCreate = defaults.filter(d => !configs.find((c: any) => c.ma_hang === d.ma_hang))
+    if (toCreate.length === 0) {
+      message.info('Tất cả mã đơn giá mặc định đã có')
+      return
+    }
+    // Bulk create — tránh spam toast + race condition
+    const key = 'add-default-payroll'
+    message.loading({ content: `Đang thêm ${toCreate.length} đơn giá mặc định...`, key })
+    try {
+      await hrApi.bulkCreatePayrollConfigs(toCreate)
+      message.success({ content: `Đã thêm ${toCreate.length} đơn giá mặc định`, key })
+      qc.invalidateQueries({ queryKey: ['hr-payroll-configs'] })
+    } catch (e: any) {
+      // Fallback: nếu bulk endpoint không có, dùng Promise.all
+      try {
+        await Promise.all(toCreate.map(d => hrApi.createPayrollConfig(d)))
+        message.success({ content: `Đã thêm ${toCreate.length} đơn giá mặc định`, key })
+        qc.invalidateQueries({ queryKey: ['hr-payroll-configs'] })
+      } catch (e2: any) {
+        message.error({ content: e2?.response?.data?.detail || 'Thêm đơn giá mặc định thất bại', key })
       }
-    })
+    }
   }
 
   const columns = [

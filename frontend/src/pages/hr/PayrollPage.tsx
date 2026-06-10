@@ -67,32 +67,38 @@ export default function PayrollPage() {
   const generateMutation = useMutation({
     mutationFn: () => client.post('/hr/payroll/generate', null, { params: monthParams }),
     onSuccess: () => {
-      message.success('Da khoi tao bang luong thang thanh cong')
+      message.success('Đã khởi tạo bảng lương tháng thành công')
       refetchSummary()
     },
     onError: (err: any) => {
-      message.error(err?.response?.data?.detail || 'Khoi tao bang luong that bai')
-    }
+      message.error(err?.response?.data?.detail || 'Khởi tạo bảng lương thất bại')
+    },
   })
 
   const holidayMutation = useMutation({
     mutationFn: (values: any) => hrApi.createPayrollHoliday({
       ...values,
-      ngay: values.ngay.format('YYYY-MM-DD')
+      ngay: values.ngay.format('YYYY-MM-DD'),
     }),
     onSuccess: () => {
-      message.success('Da luu ngay le')
+      message.success('Đã lưu ngày lễ')
       holidayForm.resetFields()
       qc.invalidateQueries({ queryKey: ['hr-payroll-holidays'] })
-    }
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.detail || 'Lưu ngày lễ thất bại')
+    },
   })
 
   const deleteHolidayMutation = useMutation({
     mutationFn: (id: number) => hrApi.deletePayrollHoliday(id),
     onSuccess: () => {
-      message.success('Da xoa ngay le')
+      message.success('Đã xóa ngày lễ')
       qc.invalidateQueries({ queryKey: ['hr-payroll-holidays'] })
-    }
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.detail || 'Xóa ngày lễ thất bại')
+    },
   })
 
   const exportPayroll = () => {
@@ -254,10 +260,10 @@ export default function PayrollPage() {
       </Row>
 
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}><Card size="small"><Statistic title="Tong thu nhap" value={(payrollSummary || []).reduce((s: number, r: any) => s + Number(r.tong_thu_nhap || 0), 0)} suffix="d" /></Card></Col>
-        <Col span={6}><Card size="small"><Statistic title="Tong thuc linh" value={(payrollSummary || []).reduce((s: number, r: any) => s + Number(r.thuc_linh || 0), 0)} suffix="d" valueStyle={{ color: '#52c41a' }} /></Card></Col>
-        <Col span={6}><Card size="small"><Statistic title="Tong tien tang ca" value={(payrollSummary || []).reduce((s: number, r: any) => s + Number(r.ot_tien_ngay_thuong || 0) + Number(r.ot_tien_chu_nhat || 0) + Number(r.ot_tien_chu_nhat_tang_ca || 0) + Number(r.ot_tien_ngay_le || 0), 0)} suffix="d" /></Card></Col>
-        <Col span={6}><Card size="small"><Statistic title="Ngay le trong thang" value={holidays.length} /></Card></Col>
+        <Col span={6}><Card size="small"><Statistic title="Tổng thu nhập" value={(payrollSummary || []).reduce((s: number, r: any) => s + Number(r.tong_thu_nhap || 0), 0)} suffix="đ" /></Card></Col>
+        <Col span={6}><Card size="small"><Statistic title="Tổng thực lĩnh" value={(payrollSummary || []).reduce((s: number, r: any) => s + Number(r.thuc_linh || 0), 0)} suffix="đ" valueStyle={{ color: '#52c41a' }} /></Card></Col>
+        <Col span={6}><Card size="small"><Statistic title="Tổng tiền tăng ca" value={(payrollSummary || []).reduce((s: number, r: any) => s + Number(r.ot_tien_ngay_thuong || 0) + Number(r.ot_tien_chu_nhat || 0) + Number(r.ot_tien_chu_nhat_tang_ca || 0) + Number(r.ot_tien_ngay_le || 0), 0)} suffix="đ" /></Card></Col>
+        <Col span={6}><Card size="small"><Statistic title="Ngày lễ trong tháng" value={holidays.length} /></Card></Col>
       </Row>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>

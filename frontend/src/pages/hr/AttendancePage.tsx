@@ -3,14 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Form, Input, Select, Space, Table, Typography, message, Row, Col, Tabs, Tag, DatePicker, Modal
 } from 'antd'
-import { 
-  FileSearchOutlined, 
-  UploadOutlined, 
-  CheckCircleOutlined, 
-  ExclamationCircleOutlined,
+import {
+  FileSearchOutlined,
+  UploadOutlined,
+  CheckCircleOutlined,
   CalendarOutlined,
-  DownloadOutlined
+  DownloadOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons'
+import { Link } from 'react-router-dom'
 import { hrApi, Employee } from '../../api/hr'
 import { downloadTemplate } from '../../utils/excelUtils'
 import * as XLSX from 'xlsx'
@@ -162,14 +163,6 @@ export default function AttendancePage() {
   })
 
   // Mutations
-  const approveMut = useMutation({
-    mutationFn: ({ id, y_kien }: { id: number, y_kien?: string }) => hrApi.approveLeaveRequest(id, y_kien),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['hr-leave-requests'] })
-      message.success('Đã duyệt đơn')
-    }
-  })
-
   const createLeaveMut = useMutation({
     mutationFn: (data: any) => hrApi.createLeaveRequest(data),
     onSuccess: () => {
@@ -177,7 +170,10 @@ export default function AttendancePage() {
       message.success('Đã gửi đơn trình duyệt')
       setLeaveModal(false)
       form.resetFields()
-    }
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.detail || 'Lỗi gửi đơn')
+    },
   })
 
   const attColumns = [
@@ -204,23 +200,27 @@ export default function AttendancePage() {
     { title: 'Thời gian', render: (_: any, r: any) => `${dayjs(r.ngay_bat_dau).format('DD/MM')} - ${dayjs(r.ngay_ket_thuc).format('DD/MM')}` },
     { title: 'Tổng ngày', dataIndex: 'tong_ngay', align: 'center' as const, render: (v: number) => <Text strong>{v}</Text> },
     { title: 'Lý do', dataIndex: 'ly_do', ellipsis: true },
-    { 
-      title: 'Trạng thái', 
+    {
+      title: 'Trạng thái',
       dataIndex: 'trang_thai',
       render: (v: string) => {
-        const labels: any = { cho_duyet: 'Chờ duyệt', phong_ban_duyet: 'P.Ban duyệt', bgd_duyet: 'BGD duyệt', tu_choi: 'Từ chối' }
-        const colors: any = { cho_duyet: 'orange', phong_ban_duyet: 'blue', bgd_duyet: 'green', tu_choi: 'red' }
-        return <Tag color={colors[v]}>{labels[v]}</Tag>
-      }
+        const labels: Record<string, string> = {
+          cho_duyet: 'Chờ duyệt',
+          phong_ban_duyet: 'P.Ban duyệt',
+          bgd_duyet: 'BGD duyệt',
+          tu_choi: 'Từ chối',
+          huy: 'Đã hủy',
+        }
+        const colors: Record<string, string> = {
+          cho_duyet: 'orange',
+          phong_ban_duyet: 'blue',
+          bgd_duyet: 'green',
+          tu_choi: 'red',
+          huy: 'default',
+        }
+        return <Tag color={colors[v] || 'default'}>{labels[v] || v}</Tag>
+      },
     },
-    {
-      title: 'Thao tác',
-      render: (_: any, r: any) => (
-        r.trang_thai !== 'bgd_duyet' && r.trang_thai !== 'tu_choi' && (
-          <Button size="small" type="primary" ghost onClick={() => approveMut.mutate({ id: r.id })}>Duyệt</Button>
-        )
-      )
-    }
   ]
 
   return (
@@ -242,36 +242,64 @@ export default function AttendancePage() {
       </Row>
 
       <Card size="small">
-        <Tabs activeKey={activeTab} onChange={setActiveTab}>
-          <Tabs.TabPane tab={<span><FileSearchOutlined /> Bảng chấm công hàng ngày</span>} key="1">
-            <Space style={{ marginBottom: 16 }}>
-              <RangePicker 
-                value={dateRange} 
-                onChange={v => v && setDateRange([v[0]!, v[1]!])} 
-                format="DD/MM/YYYY"
-              />
-              <Button type="primary">Lọc dữ liệu</Button>
-            </Space>
-            <Table 
-              dataSource={attendance} 
-              columns={attColumns} 
-              rowKey="id" 
-              loading={loadingAtt} 
-              size="small" 
-              pagination={{ pageSize: 20 }}
-            />
-          </Tabs.TabPane>
-          
-          <Tabs.TabPane tab={<span><CheckCircleOutlined /> Phê duyệt Đơn từ</span>} key="2">
-            <Table 
-              dataSource={requests} 
-              columns={reqColumns} 
-              rowKey="id" 
-              loading={loadingReq} 
-              size="small"
-            />
-          </Tabs.TabPane>
-        </Tabs>
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={[
+            {
+              key: '1',
+              label: <span><FileSearchOutlined /> Bảng chấm công hàng ngày</span>,
+              children: (
+                <>
+                  <Space style={{ marginBottom: 16 }}>
+                    <Text type="secondary">Khoảng thời gian:</Text>
+                    <RangePicker
+                      value={dateRange}
+                      onChange={v => v && setDateRange([v[0]!, v[1]!])}
+                      format="DD/MM/YYYY"
+                      allowClear={false}
+                    />
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      💡 Dữ liệu tự cập nhật khi đổi ngày
+                    </Text>
+                  </Space>
+                  <Table
+                    dataSource={attendance}
+                    columns={attColumns}
+                    rowKey="id"
+                    loading={loadingAtt}
+                    size="small"
+                    pagination={{ pageSize: 20 }}
+                  />
+                </>
+              ),
+            },
+            {
+              key: '2',
+              label: <span><CheckCircleOutlined /> Danh sách đơn từ</span>,
+              children: (
+                <>
+                  <div style={{ marginBottom: 12, padding: 8, background: '#e6f4ff', borderRadius: 6 }}>
+                    <Space>
+                      <InfoCircleOutlined style={{ color: '#1677ff' }} />
+                      <Text style={{ fontSize: 13 }}>
+                        Trang này chỉ xem danh sách. Để <strong>duyệt đơn</strong>, hãy vào{' '}
+                        <Link to="/hr/approvals">📝 Phê duyệt đơn từ</Link>.
+                      </Text>
+                    </Space>
+                  </div>
+                  <Table
+                    dataSource={requests}
+                    columns={reqColumns}
+                    rowKey="id"
+                    loading={loadingReq}
+                    size="small"
+                  />
+                </>
+              ),
+            },
+          ]}
+        />
       </Card>
 
       <Modal
@@ -281,39 +309,36 @@ export default function AttendancePage() {
         onOk={() => form.submit()}
         confirmLoading={createLeaveMut.isPending}
       >
-        <Form 
-          form={form} 
-          layout="vertical" 
+        <Form
+          form={form}
+          layout="vertical"
           onFinish={v => {
-            const data = {
-              ...v,
+            const data: any = {
+              loai_don: v.loai_don,
               ngay_bat_dau: v.range[0].toISOString(),
               ngay_ket_thuc: v.range[1].toISOString(),
-              tong_ngay: v.tong_ngay,
+              ly_do: v.ly_do,
             }
-            delete data.range
             createLeaveMut.mutate(data)
           }}
         >
-          <Form.Item name="employee_id" label="Nhân viên" rules={[{ required: true }]}>
-            <Select 
-              showSearch
-              options={employees.map(e => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))}
-              filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-            />
-          </Form.Item>
+          {/* Lưu ý: Sprint C — employee_id auto từ current_user, KHÔNG gửi từ client.
+              Trang này dùng cho HR/Admin nộp hộ. Tạm thời chuyển user dùng Cổng nhân viên Mobile. */}
+          <div style={{ marginBottom: 12, padding: 8, background: '#fff7e6', borderRadius: 6, fontSize: 12 }}>
+            <InfoCircleOutlined style={{ color: '#fa8c16' }} /> Đơn sẽ được nộp dưới tên tài khoản đang đăng nhập.
+            Nhân viên có thể tự nộp đơn qua <Link to="/hr/me">📱 Cổng nhân viên</Link>.
+          </div>
           <Form.Item name="loai_don" label="Loại đơn" rules={[{ required: true }]} initialValue="nghi_phep">
             <Select options={[
-              { value: 'nghi_phep', label: 'Nghỉ phép' },
-              { value: 'cong_tac', label: 'Đi công tác' },
-              { value: 'tang_ca', label: 'Tăng ca' },
+              { value: 'nghi_phep', label: '🏖️ Nghỉ phép' },
+              { value: 'cong_tac', label: '✈️ Đi công tác' },
+              { value: 'di_muon_ve_som', label: '🕐 Đi muộn / Về sớm' },
+              { value: 'tang_ca', label: '⏰ Tăng ca (Tổ trưởng/Tổ phó)' },
+              { value: 'ung_luong', label: '💰 Ứng lương' },
             ]} />
           </Form.Item>
           <Form.Item name="range" label="Thời gian" rules={[{ required: true }]}>
             <RangePicker showTime format="DD/MM/YYYY HH:mm" style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="tong_ngay" label="Số ngày quy đổi" rules={[{ required: true }]}>
-            <Input type="number" step="0.5" placeholder="VD: 1, 0.5, 3..." />
           </Form.Item>
           <Form.Item name="ly_do" label="Lý do">
             <Input.TextArea rows={3} />
