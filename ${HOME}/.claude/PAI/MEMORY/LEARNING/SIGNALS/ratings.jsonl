@@ -902,3 +902,4 @@
 {"timestamp":"2026-06-10T07:02:43-07:00","rating":5,"session_id":"a12a246a-3632-4716-aa70-31937e7259b5","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
 {"timestamp":"2026-06-10T07:03:04-07:00","rating":5,"session_id":"25fd015a-1422-45e5-ad3e-5997ffae9512","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
 {"timestamp":"2026-06-10T07:03:21-07:00","rating":5,"session_id":"4276bfdb-a69a-49d7-99b5-75ec8d268da9","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-10T07:06:10-07:00","rating":5,"session_id":"7982b2de-a948-4c96-a6b1-5c7eff82cea0","source":"implicit","sentiment_summary":"Inference failed: Timeout after 15000ms","confidence":0.3}

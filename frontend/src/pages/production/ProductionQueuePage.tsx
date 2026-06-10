@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Tag, Button, Space, Typography, Row, Col,
   Statistic, Popconfirm, message, Tooltip, Badge, Divider, Alert, Drawer,
-  Input, InputNumber, Popover,
+  Input, InputNumber, Popover, Select,
 } from 'antd'
 import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import {
@@ -319,6 +319,11 @@ export default function ProductionQueuePage() {
 
   // Ordered lines for drag-and-drop (synced from query)
   const [orderedLines, setOrderedLines] = useState<QueueLine[]>([])
+
+  // Filters for "Kg theo mã giấy" panel
+  const [panelFilterMa, setPanelFilterMa] = useState('')
+  const [panelFilterKho, setPanelFilterKho] = useState<number | null>(null)
+  const [panelFilterDl, setPanelFilterDl] = useState<number | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
   const [tonDetailOpen, setTonDetailOpen] = useState(false)
   const [isBatchLoading, setIsBatchLoading] = useState(false)
@@ -432,6 +437,36 @@ export default function ProductionQueuePage() {
   const kgByMa       = useMemo(() => calcKgByMa(planningRows), [planningRows])
   const totalMT      = mtByKho.reduce((s, e) => s + e.totalMT, 0)
   const showPanel    = planningRows.length > 0
+
+  // Options for panel filters
+  const panelKhoOptions = useMemo(() => {
+    const s = new Set<number>()
+    planningRows.forEach(r => { if (r.kho_giay) s.add(Number(r.kho_giay)) })
+    return Array.from(s).sort((a, b) => a - b)
+  }, [planningRows])
+
+  const panelDlOptions = useMemo(() => {
+    const s = new Set<number>()
+    kgByMa.forEach(e => { if (e.dl != null) s.add(e.dl) })
+    return Array.from(s).sort((a, b) => a - b)
+  }, [kgByMa])
+
+  // Filtered kgByMa for display
+  const kgByMaDisplay = useMemo(() => {
+    // If khổ filter: recompute from khổ-filtered rows so kg reflects only those lines
+    const rows = panelFilterKho != null
+      ? planningRows.filter(r => Number(r.kho_giay) === panelFilterKho)
+      : planningRows
+    let result = calcKgByMa(rows)
+    if (panelFilterMa.trim()) {
+      const q = panelFilterMa.trim().toLowerCase()
+      result = result.filter(e => e.ma.toLowerCase().includes(q))
+    }
+    if (panelFilterDl != null) {
+      result = result.filter(e => e.dl === panelFilterDl)
+    }
+    return result
+  }, [planningRows, panelFilterKho, panelFilterMa, panelFilterDl])
 
   // ── tồn kho giấy để đối chiếu ────────────────────────────────────────────
   const { data: tonKhoGiay = [] } = useQuery({
@@ -1160,7 +1195,7 @@ export default function ProductionQueuePage() {
               <Divider style={{ margin: '14px 0' }} />
 
               {/* ── Kg theo mã giấy (gộp tất cả lớp) ── */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <div style={{ width: 4, height: 16, background: '#52c41a', borderRadius: 2 }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#389e0d', flex: 1 }}>Kg theo mã giấy</span>
                 {kgByMa.length > 0 && (
@@ -1174,9 +1209,52 @@ export default function ProductionQueuePage() {
                   </Button>
                 )}
               </div>
+
+              {/* Filter row */}
+              {kgByMa.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                  <Input
+                    size="small"
+                    placeholder="Mã giấy"
+                    allowClear
+                    value={panelFilterMa}
+                    onChange={e => setPanelFilterMa(e.target.value)}
+                    style={{ width: 90 }}
+                  />
+                  <Select
+                    size="small"
+                    placeholder="Khổ"
+                    allowClear
+                    value={panelFilterKho ?? undefined}
+                    onChange={(v: number | undefined) => setPanelFilterKho(v ?? null)}
+                    style={{ width: 80 }}
+                    options={panelKhoOptions.map(k => ({ label: `${k} cm`, value: k }))}
+                  />
+                  <Select
+                    size="small"
+                    placeholder="ĐL"
+                    allowClear
+                    value={panelFilterDl ?? undefined}
+                    onChange={(v: number | undefined) => setPanelFilterDl(v ?? null)}
+                    style={{ width: 88 }}
+                    options={panelDlOptions.map(d => ({ label: `${d} g`, value: d }))}
+                  />
+                  {(panelFilterMa || panelFilterKho != null || panelFilterDl != null) && (
+                    <Button
+                      size="small"
+                      onClick={() => { setPanelFilterMa(''); setPanelFilterKho(null); setPanelFilterDl(null) }}
+                    >✕</Button>
+                  )}
+                </div>
+              )}
+
               {kgByMa.length === 0 ? (
                 <div style={{ padding: '10px 0', textAlign: 'center', color: '#aaa', fontSize: 13 }}>
                   Chưa có dữ liệu kết cấu giấy
+                </div>
+              ) : kgByMaDisplay.length === 0 ? (
+                <div style={{ padding: '10px 0', textAlign: 'center', color: '#aaa', fontSize: 13 }}>
+                  Không có kết quả phù hợp
                 </div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -1190,7 +1268,7 @@ export default function ProductionQueuePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {kgByMa.map((p, i) => {
+                    {kgByMaDisplay.map((p, i) => {
                       const inv = inventoryByMa.get(p.ma)
                       const canKg = Math.round(p.totalKg)
                       const tonKg = inv ? Math.round(inv.ton_luong) : null
@@ -1224,10 +1302,12 @@ export default function ProductionQueuePage() {
                   <tfoot>
                     <tr style={{ background: '#f6ffed' }}>
                       <td colSpan={2} style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 700 }}>
-                        Tổng cộng
+                        {(panelFilterMa || panelFilterKho != null || panelFilterDl != null)
+                          ? `Tổng lọc (${kgByMaDisplay.length})`
+                          : 'Tổng cộng'}
                       </td>
                       <td style={{ padding: '6px 8px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 800, color: '#fa8c16', fontSize: 14 }}>
-                        {Math.round(totalKg).toLocaleString('vi-VN')} kg
+                        {Math.round(kgByMaDisplay.reduce((s, p) => s + p.totalKg, 0)).toLocaleString('vi-VN')} kg
                       </td>
                       <td colSpan={2} style={{ border: '1px solid #b7eb8f' }} />
                     </tr>
