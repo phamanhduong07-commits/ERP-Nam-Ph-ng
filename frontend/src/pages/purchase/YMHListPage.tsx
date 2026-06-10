@@ -112,10 +112,12 @@ export default function YMHListPage() {
   })
   const otherMats = otherPage?.items ?? []
 
-  const { data: productsPage } = useQuery({
-    queryKey: ['products-for-ymh'],
-    queryFn: () => productsApi.list({ page_size: 2000 }).then(r => r.data),
-    staleTime: 300_000,
+  const [productSearch, setProductSearch] = useState('')
+  const { data: productsPage, isFetching: productsFetching } = useQuery({
+    queryKey: ['products-for-ymh', productSearch],
+    queryFn: () => productsApi.list({ search: productSearch || undefined, page_size: 100 }).then(r => r.data),
+    staleTime: 60_000,
+    enabled: true,
   })
   const products = productsPage?.items ?? []
 
@@ -780,8 +782,10 @@ export default function YMHListPage() {
                                     <Select
                                       allowClear
                                       showSearch
-                                      optionFilterProp="label"
-                                      placeholder="Chọn mã hàng sản phẩm"
+                                      filterOption={false}
+                                      loading={productsFetching}
+                                      placeholder="Gõ tìm mã hàng..."
+                                      onSearch={v => setProductSearch(v)}
                                       options={products.filter(p => p.trang_thai).map(p => ({
                                         value: p.id,
                                         label: `${p.ma_hang ?? p.ma_amis} - ${p.ten_hang}`,
