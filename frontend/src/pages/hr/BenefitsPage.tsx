@@ -90,23 +90,26 @@ export default function BenefitsPage() {
   const [activeTab, setActiveTab] = useState('dashboard')
 
   return (
-    <div style={{ padding: '16px 24px' }}>
-      <Title level={4} style={{ margin: 0, marginBottom: 4 }}>
-        <GiftOutlined style={{ color: '#fa8c16' }} /> Phúc lợi nhân viên
-      </Title>
-      <Text type="secondary">
-        Cấu hình chính sách + theo dõi cấp phát phúc lợi (sinh nhật, hiếu hỉ, lễ Tết...)
-      </Text>
+    <div style={{ padding: '20px 24px' }}>
+      <div style={{ marginBottom: 4 }}>
+        <Title level={3} style={{ margin: 0, fontWeight: 600, color: '#262626' }}>
+          <GiftOutlined style={{ color: '#fa8c16', marginRight: 10 }} />
+          Phúc lợi nhân viên
+        </Title>
+        <Text type="secondary" style={{ fontSize: 13 }}>
+          Cấu hình chính sách và theo dõi cấp phát phúc lợi (sinh nhật, hiếu hỉ, lễ Tết, thâm niên...)
+        </Text>
+      </div>
 
       <Tabs
         activeKey={activeTab}
         onChange={setActiveTab}
         style={{ marginTop: 16 }}
         items={[
-          { key: 'dashboard', label: <span>📊 Tổng quan</span>, children: <DashboardTab /> },
-          { key: 'records', label: <span><DollarOutlined /> Cấp phát phúc lợi</span>, children: <RecordsTab /> },
-          { key: 'policies', label: <span><GiftOutlined /> Chính sách</span>, children: <PoliciesTab /> },
-          { key: 'events', label: <span><TrophyOutlined /> Sự kiện gia đình sắp tới</span>, children: <FamilyEventsTab /> },
+          { key: 'dashboard', label: 'Tổng quan', children: <DashboardTab /> },
+          { key: 'records', label: 'Cấp phát phúc lợi', children: <RecordsTab /> },
+          { key: 'policies', label: 'Chính sách', children: <PoliciesTab /> },
+          { key: 'events', label: 'Sự kiện gia đình sắp tới', children: <FamilyEventsTab /> },
         ]}
       />
     </div>
@@ -896,136 +899,154 @@ function DashboardTab() {
   const hasAnyData = kpi.chi_thang > 0 || kpi.chi_nam > 0 || kpi.so_record_thang > 0
   const isCurrentMonth = thang === dayjs().month() + 1 && nam === dayjs().year()
 
+  // Style chuẩn cho mọi card — border mảnh, không màu loè loẹt
+  const cardStyle = { border: '1px solid #f0f0f0', borderRadius: 10 } as const
+  const cardTitleStyle = { fontWeight: 600, fontSize: 13, color: '#262626' }
+
+  // Mảng KPI strip — tách ra để dễ đọc
+  const kpiItems = [
+    {
+      label: 'Chi phí kỳ',
+      value: fmtVND(kpi.chi_thang),
+      sub: pctChange != null ? (
+        <span style={{ color: pctColor, fontWeight: 500 }}>
+          {pctIcon} {Math.abs(pctChange)}% so cùng kỳ
+        </span>
+      ) : (
+        <span>Cùng kỳ năm trước: {fmtVND(kpi.chi_cung_ky_nam_truoc)}</span>
+      ),
+    },
+    {
+      label: `Tổng năm ${nam}`,
+      value: fmtVND(kpi.chi_nam),
+      sub: <span>BQ {fmtVND(Math.round(kpi.chi_nam / 12))}/tháng</span>,
+    },
+    {
+      label: 'Nhân viên nhận',
+      value: kpi.so_nv_nhan_thang.toLocaleString('vi-VN'),
+      unit: 'người',
+      sub: (
+        <span>
+          BQ {kpi.so_nv_nhan_thang > 0
+            ? fmtVND(Math.round(kpi.chi_thang / kpi.so_nv_nhan_thang))
+            : '0đ'}/người
+        </span>
+      ),
+    },
+    {
+      label: 'Bản ghi',
+      value: kpi.so_record_thang.toLocaleString('vi-VN'),
+      unit: 'bản',
+      sub: <span>Đề xuất + Duyệt + Chi</span>,
+    },
+  ]
+
   return (
     <>
-      {/* ─── Hero filter card ─── */}
-      <Card
-        size="small"
-        style={{
-          marginBottom: 16,
-          background: 'linear-gradient(135deg, #fa8c16 0%, #eb2f96 100%)',
-          border: 'none',
-        }}
-        styles={{ body: { padding: '12px 16px' } }}
-      >
-        <Row justify="space-between" align="middle" wrap>
+      {/* ─── Header rút gọn: title trái + filter phải, không gradient màu ─── */}
+      <Card style={{ ...cardStyle, marginBottom: 12 }} styles={{ body: { padding: '14px 18px' } }}>
+        <Row justify="space-between" align="middle" wrap gutter={[12, 8]}>
           <Col>
-            <Space size={12} align="center">
-              <span style={{ color: '#fff', fontWeight: 600 }}>📅 Kỳ phân tích</span>
-              <Select value={thang} onChange={setThang} size="middle" style={{ width: 120 }}
-                options={Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Tháng ${i + 1}` }))}
+            <div style={{ fontSize: 11, color: '#8c8c8c', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 2 }}>
+              Phân tích phúc lợi
+            </div>
+            <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#262626' }}>
+              Tháng {thang}/{nam}
+              {isCurrentMonth && (
+                <Tag color="orange" style={{ marginLeft: 10, fontWeight: 400, fontSize: 11 }}>
+                  Kỳ hiện tại
+                </Tag>
+              )}
+            </Title>
+          </Col>
+          <Col>
+            <Space size={8}>
+              <Select value={thang} onChange={setThang} size="middle" style={{ width: 100 }}
+                options={Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Th ${i + 1}` }))}
               />
-              <Select value={nam} onChange={setNam} size="middle" style={{ width: 110 }}
-                options={Array.from({ length: 7 }, (_, i) => {
-                  const y = dayjs().year() - 3 + i
+              <Select value={nam} onChange={setNam} size="middle" style={{ width: 90 }}
+                options={Array.from({ length: 5 }, (_, i) => {
+                  const y = dayjs().year() - 2 + i
                   return { value: y, label: y.toString() }
                 })}
               />
               {!isCurrentMonth && (
-                <Button size="middle" type="default"
+                <Button size="middle"
                   onClick={() => { setThang(dayjs().month() + 1); setNam(dayjs().year()) }}>
-                  ↻ Về tháng hiện tại
+                  Về kỳ hiện tại
                 </Button>
               )}
             </Space>
           </Col>
-          <Col>
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>
-              💡 So sánh cùng kỳ · Phân tích theo loại + bộ phận · Xu hướng 12 tháng
-            </Text>
-          </Col>
         </Row>
       </Card>
 
-      {/* ─── 4 KPI cards đồng nhất ─── */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={12} md={6}>
-          <BenefitKpiCard
-            icon="💰"
-            label={`Chi phí tháng ${thang}/${nam}`}
-            value={fmtVND(kpi.chi_thang)}
-            color="#1677ff"
-            sub={
-              pctChange != null ? (
-                <Tag color={pctChange > 0 ? 'red' : 'green'} style={{ margin: 0 }}>
-                  {pctIcon} {Math.abs(pctChange)}% so cùng kỳ
-                </Tag>
-              ) : (
-                <Text type="secondary" style={{ fontSize: 11 }}>
-                  Cùng kỳ năm trước: {fmtVND(kpi.chi_cung_ky_nam_truoc)}
-                </Text>
-              )
-            }
-          />
-        </Col>
-        <Col xs={12} md={6}>
-          <BenefitKpiCard
-            icon="📅"
-            label={`Tổng năm ${nam}`}
-            value={fmtVND(kpi.chi_nam)}
-            color="#722ed1"
-            sub={
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                Trung bình {fmtVND(kpi.chi_nam / 12)}/tháng
-              </Text>
-            }
-          />
-        </Col>
-        <Col xs={12} md={6}>
-          <BenefitKpiCard
-            icon="👥"
-            label="Nhân viên được nhận tháng này"
-            value={`${kpi.so_nv_nhan_thang} người`}
-            color="#52c41a"
-            sub={
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                Bình quân: {kpi.so_nv_nhan_thang > 0
-                  ? fmtVND(Math.round(kpi.chi_thang / kpi.so_nv_nhan_thang))
-                  : '0đ'}/người
-              </Text>
-            }
-          />
-        </Col>
-        <Col xs={12} md={6}>
-          <BenefitKpiCard
-            icon="📋"
-            label="Số bản ghi tháng này"
-            value={`${kpi.so_record_thang} bản ghi`}
-            color="#fa8c16"
-            sub={
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                Gồm đề xuất + đã duyệt + đã chi
-              </Text>
-            }
-          />
-        </Col>
-      </Row>
+      {/* ─── KPI strip: 1 card chứa 4 số ngang, divider dọc mảnh ─── */}
+      <Card style={{ ...cardStyle, marginBottom: 12 }} styles={{ body: { padding: 0 } }}>
+        <Row>
+          {kpiItems.map((k, i) => (
+            <Col xs={12} md={6} key={i} style={{
+              padding: '16px 20px',
+              borderRight: i < kpiItems.length - 1 ? '1px solid #f5f5f5' : 'none',
+              borderBottom: 'none',
+            }}>
+              <div style={{
+                fontSize: 11, color: '#8c8c8c', textTransform: 'uppercase',
+                letterSpacing: 0.4, marginBottom: 8, fontWeight: 500,
+              }}>
+                {k.label}
+              </div>
+              <div style={{
+                fontSize: 24, fontWeight: 600, color: '#262626', lineHeight: 1.1,
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {k.value}
+                {k.unit && (
+                  <span style={{ fontSize: 13, color: '#8c8c8c', fontWeight: 400, marginLeft: 4 }}>
+                    {k.unit}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 8 }}>{k.sub}</div>
+            </Col>
+          ))}
+        </Row>
+      </Card>
 
-      {/* ─── 2 phân tích cạnh nhau ─── */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={12}>
-          <Card size="small" title="💡 Chi tiêu theo loại phúc lợi" extra={<Text type="secondary" style={{ fontSize: 11 }}>Tháng {thang}/{nam}</Text>}>
+      {/* ─── 2 phân tích — Chi tiêu theo loại (lớn) + Top bộ phận (gọn) ─── */}
+      <Row gutter={12} style={{ marginBottom: 12 }}>
+        <Col xs={24} md={14}>
+          <Card
+            size="small"
+            style={cardStyle}
+            title={<span style={cardTitleStyle}>Chi tiêu theo loại phúc lợi</span>}
+            styles={{ body: { minHeight: 260 } }}
+          >
             {data.by_loai.length === 0 ? (
-              <BenefitEmpty
-                icon="📊"
-                title="Chưa có chi tiêu nào trong tháng"
-                desc="Khi HR cấp phát phúc lợi cho NV, số liệu sẽ hiện ra đây phân theo từng loại (sinh nhật, hiếu hỉ, Tết...)"
-              />
+              <InlineEmpty text="Chưa phát sinh chi tiêu trong tháng này" />
             ) : (
               <div>
                 {data.by_loai.map((row) => {
                   const pct = (row.tong_tien / maxLoai) * 100
                   const cfg = LOAI_LABEL[row.loai] || { text: row.loai, icon: '🎁' }
                   return (
-                    <div key={row.loai} style={{ marginBottom: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                        <span><span style={{ fontSize: 14 }}>{cfg.icon}</span> {cfg.text} <Text type="secondary">({row.so_luot} lượt)</Text></span>
-                        <Text strong style={{ color: '#1677ff' }}>{fmtVND(row.tong_tien)}</Text>
+                    <div key={row.loai} style={{ marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                        <span style={{ color: '#262626' }}>
+                          <span style={{ marginRight: 6 }}>{cfg.icon}</span>
+                          {cfg.text}
+                          <Text type="secondary" style={{ marginLeft: 8, fontSize: 11 }}>
+                            {row.so_luot} lượt
+                          </Text>
+                        </span>
+                        <Text strong style={{ fontVariantNumeric: 'tabular-nums', color: '#262626' }}>
+                          {fmtVND(row.tong_tien)}
+                        </Text>
                       </div>
-                      <div style={{ background: '#f5f5f5', height: 8, borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ background: '#fafafa', height: 6, borderRadius: 3, overflow: 'hidden' }}>
                         <div style={{
                           width: `${pct}%`, height: '100%',
-                          background: 'linear-gradient(90deg, #1677ff, #722ed1)',
+                          background: '#fa8c16',
                           transition: 'width 0.3s',
                         }} />
                       </div>
@@ -1037,30 +1058,45 @@ function DashboardTab() {
           </Card>
         </Col>
 
-        <Col xs={24} md={12}>
-          <Card size="small" title="🏢 Top bộ phận tốn kém nhất" extra={<Text type="secondary" style={{ fontSize: 11 }}>Tháng {thang}/{nam}</Text>}>
+        <Col xs={24} md={10}>
+          <Card
+            size="small"
+            style={cardStyle}
+            title={<span style={cardTitleStyle}>Top bộ phận tốn kém</span>}
+            styles={{ body: { minHeight: 260 } }}
+          >
             {data.by_phong_ban.length === 0 ? (
-              <BenefitEmpty
-                icon="🏢"
-                title="Chưa có phát sinh theo bộ phận"
-                desc="Khi có cấp phát phúc lợi, hệ thống sẽ xếp hạng các bộ phận theo chi phí từ cao xuống thấp."
-              />
+              <InlineEmpty text="Chưa có phát sinh theo bộ phận" />
             ) : (
               <div>
-                {data.by_phong_ban.map((row, idx) => {
+                {data.by_phong_ban.slice(0, 5).map((row, idx) => {
                   const pct = (row.tong_tien / maxDept) * 100
-                  const color = idx === 0 ? '#cf1322' : idx === 1 ? '#fa541c' : idx === 2 ? '#fa8c16' : '#1677ff'
                   return (
-                    <div key={idx} style={{ marginBottom: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                        <span>
-                          <Avatar size={20} style={{ backgroundColor: color, fontSize: 11, marginRight: 6, verticalAlign: 'middle' }}>{idx + 1}</Avatar>
-                          {row.ten_bo_phan} <Text type="secondary">({row.so_luot} lượt)</Text>
-                        </span>
-                        <Text strong style={{ color }}>{fmtVND(row.tong_tien)}</Text>
-                      </div>
-                      <div style={{ background: '#f5f5f5', height: 8, borderRadius: 4, overflow: 'hidden' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
+                    <div key={idx} style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 4,
+                        background: idx === 0 ? '#fff7e6' : '#fafafa',
+                        color: idx === 0 ? '#d46b08' : '#8c8c8c',
+                        fontSize: 11, fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>{idx + 1}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                          <span style={{ fontWeight: 500, color: '#262626', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {row.ten_bo_phan}
+                          </span>
+                          <Text strong style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', marginLeft: 8, color: '#262626' }}>
+                            {fmtVND(row.tong_tien)}
+                          </Text>
+                        </div>
+                        <div style={{ background: '#fafafa', height: 4, borderRadius: 2 }}>
+                          <div style={{
+                            width: `${pct}%`, height: '100%',
+                            background: '#fa8c16',
+                            borderRadius: 2,
+                          }} />
+                        </div>
                       </div>
                     </div>
                   )
@@ -1071,48 +1107,69 @@ function DashboardTab() {
         </Col>
       </Row>
 
-      {/* ─── Bar chart xu hướng 12 tháng ─── */}
+      {/* ─── Bar chart xu hướng 12 tháng — đơn sắc, có baseline ─── */}
       <Card
         size="small"
-        title={`📈 Xu hướng chi phí phúc lợi năm ${nam}`}
+        style={{ ...cardStyle, marginBottom: 12 }}
+        title={<span style={cardTitleStyle}>Xu hướng năm {nam}</span>}
         extra={hasAnyData ? <Text type="secondary" style={{ fontSize: 11 }}>Đơn vị: triệu đồng</Text> : null}
-        style={{ marginBottom: 16 }}
       >
         {maxTrend === 0 ? (
-          <BenefitEmpty
-            icon="📉"
-            title={`Chưa có chi tiêu nào trong năm ${nam}`}
-            desc="Tạo phúc lợi đầu tiên hoặc đợi cron sinh nhật/lễ tự chạy để biểu đồ xu hướng có dữ liệu."
-          />
+          <InlineEmpty text={`Chưa có chi tiêu trong năm ${nam}`} />
         ) : (
-          <div style={{ display: 'flex', alignItems: 'flex-end', height: 160, gap: 6, paddingTop: 10 }}>
-            {data.trend_12_thang.map((row) => {
-              const pct = maxTrend > 0 ? (row.tong_tien / maxTrend) * 100 : 0
-              const isCurrent = row.thang === thang
-              return (
-                <div key={row.thang} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ fontSize: 10, color: isCurrent ? '#1677ff' : '#8c8c8c', height: 14, fontWeight: isCurrent ? 700 : 400 }}>
-                    {row.tong_tien > 0 ? `${(row.tong_tien / 1_000_000).toFixed(1)}` : ''}
+          <div style={{ position: 'relative', paddingTop: 8 }}>
+            {/* Grid line nền nhẹ */}
+            <div style={{ position: 'absolute', top: 18, left: 0, right: 0, bottom: 24, pointerEvents: 'none' }}>
+              {[0.25, 0.5, 0.75].map(p => (
+                <div key={p} style={{
+                  position: 'absolute', left: 0, right: 0,
+                  bottom: `${p * 100}%`,
+                  height: 1, background: '#f5f5f5',
+                }} />
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'flex-end', height: 140, gap: 6 }}>
+              {data.trend_12_thang.map((row) => {
+                const pct = maxTrend > 0 ? (row.tong_tien / maxTrend) * 100 : 0
+                const isCurrent = row.thang === thang
+                return (
+                  <div key={row.thang} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{
+                      fontSize: 10,
+                      color: isCurrent ? '#fa8c16' : '#bfbfbf',
+                      height: 14, fontWeight: isCurrent ? 600 : 400,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      {row.tong_tien > 0 ? (row.tong_tien / 1_000_000).toFixed(1) : ''}
+                    </div>
+                    <div style={{
+                      width: '78%', height: `${pct}%`, minHeight: row.tong_tien > 0 ? 4 : 2,
+                      background: isCurrent ? '#fa8c16' : '#ffe7ba',
+                      borderRadius: '4px 4px 0 0',
+                      transition: 'height 0.3s',
+                      cursor: 'pointer',
+                    }} title={`Tháng ${row.thang}: ${fmtVND(row.tong_tien)}`} />
+                    <div style={{
+                      fontSize: 11,
+                      color: isCurrent ? '#fa8c16' : '#8c8c8c',
+                      fontWeight: isCurrent ? 600 : 400,
+                      marginTop: 8,
+                    }}>
+                      {row.thang}
+                    </div>
                   </div>
-                  <div style={{
-                    width: '70%', height: `${pct}%`, minHeight: row.tong_tien > 0 ? 4 : 2,
-                    background: isCurrent ? 'linear-gradient(180deg, #1677ff, #722ed1)' : '#bae0ff',
-                    borderRadius: '6px 6px 0 0',
-                    transition: 'height 0.3s',
-                  }} title={`Tháng ${row.thang}: ${fmtVND(row.tong_tien)}`} />
-                  <div style={{ fontSize: 11, color: isCurrent ? '#1677ff' : '#595959', fontWeight: isCurrent ? 700 : 400, marginTop: 6 }}>
-                    T{row.thang}
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         )}
       </Card>
 
       <Card
         size="small"
-        title={`🗓️ Lịch sự kiện tháng ${thang}/${nam}`}
+        style={cardStyle}
+        title={<span style={cardTitleStyle}>Lịch sự kiện tháng {thang}/{nam}</span>}
         extra={
           <Space size={8} style={{ fontSize: 11 }}>
             <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#fff1f0', border: '1px solid #ffa39e' }} /> Lễ nghỉ</span>
@@ -1258,6 +1315,27 @@ function BenefitEmpty({ icon, title, desc }: { icon: string; title: string; desc
       <Text type="secondary" style={{ fontSize: 12, maxWidth: 400, display: 'inline-block' }}>
         {desc}
       </Text>
+    </div>
+  )
+}
+
+// ─── Empty state tinh tế cho card dashboard — chỉ 1 vòng tròn + 1 dòng ───
+function InlineEmpty({ text }: { text: string }) {
+  return (
+    <div style={{
+      padding: '56px 20px',
+      textAlign: 'center',
+      color: '#bfbfbf',
+      fontSize: 13,
+    }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: '50%',
+        border: '2px dashed #e8e8e8',
+        margin: '0 auto 12px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: '#d9d9d9', fontSize: 18,
+      }}>○</div>
+      {text}
     </div>
   )
 }
