@@ -150,11 +150,8 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
                 or (getattr(qi, field, None) if qi else None)
                 or bom_val)
 
-    # Fallback: POI → QuoteItem → BOM
-    ghi_chu_val = (line.ghi_chu
-                   or (item.ghi_chu if item else None)
-                   or (soi.ghi_chu_san_pham if soi else None)
-                   or (qi.ghi_chu if qi else None))
+    # Chỉ lấy ghi chú từ plan line hoặc LSX item — không fallback sang báo giá/đơn hàng
+    ghi_chu_val = line.ghi_chu or (item.ghi_chu if item else None)
     c_tham = _f("c_tham", _bom_mat_str(bom.chong_tham if bom else None))
     can_man = _f("can_man", _bom_mat_str(bom.can_mang if bom else None))
 
