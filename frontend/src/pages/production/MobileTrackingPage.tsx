@@ -3,7 +3,7 @@ import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Button, Space, Typography, Input, InputNumber, Modal, Form,
-  message, Tag, Row, Col, Spin, Empty, Divider, Drawer, Badge, Progress,
+  message, Tag, Row, Col, Spin, Empty, Divider, Drawer, Badge, Progress, AutoComplete,
 } from 'antd'
 import {
   PlayCircleFilled, CheckCircleFilled, PauseCircleFilled,
@@ -765,6 +765,30 @@ export default function MobileTrackingPage() {
     form.resetFields()
   }
 
+  const searchOptions = useMemo(() => {
+    const q = soLsx.trim().toUpperCase()
+    if (q.length < 2) return []
+    return machinePhieuList
+      .filter(p =>
+        (p.so_lsx || '').toUpperCase().includes(q) ||
+        (p.so_phieu || '').toUpperCase().includes(q) ||
+        (p.ten_hang || '').toUpperCase().includes(q)
+      )
+      .slice(0, 8)
+      .map(p => ({
+        value: p.so_lsx || p.so_phieu || '',
+        label: (
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <Text strong style={{ fontSize: 13 }}>{p.so_lsx || p.so_phieu}</Text>
+            <Text type="secondary" style={{ fontSize: 11, flex: 1, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {p.ten_hang}
+            </Text>
+          </div>
+        ),
+        phieu: p,
+      }))
+  }, [soLsx, machinePhieuList])
+
   const handleLookup = async (val: string) => {
     const code = val.trim().toUpperCase()
     if (!code) return
@@ -1138,14 +1162,26 @@ export default function MobileTrackingPage() {
               )}
             </div>
             <Space.Compact style={{ width: '100%' }}>
-              <Input
-                ref={lsxInputRef}
-                placeholder="Nhập hoặc quét số LSX..."
-                size="large" allowClear
+              <AutoComplete
+                style={{ flex: 1 }}
+                options={searchOptions}
                 value={soLsx}
-                onChange={e => setSoLsx(e.target.value.toUpperCase())}
-                onPressEnter={() => handleLookup(soLsx)}
-              />
+                onChange={val => setSoLsx((val || '').toUpperCase())}
+                onSelect={(_val, opt) => {
+                  const o = opt as typeof searchOptions[number]
+                  setCurrentOrder(o.phieu)
+                  setShowSearch(false)
+                  setSoLsx('')
+                  setTimeout(() => window.scrollTo({ top: 400, behavior: 'smooth' }), 100)
+                }}
+              >
+                <Input
+                  ref={lsxInputRef}
+                  placeholder="Nhập hoặc quét số LSX..."
+                  size="large" allowClear
+                  onPressEnter={() => handleLookup(soLsx)}
+                />
+              </AutoComplete>
               <Button
                 size="large" icon={<CameraOutlined />}
                 onClick={() => setIsScannerOpen(true)}
