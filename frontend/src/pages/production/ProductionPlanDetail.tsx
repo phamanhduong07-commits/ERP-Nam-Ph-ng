@@ -523,6 +523,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         <td class="right" style="font-weight:600">${Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')}</td>
         <td class="center"><span class="tag-lan">${loaiLan}</span></td>
         <td class="center">${inCell(r)}</td>
+        <td style="font-size:8px;color:#595959">${r.ghi_chu ?? ''}</td>
         <td class="right" style="font-weight:700;color:#fa8c16">${metToi > 0 ? metToi.toLocaleString('vi-VN', { maximumFractionDigits: 1 }) : '—'}</td>
       </tr>`
     }).join('')
@@ -544,12 +545,13 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
           <th class="right">SL thùng</th>
           <th class="center">Loại lằn</th>
           <th class="center">In / GC</th>
+          <th>Ghi chú</th>
           <th class="right">Mét tới</th>
         </tr></thead>
         <tbody>
           ${bodyRows}
           <tr class="total-row">
-            <td colspan="18" class="right"><strong>TỔNG SỐ MÉT TỚI:</strong></td>
+            <td colspan="19" class="right"><strong>TỔNG SỐ MÉT TỚI:</strong></td>
             <td class="right"><strong>${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></td>
           </tr>
         </tbody>
@@ -700,7 +702,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
               <th style={TH}>SL Thùng</th>
               <th style={TH}>Loại Lằn</th>
               <th style={TH}>Loại In</th>
-              {/* <th style={TH}>Ghi Chú</th> */}
+              <th style={TH}>Ghi Chú</th>
               <th style={{ ...TH, color: '#fa8c16' }}>Mét Tới</th>
               <th style={{ ...TH, color: '#cf1322' }} className="no-print">
                 <Tooltip title="Đánh dấu line này phải mua phôi sóng từ NCC ngoài">
@@ -921,7 +923,12 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                     </div>
                   </td>
 
-                  {/* Ghi Chú ẩn */}
+                  {/* Ghi Chú — nổi bật khi có nội dung */}
+                  <td style={{ ...TD, maxWidth: 200, background: r.ghi_chu ? '#fffbe6' : undefined }}>
+                    {r.ghi_chu
+                      ? <span style={{ fontSize: 13, fontWeight: 600, color: '#262626' }}>📌 {r.ghi_chu}</span>
+                      : <span style={{ fontSize: 11, color: '#d9d9d9' }}>—</span>}
+                  </td>
 
                   {/* Mét Tới */}
                   <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#fa8c16', fontSize: 14 }}>
