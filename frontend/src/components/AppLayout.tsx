@@ -219,20 +219,67 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
       permissions: ['user.view', 'user.create', 'user.edit', 'permission.view', 'permission.manage'],
       children: [
         { key: '/hr/dashboard', label: <Link to="/hr/dashboard">📊 Dashboard HR</Link> },
-        { key: '/hr/employees', label: <Link to="/hr/employees">Hồ sơ nhân viên</Link> },
-        { key: '/hr/departments', label: <Link to="/hr/departments">Cơ cấu tổ chức</Link> },
-        { key: '/hr/permission-matrix', label: <Link to="/hr/permission-matrix">Ma trận phân quyền</Link> },
-        { key: '/hr/attendance', label: <Link to="/hr/attendance">Chấm công & Đơn từ</Link> },
-        { key: '/hr/checkin-locations', label: <Link to="/hr/checkin-locations">📍 Địa điểm chấm công</Link> },
-        { key: '/hr/payroll', label: <Link to="/hr/payroll">Bảng lương sản phẩm</Link> },
-        { key: '/hr/payroll-config', label: <Link to="/hr/payroll-config">Cấu hình hệ số lương</Link> },
-        { key: '/hr/approvals', label: <Link to="/hr/approvals">📝 Phê duyệt đơn từ</Link> },
-        { key: '/hr/rewards', label: <Link to="/hr/rewards">🏆 Khen thưởng & Kỷ luật</Link> },
-        { key: '/hr/benefits', label: <Link to="/hr/benefits">🎁 Phúc lợi nhân viên</Link> },
-        { key: '/hr/health-checks', label: <Link to="/hr/health-checks">🏥 Khám sức khỏe</Link> },
-        { key: '/hr/safety', label: <Link to="/hr/safety">🛡️ An toàn lao động</Link> },
-        { key: '/hr/kpi', label: <Link to="/hr/kpi">🎯 KPI / Đánh giá</Link> },
-        { key: '/hr/reports', label: <Link to="/hr/reports">📑 Báo cáo HR</Link> },
+
+        {
+          key: 'hr-org',
+          label: '👥 Tổ chức & Nhân sự',
+          children: [
+            { key: '/hr/employees', label: <Link to="/hr/employees">Hồ sơ nhân viên</Link> },
+            { key: '/hr/departments', label: <Link to="/hr/departments">Cơ cấu tổ chức</Link> },
+            { key: '/hr/permission-matrix', label: <Link to="/hr/permission-matrix">Ma trận phân quyền</Link> },
+          ],
+        },
+
+        {
+          key: 'hr-attendance',
+          label: '🕐 Chấm công & Đơn từ',
+          children: [
+            { key: '/hr/attendance', label: <Link to="/hr/attendance">Chấm công & Đơn từ</Link> },
+            { key: '/hr/checkin-locations', label: <Link to="/hr/checkin-locations">📍 Địa điểm chấm công</Link> },
+            { key: '/hr/approvals', label: <Link to="/hr/approvals">📝 Phê duyệt đơn từ</Link> },
+          ],
+        },
+
+        {
+          key: 'hr-payroll',
+          label: '💵 Tiền lương (Quy chế Lương)',
+          children: [
+            { key: '/hr/production-output', label: <Link to="/hr/production-output">📦 Sản lượng tháng</Link> },
+            { key: '/hr/payroll-adjustments', label: <Link to="/hr/payroll-adjustments">💰 Phụ cấp & Khấu trừ</Link> },
+            { key: '/hr/payroll-runs', label: <Link to="/hr/payroll-runs">💵 Bảng lương tháng (Chốt & Duyệt)</Link> },
+            { key: '/hr/payroll-complaints', label: <Link to="/hr/payroll-complaints">⚠️ Khiếu nại lương (Điều 16)</Link> },
+            { key: '/hr/payroll', label: <Link to="/hr/payroll">Bảng lương sản phẩm (cũ)</Link> },
+            { key: '/hr/payroll-config', label: <Link to="/hr/payroll-config">⚙️ Cấu hình lương</Link> },
+          ],
+        },
+
+        {
+          key: 'hr-benefits',
+          label: '🎁 Phúc lợi & Thưởng',
+          children: [
+            { key: '/hr/rewards', label: <Link to="/hr/rewards">🏆 Khen thưởng & Kỷ luật</Link> },
+            { key: '/hr/benefits', label: <Link to="/hr/benefits">🎁 Phúc lợi nhân viên</Link> },
+          ],
+        },
+
+        {
+          key: 'hr-safety',
+          label: '🏥 An toàn & Sức khỏe',
+          children: [
+            { key: '/hr/health-checks', label: <Link to="/hr/health-checks">🏥 Khám sức khỏe định kỳ</Link> },
+            { key: '/hr/safety', label: <Link to="/hr/safety">🛡️ An toàn lao động</Link> },
+          ],
+        },
+
+        {
+          key: 'hr-evaluation',
+          label: '🎯 Đánh giá & Báo cáo',
+          children: [
+            { key: '/hr/kpi', label: <Link to="/hr/kpi">🎯 KPI / Đánh giá</Link> },
+            { key: '/hr/reports', label: <Link to="/hr/reports">📑 Báo cáo HR</Link> },
+          ],
+        },
+
         { key: '/hr/me', label: <Link to="/hr/me">📱 Cổng nhân viên (Mobile)</Link> },
       ],
     },
@@ -465,13 +512,22 @@ export default function AppLayout() {
   }
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
       <Sider
         trigger={null}
         collapsible
         collapsed={collapsed}
         width={248}
-        style={{ background: '#1b168e', borderRight: '1px solid #15116f' }}
+        style={{
+          background: '#1b168e',
+          borderRight: '1px solid #15116f',
+          height: '100vh',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          position: 'sticky',
+          top: 0,
+          left: 0,
+        }}
       >
         <div style={{
           height: collapsed ? 72 : 96,
@@ -503,7 +559,7 @@ export default function AppLayout() {
         />
       </Sider>
 
-      <Layout>
+      <Layout style={{ height: '100vh', overflow: 'hidden' }}>
         <Header style={{
           padding: '0 20px',
           background: tk.colorBgContainer,
@@ -512,6 +568,7 @@ export default function AppLayout() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexShrink: 0,
         }}>
           <Space>
             {collapsed
@@ -542,7 +599,14 @@ export default function AppLayout() {
           </Space>
         </Header>
 
-        <Content style={{ margin: 16, background: tk.colorBgLayout, overflow: 'initial' }}>
+        <Content style={{
+          margin: 16,
+          background: tk.colorBgLayout,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          flex: 1,
+          minHeight: 0,
+        }}>
           <Outlet />
         </Content>
       </Layout>
