@@ -202,6 +202,9 @@ export interface ScanLog {
   don_gia?: number
   tien_luong?: number
   nguoi_sx?: string
+  so_phoi_thuc_te?: number | null
+  so_con_thuc_te?: number | null
+  so_luong_loi?: number | null
   gio_bat_dau?: string | null
   gio_ket_thuc?: string | null
   created_at: string

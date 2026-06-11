@@ -793,10 +793,18 @@ export default function MobileTrackingPage() {
 
     try {
       const res = await cd2Api.phieuLookup(code)
+      const phieu = res.data as unknown as PhieuIn
       beep('success')
       if ('vibrate' in navigator) navigator.vibrate(60)
-      setCurrentOrder(res.data as unknown as PhieuIn)
+      setCurrentOrder(phieu)
       setShowSearch(false)
+      // Auto-select đúng máy nếu chưa chọn (hoặc sai máy)
+      if (!selectedMachine) {
+        const matchMachine = isSauInMode
+          ? maySauIns.find(m => m.id === phieu.may_sau_in_id)
+          : machines.find(m => m.id === phieu.may_in_id)
+        if (matchMachine) setSelectedMachine(matchMachine)
+      }
       setTimeout(() => window.scrollTo({ top: 400, behavior: 'smooth' }), 100)
     } catch {
       beep('error')
@@ -832,6 +840,37 @@ export default function MobileTrackingPage() {
           </Title>
           <Text type="secondary">Vui lòng chọn máy bạn đang vận hành</Text>
         </div>
+        {/* ── Tìm nhanh LSX — bỏ qua bước chọn máy ── */}
+        <Card
+          style={{ borderRadius: 20, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: 'none', marginBottom: 20 }}
+          styles={{ body: { padding: '14px 16px' } }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <ScanOutlined style={{ fontSize: 16, color: '#1677ff' }} />
+            <Text strong>Tìm nhanh Lệnh SX</Text>
+          </div>
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              ref={lsxInputRef}
+              placeholder="Nhập hoặc quét số LSX..."
+              size="large" allowClear
+              value={soLsx}
+              onChange={e => setSoLsx(e.target.value.toUpperCase())}
+              onPressEnter={() => handleLookup(soLsx)}
+            />
+            <Button
+              size="large" icon={<CameraOutlined />}
+              onClick={() => setIsScannerOpen(true)}
+              style={{ background: '#1890ff', color: '#fff', border: 'none', width: 60 }}
+            />
+            <Button
+              size="large" type="primary"
+              onClick={() => handleLookup(soLsx)}
+              style={{ background: '#001529', border: 'none', fontWeight: 600 }}
+            >TÌM</Button>
+          </Space.Compact>
+        </Card>
+
         {loadingDisplay ? <div style={{ textAlign: 'center' }}><Spin /></div> : (
           <Row gutter={[16, 16]}>
             {displayMachines.map(m => (
@@ -872,6 +911,11 @@ export default function MobileTrackingPage() {
             {factoryLogs.length === 0 && <Empty description="Chưa có hoạt động" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
           </div>
         </Card>
+        <QrScannerModal
+          open={isScannerOpen}
+          onScan={text => { setIsScannerOpen(false); setSoLsx(text); handleLookup(text) }}
+          onClose={() => setIsScannerOpen(false)}
+        />
       </div>
     )
   }

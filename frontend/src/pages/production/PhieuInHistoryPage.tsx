@@ -61,7 +61,7 @@ function TabLichSuIn() {
   const handleExport = () => {
     exportToExcel(`lich-su-in-${dayjs().format('YYYYMMDD')}`, [{
       name: 'Lịch sử in',
-      headers: ['Ngày tạo', 'LSX', 'Số phiếu', 'Trạng thái', 'Tên hàng', 'Mã KH', 'Khổ (cm)', 'Dài (cm)', 'SL phôi', 'Ngày in', 'SL in OK', 'Số phôi TT', 'Số con TT', 'SL lỗi', 'Ca', 'Ghi chú'],
+      headers: ['Ngày tạo', 'LSX', 'Số phiếu', 'Trạng thái', 'Tên hàng', 'Mã KH', 'Khổ (cm)', 'Dài (cm)', 'm²', 'SL phôi', 'Ngày in', 'SL in OK', 'Số phôi TT', 'Số con TT', 'SL lỗi', 'Ca', 'Máy in', 'Người in', 'Ghi chú'],
       rows: filtered.map(r => [
         dayjs(r.created_at).format('DD/MM/YYYY'),
         r.so_lsx ?? '',
@@ -71,6 +71,7 @@ function TabLichSuIn() {
         r.ma_kh ?? '',
         r.kho1 ?? '',
         r.dai_tt ?? '',
+        r.kho1 != null && r.dai_tt != null ? (r.kho1 * r.dai_tt / 10000).toFixed(4) : '',
         r.so_luong_phoi ?? '',
         r.ngay_in ? dayjs(r.ngay_in).format('DD/MM/YYYY') : '',
         r.so_luong_in_ok ?? '',
@@ -78,9 +79,11 @@ function TabLichSuIn() {
         r.so_con_thuc_te ?? '',
         r.so_luong_loi ?? '',
         r.ca ?? '',
+        r.ten_may ?? '',
+        r.ten_nguoi_in ?? '',
         r.ghi_chu ?? '',
       ]),
-      colWidths: [12, 14, 14, 14, 30, 10, 9, 9, 10, 12, 10, 10, 10, 10, 8, 25],
+      colWidths: [12, 14, 14, 14, 30, 10, 9, 9, 11, 10, 12, 10, 10, 10, 10, 8, 16, 16, 25],
     }])
   }
 
@@ -93,6 +96,7 @@ function TabLichSuIn() {
     { title: 'KH', dataIndex: 'ma_kh', width: 80 },
     { title: 'Khổ (cm)', dataIndex: 'kho1', width: 85, align: 'right' as const, render: (v: number | undefined) => v != null ? v : '—' },
     { title: 'Dài (cm)', dataIndex: 'dai_tt', width: 85, align: 'right' as const, render: (v: number | undefined) => v != null ? v : '—' },
+    { title: 'm²', key: 'm2', width: 85, align: 'right' as const, render: (_: unknown, r: PhieuIn) => r.kho1 != null && r.dai_tt != null ? (r.kho1 * r.dai_tt / 10000).toFixed(4) : '—' },
     { title: 'SL phôi', dataIndex: 'so_luong_phoi', width: 90, align: 'right' as const, render: (v: number | null) => v != null ? v.toLocaleString('vi-VN') : '—' },
     { title: 'Ngày in', dataIndex: 'ngay_in', width: 90, render: (v: string | null) => v ? dayjs(v).format('DD/MM/YY') : '—' },
     { title: 'SL in OK', dataIndex: 'so_luong_in_ok', width: 90, align: 'right' as const, render: (v: number | null) => v != null ? <span style={{ color: '#52c41a' }}>{v.toLocaleString('vi-VN')}</span> : '—' },
@@ -100,6 +104,8 @@ function TabLichSuIn() {
     { title: 'Con TT', dataIndex: 'so_con_thuc_te', width: 75, align: 'right' as const, render: (v: number | null) => v != null ? v.toLocaleString('vi-VN') : '—' },
     { title: 'SL lỗi', dataIndex: 'so_luong_loi', width: 80, align: 'right' as const, render: (v: number | null) => v != null && v > 0 ? <span style={{ color: '#ff4d4f' }}>{v.toLocaleString('vi-VN')}</span> : (v != null ? '0' : '—') },
     { title: 'Ca', dataIndex: 'ca', width: 55, render: (v: string | null) => v ?? '—' },
+    { title: 'Máy in', dataIndex: 'ten_may', width: 120, render: (v: string | null) => v ?? '—' },
+    { title: 'Người in', dataIndex: 'ten_nguoi_in', width: 120, render: (v: string | null) => v ?? '—' },
     { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true, render: (v: string | null) => v ?? '' },
   ]
 
@@ -127,7 +133,7 @@ function TabLichSuIn() {
       <Card>
         <Table dataSource={filtered} columns={columns} rowKey="id" size="small" loading={isLoading}
           pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `${t} phiếu` }}
-          scroll={{ x: 1280 }} />
+          scroll={{ x: 1605 }} />
       </Card>
     </>
   )
@@ -163,7 +169,7 @@ function TabLichSuTP() {
   const handleExport = () => {
     exportToExcel(`lich-su-tp-${dayjs().format('YYYYMMDD')}`, [{
       name: 'Lịch sử TP',
-      headers: ['LSX', 'Số phiếu', 'Tên hàng', 'Mã KH', 'Khổ (cm)', 'Dài (cm)', 'Ngày TP', 'Ca', 'SL TP OK', 'SL lỗi', 'Ghi chú'],
+      headers: ['LSX', 'Số phiếu', 'Tên hàng', 'Mã KH', 'Khổ (cm)', 'Dài (cm)', 'm²', 'Ngày TP', 'Ca', 'Máy in', 'Người in', 'SL TP OK', 'Phôi TT', 'Con TT', 'SL lỗi', 'Ghi chú'],
       rows: filtered.map(r => [
         r.so_lsx ?? '',
         r.so_phieu,
@@ -171,13 +177,18 @@ function TabLichSuTP() {
         r.ma_kh ?? '',
         r.kho1 ?? '',
         r.dai_tt ?? '',
+        r.kho1 != null && r.dai_tt != null ? (r.kho1 * r.dai_tt / 10000).toFixed(4) : '',
         r.ngay_sau_in ? dayjs(r.ngay_sau_in).format('DD/MM/YYYY') : '',
         r.ca_sau_in ?? '',
+        r.ten_may ?? '',
+        r.ten_nguoi_in ?? '',
         r.so_luong_sau_in_ok ?? '',
+        r.so_phoi_thuc_te ?? '',
+        r.so_con_thuc_te ?? '',
         r.so_luong_sau_in_loi ?? '',
         r.ghi_chu_sau_in ?? '',
       ]),
-      colWidths: [14, 14, 30, 10, 9, 9, 12, 8, 10, 10, 25],
+      colWidths: [14, 14, 30, 10, 9, 9, 11, 12, 8, 16, 16, 10, 10, 10, 10, 25],
     }])
   }
 
@@ -189,8 +200,13 @@ function TabLichSuTP() {
     { title: 'KH', dataIndex: 'ma_kh', width: 80 },
     { title: 'Khổ (cm)', dataIndex: 'kho1', width: 85, align: 'right' as const, render: (v: number | undefined) => v != null ? v : '—' },
     { title: 'Dài (cm)', dataIndex: 'dai_tt', width: 85, align: 'right' as const, render: (v: number | undefined) => v != null ? v : '—' },
+    { title: 'm²', key: 'm2', width: 85, align: 'right' as const, render: (_: unknown, r: PhieuIn) => r.kho1 != null && r.dai_tt != null ? (r.kho1 * r.dai_tt / 10000).toFixed(4) : '—' },
     { title: 'Ca', dataIndex: 'ca_sau_in', width: 55, render: (v: string | null) => v ?? '—' },
+    { title: 'Máy in', dataIndex: 'ten_may', width: 120, render: (v: string | null) => v ?? '—' },
+    { title: 'Người in', dataIndex: 'ten_nguoi_in', width: 120, render: (v: string | null) => v ?? '—' },
     { title: 'SL TP OK', dataIndex: 'so_luong_sau_in_ok', width: 100, align: 'right' as const, render: (v: number | null) => v != null ? <span style={{ color: '#722ed1', fontWeight: 600 }}>{v.toLocaleString('vi-VN')}</span> : '—' },
+    { title: 'Phôi TT', dataIndex: 'so_phoi_thuc_te', width: 80, align: 'right' as const, render: (v: number | null | undefined) => v != null ? v.toLocaleString('vi-VN') : '—' },
+    { title: 'Con TT', dataIndex: 'so_con_thuc_te', width: 75, align: 'right' as const, render: (v: number | null | undefined) => v != null ? v.toLocaleString('vi-VN') : '—' },
     { title: 'SL lỗi', dataIndex: 'so_luong_sau_in_loi', width: 80, align: 'right' as const, render: (v: number | null) => v != null && v > 0 ? <span style={{ color: '#ff4d4f' }}>{v.toLocaleString('vi-VN')}</span> : (v != null ? '0' : '—') },
     { title: 'Ghi chú', dataIndex: 'ghi_chu_sau_in', ellipsis: true, render: (v: string | null) => v ?? '' },
   ]
@@ -216,7 +232,7 @@ function TabLichSuTP() {
       <Card>
         <Table dataSource={filtered} columns={columns} rowKey="id" size="small" loading={isLoading}
           pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `${t} phiếu` }}
-          scroll={{ x: 1060 }} />
+          scroll={{ x: 1540 }} />
       </Card>
     </>
   )
@@ -264,7 +280,7 @@ function TabScanByLoai({ loai, label }: { loai: 'can_mang' | 'xa', label: string
   const handleExport = () => {
     exportToExcel(`lich-su-${loai}-${dayjs().format('YYYYMMDD')}`, [{
       name: label,
-      headers: ['Ngày giờ', 'LSX', 'Tên hàng', 'Máy scan', 'Người SX', 'Khổ (cm)', 'Dài (cm)', 'SL TP', 'm²', 'Đơn giá', 'Tiền lương'],
+      headers: ['Ngày giờ', 'LSX', 'Tên hàng', 'Máy scan', 'Người SX', 'Khổ (cm)', 'Dài (cm)', 'SL TP', 'Phôi TT', 'Con TT', 'SL lỗi', 'm²', 'Đơn giá', 'Tiền lương'],
       rows: filtered.map(r => [
         dayjs(r.created_at).format('DD/MM/YYYY HH:mm'),
         r.so_lsx,
@@ -274,11 +290,14 @@ function TabScanByLoai({ loai, label }: { loai: 'can_mang' | 'xa', label: string
         r.kho1 ?? '',
         r.dai_tt ?? '',
         r.so_luong_tp,
+        r.so_phoi_thuc_te ?? '',
+        r.so_con_thuc_te ?? '',
+        r.so_luong_loi ?? '',
         r.dien_tich ?? '',
         r.don_gia ?? '',
         r.tien_luong ?? '',
       ]),
-      colWidths: [16, 14, 30, 14, 14, 10, 10, 10, 12, 12, 12],
+      colWidths: [16, 14, 30, 14, 14, 10, 10, 10, 10, 10, 10, 12, 12, 12],
     }])
   }
 
@@ -291,6 +310,9 @@ function TabScanByLoai({ loai, label }: { loai: 'can_mang' | 'xa', label: string
     { title: 'Khổ (cm)', dataIndex: 'kho1', width: 85, align: 'right' as const, render: (v: number | undefined) => v ?? '—' },
     { title: 'Dài (cm)', dataIndex: 'dai_tt', width: 85, align: 'right' as const, render: (v: number | undefined) => v ?? '—' },
     { title: 'SL TP', dataIndex: 'so_luong_tp', width: 90, align: 'right' as const, render: (v: number) => <span style={{ color: '#1677ff', fontWeight: 600 }}>{v.toLocaleString('vi-VN')}</span> },
+    { title: 'Phôi TT', dataIndex: 'so_phoi_thuc_te', width: 80, align: 'right' as const, render: (v: number | null | undefined) => v != null ? v.toLocaleString('vi-VN') : '—' },
+    { title: 'Con TT', dataIndex: 'so_con_thuc_te', width: 75, align: 'right' as const, render: (v: number | null | undefined) => v != null ? v.toLocaleString('vi-VN') : '—' },
+    { title: 'SL lỗi', dataIndex: 'so_luong_loi', width: 80, align: 'right' as const, render: (v: number | null | undefined) => v != null && v > 0 ? <span style={{ color: '#ff4d4f' }}>{v.toLocaleString('vi-VN')}</span> : (v != null ? '0' : '—') },
     { title: 'm²', dataIndex: 'dien_tich', width: 90, align: 'right' as const, render: (v: number | undefined) => v != null ? v.toFixed(4) : '—' },
     { title: 'Đơn giá', dataIndex: 'don_gia', width: 90, align: 'right' as const, render: (v: number | undefined) => v != null ? v.toLocaleString('vi-VN') : '—' },
     { title: 'Tiền lương', dataIndex: 'tien_luong', width: 110, align: 'right' as const, render: (v: number | undefined) => v != null ? <span style={{ color: '#52c41a' }}>{v.toLocaleString('vi-VN')}</span> : '—' },
@@ -318,7 +340,7 @@ function TabScanByLoai({ loai, label }: { loai: 'can_mang' | 'xa', label: string
       <Card>
         <Table dataSource={filtered} columns={columns} rowKey="id" size="small" loading={isLoading}
           pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `${t} lượt scan` }}
-          scroll={{ x: 1100 }} />
+          scroll={{ x: 1335 }} />
       </Card>
     </>
   )
