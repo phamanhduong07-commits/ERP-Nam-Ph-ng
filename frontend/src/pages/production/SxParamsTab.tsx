@@ -2,7 +2,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Row, Col, Table, InputNumber, Select, Input, Button, Space, Typography,
-  Tag, Divider, message, Alert, Tooltip, Checkbox, Radio, Popconfirm,
+  Tag, Divider, message, Alert, Tooltip, Checkbox, Radio,
 } from 'antd'
 import { SaveOutlined, StarOutlined, StarFilled } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -306,6 +306,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   }
 
   const [savingMacDinh, setSavingMacDinh] = useState(false)
+  const [savedMacDinh, setSavedMacDinh] = useState(!!mac_dinh)
 
   const handleSaveMacDinh = async () => {
     if (!item.product?.id) return
@@ -325,6 +326,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
         song_3: layers.song_3.ma_ky_hieu, song_3_dl: layers.song_3.dinh_luong,
         mat_3:  layers.mat_3.ma_ky_hieu,  mat_3_dl:  layers.mat_3.dinh_luong,
       })
+      setSavedMacDinh(true)
       message.success(`Đã lưu thông số mặc định cho "${item.ten_hang}"`)
     } catch {
       message.error('Lưu mặc định thất bại')
@@ -468,21 +470,16 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
               {queueStatus === 'hoan_thanh' && <Tag color="default">✅ Hoàn thành</Tag>}
 
               {item.product?.id && (
-                <Tooltip title={mac_dinh ? 'Cập nhật thông số mặc định cho mã hàng này' : 'Lưu thông số hiện tại làm mặc định cho mã hàng này'}>
-                  <Popconfirm
-                    title="Lưu làm thông số mặc định?"
-                    description={`Các lệnh SX mới của "${item.ten_hang}" sẽ tự điền thông số này.`}
-                    onConfirm={handleSaveMacDinh}
-                    okText="Lưu mặc định"
+                <Tooltip title={savedMacDinh ? 'Cập nhật thông số mặc định cho mã hàng này' : 'Lưu thông số hiện tại làm mặc định cho mã hàng này'}>
+                  <Button
+                    size="small"
+                    icon={savedMacDinh ? <StarFilled /> : <StarOutlined />}
+                    loading={savingMacDinh}
+                    onClick={handleSaveMacDinh}
+                    style={savedMacDinh ? { color: '#faad14', borderColor: '#faad14' } : undefined}
                   >
-                    <Button
-                      size="small"
-                      icon={mac_dinh ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
-                      loading={savingMacDinh}
-                    >
-                      {mac_dinh ? 'Cập nhật mặc định' : 'Lưu làm mặc định'}
-                    </Button>
-                  </Popconfirm>
+                    {savedMacDinh ? 'Đã lưu mặc định' : 'Lưu làm mặc định'}
+                  </Button>
                 </Tooltip>
               )}
               <Button
