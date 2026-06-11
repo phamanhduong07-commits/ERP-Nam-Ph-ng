@@ -182,7 +182,7 @@ def list_phieu(
 def create_phieu(
     body: QCGiayCuonCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles("QC", "GIAM_DOC", "ADMIN")),
+    user: User = Depends(require_roles("SAN_XUAT_GIAM_SAT", "BGD_GIAM_DOC", "ADMIN")),
 ):
     pm = db.get(PaperMaterial, body.paper_material_id)
     if not pm:
@@ -222,7 +222,7 @@ def update_phieu(
     id: int,
     body: QCGiayCuonUpdate,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles("QC", "GIAM_DOC", "ADMIN", "NHAN_SU")),
+    _user: User = Depends(require_roles("SAN_XUAT_GIAM_SAT", "BGD_GIAM_DOC", "ADMIN", "NHAN_SU_TO_TRUONG")),
 ):
     obj = db.get(QCGiayCuonPhieu, id)
     if not obj:
@@ -239,7 +239,7 @@ def update_phieu(
 def delete_phieu(
     id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles("QC", "GIAM_DOC", "ADMIN")),
+    _user: User = Depends(require_roles("SAN_XUAT_GIAM_SAT", "BGD_GIAM_DOC", "ADMIN")),
 ):
     obj = db.get(QCGiayCuonPhieu, id)
     if not obj:

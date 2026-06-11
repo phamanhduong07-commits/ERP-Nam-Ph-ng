@@ -73,7 +73,7 @@ def calculate_production_salary(
     from_date: date = Query(...),
     to_date: date = Query(...),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "NHAN_SU")),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
 ):
     return PayrollService.calculate_production_salary(db, from_date, to_date)
 
@@ -83,7 +83,7 @@ def generate_payroll(
     thang: int,
     nam: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "NHAN_SU")),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
 ):
     """
     Tính toán lương tự động cho tất cả nhân viên trong tháng
@@ -222,7 +222,7 @@ def get_payroll_summary(
     thang: int,
     nam: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "NHAN_SU")),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
 ):
     runs = db.query(PayrollRun).filter(
         PayrollRun.thang == thang,
@@ -287,7 +287,7 @@ def approve_payroll(
     thang: int,
     nam: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU")),
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
 ):
     """Chốt bảng lương tháng — chuyển du_thao → da_chot."""
     runs = db.query(PayrollRun).filter(
@@ -308,7 +308,7 @@ def export_payroll_excel(
     thang: int,
     nam: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "NHAN_SU")),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
 ):
     """Xuất bảng lương tháng ra Excel."""
     from fastapi import HTTPException

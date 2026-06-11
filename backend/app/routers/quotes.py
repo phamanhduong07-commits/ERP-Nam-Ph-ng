@@ -479,7 +479,7 @@ def _auto_expire_quotes(db: Session) -> None:
         db.rollback()
 
 
-_MANAGER_ROLES = {"ADMIN", "GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN"}
+_MANAGER_ROLES = {"ADMIN", "BGD_GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN"}
 
 
 def _check_quote_owner_or_manager(quote: Quote, user: User) -> None:
@@ -954,7 +954,7 @@ def approve_quote(
     current_user: User = Depends(get_current_user),
 ):
     role_code = current_user.role.ma_vai_tro if current_user.role else None
-    if role_code not in ("ADMIN", "GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN"):
+    if role_code not in ("ADMIN", "BGD_GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN"):
         raise HTTPException(status_code=403, detail="Ban khong co quyen duyet bao gia")
     quote = _load_quote(quote_id, db)
     if quote.trang_thai not in ("moi", "cho_duyet"):

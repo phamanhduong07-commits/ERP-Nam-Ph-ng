@@ -70,7 +70,7 @@ router = APIRouter(prefix="/api/accounting", tags=["accounting"])
 
 logger = logging.getLogger(__name__)
 
-KE_TOAN_ROLES = ("KE_TOAN", "GIAM_DOC")
+KE_TOAN_ROLES = ("KE_TOAN_TRUONG", "KE_TOAN_CONG_NO", "KE_TOAN_MUA_HANG", "KETOAN_NHAN_VIEN", "BGD_GIAM_DOC")
 ACCOUNTING_AUDIT_TABLES = {
     "bank_transactions",
     "cash_receipts",

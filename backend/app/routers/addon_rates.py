@@ -19,7 +19,7 @@ from app.models.auth import User
 from app.models.addon_rate import AddonRate
 
 router = APIRouter(prefix="/api/addon-rates", tags=["addon-rates"])
-config_admin_required = require_roles("ADMIN", "GIAM_DOC")
+config_admin_required = require_roles("ADMIN", "BGD_GIAM_DOC")
 
 # ─── Mặc định ────────────────────────────────────────────────────────────────
 

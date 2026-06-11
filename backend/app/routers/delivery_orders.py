@@ -800,7 +800,7 @@ def update_delivery_header(
 
 
 @router.delete("/deliveries/{do_id}")
-def delete_delivery(do_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "ADMIN"))):
+def delete_delivery(do_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO_TO_TRUONG", "ADMIN"))):
     do = db.get(DeliveryOrder, do_id)
     if not do:
         raise HTTPException(404, "Không tìm thấy phiếu giao hàng")

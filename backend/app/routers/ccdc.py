@@ -20,7 +20,7 @@ from app.services.excel_import_service import build_template_response, ImportFie
 
 router = APIRouter(prefix="/api/ccdc", tags=["ccdc"])
 
-KE_TOAN = ("KE_TOAN", "GIAM_DOC", "ADMIN")
+KE_TOAN = ("KE_TOAN_TRUONG", "KE_TOAN_MUA_HANG", "BGD_GIAM_DOC", "ADMIN")
 
 _CCDC_IMPORT_FIELDS = [
     ImportField("ma_ccdc",          "Ma CCDC",          required=True,  parser=parse_text,    help_text="Ma cong cu dung cu, duy nhat (upsert key)"),

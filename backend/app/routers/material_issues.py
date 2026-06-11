@@ -364,7 +364,7 @@ def update_material_issue(
 
 
 @router.delete("/material-issues/{mi_id}")
-def delete_material_issue(mi_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "ADMIN"))):
+def delete_material_issue(mi_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO_TO_TRUONG", "ADMIN"))):
     mi = db.get(MaterialIssue, mi_id)
     if not mi:
         raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
@@ -398,7 +398,7 @@ def delete_material_issue(mi_id: int, db: Session = Depends(get_db), current_use
 def allocate_material_issue(
     mi_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "ADMIN", "GIAM_DOC")),
+    _: User = Depends(require_roles("KHO_TO_TRUONG", "ADMIN", "BGD_GIAM_DOC")),
 ):
     """Phân bổ kg giấy thực xuất về từng LSX theo trọng số m² × hệ số lớp.
 

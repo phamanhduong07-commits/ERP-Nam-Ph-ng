@@ -18,7 +18,7 @@ from app.models.auth import User
 from app.models.layer_allocation_coefficient import LayerAllocationCoefficient
 
 router = APIRouter(prefix="/api/layer-allocation-coefficients", tags=["layer-allocation-coefficients"])
-_admin_required = require_roles("ADMIN", "GIAM_DOC")
+_admin_required = require_roles("ADMIN", "BGD_GIAM_DOC")
 
 _DEFAULTS = [
     {"loai_lop": "mat",  "flute_type": None,  "he_so": Decimal("1.00"), "ghi_chu": "Mặt (liner)"},

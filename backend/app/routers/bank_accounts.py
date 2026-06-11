@@ -29,7 +29,7 @@ BANK_ACCOUNT_IMPORT_FIELDS = [
 
 router = APIRouter(prefix="/api/bank-accounts", tags=["bank-accounts"])
 
-KE_TOAN = ("KE_TOAN", "GIAM_DOC", "ADMIN")
+KE_TOAN = ("KE_TOAN_TRUONG", "KE_TOAN_MUA_HANG", "BGD_GIAM_DOC", "ADMIN")
 
 
 @router.get("/import-template")
@@ -42,7 +42,7 @@ async def import_bank_accounts(
     commit: bool = Query(default=False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("KE_TOAN", "GIAM_DOC", "ADMIN")),
+    _: User = Depends(require_roles("KE_TOAN_TRUONG", "KE_TOAN_MUA_HANG", "BGD_GIAM_DOC", "ADMIN")),
 ):
     return await import_excel(
         db=db, file=file, model=BankAccount,

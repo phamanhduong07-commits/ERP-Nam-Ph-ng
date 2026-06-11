@@ -19,7 +19,7 @@ from app.models.auth import User
 from app.models.indirect_cost import IndirectCostItem
 
 router = APIRouter(prefix="/api/indirect-costs", tags=["indirect-costs"])
-config_admin_required = require_roles("ADMIN", "GIAM_DOC")
+config_admin_required = require_roles("ADMIN", "BGD_GIAM_DOC")
 
 # ─── Mặc định (mirror của price_calculator._INDIRECT_BREAKDOWN) ───────────────
 

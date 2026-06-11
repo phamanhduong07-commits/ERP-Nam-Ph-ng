@@ -746,7 +746,7 @@ def update_po(po_id: int, body: POUpdate, db: Session = Depends(get_db), _: User
 @router.post("/{po_id:int}/duyet")
 def duyet_po(po_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     role_code = current_user.role.ma_vai_tro if current_user.role else None
-    if role_code not in ("GIAM_DOC", "GIAM_DOC_THUONG_MAI", "ADMIN"):
+    if role_code not in ("BGD_GIAM_DOC", "ADMIN"):
         raise HTTPException(403, "Không có quyền duyệt đơn mua hàng")
     po = db.get(PurchaseOrder, po_id)
     if not po:

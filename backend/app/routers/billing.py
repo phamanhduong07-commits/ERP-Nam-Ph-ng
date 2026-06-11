@@ -34,11 +34,11 @@ def _logo_img(pn, settings: dict) -> str:
     return f'<img src="{_html_mod.escape(src)}" style="max-height:50px;max-width:100%;object-fit:contain"/>' if src else ""
 
 # ── Role groups ──────────────────────────────────────────────────────────────
-CREATE_ROLES = ("KE_TOAN_CONG_NO", "KE_TOAN", "KE_TOAN_TRUONG", "GIAM_DOC")
-EDIT_ROLES = ("SALE_ADMIN", "KE_TOAN_CONG_NO", "KE_TOAN", "KE_TOAN_TRUONG", "GIAM_DOC")
-ADJUST_ROLES = ("KE_TOAN_CONG_NO", "KE_TOAN_TRUONG", "GIAM_DOC")   # yêu cầu điều chỉnh sau KC
-APPROVE_ROLES = ("KE_TOAN_TRUONG", "GIAM_DOC")                        # duyệt sau KC
-READ_ROLES = ("SALE_ADMIN", "KE_TOAN_CONG_NO", "KE_TOAN", "KE_TOAN_TRUONG", "GIAM_DOC", "KINH_DOANH", "MUA_HANG")
+CREATE_ROLES = ("KE_TOAN_CONG_NO", "KE_TOAN_MUA_HANG", "KE_TOAN_TRUONG", "BGD_GIAM_DOC")
+EDIT_ROLES = ("SALE_ADMIN", "TRUONG_PHONG_SALE_ADMIN", "KE_TOAN_CONG_NO", "KE_TOAN_MUA_HANG", "KE_TOAN_TRUONG", "BGD_GIAM_DOC")
+ADJUST_ROLES = ("KE_TOAN_CONG_NO", "KE_TOAN_TRUONG", "BGD_GIAM_DOC")
+APPROVE_ROLES = ("KE_TOAN_TRUONG", "BGD_GIAM_DOC")
+READ_ROLES = ("SALE_ADMIN", "TRUONG_PHONG_SALE_ADMIN", "KE_TOAN_CONG_NO", "KE_TOAN_MUA_HANG", "KE_TOAN_TRUONG", "KETOAN_NHAN_VIEN", "BGD_GIAM_DOC", "BGD_TO_TRUONG", "KINH_DOANH_TO_TRUONG", "KINH_DOANH_NHAN_VIEN", "MUA_HANG_TRUONG_PHONG", "MUA_HANG_NHAN_VIEN")
 
 _UPLOAD_DIR = "uploads/invoices"
 

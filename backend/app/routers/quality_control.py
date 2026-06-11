@@ -185,7 +185,7 @@ def update_ket_qua(
 def delete_qc_sheet(
     sheet_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("QC", "GIAM_DOC", "ADMIN")),
+    _: User = Depends(require_roles("SAN_XUAT_GIAM_SAT", "BGD_GIAM_DOC", "ADMIN")),
 ):
     sheet = db.get(QCSheet, sheet_id)
     if not sheet:

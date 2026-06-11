@@ -11,7 +11,7 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 
-_gps_admin_required = require_roles("ADMIN", "GIAM_DOC")
+_gps_admin_required = require_roles("ADMIN", "BGD_GIAM_DOC")
 from app.models.master import Xe
 from app.models.gps import DrainAlertLog, GpsSnapshot
 from app.socket_manager import sio

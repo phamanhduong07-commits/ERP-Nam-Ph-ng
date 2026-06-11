@@ -520,7 +520,7 @@ def reject_ymh(
 def duyet_pb(
     ymh_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("ADMIN", "MANAGER", "GIAM_DOC")),
+    current_user: User = Depends(require_roles("ADMIN", "MUA_HANG_TRUONG_PHONG", "BGD_GIAM_DOC")),
 ):
     ymh = db.get(PurchaseRequisition, ymh_id)
     if not ymh:
@@ -538,7 +538,7 @@ def duyet_pb(
 def duyet_gd(
     ymh_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("ADMIN", "GIAM_DOC")),
+    current_user: User = Depends(require_roles("ADMIN", "BGD_GIAM_DOC")),
 ):
     ymh = db.get(PurchaseRequisition, ymh_id)
     if not ymh:
@@ -557,7 +557,7 @@ def tao_po_tu_ymh(
     ymh_id: int,
     body: YMHCreatePO,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("ADMIN", "MANAGER", "GIAM_DOC")),
+    current_user: User = Depends(require_roles("ADMIN", "MUA_HANG_TRUONG_PHONG", "BGD_GIAM_DOC")),
 ):
     ymh = db.get(PurchaseRequisition, ymh_id)
     if not ymh:
@@ -627,7 +627,7 @@ def tao_po_tu_ymh(
 def huy_ymh(
     ymh_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "MANAGER", "GIAM_DOC")),
+    _: User = Depends(require_roles("ADMIN", "MUA_HANG_TRUONG_PHONG", "BGD_GIAM_DOC")),
 ):
     ymh = db.get(PurchaseRequisition, ymh_id)
     if not ymh:

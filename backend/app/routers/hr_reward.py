@@ -21,7 +21,7 @@ class RewardCreate(BaseModel):
 
 
 @router.get("/rewards")
-def list_rewards(db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU", "GIAM_DOC"))):
+def list_rewards(db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG", "NHAN_SU_NHAN_VIEN", "BGD_GIAM_DOC"))):
     items = db.query(RewardDiscipline).order_by(RewardDiscipline.created_at.desc()).all()
     result = []
     for item in items:

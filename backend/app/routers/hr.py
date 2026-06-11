@@ -303,7 +303,7 @@ def get_employee(id: int, db: Session = Depends(get_db), current_user: User = De
     return row
 
 @router.post("/employees", response_model=schemas.Employee)
-def create_employee(body: schemas.EmployeeCreate, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
+def create_employee(body: schemas.EmployeeCreate, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG", "NHAN_SU_NHAN_VIEN"))):
     if db.query(Employee).filter(Employee.ma_nv == body.ma_nv).first():
         raise HTTPException(400, "Mã nhân viên đã tồn tại")
     db_emp = Employee(**body.model_dump())
@@ -314,7 +314,7 @@ def create_employee(body: schemas.EmployeeCreate, db: Session = Depends(get_db),
     return db_emp
 
 @router.post("/employees/bulk")
-def bulk_create_employees(body: schemas.EmployeeBulkCreate, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
+def bulk_create_employees(body: schemas.EmployeeBulkCreate, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG", "NHAN_SU_NHAN_VIEN"))):
     created = 0
     updated = 0
     errors = []
@@ -342,7 +342,7 @@ def update_employee(
     id: int,
     body: schemas.EmployeeUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU"))
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG", "NHAN_SU_NHAN_VIEN"))
 ):
     from app.models.auth import Role, User as AuthUser
     db_emp = db.query(Employee).filter(Employee.id == id).first()
@@ -383,7 +383,7 @@ def update_employee(
     return db_emp
 
 @router.get("/employees/{id}/history")
-def get_employee_history(id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
+def get_employee_history(id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG", "NHAN_SU_NHAN_VIEN"))):
     return db.query(EmployeeHistory).filter(EmployeeHistory.employee_id == id).order_by(EmployeeHistory.created_at.desc()).all()
 
 # --- Contracts & Warnings ---
@@ -544,7 +544,7 @@ def create_leave_request(body: schemas.LeaveRequestCreate, db: Session = Depends
 def approve_leave_request(
     id: int,
     y_kien: Optional[str] = None,
-    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU", "GIAM_DOC", "QUAN_DOC")),
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG", "NHAN_SU_NHAN_VIEN", "BGD_GIAM_DOC", "SAN_XUAT_GIAM_SAT", "SAN_XUAT_TO_TRUONG")),
     db: Session = Depends(get_db)
 ):
     req = db.get(LeaveRequest, id)
@@ -580,7 +580,7 @@ def approve_leave_request(
 def approve_leave_request_body(
     id: int,
     body: schemas.LeaveApprovalRequest,
-    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU", "GIAM_DOC", "QUAN_DOC")),
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG", "NHAN_SU_NHAN_VIEN", "BGD_GIAM_DOC", "SAN_XUAT_GIAM_SAT", "SAN_XUAT_TO_TRUONG")),
     db: Session = Depends(get_db),
 ):
     req = db.get(LeaveRequest, id)
@@ -727,7 +727,7 @@ def import_contract_allowances(rows: List[dict], db: Session = Depends(get_db), 
     return {"ok": True, "created": created, "updated": updated}
 
 @router.post("/employees/{id}/issue-account")
-def issue_employee_account(id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
+def issue_employee_account(id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG"))):
     from app.models.auth import Role, User
     import bcrypt
     
@@ -765,7 +765,7 @@ def issue_employee_account(id: int, db: Session = Depends(get_db), _: User = Dep
     return {"status": "success", "username": emp.ma_nv}
 
 @router.post("/employees/{id}/toggle-account-status")
-def toggle_account_status(id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
+def toggle_account_status(id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG"))):
     from app.models.auth import User
     emp = db.get(Employee, id)
     if not emp or not emp.user_id:
@@ -992,7 +992,7 @@ async def import_employees(
     commit: bool = Query(default=True),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "NHAN_SU")),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
 ):
     """
     Import nhân viên bulk từ file Excel (.xlsx/.xls).

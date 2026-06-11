@@ -80,7 +80,7 @@ def get_stock_adjustment(adj_id: int, db: Session = Depends(get_db), _: User = D
 def create_stock_adjustment(
     body: StockAdjustmentIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "KE_TOAN", "ADMIN")),
+    current_user: User = Depends(require_roles("KHO_TO_TRUONG", "KE_TOAN_TRUONG", "ADMIN")),
 ):
     if not body.items:
         raise HTTPException(400, "Phieu kiem ke phai co it nhat 1 dong hang")
@@ -188,7 +188,7 @@ def create_stock_adjustment(
 
 
 @router.delete("/stock-adjustments/{adj_id}")
-def delete_stock_adjustment(adj_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "KE_TOAN", "ADMIN"))):
+def delete_stock_adjustment(adj_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO_TO_TRUONG", "KE_TOAN_TRUONG", "ADMIN"))):
     adj = db.get(StockAdjustment, adj_id)
     if not adj:
         raise HTTPException(404, "Khong tim thay phieu kiem ke")

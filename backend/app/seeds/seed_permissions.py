@@ -12,6 +12,7 @@ def seed_permissions():
         {"ma_quyen": "purchase.import", "ten_quyen": "Import nghiệp vụ mua hàng (NCC, Đơn mua...)"},
         {"ma_quyen": "accounting.import", "ten_quyen": "Import kế toán (Số dư đầu kỳ...)"},
         {"ma_quyen": "report.export", "ten_quyen": "Xuất báo cáo Excel quản trị"},
+        {"ma_quyen": "admin.paper_materials", "ten_quyen": "Quản trị giấy nguyên liệu (sync giá mua từ HTCPH, cập nhật loạt)"},
     ]
 
     for p in permissions:

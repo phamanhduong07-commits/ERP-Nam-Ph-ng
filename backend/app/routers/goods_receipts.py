@@ -836,7 +836,7 @@ def _gen_so_bt_gr(db: Session) -> str:
 
 
 @router.patch("/goods-receipts/{gr_id}/approve")
-def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "GIAM_DOC", "ADMIN"))):
+def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO_TO_TRUONG", "BGD_GIAM_DOC", "ADMIN"))):
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
         logger.warning("goods_receipt id=%s not found", gr_id)
@@ -925,7 +925,7 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_use
 
 
 @router.post("/goods-receipts/{gr_id}/sync-gia-ban")
-def sync_gia_ban(gr_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("GIAM_DOC", "ADMIN"))):
+def sync_gia_ban(gr_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("BGD_GIAM_DOC", "ADMIN"))):
     """Bấm nút thủ công: gia_ban = gia_mua × 1.05 cho tất cả vật tư giấy trong PNK này."""
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
@@ -986,7 +986,7 @@ def update_goods_receipt(
 
 
 @router.delete("/goods-receipts/{gr_id}")
-def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("KHO", "KHO_TO_TRUONG", "ADMIN"))):
+def delete_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("KHO_TO_TRUONG", "ADMIN"))):
     gr = db.get(GoodsReceipt, gr_id)
     if not gr:
         raise HTTPException(404, "Không tìm thấy phiếu nhập")

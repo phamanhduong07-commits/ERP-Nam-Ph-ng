@@ -29,7 +29,7 @@ from app.services.inventory_service import get_or_create_balance, xuat_balance, 
 
 router = APIRouter(prefix="/api/purchase-returns", tags=["purchase-returns"])
 
-KE_TOAN_ROLES = ("KE_TOAN", "GIAM_DOC", "ADMIN", "MUA_HANG")
+KE_TOAN_ROLES = ("KE_TOAN_TRUONG", "KE_TOAN_MUA_HANG", "BGD_GIAM_DOC", "ADMIN", "MUA_HANG_TRUONG_PHONG", "MUA_HANG_NHAN_VIEN")
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────

@@ -23,9 +23,9 @@ DEPARTMENT_MAP: dict[str, set[str]] = {
     "SAN_XUAT_GIAM_SAT":       {"SAN_XUAT_GIAM_SAT",        "SAN_XUAT_TO_TRUONG", "SAN_XUAT_THO"},
 }
 
-_FULL_ACCESS = {"ADMIN", "GIAM_DOC"}
+_FULL_ACCESS = {"ADMIN", "BGD_GIAM_DOC"}
 _ALL_MANAGERS = list(DEPARTMENT_MAP.keys())
-_users_access = require_roles("ADMIN", "GIAM_DOC", *_ALL_MANAGERS)
+_users_access = require_roles("ADMIN", "BGD_GIAM_DOC", *_ALL_MANAGERS)
 
 
 def _hash_password(plain: str) -> str:

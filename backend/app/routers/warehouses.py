@@ -11,7 +11,7 @@ from app.services.excel_import_service import (
 )
 
 router = APIRouter(prefix="/api/warehouses", tags=["warehouses"])
-master_admin_required = require_roles("ADMIN", "GIAM_DOC")
+master_admin_required = require_roles("ADMIN", "BGD_GIAM_DOC")
 
 WAREHOUSE_IMPORT_FIELDS = [
     ImportField("ma_kho", "Ma kho", required=True, parser=parse_text, help_text="Ma kho, duy nhat"),
