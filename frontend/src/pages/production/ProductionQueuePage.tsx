@@ -1462,12 +1462,15 @@ export default function ProductionQueuePage() {
 
               {/* Nút xem kế hoạch — điều hướng đến Plan chứa các dòng này */}
               {(() => {
-                // Lấy danh sách plan_id duy nhất từ planningRows
-                const planIds = [...new Set(planningRows.map(r => r.plan_id))]
-                const planLabels = [...new Set(planningRows.map(r => r.so_ke_hoach).filter(Boolean))]
+                // Lấy danh sách plan_id duy nhất — bỏ pool plan (không có trong KHSX list)
+                const realRows = planningRows.filter(r => r.so_ke_hoach !== POOL_PLAN_SO)
+                const planIds = [...new Set(realRows.map(r => r.plan_id))]
+                const planLabels = [...new Set(realRows.map(r => r.so_ke_hoach).filter(Boolean))]
+
+                if (planIds.length === 0) return null
 
                 if (planIds.length === 1) {
-                  // Tất cả cùng 1 plan → vào thẳng plan đó
+                  // Tất cả cùng 1 plan → vào thẳng plan đó (dùng ?id= vì ProductionPlansPage dùng query param)
                   return (
                     <Button
                       type="primary"
@@ -1475,7 +1478,7 @@ export default function ProductionQueuePage() {
                       block
                       size="middle"
                       style={{ marginBottom: 8 }}
-                      onClick={() => navigate(`/production/plans/${planIds[0]}`)}
+                      onClick={() => navigate(`/production/plans?id=${planIds[0]}`)}
                     >
                       Xem Kế hoạch {planLabels[0]}
                     </Button>
