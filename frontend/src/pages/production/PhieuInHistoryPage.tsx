@@ -61,7 +61,7 @@ function TabLichSuIn() {
   const handleExport = () => {
     exportToExcel(`lich-su-in-${dayjs().format('YYYYMMDD')}`, [{
       name: 'Lịch sử in',
-      headers: ['Ngày tạo', 'LSX', 'Số phiếu', 'Trạng thái', 'Tên hàng', 'Mã KH', 'Khổ (cm)', 'Dài (cm)', 'SL phôi', 'Ngày in', 'SL in OK', 'SL lỗi', 'Ca', 'Ghi chú'],
+      headers: ['Ngày tạo', 'LSX', 'Số phiếu', 'Trạng thái', 'Tên hàng', 'Mã KH', 'Khổ (cm)', 'Dài (cm)', 'SL phôi', 'Ngày in', 'SL in OK', 'Số phôi TT', 'Số con TT', 'SL lỗi', 'Ca', 'Ghi chú'],
       rows: filtered.map(r => [
         dayjs(r.created_at).format('DD/MM/YYYY'),
         r.so_lsx ?? '',
@@ -74,11 +74,13 @@ function TabLichSuIn() {
         r.so_luong_phoi ?? '',
         r.ngay_in ? dayjs(r.ngay_in).format('DD/MM/YYYY') : '',
         r.so_luong_in_ok ?? '',
+        r.so_phoi_thuc_te ?? '',
+        r.so_con_thuc_te ?? '',
         r.so_luong_loi ?? '',
         r.ca ?? '',
         r.ghi_chu ?? '',
       ]),
-      colWidths: [12, 14, 14, 14, 30, 10, 9, 9, 10, 12, 10, 10, 8, 25],
+      colWidths: [12, 14, 14, 14, 30, 10, 9, 9, 10, 12, 10, 10, 10, 10, 8, 25],
     }])
   }
 
@@ -94,6 +96,8 @@ function TabLichSuIn() {
     { title: 'SL phôi', dataIndex: 'so_luong_phoi', width: 90, align: 'right' as const, render: (v: number | null) => v != null ? v.toLocaleString('vi-VN') : '—' },
     { title: 'Ngày in', dataIndex: 'ngay_in', width: 90, render: (v: string | null) => v ? dayjs(v).format('DD/MM/YY') : '—' },
     { title: 'SL in OK', dataIndex: 'so_luong_in_ok', width: 90, align: 'right' as const, render: (v: number | null) => v != null ? <span style={{ color: '#52c41a' }}>{v.toLocaleString('vi-VN')}</span> : '—' },
+    { title: 'Phôi TT', dataIndex: 'so_phoi_thuc_te', width: 80, align: 'right' as const, render: (v: number | null) => v != null ? v.toLocaleString('vi-VN') : '—' },
+    { title: 'Con TT', dataIndex: 'so_con_thuc_te', width: 75, align: 'right' as const, render: (v: number | null) => v != null ? v.toLocaleString('vi-VN') : '—' },
     { title: 'SL lỗi', dataIndex: 'so_luong_loi', width: 80, align: 'right' as const, render: (v: number | null) => v != null && v > 0 ? <span style={{ color: '#ff4d4f' }}>{v.toLocaleString('vi-VN')}</span> : (v != null ? '0' : '—') },
     { title: 'Ca', dataIndex: 'ca', width: 55, render: (v: string | null) => v ?? '—' },
     { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true, render: (v: string | null) => v ?? '' },

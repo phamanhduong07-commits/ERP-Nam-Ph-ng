@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
+import math
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -221,11 +222,41 @@ def _to_dict(p: PhieuIn) -> dict:
         "tam_dung_luc": p.tam_dung_luc.isoformat() if p.tam_dung_luc else None,
         "tam_dung_ly_do": p.tam_dung_ly_do,
         "phieu_goc_id": p.phieu_goc_id,
+        "so_phoi_thuc_te": p.so_phoi_thuc_te,
+        "so_con_thuc_te": p.so_con_thuc_te,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "so_lsx": p.production_order.so_lenh if p.production_order else None,
         # Thông tin kỹ thuật từ ProductionOrderItem (item đầu tiên của LSX)
         **_poi_fields(p.production_order),
     }
+
+
+def _calc_phoi_con(so_thung: float, poi: "ProductionOrderItem | None") -> tuple[int | None, int | None]:
+    """Tính số phôi và số con thực tế từ số thùng — cùng công thức bên máy sóng."""
+    if not poi or not poi.loai_thung or not poi.dai or not poi.rong or not poi.cao:
+        return (None, None)
+    from app.services.price_calculator import calculate_dien_tich
+    try:
+        dims = calculate_dien_tich(
+            str(poi.loai_thung), float(poi.dai), float(poi.rong), float(poi.cao),
+            poi.so_lop or 3,
+        )
+    except Exception:
+        return (None, None)
+    if not dims:
+        return (None, None)
+    kho1: float = dims.get("kho1") or 0
+    so_dao_kh: int = dims.get("so_dao") or 1
+    kho_tt_kh: float = dims.get("kho_tt") or 0
+    # Dùng kho_tt đã điều chỉnh nếu operator đã lưu, ngược lại dùng giá trị kế hoạch
+    kho_tt_actual = float(poi.kho_tt) if poi.kho_tt else kho_tt_kh
+    so_dao = max(1, math.floor((kho_tt_actual - 1.8) / kho1)) if kho1 > 0 else so_dao_kh
+    so_lan_cat = poi.so_lan_cat or 1
+    be_so_con = poi.be_so_con if poi.be_so_con and poi.be_so_con > 1 else 1
+    so_dao_groups = max(1, round(so_dao / be_so_con))
+    so_phoi = math.ceil(so_thung / (so_dao * so_lan_cat))
+    so_con = so_phoi * so_dao_groups
+    return (so_phoi, so_con)
 
 
 def _log_state_change(
@@ -1115,6 +1146,11 @@ async def complete_printing(
     p.tam_dung_ly_do = None
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(p, k, v)
+    if body.so_luong_in_ok and body.so_luong_in_ok > 0 and p.production_order:
+        poi = p.production_order.items[0] if p.production_order.items else None
+        so_phoi, so_con = _calc_phoi_con(float(body.so_luong_in_ok), poi)
+        p.so_phoi_thuc_te = so_phoi
+        p.so_con_thuc_te = so_con
     _log_state_change(db, p, "dang_in", "cho_dinh_hinh", "complete_printing", current_user.id)
     db.commit()
     await sio.emit("machine_status_update", {
@@ -1154,6 +1190,11 @@ async def ngung_in_tao_phieu_bu(
     p.tam_dung_ly_do = None
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(p, k, v)
+    if p.production_order:
+        poi = p.production_order.items[0] if p.production_order.items else None
+        so_phoi, so_con = _calc_phoi_con(float(body.so_luong_in_ok), poi)
+        p.so_phoi_thuc_te = so_phoi
+        p.so_con_thuc_te = so_con
 
     # Tạo phiếu bù
     phieu_bu = PhieuIn(

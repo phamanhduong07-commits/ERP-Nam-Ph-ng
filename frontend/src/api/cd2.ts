@@ -148,6 +148,9 @@ export interface PhieuIn {
   tam_dung_ly_do?: string | null
   // Phiếu bù
   phieu_goc_id?: number | null
+  // Số phôi và số con thực tế (tính từ so_luong_in_ok khi hoàn thành)
+  so_phoi_thuc_te?: number | null
+  so_con_thuc_te?: number | null
 }
 
 export interface CompletePayload {

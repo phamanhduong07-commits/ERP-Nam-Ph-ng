@@ -702,7 +702,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
               <th style={TH}>SL Thùng</th>
               <th style={TH}>Loại Lằn</th>
               <th style={TH}>Loại In</th>
-              <th style={TH}>Ghi Chú</th>
+              {/* <th style={TH}>Ghi Chú</th> */}
               <th style={{ ...TH, color: '#fa8c16' }}>Mét Tới</th>
               <th style={{ ...TH, color: '#cf1322' }} className="no-print">
                 <Tooltip title="Đánh dấu line này phải mua phôi sóng từ NCC ngoài">
@@ -923,12 +923,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                     </div>
                   </td>
 
-                  {/* Ghi Chú — nổi bật khi có nội dung */}
-                  <td style={{ ...TD, maxWidth: 200, background: r.ghi_chu ? '#fffbe6' : undefined }}>
-                    {r.ghi_chu
-                      ? <span style={{ fontSize: 13, fontWeight: 600, color: '#262626' }}>📌 {r.ghi_chu}</span>
-                      : <span style={{ fontSize: 11, color: '#d9d9d9' }}>—</span>}
-                  </td>
+                  {/* Ghi Chú ẩn */}
 
                   {/* Mét Tới */}
                   <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#fa8c16', fontSize: 14 }}>

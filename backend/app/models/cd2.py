@@ -172,6 +172,10 @@ class PhieuIn(Base):
     tam_dung_luc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     tam_dung_ly_do: Mapped[str | None] = mapped_column(Text)
 
+    # Số phôi và số con thực tế (tính từ so_luong_in_ok khi hoàn thành)
+    so_phoi_thuc_te: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    so_con_thuc_te: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Phiếu bù — lưu id phiếu gốc (không FK constraint để tránh circular)
     phieu_goc_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
