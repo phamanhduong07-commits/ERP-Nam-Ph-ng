@@ -246,9 +246,8 @@ function buildMenuItems(queueCount: number): RawMenuItem[] {
           children: [
             { key: '/hr/production-output', label: <Link to="/hr/production-output">📦 Sản lượng tháng</Link> },
             { key: '/hr/payroll-adjustments', label: <Link to="/hr/payroll-adjustments">💰 Phụ cấp & Khấu trừ</Link> },
-            { key: '/hr/payroll-runs', label: <Link to="/hr/payroll-runs">💵 Bảng lương tháng (Chốt & Duyệt)</Link> },
+            { key: '/hr/payroll-runs', label: <Link to="/hr/payroll-runs">💵 Bảng lương tháng</Link> },
             { key: '/hr/payroll-complaints', label: <Link to="/hr/payroll-complaints">⚠️ Khiếu nại lương (Điều 16)</Link> },
-            { key: '/hr/payroll', label: <Link to="/hr/payroll">Bảng lương sản phẩm (cũ)</Link> },
             { key: '/hr/payroll-config', label: <Link to="/hr/payroll-config">⚙️ Cấu hình lương</Link> },
           ],
         },

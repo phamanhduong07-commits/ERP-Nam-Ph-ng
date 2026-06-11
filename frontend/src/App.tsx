@@ -163,7 +163,7 @@ const EmployeeListPage = lazy(() => import('./pages/hr/EmployeeListPage'))
 const DepartmentPage = lazy(() => import('./pages/hr/DepartmentPage'))
 const PayrollConfigPage = lazy(() => import('./pages/hr/PayrollConfigPage'))
 const AttendancePage = lazy(() => import('./pages/hr/AttendancePage'))
-const PayrollPage = lazy(() => import('./pages/hr/PayrollPage'))
+// PayrollPage cũ — gỡ. Sprint D thay thế bằng /hr/payroll-runs (engine 6 công thức + workflow)
 const LogisticsPage = lazy(() => import('./pages/hr/LogisticsPage'))
 const LeaveApprovalPage = lazy(() => import('./pages/hr/LeaveApprovalPage'))
 const RewardDisciplinePage = lazy(() => import('./pages/hr/RewardDisciplinePage'))
@@ -406,7 +406,8 @@ export default function App() {
             <Route path="hr/checkin-locations" element={<ErrorBoundary><CheckInLocationsPage /></ErrorBoundary>} />
             <Route path="hr/benefits" element={<ErrorBoundary><BenefitsPage /></ErrorBoundary>} />
             <Route path="hr/departments" element={<ErrorBoundary><DepartmentPage /></ErrorBoundary>} />
-            <Route path="hr/payroll" element={<ErrorBoundary><PayrollPage /></ErrorBoundary>} />
+            {/* Redirect: /hr/payroll cũ → /hr/payroll-runs Sprint D (engine + workflow chốt + duyệt). Ngày lễ → /hr/payroll-config tab 5 */}
+            <Route path="hr/payroll" element={<Navigate to="/hr/payroll-runs" replace />} />
             <Route path="hr/payroll-config" element={<ErrorBoundary><PayrollConfigPage /></ErrorBoundary>} />
             <Route path="hr/logistics" element={<ErrorBoundary><LogisticsPage /></ErrorBoundary>} />
             <Route path="logistics/gps-tracking" element={<ErrorBoundary><GpsTrackingPage /></ErrorBoundary>} />

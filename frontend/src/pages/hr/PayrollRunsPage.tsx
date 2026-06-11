@@ -10,8 +10,9 @@ import {
 } from 'antd'
 import {
   DollarOutlined, CalculatorOutlined, CheckCircleOutlined, BankOutlined,
-  ReloadOutlined, UnlockOutlined, DeleteOutlined, LineChartOutlined,
+  ReloadOutlined, UnlockOutlined, DeleteOutlined, LineChartOutlined, DownloadOutlined,
 } from '@ant-design/icons'
+import * as XLSX from 'xlsx'
 import { hrApi } from '../../api/hr'
 
 const { Title, Text } = Typography
@@ -68,6 +69,40 @@ export default function PayrollRunsPage() {
       r.bo_phan?.toLowerCase().includes(s)
     )
   }, [rows, search])
+
+  const exportExcel = () => {
+    if (!filtered.length) {
+      message.warning('Không có dữ liệu để xuất')
+      return
+    }
+    const data = filtered.map((r: any, idx: number) => ({
+      'STT': idx + 1,
+      'Mã NV': r.ma_nv || '',
+      'Họ tên': r.ho_ten || '',
+      'Bộ phận': r.bo_phan || '',
+      'Công quy đổi': Number(r.cong_quy_doi || 0),
+      'Hệ số CN': Number(r.he_so_ca_nhan_snapshot || 0),
+      'Lương sản phẩm': Number(r.luong_san_pham || 0),
+      'Bù tối thiểu vùng': Number(r.bu_toi_thieu_vung || 0),
+      'Cộng thêm': Number(r.phu_cap || 0),
+      'Bảo hiểm': Number(r.bao_hiem || 0),
+      'Tạm ứng': Number(r.tam_ung || 0),
+      'Tổng thu nhập': Number(r.tong_thu_nhap || 0),
+      'THỰC LĨNH': Number(r.thuc_linh || 0),
+      'Trạng thái': STATUS_LABEL[r.trang_thai] || r.trang_thai,
+    }))
+    const ws = XLSX.utils.json_to_sheet(data)
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 10 }, { wch: 22 }, { wch: 18 },
+      { wch: 12 }, { wch: 9 }, { wch: 14 }, { wch: 16 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
+      { wch: 14 }, { wch: 18 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, `T${filters.thang}-${filters.nam}`)
+    XLSX.writeFile(wb, `Bang_luong_T${String(filters.thang).padStart(2, '0')}_${filters.nam}.xlsx`)
+    message.success(`Đã xuất ${filtered.length} dòng ra Excel`)
+  }
 
   // Mutations
   const calcMut = useMutation({
@@ -238,6 +273,7 @@ export default function PayrollRunsPage() {
                 options={deps.map(d => ({ value: d.id, label: d.ten_bo_phan }))}
               />
               <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Tải lại</Button>
+              <Button icon={<DownloadOutlined />} onClick={exportExcel}>Xuất Excel</Button>
             </Space>
           </Col>
         </Row>

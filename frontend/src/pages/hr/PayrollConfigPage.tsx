@@ -15,8 +15,10 @@ import {
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, SettingOutlined, DeleteOutlined,
-  ClockCircleOutlined, GlobalOutlined, DollarOutlined, ToolOutlined,
+  ClockCircleOutlined, GlobalOutlined, DollarOutlined, ToolOutlined, CalendarOutlined,
 } from '@ant-design/icons'
+import { DatePicker } from 'antd'
+import dayjs from 'dayjs'
 import { hrApi } from '../../api/hr'
 
 const { Title, Text } = Typography
@@ -42,6 +44,7 @@ export default function PayrollConfigPage() {
           { key: 'gio_quy_doi',  label: <span><ClockCircleOutlined /> Quy đổi giờ → công</span>, children: <HourConversionTab /> },
           { key: 'min_wage',     label: <span><GlobalOutlined /> Lương tối thiểu vùng</span>, children: <MinWageTab /> },
           { key: 'config',       label: <span><ToolOutlined /> Cấu hình chung</span>,        children: <GeneralConfigTab /> },
+          { key: 'ngay_le',      label: <span><CalendarOutlined /> Ngày lễ (tăng ca 3.0)</span>, children: <HolidayTab /> },
         ]}
       />
     </div>
@@ -366,5 +369,121 @@ function GeneralConfigTab() {
         </Form>
       </Modal>
     </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAB 5: Ngày lễ — tăng ca hệ số 3.0
+// Di dời từ trang Bảng lương cũ (gỡ trùng menu)
+// ═══════════════════════════════════════════════════════════════
+function HolidayTab() {
+  const qc = useQueryClient()
+  const [form] = Form.useForm()
+  const thisYear = dayjs().year()
+
+  const { data: holidays = [] } = useQuery({
+    queryKey: ['payroll-holidays', thisYear],
+    queryFn: () => hrApi.listPayrollHolidays({
+      from_date: `${thisYear}-01-01`,
+      to_date: `${thisYear + 1}-12-31`,
+    }).then(r => r.data),
+  })
+
+  const createMut = useMutation({
+    mutationFn: (values: any) => hrApi.createPayrollHoliday({
+      ...values,
+      ngay: values.ngay.format('YYYY-MM-DD'),
+    }),
+    onSuccess: () => {
+      message.success('Đã thêm ngày lễ — tăng ca trong ngày này sẽ tính hệ số 3.0')
+      form.resetFields()
+      qc.invalidateQueries({ queryKey: ['payroll-holidays'] })
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lưu ngày lễ thất bại'),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => hrApi.deletePayrollHoliday(id),
+    onSuccess: () => {
+      message.success('Đã xóa ngày lễ')
+      qc.invalidateQueries({ queryKey: ['payroll-holidays'] })
+    },
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Xóa thất bại'),
+  })
+
+  return (
+    <Card
+      title={<Space><CalendarOutlined /> Ngày lễ áp dụng tăng ca hệ số 3.0</Space>}
+      extra={<Tag color="orange">Theo Bộ luật Lao động 2019 · Điều 98</Tag>}
+    >
+      <Alert
+        type="info"
+        showIcon
+        message="Cách hoạt động"
+        description={
+          <Text style={{ fontSize: 13 }}>
+            Các ngày được khai báo ở đây sẽ áp <strong>hệ số tăng ca 3.0</strong> khi NV làm việc vào ngày đó.
+            Bao gồm các ngày nghỉ lễ theo Bộ luật Lao động: Tết Dương lịch · Tết Âm lịch · 30/4 · 1/5 · 2/9 · 10/3 Âm lịch · Ngày Quốc tế Lao động.
+          </Text>
+        }
+        style={{ marginBottom: 16 }}
+      />
+
+      <Form form={form} layout="inline" onFinish={(v) => createMut.mutate(v)} style={{ marginBottom: 16 }}>
+        <Form.Item name="ngay" label="Ngày" rules={[{ required: true, message: 'Chọn ngày' }]}>
+          <DatePicker format="DD/MM/YYYY" style={{ width: 160 }} />
+        </Form.Item>
+        <Form.Item name="ten_ngay_le" label="Tên ngày lễ" rules={[{ required: true, message: 'Nhập tên' }]}>
+          <Input placeholder="VD: Quốc khánh 2/9" style={{ width: 280 }} />
+        </Form.Item>
+        <Form.Item name="ghi_chu" label="Ghi chú">
+          <Input placeholder="(tuỳ chọn)" style={{ width: 200 }} />
+        </Form.Item>
+        <Form.Item>
+          <Button type="primary" htmlType="submit" icon={<PlusOutlined />} loading={createMut.isPending}>
+            Thêm ngày lễ
+          </Button>
+        </Form.Item>
+      </Form>
+
+      <Table
+        dataSource={holidays}
+        rowKey="id"
+        size="small"
+        pagination={{ pageSize: 20 }}
+        columns={[
+          {
+            title: 'Ngày',
+            dataIndex: 'ngay',
+            width: 130,
+            render: (v: string) => <Text strong>{dayjs(v).format('DD/MM/YYYY')}</Text>,
+            sorter: (a: any, b: any) => dayjs(a.ngay).valueOf() - dayjs(b.ngay).valueOf(),
+            defaultSortOrder: 'descend',
+          },
+          {
+            title: 'Thứ trong tuần',
+            dataIndex: 'ngay',
+            width: 130,
+            render: (v: string) => {
+              const wd = dayjs(v).day()
+              const label = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][wd]
+              return <Tag color={wd === 0 || wd === 6 ? 'red' : 'default'}>{label}</Tag>
+            },
+          },
+          { title: 'Tên ngày lễ', dataIndex: 'ten_ngay_le', render: (v: string) => <Text strong>{v}</Text> },
+          { title: 'Ghi chú', dataIndex: 'ghi_chu' },
+          {
+            title: '',
+            width: 60,
+            align: 'center',
+            render: (_: any, r: any) => (
+              <Popconfirm title={`Xóa ngày lễ "${r.ten_ngay_le}"?`} onConfirm={() => deleteMut.mutate(r.id)}>
+                <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+              </Popconfirm>
+            ),
+          },
+        ]}
+      />
+    </Card>
   )
 }
