@@ -69,6 +69,16 @@ export default function EmployeeMobilePortal() {
     queryFn: () => client.get(`/hr/me/eligible-benefits`).then(r => r.data),
   })
 
+  const { data: kpiList = [] } = useQuery({
+    queryKey: ['my-kpi'],
+    queryFn: () => client.get(`/hr/me/kpi`).then(r => r.data),
+  })
+
+  const { data: healthCheck } = useQuery({
+    queryKey: ['my-health'],
+    queryFn: () => client.get(`/hr/me/health-checks`).then(r => r.data),
+  })
+
   const createLeaveMutation = useMutation({
     mutationFn: (values: any) => {
       // Ứng lương chỉ có 1 ngày — duplicate cho ngay_ket_thuc
@@ -163,6 +173,38 @@ export default function EmployeeMobilePortal() {
           >
             <span style={{ fontSize: 32, marginBottom: 8, display: 'block' }}>🎁</span>
             <Text strong>Phúc lợi</Text>
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card
+            hoverable
+            style={{ textAlign: 'center', borderRadius: 12 }}
+            onClick={() => setActiveTab('kpi')}
+          >
+            <span style={{ fontSize: 32, marginBottom: 8, display: 'block' }}>🎯</span>
+            <Text strong>KPI của tôi</Text>
+            {kpiList?.length > 0 && (
+              <><br /><Text type="secondary" style={{ fontSize: 11 }}>{kpiList.length} kỳ đánh giá</Text></>
+            )}
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card
+            hoverable
+            style={{
+              textAlign: 'center',
+              borderRadius: 12,
+              borderColor: healthCheck?.overdue_days ? '#ff4d4f' : undefined,
+            }}
+            onClick={() => setActiveTab('health')}
+          >
+            <span style={{ fontSize: 32, marginBottom: 8, display: 'block' }}>🏥</span>
+            <Text strong>Sức khỏe</Text>
+            {healthCheck?.overdue_days ? (
+              <><br /><Text type="danger" style={{ fontSize: 11 }}>Quá hạn {healthCheck.overdue_days} ngày</Text></>
+            ) : healthCheck?.upcoming_in_days != null && healthCheck.upcoming_in_days <= 30 ? (
+              <><br /><Text style={{ fontSize: 11, color: '#fa8c16' }}>Khám trong {healthCheck.upcoming_in_days} ngày</Text></>
+            ) : null}
           </Card>
         </Col>
         <Col span={24}>
@@ -432,12 +474,248 @@ export default function EmployeeMobilePortal() {
     )
   }
 
+  const renderKpi = () => {
+    const KPI_STATUS: Record<string, { text: string; color: string }> = {
+      chua_lam: { text: 'Chưa làm', color: 'default' },
+      nv_dang_cham: { text: 'NV đang chấm', color: 'orange' },
+      cho_ql: { text: 'Chờ quản lý', color: 'blue' },
+      cho_duyet: { text: 'Chờ duyệt', color: 'purple' },
+      hoan_tat: { text: 'Hoàn tất', color: 'green' },
+    }
+    const XEPLOAI_COLOR: Record<string, string> = {
+      A: '#52c41a', B: '#1677ff', C: '#faad14', D: '#fa8c16', E: '#ff4d4f',
+    }
+    return (
+      <div style={{ padding: 16 }}>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => setActiveTab('home')} style={{ marginBottom: 16 }}>Quay lại</Button>
+
+        <Card style={{ marginBottom: 16, background: 'linear-gradient(135deg, #722ed1, #531dab)' }} styles={{ body: { color: '#fff' } }}>
+          <Title level={4} style={{ color: '#fff', margin: 0 }}>🎯 KPI / Đánh giá hiệu suất</Title>
+          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
+            {kpiList?.length || 0} kỳ đánh giá đã thực hiện
+          </Text>
+        </Card>
+
+        {!kpiList?.length ? (
+          <Card><Text type="secondary">Chưa có kỳ KPI nào. Khi HR mở kỳ đánh giá, bạn sẽ thấy ở đây.</Text></Card>
+        ) : (
+          <List
+            dataSource={kpiList}
+            renderItem={(ev: any) => (
+              <Card key={ev.id} style={{ marginBottom: 12, borderRadius: 12 }}>
+                <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
+                  <Col>
+                    <Text strong style={{ fontSize: 15 }}>{ev.cycle_ten}</Text>
+                    <br />
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {ev.ngay_bat_dau && dayjs(ev.ngay_bat_dau).format('DD/MM/YYYY')} – {ev.ngay_ket_thuc && dayjs(ev.ngay_ket_thuc).format('DD/MM/YYYY')}
+                    </Text>
+                  </Col>
+                  <Col>
+                    <Tag color={KPI_STATUS[ev.trang_thai]?.color || 'default'}>
+                      {KPI_STATUS[ev.trang_thai]?.text || ev.trang_thai}
+                    </Tag>
+                  </Col>
+                </Row>
+
+                {ev.diem_cuoi_cung != null ? (
+                  <Row gutter={8}>
+                    <Col span={8}>
+                      <Card size="small" style={{ background: '#f6ffed', textAlign: 'center' }}>
+                        <Text type="secondary" style={{ fontSize: 11 }}>Điểm cuối</Text>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: '#389e0d' }}>
+                          {Number(ev.diem_cuoi_cung).toFixed(2)}
+                        </div>
+                      </Card>
+                    </Col>
+                    <Col span={8}>
+                      <Card size="small" style={{ background: '#e6f7ff', textAlign: 'center' }}>
+                        <Text type="secondary" style={{ fontSize: 11 }}>NV tự chấm</Text>
+                        <div style={{ fontSize: 18, fontWeight: 600 }}>
+                          {ev.diem_nv_tu_cham != null ? Number(ev.diem_nv_tu_cham).toFixed(2) : '—'}
+                        </div>
+                      </Card>
+                    </Col>
+                    <Col span={8}>
+                      <Card size="small" style={{ background: '#fff7e6', textAlign: 'center' }}>
+                        <Text type="secondary" style={{ fontSize: 11 }}>QL chấm</Text>
+                        <div style={{ fontSize: 18, fontWeight: 600 }}>
+                          {ev.diem_quan_ly != null ? Number(ev.diem_quan_ly).toFixed(2) : '—'}
+                        </div>
+                      </Card>
+                    </Col>
+                  </Row>
+                ) : (
+                  <Text type="secondary" style={{ fontSize: 13 }}>
+                    {ev.han_nv_tu_danh_gia && `⏰ Hạn tự đánh giá: ${dayjs(ev.han_nv_tu_danh_gia).format('DD/MM/YYYY')}`}
+                  </Text>
+                )}
+
+                {ev.xep_loai && (
+                  <div style={{ marginTop: 10 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Xếp loại: </Text>
+                    <Tag color={XEPLOAI_COLOR[ev.xep_loai] || 'default'} style={{ fontSize: 16, padding: '2px 12px', fontWeight: 700 }}>
+                      {ev.xep_loai}
+                    </Tag>
+                  </div>
+                )}
+
+                {ev.nhan_xet_ql && (
+                  <div style={{ marginTop: 10, padding: 10, background: '#fafafa', borderRadius: 8, borderLeft: '3px solid #1677ff' }}>
+                    <Text strong style={{ fontSize: 12, color: '#1677ff' }}>💬 Nhận xét quản lý:</Text>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>{ev.nhan_xet_ql}</div>
+                  </div>
+                )}
+                {ev.nhan_xet_bgd && (
+                  <div style={{ marginTop: 8, padding: 10, background: '#fff7e6', borderRadius: 8, borderLeft: '3px solid #fa8c16' }}>
+                    <Text strong style={{ fontSize: 12, color: '#fa8c16' }}>📌 Nhận xét BGĐ:</Text>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>{ev.nhan_xet_bgd}</div>
+                  </div>
+                )}
+              </Card>
+            )}
+          />
+        )}
+      </div>
+    )
+  }
+
+  const renderHealth = () => {
+    const PHAN_LOAI_LABEL: Record<string, { text: string; color: string }> = {
+      I: { text: 'Loại I — Rất tốt', color: '#52c41a' },
+      II: { text: 'Loại II — Tốt', color: '#1677ff' },
+      III: { text: 'Loại III — Trung bình', color: '#faad14' },
+      IV: { text: 'Loại IV — Yếu', color: '#fa8c16' },
+      V: { text: 'Loại V — Rất yếu', color: '#ff4d4f' },
+    }
+    const LOAI_KHAM: Record<string, string> = {
+      dinh_ky: 'Định kỳ',
+      dot_xuat: 'Đột xuất',
+      truoc_tuyen_dung: 'Trước tuyển dụng',
+      sau_om_dau: 'Sau ốm đau',
+    }
+    return (
+      <div style={{ padding: 16 }}>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => setActiveTab('home')} style={{ marginBottom: 16 }}>Quay lại</Button>
+
+        <Card style={{ marginBottom: 16, background: 'linear-gradient(135deg, #13c2c2, #08979c)' }} styles={{ body: { color: '#fff' } }}>
+          <Title level={4} style={{ color: '#fff', margin: 0 }}>🏥 Khám sức khỏe của tôi</Title>
+          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
+            Theo Thông tư 14/2013/TT-BYT — định kỳ tối thiểu 1 lần/năm
+          </Text>
+        </Card>
+
+        {/* Alert nhắc lịch */}
+        {healthCheck?.overdue_days ? (
+          <Card style={{ marginBottom: 12, background: '#fff1f0', borderColor: '#ff4d4f' }}>
+            <Text strong style={{ color: '#cf1322' }}>⚠️ Đã quá hạn {healthCheck.overdue_days} ngày!</Text>
+            <br />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Lịch khám tiếp theo: {dayjs(healthCheck.next_check).format('DD/MM/YYYY')}. Vui lòng liên hệ HR để đăng ký khám.
+            </Text>
+          </Card>
+        ) : healthCheck?.upcoming_in_days != null && healthCheck.upcoming_in_days <= 30 ? (
+          <Card style={{ marginBottom: 12, background: '#fff7e6', borderColor: '#fa8c16' }}>
+            <Text strong style={{ color: '#d46b08' }}>📅 Sắp đến lịch khám — còn {healthCheck.upcoming_in_days} ngày</Text>
+            <br />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Lịch khám: {dayjs(healthCheck?.next_check).format('DD/MM/YYYY')}
+            </Text>
+          </Card>
+        ) : healthCheck?.next_check ? (
+          <Card style={{ marginBottom: 12, background: '#f6ffed', borderColor: '#52c41a' }}>
+            <Text strong style={{ color: '#389e0d' }}>✅ Đến hạn còn {healthCheck.upcoming_in_days} ngày</Text>
+            <br />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Lịch khám tiếp theo: {dayjs(healthCheck.next_check).format('DD/MM/YYYY')}
+            </Text>
+          </Card>
+        ) : null}
+
+        {/* Tổng quan */}
+        <Row gutter={8} style={{ marginBottom: 16 }}>
+          <Col span={12}>
+            <Card size="small" style={{ textAlign: 'center', background: '#e6f7ff' }}>
+              <Text type="secondary" style={{ fontSize: 11 }}>Tổng số lần khám</Text>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#1677ff' }}>
+                {healthCheck?.tong_so_lan_kham || 0}
+              </div>
+            </Card>
+          </Col>
+          <Col span={12}>
+            <Card size="small" style={{ textAlign: 'center', background: '#f6ffed' }}>
+              <Text type="secondary" style={{ fontSize: 11 }}>Phân loại gần nhất</Text>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {healthCheck?.phan_loai_gan_nhat ? (
+                  <Tag color={PHAN_LOAI_LABEL[healthCheck.phan_loai_gan_nhat]?.color || 'default'} style={{ fontSize: 14, padding: '2px 12px' }}>
+                    {healthCheck.phan_loai_gan_nhat}
+                  </Tag>
+                ) : '—'}
+              </div>
+            </Card>
+          </Col>
+        </Row>
+
+        {/* Lịch sử */}
+        {!healthCheck?.history?.length ? (
+          <Card><Text type="secondary">Chưa có lịch sử khám sức khỏe.</Text></Card>
+        ) : (
+          <>
+            <Text strong style={{ fontSize: 14, marginBottom: 8, display: 'block' }}>📋 Lịch sử khám</Text>
+            <List
+              dataSource={healthCheck.history}
+              renderItem={(h: any) => (
+                <Card key={h.id} style={{ marginBottom: 10, borderRadius: 12 }}>
+                  <Row justify="space-between" align="top">
+                    <Col flex={1}>
+                      <Text strong style={{ fontSize: 14 }}>
+                        {dayjs(h.ngay_kham).format('DD/MM/YYYY')}
+                      </Text>
+                      <Tag style={{ marginLeft: 8 }}>{LOAI_KHAM[h.loai_kham] || h.loai_kham}</Tag>
+                      {h.noi_kham && (
+                        <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
+                          📍 {h.noi_kham}{h.bac_si && ` · BS. ${h.bac_si}`}
+                        </div>
+                      )}
+                      {h.ket_luan && (
+                        <div style={{ fontSize: 13, marginTop: 6, padding: 8, background: '#fafafa', borderRadius: 6 }}>
+                          <Text strong style={{ fontSize: 12 }}>Kết luận: </Text>{h.ket_luan}
+                        </div>
+                      )}
+                      {h.benh_man_tinh && (
+                        <div style={{ fontSize: 12, color: '#cf1322', marginTop: 4 }}>
+                          🩺 Bệnh mãn tính: {h.benh_man_tinh}
+                        </div>
+                      )}
+                    </Col>
+                    {h.phan_loai_suc_khoe && (
+                      <Col>
+                        <Tag
+                          color={PHAN_LOAI_LABEL[h.phan_loai_suc_khoe]?.color || 'default'}
+                          style={{ fontSize: 14, padding: '2px 10px', fontWeight: 700 }}
+                        >
+                          {h.phan_loai_suc_khoe}
+                        </Tag>
+                      </Col>
+                    )}
+                  </Row>
+                </Card>
+              )}
+            />
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ background: '#f5f5f5', minHeight: '100vh' }}>
       {activeTab === 'home' && renderHome()}
       {activeTab === 'payroll' && renderPayroll()}
       {activeTab === 'leave' && renderLeave()}
       {activeTab === 'benefits' && renderBenefits()}
+      {activeTab === 'kpi' && renderKpi()}
+      {activeTab === 'health' && renderHealth()}
       {activeTab === 'checkin' && (
         <div>
           <div style={{ padding: '8px 12px 0' }}>

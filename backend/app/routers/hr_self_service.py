@@ -6,7 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.hr import Employee, PayrollRun, AttendanceLog, LeaveRequest, CheckInLocation, BenefitRecord
+from app.models.hr import (
+    Employee, PayrollRun, AttendanceLog, LeaveRequest, CheckInLocation, BenefitRecord,
+    HealthCheck, KPIEvaluation, KPICycle, KPIScore,
+)
 from app.models.auth import User
 from app.routers.auth import get_current_user
 from app.schemas import hr as schemas
@@ -338,3 +341,166 @@ def get_my_eligible_benefits(
             "mo_ta": p.mo_ta,
         })
     return eligible
+
+
+# ─── Sprint Polish-2: KPI của tôi (Phase 1.4) ───
+
+@router.get("/kpi")
+def get_my_kpi(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List các kỳ KPI của NV (chu kỳ + tổng điểm + xếp loại + trạng thái).
+
+    NV thấy điểm cuối cùng + nhận xét. Không lộ thông tin của NV khác.
+    Sắp xếp kỳ mới nhất trước.
+    """
+    emp = db.query(Employee).filter(Employee.user_id == current_user.id).first()
+    if not emp:
+        return []
+
+    rows = (
+        db.query(KPIEvaluation, KPICycle)
+        .join(KPICycle, KPIEvaluation.cycle_id == KPICycle.id)
+        .filter(KPIEvaluation.employee_id == emp.id)
+        .order_by(KPICycle.ngay_bat_dau.desc())
+        .all()
+    )
+    return [
+        {
+            "id": ev.id,
+            "cycle_id": cy.id,
+            "cycle_ten": cy.ten,
+            "cycle_loai": cy.loai,
+            "ngay_bat_dau": cy.ngay_bat_dau.isoformat() if cy.ngay_bat_dau else None,
+            "ngay_ket_thuc": cy.ngay_ket_thuc.isoformat() if cy.ngay_ket_thuc else None,
+            "han_nv_tu_danh_gia": cy.han_nv_tu_danh_gia.isoformat() if cy.han_nv_tu_danh_gia else None,
+            "han_ql_danh_gia": cy.han_ql_danh_gia.isoformat() if cy.han_ql_danh_gia else None,
+            "diem_nv_tu_cham": float(ev.diem_nv_tu_cham) if ev.diem_nv_tu_cham is not None else None,
+            "diem_quan_ly": float(ev.diem_quan_ly) if ev.diem_quan_ly is not None else None,
+            "diem_cuoi_cung": float(ev.diem_cuoi_cung) if ev.diem_cuoi_cung is not None else None,
+            "xep_loai": ev.xep_loai,
+            "nhan_xet_ql": ev.nhan_xet_ql,
+            "nhan_xet_bgd": ev.nhan_xet_bgd,
+            "trang_thai": ev.trang_thai,
+            "ngay_duyet": ev.ngay_duyet.isoformat() if ev.ngay_duyet else None,
+        }
+        for ev, cy in rows
+    ]
+
+
+@router.get("/kpi/{evaluation_id}")
+def get_my_kpi_detail(
+    evaluation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Chi tiết 1 kỳ KPI — kèm điểm từng tiêu chí.
+
+    NV chỉ xem được bản đánh giá của chính mình.
+    """
+    emp = db.query(Employee).filter(Employee.user_id == current_user.id).first()
+    if not emp:
+        raise HTTPException(404, "Không tìm thấy hồ sơ nhân viên.")
+
+    ev = db.query(KPIEvaluation).filter(KPIEvaluation.id == evaluation_id).first()
+    if not ev:
+        raise HTTPException(404, "Không tìm thấy bản đánh giá.")
+    if ev.employee_id != emp.id:
+        raise HTTPException(403, "Bạn không có quyền xem bản đánh giá của người khác.")
+
+    cy = db.query(KPICycle).filter(KPICycle.id == ev.cycle_id).first()
+    scores = db.query(KPIScore).filter(KPIScore.evaluation_id == ev.id).all()
+    return {
+        "id": ev.id,
+        "cycle": {
+            "id": cy.id if cy else None,
+            "ten": cy.ten if cy else None,
+            "ngay_bat_dau": cy.ngay_bat_dau.isoformat() if cy and cy.ngay_bat_dau else None,
+            "ngay_ket_thuc": cy.ngay_ket_thuc.isoformat() if cy and cy.ngay_ket_thuc else None,
+            "ty_le_nv": float(cy.ty_le_nv) if cy else 30,
+            "ty_le_ql": float(cy.ty_le_ql) if cy else 70,
+        },
+        "diem_nv_tu_cham": float(ev.diem_nv_tu_cham) if ev.diem_nv_tu_cham is not None else None,
+        "diem_quan_ly": float(ev.diem_quan_ly) if ev.diem_quan_ly is not None else None,
+        "diem_cuoi_cung": float(ev.diem_cuoi_cung) if ev.diem_cuoi_cung is not None else None,
+        "xep_loai": ev.xep_loai,
+        "nhan_xet_nv": ev.nhan_xet_nv,
+        "nhan_xet_ql": ev.nhan_xet_ql,
+        "nhan_xet_bgd": ev.nhan_xet_bgd,
+        "trang_thai": ev.trang_thai,
+        "scores": [
+            {
+                "id": s.id,
+                "ten_tieu_chi": s.ten_tieu_chi,
+                "nhom": s.nhom,
+                "trong_so": float(s.trong_so or 0),
+                "thang_diem_max": s.thang_diem_max,
+                "diem_nv": float(s.diem_nv) if s.diem_nv is not None else None,
+                "diem_ql": float(s.diem_ql) if s.diem_ql is not None else None,
+                "ghi_chu_nv": s.ghi_chu_nv,
+                "ghi_chu_ql": s.ghi_chu_ql,
+            }
+            for s in scores
+        ],
+    }
+
+
+# ─── Sprint Polish-2: Khám sức khỏe của tôi (Phase 1.2) ───
+
+@router.get("/health-checks")
+def get_my_health_checks(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Lịch sử khám sức khỏe của NV + lịch khám tiếp theo + alert quá hạn.
+
+    Theo TT 14/2013/TT-BYT:
+    - NV bình thường: khám tối thiểu 1 lần/năm
+    - NV làm việc nặng nhọc/độc hại: 6 tháng/lần
+    """
+    emp = db.query(Employee).filter(Employee.user_id == current_user.id).first()
+    if not emp:
+        return {"history": [], "next_check": None, "overdue_days": 0}
+
+    rows = db.query(HealthCheck).filter(
+        HealthCheck.employee_id == emp.id,
+    ).order_by(HealthCheck.ngay_kham.desc()).all()
+
+    history = [
+        {
+            "id": r.id,
+            "ngay_kham": r.ngay_kham.isoformat() if r.ngay_kham else None,
+            "loai_kham": r.loai_kham,
+            "phan_loai_suc_khoe": r.phan_loai_suc_khoe,
+            "noi_kham": r.noi_kham,
+            "bac_si": r.bac_si,
+            "ket_luan": r.ket_luan,
+            "benh_man_tinh": r.benh_man_tinh,
+            "ngay_kham_tiep_theo": r.ngay_kham_tiep_theo.isoformat() if r.ngay_kham_tiep_theo else None,
+            "ghi_chu": r.ghi_chu,
+        }
+        for r in rows
+    ]
+
+    # Tính trạng thái: ngày khám tiếp theo gần nhất
+    today = date.today()
+    next_check = None
+    overdue_days = 0
+    upcoming_in_days = None
+    if rows and rows[0].ngay_kham_tiep_theo:
+        next_check = rows[0].ngay_kham_tiep_theo.isoformat()
+        delta = (rows[0].ngay_kham_tiep_theo - today).days
+        if delta < 0:
+            overdue_days = -delta
+        else:
+            upcoming_in_days = delta
+
+    return {
+        "history": history,
+        "next_check": next_check,
+        "overdue_days": overdue_days,
+        "upcoming_in_days": upcoming_in_days,
+        "tong_so_lan_kham": len(history),
+        "phan_loai_gan_nhat": rows[0].phan_loai_suc_khoe if rows else None,
+    }

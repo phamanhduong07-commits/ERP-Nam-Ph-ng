@@ -380,6 +380,18 @@ export const hrApi = {
   getMyPayslip: (nam: number, thang: number) => client.get<any>(`/hr/my-payslip/${nam}/${thang}`),
   listMyAvailableMonths: () => client.get<{ nam: number; thang: number; trang_thai: string; thuc_linh: number }[]>('/hr/my-payslip/list/available'),
 
+  // My KPI + Health (Polish-2 Mobile)
+  getMyKpiList: () => client.get<any[]>('/hr/me/kpi'),
+  getMyKpiDetail: (id: number) => client.get<any>(`/hr/me/kpi/${id}`),
+  getMyHealthChecks: () => client.get<{
+    history: any[]
+    next_check: string | null
+    overdue_days: number
+    upcoming_in_days: number | null
+    tong_so_lan_kham: number
+    phan_loai_gan_nhat: string | null
+  }>('/hr/me/health-checks'),
+
   // Safety summary
   safetySummary: () => client.get<{
     bhld: { total_equipments: number; issues_30d: number; expiring_30d: number }
