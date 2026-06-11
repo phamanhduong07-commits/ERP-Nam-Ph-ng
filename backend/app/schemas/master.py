@@ -181,6 +181,7 @@ class ProductShort(BaseModel):
     so_lop: int
     dvt: str
     gia_ban: Decimal
+    sx_params_mac_dinh: dict | None = None
 
     class Config:
         from_attributes = True

@@ -1,6 +1,21 @@
 import client from './client'
 import type { PagedResponse } from './customers'
 
+export interface SxParamsMacDinh {
+  to_hop_song?: string | null
+  kho_tt?: number | null
+  dai_tt?: number | null
+  be_so_con?: number | null
+  qccl?: string | null
+  mat?: string | null;     mat_dl?: number | null
+  song_1?: string | null;  song_1_dl?: number | null
+  mat_1?: string | null;   mat_1_dl?: number | null
+  song_2?: string | null;  song_2_dl?: number | null
+  mat_2?: string | null;   mat_2_dl?: number | null
+  song_3?: string | null;  song_3_dl?: number | null
+  mat_3?: string | null;   mat_3_dl?: number | null
+}
+
 export interface ProductionOrderItem {
   id: number
   product_id: number | null
@@ -18,6 +33,7 @@ export interface ProductionOrderItem {
     gia_ban: number
     dai_phoi: number | null
     rong_phoi: number | null
+    sx_params_mac_dinh: SxParamsMacDinh | null
   } | null
   so_luong_ke_hoach: number
   so_luong_hoan_thanh: number

@@ -1,5 +1,6 @@
 import client from './client'
 import type { PagedResponse } from './customers'
+import type { SxParamsMacDinh } from './productionOrders'
 
 // Thông tin cơ bản (dùng trong dropdown, chọn sản phẩm)
 export interface Product {
@@ -65,4 +66,9 @@ export const productsApi = {
     const fd = new FormData(); fd.append('file', file); fd.append('commit', String(commit))
     return client.post<Record<string, unknown>>('/products/import-excel', fd)
   },
+  patchSxParamsMacDinh: (productId: number, data: SxParamsMacDinh | null) =>
+    client.patch<{ id: number; sx_params_mac_dinh: SxParamsMacDinh | null }>(
+      `/products/${productId}/sx-params-mac-dinh`,
+      { sx_params_mac_dinh: data }
+    ),
 }

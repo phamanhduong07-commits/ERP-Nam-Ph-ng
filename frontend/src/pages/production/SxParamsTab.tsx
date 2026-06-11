@@ -2,13 +2,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Row, Col, Table, InputNumber, Select, Input, Button, Space, Typography,
-  Tag, Divider, message, Alert, Tooltip, Checkbox, Radio,
+  Tag, Divider, message, Alert, Tooltip, Checkbox, Radio, Popconfirm,
 } from 'antd'
-import { SaveOutlined } from '@ant-design/icons'
+import { SaveOutlined, StarOutlined, StarFilled } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { ProductionOrderItem } from '../../api/productionOrders'
 import { productionOrdersApi } from '../../api/productionOrders'
 import { productionPlansApi } from '../../api/productionPlans'
+import { productsApi } from '../../api/products'
 import { calcBoxDimensions, getHaoHutRate, paperMaterialsApi } from '../../api/quotes'
 import { TO_HOP_SONG_BY_LOP } from '../../api/bom'
 import EmptyState from "../../components/EmptyState"
@@ -81,7 +82,9 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   const soLop     = item.so_lop ?? item.product?.so_lop ?? 3
   const loaiThung = item.loai_thung ?? ''
 
-  const [toHopSong, setToHopSong] = useState<string>(item.to_hop_song ?? '')
+  const mac_dinh = item.product?.sx_params_mac_dinh ?? null
+
+  const [toHopSong, setToHopSong] = useState<string>(item.to_hop_song ?? mac_dinh?.to_hop_song ?? '')
   const soLuong   = Number(item.so_luong_ke_hoach)
 
   // Detect mismatch: ten_hang says "sóng XX" but to_hop_song differs
@@ -99,17 +102,17 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   )
 
   // Chiều khổ sản xuất = kho_tt lý thuyết (kho1 × soDao + 1.8), không làm tròn
-  const initKho = Number(item.kho_tt) || baseDims?.kho_tt || 0
+  const initKho = Number(item.kho_tt) || mac_dinh?.kho_tt || baseDims?.kho_tt || 0
   const [khoTt, setKhoTt] = useState<number>(initKho > 0 ? roundUpTo5(initKho) : 0)
   // Kết cấu giấy (có thể chỉnh sửa)
   const [layers, setLayers] = useState<Record<LayerKey, LayerState>>({
-    mat:    { ma_ky_hieu: item.mat    ?? null, dinh_luong: item.mat_dl    ? Number(item.mat_dl)    : null },
-    song_1: { ma_ky_hieu: item.song_1 ?? null, dinh_luong: item.song_1_dl ? Number(item.song_1_dl) : null },
-    mat_1:  { ma_ky_hieu: item.mat_1  ?? null, dinh_luong: item.mat_1_dl  ? Number(item.mat_1_dl)  : null },
-    song_2: { ma_ky_hieu: item.song_2 ?? null, dinh_luong: item.song_2_dl ? Number(item.song_2_dl) : null },
-    mat_2:  { ma_ky_hieu: item.mat_2  ?? null, dinh_luong: item.mat_2_dl  ? Number(item.mat_2_dl)  : null },
-    song_3: { ma_ky_hieu: item.song_3 ?? null, dinh_luong: item.song_3_dl ? Number(item.song_3_dl) : null },
-    mat_3:  { ma_ky_hieu: item.mat_3  ?? null, dinh_luong: item.mat_3_dl  ? Number(item.mat_3_dl)  : null },
+    mat:    { ma_ky_hieu: item.mat    ?? mac_dinh?.mat    ?? null, dinh_luong: item.mat_dl    ? Number(item.mat_dl)    : mac_dinh?.mat_dl    ?? null },
+    song_1: { ma_ky_hieu: item.song_1 ?? mac_dinh?.song_1 ?? null, dinh_luong: item.song_1_dl ? Number(item.song_1_dl) : mac_dinh?.song_1_dl ?? null },
+    mat_1:  { ma_ky_hieu: item.mat_1  ?? mac_dinh?.mat_1  ?? null, dinh_luong: item.mat_1_dl  ? Number(item.mat_1_dl)  : mac_dinh?.mat_1_dl  ?? null },
+    song_2: { ma_ky_hieu: item.song_2 ?? mac_dinh?.song_2 ?? null, dinh_luong: item.song_2_dl ? Number(item.song_2_dl) : mac_dinh?.song_2_dl ?? null },
+    mat_2:  { ma_ky_hieu: item.mat_2  ?? mac_dinh?.mat_2  ?? null, dinh_luong: item.mat_2_dl  ? Number(item.mat_2_dl)  : mac_dinh?.mat_2_dl  ?? null },
+    song_3: { ma_ky_hieu: item.song_3 ?? mac_dinh?.song_3 ?? null, dinh_luong: item.song_3_dl ? Number(item.song_3_dl) : mac_dinh?.song_3_dl ?? null },
+    mat_3:  { ma_ky_hieu: item.mat_3  ?? mac_dinh?.mat_3  ?? null, dinh_luong: item.mat_3_dl  ? Number(item.mat_3_dl)  : mac_dinh?.mat_3_dl  ?? null },
   })
   // QCCL — mặc định tính từ công thức, cho phép chỉnh sửa
   const computedQccl = useMemo(() => {
@@ -118,7 +121,7 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
     const side  = Math.round((rong / 2 + allow) * 10) / 10
     return `${side}+${cao}+${side}`
   }, [rong, cao, soLop])
-  const [qccl, setQccl] = useState<string>(item.qccl ?? computedQccl)
+  const [qccl, setQccl] = useState<string>(item.qccl ?? mac_dinh?.qccl ?? computedQccl)
   const [ghiChu, setGhiChu] = useState<string>(item.ghi_chu ?? '')
 
   const [saving, setSaving] = useState(false)
@@ -134,7 +137,11 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
   // Chạy ngược sóng: đổi chiều khổ ↔ chiều cắt trên máy
   const [nguocSong, setNguocSong] = useState(false)
   // Số con bế: khuôn bế cắt N con cùng lúc theo chiều ngang
-  const [beConBe, setBeConBe] = useState<number>(item.be_so_con && item.be_so_con > 1 ? item.be_so_con : 1)
+  const [beConBe, setBeConBe] = useState<number>(
+    item.be_so_con && item.be_so_con > 1 ? item.be_so_con
+    : mac_dinh?.be_so_con && mac_dinh.be_so_con > 1 ? mac_dinh.be_so_con
+    : 1
+  )
 
   // Khi đổi hướng sóng, tính lại chiều khổ tối ưu theo hướng mới
   useEffect(() => {
@@ -164,7 +171,10 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
     return Math.ceil((eff * beN * soDaoBase + 1.8) / 5) * 5
   }, [baseDims, khoKeHoach, beConBe, nguocSong])
   const daiKeHoach   = baseDims?.dai_ke_hoach ?? 0
-  const daiTt        = baseDims?.dai_tt ?? Number(item.dai_tt) ?? 0
+  const daiTtFormula = baseDims?.dai_tt ?? 0
+  const [daiTt, setDaiTt] = useState<number>(
+    Number(item.dai_tt) || mac_dinh?.dai_tt || daiTtFormula
+  )
   // 2 mảnh: baseDims đã tính lại dai_tt per mảnh và dien_tich × 2
   const haiManh = baseDims?.hai_manh ?? false
 
@@ -292,6 +302,34 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
       message.error('Lưu thất bại')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const [savingMacDinh, setSavingMacDinh] = useState(false)
+
+  const handleSaveMacDinh = async () => {
+    if (!item.product?.id) return
+    setSavingMacDinh(true)
+    try {
+      await productsApi.patchSxParamsMacDinh(item.product.id, {
+        to_hop_song: toHopSong || null,
+        kho_tt: khoTt,
+        dai_tt: daiTt,
+        be_so_con: beConBe > 1 ? beConBe : null,
+        qccl: qccl || null,
+        mat: layers.mat.ma_ky_hieu,       mat_dl: layers.mat.dinh_luong,
+        song_1: layers.song_1.ma_ky_hieu, song_1_dl: layers.song_1.dinh_luong,
+        mat_1:  layers.mat_1.ma_ky_hieu,  mat_1_dl:  layers.mat_1.dinh_luong,
+        song_2: layers.song_2.ma_ky_hieu, song_2_dl: layers.song_2.dinh_luong,
+        mat_2:  layers.mat_2.ma_ky_hieu,  mat_2_dl:  layers.mat_2.dinh_luong,
+        song_3: layers.song_3.ma_ky_hieu, song_3_dl: layers.song_3.dinh_luong,
+        mat_3:  layers.mat_3.ma_ky_hieu,  mat_3_dl:  layers.mat_3.dinh_luong,
+      })
+      message.success(`Đã lưu thông số mặc định cho "${item.ten_hang}"`)
+    } catch {
+      message.error('Lưu mặc định thất bại')
+    } finally {
+      setSavingMacDinh(false)
     }
   }
 
@@ -429,6 +467,24 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
               {queueStatus === 'dang_chay' && <Tag color="success">⚙️ Đang sản xuất</Tag>}
               {queueStatus === 'hoan_thanh' && <Tag color="default">✅ Hoàn thành</Tag>}
 
+              {item.product?.id && (
+                <Tooltip title={mac_dinh ? 'Cập nhật thông số mặc định cho mã hàng này' : 'Lưu thông số hiện tại làm mặc định cho mã hàng này'}>
+                  <Popconfirm
+                    title="Lưu làm thông số mặc định?"
+                    description={`Các lệnh SX mới của "${item.ten_hang}" sẽ tự điền thông số này.`}
+                    onConfirm={handleSaveMacDinh}
+                    okText="Lưu mặc định"
+                  >
+                    <Button
+                      size="small"
+                      icon={mac_dinh ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
+                      loading={savingMacDinh}
+                    >
+                      {mac_dinh ? 'Cập nhật mặc định' : 'Lưu làm mặc định'}
+                    </Button>
+                  </Popconfirm>
+                </Tooltip>
+              )}
               <Button
                 type="primary"
                 icon={<SaveOutlined />}
@@ -486,19 +542,53 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
                     </Space>
                   ) : haiManh ? (
                     <Space size={4} wrap>
-                      <Tag color="blue" style={{ margin: 0 }}>2 mảnh × {daiTt} cm/mảnh</Tag>
+                      <InputNumber
+                        size="small"
+                        value={daiTt}
+                        min={1}
+                        step={0.5}
+                        style={{ width: 80 }}
+                        onChange={v => { markDirty(); if (v && v > 0) setDaiTt(v) }}
+                        addonAfter="cm"
+                      />
+                      <Tag color="blue" style={{ margin: 0 }}>2 mảnh</Tag>
+                      {daiTtFormula > 0 && daiTt !== daiTtFormula && (
+                        <Text type="secondary" style={{ fontSize: 10 }}>KT: {daiTtFormula} cm</Text>
+                      )}
                     </Space>
                   ) : availableLanCats.length > 0 ? (
                     <Space size={4} wrap>
-                      <Text strong style={{ color: '#d46b08' }}>{daiTt} cm</Text>
+                      <InputNumber
+                        size="small"
+                        value={daiTt}
+                        min={1}
+                        step={0.5}
+                        style={{ width: 80 }}
+                        onChange={v => { markDirty(); if (v && v > 0) setDaiTt(v) }}
+                        addonAfter="cm"
+                      />
                       {activeSoLanCat > 1
                         ? <Tag color="orange" style={{ margin: 0 }}>×{activeSoLanCat} → {daiTt * activeSoLanCat} cm</Tag>
                         : <Tag style={{ margin: 0 }}>×1 (dưới 70 cm)</Tag>}
+                      {daiTtFormula > 0 && daiTt !== daiTtFormula && (
+                        <Text type="secondary" style={{ fontSize: 10 }}>KT: {daiTtFormula} cm</Text>
+                      )}
                     </Space>
                   ) : (
-                    <Text strong style={{ color: '#52c41a' }}>
-                      {daiTt > 0 ? `${daiTt} cm` : '—'}
-                    </Text>
+                    <Space size={4} align="center">
+                      <InputNumber
+                        size="small"
+                        value={daiTt}
+                        min={1}
+                        step={0.5}
+                        style={{ width: 80 }}
+                        onChange={v => { markDirty(); if (v && v > 0) setDaiTt(v) }}
+                        addonAfter="cm"
+                      />
+                      {daiTtFormula > 0 && daiTt !== daiTtFormula && (
+                        <Text type="secondary" style={{ fontSize: 10 }}>KT: {daiTtFormula} cm</Text>
+                      )}
+                    </Space>
                   )}
                 </div>
                 <div style={{ marginBottom: 8 }}>

@@ -151,3 +151,23 @@ def update_product(
     db.commit()
     db.refresh(product)
     return ProductResponse.model_validate(product)
+
+
+from pydantic import BaseModel as _BaseModel
+
+class _SxParamsMacDinhBody(_BaseModel):
+    sx_params_mac_dinh: dict | None
+
+@router.patch("/{product_id}/sx-params-mac-dinh")
+def patch_sx_params_mac_dinh(
+    product_id: int,
+    body: _SxParamsMacDinhBody,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Không tìm thấy sản phẩm")
+    product.sx_params_mac_dinh = body.sx_params_mac_dinh
+    db.commit()
+    return {"id": product.id, "sx_params_mac_dinh": product.sx_params_mac_dinh}

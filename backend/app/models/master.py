@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy import (
-    Boolean, DateTime, Float, ForeignKey, Integer, Numeric,
+    Boolean, DateTime, Float, ForeignKey, Integer, JSON, Numeric,
     SmallInteger, String, Text, func,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -359,6 +359,7 @@ class Product(Base):
     ton_toi_da: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     khong_tinh_nxt: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    sx_params_mac_dinh: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(

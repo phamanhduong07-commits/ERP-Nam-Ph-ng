@@ -1,113 +1,118 @@
 ---
-task: "Gỡ LSX khỏi KH → tự quay lại KHSX chờ"
-slug: go-khoi-kh-return-to-queue
+task: "dai_tt override per sản phẩm"
+slug: dai-tt-mac-dinh-per-product
 effort: E3
-phase: verify
-progress: 38/38
+phase: plan
+progress: 0/35
 mode: algorithm
 project: erp-nam-phuong
-started: 2026-06-10
-updated: 2026-06-10
+started: 2026-06-11
+updated: 2026-06-11
 ---
 
 ## Problem
 
-Khi nhấn "Gỡ khỏi KH", `delete_line` xóa hẳn `ProductionPlanLine` — LSX mất hoàn toàn khỏi hệ thống. Dialog xác nhận đã hiện "LSX sẽ về trạng thái chờ KHSX" nhưng hành động thực tế không làm vậy. Người dùng mong đợi LSX vẫn visible trong queue chờ để có thể lên lịch lại.
+Trong SxParamsTab, `chiều cắt (dai_tt)` là display-only — tính từ `calcBoxDimensions()`. Một số mã hàng đặc biệt cần `dai_tt` lớn hơn công thức +1-2cm (vật liệu, cấu trúc đặc thù). Hiện không có cách nào chỉnh sửa giá trị này, và kể cả khi lưu vào LSX item, lần mở lại vẫn reset về formula (vì `baseDims?.dai_tt` luôn có priority). Không có `dai_tt_mac_dinh` trên sản phẩm để làm chuẩn cho các lệnh sau.
 
 ## Vision
 
-Sau khi gỡ, LSX xuất hiện ngay trong ProductionQueuePage với trạng thái "Chờ" và badge "Hàng chờ" (phân biệt với nhap plan thông thường). Không cần thao tác thêm — tự động. Người dùng có thể thấy nó và thêm vào plan mới bất cứ lúc nào.
+Người dùng mở tab "Lập lệnh SX", thấy `chiều cắt` là input có thể chỉnh được. Với mã hàng đặc biệt, gõ 114 thay vì 112. Nhấn "Lưu làm mặc định" → toast "Đã lưu 114 cm làm mặc định cho [tên hàng]". Từ lần sau, mọi LSX của mã hàng đó tự mở ra với 114 cm — không cần nhập lại.
 
 ## Out of Scope
 
-- Không tạo UI để "kéo từ hàng chờ vào plan" (feature sau)
-- Không thay đổi schema DB (không migration)
-- Không thay đổi push_to_queue logic (nó đã handle dedup)
-- Không ảnh hưởng lines đang `dang_chay`
+- Không lưu mặc định cho các thông số khác (kho1, to_hop_song) — chỉ dai_tt
+- Không thay đổi logic nguocSong (effectiveDaiTt = kho1 khi ngược sóng — không cần override)
+- Không thay đổi haiManh logic (dai_tt per mảnh vẫn giữ nguyên, override apply bình thường)
+- Không sync `dai_tt_mac_dinh` từ AMIS/external import
 
 ## Principles
 
-- Pool plan là implementation detail — user chỉ thấy "Hàng chờ", không thấy "KHSX-POOL"
-- No migration: dùng existing schema, sentinel so_ke_hoach
-- Backward-compatible: lines từ pool plan behave như lines chờ thông thường trong queue
+- `dai_tt_mac_dinh` là sản phẩm-level override — không phải LSX-level — đúng với "làm chuẩn cho mã hàng"
+- Override rõ ràng: khi đang dùng mặc định đã lưu, UI phải hiện hint "Tính từ KT: X cm" để user biết họ đang dùng override
+- Formula vẫn là nguồn truth khi không có override — không break existing behavior
 
 ## Constraints
 
-- `plan_id` NOT NULL — phải dùng pool plan approach
-- Backend: Python FastAPI, SQLAlchemy
+- Backend: Python FastAPI + SQLAlchemy + Alembic (migration required)
 - Frontend: React 18 + TypeScript + Ant Design 5
-- Không break push_to_queue dedup logic (đã kiểm tra: nó tìm existing "cho" line → sẽ tìm thấy pool line)
+- `ProductShort` schema đã được reuse nhiều nơi — thêm field `dai_tt_mac_dinh: float | None` phải backward-compatible (nullable, default None)
+- Không break existing `handleSave` flow (vẫn save `dai_tt: effectiveDaiTt` vào LSX item)
 
 ## Goal
 
-Khi `DELETE /{plan_id}/lines/{line_id}` được gọi, thay vì xóa line, di chuyển line sang pool plan (`KHSX-POOL`) với `trang_thai = 'cho'`. Queue page tự động hiển thị line này với badge "Hàng chờ". Pool plan bị ẩn khỏi KHSX list và không thể bị xóa/chốt.
+Thêm `dai_tt_mac_dinh` vào `SanPham` model, expose qua `ProductShort` schema, cung cấp `PATCH /products/{id}/dai-tt-mac-dinh` endpoint, và trong `SxParamsTab` làm `dai_tt` editable với init từ product override, kèm "Lưu làm mặc định" button.
 
 ## Criteria
 
-- [ ] ISC-1: `QUEUE_POOL_SO = "KHSX-POOL"` constant tồn tại trong production_plans.py
-- [ ] ISC-2: `_get_or_create_pool_plan(db)` helper function tồn tại
-- [ ] ISC-3: Pool plan tự động tạo nếu chưa có khi gỡ lần đầu
-- [ ] ISC-4: `delete_line` không gọi `db.delete(line)` nữa
-- [ ] ISC-5: Sau gỡ, `line.plan_id == pool_plan.id`
-- [ ] ISC-6: Sau gỡ, `line.trang_thai == 'cho'`
-- [ ] ISC-7: Sau gỡ, `line.ngay_chay == None`
-- [ ] ISC-8: `list_plans` filter `so_ke_hoach != QUEUE_POOL_SO` — pool không hiện trong KHSX list
-- [ ] ISC-9: `delete_plan` guard — không thể xóa pool plan, raise 400
-- [ ] ISC-10: Queue endpoint vẫn trả về pool plan lines (nhap plan filter covers it)
-- [ ] ISC-11: `POOL_PLAN_SO = 'KHSX-POOL'` constant trong ProductionQueuePage.tsx
-- [ ] ISC-12: `nhapPlans` useMemo lọc ra pool plan (`so_ke_hoach !== POOL_PLAN_SO`)
-- [ ] ISC-13: `selectedNhapPlans` useMemo lọc ra pool plan
-- [ ] ISC-14: "Chốt KH" button ẩn cho lines có `so_ke_hoach === POOL_PLAN_SO`
-- [ ] ISC-15: Status tag hiển thị "Hàng chờ" (không phải "Chưa chốt KH") cho pool lines
-- [ ] ISC-16: "Kế hoạch chờ chốt" banner không hiện pool plan button
-- [ ] ISC-17: Anti: pool plan không hiện trong danh sách kế hoạch SX (list_plans)
-- [ ] ISC-18: Anti: không thể chốt pool plan qua UI
-- [ ] ISC-19: Anti: không thể xóa pool plan qua API
-- [ ] ISC-20: Anti: line đang `dang_chay` vẫn bị block gỡ (existing guard còn nguyên)
-- [ ] ISC-21: Anti: không tạo duplicate pool plan (singleton by so_ke_hoach)
-- [ ] ISC-22: Backend build thành công (no import errors, no syntax errors)
-- [ ] ISC-23: Frontend build thành công (no TypeScript errors)
-- [ ] ISC-24: Push_to_queue dedup vẫn hoạt động: gọi push với poi_id đã có pool line → cập nhật pool line thay vì tạo mới
-- [ ] ISC-25: Pool plan trang_thai = 'nhap' (để get_queue include nó)
-- [ ] ISC-26: Pool plan ghi_chu rõ ràng mô tả đây là hàng chờ
-- [ ] ISC-27: `_build_plan_response` sau delete_line trả về plan gốc (không phải pool)
-- [ ] ISC-28: Lines trong pool plan có thu_tu = 0 (không ảnh hưởng sort)
-- [ ] ISC-29: Service restart thành công sau deploy
-- [ ] ISC-30: Queue page refresh sau gỡ → line xuất hiện trong queue
-- [ ] ISC-31: Antecedent: pool plan tồn tại trong DB trước khi queue endpoint truy vấn nó
-- [ ] ISC-32: "Chốt KH" in selected-rows toolbar ẩn cho pool plan
-- [ ] ISC-33: Badge tag màu "Hàng chờ" phân biệt về màu/text với "Chưa chốt KH"
-- [ ] ISC-34: list_plans filter không break trang KHSX list hiện tại
-- [ ] ISC-35: Anti: push_to_queue không tạo plan mới khi đã có pool line cho cùng poi_id
-- [ ] ISC-36: delete_plan guard chỉ check so_ke_hoach, không ảnh hưởng xóa plan thường
-- [ ] ISC-37: Khi pool plan chưa tồn tại và gọi delete_line lần đầu → pool tự tạo thành công
-- [ ] ISC-38: Anti: lines từ da_xuat plan không bị ảnh hưởng khi gỡ (existing guard cho dang_chay vẫn đủ)
+- [ ] ISC-1: `SanPham` model có column `dai_tt_mac_dinh = Column(Float, nullable=True)`
+- [ ] ISC-2: Alembic migration file tồn tại và chạy không lỗi
+- [ ] ISC-3: `ProductShort` schema có `dai_tt_mac_dinh: float | None = None`
+- [ ] ISC-4: `PATCH /products/{id}/dai-tt-mac-dinh` endpoint tồn tại trong products router
+- [ ] ISC-5: Endpoint yêu cầu `Depends(get_current_user)` (auth guard)
+- [ ] ISC-6: Endpoint nhận body `{ "dai_tt_mac_dinh": float | null }`
+- [ ] ISC-7: Endpoint chỉ update `dai_tt_mac_dinh`, không thay đổi field khác
+- [ ] ISC-8: Endpoint trả về `{ id, dai_tt_mac_dinh }` sau khi update
+- [ ] ISC-9: `ProductionOrderItem` response (GET /production-orders/{id}) include `product.dai_tt_mac_dinh`
+- [ ] ISC-10: Frontend type `ProductShort` trong `productionOrders.ts` (hoặc tương đương) có `dai_tt_mac_dinh?: number | null`
+- [ ] ISC-11: `daiTtFormula` const = `baseDims?.dai_tt ?? 0` tồn tại trong `ItemSxCard`
+- [ ] ISC-12: `daiTtOverride` là `useState<number>`, init từ `item.product?.dai_tt_mac_dinh ?? daiTtFormula`
+- [ ] ISC-13: `daiTt` variable được thay bằng `daiTtOverride` trong tất cả tính toán KG/phôi
+- [ ] ISC-14: `effectiveDaiTt = nguocSong ? kho1 : daiTtOverride` (không phải `daiTt`)
+- [ ] ISC-15: `chiều cắt` field ở case bình thường (không nguocSong, không haiManh) là `<InputNumber>` không phải `<Text>`
+- [ ] ISC-16: `<InputNumber>` cho `dai_tt` có `min={1}`, `step={0.5}`, `addonAfter="cm"`, `size="small"`
+- [ ] ISC-17: Khi `daiTtOverride !== daiTtFormula` và `daiTtFormula > 0`: hiển thị hint "Tính KT: X cm"
+- [ ] ISC-18: "Lưu làm mặc định" button hiện khi: `daiTtOverride !== daiTtFormula` AND `item.product?.id` tồn tại
+- [ ] ISC-19: "Lưu làm mặc định" button ẩn khi `daiTtOverride === daiTtFormula` (formula match, không cần override)
+- [ ] ISC-20: "Lưu làm mặc định" button khi click gọi `PATCH /products/{id}/dai-tt-mac-dinh`
+- [ ] ISC-21: Toast sau lưu thành công: "Đã lưu X cm làm mặc định cho [ten_hang]"
+- [ ] ISC-22: Khi `item.product?.dai_tt_mac_dinh` non-null (đang dùng override đã lưu): hiển thị indicator nhỏ "Mặc định đã lưu"
+- [ ] ISC-23: "Xóa mặc định" link/button hiện khi `item.product?.dai_tt_mac_dinh` non-null, click PATCH với `null`
+- [ ] ISC-24: Sau "Xóa mặc định": `daiTtOverride` reset về `daiTtFormula`
+- [ ] ISC-25: `availableLanCats` case (dưới 70cm) vẫn dùng `daiTtOverride` thay vì `daiTt`
+- [ ] ISC-26: `haiManh` case: display "2 mảnh × X cm/mảnh" vẫn dùng `daiTtOverride`
+- [ ] ISC-27: `handleSave` vẫn ghi `dai_tt: effectiveDaiTt` vào LSX item (không thay đổi hành vi lưu LSX)
+- [ ] ISC-28: Anti: `nguocSong=true` → `dai_tt` field vẫn display-only (kho1), không expose InputNumber
+- [ ] ISC-29: Anti: lưu `dai_tt_mac_dinh` cho product A không ảnh hưởng product B
+- [ ] ISC-30: Anti: Migration thêm nullable column → không break existing SanPham records
+- [ ] ISC-31: Anti: "Lưu làm mặc định" không trigger đồng thời "Lưu thông số SX"
+- [ ] ISC-32: Anti: `dai_tt_mac_dinh=0` không được dùng như override (treat as null)
+- [ ] ISC-33: Backend migration chạy `alembic upgrade head` thành công
+- [ ] ISC-34: Backend khởi động không lỗi import/syntax
+- [ ] ISC-35: Frontend `tsc --noEmit` exit 0
 
 ## Test Strategy
 
 | isc | type | check | threshold | tool |
 |-----|------|-------|-----------|------|
-| ISC-1 | code | Grep "QUEUE_POOL_SO" in production_plans.py | found | Grep |
-| ISC-4 | code | Grep "db.delete(line)" in delete_line function | NOT found | Grep |
-| ISC-5,6,7 | code | Read delete_line function body | pool.id + cho + None | Read |
-| ISC-8 | code | Grep "QUEUE_POOL_SO" in list_plans | found | Grep |
-| ISC-9 | code | Grep "QUEUE_POOL_SO" in delete_plan | found | Grep |
-| ISC-11..16 | code | Read ProductionQueuePage relevant sections | correct | Read |
-| ISC-22 | build | Backend start (uvicorn syntax check) | no error | Bash |
-| ISC-23 | build | Frontend tsc --noEmit | exit 0 | Bash |
+| ISC-1 | code | Grep `dai_tt_mac_dinh` in models/master.py | found + Float + nullable | Grep |
+| ISC-2 | build | `alembic upgrade head` | exit 0 | Bash |
+| ISC-3 | code | Read schemas/master.py ProductShort | field present | Read |
+| ISC-4 | code | Grep `dai-tt-mac-dinh` in routers/products.py | found | Grep |
+| ISC-5 | code | Grep `get_current_user` near endpoint | found | Grep |
+| ISC-8 | live | `curl -X PATCH /products/1/dai-tt-mac-dinh -d '{"dai_tt_mac_dinh":114}'` | 200 + id + value | Bash |
+| ISC-9 | live | `curl /production-orders/{id}` | items[].product.dai_tt_mac_dinh present | Bash |
+| ISC-10 | code | Grep `dai_tt_mac_dinh` in frontend api types | found | Grep |
+| ISC-11..14 | code | Read ItemSxCard state vars | daiTtFormula/daiTtOverride/effectiveDaiTt | Read |
+| ISC-15 | code | Grep `InputNumber` near `chiều cắt\|dai_tt` in SxParamsTab | found | Grep |
+| ISC-17..24 | code | Read SxParamsTab UI section for dai_tt | buttons/hints present | Read |
+| ISC-33 | build | `alembic upgrade head` | no error | Bash |
+| ISC-34 | build | backend uvicorn start | no error | Bash |
+| ISC-35 | build | `tsc --noEmit` | exit 0 | Bash |
 
 ## Features
 
 | name | satisfies | depends_on | parallelizable |
 |------|-----------|------------|----------------|
-| pool-plan-backend | ISC-1..10,19..22,24..28,31,35..38 | — | no |
-| pool-plan-frontend | ISC-11..18,30,32..33 | pool-plan-backend | yes after backend |
+| backend-model-endpoint | ISC-1..9, 29..30, 33..34 | — | no |
+| frontend-types | ISC-10 | backend-model-endpoint | no |
+| frontend-ui | ISC-11..28, 31..32, 35 | frontend-types | yes after types |
 
 ## Decisions
 
-- Pool plan approach chosen over nullable plan_id: no migration required, backward compatible, clean sentinel pattern
-- Delegation floor: Forge for backend (Python precision), frontend done inline (straightforward TypeScript)
-- `push_to_queue` dedup check: queries `plan_trang_thai IN ['nhap', 'da_xuat']` and `trang_thai IN ['cho', 'dang_chay']` — pool plan (nhap) lines match this filter → dedup works correctly, no change needed
+- `dai_tt_mac_dinh` on SanPham (product level) vs ProductionOrderItem: user said "làm chuẩn cho mã hàng" → product level is correct. Per-LSX save already works via item.dai_tt.
+- InputNumber editable only when not `nguocSong` (when nguocSong, effectiveDaiTt=kho1 which is already computed from editable khoTt). Keeps UI surface minimal.
+- "Lưu làm mặc định" is a separate action from "Lưu thông số SX" — user consciously chooses to propagate to product level.
+- `dai_tt_mac_dinh=0` treated as null: 0 is never a valid chiều cắt, avoid mistakenly using it.
 
 ## Changelog
 
