@@ -765,29 +765,43 @@ export default function MobileTrackingPage() {
     form.resetFields()
   }
 
+  // ── Debounced autocomplete search (toàn bộ máy) ─────────────────────────
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(soLsx.trim().toUpperCase()), 300)
+    return () => clearTimeout(t)
+  }, [soLsx])
+
+  const { data: apiSearchResults } = useQuery({
+    queryKey: ['lsx-autocomplete', debouncedQuery],
+    queryFn: () => cd2Api.listPhieuIn({ search: debouncedQuery, limit: 8 }).then(r => r.data),
+    enabled: debouncedQuery.length >= 2,
+    staleTime: 30000,
+    retry: false,
+  })
+
   const searchOptions = useMemo(() => {
-    const q = soLsx.trim().toUpperCase()
+    const q = debouncedQuery
     if (q.length < 2) return []
-    return machinePhieuList
-      .filter(p =>
-        (p.so_lsx || '').toUpperCase().includes(q) ||
-        (p.so_phieu || '').toUpperCase().includes(q) ||
-        (p.ten_hang || '').toUpperCase().includes(q)
-      )
-      .slice(0, 8)
-      .map(p => ({
-        value: p.so_lsx || p.so_phieu || '',
-        label: (
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-            <Text strong style={{ fontSize: 13 }}>{p.so_lsx || p.so_phieu}</Text>
-            <Text type="secondary" style={{ fontSize: 11, flex: 1, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {p.ten_hang}
-            </Text>
-          </div>
-        ),
-        phieu: p,
-      }))
-  }, [soLsx, machinePhieuList])
+    // Dùng kết quả API (toàn máy) nếu có, fallback local nếu kiosk/offline
+    const source: PhieuIn[] = apiSearchResults ?? machinePhieuList.filter(p =>
+      (p.so_lsx || '').toUpperCase().includes(q) ||
+      (p.so_phieu || '').toUpperCase().includes(q) ||
+      (p.ten_hang || '').toUpperCase().includes(q)
+    )
+    return source.slice(0, 8).map(p => ({
+      value: p.so_lsx || p.so_phieu || '',
+      label: (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <Text strong style={{ fontSize: 13 }}>{p.so_lsx || p.so_phieu}</Text>
+          <Text type="secondary" style={{ fontSize: 11, flex: 1, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {p.ten_hang}
+          </Text>
+        </div>
+      ),
+      phieu: p,
+    }))
+  }, [debouncedQuery, apiSearchResults, machinePhieuList])
 
   const handleLookup = async (val: string) => {
     const code = val.trim().toUpperCase()
