@@ -102,6 +102,35 @@ def _add_business_days(start: date, days: int) -> date:
 
 
 # ─── Endpoints ───
+# IMPORTANT: route specific (/list/available) phải khai báo TRƯỚC route param
+# /{nam}/{thang} để FastAPI không parse "list" thành int.
+@router.get("/list/available")
+def list_my_available_months_first(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List các tháng đã chốt của NV (Mobile vẽ dropdown). Phải đặt trước /{nam}/{thang}."""
+    emp = _get_my_employee(db, current_user)
+    runs = (
+        db.query(PayrollRun.nam, PayrollRun.thang, PayrollRun.trang_thai, PayrollRun.thuc_linh)
+        .filter(
+            PayrollRun.employee_id == emp.id,
+            PayrollRun.trang_thai.in_(["da_chot", "da_thanh_toan"]),
+        )
+        .order_by(PayrollRun.nam.desc(), PayrollRun.thang.desc())
+        .all()
+    )
+    return [
+        {
+            "nam": r.nam,
+            "thang": r.thang,
+            "trang_thai": r.trang_thai,
+            "thuc_linh": float(r.thuc_linh or 0),
+        }
+        for r in runs
+    ]
+
+
 @router.get("/{nam}/{thang}", response_model=MyPayslipResponse)
 def get_my_payslip(
     nam: int,
@@ -224,28 +253,3 @@ def get_my_payslip(
     )
 
 
-@router.get("/list/available")
-def list_my_available_months(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """List các tháng đã chốt của NV (để Mobile vẽ dropdown chọn tháng)."""
-    emp = _get_my_employee(db, current_user)
-    runs = (
-        db.query(PayrollRun.nam, PayrollRun.thang, PayrollRun.trang_thai, PayrollRun.thuc_linh)
-        .filter(
-            PayrollRun.employee_id == emp.id,
-            PayrollRun.trang_thai.in_(["da_chot", "da_thanh_toan"]),
-        )
-        .order_by(PayrollRun.nam.desc(), PayrollRun.thang.desc())
-        .all()
-    )
-    return [
-        {
-            "nam": r.nam,
-            "thang": r.thang,
-            "trang_thai": r.trang_thai,
-            "thuc_linh": float(r.thuc_linh or 0),
-        }
-        for r in runs
-    ]
