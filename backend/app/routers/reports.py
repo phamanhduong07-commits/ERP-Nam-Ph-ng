@@ -2,7 +2,7 @@ import io
 from datetime import date
 from decimal import Decimal
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import exists, func, case, or_
 from sqlalchemy.orm import Session, selectinload, joinedload
@@ -619,7 +619,7 @@ def export_revenue_excel(
     if not tpl2:
         raise HTTPException(404, "Chưa cấu hình mẫu Excel REVENUE_TOP_CUSTOMERS")
 
-    result = get_revenue_report(tu_ngay=tu_ngay, den_ngay=den_ngay, nhom=nhom, db=db, _=_)
+    result = get_revenue_report(tu_ngay=tu_ngay, den_ngay=den_ngay, nhom=nhom, phap_nhan_id=None, db=db, _=_)
     meta = {"document_number": f"Doanh thu {tu_ngay} – {den_ngay}"}
 
     period_items = [{"ky": r["ky"], "doanh_thu": r["doanh_thu"]} for r in result["theo_ky"]]
@@ -707,7 +707,7 @@ def export_debt_summary_excel(
     if not tpl_ap:
         raise HTTPException(404, "Chưa cấu hình mẫu Excel DEBT_SUMMARY_AP")
 
-    result = get_debt_summary(as_of_date=as_of_date, db=db, _=_)
+    result = get_debt_summary(as_of_date=as_of_date, phap_nhan_id=None, db=db, current_user=_)
     meta = {"document_number": f"Công nợ tổng hợp"}
 
     def _debt_items(rows: list[dict]) -> list[dict]:

@@ -248,7 +248,7 @@ def test_cancel_purchase_invoice_success(client_purchase, db_session):
     inv_id = create_res.json()["id"]
 
     # Hủy invoice
-    cancel_res = client_purchase.post(f"/api/accounting/purchase-invoices/{inv_id}/huy")
+    cancel_res = client_purchase.patch(f"/api/accounting/purchase-invoices/{inv_id}/cancel")
 
     assert cancel_res.status_code == 200, cancel_res.text
     assert cancel_res.json()["trang_thai"] == "huy"
@@ -269,15 +269,15 @@ def test_cancel_purchase_invoice_idempotent(client_purchase, db_session):
     assert create_res.status_code in (200, 201)
     inv_id = create_res.json()["id"]
 
-    client_purchase.post(f"/api/accounting/purchase-invoices/{inv_id}/huy")
-    cancel2 = client_purchase.post(f"/api/accounting/purchase-invoices/{inv_id}/huy")
+    client_purchase.patch(f"/api/accounting/purchase-invoices/{inv_id}/cancel")
+    cancel2 = client_purchase.patch(f"/api/accounting/purchase-invoices/{inv_id}/cancel")
 
     assert cancel2.status_code == 200
     assert cancel2.json()["trang_thai"] == "huy"
 
 
 def test_cancel_invoice_404(client_purchase, db_session):
-    res = client_purchase.post("/api/accounting/purchase-invoices/999999/huy")
+    res = client_purchase.patch("/api/accounting/purchase-invoices/999999/cancel")
     assert res.status_code == 404
 
 
@@ -301,7 +301,7 @@ def test_cancel_invoice_with_payment_blocked(client_purchase, db_session):
     inv.da_thanh_toan = Decimal("100000")
     db_session.commit()
 
-    cancel_res = client_purchase.post(f"/api/accounting/purchase-invoices/{inv_id}/huy")
+    cancel_res = client_purchase.patch(f"/api/accounting/purchase-invoices/{inv_id}/cancel")
 
     assert cancel_res.status_code == 400
     assert "thanh toán" in cancel_res.json()["detail"].lower()

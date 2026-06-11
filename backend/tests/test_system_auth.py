@@ -65,7 +65,8 @@ def client(db_session):
         return SimpleNamespace(
             id=1, username="testuser", ho_ten="Test User",
             email=None, phan_xuong=None, machine_id=None,
-            trang_thai=True, role=_role,
+            phap_nhan_id=None, trang_thai=True, role=_role,
+            user_permissions=[],
         )
 
     with patch("app.socket_manager.sio.emit", new=AsyncMock(return_value=None)):

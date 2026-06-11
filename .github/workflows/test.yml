@@ -31,5 +31,5 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: sqlite:///./test_ci.db
-          SECRET_KEY: ci-test-secret-key
+          SECRET_KEY: ci-test-secret-key-for-testing-purposes-only-abcdef1234
         run: pytest tests/ -v --tb=short

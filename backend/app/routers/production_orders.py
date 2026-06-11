@@ -202,11 +202,13 @@ def _build_response(order: ProductionOrder, db: Session | None = None) -> Produc
             order.phoi_phan_xuong.ten_xuong if getattr(order, "phoi_phan_xuong", None) else None
         ),
         ten_kho_nhap_phoi_du_kien=(
-            _get_phoi_source_warehouse(
-                db, order.phan_xuong_id, order.phap_nhan_id,
-                getattr(order, "phoi_phan_xuong_id", None),
-            ).ten_kho
-            if db else None
+            getattr(
+                _get_phoi_source_warehouse(
+                    db, order.phan_xuong_id, order.phap_nhan_id,
+                    getattr(order, "phoi_phan_xuong_id", None),
+                ),
+                "ten_kho", None,
+            ) if db else None
         ),
         items=items,
         created_at=order.created_at,

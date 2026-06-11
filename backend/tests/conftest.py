@@ -75,8 +75,13 @@ def client(db_session):
         yield db_session
 
     def override_get_current_user():
-        _role = SimpleNamespace(ma_vai_tro="ADMIN")
-        return SimpleNamespace(id=1, username="testuser", trang_thai=True, role=_role)
+        _role = SimpleNamespace(ma_vai_tro="ADMIN", role_permissions=[])
+        return SimpleNamespace(
+            id=1, username="testuser", ho_ten="Test User",
+            email=None, phan_xuong=None, machine_id=None,
+            phap_nhan_id=None, trang_thai=True, role=_role,
+            user_permissions=[],
+        )
 
     with patch("app.socket_manager.sio.emit", new=AsyncMock(return_value=None)):
         app.dependency_overrides[get_db] = override_get_db
@@ -84,6 +89,33 @@ def client(db_session):
         with TestClient(app, raise_server_exceptions=True) as c:
             yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def seed_excel_templates(db_session):
+    """Seed ExcelTemplate records required by all export endpoints."""
+    from app.models.system import ExcelTemplate
+    template_codes = [
+        ("REVENUE_BY_PERIOD",      "Doanh thu theo kỳ"),
+        ("REVENUE_TOP_CUSTOMERS",  "Khách hàng top doanh thu"),
+        ("INVENTORY_MOVEMENT",     "Biến động tồn kho"),
+        ("DEBT_SUMMARY_AR",        "Tổng hợp công nợ phải thu"),
+        ("DEBT_SUMMARY_AP",        "Tổng hợp công nợ phải trả"),
+        ("PRODUCTION_PERFORMANCE", "Hiệu suất sản xuất"),
+        ("ORDER_PROGRESS",         "Tiến độ đơn hàng"),
+        ("TRIAL_BALANCE",          "Bảng cân đối phát sinh"),
+        ("PRODUCTION_COSTING",     "Giá thành sản xuất"),
+        ("WORKSHOP_PNL",           "Lãi lỗ xưởng"),
+    ]
+    for ma_mau, ten_mau in template_codes:
+        existing = db_session.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == ma_mau).first()
+        if not existing:
+            db_session.add(ExcelTemplate(
+                ma_mau=ma_mau,
+                ten_mau=ten_mau,
+                column_config=[{"key": "col1", "label": "Cột 1"}],
+            ))
+    db_session.commit()
 
 
 @pytest.fixture

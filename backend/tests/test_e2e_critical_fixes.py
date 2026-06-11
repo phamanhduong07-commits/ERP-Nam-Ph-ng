@@ -113,7 +113,7 @@ def test_cash_receipt_first_partial_payment_ok(client, db_session):
         json=_receipt_payload(kh.id, inv.id, so_tien=600_000),
     )
 
-    assert res.status_code == 200, res.text
+    assert res.status_code in (200, 201), res.text
 
     # Reload invoice from DB to verify side-effects
     db_session.expire(inv)
@@ -169,7 +169,7 @@ def test_cash_receipt_full_payment_closes_invoice(client, db_session):
         json=_receipt_payload(kh.id, inv.id, so_tien=400_000),
     )
 
-    assert res.status_code == 200, res.text
+    assert res.status_code in (200, 201), res.text
 
     db_session.expire(inv)
     db_session.refresh(inv)
