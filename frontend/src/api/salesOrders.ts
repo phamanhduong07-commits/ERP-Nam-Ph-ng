@@ -175,6 +175,7 @@ export const salesOrdersApi = {
   approve: (id: number) => client.patch<SalesOrder>(`/sales-orders/${id}/approve`),
   unapprove: (id: number) => client.patch<SalesOrder>(`/sales-orders/${id}/unapprove`),
   cancel: (id: number) => client.patch(`/sales-orders/${id}/cancel`),
+  huyLenhSx: (id: number) => client.patch<{ message: string }>(`/sales-orders/${id}/huy-lenh-sx`),
   importOrders: (file: File, commit: boolean = false) => {
     const formData = new FormData()
     formData.append('file', file)

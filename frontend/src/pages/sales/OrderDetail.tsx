@@ -112,6 +112,16 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     onError: (e: unknown) => message.error(apiErrorMsg(e, 'Huỷ thất bại')),
   })
 
+  const huyLenhSxMutation = useMutation({
+    mutationFn: () => salesOrdersApi.huyLenhSx(Number(id)),
+    onSuccess: () => {
+      message.success('Đã hủy lệnh SX, đơn hàng về Đã duyệt')
+      qc.invalidateQueries({ queryKey: ['sales-order', id] })
+      qc.invalidateQueries({ queryKey: ['sales-orders'] })
+    },
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Hủy lệnh SX thất bại')),
+  })
+
   const updateSoPoKhMutation = useMutation({
     mutationFn: (val: string) => salesOrdersApi.updateSoPoKh(Number(id), val || null),
     onSuccess: () => {
@@ -475,7 +485,7 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
                 Cập nhật giảm giá
               </Button>
             )}
-            {['da_duyet', 'dang_sx'].includes(order.trang_thai) && (
+            {order.trang_thai === 'da_duyet' && (
               <Button
                 size={embedded ? 'small' : 'middle'}
                 type="primary"
@@ -491,6 +501,35 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
               >
                 Lập lệnh SX
               </Button>
+            )}
+            {order.trang_thai === 'dang_sx' && (
+              <>
+                <Button
+                  size={embedded ? 'small' : 'middle'}
+                  icon={<ThunderboltOutlined />}
+                  disabled
+                  style={{ color: '#52c41a', borderColor: '#52c41a' }}
+                >
+                  Đã lập lệnh SX
+                </Button>
+                <Popconfirm
+                  title="Hủy tất cả lệnh SX của đơn hàng này?"
+                  description="Chỉ hủy được khi tất cả lệnh SX chưa bắt đầu sản xuất."
+                  onConfirm={() => huyLenhSxMutation.mutate()}
+                  okText="Hủy lệnh SX"
+                  okButtonProps={{ danger: true }}
+                  cancelText="Không"
+                >
+                  <Button
+                    size={embedded ? 'small' : 'middle'}
+                    danger
+                    icon={<CloseOutlined />}
+                    loading={huyLenhSxMutation.isPending}
+                  >
+                    Hủy lệnh SX
+                  </Button>
+                </Popconfirm>
+              </>
             )}
             {['moi', 'da_duyet'].includes(order.trang_thai) && (
               <Popconfirm title="Huỷ đơn hàng này?" onConfirm={() => cancelMutation.mutate()} okText="Huỷ" okButtonProps={{ danger: true }}>

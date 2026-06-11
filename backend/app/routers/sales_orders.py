@@ -49,7 +49,8 @@ from app.deps import get_current_user, get_admin_user, require_permissions
 from app.models.auth import User
 from app.models.master import Customer, Product
 from app.models.sales import SalesOrder, SalesOrderItem, QuoteItem
-from app.models.production import ProductionOrderItem
+from app.models.production import ProductionOrder, ProductionOrderItem
+from app.models.production_plan import ProductionPlanLine
 from app.services.sales_order_service import SalesOrderService
 from app.schemas.master import CustomerShort, ProductShort
 from app.schemas.sales import (
@@ -383,6 +384,43 @@ def update_discount(
 
     db.commit()
     return get_order(order_id, db, current_user)
+
+
+@router.patch("/{order_id}/huy-lenh-sx")
+def huy_lenh_sx(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    order = db.query(SalesOrder).filter(SalesOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+    if order.trang_thai != "dang_sx":
+        raise HTTPException(status_code=400, detail="Chỉ có thể hủy lệnh SX khi đơn hàng đang ở trạng thái Đang SX")
+
+    lenh_list = db.query(ProductionOrder).filter(ProductionOrder.sales_order_id == order_id).all()
+    non_moi = [l for l in lenh_list if l.trang_thai not in ("moi", "huy")]
+    if non_moi:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Có {len(non_moi)} lệnh SX đã bắt đầu hoặc hoàn thành, không thể hủy"
+        )
+
+    for lenh in lenh_list:
+        if lenh.trang_thai == "moi":
+            lenh.trang_thai = "huy"
+            # Xóa khỏi KHSX plan lines nếu còn đang chờ
+            db.query(ProductionPlanLine).filter(
+                ProductionPlanLine.production_order_item_id.in_(
+                    [item.id for item in lenh.items]
+                ),
+                ProductionPlanLine.trang_thai == "cho",
+            ).delete(synchronize_session=False)
+
+    order.trang_thai = "da_duyet"
+    db.commit()
+    logger.info("huy_lenh_sx sales_order id=%s so_don=%s by user=%s", order_id, order.so_don, current_user.id)
+    return {"message": f"Đã hủy lệnh SX, đơn hàng {order.so_don} về trạng thái Đã duyệt"}
 
 
 @router.patch("/{order_id}/so-po-kh", response_model=SalesOrderResponse)
