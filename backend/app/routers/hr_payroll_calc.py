@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from datetime import date
 import calendar
@@ -7,10 +9,56 @@ from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.hr import Employee, PayrollRun, AttendanceLog, RewardDiscipline, PayrollHoliday
 from app.services.hr_service import PayrollService
+from app.services.payroll_engine import calculate_payroll_for_month
 from app.routers.logistics_hr import calculate_trip_salary_allocations
 from decimal import Decimal
 
 router = APIRouter(prefix="/api/hr/payroll", tags=["HR Payroll Calculation"])
+
+
+# ═══════════════════════════════════════════════════════════════
+# Sprint D.3 — Engine tính lương sản phẩm (6 công thức)
+# ═══════════════════════════════════════════════════════════════
+class EngineCalcRequest(BaseModel):
+    nam: int = Field(ge=2020, le=2100)
+    thang: int = Field(ge=1, le=12)
+    bo_phan_id: Optional[int] = None
+    dry_run: bool = True  # preview không lưu
+
+
+@router.post("/engine/preview")
+def engine_preview(
+    body: EngineCalcRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU", "GIAM_DOC", "BGD")),
+):
+    """Engine tính lương sản phẩm theo Quy chế Điều 7-13.
+
+    `dry_run=True` mặc định → chỉ tính preview, không lưu DB.
+    Để chốt lương, gọi `/engine/commit`.
+    """
+    body.dry_run = True  # force dry-run cho preview endpoint
+    return calculate_payroll_for_month(
+        db, nam=body.nam, thang=body.thang,
+        bo_phan_id=body.bo_phan_id, dry_run=True,
+    )
+
+
+@router.post("/engine/commit")
+def engine_commit(
+    body: EngineCalcRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU")),
+):
+    """Commit tính lương → ghi vào PayrollRun (trạng thái 'du_thao').
+
+    Chỉ ADMIN/NHAN_SU. Nếu NV đã 'da_thanh_toan' thì skip (không tính lại).
+    """
+    result = calculate_payroll_for_month(
+        db, nam=body.nam, thang=body.thang,
+        bo_phan_id=body.bo_phan_id, dry_run=False,
+    )
+    return result
 
 
 def _d(value) -> Decimal:

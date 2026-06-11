@@ -859,6 +859,101 @@ class PayrollConfig(Base):
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong")
 
 
+class ProductionOutput(Base):
+    """Bảng sản lượng tháng theo mã hàng × tổ × ca × ngày.
+
+    Đầu vào cho engine tính lương sản phẩm (Sprint D.3).
+    Workflow: cho_xac_nhan → da_xac_nhan (quản lý duyệt) → tính lương.
+
+    Theo Điều 14 Quy chế Lương: sản lượng được tính lương phải đáp ứng:
+    - Có mã hàng rõ ràng
+    - Có đơn giá được ban hành
+    - Đạt yêu cầu chất lượng
+    - Được xác nhận bởi người có thẩm quyền
+    """
+    __tablename__ = "hr_production_outputs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ngay: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    # Mã hàng — khớp với PayrollConfig.ma_hang (loai='san_pham')
+    ma_hang: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    bo_phan_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("hr_departments.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    to_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("hr_teams.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    # Ca: sang | chieu | dem | all (cho ca tổng nguyên ngày)
+    ca: Mapped[str] = mapped_column(String(20), default="all", nullable=False)
+
+    san_luong: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0, nullable=False)
+    san_luong_loi: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)  # không tính lương
+
+    # Workflow xác nhận
+    trang_thai: Mapped[str] = mapped_column(String(20), default="cho_xac_nhan", nullable=False)
+    nguoi_xac_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    ngay_xac_nhan: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow,
+    )
+
+    bo_phan: Mapped["Department | None"] = relationship("Department", foreign_keys=[bo_phan_id])
+    to_nhom: Mapped["Team | None"] = relationship("Team", foreign_keys=[to_id])
+    nguoi_xac_nhan: Mapped["User | None"] = relationship("User", foreign_keys=[nguoi_xac_nhan_id])
+    created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])
+
+
+class PayrollAdjustment(Base):
+    """Phụ cấp / Khấu trừ / Tạm ứng theo NV theo tháng (Điều 12 Quy chế).
+
+    8 khoản CỘNG THÊM (loai='cong_them'):
+      tang_thuong_sp · boi_duong · cong_nhat · pc_het_hang ·
+      pc_cong_doan · pc_may_hong · pc_chuc_vu · pc_khac
+
+    7 khoản KHẤU TRỪ (loai='khau_tru'):
+      bhxh (8%) · bhyt (1.5%) · bhtn (1%) · tien_com · tam_ung ·
+      cong_doan_phi · phat (gồm điều chỉnh khác)
+
+    Engine D.3 sẽ cộng/trừ các record da_duyet vào lương cuối cùng.
+    """
+    __tablename__ = "hr_payroll_adjustments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("hr_employees.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    thang: Mapped[int] = mapped_column(Integer, nullable=False, index=True)  # 1-12
+    nam: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+
+    # loai: cong_them | khau_tru
+    loai: Mapped[str] = mapped_column(String(20), nullable=False)
+    # sub_loai: tang_thuong_sp/boi_duong/cong_nhat/pc_*/bhxh/bhyt/bhtn/tien_com/tam_ung/cong_doan_phi/phat
+    sub_loai: Mapped[str] = mapped_column(String(30), nullable=False)
+    so_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0, nullable=False)
+
+    ngay_phat_sinh: Mapped[date | None] = mapped_column(Date)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    # trang_thai: du_thao | da_duyet
+    trang_thai: Mapped[str] = mapped_column(String(20), default="du_thao", nullable=False)
+
+    nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow,
+    )
+
+    employee: Mapped["Employee"] = relationship("Employee", foreign_keys=[employee_id])
+    nguoi_duyet: Mapped["User | None"] = relationship("User", foreign_keys=[nguoi_duyet_id])
+    created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])
+
+
 class PayrollRun(Base):
     """Bảng lương tháng đã chốt"""
     __tablename__ = "hr_payroll_runs"
@@ -903,7 +998,18 @@ class PayrollRun(Base):
 
     thuc_linh: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
 
+    # Sprint D.3: track chi tiết engine tính lương sản phẩm
+    cong_quy_doi: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=0)  # Điều 9
+    he_so_ca_nhan_snapshot: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)  # Điều 10
+    trong_so_ca_nhan: Mapped[Decimal] = mapped_column(Numeric(10, 4), default=0)  # Điều 10
+    bu_toi_thieu_vung: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)  # Điều 4.8
+    bo_phan_id_snapshot: Mapped[int | None] = mapped_column(Integer)  # snapshot bộ phận khi tính
+    ghi_chu_calc: Mapped[str | None] = mapped_column(Text)  # nhật ký engine
+
     trang_thai: Mapped[str] = mapped_column(String(20), default="du_thao")  # du_thao | da_chot | da_thanh_toan
+
+    # Mốc HR chốt bảng lương — dùng tính hạn khiếu nại 15 ngày làm việc (Điều 16)
+    ngay_chot: Mapped[date | None] = mapped_column(Date)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
@@ -950,3 +1056,56 @@ class RewardDiscipline(Base):
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
 
     employee: Mapped["Employee"] = relationship("Employee")
+
+
+class PayrollComplaint(Base):
+    """Khiếu nại tiền lương theo Điều 16 Quy chế Lương Nam Phương.
+
+    Quy trình 4 bước:
+      1. Người lao động phản hồi (tao moi)
+      2. Nhân sự / quản lý phối hợp kiểm tra (dang_xu_ly)
+      3a. Có sai sót → điều chỉnh vào kỳ lương gần nhất hoặc thanh toán bổ sung (co_sai_sot)
+      3b. Không có sai sót → nhân sự giải thích căn cứ tính lương (khong_sai_sot)
+
+    Thời hạn phản hồi: trong vòng 15 ngày làm việc kể từ ngày nhận bảng lương
+    (auto-tính `han_chot` = ngay_nhan_phieu + 15 ngày làm việc).
+    """
+    __tablename__ = "hr_payroll_complaints"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("hr_employees.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    payroll_run_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("hr_payroll_runs.id", ondelete="SET NULL"), index=True,
+    )
+    thang: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    nam: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+
+    ly_do: Mapped[str] = mapped_column(Text, nullable=False)
+    so_tien_khieu_nai: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    bang_chung: Mapped[str | None] = mapped_column(Text)
+
+    ngay_nhan_phieu: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    han_chot: Mapped[date] = mapped_column(Date, nullable=False)
+
+    # Trạng thái: moi | dang_xu_ly | co_sai_sot | khong_sai_sot | het_han
+    trang_thai: Mapped[str] = mapped_column(String(20), default="moi", nullable=False)
+
+    nguoi_xu_ly_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    ngay_xu_ly: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ket_qua: Mapped[str | None] = mapped_column(Text)
+    so_tien_dieu_chinh: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    adjustment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("hr_payroll_adjustments.id", ondelete="SET NULL"),
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow,
+    )
+
+    employee: Mapped["Employee"] = relationship("Employee", foreign_keys=[employee_id])
+    nguoi_xu_ly: Mapped["User | None"] = relationship("User", foreign_keys=[nguoi_xu_ly_id])
+    created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])

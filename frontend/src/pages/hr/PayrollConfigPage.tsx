@@ -1,343 +1,370 @@
+/**
+ * Cấu hình lương sản phẩm — Sprint D.1.
+ *
+ * Theo Quy chế Lương Nam Phương:
+ * - Tab 1 (Điều 6): Bảng đơn giá theo mã hàng
+ * - Tab 2 (Điều 9): Bảng quy đổi giờ → công
+ * - Tab 3 (NĐ 74/2024): Lương tối thiểu vùng I-IV
+ * - Tab 4: Config chung (giờ/ngày chuẩn, vùng áp dụng)
+ */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Drawer, Form, Input, Select, Space, Table, Typography, message, Row, Col, Tag, InputNumber
+  Alert, Button, Card, Form, Input, InputNumber, Modal, Popconfirm,
+  Row, Col, Select, Space, Table, Tabs, Tag, Typography, message,
 } from 'antd'
-import { PlusOutlined, EditOutlined, SettingOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons'
+import {
+  PlusOutlined, EditOutlined, SettingOutlined, DeleteOutlined,
+  ClockCircleOutlined, GlobalOutlined, DollarOutlined, ToolOutlined,
+} from '@ant-design/icons'
 import { hrApi } from '../../api/hr'
-import { theoDoiApi } from '../../api/theoDoi'
-import { downloadTemplate } from '../../utils/excelUtils'
-import * as XLSX from 'xlsx'
 
 const { Title, Text } = Typography
 
-const STAGE_OPTIONS = [
-  { value: 'MAY_SONG_CD1', label: 'May song (CD1)' },
-  { value: 'XA', label: 'Xa' },
-  { value: 'IN', label: 'In' },
-  { value: 'CAN_MANG', label: 'Can mang' },
-  { value: 'THANH_PHAM', label: 'Thanh pham' },
-  { value: 'ALL', label: 'Tong san luong xuong' },
-]
+const fmtVND = (v: number | string) => Number(v || 0).toLocaleString('vi-VN') + 'đ'
 
 export default function PayrollConfigPage() {
+  return (
+    <div style={{ padding: '0 0 24px 0' }}>
+      <div style={{ marginBottom: 16 }}>
+        <Title level={4} style={{ margin: 0 }}>
+          <SettingOutlined style={{ color: '#1677ff' }} /> Cấu hình lương sản phẩm
+        </Title>
+        <Text type="secondary">
+          Master data theo <strong>Quy chế Lương Nam Phương</strong> (Điều 6, 9, 11) + Nghị định 74/2024/NĐ-CP
+        </Text>
+      </div>
+
+      <Tabs
+        defaultActiveKey="san_pham"
+        items={[
+          { key: 'san_pham',     label: <span><DollarOutlined /> Bảng đơn giá</span>,        children: <UnitPriceTab /> },
+          { key: 'gio_quy_doi',  label: <span><ClockCircleOutlined /> Quy đổi giờ → công</span>, children: <HourConversionTab /> },
+          { key: 'min_wage',     label: <span><GlobalOutlined /> Lương tối thiểu vùng</span>, children: <MinWageTab /> },
+          { key: 'config',       label: <span><ToolOutlined /> Cấu hình chung</span>,        children: <GeneralConfigTab /> },
+        ]}
+      />
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAB 1: Bảng đơn giá theo mã hàng (Điều 6 quy chế)
+// ═══════════════════════════════════════════════════════════════
+function UnitPriceTab() {
   const qc = useQueryClient()
-  const [editing, setEditing] = useState<any | null>(null)
-  const [importOpen, setImportOpen] = useState(false)
-  const [importData, setImportData] = useState<any[]>([])
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<any>(null)
   const [form] = Form.useForm()
 
-  const { data: configs = [], isLoading } = useQuery({
-    queryKey: ['hr-payroll-configs'],
-    queryFn: () => hrApi.listPayrollConfigs().then(r => r.data),
-  })
-
-  const { data: phanXuongList = [] } = useQuery({
-    queryKey: ['phan-xuong-list'],
-    queryFn: () => theoDoiApi.listPhanXuong().then(r => r.data),
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ['hr-payroll-configs', 'san_pham'],
+    queryFn: () => hrApi.listPayrollConfigs({ loai: 'san_pham' } as any).then(r => r.data),
   })
 
   const saveMut = useMutation({
-    mutationFn: (data: any) => data.id ? hrApi.updatePayrollConfig(data.id, data) : hrApi.createPayrollConfig(data),
+    mutationFn: (data: any) =>
+      editing?.id ? hrApi.updatePayrollConfig(editing.id, data) : hrApi.createPayrollConfig(data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['hr-payroll-configs'] })
-      message.success('Đã lưu cấu hình')
-      setEditing(null)
-      form.resetFields()
+      qc.invalidateQueries({ queryKey: ['hr-payroll-configs', 'san_pham'] })
+      message.success('Đã lưu mã hàng')
+      setOpen(false); setEditing(null); form.resetFields()
     },
-    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi lưu dữ liệu'),
+    onError: (e: any) => message.error(e?.response?.data?.detail || 'Lỗi lưu'),
   })
 
-  const handleAddDefault = async () => {
-    const defaults = [
-      { ma_hang: 'MAY_SONG_CD1', ten_hang: 'Máy sóng (CD1)', cong_doan: 'MAY_SONG_CD1', phan_tram_luong_sp: 100, don_gia: 60, loai: 'san_pham' },
-      { ma_hang: 'XA', ten_hang: 'Xả', cong_doan: 'XA', phan_tram_luong_sp: 100, don_gia: 68, loai: 'san_pham' },
-      { ma_hang: 'IN', ten_hang: 'In', cong_doan: 'IN', phan_tram_luong_sp: 100, don_gia: 122, loai: 'san_pham' },
-      { ma_hang: 'CAN_MANG', ten_hang: 'Cán màng', cong_doan: 'CAN_MANG', phan_tram_luong_sp: 100, don_gia: 100, loai: 'san_pham' },
-      { ma_hang: 'THANH_PHAM', ten_hang: 'Thành phẩm', cong_doan: 'THANH_PHAM', phan_tram_luong_sp: 100, don_gia: 204, loai: 'san_pham' },
-      { ma_hang: 'ALL', ten_hang: 'Tổng sản lượng xưởng', cong_doan: 'ALL', phan_tram_luong_sp: 100, don_gia: 100, loai: 'san_pham' },
-    ]
-    const toCreate = defaults.filter(d => !configs.find((c: any) => c.ma_hang === d.ma_hang))
-    if (toCreate.length === 0) {
-      message.info('Tất cả mã đơn giá mặc định đã có')
-      return
-    }
-    // Bulk create — tránh spam toast + race condition
-    const key = 'add-default-payroll'
-    message.loading({ content: `Đang thêm ${toCreate.length} đơn giá mặc định...`, key })
-    try {
-      await hrApi.bulkCreatePayrollConfigs(toCreate)
-      message.success({ content: `Đã thêm ${toCreate.length} đơn giá mặc định`, key })
-      qc.invalidateQueries({ queryKey: ['hr-payroll-configs'] })
-    } catch (e: any) {
-      // Fallback: nếu bulk endpoint không có, dùng Promise.all
-      try {
-        await Promise.all(toCreate.map(d => hrApi.createPayrollConfig(d)))
-        message.success({ content: `Đã thêm ${toCreate.length} đơn giá mặc định`, key })
-        qc.invalidateQueries({ queryKey: ['hr-payroll-configs'] })
-      } catch (e2: any) {
-        message.error({ content: e2?.response?.data?.detail || 'Thêm đơn giá mặc định thất bại', key })
-      }
-    }
+  const openCreate = () => {
+    setEditing(null); form.resetFields()
+    form.setFieldsValue({ loai: 'san_pham', phan_tram_luong_sp: 100 })
+    setOpen(true)
   }
-
-  const columns = [
-    {
-      title: 'Ma hang/C.Doan',
-      dataIndex: 'ma_hang',
-      width: 150,
-      render: (v: string) => <Tag color="blue">{v}</Tag>
-    },
-    {
-      title: 'Ten hang / loai san xuat',
-      dataIndex: 'ten_hang',
-    },
-    {
-      title: 'Xuong',
-      dataIndex: 'phan_xuong_id',
-      width: 140,
-      render: (v: number) => phanXuongList.find((px: any) => px.id === v)?.ten_xuong || 'Dung chung'
-    },
-    {
-      title: 'Khau',
-      dataIndex: 'cong_doan',
-      width: 150,
-      render: (v: string) => STAGE_OPTIONS.find(s => s.value === v)?.label || v || '-'
-    },
-    {
-      title: '% Luong SP',
-      dataIndex: 'phan_tram_luong_sp',
-      width: 120,
-      align: 'center' as const,
-      render: (v: number) => <Text>{v}%</Text>
-    },
-    {
-      title: 'Don gia',
-      dataIndex: 'don_gia',
-      width: 150,
-      align: 'right' as const,
-      render: (v: number | null) => <Text strong style={{ color: '#cf1322' }}>{v?.toLocaleString() ?? '—'}</Text>
-    },
-    {
-      title: 'Trang thai',
-      dataIndex: 'trang_thai',
-      width: 120,
-      render: (v: boolean) => <Tag color={v ? 'green' : 'red'}>{v ? 'Hoat dong' : 'Tam dung'}</Tag>
-    },
-    {
-      title: '',
-      width: 50,
-      render: (_: any, r: any) => (
-        <Button size="small" icon={<EditOutlined />} onClick={() => {
-          setEditing(r)
-          form.setFieldsValue(r)
-        }} />
-      )
-    }
-  ]
+  const openEdit = (r: any) => { setEditing(r); form.setFieldsValue(r); setOpen(true) }
 
   return (
-    <div style={{ padding: '0 0 24px 0' }}>
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-        <Col>
-          <Title level={4} style={{ margin: 0 }}>Bang don gia san pham</Title>
-          <Text type="secondary">Thiet lap don gia m2 theo xuong va khau tinh luong.</Text>
-        </Col>
-        <Col>
-          <Space>
-            <Button icon={<DownloadOutlined />} onClick={() => downloadTemplate('payroll_config')}>
-              Tai file mau
-            </Button>
-            <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
-              Import Excel
-            </Button>
-            <Button icon={<PlusOutlined />} onClick={handleAddDefault}>
-              Khoi tao khau mac dinh
-            </Button>
-            <Button type="primary" icon={<SettingOutlined />} onClick={() => setEditing({} as any)}>
-              Them don gia moi
-            </Button>
-          </Space>
-        </Col>
+    <>
+      <Alert
+        type="info" showIcon style={{ marginBottom: 12 }}
+        message="Điều 6 Quy chế: Bảng đơn giá sản phẩm — công thức Quỹ lương SP = Sản lượng × Đơn giá × % lương SP"
+      />
+      <Row justify="end" style={{ marginBottom: 12 }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm mã hàng</Button>
       </Row>
-
-      <Row gutter={16}>
-        <Col span={16}>
-          <Card size="small" styles={{ body: { padding: 0 } }}>
-            <Table
-              dataSource={configs}
-              columns={columns}
-              rowKey="id"
-              loading={isLoading}
-              size="small"
-              pagination={false}
-            />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card title={editing ? (editing.id ? 'Chinh sua don gia' : 'Them don gia') : 'Ghi chu'} size="small">
-            {editing ? (
-              <Form
-                form={form}
-                layout="vertical"
-                onFinish={v => saveMut.mutate({ ...editing, ...v })}
-                initialValues={{ trang_thai: true, phan_tram_luong_sp: 100 }}
-                onValuesChange={(changed, values) => {
-                  if ((changed.phan_xuong_id !== undefined || changed.cong_doan !== undefined) && values.cong_doan && !editing?.id) {
-                    form.setFieldsValue({
-                      ma_hang: values.phan_xuong_id ? `PX${values.phan_xuong_id}_${values.cong_doan}` : values.cong_doan,
-                    })
-                  }
-                }}
-              >
-                <Form.Item name="ma_hang" label="Ma hang / cong doan" rules={[{ required: true }]}>
-                  <Input placeholder="VD: PX1_IN, IN, ALL..." />
-                </Form.Item>
-                <Form.Item name="ten_hang" label="Ten hang / loai san xuat" rules={[{ required: true }]}>
-                  <Input placeholder="VD: May in 4 mau..." />
-                </Form.Item>
-                <Row gutter={12}>
-                  <Col span={12}>
-                    <Form.Item name="phan_xuong_id" label="Xuong / nha may">
-                      <Select
-                        allowClear
-                        placeholder="Dung chung"
-                        options={phanXuongList.map((px: any) => ({ value: px.id, label: px.ten_xuong }))}
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item name="cong_doan" label="Khau tinh luong">
-                      <Select allowClear placeholder="Chon khau" options={STAGE_OPTIONS} />
-                    </Form.Item>
-                  </Col>
-                </Row>
-                <Row gutter={12}>
-                  <Col span={12}>
-                    <Form.Item name="phan_tram_luong_sp" label="% Luong SP" rules={[{ required: true }]}>
-                      <InputNumber style={{ width: '100%' }} suffix="%" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item name="don_gia" label="Don gia" rules={[{ required: true }]}>
-                      <InputNumber style={{ width: '100%' }} formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
-                    </Form.Item>
-                  </Col>
-                </Row>
-                <Form.Item name="loai" label="Loai" initialValue="san_pham">
-                  <Select options={[
-                    { value: 'san_pham', label: 'Luong san pham' },
-                    { value: 'phu_cap', label: 'Phu cap co dinh' },
-                  ]} />
-                </Form.Item>
-                <Form.Item name="ghi_chu" label="Ghi chu">
-                  <Input.TextArea rows={2} />
-                </Form.Item>
-                <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-                  <Button onClick={() => setEditing(null)}>Huy</Button>
-                  <Button type="primary" onClick={() => form.submit()} loading={saveMut.isPending}>
-                    Luu cau hinh
-                  </Button>
-                </Space>
-              </Form>
-            ) : (
-              <div style={{ padding: '8px 0' }}>
-                <Text type="secondary">
-                  Luong san pham = tong m2 hop le tu scan x don gia x % luong san pham.
-                  <br /><br />
-                  Hoang Gia, Nam Thuan chia 5 khau. Cu Chi dung khau ALL cho tong san luong xuong. Hoc Mon khong tinh luong san pham m2.
-                </Text>
-              </div>
-            )}
-          </Card>
-        </Col>
-      </Row>
-
-      <Drawer
-        title="Xem truoc bang don gia san pham"
-        width={800}
-        open={importOpen}
-        onClose={() => {
-          setImportOpen(false)
-          setImportData([])
-        }}
-        extra={
-          <Space>
-            <Button onClick={() => setImportOpen(false)}>Huy</Button>
-            <Button
-              type="primary"
-              disabled={importData.length === 0 || importData.some(r => r._error)}
-              onClick={async () => {
-                message.loading('Dang luu bang don gia...')
-                try {
-                  const rows = importData.map(({ _error, _status, ...row }) => row)
-                  await hrApi.bulkCreatePayrollConfigs(rows)
-                  message.success(`Da cap nhat ${importData.length} ma hang thanh cong`)
-                  setImportOpen(false)
-                  setImportData([])
-                  qc.invalidateQueries({ queryKey: ['hr-payroll-configs'] })
-                } catch (e: any) {
-                  message.error(e?.response?.data?.detail?.message || e?.response?.data?.detail || 'Import don gia that bai')
-                }
-              }}
-            >
-              Xac nhan luu
-            </Button>
-          </Space>
-        }
-      >
-        <div style={{ marginBottom: 16 }}>
-          <Text type="secondary">Keo tha file Excel chua bang don gia vao day de kiem tra.</Text>
-          <div style={{ marginTop: 10 }}>
-            <Input
-              type="file"
-              accept=".xlsx, .xls, .csv"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (!file) return
-                const reader = new FileReader()
-                reader.onload = (evt) => {
-                  const bstr = evt.target?.result
-                  const wb = XLSX.read(bstr, { type: 'binary' })
-                  const ws = wb.Sheets[wb.SheetNames[0]]
-                  const data = XLSX.utils.sheet_to_json(ws)
-
-                  const validated = data.map((row: any) => {
-                    let error = ''
-                    if (!row.ma_hang) error = 'Thieu ma hang'
-                    if (!row.don_gia) error = 'Thieu don gia'
-
-                    return {
-                      ...row,
-                      _error: error,
-                      _status: error ? 'error' : 'success'
-                    }
-                  })
-                  setImportData(validated)
-                }
-                reader.readAsBinaryString(file)
-              }}
-            />
-          </div>
-        </div>
-
+      <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
-          size="small"
-          dataSource={importData}
-          pagination={false}
+          size="small" rowKey="id" loading={isLoading} dataSource={items}
           columns={[
-            { title: 'Trang thai', dataIndex: '_status', width: 120, render: (v, r) => (
-              <Tag color={v === 'success' ? 'green' : 'red'}>{v === 'success' ? 'Hop le' : r._error}</Tag>
+            { title: 'Mã hàng', dataIndex: 'ma_hang', width: 150,
+              render: (v: string) => <Text strong style={{ color: '#1677ff' }}>{v}</Text> },
+            { title: 'Tên', dataIndex: 'ten_hang' },
+            { title: 'Công đoạn', dataIndex: 'cong_doan', width: 150,
+              render: (v: string) => v ? <Tag>{v}</Tag> : '—' },
+            { title: '% lương SP', dataIndex: 'phan_tram_luong_sp', width: 120, align: 'center' as const,
+              render: (v: number) => <Tag color="blue">{v}%</Tag> },
+            { title: 'Đơn giá (VNĐ/đơn vị)', dataIndex: 'don_gia', width: 180, align: 'right' as const,
+              render: (v: number) => <Text strong style={{ color: '#fa8c16' }}>{fmtVND(v)}</Text> },
+            { title: '', width: 80, render: (_, r: any) => (
+              <Space size={4}>
+                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+              </Space>
             )},
-            { title: 'Ma hang', dataIndex: 'ma_hang' },
-            { title: 'Ten hang', dataIndex: 'ten_hang' },
-            { title: 'Xuong ID', dataIndex: 'phan_xuong_id' },
-            { title: 'Khau', dataIndex: 'cong_doan' },
-            { title: 'Don gia', dataIndex: 'don_gia', align: 'right' as const, render: (v) => v?.toLocaleString() },
-            { title: '% Luong', dataIndex: 'phan_tram_luong_sp', align: 'center' as const },
           ]}
+          pagination={{ pageSize: 20 }}
         />
-      </Drawer>
-    </div>
+      </Card>
+
+      <Modal
+        open={open} title={editing ? `Sửa mã hàng: ${editing.ma_hang}` : 'Thêm mã hàng mới'}
+        onCancel={() => { setOpen(false); setEditing(null); form.resetFields() }}
+        onOk={() => form.submit()} confirmLoading={saveMut.isPending} width={560}
+      >
+        <Form form={form} layout="vertical" onFinish={(v) => saveMut.mutate({ ...v, loai: 'san_pham' })}>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="ma_hang" label="Mã hàng" rules={[{ required: true }]}>
+                <Input placeholder="VD: IN, MAYSONG_A, CM_A..." disabled={!!editing} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="cong_doan" label="Công đoạn">
+                <Input placeholder="VD: In, Máy sóng, Cán màng..." />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="ten_hang" label="Tên hàng" rules={[{ required: true }]}>
+            <Input placeholder="VD: In offset 4 màu" />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="phan_tram_luong_sp" label="% lương sản phẩm" rules={[{ required: true }]}>
+                <InputNumber min={0} max={500} addonAfter="%" style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="don_gia" label="Đơn giá (VNĐ/đơn vị)" rules={[{ required: true }]}>
+                <InputNumber min={0} step={1} style={{ width: '100%' }}
+                  formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')} />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAB 2: Bảng quy đổi giờ → công (Điều 9 quy chế, Table 5)
+// ═══════════════════════════════════════════════════════════════
+function HourConversionTab() {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<any>(null)
+  const [form] = Form.useForm()
+
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ['hr-payroll-configs', 'gio_quy_doi'],
+    queryFn: () => hrApi.listPayrollConfigs({ loai: 'gio_quy_doi' } as any).then(r => r.data),
+  })
+
+  const saveMut = useMutation({
+    mutationFn: (data: any) =>
+      editing?.id ? hrApi.updatePayrollConfig(editing.id, data) : hrApi.createPayrollConfig(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hr-payroll-configs', 'gio_quy_doi'] })
+      message.success('Đã lưu'); setOpen(false); setEditing(null); form.resetFields()
+    },
+  })
+
+  const openCreate = () => { setEditing(null); form.resetFields(); setOpen(true) }
+  const openEdit = (r: any) => { setEditing(r); form.setFieldsValue(r); setOpen(true) }
+
+  return (
+    <>
+      <Alert
+        type="info" showIcon style={{ marginBottom: 12 }}
+        message="Điều 9 Quy chế: Công quy đổi = Tổng giờ làm việc thực tế / Giờ công chuẩn"
+        description="Quy ước hiện hành: 4 giờ = 0.5 công · 8 giờ = 1 công · 10 giờ = 1.25 công · 12 giờ = 1.5 công"
+      />
+      <Row justify="end" style={{ marginBottom: 12 }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm mức quy đổi</Button>
+      </Row>
+      <Card size="small" styles={{ body: { padding: 0 } }}>
+        <Table
+          size="small" rowKey="id" loading={isLoading} dataSource={items}
+          columns={[
+            { title: 'Mã cấu hình', dataIndex: 'ma_cau_hinh', width: 180,
+              render: (v: string) => <Text strong style={{ color: '#722ed1' }}>{v}</Text> },
+            { title: 'Diễn giải', dataIndex: 'ten_cau_hinh' },
+            { title: 'Công quy đổi', dataIndex: 'gia_tri', width: 160, align: 'center' as const,
+              render: (v: string) => <Tag color="cyan" style={{ fontSize: 14 }}>{Number(v).toFixed(2)} công</Tag> },
+            { title: '', width: 80, render: (_, r: any) => (
+              <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+            )},
+          ]}
+          pagination={false}
+        />
+      </Card>
+
+      <Modal
+        open={open} title={editing ? 'Sửa mức quy đổi' : 'Thêm mức quy đổi'}
+        onCancel={() => { setOpen(false); setEditing(null); form.resetFields() }}
+        onOk={() => form.submit()} confirmLoading={saveMut.isPending}
+      >
+        <Form form={form} layout="vertical" onFinish={(v) => saveMut.mutate({ ...v, loai: 'gio_quy_doi' })}>
+          <Form.Item name="ma_cau_hinh" label="Mã cấu hình" rules={[{ required: true }]}>
+            <Input placeholder="VD: QD_4H, QD_8H..." disabled={!!editing} />
+          </Form.Item>
+          <Form.Item name="ten_cau_hinh" label="Diễn giải" rules={[{ required: true }]}>
+            <Input placeholder="VD: 4 giờ làm việc" />
+          </Form.Item>
+          <Form.Item name="gia_tri" label="Công quy đổi" rules={[{ required: true }]}>
+            <InputNumber min={0} max={3} step={0.01} style={{ width: '100%' }} addonAfter="công" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAB 3: Lương tối thiểu vùng (NĐ 74/2024)
+// ═══════════════════════════════════════════════════════════════
+function MinWageTab() {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<any>(null)
+  const [form] = Form.useForm()
+
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ['hr-payroll-configs', 'min_wage'],
+    queryFn: () => hrApi.listPayrollConfigs({ loai: 'min_wage' } as any).then(r => r.data),
+  })
+
+  const saveMut = useMutation({
+    mutationFn: (data: any) =>
+      editing?.id ? hrApi.updatePayrollConfig(editing.id, data) : hrApi.createPayrollConfig(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hr-payroll-configs', 'min_wage'] })
+      message.success('Đã lưu'); setOpen(false); setEditing(null); form.resetFields()
+    },
+  })
+
+  return (
+    <>
+      <Alert
+        type="warning" showIcon style={{ marginBottom: 12 }}
+        message="Theo Nghị định 74/2024/NĐ-CP (hiệu lực 01/07/2024) — Lương tối thiểu tháng theo 4 vùng"
+        description="Nam Phương Bao bì ở Hóc Môn (TP.HCM) thuộc Vùng I → 4.960.000đ/tháng. Điều 4.8 Quy chế: nếu lương SP < mức tối thiểu do lý do khách quan, công ty bù phần chênh lệch."
+      />
+      <Card size="small" styles={{ body: { padding: 0 } }}>
+        <Table
+          size="small" rowKey="id" loading={isLoading} dataSource={items}
+          columns={[
+            { title: 'Mã vùng', dataIndex: 'ma_cau_hinh', width: 180,
+              render: (v: string) => {
+                const vung = v.replace('MIN_WAGE_', '')
+                const color: Record<string, string> = { I: 'red', II: 'orange', III: 'gold', IV: 'green' }
+                return <Tag color={color[vung] || 'default'} style={{ fontSize: 14, fontWeight: 600 }}>Vùng {vung}</Tag>
+              } },
+            { title: 'Mô tả', dataIndex: 'ten_cau_hinh' },
+            { title: 'Mức lương tối thiểu', dataIndex: 'gia_tri', width: 220, align: 'right' as const,
+              render: (v: string) => <Text strong style={{ color: '#cf1322', fontSize: 16 }}>{fmtVND(v)}</Text> },
+            { title: '', width: 80, render: (_, r: any) => (
+              <Button size="small" icon={<EditOutlined />}
+                onClick={() => { setEditing(r); form.setFieldsValue(r); setOpen(true) }} />
+            )},
+          ]}
+          pagination={false}
+        />
+      </Card>
+
+      <Modal
+        open={open} title={`Sửa mức lương: ${editing?.ten_cau_hinh || ''}`}
+        onCancel={() => { setOpen(false); setEditing(null); form.resetFields() }}
+        onOk={() => form.submit()} confirmLoading={saveMut.isPending}
+      >
+        <Form form={form} layout="vertical" onFinish={(v) => saveMut.mutate({ ...v, loai: 'min_wage' })}>
+          <Form.Item name="ma_cau_hinh" label="Mã vùng" rules={[{ required: true }]}>
+            <Input disabled />
+          </Form.Item>
+          <Form.Item name="ten_cau_hinh" label="Mô tả" rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="gia_tri" label="Mức lương tối thiểu / tháng (VNĐ)" rules={[{ required: true }]}>
+            <InputNumber min={0} step={10000} style={{ width: '100%' }}
+              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAB 4: Cấu hình chung
+// ═══════════════════════════════════════════════════════════════
+function GeneralConfigTab() {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState<any>(null)
+  const [form] = Form.useForm()
+
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ['hr-payroll-configs', 'config'],
+    queryFn: () => hrApi.listPayrollConfigs({ loai: 'config' } as any).then(r => r.data),
+  })
+
+  const saveMut = useMutation({
+    mutationFn: (data: any) => hrApi.updatePayrollConfig(editing.id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hr-payroll-configs', 'config'] })
+      message.success('Đã lưu'); setEditing(null); form.resetFields()
+    },
+  })
+
+  return (
+    <>
+      <Alert
+        type="info" showIcon style={{ marginBottom: 12 }}
+        message="Cấu hình chung của hệ thống lương — dùng cho engine tính lương tự động"
+      />
+      <Card size="small" styles={{ body: { padding: 0 } }}>
+        <Table
+          size="small" rowKey="id" loading={isLoading} dataSource={items}
+          columns={[
+            { title: 'Tham số', dataIndex: 'ten_cau_hinh' },
+            { title: 'Mã', dataIndex: 'ma_cau_hinh', width: 200,
+              render: (v: string) => <Text code style={{ fontSize: 11 }}>{v}</Text> },
+            { title: 'Giá trị', dataIndex: 'gia_tri', width: 180, align: 'right' as const,
+              render: (v: string, r: any) => {
+                const label = r.ma_cau_hinh === 'VUNG_AP_DUNG' ? `Vùng ${v}`
+                  : r.ma_cau_hinh === 'HE_SO_THU_VIEC' ? Number(v).toFixed(2)
+                  : r.ma_cau_hinh === 'GIO_CHUAN_NGAY' ? `${v} giờ`
+                  : r.ma_cau_hinh === 'NGAY_CHUAN_THANG' ? `${v} ngày`
+                  : v
+                return <Text strong style={{ color: '#1677ff', fontSize: 15 }}>{label}</Text>
+              } },
+            { title: '', width: 80, render: (_, r: any) => (
+              <Button size="small" icon={<EditOutlined />}
+                onClick={() => { setEditing(r); form.setFieldsValue(r) }} />
+            )},
+          ]}
+          pagination={false}
+        />
+      </Card>
+
+      <Modal
+        open={!!editing} title={`Sửa: ${editing?.ten_cau_hinh || ''}`}
+        onCancel={() => { setEditing(null); form.resetFields() }}
+        onOk={() => form.submit()} confirmLoading={saveMut.isPending}
+      >
+        <Form form={form} layout="vertical" onFinish={(v) => saveMut.mutate({ ...v, loai: 'config' })}>
+          <Form.Item name="ma_cau_hinh" label="Mã"><Input disabled /></Form.Item>
+          <Form.Item name="ten_cau_hinh" label="Tên"><Input /></Form.Item>
+          <Form.Item name="gia_tri" label="Giá trị" rules={[{ required: true }]}>
+            <InputNumber min={0} step={0.1} style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
   )
 }

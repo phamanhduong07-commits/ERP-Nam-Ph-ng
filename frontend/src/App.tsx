@@ -154,6 +154,11 @@ const HealthCheckPage = lazy(() => import('./pages/hr/HealthCheckPage'))
 const SafetyPage = lazy(() => import('./pages/hr/SafetyPage'))
 const KPIPage = lazy(() => import('./pages/hr/KPIPage'))
 const HRReportsPage = lazy(() => import('./pages/hr/HRReportsPage'))
+const HRProductionOutputPage = lazy(() => import('./pages/hr/ProductionOutputPage'))
+const PayrollAdjustmentsPage = lazy(() => import('./pages/hr/PayrollAdjustmentsPage'))
+const PayrollRunsPage = lazy(() => import('./pages/hr/PayrollRunsPage'))
+const PayrollComplaintsPage = lazy(() => import('./pages/hr/PayrollComplaintsPage'))
+const MyPayslipPage = lazy(() => import('./pages/hr/MyPayslipPage'))
 const EmployeeListPage = lazy(() => import('./pages/hr/EmployeeListPage'))
 const DepartmentPage = lazy(() => import('./pages/hr/DepartmentPage'))
 const PayrollConfigPage = lazy(() => import('./pages/hr/PayrollConfigPage'))
@@ -391,6 +396,11 @@ export default function App() {
             <Route path="hr/safety" element={<ErrorBoundary><SafetyPage /></ErrorBoundary>} />
             <Route path="hr/kpi" element={<ErrorBoundary><KPIPage /></ErrorBoundary>} />
             <Route path="hr/reports" element={<ErrorBoundary><HRReportsPage /></ErrorBoundary>} />
+            <Route path="hr/production-output" element={<ErrorBoundary><HRProductionOutputPage /></ErrorBoundary>} />
+            <Route path="hr/payroll-adjustments" element={<ErrorBoundary><PayrollAdjustmentsPage /></ErrorBoundary>} />
+            <Route path="hr/payroll-runs" element={<ErrorBoundary><PayrollRunsPage /></ErrorBoundary>} />
+            <Route path="hr/payroll-complaints" element={<ErrorBoundary><PayrollComplaintsPage /></ErrorBoundary>} />
+            <Route path="portal/payslip" element={<ErrorBoundary><MyPayslipPage /></ErrorBoundary>} />
             <Route path="hr/employees" element={<ErrorBoundary><EmployeeListPage /></ErrorBoundary>} />
             <Route path="hr/attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
             <Route path="hr/checkin-locations" element={<ErrorBoundary><CheckInLocationsPage /></ErrorBoundary>} />

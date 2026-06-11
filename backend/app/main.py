@@ -16,7 +16,7 @@ from app.routers import (
     suppliers, material_groups, other_materials, warehouses, users,
     don_vi_tinh, vi_tri, xe, tai_xe, lo_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
     production_orders, bom, production_plans, indirect_costs, addon_rates, permissions,
-    hr, logistics_hr, hr_payroll_calc, hr_reward, hr_self_service, hr_workflow, hr_benefits, hr_safety, hr_kpi, hr_reports,
+    hr, logistics_hr, hr_payroll_calc, hr_reward, hr_self_service, hr_workflow, hr_benefits, hr_safety, hr_kpi, hr_reports, hr_production, hr_payroll_adjustments, hr_payroll_runs, hr_payroll_complaints, hr_my_payslip,
 )
 from app.routers import (
     phieu_phoi, cd2, warehouse, purchase_orders, purchase_returns,
@@ -311,6 +311,11 @@ app.include_router(hr_benefits.router)
 app.include_router(hr_safety.router)
 app.include_router(hr_kpi.router)
 app.include_router(hr_reports.router)
+app.include_router(hr_production.router)
+app.include_router(hr_payroll_adjustments.router)
+app.include_router(hr_payroll_runs.router)
+app.include_router(hr_payroll_complaints.router)
+app.include_router(hr_my_payslip.router)
 app.include_router(quality_control_router.router)
 app.include_router(maintenance_router.router)
 app.include_router(crm_router.router)

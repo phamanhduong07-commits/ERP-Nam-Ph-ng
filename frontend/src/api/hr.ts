@@ -309,6 +309,77 @@ export const hrApi = {
       '/hr/kpi/summary', { params },
     ),
 
+  // Payroll Adjustments — Sprint D.4
+  listAdjustments: (params?: { thang?: number; nam?: number; employee_id?: number; loai?: string; sub_loai?: string; bo_phan_id?: number; trang_thai?: string }) =>
+    client.get<any[]>('/hr/payroll-adjustments', { params }),
+  adjustmentEnum: () => client.get<{ cong_them: { value: string; label: string }[]; khau_tru: { value: string; label: string }[] }>('/hr/payroll-adjustments/enum'),
+  adjustmentSummary: (params: { thang: number; nam: number; bo_phan_id?: number }) =>
+    client.get<any>('/hr/payroll-adjustments/summary', { params }),
+  createAdjustment: (data: any) => client.post('/hr/payroll-adjustments', data),
+  bulkCreateAdjustments: (items: any[]) => client.post('/hr/payroll-adjustments/bulk', { items }),
+  updateAdjustment: (id: number, data: any) => client.put(`/hr/payroll-adjustments/${id}`, data),
+  approveAdjustment: (id: number) => client.put(`/hr/payroll-adjustments/${id}/approve`),
+  deleteAdjustment: (id: number) => client.delete(`/hr/payroll-adjustments/${id}`),
+  autoGenBhxh: (data: { thang: number; nam: number; bo_phan_id?: number }) =>
+    client.post('/hr/payroll-adjustments/auto-generate-bh', data),
+
+  // Production outputs — Sprint D.2
+  listProductionOutputs: (params?: { nam?: number; thang?: number; ma_hang?: string; bo_phan_id?: number; to_id?: number; trang_thai?: string }) =>
+    client.get<any[]>('/hr/production-outputs', { params }),
+  productionSummary: (params: { nam: number; thang: number; bo_phan_id?: number }) =>
+    client.get<{
+      ky: string; tu_ngay: string; den_ngay: string
+      tong_san_luong: number; tong_san_luong_loi: number; tong_quy_luong_sp: number
+      so_ngay_co_sl: number; so_record_da_xac_nhan: number; so_record_cho_xac_nhan: number
+      by_ma_hang: { ma_hang: string; ten_hang: string | null; san_luong: number; san_luong_loi: number; quy_luong: number }[]
+      by_bo_phan: { ten_bo_phan: string; san_luong: number; quy_luong: number }[]
+    }>('/hr/production-outputs/summary', { params }),
+  createProductionOutput: (data: any) => client.post('/hr/production-outputs', data),
+  bulkCreateProductionOutput: (items: any[]) => client.post('/hr/production-outputs/bulk', { items }),
+  updateProductionOutput: (id: number, data: any) => client.put(`/hr/production-outputs/${id}`, data),
+  confirmProductionOutput: (id: number) => client.put(`/hr/production-outputs/${id}/confirm`),
+  deleteProductionOutput: (id: number) => client.delete(`/hr/production-outputs/${id}`),
+
+  // Payroll Engine (Sprint D.3)
+  enginePreview: (data: { nam: number; thang: number; bo_phan_id?: number }) =>
+    client.post('/hr/payroll/engine/preview', { ...data, dry_run: true }),
+  engineCommit: (data: { nam: number; thang: number; bo_phan_id?: number }) =>
+    client.post('/hr/payroll/engine/commit', { ...data, dry_run: false }),
+
+  // Payroll Runs (Sprint D.5)
+  listPayrollRuns: (params: { nam: number; thang: number; bo_phan_id?: number; trang_thai?: string }) =>
+    client.get<any[]>('/hr/payroll-runs', { params }),
+  payrollRunsSummary: (params: { nam: number; thang: number; bo_phan_id?: number }) =>
+    client.get<{
+      total: number
+      quy_luong_san_pham: number; quy_bu_toi_thieu_vung: number
+      quy_cong_them: number; quy_khau_tru: number; quy_thuc_linh: number
+      by_trang_thai: Record<string, number>
+    }>('/hr/payroll-runs/summary', { params }),
+  chotPayroll: (data: { nam: number; thang: number; bo_phan_id?: number; ghi_chu?: string; xac_nhan_tat_ca?: boolean }) =>
+    client.post('/hr/payroll-runs/chot', data),
+  duyetThanhToanPayroll: (data: { nam: number; thang: number; bo_phan_id?: number; xac_nhan_tat_ca?: boolean }) =>
+    client.post('/hr/payroll-runs/duyet-thanh-toan', data),
+  moKhoaPayrollRun: (id: number, ly_do: string) => client.post(`/hr/payroll-runs/${id}/mo-khoa`, { ly_do }),
+  deleteDraftRuns: (data: { nam: number; thang: number; bo_phan_id?: number; xac_nhan_tat_ca?: boolean }) =>
+    client.post('/hr/payroll-runs/delete-drafts', data),
+
+  // Payroll Complaints (Sprint D.5 — Điều 16)
+  listComplaints: (params?: { thang?: number; nam?: number; trang_thai?: string; bo_phan_id?: number }) =>
+    client.get<any[]>('/hr/payroll-complaints', { params }),
+  complaintsSummary: (params: { thang?: number; nam?: number }) =>
+    client.get<{ tong: number; by_trang_thai: Record<string, number> }>('/hr/payroll-complaints/summary', { params }),
+  createComplaint: (data: any) => client.post('/hr/payroll-complaints', data),
+  updateComplaint: (id: number, data: any) => client.put(`/hr/payroll-complaints/${id}`, data),
+  takeComplaint: (id: number) => client.post(`/hr/payroll-complaints/${id}/take`),
+  resolveComplaint: (id: number, data: any) => client.post(`/hr/payroll-complaints/${id}/resolve`, data),
+  deleteComplaint: (id: number) => client.delete(`/hr/payroll-complaints/${id}`),
+  autoExpireComplaints: () => client.post('/hr/payroll-complaints/_auto_expire'),
+
+  // My Payslip — Mobile (Sprint D.5)
+  getMyPayslip: (nam: number, thang: number) => client.get<any>(`/hr/my-payslip/${nam}/${thang}`),
+  listMyAvailableMonths: () => client.get<{ nam: number; thang: number; trang_thai: string; thuc_linh: number }[]>('/hr/my-payslip/list/available'),
+
   // Safety summary
   safetySummary: () => client.get<{
     bhld: { total_equipments: number; issues_30d: number; expiring_30d: number }
@@ -465,7 +536,8 @@ export const hrApi = {
     client.post(`/hr/leave-requests/${id}/cancel`),
 
   // Payroll Configs
-  listPayrollConfigs: () => client.get<PayrollConfig[]>('/hr/payroll-configs'),
+  listPayrollConfigs: (params?: { loai?: string }) =>
+    client.get<PayrollConfig[]>('/hr/payroll-configs', { params }),
   createPayrollConfig: (data: Partial<PayrollConfig>) => client.post<PayrollConfig>('/hr/payroll-configs', data),
   updatePayrollConfig: (id: number, data: Partial<PayrollConfig>) => client.put<PayrollConfig>(`/hr/payroll-configs/${id}`, data),
   bulkCreatePayrollConfigs: (items: Partial<PayrollConfig>[]) => client.post('/hr/payroll-configs/bulk', { items }),

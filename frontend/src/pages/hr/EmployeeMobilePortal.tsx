@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons'
 import client from '../../api/client'
 import dayjs from 'dayjs'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/auth'
 import MobileCheckIn from '../../components/hr/MobileCheckIn'
 
@@ -38,6 +39,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 export default function EmployeeMobilePortal() {
   const { user, logout } = useAuthStore()
+  const nav = useNavigate()
   const [activeTab, setActiveTab] = useState('home')
   const [leaveModal, setLeaveModal] = useState(false)
   const [form] = Form.useForm()
@@ -123,13 +125,14 @@ export default function EmployeeMobilePortal() {
 
       <Row gutter={[16, 16]}>
         <Col span={12}>
-          <Card 
-            hoverable 
-            style={{ textAlign: 'center', borderRadius: 12 }} 
-            onClick={() => setActiveTab('payroll')}
+          <Card
+            hoverable
+            style={{ textAlign: 'center', borderRadius: 12 }}
+            onClick={() => nav('/portal/payslip')}
           >
             <DollarOutlined style={{ fontSize: 32, color: '#ff8200', marginBottom: 8 }} />
             <br /><Text strong>Phiếu lương</Text>
+            <br /><Text type="secondary" style={{ fontSize: 11 }}>Lương sản phẩm + Khiếu nại</Text>
           </Card>
         </Col>
         <Col span={12}>

@@ -1428,8 +1428,22 @@ def import_attendance(rows: List[dict], db: Session = Depends(get_db), _: User =
 
 # --- Payroll Config ---
 @router.get("/payroll-configs", response_model=List[schemas.PayrollConfig])
-def list_payroll_configs(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return db.query(PayrollConfig).all()
+def list_payroll_configs(
+    loai: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """List config lương. Có thể filter theo loai:
+    - 'san_pham' — Bảng đơn giá theo mã hàng (Điều 6 quy chế)
+    - 'gio_quy_doi' — Bảng quy đổi giờ → công (Điều 9 quy chế, Table 5)
+    - 'min_wage' — Lương tối thiểu vùng I-IV (NĐ 74/2024)
+    - 'config' — Config chung (giờ/ngày chuẩn, vùng áp dụng, hệ số thử việc)
+    - 'so_lop_giay' — Hệ số máy sóng theo số lớp giấy (đã có sẵn)
+    """
+    q = db.query(PayrollConfig)
+    if loai:
+        q = q.filter(PayrollConfig.loai == loai)
+    return q.all()
 
 @router.post("/payroll-configs", response_model=schemas.PayrollConfig)
 def create_payroll_config(body: schemas.PayrollConfigCreate, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
