@@ -146,7 +146,7 @@ def _build_response(order: ProductionOrder, db: Session | None = None) -> Produc
             so_luong_hoan_thanh=item.so_luong_hoan_thanh,
             dvt=item.dvt,
             ngay_giao_hang=item.ngay_giao_hang,
-            ghi_chu=_f('ghi_chu'),
+            ghi_chu=item.ghi_chu,
             loai_thung=_f('loai_thung'),
             dai=_f('dai'), rong=_f('rong'), cao=_f('cao'),
             so_lop=so_lop, to_hop_song=to_hop_song,
