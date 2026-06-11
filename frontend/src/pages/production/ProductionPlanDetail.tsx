@@ -523,7 +523,6 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         <td class="right" style="font-weight:600">${Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')}</td>
         <td class="center"><span class="tag-lan">${loaiLan}</span></td>
         <td class="center">${inCell(r)}</td>
-        <td style="font-size:8px;color:#595959">${r.ghi_chu ?? ''}</td>
         <td class="right" style="font-weight:700;color:#fa8c16">${metToi > 0 ? metToi.toLocaleString('vi-VN', { maximumFractionDigits: 1 }) : '—'}</td>
       </tr>`
     }).join('')
@@ -545,13 +544,12 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
           <th class="right">SL thùng</th>
           <th class="center">Loại lằn</th>
           <th class="center">In / GC</th>
-          <th>Ghi chú</th>
           <th class="right">Mét tới</th>
         </tr></thead>
         <tbody>
           ${bodyRows}
           <tr class="total-row">
-            <td colspan="19" class="right"><strong>TỔNG SỐ MÉT TỚI:</strong></td>
+            <td colspan="18" class="right"><strong>TỔNG SỐ MÉT TỚI:</strong></td>
             <td class="right"><strong>${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></td>
           </tr>
         </tbody>
