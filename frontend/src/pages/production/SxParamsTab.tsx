@@ -470,17 +470,37 @@ function ItemSxCard({ item, orderId, paperOpts, onSaved }: ItemSxCardProps) {
               {queueStatus === 'hoan_thanh' && <Tag color="default">✅ Hoàn thành</Tag>}
 
               {item.product?.id && (
-                <Tooltip title={savedMacDinh ? 'Cập nhật thông số mặc định cho mã hàng này' : 'Lưu thông số hiện tại làm mặc định cho mã hàng này'}>
-                  <Button
-                    size="small"
-                    icon={savedMacDinh ? <StarFilled /> : <StarOutlined />}
-                    loading={savingMacDinh}
-                    onClick={handleSaveMacDinh}
-                    style={savedMacDinh ? { color: '#faad14', borderColor: '#faad14' } : undefined}
-                  >
-                    {savedMacDinh ? 'Đã lưu mặc định' : 'Lưu làm mặc định'}
-                  </Button>
-                </Tooltip>
+                <Space size={4}>
+                  <Tooltip title={savedMacDinh ? 'Cập nhật thông số mặc định cho mã hàng này' : 'Lưu thông số hiện tại làm mặc định cho mã hàng này'}>
+                    <Button
+                      size="small"
+                      icon={savedMacDinh ? <StarFilled /> : <StarOutlined />}
+                      loading={savingMacDinh}
+                      onClick={handleSaveMacDinh}
+                      style={savedMacDinh ? { color: '#faad14', borderColor: '#faad14' } : undefined}
+                    >
+                      {savedMacDinh ? 'Đã lưu mặc định' : 'Lưu làm mặc định'}
+                    </Button>
+                  </Tooltip>
+                  {savedMacDinh && (
+                    <Tooltip title="Xóa thông số mặc định của mã hàng này">
+                      <Button
+                        size="small"
+                        type="link"
+                        danger
+                        style={{ padding: '0 4px', fontSize: 12 }}
+                        onClick={async () => {
+                          if (!item.product?.id) return
+                          await productsApi.patchSxParamsMacDinh(item.product.id, null)
+                          setSavedMacDinh(false)
+                          message.success('Đã xóa thông số mặc định')
+                        }}
+                      >
+                        Xóa
+                      </Button>
+                    </Tooltip>
+                  )}
+                </Space>
               )}
               <Button
                 type="primary"
