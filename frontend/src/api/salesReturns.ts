@@ -131,12 +131,6 @@ export const SALES_RETURN_TRANG_THAI_COLORS: Record<string, string> = {
   huy: 'red',
 }
 
-export const PHUONG_AN_LABELS: Record<string, string> = {
-  chua_xuat_hd: 'Chua xuat hoa don',
-  da_xuat_hd: 'Da xuat hoa don',
-  da_thu_tien: 'Da thu tien',
-}
-
 export const TINH_TRANG_HANG_LABELS: Record<string, string> = {
   tot: 'Tốt',
   hong: 'Hỏng',
