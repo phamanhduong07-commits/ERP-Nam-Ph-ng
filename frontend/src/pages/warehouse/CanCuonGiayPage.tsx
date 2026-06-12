@@ -3,18 +3,20 @@ import type { InputNumberRef } from 'rc-input-number'
 import type { ApiError } from '../../api/types'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
-  Button, Card, InputNumber, Typography, Space, Tag, Alert, Divider, List, message,
+  Button, Card, InputNumber, Typography, Space, Tag, Alert, Divider, List, Select, Segmented, message,
 } from 'antd'
 import {
   ScanOutlined, CheckCircleFilled, CloseCircleFilled, ReloadOutlined, PrinterOutlined,
-  SelectOutlined, LogoutOutlined,
+  SelectOutlined, LogoutOutlined, BranchesOutlined,
 } from '@ant-design/icons'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import apiClient from '../../api/client'
 import QrScannerModal from '../../components/QrScannerModal'
 import { warehouseApi, type GiayRoll } from '../../api/warehouse'
 import { useAuthStore } from '../../store/auth'
 import { usePermission } from '../../hooks/usePermission'
+import { productionPlansApi } from '../../api/productionPlans'
+import { productionOrdersApi } from '../../api/productionOrders'
 
 const { Title, Text } = Typography
 
@@ -59,6 +61,13 @@ export default function CanCuonGiayPage() {
   const [kgConLai, setKgConLai]     = useState<number | null>(null)
   const [scanning, setScanning]     = useState(false)
   const [lookupError, setLookupError] = useState<string | null>(null)
+
+  // LSX / KHSX picker
+  const [orderMode, setOrderMode]   = useState<'lsx' | 'khsx'>('khsx')
+  const [selectedPlanId, setSelectedPlanId]   = useState<number | null>(null)
+  const [planLsxIds, setPlanLsxIds]           = useState<number[]>([])
+  const [loadingPlanLsx, setLoadingPlanLsx]   = useState(false)
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null)
   const [history, setHistory]       = useState<HistoryEntry[]>(() => {
     try {
       const saved = localStorage.getItem(HISTORY_STORAGE_KEY)
@@ -70,6 +79,44 @@ export default function CanCuonGiayPage() {
   })
   const inputRef                    = useRef<HTMLInputElement | null>(null)
   const kgInputRef                  = useRef<InputNumberRef>(null)
+
+  const { data: khsxPage } = useQuery({
+    queryKey: ['can-giay-khsx-list'],
+    queryFn: () => productionPlansApi.list({ page_size: 100 }).then(r => r.data),
+    staleTime: 60_000,
+  })
+  const khsxList = khsxPage?.items ?? []
+
+  const { data: lsxPaged } = useQuery({
+    queryKey: ['can-giay-lsx-list'],
+    queryFn: () => productionOrdersApi.list({ page_size: 500 }).then(r => r.data),
+    staleTime: 60_000,
+  })
+  const lsxAll = lsxPaged?.items ?? []
+
+  // LSX filtered to selected plan (for khsx mode)
+  const lsxForPlan = planLsxIds.length
+    ? lsxAll.filter(l => planLsxIds.includes(l.id))
+    : []
+
+  const handlePlanChange = async (planId: number | null) => {
+    setSelectedPlanId(planId)
+    setSelectedOrderId(null)
+    setPlanLsxIds([])
+    if (!planId) return
+    setLoadingPlanLsx(true)
+    try {
+      const plan = await productionPlansApi.get(planId).then(r => r.data)
+      const soLenhs = new Set((plan.lines ?? []).map(l => l.so_lenh).filter(Boolean))
+      const ids = lsxAll.filter(l => soLenhs.has(l.so_lenh)).map(l => l.id)
+      setPlanLsxIds(ids)
+      if (ids.length === 1) setSelectedOrderId(ids[0])
+    } catch {
+      message.error('Không thể tải LSX từ KHSX')
+    } finally {
+      setLoadingPlanLsx(false)
+    }
+  }
 
   const selectRoll = useCallback((r: GiayRoll) => {
     setRoll(r)
@@ -111,8 +158,8 @@ export default function CanCuonGiayPage() {
   })
 
   const canMut = useMutation({
-    mutationFn: ({ id, kg }: { id: number; kg: number }) =>
-      warehouseApi.canGiayRoll(id, kg).then(r => r.data),
+    mutationFn: ({ id, kg, orderId }: { id: number; kg: number; orderId?: number | null }) =>
+      warehouseApi.canGiayRoll(id, kg, orderId).then(r => r.data),
     onSuccess: (updated) => {
       const entry: HistoryEntry = {
         barcode: updated.barcode,
@@ -164,7 +211,7 @@ export default function CanCuonGiayPage() {
       message.error(`Số kg còn lại không được lớn hơn trọng lượng lúc nhập (${roll.trong_luong_ban_dau} kg).`)
       return
     }
-    canMut.mutate({ id: roll.id, kg: kgConLai })
+    canMut.mutate({ id: roll.id, kg: kgConLai, orderId: selectedOrderId })
   }, [canImport, roll, kgConLai, canMut])
 
   const handleBarcodeSubmit = useCallback((bc: string) => {
@@ -326,6 +373,90 @@ export default function CanCuonGiayPage() {
           />
         </Card>
       )}
+
+      {/* KHSX / LSX picker */}
+      <Card size="small" style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <BranchesOutlined style={{ color: '#1677ff' }} />
+          <Text strong style={{ fontSize: 14 }}>Lệnh sản xuất</Text>
+          {selectedOrderId && (
+            <Tag color="blue" style={{ marginLeft: 'auto' }}>
+              {lsxAll.find(l => l.id === selectedOrderId)?.so_lenh ?? `LSX #${selectedOrderId}`}
+            </Tag>
+          )}
+        </div>
+
+        <Segmented
+          block
+          value={orderMode}
+          onChange={v => {
+            setOrderMode(v as 'lsx' | 'khsx')
+            setSelectedPlanId(null)
+            setPlanLsxIds([])
+            setSelectedOrderId(null)
+          }}
+          options={[
+            { label: 'Theo KHSX', value: 'khsx' },
+            { label: 'Theo LSX', value: 'lsx' },
+          ]}
+          style={{ marginBottom: 10 }}
+        />
+
+        {orderMode === 'khsx' ? (
+          <>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="Chọn Kế hoạch SX..."
+              style={{ width: '100%', marginBottom: 8, fontSize: 16 }}
+              size="large"
+              allowClear
+              value={selectedPlanId}
+              onChange={handlePlanChange}
+              options={khsxList.map(p => ({ value: p.id, label: p.so_ke_hoach }))}
+            />
+            {selectedPlanId && (
+              <Select
+                showSearch
+                optionFilterProp="label"
+                placeholder={loadingPlanLsx ? 'Đang tải LSX...' : lsxForPlan.length ? 'Chọn Lệnh SX...' : 'Không có LSX'}
+                style={{ width: '100%', fontSize: 16 }}
+                size="large"
+                allowClear
+                loading={loadingPlanLsx}
+                disabled={loadingPlanLsx || !lsxForPlan.length}
+                value={selectedOrderId}
+                onChange={v => setSelectedOrderId(v ?? null)}
+                options={lsxForPlan.map(l => ({
+                  value: l.id,
+                  label: `${l.so_lenh}${l.ten_khach_hang ? ' — ' + l.ten_khach_hang : ''}`,
+                }))}
+              />
+            )}
+          </>
+        ) : (
+          <Select
+            showSearch
+            optionFilterProp="label"
+            placeholder="Tìm Lệnh SX..."
+            style={{ width: '100%', fontSize: 16 }}
+            size="large"
+            allowClear
+            value={selectedOrderId}
+            onChange={v => setSelectedOrderId(v ?? null)}
+            options={lsxAll.map(l => ({
+              value: l.id,
+              label: `${l.so_lenh}${l.ten_khach_hang ? ' — ' + l.ten_khach_hang : ''}`,
+            }))}
+          />
+        )}
+
+        {!selectedOrderId && (
+          <Text type="secondary" style={{ fontSize: 11, marginTop: 6, display: 'block' }}>
+            Không bắt buộc — chọn để ghi nhận chi phí theo lệnh SX
+          </Text>
+        )}
+      </Card>
 
       {/* Roll info + cân input */}
       {roll && (

@@ -46,6 +46,7 @@ class InventoryTransaction(Base):
     ton_sau_giao_dich: Mapped[Decimal] = mapped_column(Numeric(14, 3), default=0)
     chung_tu_loai: Mapped[str | None] = mapped_column(String(50))
     chung_tu_id: Mapped[int | None] = mapped_column(Integer)
+    production_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("production_orders.id", ondelete="SET NULL"), nullable=True, index=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

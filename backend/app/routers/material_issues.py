@@ -554,6 +554,7 @@ def _mi_to_dict(mi: MaterialIssue, db: Session) -> dict:
         "so_lenh": lsx.so_lenh if lsx else "",
         "warehouse_id": mi.warehouse_id,
         "ten_kho": wh.ten_kho if wh else "",
+        "ten_xuong": wh.phan_xuong_obj.ten_xuong if wh and wh.phan_xuong_obj else "",
         "phap_nhan_id": phap_nhan_id,
         "trang_thai": mi.trang_thai,
         "ghi_chu": mi.ghi_chu,

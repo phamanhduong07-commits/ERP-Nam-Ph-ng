@@ -317,6 +317,7 @@ export interface MaterialIssue {
   so_lenh: string
   warehouse_id: number
   ten_kho: string
+  ten_xuong?: string
   phap_nhan_id: number | null
   trang_thai: string
   ghi_chu: string | null
@@ -860,8 +861,8 @@ export const warehouseApi = {
     client.get<GiayRoll[]>('/warehouse/giay-rolls', { params }),
   getGiayRollByBarcode: (barcode: string) =>
     client.get<GiayRoll>(`/warehouse/giay-rolls/by-barcode/${encodeURIComponent(barcode)}`),
-  canGiayRoll: (rollId: number, kg_con_lai: number) =>
-    client.patch<GiayRoll>(`/warehouse/giay-rolls/${rollId}/can`, { kg_con_lai }),
+  canGiayRoll: (rollId: number, kg_con_lai: number, production_order_id?: number | null) =>
+    client.patch<GiayRoll>(`/warehouse/giay-rolls/${rollId}/can`, { kg_con_lai, production_order_id: production_order_id ?? null }),
   printGiayRollLabels: (grId: number) =>
     `/warehouse/giay-rolls/print/${grId}`,
   printGiayRollLabelOne: (rollId: number) =>

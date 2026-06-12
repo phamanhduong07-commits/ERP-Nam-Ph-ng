@@ -1223,6 +1223,7 @@ def get_giay_roll_by_barcode(
 
 class CanGiayRollIn(BaseModel):
     kg_con_lai: float
+    production_order_id: int | None = None
 
 
 @router.patch("/giay-rolls/{roll_id}/can")
@@ -1273,6 +1274,7 @@ def can_giay_roll(
                 bal.ton_luong,
                 "giay_rolls", roll.id, current_user.id,
                 paper_material_id=roll.paper_material_id,
+                production_order_id=body.production_order_id,
                 ghi_chu=f"Cân cuộn {roll.barcode}: còn lại {body.kg_con_lai} kg")
 
     db.commit()

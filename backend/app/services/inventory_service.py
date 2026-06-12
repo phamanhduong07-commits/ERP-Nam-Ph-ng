@@ -107,6 +107,7 @@ def log_tx(
     other_material_id: Optional[int] = None,
     product_id: Optional[int] = None,
     ghi_chu: Optional[str] = None,
+    production_order_id: Optional[int] = None,
 ) -> None:
     db.add(InventoryTransaction(
         warehouse_id=warehouse_id,
@@ -120,6 +121,7 @@ def log_tx(
         ton_sau_giao_dich=ton_sau,
         chung_tu_loai=chung_tu_loai,
         chung_tu_id=chung_tu_id,
+        production_order_id=production_order_id,
         ghi_chu=ghi_chu,
         created_by=created_by,
     ))
