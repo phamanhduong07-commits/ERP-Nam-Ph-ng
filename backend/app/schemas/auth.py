@@ -29,6 +29,8 @@ class UserInfo(BaseModel):
     machine_id: int | None
     phap_nhan_id: int | None = None
     permissions: list[str] = []
+    # Force NV đổi mật khẩu khi đăng nhập lần đầu (cấp tài khoản mới)
+    must_change_password: bool = False
 
     class Config:
         from_attributes = True

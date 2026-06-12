@@ -1,6 +1,6 @@
-import io
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from datetime import date
 import calendar
@@ -9,10 +9,56 @@ from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.hr import Employee, PayrollRun, AttendanceLog, RewardDiscipline, PayrollHoliday
 from app.services.hr_service import PayrollService
+from app.services.payroll_engine import calculate_payroll_for_month
 from app.routers.logistics_hr import calculate_trip_salary_allocations
 from decimal import Decimal
 
 router = APIRouter(prefix="/api/hr/payroll", tags=["HR Payroll Calculation"])
+
+
+# ═══════════════════════════════════════════════════════════════
+# Sprint D.3 — Engine tính lương sản phẩm (6 công thức)
+# ═══════════════════════════════════════════════════════════════
+class EngineCalcRequest(BaseModel):
+    nam: int = Field(ge=2020, le=2100)
+    thang: int = Field(ge=1, le=12)
+    bo_phan_id: Optional[int] = None
+    dry_run: bool = True  # preview không lưu
+
+
+@router.post("/engine/preview")
+def engine_preview(
+    body: EngineCalcRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU", "GIAM_DOC", "BGD")),
+):
+    """Engine tính lương sản phẩm theo Quy chế Điều 7-13.
+
+    `dry_run=True` mặc định → chỉ tính preview, không lưu DB.
+    Để chốt lương, gọi `/engine/commit`.
+    """
+    body.dry_run = True  # force dry-run cho preview endpoint
+    return calculate_payroll_for_month(
+        db, nam=body.nam, thang=body.thang,
+        bo_phan_id=body.bo_phan_id, dry_run=True,
+    )
+
+
+@router.post("/engine/commit")
+def engine_commit(
+    body: EngineCalcRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU")),
+):
+    """Commit tính lương → ghi vào PayrollRun (trạng thái 'du_thao').
+
+    Chỉ ADMIN/NHAN_SU. Nếu NV đã 'da_thanh_toan' thì skip (không tính lại).
+    """
+    result = calculate_payroll_for_month(
+        db, nam=body.nam, thang=body.thang,
+        bo_phan_id=body.bo_phan_id, dry_run=False,
+    )
+    return result
 
 
 def _d(value) -> Decimal:
@@ -73,7 +119,7 @@ def calculate_production_salary(
     from_date: date = Query(...),
     to_date: date = Query(...),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU")),
 ):
     return PayrollService.calculate_production_salary(db, from_date, to_date)
 
@@ -83,7 +129,7 @@ def generate_payroll(
     thang: int,
     nam: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU")),
 ):
     """
     Tính toán lương tự động cho tất cả nhân viên trong tháng
@@ -158,9 +204,8 @@ def generate_payroll(
         luong_co_ban_phu_cap = base_salary + phu_cap
         ngay_cong_nguyen_luong = attendance["cong"]
         gio_cong_thuc_te = attendance["gio"]
-        he_so = _d(getattr(emp, "he_so_ca_nhan", 1)) or Decimal("1")
         luong_theo_ngay_cong = (base_salary / Decimal("26")) * \
-            ngay_cong_nguyen_luong * he_so if base_salary > 0 else Decimal("0")
+            ngay_cong_nguyen_luong if base_salary > 0 else Decimal("0")
         hourly_rate = (base_salary / Decimal("26") / Decimal("8")) if base_salary > 0 else Decimal("0")
         ot_tien_ngay_thuong = hourly_rate * Decimal("1.5") * attendance["ot_weekday"]
         ot_tien_chu_nhat = hourly_rate * Decimal("2.0") * attendance["ot_sunday"]
@@ -206,7 +251,7 @@ def generate_payroll(
             tien_chuyen_hqcv_thanh_tich=tien_chuyen_hqcv_thanh_tich,
             tong_thu_nhap=tong_thu_nhap,
             thuong=tong_thuong,
-            tam_ung=Decimal("0"),
+            tam_ung=tong_phat,
             bao_hiem=bao_hiem,
             thuc_linh=thuc_linh,
             trang_thai="du_thao"
@@ -222,7 +267,7 @@ def get_payroll_summary(
     thang: int,
     nam: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU")),
 ):
     runs = db.query(PayrollRun).filter(
         PayrollRun.thang == thang,
@@ -280,81 +325,3 @@ def get_payroll_summary(
             "trang_thai": r.trang_thai
         })
     return result
-
-
-@router.post("/approve")
-def approve_payroll(
-    thang: int,
-    nam: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
-):
-    """Chốt bảng lương tháng — chuyển du_thao → da_chot."""
-    runs = db.query(PayrollRun).filter(
-        PayrollRun.thang == thang,
-        PayrollRun.nam == nam,
-        PayrollRun.trang_thai == "du_thao",
-    ).all()
-    if not runs:
-        raise HTTPException(400, f"Không có bảng lương nháp tháng {thang}/{nam}")
-    for r in runs:
-        r.trang_thai = "da_chot"
-    db.commit()
-    return {"status": "success", "count": len(runs), "message": f"Đã chốt {len(runs)} bản ghi lương tháng {thang}/{nam}"}
-
-
-@router.get("/export-excel")
-def export_payroll_excel(
-    thang: int,
-    nam: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_roles("ADMIN", "NHAN_SU_TO_TRUONG")),
-):
-    """Xuất bảng lương tháng ra Excel."""
-    from fastapi import HTTPException
-    from app.services.excel_export_service import build_xlsx
-    from app.models.system import ExcelTemplate
-
-    tpl = db.query(ExcelTemplate).filter(ExcelTemplate.ma_mau == "PAYROLL").first()
-    if not tpl:
-        raise HTTPException(404, "Chưa cấu hình mẫu Excel PAYROLL")
-
-    runs = db.query(PayrollRun).filter(
-        PayrollRun.thang == thang,
-        PayrollRun.nam == nam,
-    ).all()
-
-    items_data = []
-    for r in runs:
-        ot_total = float(
-            (r.ot_tien_ngay_thuong or Decimal("0"))
-            + (r.ot_tien_chu_nhat or Decimal("0"))
-            + (r.ot_tien_chu_nhat_tang_ca or Decimal("0"))
-            + (r.ot_tien_ngay_le or Decimal("0"))
-        )
-        items_data.append({
-            "ma_nv": r.employee.ma_nv if r.employee else "",
-            "ho_ten": r.employee.ho_ten if r.employee else "",
-            "chuc_vu": r.employee.chuc_vu.ten_chuc_vu if r.employee and r.employee.chuc_vu else "",
-            "luong_co_ban": float(r.luong_co_ban or 0),
-            "luong_san_pham": float(r.luong_san_pham or 0),
-            "luong_chuyen": float(r.luong_chuyen or 0),
-            "luong_theo_ngay_cong": float(r.luong_theo_ngay_cong or 0),
-            "phu_cap": float(r.phu_cap or 0),
-            "ot_total": ot_total,
-            "thuong": float(r.thuong or 0),
-            "tong_thu_nhap": float(r.tong_thu_nhap or 0),
-            "bao_hiem": float(r.bao_hiem or 0),
-            "tam_ung": float(r.tam_ung or 0),
-            "thuc_linh": float(r.thuc_linh or 0),
-            "trang_thai": r.trang_thai,
-        })
-
-    meta = {"document_number": f"Bảng lương tháng {thang:02d}/{nam}"}
-    xlsx_bytes = build_xlsx(tpl, items_data, meta, {})
-    filename = f"bang_luong_{thang:02d}_{nam}.xlsx"
-    return StreamingResponse(
-        iter([xlsx_bytes]),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )

@@ -64,6 +64,8 @@ class User(Base):
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     machine_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     lan_dang_nhap_cuoi: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Khi cấp tài khoản mới (random password), force NV đổi pass lần đầu login
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(

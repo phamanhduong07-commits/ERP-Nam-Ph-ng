@@ -1,40 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
-import {
-  Alert, Badge, Button, Card, Col, Progress, Row, Space, Statistic, Table, Tag, Tooltip, Typography,
-} from 'antd'
-import {
-  CarOutlined, EnvironmentOutlined, ReloadOutlined, ThunderboltOutlined,
-} from '@ant-design/icons'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, Badge, Button, Input, Select, Space, Tooltip, Typography } from 'antd'
+import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import client from '../../api/client'
-import EmptyState from "../../components/EmptyState"
-import PageLayout from '../../components/PageLayout'
+import GpsLiveMap, { type GpsMapVehicle } from '../../components/GpsLiveMap'
 
 const { Text } = Typography
 
-interface GpsVehicle {
-  gps_id: string
-  plate: string
-  lat: number | null
-  lng: number | null
-  speed: number
-  fuel_pct: number
-  driver_name: string
-  address: string
-  vehicle_type: string
-  capacity: string
-  km_today: number | null
-  km_total: number
-  time_update: string
-  is_stop: boolean
-  is_overspeed: boolean
-  stop_time: string
-  stop_counter: number
-  day_driving_time: number
-  status: 'moving' | 'stopped' | 'overspeed'
+interface GpsVehicle extends GpsMapVehicle {
   xe_id: number | null
   loai_xe_erp: string | null
-  trong_tai: number | null
   dinh_muc_dau: number | null
+  stop_counter: number | null
+  day_driving_time: number | null
 }
 
 interface GpsResponse {
@@ -46,13 +23,39 @@ interface GpsResponse {
   cache_age_seconds: number
 }
 
-const STATUS_CONFIG = {
-  moving: { color: '#52c41a', text: 'Đang chạy', badgeStatus: 'success' as const },
-  stopped: { color: '#faad14', text: 'Đứng', badgeStatus: 'warning' as const },
-  overspeed: { color: '#ff4d4f', text: 'Quá tốc', badgeStatus: 'error' as const },
-}
+type StatusFilter = 'all' | 'moving' | 'stopped' | 'overspeed' | 'offline'
 
 const REFRESH_INTERVAL = 30
+const STATUS_DOT_COLOR: Record<string, string> = {
+  moving: '#52c41a',
+  stopped: '#8c8c8c',
+  overspeed: '#ff4d4f',
+  offline: '#d9d9d9',
+}
+
+function isOffline(v: GpsVehicle): boolean {
+  if (!v.time_update) return true
+  // BM time format "yyyy/MM/dd HH:mm:ss" — naive parse, treat older than 30 min as offline
+  try {
+    const t = Date.parse(v.time_update.replace(/\//g, '-'))
+    if (Number.isNaN(t)) return false
+    return (Date.now() - t) / 60000 > 30
+  } catch {
+    return false
+  }
+}
+
+function getDisplayStatus(v: GpsVehicle): 'moving' | 'stopped' | 'overspeed' | 'offline' {
+  if (isOffline(v)) return 'offline'
+  return v.status
+}
+
+function timeShort(t?: string | null): string {
+  if (!t) return '—'
+  // BM format "2026/05/28 22:07:25" → "22:07:25"
+  const parts = t.split(' ')
+  return parts.length > 1 ? parts[1] : t
+}
 
 export default function GpsTrackingPage() {
   const [data, setData] = useState<GpsResponse | null>(null)
@@ -60,6 +63,15 @@ export default function GpsTrackingPage() {
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL)
   const [lastFetch, setLastFetch] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [focusedGpsId, setFocusedGpsId] = useState<string | null>(null)
+  const [focusTick, setFocusTick] = useState(0)
+  const focusVehicle = (gpsId: string) => {
+    setFocusedGpsId(gpsId)
+    setFocusTick(t => t + 1)
+  }
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -69,17 +81,15 @@ export default function GpsTrackingPage() {
       const res = await client.get<GpsResponse>('/gps/vehicles')
       const payload = res.data
       if (!payload || !Array.isArray(payload.vehicles)) {
-        throw new Error('Dữ liệu GPS không hợp lệ — thử khởi động lại backend')
+        throw new Error('Dữ liệu GPS không hợp lệ')
       }
       setData(payload)
       setError(null)
       setLastFetch(new Date())
       setCountdown(REFRESH_INTERVAL)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        ?? 'Không kết nối được GPS API'
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Không kết nối được GPS API'
       setError(msg)
-      console.error('GPS fetch error', err)
     } finally {
       setLoading(false)
     }
@@ -87,12 +97,10 @@ export default function GpsTrackingPage() {
 
   useEffect(() => {
     fetchData()
-
     timerRef.current = setInterval(fetchData, REFRESH_INTERVAL * 1000)
     countdownRef.current = setInterval(() => {
       setCountdown(prev => (prev <= 1 ? REFRESH_INTERVAL : prev - 1))
     }, 1000)
-
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
       if (countdownRef.current) clearInterval(countdownRef.current)
@@ -104,288 +112,269 @@ export default function GpsTrackingPage() {
     await fetchData()
   }
 
-  const openGpsMap = (vehicle: GpsVehicle) => {
-    if (vehicle.lat && vehicle.lng) {
-      window.open(
-        `https://maps.google.com/maps?q=${vehicle.lat},${vehicle.lng}&z=15`,
-        '_blank',
+  // Vehicle types for the filter dropdown
+  const vehicleTypes = useMemo(() => {
+    const set = new Set<string>()
+    data?.vehicles.forEach(v => v.vehicle_type && set.add(v.vehicle_type))
+    return Array.from(set).sort()
+  }, [data])
+
+  const filtered = useMemo(() => {
+    let list = data?.vehicles ?? []
+    if (statusFilter !== 'all') {
+      list = list.filter(v => getDisplayStatus(v) === statusFilter)
+    }
+    if (typeFilter !== 'all') {
+      list = list.filter(v => v.vehicle_type === typeFilter)
+    }
+    if (search.trim()) {
+      const term = search.trim().toLowerCase()
+      list = list.filter(v =>
+        v.plate.toLowerCase().includes(term) ||
+        (v.driver_name || '').toLowerCase().includes(term) ||
+        (v.address || '').toLowerCase().includes(term),
       )
     }
-  }
+    // Sort: moving > overspeed > stopped > offline; then by plate
+    const order: Record<string, number> = { moving: 0, overspeed: 1, stopped: 2, offline: 3 }
+    return [...list].sort((a, b) => {
+      const ta = order[getDisplayStatus(a)] ?? 9
+      const tb = order[getDisplayStatus(b)] ?? 9
+      if (ta !== tb) return ta - tb
+      return a.plate.localeCompare(b.plate)
+    })
+  }, [data, statusFilter, typeFilter, search])
 
-  const columns = [
-    {
-      title: 'Biển số',
-      dataIndex: 'plate',
-      key: 'plate',
-      width: 120,
-      render: (plate: string, record: GpsVehicle) => (
-        <Space direction="vertical" size={0}>
-          <Text strong style={{ fontSize: 15 }}>{plate}</Text>
-          {record.loai_xe_erp && (
-            <Text type="secondary" style={{ fontSize: 11 }}>{record.loai_xe_erp}</Text>
-          )}
-        </Space>
-      ),
-    },
-    {
-      title: 'Trạng thái',
-      dataIndex: 'status',
-      key: 'status',
-      width: 120,
-      render: (status: string, record: GpsVehicle) => {
-        const cfg = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG]
-        return (
-          <Space direction="vertical" size={2}>
-            <Badge status={cfg.badgeStatus} text={
-              <Text style={{ color: cfg.color, fontWeight: 600 }}>{cfg.text}</Text>
-            } />
-            {record.is_stop && record.stop_time && record.stop_time !== '00:00:00' && (
-              <Text type="secondary" style={{ fontSize: 11 }}>⏱ {record.stop_time}</Text>
-            )}
-          </Space>
-        )
-      },
-      filters: [
-        { text: 'Đang chạy', value: 'moving' },
-        { text: 'Đứng', value: 'stopped' },
-        { text: 'Quá tốc', value: 'overspeed' },
-      ],
-      onFilter: (value: unknown, record: GpsVehicle) => record.status === value,
-    },
-    {
-      title: 'Tốc độ',
-      dataIndex: 'speed',
-      key: 'speed',
-      width: 90,
-      sorter: (a: GpsVehicle, b: GpsVehicle) => a.speed - b.speed,
-      render: (speed: number, record: GpsVehicle) => (
-        <Text style={{ color: record.is_overspeed ? '#ff4d4f' : undefined, fontWeight: record.is_overspeed ? 700 : 400 }}>
-          {speed} km/h
-        </Text>
-      ),
-    },
-    {
-      title: 'Nhiên liệu',
-      dataIndex: 'fuel_pct',
-      key: 'fuel_pct',
-      width: 120,
-      sorter: (a: GpsVehicle, b: GpsVehicle) => a.fuel_pct - b.fuel_pct,
-      render: (fuel: number) => {
-        const pct = fuel ?? 0
-        const color = pct > 50 ? '#52c41a' : pct > 20 ? '#faad14' : '#ff4d4f'
-        return (
-          <Space direction="vertical" size={2} style={{ width: '100%' }}>
-            <Progress
-              percent={pct}
-              size="small"
-              strokeColor={color}
-              showInfo={false}
-              style={{ marginBottom: 0 }}
-            />
-            <Text style={{ fontSize: 12, color }}>{pct}%</Text>
-          </Space>
-        )
-      },
-    },
-    {
-      title: 'Lái xe',
-      dataIndex: 'driver_name',
-      key: 'driver_name',
-      width: 150,
-      render: (name: string) => name || <Text type="secondary">—</Text>,
-    },
-    {
-      title: 'Địa chỉ hiện tại',
-      dataIndex: 'address',
-      key: 'address',
-      ellipsis: true,
-      render: (address: string, record: GpsVehicle) => (
-        <Space>
-          <Tooltip title={address}>
-            <Text ellipsis style={{ maxWidth: 260 }}>{address || '—'}</Text>
-          </Tooltip>
-          {record.lat && record.lng && (
-            <Tooltip title="Xem trên Google Maps">
-              <Button
-                type="link"
-                size="small"
-                icon={<EnvironmentOutlined />}
-                onClick={() => openGpsMap(record)}
-                style={{ padding: 0 }}
-              />
-            </Tooltip>
-          )}
-        </Space>
-      ),
-    },
-    {
-      title: 'Km chuyến',
-      dataIndex: 'km_today',
-      key: 'km_today',
-      width: 110,
-      sorter: (a: GpsVehicle, b: GpsVehicle) => (a.km_today ?? 0) - (b.km_today ?? 0),
-      render: (km: number | null) => km != null ? `${km.toFixed(1)} km` : '—',
-    },
-    {
-      title: 'Km tổng',
-      dataIndex: 'km_total',
-      key: 'km_total',
-      width: 100,
-      sorter: (a: GpsVehicle, b: GpsVehicle) => (a.km_total ?? 0) - (b.km_total ?? 0),
-      render: (km: number) => km != null
-        ? <Text>{km.toLocaleString('vi-VN', { maximumFractionDigits: 0 })} km</Text>
-        : <Text type="secondary">—</Text>,
-    },
-    {
-      title: 'Lái ngày',
-      dataIndex: 'day_driving_time',
-      key: 'day_driving_time',
-      width: 90,
-      sorter: (a: GpsVehicle, b: GpsVehicle) => (a.day_driving_time ?? 0) - (b.day_driving_time ?? 0),
-      render: (minutes: number) => {
-        if (minutes == null) return <Text type="secondary">—</Text>
-        const h = Math.floor(minutes / 60)
-        const m = minutes % 60
-        const color = minutes >= 600 ? '#ff4d4f' : minutes >= 240 ? '#faad14' : undefined
-        return <Text style={{ color }}>{h > 0 ? `${h}g${m}p` : `${m}p`}</Text>
-      },
-    },
-    {
-      title: 'Số lần dừng',
-      dataIndex: 'stop_counter',
-      key: 'stop_counter',
-      width: 95,
-      sorter: (a: GpsVehicle, b: GpsVehicle) => (a.stop_counter ?? 0) - (b.stop_counter ?? 0),
-      render: (n: number) => n != null
-        ? <Text>{n} lần</Text>
-        : <Text type="secondary">—</Text>,
-    },
-    {
-      title: 'Loại xe',
-      dataIndex: 'vehicle_type',
-      key: 'vehicle_type',
-      width: 90,
-      render: (type: string, record: GpsVehicle) => (
-        <Space direction="vertical" size={0}>
-          <Text>{type}</Text>
-          {record.capacity && <Text type="secondary" style={{ fontSize: 11 }}>{record.capacity}</Text>}
-        </Space>
-      ),
-    },
-    {
-      title: 'Cập nhật',
-      dataIndex: 'time_update',
-      key: 'time_update',
-      width: 140,
-      render: (t: string) => <Text type="secondary" style={{ fontSize: 12 }}>{t}</Text>,
-    },
-  ]
-
-  const stats = data ?? { total: 0, moving: 0, stopped: 0, overspeed: 0 }
+  // Status counts from full data (not filtered)
+  const counts = useMemo(() => {
+    const c = { all: 0, moving: 0, stopped: 0, overspeed: 0, offline: 0 }
+    data?.vehicles.forEach(v => {
+      c.all += 1
+      c[getDisplayStatus(v)] += 1
+    })
+    return c
+  }, [data])
 
   return (
-    <PageLayout
-      title="Theo dõi xe GPS — Thời gian thực"
-      actions={
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', background: '#f0f2f5' }}>
+      {/* Thin top bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 16px', background: '#fff', borderBottom: '1px solid #e8e8e8',
+        height: 44, flexShrink: 0,
+      }}>
         <Space>
+          <Text strong style={{ fontSize: 14 }}>📡 Theo dõi xe GPS — Thời gian thực</Text>
+          {data && data.cache_age_seconds < REFRESH_INTERVAL && (
+            <Badge status="processing" color="green" text={<Text style={{ fontSize: 11 }}>Live</Text>} />
+          )}
+        </Space>
+        <Space size="small">
           {lastFetch && (
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              Cập nhật lúc {lastFetch.toLocaleTimeString('vi-VN')} · tự làm mới sau {countdown}s
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {lastFetch.toLocaleTimeString('vi-VN')} · auto {countdown}s
             </Text>
           )}
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={handleManualRefresh}
-            loading={loading}
-          >
+          <Button icon={<ReloadOutlined />} size="small" onClick={handleManualRefresh} loading={loading}>
             Làm mới
           </Button>
         </Space>
-      }
-    >
+      </div>
+
       {error && (
         <Alert
           type="error"
           message={`Lỗi GPS: ${error}`}
           showIcon
-          style={{ marginBottom: 12 }}
+          banner
           action={<Button size="small" onClick={handleManualRefresh}>Thử lại</Button>}
         />
       )}
 
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
-          <Card size="small">
-            <Statistic
-              title="Tổng số xe"
-              value={stats.total}
-              prefix={<CarOutlined />}
-              valueStyle={{ color: '#1677ff' }}
+      {/* Main split */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        {/* ─── Sidebar (left) ─── */}
+        <div style={{
+          width: 320, flexShrink: 0,
+          display: 'flex', flexDirection: 'column',
+          background: '#fff', borderRight: '1px solid #e8e8e8',
+        }}>
+          <div style={{ padding: 10, borderBottom: '1px solid #f0f0f0' }}>
+            <Input
+              prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+              placeholder="Tìm biển số, tài xế, địa chỉ..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              allowClear
+              size="small"
             />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card size="small">
-            <Statistic
-              title="Đang chạy"
-              value={stats.moving}
-              prefix={<ThunderboltOutlined />}
-              valueStyle={{ color: '#52c41a' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card size="small">
-            <Statistic
-              title="Đang đứng"
-              value={stats.stopped}
-              prefix={<CarOutlined />}
-              valueStyle={{ color: '#faad14' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card size="small">
-            <Statistic
-              title="Quá tốc độ"
-              value={stats.overspeed}
-              prefix={<ThunderboltOutlined />}
-              valueStyle={{ color: stats.overspeed > 0 ? '#ff4d4f' : '#888' }}
-            />
-          </Card>
-        </Col>
-      </Row>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <Select
+                size="small"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                style={{ flex: 1 }}
+                options={[
+                  { value: 'all', label: `Tất cả (${counts.all})` },
+                  { value: 'moving', label: `Đang chạy (${counts.moving})` },
+                  { value: 'stopped', label: `Đứng (${counts.stopped})` },
+                  { value: 'overspeed', label: `Quá tốc (${counts.overspeed})` },
+                  { value: 'offline', label: `Offline (${counts.offline})` },
+                ]}
+              />
+              <Select
+                size="small"
+                value={typeFilter}
+                onChange={setTypeFilter}
+                style={{ flex: 1 }}
+                options={[
+                  { value: 'all', label: 'Tất cả loại' },
+                  ...vehicleTypes.map(t => ({ value: t, label: t })),
+                ]}
+              />
+            </div>
+          </div>
 
-      <Card
-        size="small"
-        title={
-          <Space>
-            <span>Danh sách xe ({data?.vehicles?.length ?? 0})</span>
-            {data && data.cache_age_seconds < REFRESH_INTERVAL && (
-              <Tag color="green">Live</Tag>
+          {/* Table header */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '14px 1fr 60px 70px',
+            gap: 8, padding: '6px 10px', borderBottom: '1px solid #f0f0f0',
+            fontSize: 11, fontWeight: 600, color: '#8c8c8c',
+            background: '#fafafa',
+          }}>
+            <span />
+            <span>Biển số</span>
+            <span style={{ textAlign: 'right' }}>Tốc độ</span>
+            <span style={{ textAlign: 'right' }}>Thời gian</span>
+          </div>
+
+          {/* Vehicle list */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#bfbfbf', fontSize: 12 }}>
+                {loading ? 'Đang tải...' : 'Không có xe phù hợp'}
+              </div>
+            ) : (
+              filtered.map(v => {
+                const st = getDisplayStatus(v)
+                const selected = focusedGpsId === v.gps_id
+                return (
+                  <div
+                    key={v.gps_id}
+                    onClick={() => focusVehicle(v.gps_id)}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '14px 1fr 60px 70px',
+                      gap: 8,
+                      padding: '8px 10px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #f5f5f5',
+                      background: selected ? '#e6f4ff' : 'transparent',
+                      borderLeft: selected ? '3px solid #1677ff' : '3px solid transparent',
+                      alignItems: 'center',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = '#fafafa' }}
+                    onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <span style={{
+                      width: 10, height: 10, borderRadius: '50%',
+                      background: STATUS_DOT_COLOR[st],
+                      boxShadow: st === 'moving' ? '0 0 0 2px rgba(82,196,26,0.2)' : 'none',
+                    }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: '#262626' }}>
+                        {v.plate}
+                      </div>
+                      {v.driver_name && (
+                        <Tooltip title={v.driver_name}>
+                          <div style={{
+                            fontSize: 10, color: '#8c8c8c',
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          }}>
+                            {v.driver_name}
+                          </div>
+                        </Tooltip>
+                      )}
+                    </div>
+                    <span style={{
+                      textAlign: 'right',
+                      fontFamily: 'ui-monospace, monospace', fontSize: 12,
+                      color: v.is_overspeed ? '#ff4d4f' : '#262626',
+                      fontWeight: v.is_overspeed ? 700 : 400,
+                    }}>
+                      {(v.speed ?? 0).toFixed(0)}
+                    </span>
+                    <span style={{
+                      textAlign: 'right',
+                      fontFamily: 'ui-monospace, monospace', fontSize: 11,
+                      color: '#595959',
+                    }}>
+                      {timeShort(v.time_update)}
+                    </span>
+                  </div>
+                )
+              })
             )}
-          </Space>
-        }
-      >
-        <Table<GpsVehicle>
-          dataSource={data?.vehicles ?? []}
-          columns={columns}
-          rowKey="gps_id"
-          loading={loading && !data}
-          size="small"
-          pagination={false}
-          scroll={{ x: 1100 }}
-          rowClassName={(record) =>
-            record.is_overspeed ? 'gps-row-overspeed' : record.is_stop ? 'gps-row-stopped' : 'gps-row-moving'
-          }
-        />
-      </Card>
+          </div>
 
-      <style>{`
-        .gps-row-overspeed { background-color: #fff2f0 !important; }
-        .gps-row-stopped { background-color: #fffbe6 !important; }
-      `}</style>
-    </PageLayout>
+          {/* Bottom legend pills */}
+          <div style={{
+            display: 'flex', gap: 4, padding: '8px 10px',
+            borderTop: '1px solid #f0f0f0', background: '#fafafa',
+            justifyContent: 'space-between',
+          }}>
+            <LegendPill color="#1677ff" count={counts.all} label="Tất cả" active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
+            <LegendPill color="#52c41a" count={counts.moving} label="Chạy" active={statusFilter === 'moving'} onClick={() => setStatusFilter('moving')} />
+            <LegendPill color="#ff4d4f" count={counts.overspeed} label="Quá tốc" active={statusFilter === 'overspeed'} onClick={() => setStatusFilter('overspeed')} />
+            <LegendPill color="#8c8c8c" count={counts.stopped} label="Đứng" active={statusFilter === 'stopped'} onClick={() => setStatusFilter('stopped')} />
+            <LegendPill color="#d9d9d9" count={counts.offline} label="Offline" active={statusFilter === 'offline'} onClick={() => setStatusFilter('offline')} />
+          </div>
+        </div>
+
+        {/* ─── Map (right, fills rest) ─── */}
+        <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+          <GpsLiveMap
+            vehicles={filtered}
+            focusedGpsId={focusedGpsId}
+            focusTick={focusTick}
+            onMarkerClick={focusVehicle}
+            height="100%"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+interface LegendPillProps {
+  color: string
+  count: number
+  label: string
+  active?: boolean
+  onClick?: () => void
+}
+
+function LegendPill({ color, count, label, active, onClick }: LegendPillProps) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        padding: '4px 8px', borderRadius: 6,
+        background: active ? color : '#fff',
+        color: active ? '#fff' : '#262626',
+        border: `1px solid ${active ? color : '#e8e8e8'}`,
+        cursor: 'pointer',
+        minWidth: 48,
+        transition: 'all 0.15s',
+      }}
+    >
+      <span style={{
+        fontSize: 14, fontWeight: 700, lineHeight: 1,
+        fontFamily: 'ui-monospace, monospace',
+      }}>{count}</span>
+      <span style={{ fontSize: 9.5, marginTop: 2, lineHeight: 1 }}>{label}</span>
+    </div>
   )
 }

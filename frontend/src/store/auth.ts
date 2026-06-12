@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { UserInfo } from '../api/auth'
 import { storage } from '../utils/storage'
+import { connectSocket, disconnectSocket } from '../utils/socket'
 
 interface AuthState {
   token: string | null
@@ -28,9 +29,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.setItem('refresh_token', refreshToken)
     localStorage.setItem('user', JSON.stringify(user))
     set({ token, refreshToken, user })
+    // Sau login: connect socket (backend giờ bắt buộc token)
+    connectSocket()
   },
 
   logout: () => {
+    disconnectSocket()
     storage.clearAll()   // xóa token + refresh_token + user + toàn bộ ERP data
     set({ token: null, refreshToken: null, user: null })
   },

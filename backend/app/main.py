@@ -20,7 +20,7 @@ from app.routers import (
     suppliers, material_groups, other_materials, warehouses, users, tieu_chuan_ky_thuat,
     don_vi_tinh, vi_tri, xe, tai_xe, lo_xe, tinh_thanh, phuong_xa, don_gia_van_chuyen,
     production_orders, bom, production_plans, indirect_costs, addon_rates, permissions,
-    hr, logistics_hr, hr_payroll_calc, hr_reward, hr_self_service,
+    hr, logistics_hr, hr_payroll_calc, hr_reward, hr_self_service, hr_workflow, hr_benefits, hr_safety, hr_kpi, hr_reports, hr_production, hr_payroll_adjustments, hr_payroll_runs, hr_payroll_complaints, hr_my_payslip,
 )
 from app.routers import (
     phieu_phoi, cd2, warehouse, purchase_orders, purchase_returns,
@@ -51,6 +51,130 @@ from app.routers import fixed_assets as fixed_assets_router
 from app.routers import mrp as mrp_router
 from app.routers import gps as gps_router
 from app.routers.gps import gps_poller_loop
+
+
+async def benefit_birthday_loop():
+    """Cron: mỗi 6 giờ làm 2 việc:
+      1. Tự tạo BenefitRecord cho NV sinh nhật HÔM NAY (idempotent qua UNIQUE INDEX)
+      2. Ping HR (Socket.io) các sự kiện sắp tới: sinh nhật 3 ngày tới, HĐLĐ hết hạn 60 ngày
+    """
+    import asyncio as _aio
+    from datetime import date as _date, timedelta as _td
+    from sqlalchemy import extract
+    from app.database import SessionLocal as _SessionLocal
+    from app.models.hr import (
+        BenefitPolicy as _Policy, BenefitRecord as _Record, Employee as _Emp,
+        LaborContract as _Contract,
+    )
+
+    await _aio.sleep(30)  # đợi startup xong
+    while True:
+        try:
+            today = _date.today()
+            with _SessionLocal() as db:
+                # ─── 1. Auto tạo sinh nhật hôm nay ───
+                policy = db.query(_Policy).filter(
+                    _Policy.loai == "sinh_nhat",
+                    _Policy.is_active.is_(True),
+                ).first()
+                if policy:
+                    employees = db.query(_Emp).filter(
+                        _Emp.trang_thai == "dang_lam",
+                        _Emp.ngay_sinh.isnot(None),
+                        extract("month", _Emp.ngay_sinh) == today.month,
+                        extract("day", _Emp.ngay_sinh) == today.day,
+                    ).all()
+                    existing = {
+                        r.employee_id for r in db.query(_Record).filter(
+                            _Record.loai == "sinh_nhat",
+                            _Record.thang_ap_dung == today.month,
+                            _Record.nam_ap_dung == today.year,
+                        ).all()
+                    }
+                    created = 0
+                    for emp in employees:
+                        if emp.id in existing:
+                            continue
+                        if policy.ap_dung_cho == "female" and (emp.gioi_tinh or "").lower() != "nữ":
+                            continue
+                        if policy.ap_dung_cho == "male" and (emp.gioi_tinh or "").lower() != "nam":
+                            continue
+                        db.add(_Record(
+                            employee_id=emp.id, policy_id=policy.id,
+                            loai="sinh_nhat", ngay_su_kien=today,
+                            muc_tien=policy.muc_tien,
+                            ghi_chu=f"Sinh nhật {emp.ho_ten}",
+                            thang_ap_dung=today.month, nam_ap_dung=today.year,
+                            trang_thai="de_xuat",
+                        ))
+                        created += 1
+                    if created:
+                        db.commit()
+                        logger.info("Birthday auto-cron: created %s records for %s", created, today)
+
+                # ─── 2. Ping HR sự kiện sắp tới qua Socket.io ───
+                # Sinh nhật trong 3 ngày tới
+                upcoming_birthdays = []
+                for emp in db.query(_Emp).filter(
+                    _Emp.trang_thai == "dang_lam",
+                    _Emp.ngay_sinh.isnot(None),
+                ).all():
+                    if not emp.ngay_sinh:
+                        continue
+                    try:
+                        bd = _date(today.year, emp.ngay_sinh.month, emp.ngay_sinh.day)
+                    except ValueError:
+                        continue
+                    if bd < today:
+                        try:
+                            bd = _date(today.year + 1, emp.ngay_sinh.month, emp.ngay_sinh.day)
+                        except ValueError:
+                            continue
+                    delta = (bd - today).days
+                    if 1 <= delta <= 3:  # 1-3 ngày tới
+                        upcoming_birthdays.append({
+                            "ho_ten": emp.ho_ten,
+                            "ma_nv": emp.ma_nv,
+                            "con_lai_ngay": delta,
+                        })
+
+                # HĐLĐ hết hạn 60 ngày tới
+                expiring = []
+                deadline = today + _td(days=60)
+                for ct, emp in db.query(_Contract, _Emp).join(
+                    _Emp, _Emp.id == _Contract.employee_id,
+                ).filter(
+                    _Contract.trang_thai == "hieu_luc",
+                    _Contract.ngay_het_han.isnot(None),
+                    _Contract.ngay_het_han >= today,
+                    _Contract.ngay_het_han <= deadline,
+                ).all():
+                    expiring.append({
+                        "ho_ten": emp.ho_ten,
+                        "ma_nv": emp.ma_nv,
+                        "ngay_het_han": ct.ngay_het_han.isoformat() if ct.ngay_het_han else None,
+                        "con_lai_ngay": (ct.ngay_het_han - today).days if ct.ngay_het_han else None,
+                    })
+
+                # NOTE: KHÔNG emit qua Socket.io broadcast — gây leak PII vì
+                # mọi NV connected (kể cả công nhân/tài xế) đều nhận được payload
+                # chứa tên + HĐLĐ đồng nghiệp. Socket infra hiện chưa có room/JWT
+                # verify, không thể filter theo role.
+                #
+                # Thay thế: HR xem qua tab "Tổng quan" trong /hr/benefits (đã có
+                # endpoint /family-events với require_roles HR/Admin/BGD).
+                # Log internal để audit + nếu cần triển khai notification sau này
+                # sẽ làm qua REST endpoint /api/hr/notifications gated by role.
+                if upcoming_birthdays or expiring:
+                    logger.info(
+                        "HR daily summary [%s]: %d sinh nhật + %d HĐLĐ sắp hết hạn (xem dashboard /hr/benefits)",
+                        today, len(upcoming_birthdays), len(expiring),
+                    )
+
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Birthday/reminder cron error (retry 6h): %s", exc)
+        await _aio.sleep(6 * 3600)  # 6 giờ
+
 from app.models import gps as _gps_models  # noqa: F401 — ensures GpsSnapshot is in Base.metadata
 from app.routers import qc_giay_cuon as qc_giay_cuon_router
 from app.routers import hoa_don_dien_tu
@@ -116,14 +240,17 @@ async def lifespan(app: FastAPI):
     # ── Startup ───────────────────────────────────────────────────────────────
     _gps_task = asyncio.create_task(gps_poller_loop())
     _htcph_task = asyncio.create_task(run_daily_sync(_get_db))
+    _birthday_task = asyncio.create_task(benefit_birthday_loop())
     asyncio.create_task(_warmup_ollama())
     logger.info("GPS background poller scheduled")
     logger.info("HTCPH daily sync scheduled (next run: 02:00)")
+    logger.info("Birthday benefit cron scheduled (every 6h)")
     yield
     # ── Shutdown ──────────────────────────────────────────────────────────────
     _gps_task.cancel()
     _htcph_task.cancel()
-    for task in (_gps_task, _htcph_task):
+    _birthday_task.cancel()
+    for task in (_gps_task, _htcph_task, _birthday_task):
         try:
             await task
         except asyncio.CancelledError:
@@ -265,6 +392,16 @@ app.include_router(logistics_hr.router)
 app.include_router(hr_payroll_calc.router)
 app.include_router(hr_reward.router)
 app.include_router(hr_self_service.router)
+app.include_router(hr_workflow.router)
+app.include_router(hr_benefits.router)
+app.include_router(hr_safety.router)
+app.include_router(hr_kpi.router)
+app.include_router(hr_reports.router)
+app.include_router(hr_production.router)
+app.include_router(hr_payroll_adjustments.router)
+app.include_router(hr_payroll_runs.router)
+app.include_router(hr_payroll_complaints.router)
+app.include_router(hr_my_payslip.router)
 app.include_router(quality_control_router.router)
 app.include_router(maintenance_router.router)
 app.include_router(crm_router.router)

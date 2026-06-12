@@ -179,17 +179,29 @@ const PeriodClosingPage = lazy(() => import('./pages/accounting/PeriodClosingPag
 const OpeningBalancePage = lazy(() => import('./pages/accounting/OpeningBalancePage'))
 const HoaDonDienTuPage = lazy(() => import('./pages/accounting/HoaDonDienTuPage'))
 // HR
+const HRDashboardPage = lazy(() => import('./pages/hr/HRDashboardPage'))
+const HealthCheckPage = lazy(() => import('./pages/hr/HealthCheckPage'))
+const SafetyPage = lazy(() => import('./pages/hr/SafetyPage'))
+const KPIPage = lazy(() => import('./pages/hr/KPIPage'))
+const HRReportsPage = lazy(() => import('./pages/hr/HRReportsPage'))
+const HRProductionOutputPage = lazy(() => import('./pages/hr/ProductionOutputPage'))
+const PayrollAdjustmentsPage = lazy(() => import('./pages/hr/PayrollAdjustmentsPage'))
+const PayrollRunsPage = lazy(() => import('./pages/hr/PayrollRunsPage'))
+const PayrollComplaintsPage = lazy(() => import('./pages/hr/PayrollComplaintsPage'))
+const MyPayslipPage = lazy(() => import('./pages/hr/MyPayslipPage'))
 const EmployeeListPage = lazy(() => import('./pages/hr/EmployeeListPage'))
 const DepartmentPage = lazy(() => import('./pages/hr/DepartmentPage'))
 const PayrollConfigPage = lazy(() => import('./pages/hr/PayrollConfigPage'))
 const AttendancePage = lazy(() => import('./pages/hr/AttendancePage'))
-const PayrollPage = lazy(() => import('./pages/hr/PayrollPage'))
+// PayrollPage cũ — gỡ. Sprint D thay thế bằng /hr/payroll-runs (engine 6 công thức + workflow)
 const LogisticsPage = lazy(() => import('./pages/hr/LogisticsPage'))
 const LeaveApprovalPage = lazy(() => import('./pages/hr/LeaveApprovalPage'))
 const RewardDisciplinePage = lazy(() => import('./pages/hr/RewardDisciplinePage'))
 const EmployeeMobilePortal = lazy(() => import('./pages/hr/EmployeeMobilePortal'))
 const PermissionMatrixPage = lazy(() => import('./pages/hr/PermissionMatrixPage'))
 const TeamPermissionsPage = lazy(() => import('./pages/hr/TeamPermissionsPage'))
+const CheckInLocationsPage = lazy(() => import('./pages/hr/CheckInLocationsPage'))
+const BenefitsPage = lazy(() => import('./pages/hr/BenefitsPage'))
 const PrintTemplatePage = lazy(() => import('./pages/master/PrintTemplatePage'))
 const DocsPage = lazy(() => import('./pages/docs/DocsPage'))
 const GpsTrackingPage = lazy(() => import('./pages/logistics/GpsTrackingPage'))
@@ -440,10 +452,23 @@ export default function App() {
             <Route path="reports/vat-summary" element={<ErrorBoundary><VATSummaryPage /></ErrorBoundary>} />
             <Route path="reports/tax-trial-balance" element={<ErrorBoundary><TaxTrialBalancePage /></ErrorBoundary>} />
             <Route path="accounting/reports/production-costing" element={<ErrorBoundary><ProductionCostingPage /></ErrorBoundary>} />
+            <Route path="hr/dashboard" element={<ErrorBoundary><HRDashboardPage /></ErrorBoundary>} />
+            <Route path="hr/health-checks" element={<ErrorBoundary><HealthCheckPage /></ErrorBoundary>} />
+            <Route path="hr/safety" element={<ErrorBoundary><SafetyPage /></ErrorBoundary>} />
+            <Route path="hr/kpi" element={<ErrorBoundary><KPIPage /></ErrorBoundary>} />
+            <Route path="hr/reports" element={<ErrorBoundary><HRReportsPage /></ErrorBoundary>} />
+            <Route path="hr/production-output" element={<ErrorBoundary><HRProductionOutputPage /></ErrorBoundary>} />
+            <Route path="hr/payroll-adjustments" element={<ErrorBoundary><PayrollAdjustmentsPage /></ErrorBoundary>} />
+            <Route path="hr/payroll-runs" element={<ErrorBoundary><PayrollRunsPage /></ErrorBoundary>} />
+            <Route path="hr/payroll-complaints" element={<ErrorBoundary><PayrollComplaintsPage /></ErrorBoundary>} />
+            <Route path="portal/payslip" element={<ErrorBoundary><MyPayslipPage /></ErrorBoundary>} />
             <Route path="hr/employees" element={<ErrorBoundary><EmployeeListPage /></ErrorBoundary>} />
             <Route path="hr/attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
+            <Route path="hr/checkin-locations" element={<ErrorBoundary><CheckInLocationsPage /></ErrorBoundary>} />
+            <Route path="hr/benefits" element={<ErrorBoundary><BenefitsPage /></ErrorBoundary>} />
             <Route path="hr/departments" element={<ErrorBoundary><DepartmentPage /></ErrorBoundary>} />
-            <Route path="hr/payroll" element={<ErrorBoundary><PayrollPage /></ErrorBoundary>} />
+            {/* Redirect: /hr/payroll cũ → /hr/payroll-runs Sprint D (engine + workflow chốt + duyệt). Ngày lễ → /hr/payroll-config tab 5 */}
+            <Route path="hr/payroll" element={<Navigate to="/hr/payroll-runs" replace />} />
             <Route path="hr/payroll-config" element={<ErrorBoundary><PayrollConfigPage /></ErrorBoundary>} />
             <Route path="hr/logistics" element={<ErrorBoundary><LogisticsPage /></ErrorBoundary>} />
             <Route path="logistics/gps-tracking" element={<ErrorBoundary><GpsTrackingPage /></ErrorBoundary>} />

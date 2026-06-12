@@ -1,17 +1,17 @@
-import React, { useState } from 'react'
-import type { ApiError } from '../../api/types'
+import { useMemo, useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Card, Drawer, Form, Input, List, Select, Space, Table, Tabs, Typography, message, Row, Col, Tag, Avatar, InputNumber
+  Alert, Button, Card, Drawer, Input, InputNumber, Select, Space, Table, Typography, message, Row, Col, Tag, Avatar, Statistic, Tooltip, Badge,
 } from 'antd'
-import { PlusOutlined, EditOutlined, UserOutlined, SearchOutlined, DownloadOutlined, UploadOutlined, HistoryOutlined, FileProtectOutlined, WarningOutlined, MobileOutlined, LockOutlined, UnlockOutlined, KeyOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, UserOutlined, SearchOutlined, DownloadOutlined, UploadOutlined, WarningOutlined, MobileOutlined, LockOutlined, UnlockOutlined, TeamOutlined, CheckCircleOutlined, StopOutlined, IdcardOutlined, CaretDownOutlined } from '@ant-design/icons'
 import { hrApi, Employee } from '../../api/hr'
+import EmployeeProfileModal from '../../components/hr/EmployeeProfileModal'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { theoDoiApi } from '../../api/theoDoi'
 import { downloadTemplate } from '../../utils/excelUtils'
 import * as XLSX from 'xlsx'
 import dayjs from 'dayjs'
-import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
@@ -20,15 +20,28 @@ export default function EmployeeListPage() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Employee | null>(null)
   const [importOpen, setImportOpen] = useState(false)
-  const [importData, setImportData] = useState<Record<string, unknown>[]>([])
-  const [history, setHistory] = useState<Record<string, unknown>[]>([])
-  const [expiringContracts, setExpiringContracts] = useState<Record<string, unknown>[]>([])
-  const [form] = Form.useForm()
+  const [importData, setImportData] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState({
     phap_nhan_id: undefined as number | undefined,
     phan_xuong_id: undefined as number | undefined,
   })
+  const [boPhanFilter, setBoPhanFilter] = useState<number | undefined>()
+  const [trangThaiFilter, setTrangThaiFilter] = useState<string | undefined>()
+  const [accountFilter, setAccountFilter] = useState<'all' | 'has' | 'none'>('all')
+  // Quick filter từ URL — dashboard alert chip click vào sẽ kéo theo
+  const [quickFilter, setQuickFilter] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Đọc filter param từ URL khi mount (vd: ?filter=no_account)
+  useEffect(() => {
+    const f = searchParams.get('filter')
+    if (f) {
+      setQuickFilter(f)
+      // Map sang state filter cũ tương đương
+      if (f === 'no_account') setAccountFilter('none')
+    }
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Queries
   const { data: employees = [], isLoading } = useQuery({
@@ -43,7 +56,7 @@ export default function EmployeeListPage() {
 
   const { data: phanXuongList = [] } = useQuery({
     queryKey: ['phan-xuong-list'],
-    queryFn: () => theoDoiApi.listPhanXuong().then((r: { data: { id: number; ten_xuong?: string }[] }) => r.data),
+    queryFn: () => theoDoiApi.listPhanXuong().then((r: any) => r.data),
   })
 
   const { data: depts = [] } = useQuery({
@@ -62,25 +75,16 @@ export default function EmployeeListPage() {
   })
 
   // Mutations
-  const saveMut = useMutation({
-    mutationFn: (data: Partial<Employee>) => 
-      editing ? hrApi.updateEmployee(editing.id, data) : hrApi.createEmployee(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['hr-employees'] })
-      message.success(editing ? 'Đã cập nhật nhân viên' : 'Đã thêm nhân viên')
-      setOpen(false)
-      setEditing(null)
-      form.resetFields()
-    },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi lưu dữ liệu'),
-  })
-
+  // Note: Sprint A — saveMut removed, EmployeeProfileModal tự xử lý save logic.
   const issueAccMut = useMutation({
     mutationFn: (id: number) => hrApi.issueAccount(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['hr-employees'] })
-      message.success('Đã cấp tài khoản Mobile thành công (Mật khẩu: 123456)')
-    }
+      message.success('Đã cấp tài khoản Mobile thành công. Vui lòng liên hệ HR để nhận mật khẩu.', 6)
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.detail || 'Cấp tài khoản thất bại')
+    },
   })
 
   const toggleAccMut = useMutation({
@@ -91,116 +95,306 @@ export default function EmployeeListPage() {
     }
   })
 
+  // ─── Inline edit mutation: cập nhật 1 field bất kỳ của NV ───
+  const inlineEditMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Employee> }) =>
+      hrApi.updateEmployee(id, data),
+    onMutate: async ({ id, data }) => {
+      // Optimistic update — đổi cache trước khi API trả về
+      await qc.cancelQueries({ queryKey: ['hr-employees'] })
+      const prev = qc.getQueryData<Employee[]>(['hr-employees', search, filters])
+      qc.setQueryData<Employee[]>(['hr-employees', search, filters], (old) =>
+        (old || []).map(e => e.id === id ? { ...e, ...data } : e)
+      )
+      return { prev }
+    },
+    onError: (err: any, _vars, ctx) => {
+      // Rollback nếu fail
+      if (ctx?.prev) qc.setQueryData(['hr-employees', search, filters], ctx.prev)
+      message.error(err?.response?.data?.detail || 'Cập nhật thất bại')
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hr-employees'] })
+      message.success({ content: 'Đã lưu', duration: 1.5 })
+    },
+  })
+
   const openCreate = () => {
     setEditing(null)
-    form.resetFields()
     setOpen(true)
   }
 
   const openEdit = (emp: Employee) => {
     setEditing(emp)
-    form.setFieldsValue({
-      ...emp,
-      ngay_sinh: emp.ngay_sinh ? emp.ngay_sinh : undefined,
-      ngay_vao_lam: emp.ngay_vao_lam ? emp.ngay_vao_lam : undefined,
-    })
     setOpen(true)
+  }
+
+  // ─── Client-side filter (bộ phận / trạng thái / tài khoản) ───
+  // Set IDs NV có HĐ sắp hết hạn (cho quick filter)
+  const expiringEmpIds = useMemo(
+    () => new Set((expiring || []).map((c: any) => c.employee_id)),
+    [expiring]
+  )
+
+  const filteredEmployees = useMemo(() => {
+    return employees.filter(e => {
+      if (boPhanFilter && (e as any).bo_phan_id !== boPhanFilter) return false
+      if (trangThaiFilter && e.trang_thai !== trangThaiFilter) return false
+      if (accountFilter === 'has' && !(e as any).has_account) return false
+      if (accountFilter === 'none' && (e as any).has_account) return false
+      // ─── Quick filter từ Dashboard ───
+      if (quickFilter === 'contracts_expiring_60') {
+        if (!expiringEmpIds.has(e.id)) return false
+      }
+      if (quickFilter === 'missing_info') {
+        const missing = !e.cccd || !e.so_dien_thoai || !(e as any).so_so_bhxh
+        if (!missing) return false
+      }
+      return true
+    })
+  }, [employees, boPhanFilter, trangThaiFilter, accountFilter, quickFilter, expiringEmpIds])
+
+  // ─── Stats summary ───
+  const stats = useMemo(() => {
+    const total = employees.length
+    const dangLam = employees.filter(e => e.trang_thai === 'dang_lam').length
+    const daNghi = employees.filter(e => e.trang_thai === 'da_nghi').length
+    const hasAcc = employees.filter(e => (e as any).has_account).length
+    return { total, dangLam, daNghi, hasAcc }
+  }, [employees])
+
+  // ─── Helper: avatar màu deterministic theo họ tên ───
+  const getAvatarColor = (name: string) => {
+    const colors = ['#1677ff', '#13c2c2', '#52c41a', '#fa8c16', '#722ed1', '#eb2f96', '#faad14', '#a0d911']
+    let hash = 0
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0
+    return colors[Math.abs(hash) % colors.length]
+  }
+
+  const TRANG_THAI_META: Record<string, { color: string; label: string; dot: string }> = {
+    dang_lam: { color: 'success', label: 'Đang làm', dot: '#52c41a' },
+    tam_nghi: { color: 'warning', label: 'Tạm nghỉ', dot: '#faad14' },
+    da_nghi:  { color: 'default', label: 'Đã nghỉ',  dot: '#bfbfbf' },
   }
 
   const columns = [
     {
       title: 'Mã NV',
       dataIndex: 'ma_nv',
-      width: 100,
-      render: (v: string) => <Text strong style={{ color: '#1890ff' }}>{v}</Text>
-    },
-    {
-      title: 'Họ và tên',
-      dataIndex: 'ho_ten',
+      width: 92,
+      fixed: 'left' as const,
       render: (v: string, r: Employee) => (
-        <Space>
-          <Avatar icon={<UserOutlined />} src={undefined} size="small" />
-          <div>
-            <div style={{ fontWeight: 500 }}>{v}</div>
-            <div style={{ fontSize: '12px', color: '#8c8c8c' }}>{r.ten_chuc_vu || 'Chưa xếp chức vụ'}</div>
+        <a
+          onClick={() => openEdit(r)}
+          title="Xem chi tiết hồ sơ"
+          style={{
+            fontWeight: 600,
+            display: 'inline-block',
+            padding: '2px 8px',
+            background: '#f0f5ff',
+            color: '#1677ff',
+            borderRadius: 4,
+            fontSize: 12,
+            letterSpacing: 0.5,
+          }}
+        >
+          {v}
+        </a>
+      ),
+    },
+    {
+      title: 'Nhân viên',
+      dataIndex: 'ho_ten',
+      width: 280,
+      render: (v: string, r: Employee) => (
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+          onClick={() => openEdit(r)}
+          title="Xem chi tiết hồ sơ"
+        >
+          <Avatar style={{ backgroundColor: getAvatarColor(v || 'NV'), flexShrink: 0 }} size={36}>
+            {(v || 'NV').trim().split(/\s+/).slice(-2).map(w => w[0]).join('').toUpperCase()}
+          </Avatar>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                fontWeight: 600,
+                color: '#262626',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {v}
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: '#8c8c8c',
+                fontStyle: 'italic',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {r.ten_chuc_vu || '— chưa xếp chức vụ —'}
+            </div>
           </div>
-        </Space>
-      )
+        </div>
+      ),
     },
     {
-      title: 'Bộ phận',
-      dataIndex: 'ten_bo_phan',
-      width: 140,
+      title: <Tooltip title="Click cell để đổi nhanh">Bộ phận <EditOutlined style={{ fontSize: 10, opacity: 0.4 }} /></Tooltip>,
+      dataIndex: 'bo_phan_id',
+      width: 190,
+      render: (v: number, r: Employee) => (
+        <Select
+          value={v}
+          variant="borderless"
+          placeholder={<Text type="secondary">— chọn —</Text>}
+          style={{ width: '100%' }}
+          showSearch
+          allowClear
+          optionFilterProp="label"
+          options={(depts || []).map((d: any) => ({ value: d.id, label: d.ten_bo_phan }))}
+          onChange={(newId) => {
+            if (newId === v) return
+            inlineEditMut.mutate({ id: r.id, data: { bo_phan_id: newId ?? null } as any })
+          }}
+          suffixIcon={<CaretDownOutlined style={{ color: '#bfbfbf', fontSize: 11 }} />}
+          className="inline-edit-select"
+          popupMatchSelectWidth={250}
+        />
+      ),
     },
     {
-      title: 'Hệ số',
-      dataIndex: 'he_so_ca_nhan',
-      width: 80,
-      align: 'center' as const,
-      render: (v: number) => <Tag color="blue">{v}</Tag>
-    },
-    {
-      title: 'Xưởng / Nhà máy',
-      dataIndex: 'ten_phan_xuong',
-      width: 150,
-    },
-    {
-      title: 'Pháp nhân',
-      dataIndex: 'ten_phap_nhan',
-      width: 180,
-      ellipsis: true,
-    },
-    {
-      title: 'Số điện thoại',
-      dataIndex: 'so_dien_thoai',
-      width: 120,
-    },
-    {
-      title: 'Trạng thái',
-      dataIndex: 'trang_thai',
-      width: 120,
-      render: (v: string) => {
-        const color = v === 'dang_lam' ? 'green' : v === 'tam_nghi' ? 'orange' : 'red'
-        const label = v === 'dang_lam' ? 'Đang làm' : v === 'tam_nghi' ? 'Tạm nghỉ' : 'Đã nghỉ'
-        return <Tag color={color}>{label}</Tag>
-      }
-    },
-    {
-      title: 'Tài khoản Mobile',
+      title: <Tooltip title="Click cell để đổi nhanh">Pháp nhân <EditOutlined style={{ fontSize: 10, opacity: 0.4 }} /></Tooltip>,
+      dataIndex: 'phap_nhan_id',
       width: 160,
-      render: (_: unknown, r: Employee) => (
-        r.has_account ? (
-          <Space>
-            <Tag color={r.user_status ? 'cyan' : 'default'} icon={r.user_status ? <UnlockOutlined /> : <LockOutlined />}>
-              {r.username}
-            </Tag>
-            <Button 
-              size="small" 
-              type={r.user_status ? 'default' : 'primary'} 
-              danger={r.user_status}
-              icon={r.user_status ? <LockOutlined /> : <UnlockOutlined />} 
-              onClick={() => toggleAccMut.mutate(r.id)}
-            />
+      render: (v: number, r: Employee) => (
+        <Select
+          value={v}
+          variant="borderless"
+          placeholder={<Text type="secondary">— chọn —</Text>}
+          style={{ width: '100%' }}
+          showSearch
+          allowClear
+          optionFilterProp="label"
+          options={(phapNhanList || []).map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+          onChange={(newId) => {
+            if (newId === v) return
+            inlineEditMut.mutate({ id: r.id, data: { phap_nhan_id: newId ?? null } as any })
+          }}
+          suffixIcon={<CaretDownOutlined style={{ color: '#bfbfbf', fontSize: 11 }} />}
+          className="inline-edit-select"
+        />
+      ),
+    },
+    {
+      title: 'SĐT',
+      dataIndex: 'so_dien_thoai',
+      width: 115,
+      render: (v: string) => v ? <Text copyable={{ text: v, tooltips: ['Copy', 'Đã copy'] }} style={{ fontVariantNumeric: 'tabular-nums' }}>{v}</Text> : <Text type="secondary">—</Text>,
+    },
+    {
+      title: <Tooltip title="Click để chỉnh hệ số (0-10)">Hệ số <EditOutlined style={{ fontSize: 10, opacity: 0.4 }} /></Tooltip>,
+      dataIndex: 'he_so_ca_nhan',
+      width: 90,
+      align: 'center' as const,
+      render: (v: number, r: Employee) => (
+        <InputNumber
+          value={Number(v || 0)}
+          min={0}
+          max={10}
+          step={0.1}
+          precision={2}
+          size="small"
+          variant="borderless"
+          style={{ width: 72, textAlign: 'center', color: '#1677ff', fontWeight: 600 }}
+          controls={true}
+          className="inline-edit-number"
+          onBlur={(e) => {
+            const newVal = parseFloat((e.target as HTMLInputElement).value || '0')
+            if (Math.abs(newVal - Number(v || 0)) < 0.001) return
+            inlineEditMut.mutate({ id: r.id, data: { he_so_ca_nhan: newVal } as any })
+          }}
+          onPressEnter={(e) => (e.target as HTMLInputElement).blur()}
+        />
+      ),
+    },
+    {
+      title: <Tooltip title="Click để đổi trạng thái">Trạng thái <EditOutlined style={{ fontSize: 10, opacity: 0.4 }} /></Tooltip>,
+      dataIndex: 'trang_thai',
+      width: 140,
+      render: (v: string, r: Employee) => (
+        <Select
+          value={v}
+          variant="borderless"
+          style={{ width: '100%' }}
+          onChange={(newVal) => {
+            if (newVal === v) return
+            inlineEditMut.mutate({ id: r.id, data: { trang_thai: newVal } })
+          }}
+          options={[
+            { value: 'dang_lam', label: <Badge status="success" text="Đang làm" /> },
+            { value: 'tam_nghi', label: <Badge status="warning" text="Tạm nghỉ" /> },
+            { value: 'da_nghi',  label: <Badge status="default" text="Đã nghỉ" /> },
+          ]}
+          suffixIcon={<CaretDownOutlined style={{ color: '#bfbfbf', fontSize: 11 }} />}
+          className="inline-edit-select"
+        />
+      ),
+    },
+    {
+      title: 'Tài khoản',
+      key: 'account',
+      width: 150,
+      render: (_: any, r: Employee) => (
+        (r as any).has_account ? (
+          <Space size={4}>
+            <Tooltip title={(r as any).user_status ? 'Đang hoạt động' : 'Đã khóa'}>
+              <Tag
+                color={(r as any).user_status ? 'cyan' : 'default'}
+                icon={(r as any).user_status ? <UnlockOutlined /> : <LockOutlined />}
+                style={{ margin: 0, fontFamily: 'monospace' }}
+              >
+                {(r as any).username}
+              </Tag>
+            </Tooltip>
+            <Tooltip title={(r as any).user_status ? 'Khóa tài khoản' : 'Mở khóa'}>
+              <Button
+                size="small"
+                type="text"
+                danger={(r as any).user_status}
+                icon={(r as any).user_status ? <LockOutlined /> : <UnlockOutlined />}
+                onClick={() => toggleAccMut.mutate(r.id)}
+              />
+            </Tooltip>
           </Space>
         ) : (
-          <Button 
-            size="small" 
-            type="dashed" 
-            icon={<MobileOutlined />} 
+          <Button
+            size="small"
+            type="dashed"
+            icon={<MobileOutlined />}
             onClick={() => issueAccMut.mutate(r.id)}
+            loading={issueAccMut.isPending && issueAccMut.variables === r.id}
           >
-            Cấp tài khoản
+            Cấp TK
           </Button>
         )
-      )
+      ),
     },
     {
       title: '',
-      width: 60,
-      render: (_: unknown, r: Employee) => (
-        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-      )
-    }
+      key: 'actions',
+      width: 50,
+      fixed: 'right' as const,
+      render: (_: any, r: Employee) => (
+        <Tooltip title="Chỉnh sửa nhanh">
+          <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+        </Tooltip>
+      ),
+    },
   ]
 
   return (
@@ -208,47 +402,45 @@ export default function EmployeeListPage() {
       {expiring.length > 0 && (
         <Alert
           message={`Có ${expiring.length} nhân viên sắp hết hạn hợp đồng lao động!`}
-          description={expiring.map(c => `${c.ho_ten as string} (${dayjs(c.ngay_het_han as string).format('DD/MM/YYYY')})`).join(', ')}
+          description={expiring.map(c => `${c.ho_ten} (${dayjs(c.ngay_het_han).format('DD/MM/YYYY')})`).join(', ')}
           type="warning"
           showIcon
           icon={<WarningOutlined />}
           style={{ marginBottom: 16 }}
-          action={<Button size="small" type="primary" ghost>Xử lý ngay</Button>}
+          action={
+            <Button
+              size="small" type="primary" ghost
+              onClick={() => {
+                const first = expiring[0]
+                if (!first) return
+                const emp = employees.find(e => e.id === first.employee_id)
+                if (emp) openEdit(emp)
+                else message.info('Không tìm thấy nhân viên trong danh sách hiện tại')
+              }}
+            >
+              Xử lý ngay
+            </Button>
+          }
         />
       )}
-      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+      {/* ─── Title + Actions ─── */}
+      <Row justify="space-between" align="middle" style={{ marginBottom: 12 }}>
         <Col>
-          <Title level={4} style={{ margin: 0 }}>Danh sách nhân viên</Title>
-          <Text type="secondary">Quản lý hồ sơ nhân sự của 3 pháp nhân và 4 xưởng</Text>
+          <Title level={4} style={{ margin: 0 }}>
+            <TeamOutlined style={{ marginRight: 8, color: '#1677ff' }} />
+            Danh sách nhân viên
+          </Title>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            Quản lý hồ sơ nhân sự — click vào tên hoặc mã NV để xem chi tiết
+          </Text>
         </Col>
         <Col>
           <Space>
-            <Input
-              placeholder="Tìm tên, mã NV..."
-              prefix={<SearchOutlined />}
-              style={{ width: 200 }}
-              onPressEnter={(e: React.KeyboardEvent<HTMLInputElement>) => setSearch((e.target as HTMLInputElement).value)}
-              onBlur={(e: React.FocusEvent<HTMLInputElement>) => setSearch(e.target.value)}
-            />
-            <Select
-              placeholder="Chọn pháp nhân"
-              style={{ width: 180 }}
-              allowClear
-              options={(phapNhanList || []).map((p) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
-              onChange={v => setFilters(f => ({ ...f, phap_nhan_id: v }))}
-            />
-            <Select
-              placeholder="Chọn xưởng"
-              style={{ width: 150 }}
-              allowClear
-              options={(phanXuongList || []).map((p) => ({ value: p.id, label: p.ten_xuong }))}
-              onChange={v => setFilters(f => ({ ...f, phan_xuong_id: v }))}
-            />
-            <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
-              Import Excel
-            </Button>
             <Button icon={<DownloadOutlined />} onClick={() => downloadTemplate('employee')}>
               Tải file mẫu
+            </Button>
+            <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
+              Import Excel
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               Thêm nhân viên
@@ -257,175 +449,218 @@ export default function EmployeeListPage() {
         </Col>
       </Row>
 
+      {/* ─── Stats cards ─── */}
+      <Row gutter={12} style={{ marginBottom: 12 }}>
+        <Col xs={12} sm={6}>
+          <Card size="small" styles={{ body: { padding: '10px 14px' } }}>
+            <Statistic
+              title={<Text style={{ fontSize: 12, color: '#8c8c8c' }}>Tổng nhân viên</Text>}
+              value={stats.total}
+              valueStyle={{ fontSize: 22, color: '#1677ff', fontWeight: 600 }}
+              prefix={<TeamOutlined style={{ fontSize: 16 }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={6}>
+          <Card size="small" styles={{ body: { padding: '10px 14px' } }}>
+            <Statistic
+              title={<Text style={{ fontSize: 12, color: '#8c8c8c' }}>Đang làm việc</Text>}
+              value={stats.dangLam}
+              valueStyle={{ fontSize: 22, color: '#52c41a', fontWeight: 600 }}
+              prefix={<CheckCircleOutlined style={{ fontSize: 16 }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={6}>
+          <Card size="small" styles={{ body: { padding: '10px 14px' } }}>
+            <Statistic
+              title={<Text style={{ fontSize: 12, color: '#8c8c8c' }}>Đã nghỉ</Text>}
+              value={stats.daNghi}
+              valueStyle={{ fontSize: 22, color: '#bfbfbf', fontWeight: 600 }}
+              prefix={<StopOutlined style={{ fontSize: 16 }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={6}>
+          <Card size="small" styles={{ body: { padding: '10px 14px' } }}>
+            <Statistic
+              title={<Text style={{ fontSize: 12, color: '#8c8c8c' }}>Đã cấp tài khoản</Text>}
+              value={stats.hasAcc}
+              suffix={<Text type="secondary" style={{ fontSize: 13 }}>/ {stats.total}</Text>}
+              valueStyle={{ fontSize: 22, color: '#13c2c2', fontWeight: 600 }}
+              prefix={<IdcardOutlined style={{ fontSize: 16 }} />}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* ─── Filters ─── */}
+      <Card size="small" style={{ marginBottom: 12 }} styles={{ body: { padding: 10 } }}>
+        <Space wrap size={8}>
+          <Input
+            placeholder="Tìm tên, mã NV..."
+            prefix={<SearchOutlined />}
+            style={{ width: 220 }}
+            allowClear
+            onPressEnter={(e: any) => setSearch(e.target.value)}
+            onBlur={(e: any) => setSearch(e.target.value)}
+            onChange={(e: any) => { if (!e.target.value) setSearch('') }}
+          />
+          <Select
+            placeholder="Pháp nhân"
+            style={{ width: 160 }}
+            allowClear
+            options={(phapNhanList || []).map((p: any) => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+            onChange={v => setFilters(f => ({ ...f, phap_nhan_id: v }))}
+          />
+          <Select
+            placeholder="Bộ phận"
+            style={{ width: 180 }}
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            options={(depts || []).map((d: any) => ({ value: d.id, label: d.ten_bo_phan }))}
+            value={boPhanFilter}
+            onChange={setBoPhanFilter}
+          />
+          <Select
+            placeholder="Trạng thái"
+            style={{ width: 130 }}
+            allowClear
+            value={trangThaiFilter}
+            onChange={setTrangThaiFilter}
+            options={[
+              { value: 'dang_lam', label: '● Đang làm' },
+              { value: 'tam_nghi', label: '● Tạm nghỉ' },
+              { value: 'da_nghi', label: '● Đã nghỉ' },
+            ]}
+          />
+          <Select
+            style={{ width: 150 }}
+            value={accountFilter}
+            onChange={setAccountFilter}
+            options={[
+              { value: 'all', label: 'Tất cả tài khoản' },
+              { value: 'has', label: '✓ Đã cấp TK' },
+              { value: 'none', label: '✗ Chưa cấp TK' },
+            ]}
+          />
+          {(boPhanFilter || trangThaiFilter || accountFilter !== 'all' || filters.phap_nhan_id || search) && (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => {
+                setBoPhanFilter(undefined)
+                setTrangThaiFilter(undefined)
+                setAccountFilter('all')
+                setFilters({ phap_nhan_id: undefined, phan_xuong_id: undefined })
+                setSearch('')
+              }}
+            >
+              Xóa bộ lọc
+            </Button>
+          )}
+          <Text type="secondary" style={{ marginLeft: 'auto', fontSize: 13 }}>
+            Hiển thị <b>{filteredEmployees.length}</b> / {stats.total} nhân viên
+          </Text>
+        </Space>
+      </Card>
+
+      {/* ─── Quick filter banner (từ Dashboard alert) ─── */}
+      {quickFilter && (
+        <Alert
+          type="info" showIcon
+          style={{ marginBottom: 12 }}
+          message={
+            <Space>
+              <span>
+                Đang lọc theo:{' '}
+                <strong>
+                  {quickFilter === 'no_account' ? 'Nhân viên chưa được cấp tài khoản đăng nhập'
+                    : quickFilter === 'contracts_expiring_60' ? 'Hợp đồng lao động sắp hết hạn trong 60 ngày'
+                    : quickFilter === 'missing_info' ? 'Hồ sơ chưa đầy đủ (thiếu CCCD/SĐT/BHXH)'
+                    : quickFilter}
+                </strong>
+              </span>
+              <Button size="small" type="link" onClick={() => {
+                setQuickFilter(null)
+                setAccountFilter('all')
+                setSearchParams({})
+              }}>
+                ✕ Bỏ lọc nhanh
+              </Button>
+            </Space>
+          }
+        />
+      )}
+
+      {/* ─── Table ─── */}
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
-                    locale={{ emptyText: <EmptyState size="small" preset="customer" /> }}
-                    dataSource={employees}
+          dataSource={filteredEmployees}
           columns={columns}
           rowKey="id"
           loading={isLoading}
-          size="small"
-          pagination={{ pageSize: 20 }}
-          scroll={{ x: 1000 }}
+          size="middle"
+          pagination={{
+            pageSize: 25,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 25, 50, 100],
+            showTotal: (total, range) => `${range[0]}–${range[1]} / ${total} nhân viên`,
+            size: 'default',
+          }}
+          scroll={{ x: 1100 }}
+          rowClassName={(r) => r.trang_thai === 'da_nghi' ? 'opacity-row' : ''}
         />
       </Card>
+      <style>{`
+        .opacity-row { opacity: 0.55; }
+        .opacity-row:hover { opacity: 1; }
 
-      <Drawer
-        title={editing ? 'Chỉnh sửa hồ sơ' : 'Thêm nhân viên mới'}
-        width={720}
-        open={open}
-        onClose={() => setOpen(false)}
-        footer={
-          <Space style={{ float: 'right' }}>
-            <Button onClick={() => setOpen(false)}>Huỷ</Button>
-            <Button type="primary" loading={saveMut.isPending} onClick={() => form.submit()}>
-              Lưu hồ sơ
-            </Button>
-          </Space>
+        /* ─── Inline edit: hint visual để biết cell click được ─── */
+        .inline-edit-select.ant-select .ant-select-selector,
+        .inline-edit-number .ant-input-number-input-wrap input {
+          background: #fafafa !important;
+          border: 1px dashed transparent !important;
+          border-radius: 4px;
+          transition: all 0.15s;
         }
-      >
-        <Tabs items={[
-          {
-            key: 'info',
-            label: <span><UserOutlined /> Thông tin chung</span>,
-            children: (
-              <Form
-                form={form}
-                layout="vertical"
-                onFinish={v => saveMut.mutate(v)}
-                initialValues={{ trang_thai: 'dang_lam' }}
-              >
-                <Row gutter={16}>
-                  <Col span={8}>
-                    <Form.Item name="ma_nv" label="Mã nhân viên" rules={[{ required: true, message: 'Nhập mã NV' }]}>
-                      <Input placeholder="VD: NV001" disabled={!!editing} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={16}>
-                    <Form.Item name="ho_ten" label="Họ và tên" rules={[{ required: true, message: 'Nhập họ tên' }]}>
-                      <Input placeholder="Nguyễn Văn A" />
-                    </Form.Item>
-                  </Col>
-                </Row>
+        .inline-edit-select.ant-select:hover .ant-select-selector,
+        .inline-edit-number:hover .ant-input-number-input-wrap input {
+          background: #e6f4ff !important;
+          border-color: #91caff !important;
+        }
+        .inline-edit-select.ant-select.ant-select-focused .ant-select-selector,
+        .inline-edit-number.ant-input-number-focused .ant-input-number-input-wrap input {
+          background: #fff !important;
+          border-color: #1677ff !important;
+        }
+        /* Caret luôn hiện rõ (không chỉ khi hover như AntD default) */
+        .inline-edit-select.ant-select .ant-select-arrow {
+          opacity: 0.7;
+          right: 8px;
+        }
+        .inline-edit-select.ant-select:hover .ant-select-arrow {
+          opacity: 1;
+        }
+        /* InputNumber: hiện cả 2 mũi tên lên xuống (controls) cho rõ là editable */
+        .inline-edit-number .ant-input-number-handler-wrap {
+          opacity: 0.5;
+        }
+        .inline-edit-number:hover .ant-input-number-handler-wrap {
+          opacity: 1;
+        }
+      `}</style>
 
-                <Row gutter={16}>
-                  <Col span={8}>
-                    <Form.Item name="ngay_sinh" label="Ngày sinh">
-                      <Input type="date" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={8}>
-                    <Form.Item name="gioi_tinh" label="Giới tính">
-                      <Select options={[{ value: 'Nam', label: 'Nam' }, { value: 'Nữ', label: 'Nữ' }]} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={8}>
-                    <Form.Item name="so_dien_thoai" label="Số điện thoại">
-                      <Input />
-                    </Form.Item>
-                  </Col>
-                </Row>
-
-                <Title level={5} style={{ marginTop: 16 }}>Thông tin tổ chức</Title>
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item name="phap_nhan_id" label="Pháp nhân (Công ty ký HĐ)">
-                      <Select options={phapNhanList.map(p => ({ value: p.id, label: p.ten_phap_nhan }))} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item name="phan_xuong_id" label="Xưởng / Nhà máy">
-                      <Select options={phanXuongList.map((p) => ({ value: p.id, label: p.ten_xuong }))} />
-                    </Form.Item>
-                  </Col>
-                </Row>
-
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item name="bo_phan_id" label="Phòng ban / Bộ phận">
-                      <Select options={(depts || []).map((d) => ({ value: d.id, label: d.ten_bo_phan }))} />
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item name="chuc_vu_id" label="Chức vụ">
-                      <Select options={(positions || []).map((p) => ({ value: p.id, label: p.ten_chuc_vu }))} />
-                    </Form.Item>
-                  </Col>
-                </Row>
-
-                <Row gutter={16}>
-                  <Col span={8}>
-                    <Form.Item name="ngay_vao_lam" label="Ngày vào làm">
-                      <Input type="date" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={8}>
-                    <Form.Item name="he_so_ca_nhan" label="Hệ số cá nhân (Điều 11)" rules={[{ required: true }]}>
-                      <InputNumber step={0.1} min={1.0} max={3.0} style={{ width: '100%' }} placeholder="VD: 1.7" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={8}>
-                    <Form.Item name="trang_thai" label="Trạng thái">
-                      <Select options={[
-                        { value: 'dang_lam', label: 'Đang làm' },
-                        { value: 'tam_nghi', label: 'Tạm nghỉ' },
-                        { value: 'da_nghi', label: 'Đã nghỉ' },
-                      ]} />
-                    </Form.Item>
-                  </Col>
-                </Row>
-
-                <Row gutter={16}>
-                  <Col span={8}>
-                    <Form.Item name="ma_van_tay" label="Mã vân tay">
-                      <Input placeholder="ID trên máy chấm công" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={16}>
-                    <Form.Item name="user_id" label="Liên kết tài khoản hệ thống">
-                        <Select placeholder="Chọn tài khoản..." allowClear>
-                          {/* Data would come from UserList query */}
-                        </Select>
-                    </Form.Item>
-                  </Col>
-                </Row>
-              </Form>
-            )
-          },
-          {
-            key: 'history',
-            label: <span><HistoryOutlined /> Lịch sử thay đổi</span>,
-            disabled: !editing,
-            children: (
-              <List
-                dataSource={history}
-                renderItem={(item: Record<string, unknown>) => (
-                  <List.Item>
-                    <List.Item.Meta
-                      title={<Text strong>{item.loai === 'he_so' ? 'Thay đổi Hệ số cá nhân' : String(item.loai ?? '')}</Text>}
-                      description={
-                        <div>
-                          <Tag color="orange">{String(item.gia_tri_cu ?? '')}</Tag> {'->'} <Tag color="green">{String(item.gia_tri_moi ?? '')}</Tag>
-                          <br />
-                          <Text type="secondary" style={{ fontSize: '12px' }}>
-                            {dayjs(item.created_at as string).format('DD/MM/YYYY HH:mm')} - Lý do: {String(item.ly_do ?? '')}
-                          </Text>
-                        </div>
-                      }
-                    />
-                  </List.Item>
-                )}
-              />
-            )
-          },
-          {
-            key: 'docs',
-            label: <span><FileProtectOutlined /> Hồ sơ số hóa</span>,
-            disabled: !editing,
-            children: <div style={{ textAlign: 'center', padding: 40 }}><Text type="secondary">Tính năng lưu trữ hồ sơ quét đang được triển khai...</Text></div>
-          }
-        ]} />
-      </Drawer>
+      <EmployeeProfileModal
+        open={open}
+        employee={editing}
+        onClose={() => { setOpen(false); setEditing(null) }}
+        onSaved={(emp) => {
+          qc.invalidateQueries({ queryKey: ["hr-employees"] })
+          setEditing(emp)
+        }}
+      />
 
       <Drawer
         title="Xem trước dữ liệu Import Nhân viên"
@@ -451,15 +686,15 @@ export default function EmployeeListPage() {
                 // Giả lập gửi lên API
                 try {
                   await hrApi.bulkCreateEmployees(validData)
-                  if (validData.some((row) => (row as Record<string, unknown>).luong_co_ban || (row as Record<string, unknown>).phu_cap_chuyen_can || (row as Record<string, unknown>).phu_cap_trach_nhiem || (row as Record<string, unknown>).phu_cap_nha_o_com || (row as Record<string, unknown>).phu_cap_dien_thoai || (row as Record<string, unknown>).phu_cap_khac)) {
+                  if (validData.some((row: any) => row.luong_co_ban || row.phu_cap_chuyen_can || row.phu_cap_trach_nhiem || row.phu_cap_nha_o_com || row.phu_cap_dien_thoai || row.phu_cap_khac)) {
                     await hrApi.importContractAllowances(validData)
                   }
                   message.success(`Đã import thành công ${validData.length} nhân viên`)
                   setImportOpen(false)
                   setImportData([])
                   qc.invalidateQueries({ queryKey: ['hr-employees'] })
-                } catch (e: unknown) {
-                  message.error((e as ApiError)?.response?.data?.detail || 'Import nhan vien that bai')
+                } catch (e: any) {
+                  message.error(e?.response?.data?.detail?.message || e?.response?.data?.detail || 'Import nhan vien that bai')
                 }
               }}
             >
@@ -486,15 +721,14 @@ export default function EmployeeListPage() {
                   const data = XLSX.utils.sheet_to_json(ws)
                   
                   // Validation logic
-                  const validated = data.map((row: unknown) => {
-                    const r = row as Record<string, unknown>
+                  const validated = data.map((row: any) => {
                     let error = ''
-                    if (!r.ma_nv) error = 'Thiếu mã nhân viên'
-                    if (!r.ho_ten) error = 'Thiếu họ tên'
-                    if (r.he_so_ca_nhan && (Number(r.he_so_ca_nhan) < 1 || Number(r.he_so_ca_nhan) > 3)) error = 'Hệ số phải từ 1.0 - 3.0'
+                    if (!row.ma_nv) error = 'Thiếu mã nhân viên'
+                    if (!row.ho_ten) error = 'Thiếu họ tên'
+                    if (row.he_so_ca_nhan && (row.he_so_ca_nhan < 1 || row.he_so_ca_nhan > 3)) error = 'Hệ số phải từ 1.0 - 3.0'
                     
                     return {
-                      ...r,
+                      ...row,
                       _error: error,
                       _status: error ? 'error' : 'success'
                     }
@@ -512,8 +746,8 @@ export default function EmployeeListPage() {
           dataSource={importData}
           pagination={false}
           columns={[
-            { title: 'Trạng thái', dataIndex: '_status', width: 100, render: (v: string, r: Record<string, unknown>) => (
-              <Tag color={v === 'success' ? 'green' : 'red'}>{v === 'success' ? 'Hợp lệ' : r._error as string}</Tag>
+            { title: 'Trạng thái', dataIndex: '_status', width: 100, render: (v, r) => (
+              <Tag color={v === 'success' ? 'green' : 'red'}>{v === 'success' ? 'Hợp lệ' : r._error}</Tag>
             )},
             { title: 'Mã NV', dataIndex: 'ma_nv' },
             { title: 'Họ tên', dataIndex: 'ho_ten' },

@@ -227,15 +227,25 @@ function buildNavItems(queueCount: number): NavItem[] {
       flyoutSections: [
         {
           items: [
+            { key: '/hr/dashboard', to: '/hr/dashboard', label: <Link to="/hr/dashboard">📊 Dashboard HR</Link> },
             { key: '/hr/employees', to: '/hr/employees', label: <Link to="/hr/employees">Hồ sơ nhân viên</Link>, permissions: ['hr.view', 'hr.employees'] },
             { key: '/hr/departments', to: '/hr/departments', label: <Link to="/hr/departments">Cơ cấu tổ chức</Link>, permissions: ['hr.departments'] },
             { key: '/hr/permission-matrix', to: '/hr/permission-matrix', label: <Link to="/hr/permission-matrix">Ma trận phân quyền</Link>, permissions: ['permission.view', 'permission.manage'] },
             { key: '/hr/team-permissions', to: '/hr/team-permissions', label: <Link to="/hr/team-permissions">🔑 Quyền cá nhân (Team)</Link>, permissions: ['team.manage_permissions'] },
             { key: '/hr/attendance', to: '/hr/attendance', label: <Link to="/hr/attendance">Chấm công & Đơn từ</Link>, permissions: ['hr.attendance'] },
-            { key: '/hr/payroll', to: '/hr/payroll', label: <Link to="/hr/payroll">Bảng lương sản phẩm</Link>, permissions: ['hr.payroll'] },
-            { key: '/hr/payroll-config', to: '/hr/payroll-config', label: <Link to="/hr/payroll-config">Cấu hình hệ số lương</Link>, permissions: ['hr.payroll_config'] },
+            { key: '/hr/checkin-locations', to: '/hr/checkin-locations', label: <Link to="/hr/checkin-locations">📍 Địa điểm chấm công</Link>, permissions: ['hr.attendance'] },
             { key: '/hr/approvals', to: '/hr/approvals', label: <Link to="/hr/approvals">📝 Phê duyệt đơn từ</Link>, permissions: ['hr.approvals'] },
+            { key: '/hr/production-output', to: '/hr/production-output', label: <Link to="/hr/production-output">📦 Sản lượng tháng</Link>, permissions: ['hr.payroll'] },
+            { key: '/hr/payroll-adjustments', to: '/hr/payroll-adjustments', label: <Link to="/hr/payroll-adjustments">💰 Phụ cấp & Khấu trừ</Link>, permissions: ['hr.payroll'] },
+            { key: '/hr/payroll-runs', to: '/hr/payroll-runs', label: <Link to="/hr/payroll-runs">💵 Bảng lương tháng</Link>, permissions: ['hr.payroll'] },
+            { key: '/hr/payroll-complaints', to: '/hr/payroll-complaints', label: <Link to="/hr/payroll-complaints">⚠️ Khiếu nại lương</Link>, permissions: ['hr.payroll'] },
+            { key: '/hr/payroll-config', to: '/hr/payroll-config', label: <Link to="/hr/payroll-config">⚙️ Cấu hình lương</Link>, permissions: ['hr.payroll_config'] },
             { key: '/hr/rewards', to: '/hr/rewards', label: <Link to="/hr/rewards">🏆 Khen thưởng & Kỷ luật</Link>, permissions: ['hr.rewards'] },
+            { key: '/hr/benefits', to: '/hr/benefits', label: <Link to="/hr/benefits">🎁 Phúc lợi nhân viên</Link>, permissions: ['hr.view'] },
+            { key: '/hr/health-checks', to: '/hr/health-checks', label: <Link to="/hr/health-checks">🏥 Khám sức khỏe</Link>, permissions: ['hr.view'] },
+            { key: '/hr/safety', to: '/hr/safety', label: <Link to="/hr/safety">🛡️ An toàn lao động</Link>, permissions: ['hr.view'] },
+            { key: '/hr/kpi', to: '/hr/kpi', label: <Link to="/hr/kpi">🎯 KPI / Đánh giá</Link>, permissions: ['hr.view'] },
+            { key: '/hr/reports', to: '/hr/reports', label: <Link to="/hr/reports">📑 Báo cáo HR</Link>, permissions: ['hr.view'] },
             { key: '/hr/me', to: '/hr/me', label: <Link to="/hr/me">📱 Cổng nhân viên (Mobile)</Link>, permissions: ['hr.view', 'hr.attendance'] },
           ],
         },
@@ -495,7 +505,16 @@ export default function AppLayout() {
         collapsible
         collapsed={collapsed}
         width={248}
-        style={{ background: '#1b168e', borderRight: '1px solid #15116f' }}
+        style={{
+          background: '#1b168e',
+          borderRight: '1px solid #15116f',
+          height: '100vh',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          position: 'sticky',
+          top: 0,
+          left: 0,
+        }}
       >
         <div style={{
           height: collapsed ? 72 : 96,
@@ -528,7 +547,7 @@ export default function AppLayout() {
         />
       </Sider>
 
-      <Layout>
+      <Layout style={{ height: '100vh', overflow: 'hidden' }}>
         <Header style={{
           padding: '0 20px',
           background: tk.colorBgContainer,
@@ -537,6 +556,7 @@ export default function AppLayout() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexShrink: 0,
         }}>
           <Space>
             {collapsed

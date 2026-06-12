@@ -143,6 +143,12 @@ export const TINH_TRANG_HANG_LABELS: Record<string, string> = {
   loi: 'Lỗi',
 }
 
+export const PHUONG_AN_LABELS: Record<string, { label: string; color: string }> = {
+  chua_xuat_hd: { label: 'Chưa xuất HĐ', color: 'blue' },
+  da_xuat_hd: { label: 'Đã xuất HĐ', color: 'orange' },
+  da_thu_tien: { label: 'Đã thu tiền', color: 'green' },
+}
+
 export const salesReturnsApi = {
   list: (params?: {
     search?: string

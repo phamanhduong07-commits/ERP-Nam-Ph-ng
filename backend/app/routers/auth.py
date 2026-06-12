@@ -18,6 +18,27 @@ def _verify_password(plain: str, hashed: str) -> bool:
     return _bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
+def _validate_password_strength(pw: str) -> None:
+    """Bắt buộc: tối thiểu 8 ký tự + có ít nhất 1 chữ + 1 số (theo NIST 800-63B + thực tế VN).
+
+    Cho phép ký tự bất kỳ (Unicode, ký tự đặc biệt) — không bắt buộc viết hoa/đặc biệt
+    để tránh khó dùng cho NV phổ thông.
+    """
+    if not pw or len(pw) < 8:
+        raise HTTPException(status_code=400, detail="Mật khẩu phải có ít nhất 8 ký tự")
+    has_letter = any(c.isalpha() for c in pw)
+    has_digit = any(c.isdigit() for c in pw)
+    if not (has_letter and has_digit):
+        raise HTTPException(
+            status_code=400,
+            detail="Mật khẩu phải có cả chữ và số (vd: 'matkhau2026')",
+        )
+    # Chặn common weak passwords
+    weak = {"12345678", "abcdefgh", "password", "matkhau1", "qwertyui", "11111111"}
+    if pw.lower() in weak:
+        raise HTTPException(status_code=400, detail="Mật khẩu quá phổ biến, vui lòng chọn mật khẩu khác")
+
+
 def _hash_password(plain: str) -> str:
     return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(rounds=14)).decode()
 
@@ -42,7 +63,8 @@ def _make_user_info(user: User) -> UserInfo:
         phan_xuong=user.phan_xuong,
         machine_id=user.machine_id,
         phap_nhan_id=user.phap_nhan_id,
-        permissions=_get_user_permissions(user)
+        permissions=_get_user_permissions(user),
+        must_change_password=getattr(user, 'must_change_password', False),
     )
 
 
@@ -130,8 +152,12 @@ def change_password(
 ):
     if not _verify_password(data.old_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Mật khẩu cũ không đúng")
-    if len(data.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Mật khẩu mới phải có ít nhất 6 ký tự")
+    _validate_password_strength(data.new_password)
+    if data.new_password == data.old_password:
+        raise HTTPException(status_code=400, detail="Mật khẩu mới phải khác mật khẩu cũ")
     current_user.password_hash = _hash_password(data.new_password)
+    # Clear flag must_change_password sau khi NV đổi xong
+    if getattr(current_user, 'must_change_password', False):
+        current_user.must_change_password = False
     db.commit()
     return {"message": "Đổi mật khẩu thành công"}

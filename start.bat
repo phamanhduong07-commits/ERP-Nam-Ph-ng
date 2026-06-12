@@ -7,23 +7,25 @@ echo   ERP Nam Phuong - Khoi dong he thong
 echo ========================================
 echo.
 
-:: Kill process cu tren ca 2 port
-echo [1/3] Dang dung process cu...
-powershell -NoProfile -Command "8001,5173 | ForEach-Object { Get-NetTCPConnection -LocalPort $_ -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }"
+:: Dung process cu tren port 8002 va 5173 neu co
+echo [1/3] Dung process cu (neu co)...
+powershell -NoProfile -Command "8002,5173 | ForEach-Object { $p = Get-NetTCPConnection -LocalPort $_ -State Listen -ErrorAction SilentlyContinue; if ($p) { Stop-Process -Id $p.OwningProcess -Force -ErrorAction SilentlyContinue } }"
 timeout /t 2 /nobreak >nul
 
-:: Mo backend (auto-restart loop)
-echo [2/3] Khoi dong Backend :8001 ...
-start "Backend :8001" "%~dp0start-backend.bat"
+:: Mo backend
+echo [2/3] Khoi dong Backend (port 8002)...
+start "ERP Backend :8002" cmd /k "cd /d "%~dp0backend" && set PORT=8002 && .\venv\Scripts\python.exe run.py"
 
 :: Mo frontend
-echo [3/3] Khoi dong Frontend :5173 ...
-start "Frontend :5173" "%~dp0_start_frontend.bat"
+echo [3/3] Khoi dong Frontend (port 5173)...
+start "ERP Frontend :5173" cmd /k "cd /d "%~dp0frontend" && npm run dev"
 
-:: Cho backend san sang roi mo browser
+:: Cho san sang roi mo browser
 echo.
-echo Dang cho backend san sang (10 giay)...
-timeout /t 10 /nobreak >nul
+echo Dang cho he thong khoi dong (12 giay)...
+timeout /t 12 /nobreak >nul
 start http://localhost:5173
 
-echo Xong! Backend: http://localhost:8001 | Frontend: http://localhost:5173
+echo.
+echo Xong! Mo trinh duyet: http://localhost:5173
+echo Dang nhap: admin / admin123

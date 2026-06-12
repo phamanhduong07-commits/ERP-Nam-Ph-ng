@@ -25,13 +25,13 @@ from app.models.accounting import PurchaseInvoice, JournalEntry
 from app.models.quality import QCGiayCuonPhieu
 from app.models.warehouse_doc import (
     GoodsReceipt, GoodsReceiptItem,
-    GiayRoll,
     MaterialIssue, MaterialIssueItem,
     ProductionOutput,
     DeliveryOrder, DeliveryOrderItem,
     PhieuChuyenKho, PhieuChuyenKhoItem,
     StockAdjustment, StockAdjustmentItem,
 )
+from app.models.inventory import PaperRoll as GiayRoll
 from app.models.yeu_cau_giao_hang import YeuCauGiaoHang
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.cd2 import PhieuIn
