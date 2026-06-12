@@ -35,7 +35,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.hr import (
-    AttendanceLog, Employee, PayrollAdjustment, PayrollConfig, PayrollRun, ProductionOutput,
+    AttendanceLog, Employee, HrProductionOutput as ProductionOutput, PayrollAdjustment, PayrollConfig, PayrollRun,
 )
 
 logger = logging.getLogger("erp")

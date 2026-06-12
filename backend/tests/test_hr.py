@@ -104,6 +104,15 @@ def _emp_payload(ma="NV_TEST", **kwargs):
     return {"ma_nv": ma, "ho_ten": f"Nhan vien {ma}", **kwargs}
 
 
+def _link_employee_to_user(db_session, emp_id: int, user_id: int = 1) -> None:
+    """Link employee to a user so leave-request endpoints can resolve current_user → employee."""
+    from app.models.hr import Employee
+    emp = db_session.get(Employee, emp_id)
+    if emp:
+        emp.user_id = user_id
+        db_session.commit()
+
+
 def _create_employee(client, ma_nv="NV_HELPER_001", ho_ten=None):
     payload = {"ma_nv": ma_nv, "ho_ten": ho_ten or f"Nhan vien {ma_nv}"}
     res = client.post("/api/hr/employees", json=payload)
@@ -260,6 +269,7 @@ def test_list_leave_requests_returns_200(client, db_session):
 def test_create_leave_request_success(client, db_session):
     """POST /api/hr/leave-requests → 200, trang_thai mac dinh 'cho_duyet'."""
     emp = _create_employee(client, ma_nv="NV_LR_001")
+    _link_employee_to_user(db_session, emp["id"])
 
     res = client.post("/api/hr/leave-requests", json={
         "employee_id": emp["id"],
@@ -272,13 +282,14 @@ def test_create_leave_request_success(client, db_session):
     assert res.status_code in (200, 201), res.text
     data = res.json()
     assert data["id"] > 0
-    assert data["employee_id"] == emp["id"]
-    assert data["trang_thai"] == "cho_duyet"
+    assert data["data"]["employee_id"] == emp["id"]
+    assert data["data"]["trang_thai"] == "cho_duyet"
 
 
 def test_approve_leave_request_via_put(client, db_session):
-    """PUT /api/hr/leave-requests/{id}/approve voi trang_thai=bgd_duyet → doi trang_thai."""
+    """POST /api/hr/leave-requests/{id}/approve voi decision=approve → doi trang_thai."""
     emp = _create_employee(client, ma_nv="NV_LR_APP_001")
+    _link_employee_to_user(db_session, emp["id"])
 
     lr_res = client.post("/api/hr/leave-requests", json={
         "employee_id": emp["id"],
@@ -290,17 +301,18 @@ def test_approve_leave_request_via_put(client, db_session):
     assert lr_res.status_code in (200, 201)
     lr_id = lr_res.json()["id"]
 
-    res = client.put(f"/api/hr/leave-requests/{lr_id}/approve", json={
-        "trang_thai": "bgd_duyet",
-        "y_kien_duyet": "Dong y cho nghi phep",
+    res = client.post(f"/api/hr/leave-requests/{lr_id}/approve", json={
+        "decision": "approve",
+        "y_kien": "Dong y cho nghi phep",
     })
     assert res.status_code == 200
-    assert res.json()["status"] == "bgd_duyet"
+    assert res.json()["status"] == "approved"
 
 
 def test_reject_leave_request_via_put(client, db_session):
-    """PUT /api/hr/leave-requests/{id}/approve voi trang_thai=tu_choi → doi trang_thai."""
+    """POST /api/hr/leave-requests/{id}/approve voi decision=reject → tu_choi."""
     emp = _create_employee(client, ma_nv="NV_LR_REJ_001")
+    _link_employee_to_user(db_session, emp["id"])
 
     lr_res = client.post("/api/hr/leave-requests", json={
         "employee_id": emp["id"],
@@ -308,21 +320,23 @@ def test_reject_leave_request_via_put(client, db_session):
         "ngay_bat_dau": "2026-06-05T18:00:00",
         "ngay_ket_thuc": "2026-06-05T21:00:00",
         "tong_ngay": "0.5",
+        "so_gio_ot": 3,
     })
     assert lr_res.status_code in (200, 201)
     lr_id = lr_res.json()["id"]
 
-    res = client.put(f"/api/hr/leave-requests/{lr_id}/approve", json={
-        "trang_thai": "tu_choi",
-        "y_kien_duyet": "Khong co nguoi thay the",
+    res = client.post(f"/api/hr/leave-requests/{lr_id}/approve", json={
+        "decision": "reject",
+        "y_kien": "Khong co nguoi thay the",
     })
     assert res.status_code == 200
-    assert res.json()["status"] == "tu_choi"
+    assert res.json()["status"] == "rejected"
 
 
 def test_approve_leave_request_invalid_status_returns_400(client, db_session):
-    """PUT approve voi trang_thai khong hop le → 400."""
+    """POST approve voi decision khong hop le → 422 (Pydantic Literal validation)."""
     emp = _create_employee(client, ma_nv="NV_LR_INV_001")
+    _link_employee_to_user(db_session, emp["id"])
 
     lr_res = client.post("/api/hr/leave-requests", json={
         "employee_id": emp["id"],
@@ -334,15 +348,15 @@ def test_approve_leave_request_invalid_status_returns_400(client, db_session):
     assert lr_res.status_code in (200, 201)
     lr_id = lr_res.json()["id"]
 
-    res = client.put(f"/api/hr/leave-requests/{lr_id}/approve", json={
-        "trang_thai": "invalid_status",
+    res = client.post(f"/api/hr/leave-requests/{lr_id}/approve", json={
+        "decision": "invalid_value",
     })
-    assert res.status_code == 400
+    assert res.status_code == 422
 
 
 def test_approve_leave_nonexistent_returns_404(client, db_session):
-    """PUT /api/hr/leave-requests/999999/approve → 404."""
-    res = client.put("/api/hr/leave-requests/999999/approve", json={
-        "trang_thai": "bgd_duyet",
+    """POST /api/hr/leave-requests/999999/approve → 404."""
+    res = client.post("/api/hr/leave-requests/999999/approve", json={
+        "decision": "approve",
     })
     assert res.status_code == 404

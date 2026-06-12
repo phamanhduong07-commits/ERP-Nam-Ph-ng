@@ -86,6 +86,14 @@ def _create_employee(client, ma_nv="NV_HELPER"):
     return res.json()
 
 
+def _link_employee_to_user(db_session, emp_id: int, user_id: int = 1) -> None:
+    from app.models.hr import Employee
+    emp = db_session.get(Employee, emp_id)
+    if emp:
+        emp.user_id = user_id
+        db_session.commit()
+
+
 # ---------------------------------------------------------------------------
 # HR Reward tests
 # ---------------------------------------------------------------------------
@@ -175,8 +183,9 @@ def test_list_leave_requests_empty(client):
     assert res.json() == []
 
 
-def test_create_leave_request_success(client):
+def test_create_leave_request_success(client, db_session):
     emp = _create_employee(client, "NV_LEAVE01")
+    _link_employee_to_user(db_session, emp["id"])
     payload = {
         "employee_id": emp["id"],
         "loai_don": "nghi_phep",
@@ -189,11 +198,12 @@ def test_create_leave_request_success(client):
     assert res.status_code == 200
     data = res.json()
     assert "id" in data
-    assert data["loai_don"] == "nghi_phep"
+    assert data["data"]["loai_don"] == "nghi_phep"
 
 
-def test_approve_leave_request(client):
+def test_approve_leave_request(client, db_session):
     emp = _create_employee(client, "NV_LEAVE02")
+    _link_employee_to_user(db_session, emp["id"])
     payload = {
         "employee_id": emp["id"],
         "loai_don": "nghi_phep",
@@ -204,11 +214,9 @@ def test_approve_leave_request(client):
     create_res = client.post("/api/hr/leave-requests", json=payload)
     req_id = create_res.json()["id"]
 
-    approve_payload = {
-        "trang_thai": "phong_ban_duyet",
-        "y_kien_duyet": "Đồng ý",
-        "nguoi_duyet_id": 1,
-    }
-    res = client.put(f"/api/hr/leave-requests/{req_id}/approve", json=approve_payload)
+    res = client.post(f"/api/hr/leave-requests/{req_id}/approve", json={
+        "decision": "approve",
+        "y_kien": "Đồng ý",
+    })
     assert res.status_code == 200
-    assert res.json()["status"] == "phong_ban_duyet"
+    assert res.json()["status"] == "approved"

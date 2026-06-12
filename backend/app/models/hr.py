@@ -859,7 +859,7 @@ class PayrollConfig(Base):
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong")
 
 
-class ProductionOutput(Base):
+class HrProductionOutput(Base):
     """Bảng sản lượng tháng theo mã hàng × tổ × ca × ngày.
 
     Đầu vào cho engine tính lương sản phẩm (Sprint D.3).

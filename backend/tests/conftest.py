@@ -4,7 +4,7 @@ override dependencies, mock sio.emit.
 """
 import os
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_cd2.db")
-os.environ.setdefault("SECRET_KEY", "test-secret-key")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-32-chars-min")
 
 import pytest
 from types import SimpleNamespace

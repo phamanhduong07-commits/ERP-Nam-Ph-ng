@@ -22,7 +22,7 @@ from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.hr import (
-    Department, Employee, PayrollConfig, ProductionOutput, Team,
+    Department, Employee, HrProductionOutput as ProductionOutput, PayrollConfig, Team,
 )
 
 logger = logging.getLogger("erp")
