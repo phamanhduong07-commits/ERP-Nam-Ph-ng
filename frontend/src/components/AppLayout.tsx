@@ -223,7 +223,8 @@ function buildNavItems(queueCount: number): NavItem[] {
       key: 'hrm-group',
       icon: <TeamOutlined />,
       label: 'Nhân sự (HRM)',
-      permissions: ['user.view', 'user.create', 'user.edit', 'permission.view', 'permission.manage', 'team.manage_permissions'],
+      hubTo: '/hr/dashboard',
+      permissions: ['hr.view', 'hr.manage', 'hr.employees', 'hr.attendance', 'hr.payroll', 'hr.payroll_config', 'hr.approvals', 'hr.departments', 'hr.rewards', 'user.view', 'user.create', 'user.edit', 'permission.view', 'permission.manage', 'team.manage_permissions'],
       flyoutSections: [
         {
           items: [

@@ -30,6 +30,54 @@ import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
 
+// ─── Module navigation groups ───
+const MODULE_GROUPS = [
+  {
+    label: 'Nhân sự', color: '#1677ff',
+    items: [
+      { to: '/hr/employees', icon: '👤', label: 'Hồ sơ nhân viên' },
+      { to: '/hr/departments', icon: '🏢', label: 'Cơ cấu tổ chức' },
+      { to: '/hr/permission-matrix', icon: '🔒', label: 'Phân quyền' },
+      { to: '/hr/team-permissions', icon: '🔑', label: 'Quyền cá nhân' },
+    ],
+  },
+  {
+    label: 'Chấm công', color: '#52c41a',
+    items: [
+      { to: '/hr/attendance', icon: '⏰', label: 'Chấm công & Đơn từ' },
+      { to: '/hr/checkin-locations', icon: '📍', label: 'Địa điểm' },
+      { to: '/hr/approvals', icon: '📝', label: 'Phê duyệt đơn từ' },
+    ],
+  },
+  {
+    label: 'Tiền lương', color: '#fa8c16',
+    items: [
+      { to: '/hr/production-output', icon: '📦', label: 'Sản lượng tháng' },
+      { to: '/hr/payroll-adjustments', icon: '💰', label: 'Phụ cấp & Khấu trừ' },
+      { to: '/hr/payroll-runs', icon: '💵', label: 'Bảng lương tháng' },
+      { to: '/hr/payroll-complaints', icon: '⚠️', label: 'Khiếu nại lương' },
+      { to: '/hr/payroll-config', icon: '⚙️', label: 'Cấu hình lương' },
+    ],
+  },
+  {
+    label: 'Phúc lợi', color: '#722ed1',
+    items: [
+      { to: '/hr/rewards', icon: '🏆', label: 'Khen thưởng & Kỷ luật' },
+      { to: '/hr/benefits', icon: '🎁', label: 'Phúc lợi nhân viên' },
+      { to: '/hr/health-checks', icon: '🏥', label: 'Khám sức khỏe' },
+      { to: '/hr/safety', icon: '🛡️', label: 'An toàn lao động' },
+      { to: '/hr/kpi', icon: '🎯', label: 'KPI / Đánh giá' },
+    ],
+  },
+  {
+    label: 'Báo cáo', color: '#13c2c2',
+    items: [
+      { to: '/hr/reports', icon: '📑', label: 'Báo cáo HR' },
+      { to: '/hr/me', icon: '📱', label: 'Cổng nhân viên' },
+    ],
+  },
+]
+
 // ─── Color tokens ───
 const COLORS_PHAP_NHAN = ['#722ed1', '#1677ff', '#13c2c2', '#52c41a', '#fa8c16']
 const COLORS_GENDER: Record<string, string> = {
@@ -112,6 +160,39 @@ export default function HRDashboardPage() {
             </Space>
           </Col>
         </Row>
+      </Card>
+
+      {/* ─── Module navigation ─── */}
+      <Card size="small" style={{ marginBottom: 16 }} styles={{ body: { padding: '6px 16px' } }}>
+        {MODULE_GROUPS.map((group, gIdx) => (
+          <div key={group.label}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 0' }}>
+              <span style={{
+                fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.7px',
+                color: '#fff', background: group.color,
+                padding: '2px 10px', borderRadius: 4,
+                minWidth: 84, textAlign: 'center', flexShrink: 0,
+              }}>
+                {group.label}
+              </span>
+              {group.items.map(item => (
+                <Link key={item.to} to={item.to} style={{ textDecoration: 'none' }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '3px 10px', borderRadius: 6,
+                    border: '1px solid #e5e7eb', background: '#fafafa',
+                    fontSize: 12.5, color: '#374151', whiteSpace: 'nowrap', cursor: 'pointer',
+                  }}>
+                    {item.icon} {item.label}
+                  </span>
+                </Link>
+              ))}
+            </div>
+            {gIdx < MODULE_GROUPS.length - 1 && (
+              <div style={{ height: 1, background: '#f0f1f5' }} />
+            )}
+          </div>
+        ))}
       </Card>
 
       {/* ─── TNLĐ chưa báo: alert đỏ NẾU có ─── */}
