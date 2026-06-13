@@ -141,7 +141,7 @@ type TableRow = LineRow | GroupHeader | GroupFooter
 function isHeader(r: TableRow): r is GroupHeader { return r._type === 'header' }
 function isFooter(r: TableRow): r is GroupFooter { return r._type === 'footer' }
 
-/** Tích luỹ kg vào map {mã → entry}. Cùng mã → cộng, khác mã → thêm mới */
+/** Tích luỹ kg vào map. Cùng mã + cùng DL → cộng kg; khác DL → entry riêng */
 function accumLayer(
   map: Map<string, LayerEntry>,
   ma: string | null,
@@ -149,9 +149,10 @@ function accumLayer(
   kg: number,
 ) {
   if (!ma || kg <= 0) return
-  const existing = map.get(ma)
+  const key = dl != null ? `${ma}/${Math.round(dl)}` : ma
+  const existing = map.get(key)
   if (existing) existing.kg += kg
-  else map.set(ma, { ma, dl, kg })
+  else map.set(key, { ma, dl, kg })
 }
 
 /** Tính tổng kg từng lớp giấy cho một nhóm khổ — cùng mã cộng gộp */
@@ -249,32 +250,60 @@ function buildTableRows(lines: PlanLineResponse[]): { rows: TableRow[]; totalMT:
   return { rows, totalMT: Math.round(totalMT * 10) / 10 }
 }
 
-// ─── Cell giấy (mã/ĐL + kg) — format: "54/140\n191 kg" (khớp báo giá) ────────
-function PaperCell({ ma, dl, kg, isSong }: { ma: string | null; dl: number | null; kg: number; isSong: boolean }) {
-  if (!ma) return <span style={{ color: '#d9d9d9' }}>—</span>
+// ─── So sánh mã giấy (===) ────────────────────────────────────────────────────
+function isSamePaper(
+  ma1: string | null | undefined, dl1: number | null | undefined,
+  ma2: string | null | undefined, dl2: number | null | undefined,
+): boolean {
+  if (!ma1 || !ma2) return false
+  if (ma1 !== ma2) return false
+  if (dl1 == null && dl2 == null) return true
+  if (dl1 == null || dl2 == null) return false
+  return Math.round(dl1) === Math.round(dl2)
+}
+
+// ─── Cell giấy (mã/ĐL + kg) — format: "54/140\n191 kg" ──────────────────────
+function PaperCell({ ma, dl, kg, isEqual, hideKg }: { ma: string | null; dl: number | null; kg: number; isEqual?: boolean; hideKg?: boolean }) {
+  if (!ma) return <span style={{ color: '#bbb' }}>—</span>
+  if (isEqual) return (
+    <div style={{ fontWeight: 700, fontSize: 13 }}>===</div>
+  )
   return (
     <div style={{ lineHeight: 1.4 }}>
-      <div style={{ fontWeight: 600, fontSize: 13, color: isSong ? '#1677ff' : '#389e0d', whiteSpace: 'nowrap' }}>
+      <div style={{ fontWeight: 700, fontSize: 13, fontStyle: 'normal', whiteSpace: 'nowrap' }}>
         {ma}{dl != null ? `/${Math.round(dl)}` : ''}
       </div>
-      {kg > 0 && <div style={{ fontSize: 11, color: '#fa8c16', fontWeight: 600 }}>{Math.round(kg).toLocaleString('vi-VN')} kg</div>}
+      {!hideKg && kg > 0 && <div style={{ fontSize: 10, color: '#444' }}>({Math.round(kg).toLocaleString('vi-VN')} kg)</div>}
     </div>
   )
 }
 
 /** Cell hiển thị danh sách mã giấy + ĐL + kg trong dòng tổng kết khổ */
-function LayerEntriesCell({ entries, isSong, bold }: { entries: LayerEntry[]; isSong: boolean; bold?: boolean }) {
+function LayerEntriesCell({ entries, isSong, bold, asFooter }: { entries: LayerEntry[]; isSong: boolean; bold?: boolean; asFooter?: boolean }) {
   if (!entries.length) return <span style={{ color: '#d9d9d9', fontSize: 13 }}>—</span>
+  if (asFooter) {
+    // Dòng "Kết thúc khổ": hiện === + tổng kg
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {entries.map(e => (
+          <div key={e.ma} style={{ lineHeight: 1.4 }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>===</div>
+            <div style={{ fontSize: 10 }}>({Math.round(e.kg).toLocaleString('vi-VN')}kg)</div>
+          </div>
+        ))}
+      </div>
+    )
+  }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {entries.map(e => (
         <span key={e.ma} style={{
           fontSize: bold ? 14 : 13,
           fontWeight: 700,
-          color: isSong ? '#0958d9' : '#237804',
+          fontStyle: 'normal',
           whiteSpace: 'nowrap',
         }}>
-          {e.ma}{e.dl != null ? `/${Math.round(e.dl)}` : ''}: <span style={{ color: '#ad4e00' }}>{Math.round(e.kg).toLocaleString('vi-VN')}kg</span>
+          {e.ma}{e.dl != null ? `/${Math.round(e.dl)}` : ''}: <span style={{ fontWeight: 400, fontSize: bold ? 12 : 11 }}>({Math.round(e.kg).toLocaleString('vi-VN')}kg)</span>
         </span>
       ))}
     </div>
@@ -338,6 +367,48 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
   const missingKhoGiayCount = plan.lines.filter(l => !l.kho_giay || Number(l.kho_giay) === 0).length
   const totalSLThung = plan.lines.reduce((s, l) => s + Number(l.so_luong_ke_hoach), 0)
 
+  // Pre-compute === state cho từng dòng lệnh: so sánh mã giấy với dòng ngay trước
+  const lineEqMap = new Map<number, Record<string, boolean>>()
+  {
+    let prevLine: LineRow | null = null
+    for (const row of rows) {
+      if (row._type === 'line') {
+        const r = row as LineRow
+        const slots = getSongSlots(r)
+        const inner = getMatInner(r)
+        if (prevLine) {
+          const ps = getSongSlots(prevLine)
+          const pi = getMatInner(prevLine)
+          lineEqMap.set(r.id, {
+            matC:  isSamePaper(r.mat,         r.mat_dl,       prevLine.mat,        prevLine.mat_dl),
+            songC: isSamePaper(slots.songC.ma, slots.songC.dl, ps.songC.ma,         ps.songC.dl),
+            matB:  isSamePaper(r.mat_1,        r.mat_1_dl,     prevLine.mat_1,      prevLine.mat_1_dl),
+            songB: isSamePaper(slots.songB.ma, slots.songB.dl, ps.songB.ma,         ps.songB.dl),
+            inner: isSamePaper(inner.ma,       inner.dl,       pi.ma,               pi.dl),
+          })
+        } else {
+          lineEqMap.set(r.id, { matC: false, songC: false, matB: false, songB: false, inner: false })
+        }
+        prevLine = r
+      } else if (row._type === 'footer') {
+        prevLine = null   // reset tại ranh giới nhóm
+      }
+    }
+  }
+
+  // nextEqMap: nếu dòng TIẾP THEO có === ở cột đó → ẩn kg ở dòng hiện tại
+  const lineRows = rows.filter(r => r._type === 'line') as LineRow[]
+  const nextEqMap = new Map<number, Record<string, boolean>>()
+  for (let i = 0; i < lineRows.length; i++) {
+    const next = lineRows[i + 1]
+    nextEqMap.set(
+      lineRows[i].id,
+      next
+        ? lineEqMap.get(next.id) ?? { matC: false, songC: false, matB: false, songB: false, inner: false }
+        : { matC: false, songC: false, matB: false, songB: false, inner: false },
+    )
+  }
+
   // Tổng kg toàn bộ kế hoạch — cộng từng mã riêng qua tất cả GroupFooter
   const grandMaps: Record<keyof LayerKgSummary, Map<string, LayerEntry>> = {
     matC:  new Map(), songC: new Map(),
@@ -347,9 +418,10 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
     if (!isFooter(row)) continue
     for (const key of Object.keys(grandMaps) as (keyof LayerKgSummary)[]) {
       for (const e of row.layers[key]) {
-        const ex = grandMaps[key].get(e.ma)
+        const mapKey = e.dl != null ? `${e.ma}/${Math.round(e.dl)}` : e.ma
+        const ex = grandMaps[key].get(mapKey)
         if (ex) ex.kg += e.kg
-        else grandMaps[key].set(e.ma, { ...e })
+        else grandMaps[key].set(mapKey, { ...e })
       }
     }
   }
@@ -396,7 +468,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         const kho1   = r.kho1 ? Number(r.kho1) : null
         const daiTt  = r.dai_tt ? Number(r.dai_tt) : null
         dataRows.push([
-          r.ten_khach_hang ?? '',
+          r.ma_kh ?? '',
           r.so_lenh ?? '',
           r.mat ? `${r.mat}${r.mat_dl != null ? `/${Math.round(r.mat_dl)}` : ''}` : '',
           r.song_1 ? `${r.song_1}${r.song_1_dl != null ? `/${Math.round(r.song_1_dl)}` : ''}` : '',
@@ -434,55 +506,71 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
   }
 
   const handleExportPdf = () => {
-    // Helper: render ô giấy dạng "54/140\n191 kg" (khớp báo giá)
-    const paperCell = (ma: string | null, dl: number | null, kg: number, isSong: boolean) => {
-      if (!ma) return '<span style="color:#ccc">—</span>'
-      const color = isSong ? '#1677ff' : '#237804'
+    // Pre-compute === cho PDF (tương tự lineEqMap)
+    const pdfEqMap = new Map<number, Record<string, boolean>>()
+    {
+      let prev: LineRow | null = null
+      for (const row of rows) {
+        if (row._type === 'line') {
+          const r = row as LineRow
+          const slots = getSongSlots(r); const inner = getMatInner(r)
+          if (prev) {
+            const ps = getSongSlots(prev); const pi = getMatInner(prev)
+            pdfEqMap.set(r.id, {
+              matC:  isSamePaper(r.mat,         r.mat_dl,       prev.mat,        prev.mat_dl),
+              songC: isSamePaper(slots.songC.ma, slots.songC.dl, ps.songC.ma,    ps.songC.dl),
+              matB:  isSamePaper(r.mat_1,        r.mat_1_dl,     prev.mat_1,     prev.mat_1_dl),
+              songB: isSamePaper(slots.songB.ma, slots.songB.dl, ps.songB.ma,    ps.songB.dl),
+              inner: isSamePaper(inner.ma,       inner.dl,       pi.ma,          pi.dl),
+            })
+          } else {
+            pdfEqMap.set(r.id, { matC: false, songC: false, matB: false, songB: false, inner: false })
+          }
+          prev = r
+        } else if (row._type === 'footer') { prev = null }
+      }
+    }
+    // pdfNextEqMap: nếu dòng tiếp theo === thì ẩn kg ở dòng hiện tại
+    const pdfLineRows = rows.filter(r => r._type === 'line') as LineRow[]
+    const pdfNextEqMap = new Map<number, Record<string, boolean>>()
+    for (let i = 0; i < pdfLineRows.length; i++) {
+      const next = pdfLineRows[i + 1]
+      pdfNextEqMap.set(
+        pdfLineRows[i].id,
+        next
+          ? pdfEqMap.get(next.id) ?? { matC: false, songC: false, matB: false, songB: false, inner: false }
+          : { matC: false, songC: false, matB: false, songB: false, inner: false },
+      )
+    }
+
+    // Helper: render ô giấy — hiện === nếu isEq, ẩn kg nếu hideKg
+    const paperCell = (ma: string | null, dl: number | null, kg: number, isEq = false, hideKg = false) => {
+      if (!ma) return '—'
+      if (isEq) return `<span style="font-weight:700">===</span>`
       const label = dl != null ? `${ma}/${Math.round(dl)}` : ma
-      const kgLine = kg > 0 ? `<br><span style="color:#fa8c16;font-weight:600">${Math.round(kg).toLocaleString('vi-VN')} kg</span>` : ''
-      return `<span style="color:${color};font-weight:700">${label}</span>${kgLine}`
+      const kgLine = !hideKg && kg > 0 ? `<br><span style="font-size:8px">(${Math.round(kg).toLocaleString('vi-VN')}kg)</span>` : ''
+      return `<span style="font-weight:700">${label}</span>${kgLine}`
     }
 
     // Helper: render ô loại in + CT/CM
     const inCell = (r: PlanLineResponse) => {
       const loaiIn = r.loai_in && r.loai_in !== 'khong_in'
         ? (r.loai_in === 'flexo' ? 'Flexo' : r.loai_in === 'ky_thuat_so' ? 'KTS' : r.loai_in) + (r.so_mau ? ` ${r.so_mau}M` : '')
-        : '<span style="color:#ccc">—</span>'
+        : '—'
       const ct = r.c_tham && r.c_tham !== 'Không'
-        ? `<br><span class="tag-ct">CT ${r.c_tham.replace('mặt','m').replace(/\s+/g,'')}</span>` : ''
+        ? ` <span class="tag-bw">CT${r.c_tham.replace('mặt','m').replace(/\s+/g,'')}</span>` : ''
       const cm = r.can_man && r.can_man !== 'Không'
-        ? `<br><span class="tag-cm">CM ${r.can_man.replace('mặt','m').replace(/\s+/g,'')}</span>` : ''
+        ? ` <span class="tag-bw">CM${r.can_man.replace('mặt','m').replace(/\s+/g,'')}</span>` : ''
       return loaiIn + ct + cm
     }
 
-    const bodyRows = rows.map((row, i) => {
-      // Dòng header nhóm (thanh navy)
-      if (isHeader(row)) {
-        return `<tr style="page-break-inside:avoid;page-break-after:avoid">
-          <td colspan="20" style="background:#1a1a1a;color:#fff;font-weight:700;font-size:10px;padding:4px 6px;letter-spacing:0.5px;border:1px solid #000 !important">
-            ▶ KHỔ GIẤY: ${row.kho} cm — ${row.soLenh} lệnh
-          </td>
-        </tr>`
-      }
+    const bodyRows = rows.map((row) => {
+      // Bỏ banner header nhóm
+      if (isHeader(row)) return ''
 
-      if (isFooter(row)) {
-        const { layers } = row
-        const fmtGroup = (entries: { ma: string; dl: number | null; kg: number }[], isSong = false) =>
-          entries.map(e => `<span style="color:${isSong ? '#1677ff' : '#237804'};font-weight:700">${e.ma}${e.dl != null ? `/${Math.round(e.dl)}` : ''}</span><br><span style="color:#fa8c16">${Math.round(e.kg).toLocaleString('vi-VN')} kg</span>`).join('<br>') || '—'
-        return `<tr class="footer-row">
-          <td colspan="2" style="font-weight:700;color:#614700">${row.soLenh} lệnh</td>
-          <td>${fmtGroup(layers.matC, false)}</td>
-          <td>${fmtGroup(layers.songC, true)}</td>
-          <td>${fmtGroup(layers.matB, false)}</td>
-          <td>${fmtGroup(layers.songB, true)}</td>
-          <td>${fmtGroup(layers.inner, false)}</td>
-          <td colspan="11" style="text-align:right;color:#614700">Tổng nhóm: <b style="color:#262626">${row.soTam.toLocaleString('vi-VN')} tấm</b> &nbsp;·&nbsp; MT:</td>
-          <td style="text-align:right;font-weight:700;color:#fa8c16">${row.soMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</td>
-        </tr>`
-      }
+      if (isFooter(row)) return ''
 
       const r = row as LineRow
-      const songs   = getSongLetters(r.to_hop_song)
       const slcPdf  = Math.max(1, r.so_lan_cat ?? 1)
       const bccPdf  = Math.max(1, r.be_so_con ?? 1)
       const soTam   = calcSoTam(Number(r.so_luong_ke_hoach), r.so_dao, bccPdf, slcPdf)
@@ -502,29 +590,31 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       const kgSongB  = calcLayerKg(soTamKg, kho1, daiTt, slots.songB.dl,  true,  slots.songB.flute)
       const kgInner  = calcLayerKg(soTamKg, kho1, daiTt, inner.dl, false, null)
 
+      const eq  = pdfEqMap.get(r.id)     ?? { matC: false, songC: false, matB: false, songB: false, inner: false }
+      const nxt = pdfNextEqMap.get(r.id) ?? { matC: false, songC: false, matB: false, songB: false, inner: false }
       const loaiLan = r.loai_lan ? (LOAI_LAN_LABELS[r.loai_lan] ?? r.loai_lan) : '—'
 
       return `<tr>
-        <td style="font-weight:600;white-space:nowrap">${r.ma_kh ?? '—'}</td>
-        <td style="font-family:monospace;font-size:8px;font-weight:700"><span style="font-size:7px;color:#888;display:block;line-height:1">${r.thu_tu}</span>${r.so_lenh ?? '—'}${r.ngay_chay ? `<br><span style="color:#1677ff;font-size:7px">${dayjs(r.ngay_chay).format('DD/MM')}</span>` : ''}</td>
-        <td>${paperCell(r.mat,          r.mat_dl,        kgMatC,  false)}</td>
-        <td>${paperCell(slots.songC.ma, slots.songC.dl,  kgSongC, true)}</td>
-        <td>${soLop >= 5 ? paperCell(r.mat_1, r.mat_1_dl, kgMatB, false) : '<span style="color:#ccc">—</span>'}</td>
-        <td>${slots.songB.ma ? paperCell(slots.songB.ma, slots.songB.dl, kgSongB, true) : '<span style="color:#ccc">—</span>'}</td>
-        <td>${paperCell(inner.ma, inner.dl, kgInner, false)}</td>
+        <td style="font-weight:600">${r.ten_khach_hang ?? r.ma_kh ?? '—'}</td>
+        <td style="font-weight:700">${r.thu_tu > 0 ? `<span style="font-size:8px;display:block;line-height:1">${r.thu_tu}</span>` : ''}${r.so_lenh ?? '—'}${r.ngay_chay ? `<br><span style="font-size:8px">${dayjs(r.ngay_chay).format('DD/MM')}</span>` : ''}</td>
+        <td>${paperCell(r.mat,          r.mat_dl,        kgMatC,  eq.matC,  nxt.matC)}</td>
+        <td>${paperCell(slots.songC.ma, slots.songC.dl,  kgSongC, eq.songC, nxt.songC)}</td>
+        <td>${soLop >= 5 ? paperCell(r.mat_1, r.mat_1_dl, kgMatB, eq.matB, nxt.matB) : '—'}</td>
+        <td>${slots.songB.ma ? paperCell(slots.songB.ma, slots.songB.dl, kgSongB, eq.songB, nxt.songB) : '—'}</td>
+        <td>${paperCell(inner.ma, inner.dl, kgInner, eq.inner, nxt.inner)}</td>
         <td style="white-space:nowrap">${calcQuyCache(r)}</td>
-        <td class="center" style="font-weight:700;color:#531dab">${r.to_hop_song ?? '—'}</td>
-        <td class="right" style="color:${!r.kho_giay || Number(r.kho_giay) === 0 ? '#ff4d4f' : '#1677ff'};font-weight:700;font-size:13px">${!r.kho_giay || Number(r.kho_giay) === 0 ? '⚠ —' : fmtN(r.kho_giay, 1)}</td>
+        <td class="center" style="font-weight:700">${r.to_hop_song ?? '—'}</td>
+        <td class="right" style="font-weight:700">${!r.kho_giay || Number(r.kho_giay) === 0 ? '⚠ —' : fmtN(r.kho_giay, 1)}</td>
         <td class="right">${daiEff != null ? fmtN(daiEff, 1) : '—'}</td>
-        <td class="right" style="font-weight:800;font-size:15px">${soTam.toLocaleString('vi-VN')}</td>
-        <td class="center" style="color:#1677ff;font-weight:700">${r.so_dao ?? '—'}</td>
-        <td style="font-size:8px;font-family:monospace">${qccl || '—'}</td>
-        <td class="center" style="font-weight:700;color:#1677ff">${r.kho_giay != null && r.so_dao && r.so_dao > 0 ? fmtN(Number(r.kho_giay) / r.so_dao, 1) : '—'}</td>
-        <td class="right" style="font-weight:600">${Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')}</td>
-        <td class="center"><span class="tag-lan">${loaiLan}</span></td>
+        <td class="right" style="font-weight:700">${soTam.toLocaleString('vi-VN')}</td>
+        <td class="center" style="font-weight:700">${r.so_dao ?? '—'}</td>
+        <td>${qccl || '—'}</td>
+        <td class="center" style="font-weight:700">${r.kho_giay != null && r.so_dao && r.so_dao > 0 ? fmtN(Number(r.kho_giay) / r.so_dao, 1) : '—'}</td>
+        <td class="right">${Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')}</td>
+        <td class="center">${loaiLan !== '—' ? `<span class="tag-bw">${loaiLan}</span>` : '—'}</td>
         <td class="center">${inCell(r)}</td>
-        <td style="font-size:8px;color:#595959">${r.ghi_chu ?? ''}</td>
-        <td class="right" style="font-weight:700;color:#fa8c16">${metToi > 0 ? metToi.toLocaleString('vi-VN', { maximumFractionDigits: 1 }) : '—'}</td>
+        <td>${r.ghi_chu ?? ''}</td>
+        <td class="right" style="font-weight:700">${metToi > 0 ? metToi.toLocaleString('vi-VN', { maximumFractionDigits: 1 }) : '—'}</td>
       </tr>`
     }).join('')
 
@@ -533,7 +623,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         <thead><tr>
           <th>Mã KH</th>
           <th>Số LSX</th>
-          <th>Mặt C</th><th>Sóng C</th><th>Mặt B</th><th>Sóng B</th><th>Mặt T</th>
+          <th>Mặt C</th><th>Sóng C</th><th>Mặt B</th><th>Sóng B</th><th>Mặt</th>
           <th>Quy cách SP</th>
           <th class="center">Sóng</th>
           <th class="right">Khổ (cm)</th>
@@ -541,9 +631,9 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
           <th class="right">Số tấm</th>
           <th class="center">Dao</th>
           <th>QCCL</th>
-          <th class="center">Kho1/TT</th>
+          <th class="center">Khổ Xả</th>
           <th class="right">SL thùng</th>
-          <th class="center">Loại lằn</th>
+          <th class="center">Loại Lần</th>
           <th class="center">In / GC</th>
           <th>Ghi chú</th>
           <th class="right">Mét tới</th>
@@ -551,7 +641,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         <tbody>
           ${bodyRows}
           <tr class="total-row">
-            <td colspan="19" class="right"><strong>TỔNG SỐ MÉT TỚI:</strong></td>
+            <td colspan="19" class="right"><strong>TỔNG SỐ MT:</strong></td>
             <td class="right"><strong>${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></td>
           </tr>
         </tbody>
@@ -570,15 +660,13 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       `<style>
         @page { size: A4 landscape; margin: 8mm; }
         * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        body { font-size: 10px; }
-        table { font-size: 10px !important; border-collapse: collapse !important; }
-        th { padding: 3px 4px !important; font-size: 10px !important; border: 1px solid #333 !important; background: #2c2c2c !important; color: #fff !important; }
-        td { padding: 3px 4px !important; font-size: 10px; border: 1px solid #555 !important; }
-        .footer-row td { border-top: 2px solid #333 !important; border-bottom: 2px solid #333 !important; background: #e8e8e8 !important; color: #000 !important; }
-        .total-row td { border-top: 3px solid #000 !important; background: #ccc !important; color: #000 !important; }
-        .tag-ct { background:#e6fffb; color:#08979c; border:1px solid #87e8de; border-radius:3px; padding:0 3px; font-size:7px; }
-        .tag-cm { background:#f9f0ff; color:#531dab; border:1px solid #d3adf7; border-radius:3px; padding:0 3px; font-size:7px; }
-        .tag-lan{ background:#fff2e8; color:#d4380d; border:1px solid #ffbb96; border-radius:3px; padding:0 3px; font-size:7px; }
+        body { font-family: Arial, sans-serif; font-size: 10px; }
+        table { font-family: Arial, sans-serif; font-size: 10px !important; border-collapse: collapse !important; }
+        th { padding: 3px 4px !important; font-size: 10px !important; border: 1px solid #333 !important; background: #fff !important; color: #000 !important; }
+        td { padding: 3px 4px !important; font-size: 10px; border: 1px solid #000 !important; }
+        .footer-row td { border-top: 2px solid #000 !important; border-bottom: 2px solid #000 !important; }
+        .total-row td { border-top: 3px solid #000 !important; }
+        .tag-bw { border:1px solid #333; border-radius:2px; padding:0 3px; font-size:7px; font-weight:600; }
       </style>
       <h2 style="margin:0 0 4px;font-size:14px">KẾ HOẠCH SẢN XUẤT: ${plan.so_ke_hoach}</h2>
       <p class="meta" style="margin:0 0 6px;font-size:9px">${headerMeta}</p>
@@ -597,19 +685,19 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         @page { size: A4 landscape; margin: 8mm; }
         @media print {
           .no-print { display: none !important; }
-          body { margin: 0; font-size: 11px; }
+          body { margin: 0; font-family: Arial, sans-serif; font-size: 11px; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           table { font-size: 11px !important; border-collapse: collapse !important; }
           th, td { padding: 3px 4px !important; font-size: 11px !important; border: 1px solid #555 !important; }
-          th { background: #2c2c2c !important; color: #fff !important; }
-          .group-header-row td { background: #1a1a1a !important; color: #fff !important; font-size: 13px !important; }
+          th { background: #fff !important; color: #000 !important; }
+          .group-header-row td { background: #fff !important; color: #000 !important; font-size: 13px !important; }
           .group-header-row { page-break-after: avoid; break-after: avoid; }
-          .group-footer-row td { border-top: 2px solid #333 !important; border-bottom: 2px solid #333 !important; background: #e8e8e8 !important; color: #000 !important; }
-          .grand-total-row td { border-top: 3px solid #000 !important; background: #ccc !important; color: #000 !important; }
+          .group-footer-row td { border-top: 2px solid #000 !important; border-bottom: 2px solid #000 !important; }
+          .grand-total-row td { border-top: 3px solid #000 !important; }
           .ant-tag { background: #e0e0e0 !important; color: #000 !important; border: 1px solid #555 !important; font-size: 7px !important; padding: 0 3px !important; }
           .plan-header { margin-bottom: 6px; }
-          .cell-tam { font-size: 18px !important; font-weight: 800 !important; }
-          .cell-kho { font-size: 15px !important; font-weight: 800 !important; }
+          .cell-tam { font-size: 13px !important; font-weight: 700 !important; }
+          .cell-kho { font-size: 13px !important; font-weight: 700 !important; }
           .cell-mt  { font-size: 13px !important; }
         }
       `}</style>
@@ -670,9 +758,9 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
             <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 1 }}>KẾ HOẠCH SẢN XUẤT</div>
           </div>
           <div style={{ fontSize: 14, textAlign: 'right' }}>
-            <div>Tổng SL: <b style={{ color: '#1677ff', fontSize: 16 }}>{totalSLThung.toLocaleString('vi-VN')} thùng</b></div>
-            <div>Tổng MT: <b style={{ color: '#fa8c16', fontSize: 16 }}>{totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</b></div>
-            <div style={{ color: '#888' }}>{plan.lines.length} lệnh</div>
+            <div>Tổng SL: <b style={{ fontSize: 16 }}>{totalSLThung.toLocaleString('vi-VN')} thùng</b></div>
+            <div>Tổng MT: <b style={{ fontSize: 16 }}>{totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</b></div>
+            <div>{plan.lines.length} lệnh</div>
           </div>
         </div>
       </div>
@@ -681,30 +769,30 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
-            <tr style={{ background: '#f0f5ff' }}>
+            <tr>
               <th style={TH}>Mã KH</th>
               <th style={TH}>Số LSX</th>
               {/* Kết cấu giấy: 5 lớp */}
-              <th style={{ ...TH, background: '#f6ffed', color: '#389e0d' }}>Mặt C</th>
-              <th style={{ ...TH, background: '#e6f4ff', color: '#1677ff' }}>Sóng C</th>
-              <th style={{ ...TH, background: '#f6ffed', color: '#389e0d' }}>Mặt B</th>
-              <th style={{ ...TH, background: '#e6f4ff', color: '#1677ff' }}>Sóng B</th>
-              <th style={{ ...TH, background: '#f6ffed', color: '#389e0d' }}>Mặt T</th>
+              <th style={TH}>Mặt C</th>
+              <th style={TH}>Sóng C</th>
+              <th style={TH}>Mặt B</th>
+              <th style={TH}>Sóng B</th>
+              <th style={TH}>Mặt</th>
               {/* Thông số */}
               <th style={TH}>Quy Cách Sản Phẩm</th>
               <th style={TH}>Sóng</th>
-              <th style={{ ...TH, color: '#1677ff' }}>Khổ (cm)</th>
+              <th style={TH}>Khổ (cm)</th>
               <th style={TH}>Dài (cm)</th>
               <th style={TH}>Số Tấm</th>
               <th style={TH}>Dao</th>
               <th style={TH}>QCCL</th>
-              <th style={TH}>Kho1/TT</th>
+              <th style={TH}>Khổ Xả</th>
               <th style={TH}>SL Thùng</th>
-              <th style={TH}>Loại Lằn</th>
+              <th style={TH}>Loại Lần</th>
               <th style={TH}>Loại In</th>
               <th style={TH}>Ghi Chú</th>
-              <th style={{ ...TH, color: '#fa8c16' }}>Mét Tới</th>
-              <th style={{ ...TH, color: '#cf1322' }} className="no-print">
+              <th style={TH}>Mét Tới</th>
+              <th style={TH} className="no-print">
                 <Tooltip title="Đánh dấu line này phải mua phôi sóng từ NCC ngoài">
                   Mua phôi
                 </Tooltip>
@@ -714,52 +802,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
           </thead>
           <tbody>
             {rows.map((row, idx) => {
-              // ── GroupHeader row ─────────────────────────────────────────
-              if (isHeader(row)) {
-                return (
-                  <tr key={row.id} className="group-header-row" style={{ pageBreakInside: 'avoid' }}>
-                    <td colSpan={22} style={{
-                      ...TD,
-                      background: '#003a8c',
-                      color: '#fff',
-                      fontWeight: 700,
-                      fontSize: 15,
-                      letterSpacing: 0.5,
-                      padding: '6px 10px',
-                    }}>
-                      ▶ KHỔ GIẤY: <b style={{ fontSize: 19 }}>{row.kho} cm</b> — {row.soLenh} lệnh
-                    </td>
-                  </tr>
-                )
-              }
+              // ── GroupHeader row — bỏ banner, chỉ dùng footer làm phân cách ─
+              if (isHeader(row)) return null
 
-              // ── GroupFooter row ─────────────────────────────────────────
-              if (isFooter(row)) {
-                const { layers } = row
-                return (
-                  <tr key={row.id} className="group-footer-row" style={{ background: '#fff7e6', borderTop: '2px solid #ffa940', borderBottom: '2px solid #ffa940' }}>
-                    <td colSpan={2} style={{ ...TD, background: '#fff1b8', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', color: '#614700' }}>
-                      {row.soLenh} lệnh
-                    </td>
-                    <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={layers.matC} isSong={false} /></td>
-                    <td style={{ ...TD, background: '#e6f4ff' }}><LayerEntriesCell entries={layers.songC} isSong={true} /></td>
-                    <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={layers.matB} isSong={false} /></td>
-                    <td style={{ ...TD, background: '#e6f4ff' }}><LayerEntriesCell entries={layers.songB} isSong={true} /></td>
-                    <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={layers.inner} isSong={false} /></td>
-                    {/* Quy Cách → Ghi Chú: hiện soTam + soLuong */}
-                    <td colSpan={12} style={{ ...TD, textAlign: 'right', color: '#614700', fontSize: 13 }}>
-                      <b style={{ color: '#262626', fontSize: 15 }}>{row.soTam.toLocaleString('vi-VN')} tấm</b>
-                      &nbsp;·&nbsp;<b style={{ color: '#1677ff', fontSize: 15 }}>{row.soLuong.toLocaleString('vi-VN')} thùng</b>
-                      &nbsp;·&nbsp;MT:
-                    </td>
-                    <td className="cell-mt" style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#fa8c16', fontSize: 16, background: '#fff1b8' }}>
-                      {row.soMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}
-                    </td>
-                    <td style={TD} className="no-print" />
-                    <td style={TD} className="no-print" />
-                  </tr>
-                )
-              }
+              // ── GroupFooter row — bỏ, dùng grand total row ở dưới ────
+              if (isFooter(row)) return null
 
               const r = row as LineRow
               const songs    = getSongLetters(r.to_hop_song)
@@ -784,66 +831,58 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
               const kgInner  = calcLayerKg(soTamKg, kho1, daiTt, inner.dl, false, null)
 
               const hasNoKho = !r.kho_giay || Number(r.kho_giay) === 0
-              const isDangChay = r.trang_thai === 'dang_chay'
-              const isOdd = idx % 2 === 0
-              const rowBg = hasNoKho ? '#fff1f0'
-                : r.trang_thai === 'hoan_thanh' ? '#f6ffed'
-                : isDangChay ? '#fffbe6'
-                : isOdd ? '#fff' : '#fafafa'
-              const rowBorderLeft = hasNoKho ? '3px solid #ff4d4f'
-                : isDangChay ? '3px solid #faad14'
-                : undefined
+              const eq     = lineEqMap.get(r.id)  ?? { matC: false, songC: false, matB: false, songB: false, inner: false }
+              const nextEq = nextEqMap.get(r.id)  ?? { matC: false, songC: false, matB: false, songB: false, inner: false }
 
               return (
-                <tr key={r.id} style={{ background: rowBg, ...(rowBorderLeft ? { borderLeft: rowBorderLeft } : {}) }}>
-                  {/* Mã KH */}
-                  <td style={{ ...TD, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.ma_kh || '—'}</td>
+                <tr key={r.id}>
+                  {/* Mã KH — hiện đầy đủ tên khách hàng */}
+                  <td style={{ ...TD }}>
+                    <div style={{ fontWeight: 600 }}>
+                      {r.ten_khach_hang || r.ma_kh || '—'}
+                    </div>
+                  </td>
 
                   {/* Số LSX + STT nhỏ + ngày chạy */}
                   <td style={{ ...TD, whiteSpace: 'nowrap' }}>
-                    <div style={{ fontSize: 10, color: '#8c8c8c', lineHeight: 1 }}>{r.thu_tu}</div>
-                    <div style={{ fontFamily: 'monospace', fontSize: 13 }}>{r.so_lenh || '—'}</div>
-                    {r.ngay_chay && (() => {
-                      const today = dayjs().startOf('day')
-                      const nc = dayjs(r.ngay_chay).startOf('day')
-                      const ngayColor = nc.isBefore(today) ? '#ff4d4f' : nc.isSame(today) ? '#fa8c16' : '#1677ff'
-                      return (
-                        <div style={{ fontSize: 11, color: ngayColor, marginTop: 1, fontWeight: nc.isBefore(today) || nc.isSame(today) ? 700 : 400 }}>
-                          📅 {dayjs(r.ngay_chay).format('DD/MM')}
-                        </div>
-                      )
-                    })()}
+                    {r.thu_tu > 0 && <div style={{ fontSize: 10, lineHeight: 1 }}>{r.thu_tu}</div>}
+                    <div style={{ fontSize: 13 }}>{r.so_lenh || '—'}</div>
+                    {r.ngay_chay && (
+                      <div style={{ fontSize: 11, marginTop: 1 }}>
+                        {dayjs(r.ngay_chay).format('DD/MM')}
+                      </div>
+                    )}
                   </td>
 
                   {/* Mặt C */}
                   <td style={TD}>
-                    <PaperCell ma={r.mat} dl={r.mat_dl} kg={kgMatC} isSong={false} />
+                    <PaperCell ma={r.mat} dl={r.mat_dl} kg={kgMatC} isEqual={eq.matC} hideKg={nextEq.matC} />
                   </td>
 
                   {/* Sóng C */}
                   <td style={TD}>
                     {slots.songC.ma
-                      ? <PaperCell ma={slots.songC.ma} dl={slots.songC.dl} kg={kgSongC} isSong={true} />
-                      : <span style={{ color: '#d9d9d9', fontSize: 10 }}>—</span>}
+                      ? <PaperCell ma={slots.songC.ma} dl={slots.songC.dl} kg={kgSongC} isEqual={eq.songC} hideKg={nextEq.songC} />
+                      : <span style={{ fontSize: 10 }}>—</span>}
                   </td>
 
                   {/* Mặt B (chỉ có ≥5 lớp) */}
                   <td style={TD}>
                     {soLop >= 5
-                      ? <PaperCell ma={r.mat_1} dl={r.mat_1_dl} kg={kgMatB} isSong={false} />
-                      : <span style={{ color: '#d9d9d9', fontSize: 10 }}>—</span>}
+                      ? <PaperCell ma={r.mat_1} dl={r.mat_1_dl} kg={kgMatB} isEqual={eq.matB} hideKg={nextEq.matB} />
+                      : <span style={{ fontSize: 10 }}>—</span>}
                   </td>
 
                   {/* Sóng B */}
                   <td style={TD}>
                     {slots.songB.ma
-                      ? <PaperCell ma={slots.songB.ma} dl={slots.songB.dl} kg={kgSongB} isSong={true} />
-                      : <span style={{ color: '#d9d9d9', fontSize: 10 }}>—</span>}
+                      ? <PaperCell ma={slots.songB.ma} dl={slots.songB.dl} kg={kgSongB} isEqual={eq.songB} hideKg={nextEq.songB} />
+                      : <span style={{ fontSize: 10 }}>—</span>}
                   </td>
 
                   {/* Mặt trong */}
                   <td style={TD}>
-                    <PaperCell ma={inner.ma} dl={inner.dl} kg={kgInner} isSong={false} />
+                    <PaperCell ma={inner.ma} dl={inner.dl} kg={kgInner} isEqual={eq.inner} hideKg={nextEq.inner} />
                   </td>
 
                   {/* Quy cách sản phẩm */}
@@ -854,12 +893,12 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                   {/* Sóng */}
                   <td style={{ ...TD, textAlign: 'center' }}>
                     {r.to_hop_song
-                      ? <Tag color="purple" style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{r.to_hop_song}</Tag>
+                      ? <span style={{ fontWeight: 700, fontSize: 14 }}>{r.to_hop_song}</span>
                       : '—'}
                   </td>
 
                   {/* Khổ */}
-                  <td className="cell-kho" style={{ ...TD, textAlign: 'center', fontWeight: 700, color: hasNoKho ? '#ff4d4f' : '#1677ff', fontSize: 20 }}>
+                  <td className="cell-kho" style={{ ...TD, textAlign: 'center', fontWeight: 700, fontSize: 13 }}>
                     {hasNoKho ? '⚠ —' : fmtN(r.kho_giay, 1)}
                   </td>
 
@@ -869,39 +908,39 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                   </td>
 
                   {/* Số Tấm — to hơn, công nhân nhìn chính */}
-                  <td className="cell-tam" style={{ ...TD, textAlign: 'center', fontWeight: 700, fontSize: 24 }}>
+                  <td className="cell-tam" style={{ ...TD, textAlign: 'center', fontWeight: 700, fontSize: 13 }}>
                     {soTam.toLocaleString('vi-VN')}
                   </td>
 
                   {/* Dao */}
-                  <td style={{ ...TD, textAlign: 'center', fontWeight: 700, color: '#1677ff' }}>
+                  <td style={{ ...TD, textAlign: 'center', fontWeight: 700 }}>
                     {r.so_dao ?? '—'}
                   </td>
 
                   {/* QCCL */}
-                  <td style={{ ...TD, textAlign: 'center', fontFamily: 'monospace', fontSize: 12 }}>
+                  <td style={{ ...TD, textAlign: 'center', fontSize: 12 }}>
                     {qccl || '—'}
                   </td>
 
                   {/* kho_giay / so_dao = khổ mỗi dao */}
                   <td style={{ ...TD, textAlign: 'center' }}>
                     {r.kho_giay != null && r.so_dao && r.so_dao > 0
-                      ? <span style={{ fontWeight: 700, fontSize: 14, color: '#1677ff' }}>{fmtN(Number(r.kho_giay) / r.so_dao, 1)}</span>
-                      : <span style={{ color: '#d9d9d9' }}>—</span>}
+                      ? <span style={{ fontWeight: 700, fontSize: 14 }}>{fmtN(Number(r.kho_giay) / r.so_dao, 1)}</span>
+                      : <span>—</span>}
                   </td>
 
                   {/* SL Thùng — nhỏ hơn, tham khảo */}
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 400, fontSize: 12, color: '#595959' }}>
+                  <td style={{ ...TD, textAlign: 'right', fontWeight: 400, fontSize: 12 }}>
                     {Number(r.so_luong_ke_hoach).toLocaleString('vi-VN')}
                   </td>
 
                   {/* Loại Lằn */}
                   <td style={{ ...TD, textAlign: 'center' }}>
                     {r.loai_lan
-                      ? <Tag color="volcano" style={{ margin: 0, fontSize: 12 }}>
+                      ? <span style={{ border: '1px solid #555', borderRadius: 3, padding: '0 4px', fontSize: 12, fontWeight: 600 }}>
                           {LOAI_LAN_LABELS[r.loai_lan] ?? r.loai_lan}
-                        </Tag>
-                      : <span style={{ color: '#d9d9d9' }}>—</span>}
+                        </span>
+                      : <span>—</span>}
                   </td>
 
                   {/* Loại In */}
@@ -909,29 +948,29 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                       {r.loai_in && r.loai_in !== 'khong_in'
                         ? <span style={{ fontSize: 12 }}>{r.loai_in === 'flexo' ? 'Flexo' : r.loai_in === 'ky_thuat_so' ? 'KTS' : r.loai_in}{r.so_mau ? ` ${r.so_mau}M` : ''}</span>
-                        : <span style={{ color: '#d9d9d9', fontSize: 12 }}>—</span>}
+                        : <span style={{ fontSize: 12 }}>—</span>}
                       {r.c_tham && r.c_tham !== 'Không' && (
-                        <Tag color="cyan" style={{ margin: 0, fontSize: 11, lineHeight: '16px', padding: '0 5px' }}>
-                          CT {r.c_tham.replace('mặt', 'm').replace(/\s+/g, '')}
-                        </Tag>
+                        <span style={{ border: '1px solid #555', borderRadius: 2, padding: '0 4px', fontSize: 11, fontWeight: 600 }}>
+                          CT{r.c_tham.replace('mặt', 'm').replace(/\s+/g, '')}
+                        </span>
                       )}
                       {r.can_man && r.can_man !== 'Không' && (
-                        <Tag color="purple" style={{ margin: 0, fontSize: 11, lineHeight: '16px', padding: '0 5px' }}>
-                          CM {r.can_man.replace('mặt', 'm').replace(/\s+/g, '')}
-                        </Tag>
+                        <span style={{ border: '1px solid #555', borderRadius: 2, padding: '0 4px', fontSize: 11, fontWeight: 600 }}>
+                          CM{r.can_man.replace('mặt', 'm').replace(/\s+/g, '')}
+                        </span>
                       )}
                     </div>
                   </td>
 
-                  {/* Ghi Chú — nổi bật khi có nội dung */}
-                  <td style={{ ...TD, maxWidth: 200, background: r.ghi_chu ? '#fffbe6' : undefined }}>
+                  {/* Ghi Chú */}
+                  <td style={{ ...TD, maxWidth: 200 }}>
                     {r.ghi_chu
-                      ? <span style={{ fontSize: 13, fontWeight: 600, color: '#262626' }}>📌 {r.ghi_chu}</span>
-                      : <span style={{ fontSize: 11, color: '#d9d9d9' }}>—</span>}
+                      ? <span style={{ fontSize: 13, fontWeight: 600 }}>▶ {r.ghi_chu}</span>
+                      : <span style={{ fontSize: 11 }}>—</span>}
                   </td>
 
                   {/* Mét Tới */}
-                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, color: '#fa8c16', fontSize: 14 }}>
+                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700, fontSize: 14 }}>
                     {metToi > 0 ? metToi.toLocaleString('vi-VN', { maximumFractionDigits: 1 }) : '—'}
                   </td>
 
@@ -973,23 +1012,23 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
             })}
 
             {/* ── Dòng tổng cộng toàn kế hoạch ── */}
-            <tr className="grand-total-row" style={{ background: '#fffbe6', fontWeight: 700, borderTop: '3px solid #faad14' }}>
-              <td colSpan={2} style={{ ...TD, background: '#ffe58f', fontSize: 14, fontWeight: 700, color: '#614700', whiteSpace: 'nowrap' }}>
-                TỔNG KẾ HOẠCH · {plan.lines.length} lệnh
+            <tr className="grand-total-row" style={{ fontWeight: 700, borderTop: '3px solid #000' }}>
+              <td colSpan={2} style={{ ...TD, fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                TỔNG · {plan.lines.length} lệnh
               </td>
               {/* Kg từng lớp tổng (cùng mã gộp, khác mã tách) */}
-              <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={grandLayers.matC}  isSong={false} bold /></td>
-              <td style={{ ...TD, background: '#e6f4ff' }}><LayerEntriesCell entries={grandLayers.songC} isSong={true}  bold /></td>
-              <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={grandLayers.matB}  isSong={false} bold /></td>
-              <td style={{ ...TD, background: '#e6f4ff' }}><LayerEntriesCell entries={grandLayers.songB} isSong={true}  bold /></td>
-              <td style={{ ...TD, background: '#f6ffed' }}><LayerEntriesCell entries={grandLayers.inner} isSong={false} bold /></td>
+              <td style={TD}><LayerEntriesCell entries={grandLayers.matC}  isSong={false} bold /></td>
+              <td style={TD}><LayerEntriesCell entries={grandLayers.songC} isSong={true}  bold /></td>
+              <td style={TD}><LayerEntriesCell entries={grandLayers.matB}  isSong={false} bold /></td>
+              <td style={TD}><LayerEntriesCell entries={grandLayers.songB} isSong={true}  bold /></td>
+              <td style={TD}><LayerEntriesCell entries={grandLayers.inner} isSong={false} bold /></td>
               {/* Tổng SL thùng + MT toàn kế hoạch */}
-              <td colSpan={12} style={{ ...TD, textAlign: 'right', color: '#8c8c8c', fontSize: 13 }}>
-                <b style={{ color: '#1677ff', fontSize: 15 }}>{totalSLThung.toLocaleString('vi-VN')} thùng</b>
-                &nbsp;·&nbsp;Tổng MT:
+              <td colSpan={11} style={{ ...TD, textAlign: 'right', fontSize: 13 }}>
+                <b>{totalSLThung.toLocaleString('vi-VN')} thùng</b>
+                &nbsp;·&nbsp;Tổng số MT:
               </td>
               {/* Tổng MT */}
-              <td className="cell-mt" style={{ ...TD, textAlign: 'right', fontWeight: 800, color: '#fa8c16', fontSize: 18, background: '#ffe58f' }}>
+              <td className="cell-mt" style={{ ...TD, textAlign: 'right', fontWeight: 800, fontSize: 14 }}>
                 {totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}
               </td>
               <td style={TD} className="no-print" />
@@ -1014,12 +1053,13 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
 
 const TH: React.CSSProperties = {
   padding: '6px 10px',
-  border: '1px solid #b0b0b0',
+  border: '1px solid #000',
   textAlign: 'center',
   fontSize: 13,
-  fontWeight: 600,
+  fontWeight: 700,
   whiteSpace: 'nowrap',
-  background: '#f0f5ff',
+  background: '#fff',
+  color: '#000',
 }
 
 const TD: React.CSSProperties = {

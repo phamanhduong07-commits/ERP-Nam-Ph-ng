@@ -431,6 +431,7 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
       { key: 'kich_thuoc', label: 'Kích thước', width: 20 },
       { key: 'so_lop', label: 'Lớp', width: 6 },
       { key: 'to_hop_song', label: 'Tổ hợp sóng', width: 10 },
+      { key: 'cong_doan_full', label: 'Công đoạn', width: 28 },
       { key: 'so_luong_ke_hoach', label: 'SL kế hoạch', width: 12 },
       { key: 'dvt', label: 'ĐVT', width: 8 },
       { key: 'so_luong_hoan_thanh', label: 'SL hoàn thành', width: 12 },
@@ -442,11 +443,15 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
       const d = r.dai ?? r.product?.dai
       const rw = r.rong ?? r.product?.rong
       const c = r.cao ?? r.product?.cao
+      const cdParts: string[] = []
+      if (r.cong_doan) cdParts.push(r.cong_doan)
+      if (r.loai_lan && r.loai_lan !== 'khong') cdParts.push(r.loai_lan)
       return {
         ...r,
         stt: i + 1,
         ma_amis: r.product?.ma_amis ?? '',
         kich_thuoc: d ? `${Number(d)}×${Number(rw ?? 0)}×${Number(c ?? 0)} cm` : '',
+        cong_doan_full: cdParts.join(' | ') || '',
         ngay_giao: fmtDate(r.ngay_giao_hang),
       }
     })
@@ -456,34 +461,45 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
 
   const handleExportPdf = () => {
     const cols = [
-      { header: 'STT', key: 'stt', align: 'center' as const }, 
-      { header: 'Mã SP', key: 'ma_amis' }, 
+      { header: 'STT', key: 'stt', align: 'center' as const },
+      { header: 'Mã SP', key: 'ma_amis' },
       { header: 'Tên sản phẩm', key: 'ten_hang' },
-      { header: 'Kích thước', key: 'kich_thuoc' }, 
+      { header: 'Kiểu', key: 'loai_thung', align: 'center' as const },
       { header: 'Lớp', key: 'so_lop', align: 'center' as const },
-      { header: 'SL KH', key: 'so_luong_ke_hoach', align: 'right' as const }, 
+      { header: 'D (cm)', key: 'dim_d', align: 'center' as const },
+      { header: 'R (cm)', key: 'dim_r', align: 'center' as const },
+      { header: 'C (cm)', key: 'dim_c', align: 'center' as const },
+      { header: 'Công đoạn', key: 'cong_doan_full' },
+      { header: 'SL KH', key: 'so_luong_ke_hoach', align: 'right' as const },
       { header: 'ĐVT', key: 'dvt' },
-      { header: 'SL hoàn thành', key: 'so_luong_hoan_thanh', align: 'right' as const }, 
+      { header: 'SL hoàn thành', key: 'so_luong_hoan_thanh', align: 'right' as const },
       { header: 'Ngày giao', key: 'ngay_giao' },
     ]
-    
+
     const rows = order.items.map((r, i) => {
       const d = r.dai ?? r.product?.dai
       const rw = r.rong ?? r.product?.rong
       const c = r.cao ?? r.product?.cao
+      const cdParts: string[] = []
+      if (r.cong_doan) cdParts.push(r.cong_doan)
+      if (r.loai_lan && r.loai_lan !== 'khong') cdParts.push(r.loai_lan)
       return {
         stt: i + 1,
         ma_amis: r.product?.ma_amis ?? '—',
         ten_hang: r.ten_hang,
-        kich_thuoc: d ? `${Number(d)}×${Number(rw ?? 0)}×${Number(c ?? 0)}` : '—',
+        loai_thung: r.loai_thung ?? '—',
         so_lop: r.so_lop ?? '—',
+        dim_d: d != null ? Number(d) : '—',
+        dim_r: rw != null ? Number(rw) : '—',
+        dim_c: c != null ? Number(c) : '—',
+        cong_doan_full: cdParts.join(' | ') || '—',
         so_luong_ke_hoach: fmtNum(r.so_luong_ke_hoach),
         dvt: r.dvt,
         so_luong_hoan_thanh: fmtNum(r.so_luong_hoan_thanh),
         ngay_giao: fmtDate(r.ngay_giao_hang),
       }
     })
-    
+
     const table = buildHtmlTable(cols.map(c => ({ header: c.header, align: c.align })), rows.map(r => cols.map(c => (r as Record<string, unknown>)[c.key])) as (string | number | null | undefined)[][])
     
     const printData = {
