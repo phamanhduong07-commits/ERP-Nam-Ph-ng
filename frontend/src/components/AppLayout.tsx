@@ -290,6 +290,16 @@ function buildNavItems(queueCount: number): NavItem[] {
       permissions: ['report.view', 'report.export', 'report.cong_no', 'report.phoi_thanh_pham'],
       flyoutSections: [
         {
+          sectionLabel: 'Tổng hợp Group',
+          items: [
+            { key: '/reports/cashflow-daily', to: '/reports/cashflow-daily', label: <Link to="/reports/cashflow-daily">Dòng tiền Group (Ngày)</Link>, permissions: ['report.export'] },
+            { key: '/reports/group-pnl', to: '/reports/group-pnl', label: <Link to="/reports/group-pnl">P&L Group (3 PN)</Link>, permissions: ['report.export'] },
+            { key: '/reports/sales-group', to: '/reports/sales-group', label: <Link to="/reports/sales-group">Doanh số Group (Xưởng)</Link>, permissions: ['report.export'] },
+            { key: '/reports/group-debt', to: '/reports/group-debt', label: <Link to="/reports/group-debt">Công nợ Group</Link>, permissions: ['report.cong_no'] },
+            { key: '/reports/sales-nvkd', to: '/reports/sales-nvkd', label: <Link to="/reports/sales-nvkd">Doanh số NV KD</Link>, permissions: ['report.export'] },
+          ],
+        },
+        {
           sectionLabel: 'Báo cáo Quản trị',
           items: [
             { key: '/accounting/reports/workshop-pnl', to: '/accounting/reports/workshop-pnl', label: <Link to="/accounting/reports/workshop-pnl">Lãi lỗ Phân xưởng</Link>, permissions: ['report.export'] },

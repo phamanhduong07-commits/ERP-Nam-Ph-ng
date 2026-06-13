@@ -1675,6 +1675,60 @@ def get_legal_entity_cashflow(
     return AccountingService(db).get_legal_entity_cashflow(phap_nhan_id, tu_ngay, den_ngay)
 
 
+@router.get("/reports/cashflow-daily")
+def get_cashflow_daily(
+    ngay: date = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Dòng tiền Group ngày — 3 pháp nhân × per-bank-account + tổng group"""
+    return AccountingService(db).get_cashflow_daily(ngay)
+
+
+@router.get("/reports/group-pnl")
+def get_group_pnl(
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """P&L Group — 3 pháp nhân side by side + cột Tổng Group"""
+    return AccountingService(db).get_group_pnl(tu_ngay, den_ngay)
+
+
+@router.get("/reports/group-debt")
+def get_group_debt(
+    as_of_date: date = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Công nợ Group — AR + AP per pháp nhân + tổng Group"""
+    return AccountingService(db).get_group_debt_summary(as_of_date)
+
+
+@router.get("/ar/aging-7bucket")
+def get_ar_aging_7bucket(
+    as_of_date: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """AR Aging 7 bucket (chua_den_han/trong_han/sap_den_han_10/qua_han_14/qua_han_30/qua_han_60/kho_doi)"""
+    return AccountingService(db).get_ar_aging_7bucket(as_of_date, phap_nhan_id)
+
+
+@router.get("/ap/payment-plan")
+def get_ap_payment_plan(
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """AP kế hoạch thanh toán theo loại hàng"""
+    return AccountingService(db).get_ap_payment_plan(tu_ngay, den_ngay, phap_nhan_id)
+
+
 @router.get("/reports/production-costing")
 def get_production_costing(
     tu_ngay: date,

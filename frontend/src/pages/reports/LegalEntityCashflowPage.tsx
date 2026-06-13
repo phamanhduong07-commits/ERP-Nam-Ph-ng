@@ -10,7 +10,7 @@ const { Text } = Typography
 
 const LegalEntityCashflowPage: React.FC = () => {
   const { phapNhanList } = usePhapNhan()
-  interface CashflowData { total_receipts: number; total_payments: number; net_cashflow: number }
+  interface CashflowData { tong_thu: number; tong_chi: number; dong_tien_thuan: number }
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<CashflowData | null>(null)
 
@@ -43,9 +43,9 @@ const LegalEntityCashflowPage: React.FC = () => {
   ]
 
   const cashflowRows = data ? [
-    { label: '1. Thu tiền từ Khách hàng', value: data.total_receipts },
-    { label: '2. Chi trả Nhà cung cấp', value: data.total_payments },
-    { label: 'LƯU CHUYỂN TIỀN THUẦN', value: data.net_cashflow },
+    { label: '1. Thu tiền từ Khách hàng', value: data.tong_thu },
+    { label: '2. Chi trả Nhà cung cấp', value: data.tong_chi },
+    { label: 'LƯU CHUYỂN TIỀN THUẦN', value: data.dong_tien_thuan },
   ] : []
 
   return (
@@ -72,12 +72,12 @@ const LegalEntityCashflowPage: React.FC = () => {
           <Row gutter={16} style={{ marginBottom: 24 }}>
             <Col span={12}>
               <Card>
-                <Statistic title="Tổng Thu" value={data.total_receipts} precision={0} valueStyle={{ color: '#3f8600' }} />
+                <Statistic title="Tổng Thu" value={data.tong_thu} precision={0} valueStyle={{ color: '#3f8600' }} />
               </Card>
             </Col>
             <Col span={12}>
               <Card>
-                <Statistic title="Tổng Chi" value={data.total_payments} precision={0} valueStyle={{ color: '#cf1322' }} />
+                <Statistic title="Tổng Chi" value={data.tong_chi} precision={0} valueStyle={{ color: '#cf1322' }} />
               </Card>
             </Col>
           </Row>

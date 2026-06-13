@@ -444,3 +444,19 @@ class QuoteHistory(Base):
 
     quote: Mapped["Quote"] = relationship("Quote", back_populates="history")
     changed_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[changed_by])
+
+
+class SalesTarget(Base):
+    """Mục tiêu doanh số theo NV KD + tháng + xưởng (tùy chọn)"""
+    __tablename__ = "sales_targets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
+    thang: Mapped[date] = mapped_column(Date, nullable=False)  # always YYYY-MM-01
+    muc_tieu: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+    phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong", foreign_keys=[phan_xuong_id])

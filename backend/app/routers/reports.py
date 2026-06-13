@@ -13,8 +13,9 @@ from app.deps import get_current_user
 from app.models.auth import User
 from app.models.billing import SalesInvoice
 from app.models.accounting import PurchaseInvoice, ProductionCostAllocation
-from app.models.sales import SalesOrder, SalesOrderItem
-from app.models.master import Customer, CustomerNhanVien, Warehouse
+from app.models.sales import SalesOrder, SalesOrderItem, SalesTarget
+from app.models.master import Customer, CustomerNhanVien, Warehouse, PhanXuong
+from app.models.auth import User as UserModel
 from app.models.inventory import InventoryTransaction, InventoryBalance
 from app.models.master import PaperMaterial, OtherMaterial, Product
 from app.models.production import ProductionOrder, ProductionOrderItem
@@ -1037,3 +1038,237 @@ def export_production_cost_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# ── BÁO CÁO DOANH SỐ THEO XƯỞNG (GROUP) ─────────────────────────────────────
+
+@router.get("/sales-by-workshop")
+def get_sales_by_workshop(
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Doanh số Group theo xưởng — per-workshop so với mục tiêu tháng"""
+    from datetime import date as _date
+    thang_dau = _date(tu_ngay.year, tu_ngay.month, 1)
+
+    xuong_list = db.query(PhanXuong).order_by(PhanXuong.id).all()
+
+    # Mục tiêu tháng per xưởng (tổng tất cả NV của xưởng đó)
+    targets_q = db.query(
+        SalesTarget.phan_xuong_id,
+        func.sum(SalesTarget.muc_tieu).label("muc_tieu"),
+    ).filter(SalesTarget.thang == thang_dau).group_by(SalesTarget.phan_xuong_id).all()
+    target_map = {row.phan_xuong_id: float(row.muc_tieu) for row in targets_q}
+    # Mục tiêu không phân xưởng = tổng toàn group
+    target_total = sum(target_map.values())
+
+    # Doanh số per xưởng
+    ds_q = db.query(
+        SalesOrder.phan_xuong_id,
+        func.sum(SalesOrder.tong_tien).label("thuc_hien"),
+    ).filter(
+        SalesOrder.ngay_don.between(tu_ngay, den_ngay),
+        SalesOrder.trang_thai.notin_(["huy"]),
+    ).group_by(SalesOrder.phan_xuong_id).all()
+    ds_map = {row.phan_xuong_id: float(row.thuc_hien or 0) for row in ds_q}
+
+    # Doanh số theo ngày × xưởng
+    ds_ngay_q = db.query(
+        SalesOrder.ngay_don,
+        SalesOrder.phan_xuong_id,
+        func.sum(SalesOrder.tong_tien).label("tien"),
+    ).filter(
+        SalesOrder.ngay_don.between(tu_ngay, den_ngay),
+        SalesOrder.trang_thai.notin_(["huy"]),
+    ).group_by(SalesOrder.ngay_don, SalesOrder.phan_xuong_id).all()
+
+    ngay_map: dict = {}
+    for row in ds_ngay_q:
+        key = str(row.ngay_don)
+        if key not in ngay_map:
+            ngay_map[key] = {}
+        ngay_map[key][row.phan_xuong_id] = float(row.tien or 0)
+
+    xuong_result = []
+    ds_total = 0.0
+    for px in xuong_list:
+        thuc_hien = ds_map.get(px.id, 0.0)
+        muc_tieu = target_map.get(px.id, 0.0)
+        ds_total += thuc_hien
+        xuong_result.append({
+            "phan_xuong_id": px.id,
+            "ten": px.ten_xuong,
+            "muc_tieu_thang": muc_tieu,
+            "thuc_hien": thuc_hien,
+            "ty_le": round(thuc_hien / muc_tieu, 4) if muc_tieu else None,
+        })
+    xuong_result.append({
+        "phan_xuong_id": None, "ten": "Tổng Group",
+        "muc_tieu_thang": target_total,
+        "thuc_hien": ds_total,
+        "ty_le": round(ds_total / target_total, 4) if target_total else None,
+    })
+
+    theo_ngay = [
+        {"ngay": ngay, "values": {str(k): v for k, v in vals.items()},
+         "total": sum(vals.values())}
+        for ngay, vals in sorted(ngay_map.items())
+    ]
+
+    return {"tu_ngay": str(tu_ngay), "den_ngay": str(den_ngay),
+            "xuong": xuong_result, "theo_ngay": theo_ngay}
+
+
+# ── BÁO CÁO DOANH SỐ THEO NV KD ─────────────────────────────────────────────
+
+@router.get("/sales-by-nvkd")
+def get_sales_by_nvkd(
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Doanh số theo NV KD + mục tiêu tháng"""
+    from datetime import date as _date
+    thang_dau = _date(tu_ngay.year, tu_ngay.month, 1)
+
+    # Mục tiêu per user
+    targets_q = db.query(
+        SalesTarget.user_id,
+        func.sum(SalesTarget.muc_tieu).label("muc_tieu"),
+    ).filter(SalesTarget.thang == thang_dau, SalesTarget.phan_xuong_id == None
+             ).group_by(SalesTarget.user_id).all()
+    target_map = {row.user_id: float(row.muc_tieu) for row in targets_q}
+
+    # Doanh số per NV KD
+    ds_q = db.query(
+        SalesOrder.nv_kinh_doanh_id,
+        func.sum(SalesOrder.tong_tien).label("thuc_hien"),
+    ).filter(
+        SalesOrder.ngay_don.between(tu_ngay, den_ngay),
+        SalesOrder.trang_thai.notin_(["huy"]),
+        SalesOrder.nv_kinh_doanh_id != None,
+    ).group_by(SalesOrder.nv_kinh_doanh_id).all()
+
+    nv_ids = list({row.nv_kinh_doanh_id for row in ds_q} | set(target_map.keys()))
+    users = {u.id: u for u in db.query(UserModel).filter(UserModel.id.in_(nv_ids)).all()}
+
+    # Doanh số theo ngày per NV
+    ds_ngay_q = db.query(
+        SalesOrder.ngay_don,
+        SalesOrder.nv_kinh_doanh_id,
+        func.sum(SalesOrder.tong_tien).label("tien"),
+    ).filter(
+        SalesOrder.ngay_don.between(tu_ngay, den_ngay),
+        SalesOrder.trang_thai.notin_(["huy"]),
+        SalesOrder.nv_kinh_doanh_id.in_(nv_ids),
+    ).group_by(SalesOrder.ngay_don, SalesOrder.nv_kinh_doanh_id).all()
+
+    theo_ngay_map: dict = {}
+    for row in ds_ngay_q:
+        key = str(row.ngay_don)
+        if key not in theo_ngay_map:
+            theo_ngay_map[key] = {}
+        theo_ngay_map[key][row.nv_kinh_doanh_id] = float(row.tien or 0)
+
+    ds_map = {row.nv_kinh_doanh_id: float(row.thuc_hien or 0) for row in ds_q}
+    result = []
+    for uid in sorted(nv_ids):
+        u = users.get(uid)
+        thuc_hien = ds_map.get(uid, 0.0)
+        muc_tieu = target_map.get(uid, 0.0)
+        result.append({
+            "user_id": uid,
+            "ten": u.ho_ten if u else f"User {uid}",
+            "username": u.username if u else None,
+            "muc_tieu_thang": muc_tieu,
+            "thuc_hien": thuc_hien,
+            "ty_le": round(thuc_hien / muc_tieu, 4) if muc_tieu else None,
+            "theo_ngay": {str(k): v for k, v in theo_ngay_map.items()
+                          if uid in {r: val for r, val in v.items()}},
+        })
+
+    theo_ngay = [
+        {"ngay": ngay, "values": {str(k): v for k, v in vals.items()},
+         "total": sum(vals.values())}
+        for ngay, vals in sorted(theo_ngay_map.items())
+    ]
+
+    return {"tu_ngay": str(tu_ngay), "den_ngay": str(den_ngay),
+            "nvkd": result, "theo_ngay": theo_ngay}
+
+
+# ── CRUD SALES TARGETS ────────────────────────────────────────────────────────
+
+@router.get("/sales-targets")
+def list_sales_targets(
+    thang: date | None = Query(None),
+    user_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(SalesTarget)
+    if thang:
+        q = q.filter(SalesTarget.thang == thang)
+    if user_id:
+        q = q.filter(SalesTarget.user_id == user_id)
+    rows = q.order_by(SalesTarget.thang.desc(), SalesTarget.user_id).all()
+    return [{"id": r.id, "user_id": r.user_id, "phan_xuong_id": r.phan_xuong_id,
+             "thang": str(r.thang), "muc_tieu": float(r.muc_tieu), "ghi_chu": r.ghi_chu} for r in rows]
+
+
+@router.post("/sales-targets", status_code=201)
+def create_sales_target(
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from datetime import date as _date
+    thang_str = body.get("thang", "")
+    thang = _date.fromisoformat(thang_str[:7] + "-01") if thang_str else None
+    if not thang:
+        raise HTTPException(400, "thang là bắt buộc (YYYY-MM)")
+    t = SalesTarget(
+        user_id=body["user_id"],
+        phan_xuong_id=body.get("phan_xuong_id"),
+        thang=thang,
+        muc_tieu=Decimal(str(body["muc_tieu"])),
+        ghi_chu=body.get("ghi_chu"),
+    )
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return {"id": t.id, "user_id": t.user_id, "thang": str(t.thang), "muc_tieu": float(t.muc_tieu)}
+
+
+@router.put("/sales-targets/{target_id}")
+def update_sales_target(
+    target_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    t = db.get(SalesTarget, target_id)
+    if not t:
+        raise HTTPException(404, "Không tìm thấy mục tiêu")
+    if "muc_tieu" in body:
+        t.muc_tieu = Decimal(str(body["muc_tieu"]))
+    if "ghi_chu" in body:
+        t.ghi_chu = body["ghi_chu"]
+    db.commit()
+    return {"id": t.id, "muc_tieu": float(t.muc_tieu)}
+
+
+@router.delete("/sales-targets/{target_id}", status_code=204)
+def delete_sales_target(
+    target_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    t = db.get(SalesTarget, target_id)
+    if not t:
+        raise HTTPException(404, "Không tìm thấy mục tiêu")
+    db.delete(t)
+    db.commit()

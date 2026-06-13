@@ -224,6 +224,11 @@ const VATSummaryPage = lazy(() => import('./pages/reports/VATSummaryPage'))
 const TaxTrialBalancePage = lazy(() => import('./pages/reports/TaxTrialBalancePage'))
 const ProductionCostingPage = lazy(() => import('./pages/reports/ProductionCostingPage'))
 const ReportingHubPage = lazy(() => import('./pages/reports/ReportingHubPage'))
+const CashflowDailyPage = lazy(() => import('./pages/reports/CashflowDailyPage'))
+const GroupPNLPage = lazy(() => import('./pages/reports/GroupPNLPage'))
+const SalesGroupPage = lazy(() => import('./pages/reports/SalesGroupPage'))
+const GroupDebtPage = lazy(() => import('./pages/reports/GroupDebtPage'))
+const SalesByNVKDPage = lazy(() => import('./pages/reports/SalesByNVKDPage'))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -452,6 +457,11 @@ export default function App() {
             <Route path="reports/vat-summary" element={<ErrorBoundary><VATSummaryPage /></ErrorBoundary>} />
             <Route path="reports/tax-trial-balance" element={<ErrorBoundary><TaxTrialBalancePage /></ErrorBoundary>} />
             <Route path="accounting/reports/production-costing" element={<ErrorBoundary><ProductionCostingPage /></ErrorBoundary>} />
+            <Route path="reports/cashflow-daily" element={<ErrorBoundary><CashflowDailyPage /></ErrorBoundary>} />
+            <Route path="reports/group-pnl" element={<ErrorBoundary><GroupPNLPage /></ErrorBoundary>} />
+            <Route path="reports/sales-group" element={<ErrorBoundary><SalesGroupPage /></ErrorBoundary>} />
+            <Route path="reports/group-debt" element={<ErrorBoundary><GroupDebtPage /></ErrorBoundary>} />
+            <Route path="reports/sales-nvkd" element={<ErrorBoundary><SalesByNVKDPage /></ErrorBoundary>} />
             <Route path="hr/dashboard" element={<ErrorBoundary><HRDashboardPage /></ErrorBoundary>} />
             <Route path="hr/health-checks" element={<ErrorBoundary><HealthCheckPage /></ErrorBoundary>} />
             <Route path="hr/safety" element={<ErrorBoundary><SafetyPage /></ErrorBoundary>} />

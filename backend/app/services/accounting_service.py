@@ -16,7 +16,8 @@ from app.models.accounting import (
     AccountingPeriodLock,
 )
 from app.models.auth import AuditLog
-from app.models.master import Customer, Supplier, PhanXuong
+from app.models.master import Customer, Supplier, PhanXuong, PhapNhan, BankAccount
+from app.models.accounting import BankTransaction
 from app.models.purchase import PurchaseOrder
 from app.models.production import ProductionOrder
 from app.models.warehouse_doc import GoodsReceipt, DeliveryOrder, MaterialIssue, ProductionOutput
@@ -5306,3 +5307,309 @@ class AccountingService:
         wb.save(buf)
         buf.seek(0)
         return buf.getvalue()
+
+    # ─────────────────────────────────────────────
+    # BÁO CÁO TỔNG HỢP GROUP
+    # ─────────────────────────────────────────────
+
+    def get_cashflow_daily(self, ngay: date) -> dict:
+        """Dòng tiền Group ngày — 3 pháp nhân × per-bank + tổng group"""
+        all_pn = self.db.query(PhapNhan).filter(PhapNhan.trang_thai == True).order_by(PhapNhan.id).all()
+        result_pn = []
+        group_total = {"so_du_dau": Decimal(0), "tong_thu": Decimal(0),
+                       "tong_chi": Decimal(0), "so_du_cuoi": Decimal(0)}
+
+        for pn in all_pn:
+            tai_khoan = []
+            pn_thu = Decimal(0)
+            pn_chi = Decimal(0)
+            pn_so_du_dau = Decimal(0)
+
+            # Ngân hàng
+            bank_accounts = self.db.query(BankAccount).filter(
+                BankAccount.phap_nhan_id == pn.id,
+                BankAccount.trang_thai == True,
+            ).all()
+
+            for ba in bank_accounts:
+                prior_raw = self.db.query(
+                    func.coalesce(func.sum(BankTransaction.thu), 0) - func.coalesce(func.sum(BankTransaction.chi), 0)
+                ).filter(
+                    BankTransaction.bank_account_id == ba.id,
+                    BankTransaction.ngay_giao_dich < ngay,
+                ).scalar()
+                so_du_dau_ba = (ba.so_du_dau or Decimal(0)) + Decimal(str(prior_raw or 0))
+
+                thu_ba = Decimal(str(self.db.query(func.coalesce(func.sum(BankTransaction.thu), 0)).filter(
+                    BankTransaction.bank_account_id == ba.id,
+                    BankTransaction.ngay_giao_dich == ngay,
+                ).scalar() or 0))
+                chi_ba = Decimal(str(self.db.query(func.coalesce(func.sum(BankTransaction.chi), 0)).filter(
+                    BankTransaction.bank_account_id == ba.id,
+                    BankTransaction.ngay_giao_dich == ngay,
+                ).scalar() or 0))
+
+                tai_khoan.append({
+                    "loai": "ngan_hang",
+                    "bank_account_id": ba.id,
+                    "ten": ba.ten_ngan_hang,
+                    "so_tai_khoan": ba.so_tai_khoan,
+                    "so_du_dau": float(so_du_dau_ba),
+                    "thu": float(thu_ba),
+                    "chi": float(chi_ba),
+                    "so_du_cuoi": float(so_du_dau_ba + thu_ba - chi_ba),
+                })
+                pn_so_du_dau += so_du_dau_ba
+                pn_thu += thu_ba
+                pn_chi += chi_ba
+
+            # Tiền mặt
+            thu_mat = Decimal(str(self.db.query(func.coalesce(func.sum(CashReceipt.so_tien), 0)).filter(
+                CashReceipt.phap_nhan_id == pn.id,
+                CashReceipt.ngay_phieu == ngay,
+                CashReceipt.trang_thai == "da_duyet",
+            ).scalar() or 0))
+            chi_mat = Decimal(str(self.db.query(func.coalesce(func.sum(CashPayment.so_tien), 0)).filter(
+                CashPayment.phap_nhan_id == pn.id,
+                CashPayment.ngay_phieu == ngay,
+                CashPayment.trang_thai == "da_duyet",
+            ).scalar() or 0))
+            if thu_mat or chi_mat:
+                tai_khoan.insert(0, {
+                    "loai": "tien_mat",
+                    "bank_account_id": None,
+                    "ten": "Tiền mặt",
+                    "so_tai_khoan": None,
+                    "so_du_dau": 0,
+                    "thu": float(thu_mat),
+                    "chi": float(chi_mat),
+                    "so_du_cuoi": float(thu_mat - chi_mat),
+                })
+                pn_thu += thu_mat
+                pn_chi += chi_mat
+
+            pn_so_du_cuoi = pn_so_du_dau + pn_thu - pn_chi
+            result_pn.append({
+                "phap_nhan_id": pn.id,
+                "ten_viet_tat": pn.ten_viet_tat or pn.ma_phap_nhan,
+                "so_du_dau": float(pn_so_du_dau),
+                "tong_thu": float(pn_thu),
+                "tong_chi": float(pn_chi),
+                "so_du_cuoi": float(pn_so_du_cuoi),
+                "tai_khoan": tai_khoan,
+            })
+            group_total["so_du_dau"] += pn_so_du_dau
+            group_total["tong_thu"] += pn_thu
+            group_total["tong_chi"] += pn_chi
+            group_total["so_du_cuoi"] += pn_so_du_cuoi
+
+        return {
+            "ngay": str(ngay),
+            "phap_nhan": result_pn,
+            "tong_cong": {k: float(v) for k, v in group_total.items()},
+        }
+
+    def get_group_pnl(self, tu_ngay: date, den_ngay: date) -> dict:
+        """P&L Group — 3 pháp nhân side by side + cột Tổng Group"""
+        all_pn = self.db.query(PhapNhan).filter(PhapNhan.trang_thai == True).order_by(PhapNhan.id).all()
+        columns = [{"phap_nhan_id": pn.id, "ten": pn.ten_viet_tat or pn.ma_phap_nhan} for pn in all_pn]
+        columns.append({"phap_nhan_id": None, "ten": "Tổng Group"})
+
+        ROW_DEFS = [
+            ("doanh_thu_ban_hang", "Doanh thu bán hàng", 1),
+            ("giam_tru_doanh_thu", "Các khoản giảm trừ DT", 2),
+            ("doanh_thu_thuan", "Doanh thu thuần", 3),
+            ("gia_von_hang_ban", "Giá vốn hàng bán", 4),
+            ("loi_nhuan_gop", "Lợi nhuận gộp", 5),
+            ("doanh_thu_tai_chinh", "Doanh thu tài chính", 6),
+            ("chi_phi_tai_chinh", "Chi phí tài chính", 7),
+            ("chi_phi_ban_hang", "Chi phí bán hàng", 8),
+            ("chi_phi_quan_ly", "Chi phí quản lý DN", 9),
+            ("thu_nhap_khac", "Thu nhập khác", 10),
+            ("chi_phi_khac", "Chi phí khác", 11),
+            ("loi_nhuan_truoc_thue", "Lợi nhuận trước thuế", 12),
+        ]
+
+        rows = []
+        for key, label, ma_so in ROW_DEFS:
+            values = []
+            total = Decimal(0)
+            for pn in all_pn:
+                pnl = self.get_pnl(tu_ngay, den_ngay, phap_nhan_id=pn.id)
+                val = Decimal(str(pnl.get(key, 0) or 0))
+                values.append(float(val))
+                total += val
+            values.append(float(total))
+            rows.append({"chi_tieu": label, "ma_so": ma_so, "key": key, "values": values})
+
+        return {
+            "tu_ngay": str(tu_ngay),
+            "den_ngay": str(den_ngay),
+            "columns": columns,
+            "rows": rows,
+        }
+
+    def get_group_debt_summary(self, as_of_date: date) -> dict:
+        """Công nợ Group — AR + AP per pháp nhân + tổng Group"""
+        all_pn = self.db.query(PhapNhan).filter(PhapNhan.trang_thai == True).order_by(PhapNhan.id).all()
+        result_pn = []
+        AR_KEYS = ["tong", "chua_den_han", "trong_han", "sap_den_han_10",
+                   "qua_han_14", "qua_han_30", "qua_han_60", "kho_doi"]
+        AP_KEYS = ["tong", "qua_han", "den_han_30", "den_han_60", "chua_den_han"]
+        group_ar = {k: Decimal(0) for k in AR_KEYS}
+        group_ap = {k: Decimal(0) for k in AP_KEYS}
+
+        for pn in all_pn:
+            ar = self.get_ar_aging_7bucket(as_of_date, pn.id)
+            ap = self.get_ap_aging_summary(as_of_date, pn.id)
+            result_pn.append({
+                "phap_nhan_id": pn.id,
+                "ten": pn.ten_viet_tat or pn.ma_phap_nhan,
+                "ar": ar,
+                "ap": ap,
+            })
+            for k in AR_KEYS:
+                group_ar[k] += Decimal(str(ar.get(k, 0) or 0))
+            for k in AP_KEYS:
+                group_ap[k] += Decimal(str(ap.get(k, 0) or 0))
+
+        return {
+            "as_of_date": str(as_of_date),
+            "phap_nhan": result_pn,
+            "tong_group": {
+                "ar": {k: float(v) for k, v in group_ar.items()},
+                "ap": {k: float(v) for k, v in group_ap.items()},
+            },
+        }
+
+    def get_ar_aging_7bucket(self, as_of_date: date, phap_nhan_id: int | None = None) -> dict:
+        """AR Aging 7 bucket theo file Excel mẫu"""
+        from app.models.billing import SalesInvoice
+        q = self.db.query(SalesInvoice).filter(
+            SalesInvoice.trang_thai.in_(["published", "sent", "partial"])
+        )
+        if phap_nhan_id:
+            q = q.filter(SalesInvoice.phap_nhan_id == phap_nhan_id)
+
+        BUCKET_KEYS = ["chua_den_han", "trong_han", "sap_den_han_10",
+                       "qua_han_14", "qua_han_30", "qua_han_60", "kho_doi"]
+        buckets = {k: Decimal(0) for k in BUCKET_KEYS}
+
+        for inv in q.all():
+            remaining = (inv.tong_cong or Decimal(0)) - (getattr(inv, 'da_thanh_toan', None) or Decimal(0))
+            if remaining <= 0:
+                continue
+            han_tt = getattr(inv, 'han_tt', None)
+            if not han_tt:
+                buckets["chua_den_han"] += remaining
+                continue
+            days = (han_tt - as_of_date).days
+            if days > 30:
+                buckets["chua_den_han"] += remaining
+            elif days > 10:
+                buckets["trong_han"] += remaining
+            elif days >= 0:
+                buckets["sap_den_han_10"] += remaining
+            elif days >= -14:
+                buckets["qua_han_14"] += remaining
+            elif days >= -30:
+                buckets["qua_han_30"] += remaining
+            elif days >= -60:
+                buckets["qua_han_60"] += remaining
+            else:
+                buckets["kho_doi"] += remaining
+
+        tong = sum(buckets.values())
+        return {"tong": float(tong), **{k: float(v) for k, v in buckets.items()}}
+
+    def get_ap_aging_summary(self, as_of_date: date, phap_nhan_id: int | None = None) -> dict:
+        """AP Aging 4-bucket summary dùng cho group debt view"""
+        q = self.db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.trang_thai.in_(["nhap", "da_tt_mot_phan"])
+        )
+        if phap_nhan_id:
+            q = q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
+
+        buckets = {k: Decimal(0) for k in ["qua_han", "den_han_30", "den_han_60", "chua_den_han"]}
+        for inv in q.all():
+            remaining = (inv.tong_thanh_toan or Decimal(0)) - (getattr(inv, 'da_thanh_toan', None) or Decimal(0))
+            if remaining <= 0:
+                continue
+            han = getattr(inv, 'han_tt', None)
+            if not han:
+                buckets["chua_den_han"] += remaining
+                continue
+            days = (han - as_of_date).days
+            if days < 0:
+                buckets["qua_han"] += remaining
+            elif days <= 30:
+                buckets["den_han_30"] += remaining
+            elif days <= 60:
+                buckets["den_han_60"] += remaining
+            else:
+                buckets["chua_den_han"] += remaining
+
+        tong = sum(buckets.values())
+        return {"tong": float(tong), **{k: float(v) for k, v in buckets.items()}}
+
+    def get_ap_payment_plan(self, tu_ngay: date, den_ngay: date, phap_nhan_id: int | None = None) -> dict:
+        """AP kế hoạch thanh toán theo loại hàng và bucket thời gian"""
+        from app.models.warehouse_doc import GoodsReceipt
+
+        q = self.db.query(PurchaseInvoice).filter(
+            PurchaseInvoice.trang_thai.in_(["nhap", "da_tt_mot_phan"])
+        )
+        if phap_nhan_id:
+            q = q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
+
+        today = date.today()
+        last_day = calendar.monthrange(today.year, today.month)[1]
+
+        loai_map: dict = {}
+        BUCKET_KEYS = ["qua_han", "den_han_t5", "den_han_dau_thang", "den_han_cuoi_thang", "chua_den_han"]
+
+        for inv in q.all():
+            remaining = (inv.tong_thanh_toan or Decimal(0)) - (getattr(inv, 'da_thanh_toan', None) or Decimal(0))
+            if remaining <= 0:
+                continue
+
+            loai = "Khác"
+            if getattr(inv, 'gr_id', None):
+                gr = self.db.get(GoodsReceipt, inv.gr_id)
+                if gr and gr.items:
+                    item0 = gr.items[0]
+                    vt = getattr(item0, 'vat_tu', None)
+                    if vt:
+                        mg = getattr(vt, 'material_group', None)
+                        if mg:
+                            loai = mg.ten_nhom
+                        elif getattr(vt, 'loai_vt', None) == 'giay_cuon':
+                            loai = "Giấy cuộn"
+
+            if loai not in loai_map:
+                loai_map[loai] = {k: Decimal(0) for k in BUCKET_KEYS}
+
+            han = getattr(inv, 'han_tt', None)
+            if not han or han < today:
+                loai_map[loai]["qua_han"] += remaining
+            elif han <= date(today.year, today.month, 19):
+                loai_map[loai]["den_han_t5"] += remaining
+            elif han <= date(today.year, today.month, last_day):
+                loai_map[loai]["den_han_cuoi_thang"] += remaining
+            else:
+                loai_map[loai]["chua_den_han"] += remaining
+
+        rows = []
+        totals = {k: Decimal(0) for k in BUCKET_KEYS}
+        for loai, data in sorted(loai_map.items()):
+            row = {"loai_hang": loai}
+            for k in BUCKET_KEYS:
+                row[k] = float(data[k])
+                totals[k] += data[k]
+            row["tong"] = float(sum(data.values()))
+            rows.append(row)
+
+        rows.append({"loai_hang": "Tổng cộng",
+                     **{k: float(v) for k, v in totals.items()},
+                     "tong": float(sum(totals.values()))})
+        return {"rows": rows}

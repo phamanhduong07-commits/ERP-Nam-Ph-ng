@@ -268,6 +268,34 @@ export const reportsApi = {
 
   exportWorkshopPNL: (params: { tu_ngay: string; den_ngay: string; phan_xuong_id?: number }) =>
     client.get('/accounting/reports/workshop-pnl-export', { params, responseType: 'blob' }).then(r => r.data as Blob),
+
+  // Group reports
+  getCashflowDaily: (ngay: string) =>
+    client.get('/accounting/reports/cashflow-daily', { params: { ngay } }).then(r => r.data),
+  getGroupPNL: (params: { tu_ngay: string; den_ngay: string }) =>
+    client.get('/accounting/reports/group-pnl', { params }).then(r => r.data),
+  getGroupDebt: (as_of_date: string) =>
+    client.get('/accounting/reports/group-debt', { params: { as_of_date } }).then(r => r.data),
+  getArAging7Bucket: (params: { as_of_date: string; phap_nhan_id?: number }) =>
+    client.get('/accounting/ar/aging-7bucket', { params }).then(r => r.data),
+  getApPaymentPlan: (params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number }) =>
+    client.get('/accounting/ap/payment-plan', { params }).then(r => r.data),
+
+  // Sales by workshop + NV KD
+  getSalesByWorkshop: (params: { tu_ngay: string; den_ngay: string }) =>
+    client.get('/reports/sales-by-workshop', { params }).then(r => r.data),
+  getSalesByNVKD: (params: { tu_ngay: string; den_ngay: string }) =>
+    client.get('/reports/sales-by-nvkd', { params }).then(r => r.data),
+
+  // Sales targets CRUD
+  getSalesTargets: (params?: { thang?: string; user_id?: number }) =>
+    client.get('/reports/sales-targets', { params }).then(r => r.data),
+  createSalesTarget: (body: object) =>
+    client.post('/reports/sales-targets', body).then(r => r.data),
+  updateSalesTarget: (id: number, body: object) =>
+    client.put(`/reports/sales-targets/${id}`, body).then(r => r.data),
+  deleteSalesTarget: (id: number) =>
+    client.delete(`/reports/sales-targets/${id}`),
 }
 
 export const importLogsApi = {
