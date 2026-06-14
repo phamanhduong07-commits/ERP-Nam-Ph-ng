@@ -43,7 +43,7 @@ type Props = {
 const SIDER_WIDTH_DEFAULT = 248
 const SIDER_WIDTH_COLLAPSED = 80
 const ITEM_HEIGHT = 42
-const FLYOUT_WIDTH = 272
+const FLYOUT_WIDTH = 300
 const ENTER_DELAY_MS = 80
 const LEAVE_DELAY_MS = 150
 
@@ -225,12 +225,21 @@ function arrowStyle(open: boolean): React.CSSProperties {
 }
 
 function flyoutPanelStyle(left: number, top: number): React.CSSProperties {
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  const idealTop = Math.max(8, top - 6)
+  // Always guarantee at least 660px of panel height by clamping computedTop.
+  // This ensures ALL menus (large or small, top or bottom of sidebar) have
+  // enough room without relying on an item-position threshold.
+  const computedTop = Math.max(8, Math.min(idealTop, vh - 660))
+  // Use all remaining space — no hard cap
+  const maxH = vh - computedTop - 12
+
   return {
     position: 'fixed',
     left: left + 2,
-    top: Math.max(8, top - 6),
+    top: computedTop,
     width: FLYOUT_WIDTH,
-    maxHeight: `calc(100vh - ${Math.max(8, top - 6)}px - 16px)`,
+    maxHeight: maxH,
     background: '#ffffff',
     borderRadius: 10,
     boxShadow: '0 4px 6px -1px rgba(0,0,0,0.07), 0 16px 40px -4px rgba(27,22,142,0.15)',
@@ -668,68 +677,66 @@ export default function CustomSidebarNav(props: Props) {
             </div>
           )}
 
-          {/* Scrollable content with bottom fade */}
-          <div style={{ position: 'relative', flexGrow: 1, overflow: 'hidden' }}>
-            <div
-              ref={flyoutScrollRef}
-              className="np-flyout-scroll"
-              style={{ overflowY: 'auto', overflowX: 'hidden', padding: '4px 0 6px', height: '100%' }}
-            >
-              {filteredSections.length === 0 && q ? (
-                <div style={{ padding: '18px 14px', textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>
-                  Không tìm thấy "{filterQuery}"
+          {/* Scrollable content — direct flex child so height resolves correctly */}
+          <div
+            ref={flyoutScrollRef}
+            className="np-flyout-scroll"
+            style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 0 6px' }}
+          >
+            {filteredSections.length === 0 && q ? (
+              <div style={{ padding: '18px 14px', textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>
+                Không tìm thấy "{filterQuery}"
+              </div>
+            ) : (
+              filteredSections.map((section, sectionIdx) => (
+                <div key={section.sectionLabel ?? `section-${sectionIdx}`}>
+                  {sectionIdx > 0 && (
+                    <div style={{ height: 1, background: '#f0f1f5', margin: '3px 0' }} />
+                  )}
+                  {section.sectionLabel ? (
+                    <div style={sectionLabelStyle}>{section.sectionLabel}</div>
+                  ) : null}
+
+                  {section.items.map((sub) => {
+                    const subActive = isSubItemActive(sub, selectedPath)
+                    const subHovered = hoveredSubKey === sub.key
+                    return (
+                      <div
+                        key={sub.key}
+                        role="menuitem"
+                        tabIndex={0}
+                        title={typeof sub.label === 'string' ? sub.label : undefined}
+                        style={flyoutItemStyle(subActive, subHovered)}
+                        onMouseEnter={() => setHoveredSubKey(sub.key)}
+                        onMouseLeave={() => setHoveredSubKey(null)}
+                        onClick={() => handleSubClick(sub)}
+                        onKeyDown={(e) => handleSubKeyDown(e, sub)}
+                      >
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {sub.label}
+                        </span>
+                        {subHovered && !subActive && (
+                          <span style={{ flexShrink: 0, color: '#1b168e', opacity: 0.35, fontSize: 12, marginLeft: 4 }}>›</span>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-              ) : (
-                filteredSections.map((section, sectionIdx) => (
-                  <div key={section.sectionLabel ?? `section-${sectionIdx}`}>
-                    {sectionIdx > 0 && (
-                      <div style={{ height: 1, background: '#f0f1f5', margin: '3px 0' }} />
-                    )}
-                    {section.sectionLabel ? (
-                      <div style={sectionLabelStyle}>{section.sectionLabel}</div>
-                    ) : null}
-
-                    {section.items.map((sub) => {
-                      const subActive = isSubItemActive(sub, selectedPath)
-                      const subHovered = hoveredSubKey === sub.key
-                      return (
-                        <div
-                          key={sub.key}
-                          role="menuitem"
-                          tabIndex={0}
-                          title={typeof sub.label === 'string' ? sub.label : undefined}
-                          style={flyoutItemStyle(subActive, subHovered)}
-                          onMouseEnter={() => setHoveredSubKey(sub.key)}
-                          onMouseLeave={() => setHoveredSubKey(null)}
-                          onClick={() => handleSubClick(sub)}
-                          onKeyDown={(e) => handleSubKeyDown(e, sub)}
-                        >
-                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {sub.label}
-                          </span>
-                          {subHovered && !subActive && (
-                            <span style={{ flexShrink: 0, color: '#1b168e', opacity: 0.35, fontSize: 12, marginLeft: 4 }}>›</span>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Bottom fade — visible when more items below */}
-            {showBottomFade && (
-              <div style={{
-                position: 'absolute',
-                bottom: 0, left: 0, right: 0,
-                height: 28,
-                background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.96))',
-                pointerEvents: 'none',
-                borderRadius: '0 0 10px 10px',
-              }} />
+              ))
             )}
           </div>
+
+          {/* Bottom fade — positioned absolute within the fixed panel */}
+          {showBottomFade && (
+            <div style={{
+              position: 'absolute',
+              bottom: 0, left: 0, right: 0,
+              height: 28,
+              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.96))',
+              pointerEvents: 'none',
+              borderRadius: '0 0 10px 10px',
+            }} />
+          )}
         </div>,
         document.body,
       ) : null}
