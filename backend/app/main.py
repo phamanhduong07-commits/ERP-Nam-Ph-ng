@@ -177,6 +177,7 @@ async def benefit_birthday_loop():
 
 from app.models import gps as _gps_models  # noqa: F401 — ensures GpsSnapshot is in Base.metadata
 from app.routers import qc_giay_cuon as qc_giay_cuon_router
+from app.routers import qc_nvl as qc_nvl_router
 from app.routers import hoa_don_dien_tu
 from app.routers import ke_hoach_tan_dung
 from app.routers import tem_paper_prices as tem_paper_prices_router
@@ -187,7 +188,7 @@ from app.routers import cost_analysis as cost_analysis_router
 from app.routers import (
     dieu_khoan_thanh_toan, muc_thu_chi, khoan_muc_chi_phi, loai_tai_san_co_dinh,
     ky_hieu_cham_cong, bieu_thue_thu_nhap, nhom_doi_tuong, tai_khoan_ngam_dinh,
-    loai_tien,
+    loai_tien, ngan_hang,
 )
 from app.routers import chart_of_accounts as chart_of_accounts_danhmuc
 from app.services.htcph_sync import run_daily_sync
@@ -409,6 +410,7 @@ app.include_router(fixed_assets_router.router)
 app.include_router(mrp_router.router)
 app.include_router(gps_router.router)
 app.include_router(qc_giay_cuon_router.router)
+app.include_router(qc_nvl_router.router)
 app.include_router(hoa_don_dien_tu.router)
 app.include_router(tem_paper_prices_router.router, prefix="/api")
 app.include_router(offset_addon_prices_router.router, prefix="/api")
@@ -426,6 +428,7 @@ app.include_router(nhom_doi_tuong.router)
 app.include_router(chart_of_accounts_danhmuc.router)
 app.include_router(tai_khoan_ngam_dinh.router)
 app.include_router(loai_tien.router)
+app.include_router(ngan_hang.router)
 
 
 @app.exception_handler(IntegrityError)
