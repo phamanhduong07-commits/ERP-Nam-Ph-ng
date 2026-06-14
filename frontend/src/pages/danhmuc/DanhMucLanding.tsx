@@ -43,6 +43,7 @@ const COLUMNS: Group[][] = [
       links: [
         { label: 'Tài khoản ngân hàng', to: '/master/bank-accounts', permissions: ['accounting.manage', 'accounting.view'] },
         { label: 'Loại tiền', to: '/master/loai-tien', permissions: ['accounting.manage', 'accounting.view'] },
+        { label: 'Danh mục ngân hàng', to: '/master/ngan-hang', permissions: ['accounting.manage', 'accounting.view'] },
       ],
     },
     {

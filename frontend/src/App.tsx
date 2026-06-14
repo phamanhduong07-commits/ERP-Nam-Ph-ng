@@ -122,6 +122,7 @@ const NhomDoiTuongList = lazy(() => import('./pages/danhmuc/NhomDoiTuongList'))
 const ChartOfAccountsPage = lazy(() => import('./pages/danhmuc/ChartOfAccountsPage'))
 const TaiKhoanNgamDinhPage = lazy(() => import('./pages/danhmuc/TaiKhoanNgamDinhPage'))
 const LoaiTienList = lazy(() => import('./pages/danhmuc/LoaiTienList'))
+const NganHangList = lazy(() => import('./pages/danhmuc/NganHangList'))
 // Billing
 const SalesInvoiceListPage = lazy(() => import('./pages/billing/SalesInvoiceListPage'))
 const SalesInvoiceDetailPage = lazy(() => import('./pages/billing/SalesInvoiceDetailPage'))
@@ -148,6 +149,7 @@ const BankAccountList = lazy(() => import('./pages/danhmuc/BankAccountList'))
 // Quality
 const QCListPage = lazy(() => import('./pages/quality/QCListPage'))
 const QCGiayCuonPage = lazy(() => import('./pages/quality/QCGiayCuonPage'))
+const QCNvlPage = lazy(() => import('./pages/quality/QCNvlPage'))
 // Maintenance
 const MaintenanceSchedulePage = lazy(() => import('./pages/maintenance/MaintenanceSchedulePage'))
 const MaintenanceLogPage = lazy(() => import('./pages/maintenance/MaintenanceLogPage'))
@@ -346,6 +348,7 @@ export default function App() {
             <Route path="master/chart-of-accounts" element={<ErrorBoundary><ChartOfAccountsPage /></ErrorBoundary>} />
             <Route path="master/tai-khoan-ngam-dinh" element={<ErrorBoundary><TaiKhoanNgamDinhPage /></ErrorBoundary>} />
             <Route path="master/loai-tien" element={<ErrorBoundary><LoaiTienList /></ErrorBoundary>} />
+            <Route path="master/ngan-hang" element={<ErrorBoundary><NganHangList /></ErrorBoundary>} />
             <Route path="production/hub" element={<ErrorBoundary><ProductionHubPage /></ErrorBoundary>} />
             <Route path="warehouse/hub" element={<ErrorBoundary><WarehouseHubPage /></ErrorBoundary>} />
             <Route path="accounting/hub" element={<ErrorBoundary><AccountingHubPage /></ErrorBoundary>} />
@@ -495,6 +498,7 @@ export default function App() {
             <Route path="hr/team-permissions" element={<ErrorBoundary><TeamPermissionsPage /></ErrorBoundary>} />
             <Route path="quality/qc-sheets" element={<ErrorBoundary><QCListPage /></ErrorBoundary>} />
             <Route path="quality/giay-cuon" element={<ErrorBoundary><QCGiayCuonPage /></ErrorBoundary>} />
+            <Route path="quality/nvl" element={<ErrorBoundary><QCNvlPage /></ErrorBoundary>} />
             <Route path="maintenance/schedules" element={<ErrorBoundary><MaintenanceSchedulePage /></ErrorBoundary>} />
             <Route path="maintenance/logs" element={<ErrorBoundary><MaintenanceLogPage /></ErrorBoundary>} />
 
