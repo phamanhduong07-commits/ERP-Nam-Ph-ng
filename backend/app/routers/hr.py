@@ -1147,7 +1147,7 @@ def _serialize_health_check(hc: HealthCheck) -> dict:
 @router.get("/dashboard/overview")
 def hr_dashboard_overview(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_any_permission("hr.view", "hr.manage", "hr.employees", "hr.kpi")),
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU", "GIAM_DOC", "BGD")),
 ):
     """Dashboard tổng quan HR cho BGĐ — headcount + cơ cấu + sự kiện sắp tới.
 
