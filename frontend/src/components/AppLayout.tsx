@@ -179,6 +179,9 @@ function buildNavItems(queueCount: number): NavItem[] {
             { key: '/accounting/cash-book', to: '/accounting/cash-book', label: <Link to="/accounting/cash-book">Sổ quỹ tiền mặt</Link>, permissions: ['accounting.cash_book'] },
             { key: '/accounting/bank-ledger', to: '/accounting/bank-ledger', label: <Link to="/accounting/bank-ledger">Sổ tiền gửi NH</Link>, permissions: ['accounting.bank_ledger'] },
             { key: '/accounting/bank-reconciliation', to: '/accounting/bank-reconciliation', label: <Link to="/accounting/bank-reconciliation">Đối soát ngân hàng</Link>, permissions: ['accounting.bank_ledger'] },
+            { key: '/accounting/khe-uoc-vay', to: '/accounting/khe-uoc-vay', label: <Link to="/accounting/khe-uoc-vay">Khế ước đi vay</Link>, permissions: ['accounting.view'] },
+            { key: '/accounting/khe-uoc-cho-vay', to: '/accounting/khe-uoc-cho-vay', label: <Link to="/accounting/khe-uoc-cho-vay">Khế ước cho vay</Link>, permissions: ['accounting.view'] },
+            { key: '/accounting/du-bao-dong-tien', to: '/accounting/du-bao-dong-tien', label: <Link to="/accounting/du-bao-dong-tien">Dự báo dòng tiền</Link>, permissions: ['accounting.view'] },
           ],
         },
         {
