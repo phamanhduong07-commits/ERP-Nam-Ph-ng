@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, aliased, joinedload
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
 from app.models.master import Warehouse, PaperMaterial, OtherMaterial, Product, PhanXuong, PhapNhan
 from app.models.production import ProductionOrder
@@ -39,7 +39,11 @@ from app.routers.warehouse import (  # shared schemas + helpers
     _ensure_active_warehouse,
 )
 
-router = APIRouter(prefix="/api/warehouse", tags=["warehouse"])
+router = APIRouter(
+    prefix="/api/warehouse",
+    dependencies=[Depends(require_any_permission("inventory.transfer"))],
+    tags=["warehouse"],
+)
 
 
 # ── Phiếu chuyển kho ──────────────────────────────────────────────────────────

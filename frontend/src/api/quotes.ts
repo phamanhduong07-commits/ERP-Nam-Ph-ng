@@ -201,8 +201,12 @@ export const LOAI_LAN_OPTIONS = [
 ]
 
 export const LOAI_LAN_LABELS: Record<string, string> = {
-  lan_bang:     'Lằn bằng',
-  lan_am_duong: 'Lằn âm dương',
+  lan_bang:     '+ 0',
+  lan_am_duong: '+ -',
+  bang:         '+ 0',
+  am_duong:     '+ -',
+  '+ 0':        '+ 0',
+  '+ -':        '+ -',
 }
 
 export const LOAI_IN_OPTIONS = [

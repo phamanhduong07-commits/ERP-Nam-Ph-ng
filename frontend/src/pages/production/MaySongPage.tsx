@@ -693,9 +693,8 @@ function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: 
     const soPhoi    = dims?.hai_manh ? Math.ceil(soTam / 2) : soTam
     const tamNho    = soPhoi > 0 ? soPhoi * soDaoGroups : 0
     const ngaySxMaySong = phieu?.ngay ?? order.ngay_bat_dau_ke_hoach ?? ''
-    const loaiLanLabel = oi?.loai_lan === 'lan_bang' ? 'Lằn Bằng'
-                       : oi?.loai_lan === 'lan_am_duong' ? 'Lằn Âm Dương'
-                       : oi?.loai_lan ? oi.loai_lan : null
+    const _LAN: Record<string, string> = { lan_bang: '+ 0', lan_am_duong: '+ -', bang: '+ 0', am_duong: '+ -', '+ 0': '+ 0', '+ -': '+ -' }
+    const loaiLanLabel = oi?.loai_lan ? (_LAN[oi.loai_lan] ?? oi.loai_lan) : null
     await printProductionTagBatch({
       so_lenh:          order.so_lenh,
       ten_khach_hang:   order.ten_khach_hang ?? '',

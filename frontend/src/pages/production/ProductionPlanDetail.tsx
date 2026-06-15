@@ -671,11 +671,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
           ${bodyRows}
           <tr class="total-row">
             <td colspan="2" style="font-size:11px;font-weight:700;white-space:nowrap">TỔNG · ${plan.lines.length} lệnh</td>
-            <td>${layerEntriesHtml(grandLayers.matC)}</td>
-            <td>${layerEntriesHtml(grandLayers.songC)}</td>
-            <td>${layerEntriesHtml(grandLayers.matB)}</td>
-            <td>${layerEntriesHtml(grandLayers.songB)}</td>
             <td>${layerEntriesHtml(grandLayers.inner)}</td>
+            <td>${layerEntriesHtml(grandLayers.songB)}</td>
+            <td>${layerEntriesHtml(grandLayers.matB)}</td>
+            <td>${layerEntriesHtml(grandLayers.songC)}</td>
+            <td>${layerEntriesHtml(grandLayers.matC)}</td>
             <td colspan="12" class="right"><strong>${totalSLThung.toLocaleString('vi-VN')} thùng</strong> &nbsp;·&nbsp; Tổng số MT:</td>
             <td class="right"><strong style="font-size:11px">${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></td>
           </tr>
@@ -889,15 +889,15 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                     )}
                   </td>
 
-                  {/* Mặt C */}
+                  {/* Mặt trong */}
                   <td style={TD}>
-                    <PaperCell ma={r.mat} dl={r.mat_dl} kg={kgMatC} isEqual={eq.matC} hideKg={nextEq.matC} loaiGiay={r.mat_loai_giay} />
+                    <PaperCell ma={inner.ma} dl={inner.dl} kg={kgInner} isEqual={eq.inner} hideKg={nextEq.inner} loaiGiay={getMatInnerLoaiGiay(r)} />
                   </td>
 
-                  {/* Sóng C */}
+                  {/* Sóng B */}
                   <td style={TD}>
-                    {slots.songC.ma
-                      ? <PaperCell ma={slots.songC.ma} dl={slots.songC.dl} kg={kgSongC} isEqual={eq.songC} hideKg={nextEq.songC} />
+                    {slots.songB.ma
+                      ? <PaperCell ma={slots.songB.ma} dl={slots.songB.dl} kg={kgSongB} isEqual={eq.songB} hideKg={nextEq.songB} />
                       : <span style={{ fontSize: 10 }}>—</span>}
                   </td>
 
@@ -908,16 +908,16 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                       : <span style={{ fontSize: 10 }}>—</span>}
                   </td>
 
-                  {/* Sóng B */}
+                  {/* Sóng C */}
                   <td style={TD}>
-                    {slots.songB.ma
-                      ? <PaperCell ma={slots.songB.ma} dl={slots.songB.dl} kg={kgSongB} isEqual={eq.songB} hideKg={nextEq.songB} />
+                    {slots.songC.ma
+                      ? <PaperCell ma={slots.songC.ma} dl={slots.songC.dl} kg={kgSongC} isEqual={eq.songC} hideKg={nextEq.songC} />
                       : <span style={{ fontSize: 10 }}>—</span>}
                   </td>
 
-                  {/* Mặt trong */}
+                  {/* Mặt C */}
                   <td style={TD}>
-                    <PaperCell ma={inner.ma} dl={inner.dl} kg={kgInner} isEqual={eq.inner} hideKg={nextEq.inner} loaiGiay={getMatInnerLoaiGiay(r)} />
+                    <PaperCell ma={r.mat} dl={r.mat_dl} kg={kgMatC} isEqual={eq.matC} hideKg={nextEq.matC} loaiGiay={r.mat_loai_giay} />
                   </td>
 
                   {/* Quy cách sản phẩm */}
@@ -1052,11 +1052,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
                 TỔNG · {plan.lines.length} lệnh
               </td>
               {/* Kg từng lớp tổng (cùng mã gộp, khác mã tách) */}
-              <td style={TD}><LayerEntriesCell entries={grandLayers.matC}  isSong={false} bold /></td>
-              <td style={TD}><LayerEntriesCell entries={grandLayers.songC} isSong={true}  bold /></td>
-              <td style={TD}><LayerEntriesCell entries={grandLayers.matB}  isSong={false} bold /></td>
-              <td style={TD}><LayerEntriesCell entries={grandLayers.songB} isSong={true}  bold /></td>
               <td style={TD}><LayerEntriesCell entries={grandLayers.inner} isSong={false} bold /></td>
+              <td style={TD}><LayerEntriesCell entries={grandLayers.songB} isSong={true}  bold /></td>
+              <td style={TD}><LayerEntriesCell entries={grandLayers.matB}  isSong={false} bold /></td>
+              <td style={TD}><LayerEntriesCell entries={grandLayers.songC} isSong={true}  bold /></td>
+              <td style={TD}><LayerEntriesCell entries={grandLayers.matC}  isSong={false} bold /></td>
               {/* Tổng SL thùng + MT toàn kế hoạch */}
               <td colSpan={11} style={{ ...TD, textAlign: 'right', fontSize: 13 }}>
                 <b>{totalSLThung.toLocaleString('vi-VN')} thùng</b>

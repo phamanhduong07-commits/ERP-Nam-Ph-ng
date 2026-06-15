@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
 from app.models.accounting import FixedAsset
 from app.models.fixed_asset import DepreciationEntry
@@ -12,7 +12,11 @@ from app.schemas.fixed_asset import (
     DepreciationEntryResponse, RunDepreciationRequest, RunDepreciationResponse,
 )
 
-router = APIRouter(prefix="/api/fixed-assets", tags=["TSCĐ"])
+router = APIRouter(
+    prefix="/api/fixed-assets",
+    dependencies=[Depends(require_any_permission("accounting.ccdc"))],
+    tags=["TSCĐ"],
+)
 
 
 # ─── Assets ───────────────────────────────────────────────────────────────────

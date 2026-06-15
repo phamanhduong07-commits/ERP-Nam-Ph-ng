@@ -141,9 +141,8 @@ export default function TanDungPlanPage() {
     const r = inTemItem
     const slTamStr = r.so_luong_tam != null ? `${r.so_luong_tam.toLocaleString('vi-VN')} tấm` : ''
     const slTamLon = [r.cat ? `${r.cat} cm` : '', slTamStr].filter(Boolean).join(' | ')
-    const loaiLanLabel = r.loai_lan === 'lan_bang' ? 'Lằn Bằng'
-                       : r.loai_lan === 'lan_am_duong' ? 'Lằn Âm Dương'
-                       : r.loai_lan ?? ''
+    const _LAN: Record<string, string> = { lan_bang: '+ 0', lan_am_duong: '+ -', bang: '+ 0', am_duong: '+ -', '+ 0': '+ 0', '+ -': '+ -' }
+    const loaiLanLabel = r.loai_lan ? (_LAN[r.loai_lan] ?? r.loai_lan) : ''
     await printProductionTagBatch({
       so_lenh:          r.so_lenh,
       ten_khach_hang:   r.ten_khach_hang ?? r.ma_kh ?? '',

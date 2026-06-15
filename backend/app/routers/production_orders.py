@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
 from app.models.master import PhanXuong
 from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
@@ -27,7 +27,11 @@ from app.schemas.production import (
     TaoLenhBody,
 )
 
-router = APIRouter(prefix="/api/production-orders", tags=["production-orders"])
+router = APIRouter(
+    prefix="/api/production-orders",
+    dependencies=[Depends(require_any_permission("production_order.view"))],
+    tags=["production-orders"],
+)
 
 
 def _sync_so_trang_thai(db: Session, order: ProductionOrder) -> None:
@@ -445,7 +449,7 @@ def tao_lenh_tu_don_hang(
     order_id: int,
     data: TaoLenhBody,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_permission("production_order.create")),
 ):
     """Tạo lệnh sản xuất: mỗi mã hàng trong đơn = 1 lệnh SX riêng biệt."""
     so = (
@@ -562,7 +566,7 @@ class BatchTanDungPayload(BaseModel):
 def batch_set_tan_dung(
     payload: BatchTanDungPayload,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     if not payload.ids:
         return {"updated": 0}
@@ -600,7 +604,7 @@ def batch_set_tan_dung(
 def create_order(
     data: ProductionOrderCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_permission("production_order.create")),
 ):
     service = ProductionOrderService(db)
     return service.create_production_order(data, current_user.id)
@@ -611,7 +615,7 @@ def update_order(
     order_id: int,
     data: ProductionOrderUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     service = ProductionOrderService(db)
     return service.update_production_order(order_id, data)
@@ -621,7 +625,7 @@ def update_order(
 def start_order(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.start")),
 ):
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
@@ -639,7 +643,7 @@ def start_order(
 def complete_order(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.complete")),
 ):
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
@@ -669,7 +673,7 @@ def pause_order(
     order_id: int,
     data: PauseOrderBody,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_any_permission("production_order.edit")),
 ):
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
@@ -699,7 +703,7 @@ def resume_order(
     order_id: int,
     data: ResumeOrderBody,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
@@ -732,7 +736,7 @@ def resume_order(
 def cancel_order(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.cancel")),
 ):
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
@@ -751,7 +755,7 @@ def update_item_progress(
     item_id: int,
     data: UpdateItemProgress,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.start")),
 ):
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
     if not order:
@@ -796,7 +800,7 @@ def update_item_sx_params(
     item_id: int,
     data: UpdateItemSxParams,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     """Cập nhật thông số sản xuất (kết cấu giấy, chiều khổ).
     Không ảnh hưởng đến giá bán."""
@@ -909,7 +913,7 @@ def create_phieu_nhap_phoi_song(
     order_id: int,
     data: PhieuBody,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_permission("production_order.edit")),
 ):
     """Tạo phiếu nhập phôi sóng (1 phiếu/phiên, ghi nhận cả giờ bắt đầu và kết thúc)."""
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).first()
@@ -1019,7 +1023,7 @@ def ngung_phoi_song_tao_lenh_bu(
     order_id: int,
     data: PhieuBody,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_permission("production_order.edit")),
 ):
     """Ngưng SX phôi sóng sớm → tạo PhieuNhapPhoiSong cho thực tế + LSX bù cho phần còn lại."""
     order = db.query(ProductionOrder).filter(ProductionOrder.id == order_id).with_for_update().first()
@@ -1260,7 +1264,7 @@ def delete_phieu_nhap_phoi_song(
     order_id: int,
     phieu_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.cancel")),
 ):
     phieu = db.query(PhieuNhapPhoiSong).filter(
         PhieuNhapPhoiSong.id == phieu_id,
@@ -1307,7 +1311,7 @@ _KHO_DE_XUAT_MUA_NGOAI = 2000  # mm — kho 1 con >= 2m → đề xuất mua ph�
 def chuyen_mua_phoi(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     """Chuyển lệnh SX sang trạng thái mua phôi ngoài.
     Kế hoạch dùng khi phôi quá khổ hoặc định lượng không tự sản xuất được.
@@ -1368,7 +1372,7 @@ def chuyen_mua_phoi(
 def push_to_cd2(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     """Đẩy lệnh sản xuất sang hệ thống CD2 (hàng đợi máy in)."""
     order = _load_order(order_id, db)

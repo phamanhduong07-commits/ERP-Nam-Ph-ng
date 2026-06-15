@@ -9,11 +9,15 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
 from app.models.accounting import ChartOfAccounts
 
-router = APIRouter(prefix="/api/chart-of-accounts", tags=["chart-of-accounts"])
+router = APIRouter(
+    prefix="/api/chart-of-accounts",
+    dependencies=[Depends(require_any_permission("accounting.general_ledger", "accounting.manage"))],
+    tags=["chart-of-accounts"],
+)
 
 # Nhãn tiếng Việt cho loại tài khoản — dùng khi xuất Excel.
 LOAI_TK_LABELS = {

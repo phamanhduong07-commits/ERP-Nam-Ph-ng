@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_any_permission
 import logging
 from app.models.auth import User
 from app.models.master import Warehouse, PhanXuong
@@ -26,7 +26,11 @@ from app.services.carton_metrics import dec_or_zero, _to_hop_song, song_take_up,
 
 _log = logging.getLogger("erp")
 
-router = APIRouter(prefix="/api/phieu-phoi", tags=["phieu-phoi"])
+router = APIRouter(
+    prefix="/api/phieu-phoi",
+    dependencies=[Depends(require_any_permission("production_order.view", "inventory.view"))],
+    tags=["phieu-phoi"],
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

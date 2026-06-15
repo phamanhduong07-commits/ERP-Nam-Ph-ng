@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload, joinedload
 from openpyxl import Workbook
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
 from app.models.billing import SalesInvoice
 from app.models.accounting import PurchaseInvoice, ProductionCostAllocation
@@ -21,7 +21,11 @@ from app.models.master import PaperMaterial, OtherMaterial, Product
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.warehouse_doc import DeliveryOrder
 
-router = APIRouter(prefix="/api/reports", tags=["reports"])
+router = APIRouter(
+    prefix="/api/reports",
+    dependencies=[Depends(require_any_permission("report.view", "report.export"))],
+    tags=["reports"],
+)
 
 # ── Hằng số ──────────────────────────────────────────────────────────────────
 
@@ -607,7 +611,7 @@ def export_revenue_excel(
     den_ngay: str = Query(...),
     nhom: str = Query("month", description="day | month | quarter"),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("report.export")),
 ):
     """Xuất báo cáo doanh thu ra file Excel (multi-sheet)."""
     from app.services.excel_export_service import build_xlsx_sheet
@@ -652,7 +656,7 @@ def export_inventory_movement_excel(
     den_ngay: str = Query(...),
     warehouse_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("report.export")),
 ):
     """Xuất báo cáo xuất-nhập-tồn kho ra file Excel."""
     from app.services.excel_export_service import build_xlsx
@@ -695,7 +699,7 @@ def export_inventory_movement_excel(
 def export_debt_summary_excel(
     as_of_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("report.export")),
 ):
     """Xuất báo cáo công nợ tổng hợp (AR + AP) ra file Excel (multi-sheet)."""
     from app.services.excel_export_service import build_xlsx_sheet
@@ -749,7 +753,7 @@ def export_production_performance_excel(
     den_ngay: str = Query(...),
     phan_xuong_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("report.export")),
 ):
     """Xuất báo cáo năng suất sản xuất ra file Excel."""
     from app.services.excel_export_service import build_xlsx
@@ -798,7 +802,7 @@ def export_order_progress_excel(
     trang_thai: Optional[str] = Query(None),
     customer_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("report.export")),
 ):
     """Xuất báo cáo tiến độ đơn hàng ra file Excel."""
     from app.services.excel_export_service import build_xlsx
@@ -990,7 +994,7 @@ def export_production_cost_excel(
     phan_xuong_id: Optional[int] = Query(None),
     trang_thai: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("report.export")),
 ):
     """Xuất Excel báo cáo chi phí / lợi nhuận theo LSX."""
     from app.services.excel_export_service import build_xlsx
@@ -1223,7 +1227,7 @@ def list_sales_targets(
 def create_sales_target(
     body: dict,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("report.export")),
 ):
     from datetime import date as _date
     thang_str = body.get("thang", "")
@@ -1248,7 +1252,7 @@ def update_sales_target(
     target_id: int,
     body: dict,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("report.export")),
 ):
     t = db.get(SalesTarget, target_id)
     if not t:
@@ -1265,7 +1269,7 @@ def update_sales_target(
 def delete_sales_target(
     target_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("report.export")),
 ):
     t = db.get(SalesTarget, target_id)
     if not t:

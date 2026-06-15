@@ -3,11 +3,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
 from app.models.danhmuc_hr import BieuThueThuNhap, BieuThueThuNhapBac, KyHieuChamCong  # noqa: F401
 
-router = APIRouter(prefix="/api/bieu-thue-thu-nhap", tags=["bieu-thue-thu-nhap"])
+router = APIRouter(
+    prefix="/api/bieu-thue-thu-nhap",
+    dependencies=[Depends(require_any_permission("hr.payroll_config"))],
+    tags=["bieu-thue-thu-nhap"],
+)
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────

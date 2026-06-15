@@ -4,12 +4,16 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
 from app.models.purchase_requisition import PurchaseRequisition, PurchaseRequisitionItem
 from app.services.mrp_service import calculate_mrp
 
-router = APIRouter(prefix="/api/mrp", tags=["MRP Lite"])
+router = APIRouter(
+    prefix="/api/mrp",
+    dependencies=[Depends(require_any_permission("production_order.view"))],
+    tags=["MRP Lite"],
+)
 
 
 class MRPRequest(BaseModel):

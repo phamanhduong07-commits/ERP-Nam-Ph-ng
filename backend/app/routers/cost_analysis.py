@@ -15,14 +15,18 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
 from app.models.bom import ProductionBOM, ProductionBOMItem
 from app.models.master import PaperMaterial
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.warehouse_doc import MaterialIssue, MaterialIssueItem
 
-router = APIRouter(prefix="/api/production-orders", tags=["cost-analysis"])
+router = APIRouter(
+    prefix="/api/production-orders",
+    dependencies=[Depends(require_any_permission("production.cost_analysis"))],
+    tags=["cost-analysis"],
+)
 
 
 # ─── Response schemas ──────────────────────────────────────────────────────────

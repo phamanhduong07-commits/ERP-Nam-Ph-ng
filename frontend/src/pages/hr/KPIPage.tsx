@@ -14,6 +14,7 @@ import {
   Modal, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography, message,
   Popconfirm, Drawer, Empty, Progress, Tooltip,
 } from 'antd'
+import { usePermission } from '../../hooks/usePermission'
 import {
   AimOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
   CheckCircleOutlined, UserOutlined, FileTextOutlined, TrophyOutlined,
@@ -76,8 +77,12 @@ export default function KPIPage() {
 // ═══════════════════════════════════════════════════════════════
 // TAB 1: Tổng quan
 // ═══════════════════════════════════════════════════════════════
+const KPI_SUMMARY_ROLES = ['ADMIN', 'NHAN_SU', 'GIAM_DOC', 'BGD']
+
 function OverviewTab() {
   const [cycleId, setCycleId] = useState<number | undefined>()
+  const { role } = usePermission()
+  const canViewSummary = KPI_SUMMARY_ROLES.includes(role)
 
   const { data: cycles = [] } = useQuery({
     queryKey: ['kpi-cycles'],
@@ -86,7 +91,12 @@ function OverviewTab() {
   const { data: s } = useQuery({
     queryKey: ['kpi-summary', cycleId],
     queryFn: () => hrApi.kpiSummary({ cycle_id: cycleId }).then(r => r.data),
+    enabled: canViewSummary,
   })
+
+  if (!canViewSummary) {
+    return <Alert type="info" message="Bạn không có quyền xem thống kê KPI tổng quan." showIcon style={{ marginTop: 16 }} />
+  }
 
   return (
     <>

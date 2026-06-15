@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload, aliased
 from sqlalchemy import case
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
 from app.models.master import PhanXuong, PaperMaterial
 from app.models.production import ProductionOrder, ProductionOrderItem
@@ -22,7 +22,11 @@ from app.schemas.production_plan import (
 )
 from app.services.price_calculator import calculate_dien_tich
 
-router = APIRouter(prefix="/api/production-plans", tags=["production-plans"])
+router = APIRouter(
+    prefix="/api/production-plans",
+    dependencies=[Depends(require_any_permission("production_order.view"))],
+    tags=["production-plans"],
+)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -471,7 +475,7 @@ def list_plans(
 def create_plan(
     data: ProductionPlanCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_permission("production_order.create")),
 ):
     so_ke_hoach = _generate_so_ke_hoach(db)
     plan = ProductionPlan(
@@ -594,7 +598,7 @@ class _ReorderItem(BaseModel):
 def reorder_queue(
     items: list[_ReorderItem],
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     """Cập nhật thứ tự (thu_tu) cho nhiều dòng KHSX cùng lúc."""
     ids = [it.id for it in items]
@@ -611,7 +615,7 @@ def reorder_queue(
 def push_to_queue(
     data: PushToQueueRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_permission("production_order.edit")),
 ):
     """Thêm dòng LSX vào hàng chờ. Nếu đã có dòng 'cho' thì cập nhật thông số."""
     poi = db.query(ProductionOrderItem).filter(
@@ -721,7 +725,7 @@ def push_to_queue(
 def start_queue_line(
     line_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.start")),
 ):
     """Bắt đầu chạy dòng (cho → dang_chay)."""
     line = db.query(ProductionPlanLine).filter(ProductionPlanLine.id == line_id).first()
@@ -750,7 +754,7 @@ def update_plan(
     plan_id: int,
     data: ProductionPlanUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     plan = db.query(ProductionPlan).filter(ProductionPlan.id == plan_id).first()
     if not plan:
@@ -768,7 +772,7 @@ def update_plan(
 def delete_plan(
     plan_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.cancel")),
 ):
     plan = db.query(ProductionPlan).filter(ProductionPlan.id == plan_id).first()
     if not plan:
@@ -786,7 +790,7 @@ def delete_plan(
 def export_plan(
     plan_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     """Xuất kế hoạch cho sản xuất (nhap → da_xuat)."""
     plan = db.query(ProductionPlan).filter(ProductionPlan.id == plan_id).first()
@@ -809,7 +813,7 @@ def add_line(
     plan_id: int,
     data: ProductionPlanLineCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     plan = db.query(ProductionPlan).filter(ProductionPlan.id == plan_id).first()
     if not plan:
@@ -831,7 +835,7 @@ def update_line(
     line_id: int,
     data: ProductionPlanLineUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     line = db.query(ProductionPlanLine).filter(
         ProductionPlanLine.id == line_id,
@@ -858,7 +862,7 @@ def delete_line(
     plan_id: int,
     line_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     plan = db.query(ProductionPlan).filter(ProductionPlan.id == plan_id).first()
     if not plan:
@@ -908,7 +912,7 @@ def complete_line(
     plan_id: int,
     line_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.complete")),
 ):
     line = db.query(ProductionPlanLine).filter(
         ProductionPlanLine.id == line_id,
@@ -1028,7 +1032,7 @@ def toggle_mua_phoi_ngoai(
     line_id: int,
     body: dict,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any_permission("production_order.edit")),
 ):
     """
     Đánh dấu hoặc bỏ đánh dấu KHSX line cần mua phôi sóng từ NCC ngoài.
@@ -1048,7 +1052,7 @@ def toggle_mua_phoi_ngoai(
 def promote_pool_line(
     line_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_permission("production_order.edit")),
 ):
     """
     Đưa line từ pool hàng chờ về một nhap plan thực sự.
