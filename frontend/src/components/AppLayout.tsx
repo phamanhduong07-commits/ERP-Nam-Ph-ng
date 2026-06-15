@@ -248,7 +248,7 @@ function buildNavItems(queueCount: number): NavItem[] {
             { key: '/hr/benefits', to: '/hr/benefits', label: <Link to="/hr/benefits">🎁 Phúc lợi nhân viên</Link>, permissions: ['hr.view'] },
             { key: '/hr/health-checks', to: '/hr/health-checks', label: <Link to="/hr/health-checks">🏥 Khám sức khỏe</Link>, permissions: ['hr.view'] },
             { key: '/hr/safety', to: '/hr/safety', label: <Link to="/hr/safety">🛡️ An toàn lao động</Link>, permissions: ['hr.view'] },
-            { key: '/hr/kpi', to: '/hr/kpi', label: <Link to="/hr/kpi">🎯 KPI / Đánh giá</Link>, permissions: ['hr.view'] },
+            { key: '/hr/kpi', to: '/hr/kpi', label: <Link to="/hr/kpi">🎯 KPI / Đánh giá</Link>, permissions: ['hr.view', 'hr.kpi'] },
             { key: '/hr/reports', to: '/hr/reports', label: <Link to="/hr/reports">📑 Báo cáo HR</Link>, permissions: ['hr.view'] },
             { key: '/hr/me', to: '/hr/me', label: <Link to="/hr/me">📱 Cổng nhân viên (Mobile)</Link>, permissions: ['hr.view', 'hr.attendance'] },
           ],
