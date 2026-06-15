@@ -21,6 +21,7 @@ import apiClient from '../../api/client'
 import { warehousesApi } from '../../api/warehouses'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { usePermission } from '../../hooks/usePermission'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
@@ -491,7 +492,10 @@ function ChiTietTab() {
     colCapNhat,
   ]
 
-  const columns = isGiay ? columnsGiay : columnsDefault
+  const { displayColumns: displayGiay, settingsButton: settingsGiay } = useColumnPrefs('warehouse-inventory-giay', columnsGiay)
+  const { displayColumns: displayDefault, settingsButton: settingsDefault } = useColumnPrefs('warehouse-inventory-default', columnsDefault)
+  const displayColumns = isGiay ? displayGiay : displayDefault
+  const settingsButton = isGiay ? settingsGiay : settingsDefault
 
   return (
     <div>
@@ -520,6 +524,7 @@ function ChiTietTab() {
             <Tooltip title={canView ? 'Xuất Excel' : 'Bạn không có quyền xem/xuất tồn kho'}>
               <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} disabled={!canView} onClick={handleExportExcel} />
             </Tooltip>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -604,7 +609,7 @@ function ChiTietTab() {
           <Table
             locale={{ emptyText: <EmptyState size="small" /> }}
             dataSource={filtered}
-            columns={columns}
+            columns={displayColumns}
             rowKey="id"
             size="small"
             pagination={{ pageSize: 100, showSizeChanger: true, pageSizeOptions: ['50','100','200','500'], showTotal: t => `${t} mặt hàng` }}

@@ -23,6 +23,7 @@ import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolve
 
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { usePermission } from '../../hooks/usePermission'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import { getErrorMessage } from '../../utils/errorUtils'
 import EmptyState from "../../components/EmptyState"
 import HoanThienGiayModal from '../../components/HoanThienGiayModal'
@@ -513,6 +514,10 @@ export default function NhapGiayPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('warehouse-nhap-giay', columns, {
+    nonHideable: ['so_phieu'],
+  })
+
   const handleLoadInvoiceImage = async (id: number) => {
     if (expandedImages[id]) return
     const detail = await warehouseApi.getGoodsReceipt(id).then(res => res.data)
@@ -597,6 +602,7 @@ export default function NhapGiayPage() {
               onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setOpen(true) }}>
               Tạo phiếu nhập
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -631,7 +637,7 @@ export default function NhapGiayPage() {
       </Card>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
-        <Table dataSource={receiptList} columns={columns} rowKey="id" loading={isLoading} size="small"
+        <Table dataSource={receiptList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 1050 }} />
       </Card>
 

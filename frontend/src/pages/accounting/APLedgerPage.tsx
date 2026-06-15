@@ -13,6 +13,7 @@ import { apApi, APLedgerRow, APAgingRow, SoChiTietRow, SoChiTietResponse, DoiChi
 import { suppliersApi, Supplier } from '../../api/suppliers'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -152,6 +153,8 @@ function LedgerTab() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-ap-ledger', columns)
+
   return (
     <>
       <Card size="small" style={{ marginBottom: 12 }}>
@@ -196,6 +199,7 @@ function LedgerTab() {
             <Space>
               <Button size="small" icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
               <Button size="small" icon={<FilePdfOutlined />} onClick={handlePrint}>In</Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -218,7 +222,7 @@ function LedgerTab() {
 
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-                columns={columns}
+                columns={displayColumns}
         dataSource={rows}
         rowKey="invoice_id"
         loading={isLoading}

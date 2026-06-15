@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useHotkey } from '../../hooks/useHotkey'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -146,6 +147,10 @@ export default function CustomerList() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('crm-customer-list', columns, {
+    nonHideable: ['ma_kh'],
+  })
+
   const items = data?.items ?? []
   const total = data?.total ?? 0
 
@@ -195,6 +200,7 @@ export default function CustomerList() {
               <Button onClick={() => setImportVisible(true)}>
                 Import Excel
               </Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -203,7 +209,7 @@ export default function CustomerList() {
                     locale={{ emptyText: <EmptyState size="small" preset="customer" /> }}
                     rowKey="id"
           dataSource={items}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           size="small"
           pagination={{

@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useHotkey } from '../../hooks/useHotkey'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Drawer, Input, InputNumber, Select, Space, Table, Typography, message, Row, Col, Tag, Avatar, Statistic, Tooltip, Badge,
@@ -400,6 +401,10 @@ export default function EmployeeListPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-employee-list', columns, {
+    nonHideable: ['ma_nv'],
+  })
+
   return (
     <div style={{ padding: '0 0 24px 0' }}>
       {expiring.length > 0 && (
@@ -448,6 +453,7 @@ export default function EmployeeListPage() {
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               Thêm nhân viên
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -601,7 +607,7 @@ export default function EmployeeListPage() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           dataSource={filteredEmployees}
-          columns={columns}
+          columns={displayColumns}
           rowKey="id"
           loading={isLoading}
           size="middle"

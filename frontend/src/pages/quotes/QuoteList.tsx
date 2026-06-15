@@ -27,6 +27,7 @@ import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, smartPr
 import ImportExcelButton from '../../components/ImportExcelButton'
 import { useAuthStore } from '../../store/auth'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -431,6 +432,12 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
     },
   ]
 
+  const { displayColumns: displayFullColumns, settingsButton } = useColumnPrefs(
+    'sales-quote-list',
+    fullColumns,
+    { nonHideable: ['so_bao_gia'] },
+  )
+
   return (
     <div>
       <style>{`.md-selected-row > td { background-color: #e6f4ff !important; }`}</style>
@@ -462,6 +469,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
               >
                 Thêm mới
               </Button>
+              {!isEmbedded && settingsButton}
             </Space>
           </Col>
         </Row>
@@ -593,7 +601,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
             disabled: record.trang_thai === 'huy',
           }),
         } : undefined}
-        columns={isEmbedded ? compactColumns : fullColumns}
+        columns={isEmbedded ? compactColumns : displayFullColumns}
         dataSource={data?.items || []}
         locale={{ emptyText: search || trangThai || phapNhanId || dateRange.length ? 'Không tìm thấy báo giá nào' : 'Chưa có báo giá nào' }}
         rowClassName={(r) => r.id === selectedId ? 'md-selected-row' : ''}

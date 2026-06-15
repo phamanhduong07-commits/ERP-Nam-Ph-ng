@@ -22,6 +22,7 @@ import ImportExcelDialog from '../../components/ImportExcelDialog'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
 import { useHotkey } from '../../hooks/useHotkey'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -358,6 +359,12 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
     },
   ]
 
+  const { displayColumns: displayFullColumns, settingsButton } = useColumnPrefs(
+    'sales-order-list',
+    fullColumns,
+    { nonHideable: ['so_don'] },
+  )
+
   useHotkey('ctrl+n', () => navigate('/sales/orders/new'), 'Tạo đơn hàng mới')
 
   const hasFilter = !!(search || trangThai || phapNhanId || dateRange || shortcutFilter)
@@ -398,6 +405,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
               >
                 Import
               </Button>
+              {!isEmbedded && settingsButton}
             </Space>
           </Col>
         </Row>
@@ -505,7 +513,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
       </Card>
 
       <Table
-        columns={isEmbedded ? compactColumns : fullColumns}
+        columns={isEmbedded ? compactColumns : displayFullColumns}
         dataSource={displayItems}
         rowKey="id"
         loading={isLoading}

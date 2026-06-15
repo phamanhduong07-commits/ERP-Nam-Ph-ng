@@ -10,6 +10,7 @@ import { bankLedgerApi, type LedgerEntry } from '../../api/banking'
 import { exportToExcel } from '../../utils/exportUtils'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -82,6 +83,8 @@ export default function CashBookPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('cash-book', columns)
+
   const handleExportExcel = () => {
     if (!data) return
     const tu = range[0].format('DDMMYYYY')
@@ -118,6 +121,7 @@ export default function CashBookPage() {
             Xuất Excel
           </Button>
           <Button icon={<PrinterOutlined />} onClick={() => window.print()}>In</Button>
+          {settingsButton}
         </Space>
       }
     >
@@ -176,7 +180,7 @@ export default function CashBookPage() {
           <Table
                         locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
                         rowKey="so_chung_tu"
-            columns={columns}
+            columns={displayColumns}
             dataSource={data.entries}
             loading={isLoading}
             pagination={false}

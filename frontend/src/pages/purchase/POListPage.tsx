@@ -25,6 +25,7 @@ import { purchaseInvoiceApi } from '../../api/accounting'
 import { warehouseApi, TonKhoGiayRow, TonKhoNVLRow } from '../../api/warehouse'
 import apiClient from '../../api/client'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -412,6 +413,10 @@ export default function POListPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('purchase-order-list', columns, {
+    nonHideable: ['so_po'],
+  })
+
   const expandedRowRender = (r: PurchaseOrder) => (
     <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}
       columns={[
@@ -550,6 +555,7 @@ export default function POListPage() {
             >
               Import
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -621,7 +627,7 @@ export default function POListPage() {
       </Card>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
-        <Table dataSource={poList} columns={columns} rowKey="id" loading={isLoading} size="small"
+        <Table dataSource={poList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 900 }} />
       </Card>
 

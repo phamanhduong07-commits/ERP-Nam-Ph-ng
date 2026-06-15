@@ -10,6 +10,7 @@ import type { Dayjs } from 'dayjs'
 import client from '../../api/client'
 import type { PhanXuong } from '../../api/warehouse'
 import { warehouseApi } from '../../api/warehouse'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -212,6 +213,10 @@ export default function LenhTheoDoiPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-lsx-list', columns, {
+    nonHideable: ['so_lenh'],
+  })
+
   return (
     <div style={{ padding: 16 }}>
       <Row gutter={[8, 8]} align="middle" style={{ marginBottom: 12 }}>
@@ -282,6 +287,7 @@ export default function LenhTheoDoiPage() {
             <Text type="secondary" style={{ fontSize: 12 }}>
               {rows.length} lệnh
             </Text>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -290,7 +296,7 @@ export default function LenhTheoDoiPage() {
         size="small"
         rowKey="id"
         loading={isLoading}
-        columns={columns}
+        columns={displayColumns}
         dataSource={rows}
         pagination={false}
         scroll={{ x: 1050 }}
