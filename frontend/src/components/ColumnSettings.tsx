@@ -32,16 +32,27 @@ interface DraftItem {
 function extractTitle(title: unknown): string {
   if (typeof title === 'string') return title
   if (typeof title === 'number') return String(title)
+  if (Array.isArray(title)) return title.map(extractTitle).filter(Boolean).join(' ')
+  if (title && typeof title === 'object' && 'props' in (title as any)) {
+    const el = title as { props?: { children?: unknown; title?: unknown; label?: unknown } }
+    return (
+      extractTitle(el.props?.children) ||
+      extractTitle(el.props?.title) ||
+      extractTitle(el.props?.label) ||
+      ''
+    )
+  }
   return ''
 }
 
 interface SortableRowProps {
   item: DraftItem
   nonHideable: string[]
+  isSearching: boolean
   onToggle: (key: string) => void
 }
 
-function SortableRow({ item, nonHideable, onToggle }: SortableRowProps) {
+function SortableRow({ item, nonHideable, isSearching, onToggle }: SortableRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.key,
   })
@@ -65,10 +76,15 @@ function SortableRow({ item, nonHideable, onToggle }: SortableRowProps) {
   return (
     <div ref={setNodeRef} style={style}>
       <span
-        {...attributes}
-        {...listeners}
-        style={{ cursor: 'grab', color: '#bbb', fontSize: 16, lineHeight: 1, flexShrink: 0 }}
-        title="Kéo để đổi thứ tự"
+        {...(isSearching ? {} : { ...attributes, ...listeners })}
+        style={{
+          cursor: isSearching ? 'not-allowed' : 'grab',
+          color: isSearching ? '#e5e7eb' : '#bbb',
+          fontSize: 16,
+          lineHeight: 1,
+          flexShrink: 0,
+        }}
+        title={isSearching ? 'Bỏ tìm kiếm để kéo đổi thứ tự' : 'Kéo để đổi thứ tự'}
       >
         <HolderOutlined />
       </span>
@@ -166,15 +182,18 @@ export default function ColumnSettings({
     onSave(newPrefs)
   }
 
-  const filteredItems = search
+  const isSearching = search.trim().length > 0
+  const filteredItems = isSearching
     ? items.filter(it => it.title.toLowerCase().includes(search.toLowerCase()))
     : items
 
   const visibleCount = items.filter(it => it.visible).length
+  const allChecked = visibleCount === items.length
+  const someChecked = visibleCount > 0 && visibleCount < items.length
 
   return (
     <Modal
-      title="Tùy chỉnh giao diện"
+      title="Tùy chỉnh cột"
       open={open}
       onOk={handleOk}
       onCancel={onClose}
@@ -184,57 +203,56 @@ export default function ColumnSettings({
       styles={{ body: { padding: '12px 0' } }}
       destroyOnClose
     >
-      {/* Search + show/hide all */}
+      {/* Search */}
       <div style={{ padding: '0 16px 8px' }}>
         <Input
           prefix={<SearchOutlined style={{ color: '#bbb' }} />}
-          placeholder="Nhập từ khóa tìm kiếm"
+          placeholder="Tìm tên cột..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           allowClear
           size="small"
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Đang hiện {visibleCount}/{items.length} cột
-          </Text>
-          <span>
-            <Button type="link" size="small" style={{ padding: 0 }} onClick={showAll}>
-              Hiện tất cả
-            </Button>
-            <Divider type="vertical" />
-            <Button type="link" size="small" style={{ padding: 0 }} onClick={hideAll}>
-              Ẩn tất cả
-            </Button>
-          </span>
-        </div>
       </div>
 
-      {/* Column header */}
+      {/* Header row: checkbox all + count + links */}
       <div
         style={{
-          padding: '4px 16px',
-          background: '#e6f4ff',
-          borderTop: '1px solid #d0e8ff',
-          borderBottom: '1px solid #d0e8ff',
-          fontSize: 12,
-          fontWeight: 600,
-          color: '#1677ff',
-          marginBottom: 4,
+          padding: '6px 16px',
+          background: '#fafafa',
+          borderTop: '1px solid #f0f0f0',
+          borderBottom: '1px solid #f0f0f0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
         }}
       >
-        Tên cột dữ liệu
+        <Checkbox
+          checked={allChecked}
+          indeterminate={someChecked}
+          onChange={e => (e.target.checked ? showAll() : hideAll())}
+        />
+        <Text style={{ flex: 1, fontSize: 12, color: '#595959' }}>
+          Đang hiện <strong>{visibleCount}</strong>/{items.length} cột
+        </Text>
+        <Button type="link" size="small" style={{ padding: 0, fontSize: 12 }} onClick={showAll}>
+          Hiện tất cả
+        </Button>
+        <Divider type="vertical" style={{ margin: 0 }} />
+        <Button type="link" size="small" style={{ padding: 0, fontSize: 12 }} onClick={hideAll}>
+          Ẩn tất cả
+        </Button>
       </div>
 
       {/* Draggable list */}
-      <div style={{ maxHeight: 380, overflowY: 'auto', padding: '4px 8px' }}>
-        {search ? (
-          // When searching, render without drag (can't reorder filtered subset)
+      <div style={{ maxHeight: 360, overflowY: 'auto', padding: '4px 8px' }}>
+        {isSearching ? (
           filteredItems.map(item => (
             <SortableRow
               key={item.key}
               item={item}
               nonHideable={nonHideable}
+              isSearching
               onToggle={toggleVisible}
             />
           ))
@@ -246,6 +264,7 @@ export default function ColumnSettings({
                   key={item.key}
                   item={item}
                   nonHideable={nonHideable}
+                  isSearching={false}
                   onToggle={toggleVisible}
                 />
               ))}
@@ -253,7 +272,7 @@ export default function ColumnSettings({
           </DndContext>
         )}
         {filteredItems.length === 0 && (
-          <Text type="secondary" style={{ padding: '12px 8px', display: 'block', textAlign: 'center' }}>
+          <Text type="secondary" style={{ padding: '16px 8px', display: 'block', textAlign: 'center' }}>
             Không tìm thấy cột nào
           </Text>
         )}

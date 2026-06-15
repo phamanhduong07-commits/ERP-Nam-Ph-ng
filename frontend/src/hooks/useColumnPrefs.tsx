@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { Button } from 'antd'
+import { Button, Tooltip, Badge } from 'antd'
 import { SettingOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import ColumnSettings from '../components/ColumnSettings'
@@ -81,11 +81,19 @@ export function useColumnPrefs<T>(
     [pageKey],
   )
 
+  const hiddenCount = Object.values(mergedPrefs).filter(p => !p.visible).length
+
   const settingsButton = (
     <>
-      <Button icon={<SettingOutlined />} size="small" onClick={() => setOpen(true)}>
-        Tùy chỉnh cột
-      </Button>
+      <Tooltip title="Tùy chỉnh cột">
+        <Badge count={hiddenCount} size="small" offset={[-2, 2]}>
+          <Button
+            icon={<SettingOutlined />}
+            size="small"
+            onClick={() => setOpen(true)}
+          />
+        </Badge>
+      </Tooltip>
       {open && (
         <ColumnSettings
           open={open}
