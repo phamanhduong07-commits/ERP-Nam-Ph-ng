@@ -32,8 +32,8 @@ import requests
 from app.database import SessionLocal
 from app.models.auth import Role, User
 from app.models.hr import (
-    AttendanceLog, Department, Employee, PayrollAdjustment, PayrollComplaint,
-    PayrollRun, ProductionOutput, Team,
+    AttendanceLog, Department, Employee, PayrollAdjustment, PayrollAuditLog,
+    PayrollComplaint, PayrollRun, ProductionOutput, RewardDiscipline, Team,
 )
 from app.routers.auth import _hash_password as hash_password
 
@@ -94,6 +94,11 @@ def cleanup_uat_data(db):
 
     uat_emp_ids = [e.id for e in db.query(Employee).filter(Employee.ma_nv.like("UAT_%")).all()]
     if uat_emp_ids:
+        # Sprint D.6: dọn audit log + reward discipline + contracts trước (có FK)
+        db.query(PayrollAuditLog).filter(PayrollAuditLog.employee_id.in_(uat_emp_ids)).delete(synchronize_session=False)
+        db.query(RewardDiscipline).filter(RewardDiscipline.employee_id.in_(uat_emp_ids)).delete(synchronize_session=False)
+        from app.models.hr import LaborContract as _LC
+        db.query(_LC).filter(_LC.employee_id.in_(uat_emp_ids)).delete(synchronize_session=False)
         db.query(PayrollComplaint).filter(PayrollComplaint.employee_id.in_(uat_emp_ids)).delete(synchronize_session=False)
         db.query(PayrollAdjustment).filter(PayrollAdjustment.employee_id.in_(uat_emp_ids)).delete(synchronize_session=False)
         db.query(PayrollRun).filter(PayrollRun.employee_id.in_(uat_emp_ids)).delete(synchronize_session=False)
@@ -491,6 +496,186 @@ def bgd_duyet(admin_h, dept_id):
     return True
 
 
+# ═══════════════════════════════════════════════════════════════
+# SPRINT D.6 — Test cho 4 GAP fix (Khen thưởng + NV nghỉ + Thử việc + Audit)
+# ═══════════════════════════════════════════════════════════════
+
+def d6_create_reward(db, emp, admin_h):
+    """D.6 GAP-1: Tạo bản ghi Khen thưởng cho NV, verify engine cộng vào lương."""
+    step("STEP D.6-1 · Test thưởng/phạt cộng vào lương (GAP-1)")
+    from app.models.hr import RewardDiscipline
+    from datetime import datetime as _dt
+
+    # Thưởng 300k cho UAT_001 tháng 6
+    r = RewardDiscipline(
+        employee_id=emp.id,
+        loai="khen_thuong",
+        hinh_thuc="thuong_tien",
+        so_tien=300000,
+        ly_do="UAT - thưởng xuất sắc tháng 6",
+        thang_ap_dung=UAT_THANG, nam_ap_dung=UAT_NAM,
+        trang_thai="da_duyet",
+        ngay_quyet_dinh=date(UAT_NAM, UAT_THANG, 15),
+    )
+    db.add(r)
+    db.commit()
+    Stats.ok(f"Tạo bản ghi thưởng 300.000đ (đã duyệt) cho NV UAT_001")
+
+
+def d6_verify_reward_in_payroll(db, emp):
+    """Verify engine v2 đã cộng thưởng 300k vào tổng cộng thêm."""
+    step("STEP D.6-2 · Verify thưởng đã vào PayrollRun")
+    from app.models.hr import PayrollRun
+    run = db.query(PayrollRun).filter(
+        PayrollRun.employee_id == emp.id,
+        PayrollRun.thang == UAT_THANG, PayrollRun.nam == UAT_NAM,
+    ).first()
+    if not run:
+        Stats.fail("Không tìm thấy run sau khi tính lại")
+        return
+    # phu_cap = tong_cong_them = adj + thưởng. Phải có thêm 300k so với lần trước.
+    if run.thuong and float(run.thuong) >= 300000:
+        Stats.ok(f"Thưởng đã vào PayrollRun.thuong = {float(run.thuong):,.0f}đ ✓")
+    else:
+        Stats.fail(f"Thưởng KHÔNG vào run! thuong={run.thuong}")
+    if "Thưởng" in (run.ghi_chu_calc or ""):
+        Stats.ok("ghi_chu_calc có note 'Thưởng' ✓")
+
+
+def d6_test_employee_thu_viec(db, dept, admin_h):
+    """D.6 GAP-4: Tạo NV thử việc, verify engine dùng hệ số 1.3."""
+    step("STEP D.6-3 · Test NV thử việc dùng hệ số 1.3 (GAP-4)")
+    from app.routers.auth import _hash_password as hp
+    from app.models.auth import Role
+    role = db.query(Role).first()
+
+    user2 = User(
+        username="uat_thuviec", password_hash=hp("uat-thuviec-2026"),
+        ho_ten="Trần Văn Thử Việc", role_id=role.id, trang_thai=True,
+        must_change_password=False,
+    )
+    db.add(user2); db.flush()
+
+    emp2 = Employee(
+        ma_nv="UAT_002", ho_ten="Trần Văn Thử Việc",
+        bo_phan_id=dept.id, user_id=user2.id,
+        he_so_ca_nhan=Decimal("1.5"),  # Mặc dù gán 1.5, engine sẽ override = 1.3 do HĐ thử việc
+        trang_thai="dang_lam",
+        ngay_vao_lam=date(UAT_NAM, UAT_THANG, 1),
+    )
+    db.add(emp2); db.flush()
+
+    # HĐLĐ thử việc
+    from app.models.hr import LaborContract
+    contract = LaborContract(
+        employee_id=emp2.id,
+        so_hop_dong=f"UAT-HD-TV-{emp2.id}",
+        loai_hop_dong="thu_viec",
+        ngay_ky=date(UAT_NAM, UAT_THANG, 1),
+        ngay_hieu_luc=date(UAT_NAM, UAT_THANG, 1),
+        luong_co_ban=Decimal("4000000"),
+        trang_thai="hieu_luc",
+    )
+    db.add(contract)
+
+    # Chấm công đủ
+    for d_ in [3, 5, 10, 17, 22]:
+        db.add(AttendanceLog(
+            employee_id=emp2.id, ngay=date(UAT_NAM, UAT_THANG, d_),
+            tong_gio_thuc=Decimal("8"), so_cong=Decimal("1"),
+            trang_thai="hop_le",
+        ))
+    db.commit()
+    Stats.ok(f"Tạo NV UAT_002 thử việc (HĐ #{contract.id}) + 5 ngày chấm công")
+    return emp2
+
+
+def d6_verify_thu_viec_he_so(db, emp2):
+    """Verify NV thử việc trong PayrollRun có he_so_ca_nhan_snapshot = 1.3."""
+    step("STEP D.6-4 · Verify NV thử việc dùng he_so 1.3 trong PayrollRun")
+    from app.models.hr import PayrollRun
+    run = db.query(PayrollRun).filter(
+        PayrollRun.employee_id == emp2.id,
+        PayrollRun.thang == UAT_THANG, PayrollRun.nam == UAT_NAM,
+    ).first()
+    if not run:
+        Stats.fail(f"Không tìm thấy run cho NV thử việc")
+        return
+    if abs(float(run.he_so_ca_nhan_snapshot) - 1.3) < 0.01:
+        Stats.ok(f"he_so_ca_nhan_snapshot = {run.he_so_ca_nhan_snapshot} (= 1.3 thử việc) ✓")
+    else:
+        Stats.fail(f"Hệ số sai: {run.he_so_ca_nhan_snapshot}, expect 1.3")
+    if "thử việc" in (run.ghi_chu_calc or ""):
+        Stats.ok("ghi_chu_calc có note 'thử việc' ✓")
+
+
+def d6_test_employee_resigned_midmonth(db, dept, admin_h):
+    """D.6 GAP-3: Tạo NV nghỉ giữa tháng, verify vẫn có lương."""
+    step("STEP D.6-5 · Test NV nghỉ giữa tháng vẫn nhận lương (GAP-3, BLLĐ Đ48)")
+    from app.routers.auth import _hash_password as hp
+    from app.models.auth import Role
+    role = db.query(Role).first()
+
+    user3 = User(
+        username="uat_nghi", password_hash=hp("uat-nghi-2026"),
+        ho_ten="Lê Thị Nghỉ Việc", role_id=role.id, trang_thai=True,
+        must_change_password=False,
+    )
+    db.add(user3); db.flush()
+
+    emp3 = Employee(
+        ma_nv="UAT_003", ho_ten="Lê Thị Nghỉ Việc",
+        bo_phan_id=dept.id, user_id=user3.id,
+        he_so_ca_nhan=Decimal("1.8"),
+        trang_thai="da_nghi",  # Đã nghỉ
+        ngay_vao_lam=date(2024, 1, 1),
+        ngay_nghi_viec=date(UAT_NAM, UAT_THANG, 15),  # Nghỉ ngày 15/6 — GIỮA tháng
+    )
+    db.add(emp3); db.flush()
+
+    # Chấm công 10 ngày đầu tháng (trước khi nghỉ)
+    for d_ in [1, 2, 3, 4, 5, 8, 9, 10, 11, 12]:
+        db.add(AttendanceLog(
+            employee_id=emp3.id, ngay=date(UAT_NAM, UAT_THANG, d_),
+            tong_gio_thuc=Decimal("8"), so_cong=Decimal("1"),
+            trang_thai="hop_le",
+        ))
+    db.commit()
+    Stats.ok(f"Tạo NV UAT_003 đã nghỉ 15/6 + 10 ngày chấm công trước khi nghỉ")
+    return emp3
+
+
+def d6_verify_resigned_has_payroll(db, emp3):
+    """Verify NV đã nghỉ giữa tháng vẫn có PayrollRun (Điều 48 BLLĐ)."""
+    step("STEP D.6-6 · Verify NV nghỉ giữa tháng có bảng lương")
+    from app.models.hr import PayrollRun
+    run = db.query(PayrollRun).filter(
+        PayrollRun.employee_id == emp3.id,
+        PayrollRun.thang == UAT_THANG, PayrollRun.nam == UAT_NAM,
+    ).first()
+    if run and float(run.thuc_linh or 0) > 0:
+        Stats.ok(f"NV nghỉ giữa tháng có lương: {fmt(run.thuc_linh)} (BLLĐ Điều 48) ✓")
+        if "nghỉ" in (run.ghi_chu_calc or "").lower():
+            Stats.ok("ghi_chu_calc có note NV nghỉ ✓")
+    else:
+        Stats.fail(f"NV nghỉ KHÔNG có lương! run={run}")
+
+
+def d6_verify_audit_log(db, run_id):
+    """D.6 GAP-7: Verify audit log đã ghi các action."""
+    step("STEP D.6-7 · Verify audit log lịch sử thay đổi (GAP-7)")
+    from app.models.hr import PayrollAuditLog
+    logs = db.query(PayrollAuditLog).filter(PayrollAuditLog.payroll_run_id == run_id).all()
+    actions = {log.action for log in logs}
+    Stats.ok(f"Có {len(logs)} bản ghi audit · các action: {actions}")
+    expected = {"engine_calc", "chot", "duyet_thanh_toan"}
+    missing = expected - actions
+    if not missing:
+        Stats.ok(f"Đủ 3 action quan trọng: engine_calc, chot, duyet_thanh_toan ✓")
+    else:
+        Stats.warn(f"Thiếu action: {missing}")
+
+
 # ─── Step 13: NV không thể khiếu nại sau khi đã thanh toán ───
 def verify_locked(nv_h):
     step("STEP 13 · Verify khóa cứng sau thanh toán")
@@ -539,6 +724,11 @@ def main():
     create_production(db, dept, team, admin_h)
     create_adjustments(db, emp, admin_h)
 
+    # === Sprint D.6 setup: thêm thưởng + NV thử việc + NV nghỉ giữa tháng ===
+    d6_create_reward(db, emp, admin_h)
+    emp_thu_viec = d6_test_employee_thu_viec(db, dept, admin_h)
+    emp_nghi = d6_test_employee_resigned_midmonth(db, dept, admin_h)
+
     # Run pipeline
     run_engine(admin_h)
     run = verify_payroll(db, emp)
@@ -546,6 +736,11 @@ def main():
         print("\n❌ Engine fail, dừng UAT")
         db.close()
         sys.exit(1)
+
+    # === Verify Sprint D.6 GAP fixes ===
+    d6_verify_reward_in_payroll(db, emp)
+    d6_verify_thu_viec_he_so(db, emp_thu_viec)
+    d6_verify_resigned_has_payroll(db, emp_nghi)
 
     hr_chot(admin_h, dept.id)
     db.expire_all()  # refresh ngay_chot từ DB
@@ -563,6 +758,9 @@ def main():
 
     bgd_duyet(admin_h, dept.id)
     verify_locked(nv_h)
+
+    # D.6 GAP-7 verify audit log
+    d6_verify_audit_log(db, run.id)
 
     # Tổng kết
     print(f"\n{'═' * 70}")

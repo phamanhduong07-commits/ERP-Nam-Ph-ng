@@ -57,6 +57,7 @@ def engine_commit(
     result = calculate_payroll_for_month(
         db, nam=body.nam, thang=body.thang,
         bo_phan_id=body.bo_phan_id, dry_run=False,
+        user_id=current_user.id,  # D.6 GAP-7: audit ai chạy engine
     )
     return result
 

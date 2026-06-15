@@ -36,10 +36,45 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
-from app.models.hr import Department, Employee, PayrollRun
+from app.models.hr import Department, Employee, PayrollAuditLog, PayrollRun
 
 logger = logging.getLogger("erp")
 router = APIRouter(prefix="/api/hr/payroll-runs", tags=["hr-payroll-runs"])
+
+
+def _snapshot_run(r: PayrollRun) -> dict:
+    """Snapshot field tài chính của PayrollRun để lưu vào audit log."""
+    return {
+        "luong_san_pham": float(r.luong_san_pham or 0),
+        "bu_toi_thieu_vung": float(r.bu_toi_thieu_vung or 0),
+        "phu_cap": float(r.phu_cap or 0),
+        "thuong": float(r.thuong or 0),
+        "bao_hiem": float(r.bao_hiem or 0),
+        "tam_ung": float(r.tam_ung or 0),
+        "tong_thu_nhap": float(r.tong_thu_nhap or 0),
+        "thuc_linh": float(r.thuc_linh or 0),
+        "trang_thai": r.trang_thai,
+        "ngay_chot": r.ngay_chot.isoformat() if r.ngay_chot else None,
+    }
+
+
+def _audit(
+    db: Session, run: PayrollRun, action: str, user_id: int | None,
+    ly_do: str | None = None, before: dict | None = None,
+):
+    """Ghi audit log cho 1 PayrollRun. Snapshot 'after' lấy từ run hiện tại."""
+    log = PayrollAuditLog(
+        payroll_run_id=run.id,
+        thang=run.thang,
+        nam=run.nam,
+        employee_id=run.employee_id,
+        action=action,
+        user_id=user_id,
+        ly_do=ly_do,
+        before_data=before,
+        after_data=_snapshot_run(run),
+    )
+    db.add(log)
 
 
 # ─── Schemas ───
@@ -200,6 +235,38 @@ def get_run(
     return _to_read(r)
 
 
+@router.get("/{run_id}/audit")
+def get_audit_log(
+    run_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU", "GIAM_DOC", "BGD")),
+):
+    """Lịch sử thay đổi bảng lương (Sprint D.6) — phục vụ thanh tra/audit."""
+    r = db.query(PayrollRun).filter(PayrollRun.id == run_id).first()
+    if not r:
+        raise HTTPException(404, "Không tìm thấy bảng lương.")
+    logs = (
+        db.query(PayrollAuditLog)
+        .filter(PayrollAuditLog.payroll_run_id == run_id)
+        .order_by(PayrollAuditLog.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return [
+        {
+            "id": log.id,
+            "action": log.action,
+            "user_id": log.user_id,
+            "user_ho_ten": log.user.ho_ten if log.user else None,
+            "ly_do": log.ly_do,
+            "before_data": log.before_data,
+            "after_data": log.after_data,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        }
+        for log in logs
+    ]
+
+
 # ─── Workflow: HR chốt ───
 @router.post("/chot")
 def chot_thang(
@@ -254,10 +321,12 @@ def chot_thang(
     today = date.today()
     ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
     for r in rows:
+        before = _snapshot_run(r)
         r.trang_thai = "da_chot"
         r.ngay_chot = today  # mốc tính hạn khiếu nại 15 ngày làm việc (Điều 16)
         if body.ghi_chu:
             r.ghi_chu_calc = (r.ghi_chu_calc or "") + f"\n[CHỐT {ts} by user_id={current_user.id}] {body.ghi_chu}"
+        _audit(db, r, "chot", current_user.id, ly_do=body.ghi_chu, before=before)
 
     db.commit()
     logger.info(f"Payroll chot: {len(rows)} run thang {body.thang}/{body.nam} bo_phan={body.bo_phan_id} by user_id={current_user.id}")
@@ -301,7 +370,9 @@ def duyet_thanh_toan(
         logger.warning(f"Mass duyet-thanh-toan {len(rows)} runs by user_id={current_user.id} thang={body.thang}/{body.nam}")
 
     for r in rows:
+        before = _snapshot_run(r)
         r.trang_thai = "da_thanh_toan"
+        _audit(db, r, "duyet_thanh_toan", current_user.id, before=before)
 
     db.commit()
     logger.info(f"Payroll duyet thanh toan: {len(rows)} run thang {body.thang}/{body.nam} by user_id={current_user.id}")
@@ -338,10 +409,12 @@ def mo_khoa(
             detail=f"Còn {pending} khiếu nại chưa xử lý cho phiếu này — phải kết luận hết trước khi mở khóa.",
         )
 
+    before = _snapshot_run(r)
     old = r.trang_thai
     r.trang_thai = "du_thao"
     ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
     r.ghi_chu_calc = (r.ghi_chu_calc or "") + f"\n[MỞ KHÓA {ts} by user_id={current_user.id}] từ {old} — LÝ DO: {body.ly_do}"
+    _audit(db, r, "mo_khoa", current_user.id, ly_do=body.ly_do, before=before)
     db.commit()
     logger.warning(f"Payroll #{run_id} unlocked from {old} by user_id={current_user.id} reason={body.ly_do!r}")
     return {"ok": True, "id": run_id, "from": old, "to": "du_thao"}

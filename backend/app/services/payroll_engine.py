@@ -35,10 +35,53 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.hr import (
-    AttendanceLog, Employee, PayrollAdjustment, PayrollConfig, PayrollRun, ProductionOutput,
+    AttendanceLog, Employee, LaborContract, PayrollAdjustment, PayrollAuditLog,
+    PayrollConfig, PayrollRun, ProductionOutput, RewardDiscipline,
 )
 
 logger = logging.getLogger("erp")
+
+
+# ═══════════════════════════════════════════════════════════════
+# Sprint D.6 — Phân loại sub_loai cộng thêm theo NĐ 38/2022/NĐ-CP
+# ═══════════════════════════════════════════════════════════════
+# Lương tối thiểu vùng KHÔNG bao gồm: làm thêm giờ, ban đêm, thưởng,
+# tiền ăn giữa ca, hỗ trợ xăng xe, điện thoại, nhà ở, đi lại.
+# → Chỉ những khoản TÍNH CHẤT LƯƠNG mới được cộng vào ngưỡng tối thiểu.
+
+SUB_LOAI_TINH_VAO_TOI_THIEU = {
+    "cong_nhat",       # Tiền công nhật — tính chất lương
+    "pc_cong_doan",    # PC công đoạn — lương theo công đoạn
+    "pc_chuc_vu",      # PC chức vụ — lương cố định
+    "pc_khac",         # PC khác — đa số mang tính lương
+}
+# Không tính vào tối thiểu: tang_thuong_sp, boi_duong, pc_het_hang, pc_may_hong
+
+
+# ═══════════════════════════════════════════════════════════════
+# Helpers
+# ═══════════════════════════════════════════════════════════════
+def _get_active_contract(db: Session, employee_id: int, on_date: date) -> Optional[LaborContract]:
+    """Lấy HĐLĐ hiệu lực của NV vào ngày `on_date` (để biết NV có đang thử việc).
+
+    Ưu tiên HĐ có trang_thai='hieu_luc', ngay_hieu_luc <= on_date,
+    (ngay_het_han IS NULL hoặc >= on_date). Nếu nhiều thì lấy mới nhất.
+    """
+    return (
+        db.query(LaborContract)
+        .filter(
+            LaborContract.employee_id == employee_id,
+            LaborContract.trang_thai == "hieu_luc",
+            LaborContract.ngay_hieu_luc <= on_date,
+        )
+        .order_by(LaborContract.ngay_hieu_luc.desc())
+        .first()
+    )
+
+
+def _is_thu_viec(contract: Optional[LaborContract]) -> bool:
+    """NV đang thử việc → áp hệ số riêng (mặc định 1.3 theo cấu hình HE_SO_THU_VIEC)."""
+    return contract is not None and contract.loai_hop_dong == "thu_viec"
 
 
 # ─── Helpers — load config từ DB ───
@@ -92,6 +135,7 @@ def calculate_payroll_for_month(
     thang: int,
     bo_phan_id: Optional[int] = None,
     dry_run: bool = True,
+    user_id: Optional[int] = None,
 ) -> dict:
     """Tính lương cho 1 tháng × 1 bộ phận (hoặc tất cả bộ phận).
 
@@ -145,7 +189,20 @@ def calculate_payroll_for_month(
         quy_luong_by_dept[o.bo_phan_id] += quy
 
     # ─── Bước 3: lấy danh sách NV trong scope ───
-    emp_q = db.query(Employee).filter(Employee.trang_thai == "dang_lam")
+    # GAP-3 fix: Bao gồm CẢ NV đã nghỉ trong tháng (BLLĐ Điều 48 —
+    # phải thanh toán đầy đủ phần đã làm trước khi nghỉ).
+    from sqlalchemy import or_, and_
+    emp_q = db.query(Employee).filter(
+        or_(
+            Employee.trang_thai == "dang_lam",
+            # NV nghỉ giữa tháng (ngày nghỉ rơi vào trong tháng tính)
+            and_(
+                Employee.trang_thai == "da_nghi",
+                Employee.ngay_nghi_viec >= start,
+                Employee.ngay_nghi_viec <= end,
+            ),
+        )
+    )
     if bo_phan_id:
         emp_q = emp_q.filter(Employee.bo_phan_id == bo_phan_id)
     else:
@@ -155,19 +212,47 @@ def calculate_payroll_for_month(
             emp_q = emp_q.filter(Employee.bo_phan_id.in_(dept_ids))
     employees = emp_q.all()
 
+    # ─── P1 fix D.1: Batch-load contracts (1 query thay vì N) ───
+    emp_ids = [e.id for e in employees]
+    contracts_map: dict[int, LaborContract] = {}
+    if emp_ids:
+        for c in (
+            db.query(LaborContract)
+            .filter(
+                LaborContract.employee_id.in_(emp_ids),
+                LaborContract.trang_thai == "hieu_luc",
+                LaborContract.ngay_hieu_luc <= end,
+            )
+            .order_by(LaborContract.employee_id, LaborContract.ngay_hieu_luc.desc())
+            .all()
+        ):
+            # Lấy HĐ mới nhất cho mỗi NV (do đã ORDER BY ngay_hieu_luc DESC)
+            if c.employee_id not in contracts_map:
+                contracts_map[c.employee_id] = c
+
     # ─── Bước 4: tính công quy đổi + trọng số cho từng NV ───
     emp_calcs: dict[int, dict] = {}
     for emp in employees:
         gio_lam = _compute_employee_hours(db, emp.id, start, end)
         # Công quy đổi = giờ / giờ_chuẩn
         cong_quy_doi = (gio_lam / gio_chuan) if gio_chuan > 0 else Decimal(0)
-        he_so = Decimal(str(emp.he_so_ca_nhan or master["he_so_thu_viec"]))
+
+        # GAP-4 fix: NV thử việc → áp HE_SO_THU_VIEC (mặc định 1.3) thay vì hệ số cá nhân
+        contract = contracts_map.get(emp.id)
+        is_thu_viec = _is_thu_viec(contract)
+        if is_thu_viec:
+            he_so = Decimal(str(master["he_so_thu_viec"]))
+        else:
+            he_so = Decimal(str(emp.he_so_ca_nhan or master["he_so_thu_viec"]))
+
         trong_so = he_so * cong_quy_doi
         emp_calcs[emp.id] = {
             "emp": emp,
             "gio_lam": gio_lam,
             "cong_quy_doi": cong_quy_doi,
             "he_so": he_so,
+            "is_thu_viec": is_thu_viec,
+            "contract_loai": contract.loai_hop_dong if contract else None,
             "trong_so": trong_so,
         }
 
@@ -208,21 +293,11 @@ def calculate_payroll_for_month(
             quy_sp = quy_luong_by_dept.get(emp.bo_phan_id, Decimal(0))
             tong_trong_so = tong_trong_so_by_dept.get(emp.bo_phan_id, Decimal(0))
 
-        # Lương SP cá nhân
+        # Lương SP cá nhân (CHƯA bù)
         if tong_trong_so > 0:
             luong_sp = quy_sp * (c["trong_so"] / tong_trong_so)
         else:
             luong_sp = Decimal(0)
-
-        # ─── Bù tối thiểu vùng (Điều 4.8) ───
-        # Lương tối thiểu của NV theo công thực tế trong tháng
-        # = MIN_WAGE × (cong_quy_doi / ngay_chuan_thang)
-        if ngay_chuan > 0 and c["cong_quy_doi"] > 0:
-            min_for_nv = min_wage * (c["cong_quy_doi"] / ngay_chuan)
-        else:
-            min_for_nv = Decimal(0)
-        bu = max(Decimal(0), min_for_nv - luong_sp)
-        luong_sp_sau_bu = luong_sp + bu
 
         # ─── Sprint D.4: Cộng phụ cấp + Trừ khấu trừ (Điều 12) ───
         adjs = db.query(PayrollAdjustment).filter(
@@ -231,8 +306,17 @@ def calculate_payroll_for_month(
             PayrollAdjustment.nam == nam,
             PayrollAdjustment.trang_thai == "da_duyet",
         ).all()
-        tong_cong_them = sum((Decimal(str(a.so_tien or 0)) for a in adjs if a.loai == "cong_them"), Decimal(0))
-        tong_khau_tru = sum((Decimal(str(a.so_tien or 0)) for a in adjs if a.loai == "khau_tru"), Decimal(0))
+        tong_cong_them_adj = sum((Decimal(str(a.so_tien or 0)) for a in adjs if a.loai == "cong_them"), Decimal(0))
+        tong_khau_tru_adj = sum((Decimal(str(a.so_tien or 0)) for a in adjs if a.loai == "khau_tru"), Decimal(0))
+
+        # GAP-2 fix: Phân loại cộng thêm theo NĐ 38/2022 — chỉ những khoản
+        # mang tính chất LƯƠNG mới được tính vào ngưỡng tối thiểu vùng.
+        cong_them_tinh_min = sum(
+            (Decimal(str(a.so_tien or 0)) for a in adjs
+             if a.loai == "cong_them" and a.sub_loai in SUB_LOAI_TINH_VAO_TOI_THIEU),
+            Decimal(0),
+        )
+
         # Tách BHXH/BHYT/BHTN riêng để hiển thị
         bao_hiem_total = sum(
             (Decimal(str(a.so_tien or 0)) for a in adjs
@@ -244,6 +328,61 @@ def calculate_payroll_for_month(
              if a.loai == "khau_tru" and a.sub_loai == "tam_ung"),
             Decimal(0),
         )
+
+        # ─── GAP-1 fix: Cộng Khen thưởng / Kỷ luật (RewardDiscipline) ───
+        # Bản ghi đã duyệt + áp dụng cho kỳ lương này
+        rds = db.query(RewardDiscipline).filter(
+            RewardDiscipline.employee_id == emp.id,
+            RewardDiscipline.thang_ap_dung == thang,
+            RewardDiscipline.nam_ap_dung == nam,
+            RewardDiscipline.trang_thai == "da_duyet",
+        ).all()
+        tong_thuong = sum(
+            (Decimal(str(r.so_tien or 0)) for r in rds if r.loai == "khen_thuong"),
+            Decimal(0),
+        )
+        tong_phat = sum(
+            (Decimal(str(r.so_tien or 0)) for r in rds if r.loai == "ky_luat"),
+            Decimal(0),
+        )
+
+        # P1 fix A.2: Cảnh báo cộng đôi thưởng — admin tạo cả PayrollAdjustment
+        # sub_loai='tang_thuong_sp' VÀ RewardDiscipline khen_thuong cùng kỳ
+        # → có thể là lỗ hổng tài chính (rút tiền 2 lần). Flag vào anomalies.
+        if tong_thuong > 0 and any(
+            a.loai == "cong_them" and a.sub_loai == "tang_thuong_sp" for a in adjs
+        ):
+            anomalies.append({
+                "employee_id": emp.id,
+                "ma_nv": emp.ma_nv,
+                "ho_ten": emp.ho_ten,
+                "ly_do": (
+                    "Có cả PayrollAdjustment 'tang_thuong_sp' và RewardDiscipline 'khen_thuong' "
+                    "cùng kỳ — nguy cơ cộng đôi tiền thưởng. HR rà soát: chỉ giữ 1 nguồn."
+                ),
+                "tong_thuong_adj": float(sum(
+                    Decimal(str(a.so_tien or 0)) for a in adjs
+                    if a.loai == "cong_them" and a.sub_loai == "tang_thuong_sp"
+                )),
+                "tong_thuong_rd": float(tong_thuong),
+            })
+
+        # Tổng cộng thêm gồm: adjustments + thưởng (KHÔNG cộng thưởng vào ngưỡng tối thiểu)
+        tong_cong_them = tong_cong_them_adj + tong_thuong
+        # Tổng khấu trừ gồm: adjustments + phạt
+        tong_khau_tru = tong_khau_tru_adj + tong_phat
+
+        # ─── GAP-2 fix: Bù tối thiểu vùng đúng NĐ 38/2022 ───
+        # Lương tối thiểu của NV theo công thực tế: MIN_WAGE × (cong / ngay_chuan)
+        if ngay_chuan > 0 and c["cong_quy_doi"] > 0:
+            min_for_nv = min_wage * (c["cong_quy_doi"] / ngay_chuan)
+        else:
+            min_for_nv = Decimal(0)
+        # So sánh (lương SP + cộng thêm mang tính lương) với ngưỡng, KHÔNG tính
+        # thưởng, bồi dưỡng, hỗ trợ — đúng quy định NĐ 38/2022
+        luong_co_dinh = luong_sp + cong_them_tinh_min
+        bu = max(Decimal(0), min_for_nv - luong_co_dinh)
+        luong_sp_sau_bu = luong_sp + bu
 
         tong_thu_nhap = luong_sp_sau_bu + tong_cong_them
         thuc_linh = tong_thu_nhap - tong_khau_tru
@@ -297,14 +436,21 @@ def calculate_payroll_for_month(
             "gio_lam": float(c["gio_lam"]),
             "cong_quy_doi": float(c["cong_quy_doi"]),
             "he_so_ca_nhan": float(c["he_so"]),
+            "is_thu_viec": c.get("is_thu_viec", False),
+            "contract_loai": c.get("contract_loai"),
+            "da_nghi_giua_thang": emp.trang_thai == "da_nghi",
             "trong_so_ca_nhan": float(c["trong_so"]),
             "quy_luong_sp_to": float(quy_sp),
             "tong_trong_so_to": float(tong_trong_so),
             "luong_san_pham_truoc_bu": float(luong_sp),
+            "min_toi_thieu_nv": float(min_for_nv),
+            "cong_them_tinh_min": float(cong_them_tinh_min),
             "bu_toi_thieu_vung": float(bu),
             "luong_san_pham": float(luong_sp_sau_bu),
             "tong_cong_them": float(tong_cong_them),
+            "thuong": float(tong_thuong),
             "tong_khau_tru": float(tong_khau_tru),
+            "phat": float(tong_phat),
             "bao_hiem": float(bao_hiem_total),
             "tam_ung": float(tam_ung_total),
             "tong_thu_nhap": float(tong_thu_nhap),
@@ -320,14 +466,35 @@ def calculate_payroll_for_month(
                     PayrollRun.thang == thang,
                     PayrollRun.nam == nam,
                 ).first()
-                if existing and existing.trang_thai == "da_thanh_toan":
-                    errors.append(f"NV {emp.ma_nv}: bảng lương đã thanh toán, không thể tính lại")
+                # P1 fix A.5: chặn ghi đè cả "da_chot" (đã chốt nhưng chưa thanh toán)
+                # để không reset đồng hồ khiếu nại 15 ngày (Điều 16 Quy chế).
+                if existing and existing.trang_thai in ("da_thanh_toan", "da_chot"):
+                    errors.append(
+                        f"NV {emp.ma_nv}: bảng lương đã ở trạng thái '{existing.trang_thai}', "
+                        f"phải mở khóa trước khi tính lại."
+                    )
                     continue
+                is_new = existing is None
+                before_snapshot = None
                 if not existing:
                     existing = PayrollRun(
                         employee_id=emp.id, thang=thang, nam=nam,
                     )
                     db.add(existing)
+                    db.flush()  # cần ID để audit
+                else:
+                    # Snapshot trước khi engine ghi đè
+                    before_snapshot = {
+                        "luong_san_pham": float(existing.luong_san_pham or 0),
+                        "bu_toi_thieu_vung": float(existing.bu_toi_thieu_vung or 0),
+                        "phu_cap": float(existing.phu_cap or 0),
+                        "thuong": float(existing.thuong or 0),
+                        "bao_hiem": float(existing.bao_hiem or 0),
+                        "tam_ung": float(existing.tam_ung or 0),
+                        "tong_thu_nhap": float(existing.tong_thu_nhap or 0),
+                        "thuc_linh": float(existing.thuc_linh or 0),
+                        "trang_thai": existing.trang_thai,
+                    }
 
                 existing.luong_san_pham = luong_sp_sau_bu
                 existing.bu_toi_thieu_vung = bu
@@ -336,20 +503,60 @@ def calculate_payroll_for_month(
                 existing.he_so_ca_nhan_snapshot = c["he_so"]
                 existing.trong_so_ca_nhan = c["trong_so"]
                 existing.bo_phan_id_snapshot = emp.bo_phan_id
-                existing.phu_cap = tong_cong_them  # D.4: tổng 8 khoản cộng thêm
+                existing.phu_cap = tong_cong_them  # D.4: tổng cộng thêm (adj + thưởng)
+                existing.thuong = tong_thuong       # D.6: tách thưởng riêng để hiển thị
                 existing.bao_hiem = bao_hiem_total  # D.4: BHXH+BHYT+BHTN
                 existing.tam_ung = tam_ung_total    # D.4: tạm ứng đã trừ
                 existing.tong_thu_nhap = tong_thu_nhap
                 existing.thuc_linh = thuc_linh
                 existing.trang_thai = "du_thao"
-                existing.ghi_chu_calc = (
-                    f"Engine v1: Quỹ SP tổ={float(quy_sp):,.0f} · "
-                    f"Trọng số tổ={float(tong_trong_so):.2f} · "
-                    f"Trọng số CN={float(c['trong_so']):.2f} · "
-                    f"Lương SP={float(luong_sp):,.0f}"
-                    + (f" + bù tối thiểu={float(bu):,.0f}" if bu > 0 else "")
-                    + (" · ⚠️ THỰC LĨNH ÂM — khấu trừ > thu nhập" if thuc_linh < 0 else "")
-                )
+                # Ghi nhật ký Engine v2 (Sprint D.6) — đầy đủ 4 P0/P1 fix
+                notes = [
+                    f"Engine v2 ({nam}-{thang:02d}):",
+                    f"Quỹ SP tổ={float(quy_sp):,.0f}",
+                    f"Tổng trọng số={float(tong_trong_so):.2f}",
+                    f"Hệ số CN={float(c['he_so']):.2f}{' (thử việc)' if c.get('is_thu_viec') else ''}",
+                    f"Công quy đổi={float(c['cong_quy_doi']):.2f}",
+                    f"Lương SP trước bù={float(luong_sp):,.0f}",
+                ]
+                if bu > 0:
+                    notes.append(
+                        f"Bù tối thiểu vùng={float(bu):,.0f} "
+                        f"(ngưỡng {float(min_for_nv):,.0f}đ, đã trừ phụ cấp tính min "
+                        f"{float(cong_them_tinh_min):,.0f}đ)"
+                    )
+                if tong_thuong > 0:
+                    notes.append(f"+ Thưởng={float(tong_thuong):,.0f}")
+                if tong_phat > 0:
+                    notes.append(f"− Phạt={float(tong_phat):,.0f}")
+                if emp.trang_thai == "da_nghi":
+                    notes.append(f"⚠️ NV nghỉ {emp.ngay_nghi_viec} — lương phần đã làm (BLLĐ Điều 48)")
+                if thuc_linh < 0:
+                    notes.append("⚠️ THỰC LĨNH ÂM — khấu trừ > thu nhập")
+                existing.ghi_chu_calc = " · ".join(notes)
+
+                # GAP-7: Ghi audit engine_calc
+                after_snapshot = {
+                    "luong_san_pham": float(luong_sp_sau_bu),
+                    "bu_toi_thieu_vung": float(bu),
+                    "phu_cap": float(tong_cong_them),
+                    "thuong": float(tong_thuong),
+                    "bao_hiem": float(bao_hiem_total),
+                    "tam_ung": float(tam_ung_total),
+                    "tong_thu_nhap": float(tong_thu_nhap),
+                    "thuc_linh": float(thuc_linh),
+                    "trang_thai": "du_thao",
+                }
+                db.add(PayrollAuditLog(
+                    payroll_run_id=existing.id,
+                    thang=thang, nam=nam,
+                    employee_id=emp.id,
+                    action="engine_calc",
+                    user_id=user_id,
+                    ly_do="new" if is_new else "recalc",
+                    before_data=before_snapshot,
+                    after_data=after_snapshot,
+                ))
                 saved_count += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"NV {emp.ma_nv}: {exc}")

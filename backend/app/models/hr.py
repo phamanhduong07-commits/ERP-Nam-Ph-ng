@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy import (
-    Boolean, Date, DateTime, Float, ForeignKey, Integer, Numeric,
+    Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, Numeric,
     String, Text, UniqueConstraint
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -1015,6 +1015,11 @@ class PayrollRun(Base):
 
     employee: Mapped["Employee"] = relationship("Employee")
 
+    # P1 fix E.1: chặn race condition tạo trùng PayrollRun cùng NV+kỳ
+    __table_args__ = (
+        UniqueConstraint("employee_id", "thang", "nam", name="uq_payroll_emp_period"),
+    )
+
 
 class PayrollHoliday(Base):
     """Ngay le dung de phan loai tang ca he so 3.0"""
@@ -1109,3 +1114,47 @@ class PayrollComplaint(Base):
     employee: Mapped["Employee"] = relationship("Employee", foreign_keys=[employee_id])
     nguoi_xu_ly: Mapped["User | None"] = relationship("User", foreign_keys=[nguoi_xu_ly_id])
     created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])
+
+
+class PayrollAuditLog(Base):
+    """Lịch sử thay đổi bảng lương — phục vụ thanh tra/kiểm toán.
+
+    Log mọi thao tác chạm tới PayrollRun:
+      - engine_calc: engine tính lại (snapshot before/after)
+      - chot: HR chốt (du_thao → da_chot)
+      - duyet_thanh_toan: BGĐ duyệt (da_chot → da_thanh_toan)
+      - mo_khoa: ADMIN mở khóa (kèm lý do)
+      - sua_tay: HR sửa tay 1 field
+      - xoa: ADMIN/NHAN_SU xóa bản dự thảo
+
+    Dữ liệu before/after lưu JSON snapshot các field tài chính
+    (luong_san_pham, bu_toi_thieu_vung, phu_cap, thuong, bao_hiem, tam_ung,
+    tong_thu_nhap, thuc_linh, trang_thai) để tái dựng được lịch sử.
+    """
+    __tablename__ = "hr_payroll_audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payroll_run_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("hr_payroll_runs.id", ondelete="SET NULL"), index=True,
+    )
+    # Snapshot kỳ và NV ngay cả khi run bị xóa
+    thang: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    nam: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    employee_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("hr_employees.id", ondelete="SET NULL"),
+    )
+
+    # action: engine_calc | chot | duyet_thanh_toan | mo_khoa | sua_tay | xoa
+    action: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    # ondelete=SET NULL: audit log VẪN còn khi xóa user/employee — vẫn tra cứu được kỳ + run_id
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    ly_do: Mapped[str | None] = mapped_column(Text)
+    before_data: Mapped[dict | None] = mapped_column(JSON)
+    after_data: Mapped[dict | None] = mapped_column(JSON)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, index=True,
+    )
+
+    user: Mapped["User | None"] = relationship("User", foreign_keys=[user_id])
+    employee: Mapped["Employee | None"] = relationship("Employee", foreign_keys=[employee_id])
