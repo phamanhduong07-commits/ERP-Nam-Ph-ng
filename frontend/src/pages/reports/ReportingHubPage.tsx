@@ -70,7 +70,7 @@ const GROUPS: ReportGroup[] = [
     color: '#00695C',
     bg: '#e0f2f1',
     items: [
-      { icon: '🛒', name: 'Báo cáo mua hàng', desc: 'Tổng hợp mua hàng theo NCC, vật tư, kỳ', path: '/purchasing/reports' },
+      { icon: '🛒', name: 'Báo cáo mua hàng', desc: 'Tổng hợp mua hàng theo NCC, vật tư, kỳ', path: '/purchasing/reports', permissions: ['purchase.reports'] },
     ],
   },
   {
