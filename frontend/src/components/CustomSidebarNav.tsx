@@ -493,13 +493,20 @@ export default function CustomSidebarNav(props: Props) {
   }, [clearLeaveTimer])
 
   const handleNavClick = useCallback(
-    (item: NavItem) => {
+    (item: NavItem, hasFlyout: boolean, el: HTMLDivElement | null) => {
       const target = item.hubTo ?? item.to
       if (target) {
         onNavigate(target)
         navigate(target)
-        clearEnterTimer()
-        clearLeaveTimer()
+      }
+      clearEnterTimer()
+      clearLeaveTimer()
+      if (hasFlyout) {
+        // Keep flyout open so user can pick a sub-item after clicking the icon
+        const top = el ? el.getBoundingClientRect().top : 0
+        setFlyoutTop(top)
+        setActiveKey(item.key)
+      } else {
         setActiveKey(null)
         setHoveredNavKey(null)
       }
@@ -568,7 +575,7 @@ export default function CustomSidebarNav(props: Props) {
     (e: React.KeyboardEvent<HTMLDivElement>, item: NavItem, hasFlyout: boolean) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
-        handleNavClick(item)
+        handleNavClick(item, hasFlyout, e.currentTarget)
         return
       }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -590,7 +597,7 @@ export default function CustomSidebarNav(props: Props) {
           focusFirstFlyoutItemRef.current = true
           setActiveKey(item.key)
         } else {
-          handleNavClick(item)
+          handleNavClick(item, false, e.currentTarget)
         }
         return
       }
@@ -647,7 +654,7 @@ export default function CustomSidebarNav(props: Props) {
               handleNavMouseEnter(item.key, hasFlyout, e.currentTarget)
             }
             onMouseLeave={handleNavMouseLeave}
-            onClick={() => handleNavClick(item)}
+            onClick={(e) => handleNavClick(item, hasFlyout, e.currentTarget as HTMLDivElement)}
             onKeyDown={(e) => handleNavKeyDown(e, item, hasFlyout)}
           >
             {item.icon ? <span style={iconStyle}>{item.icon}</span> : null}
