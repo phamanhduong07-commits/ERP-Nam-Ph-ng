@@ -981,7 +981,6 @@ export default function KheUocVayPage() {
           <Tabs
             activeKey={createTab}
             onChange={setCreateTab}
-            size="small"
             style={{ marginTop: 4 }}
             items={[
               {
@@ -1034,14 +1033,8 @@ export default function KheUocVayPage() {
                       </Col>
                     </Row>
                     <Form.Item name="ten_ngan_hang_thu_huong" label="Tên ngân hàng thụ hưởng">
-                      <AutoComplete
-                        options={nganHangOptions}
-                        placeholder="Tên ngân hàng thụ hưởng"
-                        filterOption={(input, opt) =>
-                          (opt?.value as string ?? '').toLowerCase().includes(input.toLowerCase())
-                        }
-                        allowClear
-                      />
+                      <AutoComplete options={nganHangOptions} placeholder="Tên ngân hàng thụ hưởng"
+                        filterOption={(input, opt) => (opt?.value as string ?? '').toLowerCase().includes(input.toLowerCase())} allowClear />
                     </Form.Item>
                     <Form.Item name="tai_san_the_chap" label="Tài sản thế chấp">
                       <Input.TextArea rows={2} />

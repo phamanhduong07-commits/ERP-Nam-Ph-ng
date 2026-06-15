@@ -135,6 +135,10 @@ const AgentPage = lazy(() => import('./pages/agent/AgentPage'))
 const CashReceiptListPage = lazy(() => import('./pages/accounting/CashReceiptListPage'))
 const CashReceiptDetailPage = lazy(() => import('./pages/accounting/CashReceiptDetailPage'))
 const CashReceiptForm = lazy(() => import('./pages/accounting/CashReceiptForm'))
+const CashReceiptBatchPage = lazy(() => import('./pages/accounting/CashReceiptBatchPage'))
+const InternalTransferListPage = lazy(() => import('./pages/accounting/InternalTransferListPage'))
+const InternalTransferForm = lazy(() => import('./pages/accounting/InternalTransferForm'))
+const InternalTransferDetailPage = lazy(() => import('./pages/accounting/InternalTransferDetailPage'))
 const CashPaymentListPage = lazy(() => import('./pages/accounting/CashPaymentListPage'))
 const CashPaymentDetailPage = lazy(() => import('./pages/accounting/CashPaymentDetailPage'))
 const CashPaymentForm = lazy(() => import('./pages/accounting/CashPaymentForm'))
@@ -423,7 +427,11 @@ export default function App() {
             <Route path="billing/adjustments" element={<InvoiceAdjustmentListPage />} />
             <Route path="accounting/receipts" element={<CashReceiptListPage />} />
             <Route path="accounting/receipts/new" element={<CashReceiptForm />} />
+            <Route path="accounting/receipts/batch" element={<CashReceiptBatchPage />} />
             <Route path="accounting/receipts/:id" element={<CashReceiptDetailPage />} />
+            <Route path="accounting/internal-transfers" element={<InternalTransferListPage />} />
+            <Route path="accounting/internal-transfers/new" element={<InternalTransferForm />} />
+            <Route path="accounting/internal-transfers/:id" element={<InternalTransferDetailPage />} />
             <Route path="accounting/payments" element={<CashPaymentListPage />} />
             <Route path="accounting/payments/new" element={<CashPaymentForm />} />
             <Route path="accounting/payments/:id" element={<CashPaymentDetailPage />} />

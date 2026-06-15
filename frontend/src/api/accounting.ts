@@ -296,6 +296,18 @@ export const receiptApi = {
 
   cancel: (id: number): Promise<CashReceipt> =>
     client.patch(`/accounting/receipts/${id}/cancel`).then(r => r.data),
+
+  batch: (data: BatchReceiptCreate): Promise<BatchReceiptResponse> =>
+    client.post('/accounting/receipts/batch', data).then(r => r.data),
+
+  importExcel: (file: File, params?: { ngay_phieu?: string; phap_nhan_id?: number }) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return client.post<BatchReceiptResponse>('/accounting/receipts/import-excel', fd, {
+      params,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
 }
 
 // ──────────────────────────────────────────────────────
@@ -343,6 +355,15 @@ export const paymentApi = {
 
   cancel: (id: number): Promise<CashPayment> =>
     client.patch(`/accounting/payments/${id}/cancel`).then(r => r.data),
+
+  importExcel: (file: File, params?: { ngay_phieu?: string; phap_nhan_id?: number }) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return client.post<BatchReceiptResponse>('/accounting/payments/import-excel', fd, {
+      params,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 // ──────────────────────────────────────────────────────
@@ -879,6 +900,105 @@ export interface ProductionCostPeriodListResponse {
   page: number
   page_size: number
   items: ProductionCostPeriod[]
+}
+
+// ──────────────────────────────────────────────────────
+// Interfaces — Chuyển tiền nội bộ
+// ──────────────────────────────────────────────────────
+
+export interface InternalTransfer {
+  id: number
+  so_phieu: string
+  ngay_phieu: string
+  tu_phap_nhan_id: number | null
+  den_phap_nhan_id: number | null
+  tu_phap_nhan_ten: string | null
+  den_phap_nhan_ten: string | null
+  tu_tai_khoan: string | null
+  den_tai_khoan: string | null
+  so_tien: number
+  hinh_thuc_tt: string
+  so_tham_chieu: string | null
+  dien_giai: string | null
+  trang_thai: string
+  tk_no: string
+  tk_co: string
+  nguoi_duyet_id: number | null
+  ngay_duyet: string | null
+  created_at: string
+}
+
+export interface InternalTransferCreate {
+  ngay_phieu: string
+  tu_phap_nhan_id?: number | null
+  den_phap_nhan_id?: number | null
+  tu_tai_khoan?: string
+  den_tai_khoan?: string
+  so_tien: number
+  hinh_thuc_tt?: string
+  so_tham_chieu?: string
+  dien_giai?: string
+  tk_no?: string
+  tk_co?: string
+}
+
+// ──────────────────────────────────────────────────────
+// Interfaces — Batch receipt
+// ──────────────────────────────────────────────────────
+
+export interface BatchReceiptItem {
+  customer_id: number
+  sales_invoice_id?: number | null
+  so_tien: number
+  hinh_thuc_tt?: string
+  dien_giai?: string
+  so_tham_chieu?: string
+}
+
+export interface BatchReceiptCreate {
+  ngay_phieu: string
+  phap_nhan_id?: number | null
+  so_tai_khoan?: string
+  items: BatchReceiptItem[]
+}
+
+export interface BatchReceiptResultItem {
+  index: number
+  customer_id: number
+  so_phieu: string | null
+  so_tien: number
+  success: boolean
+  error?: string | null
+}
+
+export interface BatchReceiptResponse {
+  tong_so: number
+  thanh_cong: number
+  that_bai: number
+  items: BatchReceiptResultItem[]
+}
+
+export const TRANG_THAI_INTERNAL_TRANSFER: Record<string, { label: string; color: string }> = {
+  cho_duyet: { label: 'Chờ duyệt', color: 'orange' },
+  da_duyet:  { label: 'Đã duyệt',  color: 'green' },
+  huy:       { label: 'Đã hủy',    color: 'default' },
+}
+
+export const internalTransferApi = {
+  list: (params?: Record<string, unknown>) =>
+    client.get<{ total: number; items: InternalTransfer[] }>('/accounting/internal-transfers', { params }).then(r => r.data),
+
+  get: (id: number): Promise<InternalTransfer> =>
+    client.get(`/accounting/internal-transfers/${id}`).then(r => r.data),
+
+  create: (data: InternalTransferCreate): Promise<InternalTransfer> =>
+    client.post('/accounting/internal-transfers', data).then(r => r.data),
+
+  approve: (id: number): Promise<InternalTransfer> =>
+    client.patch(`/accounting/internal-transfers/${id}/approve`).then(r => r.data),
+
+  cancel: (id: number): Promise<InternalTransfer> =>
+    client.patch(`/accounting/internal-transfers/${id}/cancel`).then(r => r.data),
 }
 
 export const productionCostApi = {

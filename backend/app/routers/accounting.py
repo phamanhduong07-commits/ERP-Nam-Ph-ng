@@ -11,7 +11,7 @@ from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.auth import AuditLog
-from app.models.accounting import BankTransaction, CashReceipt, CashPayment, OpeningBalance, PurchaseInvoice, KheUocVay, KheUocChoVay, LichTraNo
+from app.models.accounting import BankTransaction, CashReceipt, CashPayment, OpeningBalance, PurchaseInvoice, KheUocVay, KheUocChoVay, LichTraNo, InternalTransfer
 from app.models.master import BankAccount, Customer, PhapNhan, Supplier
 from app.models.warehouse_doc import GoodsReceipt
 from sqlalchemy import desc, func
@@ -31,6 +31,7 @@ from app.schemas.accounting import (
     KheUocChoVayCreate, KheUocChoVayUpdate, KheUocChoVayResponse,
     LichTraNoResponse, TraNoRequest, CapNhatLaiSuatRequest, TraTruocHanRequest, TatToanRequest,
     CashFlowForecastResponse, ForecastDayItem,
+    InternalTransferCreate, BatchReceiptCreate,
 )
 from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_date, parse_decimal, parse_text,
@@ -506,6 +507,333 @@ def cancel_receipt(
 
 
 # ─────────────────────────────────────────────
+# THU TIỀN NHIỀU KHÁCH HÀNG (BATCH)
+# ─────────────────────────────────────────────
+
+@router.post("/receipts/batch")
+def batch_create_receipts(
+    data: BatchReceiptCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    from app.schemas.accounting import (
+        BatchReceiptResponse,
+        BatchReceiptResultItem, CashReceiptCreate,
+    )
+    results = []
+    service = AccountingService(db)
+    thanh_cong = 0
+    that_bai = 0
+    for idx, item in enumerate(data.items):
+        try:
+            receipt_data = CashReceiptCreate(
+                customer_id=item.customer_id,
+                sales_invoice_id=item.sales_invoice_id,
+                ngay_phieu=data.ngay_phieu,
+                hinh_thuc_tt=item.hinh_thuc_tt,
+                so_tai_khoan=data.so_tai_khoan,
+                so_tham_chieu=item.so_tham_chieu,
+                dien_giai=item.dien_giai,
+                so_tien=item.so_tien,
+                phap_nhan_id=data.phap_nhan_id,
+            )
+            receipt = service.create_cash_receipt(receipt_data, current_user.id)
+            results.append(BatchReceiptResultItem(
+                index=idx,
+                customer_id=item.customer_id,
+                so_phieu=receipt.so_phieu,
+                so_tien=item.so_tien,
+                success=True,
+            ))
+            thanh_cong += 1
+        except Exception as e:
+            db.rollback()
+            service = AccountingService(db)
+            results.append(BatchReceiptResultItem(
+                index=idx,
+                customer_id=item.customer_id,
+                so_phieu=None,
+                so_tien=item.so_tien,
+                success=False,
+                error=str(e),
+            ))
+            that_bai += 1
+    return BatchReceiptResponse(
+        tong_so=len(data.items),
+        thanh_cong=thanh_cong,
+        that_bai=that_bai,
+        items=results,
+    )
+
+
+@router.post("/receipts/import-excel")
+async def import_receipts_excel(
+    file: UploadFile = File(...),
+    ngay_phieu: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    """Import phiếu thu từ Excel. Cột bắt buộc: ma_kh/customer_id, so_tien.
+    Cột tùy chọn: so_hoa_don/sales_invoice_id, hinh_thuc_tt, dien_giai, so_tham_chieu."""
+    from openpyxl import load_workbook
+    from app.models.master import Customer
+    from app.models.billing import SalesInvoice
+    from app.schemas.accounting import (
+        BatchReceiptCreate, BatchReceiptResponse,
+        BatchReceiptResultItem, BatchReceiptItem, CashReceiptCreate,
+    )
+    content = await file.read()
+    try:
+        wb = load_workbook(filename=io.BytesIO(content), read_only=True, data_only=True)
+    except Exception:
+        raise HTTPException(400, "File Excel không hợp lệ")
+
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise HTTPException(400, "File Excel trống")
+
+    headers = [str(h).strip().lower() if h else "" for h in rows[0]]
+
+    def col(name: str):
+        for alias in [name]:
+            if alias in headers:
+                return headers.index(alias)
+        return None
+
+    col_cust = col("customer_id") or col("ma_kh") or col("mã kh") or col("khách hàng")
+    col_tien = col("so_tien") or col("số tiền") or col("tien")
+    col_inv   = col("sales_invoice_id") or col("so_hoa_don") or col("số hóa đơn")
+    col_httt  = col("hinh_thuc_tt") or col("hình thức tt") or col("httt")
+    col_dg    = col("dien_giai") or col("diễn giải")
+    col_ref   = col("so_tham_chieu") or col("số tham chiếu")
+
+    if col_cust is None or col_tien is None:
+        raise HTTPException(400, "File thiếu cột bắt buộc: ma_kh và so_tien")
+
+    today = ngay_phieu or date.today()
+    service = AccountingService(db)
+    results = []
+    thanh_cong = 0
+    that_bai = 0
+
+    for row_idx, row in enumerate(rows[1:], start=2):
+        if not any(c is not None for c in row):
+            continue
+        raw_cust = row[col_cust]
+        raw_tien = row[col_tien]
+        if raw_cust is None or raw_tien is None:
+            continue
+
+        try:
+            # Resolve customer
+            cust_id = None
+            if isinstance(raw_cust, (int, float)):
+                cust_id = int(raw_cust)
+            else:
+                cust = db.query(Customer).filter(Customer.ma_kh == str(raw_cust).strip()).first()
+                if cust:
+                    cust_id = cust.id
+            if not cust_id:
+                raise ValueError(f"Không tìm thấy khách hàng '{raw_cust}'")
+
+            so_tien = Decimal(str(raw_tien))
+            httt = "chuyen_khoan"
+            if col_httt is not None and row[col_httt]:
+                raw_ht = str(row[col_httt]).strip().lower()
+                if raw_ht in ("tm", "tiền mặt", "tien_mat"):
+                    httt = "tien_mat"
+                elif raw_ht in ("ck", "chuyển khoản", "chuyen_khoan"):
+                    httt = "chuyen_khoan"
+
+            inv_id = None
+            if col_inv is not None and row[col_inv]:
+                raw_inv = row[col_inv]
+                if isinstance(raw_inv, (int, float)):
+                    inv_id = int(raw_inv)
+                else:
+                    inv = db.query(SalesInvoice).filter(SalesInvoice.so_hoa_don == str(raw_inv).strip()).first()
+                    if inv:
+                        inv_id = inv.id
+
+            receipt_data = CashReceiptCreate(
+                customer_id=cust_id,
+                sales_invoice_id=inv_id,
+                ngay_phieu=today,
+                hinh_thuc_tt=httt,
+                dien_giai=str(row[col_dg]).strip() if col_dg is not None and row[col_dg] else None,
+                so_tham_chieu=str(row[col_ref]).strip() if col_ref is not None and row[col_ref] else None,
+                so_tien=so_tien,
+                phap_nhan_id=phap_nhan_id,
+            )
+            receipt = service.create_cash_receipt(receipt_data, current_user.id)
+            results.append(BatchReceiptResultItem(
+                index=row_idx,
+                customer_id=cust_id,
+                so_phieu=receipt.so_phieu,
+                so_tien=so_tien,
+                success=True,
+            ))
+            thanh_cong += 1
+        except Exception as e:
+            db.rollback()
+            service = AccountingService(db)
+            results.append(BatchReceiptResultItem(
+                index=row_idx,
+                customer_id=0,
+                so_phieu=None,
+                so_tien=Decimal("0"),
+                success=False,
+                error=f"Dòng {row_idx}: {e}",
+            ))
+            that_bai += 1
+
+    return BatchReceiptResponse(
+        tong_so=len(results),
+        thanh_cong=thanh_cong,
+        that_bai=that_bai,
+        items=results,
+    )
+
+
+# ─────────────────────────────────────────────
+# CHUYỂN TIỀN NỘI BỘ (INTERNAL TRANSFER)
+# ─────────────────────────────────────────────
+
+@router.get("/internal-transfers")
+def list_internal_transfers(
+    trang_thai: str | None = Query(None),
+    tu_ngay: date | None = Query(None),
+    den_ngay: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from app.models.accounting import InternalTransfer
+    q = db.query(InternalTransfer)
+    if trang_thai:
+        q = q.filter(InternalTransfer.trang_thai == trang_thai)
+    if tu_ngay:
+        q = q.filter(InternalTransfer.ngay_phieu >= tu_ngay)
+    if den_ngay:
+        q = q.filter(InternalTransfer.ngay_phieu <= den_ngay)
+    if phap_nhan_id:
+        q = q.filter(
+            (InternalTransfer.tu_phap_nhan_id == phap_nhan_id) |
+            (InternalTransfer.den_phap_nhan_id == phap_nhan_id)
+        )
+    total = q.count()
+    items = q.order_by(desc(InternalTransfer.ngay_phieu), desc(InternalTransfer.id)) \
+              .offset((page - 1) * page_size).limit(page_size).all()
+
+    from app.schemas.accounting import InternalTransferResponse
+    result = []
+    for it in items:
+        r = InternalTransferResponse.model_validate(it)
+        r.tu_phap_nhan_ten = it.tu_phap_nhan.ten_phap_nhan if it.tu_phap_nhan else None
+        r.den_phap_nhan_ten = it.den_phap_nhan.ten_phap_nhan if it.den_phap_nhan else None
+        result.append(r)
+    return {"total": total, "items": result}
+
+
+@router.post("/internal-transfers", status_code=201)
+def create_internal_transfer(
+    data: InternalTransferCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    from app.schemas.accounting import InternalTransferResponse
+    transfer = InternalTransfer(
+        so_phieu=AccountingService(db)._gen_so_phieu("CTN", InternalTransfer),
+        ngay_phieu=data.ngay_phieu,
+        tu_phap_nhan_id=data.tu_phap_nhan_id,
+        den_phap_nhan_id=data.den_phap_nhan_id,
+        tu_tai_khoan=data.tu_tai_khoan,
+        den_tai_khoan=data.den_tai_khoan,
+        so_tien=data.so_tien,
+        hinh_thuc_tt=data.hinh_thuc_tt,
+        so_tham_chieu=data.so_tham_chieu,
+        dien_giai=data.dien_giai,
+        tk_no=data.tk_no,
+        tk_co=data.tk_co,
+        created_by=current_user.id,
+    )
+    db.add(transfer)
+    db.commit()
+    db.refresh(transfer)
+    r = InternalTransferResponse.model_validate(transfer)
+    r.tu_phap_nhan_ten = transfer.tu_phap_nhan.ten_phap_nhan if transfer.tu_phap_nhan else None
+    r.den_phap_nhan_ten = transfer.den_phap_nhan.ten_phap_nhan if transfer.den_phap_nhan else None
+    return r
+
+
+@router.get("/internal-transfers/{transfer_id}")
+def get_internal_transfer(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from app.models.accounting import InternalTransfer
+    from app.schemas.accounting import InternalTransferResponse
+    transfer = db.get(InternalTransfer, transfer_id)
+    if not transfer:
+        raise HTTPException(404, "Không tìm thấy phiếu chuyển tiền")
+    r = InternalTransferResponse.model_validate(transfer)
+    r.tu_phap_nhan_ten = transfer.tu_phap_nhan.ten_phap_nhan if transfer.tu_phap_nhan else None
+    r.den_phap_nhan_ten = transfer.den_phap_nhan.ten_phap_nhan if transfer.den_phap_nhan else None
+    return r
+
+
+@router.patch("/internal-transfers/{transfer_id}/approve")
+def approve_internal_transfer(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    from app.models.accounting import InternalTransfer
+    from app.schemas.accounting import InternalTransferResponse
+    transfer = db.get(InternalTransfer, transfer_id)
+    if not transfer:
+        raise HTTPException(404, "Không tìm thấy phiếu chuyển tiền")
+    if transfer.trang_thai != "cho_duyet":
+        raise HTTPException(400, "Chỉ duyệt phiếu đang ở trạng thái Chờ duyệt")
+    transfer.trang_thai = "da_duyet"
+    transfer.nguoi_duyet_id = current_user.id
+    transfer.ngay_duyet = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(transfer)
+    r = InternalTransferResponse.model_validate(transfer)
+    r.tu_phap_nhan_ten = transfer.tu_phap_nhan.ten_phap_nhan if transfer.tu_phap_nhan else None
+    r.den_phap_nhan_ten = transfer.den_phap_nhan.ten_phap_nhan if transfer.den_phap_nhan else None
+    return r
+
+
+@router.patch("/internal-transfers/{transfer_id}/cancel")
+def cancel_internal_transfer(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    from app.models.accounting import InternalTransfer
+    from app.schemas.accounting import InternalTransferResponse
+    transfer = db.get(InternalTransfer, transfer_id)
+    if not transfer:
+        raise HTTPException(404, "Không tìm thấy phiếu chuyển tiền")
+    if transfer.trang_thai == "huy":
+        raise HTTPException(400, "Phiếu đã bị hủy")
+    transfer.trang_thai = "huy"
+    db.commit()
+    db.refresh(transfer)
+    r = InternalTransferResponse.model_validate(transfer)
+    r.tu_phap_nhan_ten = transfer.tu_phap_nhan.ten_phap_nhan if transfer.tu_phap_nhan else None
+    r.den_phap_nhan_ten = transfer.den_phap_nhan.ten_phap_nhan if transfer.den_phap_nhan else None
+    return r
+
+
+# ─────────────────────────────────────────────
 # HÓA ĐƠN MUA HÀNG
 # ─────────────────────────────────────────────
 
@@ -738,6 +1066,117 @@ def cancel_payment(
 ):
     logger.info("cancel_payment id=%s user=%s", payment_id, current_user.id)
     return AccountingService(db).cancel_payment(payment_id, current_user.id, ly_do)
+
+
+@router.post("/payments/import-excel")
+async def import_payments_excel(
+    file: UploadFile = File(...),
+    ngay_phieu: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    """Import phiếu chi từ Excel. Cột bắt buộc: ma_ncc (hoặc supplier_id), so_tien.
+    Cột tùy chọn: hinh_thuc_tt, dien_giai, so_tham_chieu."""
+    from openpyxl import load_workbook
+
+    content = await file.read()
+    try:
+        wb = load_workbook(filename=io.BytesIO(content), read_only=True, data_only=True)
+    except Exception:
+        raise HTTPException(400, "File Excel không hợp lệ")
+
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise HTTPException(400, "File Excel trống")
+
+    headers = [str(h).strip().lower() if h else "" for h in rows[0]]
+
+    def col(name: str):
+        if name in headers:
+            return headers.index(name)
+        return None
+
+    col_supp = col("supplier_id") or col("ma_ncc") or col("mã ncc") or col("nhà cung cấp")
+    col_tien = col("so_tien") or col("số tiền") or col("tien")
+    col_httt = col("hinh_thuc_tt") or col("hình thức tt") or col("httt")
+    col_dg   = col("dien_giai") or col("diễn giải")
+    col_ref  = col("so_tham_chieu") or col("số tham chiếu")
+
+    if col_supp is None or col_tien is None:
+        raise HTTPException(400, "File thiếu cột bắt buộc: ma_ncc và so_tien")
+
+    today = ngay_phieu or date.today()
+    service = AccountingService(db)
+    results = []
+    thanh_cong = 0
+    that_bai = 0
+
+    for row_idx, row in enumerate(rows[1:], start=2):
+        if not any(c is not None for c in row):
+            continue
+        raw_supp = row[col_supp]
+        raw_tien = row[col_tien]
+        if raw_supp is None or raw_tien is None:
+            continue
+
+        try:
+            supp_id = None
+            if isinstance(raw_supp, (int, float)):
+                supp_id = int(raw_supp)
+            else:
+                supp = db.query(Supplier).filter(Supplier.ma_ncc == str(raw_supp).strip()).first()
+                if supp:
+                    supp_id = supp.id
+            if not supp_id:
+                raise ValueError(f"Không tìm thấy nhà cung cấp '{raw_supp}'")
+
+            so_tien = Decimal(str(raw_tien))
+            httt = "chuyen_khoan"
+            if col_httt is not None and row[col_httt]:
+                raw_ht = str(row[col_httt]).strip().lower()
+                if raw_ht in ("tm", "tiền mặt", "tien_mat"):
+                    httt = "tien_mat"
+
+            payment_data = CashPaymentCreate(
+                supplier_id=supp_id,
+                ngay_phieu=today,
+                hinh_thuc_tt=httt,
+                dien_giai=str(row[col_dg]).strip() if col_dg is not None and row[col_dg] else None,
+                so_tham_chieu=str(row[col_ref]).strip() if col_ref is not None and row[col_ref] else None,
+                so_tien=so_tien,
+                phap_nhan_id=phap_nhan_id,
+            )
+            payment = service.create_cash_payment(payment_data, current_user.id)
+            results.append({
+                "index": row_idx,
+                "supplier_id": supp_id,
+                "so_phieu": payment.so_phieu,
+                "so_tien": float(so_tien),
+                "success": True,
+                "error": None,
+            })
+            thanh_cong += 1
+        except Exception as e:
+            db.rollback()
+            service = AccountingService(db)
+            results.append({
+                "index": row_idx,
+                "supplier_id": 0,
+                "so_phieu": None,
+                "so_tien": 0.0,
+                "success": False,
+                "error": f"Dòng {row_idx}: {e}",
+            })
+            that_bai += 1
+
+    return {
+        "tong_so": len(results),
+        "thanh_cong": thanh_cong,
+        "that_bai": that_bai,
+        "items": results,
+    }
 
 
 # ─────────────────────────────────────────────

@@ -938,3 +938,115 @@ class CashFlowForecastResponse(BaseModel):
     tong_chi: Decimal
     tong_tra_no: Decimal
     tong_thu_no: Decimal
+
+
+# ──────────────────────────────────────────────
+# Chuyển tiền nội bộ (Internal Transfer)
+# ──────────────────────────────────────────────
+
+class InternalTransferCreate(BaseModel):
+    ngay_phieu: date
+    tu_phap_nhan_id: int | None = None
+    den_phap_nhan_id: int | None = None
+    tu_tai_khoan: str | None = Field(None, max_length=200)
+    den_tai_khoan: str | None = Field(None, max_length=200)
+    so_tien: Decimal
+    hinh_thuc_tt: Literal[
+        "tien_mat", "chuyen_khoan", "TM", "CK", "khac"
+    ] = "chuyen_khoan"
+    so_tham_chieu: str | None = Field(None, max_length=200)
+    dien_giai: str | None = Field(None, max_length=500)
+    tk_no: str = "112"
+    tk_co: str = "112"
+
+    @field_validator("so_tien")
+    @classmethod
+    def tien_duong(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Số tiền phải lớn hơn 0")
+        return v
+
+    @model_validator(mode="after")
+    def validate_phap_nhan(self) -> "InternalTransferCreate":
+        if self.tu_phap_nhan_id and self.den_phap_nhan_id:
+            if self.tu_phap_nhan_id == self.den_phap_nhan_id:
+                raise ValueError("Pháp nhân nguồn và đích không được trùng nhau")
+        return self
+
+
+class InternalTransferResponse(BaseModel):
+    id: int
+    so_phieu: str
+    ngay_phieu: date
+    tu_phap_nhan_id: int | None
+    den_phap_nhan_id: int | None
+    tu_phap_nhan_ten: str | None = None
+    den_phap_nhan_ten: str | None = None
+    tu_tai_khoan: str | None
+    den_tai_khoan: str | None
+    so_tien: Decimal
+    hinh_thuc_tt: str
+    so_tham_chieu: str | None
+    dien_giai: str | None
+    trang_thai: str
+    tk_no: str
+    tk_co: str
+    nguoi_duyet_id: int | None
+    ngay_duyet: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────────
+# Batch receipt (Thu tiền nhiều khách hàng)
+# ──────────────────────────────────────────────
+
+class BatchReceiptItem(BaseModel):
+    customer_id: int
+    sales_invoice_id: int | None = None
+    so_tien: Decimal
+    hinh_thuc_tt: Literal[
+        "tien_mat", "chuyen_khoan", "TM", "CK", "bu_tru_cong_no", "khac"
+    ] = "chuyen_khoan"
+    dien_giai: str | None = None
+    so_tham_chieu: str | None = None
+
+    @field_validator("so_tien")
+    @classmethod
+    def tien_duong(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Số tiền phải lớn hơn 0")
+        return v
+
+
+class BatchReceiptCreate(BaseModel):
+    ngay_phieu: date
+    phap_nhan_id: int | None = None
+    so_tai_khoan: str | None = None
+    items: list[BatchReceiptItem]
+
+    @field_validator("items")
+    @classmethod
+    def items_not_empty(cls, v: list) -> list:
+        if not v:
+            raise ValueError("Danh sách cần ít nhất 1 phiếu thu")
+        return v
+
+
+class BatchReceiptResultItem(BaseModel):
+    index: int
+    customer_id: int
+    so_phieu: str | None
+    so_tien: Decimal
+    success: bool
+    error: str | None = None
+
+    model_config = {"from_attributes": False}
+
+
+class BatchReceiptResponse(BaseModel):
+    tong_so: int
+    thanh_cong: int
+    that_bai: int
+    items: list[BatchReceiptResultItem]

@@ -637,5 +637,35 @@ class LichTraNo(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
+class InternalTransfer(Base):
+    """Chuyển tiền nội bộ giữa tài khoản/pháp nhân"""
+    __tablename__ = "internal_transfers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # CTN-YYYYMM-XXXX
+    ngay_phieu: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    tu_phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
+    den_phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
+    tu_tai_khoan: Mapped[str | None] = mapped_column(String(100))
+    den_tai_khoan: Mapped[str | None] = mapped_column(String(100))
+    so_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    hinh_thuc_tt: Mapped[str] = mapped_column(String(20), default="CK")
+    so_tham_chieu: Mapped[str | None] = mapped_column(String(100))
+    dien_giai: Mapped[str | None] = mapped_column(Text)
+    trang_thai: Mapped[str] = mapped_column(String(20), default="cho_duyet", index=True)
+    # cho_duyet | da_duyet | huy
+    tk_no: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="112")
+    tk_co: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="112")
+    nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    tu_phap_nhan = relationship("PhapNhan", foreign_keys=[tu_phap_nhan_id])
+    den_phap_nhan = relationship("PhapNhan", foreign_keys=[den_phap_nhan_id])
+    creator = relationship("User", foreign_keys=[created_by])
+    nguoi_duyet = relationship("User", foreign_keys=[nguoi_duyet_id])
+
+
 # Import tại đây để tránh circular import khi billing.py import CashReceipt
 from app.models.billing import SalesInvoice  # noqa: E402, F401

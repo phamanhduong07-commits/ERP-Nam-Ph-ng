@@ -24,10 +24,20 @@ const HINH_THUC_TT_LABEL: Record<string, string> = {
   khac: 'Khác',
 }
 
+const TYPE_CONFIG: Record<string, { title: string; tkNo: string; diGiai: string }> = {
+  tax:       { title: 'Tạo phiếu nộp thuế',         tkNo: '3331', diGiai: 'Nộp thuế kỳ ' },
+  insurance: { title: 'Tạo phiếu nộp bảo hiểm',    tkNo: '3383', diGiai: 'Nộp BHXH/BHYT kỳ ' },
+  salary:    { title: 'Tạo phiếu trả lương',         tkNo: '334',  diGiai: 'Thanh toán lương tháng ' },
+}
+
 export default function CashPaymentForm() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const invoiceIdParam = Number(searchParams.get('invoice_id') || 0)
+  const typeParam = searchParams.get('type') ?? ''
+  const modeParam = searchParams.get('mode') ?? ''
+  const typeConfig = TYPE_CONFIG[typeParam]
+  const formTitle = typeConfig?.title ?? (modeParam === 'by_invoice' ? 'Trả tiền theo hóa đơn mua' : 'Tạo phiếu chi')
   const [form] = Form.useForm()
   const [selectedSupplier, setSelectedSupplier] = useState<number | undefined>()
   const [selectedInvoice, setSelectedInvoice] = useState<PurchaseInvoice | undefined>()
@@ -115,6 +125,8 @@ export default function CashPaymentForm() {
       so_tham_chieu: values.so_tham_chieu || undefined,
       dien_giai: values.dien_giai || undefined,
       so_tien: values.so_tien,
+      tk_no: values.tk_no || undefined,
+      tk_co: values.tk_co || undefined,
     })
   }
 
@@ -122,13 +134,19 @@ export default function CashPaymentForm() {
     <div style={{ padding: 24, maxWidth: 760, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/accounting/payments')} />
-        <Title level={4} style={{ margin: 0 }}>Tạo phiếu chi</Title>
+        <Title level={4} style={{ margin: 0 }}>{formTitle}</Title>
       </div>
 
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ ngay_phieu: dayjs(), hinh_thuc_tt: 'CK' }}
+        initialValues={{
+          ngay_phieu: dayjs(),
+          hinh_thuc_tt: 'CK',
+          tk_no: typeConfig?.tkNo ?? '331',
+          tk_co: '112',
+          dien_giai: typeConfig?.diGiai,
+        }}
         onFinish={onFinish}
       >
         <Card size="small" title="Thông tin chi tiền" style={{ marginBottom: 16 }}>
@@ -236,6 +254,8 @@ export default function CashPaymentForm() {
           <Form.Item name="dien_giai" label="Lý do chi">
             <Input.TextArea rows={2} />
           </Form.Item>
+          <Form.Item name="tk_no" hidden><Input /></Form.Item>
+          <Form.Item name="tk_co" hidden><Input /></Form.Item>
         </Card>
 
         <div style={{ textAlign: 'right' }}>

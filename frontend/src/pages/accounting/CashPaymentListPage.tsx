@@ -1,15 +1,22 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useHotkey } from '../../hooks/useHotkey'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Row, Select, Space, Table, Tag, Typography,
+  Alert, Button, Card, Col, DatePicker, Dropdown, Form, Modal,
+  Row, Select, Space, Table, Tag, Typography, Upload, message,
 } from 'antd'
-import { FileExcelOutlined, PlusOutlined } from '@ant-design/icons'
+import type { MenuProps } from 'antd'
+import {
+  BankOutlined, CarOutlined, CheckCircleOutlined, CloseCircleOutlined,
+  DownOutlined, FileExcelOutlined, PlusOutlined, SafetyCertificateOutlined,
+  SwapOutlined, TeamOutlined, UploadOutlined,
+} from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import type { RcFile } from 'antd/es/upload'
 import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
-import { paymentApi, CashPayment } from '../../api/accounting'
+import { paymentApi, CashPayment, BatchReceiptResultItem } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
@@ -41,6 +48,22 @@ export default function CashPaymentListPage() {
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
   const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
   const [page, setPage] = useState(1)
+  const [importModal, setImportModal] = useState(false)
+  const [importFile, setImportFile] = useState<RcFile | null>(null)
+  const [importNgay, setImportNgay] = useState<string | undefined>()
+  const [importPhapNhan, setImportPhapNhan] = useState<number | undefined>()
+  const [importResults, setImportResults] = useState<BatchReceiptResultItem[] | null>(null)
+
+  const importMut = useMutation({
+    mutationFn: () => {
+      const f = importFile
+      if (!f) throw new Error('Chưa chọn file')
+      return paymentApi.importExcel(f, { ngay_phieu: importNgay, phap_nhan_id: importPhapNhan })
+    },
+    onSuccess: r => setImportResults(r.data?.items ?? []),
+    onError: (e: { response?: { data?: { detail?: string } } }) =>
+      message.error(e?.response?.data?.detail ?? 'Lỗi import'),
+  })
 
   const { data, isLoading } = useQuery({
     queryKey: ['payments', tuNgay, denNgay, filterTrangThai, filterPhapNhan, page],
@@ -77,6 +100,52 @@ export default function CashPaymentListPage() {
   }
 
   useHotkey('ctrl+n', () => navigate('/accounting/payments/new'), 'Tạo phiếu chi mới')
+
+  const menuItems: MenuProps['items'] = [
+    {
+      key: 'basic',
+      icon: <PlusOutlined />,
+      label: 'Chi tiền',
+      onClick: () => navigate('/accounting/payments/new'),
+    },
+    {
+      key: 'by_invoice',
+      icon: <BankOutlined />,
+      label: 'Trả tiền theo hóa đơn',
+      onClick: () => navigate('/accounting/payments/new?mode=by_invoice'),
+    },
+    {
+      key: 'tax',
+      icon: <SafetyCertificateOutlined />,
+      label: 'Nộp thuế',
+      onClick: () => navigate('/accounting/payments/new?type=tax'),
+    },
+    {
+      key: 'insurance',
+      icon: <CarOutlined />,
+      label: 'Nộp bảo hiểm',
+      onClick: () => navigate('/accounting/payments/new?type=insurance'),
+    },
+    {
+      key: 'salary',
+      icon: <TeamOutlined />,
+      label: 'Trả lương',
+      onClick: () => navigate('/accounting/payments/new?type=salary'),
+    },
+    { type: 'divider' },
+    {
+      key: 'transfer',
+      icon: <SwapOutlined />,
+      label: 'Chuyển tiền nội bộ',
+      onClick: () => navigate('/accounting/internal-transfers/new'),
+    },
+    {
+      key: 'excel',
+      icon: <UploadOutlined />,
+      label: 'Nhập từ Excel',
+      onClick: () => setImportModal(true),
+    },
+  ]
 
   const columns: ColumnsType<CashPayment> = [
     {
@@ -133,14 +202,17 @@ export default function CashPaymentListPage() {
   ]
 
   return (
+    <>
     <PageLayout
       title="Phiếu chi nhà cung cấp"
       actions={
         <Space>
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/accounting/payments/new')}>
-            Tạo phiếu chi
-          </Button>
+          <Dropdown menu={{ items: menuItems }} trigger={['click']}>
+            <Button type="primary" icon={<PlusOutlined />}>
+              Tạo phiếu chi <DownOutlined />
+            </Button>
+          </Dropdown>
         </Space>
       }
     >
@@ -201,5 +273,72 @@ export default function CashPaymentListPage() {
         }}
       />
     </PageLayout>
+
+    <Modal
+      title="Nhập phiếu chi từ Excel"
+      open={importModal}
+      onCancel={() => { setImportModal(false); setImportFile(null); setImportResults(null) }}
+      footer={importResults ? (
+        <Button onClick={() => { setImportModal(false); setImportFile(null); setImportResults(null) }}>Đóng</Button>
+      ) : [
+        <Button key="cancel" onClick={() => setImportModal(false)}>Hủy</Button>,
+        <Button key="ok" type="primary" loading={importMut.isPending} disabled={!importFile} onClick={() => importMut.mutate()}>
+          Import
+        </Button>,
+      ]}
+      width={560}
+    >
+      {!importResults ? (
+        <>
+          <Alert
+            type="info"
+            style={{ marginBottom: 16 }}
+            message="Cột bắt buộc: ma_ncc (hoặc supplier_id), so_tien. Tùy chọn: hinh_thuc_tt, dien_giai, so_tham_chieu"
+          />
+          <Form layout="vertical">
+            <Form.Item label="Ngày phiếu (mặc định hôm nay)">
+              <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} onChange={d => setImportNgay(d?.format('YYYY-MM-DD'))} />
+            </Form.Item>
+            <Form.Item label="Pháp nhân">
+              <Select
+                allowClear placeholder="Chọn pháp nhân"
+                onChange={(v: number) => setImportPhapNhan(v)}
+                options={phapNhanList.map(p => ({ value: p.id, label: p.ten_phap_nhan }))}
+              />
+            </Form.Item>
+            <Form.Item label="File Excel (.xlsx)">
+              <Upload
+                accept=".xlsx"
+                maxCount={1}
+                beforeUpload={f => { setImportFile(f); return false }}
+                onRemove={() => setImportFile(null)}
+              >
+                <Button icon={<UploadOutlined />}>Chọn file</Button>
+              </Upload>
+            </Form.Item>
+          </Form>
+        </>
+      ) : (
+        <div>
+          <div style={{ marginBottom: 12 }}>
+            <Text strong>Kết quả: </Text>
+            <Text style={{ color: '#52c41a' }}>{importResults.filter(r => r.success).length} thành công</Text>
+            {' / '}
+            <Text style={{ color: '#f5222d' }}>{importResults.filter(r => !r.success).length} lỗi</Text>
+          </div>
+          {importResults.map((r, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              {r.success
+                ? <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                : <CloseCircleOutlined style={{ color: '#f5222d' }} />}
+              <Text style={{ fontSize: 13 }}>
+                {r.success ? `${r.so_phieu} — ${fmtVND(r.so_tien)}` : r.error}
+              </Text>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+    </>
   )
 }
