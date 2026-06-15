@@ -558,10 +558,27 @@ class KheUocVay(Base):
     tai_khoan_nhan: Mapped[str | None] = mapped_column(String(20), nullable=True)
     tai_san_the_chap: Mapped[str | None] = mapped_column(Text, nullable=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
-    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="hieu_luc", index=True)  # hieu_luc/da_tra/huy
+    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="hieu_luc", index=True)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    # ── Thông tin giải ngân ──────────────────────────────────────────────────
+    hop_dong_tin_dung: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    tk_no_goc: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    tk_lai_vay: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    loai_tien: Mapped[str] = mapped_column(String(10), nullable=False, default="VND")
+    phuong_thuc_giai_ngan: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ten_ngan_hang_thu_huong: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # ── Lãi suất ─────────────────────────────────────────────────────────────
+    loai_lai_suat: Mapped[str] = mapped_column(String(20), nullable=False, default="du_no_goc")
+    co_so_tinh_lai: Mapped[str] = mapped_column(String(5), nullable=False, default="365")
+    phuong_thuc_dieu_chinh: Mapped[str] = mapped_column(String(20), nullable=False, default="co_dinh")
+    lai_suat_qua_han: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, default=0)
+    # ── Hình thức trả nợ ─────────────────────────────────────────────────────
+    ngay_tra_lai_dau_tien: Mapped[date | None] = mapped_column(Date, nullable=True)
+    phuong_thuc_tra_no: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    tai_khoan_chuyen_vao: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ten_ngan_hang_tra: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     phap_nhan = relationship("PhapNhan")
     creator = relationship("User", foreign_keys=[created_by])

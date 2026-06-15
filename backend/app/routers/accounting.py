@@ -29,7 +29,8 @@ from app.schemas.accounting import (
     FixedAssetResponse, ManualJournalEntryCreate,
     KheUocVayCreate, KheUocVayUpdate, KheUocVayResponse,
     KheUocChoVayCreate, KheUocChoVayUpdate, KheUocChoVayResponse,
-    LichTraNoResponse, TraNoRequest, CashFlowForecastResponse, ForecastDayItem,
+    LichTraNoResponse, TraNoRequest, CapNhatLaiSuatRequest, TraTruocHanRequest, TatToanRequest,
+    CashFlowForecastResponse, ForecastDayItem,
 )
 from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_date, parse_decimal, parse_text,
@@ -2628,8 +2629,16 @@ def update_khe_uoc_vay(
         raise HTTPException(404, "Không tìm thấy khế ước đi vay")
     if obj.trang_thai != "hieu_luc":
         raise HTTPException(400, "Chỉ cập nhật khế ước đang hiệu lực")
-    for k, v in body.model_dump(exclude_none=True).items():
+    changes = body.model_dump(exclude_none=True)
+    lai_suat_changed = "lai_suat" in changes and changes["lai_suat"] != obj.lai_suat
+    for k, v in changes.items():
         setattr(obj, k, v)
+    if lai_suat_changed:
+        db.query(LichTraNo).filter(
+            LichTraNo.loai_khe_uoc == "di_vay",
+            LichTraNo.khe_uoc_id == id,
+            LichTraNo.trang_thai != "da_tra",
+        ).delete()
     db.commit()
     db.refresh(obj)
     return KheUocVayResponse.model_validate(obj)
@@ -2699,19 +2708,136 @@ def tra_no_vay(
 @router.patch("/khe-uoc-vay/{id}/ket-thuc")
 def ket_thuc_khe_uoc_vay(
     id: int,
+    body: TatToanRequest,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
     obj = db.query(KheUocVay).filter(KheUocVay.id == id).first()
     if not obj:
         raise HTTPException(404, "Không tìm thấy khế ước đi vay")
+    if obj.trang_thai != "hieu_luc":
+        raise HTTPException(400, "Khế ước không còn hiệu lực")
+    remaining = db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "di_vay",
+        LichTraNo.khe_uoc_id == id,
+        LichTraNo.trang_thai.in_(["chua_tra", "qua_han"]),
+    ).all()
+    for ky in remaining:
+        ky.trang_thai = "da_tra"
+        ky.ngay_tra_thuc = body.ngay_tat_toan
+        ky.so_tien_tra_thuc = ky.tong_cong
     obj.trang_thai = "da_tra"
+    db.commit()
+    return {"ok": True, "ky_count": len(remaining)}
+
+
+@router.delete("/khe-uoc-vay/{id}", status_code=204)
+def delete_khe_uoc_vay(
+    id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = db.query(KheUocVay).filter(KheUocVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước đi vay")
+    paid = db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "di_vay",
+        LichTraNo.khe_uoc_id == id,
+        LichTraNo.trang_thai == "da_tra",
+    ).count()
+    if paid > 0:
+        raise HTTPException(400, "Không thể xóa khế ước đã có kỳ thanh toán")
+    db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "di_vay",
+        LichTraNo.khe_uoc_id == id,
+    ).delete()
+    db.delete(obj)
+    db.commit()
+
+
+@router.patch("/khe-uoc-vay/{id}/lai-suat")
+def cap_nhat_lai_suat_vay(
+    id: int,
+    body: CapNhatLaiSuatRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = db.query(KheUocVay).filter(KheUocVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước đi vay")
+    if obj.trang_thai != "hieu_luc":
+        raise HTTPException(400, "Chỉ thay đổi lãi suất khế ước đang hiệu lực")
+    obj.lai_suat = body.lai_suat
+    # Xóa các kỳ chưa trả để tái tạo lịch sau
+    db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "di_vay",
+        LichTraNo.khe_uoc_id == id,
+        LichTraNo.trang_thai.in_(["chua_tra", "qua_han"]),
+    ).delete()
     db.commit()
     return {"ok": True}
 
 
+@router.post("/khe-uoc-vay/{id}/nhan-ban", response_model=KheUocVayResponse, status_code=201)
+def nhan_ban_khe_uoc_vay(
+    id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = db.query(KheUocVay).filter(KheUocVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước đi vay")
+    new_obj = KheUocVay(
+        so_khe_uoc=_next_so_khe_uoc_vay(db),
+        ngay_ky=obj.ngay_ky,
+        ngay_hieu_luc=obj.ngay_hieu_luc,
+        ngay_ket_thuc=obj.ngay_ket_thuc,
+        to_chuc_cho_vay=obj.to_chuc_cho_vay,
+        so_tien_vay=obj.so_tien_vay,
+        lai_suat=obj.lai_suat,
+        ky_tinh_lai=obj.ky_tinh_lai,
+        phuong_thuc_tra=obj.phuong_thuc_tra,
+        tai_khoan_nhan=obj.tai_khoan_nhan,
+        tai_san_the_chap=obj.tai_san_the_chap,
+        ghi_chu=obj.ghi_chu,
+        trang_thai="hieu_luc",
+        phap_nhan_id=obj.phap_nhan_id,
+        created_by=user.id,
+    )
+    db.add(new_obj)
+    db.commit()
+    db.refresh(new_obj)
+    return KheUocVayResponse.model_validate(new_obj)
+
+
+@router.patch("/khe-uoc-vay/{id}/tra-truoc-han")
+def tra_truoc_han_vay(
+    id: int,
+    body: TraTruocHanRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = db.query(KheUocVay).filter(KheUocVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước đi vay")
+    if obj.trang_thai != "hieu_luc":
+        raise HTTPException(400, "Khế ước không còn hiệu lực")
+    remaining = db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "di_vay",
+        LichTraNo.khe_uoc_id == id,
+        LichTraNo.trang_thai.in_(["chua_tra", "qua_han"]),
+    ).all()
+    for ky in remaining:
+        ky.trang_thai = "da_tra"
+        ky.ngay_tra_thuc = body.ngay_tra_thuc
+        ky.so_tien_tra_thuc = ky.tong_cong
+    obj.trang_thai = "da_tra"
+    db.commit()
+    return {"ok": True, "ky_count": len(remaining)}
+
+
 # ══════════════════════════════════════════════════════
-# KHẾ ƯỚC CHO VAY — CRUD
+# KHẾ ƯỢC CHO VAY — CRUD
 # ══════════════════════════════════════════════════════
 
 @router.get("/khe-uoc-cho-vay", response_model=list[KheUocChoVayResponse])

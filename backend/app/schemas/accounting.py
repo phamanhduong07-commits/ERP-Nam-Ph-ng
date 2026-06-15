@@ -736,6 +736,25 @@ class TraNoRequest(BaseModel):
     so_tien_tra_thuc: Decimal
 
 
+class CapNhatLaiSuatRequest(BaseModel):
+    lai_suat: Decimal = Field(..., gt=0, lt=100)
+
+
+class TraTruocHanRequest(BaseModel):
+    ngay_tra_thuc: date
+    loai_tien: str = "VND"
+    hinh_thuc: str = "chuyen_khoan"
+    tra_goc: Decimal = Decimal("0")
+    tra_lai: Decimal = Decimal("0")
+    phi_khac: Decimal = Decimal("0")
+
+
+class TatToanRequest(BaseModel):
+    ngay_tat_toan: date
+    loai_tien: str = "VND"
+    tien_phat_tra_truoc: Decimal = Decimal("0")
+
+
 # ──────────────────────────────────────────────
 # Khế ước đi vay
 # ──────────────────────────────────────────────
@@ -753,6 +772,23 @@ class KheUocVayCreate(BaseModel):
     tai_san_the_chap: str | None = None
     ghi_chu: str | None = None
     phap_nhan_id: int | None = None
+    # Thông tin giải ngân
+    hop_dong_tin_dung: str | None = Field(None, max_length=50)
+    tk_no_goc: str | None = Field(None, max_length=20)
+    tk_lai_vay: str | None = Field(None, max_length=20)
+    loai_tien: str = Field("VND", max_length=10)
+    phuong_thuc_giai_ngan: str | None = Field(None, max_length=50)
+    ten_ngan_hang_thu_huong: str | None = Field(None, max_length=200)
+    # Lãi suất
+    loai_lai_suat: str = Field("du_no_goc", max_length=20)
+    co_so_tinh_lai: str = Field("365", max_length=5)
+    phuong_thuc_dieu_chinh: str = Field("co_dinh", max_length=20)
+    lai_suat_qua_han: Decimal = Field(Decimal("0"), ge=0)
+    # Hình thức trả nợ
+    ngay_tra_lai_dau_tien: date | None = None
+    phuong_thuc_tra_no: str | None = Field(None, max_length=20)
+    tai_khoan_chuyen_vao: str | None = Field(None, max_length=20)
+    ten_ngan_hang_tra: str | None = Field(None, max_length=200)
 
     @model_validator(mode="after")
     def check_dates(self) -> "KheUocVayCreate":
@@ -766,6 +802,26 @@ class KheUocVayUpdate(BaseModel):
     tai_san_the_chap: str | None = None
     ghi_chu: str | None = None
     tai_khoan_nhan: str | None = Field(None, max_length=20)
+    lai_suat: Decimal | None = Field(None, gt=0, lt=100)
+    ky_tinh_lai: Literal["thang", "quy", "nam"] | None = None
+    phuong_thuc_tra: Literal["goc_deu", "gop_deu", "cuoi_ky"] | None = None
+    # Thông tin giải ngân
+    hop_dong_tin_dung: str | None = Field(None, max_length=50)
+    tk_no_goc: str | None = Field(None, max_length=20)
+    tk_lai_vay: str | None = Field(None, max_length=20)
+    loai_tien: str | None = Field(None, max_length=10)
+    phuong_thuc_giai_ngan: str | None = Field(None, max_length=50)
+    ten_ngan_hang_thu_huong: str | None = Field(None, max_length=200)
+    # Lãi suất
+    loai_lai_suat: str | None = Field(None, max_length=20)
+    co_so_tinh_lai: str | None = Field(None, max_length=5)
+    phuong_thuc_dieu_chinh: str | None = Field(None, max_length=20)
+    lai_suat_qua_han: Decimal | None = Field(None, ge=0)
+    # Hình thức trả nợ
+    ngay_tra_lai_dau_tien: date | None = None
+    phuong_thuc_tra_no: str | None = Field(None, max_length=20)
+    tai_khoan_chuyen_vao: str | None = Field(None, max_length=20)
+    ten_ngan_hang_tra: str | None = Field(None, max_length=200)
 
 
 class KheUocVayResponse(BaseModel):
@@ -785,6 +841,23 @@ class KheUocVayResponse(BaseModel):
     trang_thai: str
     phap_nhan_id: int | None
     created_at: datetime
+    # Thông tin giải ngân
+    hop_dong_tin_dung: str | None
+    tk_no_goc: str | None
+    tk_lai_vay: str | None
+    loai_tien: str
+    phuong_thuc_giai_ngan: str | None
+    ten_ngan_hang_thu_huong: str | None
+    # Lãi suất
+    loai_lai_suat: str
+    co_so_tinh_lai: str
+    phuong_thuc_dieu_chinh: str
+    lai_suat_qua_han: Decimal
+    # Hình thức trả nợ
+    ngay_tra_lai_dau_tien: date | None
+    phuong_thuc_tra_no: str | None
+    tai_khoan_chuyen_vao: str | None
+    ten_ngan_hang_tra: str | None
     lich_tra: list[LichTraNoResponse] = []
 
     model_config = {"from_attributes": True}
