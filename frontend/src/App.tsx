@@ -145,6 +145,9 @@ const APLedgerPage = lazy(() => import('./pages/accounting/APLedgerPage'))
 const CashBookPage = lazy(() => import('./pages/accounting/CashBookPage'))
 const BankLedgerPage = lazy(() => import('./pages/accounting/BankLedgerPage'))
 const BankReconciliationPage = lazy(() => import('./pages/accounting/BankReconciliationPage'))
+const KheUocVayPage = lazy(() => import('./pages/accounting/KheUocVayPage'))
+const KheUocChoVayPage = lazy(() => import('./pages/accounting/KheUocChoVayPage'))
+const DuBaoDongTienPage = lazy(() => import('./pages/accounting/DuBaoDongTienPage'))
 const CCDCListPage = lazy(() => import('./pages/accounting/CCDCListPage'))
 const BankAccountList = lazy(() => import('./pages/danhmuc/BankAccountList'))
 // Quality
@@ -431,6 +434,9 @@ export default function App() {
             <Route path="accounting/cash-book" element={<CashBookPage />} />
             <Route path="accounting/bank-ledger" element={<BankLedgerPage />} />
             <Route path="accounting/bank-reconciliation" element={<BankReconciliationPage />} />
+            <Route path="accounting/khe-uoc-vay" element={<KheUocVayPage />} />
+            <Route path="accounting/khe-uoc-cho-vay" element={<KheUocChoVayPage />} />
+            <Route path="accounting/du-bao-dong-tien" element={<DuBaoDongTienPage />} />
             <Route path="accounting/ccdc" element={<CCDCListPage />} />
             <Route path="master/bank-accounts" element={<BankAccountList />} />
             <Route path="accounting/ar-reconciliation" element={<ErrorBoundary><CustomerReconciliation /></ErrorBoundary>} />

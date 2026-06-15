@@ -65,7 +65,7 @@ function buildNavItems(queueCount: number): NavItem[] {
       icon: <ShopOutlined />,
       label: 'Sản xuất',
       hubTo: '/production/hub',
-      permissions: ['production_order.view', 'production_order.create', 'production_order.edit', 'cd2.view'],
+      permissions: ['production_order.view', 'production_order.create', 'production_order.edit', 'cd2.view', 'production.bom', 'production.cost_analysis'],
       flyoutSections: [
         {
           items: [
@@ -86,7 +86,7 @@ function buildNavItems(queueCount: number): NavItem[] {
                 </Link>
               ),
             },
-            { key: '/production/bom', to: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
+            { key: '/production/bom', to: '/production/bom', label: <Link to="/production/bom">Định mức (BOM)</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit', 'production.bom'] },
             { key: '/production/cost-analysis', to: '/production/cost-analysis', label: <Link to="/production/cost-analysis">Phân tích chi phí</Link>, permissions: ['production.cost_analysis'] },
             { key: '/production/may-song', to: '/production/may-song', label: <Link to="/production/may-song">🌊 Máy Sóng</Link>, permissions: ['production_order.view', 'production_order.create', 'production_order.edit'] },
           ],

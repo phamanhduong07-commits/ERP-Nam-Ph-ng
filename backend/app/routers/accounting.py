@@ -11,7 +11,7 @@ from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
 from app.models.auth import AuditLog
-from app.models.accounting import BankTransaction, CashReceipt, CashPayment, OpeningBalance, PurchaseInvoice
+from app.models.accounting import BankTransaction, CashReceipt, CashPayment, OpeningBalance, PurchaseInvoice, KheUocVay, KheUocChoVay, LichTraNo
 from app.models.master import BankAccount, Customer, PhapNhan, Supplier
 from app.models.warehouse_doc import GoodsReceipt
 from sqlalchemy import desc, func
@@ -27,6 +27,9 @@ from app.schemas.accounting import (
     ProductionCostPeriodCreate,
     FixedAssetCreate,
     FixedAssetResponse, ManualJournalEntryCreate,
+    KheUocVayCreate, KheUocVayUpdate, KheUocVayResponse,
+    KheUocChoVayCreate, KheUocChoVayUpdate, KheUocChoVayResponse,
+    LichTraNoResponse, TraNoRequest, CashFlowForecastResponse, ForecastDayItem,
 )
 from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_date, parse_decimal, parse_text,
@@ -2249,4 +2252,531 @@ async def import_workshop_payroll(
         key_field="id",  # Payroll usually creates new records
         commit=commit, resolver=workshop_payroll_resolver,
         user=user, loai_du_lieu="luong_xuong"
+    )
+
+
+# ══════════════════════════════════════════════════════
+# KHẾ ƯỚC — helpers
+# ══════════════════════════════════════════════════════
+
+def _next_so_khe_uoc_vay(db: Session) -> str:
+    from datetime import date as _date
+    today = _date.today().strftime("%Y%m%d")
+    prefix = f"KUV-{today}-"
+    last = (db.query(KheUocVay)
+              .filter(KheUocVay.so_khe_uoc.like(f"{prefix}%"))
+              .order_by(KheUocVay.id.desc()).first())
+    seq = int(last.so_khe_uoc.split("-")[-1]) + 1 if last else 1
+    return f"{prefix}{seq:03d}"
+
+
+def _next_so_khe_uoc_cho_vay(db: Session) -> str:
+    from datetime import date as _date
+    today = _date.today().strftime("%Y%m%d")
+    prefix = f"KUC-{today}-"
+    last = (db.query(KheUocChoVay)
+              .filter(KheUocChoVay.so_khe_uoc.like(f"{prefix}%"))
+              .order_by(KheUocChoVay.id.desc()).first())
+    seq = int(last.so_khe_uoc.split("-")[-1]) + 1 if last else 1
+    return f"{prefix}{seq:03d}"
+
+
+def _generate_lich_tra(
+    so_tien: Decimal,
+    lai_suat_nam: Decimal,
+    ky_tinh_lai: str,
+    phuong_thuc_tra: str,
+    ngay_hieu_luc: date,
+    ngay_ket_thuc: date,
+    loai_khe_uoc: str,
+    khe_uoc_id: int,
+) -> list[LichTraNo]:
+    from dateutil.relativedelta import relativedelta
+    import math
+
+    # Số kỳ và bước nhảy
+    if ky_tinh_lai == "thang":
+        step = relativedelta(months=1)
+    elif ky_tinh_lai == "quy":
+        step = relativedelta(months=3)
+    else:  # nam
+        step = relativedelta(years=1)
+
+    # Đếm số kỳ
+    n = 0
+    d = ngay_hieu_luc
+    while True:
+        d = d + step
+        if d > ngay_ket_thuc:
+            break
+        n += 1
+    if n == 0:
+        n = 1
+
+    r = float(lai_suat_nam) / 100.0 / (12 if ky_tinh_lai == "thang" else 4 if ky_tinh_lai == "quy" else 1)
+    P = float(so_tien)
+
+    records = []
+    remaining = P
+    ngay_ky = ngay_hieu_luc
+
+    for k in range(1, n + 1):
+        ngay_den_han = ngay_hieu_luc + step * k
+        if k == n:
+            ngay_den_han = ngay_ket_thuc
+
+        if phuong_thuc_tra == "gop_deu":
+            if r == 0:
+                goc = P / n
+                lai = 0.0
+            else:
+                M = P * r * (1 + r) ** n / ((1 + r) ** n - 1)
+                lai = remaining * r
+                goc = M - lai
+            remaining -= goc
+            if k == n:
+                goc += remaining  # rounding correction
+                remaining = 0
+
+        elif phuong_thuc_tra == "goc_deu":
+            goc = P / n
+            lai = remaining * r
+            remaining -= goc
+            if k == n:
+                goc += remaining
+                remaining = 0
+
+        else:  # cuoi_ky
+            if k < n:
+                goc = 0.0
+                lai = remaining * r
+            else:
+                goc = P
+                lai = remaining * r
+
+        tong = goc + lai
+        records.append(LichTraNo(
+            loai_khe_uoc=loai_khe_uoc,
+            khe_uoc_id=khe_uoc_id,
+            ky_so=k,
+            ngay_den_han=ngay_den_han,
+            so_tien_goc=Decimal(str(round(goc, 0))),
+            so_tien_lai=Decimal(str(round(lai, 0))),
+            tong_cong=Decimal(str(round(tong, 0))),
+            trang_thai="chua_tra",
+        ))
+    return records
+
+
+# ══════════════════════════════════════════════════════
+# KHẾ ƯỚC ĐI VAY — CRUD
+# ══════════════════════════════════════════════════════
+
+@router.get("/khe-uoc-vay", response_model=list[KheUocVayResponse])
+def list_khe_uoc_vay(
+    trang_thai: str | None = None,
+    phap_nhan_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(KheUocVay)
+    if trang_thai:
+        q = q.filter(KheUocVay.trang_thai == trang_thai)
+    if phap_nhan_id:
+        q = q.filter(KheUocVay.phap_nhan_id == phap_nhan_id)
+    items = q.order_by(KheUocVay.id.desc()).all()
+    result = []
+    for item in items:
+        lich = db.query(LichTraNo).filter(
+            LichTraNo.loai_khe_uoc == "di_vay",
+            LichTraNo.khe_uoc_id == item.id
+        ).order_by(LichTraNo.ky_so).all()
+        d = KheUocVayResponse.model_validate(item)
+        d.lich_tra = [LichTraNoResponse.model_validate(l) for l in lich]
+        result.append(d)
+    return result
+
+
+@router.post("/khe-uoc-vay", response_model=KheUocVayResponse, status_code=201)
+def create_khe_uoc_vay(
+    body: KheUocVayCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = KheUocVay(
+        **body.model_dump(),
+        so_khe_uoc=_next_so_khe_uoc_vay(db),
+        created_by=user.id,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return KheUocVayResponse.model_validate(obj)
+
+
+@router.get("/khe-uoc-vay/{id}", response_model=KheUocVayResponse)
+def get_khe_uoc_vay(
+    id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    obj = db.query(KheUocVay).filter(KheUocVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước đi vay")
+    lich = db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "di_vay", LichTraNo.khe_uoc_id == id
+    ).order_by(LichTraNo.ky_so).all()
+    d = KheUocVayResponse.model_validate(obj)
+    d.lich_tra = [LichTraNoResponse.model_validate(l) for l in lich]
+    return d
+
+
+@router.put("/khe-uoc-vay/{id}", response_model=KheUocVayResponse)
+def update_khe_uoc_vay(
+    id: int,
+    body: KheUocVayUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = db.query(KheUocVay).filter(KheUocVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước đi vay")
+    if obj.trang_thai != "hieu_luc":
+        raise HTTPException(400, "Chỉ cập nhật khế ước đang hiệu lực")
+    for k, v in body.model_dump(exclude_none=True).items():
+        setattr(obj, k, v)
+    db.commit()
+    db.refresh(obj)
+    return KheUocVayResponse.model_validate(obj)
+
+
+@router.post("/khe-uoc-vay/{id}/generate-schedule", response_model=list[LichTraNoResponse])
+def generate_schedule_vay(
+    id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = db.query(KheUocVay).filter(KheUocVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước đi vay")
+    # Xóa lịch cũ nếu có
+    db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "di_vay", LichTraNo.khe_uoc_id == id
+    ).delete()
+    records = _generate_lich_tra(
+        so_tien=obj.so_tien_vay,
+        lai_suat_nam=obj.lai_suat,
+        ky_tinh_lai=obj.ky_tinh_lai,
+        phuong_thuc_tra=obj.phuong_thuc_tra,
+        ngay_hieu_luc=obj.ngay_hieu_luc,
+        ngay_ket_thuc=obj.ngay_ket_thuc,
+        loai_khe_uoc="di_vay",
+        khe_uoc_id=id,
+    )
+    db.add_all(records)
+    db.commit()
+    return [LichTraNoResponse.model_validate(r) for r in records]
+
+
+@router.delete("/khe-uoc-vay/{id}/schedule", status_code=204)
+def delete_schedule_vay(
+    id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "di_vay", LichTraNo.khe_uoc_id == id
+    ).delete()
+    db.commit()
+
+
+@router.patch("/khe-uoc-vay/{id}/tra-no")
+def tra_no_vay(
+    id: int,
+    body: TraNoRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    ky = db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "di_vay",
+        LichTraNo.khe_uoc_id == id,
+        LichTraNo.ky_so == body.ky_so,
+    ).first()
+    if not ky:
+        raise HTTPException(404, f"Không tìm thấy kỳ {body.ky_so}")
+    ky.trang_thai = "da_tra"
+    ky.ngay_tra_thuc = body.ngay_tra_thuc
+    ky.so_tien_tra_thuc = body.so_tien_tra_thuc
+    db.commit()
+    return {"ok": True}
+
+
+@router.patch("/khe-uoc-vay/{id}/ket-thuc")
+def ket_thuc_khe_uoc_vay(
+    id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = db.query(KheUocVay).filter(KheUocVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước đi vay")
+    obj.trang_thai = "da_tra"
+    db.commit()
+    return {"ok": True}
+
+
+# ══════════════════════════════════════════════════════
+# KHẾ ƯỚC CHO VAY — CRUD
+# ══════════════════════════════════════════════════════
+
+@router.get("/khe-uoc-cho-vay", response_model=list[KheUocChoVayResponse])
+def list_khe_uoc_cho_vay(
+    trang_thai: str | None = None,
+    phap_nhan_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(KheUocChoVay)
+    if trang_thai:
+        q = q.filter(KheUocChoVay.trang_thai == trang_thai)
+    if phap_nhan_id:
+        q = q.filter(KheUocChoVay.phap_nhan_id == phap_nhan_id)
+    items = q.order_by(KheUocChoVay.id.desc()).all()
+    result = []
+    for item in items:
+        lich = db.query(LichTraNo).filter(
+            LichTraNo.loai_khe_uoc == "cho_vay",
+            LichTraNo.khe_uoc_id == item.id
+        ).order_by(LichTraNo.ky_so).all()
+        d = KheUocChoVayResponse.model_validate(item)
+        d.lich_tra = [LichTraNoResponse.model_validate(l) for l in lich]
+        result.append(d)
+    return result
+
+
+@router.post("/khe-uoc-cho-vay", response_model=KheUocChoVayResponse, status_code=201)
+def create_khe_uoc_cho_vay(
+    body: KheUocChoVayCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = KheUocChoVay(
+        **body.model_dump(),
+        so_khe_uoc=_next_so_khe_uoc_cho_vay(db),
+        created_by=user.id,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return KheUocChoVayResponse.model_validate(obj)
+
+
+@router.get("/khe-uoc-cho-vay/{id}", response_model=KheUocChoVayResponse)
+def get_khe_uoc_cho_vay(
+    id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    obj = db.query(KheUocChoVay).filter(KheUocChoVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước cho vay")
+    lich = db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "cho_vay", LichTraNo.khe_uoc_id == id
+    ).order_by(LichTraNo.ky_so).all()
+    d = KheUocChoVayResponse.model_validate(obj)
+    d.lich_tra = [LichTraNoResponse.model_validate(l) for l in lich]
+    return d
+
+
+@router.put("/khe-uoc-cho-vay/{id}", response_model=KheUocChoVayResponse)
+def update_khe_uoc_cho_vay(
+    id: int,
+    body: KheUocChoVayUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = db.query(KheUocChoVay).filter(KheUocChoVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước cho vay")
+    if obj.trang_thai != "hieu_luc":
+        raise HTTPException(400, "Chỉ cập nhật khế ước đang hiệu lực")
+    for k, v in body.model_dump(exclude_none=True).items():
+        setattr(obj, k, v)
+    db.commit()
+    db.refresh(obj)
+    return KheUocChoVayResponse.model_validate(obj)
+
+
+@router.post("/khe-uoc-cho-vay/{id}/generate-schedule", response_model=list[LichTraNoResponse])
+def generate_schedule_cho_vay(
+    id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = db.query(KheUocChoVay).filter(KheUocChoVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước cho vay")
+    db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "cho_vay", LichTraNo.khe_uoc_id == id
+    ).delete()
+    records = _generate_lich_tra(
+        so_tien=obj.so_tien_cho_vay,
+        lai_suat_nam=obj.lai_suat,
+        ky_tinh_lai=obj.ky_tinh_lai,
+        phuong_thuc_tra=obj.phuong_thuc_tra,
+        ngay_hieu_luc=obj.ngay_hieu_luc,
+        ngay_ket_thuc=obj.ngay_ket_thuc,
+        loai_khe_uoc="cho_vay",
+        khe_uoc_id=id,
+    )
+    db.add_all(records)
+    db.commit()
+    return [LichTraNoResponse.model_validate(r) for r in records]
+
+
+@router.delete("/khe-uoc-cho-vay/{id}/schedule", status_code=204)
+def delete_schedule_cho_vay(
+    id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "cho_vay", LichTraNo.khe_uoc_id == id
+    ).delete()
+    db.commit()
+
+
+@router.patch("/khe-uoc-cho-vay/{id}/tra-no")
+def tra_no_cho_vay(
+    id: int,
+    body: TraNoRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    ky = db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "cho_vay",
+        LichTraNo.khe_uoc_id == id,
+        LichTraNo.ky_so == body.ky_so,
+    ).first()
+    if not ky:
+        raise HTTPException(404, f"Không tìm thấy kỳ {body.ky_so}")
+    ky.trang_thai = "da_tra"
+    ky.ngay_tra_thuc = body.ngay_tra_thuc
+    ky.so_tien_tra_thuc = body.so_tien_tra_thuc
+    db.commit()
+    return {"ok": True}
+
+
+@router.patch("/khe-uoc-cho-vay/{id}/ket-thuc")
+def ket_thuc_khe_uoc_cho_vay(
+    id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    obj = db.query(KheUocChoVay).filter(KheUocChoVay.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Không tìm thấy khế ước cho vay")
+    obj.trang_thai = "da_tra"
+    db.commit()
+    return {"ok": True}
+
+
+# ══════════════════════════════════════════════════════
+# DỰ BÁO DÒNG TIỀN
+# ══════════════════════════════════════════════════════
+
+@router.get("/cash-flow/forecast", response_model=CashFlowForecastResponse)
+def cash_flow_forecast(
+    days: int = Query(30, ge=7, le=365),
+    phap_nhan_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from datetime import date as _date, timedelta
+    from collections import defaultdict
+
+    today = _date.today()
+    end_date = today + timedelta(days=days)
+
+    # Khởi tạo map ngày → numbers
+    day_map: dict[_date, dict] = defaultdict(lambda: {
+        "thu": Decimal("0"),
+        "chi": Decimal("0"),
+        "tra_no": Decimal("0"),
+        "thu_no": Decimal("0"),
+    })
+
+    # Phiếu thu chưa duyệt (thu dự kiến)
+    q_thu = db.query(CashReceipt).filter(
+        CashReceipt.trang_thai == "cho_duyet",
+        CashReceipt.ngay_phieu >= today,
+        CashReceipt.ngay_phieu <= end_date,
+    )
+    if phap_nhan_id:
+        q_thu = q_thu.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
+    for r in q_thu.all():
+        day_map[r.ngay_phieu]["thu"] += r.so_tien or Decimal("0")
+
+    # Phiếu chi chưa chốt (chi dự kiến)
+    q_chi = db.query(CashPayment).filter(
+        CashPayment.trang_thai == "cho_chot",
+        CashPayment.ngay_phieu >= today,
+        CashPayment.ngay_phieu <= end_date,
+    )
+    if phap_nhan_id:
+        q_chi = q_chi.filter(CashPayment.phap_nhan_id == phap_nhan_id)
+    for p in q_chi.all():
+        day_map[p.ngay_phieu]["chi"] += p.so_tien or Decimal("0")
+
+    # Lịch trả nợ đi vay sắp đến hạn
+    q_tra = db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "di_vay",
+        LichTraNo.trang_thai == "chua_tra",
+        LichTraNo.ngay_den_han >= today,
+        LichTraNo.ngay_den_han <= end_date,
+    )
+    for l in q_tra.all():
+        day_map[l.ngay_den_han]["tra_no"] += l.tong_cong or Decimal("0")
+
+    # Lịch thu nợ cho vay sắp đến hạn
+    q_thu_no = db.query(LichTraNo).filter(
+        LichTraNo.loai_khe_uoc == "cho_vay",
+        LichTraNo.trang_thai == "chua_tra",
+        LichTraNo.ngay_den_han >= today,
+        LichTraNo.ngay_den_han <= end_date,
+    )
+    for l in q_thu_no.all():
+        day_map[l.ngay_den_han]["thu_no"] += l.tong_cong or Decimal("0")
+
+    # Tạo array từ today đến end_date
+    items = []
+    luy_ke = Decimal("0")
+    cur = today
+    while cur <= end_date:
+        d = day_map[cur]
+        thu = d["thu"]
+        chi = d["chi"]
+        tra_no = d["tra_no"]
+        thu_no = d["thu_no"]
+        net = thu + thu_no - chi - tra_no
+        luy_ke += net
+        items.append(ForecastDayItem(
+            ngay=cur,
+            thu=thu,
+            chi=chi,
+            tra_no=tra_no,
+            thu_no=thu_no,
+            net=net,
+            luy_ke=luy_ke,
+        ))
+        cur += timedelta(days=1)
+
+    return CashFlowForecastResponse(
+        days=days,
+        phap_nhan_id=phap_nhan_id,
+        items=items,
+        tong_thu=sum(i.thu for i in items),
+        tong_chi=sum(i.chi for i in items),
+        tong_tra_no=sum(i.tra_no for i in items),
+        tong_thu_no=sum(i.thu_no for i in items),
     )

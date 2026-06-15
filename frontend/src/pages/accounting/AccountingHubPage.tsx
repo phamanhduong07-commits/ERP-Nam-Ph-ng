@@ -10,6 +10,9 @@ const GROUPS: HubGroup[] = [
       { icon: '📒', label: 'Sổ quỹ tiền mặt', to: '/accounting/cash-book' },
       { icon: '🏦', label: 'Sổ tiền gửi NH', to: '/accounting/bank-ledger' },
       { icon: '🔄', label: 'Đối soát ngân hàng', to: '/accounting/bank-reconciliation' },
+      { icon: '📋', label: 'Khế ước đi vay',     to: '/accounting/khe-uoc-vay' },
+      { icon: '💼', label: 'Khế ước cho vay',    to: '/accounting/khe-uoc-cho-vay' },
+      { icon: '📈', label: 'Dự báo dòng tiền',   to: '/accounting/du-bao-dong-tien' },
     ],
   },
   {

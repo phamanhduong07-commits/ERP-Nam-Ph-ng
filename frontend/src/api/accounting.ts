@@ -365,6 +365,9 @@ export const arApi = {
   getReconciliation: (customerId: number, params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number }) =>
     client.get(`/accounting/ar/reconciliation/${customerId}`, { params }).then(r => r.data),
 
+  getChartOfAccounts: (params?: { q?: string; loai_tk?: string }) =>
+    client.get('/chart-of-accounts', { params }).then(r => r.data as { id: number; so_tk: string; ten_tk: string; loai_tk: string; cap: number; trang_thai: boolean }[]),
+
   getGeneralLedger: (params: { so_tk: string; tu_ngay: string; den_ngay: string; phap_nhan_id?: number | null; phan_xuong_id?: number | null }) =>
     client.get('/accounting/general-ledger', { params }).then(r => r.data),
 

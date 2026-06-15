@@ -537,5 +537,88 @@ class HoaDonDienTu(Base):
     creator = relationship("User", foreign_keys=[created_by])
 
 
+# ──────────────────────────────────────────────
+# Khế ước đi vay
+# ──────────────────────────────────────────────
+
+class KheUocVay(Base):
+    """Khế ước đi vay — công ty vay tiền từ tổ chức/ngân hàng"""
+    __tablename__ = "khe_uoc_vay"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    so_khe_uoc: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
+    ngay_ky: Mapped[date] = mapped_column(Date, nullable=False)
+    ngay_hieu_luc: Mapped[date] = mapped_column(Date, nullable=False)
+    ngay_ket_thuc: Mapped[date] = mapped_column(Date, nullable=False)
+    to_chuc_cho_vay: Mapped[str] = mapped_column(String(200), nullable=False)
+    so_tien_vay: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    lai_suat: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False)  # %/năm
+    ky_tinh_lai: Mapped[str] = mapped_column(String(10), nullable=False, default="thang")  # thang/quy/nam
+    phuong_thuc_tra: Mapped[str] = mapped_column(String(20), nullable=False, default="gop_deu")  # goc_deu/gop_deu/cuoi_ky
+    tai_khoan_nhan: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    tai_san_the_chap: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="hieu_luc", index=True)  # hieu_luc/da_tra/huy
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    phap_nhan = relationship("PhapNhan")
+    creator = relationship("User", foreign_keys=[created_by])
+
+
+# ──────────────────────────────────────────────
+# Khế ước cho vay
+# ──────────────────────────────────────────────
+
+class KheUocChoVay(Base):
+    """Khế ước cho vay — công ty cho tổ chức/khách hàng vay tiền"""
+    __tablename__ = "khe_uoc_cho_vay"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    so_khe_uoc: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
+    ngay_ky: Mapped[date] = mapped_column(Date, nullable=False)
+    ngay_hieu_luc: Mapped[date] = mapped_column(Date, nullable=False)
+    ngay_ket_thuc: Mapped[date] = mapped_column(Date, nullable=False)
+    to_chuc_di_vay: Mapped[str] = mapped_column(String(200), nullable=False)
+    customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
+    so_tien_cho_vay: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    lai_suat: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False)  # %/năm
+    ky_tinh_lai: Mapped[str] = mapped_column(String(10), nullable=False, default="thang")
+    phuong_thuc_tra: Mapped[str] = mapped_column(String(20), nullable=False, default="gop_deu")
+    tai_san_the_chap: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="hieu_luc", index=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    phap_nhan = relationship("PhapNhan")
+    creator = relationship("User", foreign_keys=[created_by])
+
+
+# ──────────────────────────────────────────────
+# Lịch trả nợ (dùng chung cho đi vay & cho vay)
+# ──────────────────────────────────────────────
+
+class LichTraNo(Base):
+    """Lịch trả nợ — kế hoạch thanh toán theo kỳ"""
+    __tablename__ = "lich_tra_no"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    loai_khe_uoc: Mapped[str] = mapped_column(String(10), nullable=False, index=True)  # di_vay / cho_vay
+    khe_uoc_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    ky_so: Mapped[int] = mapped_column(Integer, nullable=False)
+    ngay_den_han: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    so_tien_goc: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    so_tien_lai: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    tong_cong: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="chua_tra", index=True)  # chua_tra/da_tra/qua_han
+    ngay_tra_thuc: Mapped[date | None] = mapped_column(Date, nullable=True)
+    so_tien_tra_thuc: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 # Import tại đây để tránh circular import khi billing.py import CashReceipt
 from app.models.billing import SalesInvoice  # noqa: E402, F401

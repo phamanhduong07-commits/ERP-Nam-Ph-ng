@@ -9,7 +9,7 @@ import {
   BookOutlined 
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { arApi, TrialBalanceRow } from '../../api/accounting'
+import { arApi } from '../../api/accounting'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { fmtVND, printToPdf, buildHtmlTable } from '../../utils/exportUtils'
@@ -33,13 +33,10 @@ export default function GeneralLedgerPage() {
   const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
   const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
 
-  // Lay danh sach tai khoan de chon
+  // Lay danh sach tai khoan tu he thong tai khoan ke toan
   const { data: accounts = [] } = useQuery({
-    queryKey: ['chart-of-accounts'],
-    queryFn: () => arApi.getTrialBalance({
-      tu_ngay: dayjs().format('YYYY-MM-DD'),
-      den_ngay: dayjs().format('YYYY-MM-DD')
-    })
+    queryKey: ['chart-of-accounts-list'],
+    queryFn: () => arApi.getChartOfAccounts(),
   })
 
   // Lay danh muc phap nhan
@@ -116,7 +113,7 @@ export default function GeneralLedgerPage() {
               placeholder="Chọn tài khoản..."
               value={soTk}
               onChange={setSoTk}
-              options={(Array.isArray(accounts) ? accounts as TrialBalanceRow[] : []).map((a: TrialBalanceRow) => ({ value: a.so_tk, label: `${a.so_tk} - ${a.ten_tk}` }))}
+              options={accounts.map(a => ({ value: a.so_tk, label: `${a.so_tk} - ${a.ten_tk}` }))}
               filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
             />
             <Select

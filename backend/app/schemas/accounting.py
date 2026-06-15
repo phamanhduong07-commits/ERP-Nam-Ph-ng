@@ -708,3 +708,160 @@ class FixedAssetResponse(BaseModel):
     trang_thai: str
 
     model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────────
+# Lịch trả nợ
+# ──────────────────────────────────────────────
+
+class LichTraNoResponse(BaseModel):
+    id: int
+    loai_khe_uoc: str
+    khe_uoc_id: int
+    ky_so: int
+    ngay_den_han: date
+    so_tien_goc: Decimal
+    so_tien_lai: Decimal
+    tong_cong: Decimal
+    trang_thai: str
+    ngay_tra_thuc: date | None = None
+    so_tien_tra_thuc: Decimal | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class TraNoRequest(BaseModel):
+    ky_so: int
+    ngay_tra_thuc: date
+    so_tien_tra_thuc: Decimal
+
+
+# ──────────────────────────────────────────────
+# Khế ước đi vay
+# ──────────────────────────────────────────────
+
+class KheUocVayCreate(BaseModel):
+    ngay_ky: date
+    ngay_hieu_luc: date
+    ngay_ket_thuc: date
+    to_chuc_cho_vay: str = Field(..., max_length=200)
+    so_tien_vay: Decimal = Field(..., gt=0)
+    lai_suat: Decimal = Field(..., gt=0)
+    ky_tinh_lai: Literal["thang", "quy", "nam"] = "thang"
+    phuong_thuc_tra: Literal["goc_deu", "gop_deu", "cuoi_ky"] = "gop_deu"
+    tai_khoan_nhan: str | None = Field(None, max_length=20)
+    tai_san_the_chap: str | None = None
+    ghi_chu: str | None = None
+    phap_nhan_id: int | None = None
+
+    @model_validator(mode="after")
+    def check_dates(self) -> "KheUocVayCreate":
+        if self.ngay_ket_thuc <= self.ngay_hieu_luc:
+            raise ValueError("ngay_ket_thuc phải sau ngay_hieu_luc")
+        return self
+
+
+class KheUocVayUpdate(BaseModel):
+    to_chuc_cho_vay: str | None = Field(None, max_length=200)
+    tai_san_the_chap: str | None = None
+    ghi_chu: str | None = None
+    tai_khoan_nhan: str | None = Field(None, max_length=20)
+
+
+class KheUocVayResponse(BaseModel):
+    id: int
+    so_khe_uoc: str
+    ngay_ky: date
+    ngay_hieu_luc: date
+    ngay_ket_thuc: date
+    to_chuc_cho_vay: str
+    so_tien_vay: Decimal
+    lai_suat: Decimal
+    ky_tinh_lai: str
+    phuong_thuc_tra: str
+    tai_khoan_nhan: str | None
+    tai_san_the_chap: str | None
+    ghi_chu: str | None
+    trang_thai: str
+    phap_nhan_id: int | None
+    created_at: datetime
+    lich_tra: list[LichTraNoResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────────
+# Khế ước cho vay
+# ──────────────────────────────────────────────
+
+class KheUocChoVayCreate(BaseModel):
+    ngay_ky: date
+    ngay_hieu_luc: date
+    ngay_ket_thuc: date
+    to_chuc_di_vay: str = Field(..., max_length=200)
+    customer_id: int | None = None
+    so_tien_cho_vay: Decimal = Field(..., gt=0)
+    lai_suat: Decimal = Field(..., gt=0)
+    ky_tinh_lai: Literal["thang", "quy", "nam"] = "thang"
+    phuong_thuc_tra: Literal["goc_deu", "gop_deu", "cuoi_ky"] = "gop_deu"
+    tai_san_the_chap: str | None = None
+    ghi_chu: str | None = None
+    phap_nhan_id: int | None = None
+
+    @model_validator(mode="after")
+    def check_dates(self) -> "KheUocChoVayCreate":
+        if self.ngay_ket_thuc <= self.ngay_hieu_luc:
+            raise ValueError("ngay_ket_thuc phải sau ngay_hieu_luc")
+        return self
+
+
+class KheUocChoVayUpdate(BaseModel):
+    to_chuc_di_vay: str | None = Field(None, max_length=200)
+    tai_san_the_chap: str | None = None
+    ghi_chu: str | None = None
+
+
+class KheUocChoVayResponse(BaseModel):
+    id: int
+    so_khe_uoc: str
+    ngay_ky: date
+    ngay_hieu_luc: date
+    ngay_ket_thuc: date
+    to_chuc_di_vay: str
+    customer_id: int | None
+    so_tien_cho_vay: Decimal
+    lai_suat: Decimal
+    ky_tinh_lai: str
+    phuong_thuc_tra: str
+    tai_san_the_chap: str | None
+    ghi_chu: str | None
+    trang_thai: str
+    phap_nhan_id: int | None
+    created_at: datetime
+    lich_tra: list[LichTraNoResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+# ──────────────────────────────────────────────
+# Dự báo dòng tiền
+# ──────────────────────────────────────────────
+
+class ForecastDayItem(BaseModel):
+    ngay: date
+    thu: Decimal = Decimal("0")
+    chi: Decimal = Decimal("0")
+    tra_no: Decimal = Decimal("0")
+    thu_no: Decimal = Decimal("0")
+    net: Decimal = Decimal("0")
+    luy_ke: Decimal = Decimal("0")
+
+
+class CashFlowForecastResponse(BaseModel):
+    days: int
+    phap_nhan_id: int | None
+    items: list[ForecastDayItem]
+    tong_thu: Decimal
+    tong_chi: Decimal
+    tong_tra_no: Decimal
+    tong_thu_no: Decimal
