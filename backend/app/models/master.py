@@ -273,8 +273,22 @@ class TieuChuanKyThuat(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc))
 
+    chi_tieu_list: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    # Tiêu chuẩn giấy cuộn — áp dụng theo NCC + nhóm giấy + loại giấy
+    ncc_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True)
+    nhom_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("material_groups.id", ondelete="SET NULL"), nullable=True)
+    loai_giay: Mapped[str | None] = mapped_column(String(20), nullable=True)  # nau | trang | xeo | vang | khac | None = tất cả loại
+    tc_dinh_luong: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
+    tc_sai_so_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    tc_do_buc: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
+    tc_do_nen_vong: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
+
+    ncc: Mapped["Supplier | None"] = relationship("Supplier", foreign_keys=[ncc_id])
+    nhom: Mapped["MaterialGroup | None"] = relationship("MaterialGroup", foreign_keys=[nhom_id])
     paper_materials: Mapped[list["PaperMaterial"]] = relationship("PaperMaterial", back_populates="tieu_chuan")
     other_materials: Mapped[list["OtherMaterial"]] = relationship("OtherMaterial", back_populates="tieu_chuan")
+    qc_nvl_phieu: Mapped[list["QCNvlPhieu"]] = relationship("QCNvlPhieu", back_populates="tieu_chuan")
 
 
 class CauTrucThongDung(Base):

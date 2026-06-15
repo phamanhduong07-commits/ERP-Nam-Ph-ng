@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
@@ -104,6 +105,9 @@ export default function DieuKhoanThanhToanList() {
       createMut.mutate(payload)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm điều khoản thanh toán mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu điều khoản thanh toán', 'Trang hiện tại', modalOpen)
 
   const renderSoNgay = (v: number | null) => {
     if (v === 0) return 'COD'

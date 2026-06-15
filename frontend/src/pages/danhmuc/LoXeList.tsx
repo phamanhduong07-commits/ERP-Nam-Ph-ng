@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useHotkey } from '../../hooks/useHotkey'
 import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, Table, Button, Space, Modal, Form, Input, InputNumber, Select, Tag, Popconfirm, message, Typography, Row, Col, Switch } from 'antd'
@@ -51,6 +52,9 @@ export default function LoXeList() {
     }
     editing ? updateMut.mutate({ id: editing.id, data: payload }) : createMut.mutate(payload)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm lô xe mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu lô xe', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<LoXe> = [
     { title: 'Ho ten', dataIndex: 'ho_ten' },

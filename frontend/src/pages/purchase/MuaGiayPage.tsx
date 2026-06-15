@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
@@ -302,6 +303,10 @@ function TabDonMuaGiay() {
       })
     } catch { /* validation inline */ }
   }
+
+  const openCreate = () => { form.resetFields(); setOpen(true) }
+  useHotkey('ctrl+n', openCreate, 'Tạo đơn mua giấy mới')
+  useHotkey('ctrl+s', handleSubmit, 'Lưu đơn mua giấy', 'Trang hiện tại', open)
 
   const expandedRowRender = (r: PurchaseOrder) => {
     if (r.loai_po === 'giay_tam') {

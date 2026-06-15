@@ -79,6 +79,10 @@ class ProductionPlanLineResponse(BaseModel):
     song_3_dl: Decimal | None = None
     mat_3: str | None = None
     mat_3_dl: Decimal | None = None
+    mat_loai_giay: str | None = None
+    mat_1_loai_giay: str | None = None
+    mat_2_loai_giay: str | None = None
+    mat_3_loai_giay: str | None = None
     loai_in: str | None = None
     so_mau: int | None = None
     c_tham: str | None = None

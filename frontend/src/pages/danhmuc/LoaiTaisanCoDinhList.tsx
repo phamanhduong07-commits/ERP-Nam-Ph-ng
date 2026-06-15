@@ -9,6 +9,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import client from '../../api/client'
 import EmptyState from '../../components/EmptyState'
+import { useHotkey } from '../../hooks/useHotkey'
 
 const { Title } = Typography
 const { TextArea } = Input
@@ -114,6 +115,9 @@ export default function LoaiTaisanCoDinhList() {
       createMut.mutate(payload)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm loại tài sản mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu loại tài sản', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<LoaiTaisanCoDinh> = [
     {

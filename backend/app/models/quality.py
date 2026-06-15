@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -112,4 +112,37 @@ class QCGiayCuonPhieu(Base):
 
     paper_material = relationship("PaperMaterial", foreign_keys=[paper_material_id])
     goods_receipt = relationship("GoodsReceipt", foreign_keys=[goods_receipt_id])
+    phap_nhan = relationship("PhapNhan")
+
+
+class QCNvlPhieu(Base):
+    __tablename__ = "qc_nvl_phieu"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    so_phieu: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+
+    other_material_id: Mapped[int] = mapped_column(Integer, ForeignKey("other_materials.id"), nullable=False)
+    goods_receipt_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goods_receipts.id"))
+
+    ngay_kiem_tra: Mapped[date] = mapped_column(Date, nullable=False)
+    nguoi_kiem_tra: Mapped[str | None] = mapped_column(String(100))
+
+    tieu_chuan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tieu_chuan_ky_thuat.id"))
+    tc_snapshot_json: Mapped[list | None] = mapped_column(JSON)  # snapshot chi_tieu_list tại thời điểm kiểm tra
+
+    items_json: Mapped[list | None] = mapped_column(JSON)  # [{stt, ten_chi_tieu, yeu_cau, ket_qua_do, ket_qua, ghi_chu}]
+
+    ket_qua: Mapped[str | None] = mapped_column(String(20))  # dat | khong_dat
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    other_material = relationship("OtherMaterial", foreign_keys=[other_material_id])
+    goods_receipt = relationship("GoodsReceipt", foreign_keys=[goods_receipt_id])
+    tieu_chuan = relationship("TieuChuanKyThuat", foreign_keys=[tieu_chuan_id], back_populates="qc_nvl_phieu")
     phap_nhan = relationship("PhapNhan")

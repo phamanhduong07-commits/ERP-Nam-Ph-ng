@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
@@ -140,6 +141,9 @@ export default function ProductList() {
     if (editing) updateMut.mutate({ id: editing.id, data: payload })
     else createMut.mutate(payload)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm hàng hóa mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu hàng hóa', 'Trang hiện tại', modalOpen)
 
   const khOptions = khList.map(k => ({ value: k.id, label: `${k.ma_kh} - ${k.ten_viet_tat}` }))
 

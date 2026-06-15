@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
+import { useHotkey } from '../../hooks/useHotkey'
 import { warehousesApi } from '../../api/warehouses'
 import { purchaseApi } from '../../api/purchase'
 import { suppliersApi } from '../../api/suppliers'
@@ -327,6 +328,9 @@ export default function NhapPhoiNgoaiPage() {
 
     smartExportExcel('GOODS_RECEIPT', exportData, defaultConfig, `NhapPhoiNgoai_${dayjs().format('YYYYMMDD')}`, resolvedPhapNhanId)
   }
+
+  useHotkey('ctrl+n', () => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setEditingDraftId(null); setOpen(true) }, 'Tạo phiếu nhập phôi ngoài mới')
+  useHotkey('ctrl+s', handleSubmit, 'Lưu phiếu nhập phôi ngoài', 'Trang hiện tại', open)
 
   const columns = [
     { title: 'Số phiếu', dataIndex: 'so_phieu', width: 160,

@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
-from app.models.master import PaperMaterial
+from app.models.master import PaperMaterial, TieuChuanKyThuat
 from app.models.quality import QCGiayCuonPhieu
+from app.services.qc_calc_engine import calc_paper_qc_results
 from app.schemas.quality import (
     QCGiayCuonCreate,
     QCGiayCuonResponse,
@@ -17,7 +18,7 @@ from app.schemas.quality import (
     QCGiayCuonUpdate,
 )
 
-router = APIRouter(prefix="/qc-giay-cuon", tags=["QC Giấy Cuộn"])
+router = APIRouter(prefix="/api/qc-giay-cuon", tags=["QC Giấy Cuộn"])
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -37,50 +38,7 @@ def _next_so_phieu(db: Session) -> str:
 
 def _calc_results(obj: QCGiayCuonPhieu) -> None:
     """Tính TB và kết quả pass/fail cho tất cả chỉ tiêu, ghi thẳng vào obj."""
-    # Định lượng
-    vals_dl = [v for v in [obj.dl_l1, obj.dl_l2] if v is not None]
-    if vals_dl:
-        obj.dl_tb = round(sum(vals_dl) / len(vals_dl), 3)
-        if obj.tc_dinh_luong and obj.tc_sai_so_pct is not None:
-            tc = float(obj.tc_dinh_luong)
-            ss = float(obj.tc_sai_so_pct)
-            obj.dl_ket_qua = "dat" if tc * (1 - ss / 100) <= obj.dl_tb <= tc * (1 + ss / 100) else "khong_dat"
-        elif obj.tc_dinh_luong:
-            obj.dl_ket_qua = None  # TC chưa đủ để đánh giá
-    else:
-        obj.dl_tb = None
-        obj.dl_ket_qua = None
-
-    # Độ bục
-    vals_buc = [v for v in [obj.buc_l1, obj.buc_l2, obj.buc_l3, obj.buc_l4] if v is not None]
-    if vals_buc:
-        obj.buc_tb = round(sum(vals_buc) / len(vals_buc), 4)
-        if obj.tc_do_buc:
-            obj.buc_ket_qua = "dat" if obj.buc_tb >= float(obj.tc_do_buc) else "khong_dat"
-    else:
-        obj.buc_tb = None
-        obj.buc_ket_qua = None
-
-    # Độ nén vòng
-    vals_nen = [v for v in [obj.nen_vong_l1, obj.nen_vong_l2, obj.nen_vong_l3] if v is not None]
-    if vals_nen:
-        obj.nen_vong_tb = round(sum(vals_nen) / len(vals_nen), 4)
-        if obj.tc_do_nen_vong:
-            obj.nen_vong_ket_qua = "dat" if obj.nen_vong_tb >= float(obj.tc_do_nen_vong) else "khong_dat"
-    else:
-        obj.nen_vong_tb = None
-        obj.nen_vong_ket_qua = None
-
-    # Khổ giấy
-    if obj.kho_thuc_te is not None and obj.kho_tc is not None:
-        obj.kho_ket_qua = "dat" if abs(obj.kho_thuc_te - float(obj.kho_tc)) <= 4 else "khong_dat"
-    else:
-        obj.kho_ket_qua = None
-
-    # Kết quả tổng — chỉ tính chỉ tiêu đã có đủ dữ liệu
-    all_kq = [obj.dl_ket_qua, obj.buc_ket_qua, obj.nen_vong_ket_qua, obj.kho_ket_qua]
-    filled = [k for k in all_kq if k is not None]
-    obj.ket_qua = "dat" if filled and all(k == "dat" for k in filled) else ("khong_dat" if filled else None)
+    calc_paper_qc_results(obj)
 
 
 def _enrich(phieu: QCGiayCuonPhieu, db: Session) -> QCGiayCuonResponse:
@@ -91,7 +49,7 @@ def _enrich(phieu: QCGiayCuonPhieu, db: Session) -> QCGiayCuonResponse:
         data.paper_material_ma = pm.ma_chinh
         data.paper_material_ten = pm.ten
         if pm.nsx:
-            data.ncc_ten = pm.nsx.ten
+            data.ncc_ten = pm.nsx.ten_nha_cung_cap
     return data
 
 
@@ -103,18 +61,38 @@ def get_tieu_chuan(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """Lấy tiêu chuẩn của một loại giấy để hiển thị trong form."""
+    """Lấy tiêu chuẩn của một loại giấy để hiển thị trong form QC.
+    Ưu tiên đọc từ TieuChuanKyThuat (nguồn chính), fallback về paper direct fields.
+    """
     pm = db.get(PaperMaterial, paper_material_id)
     if not pm:
         raise HTTPException(404, "Không tìm thấy mã nguyên vật liệu")
+
+    # Nguồn 1: TieuChuanKyThuat (ưu tiên — single source of truth)
+    tc = db.get(TieuChuanKyThuat, pm.tieu_chuan_id) if pm.tieu_chuan_id else None
+
+    dinh_luong_tc = (float(tc.tc_dinh_luong) if tc and tc.tc_dinh_luong is not None
+                     else (float(pm.tieu_chuan_dinh_luong) if pm.tieu_chuan_dinh_luong is not None
+                           else (float(pm.dinh_luong) if pm.dinh_luong is not None else None)))
+    sai_so_pct = (float(tc.tc_sai_so_pct) if tc and tc.tc_sai_so_pct is not None
+                  else (float(pm.sai_so_pct) if pm.sai_so_pct is not None else None))
+    do_buc = (float(tc.tc_do_buc) if tc and tc.tc_do_buc is not None
+              else (float(pm.do_buc_tieu_chuan) if pm.do_buc_tieu_chuan is not None else None))
+    do_nen_vong = (float(tc.tc_do_nen_vong) if tc and tc.tc_do_nen_vong is not None
+                   else (float(pm.do_nen_vong_tc) if pm.do_nen_vong_tc is not None else None))
+
     return {
         "ma_chinh": pm.ma_chinh,
         "ten": pm.ten,
         "kho": float(pm.kho) if pm.kho is not None else None,
         "dinh_luong": float(pm.dinh_luong) if pm.dinh_luong is not None else None,
-        "tieu_chuan_dinh_luong": float(pm.tieu_chuan_dinh_luong) if pm.tieu_chuan_dinh_luong is not None else None,
-        "do_buc_tieu_chuan": float(pm.do_buc_tieu_chuan) if pm.do_buc_tieu_chuan is not None else None,
-        "do_nen_vong_tc": float(pm.do_nen_vong_tc) if pm.do_nen_vong_tc is not None else None,
+        "tieu_chuan_id": pm.tieu_chuan_id,
+        "ten_tieu_chuan": tc.ten if tc else None,
+        "chi_tieu_list": tc.chi_tieu_list if tc else None,
+        "sai_so_pct": sai_so_pct,
+        "do_buc_tieu_chuan": do_buc,
+        "do_nen_vong_tc": do_nen_vong,
+        "tc_dinh_luong": dinh_luong_tc,
     }
 
 
@@ -188,15 +166,26 @@ def create_phieu(
     if not pm:
         raise HTTPException(404, "Không tìm thấy mã nguyên vật liệu")
 
+    # Snapshot TC tại thời điểm kiểm tra — ưu tiên TieuChuanKyThuat, fallback paper fields
+    tc = db.get(TieuChuanKyThuat, pm.tieu_chuan_id) if pm.tieu_chuan_id else None
+    snap_dinh_luong = (float(tc.tc_dinh_luong) if tc and tc.tc_dinh_luong is not None
+                       else (float(pm.tieu_chuan_dinh_luong) if pm.tieu_chuan_dinh_luong is not None
+                             else (float(pm.dinh_luong) if pm.dinh_luong is not None else None)))
+    snap_sai_so = (float(tc.tc_sai_so_pct) if tc and tc.tc_sai_so_pct is not None
+                   else (float(pm.sai_so_pct) if pm.sai_so_pct is not None else None))
+    snap_do_buc = (float(tc.tc_do_buc) if tc and tc.tc_do_buc is not None
+                   else (float(pm.do_buc_tieu_chuan) if pm.do_buc_tieu_chuan is not None else None))
+    snap_do_nen = (float(tc.tc_do_nen_vong) if tc and tc.tc_do_nen_vong is not None
+                   else (float(pm.do_nen_vong_tc) if pm.do_nen_vong_tc is not None else None))
+
     obj = QCGiayCuonPhieu(
         **body.model_dump(),
         so_phieu=_next_so_phieu(db),
         created_by=user.id,
-        # Snapshot tiêu chuẩn tại thời điểm kiểm tra
-        tc_dinh_luong=float(pm.dinh_luong) if pm.dinh_luong is not None else None,
-        tc_sai_so_pct=float(pm.sai_so_pct) if pm.sai_so_pct is not None else None,
-        tc_do_buc=float(pm.do_buc_tieu_chuan) if pm.do_buc_tieu_chuan is not None else None,
-        tc_do_nen_vong=float(pm.do_nen_vong_tc) if pm.do_nen_vong_tc is not None else None,
+        tc_dinh_luong=snap_dinh_luong,
+        tc_sai_so_pct=snap_sai_so,
+        tc_do_buc=snap_do_buc,
+        tc_do_nen_vong=snap_do_nen,
     )
     _calc_results(obj)
     db.add(obj)

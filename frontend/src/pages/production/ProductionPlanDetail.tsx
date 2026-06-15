@@ -262,18 +262,37 @@ function isSamePaper(
   return Math.round(dl1) === Math.round(dl2)
 }
 
+// ─── Màu giấy ─────────────────────────────────────────────────────────────────
+const LOAI_GIAY_LABEL: Record<string, string> = {
+  nau: 'nâu', trang: 'trắng', xeo: 'xeo', vang: 'vàng', khac: 'khác',
+}
+
+function getMatInnerLoaiGiay(r: PlanLineResponse): string | null {
+  const soLop = r.so_lop ?? 3
+  if (soLop >= 7) return r.mat_3_loai_giay
+  if (soLop >= 5) return r.mat_2_loai_giay
+  return r.mat_1_loai_giay
+}
+
 // ─── Cell giấy (mã/ĐL + kg) — format: "54/140\n191 kg" ──────────────────────
-function PaperCell({ ma, dl, kg, isEqual, hideKg }: { ma: string | null; dl: number | null; kg: number; isEqual?: boolean; hideKg?: boolean }) {
+function PaperCell({ ma, dl, kg, isEqual, hideKg, loaiGiay }: {
+  ma: string | null; dl: number | null; kg: number
+  isEqual?: boolean; hideKg?: boolean; loaiGiay?: string | null
+}) {
   if (!ma) return <span style={{ color: '#bbb' }}>—</span>
   if (isEqual) return (
     <div style={{ fontWeight: 700, fontSize: 13 }}>===</div>
   )
+  const label = loaiGiay ? LOAI_GIAY_LABEL[loaiGiay] ?? loaiGiay : null
   return (
     <div style={{ lineHeight: 1.4 }}>
       <div style={{ fontWeight: 700, fontSize: 13, fontStyle: 'normal', whiteSpace: 'nowrap' }}>
         {ma}{dl != null ? `/${Math.round(dl)}` : ''}
       </div>
       {!hideKg && kg > 0 && <div style={{ fontSize: 10, color: '#444' }}>({Math.round(kg).toLocaleString('vi-VN')} kg)</div>}
+      {label && (
+        <div style={{ fontSize: 11, color: '#444', fontWeight: 700 }}>{label}</div>
+      )}
     </div>
   )
 }
@@ -544,15 +563,25 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
     }
 
     // Helper: render ô giấy — hiện === nếu isEq, ẩn kg nếu hideKg
-    const paperCell = (ma: string | null, dl: number | null, kg: number, isEq = false, hideKg = false) => {
+    const paperCell = (ma: string | null, dl: number | null, kg: number, isEq = false, hideKg = false, loaiGiay?: string | null) => {
       if (!ma) return '—'
       if (isEq) return `<span style="font-weight:700">===</span>`
       const label = dl != null ? `${ma}/${Math.round(dl)}` : ma
       const kgLine = !hideKg && kg > 0 ? `<br><span style="font-size:8px">(${Math.round(kg).toLocaleString('vi-VN')}kg)</span>` : ''
-      return `<span style="font-weight:700">${label}</span>${kgLine}`
+      const lbl = loaiGiay ? (LOAI_GIAY_LABEL[loaiGiay] ?? loaiGiay) : null
+      const colorChip = lbl ? `<br><span style="font-size:9px;color:#333;font-weight:700">${lbl}</span>` : ''
+      return `<span style="font-weight:700">${label}</span>${kgLine}${colorChip}`
     }
 
     // Helper: render ô loại in + CT/CM
+    const layerEntriesHtml = (entries: LayerEntry[]) => {
+      if (!entries.length) return '<span style="color:#bbb">—</span>'
+      return entries.map(e => {
+        const label = e.dl != null ? `${e.ma}/${Math.round(e.dl)}` : e.ma
+        return `<span style="font-size:9px;font-weight:700;white-space:nowrap;display:block">${label}: <span style="font-weight:400">(${Math.round(e.kg).toLocaleString('vi-VN')}kg)</span></span>`
+      }).join('')
+    }
+
     const inCell = (r: PlanLineResponse) => {
       const loaiIn = r.loai_in && r.loai_in !== 'khong_in'
         ? (r.loai_in === 'flexo' ? 'Flexo' : r.loai_in === 'ky_thuat_so' ? 'KTS' : r.loai_in) + (r.so_mau ? ` ${r.so_mau}M` : '')
@@ -597,11 +626,11 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
       return `<tr>
         <td style="font-weight:600">${r.ten_khach_hang ?? r.ma_kh ?? '—'}</td>
         <td style="font-weight:700">${r.thu_tu > 0 ? `<span style="font-size:8px;display:block;line-height:1">${r.thu_tu}</span>` : ''}${r.so_lenh ?? '—'}${r.ngay_chay ? `<br><span style="font-size:8px">${dayjs(r.ngay_chay).format('DD/MM')}</span>` : ''}</td>
-        <td>${paperCell(r.mat,          r.mat_dl,        kgMatC,  eq.matC,  nxt.matC)}</td>
+        <td>${paperCell(r.mat,          r.mat_dl,        kgMatC,  eq.matC,  nxt.matC,  r.mat_loai_giay)}</td>
         <td>${paperCell(slots.songC.ma, slots.songC.dl,  kgSongC, eq.songC, nxt.songC)}</td>
         <td>${soLop >= 5 ? paperCell(r.mat_1, r.mat_1_dl, kgMatB, eq.matB, nxt.matB) : '—'}</td>
         <td>${slots.songB.ma ? paperCell(slots.songB.ma, slots.songB.dl, kgSongB, eq.songB, nxt.songB) : '—'}</td>
-        <td>${paperCell(inner.ma, inner.dl, kgInner, eq.inner, nxt.inner)}</td>
+        <td>${paperCell(inner.ma, inner.dl, kgInner, eq.inner, nxt.inner, getMatInnerLoaiGiay(r))}</td>
         <td style="white-space:nowrap">${calcQuyCache(r)}</td>
         <td class="center" style="font-weight:700">${r.to_hop_song ?? '—'}</td>
         <td class="right" style="font-weight:700">${!r.kho_giay || Number(r.kho_giay) === 0 ? '⚠ —' : fmtN(r.kho_giay, 1)}</td>
@@ -641,8 +670,14 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
         <tbody>
           ${bodyRows}
           <tr class="total-row">
-            <td colspan="19" class="right"><strong>TỔNG SỐ MT:</strong></td>
-            <td class="right"><strong>${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></td>
+            <td colspan="2" style="font-size:11px;font-weight:700;white-space:nowrap">TỔNG · ${plan.lines.length} lệnh</td>
+            <td>${layerEntriesHtml(grandLayers.matC)}</td>
+            <td>${layerEntriesHtml(grandLayers.songC)}</td>
+            <td>${layerEntriesHtml(grandLayers.matB)}</td>
+            <td>${layerEntriesHtml(grandLayers.songB)}</td>
+            <td>${layerEntriesHtml(grandLayers.inner)}</td>
+            <td colspan="12" class="right"><strong>${totalSLThung.toLocaleString('vi-VN')} thùng</strong> &nbsp;·&nbsp; Tổng số MT:</td>
+            <td class="right"><strong style="font-size:11px">${totalMT.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}</strong></td>
           </tr>
         </tbody>
       </table>`
@@ -856,7 +891,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
 
                   {/* Mặt C */}
                   <td style={TD}>
-                    <PaperCell ma={r.mat} dl={r.mat_dl} kg={kgMatC} isEqual={eq.matC} hideKg={nextEq.matC} />
+                    <PaperCell ma={r.mat} dl={r.mat_dl} kg={kgMatC} isEqual={eq.matC} hideKg={nextEq.matC} loaiGiay={r.mat_loai_giay} />
                   </td>
 
                   {/* Sóng C */}
@@ -882,7 +917,7 @@ export default function ProductionPlanDetail({ planId, embedded }: Props) {
 
                   {/* Mặt trong */}
                   <td style={TD}>
-                    <PaperCell ma={inner.ma} dl={inner.dl} kg={kgInner} isEqual={eq.inner} hideKg={nextEq.inner} />
+                    <PaperCell ma={inner.ma} dl={inner.dl} kg={kgInner} isEqual={eq.inner} hideKg={nextEq.inner} loaiGiay={getMatInnerLoaiGiay(r)} />
                   </td>
 
                   {/* Quy cách sản phẩm */}

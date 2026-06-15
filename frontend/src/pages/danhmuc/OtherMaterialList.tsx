@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
@@ -120,6 +121,9 @@ export default function OtherMaterialList() {
     if (editing) updateMut.mutate({ id: editing.id, data: payload })
     else createMut.mutate(payload)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm nguyên liệu khác mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu nguyên liệu', 'Trang hiện tại', modalOpen)
 
   const nhomOptions = nhomList.map(n => ({ value: n.id, label: `${n.ma_nhom} - ${n.ten_nhom}` }))
   const nccOptions = nccList.map(s => ({ value: s.id, label: `${s.ma_ncc} - ${s.ten_viet_tat}` }))

@@ -13,6 +13,7 @@ import {
   type OffsetAddonPrice,
   type OffsetAddonPriceCreate,
 } from '../../api/offsetAddonPrices'
+import { useHotkey } from '../../hooks/useHotkey'
 
 const { Title } = Typography
 
@@ -81,6 +82,9 @@ export default function OffsetAddonPriceList() {
       createMut.mutate(values)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm giá dịch vụ offset mới')
+  useHotkey('ctrl+s', handleOk, 'Lưu giá dịch vụ offset', 'Trang hiện tại', modal.open)
 
   const cols: ColumnsType<OffsetAddonPrice> = [
     {

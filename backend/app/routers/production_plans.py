@@ -8,7 +8,7 @@ from sqlalchemy import case
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
-from app.models.master import PhanXuong
+from app.models.master import PhanXuong, PaperMaterial
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.production_plan import ProductionPlan, ProductionPlanLine
 from app.models.bom import ProductionBOM
@@ -134,6 +134,11 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
     if order and order.sales_order and order.sales_order.customer:
         customer = order.sales_order.customer
 
+    paper_loai: dict[str, str] = getattr(line, "_paper_loai_cache", {})
+
+    def _mat_loai(code: str | None) -> str | None:
+        return paper_loai.get(code) if code else None
+
     # Lấy thông tin BOM để hiển thị loai_thung, kích thước
     bom: ProductionBOM | None = getattr(item, "_bom_cache", None)
 
@@ -195,6 +200,10 @@ def _build_line_response(line: ProductionPlanLine) -> ProductionPlanLineResponse
         mat_2=item.mat_2 if item else None, mat_2_dl=item.mat_2_dl if item else None,
         song_3=item.song_3 if item else None, song_3_dl=item.song_3_dl if item else None,
         mat_3=item.mat_3 if item else None, mat_3_dl=item.mat_3_dl if item else None,
+        mat_loai_giay=_mat_loai(item.mat if item else None),
+        mat_1_loai_giay=_mat_loai(item.mat_1 if item else None),
+        mat_2_loai_giay=_mat_loai(item.mat_2 if item else None),
+        mat_3_loai_giay=_mat_loai(item.mat_3 if item else None),
         loai_in=_f("loai_in"),
         so_mau=_f("so_mau"),
         c_tham=c_tham,
@@ -234,6 +243,26 @@ def _load_plan(plan_id: int, db: Session) -> ProductionPlan:
     bom_by_item = {b.production_order_item_id: b for b in boms}
     for ln in plan.lines:
         ln.production_order_item._bom_cache = bom_by_item.get(ln.production_order_item_id)
+
+    # Bulk lookup loai_giay cho các mặt giấy (tránh N+1)
+    mat_codes: set[str] = set()
+    for ln in plan.lines:
+        item = ln.production_order_item
+        if item:
+            for field in ("mat", "mat_1", "mat_2", "mat_3"):
+                val = getattr(item, field, None)
+                if val:
+                    mat_codes.add(val)
+    paper_loai: dict[str, str] = {}
+    if mat_codes:
+        papers = (
+            db.query(PaperMaterial.ma_ky_hieu, PaperMaterial.loai_giay)
+            .filter(PaperMaterial.ma_ky_hieu.in_(mat_codes))
+            .all()
+        )
+        paper_loai = {p.ma_ky_hieu: p.loai_giay for p in papers if p.loai_giay}
+    for ln in plan.lines:
+        ln._paper_loai_cache = paper_loai
 
     return plan
 
@@ -861,6 +890,15 @@ def delete_line(
     line.trang_thai = "cho"
     line.ngay_chay = None
     line.thu_tu = 0
+
+    # Auto-hủy plan nếu không còn line nào
+    remaining = db.query(ProductionPlanLine).filter(
+        ProductionPlanLine.plan_id == plan_id,
+        ProductionPlanLine.id != line_id,
+    ).count()
+    if remaining == 0 and plan.trang_thai != "hoan_thanh":
+        plan.trang_thai = "huy"
+
     db.commit()
     return _build_plan_response(_load_plan(plan_id, db))
 

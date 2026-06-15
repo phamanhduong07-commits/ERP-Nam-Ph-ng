@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useHotkey } from '../../hooks/useHotkey';
 import { Card, Table, Button, Modal, Form, Input, InputNumber, Switch, Tag, Space, Popconfirm, message } from 'antd';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -49,6 +50,9 @@ export default function LoaiTienList() {
 
   const openCreate = () => { setEditing(null); form.resetFields(); form.setFieldsValue({ trang_thai: true, la_mac_dinh: false, ty_gia: 1 }); setOpen(true); };
   const openEdit = (r: LoaiTien) => { setEditing(r); form.setFieldsValue(r); setOpen(true); };
+
+  useHotkey('ctrl+n', openCreate, 'Thêm loại tiền mới')
+  useHotkey('ctrl+s', () => form.submit(), 'Lưu loại tiền', 'Trang hiện tại', open)
 
   const cols = [
     { title: 'Mã', dataIndex: 'ma_loai_tien', width: 80, render: (v: string) => <b>{v}</b> },

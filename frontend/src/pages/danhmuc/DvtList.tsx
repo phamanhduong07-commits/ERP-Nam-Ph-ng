@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input,
@@ -86,6 +87,9 @@ export default function DvtList() {
       createMut.mutate(payload)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm đơn vị tính mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu đơn vị tính', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<DonViTinh> = [
     {

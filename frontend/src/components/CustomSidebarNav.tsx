@@ -372,6 +372,8 @@ export default function CustomSidebarNav(props: Props) {
   // pin it via ReturnType<typeof setTimeout> per the implementation contract.
   const enterTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Set to true when flyout is opened via keyboard so we auto-focus first item.
+  const focusFirstFlyoutItemRef = useRef(false)
 
   const clearEnterTimer = useCallback(() => {
     if (enterTimer.current !== null) {
@@ -398,6 +400,16 @@ export default function CustomSidebarNav(props: Props) {
   // Reset search filter whenever the flyout switches to a different item.
   useEffect(() => {
     setFilterQuery('')
+  }, [activeKey])
+
+  // When flyout was opened via keyboard, focus the first menuitem after render.
+  useEffect(() => {
+    if (!focusFirstFlyoutItemRef.current || !activeKey) return
+    focusFirstFlyoutItemRef.current = false
+    requestAnimationFrame(() => {
+      const first = document.querySelector<HTMLElement>('[role="menu"] [role="menuitem"]')
+      first?.focus()
+    })
   }, [activeKey])
 
   // Track whether the scroll area overflows so we can show the bottom fade.
@@ -513,24 +525,81 @@ export default function CustomSidebarNav(props: Props) {
     [navigate, onNavigate, clearEnterTimer, clearLeaveTimer],
   )
 
+  const returnFocusToParent = useCallback(() => {
+    const sidebar = document.querySelector('[aria-label="Sidebar"]')
+    const btn = activeKey
+      ? sidebar?.querySelector<HTMLElement>(`[data-nav-key="${activeKey}"]`)
+      : null
+    setActiveKey(null)
+    // Focus after state update so the flyout is gone and the sidebar item is visible.
+    requestAnimationFrame(() => btn?.focus())
+  }, [activeKey, setActiveKey])
+
   const handleSubKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>, sub: SubItem) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
         handleSubClick(sub)
+        return
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const flyout = e.currentTarget.closest('[role="menu"]') as HTMLElement | null
+        if (!flyout) return
+        const items = Array.from(flyout.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        const idx = items.indexOf(e.currentTarget)
+        if (e.key === 'ArrowDown') {
+          if (idx < items.length - 1) items[idx + 1].focus()
+        } else {
+          if (idx > 0) items[idx - 1].focus()
+          else returnFocusToParent()
+        }
+        return
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+        e.preventDefault()
+        returnFocusToParent()
       }
     },
-    [handleSubClick],
+    [handleSubClick, returnFocusToParent],
   )
 
   const handleNavKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>, item: NavItem) => {
+    (e: React.KeyboardEvent<HTMLDivElement>, item: NavItem, hasFlyout: boolean) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
         handleNavClick(item)
+        return
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const sidebar = e.currentTarget.closest('[aria-label="Sidebar"]') as HTMLElement | null
+        if (!sidebar) return
+        const navBtns = Array.from(sidebar.querySelectorAll<HTMLElement>('[role="button"]'))
+        const idx = navBtns.indexOf(e.currentTarget)
+        if (e.key === 'ArrowDown' && idx < navBtns.length - 1) navBtns[idx + 1].focus()
+        else if (e.key === 'ArrowUp' && idx > 0) navBtns[idx - 1].focus()
+        return
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        if (hasFlyout) {
+          // Open flyout and auto-focus first item via the ref+useEffect pattern.
+          const top = e.currentTarget.getBoundingClientRect().top
+          setFlyoutTop(top)
+          focusFirstFlyoutItemRef.current = true
+          setActiveKey(item.key)
+        } else {
+          handleNavClick(item)
+        }
+        return
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+        e.preventDefault()
+        setActiveKey(null)
       }
     },
-    [handleNavClick],
+    [handleNavClick, setActiveKey, setFlyoutTop],
   )
 
   // Resolve the currently open flyout's sections (if any) for rendering.
@@ -569,6 +638,7 @@ export default function CustomSidebarNav(props: Props) {
             key={item.key}
             role="button"
             tabIndex={0}
+            data-nav-key={item.key}
             title={collapsed ? item.label : undefined}
             aria-haspopup={hasFlyout ? 'menu' : undefined}
             aria-expanded={hasFlyout ? activeKey === item.key : undefined}
@@ -578,7 +648,7 @@ export default function CustomSidebarNav(props: Props) {
             }
             onMouseLeave={handleNavMouseLeave}
             onClick={() => handleNavClick(item)}
-            onKeyDown={(e) => handleNavKeyDown(e, item)}
+            onKeyDown={(e) => handleNavKeyDown(e, item, hasFlyout)}
           >
             {item.icon ? <span style={iconStyle}>{item.icon}</span> : null}
 

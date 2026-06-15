@@ -111,6 +111,7 @@ const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
 const DanhMucLanding = lazy(() => import('./pages/danhmuc/DanhMucLanding'))
+const PhimTatPage = lazy(() => import('./pages/danhmuc/PhimTatPage'))
 // Danh mục mới (kế toán, nhân sự, tài sản)
 const DieuKhoanThanhToanList = lazy(() => import('./pages/danhmuc/DieuKhoanThanhToanList'))
 const MucThuChiList = lazy(() => import('./pages/danhmuc/MucThuChiList'))
@@ -407,6 +408,7 @@ export default function App() {
             <Route path="purchasing/returns" element={<ErrorBoundary><PurchaseReturnPage /></ErrorBoundary>} />
             <Route path="purchasing/reports" element={<ErrorBoundary><PurchaseReportPage /></ErrorBoundary>} />
             <Route path="danhmuc/phap-nhan" element={<PhapNhanList />} />
+            <Route path="danhmuc/phim-tat" element={<PhimTatPage />} />
             <Route path="master/phan-xuong" element={<PhanXuongList />} />
             <Route path="master/indirect-costs" element={<IndirectCostList />} />
             <Route path="master/addon-rates" element={<AddonRateList />} />

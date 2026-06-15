@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input,
@@ -90,6 +91,9 @@ export default function MaterialGroupList() {
     if (editing) updateMut.mutate({ id: editing.id, data: payload })
     else createMut.mutate(payload)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm nhóm nguyên liệu mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu nhóm nguyên liệu', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<MaterialGroup> = [
     { title: 'Mã nhóm', dataIndex: 'ma_nhom', width: 110 },

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, Select,
@@ -117,6 +118,9 @@ export default function MucThuChiList() {
       createMut.mutate(payload)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm mục thu/chi mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu mục thu/chi', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<MucThuChi> = [
     {

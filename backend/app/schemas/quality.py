@@ -199,3 +199,77 @@ class QCGiayCuonStatsResponse(BaseModel):
     khong_dat: int
     chua_co_ket_qua: int
     ty_le_dat_pct: float
+
+
+# ── QC NVL (Nguyên vật liệu khác) ───────────────────────────────────────────
+
+class ChiTieuItem(BaseModel):
+    stt: int
+    ten_chi_tieu: str
+    don_vi: str | None = None
+    yeu_cau_text: str | None = None
+    kieu_kiem_tra: str = "pass_fail"  # range | min | max | pass_fail
+    gia_tri_min: float | None = None
+    gia_tri_max: float | None = None
+    bat_buoc: bool = True
+
+
+class QCNvlItemResult(BaseModel):
+    stt: int
+    ten_chi_tieu: str
+    yeu_cau: str | None = None
+    ket_qua_do: str | None = None   # giá trị đo được (text)
+    ket_qua: str | None = None      # dat | khong_dat | None
+    ghi_chu: str | None = None
+
+
+class QCNvlCreate(BaseModel):
+    other_material_id: int
+    goods_receipt_id: int | None = None
+    ngay_kiem_tra: date
+    nguoi_kiem_tra: str | None = None
+    tieu_chuan_id: int | None = None
+    items_json: list[QCNvlItemResult] | None = None
+    ghi_chu: str | None = None
+    phap_nhan_id: int | None = None
+
+
+class QCNvlUpdate(BaseModel):
+    ngay_kiem_tra: date | None = None
+    nguoi_kiem_tra: str | None = None
+    tieu_chuan_id: int | None = None
+    items_json: list[QCNvlItemResult] | None = None
+    ghi_chu: str | None = None
+
+
+class QCNvlResponse(BaseModel):
+    id: int
+    so_phieu: str
+    other_material_id: int
+    goods_receipt_id: int | None
+    ngay_kiem_tra: date
+    nguoi_kiem_tra: str | None
+    tieu_chuan_id: int | None
+    tc_snapshot_json: list | None
+    items_json: list | None
+    ket_qua: str | None
+    ghi_chu: str | None
+    phap_nhan_id: int | None
+    created_by: int | None
+    created_at: datetime
+    # Tên hiển thị (enriched)
+    other_material_ma: str | None = None
+    other_material_ten: str | None = None
+    tieu_chuan_ten: str | None = None
+    ncc_ten: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class QCNvlStatsResponse(BaseModel):
+    tong: int
+    dat: int
+    khong_dat: int
+    chua_co_ket_qua: int
+    ty_le_dat_pct: float

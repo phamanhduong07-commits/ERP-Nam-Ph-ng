@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ApiError } from '../api/types'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -19,6 +19,9 @@ import { authApi } from '../api/auth'
 import { productionPlansApi } from '../api/productionPlans'
 import CustomSidebarNav, { type NavItem, type FlyoutSection, type SubItem } from './CustomSidebarNav'
 import GlobalSearchModal from './GlobalSearchModal'
+import { HotkeyProvider } from '../contexts/HotkeyContext'
+import { useHotkey } from '../hooks/useHotkey'
+import { KeyboardShortcutsModal } from './KeyboardShortcutsModal'
 const namPhuongLogo = '/logo_namphuong.png'
 
 const { Header, Sider, Content } = Layout
@@ -343,6 +346,7 @@ function buildNavItems(queueCount: number): NavItem[] {
           items: [
             { key: '/quality/qc-sheets', to: '/quality/qc-sheets', label: <Link to="/quality/qc-sheets">Phiếu kiểm tra QC</Link>, permissions: ['quality.view'] },
             { key: '/quality/giay-cuon', to: '/quality/giay-cuon', label: <Link to="/quality/giay-cuon">Giấy cuộn (QC)</Link>, permissions: ['quality.view'] },
+            { key: '/quality/nvl', to: '/quality/nvl', label: <Link to="/quality/nvl">QC NVL</Link>, permissions: ['quality.view'] },
           ],
         },
       ],
@@ -370,7 +374,7 @@ function buildNavItems(queueCount: number): NavItem[] {
   ]
 }
 
-export default function AppLayout() {
+function AppLayoutInner() {
   const [collapsed, setCollapsed] = useState(false)
   const [changePwdOpen, setChangePwdOpen] = useState(false)
   const [changePwdLoading, setChangePwdLoading] = useState(false)
@@ -445,18 +449,82 @@ export default function AppLayout() {
     .map(item => (item.key === 'san-xuat' && !hasSxPerm) ? { ...item, hubTo: undefined } : item)
 
   const [searchOpen, setSearchOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
-  // Ctrl+K → open global search
+  useHotkey('ctrl+k', () => setSearchOpen(true), 'Tìm kiếm toàn cục', 'Toàn cục')
+  useHotkey('?', () => setShortcutsOpen(true), 'Hiện danh sách phím tắt', 'Toàn cục')
+  useHotkey('escape', () => {
+    // Ant Design modals handle ESC natively — skip navigation when any modal is open
+    if (document.querySelector('.ant-modal-mask')) return
+    navigate(-1)
+  }, 'Quay lại trang trước', 'Toàn cục')
+
+  // ── Arrow navigation ───────────────────────────────────────────────────────
+  const [tableNavIdx, setTableNavIdx] = useState(-1)
+
+  // Reset table focus when navigating to a new page
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault()
-        setSearchOpen(true)
-      }
-    }
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [])
+    setTableNavIdx(-1)
+    document.querySelectorAll('.row-kb-focus').forEach(el => el.classList.remove('row-kb-focus'))
+  }, [location.pathname])
+
+  // Check if focus is inside sidebar nav or its flyout portal — skip global handlers when true
+  const isNavFocused = () => {
+    const ae = document.activeElement
+    if (!ae || ae === document.body) return false
+    const sidebar = document.querySelector('[aria-label="Sidebar"]')
+    const flyout = document.querySelector('[role="menu"]')
+    return (sidebar?.contains(ae) ?? false) || (flyout?.contains(ae) ?? false)
+  }
+
+  useHotkey('arrowdown', () => {
+    if (document.querySelector('.ant-modal-mask')) return
+    if (isNavFocused()) return
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('.ant-table-row'))
+    if (!rows.length) return
+    const next = tableNavIdx < rows.length - 1 ? tableNavIdx + 1 : 0
+    rows.forEach(r => r.classList.remove('row-kb-focus'))
+    rows[next].classList.add('row-kb-focus')
+    rows[next].scrollIntoView({ block: 'nearest' })
+    setTableNavIdx(next)
+  }, 'Dòng kế tiếp trong bảng', 'Bảng dữ liệu')
+
+  useHotkey('arrowup', () => {
+    if (document.querySelector('.ant-modal-mask')) return
+    if (isNavFocused()) return
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('.ant-table-row'))
+    if (!rows.length) return
+    const prev = tableNavIdx > 0 ? tableNavIdx - 1 : rows.length - 1
+    rows.forEach(r => r.classList.remove('row-kb-focus'))
+    rows[prev].classList.add('row-kb-focus')
+    rows[prev].scrollIntoView({ block: 'nearest' })
+    setTableNavIdx(prev)
+  }, 'Dòng trước trong bảng', 'Bảng dữ liệu')
+
+  useHotkey('enter', () => {
+    if (document.querySelector('.ant-modal-mask')) return
+    if (isNavFocused()) return
+    const focused = document.querySelector<HTMLElement>('.row-kb-focus')
+    if (focused) focused.click()
+  }, 'Mở dòng đang chọn', 'Bảng dữ liệu')
+
+  useHotkey('arrowleft', () => {
+    if (document.querySelector('.ant-modal-mask')) return
+    if (isNavFocused()) return
+    const tabs = Array.from(document.querySelectorAll<HTMLElement>('.ant-tabs-tab'))
+    if (!tabs.length) return
+    const idx = tabs.findIndex(t => t.classList.contains('ant-tabs-tab-active'))
+    if (idx > 0) tabs[idx - 1].click()
+  }, 'Tab trước', 'Tabs')
+
+  useHotkey('arrowright', () => {
+    if (document.querySelector('.ant-modal-mask')) return
+    if (isNavFocused()) return
+    const tabs = Array.from(document.querySelectorAll<HTMLElement>('.ant-tabs-tab'))
+    if (!tabs.length) return
+    const idx = tabs.findIndex(t => t.classList.contains('ant-tabs-tab-active'))
+    if (idx >= 0 && idx < tabs.length - 1) tabs[idx + 1].click()
+  }, 'Tab kế tiếp', 'Tabs')
 
   const selectedKeys = [location.pathname + location.search]
 
@@ -508,8 +576,13 @@ export default function AppLayout() {
 
   return (
     <>
+    <style>{`
+      tr.row-kb-focus > td { background: #e6f4ff !important; }
+      tr.row-kb-focus:hover > td { background: #bae0ff !important; }
+    `}</style>
     <a href="#main-content" className="skip-nav">Bỏ qua điều hướng</a>
     <GlobalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+    <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     <Layout style={{ minHeight: '100vh' }}>
       <Sider
         trigger={null}
@@ -665,7 +738,7 @@ export default function AppLayout() {
           </Form>
         </Modal>
 
-        <Content id="main-content" style={{ margin: 16, background: tk.colorBgLayout, overflow: 'initial' }}>
+        <Content id="main-content" style={{ margin: 16, background: tk.colorBgLayout, overflowY: 'auto', overflowX: 'hidden' }}>
           <div key={location.pathname} className="np-page-enter">
             <Outlet />
           </div>
@@ -673,5 +746,13 @@ export default function AppLayout() {
       </Layout>
     </Layout>
     </>
+  )
+}
+
+export default function AppLayout() {
+  return (
+    <HotkeyProvider>
+      <AppLayoutInner />
+    </HotkeyProvider>
   )
 }

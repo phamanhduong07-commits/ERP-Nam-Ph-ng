@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useHotkey } from '../../hooks/useHotkey';
 import { Card, Table, Button, Modal, Form, Input, Switch, Tag, Space, Popconfirm, message } from 'antd';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -53,6 +54,9 @@ export default function NganHangList() {
     setOpen(true);
   };
   const openEdit = (r: NganHang) => { setEditing(r); form.setFieldsValue(r); setOpen(true); };
+
+  useHotkey('ctrl+n', openCreate, 'Thêm ngân hàng mới')
+  useHotkey('ctrl+s', () => form.submit(), 'Lưu ngân hàng', 'Trang hiện tại', open)
 
   const cols = [
     { title: 'Mã', dataIndex: 'ma_ngan_hang', width: 140, render: (v: string) => <b>{v}</b> },

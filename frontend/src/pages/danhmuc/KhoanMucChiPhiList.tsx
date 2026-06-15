@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useHotkey } from '../../hooks/useHotkey'
 import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -124,6 +125,9 @@ export default function KhoanMucChiPhiList() {
       createMut.mutate(payload)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm khoản mục chi phí mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu khoản mục chi phí', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<KhoanMucChiPhi> = [
     {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
@@ -57,10 +58,11 @@ export default function PaperMaterialList() {
     queryFn: () => suppliersApi.all().then(r => r.data),
   })
 
-  const { data: tcList = [] } = useQuery({
-    queryKey: ['tieu-chuan-search-paper', tcSearch],
-    queryFn: () => tieuChuanApi.search({ q: tcSearch, ap_dung_cho: 'giay', limit: 30 }).then(r => r.data),
+  const { data: tcListData } = useQuery({
+    queryKey: ['tieu-chuan-list-paper', tcSearch],
+    queryFn: () => tieuChuanApi.list({ search: tcSearch, ap_dung_cho: 'giay', page_size: 50 }).then(r => r.data),
   })
+  const tcList = tcListData?.items ?? []
 
   const createMut = useMutation({
     mutationFn: (d: PaperMaterialCreate) => paperMaterialsFullApi.create(d),
@@ -92,7 +94,10 @@ export default function PaperMaterialList() {
 
   const openEdit = (row: PaperMaterial) => {
     setEditing(row)
-    form.setFieldsValue({ ...row })
+    form.setFieldsValue({
+      ...row,
+      tieu_chuan_dinh_luong: row.tieu_chuan_dinh_luong ?? row.dinh_luong ?? undefined,
+    })
     setModalOpen(true)
   }
 
@@ -133,6 +138,9 @@ export default function PaperMaterialList() {
     if (editing) updateMut.mutate({ id: editing.id, data: payload })
     else createMut.mutate(payload)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm nguyên liệu giấy mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu nguyên liệu giấy', 'Trang hiện tại', modalOpen)
 
   const nhomOptions = nhomList.map(n => ({ value: n.id, label: `${n.ma_nhom} - ${n.ten_nhom}` }))
   const nsxOptions = nsxList.map(s => ({ value: s.id, label: `${s.ma_ncc} - ${s.ten_viet_tat}` }))
@@ -415,8 +423,25 @@ export default function PaperMaterialList() {
                             placeholder="Chọn hoặc tìm tiêu chuẩn..."
                             filterOption={false}
                             onSearch={v => setTcSearch(v)}
-                            options={tcList.map(t => ({ value: t.id, label: `${t.ma_tc} — ${t.ten}` }))}
+                            options={tcList.map(t => ({ value: t.id, label: `${t.ma_tc} — ${t.ten}`, _tc: t }))}
                             style={{ width: '100%' }}
+                            onChange={(_val, opt) => {
+                              const tc = (opt as any)?._tc
+                              if (tc) {
+                                form.setFieldsValue({
+                                  sai_so_pct: tc.tc_sai_so_pct ?? undefined,
+                                  do_buc_tieu_chuan: tc.tc_do_buc ?? undefined,
+                                  do_nen_vong_tc: tc.tc_do_nen_vong ?? undefined,
+                                })
+                              } else {
+                                // clear khi bỏ chọn TC
+                                form.setFieldsValue({
+                                  sai_so_pct: undefined,
+                                  do_buc_tieu_chuan: undefined,
+                                  do_nen_vong_tc: undefined,
+                                })
+                              }
+                            }}
                           />
                         </Form.Item>
                       </Col>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery } from '@tanstack/react-query'
 import {
   Table, Card, Button, Typography, Space, Tag, DatePicker, Input, Select
@@ -31,6 +32,8 @@ export default function JournalEntryListPage() {
     queryKey: ['journal-entries', params],
     queryFn: () => journalApi.list(params)
   })
+
+  useHotkey('ctrl+n', () => navigate('/accounting/journal-entries/new'), 'Tạo bút toán mới')
 
   const columns = [
     {

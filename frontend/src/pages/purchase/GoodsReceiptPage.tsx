@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Checkbox, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal,
@@ -392,6 +393,9 @@ export default function GoodsReceiptPage() {
     }
     createMut.mutate(payload)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Tạo phiếu nhập kho mới')
+  useHotkey('ctrl+s', () => form.submit(), 'Lưu phiếu nhập kho', 'Trang hiện tại', drawerOpen)
 
   const columns = [
     {

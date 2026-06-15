@@ -9,6 +9,7 @@ import type { ColumnsType } from 'antd/es/table'
 import type { ApiError } from '../../api/types'
 import client from '../../api/client'
 import EmptyState from '../../components/EmptyState'
+import { useHotkey } from '../../hooks/useHotkey'
 
 const { Title } = Typography
 
@@ -155,6 +156,9 @@ export default function ChartOfAccountsPage() {
       createMut.mutate(payload)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm tài khoản kế toán mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu tài khoản kế toán', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<ChartOfAccount> = [
     {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useHotkey } from '../../hooks/useHotkey'
 import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -85,6 +86,9 @@ export default function TinhThanhList() {
       createMut.mutate(payload)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm tỉnh/thành phố mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu tỉnh/thành phố', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<TinhThanh> = [
     { title: 'Mã tỉnh', dataIndex: 'ma_tinh', width: 120 },

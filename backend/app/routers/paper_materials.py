@@ -240,6 +240,13 @@ def list_paper_materials(
                 "ma_dong_cap": p.ma_dong_cap,
                 "dinh_luong": p.dinh_luong,
                 "ma_nsx_id": p.ma_nsx_id,
+                "tieu_chuan_id": p.tieu_chuan_id,
+                "tieu_chuan_dinh_luong": p.tieu_chuan_dinh_luong,
+                "sai_so_pct": p.sai_so_pct,
+                "do_buc_tieu_chuan": p.do_buc_tieu_chuan,
+                "do_nen_vong_tc": p.do_nen_vong_tc,
+                "do_cobb_tieu_chuan": p.do_cobb_tieu_chuan,
+                "do_day_tieu_chuan": p.do_day_tieu_chuan,
                 "gia_mua": p.gia_mua,
                 "gia_ban": p.gia_ban,
                 "gia_dinh_muc": p.gia_dinh_muc,
@@ -251,6 +258,7 @@ def list_paper_materials(
                 "su_dung": p.su_dung,
                 "ten_nhom": p.nhom.ten_nhom if p.nhom else None,
                 "ten_nsx": p.nsx.ten_viet_tat if p.nsx else None,
+                "ten_tieu_chuan": p.tieu_chuan.ten if p.tieu_chuan else None,
             }
             for p in items
         ],
@@ -258,6 +266,27 @@ def list_paper_materials(
         "page": page,
         "page_size": page_size,
     }
+
+
+@router.post("/populate-tc-dinh-luong")
+def populate_tc_dinh_luong(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Gán tieu_chuan_dinh_luong = dinh_luong cho papers đã có TC nhưng chưa có TC định lượng."""
+    papers = (
+        db.query(PaperMaterial)
+        .filter(
+            PaperMaterial.tieu_chuan_id.isnot(None),
+            PaperMaterial.tieu_chuan_dinh_luong.is_(None),
+            PaperMaterial.dinh_luong.isnot(None),
+        )
+        .all()
+    )
+    for p in papers:
+        p.tieu_chuan_dinh_luong = p.dinh_luong
+    db.commit()
+    return {"updated": len(papers)}
 
 
 @router.get("/import-template")

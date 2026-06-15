@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, Drawer, Form, Input, Popconfirm, Row,
@@ -104,6 +105,9 @@ export default function PhanXuongList() {
       }
     } catch { /* validation shown inline */ }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm phân xưởng mới')
+  useHotkey('ctrl+s', handleSubmit, 'Lưu phân xưởng', 'Trang hiện tại', open)
 
   const columns = [
     {

@@ -9,6 +9,7 @@ import type { ColumnsType } from 'antd/es/table'
 import type { ApiError } from '../../api/types'
 import client from '../../api/client'
 import EmptyState from '../../components/EmptyState'
+import { useHotkey } from '../../hooks/useHotkey'
 
 const { Title } = Typography
 
@@ -118,6 +119,9 @@ function NhomTab({ loai, label }: NhomTabProps) {
       createMut.mutate(payload)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm nhóm đối tượng mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu nhóm đối tượng', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<NhomDoiTuong> = [
     {

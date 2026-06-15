@@ -20,6 +20,7 @@ import {
 import type { DataNode } from 'antd/es/tree'
 import { hrApi, Department, Employee, Team } from '../../api/hr'
 import { phapNhanApi } from '../../api/phap_nhan'
+import { useHotkey } from '../../hooks/useHotkey'
 
 const { Title, Text } = Typography
 
@@ -245,6 +246,8 @@ export default function DepartmentPage() {
       setSelected({ kind: 'nv', id })
     }
   }
+
+  useHotkey('ctrl+n', () => { setEditingDept({} as Department); deptForm.resetFields() }, 'Thêm phòng ban mới')
 
   // ─── Stats tổng quan ───
   const stats = useMemo(() => ({

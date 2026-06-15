@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, Form, Input, Modal, Popconfirm, Row, Select, Space, Switch, Table, Tag, Typography, message,
@@ -162,6 +163,9 @@ export default function UserList() {
     form.setFieldsValue({ trang_thai: true })
     setOpen(true)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm tài khoản mới')
+  useHotkey('ctrl+s', () => form.submit(), 'Lưu tài khoản', 'Trang hiện tại', open)
 
   const openEdit = (record: NhanVien) => {
     setEditing(record)

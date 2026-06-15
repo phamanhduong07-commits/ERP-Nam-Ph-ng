@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
@@ -217,6 +218,10 @@ function TabDonMuaNVL() {
       })
     } catch { /* validation inline */ }
   }
+
+  const openCreate = () => { form.resetFields(); setOpen(true) }
+  useHotkey('ctrl+n', openCreate, 'Tạo đơn mua NVL mới')
+  useHotkey('ctrl+s', handleSubmit, 'Lưu đơn mua NVL', 'Trang hiện tại', open)
 
   const expandedRowRender = (r: PurchaseOrder) => (
     <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}

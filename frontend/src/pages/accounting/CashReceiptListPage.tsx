@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Row, Select, Space, Table, Tag, Typography,
@@ -51,6 +52,8 @@ export default function CashReceiptListPage() {
       rows: rows.map((r: Record<string, string | number>) => Object.values(r)),
     }])
   }
+
+  useHotkey('ctrl+n', () => navigate('/accounting/receipts/new'), 'Tạo phiếu thu mới')
 
   const columns: ColumnsType<CashReceipt> = [
     {

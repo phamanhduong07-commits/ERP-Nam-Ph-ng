@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Image, Input, InputNumber,
@@ -323,6 +324,10 @@ export default function NhapGiayPage() {
       })
     } catch { /* validation inline */ }
   }
+
+  const openCreate = () => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setOpen(true) }
+  useHotkey('ctrl+n', openCreate, 'Tạo phiếu nhập giấy mới')
+  useHotkey('ctrl+s', handleSubmit, 'Lưu phiếu nhập giấy', 'Trang hiện tại', open)
 
   const handlePrintReceipt = (r: GoodsReceipt) => {
     const cols = [

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input,
@@ -99,6 +100,9 @@ export default function ViTriList() {
       createMut.mutate(payload)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm vị trí kho mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu vị trí kho', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<ViTri> = [
     { title: 'Mã vị trí', dataIndex: 'ma_vi_tri', width: 120 },

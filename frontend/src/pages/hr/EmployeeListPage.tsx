@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Drawer, Input, InputNumber, Select, Space, Table, Typography, message, Row, Col, Tag, Avatar, Statistic, Tooltip, Badge,
@@ -123,6 +124,8 @@ export default function EmployeeListPage() {
     setEditing(null)
     setOpen(true)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm nhân viên mới')
 
   const openEdit = (emp: Employee) => {
     setEditing(emp)

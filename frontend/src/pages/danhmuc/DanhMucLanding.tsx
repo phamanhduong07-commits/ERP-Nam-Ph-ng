@@ -113,6 +113,7 @@ const COLUMNS: Group[][] = [
         { label: 'Phân quyền', to: '/master/roles', permissions: ['permission.view', 'permission.manage'] },
         { label: 'Biểu mẫu in', to: '/master/print-templates', permissions: ['master.other.view', 'master.other.manage', 'sales_order.view'] },
         { label: 'Lịch sử Import', to: '/reports/import-history', permissions: ['master.import', 'sales.import'] },
+        { label: 'Phím tắt bàn phím', to: '/danhmuc/phim-tat' },
       ],
     },
     {

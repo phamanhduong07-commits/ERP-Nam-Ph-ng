@@ -1,9 +1,10 @@
 import { useState } from 'react'
+import { useHotkey } from '../../hooks/useHotkey'
 import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
-  Select, Tag, message, Typography, Row, Col, Switch,
+  Select, Tag, message, Typography, Row, Col, Switch, Tooltip,
 } from 'antd'
 import { PlusOutlined, EditOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -86,6 +87,9 @@ export default function CustomerList() {
       createMut.mutate(vals)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm khách hàng mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu khách hàng', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<Customer> = [
     { title: 'Mã KH', dataIndex: 'ma_kh', width: 100 },
@@ -183,9 +187,11 @@ export default function CustomerList() {
                 onChange={v => { setFilterNv(v); setPage(1) }}
                 options={(saleUsers as SaleUser[]).map(u => ({ value: u.id, label: u.ho_ten }))}
               />
-              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-                Thêm khách hàng
-              </Button>
+              <Tooltip title="Ctrl + N">
+                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                  Thêm khách hàng
+                </Button>
+              </Tooltip>
               <Button onClick={() => setImportVisible(true)}>
                 Import Excel
               </Button>

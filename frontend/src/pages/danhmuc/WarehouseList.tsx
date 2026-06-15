@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
@@ -110,6 +111,9 @@ export default function WarehouseList() {
     if (editing) updateMut.mutate({ id: editing.id, data: payload })
     else createMut.mutate(payload)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm kho mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu kho', 'Trang hiện tại', modalOpen)
 
   const columns: ColumnsType<Warehouse> = [
     { title: 'Mã kho', dataIndex: 'ma_kho', width: 100 },

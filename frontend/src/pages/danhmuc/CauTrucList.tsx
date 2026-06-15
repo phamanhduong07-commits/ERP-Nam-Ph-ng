@@ -10,6 +10,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { cauTrucApi, type CauTruc, type CauTrucCreate } from '../../api/cauTruc'
 import { paperMaterialsApi, TO_HOP_SONG_OPTIONS, getSongType } from '../../api/quotes'
 import EmptyState from "../../components/EmptyState"
+import { useHotkey } from '../../hooks/useHotkey'
 
 const { Title, Text } = Typography
 
@@ -166,6 +167,9 @@ export default function CauTrucList() {
     if (editing) updateMut.mutate({ id: editing.id, data: payload })
     else createMut.mutate(payload)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm kết cấu mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu kết cấu', 'Trang hiện tại', modalOpen)
 
   // Layer rows displayed in form based on so_lop
   const layerRows: { label: string; mkName: string; dlName: string }[] = [

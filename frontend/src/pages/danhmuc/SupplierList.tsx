@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ApiError } from '../../api/types'
+import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input,
@@ -101,6 +102,9 @@ export default function SupplierList() {
     if (editing) updateMut.mutate({ id: editing.id, data: payload })
     else createMut.mutate(payload)
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm nhà cung cấp mới')
+  useHotkey('ctrl+s', handleSave, 'Lưu nhà cung cấp', 'Trang hiện tại', modalOpen)
 
   const getPhanLoaiLabel = (v: string | null) => {
     if (!v) return '—'

@@ -70,6 +70,10 @@ export interface PlanLineResponse {
   mat_2: string | null;   mat_2_dl: number | null
   song_3: string | null;  song_3_dl: number | null
   mat_3: string | null;   mat_3_dl: number | null
+  mat_loai_giay: string | null
+  mat_1_loai_giay: string | null
+  mat_2_loai_giay: string | null
+  mat_3_loai_giay: string | null
 }
 
 export interface PlanCreate {

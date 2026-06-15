@@ -7,6 +7,7 @@ import {
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { temPaperPricesApi, type TemPaperPrice, type TemPaperPriceCreate } from '../../api/temPaperPrices'
+import { useHotkey } from '../../hooks/useHotkey'
 
 const { Title } = Typography
 
@@ -74,6 +75,9 @@ export default function TemPaperPriceList() {
       createMut.mutate(values)
     }
   }
+
+  useHotkey('ctrl+n', openCreate, 'Thêm giá giấy tem mới')
+  useHotkey('ctrl+s', handleOk, 'Lưu giá giấy tem', 'Trang hiện tại', modal.open)
 
   const cols: ColumnsType<TemPaperPrice> = [
     {

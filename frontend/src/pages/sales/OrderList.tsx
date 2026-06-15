@@ -21,6 +21,7 @@ import { fmtVND, fmtDate, buildHtmlTable, smartExportExcel, smartPrintPdf, resol
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
+import { useHotkey } from '../../hooks/useHotkey'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -356,6 +357,8 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
       ),
     },
   ]
+
+  useHotkey('ctrl+n', () => navigate('/sales/orders/new'), 'Tạo đơn hàng mới')
 
   const hasFilter = !!(search || trangThai || phapNhanId || dateRange || shortcutFilter)
 
