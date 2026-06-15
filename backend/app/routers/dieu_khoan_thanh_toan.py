@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.danhmuc_chung import DieuKhoanThanhToan
 
@@ -41,7 +41,7 @@ def list_dieu_khoan_thanh_toan(
 def create_dieu_khoan_thanh_toan(
     data: DieuKhoanThanhToanBase,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permissions("dieu_khoan.manage")),
 ):
     obj = DieuKhoanThanhToan(**data.model_dump())
     db.add(obj)
@@ -55,7 +55,7 @@ def update_dieu_khoan_thanh_toan(
     id: int,
     data: DieuKhoanThanhToanBase,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permissions("dieu_khoan.manage")),
 ):
     obj = db.query(DieuKhoanThanhToan).filter(DieuKhoanThanhToan.id == id).first()
     if not obj:
@@ -71,7 +71,7 @@ def update_dieu_khoan_thanh_toan(
 def delete_dieu_khoan_thanh_toan(
     id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permissions("dieu_khoan.manage")),
 ):
     obj = db.query(DieuKhoanThanhToan).filter(DieuKhoanThanhToan.id == id).first()
     if not obj:

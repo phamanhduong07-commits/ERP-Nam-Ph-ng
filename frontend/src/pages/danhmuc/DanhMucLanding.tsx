@@ -34,7 +34,7 @@ const COLUMNS: Group[][] = [
         { label: 'Giá giấy tem offset', to: '/master/tem-paper-prices', permissions: ['master.other.manage'] },
         { label: 'Giá dịch vụ offset', to: '/master/offset-addon-prices', permissions: ['master.other.manage'] },
         { label: 'Khoản mục chi phí', to: '/master/khoan-muc-chi-phi', permissions: ['master.other.manage'] },
-        { label: 'Điều khoản thanh toán', to: '/master/dieu-khoan-thanh-toan', permissions: ['master.other.manage'] },
+        { label: 'Điều khoản thanh toán', to: '/master/dieu-khoan-thanh-toan', permissions: ['master.other.manage', 'dieu_khoan.manage'] },
         { label: 'Mục thu/chi', to: '/master/muc-thu-chi', permissions: ['master.other.manage'] },
       ],
     },
