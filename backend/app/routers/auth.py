@@ -43,17 +43,35 @@ def _hash_password(plain: str) -> str:
     return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(rounds=14)).decode()
 
 
-def _get_user_permissions(user: User) -> list[str]:
-    """Merge role permissions + user-level overrides."""
+def _get_user_permissions(user: User) -> tuple[list[str], dict[str, list[int]]]:
+    """Merge role permissions + user-level overrides.
+
+    Returns:
+        (permissions, allowed_nv_ids)
+        - permissions: quyền toàn cục (role + user-level không có target)
+        - allowed_nv_ids: {"report.xnt_all_nv": [3, 7], ...} — user-level có target_user_id
+    """
     perms: set[str] = set()
+    allowed_nv_ids: dict[str, list[int]] = {}
+
     if user.role and hasattr(user.role, 'role_permissions'):
         perms.update(rp.permission.ma_quyen for rp in user.role.role_permissions)
+
     if hasattr(user, 'user_permissions'):
-        perms.update(up.permission.ma_quyen for up in user.user_permissions)
-    return sorted(perms)
+        for up in user.user_permissions:
+            ma_quyen = up.permission.ma_quyen
+            if up.target_user_id is None:
+                perms.add(ma_quyen)
+            else:
+                allowed_nv_ids.setdefault(ma_quyen, [])
+                if up.target_user_id not in allowed_nv_ids[ma_quyen]:
+                    allowed_nv_ids[ma_quyen].append(up.target_user_id)
+
+    return sorted(perms), allowed_nv_ids
 
 
 def _make_user_info(user: User) -> UserInfo:
+    permissions, allowed_nv_ids = _get_user_permissions(user)
     return UserInfo(
         id=user.id,
         username=user.username,
@@ -63,7 +81,8 @@ def _make_user_info(user: User) -> UserInfo:
         phan_xuong=user.phan_xuong,
         machine_id=user.machine_id,
         phap_nhan_id=user.phap_nhan_id,
-        permissions=_get_user_permissions(user),
+        permissions=permissions,
+        allowed_nv_ids=allowed_nv_ids,
         must_change_password=getattr(user, 'must_change_password', False),
     )
 

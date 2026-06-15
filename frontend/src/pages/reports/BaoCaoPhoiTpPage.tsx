@@ -13,20 +13,28 @@ const SALE_ADMIN_ROLES = ['SALE_ADMIN', 'TRUONG_PHONG_SALE_ADMIN']
 export default function BaoCaoPhoiTpPage() {
   const user = useAuthStore(s => s.user)
   const isSaleAdmin = SALE_ADMIN_ROLES.includes(user?.role ?? '')
-  // Có quyền xem NV khác khi có report.xnt_all_nv (role-level hoặc user-level)
+  // Quyền toàn cục (từ role)
   const canViewAllNv = user?.permissions?.includes('report.xnt_all_nv') ?? false
-  // Lock về user mình nếu là SALE_ADMIN và không có quyền all_nv
-  const isLocked = isSaleAdmin && !canViewAllNv
+  // NV cụ thể được phép xem (từ quyền bổ sung có target_user_id)
+  const allowedNvIds = user?.allowed_nv_ids?.['report.xnt_all_nv'] ?? []
+  const hasAnyAccess = canViewAllNv || allowedNvIds.length > 0
+  // Lock về chính mình nếu là SALE_ADMIN và không có quyền nào
+  const isLocked = isSaleAdmin && !hasAnyAccess
 
   const [filterNvId, setFilterNvId] = useState<number | undefined>(
     isLocked ? user?.id : undefined
   )
 
-  const { data: nvList = [] } = useQuery<{ id: number; ho_ten: string }[]>({
+  const { data: nvListRaw = [] } = useQuery<{ id: number; ho_ten: string }[]>({
     queryKey: ['users-list'],
     queryFn: () => client.get<{ id: number; ho_ten: string }[]>('/users').then(r => r.data),
     enabled: !isLocked,
   })
+
+  // Lọc danh sách NV theo quyền: toàn cục → tất cả, có target → chỉ NV được phép + chính mình
+  const nvList = canViewAllNv
+    ? nvListRaw
+    : nvListRaw.filter(u => u.id === user?.id || allowedNvIds.includes(u.id))
 
   // Tab 1: Phôi sóng
   const { data: phoiData = [], isLoading: phoiLoading } = useQuery<KhoRow[]>({

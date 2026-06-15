@@ -29,6 +29,9 @@ class UserInfo(BaseModel):
     machine_id: int | None
     phap_nhan_id: int | None = None
     permissions: list[str] = []
+    # NV cụ thể user được phép xem theo từng loại quyền
+    # {"report.xnt_all_nv": [3, 7], "report.cong_no_all_nv": [3]}
+    allowed_nv_ids: dict[str, list[int]] = {}
     # Force NV đổi mật khẩu khi đăng nhập lần đầu (cấp tài khoản mới)
     must_change_password: bool = False
 

@@ -89,11 +89,14 @@ class UserPermission(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     permission_id: Mapped[int] = mapped_column(Integer, ForeignKey("permissions.id", ondelete="CASCADE"), nullable=False)
     granted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    # NV cụ thể được phép xem (NULL = tất cả — không dùng khi cấp mới)
+    target_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id], back_populates="user_permissions")
     permission: Mapped["Permission"] = relationship("Permission", back_populates="user_permissions")
     granter: Mapped["User | None"] = relationship("User", foreign_keys=[granted_by])
+    target_user: Mapped["User | None"] = relationship("User", foreign_keys=[target_user_id])
 
 
 class AuditLog(Base):

@@ -10,11 +10,19 @@ import client from '../../api/client'
 const { Title, Text } = Typography
 
 interface NvItem { id: number; ho_ten: string; username: string; role_code: string }
-interface UserPerm { id: number; ma_quyen: string; ten_quyen: string; granted_by_name: string | null; created_at: string }
+interface UserPerm {
+  id: number
+  ma_quyen: string
+  ten_quyen: string
+  target_user_id: number | null
+  target_user_name: string | null
+  granted_by_name: string | null
+  created_at: string
+}
 
 const GRANTABLE_PERMISSIONS = [
-  { value: 'report.xnt_all_nv',     label: 'Xem tồn phôi/TP của NV khác' },
-  { value: 'report.cong_no_all_nv', label: 'Xem công nợ của NV khác' },
+  { value: 'report.xnt_all_nv',     label: 'Xem tồn phôi/TP của NV' },
+  { value: 'report.cong_no_all_nv', label: 'Xem công nợ của NV' },
 ]
 
 export default function TeamPermissionsPage() {
@@ -22,6 +30,7 @@ export default function TeamPermissionsPage() {
   const { message } = App.useApp()
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [grantPerm, setGrantPerm] = useState<string | undefined>()
+  const [grantTargetId, setGrantTargetId] = useState<number | undefined>()
   const [pwModalOpen, setPwModalOpen] = useState(false)
   const [pwForm] = Form.useForm()
 
@@ -30,6 +39,12 @@ export default function TeamPermissionsPage() {
     queryFn: () => client.get<NvItem[]>('/users').then(r =>
       r.data.filter(u => ['SALE_ADMIN', 'TRUONG_PHONG_SALE_ADMIN'].includes(u.role_code))
     ),
+  })
+
+  // Danh sách tất cả NV để chọn target
+  const { data: allNvList = [] } = useQuery<NvItem[]>({
+    queryKey: ['all-users'],
+    queryFn: () => client.get<NvItem[]>('/users').then(r => r.data),
   })
 
   const { data: userPerms = [], isLoading } = useQuery<UserPerm[]>({
@@ -41,10 +56,14 @@ export default function TeamPermissionsPage() {
 
   const grantMut = useMutation({
     mutationFn: () =>
-      client.post(`/roles/users/${selectedUserId}/permissions`, { permission_ma_quyen: grantPerm }),
+      client.post(`/roles/users/${selectedUserId}/permissions`, {
+        permission_ma_quyen: grantPerm,
+        target_user_id: grantTargetId,
+      }),
     onSuccess: () => {
       message.success('Đã cấp quyền thành công')
       setGrantPerm(undefined)
+      setGrantTargetId(undefined)
       qc.invalidateQueries({ queryKey: ['user-perms', selectedUserId] })
     },
     onError: (e: { response?: { data?: { detail?: string } } }) =>
@@ -52,8 +71,8 @@ export default function TeamPermissionsPage() {
   })
 
   const revokeMut = useMutation({
-    mutationFn: (maQuyen: string) =>
-      client.delete(`/roles/users/${selectedUserId}/permissions/${maQuyen}`),
+    mutationFn: (upId: number) =>
+      client.delete(`/roles/users/${selectedUserId}/permissions/by-id/${upId}`),
     onSuccess: () => {
       message.success('Đã thu hồi quyền')
       qc.invalidateQueries({ queryKey: ['user-perms', selectedUserId] })
@@ -76,16 +95,27 @@ export default function TeamPermissionsPage() {
 
   const selectedUser = nvList.find(u => u.id === selectedUserId)
 
+  // Kiểm tra cặp (perm, target) đã tồn tại chưa để disable nút Cấp
+  const alreadyGranted = grantPerm && grantTargetId
+    ? userPerms.some(up => up.ma_quyen === grantPerm && up.target_user_id === grantTargetId)
+    : false
+
   const cols = [
     {
       title: 'Quyền',
       dataIndex: 'ma_quyen',
       render: (v: string, r: UserPerm) => (
         <Space direction="vertical" size={0}>
-          <Tag color="blue">{v}</Tag>
-          <Text type="secondary" style={{ fontSize: 12 }}>{r.ten_quyen}</Text>
+          <Text>{GRANTABLE_PERMISSIONS.find(p => p.value === v)?.label ?? v}</Text>
+          <Tag color="blue" style={{ fontSize: 11 }}>{v}</Tag>
         </Space>
       ),
+    },
+    {
+      title: 'NV được phép xem',
+      dataIndex: 'target_user_name',
+      render: (v: string | null) =>
+        v ? <Tag color="green">{v}</Tag> : <Tag color="orange">Tất cả</Tag>,
     },
     {
       title: 'Cấp bởi',
@@ -98,7 +128,7 @@ export default function TeamPermissionsPage() {
       render: (_: unknown, r: UserPerm) => (
         <Popconfirm
           title="Thu hồi quyền này?"
-          onConfirm={() => revokeMut.mutate(r.ma_quyen)}
+          onConfirm={() => revokeMut.mutate(r.id)}
           okText="Thu hồi" cancelText="Huỷ"
           okButtonProps={{ danger: true }}
         >
@@ -165,26 +195,44 @@ export default function TeamPermissionsPage() {
                 </Button>
               </div>
 
-              <Space style={{ marginBottom: 12 }}>
+              {/* Cấp quyền — chọn loại quyền + NV cụ thể */}
+              <Space style={{ marginBottom: 12, flexWrap: 'wrap' }}>
                 <Select
-                  placeholder="Chọn quyền để cấp"
-                  style={{ width: 280 }}
+                  placeholder="Chọn loại quyền"
+                  style={{ width: 220 }}
                   value={grantPerm}
-                  onChange={setGrantPerm}
-                  options={GRANTABLE_PERMISSIONS.filter(
-                    p => !userPerms.some(up => up.ma_quyen === p.value)
-                  )}
+                  onChange={v => { setGrantPerm(v); setGrantTargetId(undefined) }}
+                  options={GRANTABLE_PERMISSIONS}
+                />
+                <Select
+                  placeholder="Chọn NV được phép xem"
+                  style={{ width: 220 }}
+                  value={grantTargetId}
+                  onChange={setGrantTargetId}
+                  disabled={!grantPerm}
+                  showSearch
+                  filterOption={(input, opt) =>
+                    (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  options={allNvList
+                    .filter(u => u.id !== selectedUserId)
+                    .map(u => ({ value: u.id, label: u.ho_ten }))}
                 />
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
-                  disabled={!grantPerm}
+                  disabled={!grantPerm || !grantTargetId || alreadyGranted}
                   loading={grantMut.isPending}
                   onClick={() => grantMut.mutate()}
                 >
                   Cấp quyền
                 </Button>
               </Space>
+              {alreadyGranted && (
+                <div style={{ marginBottom: 8, color: '#faad14', fontSize: 12 }}>
+                  Đã có quyền này cho NV đã chọn
+                </div>
+              )}
 
               <Table
                 dataSource={userPerms}

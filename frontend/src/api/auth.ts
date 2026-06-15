@@ -10,6 +10,8 @@ export interface UserInfo {
   machine_id: number | null
   phap_nhan_id: number | null
   permissions?: string[]
+  // NV cụ thể được phép xem theo từng loại quyền
+  allowed_nv_ids?: Record<string, number[]>
 }
 
 export interface TokenResponse {

@@ -214,6 +214,7 @@ _team_lead_required = require_roles("ADMIN", "TRUONG_PHONG_SALE_ADMIN")
 
 class UserPermissionGrantRequest(BaseModel):
     permission_ma_quyen: str
+    target_user_id: int  # NV cụ thể được phép xem — bắt buộc khi cấp bổ sung
 
 
 @role_router.get("/users/{user_id}/permissions", tags=["user-permissions"])
@@ -225,7 +226,11 @@ def get_user_extra_permissions(
     """Lấy danh sách quyền cá nhân (bổ sung ngoài role) của một user."""
     rows = (
         db.query(UserPermission)
-        .options(joinedload(UserPermission.permission), joinedload(UserPermission.granter))
+        .options(
+            joinedload(UserPermission.permission),
+            joinedload(UserPermission.granter),
+            joinedload(UserPermission.target_user),
+        )
         .filter(UserPermission.user_id == user_id)
         .all()
     )
@@ -234,6 +239,8 @@ def get_user_extra_permissions(
             "id": r.id,
             "ma_quyen": r.permission.ma_quyen,
             "ten_quyen": r.permission.ten_quyen,
+            "target_user_id": r.target_user_id,
+            "target_user_name": r.target_user.ho_ten if r.target_user else None,
             "granted_by_name": r.granter.ho_ten if r.granter else None,
             "created_at": r.created_at,
         }
@@ -248,9 +255,8 @@ def grant_user_permission(
     db: Session = Depends(get_db),
     current_user: User = Depends(_team_lead_required),
 ):
-    """Cấp thêm quyền cá nhân cho một user."""
+    """Cấp thêm quyền cho một NV cụ thể (target_user_id bắt buộc)."""
     role_code = current_user.role.ma_vai_tro if current_user.role else None
-    # Trưởng phòng chỉ cấp được các quyền trong _GRANTABLE_BY_TEAM_LEAD
     if role_code != "ADMIN" and body.permission_ma_quyen not in _GRANTABLE_BY_TEAM_LEAD:
         raise HTTPException(status_code=403, detail=f"Bạn không được phép cấp quyền: {body.permission_ma_quyen}")
 
@@ -262,40 +268,49 @@ def grant_user_permission(
     if not target_user:
         raise HTTPException(status_code=404, detail="Không tìm thấy user")
 
+    nv_target = db.query(User).filter(User.id == body.target_user_id).first()
+    if not nv_target:
+        raise HTTPException(status_code=404, detail="Không tìm thấy NV mục tiêu")
+
+    # Cho phép nhiều dòng cùng permission nhưng target khác nhau
     existing = db.query(UserPermission).filter(
         UserPermission.user_id == user_id,
-        UserPermission.permission_id == perm.id
+        UserPermission.permission_id == perm.id,
+        UserPermission.target_user_id == body.target_user_id,
     ).first()
     if existing:
-        return {"message": "User đã có quyền này"}
+        return {"message": f"Đã có quyền xem NV {nv_target.ho_ten} rồi"}
 
-    up = UserPermission(user_id=user_id, permission_id=perm.id, granted_by=current_user.id)
+    up = UserPermission(
+        user_id=user_id,
+        permission_id=perm.id,
+        granted_by=current_user.id,
+        target_user_id=body.target_user_id,
+    )
     db.add(up)
     db.commit()
-    return {"message": f"Đã cấp quyền {body.permission_ma_quyen} cho {target_user.ho_ten}"}
+    return {"message": f"Đã cấp quyền xem NV {nv_target.ho_ten} cho {target_user.ho_ten}"}
 
 
-@role_router.delete("/users/{user_id}/permissions/{ma_quyen}", tags=["user-permissions"])
-def revoke_user_permission(
+@role_router.delete("/users/{user_id}/permissions/by-id/{up_id}", tags=["user-permissions"])
+def revoke_user_permission_by_id(
     user_id: int,
-    ma_quyen: str,
+    up_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(_team_lead_required),
 ):
-    """Thu hồi quyền cá nhân của một user."""
-    role_code = current_user.role.ma_vai_tro if current_user.role else None
-    if role_code != "ADMIN" and ma_quyen not in _GRANTABLE_BY_TEAM_LEAD:
-        raise HTTPException(status_code=403, detail=f"Bạn không được phép thu hồi quyền: {ma_quyen}")
-
-    perm = db.query(Permission).filter(Permission.ma_quyen == ma_quyen).first()
-    if not perm:
+    """Thu hồi quyền cá nhân theo ID dòng."""
+    row = db.query(UserPermission).filter(
+        UserPermission.id == up_id,
+        UserPermission.user_id == user_id,
+    ).first()
+    if not row:
         raise HTTPException(status_code=404, detail="Không tìm thấy quyền này")
 
-    deleted = db.query(UserPermission).filter(
-        UserPermission.user_id == user_id,
-        UserPermission.permission_id == perm.id
-    ).delete()
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code != "ADMIN" and row.permission.ma_quyen not in _GRANTABLE_BY_TEAM_LEAD:
+        raise HTTPException(status_code=403, detail="Bạn không được phép thu hồi quyền này")
+
+    db.delete(row)
     db.commit()
-    if not deleted:
-        raise HTTPException(status_code=404, detail="User không có quyền này")
-    return {"message": f"Đã thu hồi quyền {ma_quyen}"}
+    return {"message": "Đã thu hồi quyền"}
