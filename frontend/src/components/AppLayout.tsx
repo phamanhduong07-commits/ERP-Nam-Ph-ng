@@ -231,7 +231,7 @@ function buildNavItems(queueCount: number): NavItem[] {
       flyoutSections: [
         {
           items: [
-            { key: '/hr/dashboard', to: '/hr/dashboard', label: <Link to="/hr/dashboard">📊 Dashboard HR</Link> },
+            { key: '/hr/dashboard', to: '/hr/dashboard', label: <Link to="/hr/dashboard">📊 Dashboard HR</Link>, permissions: ['hr.view', 'hr.manage'] },
             { key: '/hr/employees', to: '/hr/employees', label: <Link to="/hr/employees">Hồ sơ nhân viên</Link>, permissions: ['hr.view', 'hr.employees'] },
             { key: '/hr/departments', to: '/hr/departments', label: <Link to="/hr/departments">Cơ cấu tổ chức</Link>, permissions: ['hr.departments'] },
             { key: '/hr/permission-matrix', to: '/hr/permission-matrix', label: <Link to="/hr/permission-matrix">Ma trận phân quyền</Link>, permissions: ['permission.view', 'permission.manage'] },
