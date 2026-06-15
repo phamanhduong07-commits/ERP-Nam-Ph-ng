@@ -153,3 +153,19 @@ def require_permissions(*permissions: str):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Bạn thiếu quyền: {p}")
         return current_user
     return checker
+
+
+def require_any_permission(*permissions: str):
+    """Grant access if user has ANY ONE of the listed permissions (OR logic)."""
+    def checker(
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        role_code = current_user.role.ma_vai_tro if current_user.role else None
+        if role_code == "ADMIN":
+            return current_user
+        owned = _owned_permissions(current_user, db)
+        if any(p in owned for p in permissions):
+            return current_user
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Không có quyền truy cập")
+    return checker

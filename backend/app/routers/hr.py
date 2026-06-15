@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from app.database import get_db
-from app.deps import get_current_user, require_roles
+from app.deps import get_current_user, require_roles, require_permissions, require_any_permission
 from app.models.auth import User
 from app.models.hr import Department, Position, Employee, AttendanceLog, LeaveRequest, PayrollConfig, PayrollHoliday, EmployeeHistory, EmployeeDocument, LaborContract, PayrollRun, FamilyRelation, CheckInLocation, Team, HealthCheck
 from app.models.master import PhapNhan
@@ -1147,7 +1147,7 @@ def _serialize_health_check(hc: HealthCheck) -> dict:
 @router.get("/dashboard/overview")
 def hr_dashboard_overview(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU", "GIAM_DOC", "BGD")),
+    current_user: User = Depends(require_any_permission("hr.view", "hr.manage", "hr.employees", "hr.kpi")),
 ):
     """Dashboard tổng quan HR cho BGĐ — headcount + cơ cấu + sự kiện sắp tới.
 
