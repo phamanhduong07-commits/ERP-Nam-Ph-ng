@@ -393,10 +393,13 @@ def list_employees(
         q = q.filter(Employee.phan_xuong_id == phan_xuong_id)
     if phap_nhan_id:
         q = q.filter(Employee.phap_nhan_id == phap_nhan_id)
-    if bo_phan_id:
-        q = q.filter(Employee.bo_phan_id == bo_phan_id)
-
     is_hr_admin = _role_code(current_user) in ("ADMIN", "NHAN_SU")
+
+    # Scoped manager: auto-restrict to own department, ignore caller-supplied filter
+    if not is_hr_admin and current_user.bo_phan_id:
+        q = q.filter(Employee.bo_phan_id == current_user.bo_phan_id)
+    elif bo_phan_id:
+        q = q.filter(Employee.bo_phan_id == bo_phan_id)
 
     employees = q.all()
     result = []
