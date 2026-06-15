@@ -24,7 +24,7 @@ import {
   PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { hrApi } from '../../api/hr'
 import { useAuthStore } from '../../store/auth'
 import dayjs from 'dayjs'
@@ -103,20 +103,18 @@ function DonutCenter({ label, value }: { label: string; value: number | string }
 }
 
 export default function HRDashboardPage() {
-  const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const perms: string[] = user?.permissions ?? []
   const canSeeDashboard = user?.role === 'ADMIN' || perms.some(p => ['hr.view', 'hr.manage'].includes(p))
-  if (!canSeeDashboard) {
-    navigate('/hr/employees', { replace: true })
-    return null
-  }
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['hr-dashboard-overview'],
     queryFn: () => hrApi.hrDashboardOverview().then(r => r.data),
     refetchInterval: 60_000,
+    enabled: canSeeDashboard,
   })
+
+  if (!canSeeDashboard) return <Navigate to="/hr/employees" replace />
 
   if (isLoading) {
     return <div style={{ padding: 16 }}><Skeleton active paragraph={{ rows: 10 }} /></div>
