@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber,
+  AutoComplete, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber,
   message, Modal, Row, Select, Space, Table, Tabs, Tag, Typography,
 } from 'antd'
 import {
@@ -89,6 +89,16 @@ export default function KheUocChoVayPage() {
       params: { trang_thai: filterTrangThai, phap_nhan_id: filterPhapNhan },
     }).then(r => r.data),
   })
+
+  const { data: nganHangList } = useQuery({
+    queryKey: ['ngan-hang-active'],
+    queryFn: () => client.get('/ngan-hang', { params: { trang_thai: true } }).then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+  const nganHangOptions = (nganHangList ?? []).map((b: { ten_day_du: string }) => ({
+    value: b.ten_day_du,
+    label: b.ten_day_du,
+  }))
 
   const { data: detail, refetch: refetchDetail } = useQuery({
     queryKey: ['khe-uoc-cho-vay-detail', selected?.id],
@@ -409,7 +419,14 @@ export default function KheUocChoVayPage() {
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item name="to_chuc_di_vay" label="Bên vay" rules={[{ required: true }]}>
-                <Input placeholder="Tên cá nhân / tổ chức vay" />
+                <AutoComplete
+                  options={nganHangOptions}
+                  placeholder="Tìm hoặc nhập tên cá nhân / tổ chức"
+                  filterOption={(input, opt) =>
+                    (opt?.value as string ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  allowClear
+                />
               </Form.Item>
             </Col>
             <Col span={12}>

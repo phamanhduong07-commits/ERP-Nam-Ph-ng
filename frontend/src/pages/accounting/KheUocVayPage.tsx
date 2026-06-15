@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber,
+  AutoComplete, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber,
   message, Modal, Row, Select, Space, Table, Tabs, Tag, Typography,
 } from 'antd'
 import {
-  PlusOutlined, CalendarOutlined, CheckOutlined, StopOutlined,
+  PlusOutlined, CalendarOutlined, CheckOutlined, StopOutlined, DownloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import client from '../../api/client'
 import PageLayout from '../../components/PageLayout'
+import ImportExcelButton from '../../components/ImportExcelButton'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import { fmtVND } from '../../utils/exportUtils'
 
@@ -89,6 +90,16 @@ export default function KheUocVayPage() {
       params: { trang_thai: filterTrangThai, phap_nhan_id: filterPhapNhan },
     }).then(r => r.data),
   })
+
+  const { data: nganHangList } = useQuery({
+    queryKey: ['ngan-hang-active'],
+    queryFn: () => client.get('/ngan-hang', { params: { trang_thai: true } }).then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  })
+  const nganHangOptions = (nganHangList ?? []).map((b: { ten_day_du: string }) => ({
+    value: b.ten_day_du,
+    label: b.ten_day_du,
+  }))
 
   const { data: detail, refetch: refetchDetail } = useQuery({
     queryKey: ['khe-uoc-vay-detail', selected?.id],
@@ -243,9 +254,28 @@ export default function KheUocVayPage() {
     <PageLayout
       title="Khế ước đi vay"
       actions={
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          Tạo khế ước
-        </Button>
+        <Space>
+          <ImportExcelButton
+            endpoint="/accounting/khe-uoc-vay"
+            templateFilename="mau_import_khe_uoc_di_vay.xlsx"
+            buttonText="Import Excel"
+            onImported={() => qc.invalidateQueries({ queryKey: ['khe-uoc-vay'] })}
+          />
+          <Button
+            icon={<DownloadOutlined />}
+            onClick={() => {
+              const params = new URLSearchParams()
+              if (filterTrangThai) params.set('trang_thai', filterTrangThai)
+              if (filterPhapNhan) params.set('phap_nhan_id', String(filterPhapNhan))
+              window.open(`/api/accounting/khe-uoc-vay/export?${params}`, '_blank')
+            }}
+          >
+            Export Excel
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+            Tạo khế ước
+          </Button>
+        </Space>
       }
     >
       {/* Filters */}
@@ -414,7 +444,14 @@ export default function KheUocVayPage() {
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item name="to_chuc_cho_vay" label="Tổ chức cho vay" rules={[{ required: true }]}>
-                <Input placeholder="Tên ngân hàng / tổ chức" />
+                <AutoComplete
+                  options={nganHangOptions}
+                  placeholder="Tìm hoặc nhập tên ngân hàng"
+                  filterOption={(input, opt) =>
+                    (opt?.value as string ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  allowClear
+                />
               </Form.Item>
             </Col>
             <Col span={12}>

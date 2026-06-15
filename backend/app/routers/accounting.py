@@ -2414,6 +2414,168 @@ def create_khe_uoc_vay(
     return KheUocVayResponse.model_validate(obj)
 
 
+# ── Khế ước đi vay: Import / Export ──────────────────────────────────────────
+
+_KUV_IMPORT_FIELDS = [
+    ImportField("so_khe_uoc", "Số khế ước", required=False, parser=parse_text,
+                help_text="Để trống = tạo mới. Điền vào = cập nhật nếu trùng số."),
+    ImportField("ngay_ky", "Ngày ký", required=True, parser=parse_date,
+                help_text="dd/mm/yyyy"),
+    ImportField("ngay_hieu_luc", "Ngày hiệu lực", required=True, parser=parse_date,
+                help_text="dd/mm/yyyy"),
+    ImportField("ngay_ket_thuc", "Ngày kết thúc", required=True, parser=parse_date,
+                help_text="dd/mm/yyyy"),
+    ImportField("to_chuc_cho_vay", "Tổ chức cho vay", required=True, parser=parse_text,
+                help_text="Tên ngân hàng / tổ chức"),
+    ImportField("so_tien_vay", "Số tiền vay", required=True, parser=parse_decimal,
+                help_text="Đơn vị: đồng"),
+    ImportField("lai_suat", "Lãi suất (%/năm)", required=True, parser=parse_decimal,
+                help_text="VD: 8.5 = 8.5%/năm"),
+    ImportField("ky_tinh_lai", "Kỳ tính lãi", required=False, parser=parse_text,
+                default="thang", help_text="thang | quy | nam"),
+    ImportField("phuong_thuc_tra", "Phương thức trả", required=False, parser=parse_text,
+                default="gop_deu", help_text="goc_deu | gop_deu | cuoi_ky"),
+    ImportField("tai_khoan_nhan", "TK nhận tiền", required=False, parser=parse_text,
+                help_text="VD: 112.01"),
+    ImportField("tai_san_the_chap", "Tài sản thế chấp", required=False, parser=parse_text),
+    ImportField("ghi_chu", "Mục đích vay / Ghi chú", required=False, parser=parse_text),
+]
+
+
+@router.get("/khe-uoc-vay/import-template")
+def download_kuv_import_template(_: User = Depends(get_current_user)):
+    return build_template_response("mau_import_khe_uoc_di_vay.xlsx", _KUV_IMPORT_FIELDS)
+
+
+@router.post("/khe-uoc-vay/import")
+async def import_khe_uoc_vay(
+    file: UploadFile = File(...),
+    commit: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    _VALID_KYL = {"thang", "quy", "nam"}
+    _VALID_PT = {"goc_deu", "gop_deu", "cuoi_ky"}
+
+    def _resolver(db: Session, values: dict):
+        if values.get("ky_tinh_lai") not in _VALID_KYL:
+            values["ky_tinh_lai"] = "thang"
+        if values.get("phuong_thuc_tra") not in _VALID_PT:
+            values["phuong_thuc_tra"] = "gop_deu"
+        values.setdefault("trang_thai", "hieu_luc")
+        values["created_by"] = current_user.id
+        return values, []
+
+    return await import_excel(
+        db=db,
+        file=file,
+        model=KheUocVay,
+        fields=_KUV_IMPORT_FIELDS,
+        key_field="so_khe_uoc",
+        commit=commit,
+        resolver=_resolver,
+        user=current_user,
+        loai_du_lieu="khe_uoc_vay",
+    )
+
+
+@router.get("/khe-uoc-vay/export")
+def export_khe_uoc_vay(
+    phap_nhan_id: int | None = Query(None),
+    trang_thai: str | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from datetime import date as _date
+    q = db.query(KheUocVay)
+    if phap_nhan_id:
+        q = q.filter(KheUocVay.phap_nhan_id == phap_nhan_id)
+    if trang_thai:
+        q = q.filter(KheUocVay.trang_thai == trang_thai)
+    items = q.order_by(KheUocVay.ngay_ky.desc()).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Khe uoc di vay"
+
+    hdr_fill = PatternFill("solid", fgColor="1565C0")
+    hdr_font = Font(bold=True, color="FFFFFF")
+
+    HEADERS = [
+        "STT", "Số khế ước", "Ngày ký", "Ngày hiệu lực", "Ngày kết thúc",
+        "Thời hạn (tháng)", "Tổ chức cho vay", "Số tiền vay (đ)",
+        "Lãi suất (%/năm)", "Kỳ tính lãi", "Phương thức trả",
+        "Nợ gốc đã trả", "Dư nợ hiện tại", "Lãi đã trả", "Lãi còn phải trả",
+        "TK nhận tiền", "Tài sản thế chấp",
+        "Ngày trả tiếp theo", "Pháp nhân", "Trạng thái", "Mục đích vay / Ghi chú",
+    ]
+
+    for col, h in enumerate(HEADERS, 1):
+        c = ws.cell(row=1, column=col, value=h)
+        c.fill = hdr_fill
+        c.font = hdr_font
+        c.alignment = Alignment(horizontal="center", wrap_text=True)
+
+    _TRANG_THAI_LABEL = {"hieu_luc": "Hiệu lực", "da_tra": "Đã trả", "huy": "Hủy"}
+    _KY_LABEL = {"thang": "Hàng tháng", "quy": "Hàng quý", "nam": "Hàng năm"}
+    _PT_LABEL = {"gop_deu": "Góp đều", "goc_deu": "Gốc đều", "cuoi_ky": "Cuối kỳ"}
+
+    for stt, obj in enumerate(items, 1):
+        lich = db.query(LichTraNo).filter(
+            LichTraNo.khe_uoc_id == obj.id,
+            LichTraNo.loai_khe_uoc == "di_vay",
+        ).order_by(LichTraNo.ngay_den_han).all()
+
+        goc_da_tra = sum(Decimal(str(r.so_tien_goc)) for r in lich if r.trang_thai == "da_tra")
+        lai_da_tra = sum(Decimal(str(r.so_tien_lai)) for r in lich if r.trang_thai == "da_tra")
+        lai_con = sum(Decimal(str(r.so_tien_lai)) for r in lich if r.trang_thai in ("chua_tra", "qua_han"))
+        du_no = Decimal(str(obj.so_tien_vay)) - goc_da_tra
+        next_ky = next((r for r in lich if r.trang_thai in ("chua_tra", "qua_han")), None)
+
+        thoi_han = (obj.ngay_ket_thuc.year - obj.ngay_hieu_luc.year) * 12 + (
+            obj.ngay_ket_thuc.month - obj.ngay_hieu_luc.month
+        )
+
+        pn = db.get(PhapNhan, obj.phap_nhan_id) if obj.phap_nhan_id else None
+
+        ws.append([
+            stt,
+            obj.so_khe_uoc,
+            obj.ngay_ky.strftime("%d/%m/%Y") if obj.ngay_ky else "",
+            obj.ngay_hieu_luc.strftime("%d/%m/%Y") if obj.ngay_hieu_luc else "",
+            obj.ngay_ket_thuc.strftime("%d/%m/%Y") if obj.ngay_ket_thuc else "",
+            thoi_han,
+            obj.to_chuc_cho_vay,
+            float(obj.so_tien_vay),
+            float(obj.lai_suat),
+            _KY_LABEL.get(obj.ky_tinh_lai, obj.ky_tinh_lai),
+            _PT_LABEL.get(obj.phuong_thuc_tra, obj.phuong_thuc_tra),
+            float(goc_da_tra),
+            float(du_no),
+            float(lai_da_tra),
+            float(lai_con),
+            obj.tai_khoan_nhan or "",
+            obj.tai_san_the_chap or "",
+            next_ky.ngay_den_han.strftime("%d/%m/%Y") if next_ky else "",
+            pn.ten_phap_nhan if pn else "",
+            _TRANG_THAI_LABEL.get(obj.trang_thai, obj.trang_thai),
+            obj.ghi_chu or "",
+        ])
+
+    for col in ws.columns:
+        max_w = max(len(str(c.value or "")) for c in col)
+        ws.column_dimensions[col[0].column_letter].width = min(max(max_w + 2, 12), 38)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="khe_uoc_di_vay.xlsx"'},
+    )
+
+
 @router.get("/khe-uoc-vay/{id}", response_model=KheUocVayResponse)
 def get_khe_uoc_vay(
     id: int,

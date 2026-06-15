@@ -1162,3 +1162,9 @@
 {"timestamp":"2026-06-15T05:29:58-07:00","rating":5,"session_id":"a967434d-8241-4c24-ae6a-8355b7884536","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
 {"timestamp":"2026-06-15T05:51:01-07:00","rating":5,"session_id":"42b40413-3d64-43ed-92cf-b328f575f03e","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
 {"timestamp":"2026-06-15T06:08:01-07:00","rating":5,"session_id":"a967434d-8241-4c24-ae6a-8355b7884536","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-15T06:24:33-07:00","rating":5,"session_id":"a967434d-8241-4c24-ae6a-8355b7884536","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-15T06:28:28-07:00","rating":5,"session_id":"a967434d-8241-4c24-ae6a-8355b7884536","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-15T06:30:37-07:00","rating":5,"session_id":"a967434d-8241-4c24-ae6a-8355b7884536","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-15T06:35:12-07:00","rating":3,"session_id":"a967434d-8241-4c24-ae6a-8355b7884536","source":"explicit","comment":"TRANG MỚI KO CÓ FLYOUT"}
+{"timestamp":"2026-06-15T06:40:23-07:00","rating":5,"session_id":"a967434d-8241-4c24-ae6a-8355b7884536","source":"implicit","sentiment_summary":"Inference failed: Timeout after 15000ms","confidence":0.3}
+{"timestamp":"2026-06-15T06:47:37-07:00","rating":5,"session_id":"a967434d-8241-4c24-ae6a-8355b7884536","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
