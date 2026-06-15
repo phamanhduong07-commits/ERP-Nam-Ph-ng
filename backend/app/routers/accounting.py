@@ -2417,19 +2417,24 @@ def create_khe_uoc_vay(
 # ── Khế ước đi vay: Import / Export ──────────────────────────────────────────
 
 _KUV_IMPORT_FIELDS = [
-    ImportField("so_khe_uoc", "Số khế ước", required=False, parser=parse_text,
+    ImportField("so_khe_uoc", "Số hợp đồng/Số khế ước", required=False, parser=parse_text,
+                aliases=("Số khế ước",),
                 help_text="Để trống = tạo mới. Điền vào = cập nhật nếu trùng số."),
     ImportField("ngay_ky", "Ngày ký", required=True, parser=parse_date,
                 help_text="dd/mm/yyyy"),
-    ImportField("ngay_hieu_luc", "Ngày hiệu lực", required=True, parser=parse_date,
-                help_text="dd/mm/yyyy"),
+    ImportField("ngay_hieu_luc", "Ngày giải ngân", required=True, parser=parse_date,
+                aliases=("Ngày hiệu lực",),
+                help_text="dd/mm/yyyy — ngày tiền được giải ngân vào tài khoản"),
     ImportField("ngay_ket_thuc", "Ngày kết thúc", required=True, parser=parse_date,
-                help_text="dd/mm/yyyy"),
-    ImportField("to_chuc_cho_vay", "Tổ chức cho vay", required=True, parser=parse_text,
-                help_text="Tên ngân hàng / tổ chức"),
-    ImportField("so_tien_vay", "Số tiền vay", required=True, parser=parse_decimal,
+                help_text="dd/mm/yyyy — ngày đáo hạn cuối cùng"),
+    ImportField("to_chuc_cho_vay", "Đối tượng cho vay", required=True, parser=parse_text,
+                aliases=("Tổ chức cho vay",),
+                help_text="Tên ngân hàng / tổ chức tín dụng"),
+    ImportField("so_tien_vay", "Giá trị khoản vay", required=True, parser=parse_decimal,
+                aliases=("Hạn mức tín dụng", "Số tiền vay"),
                 help_text="Đơn vị: đồng"),
-    ImportField("lai_suat", "Lãi suất (%/năm)", required=True, parser=parse_decimal,
+    ImportField("lai_suat", "Lãi suất hiện tại", required=True, parser=parse_decimal,
+                aliases=("Lãi suất (%/năm)",),
                 help_text="VD: 8.5 = 8.5%/năm"),
     ImportField("ky_tinh_lai", "Kỳ tính lãi", required=False, parser=parse_text,
                 default="thang", help_text="thang | quy | nam"),
@@ -2438,7 +2443,9 @@ _KUV_IMPORT_FIELDS = [
     ImportField("tai_khoan_nhan", "TK nhận tiền", required=False, parser=parse_text,
                 help_text="VD: 112.01"),
     ImportField("tai_san_the_chap", "Tài sản thế chấp", required=False, parser=parse_text),
-    ImportField("ghi_chu", "Mục đích vay / Ghi chú", required=False, parser=parse_text),
+    ImportField("ghi_chu", "Mục đích vay", required=False, parser=parse_text,
+                aliases=("Mục đích vay / Ghi chú",),
+                help_text="Mục đích sử dụng vốn vay"),
 ]
 
 
@@ -2502,12 +2509,26 @@ def export_khe_uoc_vay(
     hdr_font = Font(bold=True, color="FFFFFF")
 
     HEADERS = [
-        "STT", "Số khế ước", "Ngày ký", "Ngày hiệu lực", "Ngày kết thúc",
-        "Thời hạn (tháng)", "Tổ chức cho vay", "Số tiền vay (đ)",
-        "Lãi suất (%/năm)", "Kỳ tính lãi", "Phương thức trả",
-        "Nợ gốc đã trả", "Dư nợ hiện tại", "Lãi đã trả", "Lãi còn phải trả",
-        "TK nhận tiền", "Tài sản thế chấp",
-        "Ngày trả tiếp theo", "Pháp nhân", "Trạng thái", "Mục đích vay / Ghi chú",
+        "STT",
+        "Số hợp đồng/Số khế ước",
+        "Ngày giải ngân",
+        "Ngày ký",
+        "Thời hạn vay",
+        "Đối tượng cho vay",
+        "Loại tiền",
+        "Hạn mức tín dụng",
+        "Giá trị khoản vay",
+        "Giá trị đã giải ngân",
+        "Nợ gốc đã trả",
+        "Dư nợ hiện tại",
+        "Lãi phải trả",
+        "Lãi đã trả",
+        "Lãi suất hiện tại",
+        "Mục đích vay",
+        "Trạng thái",
+        "Ngày trả gốc tiếp theo",
+        "Ngày trả lãi tiếp theo",
+        "Thuộc hợp đồng tín dụng",
     ]
 
     for col, h in enumerate(HEADERS, 1):
@@ -2517,10 +2538,9 @@ def export_khe_uoc_vay(
         c.alignment = Alignment(horizontal="center", wrap_text=True)
 
     _TRANG_THAI_LABEL = {"hieu_luc": "Hiệu lực", "da_tra": "Đã trả", "huy": "Hủy"}
-    _KY_LABEL = {"thang": "Hàng tháng", "quy": "Hàng quý", "nam": "Hàng năm"}
-    _PT_LABEL = {"gop_deu": "Góp đều", "goc_deu": "Gốc đều", "cuoi_ky": "Cuối kỳ"}
 
     for stt, obj in enumerate(items, 1):
+        _pending = ("chua_tra", "qua_han")
         lich = db.query(LichTraNo).filter(
             LichTraNo.khe_uoc_id == obj.id,
             LichTraNo.loai_khe_uoc == "di_vay",
@@ -2528,12 +2548,16 @@ def export_khe_uoc_vay(
 
         goc_da_tra = sum(Decimal(str(r.so_tien_goc)) for r in lich if r.trang_thai == "da_tra")
         lai_da_tra = sum(Decimal(str(r.so_tien_lai)) for r in lich if r.trang_thai == "da_tra")
-        lai_con = sum(Decimal(str(r.so_tien_lai)) for r in lich if r.trang_thai in ("chua_tra", "qua_han"))
-        du_no = Decimal(str(obj.so_tien_vay)) - goc_da_tra
-        next_ky = next((r for r in lich if r.trang_thai in ("chua_tra", "qua_han")), None)
+        lai_con    = sum(Decimal(str(r.so_tien_lai)) for r in lich if r.trang_thai in _pending)
+        du_no      = Decimal(str(obj.so_tien_vay)) - goc_da_tra
 
-        thoi_han = (obj.ngay_ket_thuc.year - obj.ngay_hieu_luc.year) * 12 + (
-            obj.ngay_ket_thuc.month - obj.ngay_hieu_luc.month
+        # Ngày trả gốc và lãi tiếp theo (có thể khác nhau với cuoi_ky)
+        next_goc = next((r for r in lich if r.trang_thai in _pending and Decimal(str(r.so_tien_goc)) > 0), None)
+        next_lai = next((r for r in lich if r.trang_thai in _pending and Decimal(str(r.so_tien_lai)) > 0), None)
+
+        thoi_han = (
+            (obj.ngay_ket_thuc.year - obj.ngay_hieu_luc.year) * 12
+            + (obj.ngay_ket_thuc.month - obj.ngay_hieu_luc.month)
         )
 
         pn = db.get(PhapNhan, obj.phap_nhan_id) if obj.phap_nhan_id else None
@@ -2541,25 +2565,24 @@ def export_khe_uoc_vay(
         ws.append([
             stt,
             obj.so_khe_uoc,
-            obj.ngay_ky.strftime("%d/%m/%Y") if obj.ngay_ky else "",
             obj.ngay_hieu_luc.strftime("%d/%m/%Y") if obj.ngay_hieu_luc else "",
-            obj.ngay_ket_thuc.strftime("%d/%m/%Y") if obj.ngay_ket_thuc else "",
-            thoi_han,
+            obj.ngay_ky.strftime("%d/%m/%Y") if obj.ngay_ky else "",
+            f"{thoi_han} tháng",
             obj.to_chuc_cho_vay,
+            "VNĐ",
             float(obj.so_tien_vay),
-            float(obj.lai_suat),
-            _KY_LABEL.get(obj.ky_tinh_lai, obj.ky_tinh_lai),
-            _PT_LABEL.get(obj.phuong_thuc_tra, obj.phuong_thuc_tra),
+            float(obj.so_tien_vay),
+            float(obj.so_tien_vay),
             float(goc_da_tra),
             float(du_no),
-            float(lai_da_tra),
             float(lai_con),
-            obj.tai_khoan_nhan or "",
-            obj.tai_san_the_chap or "",
-            next_ky.ngay_den_han.strftime("%d/%m/%Y") if next_ky else "",
-            pn.ten_phap_nhan if pn else "",
-            _TRANG_THAI_LABEL.get(obj.trang_thai, obj.trang_thai),
+            float(lai_da_tra),
+            float(obj.lai_suat),
             obj.ghi_chu or "",
+            _TRANG_THAI_LABEL.get(obj.trang_thai, obj.trang_thai),
+            next_goc.ngay_den_han.strftime("%d/%m/%Y") if next_goc else "",
+            next_lai.ngay_den_han.strftime("%d/%m/%Y") if next_lai else "",
+            pn.ten_phap_nhan if pn else "",
         ])
 
     for col in ws.columns:
