@@ -139,6 +139,7 @@ class CashReceipt(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="cho_duyet", index=True)
     # cho_duyet | da_duyet | huy
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_duyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -146,6 +147,8 @@ class CashReceipt(Base):
 
     customer = relationship("Customer")
     invoice: Mapped["SalesInvoice | None"] = relationship("SalesInvoice", back_populates="receipts")
+    phap_nhan = relationship("PhapNhan")
+    phan_xuong = relationship("PhanXuong")
     creator = relationship("User", foreign_keys=[created_by])
     nguoi_duyet = relationship("User", foreign_keys=[nguoi_duyet_id])
 

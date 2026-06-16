@@ -19,7 +19,7 @@ import {
   receiptApi, TRANG_THAI_PHIEU_THU, HINH_THUC_TT, CashReceipt,
   BatchReceiptResponse,
 } from '../../api/accounting'
-import { usePhapNhan } from '../../hooks/useMasterData'
+import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 import EmptyState from '../../components/EmptyState'
 import PageLayout from '../../components/PageLayout'
 
@@ -30,10 +30,12 @@ export default function CashReceiptListPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { phapNhanList } = usePhapNhan()
+  const { phanXuongList } = usePhanXuong()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>()
   const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
+  const [filterPhanXuong, setFilterPhanXuong] = useState<number | undefined>()
   const [page, setPage] = useState(1)
 
   // Excel import state
@@ -41,12 +43,13 @@ export default function CashReceiptListPage() {
   const [importFile, setImportFile] = useState<UploadFile | null>(null)
   const [importNgay, setImportNgay] = useState<string>(dayjs().format('YYYY-MM-DD'))
   const [importPhapNhan, setImportPhapNhan] = useState<number | undefined>()
+  const [importPhanXuong, setImportPhanXuong] = useState<number | undefined>()
   const [importResult, setImportResult] = useState<BatchReceiptResponse | null>(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['receipts', tuNgay, denNgay, filterTrangThai, filterPhapNhan, page],
+    queryKey: ['receipts', tuNgay, denNgay, filterTrangThai, filterPhapNhan, filterPhanXuong, page],
     queryFn: () =>
-      receiptApi.list({ tu_ngay: tuNgay, den_ngay: denNgay, trang_thai: filterTrangThai, phap_nhan_id: filterPhapNhan, page, page_size: 20 }),
+      receiptApi.list({ tu_ngay: tuNgay, den_ngay: denNgay, trang_thai: filterTrangThai, phap_nhan_id: filterPhapNhan, phan_xuong_id: filterPhanXuong, page, page_size: 20 }),
   })
 
   const receipts: CashReceipt[] = data?.items ?? data ?? []
@@ -54,8 +57,8 @@ export default function CashReceiptListPage() {
   const tongSoTien = receipts.reduce((s: number, r: CashReceipt) => s + (r.so_tien ?? 0), 0)
 
   const importMut = useMutation({
-    mutationFn: ({ file, ngay, phapNhan }: { file: File; ngay: string; phapNhan?: number }) =>
-      receiptApi.importExcel(file, { ngay_phieu: ngay, phap_nhan_id: phapNhan }),
+    mutationFn: ({ file, ngay, phapNhan, phanXuong }: { file: File; ngay: string; phapNhan?: number; phanXuong?: number }) =>
+      receiptApi.importExcel(file, { ngay_phieu: ngay, phap_nhan_id: phapNhan, phan_xuong_id: phanXuong }),
     onSuccess: (result) => {
       setImportResult(result)
       qc.invalidateQueries({ queryKey: ['receipts'] })
@@ -69,13 +72,17 @@ export default function CashReceiptListPage() {
   })
 
   const handleExcel = () => {
-    const rows = receipts.map((r: CashReceipt) => ({
-      'Số phiếu': r.so_phieu,
-      'Ngày phiếu': r.ngay_phieu,
-      'Khách hàng': r.ten_don_vi ?? r.customer_id,
-      'Hình thức TT': HINH_THUC_TT[r.hinh_thuc_tt] ?? r.hinh_thuc_tt,
+    const rows = receipts.map((r: CashReceipt, i: number) => ({
+      'STT': i + 1,
+      'Ngày hạch toán': r.ngay_phieu,
+      'Ngày chứng từ': r.ngay_phieu,
+      'Số chứng từ': r.so_phieu,
+      'Diễn giải': r.dien_giai ?? '',
       'Số tiền': r.so_tien,
-      'Trạng thái': TRANG_THAI_PHIEU_THU[r.trang_thai]?.label ?? r.trang_thai,
+      'Đối tượng': r.ten_don_vi ?? `KH#${r.customer_id}`,
+      'Số tài khoản NH': r.so_tai_khoan ?? '',
+      'Lý do thu': r.dien_giai ?? '',
+      'Loại chứng từ': HINH_THUC_TT[r.hinh_thuc_tt] ?? r.hinh_thuc_tt,
     }))
     exportToExcel(`phieu-thu-${dayjs().format('YYYYMMDD')}`, [{
       name: 'Phieu thu',
@@ -84,13 +91,27 @@ export default function CashReceiptListPage() {
     }])
   }
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const blob = await receiptApi.downloadTemplate()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'mau_import_phieu_thu.xlsx'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      message.error('Không tải được mẫu Excel')
+    }
+  }
+
   const handleImportSubmit = () => {
     if (!importFile?.originFileObj) {
       message.error('Chọn file Excel trước')
       return
     }
     setImportResult(null)
-    importMut.mutate({ file: importFile.originFileObj, ngay: importNgay, phapNhan: importPhapNhan })
+    importMut.mutate({ file: importFile.originFileObj, ngay: importNgay, phapNhan: importPhapNhan, phanXuong: importPhanXuong })
   }
 
   useHotkey('ctrl+n', () => navigate('/accounting/receipts/new'), 'Tạo phiếu thu mới')
@@ -128,47 +149,72 @@ export default function CashReceiptListPage() {
 
   const columns: ColumnsType<CashReceipt> = [
     {
-      title: 'Số phiếu',
-      dataIndex: 'so_phieu',
-      width: 160,
-      render: (v, r) => <a onClick={() => navigate(`/accounting/receipts/${r.id}`)}>{v}</a>,
+      title: 'STT',
+      width: 52,
+      align: 'center' as const,
+      render: (_v, _r, index) => (page - 1) * 20 + index + 1,
     },
     {
-      title: 'Ngày phiếu',
+      title: 'Ngày hạch toán',
       dataIndex: 'ngay_phieu',
-      width: 110,
+      width: 130,
       render: v => dayjs(v).format('DD/MM/YYYY'),
     },
     {
-      title: 'Khách hàng',
+      title: 'Số chứng từ',
+      dataIndex: 'so_phieu',
+      width: 155,
+      render: (v, r) => <a onClick={() => navigate(`/accounting/receipts/${r.id}`)}>{v}</a>,
+    },
+    {
+      title: 'Đối tượng',
       dataIndex: 'ten_don_vi',
       ellipsis: true,
       render: (v, r) => v ?? `KH#${r.customer_id}`,
     },
     {
-      title: 'HĐ liên kết',
-      dataIndex: 'sales_invoice_id',
-      width: 140,
-      render: (v: number | null) =>
-        v ? <a onClick={() => navigate(`/billing/invoices/${v}`)}>HĐ#{v}</a> : '—',
-    },
-    {
-      title: 'Hình thức TT',
-      dataIndex: 'hinh_thuc_tt',
-      width: 130,
-      render: v => HINH_THUC_TT[v] ?? v,
+      title: 'Diễn giải',
+      dataIndex: 'dien_giai',
+      ellipsis: true,
+      render: v => v ?? '—',
     },
     {
       title: 'Số tiền',
       dataIndex: 'so_tien',
-      align: 'right',
-      width: 150,
+      align: 'right' as const,
+      width: 140,
       render: v => fmtVND(v),
+    },
+    {
+      title: 'Pháp nhân',
+      dataIndex: 'ten_phap_nhan',
+      width: 130,
+      ellipsis: true,
+      render: v => v ?? '—',
+    },
+    {
+      title: 'Xưởng',
+      dataIndex: 'ten_phan_xuong',
+      width: 120,
+      ellipsis: true,
+      render: v => v ?? '—',
+    },
+    {
+      title: 'Số TK NH',
+      dataIndex: 'so_tai_khoan',
+      width: 130,
+      render: v => v ?? '—',
+    },
+    {
+      title: 'Loại chứng từ',
+      dataIndex: 'hinh_thuc_tt',
+      width: 120,
+      render: v => HINH_THUC_TT[v] ?? v,
     },
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
-      width: 120,
+      width: 110,
       render: v => {
         const s = TRANG_THAI_PHIEU_THU[v]
         return <Tag color={s?.color}>{s?.label ?? v}</Tag>
@@ -217,6 +263,13 @@ export default function CashReceiptListPage() {
               options={phapNhanList.map(p => ({ value: p.id, label: p.ten_phap_nhan }))}
             />
           </Col>
+          <Col>
+            <Select
+              style={{ width: 160 }} allowClear placeholder="Xưởng"
+              onChange={v => { setFilterPhanXuong(v); setPage(1) }}
+              options={phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))}
+            />
+          </Col>
         </Row>
       </Card>
 
@@ -255,15 +308,17 @@ export default function CashReceiptListPage() {
           <Alert
             type="info"
             showIcon
-            message="Yêu cầu cột Excel"
+            message="Cột Excel theo mẫu chuẩn"
             description={
-              <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
-                <li><b>ma_kh</b> hoặc <b>customer_id</b> — mã/ID khách hàng (bắt buộc)</li>
-                <li><b>so_tien</b> — số tiền thu (bắt buộc)</li>
-                <li><b>sales_invoice_id</b> hoặc <b>so_hoa_don</b> — hóa đơn (tùy chọn)</li>
-                <li><b>hinh_thuc_tt</b> — TM/CK (mặc định: CK)</li>
-                <li><b>dien_giai</b>, <b>so_tham_chieu</b> (tùy chọn)</li>
-              </ul>
+              <div>
+                <div style={{ marginBottom: 6 }}>
+                  Bắt buộc: <b>Doi tuong</b> (mã KH), <b>So tien</b>.
+                  Tùy chọn: Ngay hach toan, Dien giai, So tai khoan NH, Ly do thu, Loai chung tu (TM/CK).
+                </div>
+                <Button size="small" icon={<FileExcelOutlined />} onClick={handleDownloadTemplate}>
+                  Tải mẫu Excel
+                </Button>
+              </div>
             }
           />
         </div>
@@ -291,6 +346,14 @@ export default function CashReceiptListPage() {
               </Form.Item>
             </Col>
           </Row>
+          <Form.Item label="Xưởng" rules={[{ required: true, message: 'Chọn xưởng' }]}>
+            <Select
+              allowClear
+              placeholder="Chọn xưởng"
+              onChange={v => setImportPhanXuong(v)}
+              options={phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))}
+            />
+          </Form.Item>
 
           <Form.Item label="File Excel (.xlsx)">
             <Upload

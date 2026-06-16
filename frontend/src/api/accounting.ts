@@ -54,6 +54,9 @@ export interface CashReceipt {
   tk_co: string
   trang_thai: string
   phap_nhan_id: number | null
+  ten_phap_nhan?: string | null
+  phan_xuong_id?: number | null
+  ten_phan_xuong?: string | null
   nguoi_duyet_id: number | null
   ngay_duyet: string | null
   created_at: string
@@ -152,7 +155,9 @@ export interface CashPayment {
   tk_co: string
   trang_thai: string
   phap_nhan_id: number | null
+  ten_phap_nhan?: string | null
   phan_xuong_id?: number | null
+  ten_phan_xuong?: string | null
   nguoi_duyet_id: number | null
   ngay_duyet: string | null
   created_at: string
@@ -300,7 +305,7 @@ export const receiptApi = {
   batch: (data: BatchReceiptCreate): Promise<BatchReceiptResponse> =>
     client.post('/accounting/receipts/batch', data).then(r => r.data),
 
-  importExcel: (file: File, params?: { ngay_phieu?: string; phap_nhan_id?: number }) => {
+  importExcel: (file: File, params?: { ngay_phieu?: string; phap_nhan_id?: number; phan_xuong_id?: number }) => {
     const fd = new FormData()
     fd.append('file', file)
     return client.post<BatchReceiptResponse>('/accounting/receipts/import-excel', fd, {
@@ -308,6 +313,9 @@ export const receiptApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
   },
+
+  downloadTemplate: () =>
+    client.get('/accounting/receipts/import-template', { responseType: 'blob' }).then(r => r.data),
 }
 
 // ──────────────────────────────────────────────────────
@@ -356,7 +364,7 @@ export const paymentApi = {
   cancel: (id: number): Promise<CashPayment> =>
     client.patch(`/accounting/payments/${id}/cancel`).then(r => r.data),
 
-  importExcel: (file: File, params?: { ngay_phieu?: string; phap_nhan_id?: number }) => {
+  importExcel: (file: File, params?: { ngay_phieu?: string; phap_nhan_id?: number; phan_xuong_id?: number }) => {
     const fd = new FormData()
     fd.append('file', file)
     return client.post<BatchReceiptResponse>('/accounting/payments/import-excel', fd, {
@@ -364,6 +372,9 @@ export const paymentApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
+
+  downloadTemplate: () =>
+    client.get('/accounting/payments/import-template', { responseType: 'blob' }).then(r => r.data),
 }
 
 // ──────────────────────────────────────────────────────

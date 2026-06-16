@@ -454,6 +454,7 @@ def list_receipts(
     tu_ngay: date | None = Query(None),
     den_ngay: date | None = Query(None),
     phap_nhan_id: int | None = Query(None),
+    phan_xuong_id: int | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -462,7 +463,7 @@ def list_receipts(
     return AccountingService(db).list_receipts(
         customer_id=customer_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
-        phap_nhan_id=phap_nhan_id,
+        phap_nhan_id=phap_nhan_id, phan_xuong_id=phan_xuong_id,
         page=page, page_size=page_size,
     )
 
@@ -566,11 +567,28 @@ def batch_create_receipts(
     )
 
 
+@router.get("/receipts/import-template")
+def download_receipts_import_template(_: User = Depends(get_current_user)):
+    """Tải mẫu Excel để import phiếu thu."""
+    return build_template_response("mau_import_phieu_thu.xlsx", [
+        ImportField("ngay_hach_toan", "Ngay hach toan", required=True, parser=parse_date, help_text="YYYY-MM-DD hoac DD/MM/YYYY"),
+        ImportField("ngay_chung_tu",  "Ngay chung tu",  parser=parse_date, help_text="De trong se dung Ngay hach toan"),
+        ImportField("so_chung_tu",    "So chung tu",    parser=parse_text, help_text="De trong - he thong tu dong tao"),
+        ImportField("dien_giai",      "Dien giai",      parser=parse_text, help_text="Dien giai nghiep vu"),
+        ImportField("so_tien",        "So tien",        required=True, parser=parse_decimal, help_text="So tien thu (VND, so nguyen)"),
+        ImportField("doi_tuong",      "Doi tuong",      required=True, parser=parse_text, help_text="Ma khach hang (ma_kh)"),
+        ImportField("so_tk_nh",       "So tai khoan NH", parser=parse_text, help_text="So tai khoan ngan hang"),
+        ImportField("ly_do",          "Ly do thu",      parser=parse_text, help_text="Ly do thu tien (neu khac Dien giai)"),
+        ImportField("loai_chung_tu",  "Loai chung tu",  parser=parse_text, help_text="TM=Tien mat, CK=Chuyen khoan (mac dinh CK)"),
+    ])
+
+
 @router.post("/receipts/import-excel")
 async def import_receipts_excel(
     file: UploadFile = File(...),
     ngay_phieu: date | None = Query(None),
     phap_nhan_id: int | None = Query(None),
+    phan_xuong_id: int | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
@@ -596,21 +614,24 @@ async def import_receipts_excel(
 
     headers = [str(h).strip().lower() if h else "" for h in rows[0]]
 
-    def col(name: str):
-        for alias in [name]:
-            if alias in headers:
-                return headers.index(alias)
+    def find_col(*names: str) -> int | None:
+        for n in names:
+            if n.lower() in headers:
+                return headers.index(n.lower())
         return None
 
-    col_cust = col("customer_id") or col("ma_kh") or col("mã kh") or col("khách hàng")
-    col_tien = col("so_tien") or col("số tiền") or col("tien")
-    col_inv   = col("sales_invoice_id") or col("so_hoa_don") or col("số hóa đơn")
-    col_httt  = col("hinh_thuc_tt") or col("hình thức tt") or col("httt")
-    col_dg    = col("dien_giai") or col("diễn giải")
-    col_ref   = col("so_tham_chieu") or col("số tham chiếu")
+    col_cust     = find_col("customer_id", "ma_kh", "mã kh", "doi_tuong", "đối tượng", "doi tuong", "khách hàng")
+    col_tien     = find_col("so_tien", "số tiền", "so tien", "tien")
+    col_inv      = find_col("sales_invoice_id", "so_hoa_don", "số hóa đơn")
+    col_httt     = find_col("hinh_thuc_tt", "hình thức tt", "httt", "loai_chung_tu", "loại chứng từ", "loai chung tu")
+    col_dg       = find_col("dien_giai", "diễn giải", "dien giai")
+    col_ref      = find_col("so_tham_chieu", "số tham chiếu")
+    col_tk       = find_col("so_tai_khoan", "so_tk_nh", "số tài khoản nh", "so tk nh")
+    col_ly_do    = find_col("ly_do", "lý do thu", "ly do thu", "ly_do_thu")
+    col_ngay_row = find_col("ngay_hach_toan", "ngày hạch toán", "ngay hach toan", "ngay_chung_tu", "ngày chứng từ")
 
     if col_cust is None or col_tien is None:
-        raise HTTPException(400, "File thiếu cột bắt buộc: ma_kh và so_tien")
+        raise HTTPException(400, "File thiếu cột bắt buộc: Doi tuong (ma_kh) và So tien")
 
     today = ngay_phieu or date.today()
     service = AccountingService(db)
@@ -638,14 +659,28 @@ async def import_receipts_excel(
             if not cust_id:
                 raise ValueError(f"Không tìm thấy khách hàng '{raw_cust}'")
 
-            so_tien = Decimal(str(raw_tien))
-            httt = "chuyen_khoan"
+            so_tien = Decimal(str(raw_tien).replace(",", "").strip())
+            row_ngay = today
+            if col_ngay_row is not None and row[col_ngay_row]:
+                from datetime import datetime as _dt
+                raw_ng = row[col_ngay_row]
+                if isinstance(raw_ng, date) and not isinstance(raw_ng, datetime):
+                    row_ngay = raw_ng
+                elif isinstance(raw_ng, datetime):
+                    row_ngay = raw_ng.date()
+                else:
+                    for _fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                        try:
+                            row_ngay = _dt.strptime(str(raw_ng).strip(), _fmt).date()
+                            break
+                        except ValueError:
+                            pass
+
+            httt = "CK"
             if col_httt is not None and row[col_httt]:
-                raw_ht = str(row[col_httt]).strip().lower()
-                if raw_ht in ("tm", "tiền mặt", "tien_mat"):
-                    httt = "tien_mat"
-                elif raw_ht in ("ck", "chuyển khoản", "chuyen_khoan"):
-                    httt = "chuyen_khoan"
+                raw_ht = str(row[col_httt]).strip().upper()
+                if raw_ht in ("TM", "TIỀN MẶT", "TIEN MAT", "TIEN_MAT"):
+                    httt = "TM"
 
             inv_id = None
             if col_inv is not None and row[col_inv]:
@@ -657,15 +692,23 @@ async def import_receipts_excel(
                     if inv:
                         inv_id = inv.id
 
+            dg_val = None
+            if col_dg is not None and row[col_dg]:
+                dg_val = str(row[col_dg]).strip()
+            elif col_ly_do is not None and row[col_ly_do]:
+                dg_val = str(row[col_ly_do]).strip()
+
             receipt_data = CashReceiptCreate(
                 customer_id=cust_id,
                 sales_invoice_id=inv_id,
-                ngay_phieu=today,
+                ngay_phieu=row_ngay,
                 hinh_thuc_tt=httt,
-                dien_giai=str(row[col_dg]).strip() if col_dg is not None and row[col_dg] else None,
+                dien_giai=dg_val,
                 so_tham_chieu=str(row[col_ref]).strip() if col_ref is not None and row[col_ref] else None,
+                so_tai_khoan=str(row[col_tk]).strip() if col_tk is not None and row[col_tk] else None,
                 so_tien=so_tien,
                 phap_nhan_id=phap_nhan_id,
+                phan_xuong_id=phan_xuong_id,
             )
             receipt = service.create_cash_receipt(receipt_data, current_user.id)
             results.append(BatchReceiptResultItem(
@@ -1017,6 +1060,7 @@ def list_payments(
     tu_ngay: date | None = Query(None),
     den_ngay: date | None = Query(None),
     phap_nhan_id: int | None = Query(None),
+    phan_xuong_id: int | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -1025,7 +1069,7 @@ def list_payments(
     return AccountingService(db).list_payments(
         supplier_id=supplier_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
-        phap_nhan_id=phap_nhan_id,
+        phap_nhan_id=phap_nhan_id, phan_xuong_id=phan_xuong_id,
         page=page, page_size=page_size,
     )
 
@@ -1068,11 +1112,28 @@ def cancel_payment(
     return AccountingService(db).cancel_payment(payment_id, current_user.id, ly_do)
 
 
+@router.get("/payments/import-template")
+def download_payments_import_template(_: User = Depends(get_current_user)):
+    """Tải mẫu Excel để import phiếu chi."""
+    return build_template_response("mau_import_phieu_chi.xlsx", [
+        ImportField("ngay_hach_toan", "Ngay hach toan", required=True, parser=parse_date, help_text="YYYY-MM-DD hoac DD/MM/YYYY"),
+        ImportField("ngay_chung_tu",  "Ngay chung tu",  parser=parse_date, help_text="De trong se dung Ngay hach toan"),
+        ImportField("so_chung_tu",    "So chung tu",    parser=parse_text, help_text="De trong - he thong tu dong tao"),
+        ImportField("dien_giai",      "Dien giai",      parser=parse_text, help_text="Dien giai nghiep vu"),
+        ImportField("so_tien",        "So tien",        required=True, parser=parse_decimal, help_text="So tien chi (VND, so nguyen)"),
+        ImportField("doi_tuong",      "Doi tuong",      required=True, parser=parse_text, help_text="Ma nha cung cap (ma_ncc)"),
+        ImportField("so_tk_nh",       "So tai khoan NH", parser=parse_text, help_text="So tai khoan ngan hang"),
+        ImportField("ly_do",          "Ly do chi",      parser=parse_text, help_text="Ly do chi tien (neu khac Dien giai)"),
+        ImportField("loai_chung_tu",  "Loai chung tu",  parser=parse_text, help_text="TM=Tien mat, CK=Chuyen khoan (mac dinh CK)"),
+    ])
+
+
 @router.post("/payments/import-excel")
 async def import_payments_excel(
     file: UploadFile = File(...),
     ngay_phieu: date | None = Query(None),
     phap_nhan_id: int | None = Query(None),
+    phan_xuong_id: int | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
@@ -1093,19 +1154,23 @@ async def import_payments_excel(
 
     headers = [str(h).strip().lower() if h else "" for h in rows[0]]
 
-    def col(name: str):
-        if name in headers:
-            return headers.index(name)
+    def find_col(*names: str) -> int | None:
+        for n in names:
+            if n.lower() in headers:
+                return headers.index(n.lower())
         return None
 
-    col_supp = col("supplier_id") or col("ma_ncc") or col("mã ncc") or col("nhà cung cấp")
-    col_tien = col("so_tien") or col("số tiền") or col("tien")
-    col_httt = col("hinh_thuc_tt") or col("hình thức tt") or col("httt")
-    col_dg   = col("dien_giai") or col("diễn giải")
-    col_ref  = col("so_tham_chieu") or col("số tham chiếu")
+    col_supp     = find_col("supplier_id", "ma_ncc", "mã ncc", "doi_tuong", "đối tượng", "doi tuong", "nhà cung cấp")
+    col_tien     = find_col("so_tien", "số tiền", "so tien", "tien")
+    col_httt     = find_col("hinh_thuc_tt", "hình thức tt", "httt", "loai_chung_tu", "loại chứng từ", "loai chung tu")
+    col_dg       = find_col("dien_giai", "diễn giải", "dien giai")
+    col_ref      = find_col("so_tham_chieu", "số tham chiếu")
+    col_tk       = find_col("so_tai_khoan", "so_tk_nh", "số tài khoản nh", "so tk nh")
+    col_ly_do    = find_col("ly_do", "lý do chi", "ly do chi", "ly_do_chi")
+    col_ngay_row = find_col("ngay_hach_toan", "ngày hạch toán", "ngay hach toan", "ngay_chung_tu", "ngày chứng từ")
 
     if col_supp is None or col_tien is None:
-        raise HTTPException(400, "File thiếu cột bắt buộc: ma_ncc và so_tien")
+        raise HTTPException(400, "File thiếu cột bắt buộc: Doi tuong (ma_ncc) và So tien")
 
     today = ngay_phieu or date.today()
     service = AccountingService(db)
@@ -1132,21 +1197,45 @@ async def import_payments_excel(
             if not supp_id:
                 raise ValueError(f"Không tìm thấy nhà cung cấp '{raw_supp}'")
 
-            so_tien = Decimal(str(raw_tien))
-            httt = "chuyen_khoan"
+            so_tien = Decimal(str(raw_tien).replace(",", "").strip())
+            row_ngay = today
+            if col_ngay_row is not None and row[col_ngay_row]:
+                from datetime import datetime as _dt
+                raw_ng = row[col_ngay_row]
+                if isinstance(raw_ng, date) and not isinstance(raw_ng, datetime):
+                    row_ngay = raw_ng
+                elif isinstance(raw_ng, datetime):
+                    row_ngay = raw_ng.date()
+                else:
+                    for _fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                        try:
+                            row_ngay = _dt.strptime(str(raw_ng).strip(), _fmt).date()
+                            break
+                        except ValueError:
+                            pass
+
+            httt = "CK"
             if col_httt is not None and row[col_httt]:
-                raw_ht = str(row[col_httt]).strip().lower()
-                if raw_ht in ("tm", "tiền mặt", "tien_mat"):
-                    httt = "tien_mat"
+                raw_ht = str(row[col_httt]).strip().upper()
+                if raw_ht in ("TM", "TIỀN MẶT", "TIEN MAT", "TIEN_MAT"):
+                    httt = "TM"
+
+            dg_val = None
+            if col_dg is not None and row[col_dg]:
+                dg_val = str(row[col_dg]).strip()
+            elif col_ly_do is not None and row[col_ly_do]:
+                dg_val = str(row[col_ly_do]).strip()
 
             payment_data = CashPaymentCreate(
                 supplier_id=supp_id,
-                ngay_phieu=today,
+                ngay_phieu=row_ngay,
                 hinh_thuc_tt=httt,
-                dien_giai=str(row[col_dg]).strip() if col_dg is not None and row[col_dg] else None,
+                dien_giai=dg_val,
                 so_tham_chieu=str(row[col_ref]).strip() if col_ref is not None and row[col_ref] else None,
+                so_tai_khoan=str(row[col_tk]).strip() if col_tk is not None and row[col_tk] else None,
                 so_tien=so_tien,
                 phap_nhan_id=phap_nhan_id,
+                phan_xuong_id=phan_xuong_id,
             )
             payment = service.create_cash_payment(payment_data, current_user.id)
             results.append({

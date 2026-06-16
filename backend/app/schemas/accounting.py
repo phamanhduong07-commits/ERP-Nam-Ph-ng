@@ -150,6 +150,7 @@ class CashReceiptResponse(BaseModel):
     so_phieu: str
     ngay_phieu: date
     customer_id: int
+    ten_don_vi: str | None = None
     sales_invoice_id: int | None
     hinh_thuc_tt: str
     so_tai_khoan: str | None
@@ -164,6 +165,8 @@ class CashReceiptResponse(BaseModel):
     created_at: datetime
     phap_nhan_id: int | None = None
     phan_xuong_id: int | None = None
+    ten_phap_nhan: str | None = None
+    ten_phan_xuong: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -214,6 +217,7 @@ class CashPaymentResponse(BaseModel):
     so_phieu: str
     ngay_phieu: date
     supplier_id: int
+    ten_don_vi: str | None = None
     purchase_invoice_id: int | None
     hinh_thuc_tt: str
     so_tai_khoan: str | None
@@ -228,6 +232,8 @@ class CashPaymentResponse(BaseModel):
     created_at: datetime
     phap_nhan_id: int | None = None
     phan_xuong_id: int | None = None
+    ten_phap_nhan: str | None = None
+    ten_phan_xuong: str | None = None
 
     model_config = {"from_attributes": True}
 

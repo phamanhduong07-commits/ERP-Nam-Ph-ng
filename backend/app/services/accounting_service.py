@@ -666,6 +666,7 @@ class AccountingService:
             tk_no=data.tk_no,
             tk_co=data.tk_co,
             phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=data.phan_xuong_id,
             created_by=user_id,
         )
         self.db.add(receipt)
@@ -1302,10 +1303,15 @@ class AccountingService:
         tu_ngay: date | None = None,
         den_ngay: date | None = None,
         phap_nhan_id: int | None = None,
+        phan_xuong_id: int | None = None,
         page: int = 1,
         page_size: int = 20,
     ):
-        q = self.db.query(CashReceipt)
+        q = self.db.query(CashReceipt).options(
+            selectinload(CashReceipt.customer),
+            selectinload(CashReceipt.phap_nhan),
+            selectinload(CashReceipt.phan_xuong),
+        )
         if customer_id:
             q = q.filter(CashReceipt.customer_id == customer_id)
         if trang_thai:
@@ -1316,9 +1322,37 @@ class AccountingService:
             q = q.filter(CashReceipt.ngay_phieu <= den_ngay)
         if phap_nhan_id:
             q = q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
+        if phan_xuong_id:
+            q = q.filter(CashReceipt.phan_xuong_id == phan_xuong_id)
 
         total = q.count()
-        items = q.order_by(desc(CashReceipt.ngay_phieu)).offset((page - 1) * page_size).limit(page_size).all()
+        rows = q.order_by(desc(CashReceipt.ngay_phieu)).offset((page - 1) * page_size).limit(page_size).all()
+        items = [
+            {
+                "id": r.id,
+                "so_phieu": r.so_phieu,
+                "ngay_phieu": r.ngay_phieu,
+                "customer_id": r.customer_id,
+                "ten_don_vi": (r.customer.ten_viet_tat or r.customer.ten_don_vi) if r.customer else None,
+                "sales_invoice_id": r.sales_invoice_id,
+                "hinh_thuc_tt": r.hinh_thuc_tt,
+                "so_tai_khoan": r.so_tai_khoan,
+                "so_tham_chieu": r.so_tham_chieu,
+                "dien_giai": r.dien_giai,
+                "so_tien": r.so_tien,
+                "tk_no": r.tk_no,
+                "tk_co": r.tk_co,
+                "trang_thai": r.trang_thai,
+                "phap_nhan_id": r.phap_nhan_id,
+                "ten_phap_nhan": r.phap_nhan.ten_phap_nhan if r.phap_nhan else None,
+                "phan_xuong_id": r.phan_xuong_id,
+                "ten_phan_xuong": r.phan_xuong.ten_xuong if r.phan_xuong else None,
+                "nguoi_duyet_id": r.nguoi_duyet_id,
+                "ngay_duyet": r.ngay_duyet,
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ]
         return {"total": total, "page": page, "page_size": page_size, "items": items}
 
     def get_receipt(self, receipt_id: int) -> CashReceipt:
@@ -1725,10 +1759,15 @@ class AccountingService:
         tu_ngay: date | None = None,
         den_ngay: date | None = None,
         phap_nhan_id: int | None = None,
+        phan_xuong_id: int | None = None,
         page: int = 1,
         page_size: int = 20,
     ):
-        q = self.db.query(CashPayment)
+        q = self.db.query(CashPayment).options(
+            selectinload(CashPayment.supplier),
+            selectinload(CashPayment.phap_nhan),
+            selectinload(CashPayment.phan_xuong),
+        )
         if supplier_id:
             q = q.filter(CashPayment.supplier_id == supplier_id)
         if trang_thai:
@@ -1739,8 +1778,36 @@ class AccountingService:
             q = q.filter(CashPayment.ngay_phieu <= den_ngay)
         if phap_nhan_id:
             q = q.filter(CashPayment.phap_nhan_id == phap_nhan_id)
+        if phan_xuong_id:
+            q = q.filter(CashPayment.phan_xuong_id == phan_xuong_id)
         total = q.count()
-        items = q.order_by(desc(CashPayment.ngay_phieu)).offset((page - 1) * page_size).limit(page_size).all()
+        rows = q.order_by(desc(CashPayment.ngay_phieu)).offset((page - 1) * page_size).limit(page_size).all()
+        items = [
+            {
+                "id": p.id,
+                "so_phieu": p.so_phieu,
+                "ngay_phieu": p.ngay_phieu,
+                "supplier_id": p.supplier_id,
+                "ten_don_vi": (p.supplier.ten_viet_tat or p.supplier.ten_don_vi) if p.supplier else None,
+                "purchase_invoice_id": p.purchase_invoice_id,
+                "hinh_thuc_tt": p.hinh_thuc_tt,
+                "so_tai_khoan": p.so_tai_khoan,
+                "so_tham_chieu": p.so_tham_chieu,
+                "dien_giai": p.dien_giai,
+                "so_tien": p.so_tien,
+                "tk_no": p.tk_no,
+                "tk_co": p.tk_co,
+                "trang_thai": p.trang_thai,
+                "phap_nhan_id": p.phap_nhan_id,
+                "ten_phap_nhan": p.phap_nhan.ten_phap_nhan if p.phap_nhan else None,
+                "phan_xuong_id": p.phan_xuong_id,
+                "ten_phan_xuong": p.phan_xuong.ten_xuong if p.phan_xuong else None,
+                "nguoi_duyet_id": p.nguoi_duyet_id,
+                "ngay_duyet": p.ngay_duyet,
+                "created_at": p.created_at,
+            }
+            for p in rows
+        ]
         return {"total": total, "page": page, "page_size": page_size, "items": items}
 
     def get_payment(self, payment_id: int) -> CashPayment:
