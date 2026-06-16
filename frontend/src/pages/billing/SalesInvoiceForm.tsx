@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import type { ApiError } from '../../api/types'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
   Row, Select, Space, Typography, message,
@@ -11,6 +11,8 @@ import dayjs from 'dayjs'
 import { billingApi, SalesInvoiceCreate, HINH_THUC_TT } from '../../api/billing'
 import { customersApi, Customer } from '../../api/customers'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
+import QuickAddSelect from '../../components/QuickAddSelect'
+import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
 
 const { Title } = Typography
 
@@ -41,6 +43,7 @@ const VAT_OPTIONS = [
 
 export default function SalesInvoiceForm() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [form] = Form.useForm()
 
   const { data: customers = [] } = useQuery<Customer[]>({
@@ -176,7 +179,8 @@ export default function SalesInvoiceForm() {
           <Row gutter={16}>
             <Col span={24}>
               <Form.Item name="customer_id" label="Khách hàng" rules={[{ required: true }]}>
-                <Select
+                <QuickAddSelect
+                  config={QUICK_ADD_CONFIGS.customer}
                   showSearch
                   filterOption={(input, opt) =>
                     (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
@@ -186,6 +190,7 @@ export default function SalesInvoiceForm() {
                     label: `${c.ma_kh ? `[${c.ma_kh}] ` : ''}${c.ten_don_vi ?? ''}`,
                   }))}
                   onChange={handleCustomerChange}
+                  onCreated={() => qc.invalidateQueries({ queryKey: ['customers-all'] })}
                   placeholder="Chọn khách hàng"
                 />
               </Form.Item>

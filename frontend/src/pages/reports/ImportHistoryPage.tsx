@@ -11,6 +11,7 @@ import { importLogsApi, ImportLogItem } from '../../api/reports'
 import { exportToExcel } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -106,6 +107,7 @@ export default function ImportHistoryPage() {
         </Tooltip>
       ) : '—' },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('reports-import-history', columns)
 
   // Tính tổng thống kê từ trang hiện tại
   const totalSuccess = data?.items.reduce((s, r) => s + r.so_dong_thanh_cong, 0) ?? 0
@@ -115,8 +117,11 @@ export default function ImportHistoryPage() {
     <PageLayout
       title="Lịch sử import dữ liệu"
       actions={
-        <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data?.items.length}
-          style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
+        <>
+          <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data?.items.length}
+            style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
+          {settingsButton}
+        </>
       }
     >
 
@@ -152,7 +157,7 @@ export default function ImportHistoryPage() {
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table<ImportLogItem>
-          columns={columns}
+          columns={displayColumns}
           dataSource={data?.items ?? []}
           rowKey="id"
           loading={isLoading}

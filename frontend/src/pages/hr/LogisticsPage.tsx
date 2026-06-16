@@ -6,6 +6,8 @@ import dayjs from 'dayjs'
 import client from '../../api/client'
 import { exportToExcel } from '../../utils/excelUtils'
 import EmptyState from "../../components/EmptyState"
+import QuickAddSelect from '../../components/QuickAddSelect'
+import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -149,7 +151,12 @@ export default function LogisticsPage() {
             <Select options={(vehicles as Vehicle[] || []).map((v: Vehicle) => ({ value: v.id, label: v.bien_so }))} />
           </Form.Item>
           <Form.Item name="employee_id" label="Tai xe" rules={[{ required: true }]}>
-            <Select showSearch optionFilterProp="label" options={(employees as Employee[] || []).map((e: Employee) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))} />
+            <QuickAddSelect
+              config={QUICK_ADD_CONFIGS.employee}
+              showSearch optionFilterProp="label"
+              options={(employees as Employee[] || []).map((e: Employee) => ({ value: e.id, label: `${e.ma_nv} - ${e.ho_ten}` }))}
+              onCreated={() => qc.invalidateQueries({ queryKey: ['hr-employees-drivers'] })}
+            />
           </Form.Item>
           <Row gutter={12}>
             <Col span={12}><Form.Item name="so_km_dau" label="KM dau" rules={[{ required: true }]}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>

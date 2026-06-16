@@ -734,6 +734,13 @@ export default function QuoteForm() {
         customerSearching={customerSearching}
         onCustomerSearch={handleCustomerSearch}
         onCustomerChange={() => { setProductOptions([]); loadProductOptions('') }}
+        onCustomerCreated={(rec) =>
+          setCustomerOptions(prev => [...prev, {
+            value: rec.id as number,
+            label: (rec.ten_viet_tat as string) ?? '',
+            ma_kh: (rec.ma_kh as string) ?? '',
+          }])
+        }
         phapNhanList={phapNhanList}
         phanXuongList={phanXuongList}
         nhanVienList={nhanVienList}

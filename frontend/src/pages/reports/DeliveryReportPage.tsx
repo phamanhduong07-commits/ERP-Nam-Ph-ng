@@ -10,6 +10,7 @@ import { reportsApi, DeliveryReportRow } from '../../api/reports'
 import { exportToExcel } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -77,6 +78,7 @@ export default function DeliveryReportPage() {
     { title: 'Trạng thái', dataIndex: 'trang_thai', width: 110,
       render: v => <Tag color={STATUS_COLORS[v] || 'default'}>{STATUS_LABELS[v] || v}</Tag> },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('reports-delivery', columns, { nonHideable: ['so_phieu'] })
 
   const byXeColumns = [
     { title: 'Xe vận chuyển', dataIndex: 'xe', key: 'xe' },
@@ -90,8 +92,11 @@ export default function DeliveryReportPage() {
     <PageLayout
       title="Báo cáo vận chuyển giao hàng"
       actions={
-        <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data}
-          style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
+        <>
+          <Button icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!data}
+            style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
+          {settingsButton}
+        </>
       }
     >
 
@@ -124,7 +129,7 @@ export default function DeliveryReportPage() {
         <Col xs={24} lg={16}>
           <Card size="small" title="Chi tiết phiếu giao hàng" styles={{ body: { padding: 0 } }}>
             <Table<DeliveryReportRow>
-              columns={columns}
+              columns={displayColumns}
               dataSource={data?.rows ?? []}
               rowKey="delivery_id"
               loading={isLoading}

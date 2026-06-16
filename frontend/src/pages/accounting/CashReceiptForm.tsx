@@ -11,6 +11,8 @@ import dayjs from 'dayjs'
 import { fmtVND } from '../../utils/exportUtils'
 import { receiptApi, CashReceiptCreate, HINH_THUC_TT } from '../../api/accounting'
 import { customersApi, Customer } from '../../api/customers'
+import QuickAddSelect from '../../components/QuickAddSelect'
+import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
 import { billingApi, SalesInvoiceListItem } from '../../api/billing'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 
@@ -155,7 +157,8 @@ export default function CashReceiptForm() {
           </Form.Item>
 
           <Form.Item name="customer_id" label="Khách hàng" rules={[{ required: true }]}>
-            <Select
+            <QuickAddSelect
+              config={QUICK_ADD_CONFIGS.customer}
               showSearch
               filterOption={(input, opt) =>
                 (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
@@ -165,6 +168,7 @@ export default function CashReceiptForm() {
                 label: `${c.ma_kh ? `[${c.ma_kh}] ` : ''}${c.ten_don_vi ?? ''}`,
               }))}
               onChange={handleCustomerChange}
+              onCreated={() => qc.invalidateQueries({ queryKey: ['customers-all'] })}
               placeholder="Chọn khách hàng"
             />
           </Form.Item>

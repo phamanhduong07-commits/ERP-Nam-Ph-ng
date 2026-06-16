@@ -1,10 +1,12 @@
 import React, { useState } from 'react'
 import { Card, Table, Form, DatePicker, Select, Button, Typography, Statistic, Row, Col } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import { reportsApi } from '../../api/reports'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import { SearchOutlined } from '@ant-design/icons'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -31,16 +33,17 @@ const LegalEntityCashflowPage: React.FC = () => {
     }
   }
 
-  const columns = [
+  const columns: ColumnsType<{ label: string; value: number }> = [
     { title: 'Chỉ tiêu', dataIndex: 'label', key: 'label' },
-    { 
-      title: 'Số tiền (VND)', 
-      dataIndex: 'value', 
-      key: 'value', 
+    {
+      title: 'Số tiền (VND)',
+      dataIndex: 'value',
+      key: 'value',
       align: 'right' as const,
       render: (val: number) => <Text strong>{val?.toLocaleString()}</Text>
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('reports-legal-entity-cashflow', columns)
 
   const cashflowRows = data ? [
     { label: '1. Thu tiền từ Khách hàng', value: data.tong_thu },
@@ -82,12 +85,12 @@ const LegalEntityCashflowPage: React.FC = () => {
             </Col>
           </Row>
 
-          <Card title="Chi tiết Dòng tiền">
-            <Table 
-              columns={columns} 
-              dataSource={cashflowRows} 
-              pagination={false} 
-              bordered 
+          <Card title="Chi tiết Dòng tiền" extra={settingsButton}>
+            <Table
+              columns={displayColumns}
+              dataSource={cashflowRows}
+              pagination={false}
+              bordered
             />
           </Card>
         </>

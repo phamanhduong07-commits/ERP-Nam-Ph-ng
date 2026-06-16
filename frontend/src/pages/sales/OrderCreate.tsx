@@ -13,6 +13,8 @@ import { productsApi } from '../../api/products'
 import { salesOrdersApi } from '../../api/salesOrders'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
+import QuickAddSelect from '../../components/QuickAddSelect'
+import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
 import { usersApi } from '../../api/usersApi'
 import type { Product } from '../../api/products'
 import EmptyState from "../../components/EmptyState"
@@ -331,15 +333,16 @@ export default function OrderCreate() {
                     label="Khách hàng"
                     rules={[{ required: true, message: 'Chọn khách hàng' }]}
                   >
-                    <Select
+                    <QuickAddSelect
+                      config={QUICK_ADD_CONFIGS.customer}
                       showSearch
                       filterOption={false}
                       placeholder="Gõ để tìm khách hàng..."
                       notFoundContent={customerSearching ? <Spin size="small" /> : 'Gõ tên / mã KH...'}
                       onSearch={handleCustomerSearch}
                       onChange={(v) => {
-                        setSelectedCustomerId(v)
-                        customersApi.get(v).then(r => {
+                        setSelectedCustomerId(v as number)
+                        customersApi.get(v as number).then(r => {
                           if (r.data?.dia_chi_giao_hang) form.setFieldValue('dia_chi_giao', r.data.dia_chi_giao_hang)
                           const maKh = r.data?.ma_kh ?? null
                           setSelectedCustomerMaKh(maKh)
@@ -347,6 +350,12 @@ export default function OrderCreate() {
                         })
                       }}
                       options={customerOptions}
+                      onCreated={(rec) =>
+                        setCustomerOptions(prev => [...prev, {
+                          value: rec.id as number,
+                          label: `[${(rec.ma_kh as string) ?? ''}] ${(rec.ten_viet_tat as string) ?? ''}`.trim(),
+                        }])
+                      }
                     />
                   </Form.Item>
                 </Col>

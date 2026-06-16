@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ApiError } from '../../api/types'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Input, InputNumber,
   Row, Select, Space, Typography, message,
@@ -12,6 +12,8 @@ import { fmtVND } from '../../utils/exportUtils'
 import { paymentApi, CashPaymentCreate, PurchaseInvoice, purchaseInvoiceApi } from '../../api/accounting'
 import { suppliersApi, Supplier } from '../../api/suppliers'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
+import QuickAddSelect from '../../components/QuickAddSelect'
+import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
 
 const { Title, Text } = Typography
 
@@ -32,6 +34,7 @@ const TYPE_CONFIG: Record<string, { title: string; tkNo: string; diGiai: string 
 
 export default function CashPaymentForm() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [searchParams] = useSearchParams()
   const invoiceIdParam = Number(searchParams.get('invoice_id') || 0)
   const typeParam = searchParams.get('type') ?? ''
@@ -177,7 +180,8 @@ export default function CashPaymentForm() {
           </Form.Item>
 
           <Form.Item name="supplier_id" label="Nhà cung cấp" rules={[{ required: true, message: 'Chọn nhà cung cấp' }]}>
-            <Select
+            <QuickAddSelect
+              config={QUICK_ADD_CONFIGS.supplier}
               showSearch
               filterOption={(input, opt) =>
                 (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
@@ -187,6 +191,7 @@ export default function CashPaymentForm() {
                 label: `${s.ma_ncc ? `[${s.ma_ncc}] ` : ''}${s.ten_don_vi ?? ''}`,
               }))}
               onChange={handleSupplierChange}
+              onCreated={() => qc.invalidateQueries({ queryKey: ['suppliers-all'] })}
               placeholder="Chọn nhà cung cấp"
             />
           </Form.Item>

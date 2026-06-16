@@ -5,6 +5,8 @@ import dayjs from 'dayjs'
 import type { PhapNhan } from '../../../api/phap_nhan'
 import type { PhanXuong } from '../../../api/warehouse'
 import type { NhanVien } from '../../../api/usersApi'
+import QuickAddSelect from '../../../components/QuickAddSelect'
+import { QUICK_ADD_CONFIGS } from '../../../config/quickAddConfigs'
 
 interface QuoteHeaderFormProps {
   form: FormInstance
@@ -15,6 +17,7 @@ interface QuoteHeaderFormProps {
   customerSearching: boolean
   onCustomerSearch: (q: string) => void
   onCustomerChange: () => void
+  onCustomerCreated?: (rec: Record<string, unknown>) => void
   phapNhanList: PhapNhan[]
   phanXuongList: PhanXuong[]
   nhanVienList: NhanVien[]
@@ -22,7 +25,7 @@ interface QuoteHeaderFormProps {
 
 export default function QuoteHeaderForm({
   form, isEdit, isReadonly, triggerAutosave,
-  customerOptions, customerSearching, onCustomerSearch, onCustomerChange,
+  customerOptions, customerSearching, onCustomerSearch, onCustomerChange, onCustomerCreated,
   phapNhanList, phanXuongList, nhanVienList,
 }: QuoteHeaderFormProps) {
   const selectedCustomerId = Form.useWatch('customer_id', form)
@@ -70,13 +73,16 @@ export default function QuoteHeaderForm({
               label="*Tên khách hàng" name="customer_id"
               rules={[{ required: true, message: 'Chọn khách hàng' }]}
             >
-              <Select
+              <QuickAddSelect
+                config={QUICK_ADD_CONFIGS.customer}
                 showSearch filterOption={false}
                 onSearch={onCustomerSearch}
                 options={customerOptions}
                 placeholder="Tìm theo tên..."
                 notFoundContent={customerSearching ? <Spin size="small" /> : 'Gõ để tìm...'}
                 onChange={onCustomerChange}
+                onCreated={onCustomerCreated}
+                disabled={isReadonly}
               />
             </Form.Item>
           </Col>
