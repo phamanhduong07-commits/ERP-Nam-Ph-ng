@@ -54,7 +54,7 @@ export default function PhapNhanPage() {
     setModalOpen(true)
   }
 
-  const columns = [
+  const columns: import('antd/es/table').ColumnsType<PhapNhan> = [
     {
       title: 'Mã/Tên pháp nhân',
       key: 'name',

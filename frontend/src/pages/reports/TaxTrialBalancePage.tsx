@@ -32,7 +32,7 @@ const TaxTrialBalancePage: React.FC = () => {
     }
   }
 
-  const columns = [
+  const columns: import('antd/es/table').ColumnsType<TrialBalanceRow> = [
     { title: 'Số TK', dataIndex: 'so_tk', key: 'so_tk', width: 100 },
     { title: 'Tên tài khoản', dataIndex: 'ten_tk', key: 'ten_tk' },
     { 

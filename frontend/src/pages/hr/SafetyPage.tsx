@@ -205,6 +205,55 @@ function BHLDTab() {
   const openCreateIssue = () => { setEditing(null); form.resetFields(); form.setFieldsValue({ ngay_cap: dayjs(), so_luong: 1, ly_do: 'cap_moi' }); setModal('issue') }
 
   const today = dayjs()
+
+  const equipColumns = [
+    { title: 'Mã', dataIndex: 'ma', width: 120, render: (v: string) => <Text strong>{v}</Text> },
+    { title: 'Tên thiết bị', dataIndex: 'ten' },
+    { title: 'Loại', dataIndex: 'loai', width: 120, render: (v: string) => v && <Tag>{v}</Tag> },
+    { title: 'Đơn vị', dataIndex: 'don_vi', width: 80 },
+    { title: 'Hạn SD (tháng)', dataIndex: 'han_su_dung_thang', width: 130, align: 'center' as const,
+      render: (v: number) => v ? <Tag color="blue">{v} tháng</Tag> : '—' },
+    { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, align: 'right' as const,
+      render: (v: number) => v ? `${(v / 1000).toLocaleString('vi')}k` : '—' },
+    { title: 'Trạng thái', dataIndex: 'trang_thai', width: 100,
+      render: (v: boolean) => v ? <Tag color="green">Đang dùng</Tag> : <Tag>Ngưng</Tag> },
+    { title: '', width: 90, render: (_: unknown, r: any) => (
+      <Space size={4}>
+        <Button size="small" icon={<EditOutlined />} onClick={() => openEditEq(r)} />
+        <Popconfirm title="Xóa thiết bị?" onConfirm={() => delEqMut.mutate(r.id)}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      </Space>
+    )},
+  ]
+  const { displayColumns: equipDisplayColumns, settingsButton: equipSettingsButton } = useColumnPrefs('hr-safety-bhld-catalog', equipColumns)
+
+  const issueColumns = [
+    { title: 'Nhân viên', dataIndex: 'ho_ten',
+      render: (v: string, r: any) => <Space>
+        <Avatar icon={<UserOutlined />} size="small" />
+        <div><div>{v}</div><Text type="secondary" style={{ fontSize: 11 }}>{r.ma_nv}</Text></div>
+      </Space> },
+    { title: 'Thiết bị', dataIndex: 'ten_equipment' },
+    { title: 'Ngày cấp', dataIndex: 'ngay_cap', width: 110, render: (v: string) => dayjs(v).format('DD/MM/YYYY') },
+    { title: 'Số lượng', dataIndex: 'so_luong', width: 80, align: 'center' as const },
+    { title: 'Hạn sử dụng', dataIndex: 'han_su_dung_den', width: 140,
+      render: (v: string) => {
+        if (!v) return <Text type="secondary">—</Text>
+        const d = dayjs(v); const diff = d.diff(today, 'day')
+        if (diff < 0) return <Tag color="red">Quá hạn {Math.abs(diff)}d</Tag>
+        if (diff <= 30) return <Tag color="orange">{d.format('DD/MM/YYYY')} ({diff}d)</Tag>
+        return <Text>{d.format('DD/MM/YYYY')}</Text>
+      }},
+    { title: 'Lý do', dataIndex: 'ly_do', width: 130, render: (v: string) => LY_DO_CAP_BHLD.find(o => o.value === v)?.label || v },
+    { title: '', width: 60, render: (_: unknown, r: any) => (
+      <Popconfirm title="Xóa lần cấp?" onConfirm={() => delIssueMut.mutate(r.id)}>
+        <Button size="small" danger icon={<DeleteOutlined />} />
+      </Popconfirm>
+    )},
+  ]
+  const { displayColumns: issueDisplayColumns, settingsButton: issueSettingsButton } = useColumnPrefs('hr-safety-bhld-issues', issueColumns)
+
   return (
     <>
       <Tabs activeKey={tab} onChange={(k) => setTab(k as any)} type="card" size="small"
@@ -223,26 +272,8 @@ function BHLDTab() {
         <Card size="small" styles={{ body: { padding: 0 } }}>
           <Table
             size="small" rowKey="id" loading={loadingEq} dataSource={equipments}
-            columns={[
-              { title: 'Mã', dataIndex: 'ma', width: 120, render: (v) => <Text strong>{v}</Text> },
-              { title: 'Tên thiết bị', dataIndex: 'ten' },
-              { title: 'Loại', dataIndex: 'loai', width: 120, render: (v) => v && <Tag>{v}</Tag> },
-              { title: 'Đơn vị', dataIndex: 'don_vi', width: 80 },
-              { title: 'Hạn SD (tháng)', dataIndex: 'han_su_dung_thang', width: 130, align: 'center' as const,
-                render: (v: number) => v ? <Tag color="blue">{v} tháng</Tag> : '—' },
-              { title: 'Đơn giá', dataIndex: 'don_gia', width: 110, align: 'right' as const,
-                render: (v: number) => v ? `${(v / 1000).toLocaleString('vi')}k` : '—' },
-              { title: 'Trạng thái', dataIndex: 'trang_thai', width: 100,
-                render: (v: boolean) => v ? <Tag color="green">Đang dùng</Tag> : <Tag>Ngưng</Tag> },
-              { title: '', width: 90, render: (_, r: any) => (
-                <Space size={4}>
-                  <Button size="small" icon={<EditOutlined />} onClick={() => openEditEq(r)} />
-                  <Popconfirm title="Xóa thiết bị?" onConfirm={() => delEqMut.mutate(r.id)}>
-                    <Button size="small" danger icon={<DeleteOutlined />} />
-                  </Popconfirm>
-                </Space>
-              )},
-            ]}
+            columns={equipDisplayColumns}
+            title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{equipSettingsButton}</div>}
             pagination={{ pageSize: 15 }}
           />
         </Card>
@@ -252,30 +283,8 @@ function BHLDTab() {
         <Card size="small" styles={{ body: { padding: 0 } }}>
           <Table
             size="small" rowKey="id" loading={loadingIs} dataSource={issues}
-            columns={[
-              { title: 'Nhân viên', dataIndex: 'ho_ten',
-                render: (v: string, r: any) => <Space>
-                  <Avatar icon={<UserOutlined />} size="small" />
-                  <div><div>{v}</div><Text type="secondary" style={{ fontSize: 11 }}>{r.ma_nv}</Text></div>
-                </Space> },
-              { title: 'Thiết bị', dataIndex: 'ten_equipment' },
-              { title: 'Ngày cấp', dataIndex: 'ngay_cap', width: 110, render: (v: string) => dayjs(v).format('DD/MM/YYYY') },
-              { title: 'Số lượng', dataIndex: 'so_luong', width: 80, align: 'center' as const },
-              { title: 'Hạn sử dụng', dataIndex: 'han_su_dung_den', width: 140,
-                render: (v: string) => {
-                  if (!v) return <Text type="secondary">—</Text>
-                  const d = dayjs(v); const diff = d.diff(today, 'day')
-                  if (diff < 0) return <Tag color="red">Quá hạn {Math.abs(diff)}d</Tag>
-                  if (diff <= 30) return <Tag color="orange">{d.format('DD/MM/YYYY')} ({diff}d)</Tag>
-                  return <Text>{d.format('DD/MM/YYYY')}</Text>
-                }},
-              { title: 'Lý do', dataIndex: 'ly_do', width: 130, render: (v: string) => LY_DO_CAP_BHLD.find(o => o.value === v)?.label || v },
-              { title: '', width: 60, render: (_, r: any) => (
-                <Popconfirm title="Xóa lần cấp?" onConfirm={() => delIssueMut.mutate(r.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
-              )},
-            ]}
+            columns={issueDisplayColumns}
+            title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{issueSettingsButton}</div>}
             pagination={{ pageSize: 15 }}
           />
         </Card>
@@ -381,42 +390,48 @@ function TrainingsTab() {
     ngay_ket_thuc: v.ngay_ket_thuc?.format('YYYY-MM-DD'),
   })
 
+  const trainingColumns = [
+    { title: 'Tên khóa', dataIndex: 'ten_khoa_hoc',
+      render: (v: string, r: any) => <a onClick={() => setDrawerTraining(r)}>{v}</a> },
+    { title: 'Nhóm', dataIndex: 'nhom_doi_tuong', width: 240,
+      render: (v: string) => <Tag color={NHOM_LABEL[v]?.color}>{NHOM_LABEL[v]?.label || v}</Tag> },
+    { title: 'Thời gian', width: 180,
+      render: (_: unknown, r: any) => `${dayjs(r.ngay_bat_dau).format('DD/MM/YY')} → ${r.ngay_ket_thuc ? dayjs(r.ngay_ket_thuc).format('DD/MM/YY') : '—'}` },
+    { title: 'Giảng viên', dataIndex: 'giang_vien', width: 150, ellipsis: true },
+    { title: 'NV tham gia', dataIndex: 'so_tham_gia', width: 110, align: 'center' as const,
+      render: (v: number, r: any) => (
+        <Button size="small" type="link" onClick={() => setDrawerTraining(r)}>
+          <Badge count={v} showZero color="#1677ff" /> Xem
+        </Button>
+      )},
+    { title: 'Trạng thái', dataIndex: 'trang_thai', width: 130,
+      render: (v: string) => {
+        const m = TRANG_THAI_TRAINING.find(t => t.value === v)
+        return <Tag color={m?.color}>{m?.label || v}</Tag>
+      }},
+    { title: '', width: 90, render: (_: unknown, r: any) => (
+      <Space size={4}>
+        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+        <Popconfirm title="Xóa buổi này? (xóa luôn danh sách NV tham gia)" onConfirm={() => delMut.mutate(r.id)}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      </Space>
+    )},
+  ]
+  const { displayColumns: trainingDisplayColumns, settingsButton: trainingSettingsButton } = useColumnPrefs('hr-safety-trainings', trainingColumns)
+
   return (
     <>
       <Row justify="end" style={{ marginBottom: 12 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Tạo buổi huấn luyện</Button>
+        <Space>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Tạo buổi huấn luyện</Button>
+          {trainingSettingsButton}
+        </Space>
       </Row>
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           size="small" rowKey="id" loading={isLoading} dataSource={trainings}
-          columns={[
-            { title: 'Tên khóa', dataIndex: 'ten_khoa_hoc',
-              render: (v: string, r: any) => <a onClick={() => setDrawerTraining(r)}>{v}</a> },
-            { title: 'Nhóm', dataIndex: 'nhom_doi_tuong', width: 240,
-              render: (v: string) => <Tag color={NHOM_LABEL[v]?.color}>{NHOM_LABEL[v]?.label || v}</Tag> },
-            { title: 'Thời gian', width: 180,
-              render: (_, r: any) => `${dayjs(r.ngay_bat_dau).format('DD/MM/YY')} → ${r.ngay_ket_thuc ? dayjs(r.ngay_ket_thuc).format('DD/MM/YY') : '—'}` },
-            { title: 'Giảng viên', dataIndex: 'giang_vien', width: 150, ellipsis: true },
-            { title: 'NV tham gia', dataIndex: 'so_tham_gia', width: 110, align: 'center' as const,
-              render: (v: number, r: any) => (
-                <Button size="small" type="link" onClick={() => setDrawerTraining(r)}>
-                  <Badge count={v} showZero color="#1677ff" /> Xem
-                </Button>
-              )},
-            { title: 'Trạng thái', dataIndex: 'trang_thai', width: 130,
-              render: (v: string) => {
-                const m = TRANG_THAI_TRAINING.find(t => t.value === v)
-                return <Tag color={m?.color}>{m?.label || v}</Tag>
-              }},
-            { title: '', width: 90, render: (_, r: any) => (
-              <Space size={4}>
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                <Popconfirm title="Xóa buổi này? (xóa luôn danh sách NV tham gia)" onConfirm={() => delMut.mutate(r.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
-              </Space>
-            )},
-          ]}
+          columns={trainingDisplayColumns}
           pagination={{ pageSize: 15 }}
         />
       </Card>
@@ -607,43 +622,49 @@ function AccidentsTab() {
     }); setOpen(true)
   }
 
+  const accidentColumns = [
+    { title: 'Nhân viên', dataIndex: 'ho_ten', width: 200,
+      render: (v: string, r: any) => <Space>
+        <Avatar icon={<UserOutlined />} size="small" style={{ backgroundColor: '#cf1322' }} />
+        <div><div>{v}</div><Text type="secondary" style={{ fontSize: 11 }}>{r.ma_nv} · {r.ten_bo_phan}</Text></div>
+      </Space> },
+    { title: 'Ngày', dataIndex: 'ngay_xay_ra', width: 100,
+      render: (v: string, r: any) => <>{dayjs(v).format('DD/MM/YY')}{r.gio_xay_ra && <><br/><Text type="secondary" style={{ fontSize: 11 }}>{r.gio_xay_ra}</Text></>}</> },
+    { title: 'Địa điểm', dataIndex: 'dia_diem', ellipsis: true },
+    { title: 'Mức độ', dataIndex: 'muc_do', width: 110,
+      render: (v: string) => { const m = MUC_DO_TNLD.find(o => o.value === v); return <Tag color={m?.color}>{m?.label}</Tag> } },
+    { title: 'Nghỉ', dataIndex: 'so_ngay_nghi', width: 80, align: 'center' as const, render: (v: number) => `${v}d` },
+    { title: 'Chi phí', dataIndex: 'chi_phi_y_te', width: 100, align: 'right' as const,
+      render: (v: number) => v ? `${(v / 1000).toLocaleString('vi')}k` : '—' },
+    { title: 'Báo Sở LĐ', dataIndex: 'da_bao_cao_so_lao_dong', width: 110, align: 'center' as const,
+      render: (v: boolean, r: any) => v
+        ? <Tag color="green">✓ Đã báo {r.ngay_bao_cao && `(${dayjs(r.ngay_bao_cao).format('DD/MM')})`}</Tag>
+        : (r.muc_do !== 'nhe' ? <Tag color="red">⚠ Chưa báo</Tag> : <Tag>—</Tag>) },
+    { title: '', width: 90, render: (_: unknown, r: any) => (
+      <Space size={4}>
+        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+        <Popconfirm title="Xóa báo cáo?" onConfirm={() => delMut.mutate(r.id)}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      </Space>
+    )},
+  ]
+  const { displayColumns: accidentDisplayColumns, settingsButton: accidentSettingsButton } = useColumnPrefs('hr-safety-accidents', accidentColumns)
+
   return (
     <>
       <Row justify="space-between" style={{ marginBottom: 12 }}>
         <Select allowClear placeholder="Lọc theo mức độ" value={filterMucDo} onChange={setFilterMucDo}
           options={MUC_DO_TNLD} style={{ width: 200 }} />
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Báo cáo TNLĐ</Button>
+        <Space>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Báo cáo TNLĐ</Button>
+          {accidentSettingsButton}
+        </Space>
       </Row>
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           size="small" rowKey="id" loading={isLoading} dataSource={accidents}
-          columns={[
-            { title: 'Nhân viên', dataIndex: 'ho_ten', width: 200,
-              render: (v: string, r: any) => <Space>
-                <Avatar icon={<UserOutlined />} size="small" style={{ backgroundColor: '#cf1322' }} />
-                <div><div>{v}</div><Text type="secondary" style={{ fontSize: 11 }}>{r.ma_nv} · {r.ten_bo_phan}</Text></div>
-              </Space> },
-            { title: 'Ngày', dataIndex: 'ngay_xay_ra', width: 100,
-              render: (v: string, r: any) => <>{dayjs(v).format('DD/MM/YY')}{r.gio_xay_ra && <><br/><Text type="secondary" style={{ fontSize: 11 }}>{r.gio_xay_ra}</Text></>}</> },
-            { title: 'Địa điểm', dataIndex: 'dia_diem', ellipsis: true },
-            { title: 'Mức độ', dataIndex: 'muc_do', width: 110,
-              render: (v: string) => { const m = MUC_DO_TNLD.find(o => o.value === v); return <Tag color={m?.color}>{m?.label}</Tag> } },
-            { title: 'Nghỉ', dataIndex: 'so_ngay_nghi', width: 80, align: 'center' as const, render: (v: number) => `${v}d` },
-            { title: 'Chi phí', dataIndex: 'chi_phi_y_te', width: 100, align: 'right' as const,
-              render: (v: number) => v ? `${(v / 1000).toLocaleString('vi')}k` : '—' },
-            { title: 'Báo Sở LĐ', dataIndex: 'da_bao_cao_so_lao_dong', width: 110, align: 'center' as const,
-              render: (v: boolean, r: any) => v
-                ? <Tag color="green">✓ Đã báo {r.ngay_bao_cao && `(${dayjs(r.ngay_bao_cao).format('DD/MM')})`}</Tag>
-                : (r.muc_do !== 'nhe' ? <Tag color="red">⚠ Chưa báo</Tag> : <Tag>—</Tag>) },
-            { title: '', width: 90, render: (_, r: any) => (
-              <Space size={4}>
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                <Popconfirm title="Xóa báo cáo?" onConfirm={() => delMut.mutate(r.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
-              </Space>
-            )},
-          ]}
+          columns={accidentDisplayColumns}
           pagination={{ pageSize: 15 }}
           expandable={{
             expandedRowRender: (r: any) => (

@@ -148,7 +148,7 @@ const WorkshopManagement: React.FC = () => {
   ]
   const { displayColumns: payrollDisplayColumns, settingsButton: payrollSettingsButton } = useColumnPrefs('accounting-workshop-payroll', payrollColumns)
 
-  const assetColumns = [
+  const assetColumns: import('antd/es/table').ColumnsType<FixedAsset> = [
     { title: 'Mã TS', dataIndex: 'ma_ts' },
     { title: 'Tên tài sản', dataIndex: 'ten_ts' },
     { title: 'Nguyên giá', dataIndex: 'nguyen_gia', align: 'right' as const, render: (val: number) => val?.toLocaleString() },

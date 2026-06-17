@@ -25,7 +25,7 @@ from app.schemas.accounting import (
     PurchaseInvoiceCreate,
     CashReceiptCreate,
     CashPaymentCreate,
-    ARLedgerRow, ARAgingRow,
+    ARLedgerRow, ARAgingRow, ARCustomerSummaryRow,
     APLedgerRow, APAgingRow,
     BalanceByPeriod,
     OpeningBalanceCreate,
@@ -1982,6 +1982,72 @@ class AccountingService:
                 qua_han_90=d["qua_han_90"],
             ))
         return sorted(result, key=lambda r: r.tong_con_lai, reverse=True)
+
+    def get_ar_customer_summary(
+        self,
+        phap_nhan_id: int | None = None,
+    ) -> list[ARCustomerSummaryRow]:
+        """Bảng kê công nợ phải thu tóm tắt theo khách hàng.
+        Cột 1 = tổng giá trị hóa đơn (non-cancelled).
+        Cột 2 = tổng phiếu thu đã duyệt.
+        Cột 3 = Cột 1 - Cột 2 (âm = khách ứng trước).
+        """
+        inv_q = self.db.query(
+            SalesInvoice.customer_id,
+            func.coalesce(func.sum(SalesInvoice.tong_cong), 0).label("tong_hd"),
+        ).filter(SalesInvoice.trang_thai != "huy")
+        if phap_nhan_id:
+            inv_q = inv_q.filter(SalesInvoice.phap_nhan_id == phap_nhan_id)
+        inv_sub = inv_q.group_by(SalesInvoice.customer_id).subquery()
+
+        rcpt_q = self.db.query(
+            CashReceipt.customer_id,
+            func.coalesce(func.sum(CashReceipt.so_tien), 0).label("tong_thu"),
+        ).filter(CashReceipt.trang_thai == "da_duyet")
+        if phap_nhan_id:
+            rcpt_q = rcpt_q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
+        rcpt_sub = rcpt_q.group_by(CashReceipt.customer_id).subquery()
+
+        rows = (
+            self.db.query(
+                Customer.id,
+                Customer.ma_kh,
+                Customer.ten_viet_tat,
+                Customer.ten_don_vi,
+                Customer.dia_chi,
+                Customer.ma_so_thue,
+                Customer.dien_thoai,
+                Customer.so_dien_thoai_lh,
+                Customer.xep_loai,
+                func.coalesce(inv_sub.c.tong_hd, 0).label("tong_hd"),
+                func.coalesce(rcpt_sub.c.tong_thu, 0).label("tong_thu"),
+            )
+            .outerjoin(inv_sub, Customer.id == inv_sub.c.customer_id)
+            .outerjoin(rcpt_sub, Customer.id == rcpt_sub.c.customer_id)
+            .filter(
+                or_(inv_sub.c.tong_hd != None, rcpt_sub.c.tong_thu != None)
+            )
+            .order_by(Customer.ma_kh)
+            .all()
+        )
+
+        result = []
+        for r in rows:
+            so_hd = Decimal(str(r.tong_hd))
+            so_thu = Decimal(str(r.tong_thu))
+            result.append(ARCustomerSummaryRow(
+                customer_id=r.id,
+                ma_kh=r.ma_kh,
+                ten_khach_hang=r.ten_viet_tat or r.ten_don_vi or r.ma_kh,
+                dia_chi=r.dia_chi,
+                ma_so_thue=r.ma_so_thue,
+                dien_thoai=r.dien_thoai or r.so_dien_thoai_lh,
+                nhom_kh=r.xep_loai,
+                so_con_phai_thu_theo_hd=so_hd,
+                so_thu_truoc_giam_tru=so_thu,
+                so_con_phai_thu=so_hd - so_thu,
+            ))
+        return result
 
     def get_supplier_reconciliation(
         self,

@@ -264,6 +264,19 @@ export interface ARAgingRow {
   qua_han_90: number
 }
 
+export interface ARCustomerSummaryRow {
+  customer_id: number
+  ma_kh: string
+  ten_khach_hang: string
+  dia_chi: string | null
+  ma_so_thue: string | null
+  dien_thoai: string | null
+  nhom_kh: string | null
+  so_con_phai_thu_theo_hd: number
+  so_thu_truoc_giam_tru: number
+  so_con_phai_thu: number
+}
+
 export interface APLedgerRow {
   invoice_id: number
   so_hoa_don: string | null
@@ -431,6 +444,9 @@ export const arApi = {
 
   getBalance: (params: { customer_id?: number; tu_ngay: string; den_ngay: string }): Promise<BalanceByPeriod> =>
     client.get('/accounting/ar/balance', { params }).then(r => r.data),
+
+  getCustomerSummary: (phapNhanId?: number): Promise<ARCustomerSummaryRow[]> =>
+    client.get('/accounting/ar/customer-summary', { params: phapNhanId ? { phap_nhan_id: phapNhanId } : {} }).then(r => r.data),
 
   getReconciliation: (customerId: number, params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number }) =>
     client.get(`/accounting/ar/reconciliation/${customerId}`, { params }).then(r => r.data),

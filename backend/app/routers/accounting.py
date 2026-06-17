@@ -21,6 +21,7 @@ from app.schemas.accounting import (
     PurchaseInvoiceResponse, CashReceiptCreate,
     CashReceiptResponse, CashPaymentCreate,
     CashPaymentResponse, OpeningBalanceCreate,
+    ARCustomerSummaryRow,
     WorkshopPayrollCreate,
     WorkshopPayrollResponse, OverheadAllocationRequest,
     OverheadAllocationResponse, ClosingResult,
@@ -1761,6 +1762,15 @@ def ar_balance(
     _: User = Depends(get_current_user),
 ):
     return AccountingService(db).get_ar_balance(customer_id, tu_ngay, den_ngay, phap_nhan_id=phap_nhan_id)
+
+
+@router.get("/ar/customer-summary", response_model=list[ARCustomerSummaryRow])
+def ar_customer_summary(
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return AccountingService(db).get_ar_customer_summary(phap_nhan_id=phap_nhan_id)
 
 
 # ─────────────────────────────────────────────

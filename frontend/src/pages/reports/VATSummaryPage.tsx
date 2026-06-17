@@ -169,7 +169,7 @@ const VATSummaryPage: React.FC = () => {
     }
   }
 
-  const summaryColumns = [
+  const summaryColumns: import('antd/es/table').ColumnsType<{ label: string; value: number }> = [
     { title: 'Chỉ tiêu', dataIndex: 'label', key: 'label' },
     {
       title: 'Giá trị (VNĐ)',

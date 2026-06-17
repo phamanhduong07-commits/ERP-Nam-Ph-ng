@@ -10,6 +10,7 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/vi'
 import { cd2Api, PhieuIn } from '../../api/cd2'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 dayjs.extend(relativeTime)
 dayjs.locale('vi')
@@ -101,6 +102,44 @@ export default function CD2DashboardPage() {
     }
   }, [qc])
 
+  const machineColumns = [
+    { title: 'Tên máy', dataIndex: 'ten_may', render: (v: string, r: any) => (
+      <Space>
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: r.status === 'RUNNING' ? '#52c41a' : r.status === 'STOPPED' ? '#f5222d' : '#d9d9d9' }} />
+        <Text strong>{v}</Text>
+      </Space>
+    )},
+    { title: 'Trạng thái', dataIndex: 'status', render: (v: string) => (
+      <Tag color={v === 'RUNNING' ? 'success' : v === 'STOPPED' ? 'warning' : v === 'ERROR' ? 'error' : 'default'}>
+        {v === 'RUNNING' ? 'ĐANG CHẠY' : v === 'STOPPED' ? 'TẠM DỪNG' : v === 'ERROR' ? 'MÁY LỖI' : 'ĐANG NGHỈ'}
+      </Tag>
+    )},
+    { title: 'Lệnh sản xuất', dataIndex: 'current_order', render: (v: string) => v ? (
+      <Text code style={{ fontSize: 11 }}>{v}</Text>
+    ) : '—' },
+    { title: 'Vận hành', dataIndex: 'operator', render: (v: string) => v || '—' },
+    { title: 'Cập nhật cuối', dataIndex: 'last_event_time', render: (v: string) => v ? dayjs(v).fromNow() : '—' },
+  ]
+  const { displayColumns: machineDisplayColumns, settingsButton: machineSettingsButton } = useColumnPrefs('production-cd2-machines', machineColumns)
+
+  const dangInColumns = [
+    { title: 'Số phiếu', dataIndex: 'so_phieu', width: 150 },
+    { title: 'Tên hàng', dataIndex: 'ten_hang', render: (v: string) => v || '—' },
+    { title: 'Khách hàng', dataIndex: 'ten_khach_hang', render: (v: string) => v || '—' },
+    { title: 'Máy in', dataIndex: 'ten_may', render: (v: string) => v ? <Tag color="orange">{v}</Tag> : '—' },
+    { title: 'SL phôi', dataIndex: 'so_luong_phoi', render: (v: number) => v?.toLocaleString('vi-VN') ?? '—', align: 'right' as const },
+    {
+      title: '',
+      width: 110,
+      render: (_: unknown, rec: PhieuIn) => (
+        <Button size="small" type="primary" onClick={() => setSelectedPhieu(rec)}>
+          Xử lý
+        </Button>
+      ),
+    },
+  ]
+  const { displayColumns: dangInDisplayColumns, settingsButton: dangInSettingsButton } = useColumnPrefs('production-cd2-dang-in', dangInColumns)
+
   if (isLoading) return <Spin style={{ margin: 40 }} />
 
   const counts = data?.phieu_in_counts ?? {}
@@ -160,34 +199,18 @@ export default function CD2DashboardPage() {
           <Space>
             <Button size="small" icon={<EyeOutlined />} onClick={() => setShowMobilePreview(true)}>Xem giao diện công nhân</Button>
             <Text type="secondary" style={{fontSize: 12}}>Cập nhật: {dayjs().format('HH:mm:ss')}</Text>
+            {machineSettingsButton}
           </Space>
         }
       >
         <Table
-                    locale={{ emptyText: <EmptyState size="small" /> }}
-                    dataSource={machineStatus}
+          locale={{ emptyText: <EmptyState size="small" /> }}
+          dataSource={machineStatus}
           rowKey="id"
           size="small"
           pagination={false}
           loading={loadingMachines}
-          columns={[
-            { title: 'Tên máy', dataIndex: 'ten_may', render: (v, r) => (
-              <Space>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: r.status === 'RUNNING' ? '#52c41a' : r.status === 'STOPPED' ? '#f5222d' : '#d9d9d9' }} />
-                <Text strong>{v}</Text>
-              </Space>
-            )},
-            { title: 'Trạng thái', dataIndex: 'status', render: v => (
-              <Tag color={v === 'RUNNING' ? 'success' : v === 'STOPPED' ? 'warning' : v === 'ERROR' ? 'error' : 'default'}>
-                {v === 'RUNNING' ? 'ĐANG CHẠY' : v === 'STOPPED' ? 'TẠM DỪNG' : v === 'ERROR' ? 'MÁY LỖI' : 'ĐANG NGHỈ'}
-              </Tag>
-            )},
-            { title: 'Lệnh sản xuất', dataIndex: 'current_order', render: v => v ? (
-              <Text code style={{ fontSize: 11 }}>{v}</Text>
-            ) : '—' },
-            { title: 'Vận hành', dataIndex: 'operator', render: v => v || '—' },
-            { title: 'Cập nhật cuối', dataIndex: 'last_event_time', render: v => v ? dayjs(v).fromNow() : '—' },
-          ]}
+          columns={machineDisplayColumns}
         />
       </Card>
 
@@ -209,22 +232,8 @@ export default function CD2DashboardPage() {
             rowKey="id"
             size="small"
             pagination={false}
-            columns={[
-              { title: 'Số phiếu', dataIndex: 'so_phieu', width: 150 },
-              { title: 'Tên hàng', dataIndex: 'ten_hang', render: v => v || '—' },
-              { title: 'Khách hàng', dataIndex: 'ten_khach_hang', render: v => v || '—' },
-              { title: 'Máy in', dataIndex: 'ten_may', render: v => v ? <Tag color="orange">{v}</Tag> : '—' },
-              { title: 'SL phôi', dataIndex: 'so_luong_phoi', render: v => v?.toLocaleString('vi-VN') ?? '—', align: 'right' },
-              {
-                title: '',
-                width: 110,
-                render: (_, rec) => (
-                  <Button size="small" type="primary" onClick={() => setSelectedPhieu(rec)}>
-                    Xử lý
-                  </Button>
-                ),
-              },
-            ]}
+            columns={dangInDisplayColumns}
+            title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{dangInSettingsButton}</div>}
           />
         </Card>
       )}

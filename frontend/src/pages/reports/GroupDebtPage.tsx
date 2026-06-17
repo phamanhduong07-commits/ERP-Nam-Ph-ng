@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Card, Table, DatePicker, Button, Typography, Row, Col, Tabs, Statistic, Tag } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { reportsApi } from '../../api/reports'
 import PageLayout from '../../components/PageLayout'
 import dayjs from 'dayjs'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -56,7 +57,7 @@ const GroupDebtPage: React.FC = () => {
     }
   }
 
-  const buildARColumns = () => [
+  const arColumns = useMemo(() => [
     { title: 'Pháp nhân', dataIndex: 'ten', key: 'ten',
       render: (v: string) => <Text strong>{v}</Text> },
     { title: 'Tổng AR', key: 'tong', align: 'right' as const,
@@ -70,9 +71,9 @@ const GroupDebtPage: React.FC = () => {
         return v > 0 ? <Text style={{ color: b.color }}>{fmt(v)}</Text> : <Text type="secondary">—</Text>
       },
     })),
-  ]
+  ], [])
 
-  const buildAPColumns = () => [
+  const apColumns = useMemo(() => [
     { title: 'Pháp nhân', dataIndex: 'ten', key: 'ten',
       render: (v: string) => <Text strong>{v}</Text> },
     { title: 'Tổng AP', key: 'tong', align: 'right' as const,
@@ -86,7 +87,10 @@ const GroupDebtPage: React.FC = () => {
         return v > 0 ? <Text style={{ color: b.color }}>{fmt(v)}</Text> : <Text type="secondary">—</Text>
       },
     })),
-  ]
+  ], [])
+
+  const { displayColumns: arDisplayColumns, settingsButton: arSettingsButton } = useColumnPrefs('reports-group-debt-ar', arColumns)
+  const { displayColumns: apDisplayColumns, settingsButton: apSettingsButton } = useColumnPrefs('reports-group-debt-ap', apColumns)
 
   const tableData = data ? [
     ...data.phap_nhan,
@@ -136,31 +140,37 @@ const GroupDebtPage: React.FC = () => {
                 key: 'ar',
                 label: `Phải thu (AR) — ${B(data.tong_group.ar.tong)}`,
                 children: (
-                  <Table
-                    columns={buildARColumns()}
-                    dataSource={tableData}
-                    rowKey={(r: any) => r.phap_nhan_id}
-                    pagination={false}
-                    bordered
-                    scroll={{ x: 'max-content' }}
-                    size="small"
-                    rowClassName={(r: any) => r.phap_nhan_id === -1 ? 'ant-table-row-total' : ''}
-                  />
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>{arSettingsButton}</div>
+                    <Table
+                      columns={arDisplayColumns}
+                      dataSource={tableData}
+                      rowKey={(r: any) => r.phap_nhan_id}
+                      pagination={false}
+                      bordered
+                      scroll={{ x: 'max-content' }}
+                      size="small"
+                      rowClassName={(r: any) => r.phap_nhan_id === -1 ? 'ant-table-row-total' : ''}
+                    />
+                  </>
                 ),
               },
               {
                 key: 'ap',
                 label: `Phải trả (AP) — ${B(data.tong_group.ap.tong)}`,
                 children: (
-                  <Table
-                    columns={buildAPColumns()}
-                    dataSource={tableData}
-                    rowKey={(r: any) => r.phap_nhan_id}
-                    pagination={false}
-                    bordered
-                    size="small"
-                    rowClassName={(r: any) => r.phap_nhan_id === -1 ? 'ant-table-row-total' : ''}
-                  />
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>{apSettingsButton}</div>
+                    <Table
+                      columns={apDisplayColumns}
+                      dataSource={tableData}
+                      rowKey={(r: any) => r.phap_nhan_id}
+                      pagination={false}
+                      bordered
+                      size="small"
+                      rowClassName={(r: any) => r.phap_nhan_id === -1 ? 'ant-table-row-total' : ''}
+                    />
+                  </>
                 ),
               },
             ]} />

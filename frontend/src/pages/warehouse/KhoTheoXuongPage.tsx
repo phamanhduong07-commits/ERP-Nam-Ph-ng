@@ -13,6 +13,7 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import type { WarehouseSlot, WarehouseSlotNA, PhanXuongWithWarehouses, TonKho } from '../../api/warehouse'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -205,6 +206,50 @@ export default function KhoTheoXuongPage() {
 
   const drawerCfg = detailSlot ? LOAI_CONFIG[detailSlot.loai_kho] : null
 
+  const tonKhoColumns = useMemo(() => [
+    {
+      title: 'Tên hàng',
+      dataIndex: 'ten_hang',
+      ellipsis: true,
+      render: (v: string) => <Text strong style={{ fontSize: 12 }}>{v}</Text>,
+    },
+    {
+      title: 'Tồn kho',
+      dataIndex: 'ton_luong',
+      width: 100,
+      align: 'right' as const,
+      render: (v: number, r: TonKho) => (
+        <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
+          <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322', fontSize: 12 }}>
+            {fmtN(v)}
+          </Text>
+          <Text type="secondary" style={{ fontSize: 10 }}>{r.don_vi}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: 'Đơn giá BQ',
+      dataIndex: 'don_gia_binh_quan',
+      width: 120,
+      align: 'right' as const,
+      render: (v: number) => v > 0
+        ? <Text style={{ fontSize: 12 }}>{fmtMoney(v)}</Text>
+        : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Giá trị tồn',
+      dataIndex: 'gia_tri_ton',
+      width: 130,
+      align: 'right' as const,
+      render: (v: number) => (
+        <Text strong style={{ color: v > 0 ? '#1677ff' : '#aaa', fontSize: 12 }}>
+          {v > 0 ? fmtMoney(v) : '—'}
+        </Text>
+      ),
+    },
+  ], [])
+  const { displayColumns: tonKhoDisplayColumns, settingsButton: tonKhoSettingsButton } = useColumnPrefs('warehouse-kho-theo-xuong-detail', tonKhoColumns)
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -391,48 +436,8 @@ export default function KhoTheoXuongPage() {
                 dataSource={detailItems}
                 pagination={false}
                 scroll={{ x: 480 }}
-                columns={[
-                  {
-                    title: 'Tên hàng',
-                    dataIndex: 'ten_hang',
-                    ellipsis: true,
-                    render: (v: string) => <Text strong style={{ fontSize: 12 }}>{v}</Text>,
-                  },
-                  {
-                    title: 'Tồn kho',
-                    dataIndex: 'ton_luong',
-                    width: 100,
-                    align: 'right' as const,
-                    render: (v: number, r: TonKho) => (
-                      <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
-                        <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322', fontSize: 12 }}>
-                          {fmtN(v)}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 10 }}>{r.don_vi}</Text>
-                      </Space>
-                    ),
-                  },
-                  {
-                    title: 'Đơn giá BQ',
-                    dataIndex: 'don_gia_binh_quan',
-                    width: 120,
-                    align: 'right' as const,
-                    render: (v: number) => v > 0
-                      ? <Text style={{ fontSize: 12 }}>{fmtMoney(v)}</Text>
-                      : <Text type="secondary">—</Text>,
-                  },
-                  {
-                    title: 'Giá trị tồn',
-                    dataIndex: 'gia_tri_ton',
-                    width: 130,
-                    align: 'right' as const,
-                    render: (v: number) => (
-                      <Text strong style={{ color: v > 0 ? '#1677ff' : '#aaa', fontSize: 12 }}>
-                        {v > 0 ? fmtMoney(v) : '—'}
-                      </Text>
-                    ),
-                  },
-                ]}
+                columns={tonKhoDisplayColumns}
+                title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{tonKhoSettingsButton}</div>}
                 summary={() => (
                   <Table.Summary.Row>
                     <Table.Summary.Cell index={0} colSpan={2}>

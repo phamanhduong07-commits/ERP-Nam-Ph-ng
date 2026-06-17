@@ -9,7 +9,7 @@ import { FileExcelOutlined, FilePdfOutlined, PlusOutlined } from '@ant-design/ic
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND } from '../../utils/exportUtils'
-import { arApi, ARLedgerEntryRow, ARLedgerRow, ARAgingRow } from '../../api/accounting'
+import { arApi, ARLedgerEntryRow, ARLedgerRow, ARAgingRow, ARCustomerSummaryRow } from '../../api/accounting'
 import { customersApi, Customer } from '../../api/customers'
 import { TRANG_THAI_INVOICE } from '../../api/billing'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'

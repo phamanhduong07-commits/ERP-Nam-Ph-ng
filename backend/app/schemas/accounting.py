@@ -442,6 +442,20 @@ class ARAgingRow(BaseModel):
     qua_han_90: Decimal     # >90 ngày
 
 
+class ARCustomerSummaryRow(BaseModel):
+    """Bảng kê công nợ phải thu theo khách hàng"""
+    customer_id: int
+    ma_kh: str
+    ten_khach_hang: str
+    dia_chi: str | None
+    ma_so_thue: str | None
+    dien_thoai: str | None
+    nhom_kh: str | None
+    so_con_phai_thu_theo_hd: Decimal
+    so_thu_truoc_giam_tru: Decimal
+    so_con_phai_thu: Decimal
+
+
 class APLedgerRow(BaseModel):
     """Một dòng trong sổ công nợ phải trả"""
     invoice_id: int

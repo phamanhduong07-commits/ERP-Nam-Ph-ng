@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -13,6 +13,7 @@ import type { WarehouseSlot, WarehouseSlotNA, PhanXuongWithWarehouses, TonKho } 
 import { exportExcelWithTemplate } from '../../utils/exportUtils'
 import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -258,6 +259,68 @@ export default function KhoNVLPage() {
   const totalDetailGiaTri = detailItems.reduce((s, r) => s + (r.gia_tri_ton ?? 0), 0)
   const totalDetailSoLuong = detailItems.reduce((s, r) => s + (r.ton_luong ?? 0), 0)
 
+  const tonKhoColumns = useMemo(() => [
+    {
+      title: 'Tên NVL',
+      dataIndex: 'ten_hang',
+      ellipsis: true,
+      render: (v: string, r: TonKho) => (
+        <Space direction="vertical" size={0}>
+          <Text strong style={{ fontSize: 12 }}>{v}</Text>
+          {r.ton_luong < r.ton_toi_thieu && r.ton_toi_thieu > 0 && (
+            <Tag color="red" style={{ fontSize: 10 }}>
+              <WarningOutlined /> Dưới mức tối thiểu
+            </Tag>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: 'Tồn kho',
+      dataIndex: 'ton_luong',
+      width: 110,
+      align: 'right' as const,
+      sorter: (a: TonKho, b: TonKho) => a.ton_luong - b.ton_luong,
+      render: (v: number, r: TonKho) => (
+        <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
+          <Text
+            strong
+            style={{
+              color: v > 0
+                ? (v < r.ton_toi_thieu && r.ton_toi_thieu > 0 ? '#ff4d4f' : '#389e0d')
+                : '#aaa',
+              fontSize: 12,
+            }}
+          >
+            {fmtN(v)}
+          </Text>
+          <Text type="secondary" style={{ fontSize: 10 }}>{r.don_vi}</Text>
+        </Space>
+      ),
+    },
+    ...(canViewPrice ? [{
+      title: 'Đơn giá BQ',
+      dataIndex: 'don_gia_binh_quan',
+      width: 120,
+      align: 'right' as const,
+      render: (v: number) => v > 0
+        ? <Text style={{ fontSize: 12 }}>{fmtMoney(v)}</Text>
+        : <Text type="secondary">—</Text>,
+    }] : []),
+    {
+      title: 'Giá trị tồn',
+      dataIndex: 'gia_tri_ton',
+      width: 130,
+      align: 'right' as const,
+      render: (v: number) => (
+        <Text strong style={{ color: v > 0 ? '#1677ff' : '#aaa', fontSize: 12 }}>
+          {v > 0 ? fmtMoney(v) : '—'}
+        </Text>
+      ),
+    },
+  ], [canViewPrice])
+  const { displayColumns: tonKhoDisplayColumns, settingsButton: tonKhoSettingsButton } = useColumnPrefs('warehouse-kho-nvl-detail', tonKhoColumns)
+
   function getLoaiForFactory(px: PhanXuongWithWarehouses): NvlLoai[] {
     // cd1_cd2 (Hoàng Gia, Nam Thuận): có cả giấy cuộn + NVL phụ
     // cd2 (Củ Chi, Hóc Môn): chỉ có NVL phụ
@@ -499,66 +562,8 @@ export default function KhoNVLPage() {
                 dataSource={detailItems}
                 pagination={{ pageSize: 20, showSizeChanger: false }}
                 scroll={{ x: 500 }}
-                columns={[
-                  {
-                    title: 'Tên NVL',
-                    dataIndex: 'ten_hang',
-                    ellipsis: true,
-                    render: (v: string, r: TonKho) => (
-                      <Space direction="vertical" size={0}>
-                        <Text strong style={{ fontSize: 12 }}>{v}</Text>
-                        {r.ton_luong < r.ton_toi_thieu && r.ton_toi_thieu > 0 && (
-                          <Tag color="red" style={{ fontSize: 10 }}>
-                            <WarningOutlined /> Dưới mức tối thiểu
-                          </Tag>
-                        )}
-                      </Space>
-                    ),
-                  },
-                  {
-                    title: 'Tồn kho',
-                    dataIndex: 'ton_luong',
-                    width: 110,
-                    align: 'right' as const,
-                    sorter: (a: TonKho, b: TonKho) => a.ton_luong - b.ton_luong,
-                    render: (v: number, r: TonKho) => (
-                      <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
-                        <Text
-                          strong
-                          style={{
-                            color: v > 0
-                              ? (v < r.ton_toi_thieu && r.ton_toi_thieu > 0 ? '#ff4d4f' : '#389e0d')
-                              : '#aaa',
-                            fontSize: 12,
-                          }}
-                        >
-                          {fmtN(v)}
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: 10 }}>{r.don_vi}</Text>
-                      </Space>
-                    ),
-                  },
-                  ...(canViewPrice ? [{
-                    title: 'Đơn giá BQ',
-                    dataIndex: 'don_gia_binh_quan',
-                    width: 120,
-                    align: 'right' as const,
-                    render: (v: number) => v > 0
-                      ? <Text style={{ fontSize: 12 }}>{fmtMoney(v)}</Text>
-                      : <Text type="secondary">—</Text>,
-                  }] : []),
-                  {
-                    title: 'Giá trị tồn',
-                    dataIndex: 'gia_tri_ton',
-                    width: 130,
-                    align: 'right' as const,
-                    render: (v: number) => (
-                      <Text strong style={{ color: v > 0 ? '#1677ff' : '#aaa', fontSize: 12 }}>
-                        {v > 0 ? fmtMoney(v) : '—'}
-                      </Text>
-                    ),
-                  },
-                ]}
+                columns={tonKhoDisplayColumns}
+                title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{tonKhoSettingsButton}</div>}
                 summary={() => (
                   <Table.Summary.Row>
                     <Table.Summary.Cell index={0} colSpan={2}>

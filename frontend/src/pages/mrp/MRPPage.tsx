@@ -81,7 +81,7 @@ export default function MRPPage() {
   const shortageCount = results.filter(r => r.thieu_hut_kg > 0).length
   const totalShortage = results.reduce((s, r) => s + r.thieu_hut_kg, 0)
 
-  const columns = [
+  const columns: import('antd/es/table').ColumnsType<MRPRow> = [
     { title: 'Mã KH', dataIndex: 'ma_ky_hieu', width: 100 },
     { title: 'Tên nguyên liệu', dataIndex: 'ten_nguyen_lieu', ellipsis: true },
     {

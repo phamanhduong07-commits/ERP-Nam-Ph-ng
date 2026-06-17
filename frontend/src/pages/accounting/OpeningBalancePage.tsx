@@ -92,7 +92,7 @@ function ImportTab({
     }
   }
 
-  const columns = [
+  const columns: import('antd/es/table').ColumnsType<ImportRow> = [
     { title: 'Dòng', dataIndex: 'row', width: 60, align: 'center' as const },
     {
       title: 'Trạng thái',

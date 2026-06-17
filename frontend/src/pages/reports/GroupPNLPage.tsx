@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Card, Table, DatePicker, Button, Typography, Row, Col, Space } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { reportsApi } from '../../api/reports'
 import PageLayout from '../../components/PageLayout'
 import dayjs from 'dayjs'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 
@@ -38,32 +39,37 @@ const GroupPNLPage: React.FC = () => {
     }
   }
 
-  const buildColumns = (cols: PNLColumn[]) => [
-    {
-      title: 'Chỉ tiêu', dataIndex: 'chi_tieu', key: 'chi_tieu', width: 240,
-      render: (v: string, r: PNLRow) => (
-        <Text strong={HIGHLIGHT_ROWS.includes(r.key)} style={{ color: HIGHLIGHT_ROWS.includes(r.key) ? '#1d3557' : undefined }}>
-          {v}
-        </Text>
-      ),
-    },
-    { title: 'MS', dataIndex: 'ma_so', key: 'ma_so', width: 48, align: 'center' as const },
-    ...cols.map((col, idx) => ({
-      title: <Text strong>{col.ten}</Text>,
-      key: `col_${idx}`,
-      align: 'right' as const,
-      render: (_: unknown, r: PNLRow) => {
-        const v = r.values[idx]
-        const isNeg = NEGATIVE_ROWS.includes(r.key)
-        const isHL = HIGHLIGHT_ROWS.includes(r.key)
-        return (
-          <Text strong={isHL} style={{ color: isNeg ? '#cf1322' : (isHL ? '#1d3557' : undefined) }}>
-            {fmt(v)}
+  const pnlColumns = useMemo(() => {
+    const cols = data?.columns ?? []
+    return [
+      {
+        title: 'Chỉ tiêu', dataIndex: 'chi_tieu', key: 'chi_tieu', width: 240,
+        render: (v: string, r: PNLRow) => (
+          <Text strong={HIGHLIGHT_ROWS.includes(r.key)} style={{ color: HIGHLIGHT_ROWS.includes(r.key) ? '#1d3557' : undefined }}>
+            {v}
           </Text>
-        )
+        ),
       },
-    })),
-  ]
+      { title: 'MS', dataIndex: 'ma_so', key: 'ma_so', width: 48, align: 'center' as const },
+      ...cols.map((col, idx) => ({
+        title: <Text strong>{col.ten}</Text>,
+        key: `col_${idx}`,
+        align: 'right' as const,
+        render: (_: unknown, r: PNLRow) => {
+          const v = r.values[idx]
+          const isNeg = NEGATIVE_ROWS.includes(r.key)
+          const isHL = HIGHLIGHT_ROWS.includes(r.key)
+          return (
+            <Text strong={isHL} style={{ color: isNeg ? '#cf1322' : (isHL ? '#1d3557' : undefined) }}>
+              {fmt(v)}
+            </Text>
+          )
+        },
+      })),
+    ]
+  }, [data?.columns])
+
+  const { displayColumns: pnlDisplayColumns, settingsButton: pnlSettingsButton } = useColumnPrefs('reports-group-pnl', pnlColumns)
 
   return (
     <PageLayout title="Báo cáo P&L Group — Tổng hợp 3 Pháp nhân">
@@ -86,9 +92,12 @@ const GroupPNLPage: React.FC = () => {
       </Card>
 
       {data && (
-        <Card title={<Title level={5}>Kết quả Kinh doanh — {data.tu_ngay} đến {data.den_ngay}</Title>}>
+        <Card
+          title={<Title level={5}>Kết quả Kinh doanh — {data.tu_ngay} đến {data.den_ngay}</Title>}
+          extra={pnlSettingsButton}
+        >
           <Table
-            columns={buildColumns(data.columns)}
+            columns={pnlDisplayColumns}
             dataSource={data.rows}
             rowKey="key"
             pagination={false}
