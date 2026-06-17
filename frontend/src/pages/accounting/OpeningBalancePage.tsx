@@ -9,6 +9,7 @@ import {
 import type { UploadFile } from 'antd/es/upload'
 import { openingBalanceApi } from '../../api/accounting'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -112,6 +113,7 @@ function ImportTab({
     },
     { title: 'Ghi chú / Lỗi', dataIndex: 'message', ellipsis: true },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-opening-balance', columns)
 
   const hasErrors = preview && preview.errors > 0
 
@@ -171,10 +173,11 @@ function ImportTab({
             }
             style={{ marginBottom: 12 }}
           />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{settingsButton}</div>
           <Table
                         locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
                         dataSource={preview.rows}
-            columns={columns}
+            columns={displayColumns}
             rowKey="row"
             size="small"
             pagination={{ pageSize: 50, showSizeChanger: false }}

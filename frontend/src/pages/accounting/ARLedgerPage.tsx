@@ -14,6 +14,7 @@ import { customersApi, Customer } from '../../api/customers'
 import { TRANG_THAI_INVOICE } from '../../api/billing'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -153,6 +154,8 @@ function LedgerTab() {
     },
   ]
 
+  const { displayColumns: displayLedgerCols, settingsButton: ledgerSettingsButton } = useColumnPrefs('accounting-ar-ledger', columns)
+
   return (
     <>
       <Card size="small" style={{ marginBottom: 12 }}>
@@ -195,6 +198,7 @@ function LedgerTab() {
           </Col>
           <Col style={{ marginLeft: 'auto' }}>
             <Space>
+              {ledgerSettingsButton}
               <Button size="small" icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
               <Button size="small" icon={<FilePdfOutlined />} onClick={handlePrint}>In</Button>
             </Space>
@@ -220,7 +224,7 @@ function LedgerTab() {
 
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-                columns={columns}
+                columns={displayLedgerCols}
         dataSource={rows}
         rowKey="invoice_id"
         loading={isLoading}
@@ -344,6 +348,8 @@ function AgingTab() {
     },
   ]
 
+  const { displayColumns: displayAgingCols, settingsButton: agingSettingsButton } = useColumnPrefs('accounting-ar-ledger', columns)
+
   const detailColumns: ColumnsType<ARLedgerRow> = [
     {
       title: 'Số hóa đơn',
@@ -405,7 +411,10 @@ function AgingTab() {
             </Space>
           </Col>
           <Col style={{ marginLeft: 'auto' }}>
-            <Button size="small" icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
+            <Space>
+              {agingSettingsButton}
+              <Button size="small" icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
+            </Space>
           </Col>
         </Row>
       </Card>
@@ -430,7 +439,7 @@ function AgingTab() {
 
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-                columns={columns}
+                columns={displayAgingCols}
         dataSource={rows}
         rowKey="customer_id"
         loading={isLoading}
@@ -529,6 +538,8 @@ function LedgerEntriesTab() {
     { title: 'Có', dataIndex: 'phat_sinh_co', width: 130, align: 'right', render: v => v > 0 ? <Text style={{ color: '#52c41a' }}>{fmtVND(v)}</Text> : '—' },
     { title: 'Số dư', dataIndex: 'so_du', width: 130, align: 'right', render: v => <Text strong>{fmtVND(v)}</Text> },
   ]
+
+  const { displayColumns: displayEntryCols, settingsButton: entrySettingsButton } = useColumnPrefs('accounting-ar-ledger', columns)
 
   const handleExcel = () => {
     const excelRows = rows.map(r => ({

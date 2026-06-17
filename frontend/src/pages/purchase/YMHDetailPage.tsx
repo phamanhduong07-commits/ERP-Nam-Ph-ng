@@ -17,6 +17,7 @@ import {
 import { suppliersApi } from '../../api/suppliers'
 import type { ApiError } from '../../api/types'
 import { fmtVND } from '../../utils/exportUtils'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 
@@ -298,6 +299,7 @@ export default function YMHDetailPage() {
     },
     { title: 'Ghi chú', dataIndex: 'ghi_chu', width: 160, render: (v: string | null | undefined) => v || '-' },
   ]
+  const { displayColumns: displayItemColumns, settingsButton } = useColumnPrefs('purchase-ymh-detail', itemColumns)
 
   const hasApprovalInfo =
     !!ymh.ten_nguoi_duyet_pb || !!ymh.ngay_duyet_pb ||
@@ -370,7 +372,8 @@ export default function YMHDetailPage() {
       <Card title="Chi tiết hàng hóa" size="small" style={{ marginBottom: 16 }}>
         <Table
           rowKey={(r, i) => (r.id != null ? String(r.id) : `${r.ten_hang}-${i}`)}
-          columns={itemColumns}
+          title={() => <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{settingsButton}</div>}
+          columns={displayItemColumns}
           dataSource={ymh.items}
           pagination={false}
           size="small"

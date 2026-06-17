@@ -13,6 +13,7 @@ import {
 } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
 import { hrApi, Employee } from '../../api/hr'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import { downloadTemplate } from '../../utils/excelUtils'
 import * as XLSX from 'xlsx'
 import dayjs from 'dayjs'
@@ -184,7 +185,7 @@ export default function AttendancePage() {
     { title: 'Công', dataIndex: 'so_cong', width: 80, align: 'center' as const, render: (v: number) => <Text strong>{v}</Text> },
     { title: 'Tăng ca', dataIndex: 'so_gio_ot', width: 80, align: 'center' as const },
     { 
-      title: 'Trạng thái', 
+      title: 'Trạng thái',
       dataIndex: 'trang_thai',
       render: (v: string) => {
         const colors: any = { hop_le: 'green', thieu_ca: 'orange', nghi_phep: 'blue', nghi_khong_phep: 'red' }
@@ -192,6 +193,7 @@ export default function AttendancePage() {
       }
     }
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-attendance', attColumns)
 
   const reqColumns = [
     { title: 'Ngày tạo', dataIndex: 'id', render: (_: any, r: any) => dayjs(r.created_at).format('DD/MM HH:mm') },
@@ -237,6 +239,7 @@ export default function AttendancePage() {
             <Button type="primary" icon={<CalendarOutlined />} onClick={() => setLeaveModal(true)}>
               Tạo đơn xin nghỉ
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -265,7 +268,7 @@ export default function AttendancePage() {
                   </Space>
                   <Table
                     dataSource={attendance}
-                    columns={attColumns}
+                    columns={displayColumns}
                     rowKey="id"
                     loading={loadingAtt}
                     size="small"

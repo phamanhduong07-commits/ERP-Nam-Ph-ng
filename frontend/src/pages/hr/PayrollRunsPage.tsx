@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons'
 import * as XLSX from 'xlsx'
 import { hrApi } from '../../api/hr'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -227,6 +228,79 @@ export default function PayrollRunsPage() {
   const hasDraft = (counts['du_thao'] || 0) > 0
   const hasChot = (counts['da_chot'] || 0) > 0
 
+  const columns = [
+    {
+      title: 'Mã NV', dataIndex: 'ma_nv', key: 'ma_nv', width: 100,
+      fixed: 'left' as const,
+    },
+    {
+      title: 'Họ tên', dataIndex: 'ho_ten', key: 'ho_ten',
+      fixed: 'left' as const, width: 180,
+      render: (v: string) => <Text strong>{v}</Text>,
+    },
+    { title: 'Bộ phận', dataIndex: 'bo_phan', key: 'bo_phan', width: 140 },
+    {
+      title: 'Lương SP', dataIndex: 'luong_san_pham', key: 'luong_san_pham', width: 120,
+      align: 'right' as const,
+      render: (v: number) => fmt(v),
+    },
+    {
+      title: 'Bù tối thiểu vùng', dataIndex: 'bu_toi_thieu_vung', key: 'bu_toi_thieu_vung', width: 140,
+      align: 'right' as const,
+      render: (v: number) => v > 0 ? <Text style={{ color: '#52c41a' }}>+{fmt(v)}</Text> : '—',
+    },
+    {
+      title: 'Cộng thêm', dataIndex: 'phu_cap', key: 'phu_cap', width: 110,
+      align: 'right' as const,
+      render: (v: number) => v > 0 ? <Text style={{ color: '#52c41a' }}>+{fmt(v)}</Text> : '—',
+    },
+    {
+      title: 'Bảo hiểm', dataIndex: 'bao_hiem', key: 'bao_hiem', width: 110,
+      align: 'right' as const,
+      render: (v: number) => v > 0 ? <Text style={{ color: '#ff4d4f' }}>−{fmt(v)}</Text> : '—',
+    },
+    {
+      title: 'Tạm ứng', dataIndex: 'tam_ung', key: 'tam_ung', width: 110,
+      align: 'right' as const,
+      render: (v: number) => v > 0 ? <Text style={{ color: '#ff4d4f' }}>−{fmt(v)}</Text> : '—',
+    },
+    {
+      title: 'Tổng thu nhập', dataIndex: 'tong_thu_nhap', key: 'tong_thu_nhap', width: 130,
+      align: 'right' as const,
+      render: (v: number) => <Text strong style={{ color: '#fa8c16' }}>{fmt(v)}</Text>,
+    },
+    {
+      title: 'THỰC LĨNH', dataIndex: 'thuc_linh', key: 'thuc_linh', width: 130,
+      align: 'right' as const,
+      fixed: 'right' as const,
+      render: (v: number) => (
+        <Text strong style={{ color: Number(v) < 0 ? '#cf1322' : '#389e0d', fontSize: 14 }}>
+          {Number(v) < 0 ? '⚠️ ' : ''}{fmt(v)}
+        </Text>
+      ),
+    },
+    {
+      title: 'Trạng thái', dataIndex: 'trang_thai', key: 'trang_thai', width: 130,
+      fixed: 'right' as const,
+      render: (v: string, r: any) => (
+        <Space size={4}>
+          <Tag color={STATUS_COLOR[v] || 'default'}>{STATUS_LABEL[v] || v}</Tag>
+          {v !== 'du_thao' && (
+            <Tooltip title="Mở khóa (ADMIN) — phải nhập lý do">
+              <Button
+                size="small"
+                type="text"
+                icon={<UnlockOutlined />}
+                onClick={() => promptUnlock(r.id)}
+              />
+            </Tooltip>
+          )}
+        </Space>
+      ),
+    },
+  ]
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-payroll-runs', columns, { nonHideable: ['ma_nv'] })
+
   return (
     <div style={{ padding: 16 }}>
       <style>{`.payroll-row-negative > td { background: #fff1f0 !important; }`}</style>
@@ -434,6 +508,7 @@ export default function PayrollRunsPage() {
                 { value: 'da_thanh_toan', label: 'Đã thanh toán' },
               ]}
             />
+            {settingsButton}
           </Space>
         }
       >
@@ -445,77 +520,7 @@ export default function PayrollRunsPage() {
           scroll={{ x: 1200 }}
           pagination={{ pageSize: 50, showSizeChanger: true }}
           rowClassName={(r: any) => (Number(r.thuc_linh) < 0 ? 'payroll-row-negative' : '')}
-          columns={[
-            {
-              title: 'Mã NV', dataIndex: 'ma_nv', key: 'ma_nv', width: 100,
-              fixed: 'left',
-            },
-            {
-              title: 'Họ tên', dataIndex: 'ho_ten', key: 'ho_ten',
-              fixed: 'left', width: 180,
-              render: (v: string) => <Text strong>{v}</Text>,
-            },
-            { title: 'Bộ phận', dataIndex: 'bo_phan', key: 'bo_phan', width: 140 },
-            {
-              title: 'Lương SP', dataIndex: 'luong_san_pham', key: 'luong_san_pham', width: 120,
-              align: 'right',
-              render: (v: number) => fmt(v),
-            },
-            {
-              title: 'Bù tối thiểu vùng', dataIndex: 'bu_toi_thieu_vung', key: 'bu_toi_thieu_vung', width: 140,
-              align: 'right',
-              render: (v: number) => v > 0 ? <Text style={{ color: '#52c41a' }}>+{fmt(v)}</Text> : '—',
-            },
-            {
-              title: 'Cộng thêm', dataIndex: 'phu_cap', key: 'phu_cap', width: 110,
-              align: 'right',
-              render: (v: number) => v > 0 ? <Text style={{ color: '#52c41a' }}>+{fmt(v)}</Text> : '—',
-            },
-            {
-              title: 'Bảo hiểm', dataIndex: 'bao_hiem', key: 'bao_hiem', width: 110,
-              align: 'right',
-              render: (v: number) => v > 0 ? <Text style={{ color: '#ff4d4f' }}>−{fmt(v)}</Text> : '—',
-            },
-            {
-              title: 'Tạm ứng', dataIndex: 'tam_ung', key: 'tam_ung', width: 110,
-              align: 'right',
-              render: (v: number) => v > 0 ? <Text style={{ color: '#ff4d4f' }}>−{fmt(v)}</Text> : '—',
-            },
-            {
-              title: 'Tổng thu nhập', dataIndex: 'tong_thu_nhap', key: 'tong_thu_nhap', width: 130,
-              align: 'right',
-              render: (v: number) => <Text strong style={{ color: '#fa8c16' }}>{fmt(v)}</Text>,
-            },
-            {
-              title: 'THỰC LĨNH', dataIndex: 'thuc_linh', key: 'thuc_linh', width: 130,
-              align: 'right',
-              fixed: 'right',
-              render: (v: number) => (
-                <Text strong style={{ color: Number(v) < 0 ? '#cf1322' : '#389e0d', fontSize: 14 }}>
-                  {Number(v) < 0 ? '⚠️ ' : ''}{fmt(v)}
-                </Text>
-              ),
-            },
-            {
-              title: 'Trạng thái', dataIndex: 'trang_thai', key: 'trang_thai', width: 130,
-              fixed: 'right',
-              render: (v: string, r: any) => (
-                <Space size={4}>
-                  <Tag color={STATUS_COLOR[v] || 'default'}>{STATUS_LABEL[v] || v}</Tag>
-                  {v !== 'du_thao' && (
-                    <Tooltip title="Mở khóa (ADMIN) — phải nhập lý do">
-                      <Button
-                        size="small"
-                        type="text"
-                        icon={<UnlockOutlined />}
-                        onClick={() => promptUnlock(r.id)}
-                      />
-                    </Tooltip>
-                  )}
-                </Space>
-              ),
-            },
-          ]}
+          columns={displayColumns}
           summary={(data) => {
             const total = data.reduce((acc: any, r: any) => ({
               luong_sp: acc.luong_sp + Number(r.luong_san_pham || 0),

@@ -13,6 +13,7 @@ import { smartExportExcel, smartPrintPdf, buildHtmlTable } from '../../utils/exp
 import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -272,6 +273,8 @@ export default function InventoryCardPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('warehouse-inventory-card', columns)
+
   const totalNhap = filtered.filter(r => NHAP_TYPES.has(r.loai_giao_dich)).reduce((s, r) => s + r.so_luong, 0)
   const totalXuat = filtered.filter(r => XUAT_TYPES.has(r.loai_giao_dich)).reduce((s, r) => s + r.so_luong, 0)
 
@@ -286,6 +289,7 @@ export default function InventoryCardPage() {
           <Tooltip title={canView ? undefined : 'Bạn không có quyền xem/xuất tồn kho'}>
             <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!canView || !filtered.length}>In PDF</Button>
           </Tooltip>
+          {settingsButton}
         </Space>
       }
     >
@@ -372,7 +376,7 @@ export default function InventoryCardPage() {
         <Table
           rowKey="id"
           size="small"
-          columns={columns}
+          columns={displayColumns}
           dataSource={filtered}
           loading={isFetching}
           pagination={{ pageSize: 50, showTotal: t => `${t} giao dịch` }}

@@ -17,6 +17,7 @@ import type { ProductionOrder } from '../../api/productionOrders'
 import { warehouseApi } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import PhieuNhapPhoiSongModal from './PhieuNhapPhoiSongModal'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -282,6 +283,8 @@ export default function TanDungPlanPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-tan-dung-plan', columns, { nonHideable: ['so_lenh'] })
+
   const today = dayjs().format('DD/MM/YYYY')
 
   return (
@@ -304,6 +307,7 @@ export default function TanDungPlanPage() {
             options={phanXuongList.map((p) => ({ value: p.id, label: p.ten_xuong }))}
           />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Tải lại</Button>
+          {settingsButton}
           <Button
             icon={<PrinterOutlined />}
             type="primary"
@@ -329,7 +333,7 @@ export default function TanDungPlanPage() {
         ) : (
           <Table
             dataSource={items}
-            columns={columns}
+            columns={displayColumns}
             rowKey="production_order_item_id"
             pagination={false}
             size="small"

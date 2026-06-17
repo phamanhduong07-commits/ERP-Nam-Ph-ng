@@ -22,6 +22,7 @@ import { warehouseApi } from '../../api/warehouse'
 import { calcBoxDimensions } from '../../api/quotes'
 import { printProductionTagBatch, exportExcelWithTemplate } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 
@@ -1353,6 +1354,8 @@ export default function MaySongPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-may-song', columns)
+
   // ─── Cột bảng Tab 2 (Lịch sử) ─────────────────────────────────────────────
 
   const allPhieuCols: ColumnsType<PhieuNhapPhoiSongListItem> = [
@@ -1535,6 +1538,7 @@ export default function MaySongPage() {
                       }}>Xóa lọc</Button>
                     </Col>
                   )}
+                  <Col>{settingsButton}</Col>
                 </Row>
 
                 {/* Filter nhanh theo trạng thái */}
@@ -1567,7 +1571,7 @@ export default function MaySongPage() {
                 {/* Bảng LSX */}
                 <Table
                   dataSource={lsxItems}
-                  columns={columns}
+                  columns={displayColumns}
                   rowKey="id"
                   loading={isLoading || (filterKhId != null && !khDetail)}
                   pagination={{ pageSize: 50, showTotal: t => `${t} lệnh SX` }}

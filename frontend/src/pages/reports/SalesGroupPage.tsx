@@ -4,6 +4,7 @@ import { SearchOutlined } from '@ant-design/icons'
 import { reportsApi } from '../../api/reports'
 import PageLayout from '../../components/PageLayout'
 import dayjs from 'dayjs'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -71,6 +72,7 @@ const SalesGroupPage: React.FC = () => {
         return <Text type={cl <= 0 ? 'success' : 'danger'}>{fmt(cl)}</Text>
       } },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('reports-sales-group', xuongColumns)
 
   const totalRow = data?.xuong.find(x => x.phan_xuong_id === null)
 
@@ -92,6 +94,7 @@ const SalesGroupPage: React.FC = () => {
               Xem doanh số
             </Button>
           </Col>
+          <Col>{settingsButton}</Col>
         </Row>
       </Card>
 
@@ -123,7 +126,7 @@ const SalesGroupPage: React.FC = () => {
 
           <Card title="Tổng hợp theo Phân xưởng" style={{ marginBottom: 24 }}>
             <Table
-              columns={xuongColumns}
+              columns={displayColumns}
               dataSource={data.xuong}
               rowKey={(r: XuongRow) => String(r.phan_xuong_id)}
               pagination={false}

@@ -12,6 +12,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { indirectCostsApi, IndirectCostMasterItem } from '../../api/bom'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -138,6 +139,7 @@ export default function IndirectCostList() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-indirect-cost', cols)
 
   if (items.length === 0 && !isLoading) {
     return (
@@ -203,11 +205,12 @@ export default function IndirectCostList() {
                     </Text>
                   </Space>
                 }
+                extra={settingsButton}
               >
                 <Table<IndirectCostMasterItem>
                   rowKey="id"
                   dataSource={lopItems}
-                  columns={cols}
+                  columns={displayColumns}
                   loading={isLoading}
                   size="small"
                   pagination={false}

@@ -17,6 +17,7 @@ import {
 import { warehouseApi } from '../../api/warehouse'
 import { exportToExcel } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -240,6 +241,7 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('production-plan-list', cols, { nonHideable: ['so_ke_hoach'] })
 
   return (
     <div>
@@ -262,6 +264,7 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
                 onClick={() => navigate('/production/plans/new')}>
                 Tạo kế hoạch mới
               </Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -395,7 +398,7 @@ export default function ProductionPlanList({ selectedId, onSelect }: Props) {
       <Table<PlanListItem>
         rowKey="id"
         dataSource={displayItems}
-        columns={cols}
+        columns={displayColumns}
         loading={isLoading}
         size="small"
         pagination={false}

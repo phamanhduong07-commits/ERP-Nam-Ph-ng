@@ -20,6 +20,7 @@ import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { usePermission } from '../../hooks/usePermission'
 import { getErrorMessage } from '../../utils/errorUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import { mediaApi } from '../../api/media'
 import { ocrExamplesApi } from '../../api/ocrExamples'
 
@@ -369,6 +370,7 @@ export default function NhapPhoiNgoaiPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('warehouse-nhap-phoi-ngoai', columns, { nonHideable: ['so_phieu'] })
 
   const expandedRowRender = (r: GoodsReceipt) => (
     <div>
@@ -425,6 +427,7 @@ export default function NhapPhoiNgoaiPage() {
               onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setEditingDraftId(null); setOpen(true) }}>
               Tạo phiếu nhập phôi
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -452,7 +455,7 @@ export default function NhapPhoiNgoaiPage() {
       </Card>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
-        <Table dataSource={receiptList} columns={columns} rowKey="id" loading={isLoading} size="small"
+        <Table dataSource={receiptList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
           locale={{ emptyText: <EmptyState preset="document" size="small" /> }}
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 1000 }} />
       </Card>

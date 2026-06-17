@@ -13,6 +13,7 @@ import client from '../../api/client'
 import PageLayout from '../../components/PageLayout'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import { fmtVND } from '../../utils/exportUtils'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -121,6 +122,7 @@ export default function DuBaoDongTienPage() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-du-bao-dong-tien', columns)
 
   return (
     <PageLayout title="Dự báo dòng tiền">
@@ -147,6 +149,7 @@ export default function DuBaoDongTienPage() {
               />
             </Col>
           )}
+          <Col style={{ marginLeft: 'auto' }}>{settingsButton}</Col>
         </Row>
       </Card>
 
@@ -227,7 +230,7 @@ export default function DuBaoDongTienPage() {
 
       {/* Table */}
       <Table<ForecastDay>
-        columns={columns}
+        columns={displayColumns}
         dataSource={items}
         rowKey="ngay"
         size="small"

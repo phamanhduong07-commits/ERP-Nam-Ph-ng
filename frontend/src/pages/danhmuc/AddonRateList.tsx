@@ -12,6 +12,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { addonRatesApi, AddonRateItem } from '../../api/bom'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -167,6 +168,7 @@ export default function AddonRateList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-addon-rate', cols)
 
   if (items.length === 0 && !isLoading) {
     return (
@@ -231,11 +233,12 @@ export default function AddonRateList() {
                     <Text style={{ fontSize: 13 }}>{label}</Text>
                   </Space>
                 }
+                extra={settingsButton}
               >
                 <Table<AddonRateItem>
                   rowKey="id"
                   dataSource={nhomItems}
-                  columns={cols}
+                  columns={displayColumns}
                   loading={isLoading}
                   size="small"
                   pagination={false}

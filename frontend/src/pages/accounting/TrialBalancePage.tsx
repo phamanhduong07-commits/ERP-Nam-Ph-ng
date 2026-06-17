@@ -14,6 +14,7 @@ import { warehouseApi } from '../../api/warehouse'
 import { fmtVND, printToPdf, buildHtmlTable, exportToExcel, downloadBlob } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -81,6 +82,8 @@ export default function TrialBalancePage() {
       )
     }
   ]
+
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-trial-balance', columns)
 
   const handleExportPdf = () => {
     const cols = [
@@ -150,6 +153,7 @@ export default function TrialBalancePage() {
             onChange={(v) => v && setDates(v as [dayjs.Dayjs, dayjs.Dayjs])}
             format="DD/MM/YYYY"
           />
+          {settingsButton}
           <Button type="primary" icon={<SearchOutlined />} onClick={() => refetch()} loading={isLoading}>
             Xem báo cáo
           </Button>
@@ -176,7 +180,7 @@ export default function TrialBalancePage() {
                     locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
                     size="small"
           dataSource={safeBalance}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={false}
           rowKey="so_tk"

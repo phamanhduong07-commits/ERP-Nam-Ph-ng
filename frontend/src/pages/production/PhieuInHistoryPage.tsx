@@ -11,6 +11,7 @@ import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { exportToExcel } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -109,6 +110,8 @@ function TabLichSuIn() {
     { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true, render: (v: string | null) => v ?? '' },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-phieu-in-history', columns, { nonHideable: ['so_phieu'] })
+
   return (
     <>
       <Card size="small" style={{ marginBottom: 12 }}>
@@ -120,6 +123,7 @@ function TabLichSuIn() {
           <CD2WorkshopSelector value={phanXuongId} onChange={setPhanXuongId} phanXuongList={phanXuongList} />
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} />
           <Button icon={<DownloadOutlined />} onClick={handleExport}>Excel</Button>
+          {settingsButton}
         </Space>
       </Card>
 
@@ -131,7 +135,7 @@ function TabLichSuIn() {
       </Row>
 
       <Card>
-        <Table dataSource={filtered} columns={columns} rowKey="id" size="small" loading={isLoading}
+        <Table dataSource={filtered} columns={displayColumns} rowKey="id" size="small" loading={isLoading}
           pagination={{ pageSize: 50, showSizeChanger: true, showTotal: t => `${t} phiếu` }}
           scroll={{ x: 1605 }} />
       </Card>

@@ -24,6 +24,7 @@ import { warehouseApi } from '../../api/warehouse'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel, printToPdf, fmtDate, fmtNum, buildHtmlTable, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -623,6 +624,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       ),
     },
   ]
+  const { displayColumns: displayGroupColumns, settingsButton } = useColumnPrefs('production-order-list', groupColumns)
 
   return (
     <div>
@@ -657,6 +659,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
                 onClick={() => navigate('/production/orders/new')}>
                 Tạo lệnh SX
               </Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -909,7 +912,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
             size="small"
             loading={isLoading}
             dataSource={groups}
-            columns={groupColumns}
+            columns={displayGroupColumns}
             defaultExpandAllRows
             expandable={{
               expandedRowRender: (g) => (

@@ -6,6 +6,7 @@ import {
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, UserOutlined, KeyOutlined } from '@ant-design/icons'
 import client from '../../api/client'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -138,6 +139,8 @@ export default function TeamPermissionsPage() {
     },
   ]
 
+  const { displayColumns: displayCols, settingsButton } = useColumnPrefs('hr-team-permissions', cols)
+
   return (
     <Card>
       <Title level={4} style={{ margin: '0 0 4px' }}>Quản lý quyền cá nhân trong team</Title>
@@ -187,12 +190,15 @@ export default function TeamPermissionsPage() {
                   <Text style={{ color: '#1677ff' }}>{selectedUser.ho_ten}</Text>
                   <Tag>{selectedUser.role_code || '—'}</Tag>
                 </Space>
-                <Button
-                  icon={<KeyOutlined />}
-                  onClick={() => { pwForm.resetFields(); setPwModalOpen(true) }}
-                >
-                  Đặt lại mật khẩu
-                </Button>
+                <Space>
+                  {settingsButton}
+                  <Button
+                    icon={<KeyOutlined />}
+                    onClick={() => { pwForm.resetFields(); setPwModalOpen(true) }}
+                  >
+                    Đặt lại mật khẩu
+                  </Button>
+                </Space>
               </div>
 
               {/* Cấp quyền — chọn loại quyền + NV cụ thể */}
@@ -236,7 +242,7 @@ export default function TeamPermissionsPage() {
 
               <Table
                 dataSource={userPerms}
-                columns={cols}
+                columns={displayCols}
                 rowKey="id"
                 size="small"
                 loading={isLoading}

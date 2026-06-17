@@ -16,6 +16,7 @@ import { warehouseApi, type TonKhoGiayRow, type GoodsReceipt } from '../../api/w
 import apiClient from '../../api/client'
 import { phapNhanApi } from '../../api/phap_nhan'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -305,6 +306,7 @@ export default function KhoGiayCuonPage() {
       render: (_, r) => <Tag>{r.details.length}</Tag>,
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('warehouse-kho-giay-cuon', summaryColumns, { nonHideable: ['ma_chinh'] })
 
   const LOAI_GIAY_COLOR: Record<string, string> = {
     nau: 'brown', trang: 'default', vang: 'gold', xeo: 'cyan', khac: 'default',
@@ -418,6 +420,7 @@ export default function KhoGiayCuonPage() {
               Nhập đầy đủ
             </Button>
           </Tooltip>
+          {settingsButton}
         </Space>
       </div>
 
@@ -523,7 +526,7 @@ export default function KhoGiayCuonPage() {
       <Table<GroupedRow>
         loading={isFetching}
         dataSource={grouped}
-        columns={summaryColumns}
+        columns={displayColumns}
         rowKey="paper_material_id"
         size="small"
         pagination={{ pageSize: 50, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] }}

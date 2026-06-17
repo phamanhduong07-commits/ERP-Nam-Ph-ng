@@ -111,6 +111,7 @@ class PurchaseInvoiceResponse(PurchaseInvoiceListItem):
 class CashReceiptCreate(BaseModel):
     customer_id: int
     sales_invoice_id: int | None = None
+    so_phieu: str | None = None          # dùng khi import từ MISA, None = tự sinh
     ngay_phieu: date
     hinh_thuc_tt: Literal[
         "tien_mat", "chuyen_khoan", "TM", "CK", "bu_tru_cong_no", "khac"
@@ -143,6 +144,30 @@ class CashReceiptCreate(BaseModel):
         if self.hinh_thuc_tt in {"tien_mat", "TM"}:
             self.tk_no = "111"
         return self
+
+
+class CashReceiptUpdate(BaseModel):
+    customer_id: int | None = None
+    sales_invoice_id: int | None = None
+    ngay_phieu: date | None = None
+    hinh_thuc_tt: Literal[
+        "tien_mat", "chuyen_khoan", "TM", "CK", "bu_tru_cong_no", "khac"
+    ] | None = None
+    so_tai_khoan: str | None = None
+    so_tham_chieu: str | None = None
+    dien_giai: str | None = None
+    so_tien: Decimal | None = None
+    tk_no: str | None = None
+    tk_co: str | None = None
+    phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
+
+    @field_validator("so_tien")
+    @classmethod
+    def tien_duong(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v <= 0:
+            raise ValueError("Số tiền phải lớn hơn 0")
+        return v
 
 
 class CashReceiptResponse(BaseModel):
@@ -178,6 +203,7 @@ class CashReceiptResponse(BaseModel):
 class CashPaymentCreate(BaseModel):
     supplier_id: int | None = None
     purchase_invoice_id: int | None = None
+    so_phieu: str | None = None          # dùng khi import từ MISA, None = tự sinh
     ngay_phieu: date
     hinh_thuc_tt: Literal[
         "tien_mat", "chuyen_khoan", "TM", "CK", "bu_tru_cong_no", "khac"
@@ -211,6 +237,31 @@ class CashPaymentCreate(BaseModel):
         if self.hinh_thuc_tt in {"tien_mat", "TM"}:
             self.tk_co = "111"
         return self
+
+
+class CashPaymentUpdate(BaseModel):
+    supplier_id: int | None = None
+    purchase_invoice_id: int | None = None
+    ngay_phieu: date | None = None
+    hinh_thuc_tt: Literal[
+        "tien_mat", "chuyen_khoan", "TM", "CK", "bu_tru_cong_no", "khac"
+    ] | None = None
+    so_tai_khoan: str | None = None
+    so_tham_chieu: str | None = None
+    dien_giai: str | None = None
+    so_tien: Decimal | None = None
+    tk_no: str | None = None
+    tk_co: str | None = None
+    loai_chi: str | None = None
+    phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
+
+    @field_validator("so_tien")
+    @classmethod
+    def tien_duong(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v <= 0:
+            raise ValueError("Số tiền phải lớn hơn 0")
+        return v
 
 
 class CashPaymentResponse(BaseModel):

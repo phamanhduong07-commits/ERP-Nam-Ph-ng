@@ -16,6 +16,7 @@ import { UploadOutlined } from '@ant-design/icons'
 import { exportToExcel, printToPdf, fmtVND, buildHtmlTable } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -271,6 +272,8 @@ export default function BomListPage() {
       ),
     },
   ]
+
+  const { displayColumns, settingsButton } = useColumnPrefs('production-bom-list', columns, { nonHideable: ['so_lenh'] })
 
   // Columns for pending tab
   const pendingColumns: ColumnsType<PendingBomItem> = [

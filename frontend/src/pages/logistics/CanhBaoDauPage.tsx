@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs, { Dayjs } from 'dayjs'
 import client from '../../api/client'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -163,6 +164,7 @@ export default function CanhBaoDauPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('logistics-canh-bao-dau', columns)
 
   return (
     <div style={{ padding: '16px 24px' }}>
@@ -199,6 +201,7 @@ export default function CanhBaoDauPage() {
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching}>
             Tải lại
           </Button>
+          {settingsButton}
         </Space>
       </div>
 
@@ -248,7 +251,7 @@ export default function CanhBaoDauPage() {
       <Card size="small" title={`Danh sách cảnh báo (${data.length})`}>
         <Table<DrainAlert>
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           rowKey="id"
           loading={isFetching}
           size="small"

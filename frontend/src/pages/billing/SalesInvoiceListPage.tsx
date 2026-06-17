@@ -19,6 +19,7 @@ import {
 import { salesOrdersApi, SalesOrderListItem, TRANG_THAI_COLORS as SO_STATUS_COLORS } from '../../api/salesOrders'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -200,6 +201,7 @@ export default function SalesInvoiceListPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('billing-sales-invoice', columns, { nonHideable: ['so_hoa_don'] })
 
   return (
     <PageLayout
@@ -217,6 +219,7 @@ export default function SalesInvoiceListPage() {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/billing/invoices/new')}>
             Tạo hóa đơn
           </Button>
+          {settingsButton}
         </Space>
       }
     >
@@ -268,7 +271,7 @@ export default function SalesInvoiceListPage() {
 
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-                columns={columns}
+                columns={displayColumns}
         dataSource={invoices}
         rowKey="id"
         loading={isLoading}

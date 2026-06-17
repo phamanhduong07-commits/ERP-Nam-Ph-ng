@@ -15,6 +15,7 @@ import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolve
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import PageLayout from '../../components/PageLayout'
 
 const { Text } = Typography
@@ -252,6 +253,7 @@ export default function StockAdjustmentsPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('warehouse-stock-adjustments', columns, { nonHideable: ['so_phieu'] })
 
   const expandedRowRender = (r: StockAdjustment) => (
     <Table dataSource={r.items} rowKey="id" size="small" pagination={false}
@@ -279,6 +281,7 @@ export default function StockAdjustmentsPage() {
             onClick={() => { form.resetFields(); setSelectedKho(undefined); setOpen(true) }}>
             Tạo phiếu kiểm kê
           </Button>
+          {settingsButton}
         </Space>
       }
     >
@@ -310,7 +313,7 @@ export default function StockAdjustmentsPage() {
       </Card>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
-        <Table dataSource={phieuList} columns={columns} rowKey="id" loading={isLoading} size="small"
+        <Table dataSource={phieuList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 850 }} />
       </Card>
 

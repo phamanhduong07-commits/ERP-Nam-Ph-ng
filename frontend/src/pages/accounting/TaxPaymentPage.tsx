@@ -13,6 +13,7 @@ import { fmtVND } from '../../utils/exportUtils'
 import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 import PageLayout from '../../components/PageLayout'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -226,6 +227,7 @@ export default function TaxPaymentPage() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-tax-payment', columns)
 
   return (
     <PageLayout
@@ -309,12 +311,12 @@ export default function TaxPaymentPage() {
         </Row>
       </Card>
 
-      <Card title="Chi tiết khoản thuế">
+      <Card title="Chi tiết khoản thuế" extra={settingsButton}>
         <Table<TaxObligationItem>
           rowKey="loai_thue"
           loading={isLoading}
           dataSource={obligations}
-          columns={columns}
+          columns={displayColumns}
           pagination={false}
           size="middle"
           rowClassName={item => (getRow(item).selected ? 'ant-table-row-selected' : '')}

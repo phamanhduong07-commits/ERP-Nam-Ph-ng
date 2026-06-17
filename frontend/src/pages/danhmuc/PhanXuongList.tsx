@@ -10,6 +10,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { warehouseApi, PhanXuong, CreatePhanXuongPayload } from '../../api/warehouse'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -151,6 +152,7 @@ export default function PhanXuongList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-phan-xuong', columns, { nonHideable: ['ma_xuong'] })
 
   return (
     <div style={{ paddingBottom: 24 }}>
@@ -169,6 +171,7 @@ export default function PhanXuongList() {
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               Thêm phân xưởng
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -177,7 +180,7 @@ export default function PhanXuongList() {
         <Table
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     dataSource={list}
-          columns={columns}
+          columns={displayColumns}
           rowKey="id"
           loading={isLoading}
           size="small"

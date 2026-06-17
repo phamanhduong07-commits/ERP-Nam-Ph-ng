@@ -8,6 +8,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { loXeApi, type LoXe } from '../../api/simpleApis'
 import { hrApi } from '../../api/hr'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -74,15 +75,21 @@ export default function LoXeList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-lo-xe', columns)
 
   return (
     <div>
       <Card>
         <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
           <Col><Title level={4} style={{ margin: 0 }}>Danh muc lo xe</Title></Col>
-          <Col><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Them moi</Button></Col>
+          <Col>
+            <Space>
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Them moi</Button>
+              {settingsButton}
+            </Space>
+          </Col>
         </Row>
-        <Table rowKey="id" dataSource={data} columns={columns} loading={isLoading} pagination={{ pageSize: 20 }} size="small" />
+        <Table rowKey="id" dataSource={data} columns={displayColumns} loading={isLoading} pagination={{ pageSize: 20 }} size="small" />
       </Card>
 
       <Modal title={editing ? 'Sua lo xe' : 'Them lo xe'} open={modalOpen} onCancel={closeModal} onOk={handleSave} confirmLoading={createMut.isPending || updateMut.isPending} okText="Luu" cancelText="Huy" destroyOnClose>

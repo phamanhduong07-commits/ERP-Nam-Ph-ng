@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons'
 import client from '../../api/client'
 import dayjs from 'dayjs'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { Option } = Select
@@ -121,6 +122,8 @@ export default function RewardDisciplinePage() {
     )},
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-reward-discipline', columns)
+
   return (
     <div style={{ padding: '0 0 24px 0' }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
@@ -129,7 +132,10 @@ export default function RewardDisciplinePage() {
           <Text type="secondary">Ghi nhận các khoản thưởng/phạt để tự động cộng/trừ vào bảng lương tháng</Text>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>Thêm quyết định mới</Button>
+          <Space>
+            {settingsButton}
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>Thêm quyết định mới</Button>
+          </Space>
         </Col>
       </Row>
 
@@ -162,7 +168,7 @@ export default function RewardDisciplinePage() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           dataSource={filteredRewards}
-          columns={columns}
+          columns={displayColumns}
           rowKey="id"
           loading={isLoading}
           size="small"

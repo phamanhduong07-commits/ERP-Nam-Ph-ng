@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs, { Dayjs } from 'dayjs'
 import client from '../../api/client'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -286,6 +287,7 @@ export default function ChiPhiChuyenPage() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('logistics-chi-phi-chuyen', columns)
 
   return (
     <div style={{ padding: '16px 24px' }}>
@@ -300,6 +302,7 @@ export default function ChiPhiChuyenPage() {
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching}>
             Tải lại
           </Button>
+          {settingsButton}
         </Space>
       </div>
 
@@ -356,7 +359,7 @@ export default function ChiPhiChuyenPage() {
       >
         <Table<TripCostRow>
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           rowKey="id"
           loading={isFetching}
           size="small"

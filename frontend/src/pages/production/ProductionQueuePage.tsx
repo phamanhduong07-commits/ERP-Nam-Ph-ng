@@ -36,6 +36,7 @@ import type { GiayRoll } from '../../api/warehouse'
 import { LOAI_LAN_LABELS } from '../../api/quotes'
 import { fmtN } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 
@@ -982,6 +983,8 @@ export default function ProductionQueuePage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-queue', columns)
+
   // ── expanded row ──────────────────────────────────────────────────────────
   const expandedRowRender = (r: QueueLine) => {
     const layers = calcLayerKgs(r)
@@ -1117,6 +1120,7 @@ export default function ProductionQueuePage() {
               </>
             )}
             <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -1196,7 +1200,7 @@ export default function ProductionQueuePage() {
               >
                 <Table
                   locale={{ emptyText: <EmptyState size="small" /> }}
-                  columns={columns}
+                  columns={displayColumns}
                   dataSource={orderedLines}
                   rowKey="id"
                   loading={isLoading}

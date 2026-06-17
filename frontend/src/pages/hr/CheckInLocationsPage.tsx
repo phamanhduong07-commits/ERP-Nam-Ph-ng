@@ -7,6 +7,7 @@ import {
   PlusOutlined, EditOutlined, DeleteOutlined, EnvironmentOutlined, ReloadOutlined,
 } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { hrApi, type CheckInLocation } from '../../api/hr'
@@ -74,6 +75,7 @@ export default function CheckInLocationsPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-checkin-locations', columns)
 
   return (
     <div style={{ padding: '16px 24px' }}>
@@ -93,6 +95,7 @@ export default function CheckInLocationsPage() {
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
             Thêm địa điểm
           </Button>
+          {settingsButton}
         </Space>
       </div>
 
@@ -101,7 +104,7 @@ export default function CheckInLocationsPage() {
           rowKey="id"
           loading={isLoading}
           dataSource={locations}
-          columns={columns}
+          columns={displayColumns}
           size="small"
           pagination={{ pageSize: 20 }}
         />

@@ -11,6 +11,7 @@ import { customerRefundApi, CustomerRefundVoucher, TRANG_THAI_HOAN_TIEN } from '
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { RangePicker } = DatePicker
 
@@ -82,6 +83,7 @@ export default function CustomerRefundListPage() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-customer-refund', columns, { nonHideable: ['so_phieu'] })
 
   const rows = data?.items ?? []
 
@@ -106,9 +108,12 @@ export default function CustomerRefundListPage() {
     <PageLayout
       title="Phiếu hoàn tiền khách hàng"
       actions={
-        <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
-          Xuất Excel
-        </Button>
+        <Space>
+          <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
+            Xuất Excel
+          </Button>
+          {settingsButton}
+        </Space>
       }
     >
       <Card size="small" style={{ marginBottom: 12 }}>
@@ -134,7 +139,7 @@ export default function CustomerRefundListPage() {
 
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-                columns={columns}
+                columns={displayColumns}
         dataSource={rows}
         rowKey="id"
         loading={isLoading}

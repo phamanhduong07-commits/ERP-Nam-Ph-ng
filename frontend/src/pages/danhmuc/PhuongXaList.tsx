@@ -11,6 +11,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { phuongXaApi, tinhThanhApi, type PhuongXa } from '../../api/simpleApis'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -127,6 +128,7 @@ export default function PhuongXaList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-phuong-xa', columns, { nonHideable: ['ma_phuong'] })
 
   return (
     <div>
@@ -158,6 +160,7 @@ export default function PhuongXaList() {
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm mới
               </Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -166,7 +169,7 @@ export default function PhuongXaList() {
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={{ pageSize: 20 }}
           size="small"

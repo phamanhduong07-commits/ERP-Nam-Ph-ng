@@ -8,6 +8,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import client from '../../api/client'
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -143,6 +144,8 @@ export default function BankReconciliationPage() {
     },
   ]
 
+  const { displayColumns: displayTxColumns, settingsButton } = useColumnPrefs('accounting-bank-recon', txColumns)
+
   const candColumns: ColumnsType<Candidate> = [
     { title: 'Số phiếu', dataIndex: 'so_phieu', width: 140 },
     { title: 'Ngày', dataIndex: 'ngay', width: 90, render: v => dayjs(v).format('DD/MM/YY') },
@@ -229,9 +232,10 @@ export default function BankReconciliationPage() {
             size="small"
             title="Sao kê ngân hàng"
             loading={txLoading}
+            extra={settingsButton}
           >
             <Table<BankTx>
-              columns={txColumns}
+              columns={displayTxColumns}
               dataSource={txItems}
               rowKey="id"
               size="small"

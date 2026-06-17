@@ -13,6 +13,7 @@ import { cd2Api, ShiftCa, ShiftConfigItem } from '../../api/cd2'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -82,19 +83,23 @@ function ShiftCaTab() {
       ),
     },
   ]
+  const { displayColumns: displayCaColumns, settingsButton: caSettingsButton } = useColumnPrefs('production-shift', columns)
 
   return (
     <div>
       <Row justify="space-between" align="middle" style={{ marginBottom: 12 }}>
         <Col><Text type="secondary">Danh sách ca làm việc ({cas.length})</Text></Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Thêm ca</Button>
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Thêm ca</Button>
+            {caSettingsButton}
+          </Space>
         </Col>
       </Row>
 
       <Table
         dataSource={cas}
-        columns={columns}
+        columns={displayCaColumns}
         rowKey="id"
         loading={isLoading}
         pagination={false}
@@ -176,7 +181,7 @@ function ShiftConfigTab() {
     })
   }
 
-  const columns = [
+  const configColumns = [
     {
       title: 'Ngày', dataIndex: 'ngay', key: 'ngay', width: 100,
       render: (v: string) => dayjs(v).format('DD/MM/YYYY'),
@@ -213,6 +218,7 @@ function ShiftConfigTab() {
       ),
     },
   ]
+  const { displayColumns: displayConfigColumns } = useColumnPrefs('production-shift-config', configColumns)
 
   return (
     <div>
@@ -275,7 +281,7 @@ function ShiftConfigTab() {
 
       <Table
         dataSource={configs}
-        columns={columns}
+        columns={displayConfigColumns}
         rowKey="id"
         loading={isLoading}
         size="small"

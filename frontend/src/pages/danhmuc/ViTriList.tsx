@@ -11,6 +11,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { viTriApi, type ViTri } from '../../api/simpleApis'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -135,6 +136,7 @@ export default function ViTriList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-vi-tri', columns)
 
   return (
     <div>
@@ -166,6 +168,7 @@ export default function ViTriList() {
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm mới
               </Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -174,7 +177,7 @@ export default function ViTriList() {
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={{ pageSize: 20 }}
           size="small"

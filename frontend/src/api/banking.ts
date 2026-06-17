@@ -85,12 +85,14 @@ export const bankAccountsApi = {
 }
 
 export const bankLedgerApi = {
-  getCashBook: (tu_ngay: string, den_ngay: string) =>
-    client.get<LedgerResponse>('/accounting/cash-book', { params: { tu_ngay, den_ngay } }),
+  getCashBook: (tu_ngay: string, den_ngay: string, phap_nhan_id?: number, phan_xuong_id?: number) =>
+    client.get<LedgerResponse>('/accounting/cash-book', {
+      params: { tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id },
+    }),
 
-  getBankLedger: (tu_ngay: string, den_ngay: string, so_tai_khoan?: string) =>
+  getBankLedger: (tu_ngay: string, den_ngay: string, so_tai_khoan?: string, phap_nhan_id?: number, phan_xuong_id?: number) =>
     client.get<LedgerResponse>('/accounting/bank-ledger', {
-      params: { tu_ngay, den_ngay, ...(so_tai_khoan ? { so_tai_khoan } : {}) },
+      params: { tu_ngay, den_ngay, so_tai_khoan, phap_nhan_id, phan_xuong_id },
     }),
 }
 

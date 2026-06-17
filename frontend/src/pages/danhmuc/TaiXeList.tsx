@@ -9,6 +9,7 @@ import { taiXeApi, type TaiXe } from '../../api/simpleApis'
 import { hrApi } from '../../api/hr'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -77,6 +78,7 @@ export default function TaiXeList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-tai-xe', columns)
 
   return (
     <div>
@@ -87,10 +89,11 @@ export default function TaiXeList() {
             <Space>
               <ImportExcelButton endpoint="/api/tai-xe" templateFilename="mau_import_tai_xe.xlsx" buttonText="Import Excel" onImported={() => queryClient.invalidateQueries({ queryKey: ['tai-xe'] })} />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Them moi</Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
-        <Table rowKey="id" dataSource={data} columns={columns} loading={isLoading} pagination={{ pageSize: 20 }} size="small" />
+        <Table rowKey="id" dataSource={data} columns={displayColumns} loading={isLoading} pagination={{ pageSize: 20 }} size="small" />
       </Card>
 
       <Modal title={editing ? 'Sua tai xe' : 'Them tai xe'} open={modalOpen} onCancel={closeModal} onOk={handleSave} confirmLoading={createMut.isPending || updateMut.isPending} okText="Luu" cancelText="Huy" destroyOnClose>

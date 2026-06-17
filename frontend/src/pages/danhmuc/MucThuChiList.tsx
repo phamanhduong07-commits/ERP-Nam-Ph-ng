@@ -10,6 +10,7 @@ import type { ColumnsType } from 'antd/es/table'
 import type { ApiError } from '../../api/types'
 import client from '../../api/client'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -164,6 +165,7 @@ export default function MucThuChiList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-muc-thu-chi', columns)
 
   return (
     <div>
@@ -173,9 +175,12 @@ export default function MucThuChiList() {
             <Title level={4} style={{ margin: 0 }}>Mục thu/chi</Title>
           </Col>
           <Col>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Thêm mới
-            </Button>
+            <Space>
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                Thêm mới
+              </Button>
+              {settingsButton}
+            </Space>
           </Col>
         </Row>
 
@@ -183,7 +188,7 @@ export default function MucThuChiList() {
           locale={{ emptyText: <EmptyState size="small" /> }}
           rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={false}
           size="small"

@@ -16,6 +16,7 @@ import type { DonHangTheoDoiRow, PhanXuongItem } from '../../api/theoDoi'
 import { usePhapNhanList } from '../../hooks/usePhapNhan'
 import { exportToExcel } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import { storage, TTL } from '../../utils/storage'
 import PageLayout from '../../components/PageLayout'
 
@@ -351,6 +352,7 @@ export default function TheoDonHangPage() {
       defaultSortOrder: 'ascend' as const,
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('sales-theo-don-hang', columns, { nonHideable: ['so_lenh'] })
 
   return (
     <PageLayout title="Theo dõi đơn hàng">
@@ -487,6 +489,7 @@ export default function TheoDonHangPage() {
                 Xuất Excel
               </Button>
             </Col>
+            <Col>{settingsButton}</Col>
             <Col flex="auto" />
             <Col>
               <Text type="secondary" style={{ fontSize: 12 }}>
@@ -542,7 +545,7 @@ export default function TheoDonHangPage() {
             size="small"
             loading={isLoading}
             dataSource={filtered}
-            columns={columns}
+            columns={displayColumns}
             pagination={{ pageSize: 50, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] }}
             scroll={{ x: 'max-content' }}
             rowClassName={getRowClass}

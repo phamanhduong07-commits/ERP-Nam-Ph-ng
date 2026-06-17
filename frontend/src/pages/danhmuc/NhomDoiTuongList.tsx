@@ -10,6 +10,7 @@ import type { ApiError } from '../../api/types'
 import client from '../../api/client'
 import EmptyState from '../../components/EmptyState'
 import { useHotkey } from '../../hooks/useHotkey'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -156,14 +157,18 @@ function NhomTab({ loai, label }: NhomTabProps) {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-nhom-doi-tuong', columns, { nonHideable: ['ma_nhom'] })
 
   return (
     <div>
       <Row justify="end" align="middle" style={{ marginBottom: 16 }}>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Thêm mới
-          </Button>
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              Thêm mới
+            </Button>
+            {settingsButton}
+          </Space>
         </Col>
       </Row>
 
@@ -171,7 +176,7 @@ function NhomTab({ loai, label }: NhomTabProps) {
         locale={{ emptyText: <EmptyState size="small" /> }}
         rowKey="id"
         dataSource={data}
-        columns={columns}
+        columns={displayColumns}
         loading={isLoading}
         pagination={false}
         size="small"

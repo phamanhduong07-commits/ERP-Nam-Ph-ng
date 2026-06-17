@@ -9,6 +9,7 @@ import dayjs from 'dayjs'
 import axios from 'axios'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 interface Machine {
   id: number
@@ -113,6 +114,7 @@ export default function MaintenanceSchedulePage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('maintenance-schedule', columns)
 
   const onSubmit = (values: Record<string, unknown>) => {
     const payload = {
@@ -142,6 +144,7 @@ export default function MaintenanceSchedulePage() {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
             Thêm lịch
           </Button>
+          {settingsButton}
         </Space>
       }
     >
@@ -151,7 +154,7 @@ export default function MaintenanceSchedulePage() {
                     rowKey="id"
           loading={isLoading}
           dataSource={schedules}
-          columns={columns}
+          columns={displayColumns}
           pagination={{ pageSize: 20 }}
           rowClassName={(r: Schedule) =>
             r.trang_thai === 'qua_han' ? 'ant-table-row-danger' : ''

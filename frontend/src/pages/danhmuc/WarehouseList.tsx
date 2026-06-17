@@ -12,6 +12,7 @@ import { warehousesApi, type Warehouse, type WarehouseCreate } from '../../api/w
 import { warehouseApi } from '../../api/warehouse'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -153,6 +154,7 @@ export default function WarehouseList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-warehouse', columns)
 
   return (
     <div>
@@ -168,10 +170,11 @@ export default function WarehouseList() {
                 onImported={() => queryClient.invalidateQueries({ queryKey: ['warehouses'] })}
               />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm kho</Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
-        <Table rowKey="id" dataSource={data} columns={columns} loading={isLoading} size="small" pagination={{ pageSize: 20 }} />
+        <Table rowKey="id" dataSource={data} columns={displayColumns} loading={isLoading} size="small" pagination={{ pageSize: 20 }} />
       </Card>
 
       <Modal

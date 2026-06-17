@@ -27,6 +27,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { hrApi, type HealthCheckRecord, type Employee } from '../../api/hr'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -251,6 +252,7 @@ export default function HealthCheckPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-health-check', columns)
 
   return (
     <div style={{ padding: '0 0 24px 0' }}>
@@ -264,9 +266,12 @@ export default function HealthCheckPage() {
           </Text>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Thêm lần khám
-          </Button>
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              Thêm lần khám
+            </Button>
+            {settingsButton}
+          </Space>
         </Col>
       </Row>
 
@@ -387,7 +392,7 @@ export default function HealthCheckPage() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           dataSource={filteredRecords}
-          columns={columns}
+          columns={displayColumns}
           rowKey="id"
           loading={isLoading}
           size="small"

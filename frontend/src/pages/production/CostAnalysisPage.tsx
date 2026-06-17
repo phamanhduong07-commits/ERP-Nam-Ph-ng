@@ -19,6 +19,7 @@ import { FundViewOutlined } from '@ant-design/icons'
 import { costAnalysisApi } from '../../api/cost_analysis'
 import type { PaperRow, LsxCostItem } from '../../api/cost_analysis'
 import { productionOrdersApi } from '../../api/productionOrders'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -78,11 +79,13 @@ const PAPER_COLUMNS: ColumnsType<PaperRow> = [
 ]
 
 function LsxPanel({ item }: { item: LsxCostItem }) {
+  const { displayColumns, settingsButton } = useColumnPrefs('production-cost-analysis', PAPER_COLUMNS)
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{settingsButton}</div>
       <Table<PaperRow>
         dataSource={item.paper_rows}
-        columns={PAPER_COLUMNS}
+        columns={displayColumns}
         rowKey={(r) => r.vi_tri_lop + r.ma_ky_hieu}
         pagination={false}
         size="small"

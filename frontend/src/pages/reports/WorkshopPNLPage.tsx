@@ -6,6 +6,7 @@ import { downloadBlob } from '../../utils/exportUtils'
 import { PrinterOutlined, SearchOutlined, InfoCircleOutlined, DownloadOutlined } from '@ant-design/icons'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -80,6 +81,7 @@ const WorkshopPNLPage: React.FC = () => {
       )
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('reports-workshop-pnl', columns)
 
   const pnlRows = data ? [
     { label: 'A. DOANH THU', value: data.tong_doanh_thu, is_total: true },
@@ -127,6 +129,7 @@ const WorkshopPNLPage: React.FC = () => {
           <Form.Item>
             <Button icon={<PrinterOutlined />}>In báo cáo</Button>
           </Form.Item>
+          <Form.Item>{settingsButton}</Form.Item>
         </Form>
       </Card>
 
@@ -156,8 +159,8 @@ const WorkshopPNLPage: React.FC = () => {
           </Row>
 
           <Card title="Chi tiết Kết quả Kinh doanh Quản trị">
-            <Table 
-              columns={columns} 
+            <Table
+              columns={displayColumns}
               dataSource={pnlRows} 
               pagination={false} 
               bordered 

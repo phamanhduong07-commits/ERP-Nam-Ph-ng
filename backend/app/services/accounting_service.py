@@ -654,7 +654,7 @@ class AccountingService:
         self._ensure_period_open(data.ngay_phieu, phap_nhan_id, "tao phieu thu")
 
         receipt = CashReceipt(
-            so_phieu=self._gen_so_phieu("PT", CashReceipt),
+            so_phieu=data.so_phieu or self._gen_so_phieu("PT", CashReceipt),
             ngay_phieu=data.ngay_phieu,
             customer_id=data.customer_id,
             sales_invoice_id=data.sales_invoice_id,
@@ -1361,6 +1361,18 @@ class AccountingService:
             raise HTTPException(404, "Không tìm thấy phiếu thu")
         return r
 
+    def update_receipt(self, receipt_id: int, data, user_id: int) -> CashReceipt:
+        r = self.db.query(CashReceipt).filter(CashReceipt.id == receipt_id).first()
+        if not r:
+            raise HTTPException(404, "Không tìm thấy phiếu thu")
+        if r.trang_thai != "cho_duyet":
+            raise HTTPException(400, "Chỉ có thể sửa phiếu thu ở trạng thái Chờ duyệt")
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(r, field, value)
+        self.db.commit()
+        self.db.refresh(r)
+        return r
+
     # ─────────────────────────────────────────────
     # HÓA ĐƠN MUA HÀNG
     # ─────────────────────────────────────────────
@@ -1615,7 +1627,7 @@ class AccountingService:
         self._ensure_period_open(data.ngay_phieu, phap_nhan_id, "tao phieu chi")
 
         payment = CashPayment(
-            so_phieu=self._gen_so_phieu("PC", CashPayment),
+            so_phieu=data.so_phieu or self._gen_so_phieu("PC", CashPayment),
             ngay_phieu=data.ngay_phieu,
             supplier_id=data.supplier_id,
             purchase_invoice_id=data.purchase_invoice_id,
@@ -1815,6 +1827,18 @@ class AccountingService:
         p = self.db.query(CashPayment).filter(CashPayment.id == payment_id).first()
         if not p:
             raise HTTPException(404, "Không tìm thấy phiếu chi")
+        return p
+
+    def update_payment(self, payment_id: int, data, user_id: int) -> CashPayment:
+        p = self.db.query(CashPayment).filter(CashPayment.id == payment_id).first()
+        if not p:
+            raise HTTPException(404, "Không tìm thấy phiếu chi")
+        if p.trang_thai not in {"cho_chot", "da_chot"}:
+            raise HTTPException(400, "Chỉ có thể sửa phiếu chi ở trạng thái Chờ chốt hoặc Đã chốt")
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(p, field, value)
+        self.db.commit()
+        self.db.refresh(p)
         return p
 
     # ─────────────────────────────────────────────
@@ -2660,32 +2684,39 @@ class AccountingService:
     # ─────────────────────────────────────────────
     # SỔ QUỸ TIỀN MẶT
     # ─────────────────────────────────────────────
-    def get_cash_book(self, tu_ngay: date, den_ngay: date) -> dict:
+    def get_cash_book(
+        self,
+        tu_ngay: date,
+        den_ngay: date,
+        phap_nhan_id: int | None = None,
+        phan_xuong_id: int | None = None,
+    ) -> dict:
         """Sổ quỹ tiền mặt: thu/chi tiền mặt trong kỳ + số dư."""
         _CASH_HTTT = {"tien_mat", "TM"}
 
-        receipts = (
-            self.db.query(CashReceipt)
-            .filter(
-                CashReceipt.hinh_thuc_tt.in_(_CASH_HTTT),
-                CashReceipt.trang_thai == "da_duyet",
-                CashReceipt.ngay_phieu >= tu_ngay,
-                CashReceipt.ngay_phieu <= den_ngay,
-            )
-            .order_by(CashReceipt.ngay_phieu, CashReceipt.so_phieu)
-            .all()
+        r_q = self.db.query(CashReceipt).filter(
+            CashReceipt.hinh_thuc_tt.in_(_CASH_HTTT),
+            CashReceipt.trang_thai == "da_duyet",
+            CashReceipt.ngay_phieu >= tu_ngay,
+            CashReceipt.ngay_phieu <= den_ngay,
         )
-        payments = (
-            self.db.query(CashPayment)
-            .filter(
-                CashPayment.hinh_thuc_tt.in_(_CASH_HTTT),
-                CashPayment.trang_thai.in_(["da_chot", "da_duyet"]),
-                CashPayment.ngay_phieu >= tu_ngay,
-                CashPayment.ngay_phieu <= den_ngay,
-            )
-            .order_by(CashPayment.ngay_phieu, CashPayment.so_phieu)
-            .all()
+        if phap_nhan_id:
+            r_q = r_q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
+        if phan_xuong_id:
+            r_q = r_q.filter(CashReceipt.phan_xuong_id == phan_xuong_id)
+        receipts = r_q.order_by(CashReceipt.ngay_phieu, CashReceipt.so_phieu).all()
+
+        p_q = self.db.query(CashPayment).filter(
+            CashPayment.hinh_thuc_tt.in_(_CASH_HTTT),
+            CashPayment.trang_thai.in_(["da_chot", "da_duyet"]),
+            CashPayment.ngay_phieu >= tu_ngay,
+            CashPayment.ngay_phieu <= den_ngay,
         )
+        if phap_nhan_id:
+            p_q = p_q.filter(CashPayment.phap_nhan_id == phap_nhan_id)
+        if phan_xuong_id:
+            p_q = p_q.filter(CashPayment.phan_xuong_id == phan_xuong_id)
+        payments = p_q.order_by(CashPayment.ngay_phieu, CashPayment.so_phieu).all()
 
         # Số dư đầu kỳ: dùng opening balance từ AMIS migration làm gốc (nếu có)
         ob_cash = (
@@ -2696,18 +2727,30 @@ class AccountingService:
         )
         ob_date = ob_cash.ky_mo_so if ob_cash else date(2000, 1, 1)
         ob_amount = Decimal(str(ob_cash.so_du_dau_ky)) if ob_cash else Decimal("0")
-        thu_truoc = self.db.query(func.coalesce(func.sum(CashReceipt.so_tien), 0)).filter(
+
+        thu_q = self.db.query(func.coalesce(func.sum(CashReceipt.so_tien), 0)).filter(
             CashReceipt.hinh_thuc_tt.in_(_CASH_HTTT),
             CashReceipt.trang_thai == "da_duyet",
             CashReceipt.ngay_phieu >= ob_date,
             CashReceipt.ngay_phieu < tu_ngay,
-        ).scalar()
-        chi_truoc = self.db.query(func.coalesce(func.sum(CashPayment.so_tien), 0)).filter(
+        )
+        if phap_nhan_id:
+            thu_q = thu_q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
+        if phan_xuong_id:
+            thu_q = thu_q.filter(CashReceipt.phan_xuong_id == phan_xuong_id)
+        thu_truoc = thu_q.scalar()
+
+        chi_q = self.db.query(func.coalesce(func.sum(CashPayment.so_tien), 0)).filter(
             CashPayment.hinh_thuc_tt.in_(_CASH_HTTT),
             CashPayment.trang_thai.in_(["da_chot", "da_duyet"]),
             CashPayment.ngay_phieu >= ob_date,
             CashPayment.ngay_phieu < tu_ngay,
-        ).scalar()
+        )
+        if phap_nhan_id:
+            chi_q = chi_q.filter(CashPayment.phap_nhan_id == phap_nhan_id)
+        if phan_xuong_id:
+            chi_q = chi_q.filter(CashPayment.phan_xuong_id == phan_xuong_id)
+        chi_truoc = chi_q.scalar()
         so_du_dau = ob_amount + Decimal(str(thu_truoc)) - Decimal(str(chi_truoc))
 
         entries = []
@@ -2718,9 +2761,11 @@ class AccountingService:
                 "so_chung_tu": r.so_phieu,
                 "loai": "thu",
                 "doi_tuong": getattr(kh, "ten_viet_tat", None) or getattr(kh, "ten_don_vi", None),
-                "dien_giai": r.dien_giai or f"Thu tiền mặt từ khách hàng",
+                "dien_giai": r.dien_giai or "Thu tiền mặt từ khách hàng",
                 "thu": Decimal(str(r.so_tien)),
                 "chi": Decimal("0"),
+                "ten_phap_nhan": r.phap_nhan.ten_phap_nhan if r.phap_nhan else None,
+                "ten_phan_xuong": r.phan_xuong.ten_xuong if r.phan_xuong else None,
             })
         for p in payments:
             ncc = self.db.get(Supplier, p.supplier_id)
@@ -2729,9 +2774,11 @@ class AccountingService:
                 "so_chung_tu": p.so_phieu,
                 "loai": "chi",
                 "doi_tuong": getattr(ncc, "ten_viet_tat", None) or getattr(ncc, "ten_don_vi", None),
-                "dien_giai": p.dien_giai or f"Chi tiền mặt cho nhà cung cấp",
+                "dien_giai": p.dien_giai or "Chi tiền mặt cho nhà cung cấp",
                 "thu": Decimal("0"),
                 "chi": Decimal(str(p.so_tien)),
+                "ten_phap_nhan": p.phap_nhan.ten_phap_nhan if p.phap_nhan else None,
+                "ten_phan_xuong": p.phan_xuong.ten_xuong if p.phan_xuong else None,
             })
 
         entries.sort(key=lambda x: (x["ngay"], x["so_chung_tu"]))
@@ -2760,6 +2807,8 @@ class AccountingService:
         tu_ngay: date,
         den_ngay: date,
         so_tai_khoan: str | None = None,
+        phap_nhan_id: int | None = None,
+        phan_xuong_id: int | None = None,
     ) -> dict:
         """Sổ ngân hàng: thu/chi chuyển khoản trong kỳ."""
         _BANK_HTTT = {"chuyen_khoan", "CK"}
@@ -2779,6 +2828,12 @@ class AccountingService:
         if so_tai_khoan:
             r_q = r_q.filter(CashReceipt.so_tai_khoan == so_tai_khoan)
             p_q = p_q.filter(CashPayment.so_tai_khoan == so_tai_khoan)
+        if phap_nhan_id:
+            r_q = r_q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
+            p_q = p_q.filter(CashPayment.phap_nhan_id == phap_nhan_id)
+        if phan_xuong_id:
+            r_q = r_q.filter(CashReceipt.phan_xuong_id == phan_xuong_id)
+            p_q = p_q.filter(CashPayment.phan_xuong_id == phan_xuong_id)
 
         receipts = r_q.order_by(CashReceipt.ngay_phieu, CashReceipt.so_phieu).all()
         payments = p_q.order_by(CashPayment.ngay_phieu, CashPayment.so_phieu).all()
@@ -2797,6 +2852,12 @@ class AccountingService:
         if so_tai_khoan:
             r_prev_q = r_prev_q.filter(CashReceipt.so_tai_khoan == so_tai_khoan)
             p_prev_q = p_prev_q.filter(CashPayment.so_tai_khoan == so_tai_khoan)
+        if phap_nhan_id:
+            r_prev_q = r_prev_q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
+            p_prev_q = p_prev_q.filter(CashPayment.phap_nhan_id == phap_nhan_id)
+        if phan_xuong_id:
+            r_prev_q = r_prev_q.filter(CashReceipt.phan_xuong_id == phan_xuong_id)
+            p_prev_q = p_prev_q.filter(CashPayment.phan_xuong_id == phan_xuong_id)
 
         # Số dư đầu kỳ: dùng opening balance từ AMIS migration làm gốc (giống cash book)
         ob_bank_q = self.db.query(OpeningBalance).filter(
@@ -2828,6 +2889,8 @@ class AccountingService:
                 "so_tham_chieu": r.so_tham_chieu,
                 "thu": Decimal(str(r.so_tien)),
                 "chi": Decimal("0"),
+                "ten_phap_nhan": r.phap_nhan.ten_phap_nhan if r.phap_nhan else None,
+                "ten_phan_xuong": r.phan_xuong.ten_xuong if r.phan_xuong else None,
             })
         for p in payments:
             ncc = self.db.get(Supplier, p.supplier_id)
@@ -2840,6 +2903,8 @@ class AccountingService:
                 "so_tham_chieu": p.so_tham_chieu,
                 "thu": Decimal("0"),
                 "chi": Decimal(str(p.so_tien)),
+                "ten_phap_nhan": p.phap_nhan.ten_phap_nhan if p.phap_nhan else None,
+                "ten_phan_xuong": p.phan_xuong.ten_xuong if p.phan_xuong else None,
             })
 
         entries.sort(key=lambda x: (x["ngay"], x["so_chung_tu"]))

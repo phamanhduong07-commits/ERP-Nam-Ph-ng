@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons'
 import client from '../../api/client'
 import dayjs from 'dayjs'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { TextArea } = Input
@@ -104,7 +105,7 @@ export default function LeaveApprovalPage() {
 
   const columns = [
     {
-      title: 'Ngày tạo', dataIndex: 'created_at', width: 130,
+      title: 'Ngày tạo', dataIndex: 'created_at', key: 'created_at', width: 130,
       render: (v: string) => <Text style={{ fontSize: 12 }}>{dayjs(v).format('DD/MM/YYYY HH:mm')}</Text>,
     },
     {
@@ -176,6 +177,8 @@ export default function LeaveApprovalPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-leave-approval', columns)
+
   return (
     <div style={{ padding: '16px 24px' }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
@@ -205,6 +208,7 @@ export default function LeaveApprovalPage() {
               </Card>
             </Badge>
             <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -238,7 +242,7 @@ export default function LeaveApprovalPage() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           dataSource={requests}
-          columns={columns}
+          columns={displayColumns}
           rowKey="id"
           loading={isLoading}
           size="small"

@@ -23,6 +23,7 @@ import {
 } from '../../utils/exportUtils'
 import { usePermission } from '../../hooks/usePermission'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 

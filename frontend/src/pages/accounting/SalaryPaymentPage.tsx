@@ -13,6 +13,7 @@ import axios from 'axios'
 import { fmtVND } from '../../utils/exportUtils'
 import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -301,6 +302,7 @@ export default function SalaryPaymentPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-salary-payment', columns, { nonHideable: ['ma_nv'] })
 
   return (
     <PageLayout
@@ -411,19 +413,22 @@ export default function SalaryPaymentPage() {
       <Card
         title="Chi tiết lương phải trả"
         extra={
-          <Text type="secondary">
-            Số trả:{' '}
-            <Text strong style={{ color: '#E65100' }}>
-              {fmtVND(tongTra)}
+          <Space>
+            <Text type="secondary">
+              Số trả:{' '}
+              <Text strong style={{ color: '#E65100' }}>
+                {fmtVND(tongTra)}
+              </Text>
             </Text>
-          </Text>
+            {settingsButton}
+          </Space>
         }
       >
         <Table<SalaryObligationItem>
           rowKey="payroll_run_id"
           loading={isFetching}
           dataSource={obligations}
-          columns={columns}
+          columns={displayColumns}
           pagination={false}
           size="middle"
           scroll={{ x: 'max-content' }}

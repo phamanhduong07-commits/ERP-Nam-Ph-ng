@@ -16,6 +16,7 @@ import PageLayout from '../../components/PageLayout'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import { fmtVND } from '../../utils/exportUtils'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -537,6 +538,8 @@ export default function KheUocVayPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-khe-uoc-vay', columns, { nonHideable: ['so_khe_uoc'] })
+
   const lichColumns: ColumnsType<LichTraNo> = [
     { title: 'Kỳ', dataIndex: 'ky_so', width: 50, align: 'center' },
     { title: 'Ngày đến hạn', dataIndex: 'ngay_den_han', width: 120, render: v => dayjs(v).format('DD/MM/YYYY') },
@@ -576,6 +579,7 @@ export default function KheUocVayPage() {
       title="Khế ước đi vay"
       actions={
         <Space>
+          {settingsButton}
           <ImportExcelButton
             endpoint="/accounting/khe-uoc-vay"
             templateFilename="mau_import_khe_uoc_di_vay.xlsx"
@@ -624,7 +628,7 @@ export default function KheUocVayPage() {
       </Card>
 
       <Table<KheUocVay>
-        columns={columns}
+        columns={displayColumns}
         dataSource={items}
         rowKey="id"
         loading={isLoading}

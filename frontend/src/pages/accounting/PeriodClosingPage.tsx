@@ -36,6 +36,7 @@ import {
   type ClosingReadinessCheck,
 } from '../../api/accounting'
 import { fmtVND } from '../../utils/exportUtils'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -285,6 +286,9 @@ export default function PeriodClosingPage() {
       width: 140,
     },
   ]
+  const { displayColumns: displayLockColumns, settingsButton: lockSettingsButton } = useColumnPrefs('accounting-period-closing-locks', lockColumns)
+  const { displayColumns: displayReadinessColumns, settingsButton: readinessSettingsButton } = useColumnPrefs('accounting-period-closing-readiness', readinessColumns)
+  const { displayColumns: displayHistoryColumns, settingsButton: historySettingsButton } = useColumnPrefs('accounting-period-closing-history', historyColumns)
 
   return (
     <div style={{ padding: 24 }}>
@@ -409,10 +413,11 @@ export default function PeriodClosingPage() {
             <Table
               size="small"
               dataSource={readiness?.checks || []}
-              columns={readinessColumns}
+              columns={displayReadinessColumns}
               rowKey="key"
               loading={readinessLoading}
               pagination={false}
+              title={() => <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{readinessSettingsButton}</div>}
             />
           </Card>
 
@@ -420,10 +425,11 @@ export default function PeriodClosingPage() {
             <Table
               size="small"
               dataSource={periodLocks}
-              columns={lockColumns}
+              columns={displayLockColumns}
               rowKey="id"
               loading={locksLoading}
               pagination={{ pageSize: 8 }}
+              title={() => <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{lockSettingsButton}</div>}
             />
           </Card>
 
@@ -431,10 +437,11 @@ export default function PeriodClosingPage() {
             <Table
               size="small"
               dataSource={historyRows}
-              columns={historyColumns}
+              columns={displayHistoryColumns}
               rowKey="id"
               loading={historyLoading}
               pagination={{ pageSize: 8 }}
+              title={() => <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{historySettingsButton}</div>}
             />
           </Card>
         </Col>

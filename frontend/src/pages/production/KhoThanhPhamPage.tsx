@@ -17,6 +17,7 @@ import {
   SALES_RETURN_TRANG_THAI_LABELS,
 } from '../../api/salesReturns'
 import type { SalesReturnListItem } from '../../api/salesReturns'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 
@@ -326,6 +327,8 @@ export default function KhoThanhPhamPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-kho-tp', columns, { nonHideable: ['so_lenh'] })
+
   return (
     <div style={{ paddingBottom: 24 }}>
       {/* Header */}
@@ -347,6 +350,7 @@ export default function KhoThanhPhamPage() {
               Tạo phiếu trả
             </Button>
             <Button size="small" onClick={() => { refetch(); refetchReturns() }}>Làm mới</Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -537,7 +541,7 @@ export default function KhoThanhPhamPage() {
           size="small"
           loading={isLoading}
           dataSource={filteredData}
-          columns={columns}
+          columns={displayColumns}
           pagination={{
             pageSize: 50,
             showSizeChanger: false,

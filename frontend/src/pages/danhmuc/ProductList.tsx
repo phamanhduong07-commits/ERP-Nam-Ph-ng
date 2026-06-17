@@ -14,6 +14,7 @@ import { LOAI_THUNG_OPTIONS } from '../../api/quotes'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -193,6 +194,7 @@ export default function ProductList() {
       ) : null,
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-product', columns, { nonHideable: ['ma_amis'] })
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
@@ -234,6 +236,7 @@ export default function ProductList() {
               <Button onClick={() => setImportVisible(true)}>
                 Import Excel
               </Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -242,7 +245,7 @@ export default function ProductList() {
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     rowKey="id"
           dataSource={items}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           size="small"
           pagination={{

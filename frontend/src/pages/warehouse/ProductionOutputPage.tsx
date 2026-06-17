@@ -14,6 +14,7 @@ import { productionOrdersApi, type ProductionOrderListItem } from '../../api/pro
 import { PrinterOutlined, FileExcelOutlined } from '@ant-design/icons'
 import { smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -187,6 +188,7 @@ export default function ProductionOutputPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('warehouse-production-output', columns, { nonHideable: ['so_phieu'] })
 
   return (
     <div style={{ paddingBottom: 24 }}>
@@ -202,6 +204,7 @@ export default function ProductionOutputPage() {
             <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setFormPxId(null); setOpen(true) }}>
               Tạo phiếu nhập TP
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -234,7 +237,7 @@ export default function ProductionOutputPage() {
       </Card>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
-        <Table dataSource={outputList} columns={columns} rowKey="id" loading={isLoading} size="small"
+        <Table dataSource={outputList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
           pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 950 }} />
       </Card>
 

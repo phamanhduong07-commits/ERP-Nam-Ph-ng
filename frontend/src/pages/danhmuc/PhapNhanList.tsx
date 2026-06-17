@@ -10,6 +10,7 @@ import { theoDoiApi, PhanXuongItem } from '../../api/theoDoi'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import MSTLookupButton from '../../components/MSTLookupButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -142,6 +143,7 @@ export default function PhapNhanList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-phap-nhan', columns, { nonHideable: ['ma_phap_nhan'] })
 
   return (
     <div style={{ paddingBottom: 24 }}>
@@ -167,12 +169,13 @@ export default function PhapNhanList() {
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               Thêm pháp nhân
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
-        <Table dataSource={list} columns={columns} rowKey="id" loading={isLoading} size="small"
+        <Table dataSource={list} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
           pagination={{ pageSize: 20 }} scroll={{ x: 950 }} />
       </Card>
 

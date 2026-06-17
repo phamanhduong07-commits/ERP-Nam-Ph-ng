@@ -8,6 +8,7 @@ import dayjs, { Dayjs } from 'dayjs'
 import * as XLSX from 'xlsx'
 import client from '../../api/client'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -228,6 +229,7 @@ export default function DoiSoatXangPage() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('logistics-doi-soat-xang', columns)
 
   return (
     <div style={{ padding: '16px 24px' }}>
@@ -253,6 +255,7 @@ export default function DoiSoatXangPage() {
           <Button icon={<DownloadOutlined />} onClick={exportToExcel} disabled={data.length === 0}>
             Xuất Excel
           </Button>
+          {settingsButton}
         </Space>
       </div>
 
@@ -304,7 +307,7 @@ export default function DoiSoatXangPage() {
       <Card size="small" title={`Danh sách xe (${data.length})`}>
         <Table<FuelRow>
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           rowKey="xe_id"
           loading={isFetching}
           size="small"

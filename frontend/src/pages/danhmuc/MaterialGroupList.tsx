@@ -11,6 +11,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { materialGroupsApi, type MaterialGroup, type MaterialGroupCreate } from '../../api/materialGroups'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -132,6 +133,7 @@ export default function MaterialGroupList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-material-group', columns)
 
   return (
     <div>
@@ -163,6 +165,7 @@ export default function MaterialGroupList() {
                   queryClient.invalidateQueries({ queryKey: ['material-groups-all'] })
                 }}
               />
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -171,7 +174,7 @@ export default function MaterialGroupList() {
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           size="small"
           pagination={{ pageSize: 20 }}

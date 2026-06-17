@@ -14,6 +14,7 @@ import { warehouseApi } from '../../api/warehouse'
 import EmptyState from "../../components/EmptyState"
 import { phapNhanApi } from '../../api/phap_nhan'
 import { useAuthStore } from '../../store/auth'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const DEPARTMENT_MAP: Record<string, string[]> = {
   TRUONG_PHONG_SALE_ADMIN: ['TRUONG_PHONG_SALE_ADMIN', 'SALE_ADMIN'],
@@ -253,6 +254,7 @@ export default function UserList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-user', columns)
 
   return (
     <div>
@@ -281,6 +283,7 @@ export default function UserList() {
               <Switch checked={showInactive} onChange={setShowInactive} checkedChildren="Tất cả" unCheckedChildren="Đang dùng" />
               <Button icon={<ReloadOutlined />} onClick={() => qc.invalidateQueries({ queryKey: ['users'] })} />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Tạo tài khoản</Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -289,7 +292,7 @@ export default function UserList() {
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           size="small"
           pagination={{ pageSize: 50, showSizeChanger: false }}

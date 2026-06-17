@@ -10,6 +10,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import client from '../../api/client'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 const { TextArea } = Input
@@ -170,6 +171,7 @@ export default function KhoanMucChiPhiList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-khoan-muc-chi-phi', columns)
 
   return (
     <div>
@@ -179,9 +181,12 @@ export default function KhoanMucChiPhiList() {
             <Title level={4} style={{ margin: 0 }}>Khoản mục chi phí</Title>
           </Col>
           <Col>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Thêm mới
-            </Button>
+            <Space>
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                Thêm mới
+              </Button>
+              {settingsButton}
+            </Space>
           </Col>
         </Row>
 
@@ -189,7 +194,7 @@ export default function KhoanMucChiPhiList() {
           locale={{ emptyText: <EmptyState size="small" /> }}
           rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={false}
           size="small"

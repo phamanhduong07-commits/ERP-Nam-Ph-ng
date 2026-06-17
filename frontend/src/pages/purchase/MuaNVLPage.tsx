@@ -21,6 +21,7 @@ import { otherMaterialsApi } from '../../api/otherMaterials'
 import type { OtherMaterialSearchResult } from '../../api/otherMaterials'
 import { purchaseInvoiceApi } from '../../api/accounting'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -272,6 +273,7 @@ function TabDonMuaNVL() {
         </Space>
       ) },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('purchase-mua-nvl', columns)
 
   return (
     <>
@@ -293,13 +295,16 @@ function TabDonMuaNVL() {
             options={Object.entries(TRANG_THAI_LABEL).map(([v, l]) => ({ value: v, label: l }))} />
         </Col>
         <Col flex="auto" style={{ textAlign: 'right' }}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true) }}>
-            Tạo đơn mua NVL
-          </Button>
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true) }}>
+              Tạo đơn mua NVL
+            </Button>
+            {settingsButton}
+          </Space>
         </Col>
       </Row>
 
-      <Table dataSource={poList} columns={columns} rowKey="id" loading={isLoading}
+      <Table dataSource={poList} columns={displayColumns} rowKey="id" loading={isLoading}
         size="small" expandable={{ expandedRowRender }}
         pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 900 }} />
 

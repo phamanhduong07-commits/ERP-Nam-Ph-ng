@@ -66,12 +66,28 @@ export interface CashReceiptCreate {
   customer_id: number
   sales_invoice_id?: number
   phap_nhan_id?: number | null
+  phan_xuong_id?: number | null
   ngay_phieu: string
   hinh_thuc_tt?: string
   so_tai_khoan?: string
   so_tham_chieu?: string
   dien_giai?: string
   so_tien: number
+  tk_no?: string
+  tk_co?: string
+}
+
+export interface CashReceiptUpdate {
+  customer_id?: number
+  sales_invoice_id?: number | null
+  phap_nhan_id?: number | null
+  phan_xuong_id?: number | null
+  ngay_phieu?: string
+  hinh_thuc_tt?: string
+  so_tai_khoan?: string | null
+  so_tham_chieu?: string | null
+  dien_giai?: string | null
+  so_tien?: number
   tk_no?: string
   tk_co?: string
 }
@@ -176,6 +192,22 @@ export interface CashPaymentCreate {
   so_tien: number
   tk_no?: string
   tk_co?: string
+}
+
+export interface CashPaymentUpdate {
+  supplier_id?: number | null
+  purchase_invoice_id?: number | null
+  phap_nhan_id?: number | null
+  phan_xuong_id?: number | null
+  ngay_phieu?: string
+  hinh_thuc_tt?: string
+  so_tai_khoan?: string | null
+  so_tham_chieu?: string | null
+  dien_giai?: string | null
+  so_tien?: number
+  tk_no?: string
+  tk_co?: string
+  loai_chi?: string | null
 }
 
 // ──────────────────────────────────────────────────────
@@ -296,6 +328,9 @@ export const receiptApi = {
   create: (data: CashReceiptCreate): Promise<CashReceipt> =>
     client.post('/accounting/receipts', data).then(r => r.data),
 
+  update: (id: number, data: CashReceiptUpdate): Promise<CashReceipt> =>
+    client.put(`/accounting/receipts/${id}`, data).then(r => r.data),
+
   approve: (id: number): Promise<CashReceipt> =>
     client.patch(`/accounting/receipts/${id}/approve`).then(r => r.data),
 
@@ -357,6 +392,9 @@ export const paymentApi = {
 
   create: (data: CashPaymentCreate): Promise<CashPayment> =>
     client.post('/accounting/payments', data).then(r => r.data),
+
+  update: (id: number, data: CashPaymentUpdate): Promise<CashPayment> =>
+    client.put(`/accounting/payments/${id}`, data).then(r => r.data),
 
   approve: (id: number): Promise<CashPayment> =>
     client.patch(`/accounting/payments/${id}/approve`).then(r => r.data),
@@ -969,6 +1007,7 @@ export interface BatchReceiptItem {
 export interface BatchReceiptCreate {
   ngay_phieu: string
   phap_nhan_id?: number | null
+  phan_xuong_id?: number | null
   so_tai_khoan?: string
   items: BatchReceiptItem[]
 }

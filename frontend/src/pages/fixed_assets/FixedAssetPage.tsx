@@ -17,6 +17,7 @@ import {
 } from '../../api/fixedAssets'
 import { useAuthStore } from '../../store/auth'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -205,6 +206,7 @@ function DanhMucTab() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('fixed-assets-main', columns, { nonHideable: ['ma_ts'] })
 
   return (
     <>
@@ -247,6 +249,7 @@ function DanhMucTab() {
         )}
         {canDepreciate && <Button icon={<PlayCircleOutlined />} onClick={() => setDepModal(true)}>Chạy khấu hao kỳ</Button>}
         {canCreate && <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm TSCĐ</Button>}
+        {settingsButton}
       </Space>
 
       <Table
@@ -254,7 +257,7 @@ function DanhMucTab() {
                 rowKey="id"
         loading={isLoading}
         dataSource={assets}
-        columns={columns}
+        columns={displayColumns}
         pagination={{ pageSize: 20 }}
         size="small"
         scroll={{ x: 1300 }}
@@ -391,6 +394,7 @@ function BaoCaoKhauHaoTab() {
       ),
     },
   ]
+  const { displayColumns: reportDisplayColumns, settingsButton: reportSettingsButton } = useColumnPrefs('fixed-assets-depreciation-report', columns, { nonHideable: ['ma_ts'] })
 
   return (
     <>
@@ -403,8 +407,9 @@ function BaoCaoKhauHaoTab() {
             <Button icon={<PlayCircleOutlined />} loading={runAllMut.isPending}>Chạy toàn kỳ</Button>
           </Popconfirm>
         )}
+        {reportSettingsButton}
       </Space>
-      <Table rowKey="id" loading={isLoading} dataSource={data?.items || []} columns={columns} pagination={{ pageSize: 20 }} size="small" scroll={{ x: 1100 }} />
+      <Table rowKey="id" loading={isLoading} dataSource={data?.items || []} columns={reportDisplayColumns} pagination={{ pageSize: 20 }} size="small" scroll={{ x: 1100 }} />
     </>
   )
 }

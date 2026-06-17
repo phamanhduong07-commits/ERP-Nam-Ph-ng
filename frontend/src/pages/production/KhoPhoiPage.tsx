@@ -20,6 +20,7 @@ import { warehouseApi } from '../../api/warehouse'
 import type { TonKho, PhanXuong } from '../../api/warehouse'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -450,6 +451,8 @@ export default function KhoPhoiPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-kho-phoi', columns, { nonHideable: ['so_lenh'] })
+
   const phoiWarehouseOptions = allWarehouses
     .filter((w: Warehouse) => w.loai_kho === 'PHOI' && w.trang_thai)
     .map((w: Warehouse) => ({ value: w.id, label: `${w.ten_kho} (${w.ma_kho})` }))
@@ -543,6 +546,7 @@ export default function KhoPhoiPage() {
                           <Text type="secondary" style={{ fontSize: 12 }}>
                             {filteredData.length} lệnh SX
                           </Text>
+                          {settingsButton}
                           {canWrite && selectedRowKeys.length > 0 && (
                             <Button
                               size="small"
@@ -579,7 +583,7 @@ export default function KhoPhoiPage() {
                       size="small"
                       loading={isLoading}
                       dataSource={filteredData}
-                      columns={columns}
+                      columns={displayColumns}
                       pagination={{ pageSize: 50, showTotal: (t, r) => `${t} lệnh SX${r[0] !== 1 || r[1] !== (data ?? []).length ? ` (lọc từ ${(data ?? []).length})` : ''}`, showSizeChanger: false }}
                       scroll={{ x: 1700 }}
                       rowClassName={(row) => row.ton_kho <= 0 ? 'ant-table-row-disabled' : ''}

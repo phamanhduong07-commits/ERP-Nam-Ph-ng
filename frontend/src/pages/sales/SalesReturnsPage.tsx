@@ -28,6 +28,7 @@ import { exportToExcel } from '../../utils/exportUtils'
 import { useAuthStore } from '../../store/auth'
 import { APPROVE_ROLES } from '../../constants/permissions'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -259,6 +260,7 @@ export default function SalesReturnsPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('sales-returns', columns, { nonHideable: ['so_phieu_tra'] })
 
   const handleExportExcel = () => {
     exportToExcel(`TraHangBan_${dayjs().format('YYYYMMDD')}`, [{
@@ -298,6 +300,7 @@ export default function SalesReturnsPage() {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/sales/returns/create')}>
             Tạo phiếu trả hàng
           </Button>
+          {settingsButton}
         </Space>
       </Space>
 
@@ -444,7 +447,7 @@ export default function SalesReturnsPage() {
 
       <Card>
         <Table
-          columns={columns}
+          columns={displayColumns}
           dataSource={returnRows}
           rowKey="id"
           loading={isLoading}

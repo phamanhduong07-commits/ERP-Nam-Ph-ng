@@ -11,6 +11,7 @@ import { reportsApi, RevenueKyRow, RevenueCustomerRow } from '../../api/reports'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -61,6 +62,7 @@ export default function RevenueReportPage() {
       render: (v: number) => <MiniBar value={v} max={maxKh} />,
     },
   ]
+  const { displayColumns: displayKyColumns, settingsButton } = useColumnPrefs('reports-revenue', kyColumns)
 
   const handleExcel = () => {
     if (!data) return
@@ -101,6 +103,7 @@ export default function RevenueReportPage() {
           <Button icon={<DownloadOutlined />} onClick={handleExportServer} disabled={!data}
             style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
           <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!data}>In</Button>
+          {settingsButton}
         </Space>
       }
     >
@@ -159,7 +162,7 @@ export default function RevenueReportPage() {
           <Card size="small" title="Doanh thu theo kỳ">
             <Table
                             locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
-                            columns={kyColumns}
+                            columns={displayKyColumns}
               dataSource={data?.theo_ky ?? []}
               rowKey="ky"
               loading={isLoading}

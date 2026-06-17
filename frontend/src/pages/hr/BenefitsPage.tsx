@@ -12,6 +12,7 @@ import {
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { hrApi } from '../../api/hr'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import { getVnHolidaysForMonth } from '../../utils/vnHolidays'
 
 const { Title, Text } = Typography
@@ -248,6 +249,7 @@ function RecordsTab() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-benefits', columns)
 
   return (
     <>
@@ -283,12 +285,13 @@ function RecordsTab() {
           >
             Xuất Excel ({records.length})
           </Button>
+          {settingsButton}
         </Space>
       </Card>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
-          dataSource={records} columns={columns} rowKey="id"
+          dataSource={records} columns={displayColumns} rowKey="id"
           loading={isLoading} size="small"
           pagination={{ pageSize: 20 }}
           scroll={{ x: 1200 }}

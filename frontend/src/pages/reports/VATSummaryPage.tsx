@@ -18,6 +18,7 @@ import { reportsApi, VATAuditItem, VATAuditResponse } from '../../api/reports'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from '../../components/EmptyState'
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -178,6 +179,7 @@ const VATSummaryPage: React.FC = () => {
       render: (val: number) => <Text strong>{val?.toLocaleString('vi-VN')}</Text>,
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('reports-vat-summary', summaryColumns)
 
   const vatRows = data ? [
     { label: '1. Doanh thu bán ra (chưa thuế)', value: data.doanh_thu_chiu_thue },
@@ -273,6 +275,7 @@ const VATSummaryPage: React.FC = () => {
               </Form.Item>
             </>
           )}
+          <Form.Item>{settingsButton}</Form.Item>
         </Form>
       </Card>
 
@@ -304,7 +307,7 @@ const VATSummaryPage: React.FC = () => {
 
           <Card title="Chi tiết kê khai">
             <Table
-              columns={summaryColumns}
+              columns={displayColumns}
               dataSource={vatRows}
               rowKey="label"
               pagination={false}

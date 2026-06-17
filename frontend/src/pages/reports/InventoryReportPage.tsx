@@ -10,6 +10,7 @@ import { reportsApi, InventoryMovementRow } from '../../api/reports'
 import { warehousesApi, Warehouse } from '../../api/warehouses'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -85,6 +86,7 @@ export default function InventoryReportPage() {
       render: v => fmtVND(v),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('reports-inventory', columns)
 
   const summary = data?.summary
 
@@ -97,6 +99,7 @@ export default function InventoryReportPage() {
           <Button icon={<DownloadOutlined />} onClick={handleExportServer} disabled={!rows.length}
             style={{ color: '#217346', borderColor: '#217346' }}>Xuất Excel</Button>
           <Button icon={<FilePdfOutlined />} onClick={handlePrint} disabled={!rows.length}>In</Button>
+          {settingsButton}
         </Space>
       </div>
 
@@ -143,7 +146,7 @@ export default function InventoryReportPage() {
 
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
-                columns={columns}
+                columns={displayColumns}
         dataSource={rows}
         rowKey={(r, i) => `${r.warehouse_id}-${r.ten_hang}-${i}`}
         loading={isLoading}

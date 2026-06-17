@@ -33,6 +33,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import PageLayout from '../../components/PageLayout'
 import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 import { fmtVND } from '../../utils/exportUtils'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Dragger } = Upload
 const { Text, Title, Paragraph } = Typography
@@ -373,6 +374,8 @@ export default function ExcelImportWizardPage() {
         ),
     },
   ]
+  const { displayColumns: displayPreviewColumns, settingsButton: previewSettingsButton } = useColumnPrefs('accounting-excel-import-preview', previewColumns)
+  const { displayColumns: displayResultColumns, settingsButton: resultSettingsButton } = useColumnPrefs('accounting-excel-import-result', resultColumns)
 
   /** Red background for error rows in the preview table. */
   function rowClassName(record: ImportResultItem): string {
@@ -512,10 +515,11 @@ export default function ExcelImportWizardPage() {
               />
             )}
 
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{previewSettingsButton}</div>
             <Table<ImportResultItem>
               rowKey="index"
               size="small"
-              columns={previewColumns}
+              columns={displayPreviewColumns}
               dataSource={items}
               rowClassName={rowClassName}
               pagination={{ pageSize: 20, showSizeChanger: false }}
@@ -567,10 +571,11 @@ export default function ExcelImportWizardPage() {
               </Col>
             </Row>
 
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{resultSettingsButton}</div>
             <Table<ImportResultItem>
               rowKey="index"
               size="small"
-              columns={resultColumns}
+              columns={displayResultColumns}
               dataSource={result.items}
               rowClassName={rowClassName}
               pagination={{ pageSize: 20, showSizeChanger: false }}

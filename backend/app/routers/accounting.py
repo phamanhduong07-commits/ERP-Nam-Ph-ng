@@ -32,6 +32,7 @@ from app.schemas.accounting import (
     LichTraNoResponse, TraNoRequest, CapNhatLaiSuatRequest, TraTruocHanRequest, TatToanRequest,
     CashFlowForecastResponse, ForecastDayItem,
     InternalTransferCreate, BatchReceiptCreate,
+    CashReceiptUpdate, CashPaymentUpdate,
     TaxPaymentCreate, TaxPaymentBatchResponse, TaxObligationItem,
     InsuranceObligationItem, InsurancePaymentCreate, InsuranceBatchResponse,
     SalaryObligationItem, SalaryPaymentCreate, SalaryBatchResponse,
@@ -510,6 +511,16 @@ def cancel_receipt(
     return AccountingService(db).cancel_receipt(receipt_id, current_user.id, ly_do)
 
 
+@router.put("/receipts/{receipt_id}", response_model=CashReceiptResponse)
+def update_receipt(
+    receipt_id: int,
+    data: CashReceiptUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    return AccountingService(db).update_receipt(receipt_id, data, current_user.id)
+
+
 # ─────────────────────────────────────────────
 # THU TIỀN NHIỀU KHÁCH HÀNG (BATCH)
 # ─────────────────────────────────────────────
@@ -573,17 +584,24 @@ def batch_create_receipts(
 
 @router.get("/receipts/import-template")
 def download_receipts_import_template(_: User = Depends(get_current_user)):
-    """Tải mẫu Excel để import phiếu thu."""
+    """Tải mẫu Excel để import phiếu thu (tương thích MISA)."""
     return build_template_response("mau_import_phieu_thu.xlsx", [
-        ImportField("ngay_hach_toan", "Ngay hach toan", required=True, parser=parse_date, help_text="YYYY-MM-DD hoac DD/MM/YYYY"),
-        ImportField("ngay_chung_tu",  "Ngay chung tu",  parser=parse_date, help_text="De trong se dung Ngay hach toan"),
-        ImportField("so_chung_tu",    "So chung tu",    parser=parse_text, help_text="De trong - he thong tu dong tao"),
-        ImportField("dien_giai",      "Dien giai",      parser=parse_text, help_text="Dien giai nghiep vu"),
-        ImportField("so_tien",        "So tien",        required=True, parser=parse_decimal, help_text="So tien thu (VND, so nguyen)"),
-        ImportField("doi_tuong",      "Doi tuong",      required=True, parser=parse_text, help_text="Ma khach hang (ma_kh)"),
-        ImportField("so_tk_nh",       "So tai khoan NH", parser=parse_text, help_text="So tai khoan ngan hang"),
-        ImportField("ly_do",          "Ly do thu",      parser=parse_text, help_text="Ly do thu tien (neu khac Dien giai)"),
-        ImportField("loai_chung_tu",  "Loai chung tu",  parser=parse_text, help_text="TM=Tien mat, CK=Chuyen khoan (mac dinh CK)"),
+        ImportField("ngay_chung_tu",  "Ngày chứng từ",          required=True,  parser=parse_date,    help_text="DD/MM/YYYY"),
+        ImportField("ngay_hach_toan", "Ngày hạch toán",                          parser=parse_date,    help_text="Để trống = dùng Ngày chứng từ"),
+        ImportField("so_chung_tu",    "Số chứng từ",                             parser=parse_text,    help_text="Để trống - hệ thống tự sinh"),
+        ImportField("ma_doi_tuong",   "Mã đối tượng",           required=True,  parser=parse_text,    help_text="Mã khách hàng (ma_kh)"),
+        ImportField("ten_doi_tuong",  "Tên đối tượng",                           parser=parse_text),
+        ImportField("dien_giai_ht",   "Diễn giải (hạch toán)",                   parser=parse_text,    help_text="Diễn giải ghi vào phiếu"),
+        ImportField("tk_no",          "TK Nợ",                                   parser=parse_text,    help_text="Mặc định: 112 (CK) hoặc 111 (TM)"),
+        ImportField("tk_co",          "TK Có",                                   parser=parse_text,    help_text="Mặc định: 131"),
+        ImportField("so_tien",        "Số tiền",                required=True,  parser=parse_decimal, help_text="Số tiền thu (VND)"),
+        ImportField("so_tk_nh",       "Số TK ngân hàng",                         parser=parse_text,    help_text="Số tài khoản ngân hàng"),
+        ImportField("ten_nh",         "Tên ngân hàng",                            parser=parse_text),
+        ImportField("httt",           "Hình thức TT",                             parser=parse_text,    help_text="TM=Tiền mặt, CK=Chuyển khoản"),
+        ImportField("ly_do",          "Lý do thu",                               parser=parse_text,    help_text="Lý do thu tiền"),
+        ImportField("co_hoa_don",     "Có hóa đơn",                               parser=parse_text,    help_text="Có hoặc Không"),
+        ImportField("so_hoa_don",     "Số hóa đơn",                               parser=parse_text),
+        ImportField("ngay_hoa_don",   "Ngày hóa đơn",                            parser=parse_date),
     ])
 
 
@@ -625,18 +643,21 @@ async def import_receipts_excel(
                 return headers.index(n.lower())
         return None
 
-    col_cust     = find_col("customer_id", "ma_kh", "mã kh", "doi_tuong", "đối tượng", "doi tuong", "khách hàng")
+    col_cust     = find_col("customer_id", "ma_kh", "mã kh", "doi_tuong", "mã đối tượng", "ma doi tuong", "đối tượng", "doi tuong", "khách hàng")
     col_tien     = find_col("so_tien", "số tiền", "so tien", "tien")
     col_inv      = find_col("sales_invoice_id", "so_hoa_don", "số hóa đơn")
-    col_httt     = find_col("hinh_thuc_tt", "hình thức tt", "httt", "loai_chung_tu", "loại chứng từ", "loai chung tu")
-    col_dg       = find_col("dien_giai", "diễn giải", "dien giai")
+    col_httt     = find_col("hình thức tt", "httt", "hinh_thuc_tt", "loai_chung_tu", "loại chứng từ", "loai chung tu")
+    col_dg       = find_col("diễn giải (hạch toán)", "dien_giai_ht", "dien_giai", "diễn giải", "dien giai")
     col_ref      = find_col("so_tham_chieu", "số tham chiếu")
-    col_tk       = find_col("so_tai_khoan", "so_tk_nh", "số tài khoản nh", "so tk nh")
-    col_ly_do    = find_col("ly_do", "lý do thu", "ly do thu", "ly_do_thu")
-    col_ngay_row = find_col("ngay_hach_toan", "ngày hạch toán", "ngay hach toan", "ngay_chung_tu", "ngày chứng từ")
+    col_tk       = find_col("số tk ngân hàng", "so_tk_nh", "so tai khoan", "so_tai_khoan", "số tài khoản nh", "so tk nh")
+    col_ly_do    = find_col("lý do thu", "ly do thu", "ly_do_thu", "ly_do")
+    col_ngay_row = find_col("ngày chứng từ", "ngay chung tu", "ngay_chung_tu", "ngay_hach_toan", "ngày hạch toán", "ngay hach toan")
+    col_so_phieu = find_col("số chứng từ", "so chung tu", "so_chung_tu", "so_phieu")
+    col_tk_no    = find_col("tk nợ", "tk_no", "tk no")
+    col_tk_co    = find_col("tk có", "tk_co", "tk co")
 
     if col_cust is None or col_tien is None:
-        raise HTTPException(400, "File thiếu cột bắt buộc: Doi tuong (ma_kh) và So tien")
+        raise HTTPException(400, "File thiếu cột bắt buộc: Mã đối tượng (ma_kh) và Số tiền")
 
     today = ngay_phieu or date.today()
     service = AccountingService(db)
@@ -703,15 +724,30 @@ async def import_receipts_excel(
             elif col_ly_do is not None and row[col_ly_do]:
                 dg_val = str(row[col_ly_do]).strip()
 
+            so_phieu_val = None
+            if col_so_phieu is not None and row[col_so_phieu]:
+                so_phieu_val = str(row[col_so_phieu]).strip() or None
+
+            tk_no_val = "112"
+            if col_tk_no is not None and row[col_tk_no]:
+                tk_no_val = str(row[col_tk_no]).strip()
+
+            tk_co_val = "131"
+            if col_tk_co is not None and row[col_tk_co]:
+                tk_co_val = str(row[col_tk_co]).strip()
+
             receipt_data = CashReceiptCreate(
                 customer_id=cust_id,
                 sales_invoice_id=inv_id,
+                so_phieu=so_phieu_val,
                 ngay_phieu=row_ngay,
                 hinh_thuc_tt=httt,
                 dien_giai=dg_val,
                 so_tham_chieu=str(row[col_ref]).strip() if col_ref is not None and row[col_ref] else None,
                 so_tai_khoan=str(row[col_tk]).strip() if col_tk is not None and row[col_tk] else None,
                 so_tien=so_tien,
+                tk_no=tk_no_val,
+                tk_co=tk_co_val,
                 phap_nhan_id=phap_nhan_id,
                 phan_xuong_id=phan_xuong_id,
             )
@@ -1120,6 +1156,16 @@ def cancel_payment(
     return AccountingService(db).cancel_payment(payment_id, current_user.id, ly_do)
 
 
+@router.put("/payments/{payment_id}", response_model=CashPaymentResponse)
+def update_payment(
+    payment_id: int,
+    data: CashPaymentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    return AccountingService(db).update_payment(payment_id, data, current_user.id)
+
+
 @router.get("/tax-obligations", response_model=list[TaxObligationItem])
 def get_tax_obligations(
     tu_ngay: date | None = Query(None),
@@ -1393,17 +1439,34 @@ def create_salary_payments(
 
 @router.get("/payments/import-template")
 def download_payments_import_template(_: User = Depends(get_current_user)):
-    """Tải mẫu Excel để import phiếu chi."""
+    """Tải mẫu Excel để import phiếu chi (tương thích MISA)."""
     return build_template_response("mau_import_phieu_chi.xlsx", [
-        ImportField("ngay_hach_toan", "Ngay hach toan", required=True, parser=parse_date, help_text="YYYY-MM-DD hoac DD/MM/YYYY"),
-        ImportField("ngay_chung_tu",  "Ngay chung tu",  parser=parse_date, help_text="De trong se dung Ngay hach toan"),
-        ImportField("so_chung_tu",    "So chung tu",    parser=parse_text, help_text="De trong - he thong tu dong tao"),
-        ImportField("dien_giai",      "Dien giai",      parser=parse_text, help_text="Dien giai nghiep vu"),
-        ImportField("so_tien",        "So tien",        required=True, parser=parse_decimal, help_text="So tien chi (VND, so nguyen)"),
-        ImportField("doi_tuong",      "Doi tuong",      required=True, parser=parse_text, help_text="Ma nha cung cap (ma_ncc)"),
-        ImportField("so_tk_nh",       "So tai khoan NH", parser=parse_text, help_text="So tai khoan ngan hang"),
-        ImportField("ly_do",          "Ly do chi",      parser=parse_text, help_text="Ly do chi tien (neu khac Dien giai)"),
-        ImportField("loai_chung_tu",  "Loai chung tu",  parser=parse_text, help_text="TM=Tien mat, CK=Chuyen khoan (mac dinh CK)"),
+        ImportField("ngay_chung_tu",   "Ngày chứng từ",              required=True,  parser=parse_date,    help_text="DD/MM/YYYY"),
+        ImportField("ngay_hach_toan",  "Ngày hạch toán",                              parser=parse_date,    help_text="Để trống = dùng Ngày chứng từ"),
+        ImportField("so_chung_tu",     "Số chứng từ",                                 parser=parse_text,    help_text="Để trống - hệ thống tự sinh"),
+        ImportField("ma_doi_tuong",    "Mã đối tượng",               required=True,  parser=parse_text,    help_text="Mã NCC (ma_ncc)"),
+        ImportField("ten_doi_tuong",   "Tên đối tượng",                               parser=parse_text),
+        ImportField("dia_chi",         "Địa chỉ",                                     parser=parse_text),
+        ImportField("ly_do_chi",       "Lý do chi",                                   parser=parse_text,    help_text="Lý do chi tiền"),
+        ImportField("dien_giai_ld",    "Diễn giải lý do chi",                         parser=parse_text),
+        ImportField("loai_tien",       "Loại tiền",                                   parser=parse_text,    help_text="VND"),
+        ImportField("ty_gia",          "Tỷ giá",                                      parser=parse_decimal, help_text="1"),
+        ImportField("dien_giai_ht",    "Diễn giải (hạch toán)",                       parser=parse_text,    help_text="Diễn giải ghi vào phiếu"),
+        ImportField("tk_no",           "TK Nợ",                                       parser=parse_text,    help_text="Mặc định: 331"),
+        ImportField("tk_co",           "TK Có",                                       parser=parse_text,    help_text="Mặc định: 112 (CK) / 111 (TM)"),
+        ImportField("so_tien",         "Số tiền",                    required=True,  parser=parse_decimal, help_text="Số tiền chi (VND)"),
+        ImportField("so_tk_nh",        "Số TK ngân hàng",                             parser=parse_text),
+        ImportField("ten_nh",          "Tên ngân hàng",                               parser=parse_text),
+        ImportField("httt",            "Hình thức TT",                                parser=parse_text,    help_text="TM=Tiền mặt, CK=Chuyển khoản"),
+        ImportField("co_hoa_don",      "Có hóa đơn",                                  parser=parse_text,    help_text="Có hoặc Không"),
+        ImportField("tong_tien_hang",  "Giá trị HHDV chưa thuế",                     parser=parse_decimal, help_text="Giá chưa VAT"),
+        ImportField("pct_thue_gtgt",   "% thuế GTGT",                                 parser=parse_decimal, help_text="0, 5, 8 hoặc 10"),
+        ImportField("tien_thue",       "Tiền thuế GTGT",                              parser=parse_decimal),
+        ImportField("ngay_hoa_don",    "Ngày hóa đơn",                               parser=parse_date),
+        ImportField("so_hoa_don",      "Số hóa đơn",                                  parser=parse_text),
+        ImportField("ma_ncc_hd",       "Mã NCC",                                      parser=parse_text,    help_text="Mã NCC trên hóa đơn"),
+        ImportField("ten_ncc_hd",      "Tên NCC",                                     parser=parse_text),
+        ImportField("mst_ncc",         "Mã số thuế NCC",                              parser=parse_text),
     ])
 
 
@@ -1440,17 +1503,27 @@ async def import_payments_excel(
                 return headers.index(n.lower())
         return None
 
-    col_supp     = find_col("supplier_id", "ma_ncc", "mã ncc", "doi_tuong", "đối tượng", "doi tuong", "nhà cung cấp")
-    col_tien     = find_col("so_tien", "số tiền", "so tien", "tien")
-    col_httt     = find_col("hinh_thuc_tt", "hình thức tt", "httt", "loai_chung_tu", "loại chứng từ", "loai chung tu")
-    col_dg       = find_col("dien_giai", "diễn giải", "dien giai")
-    col_ref      = find_col("so_tham_chieu", "số tham chiếu")
-    col_tk       = find_col("so_tai_khoan", "so_tk_nh", "số tài khoản nh", "so tk nh")
-    col_ly_do    = find_col("ly_do", "lý do chi", "ly do chi", "ly_do_chi")
-    col_ngay_row = find_col("ngay_hach_toan", "ngày hạch toán", "ngay hach toan", "ngay_chung_tu", "ngày chứng từ")
+    col_supp      = find_col("supplier_id", "ma_ncc", "mã ncc", "mã đối tượng", "ma doi tuong", "doi_tuong", "đối tượng", "doi tuong", "nhà cung cấp")
+    col_tien      = find_col("so_tien", "số tiền", "so tien", "tien")
+    col_httt      = find_col("hình thức tt", "httt", "hinh_thuc_tt", "loai_chung_tu", "loại chứng từ", "loai chung tu")
+    col_dg        = find_col("diễn giải (hạch toán)", "dien_giai_ht", "dien_giai", "diễn giải", "dien giai")
+    col_ref       = find_col("so_tham_chieu", "số tham chiếu")
+    col_tk        = find_col("số tk ngân hàng", "so_tk_nh", "so tai khoan", "so_tai_khoan", "số tài khoản nh", "so tk nh")
+    col_ly_do     = find_col("lý do chi", "ly do chi", "ly_do_chi", "ly_do")
+    col_ngay_row  = find_col("ngày chứng từ", "ngay chung tu", "ngay_chung_tu", "ngay_hach_toan", "ngày hạch toán", "ngay hach toan")
+    col_so_phieu  = find_col("số chứng từ", "so chung tu", "so_chung_tu", "so_phieu")
+    col_tk_no     = find_col("tk nợ", "tk_no", "tk no")
+    col_tk_co     = find_col("tk có", "tk_co", "tk co")
+    col_co_hd     = find_col("có hóa đơn", "co hoa don", "co_hoa_don")
+    col_tien_hang = find_col("giá trị hhdv chưa thuế", "gia tri hhdv chua thue", "tong_tien_hang", "tien_hang")
+    col_pct_thue  = find_col("% thuế gtgt", "pct_thue_gtgt", "thue_suat_gtgt", "% thue gtgt")
+    col_tien_thue = find_col("tiền thuế gtgt", "tien_thue", "tien thue gtgt")
+    col_ngay_hd   = find_col("ngày hóa đơn", "ngay_hoa_don", "ngay hoa don")
+    col_so_hd     = find_col("số hóa đơn", "so_hoa_don", "so hoa don")
+    col_mst_ncc   = find_col("mã số thuế ncc", "mst_ncc", "ma_so_thue_ncc", "mã số thuế")
 
     if col_supp is None or col_tien is None:
-        raise HTTPException(400, "File thiếu cột bắt buộc: Doi tuong (ma_ncc) và So tien")
+        raise HTTPException(400, "File thiếu cột bắt buộc: Mã đối tượng (ma_ncc) và Số tiền")
 
     today = ngay_phieu or date.today()
     service = AccountingService(db)
@@ -1506,14 +1579,109 @@ async def import_payments_excel(
             elif col_ly_do is not None and row[col_ly_do]:
                 dg_val = str(row[col_ly_do]).strip()
 
+            so_phieu_val = None
+            if col_so_phieu is not None and row[col_so_phieu]:
+                so_phieu_val = str(row[col_so_phieu]).strip() or None
+
+            tk_no_val = "331"
+            if col_tk_no is not None and row[col_tk_no]:
+                tk_no_val = str(row[col_tk_no]).strip()
+
+            tk_co_val = "112"
+            if col_tk_co is not None and row[col_tk_co]:
+                tk_co_val = str(row[col_tk_co]).strip()
+            elif httt in ("TM", "tien_mat"):
+                tk_co_val = "111"
+
+            # Tạo hóa đơn mua hàng nếu có
+            purchase_invoice_id = None
+            co_hoa_don = False
+            if col_co_hd is not None and row[col_co_hd]:
+                raw_co = str(row[col_co_hd]).strip().lower()
+                co_hoa_don = raw_co in ("có", "co", "1", "true", "x", "yes", "y")
+
+            if co_hoa_don and supp_id:
+                tien_hang = None
+                if col_tien_hang is not None and row[col_tien_hang]:
+                    try:
+                        tien_hang = Decimal(str(row[col_tien_hang]).replace(",", "").strip())
+                    except Exception:
+                        pass
+
+                if tien_hang and tien_hang > 0:
+                    thue_suat_hd = Decimal("8")
+                    if col_pct_thue is not None and row[col_pct_thue]:
+                        try:
+                            ts_raw = str(row[col_pct_thue]).replace("%", "").strip()
+                            ts_val = Decimal(ts_raw)
+                            if ts_val in (Decimal("0"), Decimal("5"), Decimal("8"), Decimal("10")):
+                                thue_suat_hd = ts_val
+                        except Exception:
+                            pass
+
+                    tien_thue_hd = None
+                    if col_tien_thue is not None and row[col_tien_thue]:
+                        try:
+                            tien_thue_hd = Decimal(str(row[col_tien_thue]).replace(",", "").strip())
+                        except Exception:
+                            pass
+
+                    ngay_hd_val = row_ngay
+                    if col_ngay_hd is not None and row[col_ngay_hd]:
+                        from datetime import datetime as _dt2
+                        raw_nhd = row[col_ngay_hd]
+                        if isinstance(raw_nhd, date) and not isinstance(raw_nhd, datetime):
+                            ngay_hd_val = raw_nhd
+                        elif isinstance(raw_nhd, datetime):
+                            ngay_hd_val = raw_nhd.date()
+                        else:
+                            for _fmt2 in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                                try:
+                                    ngay_hd_val = _dt2.strptime(str(raw_nhd).strip(), _fmt2).date()
+                                    break
+                                except ValueError:
+                                    pass
+
+                    so_hd_val = None
+                    if col_so_hd is not None and row[col_so_hd]:
+                        so_hd_val = str(row[col_so_hd]).strip()
+
+                    mst_val = None
+                    if col_mst_ncc is not None and row[col_mst_ncc]:
+                        mst_val = str(row[col_mst_ncc]).strip()
+
+                    from app.schemas.accounting import PurchaseInvoiceCreate
+                    inv_data = PurchaseInvoiceCreate(
+                        supplier_id=supp_id,
+                        ngay_lap=row_ngay,
+                        ngay_hoa_don=ngay_hd_val,
+                        so_hoa_don=so_hd_val,
+                        tong_tien_hang=tien_hang,
+                        thue_suat=thue_suat_hd,
+                        tien_thue=tien_thue_hd,
+                        ma_so_thue=mst_val,
+                        phap_nhan_id=phap_nhan_id,
+                        phan_xuong_id=phan_xuong_id,
+                    )
+                    try:
+                        if not dry_run:
+                            inv_obj = service.create_purchase_invoice(inv_data, current_user.id)
+                            purchase_invoice_id = inv_obj.id
+                    except Exception:
+                        pass  # hóa đơn là best-effort, không block payment
+
             payment_data = CashPaymentCreate(
                 supplier_id=supp_id,
+                purchase_invoice_id=purchase_invoice_id,
+                so_phieu=so_phieu_val,
                 ngay_phieu=row_ngay,
                 hinh_thuc_tt=httt,
                 dien_giai=dg_val,
                 so_tham_chieu=str(row[col_ref]).strip() if col_ref is not None and row[col_ref] else None,
                 so_tai_khoan=str(row[col_tk]).strip() if col_tk is not None and row[col_tk] else None,
                 so_tien=so_tien,
+                tk_no=tk_no_val,
+                tk_co=tk_co_val,
                 phap_nhan_id=phap_nhan_id,
                 phan_xuong_id=phan_xuong_id,
             )
@@ -2100,10 +2268,12 @@ async def import_ob_cash(
 def cash_book(
     tu_ngay: date = Query(...),
     den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
+    phan_xuong_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_cash_book(tu_ngay, den_ngay)
+    return AccountingService(db).get_cash_book(tu_ngay, den_ngay, phap_nhan_id, phan_xuong_id)
 
 
 # ─────────────────────────────────────────────
@@ -2115,10 +2285,12 @@ def bank_ledger(
     tu_ngay: date = Query(...),
     den_ngay: date = Query(...),
     so_tai_khoan: str | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
+    phan_xuong_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return AccountingService(db).get_bank_ledger(tu_ngay, den_ngay, so_tai_khoan)
+    return AccountingService(db).get_bank_ledger(tu_ngay, den_ngay, so_tai_khoan, phap_nhan_id, phan_xuong_id)
 
 
 # ─────────────────────────────────────────────

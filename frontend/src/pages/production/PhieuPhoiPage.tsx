@@ -42,6 +42,7 @@ import { usePhapNhanList } from '../../hooks/usePhapNhan'
 import { systemApi } from '../../api/system'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -989,6 +990,8 @@ function TabXuat() {
     { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true, render: (v: string | null) => v ?? '—' },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-phieu-phoi', columns)
+
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={12}>
       <Row gutter={8} align="middle" justify="space-between" wrap>
@@ -1001,15 +1004,18 @@ function TabXuat() {
           </Space>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-            Tạo phiếu xuất
-          </Button>
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+              Tạo phiếu xuất
+            </Button>
+            {settingsButton}
+          </Space>
         </Col>
       </Row>
 
       <Table<PhieuXuat>
         rowKey="id" size="small" loading={isLoading}
-        dataSource={data?.items ?? []} columns={columns}
+        dataSource={data?.items ?? []} columns={displayColumns}
         expandable={{
           expandedRowRender: (p: PhieuXuat) => (
             <Table rowKey="id" size="small" pagination={false} dataSource={p.items}

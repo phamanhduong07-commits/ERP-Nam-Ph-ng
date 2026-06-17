@@ -9,6 +9,7 @@ import { PlusOutlined, DeleteOutlined, EyeOutlined, CheckCircleOutlined } from '
 import dayjs from 'dayjs'
 import { qualityApi, QCSheet, CreateQCSheetPayload, UpdateKetQuaPayload } from '../../api/quality'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -170,6 +171,7 @@ export default function QCListPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('quality-qc-list', columns, { nonHideable: ['so_phieu'] })
 
   return (
     <div style={{ padding: 16 }}>
@@ -206,6 +208,7 @@ export default function QCListPage() {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
             Tạo phiếu QC
           </Button>
+          {settingsButton}
         </Space>
       </Card>
 
@@ -213,7 +216,7 @@ export default function QCListPage() {
                 locale={{ emptyText: <EmptyState size="small" /> }}
                 rowKey="id"
         dataSource={sheets}
-        columns={columns}
+        columns={displayColumns}
         loading={isLoading}
         size="small"
         pagination={{ pageSize: 20 }}

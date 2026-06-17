@@ -44,6 +44,7 @@ import { suppliersApi } from '../../api/suppliers'
 import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -530,6 +531,7 @@ export default function DuBaoNhuCauPage() {
       render: (v: number) => v > 0 ? <Text strong>{fmtVND(v)}</Text> : <Text type="secondary">—</Text>,
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('purchase-du-bao-nhu-cau', columns)
 
   const rowKey = (r: DuBaoNhuCauRow) =>
     `${r.paper_material_id ?? 'p'}-${r.other_material_id ?? 'o'}`
@@ -559,6 +561,7 @@ export default function DuBaoNhuCauPage() {
           <Button icon={<DownloadOutlined />} onClick={handleExport} disabled={!rows.length}>
             Xuất Excel
           </Button>
+          {settingsButton}
         </Space>
       </div>
 
@@ -753,7 +756,7 @@ export default function DuBaoNhuCauPage() {
       {rows.length > 0 && (
         <Table<DuBaoNhuCauRow>
           rowKey={rowKey}
-          columns={columns}
+          columns={displayColumns}
           dataSource={displayRows}
           loading={isFetching}
           size="small"

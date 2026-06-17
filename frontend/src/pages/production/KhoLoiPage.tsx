@@ -12,6 +12,7 @@ import { exportExcelWithTemplate } from '../../utils/exportUtils'
 import { khoAoPhoiApi, type HangLoiPhoiRow } from '../../api/kho_ao_phoi'
 import { usePermission } from '../../hooks/usePermission'
 import { getErrorMessage } from '../../utils/errorUtils'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 
@@ -483,6 +484,8 @@ export default function KhoLoiPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-kho-loi', colsLoi)
+
   const colsTra: ColumnsType<HangTraVeRow> = [
     {
       title: 'Tên hàng',
@@ -616,21 +619,24 @@ export default function KhoLoiPage() {
             children: (
               <>
               <Row justify="end" style={{ marginBottom: 8 }}>
-                <Button
-                  size="small"
-                  icon={<DownloadOutlined />}
-                  disabled={hangLoi.length === 0}
-                  onClick={handleExportLoi}
-                >
-                  Xuất Excel
-                </Button>
+                <Space>
+                  <Button
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    disabled={hangLoi.length === 0}
+                    onClick={handleExportLoi}
+                  >
+                    Xuất Excel
+                  </Button>
+                  {settingsButton}
+                </Space>
               </Row>
               <Table<HangLoiRow>
                 rowKey="id"
                 size="small"
                 loading={isLoading}
                 dataSource={hangLoi}
-                columns={colsLoi}
+                columns={displayColumns}
                 onRow={r => ({ onClick: () => setSelectedLoi(r), style: { cursor: 'pointer' } })}
                 rowClassName={() => 'hoverable-row'}
                 pagination={{ pageSize: 50, showSizeChanger: false, showTotal: t => `${t} dòng` }}

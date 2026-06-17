@@ -10,6 +10,7 @@ import type { ApiError } from '../../api/types'
 import client from '../../api/client'
 import EmptyState from '../../components/EmptyState'
 import { useHotkey } from '../../hooks/useHotkey'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -213,6 +214,7 @@ export default function ChartOfAccountsPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-chart-of-accounts', columns, { nonHideable: ['so_tk'] })
 
   return (
     <div>
@@ -243,6 +245,7 @@ export default function ChartOfAccountsPage() {
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm mới
               </Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -251,7 +254,7 @@ export default function ChartOfAccountsPage() {
           locale={{ emptyText: <EmptyState size="small" /> }}
           rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={false}
           size="small"

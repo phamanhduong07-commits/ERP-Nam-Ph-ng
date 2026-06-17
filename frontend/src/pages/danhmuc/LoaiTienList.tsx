@@ -4,6 +4,7 @@ import { Card, Table, Button, Modal, Form, Input, InputNumber, Switch, Tag, Spac
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import client from '../../api/client';
+import { useColumnPrefs } from '../../hooks/useColumnPrefs';
 
 interface LoaiTien {
   id: number;
@@ -74,13 +75,14 @@ export default function LoaiTienList() {
       ),
     },
   ];
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-loai-tien', cols);
 
   return (
     <Card
       title="Loại tiền"
-      extra={<Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm</Button>}
+      extra={<Space><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm</Button>{settingsButton}</Space>}
     >
-      <Table dataSource={data} columns={cols} rowKey="id" loading={isLoading} size="small" pagination={{ pageSize: 20 }} />
+      <Table dataSource={data} columns={displayColumns} rowKey="id" loading={isLoading} size="small" pagination={{ pageSize: 20 }} />
 
       <Modal
         title={editing ? 'Sửa loại tiền' : 'Thêm loại tiền'}

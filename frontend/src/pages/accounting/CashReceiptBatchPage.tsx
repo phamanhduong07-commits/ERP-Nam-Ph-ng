@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Card, Checkbox, Col, DatePicker, InputNumber, Row,
+  Alert, Button, Card, Checkbox, Col, DatePicker, Input, InputNumber, Row,
   Select, Space, Table, Tag, Typography, message,
 } from 'antd'
 import { ArrowLeftOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined } from '@ant-design/icons'
@@ -11,9 +11,10 @@ import dayjs from 'dayjs'
 import { fmtVND } from '../../utils/exportUtils'
 import { receiptApi, HINH_THUC_TT, BatchReceiptItem, BatchReceiptResponse } from '../../api/accounting'
 import { billingApi, SalesInvoiceListItem } from '../../api/billing'
-import { usePhapNhan } from '../../hooks/useMasterData'
+import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 import PageLayout from '../../components/PageLayout'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 
@@ -21,15 +22,18 @@ interface RowState {
   selected: boolean
   so_tien: number
   hinh_thuc_tt: string
+  dien_giai: string
 }
 
 export default function CashReceiptBatchPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { phapNhanList } = usePhapNhan()
+  const { phanXuongList } = usePhanXuong()
 
   const [ngayPhieu, setNgayPhieu] = useState<string>(dayjs().format('YYYY-MM-DD'))
   const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
+  const [phanXuongId, setPhanXuongId] = useState<number | undefined>()
   const [soTaiKhoan, setSoTaiKhoan] = useState<string>('')
   const [defaultHttt, setDefaultHttt] = useState<string>('chuyen_khoan')
   const [rowStates, setRowStates] = useState<Record<number, RowState>>({})
@@ -53,7 +57,12 @@ export default function CashReceiptBatchPage() {
   }, [invoiceData])
 
   const getRow = (inv: SalesInvoiceListItem): RowState =>
-    rowStates[inv.id] ?? { selected: false, so_tien: inv.con_lai, hinh_thuc_tt: defaultHttt }
+    rowStates[inv.id] ?? {
+      selected: false,
+      so_tien: inv.con_lai,
+      hinh_thuc_tt: defaultHttt,
+      dien_giai: `Thu tiền HĐ ${inv.so_hoa_don ?? `#${inv.id}`}`,
+    }
 
   const setRow = (id: number, patch: Partial<RowState>) =>
     setRowStates(prev => ({ ...prev, [id]: { ...getRow({ id } as SalesInvoiceListItem), ...patch } }))
@@ -74,7 +83,7 @@ export default function CashReceiptBatchPage() {
     setRowStates(prev => {
       const next = { ...prev }
       invoices.forEach(i => {
-        if (next[i.id]) next[i.id] = { ...next[i.id], hinh_thuc_tt: httt }
+        next[i.id] = { ...getRow(i), hinh_thuc_tt: httt }
       })
       return next
     })
@@ -89,12 +98,13 @@ export default function CashReceiptBatchPage() {
           sales_invoice_id: inv.id,
           so_tien: row.so_tien,
           hinh_thuc_tt: row.hinh_thuc_tt,
-          dien_giai: `Thu tiền HĐ ${inv.so_hoa_don ?? `#${inv.id}`}`,
+          dien_giai: row.dien_giai,
         }
       })
       return receiptApi.batch({
         ngay_phieu: ngayPhieu,
         phap_nhan_id: phapNhanId ?? null,
+        phan_xuong_id: phanXuongId ?? null,
         so_tai_khoan: soTaiKhoan || undefined,
         items,
       })
@@ -181,7 +191,8 @@ export default function CashReceiptBatchPage() {
     },
     {
       title: 'Số tiền thu',
-      width: 160,
+      width: 145,
+      align: 'right' as const,
       render: (_, inv) => (
         <InputNumber
           size="small"
@@ -193,12 +204,13 @@ export default function CashReceiptBatchPage() {
           formatter={v => v ? Number(v).toLocaleString('vi-VN') : ''}
           parser={v => Number((v ?? '').replace(/\D/g, ''))}
           onChange={val => setRow(inv.id, { so_tien: val ?? 0 })}
+          variant={getRow(inv).selected ? 'outlined' : 'borderless'}
         />
       ),
     },
     {
       title: 'Hình thức',
-      width: 130,
+      width: 115,
       render: (_, inv) => (
         <Select
           size="small"
@@ -214,7 +226,27 @@ export default function CashReceiptBatchPage() {
         />
       ),
     },
+    {
+      title: 'Diễn giải',
+      width: 180,
+      render: (_, inv) => (
+        <Input
+          size="small"
+          value={getRow(inv).dien_giai}
+          onChange={e => setRow(inv.id, { dien_giai: e.target.value })}
+          disabled={!getRow(inv).selected}
+          variant={getRow(inv).selected ? 'outlined' : 'borderless'}
+        />
+      ),
+    },
+    {
+      title: 'TK Phải thu',
+      width: 85,
+      align: 'center' as const,
+      render: () => <Text type="secondary">131</Text>,
+    },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-cash-receipt-batch', columns)
 
   return (
     <PageLayout
@@ -233,6 +265,7 @@ export default function CashReceiptBatchPage() {
           >
             Tạo {selectedInvoices.length} phiếu thu
           </Button>
+          {settingsButton}
         </Space>
       }
     >
@@ -250,11 +283,21 @@ export default function CashReceiptBatchPage() {
           <Col>
             <Text type="secondary" style={{ marginRight: 8 }}>Pháp nhân:</Text>
             <Select
-              style={{ width: 200 }}
+              style={{ width: 180 }}
               allowClear
               placeholder="Tất cả pháp nhân"
               onChange={v => setPhapNhanId(v)}
               options={phapNhanList.map(p => ({ value: p.id, label: p.ten_phap_nhan }))}
+            />
+          </Col>
+          <Col>
+            <Text type="secondary" style={{ marginRight: 8 }}>Xưởng:</Text>
+            <Select
+              style={{ width: 150 }}
+              allowClear
+              placeholder="Tất cả xưởng"
+              onChange={v => setPhanXuongId(v)}
+              options={phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))}
             />
           </Col>
           <Col>
@@ -287,13 +330,36 @@ export default function CashReceiptBatchPage() {
 
       <Table
         locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-        columns={columns}
+        columns={displayColumns}
         dataSource={invoices}
         rowKey="id"
         loading={isLoading}
         size="small"
+        scroll={{ x: 1200 }}
         rowClassName={inv => getRow(inv).selected ? 'ant-table-row-selected' : ''}
         pagination={{ pageSize: 50, showTotal: t => `${t} hóa đơn còn nợ` }}
+        summary={() =>
+          invoices.length > 0 ? (
+            <Table.Summary fixed="bottom">
+              <Table.Summary.Row>
+                <Table.Summary.Cell index={0} colSpan={5} align="right">
+                  <Text strong>Cộng:</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={1} align="right">
+                  <Text strong>{fmtVND(invoices.reduce((s, i) => s + i.tong_cong, 0))}</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={2} align="right">
+                  <Text strong style={{ color: '#fa8c16' }}>{fmtVND(invoices.reduce((s, i) => s + i.con_lai, 0))}</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={3} />
+                <Table.Summary.Cell index={4} align="right">
+                  <Text strong style={{ color: '#52c41a' }}>{fmtVND(tongThu)}</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={5} colSpan={3} />
+              </Table.Summary.Row>
+            </Table.Summary>
+          ) : undefined
+        }
       />
 
       {/* Kết quả */}

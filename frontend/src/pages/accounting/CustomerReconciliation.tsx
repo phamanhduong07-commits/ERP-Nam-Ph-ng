@@ -11,6 +11,7 @@ import { arApi } from '../../api/accounting'
 import { exportToExcel, fmtVND, printDocument } from '../../utils/exportUtils'
 import { usePhapNhanForPrint, usePhapNhanList } from '../../hooks/usePhapNhan'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -95,6 +96,8 @@ export default function CustomerReconciliation() {
     { title: 'Đơn giá', dataIndex: 'don_gia', width: 130, align: 'right', render: fmtVND },
     { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 150, align: 'right', render: v => <Text strong>{fmtVND(v)}</Text> },
   ]
+
+  const { displayColumns: displayDeliveryCols, settingsButton } = useColumnPrefs('accounting-customer-recon', deliveryCols, { nonHideable: ['so_phieu'] })
 
   const paymentCols: ColumnsType<ReconciliationPayment> = [
     { title: 'Ngày', dataIndex: 'ngay_phieu', width: 110, render: v => dayjs(v).format('DD/MM/YYYY') },
@@ -218,6 +221,7 @@ export default function CustomerReconciliation() {
               </Button>
               {result && <Button icon={<FileExcelOutlined />} onClick={handleExport}>Excel</Button>}
               {result && <Button icon={<FilePdfOutlined />} onClick={handlePrint}>Biên bản</Button>}
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -242,7 +246,7 @@ export default function CustomerReconciliation() {
           </Row>
 
           <Card title="Chi tiết giao hàng" style={{ marginBottom: 16 }} styles={{ body: { padding: 0 } }}>
-            <Table locale={{ emptyText: <EmptyState size="small" preset="document" /> }} rowKey={(r, i) => `${r.so_phieu}-${i}`} size="small" pagination={false} dataSource={result.items} columns={deliveryCols} scroll={{ x: 820 }} />
+            <Table locale={{ emptyText: <EmptyState size="small" preset="document" /> }} rowKey={(r, i) => `${r.so_phieu}-${i}`} size="small" pagination={false} dataSource={result.items} columns={displayDeliveryCols} scroll={{ x: 820 }} />
           </Card>
 
           <Card title="Chi tiết thanh toán" styles={{ body: { padding: 0 } }}>

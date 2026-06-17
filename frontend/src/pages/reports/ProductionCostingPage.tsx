@@ -40,6 +40,7 @@ import {
 } from '../../api/accounting'
 import { usePhanXuong, usePhapNhan } from '../../hooks/useMasterData'
 import { fmtVND } from '../../utils/exportUtils'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { RangePicker } = DatePicker
 const { Title, Text } = Typography
@@ -221,6 +222,7 @@ const ProductionCostingPage: React.FC = () => {
       },
     },
   ]
+  const { displayColumns: displayPeriodColumns, settingsButton } = useColumnPrefs('reports-production-costing', periodColumns, { nonHideable: ['ma_ky'] })
 
   const inputColumns: ColumnsType<ProductionCostInput> = [
     {
@@ -284,9 +286,12 @@ const ProductionCostingPage: React.FC = () => {
           <Title level={3} style={{ margin: 0 }}>Giá thành sản xuất</Title>
           <Text type="secondary">Quản lý kỳ tính giá thành theo pháp nhân, phân xưởng và dữ liệu sản xuất thực tế.</Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          Tạo kỳ
-        </Button>
+        <Space>
+          {settingsButton}
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+            Tạo kỳ
+          </Button>
+        </Space>
       </Space>
 
       <Alert
@@ -372,7 +377,7 @@ const ProductionCostingPage: React.FC = () => {
           rowKey="id"
           size="small"
           loading={periodsQuery.isLoading}
-          columns={periodColumns}
+          columns={displayPeriodColumns}
           dataSource={periods}
           scroll={{ x: 1100 }}
           pagination={{ pageSize: 8, showSizeChanger: false }}

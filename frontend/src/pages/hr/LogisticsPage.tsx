@@ -8,6 +8,7 @@ import { exportToExcel } from '../../utils/excelUtils'
 import EmptyState from "../../components/EmptyState"
 import QuickAddSelect from '../../components/QuickAddSelect'
 import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -93,6 +94,8 @@ export default function LogisticsPage() {
     { title: 'Trang thai', dataIndex: 'trang_thai', render: (v: string) => <Tag>{v}</Tag> },
   ]
 
+  const { displayColumns: displayFuelColumns, settingsButton } = useColumnPrefs('hr-logistics', fuelColumns)
+
   const totalFuel = (fuelLogs as FuelLog[] || []).reduce((s: number, r: FuelLog) => s + (r.thanh_tien || 0), 0)
   const totalTrip = (tripSalaries as TripSalary[] || []).reduce((s: number, r: TripSalary) => s + (r.tien_chuyen || 0), 0)
   const totalM2 = (tripSalaries as TripSalary[] || []).reduce((s: number, r: TripSalary) => s + (r.tong_m2 || 0), 0)
@@ -116,6 +119,7 @@ export default function LogisticsPage() {
             <RangePicker value={dateRange} onChange={v => v && setDateRange([v[0]!, v[1]!])} format="DD/MM/YYYY" />
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setFuelModal(true)}>Nhap do dau</Button>
             <Button icon={<DownloadOutlined />} onClick={handleExport}>Xuat Excel</Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -133,7 +137,7 @@ export default function LogisticsPage() {
           onChange={setActiveTab}
           style={{ padding: '0 16px' }}
           items={[
-            { key: 'fuel', label: <span><ThunderboltOutlined /> Nhat ky do dau</span>, children: <Table dataSource={fuelLogs || []} columns={fuelColumns} rowKey="id" loading={isLoading} size="small" bordered pagination={{ pageSize: 20 }} scroll={{ x: 1100 }} /> },
+            { key: 'fuel', label: <span><ThunderboltOutlined /> Nhat ky do dau</span>, children: <Table dataSource={fuelLogs || []} columns={displayFuelColumns} rowKey="id" loading={isLoading} size="small" bordered pagination={{ pageSize: 20 }} scroll={{ x: 1100 }} /> },
             { key: 'trip', label: <span><CarOutlined /> Luong chuyen</span>, children: <Table dataSource={tripSalaries || []} columns={tripColumns} rowKey="id" size="small" bordered pagination={{ pageSize: 20 }} scroll={{ x: 1300 }} /> },
           ]}
         />

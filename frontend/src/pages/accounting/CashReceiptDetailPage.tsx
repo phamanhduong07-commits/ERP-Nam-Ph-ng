@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Descriptions, Modal, Space, Spin, Tag, Typography, message,
 } from 'antd'
-import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, PrinterOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CheckOutlined, CloseOutlined, EditOutlined, PrinterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import namPhuongLogo from '../../assets/nam-phuong-logo-cropped.png'
 import { fmtVND, numberToVietnameseWords, smartPrintPdf } from '../../utils/exportUtils'
@@ -99,6 +99,14 @@ export default function CashReceiptDetailPage() {
           <Tag color={status?.color}>{status?.label ?? receipt.trang_thai}</Tag>
         </Space>
         <Space>
+          {canApprove && (
+            <Button
+              icon={<EditOutlined />}
+              onClick={() => navigate(`/accounting/receipts/${receiptId}/edit`)}
+            >
+              Sửa
+            </Button>
+          )}
           {canApprove && (
             <Button
               type="primary" icon={<CheckOutlined />}

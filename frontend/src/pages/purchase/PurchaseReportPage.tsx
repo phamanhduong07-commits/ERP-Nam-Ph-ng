@@ -18,6 +18,7 @@ import client from '../../api/client'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -135,6 +136,7 @@ function SoChiTietTab() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('purchase-report', columns)
 
   const tongNo = data?.rows.reduce((s, r) => s + r.phat_sinh_no, 0) ?? 0
   const tongCo = data?.rows.reduce((s, r) => s + r.phat_sinh_co, 0) ?? 0
@@ -197,6 +199,7 @@ function SoChiTietTab() {
             Xuất Excel
           </Button>
           <Button icon={<PrinterOutlined />} onClick={() => window.print()}>In</Button>
+          {settingsButton}
         </Col>
       </Row>
 
@@ -241,7 +244,7 @@ function SoChiTietTab() {
             rowKey={(r, i) => `${r.ngay}-${r.chung_tu_id}-${i}`}
             size="small"
             dataSource={data.rows}
-            columns={columns}
+            columns={displayColumns}
             pagination={{ pageSize: 50, showSizeChanger: false }}
             scroll={{ x: 900 }}
             summary={() => (

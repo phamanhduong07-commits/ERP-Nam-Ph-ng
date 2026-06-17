@@ -15,6 +15,7 @@ import { tieuChuanApi } from '../../api/tieuChuanKyThuat'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -160,6 +161,7 @@ export default function OtherMaterialList() {
       ) : null,
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-other-material', columns, { nonHideable: ['ma_chinh'] })
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
@@ -215,6 +217,7 @@ export default function OtherMaterialList() {
                 templateFilename="mau_import_vat_tu_phu.xlsx"
                 onImported={() => queryClient.invalidateQueries({ queryKey: ['other-materials'] })}
               />
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -223,7 +226,7 @@ export default function OtherMaterialList() {
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     rowKey="id"
           dataSource={items}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           size="small"
           pagination={{

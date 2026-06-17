@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx'
 import client from '../../api/client'
 import { socket } from '../../utils/socket'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -421,6 +422,7 @@ export default function NhatKyXePage() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('logistics-nhat-ky-xe', columns)
 
   const expandedRowRender = (r: DailyRow) => {
     const hasFuel = r.fuel_events.length > 0
@@ -606,6 +608,7 @@ export default function NhatKyXePage() {
           <Button icon={<DownloadOutlined />} onClick={exportToExcel} disabled={data.length === 0}>
             Xuất Excel
           </Button>
+          {settingsButton}
         </Space>
       </div>
 
@@ -725,7 +728,7 @@ export default function NhatKyXePage() {
       >
         <Table<DailyRow>
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           rowKey={r => `${r.bien_so}-${r.ngay}`}
           loading={isFetching}
           size="small"

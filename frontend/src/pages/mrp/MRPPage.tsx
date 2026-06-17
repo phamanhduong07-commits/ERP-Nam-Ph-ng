@@ -8,6 +8,7 @@ import { useMutation } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import axios from 'axios'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -103,6 +104,7 @@ export default function MRPPage() {
         v > 0 ? <Tag color="red"><b>{fmt(v)}</b></Tag> : <Tag color="green">Đủ</Tag>,
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('mrp-main', columns)
 
   return (
     <div style={{ padding: 24 }}>
@@ -149,8 +151,9 @@ export default function MRPPage() {
           </Row>
 
           <Card style={{ marginBottom: 16 }}>
-            <Table rowKey="paper_material_id" dataSource={results} columns={columns}
+            <Table rowKey="paper_material_id" dataSource={results} columns={displayColumns}
               pagination={false} size="small"
+              title={() => <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{settingsButton}</div>}
               rowClassName={(r: MRPRow) => r.thieu_hut_kg > 0 ? 'ant-table-row-danger' : ''} />
           </Card>
 

@@ -9,6 +9,7 @@ import type { ColumnsType } from 'antd/es/table'
 import client from '../../api/client'
 import type { ApiError } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -198,6 +199,7 @@ export default function BieuThueThuNhapPage() {
       ),
     },
   ]
+  const { displayColumns: displayBieuColumns, settingsButton } = useColumnPrefs('danhmuc-bieu-thue-thu-nhap', bieuColumns)
 
   const bacColumns: ColumnsType<BacThue> = [
     { title: 'Bậc', dataIndex: 'bac', width: 70, align: 'center' },
@@ -240,9 +242,12 @@ export default function BieuThueThuNhapPage() {
             <Title level={4} style={{ margin: 0 }}>Biểu tính thuế thu nhập cá nhân</Title>
           </Col>
           <Col>
+            <Space>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               Thêm biểu
             </Button>
+            {settingsButton}
+          </Space>
           </Col>
         </Row>
 
@@ -250,7 +255,7 @@ export default function BieuThueThuNhapPage() {
           locale={{ emptyText: <EmptyState size="small" /> }}
           rowKey="id"
           dataSource={data}
-          columns={bieuColumns}
+          columns={displayBieuColumns}
           loading={isLoading}
           pagination={false}
           size="small"

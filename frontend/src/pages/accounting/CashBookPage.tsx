@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Card, Table, DatePicker, Button, Space, Typography, Statistic, Row, Col, Tag,
+  Card, Table, DatePicker, Button, Space, Typography, Statistic, Row, Col, Tag, Select,
 } from 'antd'
 import { FileExcelOutlined, SearchOutlined, PrinterOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -11,6 +11,7 @@ import { exportToExcel } from '../../utils/exportUtils'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
+import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -22,12 +23,16 @@ export default function CashBookPage() {
     today.startOf('month'),
     today,
   ])
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
+  const [filterPhanXuong, setFilterPhanXuong] = useState<number | undefined>()
+  const { phapNhanList } = usePhapNhan()
+  const { phanXuongList } = usePhanXuong()
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['cash-book', range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD')],
+    queryKey: ['cash-book', range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD'), filterPhapNhan, filterPhanXuong],
     queryFn: () =>
       bankLedgerApi
-        .getCashBook(range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD'))
+        .getCashBook(range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD'), filterPhapNhan, filterPhanXuong)
         .then(r => r.data),
     enabled: true,
   })
@@ -71,6 +76,20 @@ export default function CashBookPage() {
         ) : '',
     },
     {
+      title: 'Pháp nhân',
+      dataIndex: 'ten_phap_nhan',
+      width: 130,
+      ellipsis: true,
+      render: v => v ?? '—',
+    },
+    {
+      title: 'Phân xưởng',
+      dataIndex: 'ten_phan_xuong',
+      width: 120,
+      ellipsis: true,
+      render: v => v ?? '—',
+    },
+    {
       title: 'Số dư (đ)',
       dataIndex: 'so_du',
       align: 'right',
@@ -91,18 +110,20 @@ export default function CashBookPage() {
     const den = range[1].format('DDMMYYYY')
     exportToExcel(`SoQuy_${tu}_${den}`, [{
       name: 'Sổ quỹ',
-      headers: ['Ngày', 'Số chứng từ', 'Loại', 'Đối tượng', 'Diễn giải', 'Thu (đ)', 'Chi (đ)', 'Số dư (đ)'],
+      headers: ['Ngày', 'Số chứng từ', 'Loại', 'Đối tượng', 'Diễn giải', 'Pháp nhân', 'Phân xưởng', 'Thu (đ)', 'Chi (đ)', 'Số dư (đ)'],
       rows: (data.entries ?? []).map((r: LedgerEntry) => [
         dayjs(r.ngay).format('DD/MM/YYYY'),
         r.so_chung_tu,
         r.loai === 'thu' ? 'Thu' : 'Chi',
         r.doi_tuong,
         r.dien_giai,
+        (r as any).ten_phap_nhan ?? '',
+        (r as any).ten_phan_xuong ?? '',
         Number(r.thu) > 0 ? Number(r.thu) : '',
         Number(r.chi) > 0 ? Number(r.chi) : '',
         Number(r.so_du),
       ]),
-      colWidths: [12, 18, 8, 22, 30, 16, 16, 18],
+      colWidths: [12, 18, 8, 22, 30, 16, 14, 16, 16, 18],
     }])
   }
 
@@ -125,11 +146,27 @@ export default function CashBookPage() {
         </Space>
       }
     >
-      <Space style={{ marginBottom: 16 }}>
+      <Space wrap style={{ marginBottom: 16 }}>
         <RangePicker
           value={range}
           onChange={v => v && setRange([v[0]!, v[1]!])}
           format="DD/MM/YYYY"
+        />
+        <Select
+          style={{ width: 180 }}
+          allowClear
+          placeholder="Pháp nhân"
+          value={filterPhapNhan}
+          onChange={v => setFilterPhapNhan(v)}
+          options={phapNhanList.map(p => ({ value: p.id, label: p.ten_phap_nhan }))}
+        />
+        <Select
+          style={{ width: 160 }}
+          allowClear
+          placeholder="Phân xưởng"
+          value={filterPhanXuong}
+          onChange={v => setFilterPhanXuong(v)}
+          options={phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))}
         />
         <Button type="primary" icon={<SearchOutlined />} onClick={() => refetch()}>
           Xem sổ

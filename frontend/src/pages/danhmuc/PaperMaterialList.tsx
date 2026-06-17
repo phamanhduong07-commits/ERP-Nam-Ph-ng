@@ -15,6 +15,7 @@ import { tieuChuanApi } from '../../api/tieuChuanKyThuat'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
 import { usePermission } from '../../hooks/usePermission'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -193,6 +194,7 @@ export default function PaperMaterialList() {
       ) : null,
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-paper-material', columns, { nonHideable: ['ma_chinh'] })
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
@@ -248,6 +250,7 @@ export default function PaperMaterialList() {
                 templateFilename="mau_import_nguyen_lieu_giay.xlsx"
                 onImported={() => queryClient.invalidateQueries({ queryKey: ['paper-materials'] })}
               />
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -256,7 +259,7 @@ export default function PaperMaterialList() {
           locale={{ emptyText: <EmptyState size="small" /> }}
           rowKey="id"
           dataSource={items}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           size="small"
           onChange={(_, __, sorter) => {

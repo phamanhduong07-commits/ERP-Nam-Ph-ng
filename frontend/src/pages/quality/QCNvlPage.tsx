@@ -9,6 +9,7 @@ import dayjs from 'dayjs'
 import { qcNvlApi, QCNvl, QCNvlCreatePayload, QCNvlItemResult, ChiTieuItem, TieuChuanInfo } from '../../api/qcNvl'
 import client from '../../api/client'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -439,6 +440,7 @@ export default function QCNvlPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('quality-qc-nvl', columns, { nonHideable: ['so_phieu'] })
 
   return (
     <div style={{ padding: 24 }}>
@@ -447,9 +449,12 @@ export default function QCNvlPage() {
           <Title level={4} style={{ margin: 0 }}>QC Nguyên Vật Liệu</Title>
         </Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            Tạo phiếu
-          </Button>
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              Tạo phiếu
+            </Button>
+            {settingsButton}
+          </Space>
         </Col>
       </Row>
 
@@ -505,7 +510,7 @@ export default function QCNvlPage() {
       <Table
         locale={{ emptyText: <EmptyState size="small" /> }}
         dataSource={list}
-        columns={columns}
+        columns={displayColumns}
         rowKey="id"
         loading={isLoading}
         size="small"

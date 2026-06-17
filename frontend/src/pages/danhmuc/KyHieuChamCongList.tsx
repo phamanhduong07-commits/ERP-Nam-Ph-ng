@@ -10,6 +10,7 @@ import client from '../../api/client'
 import type { ApiError } from '../../api/types'
 import EmptyState from '../../components/EmptyState'
 import { useHotkey } from '../../hooks/useHotkey'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -191,6 +192,7 @@ export default function KyHieuChamCongList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-ky-hieu-cham-cong', columns)
 
   return (
     <div>
@@ -200,9 +202,12 @@ export default function KyHieuChamCongList() {
             <Title level={4} style={{ margin: 0 }}>Ký hiệu chấm công</Title>
           </Col>
           <Col>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Thêm mới
-            </Button>
+            <Space>
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                Thêm mới
+              </Button>
+              {settingsButton}
+            </Space>
           </Col>
         </Row>
 
@@ -210,7 +215,7 @@ export default function KyHieuChamCongList() {
           locale={{ emptyText: <EmptyState size="small" /> }}
           rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={false}
           size="small"

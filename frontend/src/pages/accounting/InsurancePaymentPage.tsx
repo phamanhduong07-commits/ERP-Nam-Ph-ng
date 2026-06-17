@@ -14,6 +14,7 @@ import { fmtVND } from '../../utils/exportUtils'
 import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 import PageLayout from '../../components/PageLayout'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -255,6 +256,7 @@ export default function InsurancePaymentPage() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-insurance-payment', columns)
 
   return (
     <PageLayout
@@ -365,19 +367,22 @@ export default function InsurancePaymentPage() {
       <Card
         title="Chi tiết khoản bảo hiểm"
         extra={
-          <Text type="secondary">
-            Số nộp lần này:{' '}
-            <Text strong style={{ color: '#E65100' }}>
-              {fmtVND(tongNop)}
+          <Space>
+            <Text type="secondary">
+              Số nộp lần này:{' '}
+              <Text strong style={{ color: '#E65100' }}>
+                {fmtVND(tongNop)}
+              </Text>
             </Text>
-          </Text>
+            {settingsButton}
+          </Space>
         }
       >
         <Table<InsuranceObligationItem>
           rowKey="loai_bh"
           loading={isFetching}
           dataSource={obligations}
-          columns={columns}
+          columns={displayColumns}
           pagination={false}
           size="middle"
           rowClassName={item => (getRow(item).selected ? 'ant-table-row-selected' : '')}

@@ -14,6 +14,7 @@ import {
   type OffsetAddonPriceCreate,
 } from '../../api/offsetAddonPrices'
 import { useHotkey } from '../../hooks/useHotkey'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -115,6 +116,7 @@ export default function OffsetAddonPriceList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-offset-addon-price', cols)
 
   return (
     <Card
@@ -123,13 +125,14 @@ export default function OffsetAddonPriceList() {
         <Space>
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching}>Tải lại</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm mới</Button>
+          {settingsButton}
         </Space>
       }
     >
       <Table
         rowKey="id"
         dataSource={data}
-        columns={cols}
+        columns={displayColumns}
         loading={isFetching}
         size="small"
         pagination={{ pageSize: 50 }}

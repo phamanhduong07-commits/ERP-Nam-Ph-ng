@@ -29,6 +29,7 @@ import { suppliersApi, Supplier } from '../../api/suppliers'
 import { exportToExcel } from '../../utils/exportUtils'
 import { warehouseApi } from '../../api/warehouse'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -201,6 +202,7 @@ export default function PurchaseReturnPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('purchase-return', columns, { nonHideable: ['so_phieu'] })
 
   // ── Form create ───────────────────────────────────────────────────────────────
   const tien_thue = Math.round(tong_tien_hang * thue_suat / 100)
@@ -272,6 +274,7 @@ export default function PurchaseReturnPage() {
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
               Tạo phiếu
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -334,7 +337,7 @@ export default function PurchaseReturnPage() {
         size="small"
         loading={isLoading}
         dataSource={listData?.items ?? []}
-        columns={columns}
+        columns={displayColumns}
         pagination={{
           current: page,
           pageSize: 20,

@@ -10,6 +10,7 @@ import { purchaseApi, TRANG_THAI_PO, TRANG_THAI_PO_COLOR } from '../../api/purch
 import { phapNhanApi } from '../../api/phap_nhan'
 import { fmtVND } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { RangePicker } = DatePicker
 
@@ -55,6 +56,7 @@ export default function PurchaseDashboardPage() {
       ),
     },
   ]
+  const { displayColumns: displayColsPhapNhan, settingsButton } = useColumnPrefs('purchase-dashboard', colsPhapNhan)
 
   return (
     <div style={{ padding: 16 }}>
@@ -197,7 +199,8 @@ export default function PurchaseDashboardPage() {
             <Table
                             locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
                             rowKey="phap_nhan_id"
-              columns={colsPhapNhan}
+              title={() => <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{settingsButton}</div>}
+              columns={displayColsPhapNhan}
               dataSource={byPhapNhan}
               size="small"
               pagination={false}

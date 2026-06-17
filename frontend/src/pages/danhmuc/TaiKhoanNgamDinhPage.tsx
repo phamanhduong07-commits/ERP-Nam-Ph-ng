@@ -10,6 +10,7 @@ import type { ApiError } from '../../api/types'
 import client from '../../api/client'
 import { useAuthStore } from '../../store/auth'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -224,6 +225,7 @@ export default function TaiKhoanNgamDinhPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-tk-ngam-dinh', columns)
 
   return (
     <div>
@@ -264,6 +266,7 @@ export default function TaiKhoanNgamDinhPage() {
                   </Button>
                 </Popconfirm>
               )}
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -272,7 +275,7 @@ export default function TaiKhoanNgamDinhPage() {
           locale={{ emptyText: <EmptyState size="small" /> }}
           rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={false}
           size="small"

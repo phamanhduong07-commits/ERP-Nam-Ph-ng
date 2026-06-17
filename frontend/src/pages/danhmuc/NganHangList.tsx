@@ -4,6 +4,7 @@ import { Card, Table, Button, Modal, Form, Input, Switch, Tag, Space, Popconfirm
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import client from '../../api/client';
+import { useColumnPrefs } from '../../hooks/useColumnPrefs';
 
 interface NganHang {
   id: number;
@@ -77,15 +78,16 @@ export default function NganHangList() {
       ),
     },
   ];
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-ngan-hang', cols);
 
   return (
     <Card
       title="Danh mục ngân hàng"
-      extra={<Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm</Button>}
+      extra={<Space><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm</Button>{settingsButton}</Space>}
     >
       <Table
         dataSource={data}
-        columns={cols}
+        columns={displayColumns}
         rowKey="id"
         loading={isLoading}
         size="small"

@@ -22,6 +22,7 @@ import { analyzeSinglePhapNhanId, singlePhapNhanError, smartExportExcel, fmtVND 
 import PhotoCapture from '../../components/PhotoCapture'
 import EmptyState from "../../components/EmptyState"
 import HoanThienGiayModal from '../../components/HoanThienGiayModal'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -479,6 +480,7 @@ export default function GoodsReceiptPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('purchase-goods-receipt', columns, { nonHideable: ['so_phieu'] })
 
   const itemColumns = [
     { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
@@ -551,6 +553,7 @@ export default function GoodsReceiptPage() {
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               Tạo phiếu nhập
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -664,7 +667,7 @@ export default function GoodsReceiptPage() {
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
                 size="small"
-        columns={columns}
+        columns={displayColumns}
         dataSource={grList}
         rowKey="id"
         loading={isLoading}

@@ -11,6 +11,7 @@ import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { socket } from '../../utils/socket'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 const { RangePicker } = DatePicker
@@ -139,6 +140,7 @@ export default function ScanHistoryPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('production-scan-history', columns)
 
   return (
     <div style={{ paddingBottom: 24 }}>
@@ -151,7 +153,10 @@ export default function ScanHistoryPage() {
           </Space>
         </Col>
         <Col>
-          <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
+          <Space>
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Làm mới</Button>
+            {settingsButton}
+          </Space>
         </Col>
       </Row>
 
@@ -215,7 +220,7 @@ export default function ScanHistoryPage() {
         <Table
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     dataSource={filtered}
-          columns={columns}
+          columns={displayColumns}
           rowKey="id"
           size="small"
           loading={isLoading}

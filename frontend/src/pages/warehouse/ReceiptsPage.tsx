@@ -22,6 +22,7 @@ import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { usePermission } from '../../hooks/usePermission'
 import { getErrorMessage } from '../../utils/errorUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import { mediaApi } from '../../api/media'
 import { ocrExamplesApi } from '../../api/ocrExamples'
 
@@ -493,6 +494,7 @@ export default function ReceiptsPage() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('warehouse-receipts', columns, { nonHideable: ['so_phieu'] })
 
   const handleLoadInvoiceImage = async (id: number) => {
     if (expandedImages[id]) return
@@ -557,6 +559,7 @@ export default function ReceiptsPage() {
             <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setSelectedPO(undefined); setFormPxId(null); setInvoiceFile(null); setInvoicePreviewUrl(null); setEditingDraftId(null); setOpen(true) }}>
               Tạo phiếu nhập
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -589,7 +592,7 @@ export default function ReceiptsPage() {
       </Card>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
-        <Table dataSource={receiptList} columns={columns} rowKey="id" loading={isLoading} size="small"
+        <Table dataSource={receiptList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 1050 }} />
       </Card>
 

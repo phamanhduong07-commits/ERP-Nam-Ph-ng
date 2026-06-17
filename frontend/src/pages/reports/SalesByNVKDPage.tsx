@@ -4,6 +4,7 @@ import { SearchOutlined, SettingOutlined } from '@ant-design/icons'
 import { reportsApi } from '../../api/reports'
 import PageLayout from '../../components/PageLayout'
 import dayjs from 'dayjs'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -86,6 +87,7 @@ const SalesByNVKDPage: React.FC = () => {
         return <Text type={cl <= 0 ? 'success' : 'danger'}>{fmt(cl)}</Text>
       } },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('reports-sales-by-nvkd', columns)
 
   const ngayColumns = data ? [
     { title: 'Ngày', dataIndex: 'ngay', key: 'ngay', width: 90,
@@ -122,6 +124,7 @@ const SalesByNVKDPage: React.FC = () => {
               Cài mục tiêu tháng
             </Button>
           </Col>
+          <Col>{settingsButton}</Col>
         </Row>
       </Card>
 
@@ -129,7 +132,7 @@ const SalesByNVKDPage: React.FC = () => {
         <>
           <Card title="Tổng hợp NV Kinh doanh" style={{ marginBottom: 24 }}>
             <Table
-              columns={columns}
+              columns={displayColumns}
               dataSource={data.nvkd}
               rowKey="user_id"
               pagination={false}

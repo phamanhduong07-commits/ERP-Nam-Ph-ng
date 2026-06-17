@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { hrApi } from '../../api/hr'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { TextArea } = Input
@@ -104,6 +105,85 @@ export default function PayrollComplaintsPage() {
 
   const counts = summary?.by_trang_thai || {}
 
+  const columns = [
+    {
+      title: 'Mã NV', dataIndex: 'ma_nv', key: 'ma_nv', width: 100, fixed: 'left' as const,
+    },
+    {
+      title: 'Họ tên', dataIndex: 'ho_ten', key: 'ho_ten', width: 180, fixed: 'left' as const,
+      render: (v: string) => <Text strong>{v}</Text>,
+    },
+    { title: 'Bộ phận', dataIndex: 'bo_phan', key: 'bo_phan', width: 140 },
+    { title: 'Kỳ', key: 'ky', width: 100, render: (_: unknown, r: any) => `${r.thang}/${r.nam}` },
+    {
+      title: 'Lý do khiếu nại', dataIndex: 'ly_do', key: 'ly_do', width: 280,
+      render: (v: string) => (
+        <Tooltip title={v}>
+          <Text style={{ display: 'block', maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {v}
+          </Text>
+        </Tooltip>
+      ),
+    },
+    {
+      title: 'Số tiền KN', dataIndex: 'so_tien_khieu_nai', key: 'so_tien_khieu_nai', width: 120,
+      align: 'right' as const,
+      render: (v: number) => v ? fmt(v) + 'đ' : '—',
+    },
+    {
+      title: 'Ngày gửi', dataIndex: 'created_at', key: 'created_at', width: 130,
+      render: (v: string) => dayjs(v).format('DD/MM/YYYY HH:mm'),
+    },
+    {
+      title: 'Hạn 15 ngày LV', key: 'han', width: 130,
+      render: (_: unknown, r: any) => {
+        const remain = r.so_ngay_con_lai
+        return (
+          <Tooltip title={`Hạn chốt: ${dayjs(r.han_chot).format('DD/MM/YYYY')}`}>
+            <Tag color={remain > 7 ? 'green' : remain > 0 ? 'orange' : 'red'}>
+              {remain > 0 ? `Còn ${remain} ngày` : 'Quá hạn'}
+            </Tag>
+          </Tooltip>
+        )
+      },
+    },
+    {
+      title: 'Trạng thái', dataIndex: 'trang_thai', key: 'trang_thai', width: 200,
+      render: (v: string) => <Tag color={STATUS_COLOR[v]}>{STATUS_LABEL[v] || v}</Tag>,
+    },
+    {
+      title: 'Người xử lý', dataIndex: 'nguoi_xu_ly_ten', key: 'nguoi_xu_ly_ten', width: 140,
+    },
+    {
+      title: 'Hành động', key: 'act', width: 220, fixed: 'right' as const,
+      render: (_: unknown, r: any) => (
+        <Space>
+          {r.trang_thai === 'moi' && (
+            <Button size="small" type="primary" loading={takeMut.isPending} onClick={() => takeMut.mutate(r.id)}>
+              Nhận xử lý
+            </Button>
+          )}
+          {(r.trang_thai === 'moi' || r.trang_thai === 'dang_xu_ly') && (
+            <Button
+              size="small"
+              type="primary"
+              icon={<CheckCircleOutlined />}
+              onClick={() => {
+                setSelected(r)
+                form.resetFields()
+                form.setFieldValue('co_sai_sot', true)
+                setResolveOpen(true)
+              }}
+            >
+              Kết luận
+            </Button>
+          )}
+        </Space>
+      ),
+    },
+  ]
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-payroll-complaints', columns, { nonHideable: ['ma_nv'] })
+
   return (
     <div style={{ padding: 16 }}>
       <Card
@@ -189,14 +269,17 @@ export default function PayrollComplaintsPage() {
       <Card
         title={`Danh sách khiếu nại (${rows.length})`}
         extra={
-          <Select
-            placeholder="Trạng thái"
-            allowClear
-            value={filters.trang_thai}
-            onChange={(v) => setFilters(f => ({ ...f, trang_thai: v }))}
-            style={{ width: 180 }}
-            options={Object.entries(STATUS_LABEL).map(([v, l]) => ({ value: v, label: l }))}
-          />
+          <Space>
+            <Select
+              placeholder="Trạng thái"
+              allowClear
+              value={filters.trang_thai}
+              onChange={(v) => setFilters(f => ({ ...f, trang_thai: v }))}
+              style={{ width: 180 }}
+              options={Object.entries(STATUS_LABEL).map(([v, l]) => ({ value: v, label: l }))}
+            />
+            {settingsButton}
+          </Space>
         }
       >
         <Table
@@ -206,83 +289,7 @@ export default function PayrollComplaintsPage() {
           size="small"
           scroll={{ x: 1300 }}
           pagination={{ pageSize: 30 }}
-          columns={[
-            {
-              title: 'Mã NV', dataIndex: 'ma_nv', key: 'ma_nv', width: 100, fixed: 'left',
-            },
-            {
-              title: 'Họ tên', dataIndex: 'ho_ten', key: 'ho_ten', width: 180, fixed: 'left',
-              render: (v: string) => <Text strong>{v}</Text>,
-            },
-            { title: 'Bộ phận', dataIndex: 'bo_phan', key: 'bo_phan', width: 140 },
-            { title: 'Kỳ', key: 'ky', width: 100, render: (_, r: any) => `${r.thang}/${r.nam}` },
-            {
-              title: 'Lý do khiếu nại', dataIndex: 'ly_do', key: 'ly_do', width: 280,
-              render: (v: string) => (
-                <Tooltip title={v}>
-                  <Text style={{ display: 'block', maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {v}
-                  </Text>
-                </Tooltip>
-              ),
-            },
-            {
-              title: 'Số tiền KN', dataIndex: 'so_tien_khieu_nai', key: 'so_tien_khieu_nai', width: 120,
-              align: 'right',
-              render: (v: number) => v ? fmt(v) + 'đ' : '—',
-            },
-            {
-              title: 'Ngày gửi', dataIndex: 'created_at', key: 'created_at', width: 130,
-              render: (v: string) => dayjs(v).format('DD/MM/YYYY HH:mm'),
-            },
-            {
-              title: 'Hạn 15 ngày LV', key: 'han', width: 130,
-              render: (_, r: any) => {
-                const remain = r.so_ngay_con_lai
-                return (
-                  <Tooltip title={`Hạn chốt: ${dayjs(r.han_chot).format('DD/MM/YYYY')}`}>
-                    <Tag color={remain > 7 ? 'green' : remain > 0 ? 'orange' : 'red'}>
-                      {remain > 0 ? `Còn ${remain} ngày` : 'Quá hạn'}
-                    </Tag>
-                  </Tooltip>
-                )
-              },
-            },
-            {
-              title: 'Trạng thái', dataIndex: 'trang_thai', key: 'trang_thai', width: 200,
-              render: (v: string) => <Tag color={STATUS_COLOR[v]}>{STATUS_LABEL[v] || v}</Tag>,
-            },
-            {
-              title: 'Người xử lý', dataIndex: 'nguoi_xu_ly_ten', key: 'nguoi_xu_ly_ten', width: 140,
-            },
-            {
-              title: 'Hành động', key: 'act', width: 220, fixed: 'right',
-              render: (_, r: any) => (
-                <Space>
-                  {r.trang_thai === 'moi' && (
-                    <Button size="small" type="primary" loading={takeMut.isPending} onClick={() => takeMut.mutate(r.id)}>
-                      Nhận xử lý
-                    </Button>
-                  )}
-                  {(r.trang_thai === 'moi' || r.trang_thai === 'dang_xu_ly') && (
-                    <Button
-                      size="small"
-                      type="primary"
-                      icon={<CheckCircleOutlined />}
-                      onClick={() => {
-                        setSelected(r)
-                        form.resetFields()
-                        form.setFieldValue('co_sai_sot', true)
-                        setResolveOpen(true)
-                      }}
-                    >
-                      Kết luận
-                    </Button>
-                  )}
-                </Space>
-              ),
-            },
-          ]}
+          columns={displayColumns}
           expandable={{
             expandedRowRender: (r: any) => (
               <Space direction="vertical" style={{ width: '100%' }} size={8}>

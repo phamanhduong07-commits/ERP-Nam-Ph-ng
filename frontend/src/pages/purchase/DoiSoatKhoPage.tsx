@@ -12,6 +12,7 @@ import { warehouseApi, GoodsReceipt, GoodsReceiptItem, PhanXuong } from '../../a
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { RangePicker } = DatePicker
 
@@ -142,6 +143,7 @@ export default function DoiSoatKhoPage() {
     { title: 'Tiền đặt', dataIndex: 'thanh_tien_dat', width: 130, align: 'right', render: fmtVND },
     { title: 'Tiền đã nhận', dataIndex: 'thanh_tien_da_nhan', width: 130, align: 'right', render: fmtVND },
   ]
+  const { displayColumns: displayColsChiTiet, settingsButton } = useColumnPrefs('purchase-doi-soat-kho', colsChiTiet)
 
   const colsTongHop: ColumnsType<DoiSoatKhoSummary> = [
     { title: 'Nhà cung cấp', dataIndex: 'ten_ncc', width: 200 },
@@ -281,14 +283,17 @@ export default function DoiSoatKhoPage() {
         onChange={setActiveTab}
         tabBarExtraContent={
           activeTab !== 'nhap-nhanh' && (
-            <Button
-              icon={<DownloadOutlined />}
-              size="small"
-              disabled={!hasPermission('inventory.view')}
-              onClick={activeTab === 'chi-tiet' ? exportChiTiet : exportTongHop}
-            >
-              Xuất Excel
-            </Button>
+            <Space>
+              <Button
+                icon={<DownloadOutlined />}
+                size="small"
+                disabled={!hasPermission('inventory.view')}
+                onClick={activeTab === 'chi-tiet' ? exportChiTiet : exportTongHop}
+              >
+                Xuất Excel
+              </Button>
+              {activeTab === 'chi-tiet' && settingsButton}
+            </Space>
           )
         }
         items={[
@@ -298,7 +303,7 @@ export default function DoiSoatKhoPage() {
             children: (
               <Table<DoiSoatKhoRow>
                 rowKey="poi_id"
-                columns={colsChiTiet}
+                columns={displayColsChiTiet}
                 dataSource={rows}
                 loading={isFetching}
                 size="small"

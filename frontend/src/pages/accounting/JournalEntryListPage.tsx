@@ -14,6 +14,7 @@ import { fmtVND } from '../../utils/exportUtils'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -86,17 +87,22 @@ export default function JournalEntryListPage() {
     }
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-journal-entry', columns)
+
   return (
     <PageLayout
       title="Bút toán tổng hợp"
       actions={
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => navigate('/accounting/journal-entries/new')}
-        >
-          Tạo bút toán mới
-        </Button>
+        <Space>
+          {settingsButton}
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => navigate('/accounting/journal-entries/new')}
+          >
+            Tạo bút toán mới
+          </Button>
+        </Space>
       }
     >
       <Card size="small" style={{ marginBottom: 16 }}>
@@ -130,7 +136,7 @@ export default function JournalEntryListPage() {
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
                 dataSource={data?.items || []}
-        columns={columns}
+        columns={displayColumns}
         loading={isLoading}
         rowKey="id"
         pagination={{

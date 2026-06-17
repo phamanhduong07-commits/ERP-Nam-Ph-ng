@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Table, Button, Modal, Form, Input, Space, Typography, message, Tag, Switch, Row, Col, Select,
+  Alert, Table, Button, Modal, Form, Input, Space, Typography, message, Tag, Switch, Row, Col, Select,
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, BankOutlined, MailOutlined, PhoneOutlined } from '@ant-design/icons'
 import { phapNhanApi, PhapNhan } from '../../api/phap-nhan'
 import { warehouseApi } from '../../api/warehouse'
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -111,29 +112,34 @@ export default function PhapNhanPage() {
     }
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('master-phap-nhan', columns)
+
   return (
     <PageLayout
       title="Quản lý Pháp nhân (Công ty)"
       actions={
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-          setEditing(null)
-          form.resetFields()
-          setModalOpen(true)
-        }}>
-          Thêm mới
-        </Button>
+        <Space>
+          {settingsButton}
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+            setEditing(null)
+            form.resetFields()
+            setModalOpen(true)
+          }}>
+            Thêm mới
+          </Button>
+        </Space>
       }
     >
-      <Alert 
-        message="Thông tin tại đây sẽ được dùng để hiển thị trên tiêu đề của các phiếu in (Báo giá, Đơn hàng, Phiếu thu...)" 
-        type="info" showIcon style={{ marginBottom: 16 }} 
+      <Alert
+        message="Thông tin tại đây sẽ được dùng để hiển thị trên tiêu đề của các phiếu in (Báo giá, Đơn hàng, Phiếu thu...)"
+        type="info" showIcon style={{ marginBottom: 16 }}
       />
-      
-      <Table 
-        dataSource={phapNhans} 
-        columns={columns} 
-        loading={isLoading} 
-        rowKey="id" 
+
+      <Table
+        dataSource={phapNhans}
+        columns={displayColumns}
+        loading={isLoading}
+        rowKey="id"
         pagination={false}
       />
 
@@ -230,5 +236,3 @@ export default function PhapNhanPage() {
   )
 }
 
-import { Alert } from 'antd'
-import EmptyState from "../../components/EmptyState"

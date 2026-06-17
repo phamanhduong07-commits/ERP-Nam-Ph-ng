@@ -13,6 +13,7 @@ import client from '../../api/client'
 import PageLayout from '../../components/PageLayout'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import { fmtVND } from '../../utils/exportUtils'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -210,6 +211,8 @@ export default function KheUocChoVayPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-khe-uoc-cho-vay', columns, { nonHideable: ['so_khe_uoc'] })
+
   const lichColumns: ColumnsType<LichTraNo> = [
     { title: 'Kỳ', dataIndex: 'ky_so', width: 50, align: 'center' },
     { title: 'Ngày đến hạn', dataIndex: 'ngay_den_han', width: 120, render: v => dayjs(v).format('DD/MM/YYYY') },
@@ -250,9 +253,12 @@ export default function KheUocChoVayPage() {
     <PageLayout
       title="Khế ước cho vay"
       actions={
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          Tạo khế ước
-        </Button>
+        <Space>
+          {settingsButton}
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+            Tạo khế ước
+          </Button>
+        </Space>
       }
     >
       <Card size="small" style={{ marginBottom: 12 }}>
@@ -279,7 +285,7 @@ export default function KheUocChoVayPage() {
       </Card>
 
       <Table<KheUocChoVay>
-        columns={columns}
+        columns={displayColumns}
         dataSource={items}
         rowKey="id"
         loading={isLoading}

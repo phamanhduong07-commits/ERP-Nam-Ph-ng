@@ -16,6 +16,7 @@ import { buildHtmlTable, exportToExcel, renderTemplateAndPrint, smartExportExcel
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { usePermission } from '../../hooks/usePermission'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import PageLayout from '../../components/PageLayout'
 
 const { Text } = Typography
@@ -274,6 +275,7 @@ export default function TransfersPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('warehouse-transfers', columns, { nonHideable: ['so_phieu'] })
 
   const expandedRowRender = (r: PhieuChuyenKho) => (
     <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}
@@ -301,6 +303,7 @@ export default function TransfersPage() {
             style={{ background: '#722ed1', borderColor: '#722ed1', color: '#fff' }}>
             Tạo phiếu chuyển
           </Button>
+          {settingsButton}
         </Space>
       }
     >
@@ -346,7 +349,7 @@ export default function TransfersPage() {
       </Card>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
-        <Table dataSource={phieuList} columns={columns} rowKey="id" loading={isLoading} size="small"
+        <Table dataSource={phieuList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
           locale={{ emptyText: <EmptyState /> }}
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 900 }} />
       </Card>

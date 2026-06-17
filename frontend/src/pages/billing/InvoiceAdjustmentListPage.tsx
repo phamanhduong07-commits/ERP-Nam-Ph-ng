@@ -14,6 +14,7 @@ import {
 } from '../../api/billing'
 import { useAuthStore } from '../../store/auth'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -318,6 +319,7 @@ export default function InvoiceAdjustmentListPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('billing-invoice-adjustment', columns)
 
   return (
     <div style={{ padding: 24 }}>
@@ -329,6 +331,7 @@ export default function InvoiceAdjustmentListPage() {
               In {selectedIds.length} phiếu
             </Button>
           )}
+          {settingsButton}
         </Space>
       </div>
 
@@ -377,7 +380,7 @@ export default function InvoiceAdjustmentListPage() {
       <Card size="small">
         <Table
           rowKey="id"
-          columns={columns}
+          columns={displayColumns}
           dataSource={logs}
           loading={isLoading}
           size="small"

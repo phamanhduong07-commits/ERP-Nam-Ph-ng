@@ -11,6 +11,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { ccdcApi, type CCDC, type NhomCCDC, type CCDCCreate, type PhieuXuatCCDC, type PhieuXuatCCDCCreate } from '../../api/ccdc'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -151,6 +152,7 @@ function CCDCTab() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-ccdc', columns, { nonHideable: ['ma_ccdc'] })
 
   return (
     <>
@@ -168,12 +170,13 @@ function CCDCTab() {
           onImported={() => queryClient.invalidateQueries({ queryKey: ['ccdc'] })}
         />
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm CCDC</Button>
+        {settingsButton}
       </Space>
 
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
                 rowKey="id"
-        columns={columns}
+        columns={displayColumns}
         dataSource={data}
         loading={isLoading}
         pagination={{ pageSize: 20 }}

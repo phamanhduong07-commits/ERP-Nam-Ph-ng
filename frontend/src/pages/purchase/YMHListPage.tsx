@@ -24,6 +24,7 @@ import { suppliersApi } from '../../api/suppliers'
 import { productsApi } from '../../api/products'
 import { customersApi } from '../../api/customers'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { RangePicker } = DatePicker
 const { Text, Title } = Typography
@@ -467,6 +468,7 @@ export default function YMHListPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('purchase-ymh-list', columns)
 
   return (
     <div style={{ paddingBottom: 24 }}>
@@ -488,6 +490,7 @@ export default function YMHListPage() {
             >
               Tạo yêu cầu
             </Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -569,7 +572,7 @@ export default function YMHListPage() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table<PurchaseRequisition>
           rowKey="id"
-          columns={columns}
+          columns={displayColumns}
           dataSource={ymhs}
           loading={isFetching}
           size="small"

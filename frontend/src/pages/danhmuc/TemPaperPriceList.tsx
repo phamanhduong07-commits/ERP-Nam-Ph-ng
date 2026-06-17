@@ -8,6 +8,7 @@ import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant
 import type { ColumnsType } from 'antd/es/table'
 import { temPaperPricesApi, type TemPaperPrice, type TemPaperPriceCreate } from '../../api/temPaperPrices'
 import { useHotkey } from '../../hooks/useHotkey'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -112,6 +113,7 @@ export default function TemPaperPriceList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-tem-paper-price', cols)
 
   return (
     <Card
@@ -120,13 +122,14 @@ export default function TemPaperPriceList() {
         <Space>
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching}>Tải lại</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Thêm mới</Button>
+          {settingsButton}
         </Space>
       }
     >
       <Table
         rowKey="id"
         dataSource={data}
-        columns={cols}
+        columns={displayColumns}
         loading={isFetching}
         size="small"
         pagination={{ pageSize: 50 }}

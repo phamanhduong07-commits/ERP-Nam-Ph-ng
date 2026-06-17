@@ -10,6 +10,7 @@ import type { ColumnsType } from 'antd/es/table'
 import type { ApiError } from '../../api/types'
 import client from '../../api/client'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -153,6 +154,7 @@ export default function DieuKhoanThanhToanList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-dieu-khoan-tt', columns)
 
   return (
     <div>
@@ -162,9 +164,12 @@ export default function DieuKhoanThanhToanList() {
             <Title level={4} style={{ margin: 0 }}>Điều khoản thanh toán</Title>
           </Col>
           <Col>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Thêm mới
-            </Button>
+            <Space>
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                Thêm mới
+              </Button>
+              {settingsButton}
+            </Space>
           </Col>
         </Row>
 
@@ -172,7 +177,7 @@ export default function DieuKhoanThanhToanList() {
           locale={{ emptyText: <EmptyState size="small" /> }}
           rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={false}
           size="small"

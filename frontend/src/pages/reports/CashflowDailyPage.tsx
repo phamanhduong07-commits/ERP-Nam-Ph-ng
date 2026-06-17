@@ -4,6 +4,7 @@ import { SearchOutlined, BankOutlined } from '@ant-design/icons'
 import { reportsApi } from '../../api/reports'
 import PageLayout from '../../components/PageLayout'
 import dayjs from 'dayjs'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -63,6 +64,7 @@ const CashflowDailyPage: React.FC = () => {
     { title: 'Số dư cuối ngày', dataIndex: 'so_du_cuoi', key: 'cuoi', align: 'right' as const,
       render: (v: number) => <Text strong style={{ color: '#1d3557' }}>{fmt(v)}</Text> },
   ]
+  const { displayColumns: displaySummaryColumns, settingsButton } = useColumnPrefs('reports-cashflow-daily', summaryColumns)
 
   const detailColumns = [
     { title: 'Tài khoản', dataIndex: 'ten', key: 'ten',
@@ -125,9 +127,9 @@ const CashflowDailyPage: React.FC = () => {
             </Col>
           </Row>
 
-          <Card title="Tổng hợp theo Pháp nhân" style={{ marginBottom: 24 }}>
+          <Card title="Tổng hợp theo Pháp nhân" style={{ marginBottom: 24 }} extra={settingsButton}>
             <Table
-              columns={summaryColumns}
+              columns={displaySummaryColumns}
               dataSource={tableData}
               rowKey={(r: any) => r.phap_nhan_id ?? 'total'}
               pagination={false}

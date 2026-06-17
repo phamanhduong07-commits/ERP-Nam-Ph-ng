@@ -23,6 +23,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { hrApi } from '../../api/hr'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 

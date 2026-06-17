@@ -17,6 +17,7 @@ import { materialGroupsApi } from '../../api/materialGroups'
 import EmptyState from '../../components/EmptyState'
 import { usePermission } from '../../hooks/usePermission'
 import { useHotkey } from '../../hooks/useHotkey'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -377,6 +378,7 @@ export default function TieuChuanKyThuatList() {
       ) : null,
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-tieu-chuan-ky-thuat', columns, { nonHideable: ['ma_tc'] })
 
   return (
     <div>
@@ -408,6 +410,7 @@ export default function TieuChuanKyThuatList() {
                   Thêm tiêu chuẩn
                 </Button>
               )}
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -416,7 +419,7 @@ export default function TieuChuanKyThuatList() {
           locale={{ emptyText: <EmptyState size="small" /> }}
           rowKey="id"
           dataSource={items}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           size="small"
           pagination={{

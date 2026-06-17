@@ -434,12 +434,14 @@ export default function App() {
             <Route path="accounting/receipts/new" element={<CashReceiptForm />} />
             <Route path="accounting/receipts/by-invoice" element={<CashReceiptByInvoicePage />} />
             <Route path="accounting/receipts/batch" element={<CashReceiptBatchPage />} />
+            <Route path="accounting/receipts/:id/edit" element={<CashReceiptForm />} />
             <Route path="accounting/receipts/:id" element={<CashReceiptDetailPage />} />
             <Route path="accounting/internal-transfers" element={<InternalTransferListPage />} />
             <Route path="accounting/internal-transfers/new" element={<InternalTransferForm />} />
             <Route path="accounting/internal-transfers/:id" element={<InternalTransferDetailPage />} />
             <Route path="accounting/payments" element={<CashPaymentListPage />} />
             <Route path="accounting/payments/new" element={<CashPaymentForm />} />
+            <Route path="accounting/payments/:id/edit" element={<CashPaymentForm />} />
             <Route path="accounting/tax-payments/new" element={<TaxPaymentPage />} />
             <Route path="accounting/insurance-payments/new" element={<InsurancePaymentPage />} />
             <Route path="accounting/salary-payments/new" element={<SalaryPaymentPage />} />

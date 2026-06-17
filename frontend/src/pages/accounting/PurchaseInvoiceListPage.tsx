@@ -12,6 +12,7 @@ import { purchaseInvoiceApi, PurchaseInvoice } from '../../api/accounting'
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -148,11 +149,14 @@ export default function PurchaseInvoiceListPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-purchase-invoice', columns, { nonHideable: ['so_hoa_don'] })
+
   return (
     <PageLayout
       title="Hóa đơn mua hàng"
       actions={
         <Space>
+          {settingsButton}
           <Button icon={<FileExcelOutlined />} onClick={handleExcel}>Excel</Button>
           <Button icon={<WalletOutlined />} onClick={() => navigate('/accounting/payments')}>
             Phiếu chi
@@ -218,7 +222,7 @@ export default function PurchaseInvoiceListPage() {
 
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-                columns={columns}
+                columns={displayColumns}
         dataSource={invoices}
         rowKey="id"
         loading={isLoading}

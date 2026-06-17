@@ -7,6 +7,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { donGiaVanChuyenApi, type DonGiaVanChuyen } from '../../api/simpleApis'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 const formatVND = (v: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(v || 0)
@@ -73,6 +74,7 @@ export default function DonGiaVanChuyenList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-don-gia-van-chuyen', columns)
 
   return (
     <div>
@@ -83,10 +85,11 @@ export default function DonGiaVanChuyenList() {
             <Space>
               <ImportExcelButton endpoint="/api/don-gia-van-chuyen" templateFilename="mau_import_don_gia_van_chuyen.xlsx" buttonText="Import Excel" onImported={() => queryClient.invalidateQueries({ queryKey: ['don-gia-van-chuyen'] })} />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Them moi</Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
-        <Table rowKey="id" dataSource={data} columns={columns} loading={isLoading} pagination={{ pageSize: 20 }} size="small" />
+        <Table rowKey="id" dataSource={data} columns={displayColumns} loading={isLoading} pagination={{ pageSize: 20 }} size="small" />
       </Card>
 
       <Modal title={editing ? 'Sua don gia van chuyen' : 'Them don gia van chuyen'} open={modalOpen} onCancel={closeModal} onOk={handleSave} confirmLoading={createMut.isPending || updateMut.isPending} okText="Luu" cancelText="Huy" destroyOnClose width={620}>

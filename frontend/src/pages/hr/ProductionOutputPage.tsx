@@ -22,6 +22,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { hrApi } from '../../api/hr'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const fmtNum = (v: number) => Number(v || 0).toLocaleString('vi-VN')
@@ -128,6 +129,53 @@ export default function ProductionOutputPage() {
   const onSubmit = (v: any) => saveMut.mutate({
     ...v, ngay: v.ngay.format('YYYY-MM-DD'),
   })
+
+  const columns = [
+    { title: 'Ngày', dataIndex: 'ngay', width: 110,
+      render: (v: string) => dayjs(v).format('DD/MM/YYYY'),
+      sorter: (a: any, b: any) => dayjs(a.ngay).valueOf() - dayjs(b.ngay).valueOf() },
+    { title: 'Mã hàng', dataIndex: 'ma_hang', width: 130,
+      render: (v: string, r: any) => (
+        <>
+          <Tag color="blue">{v}</Tag>
+          <div><Text type="secondary" style={{ fontSize: 11 }}>{r.ten_hang}</Text></div>
+        </>
+      ) },
+    { title: 'Bộ phận / Tổ', width: 200,
+      render: (_: unknown, r: any) => (
+        <>
+          <div>{r.ten_bo_phan || <Text type="secondary">—</Text>}</div>
+          {r.ten_to && <Text type="secondary" style={{ fontSize: 11 }}>🏷 {r.ten_to}</Text>}
+        </>
+      ) },
+    { title: 'Ca', dataIndex: 'ca', width: 110,
+      render: (v: string) => CA_OPTIONS.find((o: any) => o.value === v)?.label || v },
+    { title: 'Sản lượng', dataIndex: 'san_luong', width: 110, align: 'right' as const,
+      render: (v: number) => <Text strong style={{ color: '#52c41a' }}>{fmtNum(v)}</Text> },
+    { title: 'Lỗi', dataIndex: 'san_luong_loi', width: 80, align: 'right' as const,
+      render: (v: number) => v > 0 ? <Text type="danger">{fmtNum(v)}</Text> : '—' },
+    { title: 'Quỹ lương SP (ước tính)', dataIndex: 'quy_luong_uoc_tinh', width: 170, align: 'right' as const,
+      render: (v: number) => <Text strong style={{ color: '#1677ff' }}>{fmtVND(v)}</Text> },
+    { title: 'Trạng thái', dataIndex: 'trang_thai', width: 140,
+      render: (v: string) => {
+        const m = TRANG_THAI_META[v]
+        return <Tag color={m?.color}>{m?.label || v}</Tag>
+      } },
+    { title: '', width: 140, render: (_: unknown, r: any) => (
+      <Space size={4}>
+        {r.trang_thai === 'cho_xac_nhan' && (
+          <Popconfirm title="Xác nhận sản lượng này?" onConfirm={() => confirmMut.mutate(r.id)}>
+            <Button size="small" type="primary" icon={<CheckCircleOutlined />}>OK</Button>
+          </Popconfirm>
+        )}
+        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+        <Popconfirm title="Xóa bản ghi này?" onConfirm={() => delMut.mutate(r.id)}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      </Space>
+    ) },
+  ]
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-production-output', columns)
 
   return (
     <div style={{ padding: '0 0 24px 0' }}>
@@ -313,51 +361,8 @@ export default function ProductionOutputPage() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           size="small" rowKey="id" loading={isLoading} dataSource={items}
-          columns={[
-            { title: 'Ngày', dataIndex: 'ngay', width: 110,
-              render: (v: string) => dayjs(v).format('DD/MM/YYYY'),
-              sorter: (a: any, b: any) => dayjs(a.ngay).valueOf() - dayjs(b.ngay).valueOf() },
-            { title: 'Mã hàng', dataIndex: 'ma_hang', width: 130,
-              render: (v: string, r: any) => (
-                <>
-                  <Tag color="blue">{v}</Tag>
-                  <div><Text type="secondary" style={{ fontSize: 11 }}>{r.ten_hang}</Text></div>
-                </>
-              ) },
-            { title: 'Bộ phận / Tổ', width: 200,
-              render: (_, r: any) => (
-                <>
-                  <div>{r.ten_bo_phan || <Text type="secondary">—</Text>}</div>
-                  {r.ten_to && <Text type="secondary" style={{ fontSize: 11 }}>🏷 {r.ten_to}</Text>}
-                </>
-              ) },
-            { title: 'Ca', dataIndex: 'ca', width: 110,
-              render: (v: string) => CA_OPTIONS.find(o => o.value === v)?.label || v },
-            { title: 'Sản lượng', dataIndex: 'san_luong', width: 110, align: 'right' as const,
-              render: (v: number) => <Text strong style={{ color: '#52c41a' }}>{fmtNum(v)}</Text> },
-            { title: 'Lỗi', dataIndex: 'san_luong_loi', width: 80, align: 'right' as const,
-              render: (v: number) => v > 0 ? <Text type="danger">{fmtNum(v)}</Text> : '—' },
-            { title: 'Quỹ lương SP (ước tính)', dataIndex: 'quy_luong_uoc_tinh', width: 170, align: 'right' as const,
-              render: (v: number) => <Text strong style={{ color: '#1677ff' }}>{fmtVND(v)}</Text> },
-            { title: 'Trạng thái', dataIndex: 'trang_thai', width: 140,
-              render: (v: string) => {
-                const m = TRANG_THAI_META[v]
-                return <Tag color={m?.color}>{m?.label || v}</Tag>
-              } },
-            { title: '', width: 140, render: (_, r: any) => (
-              <Space size={4}>
-                {r.trang_thai === 'cho_xac_nhan' && (
-                  <Popconfirm title="Xác nhận sản lượng này?" onConfirm={() => confirmMut.mutate(r.id)}>
-                    <Button size="small" type="primary" icon={<CheckCircleOutlined />}>OK</Button>
-                  </Popconfirm>
-                )}
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                <Popconfirm title="Xóa bản ghi này?" onConfirm={() => delMut.mutate(r.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
-              </Space>
-            ) },
-          ]}
+          columns={displayColumns}
+          title={() => <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px' }}>{settingsButton}</div>}
           pagination={{ pageSize: 30, showSizeChanger: true, showTotal: (t) => `Tổng ${t} bản ghi` }}
         />
       </Card>

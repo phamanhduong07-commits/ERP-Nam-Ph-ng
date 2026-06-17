@@ -20,6 +20,7 @@ import {
 import { DatePicker } from 'antd'
 import dayjs from 'dayjs'
 import { hrApi } from '../../api/hr'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -83,6 +84,24 @@ function UnitPriceTab() {
   }
   const openEdit = (r: any) => { setEditing(r); form.setFieldsValue(r); setOpen(true) }
 
+  const unitPriceColumns = [
+    { title: 'Mã hàng', dataIndex: 'ma_hang', width: 150,
+      render: (v: string) => <Text strong style={{ color: '#1677ff' }}>{v}</Text> },
+    { title: 'Tên', dataIndex: 'ten_hang' },
+    { title: 'Công đoạn', dataIndex: 'cong_doan', width: 150,
+      render: (v: string) => v ? <Tag>{v}</Tag> : '—' },
+    { title: '% lương SP', dataIndex: 'phan_tram_luong_sp', width: 120, align: 'center' as const,
+      render: (v: number) => <Tag color="blue">{v}%</Tag> },
+    { title: 'Đơn giá (VNĐ/đơn vị)', dataIndex: 'don_gia', width: 180, align: 'right' as const,
+      render: (v: number) => <Text strong style={{ color: '#fa8c16' }}>{fmtVND(v)}</Text> },
+    { title: '', width: 80, render: (_: unknown, r: any) => (
+      <Space size={4}>
+        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+      </Space>
+    )},
+  ]
+  const { displayColumns: unitPriceDisplayColumns, settingsButton: unitPriceSettingsButton } = useColumnPrefs('hr-payroll-config-unit-price', unitPriceColumns)
+
   return (
     <>
       <Alert
@@ -95,22 +114,8 @@ function UnitPriceTab() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           size="small" rowKey="id" loading={isLoading} dataSource={items}
-          columns={[
-            { title: 'Mã hàng', dataIndex: 'ma_hang', width: 150,
-              render: (v: string) => <Text strong style={{ color: '#1677ff' }}>{v}</Text> },
-            { title: 'Tên', dataIndex: 'ten_hang' },
-            { title: 'Công đoạn', dataIndex: 'cong_doan', width: 150,
-              render: (v: string) => v ? <Tag>{v}</Tag> : '—' },
-            { title: '% lương SP', dataIndex: 'phan_tram_luong_sp', width: 120, align: 'center' as const,
-              render: (v: number) => <Tag color="blue">{v}%</Tag> },
-            { title: 'Đơn giá (VNĐ/đơn vị)', dataIndex: 'don_gia', width: 180, align: 'right' as const,
-              render: (v: number) => <Text strong style={{ color: '#fa8c16' }}>{fmtVND(v)}</Text> },
-            { title: '', width: 80, render: (_, r: any) => (
-              <Space size={4}>
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-              </Space>
-            )},
-          ]}
+          columns={unitPriceDisplayColumns}
+          title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{unitPriceSettingsButton}</div>}
           pagination={{ pageSize: 20 }}
         />
       </Card>
@@ -181,6 +186,18 @@ function HourConversionTab() {
   const openCreate = () => { setEditing(null); form.resetFields(); setOpen(true) }
   const openEdit = (r: any) => { setEditing(r); form.setFieldsValue(r); setOpen(true) }
 
+  const hourConvColumns = [
+    { title: 'Mã cấu hình', dataIndex: 'ma_cau_hinh', width: 180,
+      render: (v: string) => <Text strong style={{ color: '#722ed1' }}>{v}</Text> },
+    { title: 'Diễn giải', dataIndex: 'ten_cau_hinh' },
+    { title: 'Công quy đổi', dataIndex: 'gia_tri', width: 160, align: 'center' as const,
+      render: (v: string) => <Tag color="cyan" style={{ fontSize: 14 }}>{Number(v).toFixed(2)} công</Tag> },
+    { title: '', width: 80, render: (_: unknown, r: any) => (
+      <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+    )},
+  ]
+  const { displayColumns: hourConvDisplayColumns, settingsButton: hourConvSettingsButton } = useColumnPrefs('hr-payroll-config-hour-conv', hourConvColumns)
+
   return (
     <>
       <Alert
@@ -194,16 +211,8 @@ function HourConversionTab() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           size="small" rowKey="id" loading={isLoading} dataSource={items}
-          columns={[
-            { title: 'Mã cấu hình', dataIndex: 'ma_cau_hinh', width: 180,
-              render: (v: string) => <Text strong style={{ color: '#722ed1' }}>{v}</Text> },
-            { title: 'Diễn giải', dataIndex: 'ten_cau_hinh' },
-            { title: 'Công quy đổi', dataIndex: 'gia_tri', width: 160, align: 'center' as const,
-              render: (v: string) => <Tag color="cyan" style={{ fontSize: 14 }}>{Number(v).toFixed(2)} công</Tag> },
-            { title: '', width: 80, render: (_, r: any) => (
-              <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-            )},
-          ]}
+          columns={hourConvDisplayColumns}
+          title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{hourConvSettingsButton}</div>}
           pagination={false}
         />
       </Card>
@@ -252,6 +261,23 @@ function MinWageTab() {
     },
   })
 
+  const minWageColumns = [
+    { title: 'Mã vùng', dataIndex: 'ma_cau_hinh', width: 180,
+      render: (v: string) => {
+        const vung = v.replace('MIN_WAGE_', '')
+        const color: Record<string, string> = { I: 'red', II: 'orange', III: 'gold', IV: 'green' }
+        return <Tag color={color[vung] || 'default'} style={{ fontSize: 14, fontWeight: 600 }}>Vùng {vung}</Tag>
+      } },
+    { title: 'Mô tả', dataIndex: 'ten_cau_hinh' },
+    { title: 'Mức lương tối thiểu', dataIndex: 'gia_tri', width: 220, align: 'right' as const,
+      render: (v: string) => <Text strong style={{ color: '#cf1322', fontSize: 16 }}>{fmtVND(v)}</Text> },
+    { title: '', width: 80, render: (_: unknown, r: any) => (
+      <Button size="small" icon={<EditOutlined />}
+        onClick={() => { setEditing(r); form.setFieldsValue(r); setOpen(true) }} />
+    )},
+  ]
+  const { displayColumns: minWageDisplayColumns, settingsButton: minWageSettingsButton } = useColumnPrefs('hr-payroll-config-min-wage', minWageColumns)
+
   return (
     <>
       <Alert
@@ -262,21 +288,8 @@ function MinWageTab() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           size="small" rowKey="id" loading={isLoading} dataSource={items}
-          columns={[
-            { title: 'Mã vùng', dataIndex: 'ma_cau_hinh', width: 180,
-              render: (v: string) => {
-                const vung = v.replace('MIN_WAGE_', '')
-                const color: Record<string, string> = { I: 'red', II: 'orange', III: 'gold', IV: 'green' }
-                return <Tag color={color[vung] || 'default'} style={{ fontSize: 14, fontWeight: 600 }}>Vùng {vung}</Tag>
-              } },
-            { title: 'Mô tả', dataIndex: 'ten_cau_hinh' },
-            { title: 'Mức lương tối thiểu', dataIndex: 'gia_tri', width: 220, align: 'right' as const,
-              render: (v: string) => <Text strong style={{ color: '#cf1322', fontSize: 16 }}>{fmtVND(v)}</Text> },
-            { title: '', width: 80, render: (_, r: any) => (
-              <Button size="small" icon={<EditOutlined />}
-                onClick={() => { setEditing(r); form.setFieldsValue(r); setOpen(true) }} />
-            )},
-          ]}
+          columns={minWageDisplayColumns}
+          title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{minWageSettingsButton}</div>}
           pagination={false}
         />
       </Card>
@@ -324,6 +337,26 @@ function GeneralConfigTab() {
     },
   })
 
+  const generalColumns = [
+    { title: 'Tham số', dataIndex: 'ten_cau_hinh' },
+    { title: 'Mã', dataIndex: 'ma_cau_hinh', width: 200,
+      render: (v: string) => <Text code style={{ fontSize: 11 }}>{v}</Text> },
+    { title: 'Giá trị', dataIndex: 'gia_tri', width: 180, align: 'right' as const,
+      render: (v: string, r: any) => {
+        const label = r.ma_cau_hinh === 'VUNG_AP_DUNG' ? `Vùng ${v}`
+          : r.ma_cau_hinh === 'HE_SO_THU_VIEC' ? Number(v).toFixed(2)
+          : r.ma_cau_hinh === 'GIO_CHUAN_NGAY' ? `${v} giờ`
+          : r.ma_cau_hinh === 'NGAY_CHUAN_THANG' ? `${v} ngày`
+          : v
+        return <Text strong style={{ color: '#1677ff', fontSize: 15 }}>{label}</Text>
+      } },
+    { title: '', width: 80, render: (_: unknown, r: any) => (
+      <Button size="small" icon={<EditOutlined />}
+        onClick={() => { setEditing(r); form.setFieldsValue(r) }} />
+    )},
+  ]
+  const { displayColumns: generalDisplayColumns, settingsButton: generalSettingsButton } = useColumnPrefs('hr-payroll-config-general', generalColumns)
+
   return (
     <>
       <Alert
@@ -333,24 +366,8 @@ function GeneralConfigTab() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           size="small" rowKey="id" loading={isLoading} dataSource={items}
-          columns={[
-            { title: 'Tham số', dataIndex: 'ten_cau_hinh' },
-            { title: 'Mã', dataIndex: 'ma_cau_hinh', width: 200,
-              render: (v: string) => <Text code style={{ fontSize: 11 }}>{v}</Text> },
-            { title: 'Giá trị', dataIndex: 'gia_tri', width: 180, align: 'right' as const,
-              render: (v: string, r: any) => {
-                const label = r.ma_cau_hinh === 'VUNG_AP_DUNG' ? `Vùng ${v}`
-                  : r.ma_cau_hinh === 'HE_SO_THU_VIEC' ? Number(v).toFixed(2)
-                  : r.ma_cau_hinh === 'GIO_CHUAN_NGAY' ? `${v} giờ`
-                  : r.ma_cau_hinh === 'NGAY_CHUAN_THANG' ? `${v} ngày`
-                  : v
-                return <Text strong style={{ color: '#1677ff', fontSize: 15 }}>{label}</Text>
-              } },
-            { title: '', width: 80, render: (_, r: any) => (
-              <Button size="small" icon={<EditOutlined />}
-                onClick={() => { setEditing(r); form.setFieldsValue(r) }} />
-            )},
-          ]}
+          columns={generalDisplayColumns}
+          title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{generalSettingsButton}</div>}
           pagination={false}
         />
       </Card>
@@ -411,6 +428,40 @@ function HolidayTab() {
     onError: (e: any) => message.error(e?.response?.data?.detail || 'Xóa thất bại'),
   })
 
+  const holidayColumns = [
+    {
+      title: 'Ngày',
+      dataIndex: 'ngay',
+      width: 130,
+      render: (v: string) => <Text strong>{dayjs(v).format('DD/MM/YYYY')}</Text>,
+      sorter: (a: any, b: any) => dayjs(a.ngay).valueOf() - dayjs(b.ngay).valueOf(),
+      defaultSortOrder: 'descend' as const,
+    },
+    {
+      title: 'Thứ trong tuần',
+      dataIndex: 'ngay',
+      width: 130,
+      render: (v: string) => {
+        const wd = dayjs(v).day()
+        const label = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][wd]
+        return <Tag color={wd === 0 || wd === 6 ? 'red' : 'default'}>{label}</Tag>
+      },
+    },
+    { title: 'Tên ngày lễ', dataIndex: 'ten_ngay_le', render: (v: string) => <Text strong>{v}</Text> },
+    { title: 'Ghi chú', dataIndex: 'ghi_chu' },
+    {
+      title: '',
+      width: 60,
+      align: 'center' as const,
+      render: (_: unknown, r: any) => (
+        <Popconfirm title={`Xóa ngày lễ "${r.ten_ngay_le}"?`} onConfirm={() => deleteMut.mutate(r.id)}>
+          <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      ),
+    },
+  ]
+  const { displayColumns: holidayDisplayColumns, settingsButton: holidaySettingsButton } = useColumnPrefs('hr-payroll-config-holidays', holidayColumns)
+
   return (
     <Card
       title={<Space><CalendarOutlined /> Ngày lễ áp dụng tăng ca hệ số 3.0</Space>}
@@ -451,38 +502,8 @@ function HolidayTab() {
         rowKey="id"
         size="small"
         pagination={{ pageSize: 20 }}
-        columns={[
-          {
-            title: 'Ngày',
-            dataIndex: 'ngay',
-            width: 130,
-            render: (v: string) => <Text strong>{dayjs(v).format('DD/MM/YYYY')}</Text>,
-            sorter: (a: any, b: any) => dayjs(a.ngay).valueOf() - dayjs(b.ngay).valueOf(),
-            defaultSortOrder: 'descend',
-          },
-          {
-            title: 'Thứ trong tuần',
-            dataIndex: 'ngay',
-            width: 130,
-            render: (v: string) => {
-              const wd = dayjs(v).day()
-              const label = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][wd]
-              return <Tag color={wd === 0 || wd === 6 ? 'red' : 'default'}>{label}</Tag>
-            },
-          },
-          { title: 'Tên ngày lễ', dataIndex: 'ten_ngay_le', render: (v: string) => <Text strong>{v}</Text> },
-          { title: 'Ghi chú', dataIndex: 'ghi_chu' },
-          {
-            title: '',
-            width: 60,
-            align: 'center',
-            render: (_: any, r: any) => (
-              <Popconfirm title={`Xóa ngày lễ "${r.ten_ngay_le}"?`} onConfirm={() => deleteMut.mutate(r.id)}>
-                <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-              </Popconfirm>
-            ),
-          },
-        ]}
+        columns={holidayDisplayColumns}
+        title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{holidaySettingsButton}</div>}
       />
     </Card>
   )

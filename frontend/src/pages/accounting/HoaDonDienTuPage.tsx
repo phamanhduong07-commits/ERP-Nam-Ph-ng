@@ -21,6 +21,7 @@ import { usePhapNhanList, usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { fmtVND } from '../../utils/exportUtils'
 import { printHoaDonDienTu } from '../../utils/printHoaDonDienTu'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -228,6 +229,8 @@ export default function HoaDonDienTuPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-hoa-don-dien-tu', columns)
+
   // ── item columns (editable) ────────────────────────────────────
   const itemColumns: ColumnsType<HoaDonItem> = [
     {
@@ -309,16 +312,19 @@ export default function HoaDonDienTuPage() {
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>Hóa đơn điện tử</Title>
-        {canAct && (
-          <Button type="primary" icon={<PlusOutlined />}
-            onClick={() => {
-              createForm.setFieldsValue({ ngay_lap: dayjs(), loai_hd: '1', vat_pct: 10 })
-              setItems([DEFAULT_ITEM()])
-              setShowCreate(true)
-            }}>
-            Tạo HĐDT nháp
-          </Button>
-        )}
+        <Space>
+          {settingsButton}
+          {canAct && (
+            <Button type="primary" icon={<PlusOutlined />}
+              onClick={() => {
+                createForm.setFieldsValue({ ngay_lap: dayjs(), loai_hd: '1', vat_pct: 10 })
+                setItems([DEFAULT_ITEM()])
+                setShowCreate(true)
+              }}>
+              Tạo HĐDT nháp
+            </Button>
+          )}
+        </Space>
       </div>
 
       <Form form={filterForm} layout="inline" style={{ marginBottom: 16 }} onValuesChange={(_, all) => {
@@ -351,7 +357,7 @@ export default function HoaDonDienTuPage() {
 
       <Table
         locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-        columns={columns}
+        columns={displayColumns}
         dataSource={data}
         loading={isLoading}
         rowKey="id"

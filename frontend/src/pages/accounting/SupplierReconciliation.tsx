@@ -11,6 +11,7 @@ import { Supplier, suppliersApi } from '../../api/suppliers'
 import { exportToExcel, fmtVND, printDocument } from '../../utils/exportUtils'
 import { usePhapNhanForPrint, usePhapNhanList } from '../../hooks/usePhapNhan'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -88,6 +89,8 @@ export default function SupplierReconciliation() {
     { title: 'Đơn giá', dataIndex: 'don_gia', width: 130, align: 'right', render: fmtVND },
     { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 150, align: 'right', render: v => <Text strong>{fmtVND(v)}</Text> },
   ]
+
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-supplier-recon', columns)
 
   const paymentColumns: ColumnsType<ReconPayment> = [
     { title: 'Ngày', dataIndex: 'ngay_phieu', width: 110, render: v => dayjs(v).format('DD/MM/YYYY') },
@@ -216,6 +219,7 @@ export default function SupplierReconciliation() {
           </Col>
           <Col xs={24} md={5}>
             <Space wrap>
+              {settingsButton}
               <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={isLoading} disabled={!supplierId}>
                 Xem
               </Button>
@@ -245,7 +249,7 @@ export default function SupplierReconciliation() {
           </Row>
 
           <Card title="Chi tiết nhập kho" styles={{ body: { padding: 0 } }}>
-            <Table locale={{ emptyText: <EmptyState size="small" preset="document" /> }} size="small" dataSource={recon.items} columns={columns} pagination={false} rowKey={(r, i) => `${r.so_phieu}-${i}`} scroll={{ x: 820 }} />
+            <Table locale={{ emptyText: <EmptyState size="small" preset="document" /> }} size="small" dataSource={recon.items} columns={displayColumns} pagination={false} rowKey={(r, i) => `${r.so_phieu}-${i}`} scroll={{ x: 820 }} />
           </Card>
 
           <Card title="Chi tiết thanh toán" style={{ marginTop: 16 }} styles={{ body: { padding: 0 } }}>

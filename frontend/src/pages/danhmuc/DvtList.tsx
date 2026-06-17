@@ -11,6 +11,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { donViTinhApi, type DonViTinh } from '../../api/simpleApis'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -122,6 +123,7 @@ export default function DvtList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-dvt', columns)
 
   return (
     <div>
@@ -141,6 +143,7 @@ export default function DvtList() {
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm mới
               </Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -149,7 +152,7 @@ export default function DvtList() {
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={false}
           size="small"

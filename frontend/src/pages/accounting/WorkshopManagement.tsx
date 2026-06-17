@@ -8,6 +8,7 @@ import dayjs from 'dayjs'
 import { PlusOutlined, FileExcelOutlined, UploadOutlined } from '@ant-design/icons'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { TabPane } = Tabs
 const { Text } = Typography
@@ -134,6 +135,30 @@ const WorkshopManagement: React.FC = () => {
     }
   }
 
+  const payrollColumns = [
+    { title: 'Số phiếu', dataIndex: 'so_phieu' },
+    { title: 'Tháng', dataIndex: 'thang', render: (val: string) => dayjs(val).format('MM/YYYY') },
+    { title: 'Xưởng', dataIndex: 'phan_xuong_id', render: (id: number) => phanXuongList.find((px: PhanXuongItem) => px.id === id)?.ten_xuong },
+    { title: 'Số tiền', dataIndex: 'tong_luong', align: 'right' as const, render: (val: number) => val.toLocaleString() },
+    { title: 'Trạng thái', dataIndex: 'trang_thai', render: (val: string) => <Tag color={val === 'da_duyet' ? 'green' : 'orange'}>{val}</Tag> },
+    { title: 'Hạch toán', dataIndex: 'bo_qua_hach_toan', render: (val: boolean) => val ? <Tag>Bỏ qua</Tag> : <Tag color="blue">Tự động</Tag> },
+    { title: 'Thao tác', render: (_: unknown, record: WorkshopPayroll) => (
+      record.trang_thai !== 'da_duyet' && <Button type="link" onClick={() => handleApprovePayroll(record.id)}>Duyệt</Button>
+    )}
+  ]
+  const { displayColumns: payrollDisplayColumns, settingsButton: payrollSettingsButton } = useColumnPrefs('accounting-workshop-payroll', payrollColumns)
+
+  const assetColumns = [
+    { title: 'Mã TS', dataIndex: 'ma_ts' },
+    { title: 'Tên tài sản', dataIndex: 'ten_ts' },
+    { title: 'Nguyên giá', dataIndex: 'nguyen_gia', align: 'right' as const, render: (val: number) => val?.toLocaleString() },
+    { title: 'Thời gian (tháng)', dataIndex: 'thoi_gian_khau_hao' },
+    { title: 'Đã KH', dataIndex: 'da_khau_hao_thang' },
+    { title: 'Xưởng', dataIndex: 'phan_xuong_id', render: (id: number) => phanXuongList.find((px: PhanXuongItem) => px.id === id)?.ten_xuong },
+    { title: 'Hạch toán', dataIndex: 'bo_qua_hach_toan', render: (val: boolean) => val ? <Tag>Bỏ qua</Tag> : <Tag color="blue">Tự động</Tag> },
+  ]
+  const { displayColumns: assetDisplayColumns, settingsButton: assetSettingsButton } = useColumnPrefs('accounting-workshop-assets', assetColumns)
+
   return (
     <div style={{ padding: 24 }}>
       <Card title="Quản trị Chi phí & Phân xưởng" extra={<Tag color="blue">Kế toán Quản trị</Tag>}>
@@ -185,21 +210,12 @@ const WorkshopManagement: React.FC = () => {
             </div>
             </Form>
 
-            <Table 
+            <Table
               size="small"
               dataSource={payrolls}
               rowKey="id"
-              columns={[
-                { title: 'Số phiếu', dataIndex: 'so_phieu' },
-                { title: 'Tháng', dataIndex: 'thang', render: (val) => dayjs(val).format('MM/YYYY') },
-                { title: 'Xưởng', dataIndex: 'phan_xuong_id', render: (id) => phanXuongList.find((px: PhanXuongItem) => px.id === id)?.ten_xuong },
-                { title: 'Số tiền', dataIndex: 'tong_luong', align: 'right', render: (val) => val.toLocaleString() },
-                { title: 'Trạng thái', dataIndex: 'trang_thai', render: (val) => <Tag color={val === 'da_duyet' ? 'green' : 'orange'}>{val}</Tag> },
-                { title: 'Hạch toán', dataIndex: 'bo_qua_hach_toan', render: (val) => val ? <Tag>Bỏ qua</Tag> : <Tag color="blue">Tự động</Tag> },
-                { title: 'Thao tác', render: (_: unknown, record: WorkshopPayroll) => (
-                  record.trang_thai !== 'da_duyet' && <Button type="link" onClick={() => handleApprovePayroll(record.id)}>Duyệt</Button>
-                )}
-              ]}
+              columns={payrollDisplayColumns}
+              title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{payrollSettingsButton}</div>}
             />
           </TabPane>
 
@@ -232,19 +248,12 @@ const WorkshopManagement: React.FC = () => {
               </Col>
 
               <Col span={18}>
-                <Table 
+                <Table
                   size="small"
                   dataSource={assets}
                   rowKey="id"
-                  columns={[
-                    { title: 'Mã TS', dataIndex: 'ma_ts' },
-                    { title: 'Tên tài sản', dataIndex: 'ten_ts' },
-                    { title: 'Nguyên giá', dataIndex: 'nguyen_gia', align: 'right', render: (val) => val?.toLocaleString() },
-                    { title: 'Thời gian (tháng)', dataIndex: 'thoi_gian_khau_hao' },
-                    { title: 'Đã KH', dataIndex: 'da_khau_hao_thang' },
-                    { title: 'Xưởng', dataIndex: 'phan_xuong_id', render: (id) => phanXuongList.find((px: PhanXuongItem) => px.id === id)?.ten_xuong },
-                    { title: 'Hạch toán', dataIndex: 'bo_qua_hach_toan', render: (val) => val ? <Tag>Bỏ qua</Tag> : <Tag color="blue">Tự động</Tag> },
-                  ]}
+                  columns={assetDisplayColumns}
+                  title={() => <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{assetSettingsButton}</div>}
                 />
               </Col>
             </Row>

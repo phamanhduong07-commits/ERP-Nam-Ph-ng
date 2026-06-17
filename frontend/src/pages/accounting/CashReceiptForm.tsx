@@ -1,26 +1,31 @@
 import { useEffect, useState } from 'react'
 import type { ApiError } from '../../api/types'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Form, Input, InputNumber,
+  Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber,
   Row, Select, Space, Typography, message,
 } from 'antd'
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { fmtVND } from '../../utils/exportUtils'
-import { receiptApi, CashReceiptCreate, HINH_THUC_TT } from '../../api/accounting'
+import { receiptApi, CashReceiptCreate, CashReceiptUpdate, HINH_THUC_TT } from '../../api/accounting'
 import { customersApi, Customer } from '../../api/customers'
 import QuickAddSelect from '../../components/QuickAddSelect'
 import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
 import { billingApi, SalesInvoiceListItem } from '../../api/billing'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
+import { usePhanXuong } from '../../hooks/useMasterData'
 
 const { Title } = Typography
 
 export default function CashReceiptForm() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { id } = useParams<{ id?: string }>()
+  const editId = id ? Number(id) : undefined
+  const isEdit = editId != null && !isNaN(editId)
+
   const [searchParams] = useSearchParams()
   const [form] = Form.useForm()
   const [selectedCustomer, setSelectedCustomer] = useState<number | undefined>()
@@ -40,7 +45,14 @@ export default function CashReceiptForm() {
     staleTime: 5 * 60 * 1000,
   })
 
-  // Load hóa đơn còn nợ của KH được chọn
+  const { phanXuongList } = usePhanXuong()
+
+  const { data: existing, isLoading: existingLoading } = useQuery({
+    queryKey: ['receipt', editId],
+    queryFn: () => receiptApi.get(editId!),
+    enabled: isEdit,
+  })
+
   const { data: invoiceData } = useQuery({
     queryKey: ['billing-invoices-unpaid', selectedCustomer],
     queryFn: () =>
@@ -53,14 +65,35 @@ export default function CashReceiptForm() {
   })
   const unpaidInvoices: SalesInvoiceListItem[] = invoiceData ?? []
 
+  // Pre-populate form when editing
   useEffect(() => {
+    if (!existing) return
+    setSelectedCustomer(existing.customer_id)
+    form.setFieldsValue({
+      customer_id: existing.customer_id,
+      sales_invoice_id: existing.sales_invoice_id ?? undefined,
+      ngay_phieu: dayjs(existing.ngay_phieu),
+      hinh_thuc_tt: existing.hinh_thuc_tt,
+      so_tai_khoan: existing.so_tai_khoan ?? undefined,
+      so_tham_chieu: existing.so_tham_chieu ?? undefined,
+      dien_giai: existing.dien_giai ?? undefined,
+      so_tien: Number(existing.so_tien),
+      phap_nhan_id: existing.phap_nhan_id ?? undefined,
+      phan_xuong_id: existing.phan_xuong_id ?? undefined,
+    })
+  }, [existing, form])
+
+  // Pre-populate from URL params (create mode)
+  useEffect(() => {
+    if (isEdit) return
     if (Number.isInteger(queryCustomerId) && queryCustomerId > 0) {
       setSelectedCustomer(queryCustomerId)
       form.setFieldsValue({ customer_id: queryCustomerId })
     }
-  }, [form, queryCustomerId])
+  }, [form, isEdit, queryCustomerId])
 
   useEffect(() => {
+    if (isEdit) return
     if (Number.isInteger(queryInvoiceId) && queryInvoiceId > 0 && unpaidInvoices.length > 0) {
       const inv = unpaidInvoices.find(i => i.id === queryInvoiceId)
       if (inv) {
@@ -70,10 +103,10 @@ export default function CashReceiptForm() {
           so_tien: Number.isFinite(queryAmount) && queryAmount > 0 ? queryAmount : inv.con_lai,
         })
       }
-    } else if (Number.isFinite(queryAmount) && queryAmount > 0) {
+    } else if (!isEdit && Number.isFinite(queryAmount) && queryAmount > 0) {
       form.setFieldsValue({ so_tien: queryAmount })
     }
-  }, [form, queryAmount, queryInvoiceId, unpaidInvoices])
+  }, [form, isEdit, queryAmount, queryInvoiceId, unpaidInvoices])
 
   const createMut = useMutation({
     mutationFn: (data: CashReceiptCreate) => receiptApi.create(data),
@@ -82,10 +115,20 @@ export default function CashReceiptForm() {
       qc.invalidateQueries({ queryKey: ['receipts'] })
       qc.invalidateQueries({ queryKey: ['ar-ledger-entries'] })
       qc.invalidateQueries({ queryKey: ['ar-ledger'] })
-      qc.invalidateQueries({ queryKey: ['ar-aging'] })
       navigate(`/accounting/receipts/${r.id}`)
     },
-    onError: (e: Error & { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo phiếu thu'),
+    onError: (e: Error) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi tạo phiếu thu'),
+  })
+
+  const updateMut = useMutation({
+    mutationFn: (data: CashReceiptUpdate) => receiptApi.update(editId!, data),
+    onSuccess: r => {
+      message.success('Cập nhật phiếu thu thành công')
+      qc.invalidateQueries({ queryKey: ['receipts'] })
+      qc.invalidateQueries({ queryKey: ['receipt', editId] })
+      navigate(`/accounting/receipts/${r.id}`)
+    },
+    onError: (e: Error) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi cập nhật phiếu thu'),
   })
 
   const handleCustomerChange = (id: number) => {
@@ -106,25 +149,45 @@ export default function CashReceiptForm() {
   }
 
   const onFinish = (values: CashReceiptCreate & { ngay_phieu: import('dayjs').Dayjs }) => {
-    createMut.mutate({
+    const payload = {
       customer_id: values.customer_id,
       sales_invoice_id: values.sales_invoice_id,
       phap_nhan_id: values.phap_nhan_id ?? null,
+      phan_xuong_id: values.phan_xuong_id ?? null,
       ngay_phieu: values.ngay_phieu.format('YYYY-MM-DD'),
       hinh_thuc_tt: values.hinh_thuc_tt,
       so_tai_khoan: values.so_tai_khoan || undefined,
       so_tham_chieu: values.so_tham_chieu || undefined,
       dien_giai: values.dien_giai || undefined,
       so_tien: values.so_tien,
-    })
+    }
+    if (isEdit) {
+      updateMut.mutate(payload)
+    } else {
+      createMut.mutate(payload)
+    }
   }
+
+  const isNotEditable = isEdit && existing?.trang_thai !== 'cho_duyet'
+  const isPending = createMut.isPending || updateMut.isPending
 
   return (
     <div style={{ padding: 24, maxWidth: 700, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/accounting/receipts')} />
-        <Title level={4} style={{ margin: 0 }}>Tạo phiếu thu</Title>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(isEdit ? `/accounting/receipts/${editId}` : '/accounting/receipts')} />
+        <Title level={4} style={{ margin: 0 }}>{isEdit ? 'Sửa phiếu thu' : 'Tạo phiếu thu'}</Title>
+        {isEdit && existing && <span style={{ color: '#888', fontSize: 13 }}>{existing.so_phieu}</span>}
       </div>
+
+      {isNotEditable && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Phiếu thu này không thể sửa"
+          description={`Trạng thái hiện tại: ${existing?.trang_thai}. Chỉ có thể sửa phiếu ở trạng thái Chờ duyệt.`}
+        />
+      )}
 
       <Form
         form={form}
@@ -136,28 +199,50 @@ export default function CashReceiptForm() {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="ngay_phieu" label="Ngày phiếu" rules={[{ required: true }]}>
-                <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+                <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} disabled={isNotEditable} />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="hinh_thuc_tt" label="Hình thức TT" rules={[{ required: true }]}>
-                <Select options={Object.entries(HINH_THUC_TT).map(([k, v]) => ({ value: k, label: v }))} />
+                <Select
+                  disabled={isNotEditable}
+                  options={Object.entries(HINH_THUC_TT)
+                    .filter(([k]) => !['TM', 'CK'].includes(k))
+                    .map(([k, v]) => ({ value: k, label: v }))}
+                />
               </Form.Item>
             </Col>
           </Row>
 
-          <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true, message: 'Chọn pháp nhân' }]}>
-            <Select
-              placeholder="Chọn pháp nhân phát hành phiếu"
-              options={phapNhanList.map(p => ({
-                value: p.id,
-                label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
-              }))}
-            />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="phap_nhan_id" label="Pháp nhân" rules={[{ required: true, message: 'Chọn pháp nhân' }]}>
+                <Select
+                  disabled={isNotEditable}
+                  loading={existingLoading}
+                  placeholder="Chọn pháp nhân phát hành phiếu"
+                  options={phapNhanList.map(p => ({
+                    value: p.id,
+                    label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
+                  }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="phan_xuong_id" label="Xưởng">
+                <Select
+                  disabled={isNotEditable}
+                  allowClear
+                  placeholder="Chọn xưởng (tùy chọn)"
+                  options={phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Form.Item name="customer_id" label="Khách hàng" rules={[{ required: true }]}>
             <QuickAddSelect
+              disabled={isNotEditable}
               config={QUICK_ADD_CONFIGS.customer}
               showSearch
               filterOption={(input, opt) =>
@@ -176,6 +261,7 @@ export default function CashReceiptForm() {
           {selectedCustomer && (
             <Form.Item name="sales_invoice_id" label="Hóa đơn thu tiền">
               <Select
+                disabled={isNotEditable}
                 allowClear
                 placeholder={unpaidInvoices.length === 0 ? 'Không có hóa đơn còn nợ' : 'Chọn hóa đơn (tùy chọn)'}
                 onChange={handleInvoiceChange}
@@ -215,6 +301,7 @@ export default function CashReceiptForm() {
             <InputNumber<number>
               style={{ width: '100%' }}
               min={1}
+              disabled={isNotEditable}
               formatter={v => v ? Number(v).toLocaleString('vi-VN') : ''}
               parser={v => Number((v ?? '').replace(/\D/g, ''))}
             />
@@ -223,27 +310,29 @@ export default function CashReceiptForm() {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="so_tai_khoan" label="Số tài khoản">
-                <Input placeholder="Số TK ngân hàng" />
+                <Input disabled={isNotEditable} placeholder="Số TK ngân hàng" />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="so_tham_chieu" label="Số tham chiếu">
-                <Input placeholder="Số chứng từ CK" />
+                <Input disabled={isNotEditable} placeholder="Số chứng từ CK" />
               </Form.Item>
             </Col>
           </Row>
 
           <Form.Item name="dien_giai" label="Diễn giải">
-            <Input.TextArea rows={2} />
+            <Input.TextArea rows={2} disabled={isNotEditable} />
           </Form.Item>
         </Card>
 
         <div style={{ textAlign: 'right' }}>
           <Space>
-            <Button onClick={() => navigate('/accounting/receipts')}>Hủy</Button>
-            <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={createMut.isPending}>
-              Tạo phiếu thu
-            </Button>
+            <Button onClick={() => navigate(isEdit ? `/accounting/receipts/${editId}` : '/accounting/receipts')}>Hủy</Button>
+            {!isNotEditable && (
+              <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={isPending}>
+                {isEdit ? 'Cập nhật' : 'Tạo phiếu thu'}
+              </Button>
+            )}
           </Space>
         </div>
       </Form>

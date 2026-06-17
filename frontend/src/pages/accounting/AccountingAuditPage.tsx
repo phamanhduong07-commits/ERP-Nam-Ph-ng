@@ -13,6 +13,7 @@ import {
   AccountingAuditLogParams,
 } from '../../api/accounting'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text, Paragraph } = Typography
 const { RangePicker } = DatePicker
@@ -147,6 +148,8 @@ export default function AccountingAuditPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-audit', columns)
+
   return (
     <div style={{ padding: 24 }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
@@ -157,9 +160,12 @@ export default function AccountingAuditPage() {
           </Space>
         </Col>
         <Col>
-          <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
-            Tải lại
-          </Button>
+          <Space>
+            {settingsButton}
+            <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
+              Tải lại
+            </Button>
+          </Space>
         </Col>
       </Row>
 
@@ -280,7 +286,7 @@ export default function AccountingAuditPage() {
         size="small"
         loading={isLoading}
         dataSource={data?.items || []}
-        columns={columns}
+        columns={displayColumns}
         scroll={{ x: 920 }}
         pagination={{
           total: data?.total || 0,

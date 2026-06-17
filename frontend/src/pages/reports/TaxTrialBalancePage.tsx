@@ -5,6 +5,7 @@ import { usePhapNhan } from '../../hooks/useMasterData'
 import { SearchOutlined, DownloadOutlined } from '@ant-design/icons'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -55,14 +56,15 @@ const TaxTrialBalancePage: React.FC = () => {
       align: 'right' as const,
       render: (val: number) => val.toLocaleString()
     },
-    { 
-      title: 'Dư cuối kỳ', 
-      dataIndex: 'so_du_cuoi', 
-      key: 'so_du_cuoi', 
+    {
+      title: 'Dư cuối kỳ',
+      dataIndex: 'so_du_cuoi',
+      key: 'so_du_cuoi',
       align: 'right' as const,
       render: (val: number) => <Text strong style={{ color: val < 0 ? 'red' : 'inherit' }}>{val.toLocaleString()}</Text>
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('reports-tax-trial-balance', columns)
 
   return (
     <PageLayout title="Bảng Cân đối Số phát sinh (Báo cáo Thuế/BCTC)">
@@ -86,12 +88,13 @@ const TaxTrialBalancePage: React.FC = () => {
           <Form.Item>
             <Button icon={<DownloadOutlined />}>Xuất Excel</Button>
           </Form.Item>
+          <Form.Item>{settingsButton}</Form.Item>
         </Form>
       </Card>
 
       <Card>
-        <Table 
-          columns={columns} 
+        <Table
+          columns={displayColumns}
           dataSource={data} 
           pagination={false} 
           bordered 

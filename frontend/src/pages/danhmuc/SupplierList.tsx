@@ -12,6 +12,7 @@ import { suppliersApi, type Supplier, type SupplierCreate } from '../../api/supp
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import MSTLookupButton from '../../components/MSTLookupButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -141,6 +142,7 @@ export default function SupplierList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-supplier', columns, { nonHideable: ['ma_ncc'] })
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
@@ -181,6 +183,7 @@ export default function SupplierList() {
               <Button onClick={() => setImportVisible(true)}>
                 Import Excel
               </Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -189,7 +192,7 @@ export default function SupplierList() {
                     locale={{ emptyText: <EmptyState size="small" preset="customer" /> }}
                     rowKey="id"
           dataSource={items}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           size="small"
           pagination={{

@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/auth'
 import { cd2Api, type KhoRow } from '../../api/cd2'
 import { warehouseApi, type TonKhoTPRow } from '../../api/warehouse'
 import client from '../../api/client'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -83,6 +84,7 @@ export default function BaoCaoPhoiTpPage() {
         v ? <Tag color="processing">{v.so_phieu}</Tag> : null,
     },
   ]
+  const { displayColumns: displayPhoiCols, settingsButton: phoiSettingsButton } = useColumnPrefs('reports-bao-cao-phoi-tp', phoiCols, { nonHideable: ['so_lenh'] })
 
   const tpCols = [
     { title: 'Số lệnh', dataIndex: 'so_lenh', width: 130, fixed: 'left' as const },
@@ -116,6 +118,7 @@ export default function BaoCaoPhoiTpPage() {
       sorter: (a: TonKhoTPRow, b: TonKhoTPRow) => b.ton_kho - a.ton_kho,
     },
   ]
+  const { displayColumns: displayTpCols } = useColumnPrefs('reports-bao-cao-phoi-tp-tp', tpCols, { nonHideable: ['so_lenh'] })
 
   const totalPhoiTon = phoiData.reduce((s, r) => s + (r.ton_kho || 0), 0)
   const totalTpTon = tpData.reduce((s, r) => s + (r.ton_kho || 0), 0)
@@ -144,6 +147,7 @@ export default function BaoCaoPhoiTpPage() {
           {isLocked && (
             <Tag color="blue">Hiển thị: {user?.ho_ten}</Tag>
           )}
+          {phoiSettingsButton}
         </Col>
       </Row>
 
@@ -192,7 +196,7 @@ export default function BaoCaoPhoiTpPage() {
             ) : (
               <Table
                 dataSource={phoiData}
-                columns={phoiCols}
+                columns={displayPhoiCols}
                 rowKey={r => `${r.production_order_id}-${r.warehouse_id}`}
                 size="small"
                 scroll={{ x: 1000 }}
@@ -208,7 +212,7 @@ export default function BaoCaoPhoiTpPage() {
             ) : (
               <Table
                 dataSource={tpData}
-                columns={tpCols}
+                columns={displayTpCols}
                 rowKey={r => `${r.production_order_id}-${r.warehouse_id}`}
                 size="small"
                 scroll={{ x: 1100 }}

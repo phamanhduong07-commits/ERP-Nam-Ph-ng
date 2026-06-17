@@ -11,6 +11,7 @@ import { cauTrucApi, type CauTruc, type CauTrucCreate } from '../../api/cauTruc'
 import { paperMaterialsApi, TO_HOP_SONG_OPTIONS, getSongType } from '../../api/quotes'
 import EmptyState from "../../components/EmptyState"
 import { useHotkey } from '../../hooks/useHotkey'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -289,6 +290,7 @@ export default function CauTrucList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-cau-truc', columns)
 
   return (
     <div>
@@ -315,6 +317,7 @@ export default function CauTrucList() {
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm kết cấu
               </Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
@@ -323,7 +326,7 @@ export default function CauTrucList() {
                     locale={{ emptyText: <EmptyState size="small" /> }}
                     rowKey="id"
           dataSource={data}
-          columns={columns}
+          columns={displayColumns}
           loading={isLoading}
           pagination={{ pageSize: 20 }}
           size="small"

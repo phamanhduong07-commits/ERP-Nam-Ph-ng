@@ -8,6 +8,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { xeApi, type Xe } from '../../api/simpleApis'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title } = Typography
 
@@ -74,6 +75,7 @@ export default function XeList() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-xe', columns)
 
   return (
     <div>
@@ -84,10 +86,11 @@ export default function XeList() {
             <Space>
               <ImportExcelButton endpoint="/api/xe" templateFilename="mau_import_xe.xlsx" buttonText="Import Excel" onImported={() => queryClient.invalidateQueries({ queryKey: ['xe'] })} />
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Them moi</Button>
+              {settingsButton}
             </Space>
           </Col>
         </Row>
-        <Table rowKey="id" dataSource={data} columns={columns} loading={isLoading} pagination={{ pageSize: 20 }} size="small" />
+        <Table rowKey="id" dataSource={data} columns={displayColumns} loading={isLoading} pagination={{ pageSize: 20 }} size="small" />
       </Card>
 
       <Modal title={editing ? 'Sua xe' : 'Them xe'} open={modalOpen} onCancel={closeModal} onOk={handleSave} confirmLoading={createMut.isPending || updateMut.isPending} okText="Luu" cancelText="Huy" destroyOnClose>

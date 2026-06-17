@@ -16,6 +16,7 @@ import { phapNhanApi, PhapNhan } from '../../api/phap-nhan'
 import { DragOutlined } from '@ant-design/icons'
 import EmptyState from "../../components/EmptyState"
 import { useAuthStore } from '../../store/auth'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -749,6 +750,8 @@ export default function PrintTemplatePage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('master-print-template', columns, { nonHideable: ['ma_mau'] })
+
   const deleteMut = useMutation({
     mutationFn: (record: PrintTemplate) =>
       systemApi.deleteTemplate(record.ma_mau, record.phap_nhan_id ?? undefined),
@@ -782,32 +785,35 @@ export default function PrintTemplatePage() {
             key: 'print',
             label: <span><LayoutOutlined /> Biểu mẫu In ấn (PDF)</span>,
             children: (
-              <Card 
+              <Card
                 title={<Title level={4} style={{ margin: 0 }}>⚙ Quản lý Biểu mẫu In ấn</Title>}
                 extra={
-                  <Button 
-                    type="primary" 
-                    icon={<PlusOutlined />} 
-                    onClick={() => {
-                      setIsNewMode(true)
-                      setEditModal({ ma_mau: '', ten_mau: '', html_content: '' })
-                      form.resetFields()
-                      setEasyConfig(DEFAULT_CONFIG)
-                      setSelectedPhapNhanId(phapNhans[0]?.id ?? null)
-                    }}
-                  >
-                    Thêm mẫu mới
-                  </Button>
+                  <Space>
+                    {settingsButton}
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={() => {
+                        setIsNewMode(true)
+                        setEditModal({ ma_mau: '', ten_mau: '', html_content: '' })
+                        form.resetFields()
+                        setEasyConfig(DEFAULT_CONFIG)
+                        setSelectedPhapNhanId(phapNhans[0]?.id ?? null)
+                      }}
+                    >
+                      Thêm mẫu mới
+                    </Button>
+                  </Space>
                 }
               >
-                <Alert 
+                <Alert
                   message="Hệ thống In ấn đa Pháp nhân"
                   description="Hệ thống tự động lưu mẫu in riêng cho từng pháp nhân khi bạn chọn pháp nhân trong trình thiết kế và nhấn Lưu."
                   type="success"
                   showIcon
                   style={{ marginBottom: 24 }}
                 />
-                <Table dataSource={templates} columns={columns} rowKey={(r, i) => `${r.ma_mau}_${r.phap_nhan_id || 0}`} loading={isLoading} pagination={false} />
+                <Table dataSource={templates} columns={displayColumns} rowKey={(r, i) => `${r.ma_mau}_${r.phap_nhan_id || 0}`} loading={isLoading} pagination={false} />
               </Card>
             )
           },
@@ -1159,10 +1165,12 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
 
   const sumColOptions = (form.getFieldValue('column_config') as ExcelColumnConfig[] ?? []).map(c => ({ label: c.label, value: c.key }))
 
+  const { displayColumns: displayExcelColumns, settingsButton: excelSettingsButton } = useColumnPrefs('master-print-template-excel', tableColumns, { nonHideable: ['ma_mau'] })
+
   return (
     <Card
       title={<Title level={4} style={{ margin: 0 }}>📊 Mẫu xuất Excel</Title>}
-      extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => {
+      extra={<Space>{excelSettingsButton}<Button type="primary" icon={<PlusOutlined />} onClick={() => {
         setEditModal({ ma_mau: '', ten_mau: '', column_config: [] })
         form.resetFields()
         setSelectedPhapNhanId(null)
@@ -1171,9 +1179,9 @@ function ExcelTemplateTab({ phapNhans }: { phapNhans: PhapNhan[] }) {
         setFooterConfig({ show_total: false, sum_columns: [], show_signatures: false, signatures: [] })
         setAvailableColumns([])
         setAvailableMetaKeys([])
-      }}>Thêm mẫu</Button>}
+      }}>Thêm mẫu</Button></Space>}
     >
-      <Table dataSource={templates} columns={tableColumns} loading={isLoading} rowKey={r => `${r.ma_mau}_${r.phap_nhan_id || 0}`} pagination={false} size="small" />
+      <Table dataSource={templates} columns={displayExcelColumns} loading={isLoading} rowKey={r => `${r.ma_mau}_${r.phap_nhan_id || 0}`} pagination={false} size="small" />
 
       <Modal
         title="Thiết kế mẫu Excel"

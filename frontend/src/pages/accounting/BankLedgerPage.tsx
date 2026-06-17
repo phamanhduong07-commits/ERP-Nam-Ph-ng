@@ -10,6 +10,8 @@ import dayjs from 'dayjs'
 import { bankLedgerApi, bankAccountsApi, type LedgerEntry } from '../../api/banking'
 import { exportToExcel } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
+import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -21,6 +23,10 @@ export default function BankLedgerPage() {
     today,
   ])
   const [selectedAccount, setSelectedAccount] = useState<string | undefined>()
+  const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
+  const [filterPhanXuong, setFilterPhanXuong] = useState<number | undefined>()
+  const { phapNhanList } = usePhapNhan()
+  const { phanXuongList } = usePhanXuong()
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['bank-accounts'],
@@ -28,13 +34,15 @@ export default function BankLedgerPage() {
   })
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['bank-ledger', range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD'), selectedAccount],
+    queryKey: ['bank-ledger', range[0].format('YYYY-MM-DD'), range[1].format('YYYY-MM-DD'), selectedAccount, filterPhapNhan, filterPhanXuong],
     queryFn: () =>
       bankLedgerApi
         .getBankLedger(
           range[0].format('YYYY-MM-DD'),
           range[1].format('YYYY-MM-DD'),
           selectedAccount,
+          filterPhapNhan,
+          filterPhanXuong,
         )
         .then(r => r.data),
     enabled: true,
@@ -80,6 +88,20 @@ export default function BankLedgerPage() {
         ) : '',
     },
     {
+      title: 'Pháp nhân',
+      dataIndex: 'ten_phap_nhan',
+      width: 130,
+      ellipsis: true,
+      render: v => v ?? '—',
+    },
+    {
+      title: 'Phân xưởng',
+      dataIndex: 'ten_phan_xuong',
+      width: 120,
+      ellipsis: true,
+      render: v => v ?? '—',
+    },
+    {
       title: 'Số dư (đ)',
       dataIndex: 'so_du',
       align: 'right',
@@ -91,6 +113,7 @@ export default function BankLedgerPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-bank-ledger', columns, { nonHideable: ['so_chung_tu'] })
 
   const handleExportExcel = () => {
     if (!data) return
@@ -99,7 +122,7 @@ export default function BankLedgerPage() {
     const accLabel = selectedAccount ? `_${selectedAccount}` : ''
     exportToExcel(`SoNganHang${accLabel}_${tu}_${den}`, [{
       name: 'Sổ ngân hàng',
-      headers: ['Ngày', 'Số chứng từ', 'Loại', 'Đối tượng', 'Diễn giải', 'Số tham chiếu', 'Thu (đ)', 'Chi (đ)', 'Số dư (đ)'],
+      headers: ['Ngày', 'Số chứng từ', 'Loại', 'Đối tượng', 'Diễn giải', 'Số tham chiếu', 'Pháp nhân', 'Phân xưởng', 'Thu (đ)', 'Chi (đ)', 'Số dư (đ)'],
       rows: (data.entries ?? []).map((r: LedgerEntry) => [
         dayjs(r.ngay).format('DD/MM/YYYY'),
         r.so_chung_tu,
@@ -107,11 +130,13 @@ export default function BankLedgerPage() {
         r.doi_tuong,
         r.dien_giai,
         r.so_tham_chieu ?? '',
+        (r as any).ten_phap_nhan ?? '',
+        (r as any).ten_phan_xuong ?? '',
         Number(r.thu) > 0 ? Number(r.thu) : '',
         Number(r.chi) > 0 ? Number(r.chi) : '',
         Number(r.so_du),
       ]),
-      colWidths: [12, 18, 8, 22, 28, 18, 16, 16, 18],
+      colWidths: [12, 18, 8, 22, 28, 18, 16, 14, 16, 16, 18],
     }])
   }
 
@@ -124,6 +149,7 @@ export default function BankLedgerPage() {
             Xuất Excel
           </Button>
           <Button icon={<PrinterOutlined />} onClick={() => window.print()}>In</Button>
+          {settingsButton}
         </Space>
       }
     >
@@ -143,6 +169,22 @@ export default function BankLedgerPage() {
           value={range}
           onChange={v => v && setRange([v[0]!, v[1]!])}
           format="DD/MM/YYYY"
+        />
+        <Select
+          style={{ width: 180 }}
+          allowClear
+          placeholder="Pháp nhân"
+          value={filterPhapNhan}
+          onChange={v => setFilterPhapNhan(v)}
+          options={phapNhanList.map(p => ({ value: p.id, label: p.ten_phap_nhan }))}
+        />
+        <Select
+          style={{ width: 160 }}
+          allowClear
+          placeholder="Phân xưởng"
+          value={filterPhanXuong}
+          onChange={v => setFilterPhanXuong(v)}
+          options={phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))}
         />
         <Button type="primary" icon={<SearchOutlined />} onClick={() => refetch()}>
           Xem sổ
@@ -193,7 +235,7 @@ export default function BankLedgerPage() {
           <Table
                         locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
                         rowKey="so_chung_tu"
-            columns={columns}
+            columns={displayColumns}
             dataSource={data.entries}
             loading={isLoading}
             pagination={false}

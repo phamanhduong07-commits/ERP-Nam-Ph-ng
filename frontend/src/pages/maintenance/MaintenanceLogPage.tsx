@@ -9,6 +9,7 @@ import dayjs from 'dayjs'
 import axios from 'axios'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 interface Machine {
   id: number
@@ -109,6 +110,7 @@ export default function MaintenanceLogPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('maintenance-log', columns)
 
   const onSubmit = (values: Record<string, unknown>) => {
     const payload = {
@@ -125,9 +127,12 @@ export default function MaintenanceLogPage() {
     <PageLayout
       title="Nhật ký bảo trì"
       actions={
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
-          Ghi nhật ký
-        </Button>
+        <Space>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
+            Ghi nhật ký
+          </Button>
+          {settingsButton}
+        </Space>
       }
     >
       <Row gutter={16} style={{ marginBottom: 16 }}>
@@ -155,7 +160,7 @@ export default function MaintenanceLogPage() {
                     rowKey="id"
           loading={isLoading}
           dataSource={logs}
-          columns={columns}
+          columns={displayColumns}
           pagination={{ pageSize: 20 }}
         />
       </Card>

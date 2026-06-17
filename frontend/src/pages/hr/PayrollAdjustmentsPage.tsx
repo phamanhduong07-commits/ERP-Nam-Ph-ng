@@ -19,6 +19,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { hrApi } from '../../api/hr'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const fmtVND = (v: number) => Number(v || 0).toLocaleString('vi-VN') + 'đ'
@@ -131,6 +132,42 @@ export default function PayrollAdjustmentsPage() {
 
   const loaiWatch = Form.useWatch('loai', form)
   const subLoaiOptions = loaiWatch === 'khau_tru' ? (enumData?.khau_tru || []) : (enumData?.cong_them || [])
+
+  const columns = [
+    { title: 'Nhân viên', dataIndex: 'ho_ten', render: (v: string, r: any) => (
+      <Space>
+        <Avatar size="small" style={{ backgroundColor: '#fa8c16' }}>{(v || '?').charAt(0)}</Avatar>
+        <div><div>{v}</div><Text type="secondary" style={{ fontSize: 11 }}>{r.ma_nv} · {r.ten_bo_phan}</Text></div>
+      </Space>
+    )},
+    { title: 'Loại', dataIndex: 'loai', width: 110,
+      render: (v: string) => v === 'cong_them' ? <Tag color="green">🟢 Cộng thêm</Tag> : <Tag color="red">🔴 Khấu trừ</Tag> },
+    { title: 'Chi tiết', dataIndex: 'sub_loai_label' },
+    { title: 'Số tiền', dataIndex: 'so_tien', width: 140, align: 'right' as const,
+      render: (v: number, r: any) => (
+        <Text strong style={{ color: r.loai === 'cong_them' ? '#52c41a' : '#cf1322', fontSize: 14 }}>
+          {r.loai === 'cong_them' ? '+' : '−'} {fmtVND(v)}
+        </Text>
+      ) },
+    { title: 'Ngày phát sinh', dataIndex: 'ngay_phat_sinh', width: 130,
+      render: (v: string) => v ? dayjs(v).format('DD/MM/YYYY') : '—' },
+    { title: 'Trạng thái', dataIndex: 'trang_thai', width: 120,
+      render: (v: string) => v === 'da_duyet' ? <Tag color="green">✓ Đã duyệt</Tag> : <Tag color="gold">⏳ Chờ duyệt</Tag> },
+    { title: '', width: 130, render: (_: unknown, r: any) => (
+      <Space size={4}>
+        {r.trang_thai === 'du_thao' && (
+          <Popconfirm title="Duyệt khoản này?" onConfirm={() => approveMut.mutate(r.id)}>
+            <Button size="small" type="primary" icon={<CheckCircleOutlined />}>OK</Button>
+          </Popconfirm>
+        )}
+        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+        <Popconfirm title="Xóa khoản này?" onConfirm={() => delMut.mutate(r.id)}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      </Space>
+    )},
+  ]
+  const { displayColumns, settingsButton } = useColumnPrefs('hr-payroll-adjustments', columns)
 
   return (
     <div style={{ padding: '0 0 24px 0' }}>
@@ -262,40 +299,8 @@ export default function PayrollAdjustmentsPage() {
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table size="small" rowKey="id" loading={isLoading} dataSource={items}
-          columns={[
-            { title: 'Nhân viên', dataIndex: 'ho_ten', render: (v: string, r: any) => (
-              <Space>
-                <Avatar size="small" style={{ backgroundColor: '#fa8c16' }}>{(v || '?').charAt(0)}</Avatar>
-                <div><div>{v}</div><Text type="secondary" style={{ fontSize: 11 }}>{r.ma_nv} · {r.ten_bo_phan}</Text></div>
-              </Space>
-            )},
-            { title: 'Loại', dataIndex: 'loai', width: 110,
-              render: (v: string) => v === 'cong_them' ? <Tag color="green">🟢 Cộng thêm</Tag> : <Tag color="red">🔴 Khấu trừ</Tag> },
-            { title: 'Chi tiết', dataIndex: 'sub_loai_label' },
-            { title: 'Số tiền', dataIndex: 'so_tien', width: 140, align: 'right' as const,
-              render: (v: number, r: any) => (
-                <Text strong style={{ color: r.loai === 'cong_them' ? '#52c41a' : '#cf1322', fontSize: 14 }}>
-                  {r.loai === 'cong_them' ? '+' : '−'} {fmtVND(v)}
-                </Text>
-              ) },
-            { title: 'Ngày phát sinh', dataIndex: 'ngay_phat_sinh', width: 130,
-              render: (v: string) => v ? dayjs(v).format('DD/MM/YYYY') : '—' },
-            { title: 'Trạng thái', dataIndex: 'trang_thai', width: 120,
-              render: (v: string) => v === 'da_duyet' ? <Tag color="green">✓ Đã duyệt</Tag> : <Tag color="gold">⏳ Chờ duyệt</Tag> },
-            { title: '', width: 130, render: (_, r: any) => (
-              <Space size={4}>
-                {r.trang_thai === 'du_thao' && (
-                  <Popconfirm title="Duyệt khoản này?" onConfirm={() => approveMut.mutate(r.id)}>
-                    <Button size="small" type="primary" icon={<CheckCircleOutlined />}>OK</Button>
-                  </Popconfirm>
-                )}
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                <Popconfirm title="Xóa khoản này?" onConfirm={() => delMut.mutate(r.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
-              </Space>
-            )},
-          ]}
+          columns={displayColumns}
+          title={() => <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px' }}>{settingsButton}</div>}
           pagination={{ pageSize: 30, showTotal: (t) => `Tổng ${t} bản ghi` }} />
       </Card>
 

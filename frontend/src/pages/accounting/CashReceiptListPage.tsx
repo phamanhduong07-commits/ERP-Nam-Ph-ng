@@ -1,27 +1,26 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useHotkey } from '../../hooks/useHotkey'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Card, Col, DatePicker, Dropdown, Form, Input,
-  Modal, Row, Select, Space, Table, Tag, Typography, Upload, message,
+  Button, Card, Col, DatePicker, Dropdown,
+  Row, Select, Space, Table, Tag, Typography, message,
 } from 'antd'
 import {
   PlusOutlined, FileExcelOutlined, DownOutlined,
-  UploadOutlined, SwapOutlined, CheckCircleOutlined, CloseCircleOutlined,
+  UploadOutlined, SwapOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { MenuProps } from 'antd'
-import type { UploadFile } from 'antd/es/upload'
 import dayjs from 'dayjs'
 import { exportToExcel, fmtVND } from '../../utils/exportUtils'
 import {
   receiptApi, TRANG_THAI_PHIEU_THU, HINH_THUC_TT, CashReceipt,
-  BatchReceiptResponse,
 } from '../../api/accounting'
 import { usePhapNhan, usePhanXuong } from '../../hooks/useMasterData'
 import EmptyState from '../../components/EmptyState'
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -38,14 +37,6 @@ export default function CashReceiptListPage() {
   const [filterPhanXuong, setFilterPhanXuong] = useState<number | undefined>()
   const [page, setPage] = useState(1)
 
-  // Excel import state
-  const [importOpen, setImportOpen] = useState(false)
-  const [importFile, setImportFile] = useState<UploadFile | null>(null)
-  const [importNgay, setImportNgay] = useState<string>(dayjs().format('YYYY-MM-DD'))
-  const [importPhapNhan, setImportPhapNhan] = useState<number | undefined>()
-  const [importPhanXuong, setImportPhanXuong] = useState<number | undefined>()
-  const [importResult, setImportResult] = useState<BatchReceiptResponse | null>(null)
-
   const { data, isLoading } = useQuery({
     queryKey: ['receipts', tuNgay, denNgay, filterTrangThai, filterPhapNhan, filterPhanXuong, page],
     queryFn: () =>
@@ -55,21 +46,6 @@ export default function CashReceiptListPage() {
   const receipts: CashReceipt[] = data?.items ?? data ?? []
   const total: number = data?.total ?? receipts.length
   const tongSoTien = receipts.reduce((s: number, r: CashReceipt) => s + (r.so_tien ?? 0), 0)
-
-  const importMut = useMutation({
-    mutationFn: ({ file, ngay, phapNhan, phanXuong }: { file: File; ngay: string; phapNhan?: number; phanXuong?: number }) =>
-      receiptApi.importExcel(file, { ngay_phieu: ngay, phap_nhan_id: phapNhan, phan_xuong_id: phanXuong }),
-    onSuccess: (result) => {
-      setImportResult(result)
-      qc.invalidateQueries({ queryKey: ['receipts'] })
-      if (result.that_bai === 0) {
-        message.success(`Import thành công ${result.thanh_cong} phiếu thu`)
-      } else {
-        message.warning(`Import ${result.thanh_cong} thành công, ${result.that_bai} lỗi`)
-      }
-    },
-    onError: () => message.error('Import thất bại'),
-  })
 
   const handleExcel = () => {
     const rows = receipts.map((r: CashReceipt, i: number) => ({
@@ -89,29 +65,6 @@ export default function CashReceiptListPage() {
       headers: Object.keys(rows[0] ?? {}),
       rows: rows.map((r: Record<string, string | number>) => Object.values(r)),
     }])
-  }
-
-  const handleDownloadTemplate = async () => {
-    try {
-      const blob = await receiptApi.downloadTemplate()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'mau_import_phieu_thu.xlsx'
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      message.error('Không tải được mẫu Excel')
-    }
-  }
-
-  const handleImportSubmit = () => {
-    if (!importFile?.originFileObj) {
-      message.error('Chọn file Excel trước')
-      return
-    }
-    setImportResult(null)
-    importMut.mutate({ file: importFile.originFileObj, ngay: importNgay, phapNhan: importPhapNhan, phanXuong: importPhanXuong })
   }
 
   useHotkey('ctrl+n', () => navigate('/accounting/receipts/new'), 'Tạo phiếu thu mới')
@@ -221,6 +174,7 @@ export default function CashReceiptListPage() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-cash-receipt', columns, { nonHideable: ['so_phieu'] })
 
   return (
     <PageLayout
@@ -233,6 +187,7 @@ export default function CashReceiptListPage() {
               Thu tiền <DownOutlined />
             </Button>
           </Dropdown>
+          {settingsButton}
         </Space>
       }
     >
@@ -282,7 +237,7 @@ export default function CashReceiptListPage() {
 
       <Table
         locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-        columns={columns}
+        columns={displayColumns}
         dataSource={receipts}
         rowKey="id"
         loading={isLoading}
@@ -296,119 +251,6 @@ export default function CashReceiptListPage() {
         }}
       />
 
-      {/* Modal nhập từ Excel */}
-      <Modal
-        title="Nhập phiếu thu từ Excel"
-        open={importOpen}
-        onCancel={() => { setImportOpen(false); setImportResult(null) }}
-        footer={null}
-        width={600}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <Alert
-            type="info"
-            showIcon
-            message="Cột Excel theo mẫu chuẩn"
-            description={
-              <div>
-                <div style={{ marginBottom: 6 }}>
-                  Bắt buộc: <b>Doi tuong</b> (mã KH), <b>So tien</b>.
-                  Tùy chọn: Ngay hach toan, Dien giai, So tai khoan NH, Ly do thu, Loai chung tu (TM/CK).
-                </div>
-                <Button size="small" icon={<FileExcelOutlined />} onClick={handleDownloadTemplate}>
-                  Tải mẫu Excel
-                </Button>
-              </div>
-            }
-          />
-        </div>
-
-        <Form layout="vertical">
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="Ngày phiếu">
-                <DatePicker
-                  style={{ width: '100%' }}
-                  format="DD/MM/YYYY"
-                  defaultValue={dayjs()}
-                  onChange={v => setImportNgay(v?.format('YYYY-MM-DD') ?? dayjs().format('YYYY-MM-DD'))}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="Pháp nhân">
-                <Select
-                  allowClear
-                  placeholder="Chọn pháp nhân"
-                  onChange={v => setImportPhapNhan(v)}
-                  options={phapNhanList.map(p => ({ value: p.id, label: p.ten_phap_nhan }))}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item label="Xưởng" rules={[{ required: true, message: 'Chọn xưởng' }]}>
-            <Select
-              allowClear
-              placeholder="Chọn xưởng"
-              onChange={v => setImportPhanXuong(v)}
-              options={phanXuongList.map(x => ({ value: x.id, label: x.ten_xuong }))}
-            />
-          </Form.Item>
-
-          <Form.Item label="File Excel (.xlsx)">
-            <Upload
-              accept=".xlsx,.xls"
-              maxCount={1}
-              beforeUpload={() => false}
-              onChange={({ fileList }) => setImportFile(fileList[0] ?? null)}
-            >
-              <Button icon={<UploadOutlined />}>Chọn file</Button>
-            </Upload>
-          </Form.Item>
-
-          <div style={{ textAlign: 'right', marginBottom: importResult ? 16 : 0 }}>
-            <Space>
-              <Button onClick={() => { setImportOpen(false); setImportResult(null) }}>Đóng</Button>
-              <Button
-                type="primary"
-                loading={importMut.isPending}
-                disabled={!importFile}
-                onClick={handleImportSubmit}
-              >
-                Import
-              </Button>
-            </Space>
-          </div>
-        </Form>
-
-        {importResult && (
-          <div style={{ marginTop: 16 }}>
-            <Alert
-              type={importResult.that_bai === 0 ? 'success' : 'warning'}
-              message={`Kết quả: ${importResult.thanh_cong}/${importResult.tong_so} thành công`}
-              showIcon
-            />
-            {importResult.items.length > 0 && (
-              <div style={{ maxHeight: 200, overflowY: 'auto', marginTop: 8 }}>
-                {importResult.items.map(item => (
-                  <div key={item.index} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '3px 0' }}>
-                    {item.success
-                      ? <CheckCircleOutlined style={{ color: '#52c41a' }} />
-                      : <CloseCircleOutlined style={{ color: '#ff4d4f' }} />
-                    }
-                    <Text style={{ fontSize: 12 }}>
-                      {item.success
-                        ? `${item.so_phieu} — ${fmtVND(item.so_tien)}`
-                        : item.error
-                      }
-                    </Text>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
     </PageLayout>
   )
 }

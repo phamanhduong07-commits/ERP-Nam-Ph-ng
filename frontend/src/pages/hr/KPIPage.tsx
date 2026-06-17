@@ -22,6 +22,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { hrApi } from '../../api/hr'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -354,43 +355,49 @@ function CyclesTab() {
     han_ql_danh_gia: v.han_ql_danh_gia?.format('YYYY-MM-DD'),
   })
 
+  const cycleColumns = [
+    { title: 'Tên chu kỳ', dataIndex: 'ten', render: (v: string) => <strong>{v}</strong> },
+    { title: 'Loại', dataIndex: 'loai', width: 110,
+      render: (v: string) => LOAI_CYCLE.find(o => o.value === v)?.label },
+    { title: 'Thời gian', width: 180,
+      render: (_: unknown, r: any) => `${dayjs(r.ngay_bat_dau).format('DD/MM/YY')} → ${dayjs(r.ngay_ket_thuc).format('DD/MM/YY')}` },
+    { title: 'Tỷ lệ NV/QL', width: 110, align: 'center' as const,
+      render: (_: unknown, r: any) => `${r.ty_le_nv}% / ${r.ty_le_ql}%` },
+    { title: 'Đánh giá', dataIndex: 'so_evaluation', width: 100, align: 'center' as const,
+      render: (v: number) => <Badge count={v} showZero color="#1677ff" /> },
+    { title: 'Trạng thái', dataIndex: 'trang_thai', width: 140,
+      render: (v: string) => {
+        const m = TRANG_THAI_CYCLE.find(t => t.value === v)
+        return <Tag color={m?.color}>{m?.label || v}</Tag>
+      }},
+    { title: '', width: 180, render: (_: unknown, r: any) => (
+      <Space size={4}>
+        <Tooltip title="Sinh đánh giá hàng loạt cho NV">
+          <Button size="small" icon={<RocketOutlined />} onClick={() => { setGenOpen(r); genForm.resetFields(); genForm.setFieldsValue({ cycle_id: r.id }) }}>
+            Sinh
+          </Button>
+        </Tooltip>
+        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+        <Popconfirm title="Xóa chu kỳ? (xóa cả evaluations bên trong)" onConfirm={() => delMut.mutate(r.id)}>
+          <Button size="small" danger icon={<DeleteOutlined />} />
+        </Popconfirm>
+      </Space>
+    )},
+  ]
+  const { displayColumns: cycleDisplayColumns, settingsButton: cycleSettingsButton } = useColumnPrefs('hr-kpi-cycles', cycleColumns)
+
   return (
     <>
       <Row justify="end" style={{ marginBottom: 12 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Tạo chu kỳ</Button>
+        <Space>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Tạo chu kỳ</Button>
+          {cycleSettingsButton}
+        </Space>
       </Row>
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           size="small" rowKey="id" loading={isLoading} dataSource={cycles}
-          columns={[
-            { title: 'Tên chu kỳ', dataIndex: 'ten', render: (v: string) => <strong>{v}</strong> },
-            { title: 'Loại', dataIndex: 'loai', width: 110,
-              render: (v: string) => LOAI_CYCLE.find(o => o.value === v)?.label },
-            { title: 'Thời gian', width: 180,
-              render: (_, r: any) => `${dayjs(r.ngay_bat_dau).format('DD/MM/YY')} → ${dayjs(r.ngay_ket_thuc).format('DD/MM/YY')}` },
-            { title: 'Tỷ lệ NV/QL', width: 110, align: 'center' as const,
-              render: (_, r: any) => `${r.ty_le_nv}% / ${r.ty_le_ql}%` },
-            { title: 'Đánh giá', dataIndex: 'so_evaluation', width: 100, align: 'center' as const,
-              render: (v: number) => <Badge count={v} showZero color="#1677ff" /> },
-            { title: 'Trạng thái', dataIndex: 'trang_thai', width: 140,
-              render: (v: string) => {
-                const m = TRANG_THAI_CYCLE.find(t => t.value === v)
-                return <Tag color={m?.color}>{m?.label || v}</Tag>
-              }},
-            { title: '', width: 180, render: (_, r: any) => (
-              <Space size={4}>
-                <Tooltip title="Sinh đánh giá hàng loạt cho NV">
-                  <Button size="small" icon={<RocketOutlined />} onClick={() => { setGenOpen(r); genForm.resetFields(); genForm.setFieldsValue({ cycle_id: r.id }) }}>
-                    Sinh
-                  </Button>
-                </Tooltip>
-                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-                <Popconfirm title="Xóa chu kỳ? (xóa cả evaluations bên trong)" onConfirm={() => delMut.mutate(r.id)}>
-                  <Button size="small" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
-              </Space>
-            )},
-          ]}
+          columns={cycleDisplayColumns}
           pagination={false}
         />
       </Card>
@@ -469,6 +476,33 @@ function EvaluationsTab() {
     queryFn: () => hrApi.kpiListEvaluations({ cycle_id: filterCycle, trang_thai: filterStatus }).then(r => r.data),
   })
 
+  const evalColumns = [
+    { title: 'Nhân viên', dataIndex: 'ho_ten', render: (v: string, r: any) => (
+      <Space>
+        <Avatar icon={<UserOutlined />} size="small" style={{ backgroundColor: '#722ed1' }}>{(v || '?').charAt(0)}</Avatar>
+        <div><div><a onClick={() => setDrawerId(r.id)}>{v}</a></div>
+          <Text type="secondary" style={{ fontSize: 11 }}>{r.ma_nv} · {r.ten_bo_phan}</Text></div>
+      </Space>
+    )},
+    { title: 'Chu kỳ', dataIndex: 'ten_chu_ky', width: 130 },
+    { title: 'Quản lý', dataIndex: 'ten_quan_ly', width: 150,
+      render: (v: string) => v || <Text type="secondary">— chưa gán —</Text> },
+    { title: 'Điểm NV', dataIndex: 'diem_nv_tu_cham', width: 90, align: 'center' as const,
+      render: (v: number) => v != null ? <Text strong>{v.toFixed(2)}</Text> : '—' },
+    { title: 'Điểm QL', dataIndex: 'diem_quan_ly', width: 90, align: 'center' as const,
+      render: (v: number) => v != null ? <Text strong>{v.toFixed(2)}</Text> : '—' },
+    { title: 'Điểm cuối', dataIndex: 'diem_cuoi_cung', width: 110, align: 'center' as const,
+      render: (v: number, r: any) => v != null ? (
+        <>
+          <Text strong style={{ color: XEP_LOAI_COLOR[r.xep_loai] || '#000', fontSize: 16 }}>{v.toFixed(2)}</Text>
+          {r.xep_loai && <Tag style={{ marginLeft: 4, fontWeight: 700, color: XEP_LOAI_COLOR[r.xep_loai] }}>{r.xep_loai}</Tag>}
+        </>
+      ) : '—' },
+    { title: 'Trạng thái', dataIndex: 'trang_thai', width: 160,
+      render: (v: string) => { const m = TRANG_THAI_EVAL[v]; return <Tag color={m?.color}>{m?.label || v}</Tag> }},
+  ]
+  const { displayColumns: evalDisplayColumns, settingsButton: evalSettingsButton } = useColumnPrefs('hr-kpi-evaluations', evalColumns)
+
   return (
     <>
       <Card size="small" style={{ marginBottom: 12 }}>
@@ -484,7 +518,10 @@ function EvaluationsTab() {
               options={Object.entries(TRANG_THAI_EVAL).map(([k, v]) => ({ value: k, label: v.label }))} />
           </Col>
           <Col xs={24} md={8}>
-            <Text type="secondary">Hiển thị <strong>{evals.length}</strong> bản đánh giá</Text>
+            <Space>
+              <Text type="secondary">Hiển thị <strong>{evals.length}</strong> bản đánh giá</Text>
+              {evalSettingsButton}
+            </Space>
           </Col>
         </Row>
       </Card>
@@ -492,31 +529,7 @@ function EvaluationsTab() {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table
           size="small" rowKey="id" loading={isLoading} dataSource={evals}
-          columns={[
-            { title: 'Nhân viên', dataIndex: 'ho_ten', render: (v: string, r: any) => (
-              <Space>
-                <Avatar icon={<UserOutlined />} size="small" style={{ backgroundColor: '#722ed1' }}>{(v || '?').charAt(0)}</Avatar>
-                <div><div><a onClick={() => setDrawerId(r.id)}>{v}</a></div>
-                  <Text type="secondary" style={{ fontSize: 11 }}>{r.ma_nv} · {r.ten_bo_phan}</Text></div>
-              </Space>
-            )},
-            { title: 'Chu kỳ', dataIndex: 'ten_chu_ky', width: 130 },
-            { title: 'Quản lý', dataIndex: 'ten_quan_ly', width: 150,
-              render: (v: string) => v || <Text type="secondary">— chưa gán —</Text> },
-            { title: 'Điểm NV', dataIndex: 'diem_nv_tu_cham', width: 90, align: 'center' as const,
-              render: (v: number) => v != null ? <Text strong>{v.toFixed(2)}</Text> : '—' },
-            { title: 'Điểm QL', dataIndex: 'diem_quan_ly', width: 90, align: 'center' as const,
-              render: (v: number) => v != null ? <Text strong>{v.toFixed(2)}</Text> : '—' },
-            { title: 'Điểm cuối', dataIndex: 'diem_cuoi_cung', width: 110, align: 'center' as const,
-              render: (v: number, r: any) => v != null ? (
-                <>
-                  <Text strong style={{ color: XEP_LOAI_COLOR[r.xep_loai] || '#000', fontSize: 16 }}>{v.toFixed(2)}</Text>
-                  {r.xep_loai && <Tag style={{ marginLeft: 4, fontWeight: 700, color: XEP_LOAI_COLOR[r.xep_loai] }}>{r.xep_loai}</Tag>}
-                </>
-              ) : '—' },
-            { title: 'Trạng thái', dataIndex: 'trang_thai', width: 160,
-              render: (v: string) => { const m = TRANG_THAI_EVAL[v]; return <Tag color={m?.color}>{m?.label || v}</Tag> }},
-          ]}
+          columns={evalDisplayColumns}
           pagination={{ pageSize: 30 }}
         />
       </Card>

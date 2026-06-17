@@ -12,6 +12,7 @@ import QRCode from 'qrcode'
 import { cd2Api, MayIn, MaySauIn, MayScan, PrinterUser, Machine } from '../../api/cd2'
 import { warehouseApi, PhanXuong } from '../../api/warehouse'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
@@ -173,13 +174,16 @@ function MayInTab() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-config', columns)
+
   return (
     <div>
       <Table
         rowKey="id"
         size="small"
         dataSource={mayIns}
-        columns={columns}
+        columns={displayColumns}
+        title={() => <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>{settingsButton}</div>}
         loading={isLoading}
         pagination={false}
         style={{ marginBottom: 16 }}

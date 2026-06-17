@@ -15,6 +15,7 @@ import {
 import { usePhapNhan } from '../../hooks/useMasterData'
 import EmptyState from '../../components/EmptyState'
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -92,17 +93,22 @@ export default function InternalTransferListPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-internal-transfer', columns, { nonHideable: ['so_phieu'] })
+
   return (
     <PageLayout
       title="Chuyển tiền nội bộ"
       actions={
-        <Button
-          type="primary"
-          icon={<SwapOutlined />}
-          onClick={() => navigate('/accounting/internal-transfers/new')}
-        >
-          Tạo phiếu chuyển tiền
-        </Button>
+        <Space>
+          {settingsButton}
+          <Button
+            type="primary"
+            icon={<SwapOutlined />}
+            onClick={() => navigate('/accounting/internal-transfers/new')}
+          >
+            Tạo phiếu chuyển tiền
+          </Button>
+        </Space>
       }
     >
       <Card size="small" style={{ marginBottom: 12 }}>
@@ -144,7 +150,7 @@ export default function InternalTransferListPage() {
 
       <Table
         locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-        columns={columns}
+        columns={displayColumns}
         dataSource={transfers}
         rowKey="id"
         loading={isLoading}

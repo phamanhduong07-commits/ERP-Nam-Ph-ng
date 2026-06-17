@@ -12,6 +12,7 @@ import { debtAlertsApi, type DebtOverdueAlertItem } from '../../api/accounting'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text } = Typography
 
@@ -93,15 +94,17 @@ function DebtTable({ rows, type, loading }: { rows: DebtRow[]; type: 'ar' | 'ap'
         : <Text type="secondary">—</Text>,
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs(`reports-debt-summary-${type}`, columns)
 
   return (
     <>
       <div style={{ textAlign: 'right', marginBottom: 8 }}>
         <Button size="small" icon={<FileExcelOutlined />} onClick={handleExcel} disabled={!rows.length}>Excel</Button>
+        {settingsButton}
       </div>
       <Table
                 locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
-                columns={columns}
+                columns={displayColumns}
         dataSource={rows}
         rowKey={(r, i) => `${r.customer_id ?? r.supplier_id ?? i}`}
         loading={loading}

@@ -14,6 +14,7 @@ import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
 import { fmtVND, printToPdf, buildHtmlTable } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -72,6 +73,7 @@ export default function GeneralLedgerPage() {
     { title: 'Phát sinh Có', dataIndex: 'phat_sinh_co', align: 'right' as const, render: (v: number) => v > 0 ? fmtVND(v) : '' },
     { title: 'Số dư', dataIndex: 'so_du', align: 'right' as const, render: (v: number) => <Text strong>{fmtVND(v)}</Text> },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('accounting-general-ledger', columns, { nonHideable: ['so_phieu'] })
 
   const handleExportPdf = () => {
     if (!ledger) return
@@ -141,6 +143,7 @@ export default function GeneralLedgerPage() {
               Truy vấn
             </Button>
             <Button icon={<FilePdfOutlined />} onClick={handleExportPdf}>Xuất PDF</Button>
+            {settingsButton}
           </Space>
         </Col>
       </Row>
@@ -152,7 +155,7 @@ export default function GeneralLedgerPage() {
                         size="small"
             loading={isLoading}
             dataSource={ledger.rows}
-            columns={columns}
+            columns={displayColumns}
             pagination={{ pageSize: 50 }}
             rowKey="id"
             summary={() => (

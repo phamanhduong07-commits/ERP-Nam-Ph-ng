@@ -14,6 +14,7 @@ import { paperMaterialsFullApi, type PaperMaterial } from '../../api/paperMateri
 import { type ChiTieuItem } from '../../api/tieuChuanKyThuat'
 import client from '../../api/client'
 import EmptyState from '../../components/EmptyState'
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -878,15 +879,19 @@ export default function QCGiayCuonPage() {
       ),
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('quality-qc-giay-cuon', columns, { nonHideable: ['so_phieu'] })
 
   return (
     <div style={{ padding: 24 }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
         <Col><Title level={4} style={{ margin: 0 }}>QC Giấy Cuộn</Title></Col>
         <Col>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            Tạo phiếu
-          </Button>
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              Tạo phiếu
+            </Button>
+            {settingsButton}
+          </Space>
         </Col>
       </Row>
 
@@ -931,7 +936,7 @@ export default function QCGiayCuonPage() {
       <Table
         locale={{ emptyText: <EmptyState size="small" /> }}
         dataSource={list}
-        columns={columns}
+        columns={displayColumns}
         rowKey="id"
         loading={isLoading}
         size="small"

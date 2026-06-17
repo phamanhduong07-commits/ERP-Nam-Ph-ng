@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import dayjs, { Dayjs } from 'dayjs'
 import client from '../../api/client'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -128,6 +129,7 @@ export default function KmThucTePage() {
       },
     },
   ]
+  const { displayColumns, settingsButton } = useColumnPrefs('logistics-km-thuc-te', summaryColumns)
 
   const dailyColumns = [
     {
@@ -209,6 +211,7 @@ export default function KmThucTePage() {
           <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={loadingSummary}>
             Tải lại
           </Button>
+          {settingsButton}
         </Space>
       </div>
 
@@ -269,7 +272,7 @@ export default function KmThucTePage() {
           >
             <Table<KmSummaryRow>
               dataSource={summary}
-              columns={summaryColumns}
+              columns={displayColumns}
               rowKey="bien_so"
               loading={loadingSummary}
               size="small"

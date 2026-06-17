@@ -9,6 +9,7 @@ import { productionOrdersApi } from '../../api/productionOrders'
 import type { PhieuNhapPhoiSongListItem, PhieuNhapPhoiSongItem } from '../../api/productionOrders'
 import { warehousesApi } from '../../api/warehouses'
 import EmptyState from "../../components/EmptyState"
+import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Text, Title } = Typography
 const { RangePicker } = DatePicker
@@ -137,6 +138,8 @@ export default function PhieuNhapPhoiSongPage() {
     },
   ]
 
+  const { displayColumns, settingsButton } = useColumnPrefs('production-phieu-nhap-phoi-song', columns, { nonHideable: ['so_phieu'] })
+
   const detailColumns: ColumnsType<PhieuNhapPhoiSongItem> = [
     {
       title: 'Tên hàng',
@@ -235,6 +238,7 @@ export default function PhieuNhapPhoiSongPage() {
             Xoá lọc
           </Button>
         </Col>
+        <Col>{settingsButton}</Col>
       </Row>
 
       {/* Summary */}
@@ -256,7 +260,7 @@ export default function PhieuNhapPhoiSongPage() {
         size="small"
         loading={isLoading}
         dataSource={rows}
-        columns={columns}
+        columns={displayColumns}
         pagination={{ pageSize: 50, showTotal: t => `${t} phiếu`, showSizeChanger: false }}
         scroll={{ x: 1200 }}
         onRow={row => ({
