@@ -32,6 +32,9 @@ from app.schemas.accounting import (
     LichTraNoResponse, TraNoRequest, CapNhatLaiSuatRequest, TraTruocHanRequest, TatToanRequest,
     CashFlowForecastResponse, ForecastDayItem,
     InternalTransferCreate, BatchReceiptCreate,
+    TaxPaymentCreate, TaxPaymentBatchResponse, TaxObligationItem,
+    InsuranceObligationItem, InsurancePaymentCreate, InsuranceBatchResponse,
+    SalaryObligationItem, SalaryPaymentCreate, SalaryBatchResponse,
 )
 from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_date, parse_decimal, parse_text,
@@ -537,6 +540,7 @@ def batch_create_receipts(
                 dien_giai=item.dien_giai,
                 so_tien=item.so_tien,
                 phap_nhan_id=data.phap_nhan_id,
+                phan_xuong_id=data.phan_xuong_id,
             )
             receipt = service.create_cash_receipt(receipt_data, current_user.id)
             results.append(BatchReceiptResultItem(
@@ -589,6 +593,7 @@ async def import_receipts_excel(
     ngay_phieu: date | None = Query(None),
     phap_nhan_id: int | None = Query(None),
     phan_xuong_id: int | None = Query(None),
+    dry_run: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
@@ -710,14 +715,17 @@ async def import_receipts_excel(
                 phap_nhan_id=phap_nhan_id,
                 phan_xuong_id=phan_xuong_id,
             )
-            receipt = service.create_cash_receipt(receipt_data, current_user.id)
-            results.append(BatchReceiptResultItem(
-                index=row_idx,
-                customer_id=cust_id,
-                so_phieu=receipt.so_phieu,
-                so_tien=so_tien,
-                success=True,
-            ))
+            if dry_run:
+                results.append(BatchReceiptResultItem(
+                    index=row_idx, customer_id=cust_id,
+                    so_phieu=None, so_tien=so_tien, success=True,
+                ))
+            else:
+                receipt = service.create_cash_receipt(receipt_data, current_user.id)
+                results.append(BatchReceiptResultItem(
+                    index=row_idx, customer_id=cust_id,
+                    so_phieu=receipt.so_phieu, so_tien=so_tien, success=True,
+                ))
             thanh_cong += 1
         except Exception as e:
             db.rollback()
@@ -1112,6 +1120,277 @@ def cancel_payment(
     return AccountingService(db).cancel_payment(payment_id, current_user.id, ly_do)
 
 
+@router.get("/tax-obligations", response_model=list[TaxObligationItem])
+def get_tax_obligations(
+    tu_ngay: date | None = Query(None),
+    den_ngay: date | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Tính toán các khoản thuế phải nộp từ dữ liệu hệ thống."""
+    from app.models.billing import SalesInvoice
+
+    q = db.query(func.coalesce(func.sum(SalesInvoice.tien_vat), 0)).filter(
+        SalesInvoice.trang_thai.in_(["da_phat_hanh", "da_tt_mot_phan", "da_tt_du", "qua_han"])
+    )
+    if tu_ngay:
+        q = q.filter(SalesInvoice.ngay_hoa_don >= tu_ngay)
+    if den_ngay:
+        q = q.filter(SalesInvoice.ngay_hoa_don <= den_ngay)
+    if phap_nhan_id:
+        q = q.filter(SalesInvoice.phap_nhan_id == phap_nhan_id)
+
+    tong_vat = Decimal(str(q.scalar() or 0))
+
+    return [
+        TaxObligationItem(
+            loai_thue="gtgt_dau_ra",
+            ten_khoan="Thuế GTGT đầu ra",
+            tk_no="3331",
+            so_phai_nop=tong_vat,
+        )
+    ]
+
+
+@router.post("/tax-payments", response_model=TaxPaymentBatchResponse, status_code=201)
+def create_tax_payments(
+    data: TaxPaymentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    """Tạo phiếu chi nộp thuế (không cần nhà cung cấp)."""
+    svc = AccountingService(db)
+    created_ids: list[int] = []
+    thanh_cong = 0
+    that_bai = 0
+    tong_tien = Decimal("0")
+
+    tk_co_default = "111" if data.hinh_thuc_tt in ("tien_mat", "TM") else "112"
+
+    for item in data.items:
+        if item.so_tien <= 0:
+            continue
+        payment_data = CashPaymentCreate(
+            supplier_id=None,
+            ngay_phieu=data.ngay_phieu,
+            hinh_thuc_tt=data.hinh_thuc_tt,
+            so_tai_khoan=data.so_tai_khoan,
+            dien_giai=item.dien_giai or f"Nop {item.ten_khoan}",
+            so_tien=item.so_tien,
+            tk_no=item.tk_no,
+            tk_co=item.tk_co if item.tk_co != "112" else tk_co_default,
+            loai_chi="nop_thue",
+            phap_nhan_id=data.phap_nhan_id,
+            phan_xuong_id=data.phan_xuong_id,
+        )
+        try:
+            p = svc.create_cash_payment(payment_data, current_user.id)
+            created_ids.append(p.id)
+            tong_tien += item.so_tien
+            thanh_cong += 1
+        except Exception:
+            that_bai += 1
+
+    return TaxPaymentBatchResponse(
+        tong_so=len(data.items),
+        thanh_cong=thanh_cong,
+        that_bai=that_bai,
+        tong_tien=tong_tien,
+        phieu_chi_ids=created_ids,
+    )
+
+
+@router.get("/insurance-obligations", response_model=list[InsuranceObligationItem])
+def get_insurance_obligations(
+    thang: int | None = Query(None),
+    nam: int | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Lấy khoản bảo hiểm phải nộp từ bảng lương (PayrollAdjustment)."""
+    from app.models.hr import PayrollAdjustment
+
+    BH_MAP = {
+        "bhxh":          ("Bảo hiểm xã hội",     "3383"),
+        "bhyt":          ("Bảo hiểm y tế",        "3384"),
+        "bhtn":          ("Bảo hiểm thất nghiệp", "3385"),
+        "cong_doan_phi": ("Kinh phí công đoàn",   "3382"),
+    }
+
+    q = db.query(
+        PayrollAdjustment.sub_loai,
+        func.coalesce(func.sum(PayrollAdjustment.so_tien), 0),
+    ).filter(
+        PayrollAdjustment.loai == "khau_tru",
+        PayrollAdjustment.sub_loai.in_(list(BH_MAP.keys())),
+    )
+    if thang:
+        q = q.filter(PayrollAdjustment.thang == thang)
+    if nam:
+        q = q.filter(PayrollAdjustment.nam == nam)
+    q = q.group_by(PayrollAdjustment.sub_loai)
+
+    rows = q.all()
+    result = []
+    for sub_loai, tong in rows:
+        ten, tk_no = BH_MAP.get(sub_loai, (sub_loai, "338"))
+        if Decimal(str(tong)) > 0:
+            result.append(InsuranceObligationItem(
+                loai_bh=sub_loai,
+                ten_khoan=ten,
+                tk_no=tk_no,
+                so_phai_nop=Decimal(str(tong)),
+            ))
+    return result
+
+
+@router.post("/insurance-payments", response_model=InsuranceBatchResponse, status_code=201)
+def create_insurance_payments(
+    data: InsurancePaymentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    """Tạo phiếu chi nộp bảo hiểm (không cần nhà cung cấp)."""
+    svc = AccountingService(db)
+    created_ids: list[int] = []
+    thanh_cong = 0
+    that_bai = 0
+    tong_tien = Decimal("0")
+
+    tk_co_default = "111" if data.hinh_thuc_tt in ("tien_mat", "TM") else "112"
+
+    for item in data.items:
+        if item.so_tien <= 0:
+            continue
+        payment_data = CashPaymentCreate(
+            supplier_id=None,
+            ngay_phieu=data.ngay_phieu,
+            hinh_thuc_tt=data.hinh_thuc_tt,
+            so_tai_khoan=data.so_tai_khoan,
+            dien_giai=item.dien_giai or f"Nop {item.ten_khoan} thang {data.thang}/{data.nam}",
+            so_tien=item.so_tien,
+            tk_no=item.tk_no,
+            tk_co=item.tk_co if item.tk_co != "112" else tk_co_default,
+            loai_chi="nop_bh",
+            phap_nhan_id=data.phap_nhan_id,
+            phan_xuong_id=data.phan_xuong_id,
+        )
+        try:
+            p = svc.create_cash_payment(payment_data, current_user.id)
+            created_ids.append(p.id)
+            tong_tien += item.so_tien
+            thanh_cong += 1
+        except Exception:
+            that_bai += 1
+
+    return InsuranceBatchResponse(
+        tong_so=len(data.items),
+        thanh_cong=thanh_cong,
+        that_bai=that_bai,
+        tong_tien=tong_tien,
+        phieu_chi_ids=created_ids,
+    )
+
+
+@router.get("/salary-obligations", response_model=list[SalaryObligationItem])
+def get_salary_obligations(
+    thang: int | None = Query(None),
+    nam: int | None = Query(None),
+    phap_nhan_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Lấy danh sách lương chưa trả (PayrollRun trang_thai=da_chot)."""
+    from app.models.hr import PayrollRun, Employee, Department
+
+    q = (
+        db.query(PayrollRun, Employee, Department)
+        .join(Employee, PayrollRun.employee_id == Employee.id)
+        .outerjoin(Department, Employee.bo_phan_id == Department.id)
+        .filter(PayrollRun.trang_thai == "da_chot")
+    )
+    if thang:
+        q = q.filter(PayrollRun.thang == thang)
+    if nam:
+        q = q.filter(PayrollRun.nam == nam)
+    if phap_nhan_id:
+        q = q.filter(Employee.phap_nhan_id == phap_nhan_id)
+
+    result = []
+    for run, emp, dept in q.all():
+        if run.thuc_linh > 0:
+            result.append(SalaryObligationItem(
+                payroll_run_id=run.id,
+                employee_id=emp.id,
+                ma_nv=emp.ma_nv,
+                ho_ten=emp.ho_ten,
+                don_vi=dept.ten_bo_phan if dept else None,
+                so_tai_khoan=emp.so_tk_ngan_hang,
+                ten_ngan_hang=emp.ten_ngan_hang,
+                so_phai_tra=run.thuc_linh,
+                so_tra=run.thuc_linh,
+            ))
+    return result
+
+
+@router.post("/salary-payments", response_model=SalaryBatchResponse, status_code=201)
+def create_salary_payments(
+    data: SalaryPaymentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    """Tạo phiếu chi trả lương từng nhân viên (không cần nhà cung cấp)."""
+    from app.models.hr import PayrollRun
+
+    svc = AccountingService(db)
+    created_ids: list[int] = []
+    thanh_cong = 0
+    that_bai = 0
+    tong_tien = Decimal("0")
+
+    tk_co_default = "111" if data.hinh_thuc_tt in ("tien_mat", "TM") else "112"
+
+    for item in data.items:
+        if item.so_tien <= 0:
+            continue
+        payment_data = CashPaymentCreate(
+            supplier_id=None,
+            ngay_phieu=data.ngay_phieu,
+            hinh_thuc_tt=data.hinh_thuc_tt,
+            so_tai_khoan=data.so_tai_khoan,
+            dien_giai=item.dien_giai or f"Tra luong {item.ho_ten} thang {data.thang}/{data.nam}",
+            so_tien=item.so_tien,
+            tk_no=item.tk_no,
+            tk_co=item.tk_co if item.tk_co != "112" else tk_co_default,
+            loai_chi="tra_luong",
+            phap_nhan_id=data.phap_nhan_id,
+            phan_xuong_id=data.phan_xuong_id,
+        )
+        try:
+            p = svc.create_cash_payment(payment_data, current_user.id)
+            created_ids.append(p.id)
+            tong_tien += item.so_tien
+            thanh_cong += 1
+            # Đánh dấu PayrollRun đã thanh toán
+            run = db.query(PayrollRun).filter(PayrollRun.id == item.payroll_run_id).first()
+            if run:
+                run.trang_thai = "da_thanh_toan"
+                db.add(run)
+        except Exception:
+            that_bai += 1
+
+    db.commit()
+    return SalaryBatchResponse(
+        tong_so=len(data.items),
+        thanh_cong=thanh_cong,
+        that_bai=that_bai,
+        tong_tien=tong_tien,
+        phieu_chi_ids=created_ids,
+    )
+
+
 @router.get("/payments/import-template")
 def download_payments_import_template(_: User = Depends(get_current_user)):
     """Tải mẫu Excel để import phiếu chi."""
@@ -1134,6 +1413,7 @@ async def import_payments_excel(
     ngay_phieu: date | None = Query(None),
     phap_nhan_id: int | None = Query(None),
     phan_xuong_id: int | None = Query(None),
+    dry_run: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
@@ -1237,15 +1517,19 @@ async def import_payments_excel(
                 phap_nhan_id=phap_nhan_id,
                 phan_xuong_id=phan_xuong_id,
             )
-            payment = service.create_cash_payment(payment_data, current_user.id)
-            results.append({
-                "index": row_idx,
-                "supplier_id": supp_id,
-                "so_phieu": payment.so_phieu,
-                "so_tien": float(so_tien),
-                "success": True,
-                "error": None,
-            })
+            if dry_run:
+                results.append({
+                    "index": row_idx, "supplier_id": supp_id,
+                    "so_phieu": None, "so_tien": float(so_tien),
+                    "success": True, "error": None,
+                })
+            else:
+                payment = service.create_cash_payment(payment_data, current_user.id)
+                results.append({
+                    "index": row_idx, "supplier_id": supp_id,
+                    "so_phieu": payment.so_phieu, "so_tien": float(so_tien),
+                    "success": True, "error": None,
+                })
             thanh_cong += 1
         except Exception as e:
             db.rollback()

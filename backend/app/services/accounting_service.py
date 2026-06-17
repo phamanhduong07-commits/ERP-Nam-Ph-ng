@@ -1604,7 +1604,7 @@ class AccountingService:
             inv = self.db.get(PurchaseInvoice, data.purchase_invoice_id)
             if not inv:
                 raise HTTPException(404, "Không tìm thấy hóa đơn mua")
-            if inv.supplier_id != data.supplier_id:
+            if data.supplier_id and inv.supplier_id != data.supplier_id:
                 raise HTTPException(400, "Nhà cung cấp phiếu chi không khớp hóa đơn mua")
             remaining = (inv.tong_thanh_toan or Decimal("0")) - (inv.da_thanh_toan or Decimal("0"))
             if Decimal(str(data.so_tien)) > remaining + Decimal("0.001"):
@@ -1626,6 +1626,7 @@ class AccountingService:
             so_tien=data.so_tien,
             tk_no=data.tk_no,
             tk_co=data.tk_co,
+            loai_chi=data.loai_chi,
             phap_nhan_id=phap_nhan_id,
             phan_xuong_id=phan_xuong_id,
             created_by=user_id,

@@ -139,19 +139,19 @@ export default function CashPaymentListPage() {
       key: 'tax',
       icon: <SafetyCertificateOutlined />,
       label: 'Nộp thuế',
-      onClick: () => navigate('/accounting/payments/new?type=tax'),
+      onClick: () => navigate('/accounting/tax-payments/new'),
     },
     {
       key: 'insurance',
       icon: <CarOutlined />,
       label: 'Nộp bảo hiểm',
-      onClick: () => navigate('/accounting/payments/new?type=insurance'),
+      onClick: () => navigate('/accounting/insurance-payments/new'),
     },
     {
       key: 'salary',
       icon: <TeamOutlined />,
       label: 'Trả lương',
-      onClick: () => navigate('/accounting/payments/new?type=salary'),
+      onClick: () => navigate('/accounting/salary-payments/new'),
     },
     { type: 'divider' },
     {
@@ -164,7 +164,7 @@ export default function CashPaymentListPage() {
       key: 'excel',
       icon: <UploadOutlined />,
       label: 'Nhập từ Excel',
-      onClick: () => setImportModal(true),
+      onClick: () => navigate('/accounting/excel-import?type=payment'),
     },
   ]
 

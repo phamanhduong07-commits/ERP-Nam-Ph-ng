@@ -160,13 +160,14 @@ class CashPayment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # PC-YYYYMM-XXXX
     ngay_phieu: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False, index=True)
+    supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=True, index=True)
     purchase_invoice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_invoices.id"))
     hinh_thuc_tt: Mapped[str] = mapped_column(String(20), default="CK")
     so_tai_khoan: Mapped[str | None] = mapped_column(String(100))
     so_tham_chieu: Mapped[str | None] = mapped_column(String(100))
     dien_giai: Mapped[str | None] = mapped_column(Text)
     so_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    loai_chi: Mapped[str | None] = mapped_column(String(30))  # nop_thue | nop_bh | tra_luong | null=ttt_ncc
     # Tài khoản kế toán VAS
     tk_no: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="331")
     tk_co: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="112")

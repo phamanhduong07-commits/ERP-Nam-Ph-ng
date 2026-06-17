@@ -176,7 +176,7 @@ class CashReceiptResponse(BaseModel):
 # ──────────────────────────────────────────────
 
 class CashPaymentCreate(BaseModel):
-    supplier_id: int
+    supplier_id: int | None = None
     purchase_invoice_id: int | None = None
     ngay_phieu: date
     hinh_thuc_tt: Literal[
@@ -188,6 +188,7 @@ class CashPaymentCreate(BaseModel):
     so_tien: Decimal
     tk_no: str = "331"
     tk_co: str = "112"
+    loai_chi: str | None = None  # nop_thue | nop_bh | tra_luong | null=ttt_ncc
     phap_nhan_id: int | None = None
     phan_xuong_id: int | None = None
 
@@ -216,7 +217,7 @@ class CashPaymentResponse(BaseModel):
     id: int
     so_phieu: str
     ngay_phieu: date
-    supplier_id: int
+    supplier_id: int | None = None
     ten_don_vi: str | None = None
     purchase_invoice_id: int | None
     hinh_thuc_tt: str
@@ -236,6 +237,125 @@ class CashPaymentResponse(BaseModel):
     ten_phan_xuong: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class TaxObligationItem(BaseModel):
+    loai_thue: str            # gtgt_dau_ra | tndn | tncn | khac
+    ten_khoan: str
+    tk_no: str                # 3331 | 3334 | 3335 | 3338
+    so_phai_nop: Decimal      # tính từ hệ thống
+    so_nop_lan_nay: Decimal = Decimal("0")
+
+
+class TaxPaymentItem(BaseModel):
+    loai_thue: str
+    ten_khoan: str
+    tk_no: str
+    tk_co: str = "112"
+    so_tien: Decimal
+    dien_giai: str | None = None
+
+
+class TaxPaymentCreate(BaseModel):
+    ngay_phieu: date
+    hinh_thuc_tt: Literal["tien_mat", "chuyen_khoan", "TM", "CK"] = "chuyen_khoan"
+    so_tai_khoan: str | None = None
+    phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
+    items: list[TaxPaymentItem]
+
+
+class TaxPaymentBatchResponse(BaseModel):
+    tong_so: int
+    thanh_cong: int
+    that_bai: int
+    tong_tien: Decimal
+    phieu_chi_ids: list[int]
+
+
+# ──────────────────────────────────────────────
+# Nộp bảo hiểm
+# ──────────────────────────────────────────────
+
+class InsuranceObligationItem(BaseModel):
+    loai_bh: str            # bhxh | bhyt | bhtn | cong_doan_phi
+    ten_khoan: str
+    tk_no: str              # 3383 | 3384 | 3385 | 3382
+    so_phai_nop: Decimal
+    so_nop_lan_nay: Decimal = Decimal("0")
+
+
+class InsurancePaymentItem(BaseModel):
+    loai_bh: str
+    ten_khoan: str
+    tk_no: str
+    tk_co: str = "112"
+    so_tien: Decimal
+    dien_giai: str | None = None
+
+
+class InsurancePaymentCreate(BaseModel):
+    ngay_phieu: date
+    thang: int
+    nam: int
+    hinh_thuc_tt: Literal["tien_mat", "chuyen_khoan", "TM", "CK"] = "chuyen_khoan"
+    so_tai_khoan: str | None = None
+    phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
+    items: list[InsurancePaymentItem]
+
+
+class InsuranceBatchResponse(BaseModel):
+    tong_so: int
+    thanh_cong: int
+    that_bai: int
+    tong_tien: Decimal
+    phieu_chi_ids: list[int]
+
+
+# ──────────────────────────────────────────────
+# Trả lương
+# ──────────────────────────────────────────────
+
+class SalaryObligationItem(BaseModel):
+    payroll_run_id: int
+    employee_id: int
+    ma_nv: str
+    ho_ten: str
+    don_vi: str | None          # tên bộ phận
+    so_tai_khoan: str | None
+    ten_ngan_hang: str | None
+    so_phai_tra: Decimal        # thuc_linh
+    so_tra: Decimal             # mặc định = so_phai_tra
+
+
+class SalaryPaymentItem(BaseModel):
+    payroll_run_id: int
+    employee_id: int
+    ho_ten: str
+    so_tien: Decimal
+    tk_no: str = "334"
+    tk_co: str = "112"
+    dien_giai: str | None = None
+
+
+class SalaryPaymentCreate(BaseModel):
+    ngay_phieu: date
+    thang: int
+    nam: int
+    hinh_thuc_tt: Literal["tien_mat", "chuyen_khoan", "TM", "CK"] = "chuyen_khoan"
+    so_tai_khoan: str | None = None
+    phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
+    items: list[SalaryPaymentItem]
+
+
+class SalaryBatchResponse(BaseModel):
+    tong_so: int
+    thanh_cong: int
+    that_bai: int
+    tong_tien: Decimal
+    phieu_chi_ids: list[int]
 
 
 # ──────────────────────────────────────────────
@@ -1029,6 +1149,7 @@ class BatchReceiptItem(BaseModel):
 class BatchReceiptCreate(BaseModel):
     ngay_phieu: date
     phap_nhan_id: int | None = None
+    phan_xuong_id: int | None = None
     so_tai_khoan: str | None = None
     items: list[BatchReceiptItem]
 

@@ -125,7 +125,7 @@ export default function CashReceiptListPage() {
     {
       key: 'by_invoice',
       label: 'Thu tiền theo hóa đơn',
-      onClick: () => navigate('/accounting/receipts/new?mode=by_invoice'),
+      onClick: () => navigate('/accounting/receipts/by-invoice'),
     },
     {
       key: 'batch',
@@ -143,7 +143,7 @@ export default function CashReceiptListPage() {
       key: 'import',
       icon: <UploadOutlined />,
       label: 'Nhập từ Excel',
-      onClick: () => { setImportFile(null); setImportResult(null); setImportOpen(true) },
+      onClick: () => navigate('/accounting/excel-import?type=receipt'),
     },
   ]
 
