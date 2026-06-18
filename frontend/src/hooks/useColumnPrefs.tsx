@@ -34,6 +34,8 @@ function savePrefs(pageKey: string, prefs: ColPrefs) {
 
 export interface UseColumnPrefsOptions {
   nonHideable?: string[]
+  /** Column keys that are hidden by default (user can show via settings modal) */
+  defaultHidden?: string[]
 }
 
 export function useColumnPrefs<T>(
@@ -44,20 +46,22 @@ export function useColumnPrefs<T>(
   displayColumns: ColumnsType<T>
   settingsButton: React.ReactNode
 } {
-  const { nonHideable = [] } = options ?? {}
+  const { nonHideable = [], defaultHidden = [] } = options ?? {}
   const [open, setOpen] = useState(false)
   const [prefs, setPrefs] = useState<ColPrefs>(() => loadPrefs(pageKey))
 
-  // Merge stored prefs with current columns — new columns default to visible
+  // Merge stored prefs with current columns
+  // defaultHidden keys start as visible:false unless user has saved a preference
   const mergedPrefs = useMemo<ColPrefs>(() => {
     const result: ColPrefs = {}
     columns.forEach((col, idx) => {
       const key = getColKey(col)
       if (!key) return
-      result[key] = prefs[key] ?? { visible: true, order: idx }
+      const defaultVisible = !defaultHidden.includes(key)
+      result[key] = prefs[key] ?? { visible: defaultVisible, order: idx }
     })
     return result
-  }, [columns, prefs])
+  }, [columns, prefs, defaultHidden])
 
   const displayColumns = useMemo<ColumnsType<T>>(() => {
     const isLeft = (col: ColumnsType<T>[number]) => {
