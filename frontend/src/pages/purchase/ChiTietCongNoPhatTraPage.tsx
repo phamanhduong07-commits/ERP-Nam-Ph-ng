@@ -27,6 +27,7 @@ interface Params {
   nhan_vien_id?: number
   supplier_ids: number[]
   chi_lay_hd_trong_ky: boolean
+  loai_tien: string
 }
 
 interface ReportRow {
@@ -103,6 +104,7 @@ const defaultParams = (): Params => ({
   den_ngay: dayjs(),
   supplier_ids: [],
   chi_lay_hd_trong_ky: true,
+  loai_tien: 'VND',
 })
 
 // ─── Supplier selection table ─────────────────────────────────────────────────
@@ -345,17 +347,19 @@ function ParamModal({
             <Select
               style={{ width: '100%' }}
               value="331"
-              disabled
-              options={[{ value: '331', label: '331' }]}
+              options={[{ value: '331', label: '331 — Phải trả NCC' }]}
             />
           </Col>
           <Col span={4}>
             <Text strong style={{ display: 'block', marginBottom: 4 }}>Loại tiền</Text>
             <Select
               style={{ width: '100%' }}
-              value="TH"
-              disabled
-              options={[{ value: 'TH', label: 'TH' }]}
+              value={draft.loai_tien}
+              onChange={v => setDraft(d => ({ ...d, loai_tien: v }))}
+              options={[
+                { value: 'VND', label: 'VND' },
+                { value: 'USD', label: 'USD' },
+              ]}
             />
           </Col>
           <Col span={8}>
