@@ -733,6 +733,67 @@ export interface TonKhoNVLRow {
   ton_toi_thieu: number
 }
 
+export interface TonDauKyBalance {
+  id: number
+  warehouse_id: number
+  ten_kho: string
+  paper_material_id: number | null
+  other_material_id: number | null
+  product_id: number | null
+  ma_hang: string
+  ten_hang: string
+  don_vi: string
+  ton_luong: number
+  don_gia_binh_quan: number
+  gia_tri_ton: number
+  cap_nhat_luc: string | null
+}
+
+export interface TonDauKyItemPayload {
+  warehouse_id: number
+  paper_material_id?: number | null
+  other_material_id?: number | null
+  so_luong: number
+  don_gia: number
+  ten_hang?: string | null
+  don_vi?: string | null
+}
+
+export interface SoNhapXuatTonRow {
+  warehouse_id: number
+  warehouse_name: string
+  warehouse_code: string
+  paper_material_id: number | null
+  other_material_id: number | null
+  ma_hang: string
+  ten_hang: string
+  don_vi: string
+  don_gia: number
+  ton_dau: number
+  gia_tri_dau: number
+  so_luong_nhap: number
+  gia_tri_nhap: number
+  so_luong_xuat: number
+  gia_tri_xuat: number
+  ton_cuoi: number
+  gia_tri_cuoi: number
+}
+
+export interface DoiSoatCuonRow {
+  paper_material_id: number
+  warehouse_id: number
+  warehouse_name: string | null
+  ma_giay: string | null
+  ten: string | null
+  kho_mm: number | null
+  dinh_luong: number | null
+  so_cuon: number
+  paper_roll_ton: number
+  balance_ton: number
+  chenh_lech: number
+  chenh_lech_phan_tram: number | null
+}
+
 export const warehouseApi = {
   // Phân xưởng
   listPhanXuong: (params?: { co_kho?: boolean }) => client.get<PhanXuong[]>('/warehouse/phan-xuong', { params }),
@@ -773,6 +834,7 @@ export const warehouseApi = {
   getStockAdjustment: (id: number) => client.get<StockAdjustment>(`/warehouse/stock-adjustments/${id}`),
   createStockAdjustment: (data: CreateStockAdjustmentPayload) => client.post<StockAdjustment>('/warehouse/stock-adjustments', data),
   deleteStockAdjustment: (id: number) => client.delete(`/warehouse/stock-adjustments/${id}`),
+  confirmStockAdjustment: (id: number) => client.post<StockAdjustment>(`/warehouse/stock-adjustments/${id}/confirm`),
 
   // Lịch sử giao dịch
   getGiaoDich: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; paper_material_id?: number; other_material_id?: number; product_id?: number; loai_giao_dich?: string; tu_ngay?: string; den_ngay?: string; limit?: number }) =>
@@ -894,4 +956,24 @@ export const warehouseApi = {
 
   exportMaterialIssueExcel: (id: number) =>
     client.get(`/warehouse/material-issues/${id}/export-excel`, { responseType: 'blob' }).then(r => r.data as Blob),
+
+  // Tồn đầu kỳ
+  getTonDauKy: (params?: { warehouse_id?: number }) =>
+    client.get<TonDauKyBalance[]>('/warehouse/ton-dau-ky', { params }),
+  postTonDauKy: (items: TonDauKyItemPayload[]) =>
+    client.post<{ success: number; failed: { index: number; error: string }[] }>('/warehouse/ton-dau-ky', { items }),
+
+  // Sổ nhập xuất tồn
+  getSoNhapXuatTon: (params?: { tu_ngay?: string; den_ngay?: string; warehouse_id?: number; loai_nvl?: string }) =>
+    client.get<SoNhapXuatTonRow[]>('/warehouse/so-nhap-xuat-ton', { params }),
+  exportSoNhapXuatTon: (params?: { tu_ngay?: string; den_ngay?: string; warehouse_id?: number; loai_nvl?: string }) =>
+    client.get('/warehouse/so-nhap-xuat-ton/export', { params, responseType: 'blob' }).then(r => r.data as Blob),
+
+  // Đối soát cuộn giấy
+  getDoiSoatCuon: (showAll?: boolean) =>
+    client.get<DoiSoatCuonRow[]>('/warehouse/doi-soat-cuon', { params: showAll ? { show_all: true } : {} }),
+  syncCuon: (paper_material_id: number, warehouse_id: number) =>
+    client.post<{ paper_material_id: number; warehouse_id: number; old_ton: number; new_ton: number; chenh_lech: number }>(
+      `/warehouse/doi-soat-cuon/sync/${paper_material_id}/${warehouse_id}`
+    ),
 }

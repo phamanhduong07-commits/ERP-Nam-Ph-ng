@@ -5,16 +5,15 @@ import {
   Alert, Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
   Popconfirm, Row, Select, Space, Table, Tag, Typography, message,
 } from 'antd'
-import { DeleteOutlined, FileExcelOutlined, PrinterOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons'
+import { CheckCircleOutlined, DeleteOutlined, FileExcelOutlined, MinusCircleOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   CreateStockAdjustmentPayload, StockAdjustment, StockAdjustmentItem, TonKho, warehouseApi,
 } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
-import { exportToExcel, smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
+import { smartExportExcel, smartPrintPdf, buildHtmlTable, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { usePermission } from '../../hooks/usePermission'
-import EmptyState from "../../components/EmptyState"
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import PageLayout from '../../components/PageLayout'
 
@@ -30,8 +29,13 @@ function diffColor(v: number) {
   return '#666'
 }
 
+const TRANG_THAI_LABEL: Record<string, { label: string; color: string }> = {
+  nhap: { label: 'Chờ xác nhận', color: 'orange' },
+  confirmed: { label: 'Đã xác nhận', color: 'green' },
+}
+
 export default function StockAdjustmentsPage() {
-  const companyInfo = usePhapNhanForPrint()
+  usePhapNhanForPrint()
   const { hasPermission } = usePermission()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -39,6 +43,7 @@ export default function StockAdjustmentsPage() {
   const [filterKho, setFilterKho] = useState<number | undefined>()
   const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
   const [filterXuong, setFilterXuong] = useState<number | undefined>()
+  const [filterStatus, setFilterStatus] = useState<string | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [selectedKho, setSelectedKho] = useState<number | undefined>()
@@ -48,12 +53,16 @@ export default function StockAdjustmentsPage() {
     queryFn: () => warehousesApi.list().then(r => r.data),
   })
 
-  const { data: phieuList = [], isLoading } = useQuery({
+  const { data: phieuListRaw = [], isLoading } = useQuery({
     queryKey: ['stock-adjustments', filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay],
     queryFn: () => warehouseApi.listStockAdjustments({
       warehouse_id: filterKho, phap_nhan_id: filterPhapNhan, phan_xuong_id: filterXuong, tu_ngay: tuNgay, den_ngay: denNgay,
     }).then(r => r.data),
   })
+
+  const phieuList = filterStatus
+    ? phieuListRaw.filter((r: StockAdjustment) => r.trang_thai === filterStatus)
+    : phieuListRaw
 
   const { data: tonKho = [] } = useQuery({
     queryKey: ['ton-kho-kiem-ke', selectedKho],
@@ -75,6 +84,15 @@ export default function StockAdjustmentsPage() {
       setSelectedKho(undefined)
     },
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu kiểm kê'),
+  })
+
+  const confirmMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.confirmStockAdjustment(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['stock-adjustments'] })
+      message.success('Đã xác nhận phiếu kiểm kê')
+    },
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xác nhận phiếu'),
   })
 
   const deleteMut = useMutation({
@@ -163,7 +181,7 @@ export default function StockAdjustmentsPage() {
       { header: 'Thực tế', key: 'so_luong_thuc_te', align: 'right' as const },
       { header: 'Chênh lệch', key: 'chenhlech', align: 'right' as const },
     ]
-    
+
     const itemRows = r.items.map((it: StockAdjustmentItem) => ({
       ten_hang: it.ten_hang,
       don_vi: it.don_vi,
@@ -234,20 +252,59 @@ export default function StockAdjustmentsPage() {
     { title: 'Kho', dataIndex: 'ten_kho', width: 180 },
     { title: 'Lý do', dataIndex: 'ly_do', render: (v: string | null) => v || '—' },
     {
+      title: 'Số dòng', width: 80, align: 'center' as const,
+      render: (_: unknown, r: StockAdjustment) => r.items.length,
+    },
+    {
       title: 'Chênh lệch', width: 130, align: 'right' as const,
       render: (_: unknown, r: StockAdjustment) => {
         const total = r.items.reduce((s, it) => s + it.chenhlech, 0)
         return <Text strong style={{ color: diffColor(total) }}>{fmtNum(total)}</Text>
       },
     },
-    { title: 'TT', dataIndex: 'trang_thai', width: 90, render: (v: string) => <Tag>{v}</Tag> },
     {
-      title: '', width: 80,
+      title: 'Trạng thái', dataIndex: 'trang_thai', width: 130,
+      render: (v: string) => {
+        const tt = TRANG_THAI_LABEL[v] || { label: v, color: 'default' }
+        return <Tag color={tt.color}>{tt.label}</Tag>
+      },
+    },
+    {
+      title: '', width: 110,
       render: (_: unknown, r: StockAdjustment) => (
         <Space size={4}>
           <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintAdjustment(r)} />
-          <Popconfirm title="Xoa phieu kiem ke nay?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }} disabled={!hasPermission('inventory.adjust')}>
-            <Button danger size="small" icon={<DeleteOutlined />} disabled={!hasPermission('inventory.adjust')} />
+          {r.trang_thai === 'nhap' && (
+            <Popconfirm
+              title="Xác nhận phiếu kiểm kê?"
+              description="Tồn kho đã được cập nhật khi tạo phiếu. Sau khi xác nhận, phiếu sẽ bị khoá và không thể xoá."
+              onConfirm={() => confirmMut.mutate(r.id)}
+              okText="Xác nhận"
+              cancelText="Huỷ"
+              disabled={!hasPermission('inventory.adjust')}
+            >
+              <Button
+                size="small"
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                loading={confirmMut.isPending}
+                disabled={!hasPermission('inventory.adjust')}
+              />
+            </Popconfirm>
+          )}
+          <Popconfirm
+            title="Xoá phiếu kiểm kê?"
+            description={r.trang_thai !== 'nhap' ? 'Chỉ xoá được phiếu ở trạng thái Chờ xác nhận.' : 'Tồn kho sẽ được hoàn về trạng thái trước khi kiểm kê.'}
+            onConfirm={() => deleteMut.mutate(r.id)}
+            okButtonProps={{ danger: true }}
+            disabled={!hasPermission('inventory.adjust') || r.trang_thai !== 'nhap'}
+          >
+            <Button
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              disabled={!hasPermission('inventory.adjust') || r.trang_thai !== 'nhap'}
+            />
           </Popconfirm>
         </Space>
       ),
@@ -288,25 +345,32 @@ export default function StockAdjustmentsPage() {
       <Card size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[8, 8]}>
           <Col xs={12} sm={6}>
-            <Select placeholder="Phap nhan" style={{ width: '100%' }} allowClear value={filterPhapNhan}
+            <Select placeholder="Pháp nhân" style={{ width: '100%' }} allowClear value={filterPhapNhan}
               onChange={v => { setFilterPhapNhan(v); setFilterXuong(undefined); setFilterKho(undefined) }}
               options={phapNhanOptions} />
           </Col>
           <Col xs={12} sm={6}>
-            <Select placeholder="Xuong" style={{ width: '100%' }} allowClear value={filterXuong}
+            <Select placeholder="Xưởng" style={{ width: '100%' }} allowClear value={filterXuong}
               onChange={v => { setFilterXuong(v); setFilterKho(undefined) }}
               options={xuongOptions} />
           </Col>
-          <Col xs={24} sm={8}>
+          <Col xs={24} sm={6}>
             <Select placeholder="Kho" style={{ width: '100%' }} allowClear value={filterKho} onChange={setFilterKho}
               options={activeWarehouses.map(w => ({ value: w.id, label: w.ten_kho }))} />
           </Col>
           <Col xs={12} sm={6}>
-            <DatePicker placeholder="Tu ngay" style={{ width: '100%' }} format="DD/MM/YYYY"
+            <Select placeholder="Trạng thái" style={{ width: '100%' }} allowClear value={filterStatus} onChange={setFilterStatus}
+              options={[
+                { value: 'nhap', label: 'Chờ xác nhận' },
+                { value: 'confirmed', label: 'Đã xác nhận' },
+              ]} />
+          </Col>
+          <Col xs={12} sm={6}>
+            <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
               onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
           <Col xs={12} sm={6}>
-            <DatePicker placeholder="Den ngay" style={{ width: '100%' }} format="DD/MM/YYYY"
+            <DatePicker placeholder="Đến ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
               onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
         </Row>
@@ -314,7 +378,7 @@ export default function StockAdjustmentsPage() {
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table dataSource={phieuList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
-          expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 850 }} />
+          expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 900 }} />
       </Card>
 
       <Drawer open={open} onClose={() => setOpen(false)} title="Tạo phiếu kiểm kê / điều chỉnh tồn" width={820}
@@ -326,13 +390,16 @@ export default function StockAdjustmentsPage() {
         }
       >
         <Form form={form} layout="vertical" initialValues={{ ngay: dayjs(), items: [] }}>
+          <Alert type="warning" showIcon style={{ marginBottom: 16 }}
+            message="Sau khi lưu, tồn kho sẽ được cập nhật ngay lập tức và không thể hoàn tác (chỉ có thể xoá phiếu để đảo ngược)." />
+
           <Alert type="info" showIcon style={{ marginBottom: 16 }}
             message="Nhập số lượng thực tế sau kiểm kê. Hệ thống sẽ tự động tăng/giảm tồn và lưu lịch sử giao dịch điều chỉnh." />
 
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item name="warehouse_id" label="Kho kiểm kê" rules={[{ required: true, message: 'Chọn kho' }]}>
-                <Select placeholder="Chon kho"
+                <Select placeholder="Chọn kho"
                   options={activeWarehouses.map(w => ({ value: w.id, label: w.ten_kho }))}
                   onChange={(v: number) => { setSelectedKho(v); form.setFieldValue('items', []) }}
                 />
@@ -391,19 +458,19 @@ export default function StockAdjustmentsPage() {
                               filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
                               options={tonKho.map(t => ({
                                 value: t.id,
-                                label: `${t.ten_hang} - ton: ${fmtNum(t.ton_luong)} ${t.don_vi}`,
+                                label: `${t.ten_hang} - tồn: ${fmtNum(t.ton_luong)} ${t.don_vi}`,
                               }))}
                               onChange={id => handleTonKhoSelect(name, id)}
                             />
                           </Form.Item>
                         </Col>
                         <Col span={4}>
-                          <Form.Item name={[name, 'don_vi']} label="DVT" style={{ marginBottom: 4 }}>
+                          <Form.Item name={[name, 'don_vi']} label="ĐVT" style={{ marginBottom: 4 }}>
                             <Input size="small" readOnly style={{ background: '#f5f5f5' }} />
                           </Form.Item>
                         </Col>
                         <Col span={4}>
-                          <Form.Item label="Chenh lech" style={{ marginBottom: 4 }}>
+                          <Form.Item label="Chênh lệch" style={{ marginBottom: 4 }}>
                             <Text strong style={{ color: diffColor(chenhLech) }}>{fmtNum(chenhLech)}</Text>
                           </Form.Item>
                         </Col>

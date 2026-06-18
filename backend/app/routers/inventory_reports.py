@@ -3,10 +3,12 @@
 Split out of app/routers/warehouse.py (pure structural extraction).
 Shares the /api/warehouse prefix; mounted alongside warehouse.router.
 """
+import io
 from datetime import date
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, aliased, joinedload
 from app.database import get_db
@@ -1181,3 +1183,302 @@ def doi_soat_giay(
 
     result.sort(key=lambda x: abs(x["chenh_lech"]), reverse=True)
     return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sổ nhập xuất tồn theo kỳ (Period Movement Report)
+# ─────────────────────────────────────────────────────────────────────────────
+
+NHAP_TYPES = frozenset([
+    "nhap_kho", "ton_dau_ky", "ton_dau_ky_bo_sung",
+    "dieu_chinh_tang", "chuyen_kho_den",
+    # upper-case variants stored by older code
+    "NHAP_MUA", "NHAP_SX", "CHUYEN_KHO_NHAP", "DIEU_CHINH_TANG",
+])
+
+XUAT_TYPES = frozenset([
+    "xuat_sx", "xuat_ban", "xuat_kho",
+    "dieu_chinh_giam", "chuyen_kho_di", "xuat_huy",
+    # upper-case variants
+    "XUAT_SX", "XUAT_BAN", "CHUYEN_KHO_XUAT", "DIEU_CHINH_GIAM",
+])
+
+
+def _build_so_nhap_xuat_ton(
+    db,
+    tu_ngay: Optional[date],
+    den_ngay: Optional[date],
+    warehouse_id: Optional[int],
+    loai_nvl: str,
+) -> list[dict]:
+    q = db.query(InventoryTransaction)
+    if tu_ngay:
+        q = q.filter(func.date(InventoryTransaction.ngay_giao_dich) >= tu_ngay)
+    if den_ngay:
+        q = q.filter(func.date(InventoryTransaction.ngay_giao_dich) <= den_ngay)
+    if warehouse_id:
+        q = q.filter(InventoryTransaction.warehouse_id == warehouse_id)
+    if loai_nvl == "giay_cuon":
+        q = q.filter(InventoryTransaction.paper_material_id.isnot(None))
+    elif loai_nvl == "nvl_khac":
+        q = q.filter(InventoryTransaction.other_material_id.isnot(None))
+
+    txs = q.all()
+
+    key_map: dict[tuple, dict] = {}
+    for tx in txs:
+        key = (tx.warehouse_id, tx.paper_material_id, tx.other_material_id)
+        if key not in key_map:
+            key_map[key] = {
+                "warehouse_id": tx.warehouse_id,
+                "paper_material_id": tx.paper_material_id,
+                "other_material_id": tx.other_material_id,
+                "sl_nhap": Decimal(0),
+                "gt_nhap": Decimal(0),
+                "sl_xuat": Decimal(0),
+                "gt_xuat": Decimal(0),
+            }
+        entry = key_map[key]
+        loai = tx.loai_giao_dich or ""
+        sl = tx.so_luong or Decimal(0)
+        gt = tx.gia_tri or Decimal(0)
+        if loai in NHAP_TYPES:
+            entry["sl_nhap"] += sl
+            entry["gt_nhap"] += gt
+        elif loai in XUAT_TYPES:
+            entry["sl_xuat"] += sl
+            entry["gt_xuat"] += gt
+
+    if not key_map:
+        return []
+
+    wh_ids = {k[0] for k in key_map}
+    pm_ids = {k[1] for k in key_map if k[1]}
+    om_ids = {k[2] for k in key_map if k[2]}
+
+    wh_map: dict[int, Warehouse] = {
+        w.id: w for w in db.query(Warehouse).filter(Warehouse.id.in_(wh_ids)).all()
+    }
+    pm_map2: dict[int, PaperMaterial] = {
+        p.id: p for p in db.query(PaperMaterial).filter(PaperMaterial.id.in_(pm_ids)).all()
+    } if pm_ids else {}
+    om_map2: dict[int, OtherMaterial] = {
+        o.id: o for o in db.query(OtherMaterial).filter(OtherMaterial.id.in_(om_ids)).all()
+    } if om_ids else {}
+
+    bal_q = db.query(InventoryBalance).filter(
+        InventoryBalance.warehouse_id.in_(wh_ids)
+    )
+    if pm_ids:
+        bal_q = bal_q.filter(
+            or_(
+                InventoryBalance.paper_material_id.in_(pm_ids),
+                InventoryBalance.other_material_id.in_(om_ids) if om_ids else False,
+            )
+        )
+    bals = bal_q.all()
+    bal_map: dict[tuple, InventoryBalance] = {
+        (b.warehouse_id, b.paper_material_id, b.other_material_id): b
+        for b in bals
+    }
+
+    result = []
+    for key, entry in key_map.items():
+        wh_id, pm_id, om_id = key
+        wh = wh_map.get(wh_id)
+        bal = bal_map.get(key)
+
+        ton_cuoi = float(bal.ton_luong) if bal else 0.0
+        gt_cuoi = float(bal.gia_tri_ton) if bal else 0.0
+        don_gia = float(bal.don_gia_binh_quan) if bal else 0.0
+        sl_nhap = float(entry["sl_nhap"])
+        gt_nhap = float(entry["gt_nhap"])
+        sl_xuat = float(entry["sl_xuat"])
+        gt_xuat = float(entry["gt_xuat"])
+        ton_dau = ton_cuoi - sl_nhap + sl_xuat
+        gt_dau = ton_dau * don_gia if don_gia else 0.0
+
+        if pm_id and pm_id in pm_map2:
+            pm = pm_map2[pm_id]
+            ma_hang = pm.ma_chinh or ""
+            ten_hang = pm.ten or ""
+            don_vi = "Kg"
+        elif om_id and om_id in om_map2:
+            om = om_map2[om_id]
+            ma_hang = getattr(om, "ma_chinh", "") or ""
+            ten_hang = om.ten or ""
+            don_vi = getattr(om, "don_vi", "") or ""
+        else:
+            ma_hang = ""
+            ten_hang = ""
+            don_vi = ""
+
+        result.append({
+            "warehouse_id": wh_id,
+            "warehouse_name": wh.ten_kho if wh else "",
+            "warehouse_code": wh.ma_kho if wh else "",
+            "paper_material_id": pm_id,
+            "other_material_id": om_id,
+            "ma_hang": ma_hang,
+            "ten_hang": ten_hang,
+            "don_vi": don_vi,
+            "don_gia": round(don_gia, 0),
+            "ton_dau": round(ton_dau, 3),
+            "gia_tri_dau": round(gt_dau, 0),
+            "so_luong_nhap": round(sl_nhap, 3),
+            "gia_tri_nhap": round(gt_nhap, 0),
+            "so_luong_xuat": round(sl_xuat, 3),
+            "gia_tri_xuat": round(gt_xuat, 0),
+            "ton_cuoi": round(ton_cuoi, 3),
+            "gia_tri_cuoi": round(gt_cuoi, 0),
+        })
+
+    result.sort(key=lambda x: (x["ma_hang"], x["warehouse_name"]))
+    return result
+
+
+@router.get("/so-nhap-xuat-ton")
+def so_nhap_xuat_ton(
+    tu_ngay: Optional[date] = Query(None),
+    den_ngay: Optional[date] = Query(None),
+    warehouse_id: Optional[int] = Query(None),
+    loai_nvl: str = Query("all"),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return _build_so_nhap_xuat_ton(db, tu_ngay, den_ngay, warehouse_id, loai_nvl)
+
+
+@router.get("/so-nhap-xuat-ton/export")
+def export_so_nhap_xuat_ton(
+    tu_ngay: Optional[date] = Query(None),
+    den_ngay: Optional[date] = Query(None),
+    warehouse_id: Optional[int] = Query(None),
+    loai_nvl: str = Query("all"),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    rows = _build_so_nhap_xuat_ton(db, tu_ngay, den_ngay, warehouse_id, loai_nvl)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Nhập xuất tồn"
+
+    header_fill = PatternFill("solid", fgColor="1F497D")
+    header_font = Font(bold=True, color="FFFFFF", size=10)
+    subheader_fill = PatternFill("solid", fgColor="4472C4")
+    subheader_font = Font(bold=True, color="FFFFFF", size=9)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    right = Alignment(horizontal="right", vertical="center")
+    thin = Side(style="thin", color="AAAAAA")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    period_str = ""
+    if tu_ngay and den_ngay:
+        period_str = f"Từ {tu_ngay.strftime('%d/%m/%Y')} đến {den_ngay.strftime('%d/%m/%Y')}"
+    elif tu_ngay:
+        period_str = f"Từ {tu_ngay.strftime('%d/%m/%Y')}"
+    elif den_ngay:
+        period_str = f"Đến {den_ngay.strftime('%d/%m/%Y')}"
+
+    ws.merge_cells("A1:N1")
+    ws["A1"] = "SỔ NHẬP XUẤT TỒN NGUYÊN VẬT LIỆU"
+    ws["A1"].font = Font(bold=True, size=13)
+    ws["A1"].alignment = center
+
+    ws.merge_cells("A2:N2")
+    ws["A2"] = period_str
+    ws["A2"].font = Font(italic=True, size=10)
+    ws["A2"].alignment = center
+
+    ws.merge_cells("A4:A5"); ws["A4"] = "STT"
+    ws.merge_cells("B4:B5"); ws["B4"] = "Mã hàng"
+    ws.merge_cells("C4:C5"); ws["C4"] = "Tên hàng"
+    ws.merge_cells("D4:D5"); ws["D4"] = "ĐVT"
+    ws.merge_cells("E4:E5"); ws["E4"] = "Đơn giá"
+    ws.merge_cells("F4:G4"); ws["F4"] = "Tồn đầu kỳ"
+    ws["F5"] = "Số lượng"; ws["G5"] = "Giá trị"
+    ws.merge_cells("H4:I4"); ws["H4"] = "Nhập trong kỳ"
+    ws["H5"] = "Số lượng"; ws["I5"] = "Giá trị"
+    ws.merge_cells("J4:K4"); ws["J4"] = "Xuất trong kỳ"
+    ws["J5"] = "Số lượng"; ws["K5"] = "Giá trị"
+    ws.merge_cells("L4:M4"); ws["L4"] = "Tồn cuối kỳ"
+    ws["L5"] = "Số lượng"; ws["M5"] = "Giá trị"
+    ws.merge_cells("N4:N5"); ws["N4"] = "Kho"
+
+    header_cells_row4 = ["A4","B4","C4","D4","E4","F4","H4","J4","L4","N4"]
+    header_cells_row5 = ["F5","G5","H5","I5","J5","K5","L5","M5"]
+
+    for c in header_cells_row4:
+        ws[c].font = header_font
+        ws[c].fill = header_fill
+        ws[c].alignment = center
+        ws[c].border = border
+
+    for c in header_cells_row5:
+        ws[c].font = subheader_font
+        ws[c].fill = subheader_fill
+        ws[c].alignment = center
+        ws[c].border = border
+
+    col_widths = [5, 18, 30, 6, 12, 13, 14, 13, 14, 13, 14, 13, 14, 18]
+    for i, w in enumerate(col_widths, 1):
+        from openpyxl.utils import get_column_letter
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    totals = {k: 0.0 for k in ["ton_dau","gia_tri_dau","so_luong_nhap","gia_tri_nhap","so_luong_xuat","gia_tri_xuat","ton_cuoi","gia_tri_cuoi"]}
+
+    for idx, row in enumerate(rows, 1):
+        r = idx + 5
+        ws.cell(r, 1, idx)
+        ws.cell(r, 2, row["ma_hang"])
+        ws.cell(r, 3, row["ten_hang"])
+        ws.cell(r, 4, row["don_vi"])
+        ws.cell(r, 5, row["don_gia"])
+        ws.cell(r, 6, row["ton_dau"])
+        ws.cell(r, 7, row["gia_tri_dau"])
+        ws.cell(r, 8, row["so_luong_nhap"])
+        ws.cell(r, 9, row["gia_tri_nhap"])
+        ws.cell(r, 10, row["so_luong_xuat"])
+        ws.cell(r, 11, row["gia_tri_xuat"])
+        ws.cell(r, 12, row["ton_cuoi"])
+        ws.cell(r, 13, row["gia_tri_cuoi"])
+        ws.cell(r, 14, row["warehouse_name"])
+
+        for col in [5, 6, 7, 8, 9, 10, 11, 12, 13]:
+            ws.cell(r, col).alignment = right
+        ws.cell(r, 1).alignment = center
+
+        for col in range(1, 15):
+            ws.cell(r, col).border = border
+
+        for k in totals:
+            totals[k] += row.get(k, 0.0)
+
+    tr = len(rows) + 6
+    ws.cell(tr, 1, "Tổng cộng")
+    ws.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=4)
+    ws.cell(tr, 1).font = Font(bold=True)
+    ws.cell(tr, 1).alignment = center
+
+    for col, key in [(6,"ton_dau"),(7,"gia_tri_dau"),(8,"so_luong_nhap"),(9,"gia_tri_nhap"),
+                     (10,"so_luong_xuat"),(11,"gia_tri_xuat"),(12,"ton_cuoi"),(13,"gia_tri_cuoi")]:
+        c = ws.cell(tr, col, round(totals[key], 0))
+        c.font = Font(bold=True)
+        c.alignment = right
+        c.border = border
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    tu_str = tu_ngay.strftime("%Y%m%d") if tu_ngay else "all"
+    den_str = den_ngay.strftime("%Y%m%d") if den_ngay else "all"
+    filename = f"so_nhap_xuat_ton_{tu_str}_{den_str}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

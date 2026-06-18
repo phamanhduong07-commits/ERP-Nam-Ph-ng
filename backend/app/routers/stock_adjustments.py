@@ -187,6 +187,23 @@ def create_stock_adjustment(
         raise
 
 
+@router.post("/stock-adjustments/{adj_id}/confirm")
+def confirm_stock_adjustment(
+    adj_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("KHO_TO_TRUONG", "KE_TOAN_TRUONG", "ADMIN")),
+):
+    adj = db.query(StockAdjustment).options(joinedload(StockAdjustment.items)).filter(StockAdjustment.id == adj_id).first()
+    if not adj:
+        raise HTTPException(404, "Khong tim thay phieu kiem ke")
+    if adj.trang_thai != "nhap":
+        raise HTTPException(400, "Phieu da duoc xac nhan hoac da huy")
+    adj.trang_thai = "confirmed"
+    db.commit()
+    db.refresh(adj)
+    return _adj_to_dict(adj, db)
+
+
 @router.delete("/stock-adjustments/{adj_id}")
 def delete_stock_adjustment(adj_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("KHO_TO_TRUONG", "KE_TOAN_TRUONG", "ADMIN"))):
     adj = db.get(StockAdjustment, adj_id)
