@@ -395,13 +395,13 @@ function ParamModal({
       }
     >
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
-        {/* Row 1: Chi nhánh + Kỳ báo cáo */}
+        {/* Row 1: Pháp nhân + Kỳ báo cáo */}
         <Row gutter={16}>
           <Col span={12}>
-            <Text strong style={{ display: 'block', marginBottom: 4 }}>Chi nhánh</Text>
+            <Text strong style={{ display: 'block', marginBottom: 4 }}>Pháp nhân</Text>
             <Select
               style={{ width: '100%' }}
-              placeholder="Tất cả chi nhánh"
+              placeholder="Tất cả pháp nhân"
               allowClear
               value={draft.phap_nhan_id}
               onChange={v => setDraft(d => ({ ...d, phap_nhan_id: v }))}

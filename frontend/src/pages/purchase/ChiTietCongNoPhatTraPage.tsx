@@ -292,9 +292,9 @@ function ParamModal({
       }
     >
       <Space direction="vertical" style={{ width: '100%' }} size={10}>
-        {/* Chi nhánh */}
+        {/* Pháp nhân */}
         <div>
-          <Text strong style={{ display: 'block', marginBottom: 4 }}>Chi nhánh</Text>
+          <Text strong style={{ display: 'block', marginBottom: 4 }}>Pháp nhân</Text>
           <Select
             mode="multiple"
             style={{ width: '100%' }}
