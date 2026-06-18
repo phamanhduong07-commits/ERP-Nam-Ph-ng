@@ -12,7 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_admin_user, get_current_user, require_roles
 from app.models.accounting import CashPayment, DoiTruChungTu, DoiTruItem, PurchaseInvoice
 from app.models.auth import User
 
@@ -33,6 +33,9 @@ class DoiTruCreate(BaseModel):
     ghi_chu: str | None = None
     phap_nhan_id: int | None = None
     loai: str = "doi_tru"
+    tk_no: str | None = "3311"
+    tk_co: str | None = "1121"
+    loai_tien: str = "VND"
     items: list[DoiTruItemIn]
 
 
@@ -47,6 +50,9 @@ class BuTruCreate(BaseModel):
     ngay_doi_tru: date
     ghi_chu: str | None = None
     phap_nhan_id: int | None = None
+    tk_no: str | None = "3311"
+    tk_co: str | None = "1311"
+    loai_tien: str = "VND"
     items: list[BuTruItemIn]
 
 
@@ -108,6 +114,9 @@ def _doi_tru_out(dt: DoiTruChungTu) -> dict:
         "trang_thai": dt.trang_thai,
         "tong_tien_doi_tru": float(dt.tong_tien_doi_tru),
         "ghi_chu": dt.ghi_chu,
+        "tk_no": dt.tk_no,
+        "tk_co": dt.tk_co,
+        "loai_tien": dt.loai_tien,
         "phap_nhan_id": dt.phap_nhan_id,
         "ngay_xac_nhan": dt.ngay_xac_nhan.isoformat() if dt.ngay_xac_nhan else None,
         "created_at": dt.created_at.isoformat() if dt.created_at else None,
@@ -347,6 +356,9 @@ def _create_and_confirm(db: Session, data: DoiTruCreate | BuTruCreate, user_id: 
         trang_thai="da_xac_nhan",
         ghi_chu=data.ghi_chu,
         phap_nhan_id=data.phap_nhan_id,
+        tk_no=getattr(data, "tk_no", None),
+        tk_co=getattr(data, "tk_co", None),
+        loai_tien=getattr(data, "loai_tien", "VND"),
         nguoi_xac_nhan_id=user_id,
         ngay_xac_nhan=now,
         created_by=user_id,
@@ -429,7 +441,7 @@ def create_doi_tru(
 def huy_doi_tru(
     doi_tru_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("ADMIN", "KE_TOAN")),
 ) -> Any:
     dt = (
         db.query(DoiTruChungTu)
@@ -582,14 +594,56 @@ def doi_tru_nhieu_doi_tuong(
     return results
 
 
-# ─── BỎ ĐỐI TRỪ NHIỀU ĐỐI TƯỢNG ─────────────────────────────────────────────
-
 class HuyNhieuIn(BaseModel):
     supplier_ids: list[int]
     tu_ngay: date | None = None
     den_ngay: date | None = None
     phap_nhan_id: int | None = None
 
+
+# ─── BỎ ĐỐI TRỪ NHIỀU ĐỐI TƯỢNG — PREVIEW ──────────────────────────────────
+
+@router.post("/nhieu-doi-tuong/preview-huy")
+def preview_huy_nhieu(
+    data: HuyNhieuIn,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+) -> Any:
+    from app.models.master import Supplier
+
+    results = []
+    for sid in data.supplier_ids:
+        q = db.query(DoiTruChungTu).filter(
+            DoiTruChungTu.supplier_id == sid,
+            DoiTruChungTu.trang_thai == "da_xac_nhan",
+        )
+        if data.tu_ngay:
+            q = q.filter(DoiTruChungTu.ngay_doi_tru >= data.tu_ngay)
+        if data.den_ngay:
+            q = q.filter(DoiTruChungTu.ngay_doi_tru <= data.den_ngay)
+        if data.phap_nhan_id:
+            q = q.filter(DoiTruChungTu.phap_nhan_id == data.phap_nhan_id)
+        rows = q.options(selectinload(DoiTruChungTu.supplier)).all()
+        supplier = rows[0].supplier if rows else db.query(Supplier).filter(Supplier.id == sid).first()
+        ten_ncc = (supplier.ten_viet_tat or supplier.ten_don_vi or supplier.ma_ncc) if supplier else str(sid)
+        results.append({
+            "supplier_id": sid,
+            "ten_ncc": ten_ncc,
+            "so_bao": len(rows),
+            "tong_tien": sum(float(r.tong_tien_doi_tru) for r in rows),
+            "items": [
+                {
+                    "ma_doi_tru": r.ma_doi_tru,
+                    "ngay_doi_tru": r.ngay_doi_tru.isoformat() if r.ngay_doi_tru else None,
+                    "tong_tien": float(r.tong_tien_doi_tru),
+                }
+                for r in rows
+            ],
+        })
+    return results
+
+
+# ─── BỎ ĐỐI TRỪ NHIỀU ĐỐI TƯỢNG ─────────────────────────────────────────────
 
 class SupplierConfirmIn(BaseModel):
     supplier_id: int
@@ -607,7 +661,7 @@ class ConfirmNhieuIn(BaseModel):
 def huy_nhieu_doi_tuong(
     data: HuyNhieuIn,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_admin_user),
 ) -> Any:
     results = []
     for sid in data.supplier_ids:
