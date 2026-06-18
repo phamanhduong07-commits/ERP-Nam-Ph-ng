@@ -1,5 +1,5 @@
 ﻿import calendar
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy import desc, func, and_, or_
@@ -26,6 +26,7 @@ from app.schemas.accounting import (
     CashReceiptCreate,
     CashPaymentCreate,
     ARLedgerRow, ARAgingRow, ARCustomerSummaryRow,
+    ARAgingBuckets, ARDashboardTopCustomer, ARDashboardUpcomingInvoice, ARDashboardData,
     APLedgerRow, APAgingRow,
     BalanceByPeriod,
     OpeningBalanceCreate,
@@ -1304,6 +1305,7 @@ class AccountingService:
         den_ngay: date | None = None,
         phap_nhan_id: int | None = None,
         phan_xuong_id: int | None = None,
+        hinh_thuc_tt: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ):
@@ -1324,6 +1326,15 @@ class AccountingService:
             q = q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
         if phan_xuong_id:
             q = q.filter(CashReceipt.phan_xuong_id == phan_xuong_id)
+        if hinh_thuc_tt:
+            _CASH = {"tien_mat", "TM"}
+            _BANK = {"chuyen_khoan", "CK"}
+            if hinh_thuc_tt in _CASH:
+                q = q.filter(CashReceipt.hinh_thuc_tt.in_(list(_CASH)))
+            elif hinh_thuc_tt in _BANK:
+                q = q.filter(CashReceipt.hinh_thuc_tt.in_(list(_BANK)))
+            else:
+                q = q.filter(CashReceipt.hinh_thuc_tt == hinh_thuc_tt)
 
         total = q.count()
         rows = q.order_by(desc(CashReceipt.ngay_phieu)).offset((page - 1) * page_size).limit(page_size).all()
@@ -1639,6 +1650,7 @@ class AccountingService:
             tk_no=data.tk_no,
             tk_co=data.tk_co,
             loai_chi=data.loai_chi,
+            khoan_muc_chi_phi_id=data.khoan_muc_chi_phi_id,
             phap_nhan_id=phap_nhan_id,
             phan_xuong_id=phan_xuong_id,
             created_by=user_id,
@@ -1773,6 +1785,7 @@ class AccountingService:
         den_ngay: date | None = None,
         phap_nhan_id: int | None = None,
         phan_xuong_id: int | None = None,
+        hinh_thuc_tt: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ):
@@ -1793,6 +1806,15 @@ class AccountingService:
             q = q.filter(CashPayment.phap_nhan_id == phap_nhan_id)
         if phan_xuong_id:
             q = q.filter(CashPayment.phan_xuong_id == phan_xuong_id)
+        if hinh_thuc_tt:
+            _CASH = {"tien_mat", "TM"}
+            _BANK = {"chuyen_khoan", "CK"}
+            if hinh_thuc_tt in _CASH:
+                q = q.filter(CashPayment.hinh_thuc_tt.in_(list(_CASH)))
+            elif hinh_thuc_tt in _BANK:
+                q = q.filter(CashPayment.hinh_thuc_tt.in_(list(_BANK)))
+            else:
+                q = q.filter(CashPayment.hinh_thuc_tt == hinh_thuc_tt)
         total = q.count()
         rows = q.order_by(desc(CashPayment.ngay_phieu)).offset((page - 1) * page_size).limit(page_size).all()
         items = [
@@ -1810,6 +1832,9 @@ class AccountingService:
                 "so_tien": p.so_tien,
                 "tk_no": p.tk_no,
                 "tk_co": p.tk_co,
+                "loai_chi": p.loai_chi,
+                "khoan_muc_chi_phi_id": p.khoan_muc_chi_phi_id,
+                "ten_khoan_muc": p.khoan_muc_chi_phi.ten_kmcp if p.khoan_muc_chi_phi else None,
                 "trang_thai": p.trang_thai,
                 "phap_nhan_id": p.phap_nhan_id,
                 "ten_phap_nhan": p.phap_nhan.ten_phap_nhan if p.phap_nhan else None,
@@ -2049,6 +2074,139 @@ class AccountingService:
             ))
         return result
 
+    def get_ar_dashboard(
+        self,
+        phap_nhan_id: int | None = None,
+        nhan_vien_id: int | None = None,
+    ) -> ARDashboardData:
+        today = date.today()
+
+        def _base_inv_q():
+            q = self.db.query(SalesInvoice).filter(
+                SalesInvoice.trang_thai != "huy",
+                SalesInvoice.con_lai > 0,
+            )
+            if phap_nhan_id:
+                q = q.filter(SalesInvoice.phap_nhan_id == phap_nhan_id)
+            if nhan_vien_id:
+                q = q.join(Customer, SalesInvoice.customer_id == Customer.id).filter(
+                    Customer.nv_phu_trach_id == nhan_vien_id
+                )
+            return q
+
+        invoices = _base_inv_q().all()
+
+        # ── Aging buckets ──────────────────────────────
+        buckets: dict[str, Decimal] = {
+            'truoc_han_0_7': Decimal(0),
+            'truoc_han_8_18': Decimal(0),
+            'truoc_han_tren_18': Decimal(0),
+            'qua_han': Decimal(0),
+            'khong_co_han': Decimal(0),
+        }
+        for inv in invoices:
+            remaining = inv.con_lai or Decimal(0)
+            if not inv.han_tt:
+                buckets['khong_co_han'] += remaining
+            else:
+                d = (inv.han_tt - today).days
+                if d < 0:
+                    buckets['qua_han'] += remaining
+                elif d <= 7:
+                    buckets['truoc_han_0_7'] += remaining
+                elif d <= 18:
+                    buckets['truoc_han_8_18'] += remaining
+                else:
+                    buckets['truoc_han_tren_18'] += remaining
+
+        tong_cong_no = sum(buckets.values())
+
+        # ── Tổng đã thu ────────────────────────────────
+        rcpt_q = self.db.query(
+            func.coalesce(func.sum(CashReceipt.so_tien), 0)
+        ).filter(CashReceipt.trang_thai == "da_duyet")
+        if phap_nhan_id:
+            rcpt_q = rcpt_q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
+        if nhan_vien_id:
+            rcpt_q = rcpt_q.join(Customer, CashReceipt.customer_id == Customer.id).filter(
+                Customer.nv_phu_trach_id == nhan_vien_id
+            )
+        tong_da_thu = Decimal(str(rcpt_q.scalar() or 0))
+
+        con_phai_thu = tong_cong_no - tong_da_thu
+        ty_le = float(tong_da_thu / tong_cong_no * 100) if tong_cong_no > 0 else 0.0
+
+        # ── DSO: avg(today - ngay_hoa_don) ────────────
+        if invoices:
+            avg_days = sum((today - inv.ngay_hoa_don).days for inv in invoices) / len(invoices)
+        else:
+            avg_days = 0.0
+
+        # ── Top 5 customers by con_lai ─────────────────
+        top_map: dict[int, Decimal] = {}
+        for inv in invoices:
+            top_map[inv.customer_id] = top_map.get(inv.customer_id, Decimal(0)) + (inv.con_lai or Decimal(0))
+        sorted_top = sorted(top_map.items(), key=lambda x: x[1], reverse=True)[:5]
+
+        cust_map: dict[int, Customer] = {}
+        if sorted_top:
+            custs = self.db.query(Customer).filter(
+                Customer.id.in_([c[0] for c in sorted_top])
+            ).all()
+            cust_map = {c.id: c for c in custs}
+
+        top_customers = [
+            ARDashboardTopCustomer(
+                customer_id=cid,
+                ma_kh=cust_map[cid].ma_kh,
+                ten_khach_hang=cust_map[cid].ten_viet_tat or cust_map[cid].ten_don_vi or cust_map[cid].ma_kh,
+                so_con_phai_thu=amount,
+            )
+            for cid, amount in sorted_top
+            if cid in cust_map and amount > 0
+        ]
+
+        # ── Sắp đến hạn trong 5 ngày ──────────────────
+        sap_q = _base_inv_q().filter(
+            SalesInvoice.han_tt != None,
+            SalesInvoice.han_tt >= today,
+            SalesInvoice.han_tt <= today + timedelta(days=5),
+        ).order_by(SalesInvoice.han_tt).limit(20).all()
+
+        sap_cust_ids = {inv.customer_id for inv in sap_q}
+        sap_cust_map: dict[int, Customer] = {}
+        if sap_cust_ids:
+            sap_custs = self.db.query(Customer).filter(Customer.id.in_(sap_cust_ids)).all()
+            sap_cust_map = {c.id: c for c in sap_custs}
+
+        sap_den_han = [
+            ARDashboardUpcomingInvoice(
+                invoice_id=inv.id,
+                so_hoa_don=inv.so_hoa_don,
+                han_tt=inv.han_tt,
+                customer_id=inv.customer_id,
+                ten_khach_hang=(
+                    (sap_cust_map[inv.customer_id].ten_viet_tat or
+                     sap_cust_map[inv.customer_id].ten_don_vi or
+                     sap_cust_map[inv.customer_id].ma_kh)
+                    if inv.customer_id in sap_cust_map else str(inv.customer_id)
+                ),
+                so_tien=inv.con_lai,
+            )
+            for inv in sap_q
+        ]
+
+        return ARDashboardData(
+            tong_cong_no=tong_cong_no,
+            aging=ARAgingBuckets(**buckets),
+            tong_da_thu=tong_da_thu,
+            con_phai_thu=con_phai_thu,
+            ty_le_thu_hoi=ty_le,
+            so_ngay_binh_quan=round(avg_days, 1),
+            top_customers=top_customers,
+            sap_den_han=sap_den_han,
+        )
+
     def get_supplier_reconciliation(
         self,
         supplier_id: int,
@@ -2159,22 +2317,27 @@ class AccountingService:
         cust_ids = {e.customer_id for e in entries if e.customer_id}
         inv_ids = {e.chung_tu_id for e in entries if e.chung_tu_id and e.chung_tu_loai in {"hoa_don_ban", "huy_hoa_don_ban"}}
         rec_ids = {e.chung_tu_id for e in entries if e.chung_tu_id and e.chung_tu_loai in {"phieu_thu", "huy_phieu_thu"}}
+        pn_ids = {e.phap_nhan_id for e in entries if e.phap_nhan_id}
 
         cust_map: dict[int, Customer] = {}
         inv_map: dict[int, SalesInvoice] = {}
         rec_map: dict[int, CashReceipt] = {}
+        pn_map: dict[int, PhapNhan] = {}
         if cust_ids:
             cust_map = {c.id: c for c in self.db.query(Customer).filter(Customer.id.in_(cust_ids)).all()}
         if inv_ids:
             inv_map = {i.id: i for i in self.db.query(SalesInvoice).filter(SalesInvoice.id.in_(inv_ids)).all()}
         if rec_ids:
             rec_map = {r.id: r for r in self.db.query(CashReceipt).filter(CashReceipt.id.in_(rec_ids)).all()}
+        if pn_ids:
+            pn_map = {p.id: p for p in self.db.query(PhapNhan).filter(PhapNhan.id.in_(pn_ids)).all()}
 
         rows = []
         for e in entries:
             customer = cust_map.get(e.customer_id) if e.customer_id else None
             invoice = inv_map.get(e.chung_tu_id) if e.chung_tu_id and e.chung_tu_loai in {"hoa_don_ban", "huy_hoa_don_ban"} else None
             receipt = rec_map.get(e.chung_tu_id) if e.chung_tu_id and e.chung_tu_loai in {"phieu_thu", "huy_phieu_thu"} else None
+            phap_nhan = pn_map.get(e.phap_nhan_id) if e.phap_nhan_id else None
 
             if e.loai == "tang_no":
                 phat_sinh_no = e.so_tien
@@ -2203,6 +2366,8 @@ class AccountingService:
                 "phat_sinh_no": phat_sinh_no,
                 "phat_sinh_co": phat_sinh_co,
                 "so_du": so_du_luy_ke,
+                "phap_nhan_id": e.phap_nhan_id,
+                "ten_phap_nhan": (getattr(phap_nhan, "ten_viet_tat", None) or getattr(phap_nhan, "ten_phap_nhan", None)) if phap_nhan else None,
             })
 
         return {

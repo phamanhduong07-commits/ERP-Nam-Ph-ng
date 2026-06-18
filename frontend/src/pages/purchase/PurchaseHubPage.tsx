@@ -29,8 +29,19 @@ const GROUPS: HubGroup[] = [
     title: 'Công nợ & Báo cáo',
     items: [
       { icon: '🧾', label: 'Hóa đơn mua hàng', to: '/accounting/purchase-invoices', permissions: ['accounting.ap_ledger'] },
+      { icon: '📋', label: 'Sổ chi tiết mua hàng', to: '/purchasing/reports/so-chi-tiet', permissions: ['purchase.reports'] },
       { icon: '📊', label: 'Báo cáo mua hàng', to: '/purchasing/reports', permissions: ['purchase.reports'] },
       { icon: '🏠', label: 'Dashboard mua hàng', to: '/purchasing/dashboard', permissions: ['purchase.reports'] },
+    ],
+  },
+  {
+    title: 'Tiện ích',
+    items: [
+      { icon: '🔄', label: 'Đối trừ chứng từ', to: '/purchasing/doi-tru', permissions: ['accounting.ap_ledger'] },
+      { icon: '⚡', label: 'Đối trừ nhiều đối tượng', to: '/purchasing/doi-tru-nhieu', permissions: ['accounting.ap_ledger'] },
+      { icon: '↩️', label: 'Bỏ đối trừ', to: '/purchasing/bo-doi-tru', permissions: ['accounting.ap_ledger'] },
+      { icon: '🗑️', label: 'Bỏ đối trừ nhiều đối tượng', to: '/purchasing/bo-doi-tru-nhieu', permissions: ['accounting.ap_ledger'] },
+      { icon: '🔃', label: 'Bù trừ công nợ', to: '/purchasing/bu-tru-cong-no', permissions: ['accounting.ap_ledger'] },
     ],
   },
 ]

@@ -20,6 +20,8 @@ class ChartOfAccounts(Base):
     cap: Mapped[int] = mapped_column(SmallInteger, default=1)
     so_tk_cha: Mapped[str | None] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"))
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
+    theo_doi_doi_tuong: Mapped[bool] = mapped_column(Boolean, default=False)
+    loai_doi_tuong: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
     parent = relationship("ChartOfAccounts", remote_side="ChartOfAccounts.so_tk")
 
@@ -162,12 +164,14 @@ class CashPayment(Base):
     ngay_phieu: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=True, index=True)
     purchase_invoice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_invoices.id"))
+    da_doi_tru: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     hinh_thuc_tt: Mapped[str] = mapped_column(String(20), default="CK")
     so_tai_khoan: Mapped[str | None] = mapped_column(String(100))
     so_tham_chieu: Mapped[str | None] = mapped_column(String(100))
     dien_giai: Mapped[str | None] = mapped_column(Text)
     so_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     loai_chi: Mapped[str | None] = mapped_column(String(30))  # nop_thue | nop_bh | tra_luong | null=ttt_ncc
+    khoan_muc_chi_phi_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("khoan_muc_chi_phi.id"), nullable=True)
     # Tài khoản kế toán VAS
     tk_no: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="331")
     tk_co: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="112")
@@ -183,11 +187,16 @@ class CashPayment(Base):
     supplier = relationship("Supplier")
     phap_nhan = relationship("PhapNhan")
     phan_xuong = relationship("PhanXuong")
+    khoan_muc_chi_phi = relationship("KhoanMucChiPhi", foreign_keys=[khoan_muc_chi_phi_id])
     purchase_invoice: Mapped["PurchaseInvoice | None"] = relationship(
         "PurchaseInvoice", back_populates="payments"
     )
     creator = relationship("User", foreign_keys=[created_by])
     nguoi_duyet = relationship("User", foreign_keys=[nguoi_duyet_id])
+
+    @property
+    def ten_khoan_muc(self) -> str | None:
+        return self.khoan_muc_chi_phi.ten_kmcp if self.khoan_muc_chi_phi else None
 
 
 class DebtLedgerEntry(Base):
@@ -541,6 +550,65 @@ class HoaDonDienTu(Base):
     creator = relationship("User", foreign_keys=[created_by])
 
 
+class IncomingInvoice(Base):
+    """Hóa đơn đầu vào (nhập từ email hoặc upload XML)"""
+    __tablename__ = "incoming_invoices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    so_hoa_don: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    mau_so: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ky_hieu: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ngay_hoa_don: Mapped[date | None] = mapped_column(Date, nullable=True)
+    supplier_tax_code: Mapped[str | None] = mapped_column(String(30), index=True, nullable=True)
+    supplier_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    buyer_tax_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    buyer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    tong_tien_hang: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    tien_thue: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    tong_thanh_toan: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    xml_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    items: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # [{stt, ma_hang, ten_hang, dvt, so_luong, don_gia, thanh_tien, thue_suat}]
+    trang_thai: Mapped[str] = mapped_column(String(30), default="cho_xu_ly", index=True)
+    # cho_xu_ly | da_xu_ly | bo_qua
+    purchase_invoice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_invoices.id"), nullable=True)
+    goods_receipt_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goods_receipts.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    purchase_invoice = relationship("PurchaseInvoice")
+    goods_receipt = relationship("GoodsReceipt")
+
+
+class IncomingInvoiceMappingRule(Base):
+    """Bảng luật ánh xạ vật tư từ nhà cung cấp sang hệ thống nội bộ"""
+    __tablename__ = "incoming_invoice_mapping_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    supplier_tax_code: Mapped[str] = mapped_column(String(30), index=True, nullable=False)
+    supplier_item_name: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    paper_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_materials.id"), nullable=True)
+    other_material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("other_materials.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    paper_material = relationship("PaperMaterial")
+    other_material = relationship("OtherMaterial")
+
+    __table_args__ = (
+        UniqueConstraint("supplier_tax_code", "supplier_item_name", name="uq_incoming_invoice_mapping_rule"),
+    )
+
+
+
 # ──────────────────────────────────────────────
 # Khế ước đi vay
 # ──────────────────────────────────────────────
@@ -669,6 +737,49 @@ class InternalTransfer(Base):
     den_phap_nhan = relationship("PhapNhan", foreign_keys=[den_phap_nhan_id])
     creator = relationship("User", foreign_keys=[created_by])
     nguoi_duyet = relationship("User", foreign_keys=[nguoi_duyet_id])
+
+
+class DoiTruChungTu(Base):
+    """Đối trừ chứng từ — matching phiếu chi vs hóa đơn mua (hoặc bù trừ AP vs AR)"""
+    __tablename__ = "doi_tru_chung_tu"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ma_doi_tru: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # DT-YYYYMMDD-XXX
+    ngay_doi_tru: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False, index=True)
+    loai: Mapped[str] = mapped_column(String(20), default="doi_tru")  # doi_tru | bu_tru_cong_no
+    trang_thai: Mapped[str] = mapped_column(String(20), default="da_xac_nhan", index=True)  # da_xac_nhan | da_huy
+    tong_tien_doi_tru: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
+    nguoi_xac_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    ngay_xac_nhan: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    supplier = relationship("Supplier")
+    phap_nhan = relationship("PhapNhan")
+    creator = relationship("User", foreign_keys=[created_by])
+    nguoi_xac_nhan = relationship("User", foreign_keys=[nguoi_xac_nhan_id])
+    items: Mapped[list["DoiTruItem"]] = relationship(
+        "DoiTruItem", back_populates="doi_tru", cascade="all, delete-orphan"
+    )
+
+
+class DoiTruItem(Base):
+    """Dòng đối trừ — 1 cặp HĐ mua ↔ phiếu chi (hoặc HĐ mua ↔ HĐ bán cho bù trừ)"""
+    __tablename__ = "doi_tru_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    doi_tru_id: Mapped[int] = mapped_column(Integer, ForeignKey("doi_tru_chung_tu.id"), nullable=False, index=True)
+    purchase_invoice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_invoices.id"), nullable=True)
+    cash_payment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("cash_payments.id"), nullable=True)
+    sales_invoice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sales_invoices.id"), nullable=True)
+    so_tien_doi_tru: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+
+    doi_tru = relationship("DoiTruChungTu", back_populates="items")
+    purchase_invoice = relationship("PurchaseInvoice")
+    cash_payment = relationship("CashPayment")
 
 
 # Import tại đây để tránh circular import khi billing.py import CashReceipt

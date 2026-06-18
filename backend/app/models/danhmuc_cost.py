@@ -15,6 +15,8 @@ class KhoanMucChiPhi(Base):
     ten_kmcp: Mapped[str] = mapped_column(String(150), nullable=False)
     # "nhan_cong" | "nguyen_vat_lieu" | "may_moc" | "tieu_hao" | "chi_phi_chung" | "khac"
     loai_chi_phi: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # ma_loai trong bảng tai_khoan_ngam_dinh — dùng để tra TK Nợ mặc định khi tạo phiếu chi
+    ma_loai_tk_no: Mapped[str | None] = mapped_column(String(60), nullable=True)
     ghi_chu: Mapped[str | None] = mapped_column(Text, nullable=True)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -161,6 +161,9 @@ export default function PurchaseInvoiceListPage() {
           <Button icon={<WalletOutlined />} onClick={() => navigate('/accounting/payments')}>
             Phiếu chi
           </Button>
+          <Button type="primary" onClick={() => navigate('/accounting/incoming-invoices')}>
+            Xử lý hóa đơn đầu vào
+          </Button>
         </Space>
       }
     >

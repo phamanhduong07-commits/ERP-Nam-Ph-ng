@@ -4,11 +4,12 @@ import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input,
-  InputNumber, Switch, message, Typography, Tag,
+  InputNumber, Switch, message, Typography, Tag, Select, Popconfirm,
 } from 'antd'
-import { PlusOutlined, EditOutlined, BankOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, BankOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { bankAccountsApi, type BankAccount, type BankAccountCreate } from '../../api/banking'
+import { phapNhanApi, type PhapNhan } from '../../api/phap-nhan'
 import ImportExcelButton from '../../components/ImportExcelButton'
 import EmptyState from "../../components/EmptyState"
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
@@ -20,10 +21,16 @@ export default function BankAccountList() {
   const [form] = Form.useForm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<BankAccount | null>(null)
+  const [filterPhapNhanId, setFilterPhapNhanId] = useState<number | null>(null)
+
+  const { data: phapNhanList = [] } = useQuery<PhapNhan[]>({
+    queryKey: ['phap-nhan'],
+    queryFn: () => phapNhanApi.list({ trang_thai: true }).then(r => r.data),
+  })
 
   const { data = [], isLoading } = useQuery({
-    queryKey: ['bank-accounts'],
-    queryFn: () => bankAccountsApi.list().then(r => r.data),
+    queryKey: ['bank-accounts', filterPhapNhanId],
+    queryFn: () => bankAccountsApi.list({ phap_nhan_id: filterPhapNhanId ?? undefined }).then(r => r.data),
   })
 
   const createMut = useMutation({
@@ -34,6 +41,15 @@ export default function BankAccountList() {
       message.success('Đã thêm tài khoản ngân hàng')
     },
     onError: (e: { response?: { data?: { detail?: string } } }) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi khi thêm'),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => bankAccountsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bank-accounts'] })
+      message.success('Đã xóa tài khoản ngân hàng')
+    },
+    onError: () => message.error('Lỗi khi xóa'),
   })
 
   const updateMut = useMutation({
@@ -79,6 +95,7 @@ export default function BankAccountList() {
 
   const columns: ColumnsType<BankAccount> = [
     { title: 'Mã TK', dataIndex: 'ma_tk', width: 120, render: t => <b>{t}</b> },
+    { title: 'Pháp nhân', dataIndex: 'phap_nhan_ten', width: 160, render: v => v ?? <span style={{ color: '#bbb' }}>—</span> },
     { title: 'Ngân hàng', dataIndex: 'ten_ngan_hang' },
     { title: 'Số tài khoản', dataIndex: 'so_tai_khoan', width: 200 },
     { title: 'Chủ tài khoản', dataIndex: 'chu_tai_khoan' },
@@ -98,9 +115,18 @@ export default function BankAccountList() {
     },
     {
       title: '',
-      width: 60,
+      width: 100,
       render: (_, rec) => (
-        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(rec)} />
+        <Space>
+          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(rec)} />
+          <Popconfirm
+            title="Xóa tài khoản ngân hàng này?"
+            onConfirm={() => deleteMut.mutate(rec.id)}
+            okText="Xóa" cancelText="Hủy" okButtonProps={{ danger: true }}
+          >
+            <Button size="small" danger icon={<DeleteOutlined />} loading={deleteMut.isPending} />
+          </Popconfirm>
+        </Space>
       ),
     },
   ]
@@ -122,9 +148,20 @@ export default function BankAccountList() {
         </Space>
       }
     >
+      <div style={{ marginBottom: 12 }}>
+        <Select
+          allowClear
+          placeholder="Lọc theo pháp nhân"
+          style={{ width: 240 }}
+          value={filterPhapNhanId}
+          onChange={v => setFilterPhapNhanId(v ?? null)}
+          options={phapNhanList.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+        />
+      </div>
+
       <Table
-                locale={{ emptyText: <EmptyState size="small" /> }}
-                rowKey="id"
+        locale={{ emptyText: <EmptyState size="small" /> }}
+        rowKey="id"
         columns={displayColumns}
         dataSource={data}
         loading={isLoading}
@@ -143,6 +180,13 @@ export default function BankAccountList() {
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="ma_tk" label="Mã tài khoản" rules={[{ required: true }]}>
             <Input disabled={!!editing} placeholder="VD: BIDV_001" />
+          </Form.Item>
+          <Form.Item name="phap_nhan_id" label="Pháp nhân">
+            <Select
+              allowClear
+              placeholder="Chọn pháp nhân (nếu có)"
+              options={phapNhanList.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+            />
           </Form.Item>
           <Form.Item name="ten_ngan_hang" label="Tên ngân hàng" rules={[{ required: true }]}>
             <Input placeholder="VD: Ngân hàng BIDV" />

@@ -107,6 +107,12 @@ const YMHListPage = lazy(() => import('./pages/purchase/YMHListPage'))
 const YMHDetailPage = lazy(() => import('./pages/purchase/YMHDetailPage'))
 const PurchaseDashboardPage = lazy(() => import('./pages/purchase/PurchaseDashboardPage'))
 const PurchaseHubPage = lazy(() => import('./pages/purchase/PurchaseHubPage'))
+const DoiTruPage = lazy(() => import('./pages/purchase/DoiTruPage'))
+const DoiTruNhieuPage = lazy(() => import('./pages/purchase/DoiTruNhieuPage'))
+const BoDoiTruPage = lazy(() => import('./pages/purchase/BoDoiTruPage'))
+const BoDoiTruNhieuPage = lazy(() => import('./pages/purchase/BoDoiTruNhieuPage'))
+const BuTruCongNoPage = lazy(() => import('./pages/purchase/BuTruCongNoPage'))
+const SoChiTietMuaHangPage = lazy(() => import('./pages/purchase/SoChiTietMuaHangPage'))
 const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
@@ -132,6 +138,8 @@ const InvoiceAdjustmentListPage = lazy(() => import('./pages/billing/InvoiceAdju
 // Agent
 const AgentPage = lazy(() => import('./pages/agent/AgentPage'))
 // Accounting
+const TienMatPage = lazy(() => import('./pages/accounting/TienMatPage'))
+const NganHangPage = lazy(() => import('./pages/accounting/NganHangPage'))
 const CashReceiptListPage = lazy(() => import('./pages/accounting/CashReceiptListPage'))
 const CashReceiptDetailPage = lazy(() => import('./pages/accounting/CashReceiptDetailPage'))
 const CashReceiptForm = lazy(() => import('./pages/accounting/CashReceiptForm'))
@@ -149,6 +157,7 @@ const SalaryPaymentPage = lazy(() => import('./pages/accounting/SalaryPaymentPag
 const ExcelImportWizardPage = lazy(() => import('./pages/accounting/ExcelImportWizardPage'))
 const PurchaseInvoiceListPage = lazy(() => import('./pages/accounting/PurchaseInvoiceListPage'))
 const PurchaseInvoiceDetailPage = lazy(() => import('./pages/accounting/PurchaseInvoiceDetailPage'))
+const IncomingInvoiceProcessingPage = lazy(() => import('./pages/accounting/IncomingInvoiceProcessingPage'))
 const ARLedgerPage = lazy(() => import('./pages/accounting/ARLedgerPage'))
 const APLedgerPage = lazy(() => import('./pages/accounting/APLedgerPage'))
 const CashBookPage = lazy(() => import('./pages/accounting/CashBookPage'))
@@ -419,6 +428,12 @@ export default function App() {
             <Route path="purchasing/dashboard" element={<ErrorBoundary><PurchaseDashboardPage /></ErrorBoundary>} />
             <Route path="purchasing/returns" element={<ErrorBoundary><PurchaseReturnPage /></ErrorBoundary>} />
             <Route path="purchasing/reports" element={<ErrorBoundary><PurchaseReportPage /></ErrorBoundary>} />
+            <Route path="purchasing/doi-tru" element={<ErrorBoundary><DoiTruPage /></ErrorBoundary>} />
+            <Route path="purchasing/doi-tru-nhieu" element={<ErrorBoundary><DoiTruNhieuPage /></ErrorBoundary>} />
+            <Route path="purchasing/bo-doi-tru" element={<ErrorBoundary><BoDoiTruPage /></ErrorBoundary>} />
+            <Route path="purchasing/bo-doi-tru-nhieu" element={<ErrorBoundary><BoDoiTruNhieuPage /></ErrorBoundary>} />
+            <Route path="purchasing/bu-tru-cong-no" element={<ErrorBoundary><BuTruCongNoPage /></ErrorBoundary>} />
+            <Route path="purchasing/reports/so-chi-tiet" element={<ErrorBoundary><SoChiTietMuaHangPage /></ErrorBoundary>} />
             <Route path="danhmuc/phap-nhan" element={<PhapNhanList />} />
             <Route path="danhmuc/phim-tat" element={<PhimTatPage />} />
             <Route path="master/phan-xuong" element={<PhanXuongList />} />
@@ -430,7 +445,9 @@ export default function App() {
             <Route path="billing/invoices/new" element={<SalesInvoiceForm />} />
             <Route path="billing/invoices/:id" element={<SalesInvoiceDetailPage />} />
             <Route path="billing/adjustments" element={<InvoiceAdjustmentListPage />} />
-            <Route path="accounting/receipts" element={<CashReceiptListPage />} />
+            <Route path="accounting/tien-mat" element={<TienMatPage />} />
+            <Route path="accounting/ngan-hang" element={<NganHangPage />} />
+            <Route path="accounting/receipts" element={<Navigate to="/accounting/tien-mat" replace />} />
             <Route path="accounting/receipts/new" element={<CashReceiptForm />} />
             <Route path="accounting/receipts/by-invoice" element={<CashReceiptByInvoicePage />} />
             <Route path="accounting/receipts/batch" element={<CashReceiptBatchPage />} />
@@ -439,7 +456,7 @@ export default function App() {
             <Route path="accounting/internal-transfers" element={<InternalTransferListPage />} />
             <Route path="accounting/internal-transfers/new" element={<InternalTransferForm />} />
             <Route path="accounting/internal-transfers/:id" element={<InternalTransferDetailPage />} />
-            <Route path="accounting/payments" element={<CashPaymentListPage />} />
+            <Route path="accounting/payments" element={<Navigate to="/accounting/tien-mat" replace />} />
             <Route path="accounting/payments/new" element={<CashPaymentForm />} />
             <Route path="accounting/payments/:id/edit" element={<CashPaymentForm />} />
             <Route path="accounting/tax-payments/new" element={<TaxPaymentPage />} />
@@ -449,6 +466,7 @@ export default function App() {
             <Route path="accounting/payments/:id" element={<CashPaymentDetailPage />} />
             <Route path="accounting/purchase-invoices" element={<PurchaseInvoiceListPage />} />
             <Route path="accounting/purchase-invoices/:id" element={<PurchaseInvoiceDetailPage />} />
+            <Route path="accounting/incoming-invoices" element={<ErrorBoundary><IncomingInvoiceProcessingPage /></ErrorBoundary>} />
             <Route path="accounting/ar-ledger" element={<ARLedgerPage />} />
             <Route path="accounting/ap-ledger" element={<APLedgerPage />} />
             <Route path="accounting/cash-book" element={<CashBookPage />} />

@@ -6,6 +6,7 @@ export interface BankAccount {
   ten_ngan_hang: string
   so_tai_khoan: string
   phap_nhan_id?: number | null
+  phap_nhan_ten?: string | null
   chu_tai_khoan: string | null
   chi_nhanh: string | null
   swift_code: string | null
@@ -19,6 +20,7 @@ export interface BankAccountCreate {
   ma_tk: string
   ten_ngan_hang: string
   so_tai_khoan: string
+  phap_nhan_id?: number | null
   chu_tai_khoan?: string
   chi_nhanh?: string
   swift_code?: string
@@ -74,7 +76,7 @@ export interface BankReconcileCandidate {
 }
 
 export const bankAccountsApi = {
-  list: (params?: { search?: string; trang_thai?: boolean }) =>
+  list: (params?: { search?: string; trang_thai?: boolean; phap_nhan_id?: number | null }) =>
     client.get<BankAccount[]>('/bank-accounts', { params }),
 
   create: (data: BankAccountCreate) =>
@@ -82,6 +84,9 @@ export const bankAccountsApi = {
 
   update: (id: number, data: BankAccountUpdate) =>
     client.put<BankAccount>(`/bank-accounts/${id}`, data),
+
+  delete: (id: number) =>
+    client.delete(`/bank-accounts/${id}`),
 }
 
 export const bankLedgerApi = {

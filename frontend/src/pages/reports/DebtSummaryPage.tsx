@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Alert, Card, Col, DatePicker, Row, Space, Statistic, Table, Tabs, Tag, Typography,
+  Alert, Card, Col, DatePicker, Row, Select, Space, Statistic, Table, Tabs, Tag, Typography,
   Button,
 } from 'antd'
-import { DownloadOutlined, FileExcelOutlined, FilePdfOutlined, WarningOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileExcelOutlined, FilePdfOutlined, PrinterOutlined, WarningOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import { reportsApi, DebtRow, DebtSummaryResponse } from '../../api/reports'
+import { reportsApi, DebtRow, DebtSummaryResponse, type ApLedgerRow, type ApLedgerTotals } from '../../api/reports'
 import { debtAlertsApi, type DebtOverdueAlertItem } from '../../api/accounting'
+import { phapNhanApi } from '../../api/phap_nhan'
 import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
@@ -204,6 +205,221 @@ function OverdueAlertsPanel({ asOfDate }: { asOfDate: string }) {
   )
 }
 
+// ─── Helper: in mẫu tổng hợp NCC ────────────────────────────────────────────
+
+function printApLedger(rows: ApLedgerRow[], totals: ApLedgerTotals, tuNgay: string, denNgay: string, phapNhanName: string) {
+  const fmt = (v: number) => v > 0 ? fmtVND(v) : ''
+  const rowsHtml = rows.map(r => `
+    <tr>
+      <td>${r.ma_ncc}</td>
+      <td>${r.ten_ncc}</td>
+      <td style="text-align:center">${r.tk_cong_no}</td>
+      <td style="text-align:right">${fmt(r.so_du_dau_ky_no)}</td>
+      <td style="text-align:right">${fmt(r.so_du_dau_ky_co)}</td>
+      <td style="text-align:right">${fmt(r.phat_sinh_no)}</td>
+      <td style="text-align:right">${fmt(r.phat_sinh_co)}</td>
+      <td style="text-align:right">${fmt(r.so_du_cuoi_ky_no)}</td>
+      <td style="text-align:right">${fmt(r.so_du_cuoi_ky_co)}</td>
+    </tr>`).join('')
+
+  const from = dayjs(tuNgay)
+  const to = dayjs(denNgay)
+  const kyLabel = from.month() === to.month() && from.year() === to.year()
+    ? `Tháng ${from.month() + 1} năm ${from.year()}`
+    : `${from.format('DD/MM/YYYY')} – ${to.format('DD/MM/YYYY')}`
+
+  const html = `
+    <style>
+      body { font-family: 'Times New Roman', serif; font-size: 11pt; margin: 10mm 15mm; }
+      h2 { text-align: center; font-size: 14pt; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 1px; }
+      .subtitle { text-align: center; font-style: italic; font-size: 10pt; margin: 0 0 12px; }
+      table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+      th, td { border: 1px solid #bbb; padding: 4px 6px; }
+      th { background: #e8f4e8; text-align: center; font-weight: bold; }
+      .total-row td { font-weight: bold; background: #f5f5f5; }
+      @media print { @page { size: A4 landscape; margin: 10mm 12mm; } }
+    </style>
+    <h2>Tổng hợp công nợ phải trả nhà cung cấp</h2>
+    <p class="subtitle">
+      Chi nhánh: ${phapNhanName}, Tài khoản: 331, Loại tiền: &lt;&lt;Tổng hợp&gt;&gt;, ${kyLabel}
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2">Mã nhà cung cấp</th>
+          <th rowspan="2">Tên nhà cung cấp</th>
+          <th rowspan="2">TK Công nợ</th>
+          <th colspan="2">Số dư đầu kỳ</th>
+          <th colspan="2">Phát sinh</th>
+          <th colspan="2">Số dư cuối kỳ</th>
+        </tr>
+        <tr>
+          <th>Nợ</th><th>Có</th>
+          <th>Nợ</th><th>Có</th>
+          <th>Nợ</th><th>Có</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+        <tr class="total-row">
+          <td colspan="3">Tổng cộng</td>
+          <td style="text-align:right">${fmt(totals.so_du_dau_ky_no)}</td>
+          <td style="text-align:right">${fmt(totals.so_du_dau_ky_co)}</td>
+          <td style="text-align:right">${fmt(totals.phat_sinh_no)}</td>
+          <td style="text-align:right">${fmt(totals.phat_sinh_co)}</td>
+          <td style="text-align:right">${fmt(totals.so_du_cuoi_ky_no)}</td>
+          <td style="text-align:right">${fmt(totals.so_du_cuoi_ky_co)}</td>
+        </tr>
+      </tbody>
+    </table>`
+
+  const w = window.open('', '_blank', 'width=1100,height=700')!
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Công nợ NCC</title></head><body>${html}</body></html>`)
+  w.document.close()
+  w.focus()
+  w.print()
+}
+
+// ─── Tab: Tổng hợp công nợ phải trả NCC ────────────────────────────────────
+
+function ApLedgerTab() {
+  const [dates, setDates] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
+    dayjs().startOf('month'),
+    dayjs(),
+  ])
+  const [phapNhanId, setPhapNhanId] = useState<number | undefined>()
+
+  const { data: listPhapNhan = [] } = useQuery({
+    queryKey: ['phap-nhan-list'],
+    queryFn: () => phapNhanApi.list().then(r => r.data),
+    staleTime: 5 * 60_000,
+  })
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['ap-ledger-summary', dates[0].format('YYYY-MM-DD'), dates[1].format('YYYY-MM-DD'), phapNhanId],
+    queryFn: () => reportsApi.getApLedgerSummary({
+      tu_ngay: dates[0].format('YYYY-MM-DD'),
+      den_ngay: dates[1].format('YYYY-MM-DD'),
+      phap_nhan_id: phapNhanId,
+    }),
+    staleTime: 60_000,
+  })
+
+  const phapNhanName = phapNhanId
+    ? (listPhapNhan.find(p => p.id === phapNhanId)?.ten_phap_nhan ?? 'CÔNG TY TNHH SẢN XUẤT THƯƠNG MẠI NAM PHƯƠNG')
+    : 'CÔNG TY TNHH SẢN XUẤT THƯƠNG MẠI NAM PHƯƠNG'
+
+  const fmtCell = (v: number) => v > 0 ? <span>{fmtM(v)}</span> : <Text type="secondary">—</Text>
+
+  const columns = [
+    { title: 'Mã NCC', dataIndex: 'ma_ncc', width: 100 },
+    { title: 'Tên nhà cung cấp', dataIndex: 'ten_ncc', ellipsis: true },
+    { title: 'TK Công nợ', dataIndex: 'tk_cong_no', width: 110, align: 'center' as const },
+    {
+      title: 'Số dư đầu kỳ',
+      children: [
+        { title: 'Nợ', dataIndex: 'so_du_dau_ky_no', align: 'right' as const, width: 140, render: (v: number) => fmtCell(v) },
+        { title: 'Có', dataIndex: 'so_du_dau_ky_co', align: 'right' as const, width: 140, render: (v: number) => fmtCell(v) },
+      ],
+    },
+    {
+      title: 'Phát sinh',
+      children: [
+        { title: 'Nợ', dataIndex: 'phat_sinh_no', align: 'right' as const, width: 140, render: (v: number) => fmtCell(v) },
+        { title: 'Có', dataIndex: 'phat_sinh_co', align: 'right' as const, width: 140, render: (v: number) => fmtCell(v) },
+      ],
+    },
+    {
+      title: 'Số dư cuối kỳ',
+      children: [
+        { title: 'Nợ', dataIndex: 'so_du_cuoi_ky_no', align: 'right' as const, width: 140, render: (v: number) => fmtCell(v) },
+        { title: 'Có', dataIndex: 'so_du_cuoi_ky_co', align: 'right' as const, width: 140, render: (v: number) => fmtCell(v) },
+      ],
+    },
+  ]
+
+  const t = data?.totals
+
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size={12}>
+      <Row gutter={[8, 8]} align="middle">
+        <Col>
+          <DatePicker.RangePicker
+            value={[dates[0], dates[1]]}
+            format="DD/MM/YYYY"
+            picker="date"
+            onChange={ds => ds && setDates([ds[0]!, ds[1]!])}
+          />
+        </Col>
+        <Col>
+          <Select
+            style={{ width: 200 }}
+            placeholder="Tất cả pháp nhân"
+            allowClear
+            value={phapNhanId}
+            onChange={v => setPhapNhanId(v)}
+            options={listPhapNhan.map(p => ({ value: p.id, label: p.ten_viet_tat || p.ten_phap_nhan }))}
+          />
+        </Col>
+        <Col>
+          <Button
+            icon={<FileExcelOutlined />}
+            style={{ color: '#217346', borderColor: '#217346' }}
+            disabled={!data?.rows.length}
+            onClick={() => {
+              if (!data) return
+              exportToExcel(`TongHopCongNoNCC_${dates[0].format('DDMMYYYY')}_${dates[1].format('DDMMYYYY')}`, [{
+                name: 'Tổng hợp NCC',
+                headers: ['Mã NCC', 'Tên NCC', 'TK CN', 'Dư đầu Nợ', 'Dư đầu Có', 'PS Nợ', 'PS Có', 'Dư cuối Nợ', 'Dư cuối Có'],
+                rows: data.rows.map(r => [
+                  r.ma_ncc, r.ten_ncc, r.tk_cong_no,
+                  r.so_du_dau_ky_no || '', r.so_du_dau_ky_co || '',
+                  r.phat_sinh_no || '', r.phat_sinh_co || '',
+                  r.so_du_cuoi_ky_no || '', r.so_du_cuoi_ky_co || '',
+                ]),
+                colWidths: [12, 28, 8, 16, 16, 16, 16, 16, 16],
+              }])
+            }}
+          >
+            Xuất Excel
+          </Button>
+        </Col>
+        <Col>
+          <Button
+            icon={<PrinterOutlined />}
+            disabled={!data}
+            onClick={() => data && printApLedger(data.rows, data.totals, dates[0].format('YYYY-MM-DD'), dates[1].format('YYYY-MM-DD'), phapNhanName)}
+          >
+            In mẫu
+          </Button>
+        </Col>
+      </Row>
+
+      <Table<ApLedgerRow>
+        locale={{ emptyText: <EmptyState size="small" preset="report" /> }}
+        rowKey="supplier_id"
+        size="small"
+        loading={isLoading}
+        dataSource={data?.rows ?? []}
+        columns={columns}
+        pagination={{ pageSize: 50, showTotal: t => `${t} nhà cung cấp` }}
+        scroll={{ x: 1100 }}
+        summary={() => t && (
+          <Table.Summary.Row>
+            <Table.Summary.Cell index={0} colSpan={3}><Text strong>Tổng cộng</Text></Table.Summary.Cell>
+            <Table.Summary.Cell index={3} align="right"><Text strong>{t.so_du_dau_ky_no > 0 ? fmtM(t.so_du_dau_ky_no) : '—'}</Text></Table.Summary.Cell>
+            <Table.Summary.Cell index={4} align="right"><Text strong>{t.so_du_dau_ky_co > 0 ? fmtM(t.so_du_dau_ky_co) : '—'}</Text></Table.Summary.Cell>
+            <Table.Summary.Cell index={5} align="right"><Text strong>{t.phat_sinh_no > 0 ? fmtM(t.phat_sinh_no) : '—'}</Text></Table.Summary.Cell>
+            <Table.Summary.Cell index={6} align="right"><Text strong>{t.phat_sinh_co > 0 ? fmtM(t.phat_sinh_co) : '—'}</Text></Table.Summary.Cell>
+            <Table.Summary.Cell index={7} align="right"><Text strong style={{ color: '#fa541c' }}>{t.so_du_cuoi_ky_no > 0 ? fmtM(t.so_du_cuoi_ky_no) : '—'}</Text></Table.Summary.Cell>
+            <Table.Summary.Cell index={8} align="right"><Text strong style={{ color: '#389e0d' }}>{t.so_du_cuoi_ky_co > 0 ? fmtM(t.so_du_cuoi_ky_co) : '—'}</Text></Table.Summary.Cell>
+          </Table.Summary.Row>
+        )}
+      />
+    </Space>
+  )
+}
+
 export default function DebtSummaryPage() {
   const [asOfDate, setAsOfDate] = useState<string>(dayjs().format('YYYY-MM-DD'))
 
@@ -293,6 +509,11 @@ export default function DebtSummaryPage() {
                 <DebtTable rows={ap?.rows ?? []} type="ap" loading={isLoading} />
               </>
             ),
+          },
+          {
+            key: 'ap-ledger',
+            label: 'Tổng hợp NCC',
+            children: <ApLedgerTab />,
           },
         ]}
       />

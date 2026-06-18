@@ -6,11 +6,16 @@ import {
   Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber,
   Row, Select, Space, Typography, message,
 } from 'antd'
-import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, BankOutlined, SaveOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { fmtVND } from '../../utils/exportUtils'
 import { paymentApi, CashPaymentCreate, CashPaymentUpdate, PurchaseInvoice, purchaseInvoiceApi } from '../../api/accounting'
+import { bankAccountsApi, BankAccount } from '../../api/banking'
 import { suppliersApi, Supplier } from '../../api/suppliers'
+import client from '../../api/client'
+
+interface KhoanMucChiPhi { id: number; ma_kmcp: string; ten_kmcp: string; ma_loai_tk_no?: string | null }
+interface TaiKhoanNgamDinh { id: number; ma_loai: string; ten_loai: string; nhom: string; so_tk: string | null }
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 import QuickAddSelect from '../../components/QuickAddSelect'
 import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
@@ -24,10 +29,10 @@ const HINH_THUC_TT_LABEL: Record<string, string> = {
   khac: 'Khác',
 }
 
-const TYPE_CONFIG: Record<string, { title: string; tkNo: string; diGiai: string }> = {
-  tax:       { title: 'Tạo phiếu nộp thuế',       tkNo: '3331', diGiai: 'Nộp thuế kỳ ' },
-  insurance: { title: 'Tạo phiếu nộp bảo hiểm',   tkNo: '3383', diGiai: 'Nộp BHXH/BHYT kỳ ' },
-  salary:    { title: 'Tạo phiếu trả lương',       tkNo: '334',  diGiai: 'Thanh toán lương tháng ' },
+const TYPE_CONFIG: Record<string, { title: string; maLoaiTkNo: string; diGiai: string }> = {
+  tax:       { title: 'Tạo phiếu nộp thuế',       maLoaiTkNo: 'thue_gtgt_phai_nop',       diGiai: 'Nộp thuế kỳ ' },
+  insurance: { title: 'Tạo phiếu nộp bảo hiểm',   maLoaiTkNo: 'bao_hiem_xa_hoi',          diGiai: 'Nộp BHXH/BHYT kỳ ' },
+  salary:    { title: 'Tạo phiếu trả lương',       maLoaiTkNo: 'phai_tra_nguoi_lao_dong',  diGiai: 'Thanh toán lương tháng ' },
 }
 
 const EDITABLE_STATUSES = new Set(['cho_chot', 'da_chot'])
@@ -43,6 +48,7 @@ export default function CashPaymentForm() {
   const invoiceIdParam = Number(searchParams.get('invoice_id') || 0)
   const typeParam = searchParams.get('type') ?? ''
   const modeParam = searchParams.get('mode') ?? ''
+  const hinhThucParam = searchParams.get('hinh_thuc') ?? 'chuyen_khoan'
   const typeConfig = TYPE_CONFIG[typeParam]
   const formTitle = isEdit
     ? 'Sửa phiếu chi'
@@ -62,6 +68,31 @@ export default function CashPaymentForm() {
     queryFn: () => phapNhanApi.list({ active_only: true }).then(r => r.data),
     staleTime: 5 * 60 * 1000,
   })
+
+  const { data: bankAccounts = [] } = useQuery<BankAccount[]>({
+    queryKey: ['bank-accounts-active'],
+    queryFn: () => bankAccountsApi.list({ trang_thai: true }).then(r => r.data),
+    staleTime: 10 * 60 * 1000,
+  })
+
+  const { data: khoanMucList = [] } = useQuery<KhoanMucChiPhi[]>({
+    queryKey: ['khoan-muc-chi-phi'],
+    queryFn: () => client.get<KhoanMucChiPhi[]>('/khoan-muc-chi-phi').then(r => r.data),
+    staleTime: 10 * 60 * 1000,
+  })
+
+  const { data: tkNgamDinhList = [] } = useQuery<TaiKhoanNgamDinh[]>({
+    queryKey: ['tai-khoan-ngam-dinh'],
+    queryFn: () => client.get<TaiKhoanNgamDinh[]>('/tai-khoan-ngam-dinh').then(r => r.data),
+    staleTime: 30 * 60 * 1000,
+  })
+
+  const tkNgamDinhMap = Object.fromEntries(tkNgamDinhList.map(t => [t.ma_loai, t.so_tk]))
+
+  const selectedPhapNhan = Form.useWatch('phap_nhan_id', form)
+  const filteredBankAccounts = selectedPhapNhan
+    ? bankAccounts.filter(b => b.phap_nhan_id === selectedPhapNhan || b.phap_nhan_id == null)
+    : bankAccounts
 
   const { data: existing, isLoading: existingLoading } = useQuery({
     queryKey: ['payment', editId],
@@ -86,6 +117,20 @@ export default function CashPaymentForm() {
   })
   const unpaidInvoices: PurchaseInvoice[] = invoiceData ?? []
 
+  // Auto-fill TK từ tai_khoan_ngam_dinh khi tạo mới
+  useEffect(() => {
+    if (isEdit || !tkNgamDinhList.length) return
+    // TK Có: tiền mặt hoặc tiền gửi ngân hàng
+    const maLoaiCo = (hinhThucParam === 'tien_mat' || hinhThucParam === 'TM') ? 'tien_mat' : 'tien_gui_ngan_hang'
+    const soTkCo = tkNgamDinhMap[maLoaiCo]
+    if (soTkCo) form.setFieldValue('tk_co', soTkCo)
+    // TK Nợ: từ typeConfig (thuế/bảo hiểm/lương) hoặc mặc định 331
+    if (typeConfig?.maLoaiTkNo) {
+      const soTkNo = tkNgamDinhMap[typeConfig.maLoaiTkNo]
+      if (soTkNo) form.setFieldValue('tk_no', soTkNo)
+    }
+  }, [tkNgamDinhList]) // eslint-disable-line
+
   // Pre-populate form when editing
   useEffect(() => {
     if (!existing) return
@@ -103,6 +148,7 @@ export default function CashPaymentForm() {
       so_tien: Number(existing.so_tien),
       tk_no: existing.tk_no,
       tk_co: existing.tk_co,
+      khoan_muc_chi_phi_id: existing.khoan_muc_chi_phi_id ?? undefined,
     })
   }, [existing, form])
 
@@ -174,6 +220,7 @@ export default function CashPaymentForm() {
       so_tien: values.so_tien,
       tk_no: values.tk_no || undefined,
       tk_co: values.tk_co || undefined,
+      khoan_muc_chi_phi_id: values.khoan_muc_chi_phi_id ?? null,
     }
     if (isEdit) {
       updateMut.mutate(payload)
@@ -208,8 +255,8 @@ export default function CashPaymentForm() {
         layout="vertical"
         initialValues={{
           ngay_phieu: dayjs(),
-          hinh_thuc_tt: 'chuyen_khoan',
-          tk_no: typeConfig?.tkNo ?? '331',
+          hinh_thuc_tt: hinhThucParam,
+          tk_no: '331',
           tk_co: '112',
           dien_giai: typeConfig?.diGiai,
         }}
@@ -227,6 +274,11 @@ export default function CashPaymentForm() {
                 <Select
                   disabled={isNotEditable}
                   options={Object.entries(HINH_THUC_TT_LABEL).map(([k, v]) => ({ value: k, label: v }))}
+                  onChange={(val: string) => {
+                    const maLoai = (val === 'tien_mat' || val === 'TM') ? 'tien_mat' : 'tien_gui_ngan_hang'
+                    const soTk = tkNgamDinhMap[maLoai]
+                    if (soTk) form.setFieldValue('tk_co', soTk)
+                  }}
                 />
               </Form.Item>
             </Col>
@@ -236,6 +288,7 @@ export default function CashPaymentForm() {
             <Select
               disabled={isNotEditable || existingLoading}
               placeholder="Chọn pháp nhân"
+              onChange={() => form.setFieldValue('so_tai_khoan', undefined)}
               options={phapNhanList.map(p => ({
                 value: p.id,
                 label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
@@ -315,8 +368,23 @@ export default function CashPaymentForm() {
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="so_tai_khoan" label="Số tài khoản">
-                <Input disabled={isNotEditable} placeholder="Số tài khoản ngân hàng" />
+              <Form.Item
+                name="so_tai_khoan"
+                label={<span>Số tài khoản&nbsp;<a onClick={() => navigate('/master/bank-accounts')} title="Danh mục tài khoản NH"><BankOutlined /></a></span>}
+              >
+                <Select
+                  disabled={isNotEditable}
+                  allowClear
+                  showSearch
+                  placeholder="Chọn tài khoản ngân hàng"
+                  filterOption={(input, opt) =>
+                    (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  options={filteredBankAccounts.map(b => ({
+                    value: b.so_tai_khoan,
+                    label: `${b.so_tai_khoan} — ${b.ten_ngan_hang}`,
+                  }))}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -329,8 +397,41 @@ export default function CashPaymentForm() {
           <Form.Item name="dien_giai" label="Lý do chi">
             <Input.TextArea rows={2} disabled={isNotEditable} />
           </Form.Item>
-          <Form.Item name="tk_no" hidden><Input /></Form.Item>
-          <Form.Item name="tk_co" hidden><Input /></Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="tk_no" label="TK Nợ" rules={[{ required: true, message: 'Nhập TK Nợ' }]}>
+                <Input disabled={isNotEditable} placeholder="VD: 331, 334" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="tk_co" label="TK Có" rules={[{ required: true, message: 'Nhập TK Có' }]}>
+                <Input disabled={isNotEditable} placeholder="VD: 112, 111" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item name="khoan_muc_chi_phi_id" label="Khoản mục chi phí">
+            <Select
+              disabled={isNotEditable}
+              allowClear
+              showSearch
+              placeholder="Chọn khoản mục chi phí (tùy chọn)"
+              filterOption={(input, opt) =>
+                (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              onChange={(val: number | undefined) => {
+                const km = khoanMucList.find(k => k.id === val)
+                if (km?.ma_loai_tk_no) {
+                  const soTk = tkNgamDinhMap[km.ma_loai_tk_no]
+                  if (soTk) form.setFieldValue('tk_no', soTk)
+                }
+              }}
+              options={khoanMucList.map(k => ({
+                value: k.id,
+                label: `[${k.ma_kmcp}] ${k.ten_kmcp}`,
+              }))}
+            />
+          </Form.Item>
         </Card>
 
         <div style={{ textAlign: 'right' }}>

@@ -16,6 +16,7 @@ class KhoanMucChiPhiBase(BaseModel):
     ma_kmcp: str
     ten_kmcp: str
     loai_chi_phi: str | None = None
+    ma_loai_tk_no: str | None = None
     ghi_chu: str | None = None
     trang_thai: bool = True
 

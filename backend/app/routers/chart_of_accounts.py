@@ -38,6 +38,8 @@ class ChartOfAccountsBase(BaseModel):
     cap: int = 1
     so_tk_cha: str | None = None
     trang_thai: bool = True
+    theo_doi_doi_tuong: bool = False
+    loai_doi_tuong: str | None = None
 
 
 class ChartOfAccountsResponse(ChartOfAccountsBase):

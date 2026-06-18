@@ -158,8 +158,19 @@ function buildNavItems(queueCount: number): NavItem[] {
             { key: '/purchasing/dashboard', to: '/purchasing/dashboard', label: <Link to="/purchasing/dashboard">Dashboard mua hàng</Link> },
             { key: '/purchasing/doi-soat-kho', to: '/purchasing/doi-soat-kho', label: <Link to="/purchasing/doi-soat-kho">Đối soát kho (PO vs GR)</Link> },
             { key: '/accounting/purchase-invoices', to: '/accounting/purchase-invoices', label: <Link to="/accounting/purchase-invoices">Hóa đơn mua hàng</Link> },
+            { key: '/accounting/incoming-invoices', to: '/accounting/incoming-invoices', label: <Link to="/accounting/incoming-invoices">Xử lý hóa đơn đầu vào</Link> },
             { key: '/purchasing/returns', to: '/purchasing/returns', label: <Link to="/purchasing/returns">Trả hàng NCC</Link> },
             { key: '/purchasing/reports', to: '/purchasing/reports', label: <Link to="/purchasing/reports">Báo cáo mua hàng</Link> },
+          ],
+        },
+        {
+          sectionLabel: 'Tiện ích',
+          items: [
+            { key: '/purchasing/doi-tru', to: '/purchasing/doi-tru', label: <Link to="/purchasing/doi-tru">Đối trừ chứng từ</Link> },
+            { key: '/purchasing/doi-tru-nhieu', to: '/purchasing/doi-tru-nhieu', label: <Link to="/purchasing/doi-tru-nhieu">Đối trừ chứng từ nhiều đối tượng</Link> },
+            { key: '/purchasing/bo-doi-tru', to: '/purchasing/bo-doi-tru', label: <Link to="/purchasing/bo-doi-tru">Bỏ đối trừ</Link> },
+            { key: '/purchasing/bo-doi-tru-nhieu', to: '/purchasing/bo-doi-tru-nhieu', label: <Link to="/purchasing/bo-doi-tru-nhieu">Bỏ đối trừ chứng từ nhiều đối tượng</Link> },
+            { key: '/purchasing/bu-tru-cong-no', to: '/purchasing/bu-tru-cong-no', label: <Link to="/purchasing/bu-tru-cong-no">Bù trừ công nợ</Link> },
           ],
         },
       ],
@@ -174,8 +185,8 @@ function buildNavItems(queueCount: number): NavItem[] {
         {
           sectionLabel: 'Quỹ & Ngân hàng',
           items: [
-            { key: '/accounting/receipts', to: '/accounting/receipts', label: <Link to="/accounting/receipts">Phiếu thu</Link>, permissions: ['accounting.receipts'] },
-            { key: '/accounting/payments', to: '/accounting/payments', label: <Link to="/accounting/payments">Phiếu chi</Link>, permissions: ['accounting.payments'] },
+            { key: '/accounting/tien-mat', to: '/accounting/tien-mat', label: <Link to="/accounting/tien-mat">Tiền mặt</Link>, permissions: ['accounting.receipts'] },
+            { key: '/accounting/ngan-hang', to: '/accounting/ngan-hang', label: <Link to="/accounting/ngan-hang">Ngân hàng</Link>, permissions: ['accounting.payments'] },
             { key: '/accounting/cash-book', to: '/accounting/cash-book', label: <Link to="/accounting/cash-book">Sổ quỹ tiền mặt</Link>, permissions: ['accounting.cash_book'] },
             { key: '/accounting/bank-ledger', to: '/accounting/bank-ledger', label: <Link to="/accounting/bank-ledger">Sổ tiền gửi NH</Link>, permissions: ['accounting.bank_ledger'] },
             { key: '/accounting/bank-reconciliation', to: '/accounting/bank-reconciliation', label: <Link to="/accounting/bank-reconciliation">Đối soát ngân hàng</Link>, permissions: ['accounting.bank_ledger'] },
@@ -202,6 +213,7 @@ function buildNavItems(queueCount: number): NavItem[] {
             { key: '/accounting/general-ledger', to: '/accounting/general-ledger', label: <Link to="/accounting/general-ledger">Sổ cái tài khoản</Link>, permissions: ['accounting.general_ledger'] },
             { key: '/accounting/audit-logs', to: '/accounting/audit-logs', label: <Link to="/accounting/audit-logs">Nhật ký audit kế toán</Link>, permissions: ['accounting.import', 'accounting.manage'] },
             { key: '/accounting/hoa-don-dien-tu', to: '/accounting/hoa-don-dien-tu', label: <Link to="/accounting/hoa-don-dien-tu">Hóa đơn điện tử</Link>, permissions: ['accounting.hoa_don_dien_tu', 'accounting.manage'] },
+            { key: '/accounting/incoming-invoices', to: '/accounting/incoming-invoices', label: <Link to="/accounting/incoming-invoices">Xử lý hóa đơn đầu vào</Link>, permissions: ['accounting.manage'] },
             { key: '/accounting/purchase-invoices', to: '/accounting/purchase-invoices', label: <Link to="/accounting/purchase-invoices">Hóa đơn mua hàng</Link>, permissions: ['accounting.manage'] },
             { key: '/accounting/workshop-management', to: '/accounting/workshop-management', label: <Link to="/accounting/workshop-management">Quản trị xưởng (Lương)</Link>, permissions: ['accounting.workshop_mgmt'] },
             { key: '/accounting/ccdc', to: '/accounting/ccdc', label: <Link to="/accounting/ccdc">Tài sản & CCDC</Link>, permissions: ['accounting.ccdc'] },

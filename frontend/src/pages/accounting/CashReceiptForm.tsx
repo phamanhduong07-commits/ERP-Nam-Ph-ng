@@ -6,11 +6,13 @@ import {
   Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber,
   Row, Select, Space, Typography, message,
 } from 'antd'
-import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, BankOutlined, SaveOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { fmtVND } from '../../utils/exportUtils'
 import { receiptApi, CashReceiptCreate, CashReceiptUpdate, HINH_THUC_TT } from '../../api/accounting'
+import { bankAccountsApi, BankAccount } from '../../api/banking'
 import { customersApi, Customer } from '../../api/customers'
+import client from '../../api/client'
 import QuickAddSelect from '../../components/QuickAddSelect'
 import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
 import { billingApi, SalesInvoiceListItem } from '../../api/billing'
@@ -18,6 +20,8 @@ import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 import { usePhanXuong } from '../../hooks/useMasterData'
 
 const { Title } = Typography
+
+interface TaiKhoanNgamDinh { id: number; ma_loai: string; so_tk: string | null }
 
 export default function CashReceiptForm() {
   const navigate = useNavigate()
@@ -33,6 +37,7 @@ export default function CashReceiptForm() {
   const queryCustomerId = Number(searchParams.get('customer_id'))
   const queryInvoiceId = Number(searchParams.get('invoice_id'))
   const queryAmount = Number(searchParams.get('amount'))
+  const hinhThucParam = searchParams.get('hinh_thuc') ?? 'chuyen_khoan'
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ['customers-all'],
@@ -46,6 +51,24 @@ export default function CashReceiptForm() {
   })
 
   const { phanXuongList } = usePhanXuong()
+
+  const { data: bankAccounts = [] } = useQuery<BankAccount[]>({
+    queryKey: ['bank-accounts-active'],
+    queryFn: () => bankAccountsApi.list({ trang_thai: true }).then(r => r.data),
+    staleTime: 10 * 60 * 1000,
+  })
+
+  const { data: tkNgamDinhList = [] } = useQuery<TaiKhoanNgamDinh[]>({
+    queryKey: ['tai-khoan-ngam-dinh'],
+    queryFn: () => client.get<TaiKhoanNgamDinh[]>('/tai-khoan-ngam-dinh').then(r => r.data),
+    staleTime: 30 * 60 * 1000,
+  })
+  const tkNgamDinhMap = Object.fromEntries(tkNgamDinhList.map(t => [t.ma_loai, t.so_tk]))
+
+  const selectedPhapNhan = Form.useWatch('phap_nhan_id', form)
+  const filteredBankAccounts = selectedPhapNhan
+    ? bankAccounts.filter(b => b.phap_nhan_id === selectedPhapNhan || b.phap_nhan_id == null)
+    : bankAccounts
 
   const { data: existing, isLoading: existingLoading } = useQuery({
     queryKey: ['receipt', editId],
@@ -64,6 +87,14 @@ export default function CashReceiptForm() {
       ),
   })
   const unpaidInvoices: SalesInvoiceListItem[] = invoiceData ?? []
+
+  // Auto-fill TK Nợ từ tai_khoan_ngam_dinh khi tạo mới
+  useEffect(() => {
+    if (isEdit || !tkNgamDinhList.length) return
+    const maLoai = (hinhThucParam === 'tien_mat' || hinhThucParam === 'TM') ? 'tien_mat' : 'tien_gui_ngan_hang'
+    const soTk = tkNgamDinhMap[maLoai]
+    if (soTk) form.setFieldValue('tk_no', soTk)
+  }, [tkNgamDinhList]) // eslint-disable-line
 
   // Pre-populate form when editing
   useEffect(() => {
@@ -160,6 +191,8 @@ export default function CashReceiptForm() {
       so_tham_chieu: values.so_tham_chieu || undefined,
       dien_giai: values.dien_giai || undefined,
       so_tien: values.so_tien,
+      tk_no: values.tk_no,
+      tk_co: values.tk_co,
     }
     if (isEdit) {
       updateMut.mutate(payload)
@@ -192,7 +225,7 @@ export default function CashReceiptForm() {
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ ngay_phieu: dayjs(), hinh_thuc_tt: 'chuyen_khoan' }}
+        initialValues={{ ngay_phieu: dayjs(), hinh_thuc_tt: hinhThucParam, tk_no: '112', tk_co: '131' }}
         onFinish={onFinish}
       >
         <Card size="small" title="Thông tin" style={{ marginBottom: 16 }}>
@@ -209,6 +242,11 @@ export default function CashReceiptForm() {
                   options={Object.entries(HINH_THUC_TT)
                     .filter(([k]) => !['TM', 'CK'].includes(k))
                     .map(([k, v]) => ({ value: k, label: v }))}
+                  onChange={(val: string) => {
+                    const maLoai = (val === 'tien_mat' || val === 'TM') ? 'tien_mat' : 'tien_gui_ngan_hang'
+                    const soTk = tkNgamDinhMap[maLoai]
+                    if (soTk) form.setFieldValue('tk_no', soTk)
+                  }}
                 />
               </Form.Item>
             </Col>
@@ -221,6 +259,7 @@ export default function CashReceiptForm() {
                   disabled={isNotEditable}
                   loading={existingLoading}
                   placeholder="Chọn pháp nhân phát hành phiếu"
+                  onChange={() => form.setFieldValue('so_tai_khoan', undefined)}
                   options={phapNhanList.map(p => ({
                     value: p.id,
                     label: `[${p.ma_phap_nhan}] ${p.ten_phap_nhan}`,
@@ -309,8 +348,23 @@ export default function CashReceiptForm() {
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="so_tai_khoan" label="Số tài khoản">
-                <Input disabled={isNotEditable} placeholder="Số TK ngân hàng" />
+              <Form.Item
+                name="so_tai_khoan"
+                label={<span>Số tài khoản&nbsp;<a onClick={() => navigate('/master/bank-accounts')} title="Danh mục tài khoản NH"><BankOutlined /></a></span>}
+              >
+                <Select
+                  disabled={isNotEditable}
+                  allowClear
+                  showSearch
+                  placeholder="Chọn tài khoản ngân hàng"
+                  filterOption={(input, opt) =>
+                    (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  options={filteredBankAccounts.map(b => ({
+                    value: b.so_tai_khoan,
+                    label: `${b.so_tai_khoan} — ${b.ten_ngan_hang}`,
+                  }))}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -323,6 +377,19 @@ export default function CashReceiptForm() {
           <Form.Item name="dien_giai" label="Diễn giải">
             <Input.TextArea rows={2} disabled={isNotEditable} />
           </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="tk_no" label="TK Nợ" rules={[{ required: true, message: 'Nhập TK Nợ' }]}>
+                <Input disabled={isNotEditable} placeholder="VD: 112, 111" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="tk_co" label="TK Có" rules={[{ required: true, message: 'Nhập TK Có' }]}>
+                <Input disabled={isNotEditable} placeholder="VD: 131, 511" />
+              </Form.Item>
+            </Col>
+          </Row>
         </Card>
 
         <div style={{ textAlign: 'right' }}>

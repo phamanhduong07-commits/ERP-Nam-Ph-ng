@@ -29,6 +29,37 @@ export interface DebtSummaryResponse {
   ap: { summary: DebtGroupSummary; rows: DebtRow[] }
 }
 
+// ── AP Ledger Summary (TK 331) ────────────────────────────────────────────────
+
+export interface ApLedgerRow {
+  supplier_id: number
+  ma_ncc: string
+  ten_ncc: string
+  tk_cong_no: string
+  so_du_dau_ky_no: number
+  so_du_dau_ky_co: number
+  phat_sinh_no: number
+  phat_sinh_co: number
+  so_du_cuoi_ky_no: number
+  so_du_cuoi_ky_co: number
+}
+
+export interface ApLedgerTotals {
+  so_du_dau_ky_no: number
+  so_du_dau_ky_co: number
+  phat_sinh_no: number
+  phat_sinh_co: number
+  so_du_cuoi_ky_no: number
+  so_du_cuoi_ky_co: number
+}
+
+export interface ApLedgerSummaryResponse {
+  tu_ngay: string
+  den_ngay: string
+  rows: ApLedgerRow[]
+  totals: ApLedgerTotals
+}
+
 // ── Revenue ───────────────────────────────────────────────────────────────────
 
 export interface RevenueKyRow {
@@ -231,6 +262,9 @@ export const reportsApi = {
 
   exportDebtSummary: (params: { as_of_date?: string }): Promise<Blob> =>
     client.get('/reports/debt-summary/export', { params, responseType: 'blob' }).then(r => r.data),
+
+  getApLedgerSummary: (params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number }): Promise<ApLedgerSummaryResponse> =>
+    client.get('/reports/ap-ledger-summary', { params }).then(r => r.data),
 
   exportProductionPerformance: (params: { tu_ngay: string; den_ngay: string; phan_xuong_id?: number }): Promise<Blob> =>
     client.get('/reports/production-performance/export', { params, responseType: 'blob' }).then(r => r.data),

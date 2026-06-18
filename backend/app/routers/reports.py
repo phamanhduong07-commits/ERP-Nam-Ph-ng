@@ -12,9 +12,9 @@ from app.database import get_db
 from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
 from app.models.billing import SalesInvoice
-from app.models.accounting import PurchaseInvoice, ProductionCostAllocation
+from app.models.accounting import PurchaseInvoice, ProductionCostAllocation, DebtLedgerEntry
 from app.models.sales import SalesOrder, SalesOrderItem, SalesTarget
-from app.models.master import Customer, CustomerNhanVien, Warehouse, PhanXuong
+from app.models.master import Customer, CustomerNhanVien, Warehouse, PhanXuong, Supplier
 from app.models.auth import User as UserModel
 from app.models.inventory import InventoryTransaction, InventoryBalance
 from app.models.master import PaperMaterial, OtherMaterial, Product
@@ -177,6 +177,89 @@ def get_debt_summary(
         "ar": {"summary": ar_summary, "rows": ar_list},
         "ap": {"summary": ap_summary, "rows": ap_list},
     }
+
+
+# ── 1b. Tổng hợp công nợ phải trả NCC (sổ cái TK 331) ───────────────────────
+
+@router.get("/ap-ledger-summary")
+def get_ap_ledger_summary(
+    tu_ngay: str = Query(..., description="Từ ngày (YYYY-MM-DD)"),
+    den_ngay: str = Query(..., description="Đến ngày (YYYY-MM-DD)"),
+    phap_nhan_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Tổng hợp công nợ phải trả NCC theo kỳ: dư đầu kỳ / phát sinh / dư cuối kỳ (Nợ/Có)."""
+    d_from = date.fromisoformat(tu_ngay)
+    d_to = date.fromisoformat(den_ngay)
+
+    def _agg(date_cond, loai: str) -> dict[int, float]:
+        q = (
+            db.query(
+                DebtLedgerEntry.supplier_id,
+                func.coalesce(func.sum(DebtLedgerEntry.so_tien), 0).label("total"),
+            )
+            .filter(
+                DebtLedgerEntry.doi_tuong == "nha_cung_cap",
+                DebtLedgerEntry.loai == loai,
+                DebtLedgerEntry.supplier_id.isnot(None),
+                date_cond,
+            )
+        )
+        if phap_nhan_id is not None:
+            q = q.filter(DebtLedgerEntry.phap_nhan_id == phap_nhan_id)
+        return {r.supplier_id: float(r.total) for r in q.group_by(DebtLedgerEntry.supplier_id).all()}
+
+    tang_before = _agg(DebtLedgerEntry.ngay < d_from, "tang_no")
+    giam_before = _agg(DebtLedgerEntry.ngay < d_from, "giam_no")
+    tang_in = _agg((DebtLedgerEntry.ngay >= d_from) & (DebtLedgerEntry.ngay <= d_to), "tang_no")
+    giam_in = _agg((DebtLedgerEntry.ngay >= d_from) & (DebtLedgerEntry.ngay <= d_to), "giam_no")
+
+    all_ids = set(tang_before) | set(giam_before) | set(tang_in) | set(giam_in)
+    _empty_totals = {
+        "so_du_dau_ky_no": 0, "so_du_dau_ky_co": 0,
+        "phat_sinh_no": 0, "phat_sinh_co": 0,
+        "so_du_cuoi_ky_no": 0, "so_du_cuoi_ky_co": 0,
+    }
+    if not all_ids:
+        return {"rows": [], "tu_ngay": tu_ngay, "den_ngay": den_ngay, "totals": _empty_totals}
+
+    suppliers = {s.id: s for s in db.query(Supplier).filter(Supplier.id.in_(all_ids)).all()}
+
+    rows = []
+    for sid in all_ids:
+        net_open = tang_before.get(sid, 0) - giam_before.get(sid, 0)
+        ps_co = tang_in.get(sid, 0)
+        ps_no = giam_in.get(sid, 0)
+        net_close = net_open + ps_co - ps_no
+        if net_open == 0 and ps_co == 0 and ps_no == 0:
+            continue
+        sup = suppliers.get(sid)
+        rows.append({
+            "supplier_id": sid,
+            "ma_ncc": sup.ma_ncc if sup else f"NCC#{sid}",
+            "ten_ncc": (sup.ten_viet_tat if sup else f"NCC#{sid}"),
+            "tk_cong_no": "331",
+            "so_du_dau_ky_no": max(0.0, -net_open),
+            "so_du_dau_ky_co": max(0.0, net_open),
+            "phat_sinh_no": ps_no,
+            "phat_sinh_co": ps_co,
+            "so_du_cuoi_ky_no": max(0.0, -net_close),
+            "so_du_cuoi_ky_co": max(0.0, net_close),
+        })
+
+    rows.sort(key=lambda r: r["ten_ncc"])
+
+    def _s(k): return sum(r[k] for r in rows)
+    totals = {
+        "so_du_dau_ky_no": _s("so_du_dau_ky_no"),
+        "so_du_dau_ky_co": _s("so_du_dau_ky_co"),
+        "phat_sinh_no": _s("phat_sinh_no"),
+        "phat_sinh_co": _s("phat_sinh_co"),
+        "so_du_cuoi_ky_no": _s("so_du_cuoi_ky_no"),
+        "so_du_cuoi_ky_co": _s("so_du_cuoi_ky_co"),
+    }
+    return {"rows": rows, "tu_ngay": tu_ngay, "den_ngay": den_ngay, "totals": totals}
 
 
 # ── 2. Báo cáo doanh thu ─────────────────────────────────────────────────────

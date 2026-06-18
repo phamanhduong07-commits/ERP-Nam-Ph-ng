@@ -99,5 +99,13 @@ class Settings(BaseSettings):
     MISA_TEMPLATE_CODE: str = "01GTKT0/001"  # Mẫu số hóa đơn
     MISA_SERIAL: str = ""  # Ký hiệu (VD: C25TAA)
 
+    # Cấu hình email quét hóa đơn đầu vào
+    EMAIL_IMAP_SERVER: str = ""
+    EMAIL_IMAP_PORT: int = 993
+    EMAIL_IMAP_USER: str = ""
+    EMAIL_IMAP_PASSWORD: str = ""
+    EMAIL_SCAN_INTERVAL_MINUTES: int = 10
+
+
 
 settings = Settings()

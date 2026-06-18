@@ -169,6 +169,9 @@ export interface CashPayment {
   so_tien: number
   tk_no: string
   tk_co: string
+  loai_chi?: string | null
+  khoan_muc_chi_phi_id?: number | null
+  ten_khoan_muc?: string | null
   trang_thai: string
   phap_nhan_id: number | null
   ten_phap_nhan?: string | null
@@ -192,6 +195,8 @@ export interface CashPaymentCreate {
   so_tien: number
   tk_no?: string
   tk_co?: string
+  loai_chi?: string | null
+  khoan_muc_chi_phi_id?: number | null
 }
 
 export interface CashPaymentUpdate {
@@ -208,6 +213,7 @@ export interface CashPaymentUpdate {
   tk_no?: string
   tk_co?: string
   loai_chi?: string | null
+  khoan_muc_chi_phi_id?: number | null
 }
 
 // ──────────────────────────────────────────────────────
@@ -241,6 +247,8 @@ export interface ARLedgerEntryRow {
   phat_sinh_no: number
   phat_sinh_co: number
   so_du: number
+  phap_nhan_id: number | null
+  ten_phap_nhan: string | null
 }
 
 export interface ARLedgerEntries {
@@ -262,6 +270,41 @@ export interface ARAgingRow {
   qua_han_30: number
   qua_han_60: number
   qua_han_90: number
+}
+
+export interface ARAgingBuckets {
+  truoc_han_0_7: number
+  truoc_han_8_18: number
+  truoc_han_tren_18: number
+  qua_han: number
+  khong_co_han: number
+}
+
+export interface ARDashboardTopCustomer {
+  customer_id: number
+  ma_kh: string
+  ten_khach_hang: string
+  so_con_phai_thu: number
+}
+
+export interface ARDashboardUpcomingInvoice {
+  invoice_id: number
+  so_hoa_don: string | null
+  han_tt: string
+  customer_id: number
+  ten_khach_hang: string
+  so_tien: number
+}
+
+export interface ARDashboardData {
+  tong_cong_no: number
+  aging: ARAgingBuckets
+  tong_da_thu: number
+  con_phai_thu: number
+  ty_le_thu_hoi: number
+  so_ngay_binh_quan: number
+  top_customers: ARDashboardTopCustomer[]
+  sap_den_han: ARDashboardUpcomingInvoice[]
 }
 
 export interface ARCustomerSummaryRow {
@@ -447,6 +490,9 @@ export const arApi = {
 
   getCustomerSummary: (phapNhanId?: number): Promise<ARCustomerSummaryRow[]> =>
     client.get('/accounting/ar/customer-summary', { params: phapNhanId ? { phap_nhan_id: phapNhanId } : {} }).then(r => r.data),
+
+  getDashboard: (params: { phap_nhan_id?: number; nhan_vien_id?: number }): Promise<ARDashboardData> =>
+    client.get('/accounting/ar/dashboard', { params }).then(r => r.data),
 
   getReconciliation: (customerId: number, params: { tu_ngay: string; den_ngay: string; phap_nhan_id?: number }) =>
     client.get(`/accounting/ar/reconciliation/${customerId}`, { params }).then(r => r.data),
@@ -1083,3 +1129,105 @@ export const productionCostApi = {
   close: (id: number) =>
     client.post<ProductionCostPeriod>(`/accounting/production-cost-periods/${id}/close`).then(r => r.data),
 }
+
+// ──────────────────────────────────────────────────────
+// Interfaces & API — Hóa đơn đầu vào
+// ──────────────────────────────────────────────────────
+
+export interface IncomingInvoiceItem {
+  stt: number
+  ma_hang?: string
+  ten_hang: string
+  dvt: string
+  so_luong: number
+  don_gia: number
+  thanh_tien: number
+  thue_suat: string
+  mapped_material?: {
+    material_type: 'paper' | 'other'
+    id: number
+    ma_chinh: string
+    ten: string
+    dvt: string
+  } | null
+}
+
+export interface IncomingInvoice {
+  id: number
+  so_hoa_don: string | null
+  mau_so: string | null
+  ky_hieu: string | null
+  ngay_hoa_don: string | null
+  supplier_tax_code: string | null
+  supplier_name: string | null
+  buyer_tax_code: string | null
+  buyer_name: string | null
+  tong_tien_hang: number
+  tien_thue: number
+  tong_thanh_toan: number
+  trang_thai: string
+  purchase_invoice_id: number | null
+  goods_receipt_id: number | null
+  created_at: string
+  items?: IncomingInvoiceItem[]
+  internal_supplier_id?: number | null
+  internal_supplier_name?: string | null
+  internal_phap_nhan_id?: number | null
+  internal_phap_nhan_name?: string | null
+  xml_content?: string | null
+}
+
+export interface IncomingInvoiceItemMapping {
+  stt: number
+  material_type: 'paper' | 'other'
+  material_id: number
+}
+
+export interface ProcessIncomingInvoicePayload {
+  phap_nhan_id: number
+  supplier_id: number
+  warehouse_id?: number | null
+  create_goods_receipt: boolean
+  items_mapping: IncomingInvoiceItemMapping[]
+}
+
+export const incomingInvoiceApi = {
+  list: (params?: Record<string, unknown>): Promise<{ total: number; page: number; page_size: number; items: IncomingInvoice[] }> =>
+    client.get('/incoming-invoices', { params }).then(r => r.data),
+
+  get: (id: number): Promise<IncomingInvoice> =>
+    client.get(`/incoming-invoices/${id}`).then(r => r.data),
+
+  uploadXML: (file: File): Promise<{ id: number; so_hoa_don: string; detail: string }> => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return client.post('/incoming-invoices/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
+
+  syncEmail: (): Promise<{ status: string; count: number; detail: string }> =>
+    client.post('/incoming-invoices/sync-email').then(r => r.data),
+
+  getSuggestions: (q: string, limit?: number): Promise<{
+    material_type: 'paper' | 'other'
+    id: number
+    ma_chinh: string
+    ten: string
+    dvt: string
+    score: number
+  }[]> =>
+    client.get('/incoming-invoices/suggestions', { params: { q, ...(limit ? { limit } : {}) } }).then(r => r.data),
+
+  process: (id: number, payload: ProcessIncomingInvoicePayload): Promise<{
+    status: string
+    purchase_invoice_id: number
+    goods_receipt_id: number | null
+    detail: string
+  }> =>
+    client.post(`/incoming-invoices/${id}/process`, payload).then(r => r.data),
+
+  ignore: (id: number): Promise<{ status: string; detail: string }> =>
+    client.post(`/incoming-invoices/${id}/ignore`).then(r => r.data),
+}
+

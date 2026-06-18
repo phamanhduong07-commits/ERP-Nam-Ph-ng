@@ -40,6 +40,8 @@ from app.routers import customer_refunds as customer_refunds_router
 from app.routers import import_logs as import_logs_router
 from app.routers import system as system_router
 from app.routers import media as media_router
+from app.routers import incoming_invoices
+from app.routers import doi_tru as doi_tru_router
 from app.agent import router as agent_router
 from app.routers import quality_control as quality_control_router
 from app.routers import kho_ao as kho_ao_router
@@ -175,6 +177,30 @@ async def benefit_birthday_loop():
             logger.warning("Birthday/reminder cron error (retry 6h): %s", exc)
         await _aio.sleep(6 * 3600)  # 6 giờ
 
+
+async def incoming_invoice_email_scanner_loop():
+    """Vòng lặp chạy ngầm định kỳ quét email tải hóa đơn XML đầu vào."""
+    from app.database import SessionLocal as _SessionLocal
+    from app.routers.incoming_invoices import scan_emails_for_invoices
+    from app.config import settings
+
+    # Đợi startup ổn định
+    await asyncio.sleep(45)
+
+    interval = settings.EMAIL_SCAN_INTERVAL_MINUTES * 60
+    if interval <= 0:
+        interval = 600
+
+    logger.info("Incoming invoice email scanner loop started with interval %s seconds", interval)
+    while True:
+        try:
+            with _SessionLocal() as db:
+                scan_emails_for_invoices(db)
+        except Exception as exc:
+            logger.warning("Error in background email scanner: %s", exc, exc_info=True)
+        await asyncio.sleep(interval)
+
+
 from app.models import gps as _gps_models  # noqa: F401 — ensures GpsSnapshot is in Base.metadata
 from app.routers import qc_giay_cuon as qc_giay_cuon_router
 from app.routers import qc_nvl as qc_nvl_router
@@ -242,16 +268,19 @@ async def lifespan(app: FastAPI):
     _gps_task = asyncio.create_task(gps_poller_loop())
     _htcph_task = asyncio.create_task(run_daily_sync(_get_db))
     _birthday_task = asyncio.create_task(benefit_birthday_loop())
+    _email_scan_task = asyncio.create_task(incoming_invoice_email_scanner_loop())
     asyncio.create_task(_warmup_ollama())
     logger.info("GPS background poller scheduled")
     logger.info("HTCPH daily sync scheduled (next run: 02:00)")
     logger.info("Birthday benefit cron scheduled (every 6h)")
+    logger.info("Incoming invoice email scanner scheduled")
     yield
     # ── Shutdown ──────────────────────────────────────────────────────────────
     _gps_task.cancel()
     _htcph_task.cancel()
     _birthday_task.cancel()
-    for task in (_gps_task, _htcph_task, _birthday_task):
+    _email_scan_task.cancel()
+    for task in (_gps_task, _htcph_task, _birthday_task, _email_scan_task):
         try:
             await task
         except asyncio.CancelledError:
@@ -412,6 +441,8 @@ app.include_router(gps_router.router)
 app.include_router(qc_giay_cuon_router.router)
 app.include_router(qc_nvl_router.router)
 app.include_router(hoa_don_dien_tu.router)
+app.include_router(incoming_invoices.router)
+app.include_router(doi_tru_router.router, prefix="/api")
 app.include_router(tem_paper_prices_router.router, prefix="/api")
 app.include_router(offset_addon_prices_router.router, prefix="/api")
 app.include_router(sync_htcph_router.router)

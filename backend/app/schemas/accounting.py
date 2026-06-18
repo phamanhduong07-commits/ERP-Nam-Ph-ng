@@ -139,11 +139,7 @@ class CashReceiptCreate(BaseModel):
             raise ValueError("Số tiền phải lớn hơn 0")
         return v
 
-    @model_validator(mode="after")
-    def tk_no_theo_httt(self) -> "CashReceiptCreate":
-        if self.hinh_thuc_tt in {"tien_mat", "TM"}:
-            self.tk_no = "111"
-        return self
+    # tk_no/tk_co do user nhập, không auto-override
 
 
 class CashReceiptUpdate(BaseModel):
@@ -215,6 +211,7 @@ class CashPaymentCreate(BaseModel):
     tk_no: str = "331"
     tk_co: str = "112"
     loai_chi: str | None = None  # nop_thue | nop_bh | tra_luong | null=ttt_ncc
+    khoan_muc_chi_phi_id: int | None = None
     phap_nhan_id: int | None = None
     phan_xuong_id: int | None = None
 
@@ -232,11 +229,7 @@ class CashPaymentCreate(BaseModel):
             raise ValueError("Số tiền phải lớn hơn 0")
         return v
 
-    @model_validator(mode="after")
-    def tk_co_theo_httt(self) -> "CashPaymentCreate":
-        if self.hinh_thuc_tt in {"tien_mat", "TM"}:
-            self.tk_co = "111"
-        return self
+    # tk_no/tk_co do user nhập, không auto-override
 
 
 class CashPaymentUpdate(BaseModel):
@@ -253,6 +246,7 @@ class CashPaymentUpdate(BaseModel):
     tk_no: str | None = None
     tk_co: str | None = None
     loai_chi: str | None = None
+    khoan_muc_chi_phi_id: int | None = None
     phap_nhan_id: int | None = None
     phan_xuong_id: int | None = None
 
@@ -278,6 +272,9 @@ class CashPaymentResponse(BaseModel):
     so_tien: Decimal
     tk_no: str
     tk_co: str
+    loai_chi: str | None = None
+    khoan_muc_chi_phi_id: int | None = None
+    ten_khoan_muc: str | None = None
     trang_thai: Literal["cho_chot", "da_chot", "da_duyet", "huy"] = "cho_chot"
     nguoi_duyet_id: int | None
     ngay_duyet: datetime | None
@@ -456,6 +453,41 @@ class ARCustomerSummaryRow(BaseModel):
     so_con_phai_thu: Decimal
 
 
+class ARAgingBuckets(BaseModel):
+    truoc_han_0_7: Decimal
+    truoc_han_8_18: Decimal
+    truoc_han_tren_18: Decimal
+    qua_han: Decimal
+    khong_co_han: Decimal
+
+
+class ARDashboardTopCustomer(BaseModel):
+    customer_id: int
+    ma_kh: str
+    ten_khach_hang: str
+    so_con_phai_thu: Decimal
+
+
+class ARDashboardUpcomingInvoice(BaseModel):
+    invoice_id: int
+    so_hoa_don: str | None
+    han_tt: date
+    customer_id: int
+    ten_khach_hang: str
+    so_tien: Decimal
+
+
+class ARDashboardData(BaseModel):
+    tong_cong_no: Decimal
+    aging: ARAgingBuckets
+    tong_da_thu: Decimal
+    con_phai_thu: Decimal
+    ty_le_thu_hoi: float
+    so_ngay_binh_quan: float
+    top_customers: list[ARDashboardTopCustomer]
+    sap_den_han: list[ARDashboardUpcomingInvoice]
+
+
 class APLedgerRow(BaseModel):
     """Một dòng trong sổ công nợ phải trả"""
     invoice_id: int
@@ -568,6 +600,7 @@ class BankAccountResponse(BaseModel):
     ten_ngan_hang: str
     so_tai_khoan: str
     phap_nhan_id: int | None = None
+    phap_nhan_ten: str | None = None
     chu_tai_khoan: str | None
     chi_nhanh: str | None
     swift_code: str | None

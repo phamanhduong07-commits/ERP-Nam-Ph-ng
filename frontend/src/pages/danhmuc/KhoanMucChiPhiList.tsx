@@ -4,7 +4,7 @@ import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input,
-  Tag, Popconfirm, message, Typography, Row, Col, Switch, Select,
+  Tag, Popconfirm, message, Typography, Row, Col, Switch, Select, Tooltip,
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -20,8 +20,17 @@ interface KhoanMucChiPhi {
   ma_kmcp: string
   ten_kmcp: string
   loai_chi_phi: string | null
+  ma_loai_tk_no: string | null
   ghi_chu: string | null
   trang_thai: boolean
+}
+
+interface TaiKhoanNgamDinh {
+  id: number
+  ma_loai: string
+  ten_loai: string
+  nhom: string
+  so_tk: string | null
 }
 
 type KhoanMucChiPhiInput = Omit<KhoanMucChiPhi, 'id'>
@@ -63,6 +72,14 @@ export default function KhoanMucChiPhiList() {
     queryKey: ['khoan-muc-chi-phi'],
     queryFn: () => api.list().then(r => r.data),
   })
+
+  const { data: tkNgamDinhList = [] } = useQuery<TaiKhoanNgamDinh[]>({
+    queryKey: ['tai-khoan-ngam-dinh'],
+    queryFn: () => client.get<TaiKhoanNgamDinh[]>('/tai-khoan-ngam-dinh').then(r => r.data),
+    staleTime: 30 * 60 * 1000,
+  })
+
+  const tkMap = Object.fromEntries(tkNgamDinhList.map(t => [t.ma_loai, t]))
 
   const createMut = useMutation({
     mutationFn: (d: KhoanMucChiPhiInput) => api.create(d),
@@ -117,6 +134,7 @@ export default function KhoanMucChiPhiList() {
       ma_kmcp: vals.ma_kmcp,
       ten_kmcp: vals.ten_kmcp,
       loai_chi_phi: vals.loai_chi_phi || null,
+      ma_loai_tk_no: vals.ma_loai_tk_no || null,
       ghi_chu: vals.ghi_chu || null,
       trang_thai: vals.trang_thai ?? true,
     }
@@ -149,6 +167,21 @@ export default function KhoanMucChiPhiList() {
         return cfg ? <Tag color={cfg.color}>{cfg.label}</Tag> : <Tag>{v}</Tag>
       },
     },
+    {
+      title: 'TK Nợ ngầm định',
+      dataIndex: 'ma_loai_tk_no',
+      width: 160,
+      render: (v: string | null) => {
+        if (!v) return '—'
+        const tk = tkMap[v]
+        if (!tk) return <Tag>{v}</Tag>
+        return (
+          <Tooltip title={tk.ten_loai}>
+            <Tag color="blue">{tk.so_tk} — {tk.ten_loai}</Tag>
+          </Tooltip>
+        )
+      },
+    },
     { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v ?? '—' },
     {
       title: 'Trạng thái',
@@ -172,6 +205,11 @@ export default function KhoanMucChiPhiList() {
     },
   ]
   const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-khoan-muc-chi-phi', columns)
+
+  const tkNgamDinhOptions = tkNgamDinhList.map(t => ({
+    value: t.ma_loai,
+    label: `${t.so_tk ?? '—'} — ${t.ten_loai}`,
+  }))
 
   return (
     <div>
@@ -220,6 +258,21 @@ export default function KhoanMucChiPhiList() {
           </Form.Item>
           <Form.Item label="Loại chi phí" name="loai_chi_phi">
             <Select allowClear placeholder="Chọn loại chi phí" options={LOAI_OPTIONS} />
+          </Form.Item>
+          <Form.Item
+            label="TK Nợ ngầm định"
+            name="ma_loai_tk_no"
+            extra="Khi chọn khoản mục này trong phiếu chi, TK Nợ sẽ tự điền theo tài khoản ngầm định"
+          >
+            <Select
+              allowClear
+              showSearch
+              placeholder="Chọn tài khoản kế toán ngầm định"
+              filterOption={(input, opt) =>
+                (opt?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={tkNgamDinhOptions}
+            />
           </Form.Item>
           <Form.Item label="Ghi chú" name="ghi_chu">
             <TextArea rows={3} placeholder="Ghi chú thêm (không bắt buộc)" />

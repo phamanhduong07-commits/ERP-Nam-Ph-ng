@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber, Select,
-  Tag, Badge, Popconfirm, message, Typography, Row, Col, Switch,
+  Tag, Badge, Popconfirm, message, Typography, Row, Col, Switch, Divider, Checkbox,
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -22,6 +22,8 @@ interface ChartOfAccount {
   cap: number
   so_tk_cha: string | null
   trang_thai: boolean
+  theo_doi_doi_tuong: boolean
+  loai_doi_tuong: string | null
 }
 
 const coaApi = {
@@ -150,6 +152,8 @@ export default function ChartOfAccountsPage() {
       cap: vals.cap ?? 1,
       so_tk_cha: vals.so_tk_cha || null,
       trang_thai: vals.trang_thai ?? true,
+      theo_doi_doi_tuong: vals.theo_doi_doi_tuong ?? false,
+      loai_doi_tuong: vals.theo_doi_doi_tuong ? (vals.loai_doi_tuong || null) : null,
     }
     if (editing) {
       updateMut.mutate({ id: editing.id, data: payload })
@@ -191,6 +195,19 @@ export default function ChartOfAccountsPage() {
       render: (v: number) => <Badge count={v} showZero color="#1565C0" />,
     },
     { title: 'TK cha', dataIndex: 'so_tk_cha', width: 100, render: (v: string | null) => v ?? '—' },
+    {
+      title: 'Theo dõi đối tượng',
+      key: 'theo_doi',
+      width: 160,
+      render: (_: unknown, r: ChartOfAccount) => {
+        if (!r.theo_doi_doi_tuong) return <Tag color="default">Không</Tag>
+        const label = r.loai_doi_tuong === 'khach_hang' ? 'Khách hàng'
+          : r.loai_doi_tuong === 'nha_cung_cap' ? 'Nhà cung cấp'
+          : r.loai_doi_tuong === 'nhan_vien' ? 'Nhân viên'
+          : r.loai_doi_tuong ?? ''
+        return <Tag color="blue">Đối tượng: {label}</Tag>
+      },
+    },
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',

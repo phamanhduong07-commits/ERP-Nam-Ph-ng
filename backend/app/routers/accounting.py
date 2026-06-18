@@ -21,7 +21,7 @@ from app.schemas.accounting import (
     PurchaseInvoiceResponse, CashReceiptCreate,
     CashReceiptResponse, CashPaymentCreate,
     CashPaymentResponse, OpeningBalanceCreate,
-    ARCustomerSummaryRow,
+    ARCustomerSummaryRow, ARDashboardData,
     WorkshopPayrollCreate,
     WorkshopPayrollResponse, OverheadAllocationRequest,
     OverheadAllocationResponse, ClosingResult,
@@ -460,6 +460,7 @@ def list_receipts(
     den_ngay: date | None = Query(None),
     phap_nhan_id: int | None = Query(None),
     phan_xuong_id: int | None = Query(None),
+    hinh_thuc_tt: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -469,6 +470,7 @@ def list_receipts(
         customer_id=customer_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
         phap_nhan_id=phap_nhan_id, phan_xuong_id=phan_xuong_id,
+        hinh_thuc_tt=hinh_thuc_tt,
         page=page, page_size=page_size,
     )
 
@@ -1106,6 +1108,7 @@ def list_payments(
     den_ngay: date | None = Query(None),
     phap_nhan_id: int | None = Query(None),
     phan_xuong_id: int | None = Query(None),
+    hinh_thuc_tt: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -1115,6 +1118,7 @@ def list_payments(
         supplier_id=supplier_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
         phap_nhan_id=phap_nhan_id, phan_xuong_id=phan_xuong_id,
+        hinh_thuc_tt=hinh_thuc_tt,
         page=page, page_size=page_size,
     )
 
@@ -1773,6 +1777,19 @@ def ar_customer_summary(
     return AccountingService(db).get_ar_customer_summary(phap_nhan_id=phap_nhan_id)
 
 
+@router.get("/ar/dashboard", response_model=ARDashboardData)
+def ar_dashboard(
+    phap_nhan_id: int | None = Query(None),
+    nhan_vien_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return AccountingService(db).get_ar_dashboard(
+        phap_nhan_id=phap_nhan_id,
+        nhan_vien_id=nhan_vien_id,
+    )
+
+
 # ─────────────────────────────────────────────
 # SỔ CÔNG NỢ — AP (phải trả)
 # ─────────────────────────────────────────────
@@ -1868,6 +1885,125 @@ def so_chi_tiet_mua_hang(
         phap_nhan_id=phap_nhan_id,
         page=page, page_size=page_size,
     )
+
+
+# ─────────────────────────────────────────────
+# SỔ CHI TIẾT MUA HÀNG — NÂNG CAO
+# ─────────────────────────────────────────────
+
+@router.get("/purchase/so-chi-tiet-nangcao")
+def so_chi_tiet_mua_hang_nangcao(
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
+    nhom_vthh_id: int | None = Query(None),
+    phan_loai_ncc: str | None = Query(None),
+    nhan_vien_id: int | None = Query(None),
+    supplier_ids: list[int] = Query(default=[]),
+    paper_material_ids: list[int] = Query(default=[]),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from sqlalchemy import select as sa_select
+    from app.models.warehouse_doc import GoodsReceiptItem
+    from app.models.master import PaperMaterial, MaterialGroup
+
+    q = (
+        db.query(PurchaseInvoice, Supplier)
+        .join(Supplier, PurchaseInvoice.supplier_id == Supplier.id)
+        .filter(
+            PurchaseInvoice.ngay_lap >= tu_ngay,
+            PurchaseInvoice.ngay_lap <= den_ngay,
+            PurchaseInvoice.trang_thai != "huy",
+        )
+    )
+
+    if phap_nhan_id:
+        q = q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
+
+    if supplier_ids:
+        q = q.filter(PurchaseInvoice.supplier_id.in_(supplier_ids))
+
+    if phan_loai_ncc:
+        q = q.filter(Supplier.phan_loai == phan_loai_ncc)
+
+    if nhan_vien_id:
+        q = q.filter(PurchaseInvoice.created_by == nhan_vien_id)
+
+    # Filter by material group or specific paper materials — go through GR
+    if nhom_vthh_id or paper_material_ids:
+        gr_item_q = db.query(GoodsReceiptItem.receipt_id)
+        if nhom_vthh_id:
+            gr_item_q = gr_item_q.join(
+                PaperMaterial,
+                GoodsReceiptItem.paper_material_id == PaperMaterial.id
+            ).filter(PaperMaterial.ma_nhom_id == nhom_vthh_id)
+        if paper_material_ids:
+            gr_item_q = gr_item_q.filter(
+                GoodsReceiptItem.paper_material_id.in_(paper_material_ids)
+            )
+        matching_gr_ids = [r[0] for r in gr_item_q.distinct().all()]
+        q = q.filter(PurchaseInvoice.gr_id.in_(matching_gr_ids))
+
+    total = q.count()
+
+    rows_raw = (
+        q.order_by(PurchaseInvoice.ngay_lap.desc(), PurchaseInvoice.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    # Preload GR so_phieu
+    gr_ids = [pi.gr_id for pi, _ in rows_raw if pi.gr_id]
+    gr_map: dict[int, str] = {}
+    if gr_ids:
+        grs = db.query(GoodsReceipt.id, GoodsReceipt.so_phieu).filter(GoodsReceipt.id.in_(gr_ids)).all()
+        gr_map = {g.id: g.so_phieu for g in grs}
+
+    rows = []
+    tong_tien_hang = Decimal("0")
+    tong_thue = Decimal("0")
+    tong_thanh_toan = Decimal("0")
+    da_thanh_toan = Decimal("0")
+
+    for pi, sup in rows_raw:
+        tong_tien_hang += pi.tong_tien_hang
+        tong_thue += pi.tien_thue
+        tong_thanh_toan += pi.tong_thanh_toan
+        da_thanh_toan += pi.da_thanh_toan
+        rows.append({
+            "id": pi.id,
+            "ngay_hach_toan": pi.ngay_lap.isoformat(),
+            "ngay_chung_tu": (pi.ngay_hoa_don or pi.ngay_lap).isoformat(),
+            "so_chung_tu": gr_map.get(pi.gr_id) if pi.gr_id else None,
+            "so_hoa_don": pi.so_hoa_don,
+            "supplier_id": pi.supplier_id,
+            "ten_ncc": sup.ten_viet_tat,
+            "tong_tien_hang": float(pi.tong_tien_hang),
+            "tien_thue": float(pi.tien_thue),
+            "tong_thanh_toan": float(pi.tong_thanh_toan),
+            "da_thanh_toan": float(pi.da_thanh_toan),
+            "con_lai": float(pi.con_lai),
+            "trang_thai": pi.trang_thai,
+            "ghi_chu": pi.ghi_chu,
+        })
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "rows": rows,
+        "totals": {
+            "tong_tien_hang": float(tong_tien_hang),
+            "tong_thue": float(tong_thue),
+            "tong_thanh_toan": float(tong_thanh_toan),
+            "da_thanh_toan": float(da_thanh_toan),
+            "con_lai": float(tong_thanh_toan - da_thanh_toan),
+        },
+    }
 
 
 # ─────────────────────────────────────────────
