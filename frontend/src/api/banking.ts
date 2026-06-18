@@ -35,10 +35,13 @@ export interface BankAccountUpdate extends Partial<BankAccountCreate> {
 export interface LedgerEntry {
   ngay: string
   so_chung_tu: string
+  chung_tu_id?: number
   loai: 'thu' | 'chi'
   doi_tuong: string | null
   dien_giai: string | null
   so_tham_chieu?: string | null
+  tk_no?: string | null
+  tk_co?: string | null
   thu: number
   chi: number
   so_du: number

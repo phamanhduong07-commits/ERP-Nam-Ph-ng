@@ -814,20 +814,23 @@ class AccountingService:
         return entry
 
     def _post_cash_receipt_journal(self, receipt: CashReceipt) -> None:
-        lines = [
-            {
-                'so_tk': receipt.tk_no,
-                'dien_giai': f"Thu tiền HĐ {receipt.sales_invoice_id or ''}",
-                'so_tien_no': float(receipt.so_tien),
-                'so_tien_co': 0,
-            },
-            {
-                'so_tk': receipt.tk_co,
-                'dien_giai': f"Giảm công nợ KH {receipt.customer_id}",
-                'so_tien_no': 0,
-                'so_tien_co': float(receipt.so_tien),
-            },
-        ]
+        if receipt.journal_lines_override:
+            lines = receipt.journal_lines_override
+        else:
+            lines = [
+                {
+                    'so_tk': receipt.tk_no,
+                    'dien_giai': f"Thu tiền HĐ {receipt.sales_invoice_id or ''}",
+                    'so_tien_no': float(receipt.so_tien),
+                    'so_tien_co': 0,
+                },
+                {
+                    'so_tk': receipt.tk_co,
+                    'dien_giai': f"Giảm công nợ KH {receipt.customer_id}",
+                    'so_tien_no': 0,
+                    'so_tien_co': float(receipt.so_tien),
+                },
+            ]
         self._create_journal_entry(
             ngay=receipt.ngay_phieu,
             dien_giai=f"Phiếu thu {receipt.so_phieu}",
@@ -839,6 +842,19 @@ class AccountingService:
         )
 
     def _post_cash_payment_journal(self, payment: CashPayment) -> None:
+        if payment.journal_lines_override:
+            self._create_journal_entry(
+                ngay=payment.ngay_phieu,
+                dien_giai=f"Phiếu chi {payment.so_phieu}",
+                loai_but_toan='phieu_chi',
+                chung_tu_loai='phieu_chi',
+                chung_tu_id=payment.id,
+                lines=payment.journal_lines_override,
+                phap_nhan_id=payment.phap_nhan_id,
+                phan_xuong_id=payment.phan_xuong_id,
+            )
+            return
+
         so_tien = Decimal(str(payment.so_tien))
         vat_amount = Decimal("0")
 
@@ -1306,6 +1322,7 @@ class AccountingService:
         phap_nhan_id: int | None = None,
         phan_xuong_id: int | None = None,
         hinh_thuc_tt: str | None = None,
+        search: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ):
@@ -1326,6 +1343,11 @@ class AccountingService:
             q = q.filter(CashReceipt.phap_nhan_id == phap_nhan_id)
         if phan_xuong_id:
             q = q.filter(CashReceipt.phan_xuong_id == phan_xuong_id)
+        if search:
+            pct = f"%{search}%"
+            q = q.join(Customer, CashReceipt.customer_id == Customer.id).filter(
+                or_(Customer.ten_viet_tat.ilike(pct), Customer.ten_don_vi.ilike(pct))
+            )
         if hinh_thuc_tt:
             _CASH = {"tien_mat", "TM"}
             _BANK = {"chuyen_khoan", "CK"}
@@ -1786,6 +1808,7 @@ class AccountingService:
         phap_nhan_id: int | None = None,
         phan_xuong_id: int | None = None,
         hinh_thuc_tt: str | None = None,
+        search: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ):
@@ -1806,6 +1829,11 @@ class AccountingService:
             q = q.filter(CashPayment.phap_nhan_id == phap_nhan_id)
         if phan_xuong_id:
             q = q.filter(CashPayment.phan_xuong_id == phan_xuong_id)
+        if search:
+            pct = f"%{search}%"
+            q = q.join(Supplier, CashPayment.supplier_id == Supplier.id).filter(
+                or_(Supplier.ten_viet_tat.ilike(pct), Supplier.ten_don_vi.ilike(pct))
+            )
         if hinh_thuc_tt:
             _CASH = {"tien_mat", "TM"}
             _BANK = {"chuyen_khoan", "CK"}
@@ -2990,9 +3018,12 @@ class AccountingService:
             entries.append({
                 "ngay": r.ngay_phieu,
                 "so_chung_tu": r.so_phieu,
+                "chung_tu_id": r.id,
                 "loai": "thu",
                 "doi_tuong": getattr(kh, "ten_viet_tat", None) or getattr(kh, "ten_don_vi", None),
                 "dien_giai": r.dien_giai or "Thu tiền mặt từ khách hàng",
+                "tk_no": r.tk_no,
+                "tk_co": r.tk_co,
                 "thu": Decimal(str(r.so_tien)),
                 "chi": Decimal("0"),
                 "ten_phap_nhan": r.phap_nhan.ten_phap_nhan if r.phap_nhan else None,
@@ -3003,9 +3034,12 @@ class AccountingService:
             entries.append({
                 "ngay": p.ngay_phieu,
                 "so_chung_tu": p.so_phieu,
+                "chung_tu_id": p.id,
                 "loai": "chi",
                 "doi_tuong": getattr(ncc, "ten_viet_tat", None) or getattr(ncc, "ten_don_vi", None),
                 "dien_giai": p.dien_giai or "Chi tiền mặt cho nhà cung cấp",
+                "tk_no": p.tk_no,
+                "tk_co": p.tk_co,
                 "thu": Decimal("0"),
                 "chi": Decimal(str(p.so_tien)),
                 "ten_phap_nhan": p.phap_nhan.ten_phap_nhan if p.phap_nhan else None,
@@ -3114,10 +3148,13 @@ class AccountingService:
             entries.append({
                 "ngay": r.ngay_phieu,
                 "so_chung_tu": r.so_phieu,
+                "chung_tu_id": r.id,
                 "loai": "thu",
                 "doi_tuong": getattr(kh, "ten_viet_tat", None) or getattr(kh, "ten_don_vi", None),
                 "dien_giai": r.dien_giai or "Thu chuyển khoản",
                 "so_tham_chieu": r.so_tham_chieu,
+                "tk_no": r.tk_no,
+                "tk_co": r.tk_co,
                 "thu": Decimal(str(r.so_tien)),
                 "chi": Decimal("0"),
                 "ten_phap_nhan": r.phap_nhan.ten_phap_nhan if r.phap_nhan else None,
@@ -3128,10 +3165,13 @@ class AccountingService:
             entries.append({
                 "ngay": p.ngay_phieu,
                 "so_chung_tu": p.so_phieu,
+                "chung_tu_id": p.id,
                 "loai": "chi",
                 "doi_tuong": getattr(ncc, "ten_viet_tat", None) or getattr(ncc, "ten_don_vi", None),
                 "dien_giai": p.dien_giai or "Chi chuyển khoản",
                 "so_tham_chieu": p.so_tham_chieu,
+                "tk_no": p.tk_no,
+                "tk_co": p.tk_co,
                 "thu": Decimal("0"),
                 "chi": Decimal(str(p.so_tien)),
                 "ten_phap_nhan": p.phap_nhan.ten_phap_nhan if p.phap_nhan else None,

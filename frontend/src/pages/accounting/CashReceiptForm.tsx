@@ -4,9 +4,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber,
-  Row, Select, Space, Typography, message,
+  Modal, Row, Select, Space, Typography, message,
 } from 'antd'
-import { ArrowLeftOutlined, BankOutlined, SaveOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, BankOutlined, CheckCircleOutlined, SaveOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { fmtVND } from '../../utils/exportUtils'
 import { receiptApi, CashReceiptCreate, CashReceiptUpdate, HINH_THUC_TT } from '../../api/accounting'
@@ -15,6 +15,8 @@ import { customersApi, Customer } from '../../api/customers'
 import client from '../../api/client'
 import QuickAddSelect from '../../components/QuickAddSelect'
 import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
+import HachToanSection from '../../components/accounting/HachToanSection'
+import AttachmentSection from '../../components/accounting/AttachmentSection'
 import { billingApi, SalesInvoiceListItem } from '../../api/billing'
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 import { usePhanXuong } from '../../hooks/useMasterData'
@@ -66,6 +68,10 @@ export default function CashReceiptForm() {
   const tkNgamDinhMap = Object.fromEntries(tkNgamDinhList.map(t => [t.ma_loai, t.so_tk]))
 
   const selectedPhapNhan = Form.useWatch('phap_nhan_id', form)
+  const watchTkNo    = Form.useWatch('tk_no', form) as string | undefined
+  const watchTkCo    = Form.useWatch('tk_co', form) as string | undefined
+  const watchSoTien  = Form.useWatch('so_tien', form) as number | undefined
+  const watchDienGiai = Form.useWatch('dien_giai', form) as string | undefined
   const filteredBankAccounts = selectedPhapNhan
     ? bankAccounts.filter(b => b.phap_nhan_id === selectedPhapNhan || b.phap_nhan_id == null)
     : bankAccounts
@@ -203,6 +209,21 @@ export default function CashReceiptForm() {
 
   const isNotEditable = isEdit && existing?.trang_thai !== 'cho_duyet'
   const isPending = createMut.isPending || updateMut.isPending
+
+  const handleApprove = () => {
+    if (!editId) return
+    Modal.confirm({
+      title: 'Duyệt phiếu thu?',
+      content: `Phiếu ${existing?.so_phieu} sẽ được duyệt và tạo bút toán kế toán.`,
+      okText: 'Duyệt',
+      okType: 'primary',
+      onOk: async () => {
+        await receiptApi.approve(editId)
+        qc.invalidateQueries({ queryKey: ['receipt', editId] })
+        message.success('Đã duyệt phiếu thu')
+      },
+    })
+  }
 
   return (
     <div style={{ padding: 24, maxWidth: 700, margin: '0 auto' }}>
@@ -392,12 +413,34 @@ export default function CashReceiptForm() {
           </Row>
         </Card>
 
-        <div style={{ textAlign: 'right' }}>
+        <HachToanSection
+          documentId={editId}
+          documentLoai="phieu_thu"
+          trangThai={existing?.trang_thai ?? 'cho_duyet'}
+          tkNo={watchTkNo ?? ''}
+          tkCo={watchTkCo ?? ''}
+          soTien={watchSoTien ?? 0}
+          dienGiai={watchDienGiai ?? ''}
+          initialOverride={existing?.journal_lines_override}
+        />
+
+        <AttachmentSection
+          module="phieu_thu"
+          recordId={editId}
+          readonly={existing?.trang_thai === 'huy'}
+        />
+
+        <div style={{ textAlign: 'right', marginTop: 16 }}>
           <Space>
             <Button onClick={() => navigate(isEdit ? `/accounting/receipts/${editId}` : '/accounting/receipts')}>Hủy</Button>
             {!isNotEditable && (
               <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={isPending}>
                 {isEdit ? 'Cập nhật' : 'Tạo phiếu thu'}
+              </Button>
+            )}
+            {isEdit && existing?.trang_thai === 'cho_duyet' && (
+              <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleApprove} style={{ background: '#52c41a', borderColor: '#52c41a' }}>
+                Duyệt
               </Button>
             )}
           </Space>

@@ -4,9 +4,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber,
-  Row, Select, Space, Typography, message,
+  Modal, Row, Select, Space, Typography, message,
 } from 'antd'
-import { ArrowLeftOutlined, BankOutlined, SaveOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, BankOutlined, CheckCircleOutlined, SaveOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { fmtVND } from '../../utils/exportUtils'
 import { paymentApi, CashPaymentCreate, CashPaymentUpdate, PurchaseInvoice, purchaseInvoiceApi } from '../../api/accounting'
@@ -19,6 +19,8 @@ interface TaiKhoanNgamDinh { id: number; ma_loai: string; ten_loai: string; nhom
 import { phapNhanApi, PhapNhan } from '../../api/phap_nhan'
 import QuickAddSelect from '../../components/QuickAddSelect'
 import { QUICK_ADD_CONFIGS } from '../../config/quickAddConfigs'
+import HachToanSection from '../../components/accounting/HachToanSection'
+import AttachmentSection from '../../components/accounting/AttachmentSection'
 
 const { Title, Text } = Typography
 
@@ -90,6 +92,10 @@ export default function CashPaymentForm() {
   const tkNgamDinhMap = Object.fromEntries(tkNgamDinhList.map(t => [t.ma_loai, t.so_tk]))
 
   const selectedPhapNhan = Form.useWatch('phap_nhan_id', form)
+  const watchTkNo     = Form.useWatch('tk_no', form) as string | undefined
+  const watchTkCo     = Form.useWatch('tk_co', form) as string | undefined
+  const watchSoTien   = Form.useWatch('so_tien', form) as number | undefined
+  const watchDienGiai = Form.useWatch('dien_giai', form) as string | undefined
   const filteredBankAccounts = selectedPhapNhan
     ? bankAccounts.filter(b => b.phap_nhan_id === selectedPhapNhan || b.phap_nhan_id == null)
     : bankAccounts
@@ -231,6 +237,27 @@ export default function CashPaymentForm() {
 
   const isNotEditable = isEdit && existing != null && !EDITABLE_STATUSES.has(existing.trang_thai)
   const isPending = createMut.isPending || updateMut.isPending
+
+  const handleApprove = () => {
+    if (!editId) return
+    const tt = existing?.trang_thai
+    const isChot = tt === 'cho_chot'
+    const label = isChot ? 'Chốt' : 'Duyệt'
+    const content = isChot
+      ? `Phiếu ${existing?.so_phieu} sẽ được chốt.`
+      : `Phiếu ${existing?.so_phieu} sẽ được duyệt và tạo bút toán kế toán.`
+    Modal.confirm({
+      title: `${label} phiếu chi?`,
+      content,
+      okText: label,
+      okType: 'primary',
+      onOk: async () => {
+        await paymentApi.approve(editId)
+        qc.invalidateQueries({ queryKey: ['payment', editId] })
+        message.success(`Đã ${label.toLowerCase()} phiếu chi`)
+      },
+    })
+  }
 
   return (
     <div style={{ padding: 24, maxWidth: 760, margin: '0 auto' }}>
@@ -434,12 +461,39 @@ export default function CashPaymentForm() {
           </Form.Item>
         </Card>
 
-        <div style={{ textAlign: 'right' }}>
+        <HachToanSection
+          documentId={editId}
+          documentLoai="phieu_chi"
+          trangThai={existing?.trang_thai ?? 'cho_chot'}
+          tkNo={watchTkNo ?? ''}
+          tkCo={watchTkCo ?? ''}
+          soTien={watchSoTien ?? 0}
+          dienGiai={watchDienGiai ?? ''}
+          initialOverride={existing?.journal_lines_override}
+        />
+
+        <AttachmentSection
+          module="phieu_chi"
+          recordId={editId}
+          readonly={existing?.trang_thai === 'huy'}
+        />
+
+        <div style={{ textAlign: 'right', marginTop: 16 }}>
           <Space>
             <Button onClick={() => navigate(isEdit ? `/accounting/payments/${editId}` : '/accounting/payments')}>Hủy</Button>
             {!isNotEditable && (
               <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={isPending}>
                 {isEdit ? 'Cập nhật' : 'Tạo phiếu chi'}
+              </Button>
+            )}
+            {isEdit && existing?.trang_thai === 'cho_chot' && (
+              <Button icon={<CheckCircleOutlined />} onClick={handleApprove} style={{ borderColor: '#faad14', color: '#faad14' }}>
+                Chốt
+              </Button>
+            )}
+            {isEdit && existing?.trang_thai === 'da_chot' && (
+              <Button type="primary" icon={<CheckCircleOutlined />} onClick={handleApprove} style={{ background: '#52c41a', borderColor: '#52c41a' }}>
+                Duyệt
               </Button>
             )}
           </Space>

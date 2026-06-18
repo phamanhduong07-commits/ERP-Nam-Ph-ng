@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Card, Table, DatePicker, Button, Space, Typography, Statistic,
+  Card, Table, DatePicker, Button, Input, Space, Typography, Statistic,
   Row, Col, Tag, Select,
 } from 'antd'
 import { FileExcelOutlined, SearchOutlined, PrinterOutlined } from '@ant-design/icons'
@@ -17,6 +18,7 @@ const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
 export default function BankLedgerPage() {
+  const navigate = useNavigate()
   const today = dayjs()
   const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
     today.startOf('month'),
@@ -27,6 +29,8 @@ export default function BankLedgerPage() {
   const [filterPhanXuong, setFilterPhanXuong] = useState<number | undefined>()
   const { phapNhanList } = usePhapNhan()
   const { phanXuongList } = usePhanXuong()
+  const [searchText, setSearchText] = useState<string>('')
+  const [filterLoai, setFilterLoai] = useState<string | undefined>()
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['bank-accounts'],
@@ -48,6 +52,13 @@ export default function BankLedgerPage() {
     enabled: true,
   })
 
+  const filteredEntries = (data?.entries ?? []).filter((r: LedgerEntry) => {
+    if (filterLoai && r.loai !== filterLoai) return false
+    if (!searchText) return true
+    const q = searchText.toLowerCase()
+    return (r.doi_tuong ?? '').toLowerCase().includes(q) || (r.dien_giai ?? '').toLowerCase().includes(q)
+  })
+
   const columns: ColumnsType<LedgerEntry> = [
     {
       title: 'Ngày',
@@ -55,7 +66,12 @@ export default function BankLedgerPage() {
       width: 100,
       render: v => dayjs(v).format('DD/MM/YYYY'),
     },
-    { title: 'Số chứng từ', dataIndex: 'so_chung_tu', width: 160 },
+    {
+      title: 'Số chứng từ', dataIndex: 'so_chung_tu', width: 160,
+      render: (v: string, r: LedgerEntry) => r.chung_tu_id
+        ? <a onClick={() => navigate(r.loai === 'thu' ? `/accounting/receipts/${r.chung_tu_id}` : `/accounting/payments/${r.chung_tu_id}`)}>{v}</a>
+        : v,
+    },
     {
       title: 'Loại',
       dataIndex: 'loai',
@@ -67,6 +83,17 @@ export default function BankLedgerPage() {
     { title: 'Đối tượng', dataIndex: 'doi_tuong', ellipsis: true },
     { title: 'Diễn giải', dataIndex: 'dien_giai', ellipsis: true },
     { title: 'Số tham chiếu', dataIndex: 'so_tham_chieu', width: 150 },
+    {
+      title: 'Định khoản',
+      key: 'dinh_khoan',
+      width: 120,
+      render: (_v: unknown, r: LedgerEntry) => (
+        <span style={{ fontSize: 12 }}>
+          <Tag color="blue" style={{ marginRight: 2 }}>{r.tk_no ?? '—'}</Tag>
+          <Tag color="purple">{r.tk_co ?? '—'}</Tag>
+        </span>
+      ),
+    },
     {
       title: 'Thu (đ)',
       dataIndex: 'thu',
@@ -189,6 +216,21 @@ export default function BankLedgerPage() {
         <Button type="primary" icon={<SearchOutlined />} onClick={() => refetch()}>
           Xem sổ
         </Button>
+        <Select
+          allowClear
+          style={{ width: 110 }}
+          placeholder="Loại"
+          value={filterLoai}
+          onChange={v => setFilterLoai(v)}
+          options={[{ value: 'thu', label: 'Thu' }, { value: 'chi', label: 'Chi' }]}
+        />
+        <Input.Search
+          style={{ width: 220 }}
+          placeholder="Tìm đối tượng / diễn giải..."
+          allowClear
+          onSearch={v => setSearchText(v)}
+          onChange={e => { if (!e.target.value) setSearchText('') }}
+        />
       </Space>
 
       {data && (
@@ -236,7 +278,7 @@ export default function BankLedgerPage() {
                         locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
                         rowKey="so_chung_tu"
             columns={displayColumns}
-            dataSource={data.entries}
+            dataSource={filteredEntries}
             loading={isLoading}
             pagination={false}
             size="small"

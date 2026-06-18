@@ -461,6 +461,7 @@ def list_receipts(
     phap_nhan_id: int | None = Query(None),
     phan_xuong_id: int | None = Query(None),
     hinh_thuc_tt: str | None = Query(None),
+    q: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -470,7 +471,7 @@ def list_receipts(
         customer_id=customer_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
         phap_nhan_id=phap_nhan_id, phan_xuong_id=phan_xuong_id,
-        hinh_thuc_tt=hinh_thuc_tt,
+        hinh_thuc_tt=hinh_thuc_tt, search=q,
         page=page, page_size=page_size,
     )
 
@@ -514,6 +515,38 @@ def cancel_receipt(
     return AccountingService(db).cancel_receipt(receipt_id, current_user.id, ly_do)
 
 
+@router.post("/receipts/{receipt_id}/clone", response_model=CashReceiptResponse)
+def clone_receipt(
+    receipt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    svc = AccountingService(db)
+    src = db.get(CashReceipt, receipt_id)
+    if not src:
+        raise HTTPException(404, "Không tìm thấy phiếu thu")
+    clone = CashReceipt(
+        so_phieu=svc._gen_so_phieu("PT", CashReceipt),
+        ngay_phieu=src.ngay_phieu,
+        customer_id=src.customer_id,
+        sales_invoice_id=None,
+        hinh_thuc_tt=src.hinh_thuc_tt,
+        so_tai_khoan=src.so_tai_khoan,
+        so_tham_chieu=None,
+        dien_giai=src.dien_giai,
+        so_tien=src.so_tien,
+        tk_no=src.tk_no,
+        tk_co=src.tk_co,
+        phap_nhan_id=src.phap_nhan_id,
+        phan_xuong_id=src.phan_xuong_id,
+        created_by=current_user.id,
+    )
+    db.add(clone)
+    db.commit()
+    db.refresh(clone)
+    return svc.get_receipt(clone.id)
+
+
 @router.put("/receipts/{receipt_id}", response_model=CashReceiptResponse)
 def update_receipt(
     receipt_id: int,
@@ -522,6 +555,24 @@ def update_receipt(
     current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
 ):
     return AccountingService(db).update_receipt(receipt_id, data, current_user.id)
+
+
+@router.patch("/receipts/{receipt_id}/journal-lines")
+def save_receipt_journal_lines(
+    receipt_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    receipt = db.get(CashReceipt, receipt_id)
+    if not receipt:
+        raise HTTPException(404, "Không tìm thấy phiếu thu")
+    if receipt.trang_thai == "da_duyet":
+        raise HTTPException(400, "Phiếu đã duyệt, không thể sửa bút toán")
+    lines = body.get("lines", [])
+    receipt.journal_lines_override = lines if lines else None
+    db.commit()
+    return {"ok": True, "lines": receipt.journal_lines_override}
 
 
 # ─────────────────────────────────────────────
@@ -1109,6 +1160,7 @@ def list_payments(
     phap_nhan_id: int | None = Query(None),
     phan_xuong_id: int | None = Query(None),
     hinh_thuc_tt: str | None = Query(None),
+    q: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -1118,7 +1170,7 @@ def list_payments(
         supplier_id=supplier_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
         phap_nhan_id=phap_nhan_id, phan_xuong_id=phan_xuong_id,
-        hinh_thuc_tt=hinh_thuc_tt,
+        hinh_thuc_tt=hinh_thuc_tt, search=q,
         page=page, page_size=page_size,
     )
 
@@ -1159,6 +1211,58 @@ def cancel_payment(
 ):
     logger.info("cancel_payment id=%s user=%s", payment_id, current_user.id)
     return AccountingService(db).cancel_payment(payment_id, current_user.id, ly_do)
+
+
+@router.patch("/payments/{payment_id}/journal-lines")
+def save_payment_journal_lines(
+    payment_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    payment = db.get(CashPayment, payment_id)
+    if not payment:
+        raise HTTPException(404, "Không tìm thấy phiếu chi")
+    if payment.trang_thai == "da_duyet":
+        raise HTTPException(400, "Phiếu đã duyệt, không thể sửa bút toán")
+    lines = body.get("lines", [])
+    payment.journal_lines_override = lines if lines else None
+    db.commit()
+    return {"ok": True, "lines": payment.journal_lines_override}
+
+
+@router.post("/payments/{payment_id}/clone", response_model=CashPaymentResponse)
+def clone_payment(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*KE_TOAN_ROLES)),
+):
+    svc = AccountingService(db)
+    src = db.get(CashPayment, payment_id)
+    if not src:
+        raise HTTPException(404, "Không tìm thấy phiếu chi")
+    clone = CashPayment(
+        so_phieu=svc._gen_so_phieu("PC", CashPayment),
+        ngay_phieu=src.ngay_phieu,
+        supplier_id=src.supplier_id,
+        purchase_invoice_id=None,
+        hinh_thuc_tt=src.hinh_thuc_tt,
+        so_tai_khoan=src.so_tai_khoan,
+        so_tham_chieu=None,
+        dien_giai=src.dien_giai,
+        so_tien=src.so_tien,
+        loai_chi=src.loai_chi,
+        khoan_muc_chi_phi_id=src.khoan_muc_chi_phi_id,
+        tk_no=src.tk_no,
+        tk_co=src.tk_co,
+        phap_nhan_id=src.phap_nhan_id,
+        phan_xuong_id=src.phan_xuong_id,
+        created_by=current_user.id,
+    )
+    db.add(clone)
+    db.commit()
+    db.refresh(clone)
+    return svc.get_payment(clone.id)
 
 
 @router.put("/payments/{payment_id}", response_model=CashPaymentResponse)
