@@ -494,7 +494,12 @@ export default function GoodsReceiptPage() {
       width: 100,
       render: (v: string) => <Tag color={v === 'DAT' ? 'green' : 'red'}>{v === 'DAT' ? 'Đạt' : 'Không đạt'}</Tag>,
     },
-    { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true, render: (v: string | null) => v ?? '-' },
+    { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true, render: (v: string | null) => {
+      if (v && v.includes('Hóa đơn XML')) {
+        return <span>{v} <a href="/accounting/incoming-invoices" style={{ fontSize: 11 }}>[HĐ đầu vào]</a></span>
+      }
+      return v ?? '-'
+    }},
   ]
 
   const handleExportExcel = async () => {
@@ -711,7 +716,16 @@ export default function GoodsReceiptPage() {
               <Descriptions.Item label="Tổng giá trị">
                 <Text strong>{fmtVND(detailDrawer.tong_gia_tri)}</Text>
               </Descriptions.Item>
-              {detailDrawer.ghi_chu && <Descriptions.Item label="Ghi chú" span={2}>{detailDrawer.ghi_chu}</Descriptions.Item>}
+              {detailDrawer.ghi_chu && (
+                <Descriptions.Item label="Ghi chú" span={2}>
+                  {detailDrawer.ghi_chu}
+                  {detailDrawer.ghi_chu.includes('Hóa đơn XML') && (
+                    <a href="/accounting/incoming-invoices" style={{ marginLeft: 8, fontSize: 12 }}>
+                      → Xem hóa đơn đầu vào
+                    </a>
+                  )}
+                </Descriptions.Item>
+              )}
             </Descriptions>
 
             <Divider orientation="left" orientationMargin={0}>Chi tiết hàng nhập</Divider>

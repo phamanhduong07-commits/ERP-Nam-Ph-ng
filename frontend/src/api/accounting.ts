@@ -53,6 +53,7 @@ export interface CashReceipt {
   tk_no: string
   tk_co: string
   trang_thai: string
+  journal_lines_override?: any[] | null
   phap_nhan_id: number | null
   ten_phap_nhan?: string | null
   phan_xuong_id?: number | null
@@ -173,6 +174,7 @@ export interface CashPayment {
   khoan_muc_chi_phi_id?: number | null
   ten_khoan_muc?: string | null
   trang_thai: string
+  journal_lines_override?: any[] | null
   phap_nhan_id: number | null
   ten_phap_nhan?: string | null
   phan_xuong_id?: number | null
@@ -214,6 +216,34 @@ export interface CashPaymentUpdate {
   tk_co?: string
   loai_chi?: string | null
   khoan_muc_chi_phi_id?: number | null
+}
+
+// ──────────────────────────────────────────────────────
+// Interfaces — Journal Entry (Hạch toán)
+// ──────────────────────────────────────────────────────
+
+export interface JournalEntryLine {
+  id: number
+  entry_id: number
+  so_tk: string
+  dien_giai: string | null
+  so_tien_no: number
+  so_tien_co: number
+  phap_nhan_id: number | null
+  phan_xuong_id: number | null
+}
+
+export interface JournalEntry {
+  id: number
+  so_but_toan: string
+  ngay_but_toan: string
+  dien_giai: string | null
+  loai_but_toan: string
+  tong_no: number
+  tong_co: number
+  chung_tu_loai: string | null
+  chung_tu_id: number | null
+  lines: JournalEntryLine[]
 }
 
 // ──────────────────────────────────────────────────────
@@ -393,6 +423,11 @@ export const receiptApi = {
   cancel: (id: number): Promise<CashReceipt> =>
     client.patch(`/accounting/receipts/${id}/cancel`).then(r => r.data),
 
+  clone: (id: number): Promise<CashReceipt> =>
+    client.post(`/accounting/receipts/${id}/clone`).then(r => r.data),
+
+  printUrl: (id: number) => `/api/accounting/receipts/${id}/print`,
+
   batch: (data: BatchReceiptCreate): Promise<BatchReceiptResponse> =>
     client.post('/accounting/receipts/batch', data).then(r => r.data),
 
@@ -407,6 +442,9 @@ export const receiptApi = {
 
   downloadTemplate: () =>
     client.get('/accounting/receipts/import-template', { responseType: 'blob' }).then(r => r.data),
+
+  getJournalEntries: (id: number): Promise<JournalEntry[]> =>
+    client.get(`/accounting/documents/phieu_thu/${id}/journal-entries`).then(r => r.data),
 }
 
 // ──────────────────────────────────────────────────────
@@ -458,6 +496,11 @@ export const paymentApi = {
   cancel: (id: number): Promise<CashPayment> =>
     client.patch(`/accounting/payments/${id}/cancel`).then(r => r.data),
 
+  clone: (id: number): Promise<CashPayment> =>
+    client.post(`/accounting/payments/${id}/clone`).then(r => r.data),
+
+  printUrl: (id: number) => `/api/accounting/payments/${id}/print`,
+
   importExcel: (file: File, params?: { ngay_phieu?: string; phap_nhan_id?: number; phan_xuong_id?: number }) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -469,6 +512,9 @@ export const paymentApi = {
 
   downloadTemplate: () =>
     client.get('/accounting/payments/import-template', { responseType: 'blob' }).then(r => r.data),
+
+  getJournalEntries: (id: number): Promise<JournalEntry[]> =>
+    client.get(`/accounting/documents/phieu_chi/${id}/journal-entries`).then(r => r.data),
 }
 
 // ──────────────────────────────────────────────────────
@@ -1143,6 +1189,7 @@ export interface IncomingInvoiceItem {
   don_gia: number
   thanh_tien: number
   thue_suat: string
+  from_saved_rule?: boolean
   mapped_material?: {
     material_type: 'paper' | 'other'
     id: number
@@ -1150,6 +1197,12 @@ export interface IncomingInvoiceItem {
     ten: string
     dvt: string
   } | null
+}
+
+export interface IncomingInvoiceStats {
+  cho_xu_ly: { count: number; tong_gia_tri: number }
+  da_xu_ly: { count: number; tong_gia_tri: number }
+  bo_qua: { count: number; tong_gia_tri: number }
 }
 
 export interface IncomingInvoice {
@@ -1172,6 +1225,7 @@ export interface IncomingInvoice {
   items?: IncomingInvoiceItem[]
   internal_supplier_id?: number | null
   internal_supplier_name?: string | null
+  phap_nhan_id?: number | null
   internal_phap_nhan_id?: number | null
   internal_phap_nhan_name?: string | null
   xml_content?: string | null
@@ -1194,6 +1248,9 @@ export interface ProcessIncomingInvoicePayload {
 export const incomingInvoiceApi = {
   list: (params?: Record<string, unknown>): Promise<{ total: number; page: number; page_size: number; items: IncomingInvoice[] }> =>
     client.get('/incoming-invoices', { params }).then(r => r.data),
+
+  stats: (phap_nhan_id?: number): Promise<IncomingInvoiceStats> =>
+    client.get('/incoming-invoices/stats', { params: phap_nhan_id ? { phap_nhan_id } : undefined }).then(r => r.data),
 
   get: (id: number): Promise<IncomingInvoice> =>
     client.get(`/incoming-invoices/${id}`).then(r => r.data),
@@ -1229,5 +1286,11 @@ export const incomingInvoiceApi = {
 
   ignore: (id: number): Promise<{ status: string; detail: string }> =>
     client.post(`/incoming-invoices/${id}/ignore`).then(r => r.data),
+
+  revert: (id: number): Promise<{ status: string; detail: string }> =>
+    client.post(`/incoming-invoices/${id}/revert`).then(r => r.data),
+
+  unprocess: (id: number): Promise<{ status: string; detail: string }> =>
+    client.post(`/incoming-invoices/${id}/unprocess`).then(r => r.data),
 }
 

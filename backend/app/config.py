@@ -100,6 +100,11 @@ class Settings(BaseSettings):
     MISA_SERIAL: str = ""  # Ký hiệu (VD: C25TAA)
 
     # Cấu hình email quét hóa đơn đầu vào
+    # Multi-account: JSON array của {phap_nhan_id, server, port, user, password}
+    # Ví dụ: [{"phap_nhan_id":1,"server":"imap.gmail.com","port":993,"user":"kt@np.com","password":"apppass"},...]
+    # Nếu để rỗng ("[]") → fallback sang 4 biến legacy bên dưới
+    EMAIL_IMAP_CONFIGS: str = "[]"
+    # Legacy single-account (dùng khi EMAIL_IMAP_CONFIGS rỗng)
     EMAIL_IMAP_SERVER: str = ""
     EMAIL_IMAP_PORT: int = 993
     EMAIL_IMAP_USER: str = ""

@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Table, Tag, Button, Space, Card, Input, Row, Col, DatePicker, Select,
-  Modal, Form, Switch, Typography, message, notification, Tooltip, Empty, Upload, Badge, Divider, List, Spin
+  Modal, Form, Switch, Typography, message, notification, Tooltip, Empty, Upload, Badge, Divider, List, Spin, Statistic, Popconfirm
 } from 'antd'
 import {
   SyncOutlined, UploadOutlined, FileTextOutlined,
-  SearchOutlined, CheckCircleOutlined, CloseCircleOutlined, InfoCircleOutlined,
-  CheckOutlined, ArrowRightOutlined, DownloadOutlined
+  SearchOutlined, InfoCircleOutlined,
+  CheckOutlined, ArrowRightOutlined, DownloadOutlined, RollbackOutlined,
+  StarFilled, WarningOutlined
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -23,7 +24,7 @@ import { warehousesApi } from '../../api/warehouses'
 import { suppliersApi } from '../../api/suppliers'
 import { fmtVND } from '../../utils/exportUtils'
 
-const { Text, Title, Paragraph } = Typography
+const { Text, Paragraph } = Typography
 const { RangePicker } = DatePicker
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -39,21 +40,34 @@ export default function IncomingInvoiceProcessingPage() {
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [filterTrangThai, setFilterTrangThai] = useState<string | undefined>('cho_xu_ly')
   const [filterMST, setFilterMST] = useState<string | undefined>()
+  const [filterSupplierName, setFilterSupplierName] = useState<string | undefined>()
+  const [filterPhapNhanId, setFilterPhapNhanId] = useState<number | undefined>()
+  const [filterSoHoaDon, setFilterSoHoaDon] = useState<string | undefined>()
   const [page, setPage] = useState(1)
 
   // Drawer/Modal state
   const [processId, setProcessId] = useState<number | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
+  // Fetch stats — filter theo phap_nhan_id hiện tại
+  const { data: stats } = useQuery({
+    queryKey: ['incoming-invoices-stats', filterPhapNhanId],
+    queryFn: () => incomingInvoiceApi.stats(filterPhapNhanId),
+    refetchInterval: 30000,
+  })
+
   // Fetch incoming invoices
   const { data, isLoading } = useQuery({
-    queryKey: ['incoming-invoices', tuNgay, denNgay, filterTrangThai, filterMST, page],
+    queryKey: ['incoming-invoices', tuNgay, denNgay, filterTrangThai, filterMST, filterSupplierName, filterPhapNhanId, filterSoHoaDon, page],
     queryFn: () =>
       incomingInvoiceApi.list({
         tu_ngay: tuNgay,
         den_ngay: denNgay,
         trang_thai: filterTrangThai,
         supplier_tax_code: filterMST || undefined,
+        supplier_name: filterSupplierName || undefined,
+        phap_nhan_id: filterPhapNhanId || undefined,
+        so_hoa_don: filterSoHoaDon || undefined,
         page,
         page_size: 20,
       }),
@@ -79,6 +93,7 @@ export default function IncomingInvoiceProcessingPage() {
     onSuccess: (res) => {
       message.success(res.detail || `Đã đồng bộ thành công ${res.count} hóa đơn mới.`)
       queryClient.invalidateQueries({ queryKey: ['incoming-invoices'] })
+      queryClient.invalidateQueries({ queryKey: ['incoming-invoices-stats'], exact: false })
     },
     onError: (err: any) => {
       message.error(err?.response?.data?.detail || 'Lỗi khi đồng bộ email.')
@@ -97,12 +112,12 @@ export default function IncomingInvoiceProcessingPage() {
         message.error('Chỉ chấp nhận file định dạng XML!')
         return false
       }
-      
+
       incomingInvoiceApi.uploadXML(file)
         .then((res) => {
           message.success(res.detail || 'Tải lên hóa đơn XML thành công!')
           queryClient.invalidateQueries({ queryKey: ['incoming-invoices'] })
-          // Auto open the uploaded invoice for processing
+          queryClient.invalidateQueries({ queryKey: ['incoming-invoices-stats'], exact: false })
           if (res.id) {
             setProcessId(res.id)
             setIsModalOpen(true)
@@ -123,9 +138,23 @@ export default function IncomingInvoiceProcessingPage() {
       setIsModalOpen(false)
       setProcessId(null)
       queryClient.invalidateQueries({ queryKey: ['incoming-invoices'] })
+      queryClient.invalidateQueries({ queryKey: ['incoming-invoices-stats'], exact: false })
     },
     onError: (err: any) => {
       message.error(err?.response?.data?.detail || 'Lỗi khi cập nhật hóa đơn.')
+    }
+  })
+
+  // Revert (undo ignore) mutation
+  const revertMutation = useMutation({
+    mutationFn: (id: number) => incomingInvoiceApi.revert(id),
+    onSuccess: (res) => {
+      message.success(res.detail || 'Đã mở lại hóa đơn thành công.')
+      queryClient.invalidateQueries({ queryKey: ['incoming-invoices'] })
+      queryClient.invalidateQueries({ queryKey: ['incoming-invoices-stats'], exact: false })
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.detail || 'Lỗi khi hoàn tác.')
     }
   })
 
@@ -156,8 +185,15 @@ export default function IncomingInvoiceProcessingPage() {
       title: 'Ngày hóa đơn',
       dataIndex: 'ngay_hoa_don',
       key: 'ngay_hoa_don',
-      width: 120,
+      width: 115,
       render: v => v ? dayjs(v).format('DD/MM/YYYY') : '-'
+    },
+    {
+      title: 'Ngày nhận',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 115,
+      render: v => v ? dayjs(v).format('DD/MM/YYYY HH:mm') : '-'
     },
     {
       title: 'Đơn vị bán',
@@ -170,6 +206,15 @@ export default function IncomingInvoiceProcessingPage() {
           <div style={{ fontSize: '11px', color: '#8c8c8c' }}>MST: {r.supplier_tax_code}</div>
         </div>
       )
+    },
+    {
+      title: 'Pháp nhân mua',
+      key: 'phap_nhan',
+      width: 140,
+      ellipsis: true,
+      render: (_: any, r: IncomingInvoice) => r.internal_phap_nhan_name
+        ? <Tag color="purple" style={{ fontSize: 11 }}>{r.internal_phap_nhan_name}</Tag>
+        : <span style={{ color: '#bfbfbf', fontSize: 11 }}>{r.buyer_name || '-'}</span>
     },
     {
       title: 'Tổng thanh toán',
@@ -212,7 +257,7 @@ export default function IncomingInvoiceProcessingPage() {
     {
       title: 'Thao tác',
       key: 'actions',
-      width: 150,
+      width: 160,
       align: 'right',
       render: (_, r) => (
         <Space>
@@ -221,9 +266,26 @@ export default function IncomingInvoiceProcessingPage() {
               <Button type="primary" size="small" onClick={() => handleOpenProcess(r.id)}>
                 Xử lý
               </Button>
-              <Button size="small" danger onClick={() => ignoreMutation.mutate(r.id)}>
+              <Button size="small" danger onClick={() => ignoreMutation.mutate(r.id)} loading={ignoreMutation.isPending}>
                 Bỏ qua
               </Button>
+            </>
+          ) : r.trang_thai === 'bo_qua' ? (
+            <>
+              <Button size="small" icon={<FileTextOutlined />} onClick={() => handleOpenProcess(r.id)}>
+                Xem
+              </Button>
+              <Popconfirm
+                title="Mở lại hóa đơn?"
+                description="Hóa đơn sẽ được đưa về trạng thái Chờ xử lý."
+                onConfirm={() => revertMutation.mutate(r.id)}
+                okText="Mở lại"
+                cancelText="Hủy"
+              >
+                <Button size="small" icon={<RollbackOutlined />} loading={revertMutation.isPending}>
+                  Mở lại
+                </Button>
+              </Popconfirm>
             </>
           ) : (
             <Button size="small" icon={<FileTextOutlined />} onClick={() => handleOpenProcess(r.id)}>
@@ -256,6 +318,62 @@ export default function IncomingInvoiceProcessingPage() {
         </Space>
       }
     >
+      {/* Stats Cards */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <Col xs={24} sm={8}>
+          <Card
+            size="small"
+            style={{ borderRadius: 8, borderLeft: '4px solid #fa8c16', cursor: 'pointer' }}
+            onClick={() => { setFilterTrangThai('cho_xu_ly'); setPage(1) }}
+          >
+            <Statistic
+              title="Chờ xử lý"
+              value={stats?.cho_xu_ly?.count ?? 0}
+              suffix={<span style={{ fontSize: 12, color: '#8c8c8c', fontWeight: 'normal' }}>hóa đơn</span>}
+              valueStyle={{ color: '#fa8c16', fontSize: 22 }}
+            />
+            <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
+              Tổng: {fmtVND(stats?.cho_xu_ly?.tong_gia_tri ?? 0)}
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card
+            size="small"
+            style={{ borderRadius: 8, borderLeft: '4px solid #52c41a', cursor: 'pointer' }}
+            onClick={() => { setFilterTrangThai('da_xu_ly'); setPage(1) }}
+          >
+            <Statistic
+              title="Đã xử lý"
+              value={stats?.da_xu_ly?.count ?? 0}
+              suffix={<span style={{ fontSize: 12, color: '#8c8c8c', fontWeight: 'normal' }}>hóa đơn</span>}
+              valueStyle={{ color: '#52c41a', fontSize: 22 }}
+            />
+            <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
+              Tổng: {fmtVND(stats?.da_xu_ly?.tong_gia_tri ?? 0)}
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card
+            size="small"
+            style={{ borderRadius: 8, borderLeft: '4px solid #d9d9d9', cursor: 'pointer' }}
+            onClick={() => { setFilterTrangThai('bo_qua'); setPage(1) }}
+          >
+            <Statistic
+              title="Đã bỏ qua"
+              value={stats?.bo_qua?.count ?? 0}
+              suffix={<span style={{ fontSize: 12, color: '#8c8c8c', fontWeight: 'normal' }}>hóa đơn</span>}
+              valueStyle={{ color: '#8c8c8c', fontSize: 22 }}
+            />
+            <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
+              Click để xem danh sách
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Filter bar */}
       <Card size="small" style={{ marginBottom: 12, borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
         <Row gutter={[12, 8]} align="middle">
           <Col>
@@ -271,11 +389,39 @@ export default function IncomingInvoiceProcessingPage() {
           </Col>
           <Col>
             <Input
-              style={{ width: 180 }}
-              placeholder="MST nhà cung cấp"
+              style={{ width: 150 }}
+              placeholder="Số hóa đơn"
               prefix={<SearchOutlined />}
               allowClear
+              onChange={e => { setFilterSoHoaDon(e.target.value || undefined); setPage(1) }}
+            />
+          </Col>
+          <Col>
+            <Input
+              style={{ width: 200 }}
+              placeholder="Tên nhà cung cấp"
+              prefix={<SearchOutlined />}
+              allowClear
+              onChange={e => { setFilterSupplierName(e.target.value || undefined); setPage(1) }}
+            />
+          </Col>
+          <Col>
+            <Input
+              style={{ width: 160 }}
+              placeholder="MST nhà cung cấp"
+              allowClear
               onChange={e => { setFilterMST(e.target.value || undefined); setPage(1) }}
+            />
+          </Col>
+          <Col>
+            <Select
+              style={{ width: 180 }}
+              placeholder="Pháp nhân mua hàng"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              onChange={(v: number | undefined) => { setFilterPhapNhanId(v); setPage(1) }}
+              options={phapNhanList.map(pn => ({ value: pn.id, label: pn.ten_phap_nhan }))}
             />
           </Col>
           <Col>
@@ -305,7 +451,8 @@ export default function IncomingInvoiceProcessingPage() {
           pageSize: 20,
           total: data?.total || 0,
           onChange: setPage,
-          showSizeChanger: false
+          showSizeChanger: false,
+          showTotal: (total) => `Tổng ${total} hóa đơn`
         }}
         style={{ borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}
       />
@@ -326,6 +473,7 @@ export default function IncomingInvoiceProcessingPage() {
             setIsModalOpen(false)
             setProcessId(null)
             queryClient.invalidateQueries({ queryKey: ['incoming-invoices'] })
+            queryClient.invalidateQueries({ queryKey: ['incoming-invoices-stats'], exact: false })
           }}
         />
       )}
@@ -336,15 +484,24 @@ export default function IncomingInvoiceProcessingPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 // PROCESS WORKSPACE MODAL COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
+interface WarehouseOption { id: number; ma_kho: string; ten_kho: string; loai_kho: string; trang_thai: boolean; phan_xuong_id?: number | null }
+interface SupplierOption { id: number; ma_ncc: string; ten_don_vi?: string | null; ten_viet_tat?: string | null; ma_so_thue?: string | null }
+interface PhapNhanOption { id: number; ten_phap_nhan: string; ma_so_thue?: string | null }
+
 interface ProcessWorkspaceModalProps {
   invoiceId: number
   visible: boolean
   onClose: () => void
-  warehouseList: any[]
-  supplierList: any[]
-  phapNhanList: any[]
+  warehouseList: WarehouseOption[]
+  supplierList: SupplierOption[]
+  phapNhanList: PhapNhanOption[]
   onSuccess: () => void
 }
+
+// Track item disposition: mapped to a material, or explicitly skipped
+type ItemDisposition =
+  | { type: 'mapped'; material_type: 'paper' | 'other'; id: number; label: string }
+  | { type: 'skipped' }
 
 function ProcessWorkspaceModal({
   invoiceId,
@@ -355,12 +512,12 @@ function ProcessWorkspaceModal({
   phapNhanList,
   onSuccess
 }: ProcessWorkspaceModalProps) {
+  const queryClient = useQueryClient()
   const [form] = Form.useForm()
-  const [mappings, setMappings] = useState<Record<number, { material_type: 'paper' | 'other'; id: number; label: string }>>({})
+  const [dispositions, setDispositions] = useState<Record<number, ItemDisposition>>({})
   const [suggestionsMap, setSuggestionsMap] = useState<Record<number, any[]>>({})
   const [suggestionsLoading, setSuggestionsLoading] = useState<Record<number, boolean>>({})
-  
-  // Custom dropdown options loaded via async search
+
   const [searchOptions, setSearchOptions] = useState<Record<number, any[]>>({})
   const [searchLoading, setSearchLoading] = useState<Record<number, boolean>>({})
 
@@ -376,27 +533,25 @@ function ProcessWorkspaceModal({
   // Initialize form and mappings when invoice details load
   useEffect(() => {
     if (inv) {
-      // 1. Initial form values
       form.setFieldsValue({
-        phap_nhan_id: inv.internal_phap_nhan_id || undefined,
+        phap_nhan_id: inv.phap_nhan_id || inv.internal_phap_nhan_id || undefined,
         supplier_id: inv.internal_supplier_id || undefined,
         warehouse_id: warehouseList.find(w => w.trang_thai)?.id || undefined,
       })
 
-      // 2. Load existing mappings
-      const initialMappings: typeof mappings = {}
+      const initialDispositions: Record<number, ItemDisposition> = {}
       inv.items?.forEach((item) => {
         if (item.mapped_material) {
-          initialMappings[item.stt] = {
+          initialDispositions[item.stt] = {
+            type: 'mapped',
             material_type: item.mapped_material.material_type,
             id: item.mapped_material.id,
             label: `[${item.mapped_material.ma_chinh}] ${item.mapped_material.ten}`
           }
         }
       })
-      setMappings(initialMappings)
+      setDispositions(initialDispositions)
 
-      // 3. Fetch fuzzy suggestions for items that don't have mapping yet
       inv.items?.forEach((item) => {
         if (!item.mapped_material) {
           fetchFuzzySuggestions(item.stt, item.ten_hang)
@@ -417,7 +572,6 @@ function ProcessWorkspaceModal({
     }
   }
 
-  // Handle searching materials in Select dropdown
   const handleMaterialSearch = async (stt: number, value: string) => {
     if (!value || value.trim().length < 2) return
     setSearchLoading(prev => ({ ...prev, [stt]: true }))
@@ -441,20 +595,17 @@ function ProcessWorkspaceModal({
   const handleSelectMaterial = (stt: number, selectedVal: string, option: any) => {
     const [material_type, idStr] = selectedVal.split(':')
     const id = parseInt(idStr)
-    setMappings(prev => ({
+    setDispositions(prev => ({
       ...prev,
-      [stt]: {
-        material_type: material_type as 'paper' | 'other',
-        id,
-        label: option.label
-      }
+      [stt]: { type: 'mapped', material_type: material_type as 'paper' | 'other', id, label: option.label }
     }))
   }
 
   const handleSelectSuggestion = (stt: number, sug: any) => {
-    setMappings(prev => ({
+    setDispositions(prev => ({
       ...prev,
       [stt]: {
+        type: 'mapped',
         material_type: sug.material_type,
         id: sug.id,
         label: `[${sug.ma_chinh}] ${sug.ten}`
@@ -462,18 +613,24 @@ function ProcessWorkspaceModal({
     }))
   }
 
-  const handleClearMapping = (stt: number) => {
-    setMappings(prev => {
+  const handleClearDisposition = (stt: number) => {
+    setDispositions(prev => {
       const copy = { ...prev }
       delete copy[stt]
       return copy
     })
   }
 
+  const handleSkipItem = (stt: number) => {
+    setDispositions(prev => ({ ...prev, [stt]: { type: 'skipped' } }))
+  }
+
   // Process and generate document mutation
   const processMutation = useMutation({
     mutationFn: (payload: any) => incomingInvoiceApi.process(invoiceId, payload),
     onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-invoices'], exact: false })
+      queryClient.invalidateQueries({ queryKey: ['goods-receipts'], exact: false })
       notification.success({
         message: 'Xử lý thành công!',
         description: (
@@ -517,34 +674,64 @@ function ProcessWorkspaceModal({
     }
   })
 
+  // Unprocess mutation (hoàn tác xử lý)
+  const unprocessMutation = useMutation({
+    mutationFn: (id: number) => incomingInvoiceApi.unprocess(id),
+    onSuccess: (res) => {
+      message.success(res.detail || 'Đã hoàn tác xử lý — hóa đơn trở về Chờ xử lý.')
+      onSuccess()
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.detail || 'Không thể hoàn tác — GR hoặc PI đã được duyệt.')
+    }
+  })
+
   const handleConfirmProcess = () => {
     form.validateFields()
       .then((values) => {
-        // Verify all items have mappings
-        const unmappedItems = inv?.items?.filter(item => !mappings[item.stt]) || []
+        const skippedItems = inv?.items?.filter(item => dispositions[item.stt]?.type === 'skipped') || []
+        const unmappedItems = inv?.items?.filter(item => !dispositions[item.stt]) || []
+
+        // Block if any item has no disposition at all (neither mapped nor skipped)
         if (unmappedItems.length > 0) {
-          message.error(`Còn ${unmappedItems.length} mặt hàng chưa liên kết với mã vật tư nội bộ. Hãy liên kết tất cả trước khi xác nhận.`)
+          message.warning(
+            `Còn ${unmappedItems.length} mặt hàng chưa xử lý. Hãy liên kết vật tư hoặc nhấn "Bỏ qua dòng" cho từng mặt hàng.`
+          )
           return
         }
 
-        const items_mapping: IncomingInvoiceItemMapping[] = Object.entries(mappings).map(([sttStr, mapData]) => ({
-          stt: parseInt(sttStr),
-          material_type: mapData.material_type,
-          material_id: mapData.id
-        }))
+        // Warn (not block) if some items are skipped
+        const doProcess = () => {
+          const items_mapping: IncomingInvoiceItemMapping[] = Object.entries(dispositions)
+            .filter(([, d]) => d.type === 'mapped')
+            .map(([sttStr, d]) => {
+              const mapped = d as Extract<ItemDisposition, { type: 'mapped' }>
+              return { stt: parseInt(sttStr), material_type: mapped.material_type, material_id: mapped.id }
+            })
 
-        const payload = {
-          phap_nhan_id: values.phap_nhan_id,
-          supplier_id: values.supplier_id,
-          warehouse_id: createGoodsReceipt ? values.warehouse_id : null,
-          create_goods_receipt: createGoodsReceipt,
-          items_mapping
+          const payload = {
+            phap_nhan_id: values.phap_nhan_id,
+            supplier_id: values.supplier_id,
+            warehouse_id: createGoodsReceipt ? values.warehouse_id : null,
+            create_goods_receipt: createGoodsReceipt,
+            items_mapping
+          }
+          processMutation.mutate(payload)
         }
 
-        processMutation.mutate(payload)
+        if (skippedItems.length > 0) {
+          Modal.confirm({
+            title: `${skippedItems.length} dòng sẽ bị bỏ qua`,
+            content: `${skippedItems.map(i => `"${i.ten_hang}"`).join(', ')} sẽ không được đưa vào Phiếu nhập kho. Tiếp tục?`,
+            okText: 'Xác nhận xử lý',
+            cancelText: 'Quay lại kiểm tra',
+            onOk: doProcess,
+          })
+        } else {
+          doProcess()
+        }
       })
-      .catch((err) => {
-        console.error(err)
+      .catch(() => {
         message.error('Vui lòng điền đầy đủ thông tin pháp nhân và nhà cung cấp nội bộ.')
       })
   }
@@ -561,6 +748,11 @@ function ProcessWorkspaceModal({
   }
 
   const isEditable = inv?.trang_thai === 'cho_xu_ly'
+
+  // Compute progress summary
+  const mappedCount = Object.values(dispositions).filter(d => d.type === 'mapped').length
+  const skippedCount = Object.values(dispositions).filter(d => d.type === 'skipped').length
+  const pendingCount = (inv?.items?.length ?? 0) - mappedCount - skippedCount
 
   if (isLoading) {
     return (
@@ -609,9 +801,31 @@ function ProcessWorkspaceModal({
             Bỏ qua hóa đơn
           </Button>
         ),
+        !isEditable && inv.trang_thai === 'da_xu_ly' && (
+          <Popconfirm
+            key="unprocess"
+            title="Hoàn tác xử lý?"
+            description="Phiếu nhập kho và hóa đơn mua hàng nháp sẽ bị xóa. Chỉ thực hiện được khi chứng từ chưa được duyệt."
+            onConfirm={() => unprocessMutation.mutate(inv.id)}
+            okText="Hoàn tác"
+            okButtonProps={{ danger: true }}
+            cancelText="Hủy"
+          >
+            <Button key="unprocess-btn" loading={unprocessMutation.isPending} style={{ color: '#fa8c16', borderColor: '#fa8c16' }}>
+              Hoàn tác xử lý
+            </Button>
+          </Popconfirm>
+        ),
         isEditable && (
-          <Button key="submit" type="primary" onClick={handleConfirmProcess} loading={processMutation.isPending}>
+          <Button
+            key="submit"
+            type="primary"
+            onClick={handleConfirmProcess}
+            loading={processMutation.isPending}
+            disabled={pendingCount > 0}
+          >
             Xác nhận & Sinh chứng từ
+            {pendingCount > 0 && ` (còn ${pendingCount} dòng)`}
           </Button>
         )
       ]}
@@ -664,7 +878,7 @@ function ProcessWorkspaceModal({
                 </Col>
                 <Col span={8}>
                   <div style={{ fontSize: '11px', color: '#8c8c8c' }}>Tiền thuế VAT</div>
-                  <Text strong color="orange">{fmtVND(inv.tien_thue)}</Text>
+                  <Text strong>{fmtVND(inv.tien_thue)}</Text>
                 </Col>
                 <Col span={8}>
                   <div style={{ fontSize: '11px', color: '#8c8c8c' }}>Tổng thanh toán</div>
@@ -685,7 +899,7 @@ function ProcessWorkspaceModal({
                     placeholder="Chọn pháp nhân..."
                     showSearch
                     optionFilterProp="label"
-                    options={phapNhanList.map(pn => ({
+                    options={phapNhanList.map((pn: PhapNhanOption) => ({
                       value: pn.id,
                       label: pn.ten_phap_nhan,
                       mst: pn.ma_so_thue
@@ -708,7 +922,17 @@ function ProcessWorkspaceModal({
                     placeholder="Chọn nhà cung cấp nội bộ..."
                     showSearch
                     optionFilterProp="label"
-                    options={supplierList.map(s => ({
+                    onChange={(val: number) => {
+                      const chosen = supplierList.find((s: SupplierOption) => s.id === val)
+                      if (chosen && chosen.ma_so_thue && inv.supplier_tax_code &&
+                          chosen.ma_so_thue !== inv.supplier_tax_code) {
+                        message.warning(
+                          `MST không khớp: NCC nội bộ (${chosen.ma_so_thue}) ≠ hóa đơn (${inv.supplier_tax_code}). Kiểm tra lại trước khi xác nhận.`,
+                          6
+                        )
+                      }
+                    }}
+                    options={supplierList.map((s: SupplierOption) => ({
                       value: s.id,
                       label: s.ten_viet_tat ? `${s.ten_viet_tat} (${s.ma_ncc})` : s.ten_don_vi || s.ma_ncc,
                       mst: s.ma_so_thue
@@ -741,7 +965,7 @@ function ProcessWorkspaceModal({
                       placeholder="Chọn kho nhập..."
                       showSearch
                       optionFilterProp="label"
-                      options={warehouseList.map(w => ({
+                      options={warehouseList.map((w: WarehouseOption) => ({
                         value: w.id,
                         label: `[${w.ma_kho}] ${w.ten_kho} - ${w.loai_kho}`
                       }))}
@@ -759,9 +983,11 @@ function ProcessWorkspaceModal({
             title={
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>Không gian liên kết vật tư nội bộ</span>
-                <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#8c8c8c' }}>
-                  Khớp MST và Tên NCC để lưu luật tự động cho lần sau
-                </span>
+                <Space size={4}>
+                  {mappedCount > 0 && <Tag color="success">{mappedCount} đã liên kết</Tag>}
+                  {skippedCount > 0 && <Tag color="warning">{skippedCount} bỏ qua</Tag>}
+                  {pendingCount > 0 && <Tag color="error">{pendingCount} chờ xử lý</Tag>}
+                </Space>
               </div>
             }
             size="small"
@@ -770,19 +996,23 @@ function ProcessWorkspaceModal({
           >
             <List
               dataSource={inv.items || []}
+              style={{ maxHeight: '60vh', overflowY: 'auto' }}
               renderItem={(item: IncomingInvoiceItem) => {
-                const mapped = mappings[item.stt]
+                const disp = dispositions[item.stt]
                 const suggestions = suggestionsMap[item.stt] || []
                 const isSugLoading = suggestionsLoading[item.stt]
-                
+                const isSkipped = disp?.type === 'skipped'
+                const isMapped = disp?.type === 'mapped'
+
                 return (
                   <div
                     key={item.stt}
                     style={{
                       padding: '12px 8px',
                       borderBottom: '1px solid #f0f0f0',
-                      background: mapped ? '#f6ffed' : '#fff',
-                      transition: 'background 0.3s'
+                      background: isSkipped ? '#fffbe6' : isMapped ? '#f6ffed' : '#fff',
+                      transition: 'background 0.3s',
+                      opacity: isSkipped ? 0.75 : 1,
                     }}
                   >
                     {/* Item original info */}
@@ -795,14 +1025,22 @@ function ProcessWorkspaceModal({
                           ĐVT: <Text code>{item.dvt}</Text> | SL: <Text strong>{item.so_luong}</Text> | Đơn giá: <Text strong>{fmtVND(item.don_gia)}</Text> | Thành tiền: <Text strong>{fmtVND(item.thanh_tien)}</Text> | Thuế: <Text code>{item.thue_suat}</Text>
                         </div>
                       </Col>
-                      
+
                       <Col span={10} style={{ textAlign: 'right' }}>
-                        {mapped ? (
-                          <Tag color="success" icon={<CheckOutlined />} style={{ padding: '4px 8px', fontSize: '12px' }}>
-                            Đã liên kết
+                        {isSkipped ? (
+                          <Tag color="warning" icon={<WarningOutlined />} style={{ padding: '4px 8px', fontSize: '12px' }}>
+                            Bỏ qua dòng này
+                          </Tag>
+                        ) : isMapped ? (
+                          <Tag
+                            color={item.from_saved_rule ? 'cyan' : 'success'}
+                            icon={item.from_saved_rule ? <StarFilled /> : <CheckOutlined />}
+                            style={{ padding: '4px 8px', fontSize: '12px' }}
+                          >
+                            {item.from_saved_rule ? 'Khớp từ luật cũ' : 'Đã liên kết'}
                           </Tag>
                         ) : (
-                          <Tag color="warning" icon={<InfoCircleOutlined />} style={{ padding: '4px 8px', fontSize: '12px' }}>
+                          <Tag color="orange" icon={<InfoCircleOutlined />} style={{ padding: '4px 8px', fontSize: '12px' }}>
                             Chờ liên kết
                           </Tag>
                         )}
@@ -811,15 +1049,31 @@ function ProcessWorkspaceModal({
 
                     {/* Mapping action panel */}
                     <div style={{ marginTop: 10, paddingLeft: 14 }}>
-                      {mapped ? (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '6px 12px', borderRadius: '4px', border: '1px dashed #b7eb8f' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#389e0d' }}>
-                            {mapped.label}
+                      {isSkipped ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fffbe6', padding: '6px 12px', borderRadius: '4px', border: '1px dashed #ffe58f' }}>
+                          <span style={{ fontSize: '12px', color: '#ad8b00', fontStyle: 'italic' }}>
+                            Dòng này sẽ không được đưa vào Phiếu nhập kho
                           </span>
                           {isEditable && (
-                            <Button size="small" type="link" danger onClick={() => handleClearMapping(item.stt)}>
-                              Thay đổi
+                            <Button size="small" type="link" onClick={() => handleClearDisposition(item.stt)}>
+                              Hoàn tác
                             </Button>
+                          )}
+                        </div>
+                      ) : isMapped ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '6px 12px', borderRadius: '4px', border: '1px dashed #b7eb8f' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#389e0d' }}>
+                            {(disp as Extract<ItemDisposition, { type: 'mapped' }>).label}
+                          </span>
+                          {isEditable && (
+                            <Space size={4}>
+                              <Button size="small" type="link" danger onClick={() => handleClearDisposition(item.stt)}>
+                                Thay đổi
+                              </Button>
+                              <Button size="small" type="link" style={{ color: '#fa8c16' }} onClick={() => handleSkipItem(item.stt)}>
+                                Bỏ qua dòng
+                              </Button>
+                            </Space>
                           )}
                         </div>
                       ) : (
@@ -857,8 +1111,16 @@ function ProcessWorkspaceModal({
                                   </Tooltip>
                                 ))
                               ) : (
-                                <span style={{ fontSize: '11px', color: '#bfbfbf', fontStyle: 'italic' }}>Không có gợi ý trùng khớp cao. Hãy tìm kiếm thủ công.</span>
+                                <span style={{ fontSize: '11px', color: '#bfbfbf', fontStyle: 'italic' }}>Không có gợi ý khớp. Tìm kiếm thủ công hoặc bỏ qua dòng.</span>
                               )}
+                              <Button
+                                size="small"
+                                type="text"
+                                style={{ color: '#fa8c16', fontSize: '11px', padding: '0 4px' }}
+                                onClick={() => handleSkipItem(item.stt)}
+                              >
+                                Bỏ qua dòng này
+                              </Button>
                             </div>
                           </div>
                         )

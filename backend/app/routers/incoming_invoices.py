@@ -5,20 +5,20 @@ import imaplib
 import json
 import logging
 from datetime import date, datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, Optional
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from pydantic import BaseModel
 from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_permissions
 from app.models.auth import User
 from app.models.master import Supplier, PaperMaterial, OtherMaterial, PhapNhan, Warehouse, PhanXuong
 from app.models.accounting import IncomingInvoice, IncomingInvoiceMappingRule, PurchaseInvoice, DebtLedgerEntry
 from app.models.warehouse_doc import GoodsReceipt, GoodsReceiptItem
+from app.schemas.accounting import IncomingInvoiceItemMapping, ProcessIncomingInvoicePayload
 from app.services.xml_invoice_parser import parse_xml_invoice
 from app.services.accounting_service import AccountingService
 from app.config import settings
@@ -27,47 +27,62 @@ logger = logging.getLogger("erp")
 router = APIRouter(prefix="/api/incoming-invoices", tags=["Hóa đơn đầu vào"])
 
 
-# Pydantic schemas
-class IncomingInvoiceItemMapping(BaseModel):
-    stt: int
-    material_type: str  # "paper" | "other"
-    material_id: int
-
-
-class ProcessIncomingInvoicePayload(BaseModel):
-    phap_nhan_id: int
-    supplier_id: int
-    warehouse_id: Optional[int] = None
-    create_goods_receipt: bool = True
-    items_mapping: List[IncomingInvoiceItemMapping]
-
-
-# Helper logic for email IMAP scanning
-def scan_emails_for_invoices(db: Session) -> int:
+# Helper: đọc danh sách IMAP configs từ settings
+def get_imap_configs() -> list[dict]:
     """
-    Quét hòm thư email qua IMAP, bóc tách các file đính kèm XML hóa đơn
-    và lưu vào bảng incoming_invoices ở trạng thái chờ xử lý.
+    Đọc danh sách IMAP account configs.
+    Ưu tiên EMAIL_IMAP_CONFIGS (JSON array).
+    Fallback sang 4 biến legacy EMAIL_IMAP_SERVER/PORT/USER/PASSWORD nếu JSON rỗng.
     """
-    if not settings.EMAIL_IMAP_SERVER or not settings.EMAIL_IMAP_USER or not settings.EMAIL_IMAP_PASSWORD:
-        logger.info("IMAP Email configuration is incomplete. Skipping background email scan.")
+    configs_str = (settings.EMAIL_IMAP_CONFIGS or "").strip()
+    if configs_str and configs_str != "[]":
+        try:
+            parsed = json.loads(configs_str)
+            if isinstance(parsed, list) and parsed:
+                return parsed
+        except Exception:
+            logger.error("EMAIL_IMAP_CONFIGS JSON không hợp lệ — fallback sang legacy config")
+
+    if settings.EMAIL_IMAP_SERVER and settings.EMAIL_IMAP_USER and settings.EMAIL_IMAP_PASSWORD:
+        return [{
+            "phap_nhan_id": None,
+            "server": settings.EMAIL_IMAP_SERVER,
+            "port": settings.EMAIL_IMAP_PORT,
+            "user": settings.EMAIL_IMAP_USER,
+            "password": settings.EMAIL_IMAP_PASSWORD,
+        }]
+    return []
+
+
+def scan_one_imap_account(db: Session, cfg: dict, phap_nhan_lookup: dict[str, int]) -> int:
+    """
+    Quét 1 hòm thư IMAP, parse XML hóa đơn, lưu vào DB.
+    phap_nhan_lookup: {ma_so_thue → phap_nhan_id} để auto-detect pháp nhân từ buyer_tax_code.
+    cfg.phap_nhan_id (nếu có) override auto-detect.
+    """
+    server = cfg.get("server", "")
+    port = int(cfg.get("port", 993))
+    user = cfg.get("user", "")
+    password = cfg.get("password", "")
+    forced_pn_id = cfg.get("phap_nhan_id")  # override nếu config chỉ định cứng
+
+    if not server or not user or not password:
+        logger.warning("IMAP config thiếu server/user/password — bỏ qua account: %s", user)
         return 0
 
     count = 0
     mail = None
     try:
-        # Kết nối tới IMAP server
-        mail = imaplib.IMAP4_SSL(settings.EMAIL_IMAP_SERVER, settings.EMAIL_IMAP_PORT)
-        mail.login(settings.EMAIL_IMAP_USER, settings.EMAIL_IMAP_PASSWORD)
+        mail = imaplib.IMAP4_SSL(server, port)
+        mail.login(user, password)
         mail.select("inbox")
 
-        # Tìm các email chưa đọc
         status, messages = mail.search(None, 'UNSEEN')
         if status != 'OK' or not messages[0]:
             return 0
 
         for msg_num in messages[0].split():
             try:
-                # Tải nội dung email
                 status, msg_data = mail.fetch(msg_num, '(RFC822)')
                 if status != 'OK':
                     continue
@@ -75,7 +90,6 @@ def scan_emails_for_invoices(db: Session) -> int:
                 raw_email = msg_data[0][1]
                 msg = email.message_from_bytes(raw_email)
 
-                # Duyệt các phần của email để tìm file đính kèm XML
                 for part in msg.walk():
                     if part.get_content_maintype() == 'multipart':
                         continue
@@ -91,16 +105,13 @@ def scan_emails_for_invoices(db: Session) -> int:
                         if not xml_data:
                             continue
 
-                        # Thử decode với utf-8-sig (để loại bỏ BOM nếu có) hoặc utf-8
                         try:
                             xml_str = xml_data.decode("utf-8-sig")
                         except UnicodeDecodeError:
                             xml_str = xml_data.decode("utf-8", errors="ignore")
 
-                        # Parse XML hóa đơn
                         parsed_data = parse_xml_invoice(xml_str)
                         if parsed_data:
-                            # Đảm bảo hóa đơn này chưa được lưu trước đó
                             existing = db.query(IncomingInvoice).filter(
                                 IncomingInvoice.so_hoa_don == parsed_data["so_hoa_don"],
                                 IncomingInvoice.ky_hieu == parsed_data["ky_hieu"],
@@ -109,6 +120,8 @@ def scan_emails_for_invoices(db: Session) -> int:
                             ).first()
 
                             if not existing:
+                                # Xác định phap_nhan_id: config override > auto-detect từ buyer_tax_code
+                                pn_id = forced_pn_id or phap_nhan_lookup.get(parsed_data.get("buyer_tax_code", ""))
                                 invoice = IncomingInvoice(
                                     so_hoa_don=parsed_data["so_hoa_don"],
                                     mau_so=parsed_data["mau_so"],
@@ -124,22 +137,23 @@ def scan_emails_for_invoices(db: Session) -> int:
                                     xml_content=xml_str,
                                     items=parsed_data["items"],
                                     trang_thai="cho_xu_ly",
+                                    phap_nhan_id=pn_id,
                                 )
                                 db.add(invoice)
                                 count += 1
 
-                # Đánh dấu email đã đọc sau khi xử lý xong các đính kèm
                 mail.store(msg_num, '+FLAGS', '\\Seen')
 
             except Exception as msg_err:
-                logger.error("Lỗi khi xử lý email số %s: %s", msg_num, msg_err, exc_info=True)
+                logger.error("Lỗi xử lý email %s từ %s: %s", msg_num, user, msg_err, exc_info=True)
 
         if count > 0:
             db.commit()
-            logger.info("Đã quét và tải thành công %s hóa đơn đầu vào từ email.", count)
+            logger.info("IMAP %s: đã lưu %s hóa đơn mới.", user, count)
 
     except Exception as imap_err:
-        logger.error("Lỗi kết nối IMAP Email: %s", imap_err, exc_info=True)
+        logger.error("Lỗi kết nối IMAP %s: %s", user, imap_err, exc_info=True)
+        raise
     finally:
         if mail:
             try:
@@ -151,10 +165,36 @@ def scan_emails_for_invoices(db: Session) -> int:
     return count
 
 
+def scan_all_emails_for_invoices(db: Session) -> int:
+    """Quét tất cả IMAP accounts đã cấu hình, mỗi account lỗi không ảnh hưởng account khác."""
+    configs = get_imap_configs()
+    if not configs:
+        logger.info("Không có IMAP config nào — bỏ qua quét email.")
+        return 0
+
+    # Build lookup dict ma_so_thue → phap_nhan_id cho auto-detect
+    phap_nhan_lookup: dict[str, int] = {
+        pn.ma_so_thue: pn.id
+        for pn in db.query(PhapNhan).filter(PhapNhan.ma_so_thue.isnot(None)).all()
+    }
+
+    total = 0
+    for cfg in configs:
+        try:
+            count = scan_one_imap_account(db, cfg, phap_nhan_lookup)
+            total += count
+        except Exception as e:
+            logger.error("Bỏ qua IMAP account %s do lỗi: %s", cfg.get("user"), e)
+    return total
+
+
 @router.get("")
 def list_incoming_invoices(
     trang_thai: Optional[str] = Query(None),
+    so_hoa_don: Optional[str] = Query(None),
     supplier_tax_code: Optional[str] = Query(None),
+    supplier_name: Optional[str] = Query(None),
+    phap_nhan_id: Optional[int] = Query(None),
     tu_ngay: Optional[date] = Query(None),
     den_ngay: Optional[date] = Query(None),
     page: int = Query(1, ge=1),
@@ -165,8 +205,14 @@ def list_incoming_invoices(
     q = db.query(IncomingInvoice)
     if trang_thai:
         q = q.filter(IncomingInvoice.trang_thai == trang_thai)
+    if so_hoa_don:
+        q = q.filter(IncomingInvoice.so_hoa_don.ilike(f"%{so_hoa_don}%"))
     if supplier_tax_code:
         q = q.filter(IncomingInvoice.supplier_tax_code == supplier_tax_code)
+    if supplier_name:
+        q = q.filter(IncomingInvoice.supplier_name.ilike(f"%{supplier_name}%"))
+    if phap_nhan_id:
+        q = q.filter(IncomingInvoice.phap_nhan_id == phap_nhan_id)
     if tu_ngay:
         q = q.filter(IncomingInvoice.ngay_hoa_don >= tu_ngay)
     if den_ngay:
@@ -180,18 +226,24 @@ def list_incoming_invoices(
         .all()
     )
 
+    # Bulk lookup Supplier + PhapNhan để tránh N+1 queries
+    supplier_tax_codes = list({r.supplier_tax_code for r in rows if r.supplier_tax_code})
+    buyer_tax_codes = list({r.buyer_tax_code for r in rows if r.buyer_tax_code})
+
+    supplier_map: dict[str, Any] = {}
+    if supplier_tax_codes:
+        for s in db.query(Supplier).filter(Supplier.ma_so_thue.in_(supplier_tax_codes), Supplier.trang_thai == True).all():
+            supplier_map[s.ma_so_thue] = s
+
+    phap_nhan_map: dict[str, Any] = {}
+    if buyer_tax_codes:
+        for pn in db.query(PhapNhan).filter(PhapNhan.ma_so_thue.in_(buyer_tax_codes), PhapNhan.trang_thai == True).all():
+            phap_nhan_map[pn.ma_so_thue] = pn
+
     items = []
     for r in rows:
-        # Check if mapped Supplier exists
-        internal_supplier = None
-        if r.supplier_tax_code:
-            internal_supplier = db.query(Supplier).filter(Supplier.ma_so_thue == r.supplier_tax_code, Supplier.trang_thai == True).first()
-
-        # Check if mapped PhapNhan exists
-        internal_phap_nhan = None
-        if r.buyer_tax_code:
-            internal_phap_nhan = db.query(PhapNhan).filter(PhapNhan.ma_so_thue == r.buyer_tax_code, PhapNhan.trang_thai == True).first()
-
+        s = supplier_map.get(r.supplier_tax_code) if r.supplier_tax_code else None
+        pn = phap_nhan_map.get(r.buyer_tax_code) if r.buyer_tax_code else None
         items.append({
             "id": r.id,
             "so_hoa_don": r.so_hoa_don,
@@ -209,13 +261,37 @@ def list_incoming_invoices(
             "purchase_invoice_id": r.purchase_invoice_id,
             "goods_receipt_id": r.goods_receipt_id,
             "created_at": r.created_at.isoformat() if r.created_at else None,
-            "internal_supplier_id": internal_supplier.id if internal_supplier else None,
-            "internal_supplier_name": (internal_supplier.ten_viet_tat or internal_supplier.ten_don_vi) if internal_supplier else None,
-            "internal_phap_nhan_id": internal_phap_nhan.id if internal_phap_nhan else None,
-            "internal_phap_nhan_name": internal_phap_nhan.ten_phap_nhan if internal_phap_nhan else None,
+            "internal_supplier_id": s.id if s else None,
+            "internal_supplier_name": (s.ten_viet_tat or s.ten_don_vi) if s else None,
+            "phap_nhan_id": r.phap_nhan_id,
+            "internal_phap_nhan_id": pn.id if pn else None,
+            "internal_phap_nhan_name": pn.ten_phap_nhan if pn else None,
         })
 
     return {"total": total, "page": page, "page_size": page_size, "items": items}
+
+
+@router.get("/stats")
+def get_incoming_invoice_stats(
+    phap_nhan_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Thống kê số lượng và tổng giá trị hóa đơn đầu vào theo trạng thái."""
+    from sqlalchemy import func
+    q = db.query(IncomingInvoice.trang_thai, func.count().label("count"), func.sum(IncomingInvoice.tong_thanh_toan).label("tong_gia_tri"))
+    if phap_nhan_id:
+        q = q.filter(IncomingInvoice.phap_nhan_id == phap_nhan_id)
+    rows = q.group_by(IncomingInvoice.trang_thai).all()
+    result: dict[str, Any] = {
+        "cho_xu_ly": {"count": 0, "tong_gia_tri": 0},
+        "da_xu_ly": {"count": 0, "tong_gia_tri": 0},
+        "bo_qua": {"count": 0, "tong_gia_tri": 0},
+    }
+    for trang_thai, count, tong_gia_tri in rows:
+        if trang_thai in result:
+            result[trang_thai] = {"count": count, "tong_gia_tri": float(tong_gia_tri or 0)}
+    return result
 
 
 @router.get("/suggestions")
@@ -225,48 +301,57 @@ def get_material_suggestions(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Gợi ý tìm kiếm mờ (Fuzzy matching) mã vật tư dựa trên tên mặt hàng đầu vào."""
+    """Gợi ý tìm kiếm vật tư: DB-side ILIKE trước, fuzzy score sau để rank."""
+    from sqlalchemy import or_
     query_str = q.strip().lower()
-    
-    # Lấy danh sách các vật tư hoạt động
-    papers = db.query(PaperMaterial).filter(PaperMaterial.su_dung == True).all()
-    others = db.query(OtherMaterial).filter(OtherMaterial.trang_thai == True).all()
-    
+    like_pat = f"%{query_str}%"
+
+    # DB-side filter: chỉ load rows khớp ILIKE (tên hoặc mã), giới hạn 100 rows
+    papers = (
+        db.query(PaperMaterial)
+        .filter(PaperMaterial.su_dung == True)
+        .filter(or_(PaperMaterial.ten.ilike(like_pat), PaperMaterial.ma_chinh.ilike(like_pat)))
+        .limit(100)
+        .all()
+    )
+    others = (
+        db.query(OtherMaterial)
+        .filter(OtherMaterial.trang_thai == True)
+        .filter(or_(OtherMaterial.ten.ilike(like_pat), OtherMaterial.ma_chinh.ilike(like_pat)))
+        .limit(100)
+        .all()
+    )
+
     suggestions = []
-    
-    # So khớp với danh mục giấy cuộn (PaperMaterial)
     for p in papers:
-        score_ten = difflib.SequenceMatcher(None, query_str, p.ten.lower()).ratio()
-        score_code = difflib.SequenceMatcher(None, query_str, p.ma_chinh.lower()).ratio()
-        score = max(score_ten, score_code)
-        if score > 0.15:
-            suggestions.append({
-                "material_type": "paper",
-                "id": p.id,
-                "ma_chinh": p.ma_chinh,
-                "ten": p.ten,
-                "dvt": p.dvt,
-                "loai_giay": p.loai_giay,
-                "dinh_luong": float(p.dinh_luong or 0),
-                "score": score
-            })
-
-    # So khớp với danh mục nguyên vật liệu khác (OtherMaterial)
+        score = max(
+            difflib.SequenceMatcher(None, query_str, p.ten.lower()).ratio(),
+            difflib.SequenceMatcher(None, query_str, p.ma_chinh.lower()).ratio(),
+        )
+        suggestions.append({
+            "material_type": "paper",
+            "id": p.id,
+            "ma_chinh": p.ma_chinh,
+            "ten": p.ten,
+            "dvt": p.dvt,
+            "loai_giay": p.loai_giay,
+            "dinh_luong": float(p.dinh_luong or 0),
+            "score": score,
+        })
     for o in others:
-        score_ten = difflib.SequenceMatcher(None, query_str, o.ten.lower()).ratio()
-        score_code = difflib.SequenceMatcher(None, query_str, o.ma_chinh.lower()).ratio()
-        score = max(score_ten, score_code)
-        if score > 0.15:
-            suggestions.append({
-                "material_type": "other",
-                "id": o.id,
-                "ma_chinh": o.ma_chinh,
-                "ten": o.ten,
-                "dvt": o.dvt,
-                "score": score
-            })
+        score = max(
+            difflib.SequenceMatcher(None, query_str, o.ten.lower()).ratio(),
+            difflib.SequenceMatcher(None, query_str, o.ma_chinh.lower()).ratio(),
+        )
+        suggestions.append({
+            "material_type": "other",
+            "id": o.id,
+            "ma_chinh": o.ma_chinh,
+            "ten": o.ten,
+            "dvt": o.dvt,
+            "score": score,
+        })
 
-    # Sắp xếp kết quả gợi ý theo score giảm dần
     suggestions.sort(key=lambda x: x["score"], reverse=True)
     return suggestions[:limit]
 
@@ -301,6 +386,7 @@ def get_incoming_invoice(
         rule = rules_map.get(name_key)
         
         it_copy["mapped_material"] = None
+        it_copy["from_saved_rule"] = False
         if rule:
             if rule["paper_material_id"]:
                 pm = db.get(PaperMaterial, rule["paper_material_id"])
@@ -312,6 +398,7 @@ def get_incoming_invoice(
                         "ten": pm.ten,
                         "dvt": pm.dvt
                     }
+                    it_copy["from_saved_rule"] = True
             elif rule["other_material_id"]:
                 om = db.get(OtherMaterial, rule["other_material_id"])
                 if om:
@@ -322,6 +409,7 @@ def get_incoming_invoice(
                         "ten": om.ten,
                         "dvt": om.dvt
                     }
+                    it_copy["from_saved_rule"] = True
         enriched_items.append(it_copy)
 
     # Khớp nhanh Supplier nội bộ
@@ -355,6 +443,7 @@ def get_incoming_invoice(
         "created_at": inv.created_at.isoformat() if inv.created_at else None,
         "internal_supplier_id": internal_supplier.id if internal_supplier else None,
         "internal_supplier_name": (internal_supplier.ten_viet_tat or internal_supplier.ten_don_vi) if internal_supplier else None,
+        "phap_nhan_id": inv.phap_nhan_id,
         "internal_phap_nhan_id": internal_phap_nhan.id if internal_phap_nhan else None,
         "internal_phap_nhan_name": internal_phap_nhan.ten_phap_nhan if internal_phap_nhan else None,
     }
@@ -364,12 +453,14 @@ def get_incoming_invoice(
 async def upload_xml_invoice(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permissions("accounting.incoming_invoice")),
 ):
     if not file.filename.lower().endswith('.xml'):
         raise HTTPException(400, "Chỉ chấp nhận file đính kèm dạng XML")
 
     content = await file.read()
+    if len(content) > 5_000_000:
+        raise HTTPException(413, "File quá lớn — tối đa 5MB cho file XML hóa đơn")
     try:
         xml_str = content.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -390,6 +481,12 @@ async def upload_xml_invoice(
     if existing:
         return {"detail": "Hóa đơn này đã được tải lên trước đó", "id": existing.id}
 
+    # Auto-detect phap_nhan từ buyer_tax_code
+    pn_id = None
+    if parsed.get("buyer_tax_code"):
+        pn_row = db.query(PhapNhan).filter(PhapNhan.ma_so_thue == parsed["buyer_tax_code"]).first()
+        pn_id = pn_row.id if pn_row else None
+
     invoice = IncomingInvoice(
         so_hoa_don=parsed["so_hoa_don"],
         mau_so=parsed["mau_so"],
@@ -405,6 +502,7 @@ async def upload_xml_invoice(
         xml_content=xml_str,
         items=parsed["items"],
         trang_thai="cho_xu_ly",
+        phap_nhan_id=pn_id,
     )
     db.add(invoice)
     db.commit()
@@ -415,10 +513,10 @@ async def upload_xml_invoice(
 @router.post("/sync-email")
 def manual_email_sync(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permissions("accounting.incoming_invoice")),
 ):
-    """Kích hoạt quét hòm thư email thủ công để tải hóa đơn."""
-    count = scan_emails_for_invoices(db)
+    """Kích hoạt quét tất cả hòm thư email đã cấu hình để tải hóa đơn."""
+    count = scan_all_emails_for_invoices(db)
     return {"status": "success", "count": count, "detail": f"Đã đồng bộ thành công {count} hóa đơn đầu vào mới từ email."}
 
 
@@ -426,7 +524,7 @@ def manual_email_sync(
 def ignore_incoming_invoice(
     id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permissions("accounting.incoming_invoice")),
 ):
     inv = db.get(IncomingInvoice, id)
     if not inv:
@@ -439,12 +537,75 @@ def ignore_incoming_invoice(
     return {"status": "success", "detail": f"Đã bỏ qua hóa đơn số {inv.so_hoa_don}"}
 
 
+@router.post("/{id}/revert")
+def revert_incoming_invoice(
+    id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permissions("accounting.incoming_invoice")),
+):
+    """Hoàn tác bỏ qua: đưa hóa đơn từ trạng thái 'bo_qua' về 'cho_xu_ly'."""
+    inv = db.get(IncomingInvoice, id)
+    if not inv:
+        raise HTTPException(404, "Hóa đơn đầu vào không tồn tại")
+    if inv.trang_thai != "bo_qua":
+        raise HTTPException(400, f"Chỉ có thể hoàn tác hóa đơn ở trạng thái 'Đã bỏ qua' (hiện tại: '{inv.trang_thai}')")
+
+    inv.trang_thai = "cho_xu_ly"
+    db.commit()
+    return {"status": "success", "detail": f"Đã mở lại hóa đơn số {inv.so_hoa_don} để xử lý"}
+
+
+@router.post("/{id}/unprocess")
+def unprocess_incoming_invoice(
+    id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permissions("accounting.incoming_invoice")),
+):
+    """Hoàn tác xử lý: xóa GR nháp + PI nháp được tạo từ hóa đơn này, đưa về cho_xu_ly.
+    Chỉ cho phép khi GoodsReceipt còn trang_thai='nhap' VÀ PurchaseInvoice còn trang_thai='nhap'.
+    """
+    inv = db.get(IncomingInvoice, id)
+    if not inv:
+        raise HTTPException(404, "Hóa đơn đầu vào không tồn tại")
+    if inv.trang_thai != "da_xu_ly":
+        raise HTTPException(400, "Chỉ có thể hoàn tác hóa đơn ở trạng thái 'Đã xử lý'")
+
+    # Kiểm tra PI còn nháp không
+    pi = db.get(PurchaseInvoice, inv.purchase_invoice_id) if inv.purchase_invoice_id else None
+    if pi and pi.trang_thai != "nhap":
+        raise HTTPException(400, f"Hóa đơn mua hàng #{pi.id} đã được duyệt — không thể hoàn tác")
+
+    # Kiểm tra GR còn nháp không
+    gr = db.get(GoodsReceipt, inv.goods_receipt_id) if inv.goods_receipt_id else None
+    if gr and gr.trang_thai != "nhap":
+        raise HTTPException(400, f"Phiếu nhập kho #{gr.id} đã được xác nhận — không thể hoàn tác")
+
+    # Xóa GoodsReceipt items + GoodsReceipt
+    if gr:
+        db.query(GoodsReceiptItem).filter(GoodsReceiptItem.receipt_id == gr.id).delete()
+        db.delete(gr)
+
+    # Xóa PurchaseInvoice
+    if pi:
+        db.delete(pi)
+
+    # Đưa hóa đơn về trạng thái ban đầu
+    inv.trang_thai = "cho_xu_ly"
+    inv.purchase_invoice_id = None
+    inv.goods_receipt_id = None
+
+    db.commit()
+    logger.info("Unprocessed IncomingInvoice id=%s — deleted GR %s and PI %s", id,
+                gr.id if gr else None, pi.id if pi else None)
+    return {"status": "success", "detail": f"Đã hoàn tác xử lý hóa đơn số {inv.so_hoa_don}"}
+
+
 @router.post("/{id}/process")
 def process_incoming_invoice(
     id: int,
     payload: ProcessIncomingInvoicePayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("accounting.incoming_invoice")),
 ):
     """
     Xác nhận liên kết vật tư, lưu luật ánh xạ và tự động tạo chứng từ:

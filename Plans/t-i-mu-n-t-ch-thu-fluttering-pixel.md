@@ -1,127 +1,205 @@
-# Plan: Tách Thu Chi theo phương thức thanh toán
+# Kế hoạch hoàn thiện chức năng nghiệp vụ Thu Chi
 
 ## Context
 
-Hiện tại ERP có 2 page riêng lẻ: **Phiếu thu** và **Phiếu chi**, mỗi trang liệt kê cả tiền mặt lẫn ngân hàng lẫn bù trừ. Kế toán tiền mặt và kế toán ngân hàng phải lọc thủ công mỗi lần vào.
+ERP đã có đầy đủ infrastructure thu chi (CashReceipt/CashPayment CRUD, TienMatPage/NganHangPage list, sổ quỹ, sổ tiền gửi, đối soát, nộp thuế/bảo hiểm/lương). Yêu cầu hoàn thiện dựa trên screenshot tham chiếu (MISA-style) để đạt chuẩn UX kế toán chuyên nghiệp.
 
-Yêu cầu: Tổ chức lại thành 2 trang theo phương thức thanh toán:
-- **Tiền mặt**: gồm cả thu + chi có `hinh_thuc_tt ∈ {TM, tien_mat}`
-- **Ngân hàng**: gồm cả thu + chi có `hinh_thuc_tt ∈ {CK, chuyen_khoan}`
-- **Bù trừ công nợ / Khác**: thuộc module mua/bán, không nằm ở đây
-- Thay hoàn toàn trang cũ, không giữ lại song song
+**Trạng thái hiện tại đã hoàn thành:**
+- ✅ CRUD phiếu thu/chi, list pages, filter, phân trang
+- ✅ TienMatPage / NganHangPage với bulk actions (bỏ ghi, nhân bản)
+- ✅ TK Nợ/Có tự động theo khoản mục chi phí
+- ✅ Sổ quỹ tiền mặt, sổ tiền gửi ngân hàng, đối soát
+- ✅ Nộp thuế, nộp bảo hiểm, trả lương (batch payment pages)
+- ✅ JournalEntry + JournalEntryLine models (auto-tạo khi approve)
+- ✅ Print templates phiếu thu/chi
 
----
-
-## Thay đổi cần thực hiện
-
-### 1. Backend — `backend/app/routers/accounting.py`
-
-Thêm query param `hinh_thuc_tt: Optional[str] = None` vào 2 endpoint:
-- `list_receipts()` — thêm filter `if hinh_thuc_tt: query = query.filter(CashReceipt.hinh_thuc_tt.in_(...))`
-- `list_payments()` — tương tự
-
-Logic filter: chuẩn hóa input:
-- `tien_mat` hoặc `TM` → filter `hinh_thuc_tt IN ('TM', 'tien_mat')`
-- `chuyen_khoan` hoặc `CK` → filter `hinh_thuc_tt IN ('CK', 'chuyen_khoan')`
-- Không truyền → không filter (giữ nguyên hành vi cũ)
+**Gap so với reference (MISA-style):**
+1. ❌ **Hạch toán section trong form** — form chưa hiển thị journal lines
+2. ❌ **Đính kèm file** — không có attachment support
+3. ❌ **Quick approve từ form** — phải vào list page mới approve được
+4. ❌ **Bút toán thủ công override** — chưa cho phép chỉnh journal trước khi approve
 
 ---
 
-### 2. Frontend — 2 trang mới
+## Kiến trúc hiện tại — cần hiểu trước khi sửa
 
-#### `frontend/src/pages/accounting/TienMatPage.tsx` (NEW)
+**JournalEntry flow:**
+- `CashReceipt` tạo → trạng thái `cho_duyet` → **CHƯA có JournalEntry**
+- Approve → `da_duyet` → `_post_cash_receipt_journal()` → tạo **2 lines**: (tk_no, Nợ=so_tien) + (tk_co, Có=so_tien)
+- `CashPayment` có 2-step: `cho_chot → da_chot → da_duyet` → journal chỉ tạo khi `da_duyet`
 
-```
-Layout:
-  PageLayout title="Quỹ Tiền Mặt"
-  Tabs: [Thu tiền mặt] | [Chi tiền mặt]
-  Bộ lọc chung (dùng lại pattern từ CashReceiptListPage):
-    - RangePicker ngày
-    - Select trạng thái
-    - Select pháp nhân
-    - Select xưởng
-  Tab Thu: table receipts, query với hinh_thuc_tt='TM'
-    - Columns: STT, Ngày, Số CT, Đối tượng (KH), Diễn giải, Số tiền, Pháp nhân, Xưởng, Trạng thái
-    - Bỏ cột "Số TK NH" (không dùng cho tiền mặt)
-  Tab Chi: table payments, query với hinh_thuc_tt='TM'
-    - Columns tương tự, Đối tượng là NCC
-    - Bỏ cột "Số TK NH"
-  Nút tạo mới:
-    - Tab Thu đang active → navigate('/accounting/receipts/new?hinh_thuc=tien_mat')
-    - Tab Chi đang active → navigate('/accounting/payments/new?hinh_thuc=tien_mat')
-```
+**Endpoint lấy journal của document:**
+- `GET /api/accounting/documents/{chung_tu_loai}/{chung_tu_id}/journal-entries`
+- `chung_tu_loai` = `"phieu_thu"` hoặc `"phieu_chi"`
 
-#### `frontend/src/pages/accounting/NganHangPage.tsx` (NEW)
-
-Giống TienMatPage, nhưng:
-- Title: "Ngân Hàng"
-- Query với `hinh_thuc_tt='CK'`
-- **Giữ lại** cột "Số TK NH" và thêm cột "Số tham chiếu" (`so_tham_chieu`)
-- Nút tạo mới → `?hinh_thuc=chuyen_khoan`
+**Service file:** `backend/app/services/accounting_service.py`
+- `_post_cash_receipt_journal()` — tạo journal khi approve receipt
+- `_post_cash_payment_journal()` — tạo journal khi approve payment (có split VAT)
 
 ---
 
-### 3. Frontend — `frontend/src/App.tsx`
+## Sprint 1: Hạch toán section trong form (3–4 ngày) ⭐ ƯU TIÊN CAO
 
-- **Thêm** import và routes:
-  ```
-  /accounting/tien-mat  → TienMatPage
-  /accounting/ngan-hang → NganHangPage
-  ```
-- **Giữ nguyên** routes cũ `/accounting/receipts` và `/accounting/payments` (form tạo/sửa vẫn dùng)
-- **Xóa** routes list cũ:
-  - `/accounting/receipts` (list) → redirect về `/accounting/tien-mat`
-  - `/accounting/payments` (list) → redirect về `/accounting/tien-mat`
+Thêm section **"Hạch toán"** vào `CashReceiptForm.tsx` và `CashPaymentForm.tsx`.
 
-  Thực tế: route cũ chỉ xóa phần `element={<CashReceiptListPage />}` và thay bằng `<Navigate to="/accounting/tien-mat" />`.
+### UX theo trạng thái:
+| Trạng thái | Hành vi |
+|---|---|
+| `cho_duyet` / `cho_chot` | Preview bút toán computed client-side từ tk_no/tk_co/so_tien — read-only, realtime |
+| `da_duyet` | Bút toán thực từ DB (GET journal-entries endpoint) — read-only, locked |
+| `huy` | Ẩn section |
+
+### Bảng Hạch toán (giống screenshot reference):
+| # | Diễn giải | TK Nợ | TK Có | Số tiền |
+|---|---|---|---|---|
+| 1 | Thu tiền HĐ... | 112 | | 1.000.000 |
+| 2 | Giảm công nợ KH | | 131 | 1.000.000 |
+
+### Backend — KHÔNG cần thay đổi
+Chỉ cần thêm API client method:
+
+```typescript
+// frontend/src/api/accounting.ts — thêm vào receiptApi:
+getJournalEntries: (id: number) =>
+  client.get(`/accounting/documents/phieu_thu/${id}/journal-entries`).then(r => r.data),
+
+// và paymentApi:
+getJournalEntries: (id: number) =>
+  client.get(`/accounting/documents/phieu_chi/${id}/journal-entries`).then(r => r.data),
+```
+
+### Frontend Logic:
+```tsx
+// Khi cho_duyet: compute preview từ form fields
+const previewLines = useMemo(() => {
+  const tkNo = form.getFieldValue('tk_no')
+  const tkCo = form.getFieldValue('tk_co')
+  const soTien = Number(form.getFieldValue('so_tien') || 0)
+  const dienGiai = form.getFieldValue('dien_giai') || ''
+  if (!tkNo || !soTien) return []
+  return [
+    { key: 1, dien_giai: dienGiai, tk_no: tkNo, tk_co: '', so_tien: soTien },
+    { key: 2, dien_giai: dienGiai, tk_no: '', tk_co: tkCo, so_tien: soTien },
+  ]
+}, [formValues])
+
+// Khi da_duyet: fetch từ DB
+const { data: journalEntries } = useQuery(
+  ['journal-entries', 'phieu_thu', receiptId],
+  () => receiptApi.getJournalEntries(receiptId),
+  { enabled: !!receiptId && status === 'da_duyet' }
+)
+```
+
+### Files cần thay đổi:
+| File | Thay đổi |
+|---|---|
+| `frontend/src/api/accounting.ts` | Thêm `getJournalEntries()` vào receiptApi + paymentApi |
+| `frontend/src/pages/accounting/CashReceiptForm.tsx` | Thêm HachToanSection dưới form fields |
+| `frontend/src/pages/accounting/CashPaymentForm.tsx` | Thêm HachToanSection |
+| `frontend/src/components/accounting/HachToanSection.tsx` | Component mới (shared) |
 
 ---
 
-### 4. Frontend — `frontend/src/components/AppLayout.tsx`
+## Sprint 2: Đính kèm file (1–2 ngày)
 
-Trong section "Quỹ & Ngân hàng" (dòng ~175-186), thay:
+### Backend — model mới:
+```python
+# backend/app/models/accounting.py
+class Attachment(Base):
+    __tablename__ = "attachments"
+    id: Mapped[int] (PK)
+    chung_tu_loai: Mapped[str]   # "phieu_thu", "phieu_chi"
+    chung_tu_id: Mapped[int]
+    file_name: Mapped[str]
+    file_path: Mapped[str]       # relative path từ D:\NAM_PHUONG_SOFTWARE\attachments\
+    file_size: Mapped[int]
+    uploaded_by: Mapped[int] (FK → User)
+    uploaded_at: Mapped[datetime]
 ```
-- Phiếu thu → /accounting/receipts
-- Phiếu chi → /accounting/payments
+
+### Backend — 4 endpoints mới:
 ```
-Thành:
+POST   /api/attachments/{loai}/{id}        — upload (multipart, max 5MB)
+GET    /api/attachments/{loai}/{id}        — list files
+DELETE /api/attachments/{attach_id}        — xóa
+GET    /api/attachments/{attach_id}/file   — download
 ```
-- Tiền mặt  → /accounting/tien-mat
-- Ngân hàng → /accounting/ngan-hang
-```
+
+### Frontend:
+- Component `AttachmentSection.tsx` dùng AntD `Upload.Dragger`
+- Tái sử dụng cho cả receipt, payment, và các form khác sau này
+- Giới hạn: 5MB/file, max 10 files, cho phép: PDF, PNG, JPG, XLSX, DOCX
+
+### Files cần thay đổi:
+| File | Thay đổi |
+|---|---|
+| `backend/app/models/accounting.py` | Thêm Attachment model |
+| `backend/app/routers/accounting.py` | 4 endpoints upload/list/delete/download |
+| Alembic migration | Tạo bảng `attachments` |
+| `frontend/src/api/accounting.ts` | Thêm attachmentApi |
+| `frontend/src/components/accounting/AttachmentSection.tsx` | Component mới |
+| `frontend/src/pages/accounting/CashReceiptForm.tsx` | Thêm AttachmentSection |
+| `frontend/src/pages/accounting/CashPaymentForm.tsx` | Thêm AttachmentSection |
 
 ---
 
-### 5. Forms — pre-fill hinh_thuc_tt (nhỏ)
+## Sprint 3: Quick approve + Workflow UX (1–2 ngày)
 
-Đọc URL param `?hinh_thuc=tien_mat|chuyen_khoan` trong:
-- `CashReceiptForm.tsx`: `useSearchParams()` → set initial value của field `hinh_thuc_tt`
-- `CashPaymentForm.tsx`: tương tự
+### 3a. Nút Duyệt trực tiếp trong form
+Thêm action button vào header của form (cạnh nút Lưu):
+- CashReceiptForm: `trang_thai === 'cho_duyet'` → hiện nút **"Duyệt"**
+- CashPaymentForm: `trang_thai === 'cho_chot'` → hiện **"Chốt"**; `'da_chot'` → hiện **"Duyệt"**
+- Gọi `receiptApi.approve(id)` / `paymentApi.approve(id)` rồi refetch
 
-Hiện tại cả 2 form đều default `chuyen_khoan` — chỉ cần ghi đè initial value nếu param tồn tại.
+### 3b. Timeline trạng thái
+Thêm mini timeline dưới tiêu đề form:
+```
+🟢 Tạo — Dương — 18/06/2026 12:30  →  🟡 Chờ duyệt  →  ✅ Đã duyệt — Admin — 18/06/2026 14:00
+```
+Data: `created_at`, `ngay_duyet`, `nguoi_duyet_id` đã có sẵn trong model.
+
+### Files:
+- `frontend/src/pages/accounting/CashReceiptForm.tsx`
+- `frontend/src/pages/accounting/CashPaymentForm.tsx`
+- (Optional) `frontend/src/components/accounting/DocumentTimeline.tsx`
 
 ---
 
-## Files bị thay đổi
+## Sprint 4: Bút toán override (Nâng cao — làm sau) 
 
-| File | Loại thay đổi |
-|------|--------------|
-| `backend/app/routers/accounting.py` | Thêm filter param (2 hàm) |
-| `frontend/src/pages/accounting/TienMatPage.tsx` | TẠO MỚI |
-| `frontend/src/pages/accounting/NganHangPage.tsx` | TẠO MỚI |
-| `frontend/src/App.tsx` | Thêm import + routes + redirect |
-| `frontend/src/components/AppLayout.tsx` | Đổi menu item |
-| `frontend/src/pages/accounting/CashReceiptForm.tsx` | Đọc URL param (nhỏ) |
-| `frontend/src/pages/accounting/CashPaymentForm.tsx` | Đọc URL param (nhỏ) |
+Cho phép kế toán chỉnh journal lines trước khi approve:
+- Backend: thêm `journal_lines_override: JSON` vào CashReceipt/CashPayment
+- Frontend: editable table với Thêm/Xóa dòng, validate ∑ Nợ = ∑ Có
+- Khi approve: dùng override nếu có, auto-compute nếu không
 
-**Không thay đổi:** `api/accounting.ts` (đã dùng `Record<string, unknown>` nên không cần sửa), CashReceiptListPage/CashPaymentListPage vẫn tồn tại (chỉ bỏ route list, giữ để form detail dùng).
+**Chỉ làm khi Sprint 1-3 xong và user cần tính năng này.**
+
+---
+
+## Thứ tự thực hiện
+
+```
+Sprint 1 (3-4 ngày)    Sprint 2 (1-2 ngày)    Sprint 3 (1-2 ngày)    Sprint 4 (2-3 ngày)
+Hạch toán section  →   Đính kèm file      →   Quick approve UX   →   Override journal
+Backend KHÔNG đổi      Model + API mới        Frontend only           Optional/advanced
+```
 
 ---
 
 ## Verification
 
-1. Vào `/accounting/tien-mat` → chỉ hiện giao dịch TM, tab Thu/Chi hoạt động
-2. Vào `/accounting/ngan-hang` → chỉ hiện giao dịch CK, có cột Số TK NH
-3. Click "Tạo phiếu thu" từ trang Tiền mặt → form mở với `hinh_thuc_tt = tien_mat`
-4. URL cũ `/accounting/receipts` → redirect về `/accounting/tien-mat`
-5. Sidebar menu hiển thị "Tiền mặt" và "Ngân hàng" thay cho "Phiếu thu"/"Phiếu chi"
+**Sprint 1:**
+1. Tạo phiếu thu mới → nhập TK Nợ=112, TK Có=131, Số tiền=1.000.000 → section Hạch toán hiển thị 2 dòng preview
+2. Thay đổi số tiền → preview cập nhật realtime
+3. Approve phiếu → section hiển thị bút toán thực từ DB (cùng dữ liệu)
+
+**Sprint 2:**
+1. Upload PDF 2MB → xuất hiện trong danh sách đính kèm với tên file + size
+2. Click download → file tải về đúng
+3. Xóa → biến mất
+4. Upload > 5MB → báo lỗi
+
+**Sprint 3:**
+1. Form phiếu thu `cho_duyet` → có nút "Duyệt" → click → phiếu chuyển sang `da_duyet`, reload
+2. Timeline hiển thị đúng thứ tự và timestamp

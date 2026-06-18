@@ -181,6 +181,7 @@ class CashReceiptResponse(BaseModel):
     tk_no: str
     tk_co: str
     trang_thai: Literal["cho_duyet", "da_duyet", "huy"] = "cho_duyet"
+    journal_lines_override: list | None = None
     nguoi_duyet_id: int | None
     ngay_duyet: datetime | None
     created_at: datetime
@@ -276,6 +277,7 @@ class CashPaymentResponse(BaseModel):
     khoan_muc_chi_phi_id: int | None = None
     ten_khoan_muc: str | None = None
     trang_thai: Literal["cho_chot", "da_chot", "da_duyet", "huy"] = "cho_chot"
+    journal_lines_override: list | None = None
     nguoi_duyet_id: int | None
     ngay_duyet: datetime | None
     created_at: datetime
@@ -286,6 +288,19 @@ class CashPaymentResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
+class IncomingInvoiceItemMapping(BaseModel):
+    stt: int
+    material_type: str  # "paper" | "other"
+    material_id: int
+
+
+class ProcessIncomingInvoicePayload(BaseModel):
+    phap_nhan_id: int
+    supplier_id: int
+    warehouse_id: int | None = None
+    create_goods_receipt: bool = True
+    items_mapping: list[IncomingInvoiceItemMapping]
 
 class TaxObligationItem(BaseModel):
     loai_thue: str            # gtgt_dau_ra | tndn | tncn | khac

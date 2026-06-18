@@ -140,6 +140,7 @@ class CashReceipt(Base):
     tk_co: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="131")
     trang_thai: Mapped[str] = mapped_column(String(20), default="cho_duyet", index=True)
     # cho_duyet | da_duyet | huy
+    journal_lines_override: Mapped[list | None] = mapped_column(JSON, nullable=True)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -177,6 +178,7 @@ class CashPayment(Base):
     tk_co: Mapped[str] = mapped_column(String(20), ForeignKey("chart_of_accounts.so_tk"), default="112")
     trang_thai: Mapped[str] = mapped_column(String(20), default="cho_chot", index=True)
     # cho_chot | da_chot | da_duyet | huy
+    journal_lines_override: Mapped[list | None] = mapped_column(JSON, nullable=True)
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
     nguoi_duyet_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
@@ -573,6 +575,7 @@ class IncomingInvoice(Base):
     # cho_xu_ly | da_xu_ly | bo_qua
     purchase_invoice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_invoices.id"), nullable=True)
     goods_receipt_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goods_receipts.id"), nullable=True)
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -582,6 +585,7 @@ class IncomingInvoice(Base):
 
     purchase_invoice = relationship("PurchaseInvoice")
     goods_receipt = relationship("GoodsReceipt")
+    phap_nhan = relationship("PhapNhan")
 
 
 class IncomingInvoiceMappingRule(Base):

@@ -597,6 +597,33 @@ def update_employee(
     logger.info("updated employee id=%s", id)
     return db_emp
 
+@router.delete("/employees/{id}")
+def delete_employee(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ADMIN")),
+):
+    """Xóa cứng nhân viên. Chỉ ADMIN. Bị chặn nếu NV đã có dữ liệu lương/hợp đồng/chấm công."""
+    emp = db.query(Employee).filter(Employee.id == id).first()
+    if not emp:
+        raise HTTPException(404, "Không tìm thấy nhân viên")
+
+    # Guard: còn hợp đồng
+    if db.query(LaborContract).filter(LaborContract.employee_id == id).first():
+        raise HTTPException(400, "Không thể xóa: nhân viên đã có hợp đồng lao động")
+
+    # Guard: còn dữ liệu lương
+    if db.query(PayrollRun).filter(PayrollRun.employee_id == id).first():
+        raise HTTPException(400, "Không thể xóa: nhân viên đã có dữ liệu tính lương")
+
+    ma_nv = emp.ma_nv
+    ho_ten = emp.ho_ten
+    db.delete(emp)
+    db.commit()
+    logger.info("employee hard-deleted id=%s ma_nv=%s ho_ten=%s by user=%s", id, ma_nv, ho_ten, current_user.id)
+    return {"ok": True, "deleted": {"id": id, "ma_nv": ma_nv, "ho_ten": ho_ten}}
+
+
 @router.get("/employees/{id}/history")
 def get_employee_history(id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("ADMIN", "NHAN_SU"))):
     return db.query(EmployeeHistory).filter(EmployeeHistory.employee_id == id).order_by(EmployeeHistory.created_at.desc()).all()

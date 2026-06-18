@@ -181,7 +181,7 @@ async def benefit_birthday_loop():
 async def incoming_invoice_email_scanner_loop():
     """Vòng lặp chạy ngầm định kỳ quét email tải hóa đơn XML đầu vào."""
     from app.database import SessionLocal as _SessionLocal
-    from app.routers.incoming_invoices import scan_emails_for_invoices
+    from app.routers.incoming_invoices import scan_all_emails_for_invoices as scan_emails_for_invoices
     from app.config import settings
 
     # Đợi startup ổn định
