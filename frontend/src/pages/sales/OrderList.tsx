@@ -362,7 +362,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
   const { displayColumns: displayFullColumns, settingsButton } = useColumnPrefs(
     'sales-order-list',
     fullColumns,
-    { nonHideable: ['so_don'] },
+    { nonHideable: ['so_don'], data: data?.items },
   )
 
   useHotkey('ctrl+n', () => navigate('/sales/orders/new'), 'Tạo đơn hàng mới')

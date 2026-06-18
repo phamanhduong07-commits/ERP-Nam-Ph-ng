@@ -149,6 +149,7 @@ export default function CustomerList() {
 
   const { displayColumns, settingsButton } = useColumnPrefs('crm-customer-list', columns, {
     nonHideable: ['ma_kh'],
+    data: data?.items,
   })
 
   const items = data?.items ?? []

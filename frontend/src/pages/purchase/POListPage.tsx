@@ -415,6 +415,7 @@ export default function POListPage() {
 
   const { displayColumns, settingsButton } = useColumnPrefs('purchase-order-list', columns, {
     nonHideable: ['so_po'],
+    data: rawPoList,
   })
 
   const expandedRowRender = (r: PurchaseOrder) => (

@@ -624,7 +624,7 @@ export default function ProductionOrderList({ selectedId, onSelect }: Props) {
       ),
     },
   ]
-  const { displayColumns: displayGroupColumns, settingsButton } = useColumnPrefs('production-order-list', groupColumns)
+  const { displayColumns: displayGroupColumns, settingsButton } = useColumnPrefs('production-order-list', groupColumns, { data: data?.items })
 
   return (
     <div>

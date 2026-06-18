@@ -435,7 +435,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
   const { displayColumns: displayFullColumns, settingsButton } = useColumnPrefs(
     'sales-quote-list',
     fullColumns,
-    { nonHideable: ['so_bao_gia'] },
+    { nonHideable: ['so_bao_gia'], data: data?.items },
   )
 
   return (

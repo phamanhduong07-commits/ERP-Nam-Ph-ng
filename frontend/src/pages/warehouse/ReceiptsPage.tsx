@@ -494,7 +494,7 @@ export default function ReceiptsPage() {
       },
     },
   ]
-  const { displayColumns, settingsButton } = useColumnPrefs('warehouse-receipts', columns, { nonHideable: ['so_phieu'] })
+  const { displayColumns, settingsButton } = useColumnPrefs('warehouse-receipts', columns, { nonHideable: ['so_phieu'], data: receiptList })
 
   const handleLoadInvoiceImage = async (id: number) => {
     if (expandedImages[id]) return

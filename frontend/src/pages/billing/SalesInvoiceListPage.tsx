@@ -201,7 +201,7 @@ export default function SalesInvoiceListPage() {
       ),
     },
   ]
-  const { displayColumns, settingsButton } = useColumnPrefs('billing-sales-invoice', columns, { nonHideable: ['so_hoa_don'] })
+  const { displayColumns, settingsButton } = useColumnPrefs('billing-sales-invoice', columns, { nonHideable: ['so_hoa_don'], data: data?.items })
 
   return (
     <PageLayout

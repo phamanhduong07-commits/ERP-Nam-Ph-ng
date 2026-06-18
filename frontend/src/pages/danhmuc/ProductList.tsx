@@ -194,7 +194,7 @@ export default function ProductList() {
       ) : null,
     },
   ]
-  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-product', columns, { nonHideable: ['ma_amis'] })
+  const { displayColumns, settingsButton } = useColumnPrefs('danhmuc-product', columns, { nonHideable: ['ma_amis'], data: data?.items })
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
