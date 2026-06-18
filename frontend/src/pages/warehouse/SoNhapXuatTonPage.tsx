@@ -204,7 +204,7 @@ export default function SoNhapXuatTonPage() {
               allowClear
               value={warehouseId}
               onChange={setWarehouseId}
-              options={warehouses.filter(w => w.trang_thai).map(w => ({ value: w.id, label: w.ten_kho }))}
+              options={(warehouses ?? []).filter(w => w.trang_thai).map(w => ({ value: w.id, label: w.ten_kho }))}
               showSearch
               optionFilterProp="label"
             />

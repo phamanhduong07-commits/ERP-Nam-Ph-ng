@@ -119,7 +119,7 @@ export default function TonDauKyPage() {
           placeholder="Chọn kho"
           value={r.warehouse_id}
           onChange={v => updateRow(r.key, { warehouse_id: v })}
-          options={warehouses.map(w => ({ value: w.id, label: w.ten_kho }))}
+          options={(warehouses ?? []).map(w => ({ value: w.id, label: w.ten_kho }))}
           showSearch
           filterOption={(input, opt) => (opt?.label as string || '').toLowerCase().includes(input.toLowerCase())}
         />
@@ -138,7 +138,7 @@ export default function TonDauKyPage() {
             const mat = paperMats.find(m => m.id === v)
             updateRow(r.key, { paper_material_id: v, other_material_id: undefined, ten_hang: mat?.ten || '', don_vi: mat?.dvt || 'Kg' })
           }}
-          options={paperMats.map(m => ({ value: m.id, label: `${m.ma_chinh} – ${m.ten}` }))}
+          options={(paperMats ?? []).map(m => ({ value: m.id, label: `${m.ma_chinh} – ${m.ten}` }))}
           showSearch
           filterOption={(input, opt) => (opt?.label as string || '').toLowerCase().includes(input.toLowerCase())}
         />
@@ -157,7 +157,7 @@ export default function TonDauKyPage() {
             const mat = otherMats.find(m => m.id === v)
             updateRow(r.key, { other_material_id: v, paper_material_id: undefined, ten_hang: mat?.ten || '', don_vi: mat?.dvt || 'Cái' })
           }}
-          options={otherMats.map(m => ({ value: m.id, label: `${m.ma_chinh} – ${m.ten}` }))}
+          options={(otherMats ?? []).map(m => ({ value: m.id, label: `${m.ma_chinh} – ${m.ten}` }))}
           showSearch
           filterOption={(input, opt) => (opt?.label as string || '').toLowerCase().includes(input.toLowerCase())}
         />

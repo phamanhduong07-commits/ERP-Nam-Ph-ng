@@ -61,7 +61,7 @@ export default function DoiSoatCuonPage() {
   }
 
   function handleSyncAll() {
-    const discrepancies = rows.filter(r => Math.abs(r.chenh_lech) > 0.001)
+    const discrepancies = (rows ?? []).filter(r => Math.abs(r.chenh_lech) > 0.001)
     if (discrepancies.length === 0) {
       message.info('Không có chênh lệch nào cần đồng bộ')
       return
@@ -202,7 +202,7 @@ export default function DoiSoatCuonPage() {
     },
   ]
 
-  const discrepancyCount = rows.filter(r => Math.abs(r.chenh_lech) > 0.001).length
+  const discrepancyCount = (rows ?? []).filter(r => Math.abs(r.chenh_lech) > 0.001).length
 
   return (
     <div style={{ padding: 24 }}>
