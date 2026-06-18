@@ -30,6 +30,7 @@ const GROUPS: HubGroup[] = [
     items: [
       { icon: '🧾', label: 'Hóa đơn mua hàng', to: '/accounting/purchase-invoices', permissions: ['accounting.ap_ledger'] },
       { icon: '📋', label: 'Sổ chi tiết mua hàng', to: '/purchasing/reports/so-chi-tiet', permissions: ['purchase.reports'] },
+      { icon: '📄', label: 'Chi tiết công nợ phải trả theo HĐ', to: '/purchasing/reports/chi-tiet-cong-no-phai-tra', permissions: ['accounting.ap_ledger'] },
       { icon: '📊', label: 'Báo cáo mua hàng', to: '/purchasing/reports', permissions: ['purchase.reports'] },
       { icon: '🏠', label: 'Dashboard mua hàng', to: '/purchasing/dashboard', permissions: ['purchase.reports'] },
     ],

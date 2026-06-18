@@ -2092,6 +2092,110 @@ def doi_chieu_phai_tra(
     return rows
 
 
+# ─────────────────────────────────────────────
+# CHI TIẾT CÔNG NỢ PHẢI TRẢ THEO HÓA ĐƠN
+# ─────────────────────────────────────────────
+
+@router.get("/ap/chi-tiet-theo-hoa-don")
+def chi_tiet_cong_no_phai_tra(
+    tu_ngay: date = Query(...),
+    den_ngay: date = Query(...),
+    phap_nhan_id: int | None = Query(None),
+    phan_loai_ncc: str | None = Query(None),
+    nhan_vien_id: int | None = Query(None),
+    supplier_ids: list[int] = Query(default=[]),
+    chi_lay_hd_trong_ky: bool = Query(True),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Chi tiết công nợ phải trả (TK 331) theo hóa đơn — nâng cao."""
+    from datetime import date as date_type
+
+    AccountingService(db)._mark_overdue_ap()
+    today = date_type.today()
+
+    q = (
+        db.query(PurchaseInvoice, Supplier)
+        .join(Supplier, PurchaseInvoice.supplier_id == Supplier.id)
+        .filter(PurchaseInvoice.trang_thai != "huy")
+    )
+
+    if chi_lay_hd_trong_ky:
+        # Chỉ hóa đơn phát sinh trong kỳ
+        q = q.filter(PurchaseInvoice.ngay_lap >= tu_ngay, PurchaseInvoice.ngay_lap <= den_ngay)
+    else:
+        # Tất cả hóa đơn chưa thanh toán đủ tính đến den_ngay
+        q = q.filter(
+            PurchaseInvoice.ngay_lap <= den_ngay,
+            PurchaseInvoice.con_lai > 0,
+        )
+
+    if phap_nhan_id:
+        q = q.filter(PurchaseInvoice.phap_nhan_id == phap_nhan_id)
+    if supplier_ids:
+        q = q.filter(PurchaseInvoice.supplier_id.in_(supplier_ids))
+    if phan_loai_ncc:
+        q = q.filter(Supplier.phan_loai == phan_loai_ncc)
+    if nhan_vien_id:
+        q = q.filter(PurchaseInvoice.created_by == nhan_vien_id)
+
+    total = q.count()
+
+    rows_raw = (
+        q.order_by(Supplier.ten_viet_tat, PurchaseInvoice.ngay_lap, PurchaseInvoice.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    rows = []
+    tong_phat_sinh = Decimal("0")
+    tong_da_tt = Decimal("0")
+    tong_con_lai = Decimal("0")
+
+    for pi, sup in rows_raw:
+        so_ngay_qua_han = 0
+        if pi.han_tt and pi.han_tt < today and pi.trang_thai != "da_tt_du":
+            so_ngay_qua_han = (today - pi.han_tt).days
+
+        tong_phat_sinh += pi.tong_thanh_toan
+        tong_da_tt += pi.da_thanh_toan
+        tong_con_lai += pi.con_lai
+
+        rows.append({
+            "id": pi.id,
+            "ma_ncc": sup.ma_ncc,
+            "ten_ncc": sup.ten_viet_tat,
+            "ngay_hach_toan": pi.ngay_lap.isoformat(),
+            "ngay_hoa_don": (pi.ngay_hoa_don or pi.ngay_lap).isoformat(),
+            "so_hoa_don": pi.so_hoa_don,
+            "tong_tien_hang": float(pi.tong_tien_hang),
+            "tien_thue": float(pi.tien_thue),
+            "tong_thanh_toan": float(pi.tong_thanh_toan),
+            "da_thanh_toan": float(pi.da_thanh_toan),
+            "con_lai": float(pi.con_lai),
+            "han_tt": pi.han_tt.isoformat() if pi.han_tt else None,
+            "so_ngay_qua_han": so_ngay_qua_han,
+            "trang_thai": pi.trang_thai,
+            "ghi_chu": pi.ghi_chu,
+            "supplier_id": pi.supplier_id,
+        })
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "rows": rows,
+        "totals": {
+            "tong_phat_sinh": float(tong_phat_sinh),
+            "tong_da_tt": float(tong_da_tt),
+            "tong_con_lai": float(tong_con_lai),
+        },
+    }
+
+
 @router.get("/ap/doi-chieu/{supplier_id}")
 def doi_chieu_cong_no(
     supplier_id: int,

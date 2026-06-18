@@ -113,6 +113,7 @@ const BoDoiTruPage = lazy(() => import('./pages/purchase/BoDoiTruPage'))
 const BoDoiTruNhieuPage = lazy(() => import('./pages/purchase/BoDoiTruNhieuPage'))
 const BuTruCongNoPage = lazy(() => import('./pages/purchase/BuTruCongNoPage'))
 const SoChiTietMuaHangPage = lazy(() => import('./pages/purchase/SoChiTietMuaHangPage'))
+const ChiTietCongNoPhatTraPage = lazy(() => import('./pages/purchase/ChiTietCongNoPhatTraPage'))
 const PhapNhanList = lazy(() => import('./pages/danhmuc/PhapNhanList'))
 const PhanXuongList = lazy(() => import('./pages/danhmuc/PhanXuongList'))
 const RolePermissionsPage = lazy(() => import('./pages/danhmuc/RolePermissionsPage'))
@@ -434,6 +435,7 @@ export default function App() {
             <Route path="purchasing/bo-doi-tru-nhieu" element={<ErrorBoundary><BoDoiTruNhieuPage /></ErrorBoundary>} />
             <Route path="purchasing/bu-tru-cong-no" element={<ErrorBoundary><BuTruCongNoPage /></ErrorBoundary>} />
             <Route path="purchasing/reports/so-chi-tiet" element={<ErrorBoundary><SoChiTietMuaHangPage /></ErrorBoundary>} />
+            <Route path="purchasing/reports/chi-tiet-cong-no-phai-tra" element={<ErrorBoundary><ChiTietCongNoPhatTraPage /></ErrorBoundary>} />
             <Route path="danhmuc/phap-nhan" element={<PhapNhanList />} />
             <Route path="danhmuc/phim-tat" element={<PhimTatPage />} />
             <Route path="master/phan-xuong" element={<PhanXuongList />} />
