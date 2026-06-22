@@ -96,6 +96,7 @@ const SoNhapXuatTonPage = lazy(() => import('./pages/warehouse/SoNhapXuatTonPage
 const DoiSoatCuonPage = lazy(() => import('./pages/warehouse/DoiSoatCuonPage'))
 const InventoryCardPage = lazy(() => import('./pages/warehouse/InventoryCardPage'))
 const ProductionOutputPage = lazy(() => import('./pages/warehouse/ProductionOutputPage'))
+const ProductionSessionsPage = lazy(() => import('./pages/warehouse/ProductionSessionsPage'))
 const TheoDonHangPage = lazy(() => import('./pages/sales/TheoDonHangPage'))
 const GiaoHangPage = lazy(() => import('./pages/sales/GiaoHangPage'))
 const POListPage = lazy(() => import('./pages/purchase/POListPage'))
@@ -423,6 +424,7 @@ export default function App() {
             <Route path="warehouse/so-nhap-xuat-ton" element={<ErrorBoundary><SoNhapXuatTonPage /></ErrorBoundary>} />
             <Route path="warehouse/doi-soat-cuon" element={<ErrorBoundary><DoiSoatCuonPage /></ErrorBoundary>} />
             <Route path="warehouse/the-kho" element={<InventoryCardPage />} />
+            <Route path="warehouse/production-sessions" element={<ErrorBoundary><ProductionSessionsPage /></ErrorBoundary>} />
             <Route path="purchasing/hub" element={<ErrorBoundary><PurchaseHubPage /></ErrorBoundary>} />
             <Route path="purchasing/giay-cuon" element={<ErrorBoundary><MuaGiayPage /></ErrorBoundary>} />
             <Route path="purchasing/nvl-khac" element={<ErrorBoundary><MuaNVLPage /></ErrorBoundary>} />

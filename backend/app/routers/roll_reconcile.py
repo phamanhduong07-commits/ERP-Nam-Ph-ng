@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
-from app.models.inventory import InventoryBalance, PaperRoll
+from app.models.inventory import InventoryBalance
+from app.models.warehouse_doc import GiayRoll
 from app.models.master import Warehouse, PaperMaterial
 from app.services.inventory_service import get_or_create_balance, nhap_balance, xuat_balance, log_tx
 
@@ -27,13 +28,13 @@ def get_doi_soat_cuon(
 ):
     roll_agg = (
         db.query(
-            PaperRoll.paper_material_id,
-            PaperRoll.warehouse_id,
-            func.sum(PaperRoll.trong_luong_hien_tai).label("paper_roll_ton"),
-            func.count(PaperRoll.id).label("so_cuon"),
+            GiayRoll.paper_material_id,
+            GiayRoll.warehouse_id,
+            func.sum(GiayRoll.trong_luong_con_lai).label("paper_roll_ton"),
+            func.count(GiayRoll.id).label("so_cuon"),
         )
-        .filter(PaperRoll.trang_thai == "kho")
-        .group_by(PaperRoll.paper_material_id, PaperRoll.warehouse_id)
+        .filter(GiayRoll.trang_thai.in_(["trong_kho", "dang_dung"]))
+        .group_by(GiayRoll.paper_material_id, GiayRoll.warehouse_id)
         .all()
     )
 
@@ -111,11 +112,11 @@ def sync_doi_soat_cuon(
     current_user: User = Depends(require_any_permission("inventory.adjust")),
 ):
     paper_roll_ton = (
-        db.query(func.sum(PaperRoll.trong_luong_hien_tai))
+        db.query(func.sum(GiayRoll.trong_luong_con_lai))
         .filter(
-            PaperRoll.trang_thai == "kho",
-            PaperRoll.paper_material_id == paper_material_id,
-            PaperRoll.warehouse_id == warehouse_id,
+            GiayRoll.trang_thai.in_(["trong_kho", "dang_dung"]),
+            GiayRoll.paper_material_id == paper_material_id,
+            GiayRoll.warehouse_id == warehouse_id,
         )
         .scalar()
     ) or Decimal("0")

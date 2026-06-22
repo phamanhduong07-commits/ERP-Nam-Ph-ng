@@ -4,7 +4,7 @@ Split out of app/routers/warehouse.py (pure structural extraction).
 Shares the /api/warehouse prefix; mounted alongside warehouse.router.
 """
 import html as _html_mod
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from app.utils.template import apply_template, standard_vars
 from typing import Optional
@@ -24,6 +24,7 @@ from app.models.warehouse_doc import (
     GoodsReceipt, GoodsReceiptItem,
     GiayRoll,
 )
+from app.models.production import ProductionSession, ProductionSessionRoll
 from app.services.accounting_service import AccountingService
 from app.models.system import PrintTemplate, SystemSetting
 from app.utils.log import get_logger
@@ -1306,6 +1307,7 @@ def get_giay_roll_by_barcode(
 class CanGiayRollIn(BaseModel):
     kg_con_lai: float
     production_order_id: int | None = None
+    session_id: int | None = None  # Nếu None, tự động tìm phiên đang chạy
 
 
 @router.patch("/giay-rolls/{roll_id}/can")
@@ -1315,14 +1317,16 @@ def can_giay_roll(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Cập nhật trọng lượng còn lại sau khi cân — điều chỉnh InventoryBalance."""
+    """Cập nhật trọng lượng còn lại sau khi cân — điều chỉnh InventoryBalance
+    và tự động ghi nhận tiêu hao vào Phiên sản xuất đang hoạt động."""
     roll = db.get(GiayRoll, roll_id)
     if not roll:
         raise HTTPException(404, "Không tìm thấy cuộn giấy")
     if body.kg_con_lai < 0:
         raise HTTPException(400, "Trọng lượng không được âm")
 
-    delta_kg = float(roll.trong_luong_con_lai) - body.kg_con_lai
+    trong_luong_cu = float(roll.trong_luong_con_lai)
+    delta_kg = trong_luong_cu - body.kg_con_lai
     roll.trong_luong_con_lai = Decimal(str(body.kg_con_lai))
 
     if body.kg_con_lai == 0:
@@ -1359,8 +1363,48 @@ def can_giay_roll(
                 production_order_id=body.production_order_id,
                 ghi_chu=f"Cân cuộn {roll.barcode}: còn lại {body.kg_con_lai} kg")
 
+    # ── Ghi nhận tiêu hao vào Phiên sản xuất ─────────────────────────────────
+    # Tìm phiên: ưu tiên session_id từ request, sau đó auto-detect phiên đang chạy
+    session_id = body.session_id
+    if not session_id and roll.warehouse_id:
+        # Tìm phiên đang chạy của kho (warehouse) tương ứng
+        # Lấy phiên mới nhất đang chạy (không bắt buộc cùng phan_xuong)
+        active = db.query(ProductionSession).filter(
+            ProductionSession.trang_thai == "dang_chay",
+        ).order_by(ProductionSession.ngay_tao.desc(), ProductionSession.id.desc()).first()
+        if active:
+            session_id = active.id
+
+    if session_id and abs(delta_kg) >= 0.01:
+        # Tìm bản ghi roll trong phiên
+        sr = db.query(ProductionSessionRoll).filter(
+            ProductionSessionRoll.session_id == session_id,
+            ProductionSessionRoll.giay_roll_id == roll_id,
+        ).first()
+        if sr:
+            # Cập nhật bản ghi hiện có
+            sr.trong_luong_cuoi = Decimal(str(body.kg_con_lai))
+            sr.trong_luong_tieu_hao = sr.trong_luong_dau - Decimal(str(body.kg_con_lai))
+            sr.ngay_can = datetime.now(timezone.utc)
+            sr.can_by = current_user.id
+        else:
+            # Tạo mới bản ghi tiêu hao cuộn
+            sr = ProductionSessionRoll(
+                session_id=session_id,
+                giay_roll_id=roll_id,
+                trong_luong_dau=Decimal(str(trong_luong_cu)),
+                trong_luong_cuoi=Decimal(str(body.kg_con_lai)),
+                trong_luong_tieu_hao=Decimal(str(max(0, delta_kg))),
+                ngay_can=datetime.now(timezone.utc),
+                can_by=current_user.id,
+            )
+            db.add(sr)
+
     db.commit()
-    return _giay_roll_to_dict(roll)
+    result = _giay_roll_to_dict(roll)
+    result["session_id"] = session_id
+    return result
+
 
 
 def _barcode_img(value: str) -> str:

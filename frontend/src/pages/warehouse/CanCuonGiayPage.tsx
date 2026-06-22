@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import {
   ScanOutlined, CheckCircleFilled, CloseCircleFilled, ReloadOutlined, PrinterOutlined,
-  SelectOutlined, LogoutOutlined, BranchesOutlined,
+  SelectOutlined, LogoutOutlined, BranchesOutlined, PlayCircleOutlined,
 } from '@ant-design/icons'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import apiClient from '../../api/client'
@@ -68,6 +68,20 @@ export default function CanCuonGiayPage() {
   const [planLsxIds, setPlanLsxIds]           = useState<number[]>([])
   const [loadingPlanLsx, setLoadingPlanLsx]   = useState(false)
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null)
+  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
+
+  const { data: activeSessions } = useQuery({
+    queryKey: ['active-production-sessions'],
+    queryFn: () => warehouseApi.getActiveProductionSessions().then(r => r.data),
+    staleTime: 10_000,
+  })
+
+  useEffect(() => {
+    if (Array.isArray(activeSessions) && activeSessions.length === 1 && selectedSessionId === null) {
+      setSelectedSessionId(activeSessions[0].id)
+    }
+  }, [activeSessions, selectedSessionId])
+
   const [history, setHistory]       = useState<HistoryEntry[]>(() => {
     try {
       const saved = localStorage.getItem(HISTORY_STORAGE_KEY)
@@ -158,8 +172,8 @@ export default function CanCuonGiayPage() {
   })
 
   const canMut = useMutation({
-    mutationFn: ({ id, kg, orderId }: { id: number; kg: number; orderId?: number | null }) =>
-      warehouseApi.canGiayRoll(id, kg, orderId).then(r => r.data),
+    mutationFn: ({ id, kg, orderId, sessionId }: { id: number; kg: number; orderId?: number | null; sessionId?: number | null }) =>
+      warehouseApi.canGiayRoll(id, kg, orderId, sessionId).then(r => r.data),
     onSuccess: (updated) => {
       const entry: HistoryEntry = {
         barcode: updated.barcode,
@@ -211,8 +225,8 @@ export default function CanCuonGiayPage() {
       message.error(`Số kg còn lại không được lớn hơn trọng lượng lúc nhập (${roll.trong_luong_ban_dau} kg).`)
       return
     }
-    canMut.mutate({ id: roll.id, kg: kgConLai, orderId: selectedOrderId })
-  }, [canImport, roll, kgConLai, canMut])
+    canMut.mutate({ id: roll.id, kg: kgConLai, orderId: selectedOrderId, sessionId: selectedSessionId })
+  }, [canImport, roll, kgConLai, selectedOrderId, selectedSessionId, canMut])
 
   const handleBarcodeSubmit = useCallback((bc: string) => {
     const trimmed = bc.trim()
@@ -373,6 +387,41 @@ export default function CanCuonGiayPage() {
           />
         </Card>
       )}
+
+      {/* Phiên sản xuất picker */}
+      <Card size="small" style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <PlayCircleOutlined style={{ color: '#52c41a' }} />
+          <Text strong style={{ fontSize: 14 }}>Phiên sản xuất đang chạy</Text>
+          {selectedSessionId && (
+            <Tag color="success" style={{ marginLeft: 'auto' }}>
+              {Array.isArray(activeSessions)
+                ? (activeSessions.find(s => s.id === selectedSessionId)?.ten_phien ?? `Phiên #${selectedSessionId}`)
+                : `Phiên #${selectedSessionId}`}
+            </Tag>
+          )}
+        </div>
+
+        <Select
+          showSearch
+          optionFilterProp="label"
+          placeholder="Chọn Phiên sản xuất (Auto-detect nếu trống)..."
+          style={{ width: '100%', fontSize: 16 }}
+          size="large"
+          allowClear
+          value={selectedSessionId}
+          onChange={v => setSelectedSessionId(v ?? null)}
+          options={Array.isArray(activeSessions) ? activeSessions.map(s => ({
+            value: s.id,
+            label: `${s.ten_phien} (${s.phan_xuong_ten || 'Không xác định phân xưởng'})`,
+          })) : []}
+        />
+        {!selectedSessionId && (
+          <Text type="secondary" style={{ fontSize: 11, marginTop: 6, display: 'block' }}>
+            Để trống sẽ tự động gán vào Phiên chạy máy đang hoạt động mới nhất
+          </Text>
+        )}
+      </Card>
 
       {/* KHSX / LSX picker */}
       <Card size="small" style={{ marginBottom: 12 }}>

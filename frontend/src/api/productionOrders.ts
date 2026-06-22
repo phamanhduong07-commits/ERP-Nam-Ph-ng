@@ -272,6 +272,7 @@ export interface PhieuNhapPhoiSongListItem extends PhieuNhapPhoiSong {
   tong_so_tam: number
   tong_so_luong_thuc_te: number
   tong_so_luong_loi: number
+  session_id: number | null  // ID phiên sản xuất được gán (null = chưa gán)
 }
 
 export interface NgungPhoiSongResponse {

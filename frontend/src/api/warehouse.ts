@@ -929,8 +929,8 @@ export const warehouseApi = {
     client.get<GiayRoll[]>('/warehouse/giay-rolls', { params }),
   getGiayRollByBarcode: (barcode: string) =>
     client.get<GiayRoll>(`/warehouse/giay-rolls/by-barcode/${encodeURIComponent(barcode)}`),
-  canGiayRoll: (rollId: number, kg_con_lai: number, production_order_id?: number | null) =>
-    client.patch<GiayRoll>(`/warehouse/giay-rolls/${rollId}/can`, { kg_con_lai, production_order_id: production_order_id ?? null }),
+  canGiayRoll: (rollId: number, kg_con_lai: number, production_order_id?: number | null, session_id?: number | null) =>
+    client.patch<GiayRoll>(`/warehouse/giay-rolls/${rollId}/can`, { kg_con_lai, production_order_id: production_order_id ?? null, session_id: session_id ?? null }),
   printGiayRollLabels: (grId: number) =>
     `/warehouse/giay-rolls/print/${grId}`,
   printGiayRollLabelOne: (rollId: number) =>
@@ -982,4 +982,162 @@ export const warehouseApi = {
     client.post<{ paper_material_id: number; warehouse_id: number; old_ton: number; new_ton: number; chenh_lech: number }>(
       `/warehouse/doi-soat-cuon/sync/${paper_material_id}/${warehouse_id}`
     ),
+
+  // ── Phiên sản xuất ──────────────────────────────────────────────────────────
+  listProductionSessions: (params?: {
+    trang_thai?: string
+    phan_xuong_id?: number
+    ngay_tu?: string
+    ngay_den?: string
+    page?: number
+    page_size?: number
+  }) =>
+    client.get<{
+      total: number
+      page: number
+      page_size: number
+      items: ProductionSessionSummary[]
+    }>('/warehouse/production-sessions', { params }),
+
+  getActiveProductionSessions: (phan_xuong_id?: number) =>
+    client.get<ProductionSessionSummary[]>('/warehouse/production-sessions/active', {
+      params: phan_xuong_id ? { phan_xuong_id } : {},
+    }),
+
+  getProductionSession: (id: number) =>
+    client.get<ProductionSessionDetail>(`/warehouse/production-sessions/${id}`),
+
+  createProductionSession: (data: { ten_phien: string; ngay_tao?: string; phan_xuong_id?: number }) =>
+    client.post<{ id: number; ten_phien: string; trang_thai: string }>('/warehouse/production-sessions', data),
+
+  assignPhieuSong: (session_id: number, phieu_ids: number[]) =>
+    client.post<{ assigned: number[]; session_id: number }>(
+      `/warehouse/production-sessions/${session_id}/assign-phieu-song`,
+      { phieu_ids }
+    ),
+
+  unassignPhieuSong: (session_id: number, phieu_ids: number[]) =>
+    client.post<{ removed: number[] }>(
+      `/warehouse/production-sessions/${session_id}/unassign-phieu-song`,
+      { phieu_ids }
+    ),
+
+  updateSessionWastes: (session_id: number, wastes: { flute_type: string; so_kg_hao_hut: number }[]) =>
+    client.patch<{ ok: boolean }>(`/warehouse/production-sessions/${session_id}/wastes`, { wastes }),
+
+  updateSessionMaterials: (
+    session_id: number,
+    materials: { other_material_id: number; so_luong: number; don_gia?: number }[]
+  ) =>
+    client.patch<{ ok: boolean }>(`/warehouse/production-sessions/${session_id}/materials`, { materials }),
+
+  previewSessionAllocation: (session_id: number) =>
+    client.get<ProductionSessionAllocation>(`/warehouse/production-sessions/${session_id}/preview-allocate`),
+
+  closeProductionSession: (session_id: number) =>
+    client.post<{ ok: boolean; message: string; allocation: ProductionSessionAllocation }>(
+      `/warehouse/production-sessions/${session_id}/close`
+    ),
 }
+
+// ── Production Session Types ──────────────────────────────────────────────────
+
+export interface ProductionSessionSummary {
+  id: number
+  ten_phien: string
+  ngay_tao: string | null
+  trang_thai: 'dang_chay' | 'cho_phan_bo' | 'da_chot'
+  phan_xuong_id: number | null
+  phan_xuong_ten: string | null
+  so_cuon: number
+  so_phieu: number
+  created_by: number | null
+  created_at: string | null
+  closed_at: string | null
+}
+
+export interface SessionRollDetail {
+  id: number
+  giay_roll_id: number
+  barcode: string | null
+  paper_material_id: number | null
+  ten_nvl: string | null
+  kho: number | null
+  dinh_luong: number | null
+  trong_luong_dau: number
+  trong_luong_cuoi: number | null
+  trong_luong_tieu_hao: number | null
+  ngay_can: string | null
+}
+
+export interface SessionPhieuSongItem {
+  id: number
+  production_order_item_id: number
+  ten_hang: string | null
+  so_lop: number | null
+  chieu_kho: number | null
+  chieu_cat: number | null
+  so_luong_ke_hoach: number
+  so_luong_thuc_te: number | null
+}
+
+export interface SessionPhieuSong {
+  id: number
+  so_phieu: string
+  ngay: string | null
+  ca: string | null
+  production_order_id: number
+  items: SessionPhieuSongItem[]
+}
+
+export interface ProductionSessionDetail extends ProductionSessionSummary {
+  rolls: SessionRollDetail[]
+  materials: {
+    id: number
+    other_material_id: number
+    ten_nvl: string | null
+    so_luong: number
+    don_gia: number
+    thanh_tien: number
+  }[]
+  paper_wastes: {
+    id: number
+    flute_type: string
+    so_kg_hao_hut: number
+  }[]
+  phieu_nhap_phoi_songs: SessionPhieuSong[]
+}
+
+export interface AllocationLSXItem {
+  production_order_item_id: number
+  production_order_id: number
+  ten_hang: string | null
+  so_lop: number | null
+  so_luong: number
+  dien_tich_m2: number
+  dien_tich_quy_doi: number
+  chi_phi_giay: number
+  chi_phi_nvl_phu: number
+  chi_phi_tong: number
+}
+
+export interface ProductionSessionAllocation {
+  session_id: number
+  ten_phien: string
+  trang_thai: string
+  rolls_by_material: {
+    pm_id: number
+    ten: string
+    tieu_hao_kg: number
+    don_gia: number
+    chi_phi: number
+  }[]
+  allocation_by_lsx: AllocationLSXItem[]
+  total_tieu_hao_giay_kg: number
+  total_hao_hut_kg: number
+  total_chi_phi_giay: number
+  total_chi_phi_nvl_phu: number
+  total_chi_phi_phien: number
+  errors: string[]
+}
+

@@ -139,3 +139,95 @@ class MayDungLog(Base):
     production_order: Mapped["ProductionOrder"] = relationship("ProductionOrder")
     phan_xuong: Mapped["PhanXuong | None"] = relationship("PhanXuong")  # type: ignore[name-defined]
     creator: Mapped["User | None"] = relationship("User")  # type: ignore[name-defined]
+
+
+class ProductionSession(Base):
+    """Phiên sản xuất chạy máy — gom nhóm LSX, phôi sóng, giấy cuộn và NVL phụ theo đợt chạy thực tế."""
+    __tablename__ = "production_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ten_phien: Mapped[str] = mapped_column(String(100), nullable=False)
+    ngay_tao: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    trang_thai: Mapped[str] = mapped_column(String(20), nullable=False, default="dang_chay")
+    # dang_chay | cho_phan_bo | da_chot
+    so_kg_hao_hut_chung: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False, default=Decimal("0"))
+    phan_xuong_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phan_xuong.id"), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    closed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    phan_xuong = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
+    creator = relationship("User", foreign_keys=[created_by])
+    closed_by_user = relationship("User", foreign_keys=[closed_by])
+
+    rolls: Mapped[list["ProductionSessionRoll"]] = relationship(
+        "ProductionSessionRoll", back_populates="session", cascade="all, delete-orphan"
+    )
+    materials: Mapped[list["ProductionSessionMaterial"]] = relationship(
+        "ProductionSessionMaterial", back_populates="session", cascade="all, delete-orphan"
+    )
+    paper_wastes: Mapped[list["ProductionSessionPaperWaste"]] = relationship(
+        "ProductionSessionPaperWaste", back_populates="session", cascade="all, delete-orphan"
+    )
+    phieu_nhap_phoi_songs: Mapped[list["PhieuNhapPhoiSong"]] = relationship(
+        "PhieuNhapPhoiSong", back_populates="session"
+    )
+
+
+class ProductionSessionRoll(Base):
+    """Tiêu hao của từng cuộn giấy trong Phiên sản xuất."""
+    __tablename__ = "production_session_rolls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("production_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    giay_roll_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("giay_rolls.id"), nullable=False
+    )
+    trong_luong_dau: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)
+    trong_luong_cuoi: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    trong_luong_tieu_hao: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    ngay_can: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    can_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+
+    session: Mapped["ProductionSession"] = relationship("ProductionSession", back_populates="rolls")
+    giay_roll = relationship("GiayRoll", foreign_keys=[giay_roll_id])
+    can_by_user = relationship("User", foreign_keys=[can_by])
+
+
+class ProductionSessionMaterial(Base):
+    """Tiêu hao nguyên vật liệu phụ (Keo dán, Bột mì...) trong Phiên sản xuất."""
+    __tablename__ = "production_session_materials"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("production_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    other_material_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("other_materials.id"), nullable=False
+    )
+    so_luong: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False, default=Decimal("0"))
+    don_gia: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    thanh_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+
+    session: Mapped["ProductionSession"] = relationship("ProductionSession", back_populates="materials")
+    other_material = relationship("OtherMaterial", foreign_keys=[other_material_id])
+
+
+class ProductionSessionPaperWaste(Base):
+    """Hao hụt giấy (phế liệu) chi tiết theo loại Sóng thu hồi trong Phiên sản xuất."""
+    __tablename__ = "production_session_paper_wastes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("production_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    flute_type: Mapped[str] = mapped_column(String(10), nullable=False) # B | C | E | A | CHUNG
+    so_kg_hao_hut: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False, default=Decimal("0"))
+
+    session: Mapped["ProductionSession"] = relationship("ProductionSession", back_populates="paper_wastes")
+

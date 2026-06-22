@@ -333,10 +333,9 @@ export default function StockAdjustmentsPage() {
               title="Hủy phiếu kiểm kê này?"
               description="Hoàn trả chênh lệch tồn kho thực tế và đảo bút toán kế toán."
               onConfirm={() => cancelMut.mutate(r.id)}
-              okButtonProps={{ danger: true }}
+              okButtonProps={{ danger: true, loading: cancelMut.isPending }}
               okText="Hủy phiếu"
               cancelText="Không"
-              loading={cancelMut.isPending}
             >
               <Tooltip title="Hủy phiếu">
                 <Button danger type="text" size="small" icon={<CloseCircleOutlined style={{ color: '#ff4d4f' }} />} />

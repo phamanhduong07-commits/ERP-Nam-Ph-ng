@@ -24,6 +24,9 @@ class PhieuNhapPhoiSong(Base):
         Integer, ForeignKey("warehouses.id"), nullable=True
     )
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    session_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("production_sessions.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -31,6 +34,7 @@ class PhieuNhapPhoiSong(Base):
     production_order = relationship("ProductionOrder")  # type: ignore[assignment]
     warehouse = relationship("Warehouse")               # type: ignore[assignment]
     creator = relationship("User")                      # type: ignore[assignment]
+    session = relationship("ProductionSession", back_populates="phieu_nhap_phoi_songs")
     items: Mapped[list["PhieuNhapPhoiSongItem"]] = relationship(
         "PhieuNhapPhoiSongItem", cascade="all, delete-orphan", back_populates="phieu"
     )

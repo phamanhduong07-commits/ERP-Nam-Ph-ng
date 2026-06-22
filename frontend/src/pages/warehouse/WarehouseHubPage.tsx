@@ -15,6 +15,7 @@ const GROUPS: HubGroup[] = [
     items: [
       { icon: '🧻', label: 'Nhập giấy cuộn', to: '/warehouse/nhap-giay', permissions: ['inventory.import'] },
       { icon: '⚖️', label: 'Cân giấy cuộn', to: '/warehouse/can-cuon-giay', permissions: ['inventory.import'] },
+      { icon: '🏭', label: 'Phiên sản xuất', to: '/warehouse/production-sessions', permissions: ['inventory.view', 'inventory.import'] },
       { icon: '📥', label: 'Nhập phôi (mua ngoài)', to: '/warehouse/nhap-phoi-ngoai', permissions: ['inventory.import'] },
       { icon: '📦', label: 'Nhập NVL khác', to: '/warehouse/receipts', permissions: ['inventory.import'] },
       { icon: '🏭', label: 'Nhập TP từ SX', to: '/warehouse/production-output', permissions: ['inventory.import'] },
