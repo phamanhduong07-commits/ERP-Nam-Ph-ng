@@ -149,16 +149,15 @@ export default function NhapNhanhPage() {
       {/* Camera area — chiếm toàn bộ không gian */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 14px 0' }}>
 
+        <input
+          id={captureId}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={handleCapture}
+        />
         <label htmlFor={captureId} style={{ display: 'flex', flexDirection: 'column', flex: 1, cursor: 'pointer' }}>
-          <input
-            id={captureId}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            style={{ display: 'none' }}
-            onChange={handleCapture}
-          />
-
           {previewUrl ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               <img
