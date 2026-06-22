@@ -145,12 +145,31 @@ def get_cost_analysis(
         .all()
     )
 
+    # Step 4.2 — Load all closed ProductionSessions for this KHSX and their allocation details
+    from app.models.production import ProductionSession
+    from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong
+
+    session_ids_q = db.query(PhieuNhapPhoiSong.session_id).filter(
+        PhieuNhapPhoiSong.production_order_id == khsx_id,
+        PhieuNhapPhoiSong.session_id.is_not(None)
+    ).distinct().all()
+    session_ids = [r[0] for r in session_ids_q]
+
+    session_list: list[ProductionSession] = []
+    if session_ids:
+        session_list = db.query(ProductionSession).filter(
+            ProductionSession.id.in_(session_ids),
+            ProductionSession.trang_thai == "da_chot",
+            ProductionSession.allocation_detail.is_not(None)
+        ).all()
+
     # Step 5 — Aggregate actual cost per (lsx_id, ma_ky_hieu)
     # actual_map: (lsx_id, ma_ky_hieu) → {"kg": float, "thanh_tien": float}
     actual_map: dict[tuple[int, str], dict] = defaultdict(
         lambda: {"kg": 0.0, "thanh_tien": 0.0}
     )
 
+    # Aggregate from Material Issues
     for mi in mi_list:
         for item in mi.items:
             if not item.paper_material_id or not item.allocation_detail:
@@ -174,6 +193,30 @@ def get_cost_analysis(
                 if entry_lsx_id and kg > 0:
                     actual_map[(int(entry_lsx_id), ma)]["kg"] += kg
                     actual_map[(int(entry_lsx_id), ma)]["thanh_tien"] += tt
+
+    # Aggregate from Production Sessions
+    for sess in session_list:
+        try:
+            entries = json.loads(sess.allocation_detail)
+        except Exception:
+            continue
+        if not isinstance(entries, list):
+            continue
+        for e in entries:
+            entry_lsx_id = e.get("production_order_item_id")
+            papers = e.get("papers", [])
+            if not entry_lsx_id or not papers:
+                continue
+            for p in papers:
+                pm_id = p.get("paper_material_id")
+                kg = float(p.get("kg_phan_bo", 0) or 0)
+                tt = float(p.get("chi_phi", 0) or 0)
+                if pm_id and kg > 0:
+                    pm = db.get(PaperMaterial, pm_id)
+                    if pm and pm.ma_ky_hieu:
+                        ma = pm.ma_ky_hieu.strip().upper()
+                        actual_map[(int(entry_lsx_id), ma)]["kg"] += kg
+                        actual_map[(int(entry_lsx_id), ma)]["thanh_tien"] += tt
 
     # Step 6 — Build result per LSX
     items_out: list[LsxCostItemOut] = []

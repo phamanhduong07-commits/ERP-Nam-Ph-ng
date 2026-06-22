@@ -7,7 +7,7 @@ Tai lieu nay danh cho nguoi quan tri he thong va team ho tro van hanh.
 | Thanh phan | Gia tri mac dinh |
 | --- | --- |
 | Database | PostgreSQL `erp_nam_phuong` |
-| Backend | FastAPI, cong `8000` |
+| Backend | FastAPI, cong `8001` |
 | Frontend dev | Vite, cong `5173` |
 | API docs | `/api/docs` |
 | File upload | `backend/uploads/` |
@@ -19,7 +19,7 @@ Tai lieu nay danh cho nguoi quan tri he thong va team ho tro van hanh.
 2. Khoi dong backend bang `python run.py` hoac `start-backend.bat`.
 3. Khoi dong frontend bang `npm run dev` hoac `start-frontend.bat`.
 4. Mo `http://localhost:5173` va thu dang nhap.
-5. Kiem tra `http://localhost:8000/api/health` neu nghi backend loi.
+5. Kiem tra `http://localhost:8001/api/health` neu nghi backend loi.
 
 ## Backup
 

@@ -6,6 +6,9 @@ from datetime import date
 from decimal import Decimal
 import pytest
 from app.models.master import PhanXuong, PhapNhan, Warehouse, PaperMaterial, OtherMaterial, MaterialGroup
+from app.models.bom import ProductionBOM, ProductionBOMItem
+from app.models.layer_allocation_coefficient import LayerAllocationCoefficient
+from app.models.accounting import JournalEntry, JournalEntryLine
 from app.models.inventory import InventoryBalance
 from app.models.warehouse_doc import GiayRoll
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
@@ -39,8 +42,8 @@ def _setup_entities(db):
     db.flush()
 
     # Setup PaperMaterials
-    pm1 = PaperMaterial(ma_chinh="PM1", ma_nhom_id=pg.id, ten="Giay PM1", dvt="Kg", su_dung=True, kho=Decimal("100"), dinh_luong=Decimal("150"))
-    pm2 = PaperMaterial(ma_chinh="PM2", ma_nhom_id=pg.id, ten="Giay PM2", dvt="Kg", su_dung=True, kho=Decimal("100"), dinh_luong=Decimal("200"))
+    pm1 = PaperMaterial(ma_chinh="PM1", ma_ky_hieu="PM1", ma_nhom_id=pg.id, ten="Giay PM1", dvt="Kg", su_dung=True, kho=Decimal("100"), dinh_luong=Decimal("150"))
+    pm2 = PaperMaterial(ma_chinh="PM2", ma_ky_hieu="PM2", ma_nhom_id=pg.id, ten="Giay PM2", dvt="Kg", su_dung=True, kho=Decimal("100"), dinh_luong=Decimal("200"))
     db.add_all([pm1, pm2])
     db.flush()
 
@@ -142,6 +145,60 @@ def test_auto_detect_session_on_can_roll(client, db_session):
     assert s_roll.trong_luong_cuoi == Decimal("450")
     assert s_roll.trong_luong_tieu_hao == Decimal("50")
 
+def _setup_bom_and_coeffs(db, poi1, poi2, poi3, pm1, pm2):
+    # 1. Create coefficients
+    lac_b = LayerAllocationCoefficient(loai_lop="song", flute_type="B", he_so=Decimal("1.36"))
+    lac_c = LayerAllocationCoefficient(loai_lop="song", flute_type="C", he_so=Decimal("1.40"))
+    db.add_all([lac_b, lac_c])
+    db.flush()
+
+    # 2. Create BOM for poi1 (Thung 3L - uses PM1)
+    bom1 = ProductionBOM(
+        production_order_item_id=poi1.id,
+        loai_thung="A1", dai=Decimal("10"), rong=Decimal("10"), cao=Decimal("10"), so_lop=3,
+        so_luong_sx=Decimal("100"), trang_thai="confirmed"
+    )
+    db.add(bom1)
+    db.flush()
+    bi1_1 = ProductionBOMItem(bom_id=bom1.id, vi_tri_lop="Mặt ngoài", loai_lop="mat", flute_type=None, ma_ky_hieu="PM1", paper_material_id=pm1.id, dinh_luong=Decimal("150"), dien_tich_1con=Decimal("1.0"), so_luong_sx=Decimal("100"))
+    bi1_2 = ProductionBOMItem(bom_id=bom1.id, vi_tri_lop="Sóng B", loai_lop="song", flute_type="B", ma_ky_hieu="PM1", paper_material_id=pm1.id, dinh_luong=Decimal("150"), dien_tich_1con=Decimal("1.36"), so_luong_sx=Decimal("100"))
+    bi1_3 = ProductionBOMItem(bom_id=bom1.id, vi_tri_lop="Mặt trong", loai_lop="mat", flute_type=None, ma_ky_hieu="PM1", paper_material_id=pm1.id, dinh_luong=Decimal("150"), dien_tich_1con=Decimal("1.0"), so_luong_sx=Decimal("100"))
+    db.add_all([bi1_1, bi1_2, bi1_3])
+
+    # 3. Create BOM for poi2 (Thung 5L - uses PM2)
+    bom2 = ProductionBOM(
+        production_order_item_id=poi2.id,
+        loai_thung="A1", dai=Decimal("10"), rong=Decimal("10"), cao=Decimal("10"), so_lop=5,
+        so_luong_sx=Decimal("200"), trang_thai="confirmed"
+    )
+    db.add(bom2)
+    db.flush()
+    bi2_1 = ProductionBOMItem(bom_id=bom2.id, vi_tri_lop="Mặt ngoài", loai_lop="mat", flute_type=None, ma_ky_hieu="PM2", paper_material_id=pm2.id, dinh_luong=Decimal("200"), dien_tich_1con=Decimal("1.0"), so_luong_sx=Decimal("200"))
+    bi2_2 = ProductionBOMItem(bom_id=bom2.id, vi_tri_lop="Sóng B", loai_lop="song", flute_type="B", ma_ky_hieu="PM2", paper_material_id=pm2.id, dinh_luong=Decimal("200"), dien_tich_1con=Decimal("1.36"), so_luong_sx=Decimal("200"))
+    bi2_3 = ProductionBOMItem(bom_id=bom2.id, vi_tri_lop="Mặt giữa", loai_lop="mat", flute_type=None, ma_ky_hieu="PM2", paper_material_id=pm2.id, dinh_luong=Decimal("200"), dien_tich_1con=Decimal("1.0"), so_luong_sx=Decimal("200"))
+    bi2_4 = ProductionBOMItem(bom_id=bom2.id, vi_tri_lop="Sóng C", loai_lop="song", flute_type="C", ma_ky_hieu="PM2", paper_material_id=pm2.id, dinh_luong=Decimal("200"), dien_tich_1con=Decimal("1.40"), so_luong_sx=Decimal("200"))
+    bi2_5 = ProductionBOMItem(bom_id=bom2.id, vi_tri_lop="Mặt trong", loai_lop="mat", flute_type=None, ma_ky_hieu="PM2", paper_material_id=pm2.id, dinh_luong=Decimal("200"), dien_tich_1con=Decimal("1.0"), so_luong_sx=Decimal("200"))
+    db.add_all([bi2_1, bi2_2, bi2_3, bi2_4, bi2_5])
+
+    # 4. Create BOM for poi3 (Thung 7L - uses PM1)
+    bom3 = ProductionBOM(
+        production_order_item_id=poi3.id,
+        loai_thung="A1", dai=Decimal("10"), rong=Decimal("10"), cao=Decimal("10"), so_lop=7,
+        so_luong_sx=Decimal("100"), trang_thai="confirmed"
+    )
+    db.add(bom3)
+    db.flush()
+    bi3_1 = ProductionBOMItem(bom_id=bom3.id, vi_tri_lop="Mặt ngoài", loai_lop="mat", flute_type=None, ma_ky_hieu="PM1", paper_material_id=pm1.id, dinh_luong=Decimal("150"), dien_tich_1con=Decimal("1.0"), so_luong_sx=Decimal("100"))
+    bi3_2 = ProductionBOMItem(bom_id=bom3.id, vi_tri_lop="Sóng B", loai_lop="song", flute_type="B", ma_ky_hieu="PM1", paper_material_id=pm1.id, dinh_luong=Decimal("150"), dien_tich_1con=Decimal("1.36"), so_luong_sx=Decimal("100"))
+    bi3_3 = ProductionBOMItem(bom_id=bom3.id, vi_tri_lop="Mặt giữa 1", loai_lop="mat", flute_type=None, ma_ky_hieu="PM1", paper_material_id=pm1.id, dinh_luong=Decimal("150"), dien_tich_1con=Decimal("1.0"), so_luong_sx=Decimal("100"))
+    bi3_4 = ProductionBOMItem(bom_id=bom3.id, vi_tri_lop="Sóng C", loai_lop="song", flute_type="C", ma_ky_hieu="PM1", paper_material_id=pm1.id, dinh_luong=Decimal("150"), dien_tich_1con=Decimal("1.40"), so_luong_sx=Decimal("100"))
+    bi3_5 = ProductionBOMItem(bom_id=bom3.id, vi_tri_lop="Mặt giữa 2", loai_lop="mat", flute_type=None, ma_ky_hieu="PM1", paper_material_id=pm1.id, dinh_luong=Decimal("150"), dien_tich_1con=Decimal("1.0"), so_luong_sx=Decimal("100"))
+    bi3_6 = ProductionBOMItem(bom_id=bom3.id, vi_tri_lop="Sóng B 2", loai_lop="song", flute_type="B", ma_ky_hieu="PM1", paper_material_id=pm1.id, dinh_luong=Decimal("150"), dien_tich_1con=Decimal("1.36"), so_luong_sx=Decimal("100"))
+    bi3_7 = ProductionBOMItem(bom_id=bom3.id, vi_tri_lop="Mặt trong", loai_lop="mat", flute_type=None, ma_ky_hieu="PM1", paper_material_id=pm1.id, dinh_luong=Decimal("150"), dien_tich_1con=Decimal("1.0"), so_luong_sx=Decimal("100"))
+    db.add_all([bi3_1, bi3_2, bi3_3, bi3_4, bi3_5, bi3_6, bi3_7])
+    
+    db.flush()
+
 def test_compute_allocation_algorithm(client, db_session):
     pn, px, wh, pm1, pm2, om, r1, r2 = _setup_entities(db_session)
     
@@ -169,11 +226,11 @@ def test_compute_allocation_algorithm(client, db_session):
     db_session.add(porder)
     db_session.flush()
 
-    # Item 1: 3-layer. Area = 100 * (100 * 100 / 10000) = 100 m2. Coefficient = 1.0. Area QD = 100 m2.
+    # Item 1: 3-layer. Area = 100 * (100 * 100 / 10000) = 100 m2. Area QD = 100 * 1.36 = 136 m2.
     poi1 = ProductionOrderItem(production_order_id=porder.id, ten_hang="Thung 3L", so_lop=3, so_luong_ke_hoach=100, dvt="Thung")
-    # Item 2: 5-layer. Area = 200 * (100 * 100 / 10000) = 200 m2. Coefficient = 2.0. Area QD = 400 m2.
+    # Item 2: 5-layer. Area = 200 * (100 * 100 / 10000) = 200 m2. Area QD = 200 * (1.36 + 1.40) = 552 m2.
     poi2 = ProductionOrderItem(production_order_id=porder.id, ten_hang="Thung 5L", so_lop=5, so_luong_ke_hoach=200, dvt="Thung")
-    # Item 3: 7-layer. Area = 100 * (100 * 100 / 10000) = 100 m2. Coefficient = 3.0. Area QD = 300 m2.
+    # Item 3: 7-layer. Area = 100 * (100 * 100 / 10000) = 100 m2. Area QD = 100 * (1.36 + 1.40 + 1.36) = 412 m2.
     poi3 = ProductionOrderItem(production_order_id=porder.id, ten_hang="Thung 7L", so_lop=7, so_luong_ke_hoach=100, dvt="Thung")
 
     db_session.add_all([poi1, poi2, poi3])
@@ -189,6 +246,9 @@ def test_compute_allocation_algorithm(client, db_session):
     pi3 = PhieuNhapPhoiSongItem(phieu_id=phieu.id, production_order_item_id=poi3.id, so_luong_ke_hoach=Decimal("100"), so_luong_thuc_te=Decimal("100"), chieu_kho=Decimal("100"), chieu_cat=Decimal("100"))
 
     db_session.add_all([pi1, pi2, pi3])
+    
+    # Setup BOM and Coefficients
+    _setup_bom_and_coeffs(db_session, poi1, poi2, poi3, pm1, pm2)
     db_session.commit()
 
     # 7. Call preview allocate API
@@ -207,24 +267,26 @@ def test_compute_allocation_algorithm(client, db_session):
     assert data["total_chi_phi_nvl_phu"] == 500000.0
     assert data["total_chi_phi_phien"] == 6550000.0
 
-    # Total area = 100 + 200 + 100 = 400 m2.
-    # Total area qd = 100*1 + 200*2 + 100*3 = 800 m2.
-    # Check paper cost allocation:
-    # Item 1 (100 m2): 6,050,000 * 100 / 400 = 1,512,500.0
-    # Item 2 (200 m2): 6,050,000 * 200 / 400 = 3,025,000.0
-    # Item 3 (100 m2): 6,050,000 * 100 / 400 = 1,512,500.0
+    # Check paper cost allocation using new weighted area:
+    # PM2 (4,400,000 VND) is 100% allocated to poi2 (Thung 5L) because it's only in poi2 BOM.
+    # PM1 (1,650,000 VND) is allocated to poi1 and poi3:
+    # poi1 weight = 100 * (1.0 + 1.36 + 1.0) = 384.96
+    # poi3 weight = 100 * (1.0 + 1.36 + 1.0 + 1.40 + 1.0 + 1.36 + 1.0) = 965.92
+    # Total PM1 weight = 1350.88
+    # poi1 share = 1,650,000 * 384.96 / 1350.88 = 470,200.17 VND
+    # poi3 share = 1,650,000 * 965.92 / 1350.88 = 1,179,799.83 VND
     alloc_items = {it["production_order_item_id"]: it for it in data["allocation_by_lsx"]}
-    assert alloc_items[poi1.id]["chi_phi_giay"] == 1512500.0
-    assert alloc_items[poi2.id]["chi_phi_giay"] == 3025000.0
-    assert alloc_items[poi3.id]["chi_phi_giay"] == 1512500.0
+    assert abs(alloc_items[poi1.id]["chi_phi_giay"] - 470200.17) < 1.0
+    assert abs(alloc_items[poi2.id]["chi_phi_giay"] - 4400000.0) < 1.0
+    assert abs(alloc_items[poi3.id]["chi_phi_giay"] - 1179799.83) < 1.0
 
-    # Check glue (other material) cost allocation by area qd:
-    # Item 1 (100 m2 qd): 500,000 * 100 / 800 = 62,500.0
-    # Item 2 (400 m2 qd): 500,000 * 400 / 800 = 250,000.0
-    # Item 3 (300 m2 qd): 500,000 * 300 / 800 = 187,500.0
-    assert alloc_items[poi1.id]["chi_phi_nvl_phu"] == 62500.0
-    assert alloc_items[poi2.id]["chi_phi_nvl_phu"] == 250000.0
-    assert alloc_items[poi3.id]["chi_phi_nvl_phu"] == 187500.0
+    # Check glue cost allocation using new DB wave factors:
+    # poi1 (136 m2 qd): 500,000 * 136 / 1100 = 61,818.18 VND
+    # poi2 (552 m2 qd): 500,000 * 552 / 1100 = 250,909.09 VND
+    # poi3 (412 m2 qd): 500,000 * 412 / 1100 = 187,272.73 VND
+    assert abs(alloc_items[poi1.id]["chi_phi_nvl_phu"] - 61818.18) < 1.0
+    assert abs(alloc_items[poi2.id]["chi_phi_nvl_phu"] - 250909.09) < 1.0
+    assert abs(alloc_items[poi3.id]["chi_phi_nvl_phu"] - 187272.73) < 1.0
 
     # 8. Close session
     close_res = client.post(f"/api/warehouse/production-sessions/{session.id}/close")
@@ -234,3 +296,29 @@ def test_compute_allocation_algorithm(client, db_session):
     # Check status transitioned to da_chot
     db_session.refresh(session)
     assert session.trang_thai == "da_chot"
+    assert session.allocation_detail is not None
+
+    # Check journal entry Nợ 154 / Có 154 was created
+    entry = db_session.query(JournalEntry).filter_by(
+        chung_tu_loai="production_sessions",
+        chung_tu_id=session.id,
+        loai_but_toan="xuat_sx"
+    ).first()
+    assert entry is not None
+    assert entry.tong_no == Decimal("6550000.00")
+    assert entry.tong_co == Decimal("6550000.00")
+    
+    # Check that there are lines crediting the workshop and debiting the LSXs
+    lines = db_session.query(JournalEntryLine).filter_by(entry_id=entry.id).all()
+    assert len(lines) == 6  # 3 LSXs * 2 lines per LSX (one debit, one credit)
+    
+    # The credit lines should have phan_xuong_id set, the debit lines should have phan_xuong_id as None
+    credit_lines = [l for l in lines if l.so_tien_co > 0]
+    debit_lines = [l for l in lines if l.so_tien_no > 0]
+    assert len(credit_lines) == 3
+    assert len(debit_lines) == 3
+    for l in credit_lines:
+        assert l.phan_xuong_id == px.id
+    for l in debit_lines:
+        assert l.phan_xuong_id is None
+

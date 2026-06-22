@@ -158,6 +158,7 @@ class ProductionSession(Base):
     )
     closed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    allocation_detail: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: kết quả phân bổ chi tiết về từng LSX
 
     phan_xuong = relationship("PhanXuong", foreign_keys=[phan_xuong_id])
     creator = relationship("User", foreign_keys=[created_by])

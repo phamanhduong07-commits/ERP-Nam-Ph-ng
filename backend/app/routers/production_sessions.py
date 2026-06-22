@@ -461,11 +461,73 @@ def _compute_allocation(session: ProductionSession, db: Session) -> dict:
       - errors: danh sách cảnh báo
     """
     errors = []
+    from app.models.bom import ProductionBOM, ProductionBOMItem
+    from app.models.layer_allocation_coefficient import LayerAllocationCoefficient
 
-    # ── 1. Thu thập tiêu hao giấy theo paper_material_id ───────────────────
+    # ── 1. Gom tất cả LSX tham gia phiên và load BOM (Ràng buộc kiểm tra BOM - Phương án A) ──
+    lsx_list: list[ProductionOrderItem] = []
+    for p in session.phieu_nhap_phoi_songs:
+        for it in p.items:
+            poi = it.production_order_item
+            if poi and poi not in lsx_list:
+                lsx_list.append(poi)
+
+    lsx_bom_map: dict[int, list[ProductionBOMItem]] = {}
+    for lsx in lsx_list:
+        bom = db.query(ProductionBOM).filter(
+            ProductionBOM.production_order_item_id == lsx.id,
+            ProductionBOM.trang_thai == "confirmed"
+        ).order_by(ProductionBOM.id.desc()).first()
+        if bom:
+            bom_items = db.query(ProductionBOMItem).filter(ProductionBOMItem.bom_id == bom.id).all()
+            lsx_bom_map[lsx.id] = bom_items
+        else:
+            errors.append(f"Lệnh sản xuất '{lsx.ten_hang}' (ID {lsx.id}) chưa có định mức BOM được duyệt")
+
+    # Tạo map ma_ky_hieu -> pm_id từ các cuộn giấy trong phiên
+    ma_ky_hieu_to_pm_id: dict[str, int] = {}
+    for sr in session.rolls:
+        roll = sr.giay_roll
+        if roll and roll.paper_material_id:
+            pm = roll.paper_material
+            if pm and pm.ma_ky_hieu:
+                ma_ky_hieu_to_pm_id[pm.ma_ky_hieu.strip().upper()] = roll.paper_material_id
+
+    # Kiểm tra cuộn giấy tiêu hao có khớp với BOM không
+    for sr in session.rolls:
+        roll = sr.giay_roll
+        if not roll or not roll.paper_material_id:
+            continue
+        pm = roll.paper_material
+        if not pm or not pm.ma_ky_hieu:
+            errors.append(f"Cuộn giấy {roll.barcode} chưa có thông tin mã ký hiệu vật liệu")
+            continue
+        ma_ky_hieu = pm.ma_ky_hieu.strip().upper()
+        
+        found = False
+        for bom_items in lsx_bom_map.values():
+            for bi in bom_items:
+                if bi.ma_ky_hieu and bi.ma_ky_hieu.strip().upper() == ma_ky_hieu:
+                    found = True
+                    break
+            if found:
+                break
+        if not found:
+            errors.append(f"Cuộn giấy {roll.barcode} (loại {pm.ten_viet_tat or pm.ten}) không có trong định mức BOM của các LSX thuộc phiên này")
+
+    # Load hệ số sóng từ DB
+    coeffs = db.query(LayerAllocationCoefficient).all()
+    coeff_map: dict[tuple[str, str | None], Decimal] = {
+        (c.loai_lop, c.flute_type): c.he_so for c in coeffs
+    }
+
+    def _he_so(loai_lop: str, flute_type: str | None) -> float:
+        return float(coeff_map.get((loai_lop, flute_type), Decimal("1.0")))
+
+    # ── 2. Thu thập tiêu hao giấy theo paper_material_id ───────────────────
     rolls_by_pm: dict[int, dict] = {}   # pm_id → {ten, tieu_hao_kg, don_gia, flute_types_used}
     for sr in session.rolls:
-        roll: GiayRoll = sr.giay_roll
+        roll = sr.giay_roll
         if not roll or not roll.paper_material_id:
             continue
         pm_id = roll.paper_material_id
@@ -473,7 +535,7 @@ def _compute_allocation(session: ProductionSession, db: Session) -> dict:
         if tieu_hao <= 0:
             continue
         if pm_id not in rolls_by_pm:
-            pm: PaperMaterial = roll.paper_material
+            pm = roll.paper_material
             # Lấy đơn giá bình quân từ inventory_balance
             bal = db.query(InventoryBalance).filter(
                 InventoryBalance.paper_material_id == pm_id,
@@ -488,12 +550,10 @@ def _compute_allocation(session: ProductionSession, db: Session) -> dict:
             }
         rolls_by_pm[pm_id]["tieu_hao_kg"] += tieu_hao
 
-    # ── 2. Phân bổ hao hụt giấy theo loại sóng vào từng loại giấy ─────────
-    #   Hiện tại: hao hụt CHUNG được chia tỷ lệ theo trọng lượng tiêu hao
-    #   Hao hụt theo sóng (B/C/E...) cũng chia tỷ lệ vì không biết rõ PM nào dùng sóng nào
-    #   (tương lai: nếu có mapping flute_type → paper_material thì sẽ chính xác hơn)
+    # ── 3. Phân bổ hao hụt giấy cộng gộp (chia đều theo tỷ lệ tiêu hao) ───
     total_tieu_hao = sum(v["tieu_hao_kg"] for v in rolls_by_pm.values())
     total_hao_hut = sum(float(w.so_kg_hao_hut) for w in session.paper_wastes)
+    total_hao_hut += float(session.so_kg_hao_hut_chung or 0)
 
     if total_tieu_hao > 0 and total_hao_hut > 0:
         for pm_id, info in rolls_by_pm.items():
@@ -504,19 +564,14 @@ def _compute_allocation(session: ProductionSession, db: Session) -> dict:
     for info in rolls_by_pm.values():
         info["chi_phi"] = info["tieu_hao_kg"] * info["don_gia"]
 
-    # ── 3. Thu thập sản lượng phôi thực tế từ phiếu nhập phôi sóng ─────────
+    # ── 4. Thu thập sản lượng phôi thực tế từ phiếu nhập phôi sóng ─────────
     # Tính diện tích giấy thực tế của từng LSX item trong phiên
     # Key: production_order_item_id → {ten_hang, so_lop, dien_tich_m2, dien_tich_quy_doi}
     lsx_items: dict[int, dict] = {}
-
-    # Cần biết mỗi LSX item dùng paper_material nào → phân bổ chi phí giấy đúng loại
-    # Lấy qua ProductionOrderItem.song_1, song_2... (sẽ dùng tên vật liệu để match)
-    # Để đơn giản + bền vững: phân bổ chi phí giấy theo tỷ lệ diện tích TỔNG HỢP
-    # (vì cùng một phiên chạy chủ yếu một loại giấy)
-
+    
     for phieu in session.phieu_nhap_phoi_songs:
         for it in phieu.items:
-            poi: ProductionOrderItem = it.production_order_item
+            poi = it.production_order_item
             if not poi:
                 continue
             sl = float(it.so_luong_thuc_te or it.so_luong_ke_hoach or 0)
@@ -526,8 +581,17 @@ def _compute_allocation(session: ProductionSession, db: Session) -> dict:
                 continue
 
             dien_tich = sl * (kho * cat / 10000)      # m²
-            k = _layer_coeff(poi.so_lop)
-            dien_tich_quy_doi = dien_tich * k          # m² quy đổi 3-lớp
+            
+            # Tính hệ số quy đổi keo từ các lớp sóng trong BOM
+            glue_factor = 0.0
+            bom_items = lsx_bom_map.get(poi.id, [])
+            for bi in bom_items:
+                if bi.loai_lop == "song":
+                    glue_factor += _he_so(bi.loai_lop, bi.flute_type)
+            if glue_factor == 0.0:
+                glue_factor = float(_layer_coeff(poi.so_lop))
+            
+            dien_tich_quy_doi = dien_tich * glue_factor
 
             poi_id = it.production_order_item_id
             if poi_id not in lsx_items:
@@ -542,23 +606,54 @@ def _compute_allocation(session: ProductionSession, db: Session) -> dict:
                     "chi_phi_giay": 0.0,
                     "chi_phi_nvl_phu": 0.0,
                     "chi_phi_tong": 0.0,
+                    "papers": [],  # Chi tiết giấy phân bổ
                 }
             lsx_items[poi_id]["so_luong"] += sl
             lsx_items[poi_id]["dien_tich_m2"] += dien_tich
             lsx_items[poi_id]["dien_tich_quy_doi"] += dien_tich_quy_doi
 
-    # ── 4. Phân bổ chi phí giấy (tổng tất cả PM) theo diện tích m² thực tế ─
-    total_dien_tich = sum(v["dien_tich_m2"] for v in lsx_items.values())
-    total_chi_phi_giay = sum(v["chi_phi"] for v in rolls_by_pm.values())
+    # ── 5. Tính trọng số phân bổ giấy lý thuyết (diện tích lý thuyết của từng loại giấy) ──
+    # planned_weight: (lsx_id, pm_id) -> trọng số diện tích giấy tiêu hao lý thuyết
+    planned_weight: dict[tuple[int, int], float] = {}
+    for lsx in lsx_list:
+        bom_items = lsx_bom_map.get(lsx.id, [])
+        for bi in bom_items:
+            ma = (bi.ma_ky_hieu or "").strip().upper()
+            if ma in ma_ky_hieu_to_pm_id:
+                pm_id = ma_ky_hieu_to_pm_id[ma]
+                actual_qty = lsx_items.get(lsx.id, {}).get("so_luong", 0.0)
+                area_1con = float(bi.dien_tich_1con or 0)
+                if actual_qty > 0 and area_1con > 0:
+                    he_so = _he_so(bi.loai_lop, bi.flute_type)
+                    w = actual_qty * area_1con * he_so
+                    key = (lsx.id, pm_id)
+                    planned_weight[key] = planned_weight.get(key, 0.0) + w
 
-    if total_dien_tich > 0:
-        for info in lsx_items.values():
-            ty_le = info["dien_tich_m2"] / total_dien_tich
-            info["chi_phi_giay"] = total_chi_phi_giay * ty_le
-    elif lsx_items:
-        errors.append("Không có dữ liệu sản lượng thực tế — không thể phân bổ chi phí giấy")
+    total_weight_by_pm: dict[int, float] = {}
+    for (lsx_id, pm_id), w in planned_weight.items():
+        total_weight_by_pm[pm_id] = total_weight_by_pm.get(pm_id, 0.0) + w
 
-    # ── 5. Phân bổ chi phí NVL phụ theo diện tích quy đổi 3 lớp ───────────
+    # ── 6. Phân bổ chi tiết chi phí của từng loại giấy về các LSX ──
+    for pm_id, info in rolls_by_pm.items():
+        total_w = total_weight_by_pm.get(pm_id, 0.0)
+        pm_chi_phi = info["chi_phi"]
+        if total_w > 0:
+            for lsx_id in lsx_items:
+                w = planned_weight.get((lsx_id, pm_id), 0.0)
+                share = w / total_w
+                allocated_val = pm_chi_phi * share
+                lsx_items[lsx_id]["chi_phi_giay"] += allocated_val
+                
+                # Lưu chi tiết phân bổ của loại giấy này
+                kg_phan_bo = info["tieu_hao_kg"] * share
+                lsx_items[lsx_id]["papers"].append({
+                    "paper_material_id": pm_id,
+                    "ten_nvl": info["ten"],
+                    "kg_phan_bo": round(kg_phan_bo, 3),
+                    "chi_phi": round(allocated_val, 2),
+                })
+
+    # ── 7. Phân bổ chi phí NVL phụ theo diện tích quy đổi ─────────────────
     total_dien_tich_qd = sum(v["dien_tich_quy_doi"] for v in lsx_items.values())
     total_chi_phi_nvl = sum(float(m.thanh_tien) for m in session.materials)
 
@@ -569,17 +664,16 @@ def _compute_allocation(session: ProductionSession, db: Session) -> dict:
     elif lsx_items and total_chi_phi_nvl > 0:
         errors.append("Không có dữ liệu diện tích quy đổi — NVL phụ chưa được phân bổ")
 
-    # Tổng chi phí cho mỗi LSX
+    # Tổng chi phí cho mỗi LSX và làm tròn
+    total_chi_phi_giay = 0.0
     for info in lsx_items.values():
         info["chi_phi_tong"] = info["chi_phi_giay"] + info["chi_phi_nvl_phu"]
-
-    # Làm tròn 2 chữ số thập phân
-    for info in lsx_items.values():
         info["chi_phi_giay"] = round(info["chi_phi_giay"], 2)
         info["chi_phi_nvl_phu"] = round(info["chi_phi_nvl_phu"], 2)
         info["chi_phi_tong"] = round(info["chi_phi_tong"], 2)
         info["dien_tich_m2"] = round(info["dien_tich_m2"], 4)
         info["dien_tich_quy_doi"] = round(info["dien_tich_quy_doi"], 4)
+        total_chi_phi_giay += info["chi_phi_giay"]
 
     return {
         "rolls_by_material": list(rolls_by_pm.values()),
@@ -678,10 +772,45 @@ def close_session(
     if allocation["errors"]:
         raise HTTPException(400, f"Không thể chốt phiên: {'; '.join(allocation['errors'])}")
 
-    # Cập nhật trạng thái phiên
+    # Cập nhật trạng thái phiên và lưu allocation_detail
+    import json
+    session.allocation_detail = json.dumps(allocation["allocation_by_lsx"], ensure_ascii=False)
     session.trang_thai = "da_chot"
     session.closed_by = current_user.id
     session.closed_at = datetime.now(timezone.utc)
+
+    # ── Hạch toán Kế toán Hướng 1 ──
+    from app.services.accounting_service import AccountingService
+    phap_nhan_id = session.phan_xuong.phap_nhan_id if session.phan_xuong else None
+
+    journal_items = []
+    for info in allocation["allocation_by_lsx"]:
+        chi_phi_tong = float(info["chi_phi_tong"] or 0)
+        if chi_phi_tong <= 0:
+            continue
+        journal_items.append({
+            "ten_hang": f"K/C chi phí Phiên #{session.id} về LSX #{info['production_order_id']} - {info['ten_hang']}",
+            "so_luong": 1.0,
+            "don_gia": chi_phi_tong,
+            "tk_no": "154",
+            "tk_co": "154",
+            "phan_xuong_id_no": None,
+            "phan_xuong_id_co": session.phan_xuong_id,
+            "phap_nhan_id_no": phap_nhan_id,
+            "phap_nhan_id_co": phap_nhan_id,
+        })
+
+    if journal_items:
+        acc_service = AccountingService(db)
+        acc_service.post_inventory_journal(
+            ngay=session.ngay_tao,
+            loai="XUAT_SX",  # Dùng XUAT_SX để hạch toán sản xuất
+            chung_tu_loai="production_sessions",
+            chung_tu_id=session.id,
+            items=journal_items,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=session.phan_xuong_id,
+        )
 
     db.commit()
 
