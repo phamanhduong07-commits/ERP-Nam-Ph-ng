@@ -419,6 +419,7 @@ def ton_kho_lsx(
             func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0).label("tong_chuyen_xuat"),
         )
         .join(PhieuChuyenKho, PhieuChuyenKho.id == PhieuChuyenKhoItem.phieu_chuyen_kho_id)
+        .filter(PhieuChuyenKho.trang_thai == "da_duyet")
     )
     if allowed_order_ids is not None:
         chuyen_xuat_q = chuyen_xuat_q.filter(PhieuChuyenKhoItem.production_order_id.in_(allowed_order_ids))
@@ -433,6 +434,7 @@ def ton_kho_lsx(
             func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0).label("tong_chuyen_nhap"),
         )
         .join(PhieuChuyenKho, PhieuChuyenKho.id == PhieuChuyenKhoItem.phieu_chuyen_kho_id)
+        .filter(PhieuChuyenKho.trang_thai == "da_duyet")
     )
     if allowed_order_ids is not None:
         chuyen_nhap_q = chuyen_nhap_q.filter(PhieuChuyenKhoItem.production_order_id.in_(allowed_order_ids))

@@ -3,9 +3,9 @@ import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
-  Popconfirm, Row, Select, Space, Table, Tag, Typography, message,
+  Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Tooltip,
 } from 'antd'
-import { CheckCircleOutlined, DeleteOutlined, FileExcelOutlined, MinusCircleOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
+import { CheckCircleOutlined, DeleteOutlined, FileExcelOutlined, MinusCircleOutlined, PlusOutlined, PrinterOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   CreateStockAdjustmentPayload, StockAdjustment, StockAdjustmentItem, TonKho, warehouseApi,
@@ -32,6 +32,7 @@ function diffColor(v: number) {
 const TRANG_THAI_LABEL: Record<string, { label: string; color: string }> = {
   nhap: { label: 'Chờ xác nhận', color: 'orange' },
   confirmed: { label: 'Đã xác nhận', color: 'green' },
+  huy: { label: 'Đã huỷ', color: 'red' },
 }
 
 export default function StockAdjustmentsPage() {
@@ -90,9 +91,22 @@ export default function StockAdjustmentsPage() {
     mutationFn: (id: number) => warehouseApi.confirmStockAdjustment(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['stock-adjustments'] })
+      qc.invalidateQueries({ queryKey: ['ton-kho'] })
+      qc.invalidateQueries({ queryKey: ['ton-kho-kiem-ke'] })
       message.success('Đã xác nhận phiếu kiểm kê')
     },
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xác nhận phiếu'),
+  })
+
+  const cancelMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.cancelStockAdjustment(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['stock-adjustments'] })
+      qc.invalidateQueries({ queryKey: ['ton-kho'] })
+      qc.invalidateQueries({ queryKey: ['ton-kho-kiem-ke'] })
+      message.success('Đã huỷ phiếu kiểm kê')
+    },
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi huỷ phiếu'),
   })
 
   const deleteMut = useMutation({
@@ -270,42 +284,65 @@ export default function StockAdjustmentsPage() {
       },
     },
     {
-      title: '', width: 110,
+      title: '', width: 140,
       render: (_: unknown, r: StockAdjustment) => (
         <Space size={4}>
-          <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintAdjustment(r)} />
+          <Tooltip title="In phiếu">
+            <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintAdjustment(r)} />
+          </Tooltip>
           {r.trang_thai === 'nhap' && (
-            <Popconfirm
-              title="Xác nhận phiếu kiểm kê?"
-              description="Tồn kho đã được cập nhật khi tạo phiếu. Sau khi xác nhận, phiếu sẽ bị khoá và không thể xoá."
-              onConfirm={() => confirmMut.mutate(r.id)}
-              okText="Xác nhận"
-              cancelText="Huỷ"
-              disabled={!hasPermission('inventory.adjust')}
-            >
-              <Button
-                size="small"
-                type="primary"
-                icon={<CheckCircleOutlined />}
-                loading={confirmMut.isPending}
+            <>
+              <Popconfirm
+                title="Xác nhận phiếu kiểm kê?"
+                description="Sau khi xác nhận, tồn kho thực tế sẽ được cập nhật và ghi sổ kế toán."
+                onConfirm={() => confirmMut.mutate(r.id)}
+                okText="Xác nhận"
+                cancelText="Huỷ"
                 disabled={!hasPermission('inventory.adjust')}
-              />
+              >
+                <Tooltip title="Xác nhận phiếu">
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<CheckCircleOutlined />}
+                    loading={confirmMut.isPending}
+                    disabled={!hasPermission('inventory.adjust')}
+                  />
+                </Tooltip>
+              </Popconfirm>
+              <Popconfirm
+                title="Xoá phiếu kiểm kê nháp?"
+                description="Phiếu nháp chưa thay đổi tồn kho nên có thể xoá an toàn."
+                onConfirm={() => deleteMut.mutate(r.id)}
+                okButtonProps={{ danger: true }}
+                disabled={!hasPermission('inventory.adjust')}
+              >
+                <Tooltip title="Xoá phiếu">
+                  <Button
+                    danger
+                    size="small"
+                    icon={<DeleteOutlined />}
+                    disabled={!hasPermission('inventory.adjust')}
+                  />
+                </Tooltip>
+              </Popconfirm>
+            </>
+          )}
+          {r.trang_thai === 'confirmed' && hasPermission('inventory.adjust') && (
+            <Popconfirm
+              title="Hủy phiếu kiểm kê này?"
+              description="Hoàn trả chênh lệch tồn kho thực tế và đảo bút toán kế toán."
+              onConfirm={() => cancelMut.mutate(r.id)}
+              okButtonProps={{ danger: true }}
+              okText="Hủy phiếu"
+              cancelText="Không"
+              loading={cancelMut.isPending}
+            >
+              <Tooltip title="Hủy phiếu">
+                <Button danger type="text" size="small" icon={<CloseCircleOutlined style={{ color: '#ff4d4f' }} />} />
+              </Tooltip>
             </Popconfirm>
           )}
-          <Popconfirm
-            title="Xoá phiếu kiểm kê?"
-            description={r.trang_thai !== 'nhap' ? 'Chỉ xoá được phiếu ở trạng thái Chờ xác nhận.' : 'Tồn kho sẽ được hoàn về trạng thái trước khi kiểm kê.'}
-            onConfirm={() => deleteMut.mutate(r.id)}
-            okButtonProps={{ danger: true }}
-            disabled={!hasPermission('inventory.adjust') || r.trang_thai !== 'nhap'}
-          >
-            <Button
-              danger
-              size="small"
-              icon={<DeleteOutlined />}
-              disabled={!hasPermission('inventory.adjust') || r.trang_thai !== 'nhap'}
-            />
-          </Popconfirm>
         </Space>
       ),
     },
@@ -391,7 +428,7 @@ export default function StockAdjustmentsPage() {
       >
         <Form form={form} layout="vertical" initialValues={{ ngay: dayjs(), items: [] }}>
           <Alert type="warning" showIcon style={{ marginBottom: 16 }}
-            message="Sau khi lưu, tồn kho sẽ được cập nhật ngay lập tức và không thể hoàn tác (chỉ có thể xoá phiếu để đảo ngược)." />
+            message="Sau khi lưu, phiếu kiểm kê sẽ ở trạng thái Chờ xác nhận (chưa làm thay đổi tồn kho). Thủ kho cần bấm nút 'Xác nhận' ngoài danh sách để thực sự cập nhật số liệu thực tế." />
 
           <Alert type="info" showIcon style={{ marginBottom: 16 }}
             message="Nhập số lượng thực tế sau kiểm kê. Hệ thống sẽ tự động tăng/giảm tồn và lưu lịch sử giao dịch điều chỉnh." />

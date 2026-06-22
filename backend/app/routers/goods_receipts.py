@@ -33,6 +33,7 @@ logger = get_logger(__name__)
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
     nhap_balance as _nhap_balance,
+    xuat_balance as _xuat_balance,
     log_tx as _log_tx,
     get_workshop_warehouse as _get_workshop_warehouse,
 )
@@ -922,6 +923,87 @@ def approve_goods_receipt(gr_id: int, db: Session = Depends(get_db), current_use
     db.refresh(gr)
     logger.info("approved goods_receipt id=%s so_phieu=%s by user=%s", gr_id, gr.so_phieu, current_user.id)
     return {"ok": True, "trang_thai": "da_duyet"}
+
+
+@router.post("/goods-receipts/{gr_id}/cancel")
+def cancel_goods_receipt(
+    gr_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("KE_TOAN_TRUONG", "BGD_GIAM_DOC", "ADMIN")),
+):
+    gr = db.get(GoodsReceipt, gr_id)
+    if not gr:
+        raise HTTPException(404, "Không tìm thấy phiếu nhập")
+    if gr.trang_thai != "da_duyet":
+        raise HTTPException(400, "Chỉ hủy duyệt được phiếu nhập ở trạng thái Đã duyệt")
+
+    # Check if invoice is linked
+    active_invoice = db.query(PurchaseInvoice).filter(
+        PurchaseInvoice.gr_id == gr_id,
+        PurchaseInvoice.trang_thai != "huy",
+    ).first()
+    if active_invoice:
+        raise HTTPException(400, "Không thể hủy nhập kho đã lập hóa đơn mua hàng")
+
+    # Check if purchase return is linked
+    active_return = db.query(PurchaseReturn).filter(
+        PurchaseReturn.gr_id == gr_id,
+        PurchaseReturn.trang_thai != "huy",
+    ).first()
+    if active_return:
+        raise HTTPException(400, "Không thể hủy nhập kho đã có phiếu trả hàng mua")
+
+    # Check if rolls have been used
+    used_rolls = db.query(GiayRoll).filter(
+        GiayRoll.goods_receipt_id == gr_id,
+        GiayRoll.trang_thai.in_(["dang_dung", "da_dung"]),
+    ).first()
+    if used_rolls:
+        raise HTTPException(400, f"Không thể hủy vì cuộn giấy {used_rolls.barcode} đã/đang được sử dụng")
+
+    # Lock balances and deduct
+    for item in gr.items:
+        if gr.warehouse_id:
+            bal = _get_or_create_balance(
+                db, gr.warehouse_id,
+                item.paper_material_id, item.other_material_id,
+                ten_hang=item.ten_hang, don_vi=item.dvt, lock=True
+            )
+            if bal.ton_luong < item.so_luong:
+                raise HTTPException(
+                    400,
+                    f"Không đủ tồn kho để hủy nhập cho {item.ten_hang}: cần trừ {float(item.so_luong):g}, hiện còn {float(bal.ton_luong):g}"
+                )
+            _xuat_balance(bal, item.so_luong, item.ten_hang)
+            _log_tx(db, gr.warehouse_id, "HUY_NHAP_MUA",
+                    item.so_luong, item.don_gia, bal.ton_luong,
+                    "goods_receipts", gr.id, current_user.id,
+                    paper_material_id=item.paper_material_id,
+                    other_material_id=item.other_material_id,
+                    ghi_chu=f"Hủy duyệt nhập kho {gr.so_phieu}")
+
+        if item.po_item_id:
+            poi = db.get(PurchaseOrderItem, item.po_item_id)
+            if poi:
+                poi.so_luong_da_nhan = max(Decimal("0"), (poi.so_luong_da_nhan or Decimal("0")) - item.so_luong)
+                if item.so_cuon is not None and poi.so_cuon is not None:
+                    poi.so_cuon_da_nhan = max(0, (poi.so_cuon_da_nhan or 0) - item.so_cuon)
+
+    if gr.po_id:
+        _recalc_purchase_order_receipt_status(db, gr.po_id)
+
+    # Cancel generated rolls
+    db.query(GiayRoll).filter(GiayRoll.goods_receipt_id == gr_id).update({"trang_thai": "da_huy"})
+
+    # Reverse accounting journal entries
+    acc_service = AccountingService(db)
+    acc_service._reverse_journal_entries("goods_receipts", gr_id)
+
+    gr.trang_thai = "huy"
+    db.commit()
+    db.refresh(gr)
+    logger.info("canceled goods_receipt id=%s so_phieu=%s by user=%s", gr_id, gr.so_phieu, current_user.id)
+    return {"ok": True, "trang_thai": "huy"}
 
 
 @router.post("/goods-receipts/{gr_id}/sync-gia-ban")

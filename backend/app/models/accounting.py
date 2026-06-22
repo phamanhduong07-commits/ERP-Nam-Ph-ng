@@ -755,6 +755,9 @@ class DoiTruChungTu(Base):
     trang_thai: Mapped[str] = mapped_column(String(20), default="da_xac_nhan", index=True)  # da_xac_nhan | da_huy
     tong_tien_doi_tru: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    tk_no: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    tk_co: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    loai_tien: Mapped[str] = mapped_column(String(10), default="VND", nullable=False, server_default="VND")
     phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"), nullable=True, index=True)
     nguoi_xac_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     ngay_xac_nhan: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

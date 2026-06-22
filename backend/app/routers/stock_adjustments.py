@@ -106,85 +106,41 @@ def create_stock_adjustment(
     if all(diff == 0 for _, _, diff in balances):
         raise HTTPException(400, "Khong co chenh lech ton kho de dieu chinh")
 
-    try:
-        adj = StockAdjustment(
-            so_phieu=_gen_so(db, "KK", StockAdjustment),
-            warehouse_id=body.warehouse_id,
-            ngay=body.ngay,
-            ly_do=body.ly_do,
-            ghi_chu=body.ghi_chu,
-            created_by=current_user.id,
-        )
-        db.add(adj)
-        db.flush()
+    adj = StockAdjustment(
+        so_phieu=_gen_so(db, "KK", StockAdjustment),
+        warehouse_id=body.warehouse_id,
+        ngay=body.ngay,
+        ly_do=body.ly_do,
+        ghi_chu=body.ghi_chu,
+        trang_thai="nhap",
+        created_by=current_user.id,
+    )
+    db.add(adj)
+    db.flush()
 
-        wh = _ensure_active_warehouse(db, body.warehouse_id)
-        journal_items_adj = []
-        for it, bal, diff in balances:
-            ten_hang = _balance_item_name(db, bal)
-            don_vi = bal.don_vi or _balance_item_unit(db, bal)
-            don_gia = bal.don_gia_binh_quan or Decimal("0")
+    for it, bal, diff in balances:
+        ten_hang = _balance_item_name(db, bal)
+        don_vi = bal.don_vi or _balance_item_unit(db, bal)
+        don_gia = bal.don_gia_binh_quan or Decimal("0")
 
-            db.add(StockAdjustmentItem(
-                adjustment_id=adj.id,
-                inventory_balance_id=bal.id,
-                paper_material_id=bal.paper_material_id,
-                other_material_id=bal.other_material_id,
-                product_id=bal.product_id,
-                ten_hang=ten_hang,
-                don_vi=don_vi,
-                so_luong_so_sach=bal.ton_luong,
-                so_luong_thuc_te=it.so_luong_thuc_te,
-                chenhlech=diff,
-                don_gia=don_gia,
-                ghi_chu=it.ghi_chu,
-            ))
+        db.add(StockAdjustmentItem(
+            adjustment_id=adj.id,
+            inventory_balance_id=bal.id,
+            paper_material_id=bal.paper_material_id,
+            other_material_id=bal.other_material_id,
+            product_id=bal.product_id,
+            ten_hang=ten_hang,
+            don_vi=don_vi,
+            so_luong_so_sach=bal.ton_luong,
+            so_luong_thuc_te=it.so_luong_thuc_te,
+            chenhlech=diff,
+            don_gia=don_gia,
+            ghi_chu=it.ghi_chu,
+        ))
 
-            if diff > 0:
-                _nhap_balance(bal, diff, don_gia)
-                loai = "DIEU_CHINH_TANG"
-                so_luong_tx = diff
-            else:
-                _xuat_balance(bal, -diff, ten_hang)
-                loai = "DIEU_CHINH_GIAM"
-                so_luong_tx = -diff
-
-            _log_tx(db, body.warehouse_id, loai,
-                    so_luong_tx, don_gia, bal.ton_luong,
-                    "stock_adjustment", adj.id, current_user.id,
-                    paper_material_id=bal.paper_material_id,
-                    other_material_id=bal.other_material_id,
-                    product_id=bal.product_id,
-                    ghi_chu=it.ghi_chu or body.ly_do)
-            journal_items_adj.append({
-                "ten_hang": ten_hang,
-                "so_luong": abs(diff),
-                "don_gia": don_gia,
-                "tk_no": _tk_inventory(bal.paper_material_id, bal.other_material_id, bal.product_id, wh.loai_kho) if diff > 0 else "811",
-                "tk_co": _tk_inventory(bal.paper_material_id, bal.other_material_id, bal.product_id, wh.loai_kho) if diff < 0 else "711",
-            })
-
-        # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
-        acc_service = AccountingService(db)
-        phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
-
-        if not adj.bo_qua_hach_toan:
-            acc_service.post_inventory_journal(
-                ngay=adj.ngay,
-                loai="DIEU_CHINH",
-                chung_tu_loai="stock_adjustment",
-                chung_tu_id=adj.id,
-                phap_nhan_id=phap_nhan_id,
-                phan_xuong_id=wh.phan_xuong_id if wh else None,
-                items=journal_items_adj,
-            )
-
-        db.commit()
-        db.refresh(adj)
-        return _adj_to_dict(adj, db)
-    except Exception:
-        db.rollback()
-        raise
+    db.commit()
+    db.refresh(adj)
+    return _adj_to_dict(adj, db)
 
 
 @router.post("/stock-adjustments/{adj_id}/confirm")
@@ -198,7 +154,144 @@ def confirm_stock_adjustment(
         raise HTTPException(404, "Khong tim thay phieu kiem ke")
     if adj.trang_thai != "nhap":
         raise HTTPException(400, "Phieu da duoc xac nhan hoac da huy")
+
+    wh = _ensure_active_warehouse(db, adj.warehouse_id)
+    journal_items_adj = []
+
+    for it in adj.items:
+        bal = db.get(InventoryBalance, it.inventory_balance_id)
+        if not bal:
+            bal = _get_or_create_balance(
+                db, adj.warehouse_id,
+                it.paper_material_id, it.other_material_id, it.product_id,
+                ten_hang=it.ten_hang, don_vi=it.don_vi
+            )
+
+        # Lock row to avoid race condition
+        db.query(InventoryBalance).filter(InventoryBalance.id == bal.id).with_for_update().first()
+
+        it.so_luong_so_sach = bal.ton_luong
+        it.chenhlech = it.so_luong_thuc_te - bal.ton_luong
+        it.don_gia = bal.don_gia_binh_quan or Decimal("0")
+
+        diff = it.chenhlech
+        don_gia = it.don_gia
+
+        if diff == 0:
+            continue
+
+        if diff > 0:
+            _nhap_balance(bal, diff, don_gia)
+            loai = "DIEU_CHINH_TANG"
+            so_luong_tx = diff
+        else:
+            if bal.ton_luong < -diff:
+                raise HTTPException(400, f"Không đủ tồn kho để giảm điều chỉnh cho {it.ten_hang}: cần giảm {-float(diff):g}, còn {float(bal.ton_luong):g}")
+            _xuat_balance(bal, -diff, it.ten_hang)
+            loai = "DIEU_CHINH_GIAM"
+            so_luong_tx = -diff
+
+        _log_tx(db, adj.warehouse_id, loai,
+                so_luong_tx, don_gia, bal.ton_luong,
+                "stock_adjustment", adj.id, current_user.id,
+                paper_material_id=it.paper_material_id,
+                other_material_id=it.other_material_id,
+                product_id=it.product_id,
+                ghi_chu=it.ghi_chu or adj.ly_do)
+
+        journal_items_adj.append({
+            "ten_hang": it.ten_hang,
+            "so_luong": abs(diff),
+            "don_gia": don_gia,
+            "tk_no": _tk_inventory(it.paper_material_id, it.other_material_id, it.product_id, wh.loai_kho) if diff > 0 else "811",
+            "tk_co": _tk_inventory(it.paper_material_id, it.other_material_id, it.product_id, wh.loai_kho) if diff < 0 else "711",
+        })
+
+    # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
+    acc_service = AccountingService(db)
+    phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
+
+    if not adj.bo_qua_hach_toan and journal_items_adj:
+        acc_service.post_inventory_journal(
+            ngay=adj.ngay,
+            loai="DIEU_CHINH",
+            chung_tu_loai="stock_adjustment",
+            chung_tu_id=adj.id,
+            phap_nhan_id=phap_nhan_id,
+            phan_xuong_id=wh.phan_xuong_id if wh else None,
+            items=journal_items_adj,
+        )
+
     adj.trang_thai = "confirmed"
+    db.commit()
+    db.refresh(adj)
+    return _adj_to_dict(adj, db)
+
+
+@router.post("/stock-adjustments/{adj_id}/cancel")
+def cancel_stock_adjustment(
+    adj_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("KHO_TO_TRUONG", "KE_TOAN_TRUONG", "ADMIN")),
+):
+    adj = db.query(StockAdjustment).options(joinedload(StockAdjustment.items)).filter(StockAdjustment.id == adj_id).first()
+    if not adj:
+        raise HTTPException(404, "Khong tim thay phieu kiem ke")
+    if adj.trang_thai == "nhap":
+        raise HTTPException(400, "Không thể hủy phiếu chưa xác nhận (hãy xóa phiếu)")
+    if adj.trang_thai == "huy":
+        raise HTTPException(400, "Phiếu đã được hủy trước đó")
+
+    # Validate destination balances have enough inventory if we need to deduct
+    for it in adj.items:
+        if it.chenhlech > 0:
+            bal = db.get(InventoryBalance, it.inventory_balance_id)
+            if not bal:
+                bal = _get_or_create_balance(
+                    db, adj.warehouse_id,
+                    it.paper_material_id, it.other_material_id, it.product_id,
+                    ten_hang=it.ten_hang, don_vi=it.don_vi
+                )
+            if bal.ton_luong < it.chenhlech:
+                raise HTTPException(400, f"Không đủ tồn kho để hủy bỏ điều chỉnh tăng cho {it.ten_hang}: cần giảm {float(it.chenhlech):g}, còn {float(bal.ton_luong):g}")
+
+    # Reverse inventory changes
+    for it in adj.items:
+        if it.chenhlech == 0:
+            continue
+        bal = db.get(InventoryBalance, it.inventory_balance_id)
+        if not bal:
+            bal = _get_or_create_balance(
+                db, adj.warehouse_id,
+                it.paper_material_id, it.other_material_id, it.product_id,
+                ten_hang=it.ten_hang, don_vi=it.don_vi
+            )
+
+        # Lock row
+        db.query(InventoryBalance).filter(InventoryBalance.id == bal.id).with_for_update().first()
+
+        if it.chenhlech > 0:
+            _xuat_balance(bal, it.chenhlech, it.ten_hang)
+            loai = "HUY_DIEU_CHINH_GIAM"
+            so_luong_tx = it.chenhlech
+        else:
+            _nhap_balance(bal, -it.chenhlech, it.don_gia)
+            loai = "HUY_DIEU_CHINH_TANG"
+            so_luong_tx = -it.chenhlech
+
+        _log_tx(db, adj.warehouse_id, loai,
+                so_luong_tx, it.don_gia, bal.ton_luong,
+                "stock_adjustment", adj.id, current_user.id,
+                paper_material_id=it.paper_material_id,
+                other_material_id=it.other_material_id,
+                product_id=it.product_id,
+                ghi_chu=f"Hủy phiếu {adj.so_phieu}")
+
+    # Reverse accounting
+    acc_service = AccountingService(db)
+    acc_service._reverse_journal_entries("stock_adjustment", adj_id)
+
+    adj.trang_thai = "huy"
     db.commit()
     db.refresh(adj)
     return _adj_to_dict(adj, db)
@@ -211,34 +304,6 @@ def delete_stock_adjustment(adj_id: int, db: Session = Depends(get_db), current_
         raise HTTPException(404, "Khong tim thay phieu kiem ke")
     if adj.trang_thai != "nhap":
         raise HTTPException(400, "Chi duoc xoa phieu o trang thai Nhap")
-
-    for it in adj.items:
-        bal = _get_or_create_balance(
-            db, adj.warehouse_id,
-            it.paper_material_id, it.other_material_id, it.product_id,
-            ten_hang=it.ten_hang, don_vi=it.don_vi,
-        )
-        if it.chenhlech > 0:
-            _xuat_balance(bal, it.chenhlech, it.ten_hang)
-            _log_tx(db, adj.warehouse_id, "XOA_DIEU_CHINH_TANG",
-                    it.chenhlech, it.don_gia, bal.ton_luong,
-                    "stock_adjustment", adj.id, current_user.id,
-                    paper_material_id=it.paper_material_id,
-                    other_material_id=it.other_material_id,
-                    product_id=it.product_id,
-                    ghi_chu=f"Xóa {adj.so_phieu}")
-        elif it.chenhlech < 0:
-            _nhap_balance(bal, -it.chenhlech, it.don_gia)
-            _log_tx(db, adj.warehouse_id, "XOA_DIEU_CHINH_GIAM",
-                    -it.chenhlech, it.don_gia, bal.ton_luong,
-                    "stock_adjustment", adj.id, current_user.id,
-                    paper_material_id=it.paper_material_id,
-                    other_material_id=it.other_material_id,
-                    product_id=it.product_id,
-                    ghi_chu=f"Xóa {adj.so_phieu}")
-
-    acc_service = AccountingService(db)
-    acc_service._reverse_journal_entries("stock_adjustment", adj_id)
 
     db.delete(adj)
     db.commit()

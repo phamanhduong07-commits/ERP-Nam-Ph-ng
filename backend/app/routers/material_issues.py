@@ -28,6 +28,7 @@ logger = get_logger(__name__)
 
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
+    nhap_balance as _nhap_balance,
     xuat_balance as _xuat_balance,
     log_tx as _log_tx,
     get_workshop_warehouse as _get_workshop_warehouse,
@@ -231,7 +232,7 @@ def export_material_issue_excel(mi_id: int, db: Session = Depends(get_db), _: Us
 def create_material_issue(
     body: MaterialIssueIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("KHO_NHAN_VIEN", "KHO_TO_TRUONG", "ADMIN")),
 ):
     if not body.items:
         raise HTTPException(400, "Phiếu xuất phải có ít nhất 1 dòng hàng")
@@ -251,40 +252,24 @@ def create_material_issue(
     if not _ensure_active_warehouse(db, warehouse_id, {"GIAY_CUON", "NVL_PHU"}):
         raise HTTPException(404, "Không tìm thấy kho")
 
-    # Validate tồn trước
-    for it in body.items:
-        ten_hang, _ = _resolve_nvl_name(db, it.paper_material_id, it.other_material_id, it.ten_hang)
-        bal = _get_or_create_balance(db, warehouse_id,
-                                     it.paper_material_id, it.other_material_id,
-                                     ten_hang=ten_hang or it.ten_hang)
-        if bal.ton_luong < it.so_luong_thuc_xuat:
-            raise HTTPException(400, f"Không đủ tồn: {ten_hang or it.ten_hang} — "
-                                f"cần {float(it.so_luong_thuc_xuat):g}, còn {float(bal.ton_luong):g}")
-
     mi = MaterialIssue(
         so_phieu=_gen_so(db, "XI", MaterialIssue),
         ngay_xuat=body.ngay_xuat,
         production_order_id=body.production_order_id,
         warehouse_id=warehouse_id,
         ghi_chu=body.ghi_chu,
+        trang_thai="nhap",
         created_by=current_user.id,
     )
     db.add(mi)
     db.flush()
 
-    journal_lines_mi: list[dict] = []
     for it in body.items:
         ten_hang, dvt = _resolve_nvl_name(db, it.paper_material_id, it.other_material_id, it.ten_hang)
         if not ten_hang:
             ten_hang = it.ten_hang
         if it.dvt and it.dvt != "Kg":
             dvt = it.dvt
-
-        # Lock row trước khi trừ tồn — tránh race condition concurrent exports
-        bal = _get_or_create_balance(db, warehouse_id,
-                                     it.paper_material_id, it.other_material_id,
-                                     ten_hang=ten_hang, don_vi=dvt, lock=True)
-        don_gia_xuat = bal.don_gia_binh_quan
 
         db.add(MaterialIssueItem(
             issue_id=mi.id,
@@ -294,19 +279,58 @@ def create_material_issue(
             so_luong_ke_hoach=it.so_luong_ke_hoach,
             so_luong_thuc_xuat=it.so_luong_thuc_xuat,
             dvt=dvt,
-            don_gia=don_gia_xuat,
+            don_gia=it.don_gia or Decimal("0"),
             ghi_chu=it.ghi_chu,
         ))
 
-        _xuat_balance(bal, it.so_luong_thuc_xuat, ten_hang)
-        _log_tx(db, warehouse_id, "XUAT_SX",
+    db.commit()
+    db.refresh(mi)
+    logger.info("created draft material_issue id=%s so_phieu=%s by user=%s", mi.id, mi.so_phieu, current_user.id)
+    return _mi_to_dict(mi, db)
+
+
+@router.patch("/material-issues/{mi_id}/approve")
+def approve_material_issue(
+    mi_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("KHO_TO_TRUONG", "ADMIN")),
+):
+    mi = db.get(MaterialIssue, mi_id)
+    if not mi:
+        logger.warning("material_issue id=%s not found", mi_id)
+        raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
+    if mi.trang_thai == "da_xuat":
+        raise HTTPException(400, "Phiếu đã được duyệt xuất")
+    if mi.trang_thai == "huy":
+        raise HTTPException(400, "Không thể duyệt xuất phiếu đã hủy")
+
+    # Validate tồn trước
+    for it in mi.items:
+        bal = _get_or_create_balance(db, mi.warehouse_id,
+                                     it.paper_material_id, it.other_material_id,
+                                     ten_hang=it.ten_hang, don_vi=it.dvt)
+        if bal.ton_luong < it.so_luong_thuc_xuat:
+            raise HTTPException(400, f"Không đủ tồn kho: {it.ten_hang} — "
+                                f"cần {float(it.so_luong_thuc_xuat):g}, còn {float(bal.ton_luong):g}")
+
+    journal_lines_mi: list[dict] = []
+    for it in mi.items:
+        # Lock row trước khi trừ tồn — tránh race condition concurrent exports
+        bal = _get_or_create_balance(db, mi.warehouse_id,
+                                     it.paper_material_id, it.other_material_id,
+                                     ten_hang=it.ten_hang, don_vi=it.dvt, lock=True)
+        don_gia_xuat = bal.don_gia_binh_quan
+        it.don_gia = don_gia_xuat
+
+        _xuat_balance(bal, it.so_luong_thuc_xuat, it.ten_hang)
+        _log_tx(db, mi.warehouse_id, "XUAT_SX",
                 it.so_luong_thuc_xuat, don_gia_xuat, bal.ton_luong,
                 "material_issues", mi.id, current_user.id,
                 paper_material_id=it.paper_material_id,
                 other_material_id=it.other_material_id,
                 ghi_chu=it.ghi_chu)
         journal_lines_mi.append({
-            "ten_hang": ten_hang,
+            "ten_hang": it.ten_hang,
             "so_luong": it.so_luong_thuc_xuat,
             "don_gia": float(don_gia_xuat),
             "tk_no": "154",
@@ -314,11 +338,11 @@ def create_material_issue(
         })
 
     # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
-    acc_service = AccountingService(db)
-    wh = db.get(Warehouse, warehouse_id)
+    wh = db.get(Warehouse, mi.warehouse_id)
     phap_nhan_id = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
 
-    if not mi.bo_qua_hach_toan:
+    if not mi.bo_qua_hach_toan and journal_lines_mi:
+        acc_service = AccountingService(db)
         acc_service.post_inventory_journal(
             ngay=mi.ngay_xuat,
             loai="XUAT_SX",
@@ -329,38 +353,49 @@ def create_material_issue(
             items=journal_lines_mi,
         )
 
+    mi.trang_thai = "da_xuat"
     db.commit()
     db.refresh(mi)
-    return _mi_to_dict(mi, db)
+    logger.info("approved material_issue id=%s so_phieu=%s by user=%s", mi.id, mi.so_phieu, current_user.id)
+    return {"ok": True, "trang_thai": "da_xuat"}
 
 
-class MaterialIssueUpdateIn(BaseModel):
-    ngay_xuat: Optional[date] = None
-    ca: Optional[str] = None
-    ghi_chu: Optional[str] = None
-
-
-@router.put("/material-issues/{mi_id}")
-def update_material_issue(
+@router.post("/material-issues/{mi_id}/cancel")
+def cancel_material_issue(
     mi_id: int,
-    body: MaterialIssueUpdateIn,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("KHO_TO_TRUONG", "ADMIN")),
 ):
     mi = db.get(MaterialIssue, mi_id)
     if not mi:
         raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
-    if mi.trang_thai != "nhap":
-        raise HTTPException(400, "Chỉ sửa được phiếu ở trạng thái Nhập")
-    if body.ngay_xuat is not None:
-        mi.ngay_xuat = body.ngay_xuat
-    if body.ca is not None:
-        mi.ca = body.ca
-    if body.ghi_chu is not None:
-        mi.ghi_chu = body.ghi_chu
+    if mi.trang_thai == "nhap":
+        raise HTTPException(400, "Không thể hủy phiếu chưa duyệt xuất (hãy xóa phiếu)")
+    if mi.trang_thai == "huy":
+        raise HTTPException(400, "Phiếu đã được hủy trước đó")
+
+    # Hoàn trả lại tồn kho
+    for it in mi.items:
+        bal = _get_or_create_balance(db, mi.warehouse_id,
+                                     it.paper_material_id, it.other_material_id,
+                                     ten_hang=it.ten_hang, don_vi=it.dvt)
+        _nhap_balance(bal, it.so_luong_thuc_xuat, it.don_gia)
+        _log_tx(db, mi.warehouse_id, "HUY_XUAT_SX",
+                it.so_luong_thuc_xuat, it.don_gia, bal.ton_luong,
+                "material_issues", mi.id, current_user.id,
+                paper_material_id=it.paper_material_id,
+                other_material_id=it.other_material_id,
+                ghi_chu=f"Hủy phiếu {mi.so_phieu}")
+
+    # Đảo ngược bút toán kế toán
+    acc_service = AccountingService(db)
+    acc_service._reverse_journal_entries("material_issues", mi_id)
+
+    mi.trang_thai = "huy"
     db.commit()
     db.refresh(mi)
-    return _mi_to_dict(mi, db)
+    logger.info("canceled material_issue id=%s so_phieu=%s by user=%s", mi.id, mi.so_phieu, current_user.id)
+    return {"ok": True, "trang_thai": "huy"}
 
 
 @router.delete("/material-issues/{mi_id}")
@@ -368,26 +403,8 @@ def delete_material_issue(mi_id: int, db: Session = Depends(get_db), current_use
     mi = db.get(MaterialIssue, mi_id)
     if not mi:
         raise HTTPException(404, "Không tìm thấy phiếu xuất NVL")
-    if mi.trang_thai == "da_xuat":
-        raise HTTPException(400, "Không thể xoá phiếu đã xuất")
-
-    for it in mi.items:
-        bal = _get_or_create_balance(db, mi.warehouse_id,
-                                     it.paper_material_id, it.other_material_id,
-                                     ten_hang=it.ten_hang, don_vi=it.dvt)
-        bal.ton_luong += it.so_luong_thuc_xuat
-        bal.gia_tri_ton = bal.ton_luong * bal.don_gia_binh_quan
-        bal.cap_nhat_luc = datetime.now(timezone.utc)
-        _log_tx(db, mi.warehouse_id, "XOA_XUAT_SX",
-                it.so_luong_thuc_xuat, it.don_gia, bal.ton_luong,
-                "material_issues", mi.id, current_user.id,
-                paper_material_id=it.paper_material_id,
-                other_material_id=it.other_material_id,
-                ghi_chu=f"Xóa {mi.so_phieu}")
-
-    # Đảo ngược bút toán kế toán
-    acc_service = AccountingService(db)
-    acc_service._reverse_journal_entries("material_issues", mi_id)
+    if mi.trang_thai != "nhap":
+        raise HTTPException(400, "Chỉ được xóa phiếu ở trạng thái Nhập")
 
     db.delete(mi)
     db.commit()

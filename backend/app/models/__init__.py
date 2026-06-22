@@ -41,3 +41,10 @@ import app.models.defect_records  # noqa: F401
 import app.models.yeu_cau_giao_hang  # noqa: F401
 import app.models.media  # noqa: F401
 import app.models.layer_allocation_coefficient  # noqa: F401
+import app.models.danhmuc_cost  # noqa: F401
+import app.models.danhmuc_chung  # noqa: F401
+import app.models.danhmuc_hr  # noqa: F401
+import app.models.danhmuc_nhom  # noqa: F401
+import app.models.loai_tien  # noqa: F401
+import app.models.ngan_hang  # noqa: F401
+

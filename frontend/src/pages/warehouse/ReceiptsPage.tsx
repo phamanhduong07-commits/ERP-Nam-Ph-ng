@@ -8,7 +8,7 @@ import {
 import {
   FileExcelOutlined, FileImageOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
   InboxOutlined, MinusCircleOutlined, CheckCircleOutlined, DollarOutlined,
-  ThunderboltOutlined, UploadOutlined, ScanOutlined, FormOutlined, StarOutlined,
+  ThunderboltOutlined, UploadOutlined, ScanOutlined, FormOutlined, StarOutlined, CloseCircleOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { warehouseApi, CreateGoodsReceiptPayload, CompleteGoodsReceiptPayload, GoodsReceipt } from '../../api/warehouse'
@@ -50,7 +50,8 @@ const fileToBase64 = (file: File): Promise<string> =>
 
 export default function ReceiptsPage() {
   const companyInfo = usePhapNhanForPrint()
-  const { hasPermission, canApprove } = usePermission()
+  const { hasPermission, canApprove, isAdmin, role } = usePermission()
+  const canCancelGR = isAdmin || ['KE_TOAN_TRUONG', 'BGD_GIAM_DOC'].includes(role || '')
   const canViewPrice = hasPermission('production.cost_analysis')
   const canImport = hasPermission('inventory.import')
   const qc = useQueryClient()
@@ -264,6 +265,16 @@ export default function ReceiptsPage() {
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi duyệt phiếu'),
   })
 
+  const cancelMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.cancelGoodsReceipt(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['goods-receipts-nvl'] })
+      qc.invalidateQueries({ queryKey: ['ton-kho'] })
+      message.success('Đã hủy duyệt phiếu nhập kho (hoàn trả tồn kho và đảo bút toán)')
+    },
+    onError: (e: unknown) => message.error(getErrorMessage(e, 'Lỗi hủy duyệt phiếu')),
+  })
+
   const syncGiaBanMut = useMutation({
     mutationFn: (id: number) => warehouseApi.syncGiaBan(id),
     onSuccess: (res) => {
@@ -455,11 +466,13 @@ export default function ReceiptsPage() {
     { title: 'TT', dataIndex: 'trang_thai', width: 105,
       render: (v: string) => {
         if (v === 'nhap_nhanh') return <Tag color="orange">Chờ nhập</Tag>
+        if (v === 'nhap') return <Tag color="orange">Nháp</Tag>
         if (v === 'da_duyet') return <Tag color="green">Đã duyệt</Tag>
+        if (v === 'huy') return <Tag color="red">Đã hủy</Tag>
         return <Tag color="blue">Đã nhập</Tag>
       } },
     {
-      title: '', width: 160,
+      title: '', width: 180,
       render: (_: unknown, r: GoodsReceipt) => {
         const hasPaper = (r.items || []).some(it => it.paper_material_id)
         return (
@@ -476,6 +489,25 @@ export default function ReceiptsPage() {
               <Button size="small" icon={<CheckCircleOutlined />} style={{ color: '#52c41a', borderColor: '#52c41a' }}
                 disabled={r.trang_thai !== 'nhap'} />
             </Popconfirm>
+            {r.trang_thai === 'da_duyet' && canCancelGR && (
+              <Popconfirm
+                title={
+                  <div style={{ maxWidth: 300 }}>
+                    <strong>Hủy duyệt phiếu nhập kho này?</strong>
+                    <br />
+                    Tồn kho sẽ bị trừ ngược, các cuộn giấy đã sinh sẽ bị hủy và bút toán kế toán sẽ bị đảo ngược.
+                  </div>
+                }
+                onConfirm={() => cancelMut.mutate(r.id)}
+                okButtonProps={{ danger: true, loading: cancelMut.isPending }}
+                okText="Hủy duyệt"
+                cancelText="Quay lại"
+              >
+                <Tooltip title="Hủy duyệt phiếu nhập (Reversal)">
+                  <Button size="small" icon={<CloseCircleOutlined />} style={{ color: '#ff4d4f', borderColor: '#ff4d4f' }} />
+                </Tooltip>
+              </Popconfirm>
+            )}
             {r.trang_thai === 'da_duyet' && hasPaper && (
               <Tooltip title="Cập nhật giá bán = giá mua × 1.05 cho vật tư giấy trong phiếu này">
                 <Popconfirm title="Cập nhật giá bán ×1.05?" onConfirm={() => syncGiaBanMut.mutate(r.id)}>
@@ -486,8 +518,8 @@ export default function ReceiptsPage() {
               </Tooltip>
             )}
             <Popconfirm title="Xoá phiếu nhập?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}
-              disabled={r.trang_thai === 'da_duyet'}>
-              <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai === 'da_duyet'} />
+              disabled={r.trang_thai !== 'nhap'}>
+              <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai !== 'nhap'} />
             </Popconfirm>
           </Space>
         )

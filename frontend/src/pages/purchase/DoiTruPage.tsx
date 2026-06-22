@@ -61,6 +61,8 @@ export default function DoiTruPage() {
   const [selectedInvIds, setSelectedInvIds] = useState<number[]>([])
   const [payAmounts, setPayAmounts] = useState<Record<number, number>>({})
   const [invAmounts, setInvAmounts] = useState<Record<number, number>>({})
+  const [tkNo, setTkNo] = useState('3311')
+  const [loaiTien, setLoaiTien] = useState('VND')
 
   useEffect(() => {
     client.get(`${API}/suppliers?limit=500`).then(r => setSuppliers(r.data.items ?? r.data)).catch(() => {})
@@ -110,13 +112,24 @@ export default function DoiTruPage() {
       message.warning('Chọn ít nhất 1 chứng từ thanh toán và 1 chứng từ công nợ'); return
     }
     const pairs = buildPairs(selectedPayIds, selectedInvIds, payAmounts, invAmounts)
-    if (!pairs.length) { message.warning('Không tạo được cặp đối trừ'); return }
+    if (!pairs.length) {
+      const totPay = selectedPayIds.reduce((s, id) => s + (payAmounts[id] ?? 0), 0)
+      const totInv = selectedInvIds.reduce((s, id) => s + (invAmounts[id] ?? 0), 0)
+      message.warning(
+        `Không tạo được cặp đối trừ — Tổng phiếu chi: ${fmt(totPay)} đ / Tổng hóa đơn: ${fmt(totInv)} đ. Kiểm tra số tiền đã nhập.`,
+        5,
+      )
+      return
+    }
     createMut.mutate({
       supplier_id: supplierId,
       ngay_doi_tru: ngayDoiTru.format('YYYY-MM-DD'),
       ghi_chu: ghiChu,
       phap_nhan_id: phapNhanId,
       items: pairs,
+      tk_no: tkNo,
+      tk_co: '1121',
+      loai_tien: loaiTien,
     })
   }
 
@@ -241,7 +254,7 @@ export default function DoiTruPage() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Text strong style={{ whiteSpace: 'nowrap' }}>TK phải trả</Text>
-            <Select defaultValue="3311" style={{ width: 90 }}
+            <Select value={tkNo} onChange={setTkNo} style={{ width: 90 }}
               options={[{ value: '3311', label: '3311' }, { value: '3312', label: '3312' }]} />
           </div>
 
@@ -253,7 +266,7 @@ export default function DoiTruPage() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Text strong>Loại tiền</Text>
-            <Select defaultValue="VND" style={{ width: 80 }} options={[{ value: 'VND', label: 'VND' }]} />
+            <Select value={loaiTien} onChange={setLoaiTien} style={{ width: 80 }} options={[{ value: 'VND', label: 'VND' }]} />
           </div>
 
           <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}

@@ -33,6 +33,8 @@ export default function DoiTruNhieuPage() {
   const [phapNhanId, setPhapNhanId] = useState<number | null>(null)
   const [phapNhanList, setPhapNhanList] = useState<{ id: number; ten_viet_tat: string; ten_phap_nhan: string }[]>([])
   const [allowEdit, setAllowEdit] = useState(false)
+  const [tkNo, setTkNo] = useState('3311')
+  const [loaiTien, setLoaiTien] = useState('VND')
   const [ghiChu, setGhiChu] = useState('')
   const [search, setSearch] = useState('')
   const [supplierList, setSupplierList] = useState<SupplierRow[]>([])
@@ -112,7 +114,7 @@ export default function DoiTruNhieuPage() {
       .filter(s => s.items.length > 0)
 
     if (!suppliers.length) { message.warning('Không có cặp đối trừ hợp lệ'); return }
-    confirmMut.mutate({ ngay_doi_tru: ngayDoiTru.format('YYYY-MM-DD'), ghi_chu: ghiChu, phap_nhan_id: phapNhanId, suppliers })
+    confirmMut.mutate({ ngay_doi_tru: ngayDoiTru.format('YYYY-MM-DD'), ghi_chu: ghiChu, phap_nhan_id: phapNhanId, tk_no: tkNo, tk_co: '1121', loai_tien: loaiTien, suppliers })
   }
 
   const filteredList = useMemo(
@@ -197,7 +199,7 @@ export default function DoiTruNhieuPage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Text strong>Tài khoản phải trả</Text>
-          <Select defaultValue="3311" style={{ width: 90 }}
+          <Select value={tkNo} onChange={setTkNo} style={{ width: 90 }}
             options={[{ value: '3311', label: '3311' }, { value: '3312', label: '3312' }]} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -207,7 +209,7 @@ export default function DoiTruNhieuPage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Text strong>Loại tiền</Text>
-          <Select defaultValue="VND" style={{ width: 80 }} options={[{ value: 'VND', label: 'VND' }]} />
+          <Select value={loaiTien} onChange={setLoaiTien} style={{ width: 80 }} options={[{ value: 'VND', label: 'VND' }]} />
         </div>
         <Button icon={<ReloadOutlined />} onClick={fetchSuppliers} loading={loadingList}
           style={{ background: '#00695c', color: '#fff', border: 'none' }}>

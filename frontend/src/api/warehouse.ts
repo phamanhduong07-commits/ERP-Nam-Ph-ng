@@ -827,6 +827,8 @@ export const warehouseApi = {
   getPhieuChuyen: (id: number) => client.get<PhieuChuyenKho>(`/warehouse/phieu-chuyen/${id}`),
   createPhieuChuyen: (data: CreatePhieuChuyenPayload) => client.post<PhieuChuyenKho>('/warehouse/phieu-chuyen', data),
   deletePhieuChuyen: (id: number) => client.delete(`/warehouse/phieu-chuyen/${id}`),
+  approvePhieuChuyen: (id: number) => client.patch(`/warehouse/phieu-chuyen/${id}/approve`),
+  cancelPhieuChuyen: (id: number) => client.post(`/warehouse/phieu-chuyen/${id}/cancel`),
 
   // Kiem ke / dieu chinh ton kho
   listStockAdjustments: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; tu_ngay?: string; den_ngay?: string }) =>
@@ -835,6 +837,7 @@ export const warehouseApi = {
   createStockAdjustment: (data: CreateStockAdjustmentPayload) => client.post<StockAdjustment>('/warehouse/stock-adjustments', data),
   deleteStockAdjustment: (id: number) => client.delete(`/warehouse/stock-adjustments/${id}`),
   confirmStockAdjustment: (id: number) => client.post<StockAdjustment>(`/warehouse/stock-adjustments/${id}/confirm`),
+  cancelStockAdjustment: (id: number) => client.post<StockAdjustment>(`/warehouse/stock-adjustments/${id}/cancel`),
 
   // Lịch sử giao dịch
   getGiaoDich: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; paper_material_id?: number; other_material_id?: number; product_id?: number; loai_giao_dich?: string; tu_ngay?: string; den_ngay?: string; limit?: number }) =>
@@ -862,6 +865,7 @@ export const warehouseApi = {
   extractImageOcr: (id: number) => client.post<{ raw_text: string; extracted: OcrExtracted; warning?: string }>(`/warehouse/goods-receipts/${id}/extract-image`),
   deleteGoodsReceipt: (id: number) => client.delete(`/warehouse/goods-receipts/${id}`),
   approveGoodsReceipt: (id: number) => client.patch(`/warehouse/goods-receipts/${id}/approve`),
+  cancelGoodsReceipt: (id: number) => client.post(`/warehouse/goods-receipts/${id}/cancel`),
   getGRMatchingStatus: (id: number) => client.get<{
     gr_id: number; so_phieu_gr: string; so_po: string | null; so_hoa_don: string | null
     gia_tri_gr: number; gia_tri_po: number | null; gia_tri_hd: number | null
@@ -878,6 +882,8 @@ export const warehouseApi = {
   getMaterialIssue: (id: number) => client.get<MaterialIssue>(`/warehouse/material-issues/${id}`),
   createMaterialIssue: (data: CreateMaterialIssuePayload) => client.post<MaterialIssue>('/warehouse/material-issues', data),
   deleteMaterialIssue: (id: number) => client.delete(`/warehouse/material-issues/${id}`),
+  approveMaterialIssue: (id: number) => client.patch(`/warehouse/material-issues/${id}/approve`),
+  cancelMaterialIssue: (id: number) => client.post(`/warehouse/material-issues/${id}/cancel`),
 
   // Nhập thành phẩm từ sản xuất (ProductionOutput)
   listProductionOutputs: (params?: { warehouse_id?: number; production_order_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; tu_ngay?: string; den_ngay?: string }) =>

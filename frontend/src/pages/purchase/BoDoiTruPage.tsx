@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import {
   Button, Card, DatePicker, message, Select, Space,
-  Table, Tag, Typography, Popconfirm,
+  Table, Tag, Tooltip, Typography, Popconfirm,
 } from 'antd'
 import { StopOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import client from '../../api/client'
+import { usePermission } from '../../hooks/usePermission'
 import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
@@ -13,6 +14,8 @@ const API = ''
 
 export default function BoDoiTruPage() {
   const qc = useQueryClient()
+  const { isAdmin, role } = usePermission()
+  const canHuy = isAdmin || role === 'KE_TOAN'
   const [supplierId, setSupplierId] = useState<number | null>(null)
   const [phapNhanId, setPhapNhanId] = useState<number | null>(null)
   const [phapNhanList, setPhapNhanList] = useState<{ id: number; ten_viet_tat: string; ten_phap_nhan: string }[]>([])
@@ -40,7 +43,7 @@ export default function BoDoiTruPage() {
         limit: 200,
       },
     }).then(r => r.data),
-    enabled: true,
+    enabled: !!supplierId,
   })
 
   const huyMut = useMutation({
@@ -69,17 +72,20 @@ export default function BoDoiTruPage() {
       title: 'Thao tác', key: 'action',
       render: (row: any) => (
         row.trang_thai === 'da_xac_nhan' ? (
-          <Popconfirm
-            title="Xác nhận hủy đối trừ?"
-            description="Hóa đơn và phiếu chi sẽ trở về trạng thái chưa đối trừ"
-            onConfirm={() => huyMut.mutate(row.id)}
-            okText="Hủy đối trừ" cancelText="Không"
-            okButtonProps={{ danger: true }}
-          >
-            <Button danger size="small" icon={<StopOutlined />} loading={huyMut.isPending}>
-              Bỏ đối trừ
-            </Button>
-          </Popconfirm>
+          <Tooltip title={!canHuy ? 'Chỉ kế toán mới được hủy đối trừ' : ''}>
+            <Popconfirm
+              title="Xác nhận hủy đối trừ?"
+              description="Hóa đơn và phiếu chi sẽ trở về trạng thái chưa đối trừ"
+              onConfirm={() => huyMut.mutate(row.id)}
+              okText="Hủy đối trừ" cancelText="Không"
+              okButtonProps={{ danger: true }}
+              disabled={!canHuy}
+            >
+              <Button danger size="small" icon={<StopOutlined />} loading={huyMut.isPending} disabled={!canHuy}>
+                Bỏ đối trừ
+              </Button>
+            </Popconfirm>
+          </Tooltip>
         ) : null
       ),
     },
@@ -115,6 +121,7 @@ export default function BoDoiTruPage() {
           rowKey="id"
           size="small"
           pagination={{ pageSize: 20 }}
+          locale={{ emptyText: supplierId ? 'Không có đối trừ nào trong khoảng thời gian này' : 'Chọn nhà cung cấp để xem danh sách đối trừ' }}
           expandable={{
             expandedRowRender: (row: any) => (
               <Table

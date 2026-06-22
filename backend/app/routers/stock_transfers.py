@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, aliased, joinedload
 from app.database import get_db
-from app.deps import get_current_user, require_any_permission
+from app.deps import get_current_user, require_any_permission, require_roles
 from app.models.auth import User
 from app.models.master import Warehouse, PaperMaterial, OtherMaterial, Product, PhanXuong, PhapNhan
 from app.models.production import ProductionOrder
@@ -121,8 +121,11 @@ def create_phieu_chuyen(
             tong_nhap = db.query(func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te), 0)).join(
                 PhieuNhapPhoiSong, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id
             ).filter(PhieuNhapPhoiSong.production_order_id == it.production_order_id).scalar() or Decimal("0")
-            tong_chuyen = db.query(func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0)).filter(
-                PhieuChuyenKhoItem.production_order_id == it.production_order_id
+            tong_chuyen = db.query(func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0)).join(
+                PhieuChuyenKho, PhieuChuyenKhoItem.phieu_chuyen_kho_id == PhieuChuyenKho.id
+            ).filter(
+                PhieuChuyenKhoItem.production_order_id == it.production_order_id,
+                PhieuChuyenKho.trang_thai == "da_duyet"
             ).scalar() or Decimal("0")
             ton_tai_nguon = max(Decimal("0"), Decimal(str(tong_nhap)) - Decimal(str(tong_chuyen)))
             if ton_tai_nguon < it.so_luong:
@@ -139,190 +142,293 @@ def create_phieu_chuyen(
                 raise HTTPException(400, f"Không đủ tồn tại kho xuất: {ten_hang} — "
                                     f"cần {float(it.so_luong):g}, còn {float(bal.ton_luong):g}")
 
-    try:
-        phieu = PhieuChuyenKho(
-            so_phieu=_gen_so(db, "CK", PhieuChuyenKho),
-            warehouse_xuat_id=body.warehouse_xuat_id,
-            warehouse_nhap_id=body.warehouse_nhap_id,
-            ngay=body.ngay,
-            ghi_chu=body.ghi_chu,
-            created_by=current_user.id,
-        )
-        db.add(phieu)
-        db.flush()
+    phieu = PhieuChuyenKho(
+        so_phieu=_gen_so(db, "CK", PhieuChuyenKho),
+        warehouse_xuat_id=body.warehouse_xuat_id,
+        warehouse_nhap_id=body.warehouse_nhap_id,
+        ngay=body.ngay,
+        ghi_chu=body.ghi_chu,
+        trang_thai="nhap",
+        created_by=current_user.id,
+    )
+    db.add(phieu)
+    db.flush()
 
-        for it in body.items:
-            is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
-            if is_phoi:
-                # Phôi sóng: chỉ tạo PhieuChuyenKhoItem, KHÔNG dùng InventoryBalance
-                # get_ton_kho_lsx đọc tong_chuyen từ bảng này để tính tồn kho phôi
+    for it in body.items:
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
+        if is_phoi:
+            don_gia_phoi = it.don_gia
+            if (not don_gia_phoi or don_gia_phoi == Decimal("0")) and it.production_order_id:
+                lsx = db.get(ProductionOrder, it.production_order_id)
+                if lsx and lsx.don_gia_noi_bo and lsx.don_gia_noi_bo > 0:
+                    don_gia_phoi = lsx.don_gia_noi_bo
 
-                # Tự động lấy don_gia_noi_bo từ LSX nếu client không truyền (hoặc truyền 0)
-                don_gia_phoi = it.don_gia
-                if (not don_gia_phoi or don_gia_phoi == Decimal("0")) and it.production_order_id:
-                    lsx = db.get(ProductionOrder, it.production_order_id)
-                    if lsx and lsx.don_gia_noi_bo and lsx.don_gia_noi_bo > 0:
-                        don_gia_phoi = lsx.don_gia_noi_bo
+            db.add(PhieuChuyenKhoItem(
+                phieu_chuyen_kho_id=phieu.id,
+                production_order_id=it.production_order_id,
+                paper_material_id=None,
+                other_material_id=None,
+                ten_hang=it.ten_hang or f"LSX #{it.production_order_id}",
+                don_vi=it.don_vi,
+                so_luong=it.so_luong,
+                don_gia=don_gia_phoi,
+                ghi_chu=it.ghi_chu,
+            ))
+        else:
+            ten_hang, don_vi = _resolve_nvl_name(db, it.paper_material_id, it.other_material_id, it.ten_hang)
+            if not ten_hang:
+                ten_hang = it.ten_hang
+            don_vi = it.don_vi or don_vi
 
-                db.add(PhieuChuyenKhoItem(
-                    phieu_chuyen_kho_id=phieu.id,
-                    production_order_id=it.production_order_id,
-                    paper_material_id=None,
-                    other_material_id=None,
-                    ten_hang=it.ten_hang or f"LSX #{it.production_order_id}",
-                    don_vi=it.don_vi,
-                    so_luong=it.so_luong,
-                    don_gia=don_gia_phoi,
-                    ghi_chu=it.ghi_chu,
-                ))
-            else:
-                ten_hang, don_vi = _resolve_nvl_name(db, it.paper_material_id, it.other_material_id, it.ten_hang)
-                if not ten_hang:
-                    ten_hang = it.ten_hang
-                don_vi = it.don_vi or don_vi
+            bal_xuat = _get_or_create_balance(db, body.warehouse_xuat_id,
+                                              it.paper_material_id, it.other_material_id,
+                                              ten_hang=ten_hang, don_vi=don_vi)
+            don_gia_xuat = bal_xuat.don_gia_binh_quan
 
-                # Lấy giá bình quân TRƯỚC khi tạo item — lock row để tránh race condition
-                bal_xuat = _get_or_create_balance(db, body.warehouse_xuat_id,
-                                                  it.paper_material_id, it.other_material_id,
-                                                  ten_hang=ten_hang, don_vi=don_vi, lock=True)
-                don_gia_xuat = bal_xuat.don_gia_binh_quan
+            db.add(PhieuChuyenKhoItem(
+                phieu_chuyen_kho_id=phieu.id,
+                paper_material_id=it.paper_material_id,
+                other_material_id=it.other_material_id,
+                production_order_id=it.production_order_id,
+                ten_hang=ten_hang,
+                don_vi=don_vi,
+                so_luong=it.so_luong,
+                don_gia=don_gia_xuat,
+                ghi_chu=it.ghi_chu,
+            ))
 
-                db.add(PhieuChuyenKhoItem(
-                    phieu_chuyen_kho_id=phieu.id,
+    db.commit()
+    db.refresh(phieu)
+    return _ck_to_dict(phieu, db)
+
+
+@router.patch("/phieu-chuyen/{phieu_id}/approve")
+def approve_phieu_chuyen(
+    phieu_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("KHO_TO_TRUONG", "ADMIN")),
+):
+    phieu = db.get(PhieuChuyenKho, phieu_id)
+    if not phieu:
+        raise HTTPException(404, "Không tìm thấy phiếu chuyển")
+    if phieu.trang_thai == "da_duyet":
+        raise HTTPException(400, "Phiếu đã được duyệt chuyển")
+    if phieu.trang_thai == "huy":
+        raise HTTPException(400, "Không thể duyệt chuyển phiếu đã hủy")
+
+    # Validate balances first
+    for it in phieu.items:
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
+        if is_phoi:
+            tong_nhap = db.query(func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te), 0)).join(
+                PhieuNhapPhoiSong, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id
+            ).filter(PhieuNhapPhoiSong.production_order_id == it.production_order_id).scalar() or Decimal("0")
+            tong_chuyen = db.query(func.coalesce(func.sum(PhieuChuyenKhoItem.so_luong), 0)).join(
+                PhieuChuyenKho, PhieuChuyenKhoItem.phieu_chuyen_kho_id == PhieuChuyenKho.id
+            ).filter(
+                PhieuChuyenKhoItem.production_order_id == it.production_order_id,
+                PhieuChuyenKho.trang_thai == "da_duyet"
+            ).scalar() or Decimal("0")
+            ton_tai_nguon = max(Decimal("0"), Decimal(str(tong_nhap)) - Decimal(str(tong_chuyen)))
+            if ton_tai_nguon < it.so_luong:
+                raise HTTPException(400, f"Không đủ phôi tại kho nguồn: LSX #{it.production_order_id} — "
+                                    f"cần {float(it.so_luong):g}, còn {float(ton_tai_nguon):g}")
+        else:
+            bal_xuat = _get_or_create_balance(db, phieu.warehouse_xuat_id,
+                                              it.paper_material_id, it.other_material_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi)
+            if bal_xuat.ton_luong < it.so_luong:
+                raise HTTPException(400, f"Không đủ tồn tại kho xuất: {it.ten_hang} — "
+                                    f"cần {float(it.so_luong):g}, còn {float(bal_xuat.ton_luong):g}")
+
+    # Process inventory and transaction logging
+    for it in phieu.items:
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
+        if is_phoi:
+            if (not it.don_gia or it.don_gia == Decimal("0")) and it.production_order_id:
+                lsx = db.get(ProductionOrder, it.production_order_id)
+                if lsx and lsx.don_gia_noi_bo and lsx.don_gia_noi_bo > 0:
+                    it.don_gia = lsx.don_gia_noi_bo
+        else:
+            # Lock source balance to prevent race conditions
+            bal_xuat = _get_or_create_balance(db, phieu.warehouse_xuat_id,
+                                              it.paper_material_id, it.other_material_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi, lock=True)
+            don_gia_xuat = bal_xuat.don_gia_binh_quan
+            it.don_gia = don_gia_xuat
+
+            _xuat_balance(bal_xuat, it.so_luong, it.ten_hang)
+            _log_tx(db, phieu.warehouse_xuat_id, "CHUYEN_KHO_XUAT",
+                    it.so_luong, don_gia_xuat, bal_xuat.ton_luong,
+                    "phieu_chuyen_kho", phieu.id, current_user.id,
                     paper_material_id=it.paper_material_id,
                     other_material_id=it.other_material_id,
-                    production_order_id=it.production_order_id,
-                    ten_hang=ten_hang,
-                    don_vi=don_vi,
-                    so_luong=it.so_luong,
-                    don_gia=don_gia_xuat,
-                    ghi_chu=it.ghi_chu,
-                ))
+                    ghi_chu=it.ghi_chu)
 
-                _xuat_balance(bal_xuat, it.so_luong, ten_hang)
-                _log_tx(db, body.warehouse_xuat_id, "CHUYEN_KHO_XUAT",
-                        it.so_luong, don_gia_xuat, bal_xuat.ton_luong,
-                        "phieu_chuyen_kho", phieu.id, current_user.id,
-                        paper_material_id=it.paper_material_id,
-                        other_material_id=it.other_material_id,
-                        ghi_chu=it.ghi_chu)
+            # Add to destination warehouse
+            bal_nhap = _get_or_create_balance(db, phieu.warehouse_nhap_id,
+                                              it.paper_material_id, it.other_material_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi)
+            _nhap_balance(bal_nhap, it.so_luong, don_gia_xuat)
+            _log_tx(db, phieu.warehouse_nhap_id, "CHUYEN_KHO_NHAP",
+                    it.so_luong, don_gia_xuat, bal_nhap.ton_luong,
+                    "phieu_chuyen_kho", phieu.id, current_user.id,
+                    paper_material_id=it.paper_material_id,
+                    other_material_id=it.other_material_id,
+                    ghi_chu=it.ghi_chu)
 
-                bal_nhap = _get_or_create_balance(db, body.warehouse_nhap_id,
-                                                  it.paper_material_id, it.other_material_id,
-                                                  ten_hang=ten_hang, don_vi=don_vi)
-                _nhap_balance(bal_nhap, it.so_luong, don_gia_xuat)
-                _log_tx(db, body.warehouse_nhap_id, "CHUYEN_KHO_NHAP",
-                        it.so_luong, don_gia_xuat, bal_nhap.ton_luong,
-                        "phieu_chuyen_kho", phieu.id, current_user.id,
-                        paper_material_id=it.paper_material_id,
-                        other_material_id=it.other_material_id,
-                        ghi_chu=it.ghi_chu)
+    # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
+    acc_service = AccountingService(db)
+    wh_xuat = db.get(Warehouse, phieu.warehouse_xuat_id)
+    wh_nhap = db.get(Warehouse, phieu.warehouse_nhap_id)
 
-        # ── Ghi sổ kế toán tự động ──────────────────────────────────────────────
-        acc_service = AccountingService(db)
+    phap_nhan_id_xuat = wh_xuat.phan_xuong_obj.phap_nhan_id if wh_xuat and wh_xuat.phan_xuong_obj else None
+    phap_nhan_id_nhap = wh_nhap.phan_xuong_obj.phap_nhan_id if wh_nhap and wh_nhap.phan_xuong_obj else None
 
-        # Lấy thông tin pháp nhân và xưởng — mỗi chiều dùng phap_nhan riêng
-        wh_xuat = db.get(Warehouse, body.warehouse_xuat_id)
-        wh_nhap = db.get(Warehouse, body.warehouse_nhap_id)
+    # Chuẩn bị dữ liệu dòng cho kế toán
+    journal_items = []
+    for it in phieu.items:
+        _product_id = getattr(it, "product_id", None)
+        _is_phoi_item = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
+        tk_kho = "155" if _product_id or it.production_order_id else "152"
 
-        phap_nhan_id_xuat = wh_xuat.phan_xuong_obj.phap_nhan_id if wh_xuat and wh_xuat.phan_xuong_obj else None
-        phap_nhan_id_nhap = wh_nhap.phan_xuong_obj.phap_nhan_id if wh_nhap and wh_nhap.phan_xuong_obj else None
-        phap_nhan_id = phap_nhan_id_xuat  # giữ alias cho bút toán xuất
+        std_price = Decimal("0")
+        if it.paper_material_id:
+            mat = db.get(PaperMaterial, it.paper_material_id)
+            std_price = mat.gia_dinh_muc if mat else Decimal("0")
+        elif it.other_material_id:
+            mat = db.get(OtherMaterial, it.other_material_id)
+            std_price = mat.gia_dinh_muc if mat else Decimal("0")
+        elif _is_phoi_item:
+            std_price = it.don_gia or Decimal("0")
+        elif _product_id:
+            prod = db.get(Product, _product_id)
+            std_price = prod.gia_dinh_muc if prod else Decimal("0")
 
-        # Chuẩn bị dữ liệu dòng cho kế toán
-        journal_items = []
-        for it in phieu.items:
-            # Xác định tài khoản 152 (NVL) hay 155 (Thành phẩm / Phôi sóng)
-            _product_id = getattr(it, "product_id", None)
-            _is_phoi_item = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
-            tk_kho = "155" if _product_id or it.production_order_id else "152"
+        transfer_price = std_price if std_price > 0 else (it.don_gia or Decimal("0"))
+        don_gia_bq = transfer_price if _is_phoi_item else (it.don_gia or Decimal("0"))
 
-            # --- LẤY GIÁ CHUYỂN ---
-            std_price = Decimal("0")
-            if it.paper_material_id:
-                mat = db.get(PaperMaterial, it.paper_material_id)
-                std_price = mat.gia_dinh_muc if mat else Decimal("0")
-            elif it.other_material_id:
-                mat = db.get(OtherMaterial, it.other_material_id)
-                std_price = mat.gia_dinh_muc if mat else Decimal("0")
-            elif _is_phoi_item:
-                # Phôi sóng: dùng giá đã lưu trên item (= don_gia_noi_bo tại thời điểm tạo phiếu)
-                std_price = it.don_gia or Decimal("0")
-            elif _product_id:
-                prod = db.get(Product, _product_id)
-                std_price = prod.gia_dinh_muc if prod else Decimal("0")
+        journal_items.append({
+            "ten_hang": it.ten_hang,
+            "so_luong": it.so_luong,
+            "don_gia": transfer_price,
+            "don_gia_binh_quan": don_gia_bq,
+            "tk_kho": tk_kho
+        })
 
-            # Nếu không có giá, dùng giá bình quân lưu trong item
-            transfer_price = std_price if std_price > 0 else (it.don_gia or Decimal("0"))
+    _existing_journal = db.query(JournalEntry).filter(
+        JournalEntry.chung_tu_loai == "phieu_chuyen_kho",
+        JournalEntry.chung_tu_id == phieu.id,
+    ).first()
 
-            # Phôi không có don_gia_binh_quan từ InventoryBalance → dùng transfer_price cho cả 2 vế
-            don_gia_bq = transfer_price if _is_phoi_item else (it.don_gia or Decimal("0"))
+    if journal_items and not phieu.bo_qua_hach_toan and not _existing_journal:
+        # 1. Bút toán xưởng xuất:
+        lines_xuat = []
+        for i in journal_items:
+            val_std = float(i["so_luong"]) * float(i["don_gia"])      # Giá định mức
+            val_act = float(i["so_luong"]) * float(i.get("don_gia_binh_quan", i["don_gia"])) # Giá bình quân
 
-            journal_items.append({
-                "ten_hang": it.ten_hang,
-                "so_luong": it.so_luong,
-                "don_gia": transfer_price,
-                "don_gia_binh_quan": don_gia_bq,
-                "tk_kho": tk_kho
-            })
+            lines_xuat.append({"so_tk": "1368", "dien_giai": f"DTNB: {i['ten_hang']}", "so_tien_no": val_std, "so_tien_co": 0})
+            lines_xuat.append({"so_tk": "5112", "dien_giai": f"DTNB: {i['ten_hang']}", "so_tien_no": 0, "so_tien_co": val_std})
 
-        # Guard idempotency: không tạo bút toán trùng nếu phiếu đã có journal
-        _existing_journal = db.query(JournalEntry).filter(
-            JournalEntry.chung_tu_loai == "phieu_chuyen_kho",
-            JournalEntry.chung_tu_id == phieu.id,
-        ).first()
+            lines_xuat.append({"so_tk": "6322", "dien_giai": f"GVNB: {i['ten_hang']}", "so_tien_no": val_act, "so_tien_co": 0})
+            lines_xuat.append({"so_tk": i["tk_kho"], "dien_giai": f"GVNB: {i['ten_hang']}", "so_tien_no": 0, "so_tien_co": val_act})
 
-        if journal_items and not phieu.bo_qua_hach_toan and not _existing_journal:
-            # 1. Bút toán xưởng xuất:
-            # - Nợ 1368 / Có 5112 (Doanh thu nội bộ theo Giá định mức)
-            # - Nợ 6322 / Có 152-155 (Giá vốn nội bộ theo Giá bình quân)
-            lines_xuat = []
-            for i in journal_items:
-                val_std = float(i["so_luong"]) * float(i["don_gia"])      # Giá định mức
-                val_act = float(i["so_luong"]) * float(i.get("don_gia_binh_quan", i["don_gia"])) # Giá bình quân
+        acc_service._create_journal_entry(
+            ngay=phieu.ngay,
+            dien_giai=f"Xuất nội bộ: {phieu.so_phieu}",
+            loai_but_toan="chuyen_kho_xuat",
+            chung_tu_loai="phieu_chuyen_kho",
+            chung_tu_id=phieu.id,
+            phap_nhan_id=phap_nhan_id_xuat,
+            phan_xuong_id=wh_xuat.phan_xuong_id,
+            lines=lines_xuat
+        )
 
-                # Cặp Doanh thu nội bộ
-                lines_xuat.append({"so_tk": "1368", "dien_giai": f"DTNB: {i['ten_hang']}", "so_tien_no": val_std, "so_tien_co": 0})
-                lines_xuat.append({"so_tk": "5112", "dien_giai": f"DTNB: {i['ten_hang']}", "so_tien_no": 0, "so_tien_co": val_std})
+        # 2. Bút toán xưởng nhập: Nợ 152-155 / Có 3368
+        acc_service.post_inventory_journal(
+            ngay=phieu.ngay,
+            loai="CHUYEN_KHO_NHAP",
+            chung_tu_loai="phieu_chuyen_kho",
+            chung_tu_id=phieu.id,
+            phap_nhan_id=phap_nhan_id_nhap,
+            phan_xuong_id=wh_nhap.phan_xuong_id,
+            items=[{
+                "ten_hang": i["ten_hang"],
+                "so_luong": i["so_luong"],
+                "don_gia": i["don_gia"],
+                "tk_no": i["tk_kho"],
+                "tk_co": "3368"
+            } for i in journal_items]
+        )
 
-                # Cặp Giá vốn nội bộ
-                lines_xuat.append({"so_tk": "6322", "dien_giai": f"GVNB: {i['ten_hang']}", "so_tien_no": val_act, "so_tien_co": 0})
-                lines_xuat.append({"so_tk": i["tk_kho"], "dien_giai": f"GVNB: {i['ten_hang']}", "so_tien_no": 0, "so_tien_co": val_act})
+    phieu.trang_thai = "da_duyet"
+    db.commit()
+    db.refresh(phieu)
+    return {"ok": True, "trang_thai": "da_duyet"}
 
-            acc_service._create_journal_entry(
-                ngay=phieu.ngay,
-                dien_giai=f"Xuất nội bộ: {phieu.so_phieu}",
-                loai_but_toan="chuyen_kho_xuat",
-                chung_tu_loai="phieu_chuyen_kho",
-                chung_tu_id=phieu.id,
-                phap_nhan_id=phap_nhan_id,
-                phan_xuong_id=wh_xuat.phan_xuong_id,
-                lines=lines_xuat
-            )
 
-            # 2. Bút toán xưởng nhập: Nợ 152-155 / Có 3368 (Theo Giá định mức)
-            acc_service.post_inventory_journal(
-                ngay=phieu.ngay,
-                loai="CHUYEN_KHO_NHAP",
-                chung_tu_loai="phieu_chuyen_kho",
-                chung_tu_id=phieu.id,
-                phap_nhan_id=phap_nhan_id_nhap,
-                phan_xuong_id=wh_nhap.phan_xuong_id,
-                items=[{
-                    "ten_hang": i["ten_hang"],
-                    "so_luong": i["so_luong"],
-                    "don_gia": i["don_gia"],
-                    "tk_no": i["tk_kho"],
-                    "tk_co": "3368"
-                } for i in journal_items]
-            )
+@router.post("/phieu-chuyen/{phieu_id}/cancel")
+def cancel_phieu_chuyen(
+    phieu_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("KHO_TO_TRUONG", "ADMIN")),
+):
+    phieu = db.get(PhieuChuyenKho, phieu_id)
+    if not phieu:
+        raise HTTPException(404, "Không tìm thấy phiếu chuyển")
+    if phieu.trang_thai == "nhap":
+        raise HTTPException(400, "Không thể hủy phiếu chưa duyệt (hãy xóa phiếu)")
+    if phieu.trang_thai == "huy":
+        raise HTTPException(400, "Phiếu đã được hủy trước đó")
 
-        db.commit()
-        db.refresh(phieu)
-        return _ck_to_dict(phieu, db)
-    except Exception:
-        db.rollback()
-        raise
+    # Validate destination balance has enough to deduct
+    for it in phieu.items:
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
+        if not is_phoi:
+            bal_nhap = _get_or_create_balance(db, phieu.warehouse_nhap_id,
+                                              it.paper_material_id, it.other_material_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi)
+            if bal_nhap.ton_luong < it.so_luong:
+                raise HTTPException(400, f"Không đủ tồn tại kho nhận để hoàn trả: {it.ten_hang} — "
+                                    f"cần {float(it.so_luong):g}, còn {float(bal_nhap.ton_luong):g}")
+
+    # Reverse inventory
+    for it in phieu.items:
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
+        if not is_phoi:
+            # Add back to source warehouse
+            bal_xuat = _get_or_create_balance(db, phieu.warehouse_xuat_id,
+                                              it.paper_material_id, it.other_material_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi)
+            _nhap_balance(bal_xuat, it.so_luong, it.don_gia)
+            _log_tx(db, phieu.warehouse_xuat_id, "HUY_CHUYEN_XUAT",
+                    it.so_luong, it.don_gia, bal_xuat.ton_luong,
+                    "phieu_chuyen_kho", phieu.id, current_user.id,
+                    paper_material_id=it.paper_material_id,
+                    other_material_id=it.other_material_id,
+                    ghi_chu=f"Hủy phiếu {phieu.so_phieu}")
+
+            # Deduct from destination warehouse
+            bal_nhap = _get_or_create_balance(db, phieu.warehouse_nhap_id,
+                                              it.paper_material_id, it.other_material_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi, lock=True)
+            _xuat_balance(bal_nhap, it.so_luong, it.ten_hang)
+            _log_tx(db, phieu.warehouse_nhap_id, "HUY_CHUYEN_NHAP",
+                    it.so_luong, it.don_gia, bal_nhap.ton_luong,
+                    "phieu_chuyen_kho", phieu.id, current_user.id,
+                    paper_material_id=it.paper_material_id,
+                    other_material_id=it.other_material_id,
+                    ghi_chu=f"Hủy phiếu {phieu.so_phieu}")
+
+    # Reverse accounting
+    acc_service = AccountingService(db)
+    acc_service._reverse_journal_entries("phieu_chuyen_kho", phieu_id)
+
+    phieu.trang_thai = "huy"
+    db.commit()
+    db.refresh(phieu)
+    return {"ok": True, "trang_thai": "huy"}
 
 
 @router.delete("/phieu-chuyen/{phieu_id}")
@@ -332,42 +438,6 @@ def delete_phieu_chuyen(phieu_id: int, db: Session = Depends(get_db), current_us
         raise HTTPException(404, "Không tìm thấy phiếu chuyển")
     if p.trang_thai != "nhap":
         raise HTTPException(400, "Chỉ được xoá phiếu ở trạng thái Nhập")
-
-    for it in p.items:
-        _is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
-        if _is_phoi:
-            # Phôi sóng không dùng InventoryBalance — tồn kho tự đảo ngược khi xóa PhieuChuyenKhoItem
-            continue
-
-        bal_xuat = _get_or_create_balance(db, p.warehouse_xuat_id,
-                                          it.paper_material_id, it.other_material_id,
-                                          ten_hang=it.ten_hang, don_vi=it.don_vi)
-        bal_xuat.ton_luong += it.so_luong
-        bal_xuat.gia_tri_ton = bal_xuat.ton_luong * bal_xuat.don_gia_binh_quan
-        bal_xuat.cap_nhat_luc = datetime.now(timezone.utc)
-        _log_tx(db, p.warehouse_xuat_id, "XOA_CHUYEN_XUAT",
-                it.so_luong, it.don_gia, bal_xuat.ton_luong,
-                "phieu_chuyen_kho", p.id, current_user.id,
-                paper_material_id=it.paper_material_id,
-                other_material_id=it.other_material_id,
-                ghi_chu=f"Xóa {p.so_phieu}")
-
-        bal_nhap = _get_or_create_balance(db, p.warehouse_nhap_id,
-                                          it.paper_material_id, it.other_material_id,
-                                          ten_hang=it.ten_hang, don_vi=it.don_vi)
-        bal_nhap.ton_luong = max(Decimal("0"), bal_nhap.ton_luong - it.so_luong)
-        bal_nhap.gia_tri_ton = bal_nhap.ton_luong * bal_nhap.don_gia_binh_quan
-        bal_nhap.cap_nhat_luc = datetime.now(timezone.utc)
-        _log_tx(db, p.warehouse_nhap_id, "XOA_CHUYEN_NHAP",
-                it.so_luong, it.don_gia, bal_nhap.ton_luong,
-                "phieu_chuyen_kho", p.id, current_user.id,
-                paper_material_id=it.paper_material_id,
-                other_material_id=it.other_material_id,
-                ghi_chu=f"Xóa {p.so_phieu}")
-
-    # Đảo ngược bút toán kế toán
-    acc_service = AccountingService(db)
-    acc_service._reverse_journal_entries("phieu_chuyen_kho", phieu_id)
 
     db.delete(p)
     db.commit()

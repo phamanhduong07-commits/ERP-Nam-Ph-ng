@@ -3,9 +3,9 @@ import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, DatePicker, Descriptions, Divider, Drawer, Form, Input, InputNumber,
-  Popconfirm, Row, Select, Space, Table, Tag, Typography, message,
+  Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Tooltip,
 } from 'antd'
-import { EyeOutlined, FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined, SwapOutlined, ArrowRightOutlined, MinusCircleOutlined } from '@ant-design/icons'
+import { EyeOutlined, FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined, SwapOutlined, ArrowRightOutlined, MinusCircleOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import { systemApi } from '../../api/system'
 import dayjs from 'dayjs'
 import {
@@ -23,7 +23,7 @@ const { Text } = Typography
 
 export default function TransfersPage() {
   const companyInfo = usePhapNhanForPrint()
-  const { hasPermission } = usePermission()
+  const { hasPermission, canApprove } = usePermission()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -101,6 +101,32 @@ export default function TransfersPage() {
       message.success('Đã xoá phiếu chuyển')
     },
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá phiếu'),
+  })
+
+  const approveMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.approvePhieuChuyen(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['phieu-chuyen'] })
+      qc.invalidateQueries({ queryKey: ['ton-kho'] })
+      message.success('Đã duyệt chuyển kho')
+      if (detailPhieu) {
+        setDetailPhieu(prev => prev ? { ...prev, trang_thai: 'da_duyet' } : null)
+      }
+    },
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi duyệt phiếu'),
+  })
+
+  const cancelMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.cancelPhieuChuyen(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['phieu-chuyen'] })
+      qc.invalidateQueries({ queryKey: ['ton-kho'] })
+      message.success('Đã huỷ phiếu chuyển kho')
+      if (detailPhieu) {
+        setDetailPhieu(prev => prev ? { ...prev, trang_thai: 'huy' } : null)
+      }
+    },
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi huỷ phiếu'),
   })
 
   const phapNhanOptions = Array.from(new Map(
@@ -261,16 +287,42 @@ export default function TransfersPage() {
         </Space>
       ),
     },
-    { title: 'TT', dataIndex: 'trang_thai', width: 100, render: (v: string) => <Tag color={v === 'da_duyet' ? 'green' : 'default'}>{v === 'da_duyet' ? 'Đã duyệt' : 'Nhập'}</Tag> },
+    { title: 'TT', dataIndex: 'trang_thai', width: 100, render: (v: string) => <Tag color={v === 'da_duyet' ? 'green' : v === 'huy' ? 'red' : 'default'}>{v === 'da_duyet' ? 'Đã duyệt' : v === 'huy' ? 'Huỷ' : 'Nhập'}</Tag> },
     { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '—' },
     {
-      title: '', width: 80,
+      title: '', width: 120,
       render: (_: unknown, r: PhieuChuyenKho) => (
         <Space size={4}>
           <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailPhieu(r)} />
-          <Popconfirm title="Xoá phiếu chuyển này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }} disabled={r.trang_thai !== 'nhap' || !hasPermission('inventory.transfer')}>
-            <Button danger size="small" icon={<DeleteOutlined />} disabled={r.trang_thai !== 'nhap' || !hasPermission('inventory.transfer')} />
-          </Popconfirm>
+          {r.trang_thai === 'nhap' && (
+            <>
+              {canApprove && (
+                <Popconfirm title="Duyệt chuyển kho phiếu này?" onConfirm={() => approveMut.mutate(r.id)} okText="Duyệt" cancelText="Không">
+                  <Tooltip title="Duyệt phiếu">
+                    <Button type="text" size="small" icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />} />
+                  </Tooltip>
+                </Popconfirm>
+              )}
+              <Popconfirm title="Xoá phiếu chuyển này?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }} disabled={!hasPermission('inventory.transfer')}>
+                <Tooltip title="Xoá phiếu">
+                  <Button danger size="small" icon={<DeleteOutlined />} disabled={!hasPermission('inventory.transfer')} />
+                </Tooltip>
+              </Popconfirm>
+            </>
+          )}
+          {r.trang_thai === 'da_duyet' && canApprove && (
+            <Popconfirm
+              title="Hủy phiếu chuyển kho này? (Hoàn trả tồn kho và đảo bút toán kế toán)"
+              onConfirm={() => cancelMut.mutate(r.id)}
+              okButtonProps={{ danger: true }}
+              okText="Hủy phiếu"
+              cancelText="Không"
+            >
+              <Tooltip title="Hủy phiếu">
+                <Button type="text" size="small" icon={<CloseCircleOutlined style={{ color: '#ff4d4f' }} />} />
+              </Tooltip>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -367,7 +419,7 @@ export default function TransfersPage() {
       >
         <Form form={form} layout="vertical" initialValues={{ ngay: dayjs() }}>
           <Alert type="info" showIcon style={{ marginBottom: 16 }}
-            message="Phiếu chuyển kho tự động giảm tồn kho nguồn và tăng tồn kho đích trong cùng một giao dịch." />
+            message="Sau khi lưu, phiếu chuyển sẽ ở trạng thái Nháp (chưa làm thay đổi tồn kho). Thủ kho cần bấm nút 'Duyệt' ngoài danh sách để thực sự cập nhật số liệu thực tế." />
 
           <Row gutter={12} align="bottom">
             <Col span={11}>
@@ -543,8 +595,8 @@ export default function TransfersPage() {
             <Descriptions column={2} size="small" bordered>
               <Descriptions.Item label="Ngày">{detailPhieu.ngay}</Descriptions.Item>
               <Descriptions.Item label="Trạng thái">
-                <Tag color={detailPhieu.trang_thai === 'da_duyet' ? 'green' : 'default'}>
-                  {detailPhieu.trang_thai === 'da_duyet' ? 'Đã duyệt' : 'Nhập'}
+                <Tag color={detailPhieu.trang_thai === 'da_duyet' ? 'green' : detailPhieu.trang_thai === 'huy' ? 'red' : 'default'}>
+                  {detailPhieu.trang_thai === 'da_duyet' ? 'Đã duyệt' : detailPhieu.trang_thai === 'huy' ? 'Huỷ' : 'Nhập'}
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Pháp nhân xuất" span={2}>

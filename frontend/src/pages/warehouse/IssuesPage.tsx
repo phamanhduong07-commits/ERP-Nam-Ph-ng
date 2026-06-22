@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import {
   FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
-  ExportOutlined, MinusCircleOutlined,
+  ExportOutlined, MinusCircleOutlined, CheckCircleOutlined, CloseCircleOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
@@ -35,7 +35,7 @@ const DVT_OPTIONS = ['Kg', 'Tấn', 'Cuộn', 'Tờ', 'Cái', 'Bộ', 'Hộp', '
 // ── Tab 1: Danh sách phiếu xuất NVL ─────────────────────────────────────────
 
 function TabDanhSachXuatNVL() {
-  const { hasPermission } = usePermission()
+  const { hasPermission, canApprove } = usePermission()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -120,6 +120,26 @@ function TabDanhSachXuatNVL() {
       message.success('Đã xoá phiếu xuất')
     },
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
+  })
+
+  const approveMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.approveMaterialIssue(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['material-issues'] })
+      qc.invalidateQueries({ queryKey: ['ton-kho-nvl'] })
+      message.success('Đã duyệt phiếu xuất')
+    },
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi duyệt'),
+  })
+
+  const cancelMut = useMutation({
+    mutationFn: (id: number) => warehouseApi.cancelMaterialIssue(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['material-issues'] })
+      qc.invalidateQueries({ queryKey: ['ton-kho-nvl'] })
+      message.success('Đã huỷ phiếu xuất')
+    },
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi huỷ'),
   })
 
   const handleMatSelect = (itemName: number, loai: string, matId: number) => {
@@ -321,7 +341,7 @@ function TabDanhSachXuatNVL() {
       ),
     },
     {
-      title: '', width: 90,
+      title: '', width: 120,
       render: (_: unknown, r: MaterialIssue) => (
         <Space size={4}>
           <Tooltip title="In phiếu">
@@ -332,15 +352,46 @@ function TabDanhSachXuatNVL() {
               style={{ color: '#217346', borderColor: '#217346' }}
               onClick={() => handleExportIssueExcel(r.id, r.so_phieu)} />
           </Tooltip>
-          <Popconfirm
-            title="Xoá phiếu xuất này?"
-            onConfirm={() => deleteMut.mutate(r.id)}
-            okButtonProps={{ danger: true }}
-            disabled={r.trang_thai === 'da_xuat' || !hasPermission('inventory.export')}
-          >
-            <Button danger size="small" icon={<DeleteOutlined />}
-              disabled={r.trang_thai === 'da_xuat' || !hasPermission('inventory.export')} />
-          </Popconfirm>
+          {r.trang_thai === 'nhap' && (
+            <>
+              {canApprove && (
+                <Popconfirm
+                  title="Duyệt xuất kho phiếu này?"
+                  onConfirm={() => approveMut.mutate(r.id)}
+                  okText="Duyệt"
+                  cancelText="Không"
+                >
+                  <Tooltip title="Duyệt phiếu">
+                    <Button type="text" size="small" icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />} />
+                  </Tooltip>
+                </Popconfirm>
+              )}
+              <Popconfirm
+                title="Xoá phiếu xuất này?"
+                onConfirm={() => deleteMut.mutate(r.id)}
+                okButtonProps={{ danger: true }}
+                disabled={!hasPermission('inventory.export')}
+              >
+                <Tooltip title="Xoá phiếu">
+                  <Button danger size="small" icon={<DeleteOutlined />}
+                    disabled={!hasPermission('inventory.export')} />
+                </Tooltip>
+              </Popconfirm>
+            </>
+          )}
+          {r.trang_thai === 'da_xuat' && canApprove && (
+            <Popconfirm
+              title="Hủy phiếu xuất kho này? (Hoàn trả tồn kho và đảo bút toán kế toán)"
+              onConfirm={() => cancelMut.mutate(r.id)}
+              okButtonProps={{ danger: true }}
+              okText="Hủy phiếu"
+              cancelText="Không"
+            >
+              <Tooltip title="Hủy phiếu">
+                <Button type="text" size="small" icon={<CloseCircleOutlined style={{ color: '#ff4d4f' }} />} />
+              </Tooltip>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
