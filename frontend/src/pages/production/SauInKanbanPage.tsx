@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import type { ApiError } from '../../api/types'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
-  Badge, Button, Card, Col, DatePicker, Divider, Empty,
+  Badge, Button, Card, Checkbox, Col, DatePicker, Divider, Empty,
   Form, Input, InputNumber, Modal, Popconfirm,
-  Row, Select, Space, Statistic, Tag, Tabs, Typography, message,
+  Row, Select, Space, Spin, Statistic, Tag, Tabs, Typography, message,
 } from 'antd'
 import {
   AppstoreOutlined, CheckCircleOutlined, DeleteOutlined,
@@ -743,6 +743,32 @@ function ChoTPTab({
   )
 }
 
+// ── Addon state type ─────────────────────────────────────────────────────────
+
+interface AddonParams {
+  chong_tham: number
+  in_flexo_mau: number
+  in_flexo_phu_nen: boolean
+  in_ky_thuat_so: boolean
+  chap_xa: boolean
+  boi: boolean
+  be_so_con: number
+  dan: boolean
+  ghim: boolean
+  can_mang: number
+}
+
+const ADDON_DEFAULT: AddonParams = {
+  chong_tham: 0, in_flexo_mau: 0, in_flexo_phu_nen: false,
+  in_ky_thuat_so: false, chap_xa: false, boi: false,
+  be_so_con: 0, dan: false, ghim: false, can_mang: 0,
+}
+
+const ADDON_LABELS: Record<string, string> = {
+  chong_tham: 'Chống thấm', in_flexo: 'In flexo', in_ky_thuat_so: 'In KTS',
+  chap_xa: 'Chấp xà', boi: 'Bồi', be: 'Bế', dan: 'Dán', ghim: 'Ghim', can_mang: 'Cán màng',
+}
+
 // ── Chuyển BTP Modal ─────────────────────────────────────────────────────────
 
 function ChuyenBTPModal({
@@ -756,6 +782,10 @@ function ChuyenBTPModal({
 }) {
   const [form] = Form.useForm()
   const [saving, setSaving] = useState(false)
+  const [addons, setAddons] = useState<AddonParams>(ADDON_DEFAULT)
+
+  const set = <K extends keyof AddonParams>(k: K, v: AddonParams[K]) =>
+    setAddons(prev => ({ ...prev, [k]: v }))
 
   const { data: allWarehouses = [] } = useQuery({
     queryKey: ['warehouses'],
@@ -769,9 +799,9 @@ function ChuyenBTPModal({
     enabled: open && !!phieu.production_order_id,
   })
 
-  const { data: btpPrice } = useQuery({
-    queryKey: ['btp-price', phieu.production_order_id],
-    queryFn: () => warehouseApi.getBtpPrice({ production_order_id: phieu.production_order_id! }).then(r => r.data),
+  const { data: btpPrice, isFetching: priceFetching } = useQuery({
+    queryKey: ['btp-price', phieu.production_order_id, addons],
+    queryFn: () => warehouseApi.getBtpPrice({ production_order_id: phieu.production_order_id!, ...addons }).then(r => r.data),
     enabled: open && !!phieu.production_order_id,
   })
 
@@ -782,11 +812,15 @@ function ChuyenBTPModal({
   const hasQuotePrice = btpPrice != null && btpPrice.gia_phoi != null
 
   useEffect(() => {
+    if (open) { setAddons(ADDON_DEFAULT); form.resetFields(['don_gia']) }
+  }, [open])
+
+  useEffect(() => {
     if (open && sourceKho) form.setFieldValue('kho_xuat_id', sourceKho.id)
   }, [open, sourceKho?.id])
 
   useEffect(() => {
-    if (btpPrice != null) form.setFieldValue('don_gia', btpPrice.don_gia_btp)
+    if (btpPrice != null) form.setFieldValue('don_gia', Math.round(btpPrice.don_gia_btp))
   }, [btpPrice?.don_gia_btp])
 
   const handleOk = async () => {
@@ -818,6 +852,10 @@ function ChuyenBTPModal({
     }
   }
 
+  const addonBreakdown = btpPrice?.addon_detail
+    ? Object.entries(btpPrice.addon_detail).filter(([, v]) => v > 0)
+    : []
+
   return (
     <Modal
       open={open}
@@ -827,12 +865,13 @@ function ChuyenBTPModal({
       okText="Tạo phiếu chuyển kho"
       cancelText="Huỷ"
       okButtonProps={{ loading: saving }}
-      width={480}
+      width={540}
       destroyOnClose
     >
-      <Card size="small" style={{ background: '#f0f5ff', borderColor: '#adc6ff', marginBottom: 16 }}>
+      {/* Thông tin phiếu */}
+      <Card size="small" style={{ background: '#f0f5ff', borderColor: '#adc6ff', marginBottom: 12 }}>
         <div style={{ fontWeight: 700 }}>{phieu.ten_hang}</div>
-        <Space size={16} style={{ marginTop: 6 }}>
+        <Space size={16} style={{ marginTop: 4 }}>
           {phieu.so_lsx && <Text style={{ fontSize: 12 }}>LSX: <strong>{phieu.so_lsx}</strong></Text>}
           {phieu.so_luong_in_ok != null && (
             <Text style={{ fontSize: 12 }}>
@@ -843,20 +882,135 @@ function ChuyenBTPModal({
       </Card>
 
       {!sourceKho && (
-        <div style={{ color: '#ff4d4f', marginBottom: 12, fontSize: 13 }}>
+        <div style={{ color: '#ff4d4f', marginBottom: 10, fontSize: 13 }}>
           ⚠️ Xưởng hiện tại chưa có kho BTP — tạo kho BTP trong Danh mục &gt; Kho.
         </div>
       )}
+
+      {/* Công đoạn đã làm → tính giá */}
+      <Card
+        size="small"
+        title={<span style={{ fontSize: 13 }}>Công đoạn xưởng này đã làm</span>}
+        style={{ marginBottom: 12, borderColor: '#d9d9d9' }}
+        extra={priceFetching ? <Spin size="small" /> : null}
+      >
+        <Row gutter={[8, 8]} align="middle">
+          {/* Chống thấm */}
+          <Col span={12}>
+            <Space size={6}>
+              <Text style={{ fontSize: 12 }}>Chống thấm:</Text>
+              <Select
+                size="small"
+                value={addons.chong_tham}
+                onChange={v => set('chong_tham', v)}
+                style={{ width: 90 }}
+                options={[{ value: 0, label: 'Không' }, { value: 1, label: '1 mặt' }, { value: 2, label: '2 mặt' }]}
+              />
+            </Space>
+          </Col>
+          {/* Cán màng */}
+          <Col span={12}>
+            <Space size={6}>
+              <Text style={{ fontSize: 12 }}>Cán màng:</Text>
+              <Select
+                size="small"
+                value={addons.can_mang}
+                onChange={v => set('can_mang', v)}
+                style={{ width: 90 }}
+                options={[{ value: 0, label: 'Không' }, { value: 1, label: '1 mặt' }, { value: 2, label: '2 mặt' }]}
+              />
+            </Space>
+          </Col>
+          {/* In flexo */}
+          <Col span={12}>
+            <Space size={6}>
+              <Text style={{ fontSize: 12 }}>In flexo:</Text>
+              <InputNumber
+                size="small"
+                min={0}
+                max={10}
+                value={addons.in_flexo_mau}
+                onChange={v => set('in_flexo_mau', v ?? 0)}
+                style={{ width: 56 }}
+                addonAfter="màu"
+              />
+            </Space>
+          </Col>
+          {/* In flexo phủ nền + In KTS */}
+          <Col span={12}>
+            <Space size={10}>
+              <Checkbox
+                checked={addons.in_flexo_phu_nen}
+                onChange={e => set('in_flexo_phu_nen', e.target.checked)}
+                disabled={addons.in_flexo_mau === 0}
+              >
+                <span style={{ fontSize: 12 }}>Phủ nền</span>
+              </Checkbox>
+              <Checkbox
+                checked={addons.in_ky_thuat_so}
+                onChange={e => set('in_ky_thuat_so', e.target.checked)}
+              >
+                <span style={{ fontSize: 12 }}>In KTS</span>
+              </Checkbox>
+            </Space>
+          </Col>
+          {/* Bế */}
+          <Col span={12}>
+            <Space size={6}>
+              <Text style={{ fontSize: 12 }}>Bế:</Text>
+              <InputNumber
+                size="small"
+                min={0}
+                value={addons.be_so_con}
+                onChange={v => set('be_so_con', v ?? 0)}
+                style={{ width: 56 }}
+                addonAfter="con"
+              />
+            </Space>
+          </Col>
+          {/* Chấp xà, Bồi, Dán, Ghim */}
+          <Col span={12}>
+            <Space size={10} wrap>
+              {(['chap_xa', 'boi', 'dan', 'ghim'] as const).map(k => (
+                <Checkbox key={k} checked={addons[k] as boolean} onChange={e => set(k, e.target.checked)}>
+                  <span style={{ fontSize: 12 }}>{ADDON_LABELS[k] ?? k}</span>
+                </Checkbox>
+              ))}
+            </Space>
+          </Col>
+        </Row>
+
+        {/* Breakdown giá */}
+        {btpPrice && (
+          <div style={{ marginTop: 10, borderTop: '1px dashed #e8e8e8', paddingTop: 8 }}>
+            <Row gutter={8}>
+              <Col span={12}>
+                <Text style={{ fontSize: 11, color: '#888' }}>
+                  Giấy (a+b+e): {hasQuotePrice
+                    ? <strong>{Math.round(btpPrice.gia_phoi!).toLocaleString('vi-VN')}đ</strong>
+                    : <span style={{ color: '#faad14' }}>chưa có BG</span>}
+                </Text>
+              </Col>
+              {addonBreakdown.length > 0 && (
+                <Col span={12}>
+                  {addonBreakdown.map(([k, v]) => (
+                    <div key={k} style={{ fontSize: 11, color: '#595959' }}>
+                      +{ADDON_LABELS[k] ?? k}: <strong>{Math.round(v).toLocaleString('vi-VN')}đ</strong>
+                    </div>
+                  ))}
+                </Col>
+              )}
+            </Row>
+          </div>
+        )}
+      </Card>
 
       <Form form={form} layout="vertical" initialValues={{ so_luong: phieu.so_luong_in_ok, don_gia: 0 }}>
         <Form.Item name="kho_xuat_id" label="Kho xuất" rules={[{ required: true, message: 'Chọn kho xuất' }]}>
           <Select options={btpKhos.map(w => ({ value: w.id, label: w.ten_kho }))} placeholder="Kho BTP xưởng này" />
         </Form.Item>
         <Form.Item name="kho_nhap_id" label="Kho nhập (xưởng nhận)" rules={[{ required: true, message: 'Chọn kho đích' }]}>
-          <Select
-            options={destKhos.map(w => ({ value: w.id, label: w.ten_kho }))}
-            placeholder="Chọn xưởng nhận BTP"
-          />
+          <Select options={destKhos.map(w => ({ value: w.id, label: w.ten_kho }))} placeholder="Chọn xưởng nhận BTP" />
         </Form.Item>
         <Row gutter={12}>
           <Col span={12}>
@@ -867,12 +1021,15 @@ function ChuyenBTPModal({
           <Col span={12}>
             <Form.Item
               name="don_gia"
-              label="Đơn giá nội bộ (đ/cái)"
+              label={
+                <Space size={4}>
+                  <span>Đơn giá nội bộ (đ/cái)</span>
+                  {priceFetching && <Spin size="small" />}
+                </Space>
+              }
               extra={
                 <span style={{ fontSize: 11, color: hasQuotePrice ? '#52c41a' : '#faad14' }}>
-                  {hasQuotePrice
-                    ? `Từ báo giá: ${btpPrice!.gia_phoi!.toLocaleString('vi-VN')}đ/cái`
-                    : 'Không có báo giá — nhập tay'}
+                  {hasQuotePrice ? 'Tự tính từ báo giá + công đoạn' : 'Không có BG — nhập tay'}
                 </span>
               }
             >
