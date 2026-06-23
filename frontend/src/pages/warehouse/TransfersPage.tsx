@@ -229,19 +229,26 @@ export default function TransfersPage() {
 
   const handlePrintDetail = () => {
     if (!detailPhieu) return
-    
-    const cols = [
-      { header: 'STT', key: 'stt', align: 'center' as const },
+
+    const hasBtp = (detailPhieu.items || []).some((it: PhieuKhoItem) => it.production_order_id)
+
+    type ColDef = { header: string; key: string; align?: 'center' | 'right' }
+    const cols: ColDef[] = [
+      { header: 'STT', key: 'stt', align: 'center' },
+      ...(hasBtp ? [{ header: 'LSX', key: 'so_lsx', align: 'center' as const }] : []),
       { header: 'Tên hàng', key: 'ten_hang' },
+      ...(hasBtp ? [{ header: 'Quy cách', key: 'quy_cach' }] : []),
       { header: 'ĐVT', key: 'don_vi', align: 'center' as const },
-      { header: 'Số lượng', key: 'so_luong', align: 'right' as const },
-      { header: 'Đơn giá', key: 'don_gia', align: 'right' as const },
+      { header: 'Số lượng', key: 'so_luong', align: 'right' },
+      { header: 'Đơn giá', key: 'don_gia', align: 'right' },
       { header: 'Ghi chú', key: 'ghi_chu' },
     ]
 
     const itemRows = (detailPhieu.items || []).map((it: PhieuKhoItem, i: number) => ({
       stt: i + 1,
+      so_lsx: ((it as unknown as Record<string, unknown>).so_lsx as string) ?? '—',
       ten_hang: it.ten_hang ?? '',
+      quy_cach: (((it as unknown as Record<string, unknown>).quy_cach || (it as unknown as Record<string, unknown>).kho_cat || '—') as string),
       don_vi: it.don_vi ?? '',
       so_luong: Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
       don_gia: Number(it.don_gia) > 0 ? Number(it.don_gia).toLocaleString('vi-VN') + 'đ' : '—',
@@ -249,15 +256,15 @@ export default function TransfersPage() {
     }))
 
     const table = buildHtmlTable(
-      cols.map(c => ({ header: c.header, align: c.align })), 
+      cols.map(c => ({ header: c.header, align: c.align })),
       itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key] as string | number | null | undefined))
     )
 
     const ngay = detailPhieu.ngay ?? ''
     const [yyyy, mm, dd] = ngay.split('-')
-    
+
     const printData = {
-      subtitle: 'PHIẾU CHUYỂN KHO',
+      subtitle: hasBtp ? 'PHIẾU CHUYỂN BÁN THÀNH PHẨM' : 'PHIẾU CHUYỂN KHO',
       document_number: detailPhieu.so_phieu,
       document_date: ngay ? `${dd}/${mm}/${yyyy}` : '—',
       customer_name: `${detailPhieu.ten_kho_xuat ?? '—'}${detailPhieu.ten_phan_xuong_xuat ? ` (${detailPhieu.ten_phan_xuong_xuat})` : ''}`,

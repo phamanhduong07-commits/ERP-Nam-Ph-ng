@@ -837,7 +837,7 @@ export const warehouseApi = {
   getBtpPrice: (params: { production_order_id: number; chong_tham?: number; in_flexo_mau?: number; in_flexo_phu_nen?: boolean; in_ky_thuat_so?: boolean; chap_xa?: boolean; boi?: boolean; be_so_con?: number; dan?: boolean; ghim?: boolean; can_mang?: number }) =>
     client.get<{ production_order_id: number; ten_hang: string; gia_phoi: number | null; dien_tich: number | null; addon_detail: Record<string, number>; addon_tong: number; don_gia_btp: number; ghi_chu: string }>('/warehouse/btp-price', { params }),
   btpTransferKanban: (data: { production_order_id: number; product_id: number; warehouse_xuat_id: number; warehouse_nhap_id: number; so_luong: number; don_gia: number; ten_hang?: string; ghi_chu?: string; phieu_in_id?: number }) =>
-    client.post<{ ok: boolean; so_phieu_chuyen: string; so_phieu_tp: string }>('/warehouse/btp-transfer-kanban', data),
+    client.post<{ ok: boolean; phieu_chuyen_kho_id: number; so_phieu_chuyen: string; so_phieu_tp: string }>('/warehouse/btp-transfer-kanban', data),
 
   // Kiem ke / dieu chinh ton kho
   listStockAdjustments: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; tu_ngay?: string; den_ngay?: string }) =>

@@ -8,7 +8,7 @@ import {
 } from 'antd'
 import {
   AppstoreOutlined, CheckCircleOutlined, DeleteOutlined,
-  PauseOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined,
+  PauseOutlined, PlayCircleOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined,
   RollbackOutlined, SendOutlined, SettingOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -19,6 +19,7 @@ import { productionOrdersApi } from '../../api/productionOrders'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { socket } from '../../utils/socket'
+import { buildHtmlTable, smartPrintPdf } from '../../utils/exportUtils'
 
 const { Title, Text } = Typography
 
@@ -798,7 +799,7 @@ function ChuyenBTPModal({
   phanXuongId: number | null
   open: boolean
   onClose: () => void
-  onDone: (soPhieu: string) => void
+  onDone: (soPhieu: string, phieuChuyenId: number) => void
 }) {
   const [form] = Form.useForm()
   const [saving, setSaving] = useState(false)
@@ -862,7 +863,7 @@ function ChuyenBTPModal({
       })
       message.success(`Đã chuyển BTP — phiếu ${res.data.so_phieu_chuyen}`)
       form.resetFields()
-      onDone(res.data.so_phieu_chuyen)
+      onDone(res.data.so_phieu_chuyen, res.data.phieu_chuyen_kho_id)
     } catch (e) {
       message.error((e as ApiError)?.response?.data?.detail || 'Lỗi chuyển BTP')
     } finally {
@@ -1070,6 +1071,7 @@ export default function SauInKanbanPage() {
   const [completingPhieu, setCompletingPhieu] = useState<PhieuIn | null>(null)
   const [startDinhHinhPhieu, setStartDinhHinhPhieu] = useState<PhieuIn | null>(null)
   const [chuyenBTPPhieu, setChuyenBTPPhieu] = useState<PhieuIn | null>(null)
+  const [printTransferPhieu, setPrintTransferPhieu] = useState<{ id: number; soPhieu: string } | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
@@ -1121,6 +1123,46 @@ export default function SauInKanbanPage() {
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi xoá'),
     onSettled: () => setDeletingId(null),
   })
+
+  const handlePrintTransfer = async () => {
+    if (!printTransferPhieu) return
+    try {
+      const detail = await warehouseApi.getPhieuChuyen(printTransferPhieu.id).then(r => r.data)
+      const cols = [
+        { header: 'LSX', key: 'so_lsx', align: 'center' as const },
+        { header: 'Tên hàng', key: 'ten_hang' },
+        { header: 'Quy cách', key: 'quy_cach' },
+        { header: 'SL', key: 'so_luong', align: 'right' as const },
+        { header: 'Đơn giá', key: 'don_gia', align: 'right' as const },
+        { header: 'Ghi chú', key: 'ghi_chu' },
+      ]
+      type ItemRow = { so_lsx: string; ten_hang: string; quy_cach: string; so_luong: string; don_gia: string; ghi_chu: string }
+      const rows: ItemRow[] = ((detail.items || []) as unknown as Record<string, unknown>[]).map(it => ({
+        so_lsx: (it.so_lsx as string) ?? '—',
+        ten_hang: (it.ten_hang as string) ?? '',
+        quy_cach: ((it.quy_cach || it.kho_cat || '—') as string),
+        so_luong: Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
+        don_gia: Number(it.don_gia) > 0 ? Number(it.don_gia).toLocaleString('vi-VN') + 'đ' : '—',
+        ghi_chu: (it.ghi_chu as string) ?? '',
+      }))
+      const table = buildHtmlTable(
+        cols.map(c => ({ header: c.header, align: c.align })),
+        rows.map(row => cols.map(c => row[c.key as keyof ItemRow]))
+      )
+      const [yyyy, mm, dd] = (detail.ngay ?? '').split('-')
+      await smartPrintPdf('WAREHOUSE_TRANSFER', {
+        subtitle: 'PHIẾU CHUYỂN BÁN THÀNH PHẨM',
+        document_number: detail.so_phieu,
+        document_date: detail.ngay ? `${dd}/${mm}/${yyyy}` : '—',
+        customer_name: `${detail.ten_kho_xuat ?? '—'}${detail.ten_phan_xuong_xuat ? ` (${detail.ten_phan_xuong_xuat})` : ''}`,
+        delivery_address: `${detail.ten_kho_nhap ?? '—'}${detail.ten_phan_xuong_nhap ? ` (${detail.ten_phan_xuong_nhap})` : ''}`,
+        body_html: table,
+        footer_html: detail.ghi_chu ?? '',
+      }, detail.phap_nhan_id_for_print ?? undefined)
+    } catch (e) {
+      message.error('Không thể in phiếu — ' + ((e as Error).message || ''))
+    }
+  }
 
   const handleTamDung = (phieu: PhieuIn) => {
     setPauseReason('')
@@ -1316,9 +1358,31 @@ export default function SauInKanbanPage() {
           phanXuongId={phanXuongId ?? null}
           open
           onClose={() => setChuyenBTPPhieu(null)}
-          onDone={() => { setChuyenBTPPhieu(null); invalidate() }}
+          onDone={(soPhieu, phieuChuyenId) => {
+            setChuyenBTPPhieu(null)
+            invalidate()
+            setPrintTransferPhieu({ id: phieuChuyenId, soPhieu })
+          }}
         />
       )}
+
+      <Modal
+        open={!!printTransferPhieu}
+        title={`Phiếu ${printTransferPhieu?.soPhieu ?? ''} đã tạo thành công`}
+        onCancel={() => setPrintTransferPhieu(null)}
+        footer={[
+          <Button key="print" type="primary" icon={<PrinterOutlined />} onClick={handlePrintTransfer}>
+            In phiếu chuyển
+          </Button>,
+          <Button key="close" onClick={() => setPrintTransferPhieu(null)}>
+            Đóng
+          </Button>,
+        ]}
+        width={400}
+        destroyOnClose
+      >
+        <p>BTP đã được chuyển kho thành công. In phiếu để cả hai bên thủ kho ký xác nhận.</p>
+      </Modal>
 
       <Modal
         open={!!pausingPhieu}
