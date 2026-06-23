@@ -769,14 +769,25 @@ function ChuyenBTPModal({
     enabled: open && !!phieu.production_order_id,
   })
 
+  const { data: btpPrice } = useQuery({
+    queryKey: ['btp-price', phieu.production_order_id],
+    queryFn: () => warehouseApi.getBtpPrice({ production_order_id: phieu.production_order_id! }).then(r => r.data),
+    enabled: open && !!phieu.production_order_id,
+  })
+
   const btpKhos = allWarehouses.filter(w => w.loai_kho === 'BTP' && w.trang_thai)
   const sourceKho = btpKhos.find(w => w.phan_xuong_id === phanXuongId)
   const destKhos = btpKhos.filter(w => w.phan_xuong_id !== phanXuongId)
   const productId = lsx?.items?.[0]?.product_id ?? null
+  const hasQuotePrice = btpPrice != null && btpPrice.gia_phoi != null
 
   useEffect(() => {
     if (open && sourceKho) form.setFieldValue('kho_xuat_id', sourceKho.id)
   }, [open, sourceKho?.id])
+
+  useEffect(() => {
+    if (btpPrice != null) form.setFieldValue('don_gia', btpPrice.don_gia_btp)
+  }, [btpPrice?.don_gia_btp])
 
   const handleOk = async () => {
     const v = await form.validateFields()
@@ -854,7 +865,17 @@ function ChuyenBTPModal({
             </Form.Item>
           </Col>
           <Col span={12}>
-            <Form.Item name="don_gia" label="Đơn giá nội bộ (đ/cái)">
+            <Form.Item
+              name="don_gia"
+              label="Đơn giá nội bộ (đ/cái)"
+              extra={
+                <span style={{ fontSize: 11, color: hasQuotePrice ? '#52c41a' : '#faad14' }}>
+                  {hasQuotePrice
+                    ? `Từ báo giá: ${btpPrice!.gia_phoi!.toLocaleString('vi-VN')}đ/cái`
+                    : 'Không có báo giá — nhập tay'}
+                </span>
+              }
+            >
               <InputNumber style={{ width: '100%' }} min={0} formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
             </Form.Item>
           </Col>
