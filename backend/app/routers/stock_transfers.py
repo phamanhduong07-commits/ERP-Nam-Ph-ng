@@ -18,7 +18,7 @@ from app.models.sales import SalesOrder, SalesOrderItem, QuoteItem
 from app.models.addon_rate import AddonRate
 from app.models.accounting import JournalEntry
 from app.models.warehouse_doc import (
-    PhieuChuyenKho, PhieuChuyenKhoItem,
+    PhieuChuyenKho, PhieuChuyenKhoItem, ProductionOutput,
 )
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.cd2 import PhieuIn
@@ -938,4 +938,135 @@ def get_btp_price(
         "addon_tong": round(addon, 2),
         "don_gia_btp": don_gia_btp,
         "ghi_chu": "Giá gợi ý — hoạch toán nội bộ" if gia_phoi else "Không tìm thấy gia_phoi từ báo giá — cần nhập tay",
+    }
+
+
+# ── BTP Transfer Kanban — atomic endpoint ────────────────────────────────────
+
+class BtpTransferKanbanIn(BaseModel):
+    production_order_id: int          # LSX xưởng A (sẽ là parent của child LSX)
+    product_id: int
+    warehouse_xuat_id: int            # kho BTP xưởng A
+    warehouse_nhap_id: int            # kho BTP xưởng B
+    so_luong: Decimal = Field(..., gt=0)
+    don_gia: Decimal = Field(Decimal("0"), ge=0)
+    ten_hang: str = ""
+    ghi_chu: Optional[str] = None
+
+
+@router.post("/btp-transfer-kanban", status_code=201)
+def btp_transfer_kanban(
+    body: BtpTransferKanbanIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Chuyển BTP từ kanban xưởng A → kanban xưởng B trong 1 giao dịch.
+
+    3 bước tự động:
+    1. Tạo ProductionOutput → ghi BTP vào kho BTP xưởng A (InventoryBalance += so_luong)
+    2. Tạo PhieuChuyenKho is_btp
+    3. Approve phiếu → trừ kho A, cộng kho B + tạo child LSX + PhieuIn(cho_dinh_hinh) tại xưởng B
+    """
+    if body.warehouse_xuat_id == body.warehouse_nhap_id:
+        raise HTTPException(400, "Kho xuất và kho nhận phải khác nhau")
+
+    lsx = db.get(ProductionOrder, body.production_order_id)
+    if not lsx:
+        raise HTTPException(404, "Không tìm thấy lệnh sản xuất")
+
+    wh_xuat = db.get(Warehouse, body.warehouse_xuat_id)
+    wh_nhap = db.get(Warehouse, body.warehouse_nhap_id)
+    if not wh_xuat or not wh_nhap:
+        raise HTTPException(404, "Không tìm thấy kho")
+
+    prod = db.get(Product, body.product_id)
+    ten_hang = body.ten_hang or (prod.ten_san_pham if prod else f"SP #{body.product_id}")
+    don_vi = (getattr(prod, "dvt", None) or "Cái") if prod else "Cái"
+
+    # ── Bước 1: Tạo ProductionOutput → ghi BTP vào kho xuất ──────────────────
+    po_out = ProductionOutput(
+        so_phieu=_gen_so(db, "TP", ProductionOutput),
+        ngay_nhap=date.today(),
+        production_order_id=body.production_order_id,
+        warehouse_id=body.warehouse_xuat_id,
+        product_id=body.product_id,
+        ten_hang=ten_hang,
+        so_luong_nhap=body.so_luong,
+        so_luong_loi=Decimal("0"),
+        dvt=don_vi,
+        don_gia_xuat_xuong=body.don_gia,
+        ghi_chu=f"Tự động từ Chuyển BTP kanban — {body.ghi_chu or ''}".strip(" —"),
+        created_by=current_user.id,
+    )
+    db.add(po_out)
+    db.flush()
+
+    bal_src = _get_or_create_balance(db, body.warehouse_xuat_id,
+                                     product_id=body.product_id,
+                                     ten_hang=ten_hang, don_vi=don_vi)
+    _nhap_balance(bal_src, body.so_luong, body.don_gia)
+    _log_tx(db, body.warehouse_xuat_id, "NHAP_SX",
+            body.so_luong, body.don_gia, bal_src.ton_luong,
+            "production_outputs", po_out.id, current_user.id,
+            product_id=body.product_id)
+
+    # ── Bước 2: Tạo PhieuChuyenKho (is_btp) ─────────────────────────────────
+    phieu = PhieuChuyenKho(
+        so_phieu=_gen_so(db, "CK", PhieuChuyenKho),
+        warehouse_xuat_id=body.warehouse_xuat_id,
+        warehouse_nhap_id=body.warehouse_nhap_id,
+        ngay=date.today(),
+        ghi_chu=body.ghi_chu,
+        trang_thai="nhap",
+        created_by=current_user.id,
+    )
+    db.add(phieu)
+    db.flush()
+
+    db.add(PhieuChuyenKhoItem(
+        phieu_chuyen_kho_id=phieu.id,
+        product_id=body.product_id,
+        production_order_id=body.production_order_id,
+        paper_material_id=None,
+        other_material_id=None,
+        ten_hang=ten_hang,
+        don_vi=don_vi,
+        so_luong=body.so_luong,
+        don_gia=body.don_gia,
+        ghi_chu=body.ghi_chu,
+    ))
+    db.flush()
+
+    # ── Bước 3: Approve (xuat kho A, nhap kho B, tạo child LSX + PhieuIn) ────
+    bal_xuat = _get_or_create_balance(db, body.warehouse_xuat_id,
+                                      product_id=body.product_id,
+                                      ten_hang=ten_hang, don_vi=don_vi, lock=True)
+    _xuat_balance(bal_xuat, body.so_luong, ten_hang)
+    _log_tx(db, body.warehouse_xuat_id, "CHUYEN_KHO_XUAT",
+            body.so_luong, body.don_gia, bal_xuat.ton_luong,
+            "phieu_chuyen_kho", phieu.id, current_user.id,
+            product_id=body.product_id, ghi_chu=body.ghi_chu)
+
+    bal_nhap = _get_or_create_balance(db, body.warehouse_nhap_id,
+                                      product_id=body.product_id,
+                                      ten_hang=ten_hang, don_vi=don_vi)
+    _nhap_balance(bal_nhap, body.so_luong, body.don_gia)
+    _log_tx(db, body.warehouse_nhap_id, "CHUYEN_KHO_NHAP",
+            body.so_luong, body.don_gia, bal_nhap.ton_luong,
+            "phieu_chuyen_kho", phieu.id, current_user.id,
+            product_id=body.product_id, ghi_chu=body.ghi_chu)
+
+    _auto_create_btp_workflow(
+        db, body.production_order_id, body.product_id,
+        body.so_luong, body.warehouse_nhap_id, current_user.id,
+    )
+
+    phieu.trang_thai = "da_duyet"
+    db.commit()
+    db.refresh(phieu)
+
+    return {
+        "ok": True,
+        "so_phieu_chuyen": phieu.so_phieu,
+        "so_phieu_tp": po_out.so_phieu,
     }

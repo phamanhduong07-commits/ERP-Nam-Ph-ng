@@ -825,28 +825,24 @@ function ChuyenBTPModal({
 
   const handleOk = async () => {
     const v = await form.validateFields()
+    if (!productId) { message.error('LSX chưa liên kết sản phẩm'); return }
     setSaving(true)
     try {
-      const res = await warehouseApi.createPhieuChuyen({
+      const res = await warehouseApi.btpTransferKanban({
+        production_order_id: phieu.production_order_id!,
+        product_id: productId,
         warehouse_xuat_id: v.kho_xuat_id,
         warehouse_nhap_id: v.kho_nhap_id,
-        ngay: dayjs().format('YYYY-MM-DD'),
+        so_luong: v.so_luong,
+        don_gia: v.don_gia ?? 0,
+        ten_hang: phieu.ten_hang || '',
         ghi_chu: v.ghi_chu || undefined,
-        items: [{
-          paper_material_id: null,
-          other_material_id: null,
-          product_id: productId,
-          ten_hang: phieu.ten_hang || '',
-          don_vi: 'Cái',
-          so_luong: v.so_luong,
-          don_gia: v.don_gia ?? 0,
-        }],
       })
-      message.success(`Đã tạo phiếu chuyển kho ${res.data.so_phieu}`)
+      message.success(`Đã chuyển BTP — phiếu ${res.data.so_phieu_chuyen}`)
       form.resetFields()
-      onDone(res.data.so_phieu)
+      onDone(res.data.so_phieu_chuyen)
     } catch (e) {
-      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu')
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi chuyển BTP')
     } finally {
       setSaving(false)
     }
@@ -862,7 +858,7 @@ function ChuyenBTPModal({
       title={<Space><SendOutlined />Chuyển BTP sang xưởng khác</Space>}
       onCancel={onClose}
       onOk={handleOk}
-      okText="Tạo phiếu chuyển kho"
+      okText="Chuyển BTP ngay"
       cancelText="Huỷ"
       okButtonProps={{ loading: saving }}
       width={540}
