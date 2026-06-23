@@ -90,9 +90,8 @@ def get_template(ma_mau: str, phap_nhan_id: Optional[int] = None, strict: bool =
         tpl = query.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first()
         if tpl:
             return tpl
-        if strict:
-            raise HTTPException(404, f"Khong tim thay mau in {key} cho phap nhan ID {phap_nhan_id}")
-        tpl = query.first()
+        # Fallback: global template (phap_nhan_id IS NULL), then any
+        tpl = query.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or query.first()
     else:
         tpl = query.filter(PrintTemplate.phap_nhan_id.is_(None)).first()
         if not tpl:

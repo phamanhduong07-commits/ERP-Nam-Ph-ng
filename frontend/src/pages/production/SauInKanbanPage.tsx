@@ -827,8 +827,9 @@ function ChuyenBTPModal({
   })
 
   const btpKhos = allWarehouses.filter(w => w.loai_kho === 'BTP' && w.trang_thai)
-  const sourceKho = btpKhos.find(w => w.phan_xuong_id === phanXuongId)
-  const destKhos = btpKhos.filter(w => w.phan_xuong_id !== phanXuongId)
+  const lsxPxId = lsx?.phan_xuong_id ?? phanXuongId
+  const sourceKho = btpKhos.find(w => w.phan_xuong_id === lsxPxId)
+  const destKhos = btpKhos.filter(w => w.phan_xuong_id !== lsxPxId)
   const productId = lsx?.items?.[0]?.product_id ?? null
   const hasQuotePrice = btpPrice != null && btpPrice.gia_phoi != null
 
@@ -838,7 +839,7 @@ function ChuyenBTPModal({
 
   useEffect(() => {
     if (open && sourceKho) form.setFieldValue('kho_xuat_id', sourceKho.id)
-  }, [open, sourceKho?.id])
+  }, [open, sourceKho?.id, lsx?.phan_xuong_id])
 
   useEffect(() => {
     if (btpPrice != null) form.setFieldValue('don_gia', Math.round(btpPrice.don_gia_btp))
@@ -900,9 +901,14 @@ function ChuyenBTPModal({
         </Space>
       </Card>
 
-      {!sourceKho && (
+      {!sourceKho && btpKhos.length === 0 && (
         <div style={{ color: '#ff4d4f', marginBottom: 10, fontSize: 13 }}>
-          ⚠️ Xưởng hiện tại chưa có kho BTP — tạo kho BTP trong Danh mục &gt; Kho.
+          ⚠️ Chưa có kho BTP nào — tạo kho BTP trong Danh mục &gt; Kho.
+        </div>
+      )}
+      {!sourceKho && btpKhos.length > 0 && (
+        <div style={{ color: '#fa8c16', marginBottom: 10, fontSize: 13 }}>
+          ℹ️ Không tìm thấy kho BTP của xưởng này — chọn kho xuất thủ công bên dưới.
         </div>
       )}
 
