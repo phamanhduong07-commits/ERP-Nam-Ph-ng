@@ -972,6 +972,12 @@ def btp_transfer_kanban(
     if body.warehouse_xuat_id == body.warehouse_nhap_id:
         raise HTTPException(400, "Kho xuất và kho nhận phải khác nhau")
 
+    # ── Idempotency: nếu PhieuIn gốc đã chuyển rồi thì từ chối ───────────────
+    if body.phieu_in_id:
+        src_pi = db.get(PhieuIn, body.phieu_in_id)
+        if src_pi and src_pi.trang_thai == "da_chuyen_btp":
+            raise HTTPException(400, "Phiếu in này đã được chuyển BTP rồi")
+
     lsx = db.get(ProductionOrder, body.production_order_id)
     if not lsx:
         raise HTTPException(404, "Không tìm thấy lệnh sản xuất")
@@ -982,97 +988,148 @@ def btp_transfer_kanban(
         raise HTTPException(404, "Không tìm thấy kho")
 
     prod = db.get(Product, body.product_id)
-    ten_hang = body.ten_hang or (prod.ten_san_pham if prod else f"SP #{body.product_id}")
-    don_vi = (getattr(prod, "dvt", None) or "Cái") if prod else "Cái"
+    if not prod:
+        raise HTTPException(404, f"Không tìm thấy sản phẩm #{body.product_id}")
+    ten_hang = body.ten_hang or prod.ten_san_pham
+    don_vi = getattr(prod, "dvt", None) or "Cái"
 
-    # ── Bước 1: Tạo ProductionOutput → ghi BTP vào kho xuất ──────────────────
-    po_out = ProductionOutput(
-        so_phieu=_gen_so(db, "TP", ProductionOutput),
-        ngay_nhap=date.today(),
-        production_order_id=body.production_order_id,
-        warehouse_id=body.warehouse_xuat_id,
-        product_id=body.product_id,
-        ten_hang=ten_hang,
-        so_luong_nhap=body.so_luong,
-        so_luong_loi=Decimal("0"),
-        dvt=don_vi,
-        don_gia_xuat_xuong=body.don_gia,
-        ghi_chu=f"Tự động từ Chuyển BTP kanban — {body.ghi_chu or ''}".strip(" —"),
-        created_by=current_user.id,
-    )
-    db.add(po_out)
-    db.flush()
+    try:
+        # ── Bước 1: Tạo ProductionOutput → ghi BTP vào kho xuất ──────────────────
+        po_out = ProductionOutput(
+            so_phieu=_gen_so(db, "TP", ProductionOutput),
+            ngay_nhap=date.today(),
+            production_order_id=body.production_order_id,
+            warehouse_id=body.warehouse_xuat_id,
+            product_id=body.product_id,
+            ten_hang=ten_hang,
+            so_luong_nhap=body.so_luong,
+            so_luong_loi=Decimal("0"),
+            dvt=don_vi,
+            don_gia_xuat_xuong=body.don_gia,
+            ghi_chu=f"Tự động từ Chuyển BTP kanban — {body.ghi_chu or ''}".strip(" —"),
+            created_by=current_user.id,
+        )
+        db.add(po_out)
+        db.flush()
 
-    bal_src = _get_or_create_balance(db, body.warehouse_xuat_id,
-                                     product_id=body.product_id,
-                                     ten_hang=ten_hang, don_vi=don_vi)
-    _nhap_balance(bal_src, body.so_luong, body.don_gia)
-    _log_tx(db, body.warehouse_xuat_id, "NHAP_SX",
-            body.so_luong, body.don_gia, bal_src.ton_luong,
-            "production_outputs", po_out.id, current_user.id,
-            product_id=body.product_id)
+        bal_src = _get_or_create_balance(db, body.warehouse_xuat_id,
+                                         product_id=body.product_id,
+                                         ten_hang=ten_hang, don_vi=don_vi)
+        _nhap_balance(bal_src, body.so_luong, body.don_gia)
+        _log_tx(db, body.warehouse_xuat_id, "NHAP_SX",
+                body.so_luong, body.don_gia, bal_src.ton_luong,
+                "production_outputs", po_out.id, current_user.id,
+                product_id=body.product_id)
 
-    # ── Bước 2: Tạo PhieuChuyenKho (is_btp) ─────────────────────────────────
-    phieu = PhieuChuyenKho(
-        so_phieu=_gen_so(db, "CK", PhieuChuyenKho),
-        warehouse_xuat_id=body.warehouse_xuat_id,
-        warehouse_nhap_id=body.warehouse_nhap_id,
-        ngay=date.today(),
-        ghi_chu=body.ghi_chu,
-        trang_thai="nhap",
-        created_by=current_user.id,
-    )
-    db.add(phieu)
-    db.flush()
+        # ── Bước 2: Tạo PhieuChuyenKho (is_btp) ─────────────────────────────────
+        phieu = PhieuChuyenKho(
+            so_phieu=_gen_so(db, "CK", PhieuChuyenKho),
+            warehouse_xuat_id=body.warehouse_xuat_id,
+            warehouse_nhap_id=body.warehouse_nhap_id,
+            ngay=date.today(),
+            ghi_chu=body.ghi_chu,
+            trang_thai="nhap",
+            created_by=current_user.id,
+        )
+        db.add(phieu)
+        db.flush()
 
-    db.add(PhieuChuyenKhoItem(
-        phieu_chuyen_kho_id=phieu.id,
-        product_id=body.product_id,
-        production_order_id=body.production_order_id,
-        paper_material_id=None,
-        other_material_id=None,
-        ten_hang=ten_hang,
-        don_vi=don_vi,
-        so_luong=body.so_luong,
-        don_gia=body.don_gia,
-        ghi_chu=body.ghi_chu,
-    ))
-    db.flush()
+        db.add(PhieuChuyenKhoItem(
+            phieu_chuyen_kho_id=phieu.id,
+            product_id=body.product_id,
+            production_order_id=body.production_order_id,
+            paper_material_id=None,
+            other_material_id=None,
+            ten_hang=ten_hang,
+            don_vi=don_vi,
+            so_luong=body.so_luong,
+            don_gia=body.don_gia,
+            ghi_chu=body.ghi_chu,
+        ))
+        db.flush()
 
-    # ── Bước 3: Approve (xuat kho A, nhap kho B, tạo child LSX + PhieuIn) ────
-    bal_xuat = _get_or_create_balance(db, body.warehouse_xuat_id,
-                                      product_id=body.product_id,
-                                      ten_hang=ten_hang, don_vi=don_vi, lock=True)
-    _xuat_balance(bal_xuat, body.so_luong, ten_hang)
-    _log_tx(db, body.warehouse_xuat_id, "CHUYEN_KHO_XUAT",
-            body.so_luong, body.don_gia, bal_xuat.ton_luong,
-            "phieu_chuyen_kho", phieu.id, current_user.id,
-            product_id=body.product_id, ghi_chu=body.ghi_chu)
+        # ── Bước 3: Approve (xuat kho A, nhap kho B, tạo child LSX + PhieuIn) ────
+        bal_xuat = _get_or_create_balance(db, body.warehouse_xuat_id,
+                                          product_id=body.product_id,
+                                          ten_hang=ten_hang, don_vi=don_vi, lock=True)
+        _xuat_balance(bal_xuat, body.so_luong, ten_hang)
+        _log_tx(db, body.warehouse_xuat_id, "CHUYEN_KHO_XUAT",
+                body.so_luong, body.don_gia, bal_xuat.ton_luong,
+                "phieu_chuyen_kho", phieu.id, current_user.id,
+                product_id=body.product_id, ghi_chu=body.ghi_chu)
 
-    bal_nhap = _get_or_create_balance(db, body.warehouse_nhap_id,
-                                      product_id=body.product_id,
-                                      ten_hang=ten_hang, don_vi=don_vi)
-    _nhap_balance(bal_nhap, body.so_luong, body.don_gia)
-    _log_tx(db, body.warehouse_nhap_id, "CHUYEN_KHO_NHAP",
-            body.so_luong, body.don_gia, bal_nhap.ton_luong,
-            "phieu_chuyen_kho", phieu.id, current_user.id,
-            product_id=body.product_id, ghi_chu=body.ghi_chu)
+        bal_nhap = _get_or_create_balance(db, body.warehouse_nhap_id,
+                                          product_id=body.product_id,
+                                          ten_hang=ten_hang, don_vi=don_vi)
+        _nhap_balance(bal_nhap, body.so_luong, body.don_gia)
+        _log_tx(db, body.warehouse_nhap_id, "CHUYEN_KHO_NHAP",
+                body.so_luong, body.don_gia, bal_nhap.ton_luong,
+                "phieu_chuyen_kho", phieu.id, current_user.id,
+                product_id=body.product_id, ghi_chu=body.ghi_chu)
 
-    _auto_create_btp_workflow(
-        db, body.production_order_id, body.product_id,
-        body.so_luong, body.warehouse_nhap_id, current_user.id,
-    )
+        _auto_create_btp_workflow(
+            db, body.production_order_id, body.product_id,
+            body.so_luong, body.warehouse_nhap_id, current_user.id,
+        )
 
-    phieu.trang_thai = "da_duyet"
+        phieu.trang_thai = "da_duyet"
 
-    # Đánh dấu PhieuIn gốc ở xưởng A đã chuyển → ẩn khỏi kanban
-    if body.phieu_in_id:
-        src_phieu_in = db.get(PhieuIn, body.phieu_in_id)
-        if src_phieu_in:
-            src_phieu_in.trang_thai = "da_chuyen_btp"
+        # ── Ghi sổ kế toán (cùng pattern approve_phieu_chuyen) ─────────────────
+        don_gia_vnd = float(body.don_gia)
+        so_luong_f  = float(body.so_luong)
+        val = don_gia_vnd * so_luong_f
+        if val > 0:
+            phap_nhan_xuat = (wh_xuat.phan_xuong_obj.phap_nhan_id
+                              if wh_xuat and wh_xuat.phan_xuong_obj else None)
+            phap_nhan_nhap = (wh_nhap.phan_xuong_obj.phap_nhan_id
+                              if wh_nhap and wh_nhap.phan_xuong_obj else None)
+            acc = AccountingService(db)
+            acc._create_journal_entry(
+                ngay=date.today(),
+                dien_giai=f"Xuất BTP nội bộ: {phieu.so_phieu}",
+                loai_but_toan="chuyen_kho_xuat",
+                chung_tu_loai="phieu_chuyen_kho",
+                chung_tu_id=phieu.id,
+                phap_nhan_id=phap_nhan_xuat,
+                phan_xuong_id=wh_xuat.phan_xuong_id,
+                lines=[
+                    {"so_tk": "1368", "dien_giai": f"DTNB: {ten_hang}", "so_tien_no": val, "so_tien_co": 0},
+                    {"so_tk": "5112", "dien_giai": f"DTNB: {ten_hang}", "so_tien_no": 0, "so_tien_co": val},
+                    {"so_tk": "6322", "dien_giai": f"GVNB: {ten_hang}", "so_tien_no": val, "so_tien_co": 0},
+                    {"so_tk": "155",  "dien_giai": f"GVNB: {ten_hang}", "so_tien_no": 0, "so_tien_co": val},
+                ],
+            )
+            acc.post_inventory_journal(
+                ngay=date.today(),
+                loai="CHUYEN_KHO_NHAP",
+                chung_tu_loai="phieu_chuyen_kho",
+                chung_tu_id=phieu.id,
+                phap_nhan_id=phap_nhan_nhap,
+                phan_xuong_id=wh_nhap.phan_xuong_id,
+                items=[{
+                    "ten_hang": ten_hang,
+                    "so_luong": body.so_luong,
+                    "don_gia": body.don_gia,
+                    "tk_no": "155",
+                    "tk_co": "3368",
+                }],
+            )
 
-    db.commit()
-    db.refresh(phieu)
+        # Đánh dấu PhieuIn gốc ở xưởng A đã chuyển → ẩn khỏi kanban
+        if body.phieu_in_id:
+            src_phieu_in = db.get(PhieuIn, body.phieu_in_id)
+            if src_phieu_in:
+                src_phieu_in.trang_thai = "da_chuyen_btp"
+
+        db.commit()
+        db.refresh(phieu)
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(500, f"Lỗi khi chuyển BTP: {exc}") from exc
 
     return {
         "ok": True,

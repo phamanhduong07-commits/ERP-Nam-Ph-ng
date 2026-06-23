@@ -79,12 +79,32 @@ function PhieuCard({ phieu, actions }: { phieu: PhieuIn; actions: React.ReactNod
                 </Text>
               </Col>
             )}
+            {phieu.so_luong_in_ok == null && phieu.so_luong_phoi != null && phieu.so_luong_phoi > 0 && (
+              <Col>
+                <Text style={{ fontSize: 11, color: '#888' }}>SL </Text>
+                <Text strong style={{ color: '#722ed1', fontSize: 12 }}>
+                  {phieu.so_luong_phoi.toLocaleString('vi-VN')}
+                </Text>
+              </Col>
+            )}
             {phieu.so_luong_sau_in_ok != null && (
               <Col>
                 <Text style={{ fontSize: 11, color: '#888' }}>TP OK </Text>
                 <Text strong style={{ color: '#13c2c2', fontSize: 12 }}>
                   {phieu.so_luong_sau_in_ok.toLocaleString('vi-VN')}
                 </Text>
+              </Col>
+            )}
+            {phieu.kho_tt != null && (
+              <Col>
+                <Text style={{ fontSize: 11, color: '#888' }}>Khổ </Text>
+                <Text strong style={{ fontSize: 12 }}>{phieu.kho_tt}</Text>
+              </Col>
+            )}
+            {phieu.dai_tt != null && (
+              <Col>
+                <Text style={{ fontSize: 11, color: '#888' }}>Cắt </Text>
+                <Text strong style={{ fontSize: 12 }}>{phieu.dai_tt}</Text>
               </Col>
             )}
             {phieu.quy_cach && (
@@ -825,11 +845,12 @@ function ChuyenBTPModal({
 
   const handleOk = async () => {
     const v = await form.validateFields()
+    if (!phieu.production_order_id) { message.error('Phiếu chưa liên kết LSX'); return }
     if (!productId) { message.error('LSX chưa liên kết sản phẩm'); return }
     setSaving(true)
     try {
       const res = await warehouseApi.btpTransferKanban({
-        production_order_id: phieu.production_order_id!,
+        production_order_id: phieu.production_order_id,
         product_id: productId,
         warehouse_xuat_id: v.kho_xuat_id,
         warehouse_nhap_id: v.kho_nhap_id,
