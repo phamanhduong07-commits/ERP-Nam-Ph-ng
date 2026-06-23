@@ -1156,7 +1156,7 @@ export default function SauInKanbanPage() {
         rows.map(row => cols.map(c => row[c.key as keyof ItemRow]))
       )
       const [yyyy, mm, dd] = (detail.ngay ?? '').split('-')
-      await smartPrintPdf('WAREHOUSE_TRANSFER', {
+      await smartPrintPdf('BTP_TRANSFER', {
         subtitle: 'PHIẾU CHUYỂN BÁN THÀNH PHẨM',
         document_number: detail.so_phieu,
         document_date: detail.ngay ? `${dd}/${mm}/${yyyy}` : '—',

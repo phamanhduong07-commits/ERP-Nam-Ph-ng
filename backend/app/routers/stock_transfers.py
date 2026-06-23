@@ -1133,6 +1133,7 @@ def btp_transfer_kanban(
 
     return {
         "ok": True,
+        "phieu_chuyen_kho_id": phieu.id,
         "so_phieu_chuyen": phieu.so_phieu,
         "so_phieu_tp": po_out.so_phieu,
     }

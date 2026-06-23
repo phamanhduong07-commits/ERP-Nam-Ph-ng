@@ -105,6 +105,26 @@ const DOC_TYPE_SCHEMAS: Record<string, DocTypeSchema> = {
       { title: 'Tài xế', sub: '(Ký, họ tên)', align: 'right' },
     ]
   },
+  'BTP_TRANSFER': {
+    label: 'Phiếu chuyển BTP',
+    showTable: true,
+    defaultColumns: [
+      { key: 'so_lsx', label: 'LSX' },
+      { key: 'ten_hang', label: 'Tên sản phẩm' },
+      { key: 'quy_cach', label: 'Quy cách' },
+      { key: 'so_luong', label: 'Số lượng' },
+      { key: 'don_gia', label: 'Đơn giá nội bộ' },
+      { key: 'ghi_chu', label: 'Ghi chú' },
+    ],
+    customerLabel: 'Xưởng xuất',
+    deliveryLabel: 'Xưởng nhận',
+    easyOverrides: { showDriver: false, showAssistant1: false, showAssistant2: false, showM2: false, showCustomer: true, showDelivery: true, showWarehouse: false },
+    signatures: [
+      { title: 'Thủ kho xuất', sub: '(Ký, họ tên)', align: 'left' },
+      { title: 'Thủ kho nhập', sub: '(Ký, họ tên)', align: 'center' },
+      { title: 'Người lập', sub: '(Ký tên)', align: 'right' },
+    ]
+  },
   'WAREHOUSE_TRANSFER': {
     label: 'Phiếu chuyển kho',
     showTable: true,

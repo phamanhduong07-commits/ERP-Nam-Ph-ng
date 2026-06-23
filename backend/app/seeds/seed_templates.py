@@ -700,6 +700,87 @@ TEMPLATES = [
         }
     },
     {
+        "ma_mau": "BTP_TRANSFER",
+        "ten_mau": "Phiếu Chuyển BTP",
+        "html_content": """
+<style>
+  @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.5; }
+  .hdr { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 8px; border-bottom: 2px solid #1B5E20; margin-bottom: 10px; }
+  .logo img { max-width: 80px; max-height: 65px; object-fit: contain; }
+  .co-name { font-size: 13pt; font-weight: bold; color: #1B5E20; text-transform: uppercase; }
+  .co-info { font-size: 9pt; color: #444; line-height: 1.5; margin-top: 3px; }
+  .ttl { text-align: center; margin: 10px 0 10px; }
+  .ttl h2 { font-size: 17pt; font-weight: bold; letter-spacing: 2px; }
+  .ttl .no { font-size: 9.5pt; color: #444; margin-top: 5px; }
+  .info { font-size: 10.5pt; line-height: 1.9; margin-bottom: 8px; }
+  .r { display: flex; margin: 2px 0; }
+  .r .lbl { min-width: 160px; font-weight: bold; flex-shrink: 0; }
+  .r .val { flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; min-height: 1.2em; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-top: 8px; }
+  table th { background: #1B5E20; color: #fff; padding: 5px 6px; border: 1px solid #ccc; text-align: center; }
+  table td { border: 1px solid #ddd; padding: 4px 6px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .total-row td { font-weight: bold; background: #E8F5E9; }
+  .note { font-size: 10pt; font-style: italic; color: #444; margin-top: 8px; }
+  .sig { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  .sig td { border: none; text-align: center; vertical-align: top; }
+  .s-title { font-weight: bold; font-size: 10.5pt; }
+  .s-sub { font-style: italic; font-size: 8.5pt; color: #555; margin-top: 2px; }
+  .s-space { height: 48px; }
+</style>
+<div class="hdr">
+  <div class="logo">{{logo_img}}</div>
+  <div>
+    <div class="co-name">{{company_name}}</div>
+    <div class="co-info">{{company_details}}</div>
+  </div>
+</div>
+<div class="ttl">
+  <h2>PHIẾU CHUYỂN BÁN THÀNH PHẨM</h2>
+  <div class="no">Số: <strong>{{document_number}}</strong> &nbsp;|&nbsp; Ngày: {{document_date}}</div>
+</div>
+<div class="info">
+  <div class="g2">
+    <div class="r"><span class="lbl">Xưởng xuất:</span><span class="val"><strong>{{customer_name}}</strong></span></div>
+    <div class="r"><span class="lbl">Xưởng nhận:</span><span class="val"><strong>{{delivery_address}}</strong></span></div>
+  </div>
+</div>
+{{body_html}}
+<div class="note">Ghi chú: {{footer_html}}</div>
+<table class="sig">
+  <tr>
+    <td style="width:33%">
+      <div class="s-title">Thủ kho xuất</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:33%">
+      <div class="s-title">Thủ kho nhập</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+    <td style="width:33%">
+      <div class="s-title">Người lập phiếu</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-space"></div>
+    </td>
+  </tr>
+</table>
+""",
+        "variables_meta": {
+            "document_number": "Số phiếu",
+            "document_date": "Ngày chuyển",
+            "customer_name": "Xưởng xuất + kho BTP",
+            "delivery_address": "Xưởng nhận + kho BTP",
+            "body_html": "Bảng BTP (LSX, tên, quy cách, SL, đơn giá)",
+            "footer_html": "Ghi chú"
+        }
+    },
+    {
         "ma_mau": "WAREHOUSE_TRANSFER",
         "ten_mau": "Phiếu Chuyển Kho",
         "html_content": """
