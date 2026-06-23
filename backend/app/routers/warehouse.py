@@ -157,6 +157,7 @@ class ProductionOutputIn(BaseModel):
     so_luong_loi: Decimal = Field(Decimal("0"), ge=0)
     dvt: str = "Thùng"
     don_gia_xuat_xuong: Decimal = Field(Decimal("0"), ge=0)
+    production_session_id: Optional[int] = None  # nếu truyền → auto-fill don_gia_xuat_xuong từ phiên
     ghi_chu: Optional[str] = None
 
 

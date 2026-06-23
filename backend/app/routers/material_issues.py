@@ -51,6 +51,7 @@ router = APIRouter(prefix="/api/warehouse", tags=["warehouse"])
 def list_material_issues(
     warehouse_id: Optional[int] = Query(None),
     production_order_id: Optional[int] = Query(None),
+    production_session_id: Optional[int] = Query(None),
     phan_xuong_id: Optional[int] = Query(None),
     phap_nhan_id: Optional[int] = Query(None),
     tu_ngay: Optional[date] = Query(None),
@@ -65,6 +66,8 @@ def list_material_issues(
         q = q.filter(MaterialIssue.warehouse_id == warehouse_id)
     if production_order_id:
         q = q.filter(MaterialIssue.production_order_id == production_order_id)
+    if production_session_id:
+        q = q.filter(MaterialIssue.production_session_id == production_session_id)
     if phan_xuong_id:
         q = q.filter(Warehouse.phan_xuong_id == phan_xuong_id)
     if phap_nhan_id:
@@ -568,12 +571,14 @@ def _mi_to_dict(mi: MaterialIssue, db: Session) -> dict:
         "ngay_xuat": str(mi.ngay_xuat),
         "ca": mi.ca,
         "production_order_id": mi.production_order_id,
+        "production_session_id": mi.production_session_id,
         "so_lenh": lsx.so_lenh if lsx else "",
         "warehouse_id": mi.warehouse_id,
         "ten_kho": wh.ten_kho if wh else "",
         "ten_xuong": wh.phan_xuong_obj.ten_xuong if wh and wh.phan_xuong_obj else "",
         "phap_nhan_id": phap_nhan_id,
         "trang_thai": mi.trang_thai,
+        "bo_qua_hach_toan": mi.bo_qua_hach_toan,
         "ghi_chu": mi.ghi_chu,
         "created_at": mi.created_at.isoformat() if mi.created_at else None,
         "items": [{

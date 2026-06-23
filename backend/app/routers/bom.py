@@ -33,7 +33,7 @@ from app.schemas.bom import (
     IndirectCostItem,
 )
 from app.models.sales import SalesOrder, Quote, QuoteItem
-from app.models.production import ProductionOrderItem, ProductionOrder
+from app.models.production import ProductionOrderItem, ProductionOrder, ProductionKhauCost
 from app.models.master import PaperMaterial, CauTrucThongDung, Customer
 from app.models.bom import ProductionBOM, ProductionBOMItem, ProductionBOMIndirectCostItem
 from app.models.auth import User
@@ -1304,6 +1304,90 @@ def get_bom(
     return _bom_to_response(_load_bom(bom_id, db))
 
 
+def _populate_khau_costs_from_bom(bom: ProductionBOM, db: Session) -> None:
+    """Tạo (hoặc replace) ProductionKhauCost entries cho POI từ BOM add-on flags.
+
+    Idempotent: xóa hết entries cũ của POI rồi tạo lại.
+    Bỏ qua nếu BOM không liên kết với POI hoặc dien_tich = None / 0.
+    """
+    from datetime import datetime, timezone
+    poi_id = bom.production_order_item_id
+    if not poi_id:
+        return
+
+    dien_tich_1con = float(bom.dien_tich or 0)
+    so_luong = float(bom.so_luong_sx or 0)
+    if dien_tich_1con <= 0 or so_luong <= 0:
+        return
+
+    dien_tich_total = Decimal(str(round(dien_tich_1con * so_luong, 6)))
+
+    # Xóa entries cũ (idempotent)
+    db.query(ProductionKhauCost).filter(
+        ProductionKhauCost.production_order_item_id == poi_id
+    ).delete(synchronize_session=False)
+
+    addon_rates: dict = get_addon_rates_from_db(db) or {}
+    now = datetime.now(timezone.utc)
+
+    def _add(khau: str, don_gia_m2: float, dt: Decimal = dien_tich_total) -> None:
+        if don_gia_m2 <= 0 or dt <= 0:
+            return
+        r = Decimal(str(round(don_gia_m2, 2)))
+        db.add(ProductionKhauCost(
+            production_order_item_id=poi_id,
+            khau=khau,
+            don_gia_m2=r,
+            dien_tich=dt,
+            thanh_tien=dt * r,
+            created_at=now,
+        ))
+
+    # Chống thấm (d1)
+    if bom.chong_tham and bom.chong_tham > 0:
+        key = f"d1_{min(bom.chong_tham, 2)}_mat"
+        _add(f"chong_tham_{bom.chong_tham}mat", addon_rates.get(key, 0))
+
+    # In Flexo (d2) — đơn giá per m²: base + (n-1)*them_mau
+    if bom.in_flexo_mau and bom.in_flexo_mau > 0:
+        base = addon_rates.get("d2_base", 300.0)
+        them = addon_rates.get("d2_them_mau", 50.0)
+        phu_nen = addon_rates.get("d2_phu_nen", 100.0) if bom.in_flexo_phu_nen else 0.0
+        rate_m2 = base + them * (bom.in_flexo_mau - 1) + phu_nen
+        _add(f"in_flexo_{bom.in_flexo_mau}mau", rate_m2)
+
+    # Cán màng (d8)
+    if bom.can_mang and bom.can_mang > 0:
+        key = f"d8_{min(bom.can_mang, 2)}_mat"
+        _add(f"can_mang_{bom.can_mang}mat", addon_rates.get(key, 0))
+
+    # Bồi (d5) — per m²
+    if bom.boi:
+        _add("boi", addon_rates.get("d5_boi", 187.0))
+
+    # Bế (d6) — per pcs, normalize to per m²
+    if bom.be_so_con and bom.be_so_con > 0:
+        be_map = {1: "d6_1_con", 2: "d6_2_con", 4: "d6_4_con", 6: "d6_6_con", 8: "d6_8_con"}
+        key = be_map.get(bom.be_so_con, "d6_2_con")
+        rate_pcs = addon_rates.get(key, 0)
+        if rate_pcs > 0 and float(dien_tich_total) > 0:
+            # Normalize: (đ/thùng × so_luong) / total_m2 = đ/m²
+            rate_m2 = rate_pcs * so_luong / float(dien_tich_total)
+            _add(f"be_{bom.be_so_con}con", rate_m2)
+
+    # Dán (d7) — per pcs, normalize to per m²
+    if bom.dan:
+        rate_pcs = addon_rates.get("d7_dan", 0)
+        if rate_pcs > 0 and float(dien_tich_total) > 0:
+            _add("dan", rate_pcs * so_luong / float(dien_tich_total))
+
+    # Ghim (d7)
+    if bom.ghim:
+        rate_pcs = addon_rates.get("d7_ghim", 0)
+        if rate_pcs > 0 and float(dien_tich_total) > 0:
+            _add("ghim", rate_pcs * so_luong / float(dien_tich_total))
+
+
 @router.patch("/{bom_id}/confirm", response_model=BomResponse)
 def confirm_bom(
     bom_id: int,
@@ -1320,8 +1404,13 @@ def confirm_bom(
             detail=f"BOM đang ở trạng thái '{bom.trang_thai}', không thể xác nhận",
         )
     bom.trang_thai = "confirmed"
+    # Snapshot giá tại thời điểm confirm — dùng cho variance analysis sau này
+    for item in bom.items:
+        item.don_gia_lock = item.don_gia_kg
     # Sync lại gia công sang production_order_items
     _sync_poi_from_bom(bom, db)
+    # Auto-tạo khau_costs từ BOM add-on flags
+    _populate_khau_costs_from_bom(bom, db)
     db.commit()
     return _bom_to_response(_load_bom(bom_id, db))
 

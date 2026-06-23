@@ -176,6 +176,9 @@ class ProductionSession(Base):
     phieu_nhap_phoi_songs: Mapped[list["PhieuNhapPhoiSong"]] = relationship(
         "PhieuNhapPhoiSong", back_populates="session"
     )
+    overheads: Mapped[list["ProductionSessionOverhead"]] = relationship(
+        "ProductionSessionOverhead", back_populates="session", cascade="all, delete-orphan"
+    )
 
 
 class ProductionSessionRoll(Base):
@@ -232,3 +235,55 @@ class ProductionSessionPaperWaste(Base):
 
     session: Mapped["ProductionSession"] = relationship("ProductionSession", back_populates="paper_wastes")
 
+
+class ProductionKhauCost(Base):
+    """Chi phí gia công theo khâu converting (in, bế, dán, chống thấm...) per m².
+
+    Được auto-tạo khi confirm_bom() từ các flag add-on trong BOM.
+    Staff có thể cập nhật dien_tich / don_gia_m2 để reflect actual costs.
+    thanh_tien = dien_tich × don_gia_m2
+    """
+    __tablename__ = "production_khau_costs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    production_order_item_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("production_order_items.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # Tham chiếu addon_rate (nullable — cho phép nhập tay không cần rate có sẵn)
+    addon_rate_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("addon_rates.id", ondelete="SET NULL"), nullable=True
+    )
+    khau: Mapped[str] = mapped_column(String(50), nullable=False)
+    # "in_flexo_2mau", "be_4con", "chong_tham_1mat", "can_mang_2mat", "dan", "boi", etc.
+
+    don_gia_m2: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    dien_tich: Mapped[Decimal] = mapped_column(Numeric(12, 6), nullable=False)  # m² tổng
+    thanh_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    production_order_item: Mapped["ProductionOrderItem"] = relationship(  # type: ignore[name-defined]
+        "ProductionOrderItem", foreign_keys=[production_order_item_id]
+    )
+
+
+class ProductionSessionOverhead(Base):
+    """Chi phí sản xuất chung (overhead) theo phiên — điện, thuê xưởng, khấu hao máy, lương gián tiếp."""
+    __tablename__ = "production_session_overheads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("production_sessions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    loai_chi_phi: Mapped[str] = mapped_column(String(50), nullable=False)
+    # "dien" | "thue_xuong" | "khau_hao_may" | "luong_gian_tiep" | "khac"
+    ten_chi_phi: Mapped[str] = mapped_column(String(200), nullable=False)
+    thanh_tien: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    ghi_chu: Mapped[str | None] = mapped_column(Text)
+
+    session: Mapped["ProductionSession"] = relationship("ProductionSession", back_populates="overheads")

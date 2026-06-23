@@ -644,6 +644,7 @@ export interface GiayRoll {
   dinh_luong: number | null
   ma_nsx: string | null
   warehouse_id: number | null
+  phan_xuong_id: number | null
   ten_kho: string | null
   so_phieu_nhap: string | null
   ngay_nhap: string | null
@@ -1043,7 +1044,7 @@ export const warehouseApi = {
     client.get<{ flute_types: string[] }>(`/warehouse/production-sessions/${session_id}/suggested-flutes`),
 
   getDefaultMaterials: (session_id: number) =>
-    client.get<{ materials: { id: number; ten: string; dvt: string | null }[] }>(
+    client.get<{ materials: { id: number; ten: string; dvt: string | null; gia_mua: number }[] }>(
       `/warehouse/production-sessions/${session_id}/default-materials`
     ),
 
@@ -1066,6 +1067,25 @@ export const warehouseApi = {
     client.post<{ ok: boolean; message: string; new_session_id: number; new_session: ProductionSessionSummary }>(
       `/warehouse/production-sessions/${session_id}/split`,
       body
+    ),
+
+  moveRollToSession: (session_id: number, roll_id: number, target_session_id: number) =>
+    client.patch<{ ok: boolean; roll_id: number; from_session_id: number; to_session_id: number }>(
+      `/warehouse/production-sessions/${session_id}/rolls/${roll_id}/move`,
+      { target_session_id }
+    ),
+
+  getProductionSessionReport: (session_id: number) =>
+    client.get<SessionReportData>(`/warehouse/production-sessions/${session_id}/report`),
+
+  getProductionSessionsSummaryReport: (params?: {
+    tu_ngay?: string
+    den_ngay?: string
+    phan_xuong_id?: number
+  }) =>
+    client.get<{ total: number; items: SessionSummaryReportItem[] }>(
+      '/warehouse/production-sessions/summary-report',
+      { params }
     ),
 }
 
@@ -1169,5 +1189,96 @@ export interface ProductionSessionAllocation {
   total_chi_phi_nvl_phu: number
   total_chi_phi_phien: number
   errors: string[]
+}
+
+// ── Báo cáo quản trị phiên sản xuất ──────────────────────────────────────────
+
+export interface SessionReportLSX {
+  production_order_id: number
+  so_lenh: string | null
+  ten_hang: string
+  ke_hoach: number
+  thuc_te: number
+  loi: number
+  ty_le_hoan_thanh: number | null
+  ty_le_loi: number | null
+}
+
+export interface SessionReportChiPhiLSX {
+  production_order_id: number | null
+  ten_hang: string | null
+  so_luong: number
+  chi_phi_giay: number
+  chi_phi_nvl_phu: number
+  chi_phi_khau: number
+  tong: number
+}
+
+export interface SessionReportData {
+  session: {
+    id: number
+    ten_phien: string
+    ngay_tao: string | null
+    trang_thai: string
+    phan_xuong_ten: string | null
+    created_at: string | null
+    closed_at: string | null
+  }
+  san_luong: {
+    ke_hoach: number
+    thuc_te: number
+    so_luong_loi: number
+    ty_le_hoan_thanh: number | null
+    ty_le_loi: number | null
+    detail_by_lsx: SessionReportLSX[]
+  }
+  tieu_hao_nvl: {
+    tong_kg_giay_tieu_hao: number
+    tong_kg_hao_hut: number
+    ty_le_hao_hut_pct: number | null
+    hao_hut_by_flute: { flute_type: string; so_kg: number }[]
+    nvl_phu: { ten_nvl: string | null; don_vi: string | null; so_luong: number; don_gia: number; thanh_tien: number }[]
+  }
+  chi_phi: {
+    tong_chi_phi: number
+    chi_phi_giay: number
+    chi_phi_nvl_phu: number
+    chi_phi_khau: number
+    detail_by_lsx: SessionReportChiPhiLSX[]
+  } | null
+  thoi_gian: {
+    tong_phut_chay: number
+    tong_phut_dung: number
+    hieu_suat_thoi_gian_pct: number | null
+    may_dung_log: {
+      ngay: string | null
+      gio_bat_dau: string | null
+      gio_tiep_tuc: string | null
+      phut: number
+      ly_do: string
+      ghi_chu: string | null
+    }[]
+  }
+}
+
+export interface SessionSummaryReportItem {
+  id: number
+  ten_phien: string
+  ngay_tao: string | null
+  trang_thai: string
+  phan_xuong_ten: string | null
+  so_cuon: number
+  so_phieu: number
+  ke_hoach: number
+  thuc_te: number
+  so_luong_loi: number
+  ty_le_hoan_thanh: number | null
+  ty_le_loi: number | null
+  tong_kg_tieu_hao: number
+  tong_kg_hao_hut: number
+  ty_le_hao_hut: number | null
+  tong_chi_phi: number | null
+  tong_phut_dung: number
+  closed_at: string | null
 }
 

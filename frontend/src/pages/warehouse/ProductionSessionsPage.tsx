@@ -3,7 +3,7 @@ import {
   Button, Card, Table, Tag, Space, Typography, Modal, Form, Input,
   DatePicker, InputNumber, Select, Divider, Descriptions, Drawer,
   Tabs, Tooltip, Popconfirm, Empty, Alert, Badge, Statistic, Row, Col,
-  message,
+  Popover, message,
 } from 'antd'
 import {
   PlusOutlined, ReloadOutlined, EyeOutlined, CheckCircleOutlined,
@@ -18,6 +18,7 @@ import {
   type ProductionSessionSummary,
   type ProductionSessionDetail,
   type ProductionSessionAllocation,
+  type SessionReportData,
 } from '../../api/warehouse'
 import { otherMaterialsApi } from '../../api/otherMaterials'
 import { productionOrdersApi } from '../../api/productionOrders'
@@ -45,6 +46,222 @@ function fmt(n: number) {
 }
 function fmtKg(n: number) {
   return `${n.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} kg`
+}
+
+const LY_DO_LABEL: Record<string, string> = {
+  hong_may: 'Hỏng máy',
+  het_nguyen_lieu: 'Hết nguyên liệu',
+  nghi_giai_lao: 'Nghỉ giải lao',
+  giao_ca: 'Giao ca',
+  khac: 'Khác',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-component: Tab báo cáo hiệu quả
+// ─────────────────────────────────────────────────────────────────────────────
+function SessionReportTab({ report }: { report: SessionReportData }) {
+  const sl = report.san_luong
+  const nvl = report.tieu_hao_nvl
+  const cp = report.chi_phi
+  const tg = report.thoi_gian
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* ── KPI Cards ────────────────────────────────────────────────────────── */}
+      <Row gutter={12}>
+        <Col span={6}>
+          <Card size="small" style={{ background: '#f6ffed', border: '1px solid #b7eb8f' }}>
+            <Statistic
+              title="Hoàn thành"
+              value={sl.ty_le_hoan_thanh ?? 0}
+              suffix="%"
+              precision={1}
+              valueStyle={{ color: '#52c41a', fontSize: 28 }}
+            />
+            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+              {sl.thuc_te.toLocaleString()} / {sl.ke_hoach.toLocaleString()} cái
+            </div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" style={{ background: sl.ty_le_loi && sl.ty_le_loi > 3 ? '#fff1f0' : '#f9f9f9', border: sl.ty_le_loi && sl.ty_le_loi > 3 ? '1px solid #ffa39e' : '1px solid #d9d9d9' }}>
+            <Statistic
+              title="Tỷ lệ lỗi"
+              value={sl.ty_le_loi ?? 0}
+              suffix="%"
+              precision={2}
+              valueStyle={{ color: sl.ty_le_loi && sl.ty_le_loi > 3 ? '#cf1322' : '#595959', fontSize: 28 }}
+            />
+            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+              {sl.so_luong_loi.toLocaleString()} cái lỗi
+            </div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" style={{ background: '#fffbe6', border: '1px solid #ffe58f' }}>
+            <Statistic
+              title="Hao hụt giấy"
+              value={nvl.ty_le_hao_hut_pct ?? 0}
+              suffix="%"
+              precision={2}
+              valueStyle={{ color: '#d48806', fontSize: 28 }}
+            />
+            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+              {fmtKg(nvl.tong_kg_hao_hut)} / {fmtKg(nvl.tong_kg_giay_tieu_hao)}
+            </div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" style={{ background: '#fff0f6', border: '1px solid #ffadd2' }}>
+            <Statistic
+              title="Tổng chi phí"
+              value={cp ? cp.tong_chi_phi : 0}
+              formatter={v => cp ? fmt(Number(v)) : '—'}
+              suffix={cp ? '₫' : ''}
+              valueStyle={{ color: '#c41d7f', fontSize: 24 }}
+            />
+            {!cp && <div style={{ fontSize: 12, color: '#aaa' }}>Phiên chưa chốt</div>}
+          </Card>
+        </Col>
+      </Row>
+
+      {/* ── Sản lượng theo LSX ───────────────────────────────────────────────── */}
+      <Card size="small" title="📦 Sản lượng theo lệnh sản xuất">
+        <Table
+          size="small"
+          rowKey="production_order_id"
+          dataSource={sl.detail_by_lsx}
+          pagination={false}
+          columns={[
+            { title: 'Lệnh SX', dataIndex: 'so_lenh', width: 130, render: v => v ?? '—' },
+            { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+            { title: 'Kế hoạch', dataIndex: 'ke_hoach', width: 100, align: 'right', render: (v: number) => v.toLocaleString() },
+            { title: 'Thực tế', dataIndex: 'thuc_te', width: 100, align: 'right', render: (v: number) => v.toLocaleString() },
+            {
+              title: '% HT', dataIndex: 'ty_le_hoan_thanh', width: 80, align: 'right',
+              render: (v: number | null) => v == null ? '—' : <Text style={{ color: v >= 95 ? '#52c41a' : v >= 80 ? '#d48806' : '#cf1322' }}>{v}%</Text>,
+            },
+            { title: 'Lỗi', dataIndex: 'loi', width: 80, align: 'right', render: (v: number) => v > 0 ? <Text type="danger">{v.toLocaleString()}</Text> : '0' },
+            {
+              title: '% Lỗi', dataIndex: 'ty_le_loi', width: 80, align: 'right',
+              render: (v: number | null) => v == null ? '—' : <Text type={v > 3 ? 'danger' : undefined}>{v}%</Text>,
+            },
+          ]}
+        />
+      </Card>
+
+      {/* ── Tiêu hao NVL ─────────────────────────────────────────────────────── */}
+      <Row gutter={12}>
+        <Col span={12}>
+          <Card size="small" title="🗑️ Hao hụt giấy theo sóng">
+            {nvl.hao_hut_by_flute.length === 0
+              ? <Empty description="Không có dữ liệu hao hụt" imageStyle={{ height: 40 }} />
+              : (
+                <Table
+                  size="small"
+                  rowKey="flute_type"
+                  dataSource={nvl.hao_hut_by_flute}
+                  pagination={false}
+                  columns={[
+                    { title: 'Loại sóng', dataIndex: 'flute_type', width: 100 },
+                    { title: 'Kg hao hụt', dataIndex: 'so_kg', align: 'right', render: (v: number) => fmtKg(v) },
+                  ]}
+                />
+              )
+            }
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card size="small" title="🧪 NVL phụ tiêu hao">
+            {nvl.nvl_phu.length === 0
+              ? <Empty description="Không có NVL phụ" imageStyle={{ height: 40 }} />
+              : (
+                <Table
+                  size="small"
+                  rowKey="ten_nvl"
+                  dataSource={nvl.nvl_phu}
+                  pagination={false}
+                  columns={[
+                    { title: 'Tên NVL', dataIndex: 'ten_nvl', ellipsis: true },
+                    { title: 'SL', dataIndex: 'so_luong', width: 80, align: 'right', render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 2 }) },
+                    { title: 'ĐVT', dataIndex: 'don_vi', width: 60 },
+                    { title: 'Thành tiền', dataIndex: 'thanh_tien', width: 120, align: 'right', render: (v: number) => `${fmt(v)} ₫` },
+                  ]}
+                />
+              )
+            }
+          </Card>
+        </Col>
+      </Row>
+
+      {/* ── Chi phí by LSX (chỉ khi đã chốt) ────────────────────────────────── */}
+      {cp && (
+        <Card size="small" title="💰 Chi phí phân bổ theo lệnh sản xuất">
+          <Row gutter={16} style={{ marginBottom: 12 }}>
+            <Col span={6}><Statistic title="CP giấy" value={cp.chi_phi_giay} formatter={v => fmt(Number(v))} suffix="₫" /></Col>
+            <Col span={6}><Statistic title="CP NVL phụ" value={cp.chi_phi_nvl_phu} formatter={v => fmt(Number(v))} suffix="₫" /></Col>
+            <Col span={6}><Statistic title="CP gia công" value={cp.chi_phi_khau} formatter={v => fmt(Number(v))} suffix="₫" /></Col>
+            <Col span={6}><Statistic title="Tổng" value={cp.tong_chi_phi} formatter={v => fmt(Number(v))} suffix="₫" valueStyle={{ color: '#cf1322' }} /></Col>
+          </Row>
+          <Table
+            size="small"
+            rowKey={(r, i) => String(r.production_order_id ?? i)}
+            dataSource={cp.detail_by_lsx}
+            pagination={false}
+            columns={[
+              { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+              { title: 'SL', dataIndex: 'so_luong', width: 90, align: 'right', render: (v: number) => v.toLocaleString() },
+              { title: 'CP giấy', dataIndex: 'chi_phi_giay', width: 120, align: 'right', render: (v: number) => `${fmt(v)} ₫` },
+              { title: 'CP NVL phụ', dataIndex: 'chi_phi_nvl_phu', width: 110, align: 'right', render: (v: number) => `${fmt(v)} ₫` },
+              { title: 'CP gia công', dataIndex: 'chi_phi_khau', width: 110, align: 'right', render: (v: number) => `${fmt(v)} ₫` },
+              { title: 'Tổng', dataIndex: 'tong', width: 130, align: 'right', render: (v: number) => <Text strong type="danger">{fmt(v)} ₫</Text> },
+            ]}
+          />
+        </Card>
+      )}
+
+      {/* ── Thời gian máy dừng ───────────────────────────────────────────────── */}
+      <Card size="small" title="⏱️ Thời gian máy dừng">
+        <Row gutter={16} style={{ marginBottom: 12 }}>
+          <Col span={8}>
+            <Statistic title="Tổng thời gian chạy (phút)" value={tg.tong_phut_chay} />
+          </Col>
+          <Col span={8}>
+            <Statistic title="Tổng thời gian dừng (phút)" value={tg.tong_phut_dung} valueStyle={{ color: tg.tong_phut_dung > 30 ? '#cf1322' : undefined }} />
+          </Col>
+          <Col span={8}>
+            <Statistic
+              title="Hiệu suất thời gian"
+              value={tg.hieu_suat_thoi_gian_pct ?? '—'}
+              suffix={tg.hieu_suat_thoi_gian_pct != null ? '%' : ''}
+              valueStyle={{ color: tg.hieu_suat_thoi_gian_pct != null && tg.hieu_suat_thoi_gian_pct >= 85 ? '#52c41a' : '#d48806' }}
+            />
+          </Col>
+        </Row>
+        {tg.may_dung_log.length > 0 && (
+          <Table
+            size="small"
+            rowKey={(_, i) => String(i)}
+            dataSource={tg.may_dung_log}
+            pagination={false}
+            columns={[
+              { title: 'Ngày', dataIndex: 'ngay', width: 110 },
+              { title: 'Bắt đầu', dataIndex: 'gio_bat_dau', width: 90 },
+              { title: 'Tiếp tục', dataIndex: 'gio_tiep_tuc', width: 90, render: (v: string | null) => v ?? '—' },
+              { title: 'Phút', dataIndex: 'phut', width: 70, align: 'right' },
+              { title: 'Lý do', dataIndex: 'ly_do', width: 140, render: (v: string) => LY_DO_LABEL[v] ?? v },
+              { title: 'Ghi chú', dataIndex: 'ghi_chu', ellipsis: true, render: (v: string | null) => v ?? '' },
+            ]}
+          />
+        )}
+        {tg.may_dung_log.length === 0 && (
+          <Empty description="Không có log máy dừng" imageStyle={{ height: 40 }} />
+        )}
+      </Card>
+
+    </div>
+  )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,6 +308,10 @@ export default function ProductionSessionsPage() {
   const [splitRollIds, setSplitRollIds] = useState<number[]>([])
   const [splitForm] = Form.useForm()
 
+  // Chuyển cuộn giấy sang phiên khác
+  const [moveRollId, setMoveRollId] = useState<number | null>(null)
+  const [moveTargetSessionId, setMoveTargetSessionId] = useState<number | null>(null)
+
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: sessionsData, isLoading } = useQuery({
     queryKey: ['production-sessions', filterStatus, page],
@@ -105,6 +326,27 @@ export default function ProductionSessionsPage() {
     queryKey: ['production-session-detail', selectedId],
     queryFn: () => selectedId ? warehouseApi.getProductionSession(selectedId).then(r => r.data) : null,
     enabled: !!selectedId && detailOpen,
+  })
+
+  const { data: activeSessions } = useQuery({
+    queryKey: ['production-sessions-active'],
+    queryFn: () => warehouseApi.getActiveProductionSessions().then(r => r.data),
+    enabled: moveRollId != null,
+  })
+
+  const moveRollMut = useMutation({
+    mutationFn: ({ roll_id, target_session_id }: { roll_id: number; target_session_id: number }) =>
+      warehouseApi.moveRollToSession(selectedId!, roll_id, target_session_id),
+    onSuccess: () => {
+      message.success('Đã chuyển cuộn giấy sang phiên mới')
+      setMoveRollId(null)
+      setMoveTargetSessionId(null)
+      qc.invalidateQueries({ queryKey: ['production-session-detail', selectedId] })
+    },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(msg || 'Chuyển phiên thất bại')
+    },
   })
 
   const { data: allPhieuSong } = useQuery({
@@ -132,6 +374,12 @@ export default function ProductionSessionsPage() {
   const { data: defaultMaterials } = useQuery({
     queryKey: ['default-materials', selectedId],
     queryFn: () => selectedId ? warehouseApi.getDefaultMaterials(selectedId).then(r => r.data) : null,
+    enabled: !!selectedId && detailOpen,
+  })
+
+  const { data: sessionReport, isLoading: reportLoading } = useQuery({
+    queryKey: ['production-session-report', selectedId],
+    queryFn: () => selectedId ? warehouseApi.getProductionSessionReport(selectedId).then(r => r.data) : null,
     enabled: !!selectedId && detailOpen,
   })
 
@@ -274,7 +522,7 @@ export default function ProductionSessionsPage() {
 
     const savedMaterials = detail.materials.map(m => ({ other_material_id: m.other_material_id, so_luong: m.so_luong, don_gia: m.don_gia }))
     if (savedMaterials.length === 0 && detail.trang_thai !== 'da_chot' && defaultMaterials?.materials?.length) {
-      setMaterials(defaultMaterials.materials.map(m => ({ other_material_id: m.id, so_luong: 0, don_gia: 0 })))
+      setMaterials(defaultMaterials.materials.map(m => ({ other_material_id: m.id, so_luong: 0, don_gia: m.gia_mua ?? 0 })))
     } else {
       setMaterials(savedMaterials)
     }
@@ -554,6 +802,48 @@ export default function ProductionSessionsPage() {
                         width: 120,
                         render: (v: number | null) => v !== null ? <Text type="danger">{fmtKg(v)}</Text> : '—',
                       },
+                      ...(detail.trang_thai !== 'da_chot' ? [{
+                        title: '',
+                        key: 'move',
+                        width: 130,
+                        render: (_: unknown, row: { id: number }) => (
+                          <Popover
+                            trigger="click"
+                            open={moveRollId === row.id}
+                            onOpenChange={open => {
+                              if (open) { setMoveRollId(row.id); setMoveTargetSessionId(null) }
+                              else { setMoveRollId(null) }
+                            }}
+                            content={
+                              <div style={{ width: 260 }}>
+                                <div style={{ marginBottom: 8, fontWeight: 500 }}>Chuyển sang phiên:</div>
+                                <Select
+                                  style={{ width: '100%', marginBottom: 8 }}
+                                  placeholder="Chọn phiên đích"
+                                  value={moveTargetSessionId}
+                                  onChange={v => setMoveTargetSessionId(v)}
+                                  options={(activeSessions ?? [])
+                                    .filter(s => s.id !== selectedId && s.trang_thai !== 'da_chot')
+                                    .map(s => ({ value: s.id, label: `#${s.id} ${s.ten_phien}` }))}
+                                />
+                                <Button
+                                  type="primary" size="small" block
+                                  disabled={!moveTargetSessionId}
+                                  loading={moveRollMut.isPending}
+                                  onClick={() => {
+                                    if (moveTargetSessionId)
+                                      moveRollMut.mutate({ roll_id: row.id, target_session_id: moveTargetSessionId })
+                                  }}
+                                >
+                                  Xác nhận chuyển
+                                </Button>
+                              </div>
+                            }
+                          >
+                            <Button size="small" type="link">Chuyển phiên</Button>
+                          </Popover>
+                        ),
+                      }] : []),
                     ]}
                   />
                 )
@@ -939,6 +1229,19 @@ export default function ProductionSessionsPage() {
                 }
               </TabPane>
             )}
+
+            {/* Tab: Báo cáo hiệu quả */}
+            <TabPane
+              tab={<span>📊 Báo cáo hiệu quả</span>}
+              key="report"
+            >
+              {reportLoading
+                ? <div style={{ textAlign: 'center', padding: 40 }}>Đang tải...</div>
+                : !sessionReport
+                  ? <Empty description="Không có dữ liệu" />
+                  : <SessionReportTab report={sessionReport} />
+              }
+            </TabPane>
 
           </Tabs>
         )}

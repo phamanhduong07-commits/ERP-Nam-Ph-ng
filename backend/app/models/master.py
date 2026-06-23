@@ -247,6 +247,7 @@ class OtherMaterial(Base):
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
     la_mac_dinh_pha_keo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ton_kho: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(

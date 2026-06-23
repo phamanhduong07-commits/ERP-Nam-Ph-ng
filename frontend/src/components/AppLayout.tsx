@@ -130,6 +130,7 @@ function buildNavItems(queueCount: number): NavItem[] {
             { key: '/warehouse/nhap-giay', to: '/warehouse/nhap-giay', label: <Link to="/warehouse/nhap-giay">Nhập giấy cuộn</Link>, permissions: ['inventory.import'] },
             { key: '/warehouse/can-cuon-giay', to: '/warehouse/can-cuon-giay', label: <Link to="/warehouse/can-cuon-giay">Cân giấy cuộn</Link>, permissions: ['inventory.import'] },
             { key: '/warehouse/production-sessions', to: '/warehouse/production-sessions', label: <Link to="/warehouse/production-sessions">Phiên sản xuất</Link>, permissions: ['inventory.view', 'inventory.import'] },
+            { key: '/warehouse/production-session-report', to: '/warehouse/production-session-report', label: <Link to="/warehouse/production-session-report">📊 Báo cáo phiên SX</Link>, permissions: ['inventory.view'] },
             { key: '/warehouse/nhap-phoi-ngoai', to: '/warehouse/nhap-phoi-ngoai', label: <Link to="/warehouse/nhap-phoi-ngoai">Nhập phôi sóng (mua ngoài)</Link>, permissions: ['inventory.import'] },
             { key: '/warehouse/receipts', to: '/warehouse/receipts', label: <Link to="/warehouse/receipts">Nhập NVL khác</Link>, permissions: ['inventory.import'] },
             { key: '/warehouse/issues', to: '/warehouse/issues', label: <Link to="/warehouse/issues">Xuất NVL sản xuất</Link>, permissions: ['inventory.export'] },

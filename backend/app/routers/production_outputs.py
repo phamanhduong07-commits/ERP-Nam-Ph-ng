@@ -110,6 +110,24 @@ def create_production_output(
             ten_hang = ten_hang or prod.ten_san_pham
             dvt = dvt or getattr(prod, "dvt", "Thùng") or "Thùng"
 
+    # Auto-fill don_gia_xuat_xuong từ phiên sản xuất nếu chưa nhập và có session
+    don_gia = body.don_gia_xuat_xuong
+    session_id = body.production_session_id
+    if session_id and don_gia == 0:
+        from app.models.production import ProductionSession
+        import json as _json
+        sess = db.get(ProductionSession, session_id)
+        if sess and sess.allocation_detail:
+            alloc = sess.allocation_detail if isinstance(sess.allocation_detail, list) else _json.loads(sess.allocation_detail)
+            # Gộp chi_phi_tong của tất cả LSX item thuộc production_order_id này
+            total_cost = sum(
+                float(a.get("chi_phi_tong") or 0)
+                for a in alloc
+                if a.get("production_order_id") == body.production_order_id
+            )
+            if total_cost > 0 and body.so_luong_nhap > 0:
+                don_gia = Decimal(str(round(total_cost / float(body.so_luong_nhap), 2)))
+
     out = ProductionOutput(
         so_phieu=_gen_so(db, "TP", ProductionOutput),
         ngay_nhap=body.ngay_nhap,
@@ -121,7 +139,8 @@ def create_production_output(
         so_luong_loi=body.so_luong_loi,
         trang_thai_loi='da_nhap_kho_ao' if body.so_luong_loi > 0 else None,
         dvt=dvt,
-        don_gia_xuat_xuong=body.don_gia_xuat_xuong,
+        don_gia_xuat_xuong=don_gia,
+        production_session_id=session_id,
         ghi_chu=body.ghi_chu,
         created_by=current_user.id,
     )
@@ -248,6 +267,7 @@ def _po_out_to_dict(out: ProductionOutput, db: Session) -> dict:
         "trang_thai_loi": out.trang_thai_loi,
         "dvt": out.dvt,
         "don_gia_xuat_xuong": float(out.don_gia_xuat_xuong),
+        "production_session_id": out.production_session_id,
         "ghi_chu": out.ghi_chu,
         "created_at": out.created_at.isoformat() if out.created_at else None,
     }

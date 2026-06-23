@@ -77,8 +77,9 @@ class MaterialIssue(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     so_phieu: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)  # XI-YYYYMM-XXXX
     ngay_xuat: Mapped[date] = mapped_column(Date, nullable=False)
-    production_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=False)
-    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    production_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=True)
+    production_session_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("production_sessions.id"), nullable=True)
+    warehouse_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=True)
     ca: Mapped[str | None] = mapped_column(String(10))  # "sang" | "chieu" | "toi"
     trang_thai: Mapped[str] = mapped_column(String(20), default="nhap")  # nhap | da_xuat | huy
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -87,6 +88,7 @@ class MaterialIssue(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     production_order = relationship("ProductionOrder")
+    production_session = relationship("ProductionSession")
     warehouse = relationship("Warehouse")
     creator = relationship("User")
     items: Mapped[list["MaterialIssueItem"]] = relationship(
@@ -131,12 +133,14 @@ class ProductionOutput(Base):
     # None=không có lỗi | 'cho_xu_ly' | 'da_nhap_kho_ao'
     dvt: Mapped[str] = mapped_column(String(20), default="Thùng")
     don_gia_xuat_xuong: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    production_session_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("production_sessions.id"), nullable=True, index=True)
     bo_qua_hach_toan: Mapped[bool] = mapped_column(Boolean, default=False)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     production_order = relationship("ProductionOrder")
+    production_session = relationship("ProductionSession", foreign_keys=[production_session_id])
     warehouse = relationship("Warehouse")
     product = relationship("Product")
     creator = relationship("User")

@@ -195,6 +195,7 @@ class BomItemResponse(BaseModel):
     ty_le_hao_hut: Decimal
     trong_luong_can_tong: Decimal | None
     don_gia_kg: Decimal
+    don_gia_lock: Decimal | None = None
     thanh_tien: Decimal | None
 
     class Config:

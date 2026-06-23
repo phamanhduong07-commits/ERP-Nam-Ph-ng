@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kế hoạch: BOM → Phân tích chi phí → Giá thành SX</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; line-height: 1.6; }
+
+  .header { background: linear-gradient(135deg, #1a2744 0%, #0f1117 100%); padding: 40px 48px 32px; border-bottom: 1px solid #1e293b; }
+  .header h1 { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.3px; }
+  .header p  { font-size: 13px; color: #64748b; margin-top: 6px; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 40px 48px; }
+
+  /* ── Flow diagram ── */
+  .flow { display: flex; align-items: stretch; gap: 0; margin-bottom: 48px; overflow-x: auto; }
+  .flow-node {
+    flex: 1; min-width: 160px; background: #1e293b; border: 1px solid #334155;
+    border-radius: 8px; padding: 16px 14px; position: relative;
+  }
+  .flow-node.done   { border-color: #22c55e44; background: #14261e; }
+  .flow-node.active { border-color: #3b82f644; background: #0f1f35; }
+  .flow-node.gap    { border-color: #f59e0b44; background: #1c1608; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 8px; color: #475569; font-size: 18px; flex-shrink: 0; }
+  .flow-node .label { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px; }
+  .flow-node.done   .label { color: #4ade80; }
+  .flow-node.active .label { color: #60a5fa; }
+  .flow-node.gap    .label { color: #fbbf24; }
+  .flow-node h3 { font-size: 13px; font-weight: 600; color: #f1f5f9; margin-bottom: 8px; }
+  .flow-node ul { list-style: none; }
+  .flow-node ul li { font-size: 11px; color: #94a3b8; padding: 2px 0; }
+  .flow-node ul li::before { content: '·  '; color: #475569; }
+
+  /* ── Section ── */
+  .section { margin-bottom: 48px; }
+  .section-title { font-size: 16px; font-weight: 700; color: #f1f5f9; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; gap: 10px; }
+  .section-title span { font-size: 12px; font-weight: 500; color: #64748b; }
+
+  /* ── Sprint cards ── */
+  .sprints { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+  .sprint {
+    background: #1e293b; border: 1px solid #334155; border-radius: 10px; overflow: hidden;
+  }
+  .sprint-header { padding: 16px 20px 12px; border-bottom: 1px solid #0f172a; }
+  .sprint-header .sprint-num { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .sprint-header h3 { font-size: 14px; font-weight: 700; color: #f1f5f9; }
+  .sprint-header .tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px; margin-top: 6px; }
+  .sprint-body { padding: 16px 20px; }
+  .sprint-body .task { display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-start; }
+  .sprint-body .task-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+  .sprint-body .task-text { font-size: 12px; color: #cbd5e1; }
+  .sprint-body .task-text strong { color: #f1f5f9; font-weight: 600; }
+  .sprint-body .task-text code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; color: #7dd3fc; background: #0c1929; padding: 1px 5px; border-radius: 3px; }
+  .sprint-footer { padding: 10px 20px 14px; background: #171f2e; }
+  .sprint-footer p { font-size: 11px; color: #64748b; }
+  .sprint-footer strong { color: #94a3b8; }
+
+  .s1 .sprint-header { background: #14261e; }
+  .s1 .sprint-header .sprint-num { color: #4ade80; }
+  .s1 .sprint-header .tag { background: #14532d; color: #4ade80; }
+  .s2 .sprint-header { background: #0f1f35; }
+  .s2 .sprint-header .sprint-num { color: #60a5fa; }
+  .s2 .sprint-header .tag { background: #1e3a5f; color: #60a5fa; }
+  .s3 .sprint-header { background: #1c1608; }
+  .s3 .sprint-header .sprint-num { color: #fbbf24; }
+  .s3 .sprint-header .tag { background: #451a03; color: #fbbf24; }
+  .s4 .sprint-header { background: #1c0a1a; }
+  .s4 .sprint-header .sprint-num { color: #e879f9; }
+  .s4 .sprint-header .tag { background: #3b0764; color: #e879f9; }
+  .s5 .sprint-header { background: #111827; }
+  .s5 .sprint-header .sprint-num { color: #94a3b8; }
+  .s5 .sprint-header .tag { background: #1f2937; color: #94a3b8; }
+
+  /* ── Data flow table ── */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .data-table th { text-align: left; padding: 10px 14px; background: #1e293b; color: #94a3b8; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; }
+  .data-table td { padding: 10px 14px; border-bottom: 1px solid #1e293b; vertical-align: top; color: #cbd5e1; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table code { font-family: 'SF Mono', monospace; font-size: 11px; color: #7dd3fc; background: #0c1929; padding: 1px 5px; border-radius: 3px; }
+  .badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 99px; }
+  .badge.done   { background: #14532d; color: #4ade80; }
+  .badge.gap    { background: #451a03; color: #fbbf24; }
+  .badge.partial { background: #1e3a5f; color: #60a5fa; }
+
+  /* ── Gap table ── */
+  .gaps { background: #1c1608; border: 1px solid #f59e0b33; border-radius: 8px; padding: 20px 24px; margin-bottom: 48px; }
+  .gaps h3 { font-size: 13px; font-weight: 700; color: #fbbf24; margin-bottom: 14px; }
+  .gap-item { display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-start; }
+  .gap-item .g-num { font-size: 11px; font-weight: 700; color: #f59e0b; background: #451a03; border-radius: 4px; padding: 1px 7px; flex-shrink: 0; margin-top: 1px; }
+  .gap-item .g-text { font-size: 12px; color: #d97706; }
+  .gap-item .g-text strong { color: #fbbf24; }
+
+  /* ── Account chain ── */
+  .acct-chain { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .acct-box { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 8px 14px; text-align: center; }
+  .acct-box .acct-num { font-size: 15px; font-weight: 800; color: #f1f5f9; font-family: monospace; }
+  .acct-box .acct-name { font-size: 10px; color: #64748b; margin-top: 2px; }
+  .acct-box.active { border-color: #3b82f6; background: #0f1f35; }
+  .acct-box.active .acct-num { color: #60a5fa; }
+  .acct-arrow { color: #475569; font-size: 18px; }
+  .acct-label { font-size: 11px; color: #64748b; margin: 4px 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>BOM → Phân tích chi phí → Giá thành sản xuất</h1>
+  <p>Kế hoạch hoàn thiện — kết nối từ những gì đã xây dựng &nbsp;·&nbsp; ERP Nam Phương</p>
+</div>
+
+<div class="container">
+
+  <!-- ── Luồng tổng thể ── -->
+  <div class="section">
+    <div class="section-title">Luồng dữ liệu tổng thể <span>từ đặt hàng → giá thành thực tế</span></div>
+    <div class="flow">
+      <div class="flow-node done">
+        <div class="label">✅ Có sẵn</div>
+        <h3>Đơn hàng<br>LSX / BOM</h3>
+        <ul>
+          <li>ProductionOrder</li>
+          <li>ProductionOrderItem</li>
+          <li>ProductionBOM (confirmed)</li>
+          <li>BOM chi phí kế hoạch</li>
+        </ul>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node done">
+        <div class="label">✅ Vừa xây</div>
+        <h3>Phiên SX<br>Tiêu hao thực tế</h3>
+        <ul>
+          <li>ProductionSession</li>
+          <li>SessionRoll (giấy, kg)</li>
+          <li>SessionMaterial (NVL)</li>
+          <li>PaperWaste (hao hụt)</li>
+        </ul>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node done">
+        <div class="label">✅ Vừa xây</div>
+        <h3>Phiếu xuất kho<br>tự động</h3>
+        <ul>
+          <li>XGIAY (draft→da_xuat)</li>
+          <li>XNVL (khi chốt)</li>
+          <li>bo_qua_hach_toan=T</li>
+          <li>filter session_id ✓</li>
+        </ul>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node active">
+        <div class="label">🔄 Một phần</div>
+        <h3>Phân bổ<br>chi phí / LSX</h3>
+        <ul>
+          <li>_compute_allocation</li>
+          <li>Chi phí giấy ✓</li>
+          <li>Chi phí NVL ✓</li>
+          <li>Journal 154/154 ✓</li>
+          <li>154/152 ← thiếu</li>
+        </ul>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node gap">
+        <div class="label">⚠ Cần xây</div>
+        <h3>Nhập thành phẩm<br>theo giá thành</h3>
+        <ul>
+          <li>ProductionOutput</li>
+          <li>don_gia = tổng/sl</li>
+          <li>Journal 155/154</li>
+          <li>Cần kết nối session</li>
+        </ul>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node gap">
+        <div class="label">⚠ Cần xây</div>
+        <h3>Báo cáo<br>giá thành</h3>
+        <ul>
+          <li>Giá thành / LSX</li>
+          <li>Variance BOM vs TT</li>
+          <li>Chi tiết: giấy/NVL/OH</li>
+          <li>Dashboard tổng hợp</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Gaps hiện tại ── -->
+  <div class="gaps">
+    <h3>⚠ 5 gap cần giải quyết</h3>
+    <div class="gap-item">
+      <span class="g-num">G1</span>
+      <span class="g-text"><strong>Journal 154/152 thiếu</strong> — chot_phien chỉ post Nợ 154/Có 154 (nội bộ), chưa có Nợ 154/Có 1521 (giấy) + Có 1522 (NVL). MaterialIssue bo_qua_hach_toan=True nhưng cần bút toán riêng khi xuat kho giấy.</span>
+    </div>
+    <div class="gap-item">
+      <span class="g-num">G2</span>
+      <span class="g-text"><strong>ProductionOutput chưa nhận chi phí từ session</strong> — Model có don_gia_xuat_xuong nhưng chưa tự tính = allocation_total / so_luong từ session. Phải nhập tay.</span>
+    </div>
+    <div class="gap-item">
+      <span class="g-num">G3</span>
+      <span class="g-text"><strong>BOM chưa có standard cost cố định</strong> — chi_phi_giay/NVL tính từ don_gia_kg hiện tại, không lock lại khi BOM confirmed. Khi giá nguyên liệu thay đổi, BOM cũ bị sai.</span>
+    </div>
+    <div class="gap-item">
+      <span class="g-num">G4</span>
+      <span class="g-text"><strong>Không có Variance report</strong> — Sau khi chốt phiên có allocation_detail (JSON) cho từng LSX, nhưng chưa so sánh được với chi phí kế hoạch từ BOM.</span>
+    </div>
+    <div class="gap-item">
+      <span class="g-num">G5</span>
+      <span class="g-text"><strong>ProductionOrder thiếu m² kế hoạch</strong> — so_luong_ke_hoach là số thùng, không có diện_tich_ke_hoach. _compute_allocation phải tính ngược từ phiếu nhập phôi sóng.</span>
+    </div>
+  </div>
+
+  <!-- ── Chuỗi hạch toán ── -->
+  <div class="section">
+    <div class="section-title">Chuỗi hạch toán mục tiêu</div>
+    <div style="overflow-x:auto; padding-bottom:8px;">
+      <div class="acct-chain">
+        <div class="acct-box">
+          <div class="acct-num">1521</div>
+          <div class="acct-name">Giấy cuộn</div>
+        </div>
+        <div class="acct-arrow">→</div>
+        <div class="acct-label" style="text-align:center;">Khi nhập giấy<br><small>Nợ 1521 / Có 331</small></div>
+
+        <div style="flex-basis:100%;height:0;"></div>
+
+        <div class="acct-box">
+          <div class="acct-num">1521</div>
+          <div class="acct-name">Giấy cuộn</div>
+        </div>
+        <div class="acct-arrow">→</div>
+        <div class="acct-box active">
+          <div class="acct-num">154</div>
+          <div class="acct-name">Chi phí SX</div>
+        </div>
+        <div class="acct-label">Xuất kho giấy vào SX<br><small>Nợ 154 / Có 1521</small><br><span style="color:#fbbf24;font-size:10px;">⚠ G1 — cần thêm</span></div>
+
+        <div style="flex-basis:100%;height:0;"></div>
+
+        <div class="acct-box">
+          <div class="acct-num">1522</div>
+          <div class="acct-name">NVL phụ</div>
+        </div>
+        <div class="acct-arrow">→</div>
+        <div class="acct-box active">
+          <div class="acct-num">154</div>
+          <div class="acct-name">Chi phí SX</div>
+        </div>
+        <div class="acct-label">Xuất NVL phụ vào SX<br><small>Nợ 154 / Có 1522</small><br><span style="color:#fbbf24;font-size:10px;">⚠ G1 — cần sửa</span></div>
+
+        <div style="flex-basis:100%;height:0;"></div>
+
+        <div class="acct-box active">
+          <div class="acct-num">154</div>
+          <div class="acct-name">Chi phí SX</div>
+        </div>
+        <div class="acct-arrow">→</div>
+        <div class="acct-box">
+          <div class="acct-num">155</div>
+          <div class="acct-name">Thành phẩm</div>
+        </div>
+        <div class="acct-label">Nhập kho thành phẩm<br><small>Nợ 155 / Có 154</small><br><span style="color:#fbbf24;font-size:10px;">⚠ G2 — cần kết nối</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Nguồn dữ liệu cho từng loại chi phí ── -->
+  <div class="section">
+    <div class="section-title">Nguồn dữ liệu chi phí <span>đã có vs còn thiếu</span></div>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Loại chi phí</th>
+            <th>Nguồn thực tế (đã có)</th>
+            <th>Nguồn kế hoạch (BOM)</th>
+            <th>Phân bổ về LSX</th>
+            <th>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Giấy nguyên liệu</strong></td>
+            <td><code>SessionRoll.trong_luong_tieu_hao</code><br>× <code>InventoryBalance.don_gia_binh_quan</code></td>
+            <td><code>BOMItem.don_gia_kg</code> × dinh_muc_kg/m²<br><em style="color:#f59e0b;font-size:11px;">⚠ G3: don_gia_kg không lock</em></td>
+            <td>Theo tỷ lệ khối lượng lý thuyết / flute type</td>
+            <td><span class="badge partial">Một phần</span></td>
+          </tr>
+          <tr>
+            <td><strong>NVL phụ (keo, tinh bột)</strong></td>
+            <td><code>SessionMaterial.so_luong</code><br>× <code>OtherMaterial.gia_mua</code></td>
+            <td><code>BOMIndirectCostItem.don_gia_m2</code><br>× diện tích kế hoạch</td>
+            <td>Theo diện tích quy đổi (<code>dien_tich_quy_doi</code>)</td>
+            <td><span class="badge partial">Một phần</span></td>
+          </tr>
+          <tr>
+            <td><strong>Hao hụt giấy</strong></td>
+            <td><code>SessionPaperWaste</code> per flute type<br>+ <code>so_kg_hao_hut_chung</code></td>
+            <td>Tỷ lệ % trong <code>ProductionBOM</code></td>
+            <td>Theo tỷ lệ tiêu hao từng vật liệu</td>
+            <td><span class="badge done">✅ Xong</span></td>
+          </tr>
+          <tr>
+            <td><strong>Chi phí gián tiếp</strong></td>
+            <td>Chưa có nguồn thực tế</td>
+            <td><code>BOM.chi_phi_gian_tiep</code> (tính sẵn)</td>
+            <td>Chưa phân bổ vào session</td>
+            <td><span class="badge gap">⚠ Thiếu</span></td>
+          </tr>
+          <tr>
+            <td><strong>Giá thành xuất xưởng</strong></td>
+            <td>Tổng phân bổ / <code>so_luong_hoan_thanh</code></td>
+            <td><code>BOM.gia_ban_co_ban</code> (bán hàng, không phải cost)</td>
+            <td>→ <code>ProductionOutput.don_gia_xuat_xuong</code></td>
+            <td><span class="badge gap">⚠ G2: chưa nối</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Sprint plan ── -->
+  <div class="section">
+    <div class="section-title">Kế hoạch sprint</div>
+    <div class="sprints">
+
+      <div class="sprint s1">
+        <div class="sprint-header">
+          <div class="sprint-num">Sprint hiện tại · Đã xong</div>
+          <h3>Nền tảng tiêu hao thực tế</h3>
+          <span class="tag">✅ Hoàn thành</span>
+        </div>
+        <div class="sprint-body">
+          <div class="task"><span class="task-icon">✅</span><span class="task-text"><strong>ProductionSession</strong> theo ca, phan_xuong</span></div>
+          <div class="task"><span class="task-icon">✅</span><span class="task-text"><strong>Cân cuộn giấy</strong> → trừ tồn, ghi tiêu hao vào session</span></div>
+          <div class="task"><span class="task-icon">✅</span><span class="task-text"><strong>Draft XGIAY phiếu</strong> tích lũy mỗi lần cân, filter session_id</span></div>
+          <div class="task"><span class="task-icon">✅</span><span class="task-text"><strong>XNVL phiếu</strong> tự tạo khi chốt</span></div>
+          <div class="task"><span class="task-icon">✅</span><span class="task-text"><strong>_compute_allocation</strong> cơ bản: giấy + NVL + hao hụt → LSX</span></div>
+          <div class="task"><span class="task-icon">✅</span><span class="task-text"><strong>Journal 154/154</strong> nội bộ khi chốt</span></div>
+        </div>
+        <div class="sprint-footer"><p><strong>Output:</strong> Có đầy đủ dữ liệu tiêu hao thực tế, phiếu xuất kho tự động</p></div>
+      </div>
+
+      <div class="sprint s2">
+        <div class="sprint-header">
+          <div class="sprint-num">Sprint 2 · Kế tiếp</div>
+          <h3>Sửa journal + BOM standard cost</h3>
+          <span class="tag">Ưu tiên cao</span>
+        </div>
+        <div class="sprint-body">
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>Sửa G1</strong> — <code>chot_phien</code>: thêm bút toán <code>Nợ 154 / Có 1521</code> cho giấy, <code>Có 1522</code> cho NVL. XGIAY/XNVL <code>bo_qua_hach_toan=False</code> → post journal tại đây</span></div>
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>Sửa G3</strong> — Thêm <code>don_gia_lock</code> vào <code>ProductionBOMItem</code>: khi BOM confirmed → snapshot <code>InventoryBalance.don_gia_binh_quan</code> vào <code>don_gia_lock</code>. Variance = don_gia_binh_quan_lúc_sản_xuất − don_gia_lock</span></div>
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>Thêm <code>dien_tich_ke_hoach</code></strong> vào <code>ProductionOrderItem</code> (m²) — tính từ BOM khi confirm. Dùng làm baseline cho allocation</span></div>
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>Migration Alembic</strong> cho các field mới</span></div>
+        </div>
+        <div class="sprint-footer"><p><strong>Output:</strong> Hạch toán đúng chuỗi 1521/1522→154, BOM lock giá khi confirm</p></div>
+      </div>
+
+      <div class="sprint s3">
+        <div class="sprint-header">
+          <div class="sprint-num">Sprint 3</div>
+          <h3>Nhập thành phẩm theo giá thành</h3>
+          <span class="tag">Ưu tiên cao</span>
+        </div>
+        <div class="sprint-body">
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>Sửa G2</strong> — <code>chot_phien</code>: sau _compute_allocation, tự điền <code>ProductionOutput.don_gia_xuat_xuong</code> = <code>chi_phi_tong / so_luong_hoan_thanh</code> cho từng LSX</span></div>
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>API confirm ProductionOutput</strong> — POST <code>/production-outputs/{id}/confirm</code>: nhập kho TP, post <code>Nợ 155 / Có 154</code>, cập nhật <code>InventoryBalance</code> kho TP với giá thành thực tế</span></div>
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>Tự động tạo ProductionOutput draft</strong> khi chốt phiên — 1 phiếu / LSX, <code>trang_thai=draft</code>, chờ xác nhận nhập kho</span></div>
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>Frontend:</strong> Tab "Thành phẩm" trong ProductionSessionsPage — list draft ProductionOutput, nút confirm</span></div>
+        </div>
+        <div class="sprint-footer"><p><strong>Output:</strong> Chuỗi 154→155 hoàn chỉnh, tồn kho TP có giá thành đúng</p></div>
+      </div>
+
+      <div class="sprint s4">
+        <div class="sprint-header">
+          <div class="sprint-num">Sprint 4</div>
+          <h3>Variance: BOM kế hoạch vs thực tế</h3>
+          <span class="tag">Quan trọng</span>
+        </div>
+        <div class="sprint-body">
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>Sửa G4</strong> — <code>_compute_allocation</code>: thêm <code>chi_phi_ke_hoach</code> từ BOM confirmed vào <code>allocation_by_lsx</code>. Tính <code>variance = actual − standard</code></span></div>
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>GET <code>/production-sessions/{id}/variance</code></strong> — trả về bảng variance per LSX: giấy (kế hoạch vs thực), NVL (kế hoạch vs thực), tổng</span></div>
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>Phân tích nguyên nhân</strong> — Variance giấy = <em>lượng chênh</em> (kg TT vs kế hoạch) + <em>giá chênh</em> (don_gia_binh_quan vs don_gia_lock)</span></div>
+          <div class="task"><span class="task-icon">🔧</span><span class="task-text"><strong>Frontend:</strong> Tab "Variance" trong session detail — bảng màu (xanh/đỏ) so sánh</span></div>
+        </div>
+        <div class="sprint-footer"><p><strong>Output:</strong> Quản lý hiệu quả sản xuất, phát hiện lãng phí nguyên liệu</p></div>
+      </div>
+
+      <div class="sprint s5">
+        <div class="sprint-header">
+          <div class="sprint-num">Sprint 5</div>
+          <h3>Báo cáo giá thành tổng hợp</h3>
+          <span class="tag">Hoàn thiện</span>
+        </div>
+        <div class="sprint-body">
+          <div class="task"><span class="task-icon">📊</span><span class="task-text"><strong>Báo cáo giá thành / LSX</strong> — đơn giá xuất xưởng, breakdown: giấy / NVL / hao hụt / overhead, so với giá bán</span></div>
+          <div class="task"><span class="task-icon">📊</span><span class="task-text"><strong>Báo cáo kỳ</strong> — tổng chi phí sản xuất tháng, theo pháp nhân / xưởng, tỷ lệ từng khoản mục</span></div>
+          <div class="task"><span class="task-icon">📊</span><span class="task-text"><strong>Giá thành trung bình</strong> — rolling average per sản phẩm, trend theo tháng</span></div>
+          <div class="task"><span class="task-icon">📊</span><span class="task-text"><strong>Chi phí gián tiếp</strong> (G5) — phân bổ lương, khấu hao, điện nước vào 154 theo m²</span></div>
+        </div>
+        <div class="sprint-footer"><p><strong>Output:</strong> Dashboard giá thành đầy đủ cho BGĐ, kế toán, quản đốc</p></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Các model cần thêm / sửa ── -->
+  <div class="section">
+    <div class="section-title">Model / migration cần thêm hoặc sửa</div>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr><th>Model / File</th><th>Thay đổi</th><th>Sprint</th><th>Lý do</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>bom.py · ProductionBOMItem</code></td>
+            <td>Thêm <code>don_gia_lock: Decimal</code> — snapshot khi BOM confirmed</td>
+            <td><span class="badge partial">S2</span></td>
+            <td>G3: cố định giá vật liệu tại thời điểm lên kế hoạch</td>
+          </tr>
+          <tr>
+            <td><code>production.py · ProductionOrderItem</code></td>
+            <td>Thêm <code>dien_tich_ke_hoach: Decimal</code> (m²)</td>
+            <td><span class="badge partial">S2</span></td>
+            <td>G5: allocation cần m² kế hoạch để tính variance</td>
+          </tr>
+          <tr>
+            <td><code>production_sessions.py · chot_phien</code></td>
+            <td>Sửa journal: Nợ 154 / Có 1521 + Có 1522 thay vì Có 154</td>
+            <td><span class="badge partial">S2</span></td>
+            <td>G1: hạch toán đúng tài khoản nguyên vật liệu</td>
+          </tr>
+          <tr>
+            <td><code>warehouse_doc.py · ProductionOutput</code></td>
+            <td>Thêm <code>production_session_id</code>, tự điền <code>don_gia_xuat_xuong</code></td>
+            <td><span class="badge gap">S3</span></td>
+            <td>G2: liên kết chi phí session → giá thành TP</td>
+          </tr>
+          <tr>
+            <td><code>production_sessions.py · _compute_allocation</code></td>
+            <td>Thêm <code>chi_phi_ke_hoach</code> từ BOM, trả về <code>variance</code> per LSX</td>
+            <td><span class="badge gap">S4</span></td>
+            <td>G4: variance analysis BOM vs thực tế</td>
+          </tr>
+          <tr>
+            <td><code>production.py · (mới)</code></td>
+            <td><code>OverheadAllocation</code> — bảng phân bổ chi phí gián tiếp tháng vào 154</td>
+            <td><span class="badge gap">S5</span></td>
+            <td>G5: lương/khấu hao/điện vào giá thành</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

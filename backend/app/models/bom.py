@@ -163,6 +163,7 @@ class ProductionBOMItem(Base):
     trong_luong_can_tong: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))  # kg total
 
     don_gia_kg: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
+    don_gia_lock: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))  # snapshot khi BOM confirmed
     thanh_tien: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
 
     # ---- Relationships ----

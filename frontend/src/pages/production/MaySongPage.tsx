@@ -5,7 +5,7 @@ import {
   message, Modal, Popconfirm, Progress, Row, Segmented, Select, Space, Spin, Table, Tabs, Tag,
   TimePicker, Tooltip, Typography,
 } from 'antd'
-import { CaretRightOutlined, CopyOutlined, PauseOutlined, PrinterOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
+import { CaretRightOutlined, CopyOutlined, LinkOutlined, PauseOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import {
@@ -867,6 +867,34 @@ function ModalInTem({ state, onClose, onUpdateTamPerPallet, onUpdateSoPallet }: 
   )
 }
 
+// ─── Session helpers ─────────────────────────────────────────────────────────
+const SESSION_STATUS_LABEL: Record<string, string> = {
+  dang_chay: 'Đang chạy',
+  cho_phan_bo: 'Chờ phân bổ',
+  da_chot: 'Đã chốt',
+}
+const SESSION_STATUS_COLOR: Record<string, string> = {
+  dang_chay: 'green',
+  cho_phan_bo: 'orange',
+  da_chot: 'default',
+}
+
+function defaultShiftName(): string {
+  const h = new Date().getHours()
+  const ca = h >= 6 && h < 14 ? 'Ca 1' : h >= 14 && h < 22 ? 'Ca 2' : 'Ca 3'
+  const d = new Date()
+  return `${ca} - ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+}
+
+function nextSessionName(existingName?: string): string {
+  const base = defaultShiftName()
+  if (!existingName) return base
+  if (existingName === base) return `${base} (2)`
+  const m = existingName.match(/^(.+) \((\d+)\)$/)
+  if (m && m[1] === base) return `${base} (${parseInt(m[2]) + 1})`
+  return base
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function MaySongPage() {
   const [activeTab, setActiveTab]       = useState('dang_sx')
@@ -882,6 +910,8 @@ export default function MaySongPage() {
   const [inTemLoading, setInTemLoading] = useState(false)
   const [histTuNgay, setHistTuNgay]     = useState(dayjs().subtract(30, 'day').format('YYYY-MM-DD'))
   const [histDenNgay, setHistDenNgay]   = useState(dayjs().format('YYYY-MM-DD'))
+  const [newSessionOpen, setNewSessionOpen] = useState(false)
+  const [newSessionName, setNewSessionName] = useState('')
   const [histFilterCa, setHistFilterCa]   = useState<string | undefined>()
   const [histSearchLenh, setHistSearchLenh] = useState('')
   const qc = useQueryClient()
@@ -904,10 +934,11 @@ export default function MaySongPage() {
     staleTime: 60_000,
   })
 
-  // D4: Đảm bảo tồn tại phiên sản xuất cho ca hiện tại khi mở trang
-  useQuery({
+  // D4: Đảm bảo + hiển thị phiên sản xuất cho ca hiện tại (chỉ khi đã chọn xưởng)
+  const { data: shiftSessionData, isLoading: shiftSessionLoading, refetch: refetchShiftSession } = useQuery({
     queryKey: ['ensure-session-for-shift', filterPxId],
     queryFn: () => warehouseApi.ensureSessionForShift(filterPxId).then(r => r.data),
+    enabled: filterPxId != null,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   })
@@ -1051,6 +1082,17 @@ export default function MaySongPage() {
       setHoanthanhId(null)
     },
     onError: () => message.error('Lỗi khi lưu phiếu, vui lòng thử lại'),
+  })
+
+  const createSessionMut = useMutation({
+    mutationFn: (ten_phien: string) =>
+      warehouseApi.createProductionSession({ ten_phien, phan_xuong_id: filterPxId }).then(r => r.data),
+    onSuccess: () => {
+      message.success('Đã tạo phiên sản xuất mới')
+      setNewSessionOpen(false)
+      qc.invalidateQueries({ queryKey: ['ensure-session-for-shift', filterPxId] })
+    },
+    onError: () => message.error('Lỗi khi tạo phiên'),
   })
 
   const ngungMut = useMutation({
@@ -1549,6 +1591,42 @@ export default function MaySongPage() {
                   <Col>{settingsButton}</Col>
                 </Row>
 
+                {/* Banner phiên sản xuất active */}
+                {filterPxId && (
+                  <Row align="middle" justify="space-between" style={{ marginBottom: 8 }}>
+                    <Col>
+                      {shiftSessionLoading ? (
+                        <Spin size="small" />
+                      ) : shiftSessionData ? (
+                        <Space size={4}>
+                          <Tag color={SESSION_STATUS_COLOR[shiftSessionData.session.trang_thai] ?? 'default'}>
+                            {shiftSessionData.session.ten_phien}
+                          </Tag>
+                          <Tag color={SESSION_STATUS_COLOR[shiftSessionData.session.trang_thai] ?? 'default'}>
+                            {SESSION_STATUS_LABEL[shiftSessionData.session.trang_thai] ?? shiftSessionData.session.trang_thai}
+                          </Tag>
+                          <Button
+                            size="small" type="link" icon={<LinkOutlined />}
+                            style={{ padding: 0 }}
+                            onClick={() => window.open(`/warehouse/production-sessions?session_id=${shiftSessionData.session.id}`, '_blank')}
+                          >
+                            Xem phiên
+                          </Button>
+                        </Space>
+                      ) : null}
+                    </Col>
+                    <Col>
+                      <Button
+                        size="small"
+                        icon={<PlusOutlined />}
+                        onClick={() => { setNewSessionName(nextSessionName(shiftSessionData?.session?.ten_phien)); setNewSessionOpen(true) }}
+                      >
+                        Tạo phiên mới
+                      </Button>
+                    </Col>
+                  </Row>
+                )}
+
                 {/* Filter nhanh theo trạng thái */}
                 <Row style={{ marginBottom: 8 }}>
                   <Col>
@@ -1915,6 +1993,34 @@ export default function MaySongPage() {
         onUpdateTamPerPallet={nTpp => setInTemState(s => s ? { ...s, tamPerPallet: nTpp, soPallet: s.soTam > 0 ? Math.ceil(s.soTam / nTpp) : 1 } : null)}
         onUpdateSoPallet={n => setInTemState(s => s ? { ...s, soPallet: n } : null)}
       />
+
+      <Modal
+        title="Tạo phiên sản xuất mới"
+        open={newSessionOpen}
+        onCancel={() => setNewSessionOpen(false)}
+        onOk={() => {
+          if (!newSessionName.trim()) { message.warning('Nhập tên phiên'); return }
+          createSessionMut.mutate(newSessionName.trim())
+        }}
+        confirmLoading={createSessionMut.isPending}
+        okText="Tạo phiên"
+        cancelText="Hủy"
+        width={400}
+      >
+        <div style={{ marginBottom: 8, color: '#666', fontSize: 13 }}>
+          Tên phiên (có thể chỉnh):
+        </div>
+        <Input
+          value={newSessionName}
+          onChange={e => setNewSessionName(e.target.value)}
+          placeholder="Ca 1 - 23/06/2026"
+          onPressEnter={() => {
+            if (!newSessionName.trim()) return
+            createSessionMut.mutate(newSessionName.trim())
+          }}
+          autoFocus
+        />
+      </Modal>
     </div>
   )
 }

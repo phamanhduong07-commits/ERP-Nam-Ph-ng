@@ -23,7 +23,9 @@ from app.models.quality import QCGiayCuonPhieu
 from app.models.warehouse_doc import (
     GoodsReceipt, GoodsReceiptItem,
     GiayRoll,
+    MaterialIssue, MaterialIssueItem,
 )
+from app.models.inventory import InventoryBalance
 from app.models.production import ProductionSession, ProductionSessionRoll
 from app.services.accounting_service import AccountingService
 from app.models.system import PrintTemplate, SystemSetting
@@ -1215,6 +1217,7 @@ def _giay_roll_to_dict(roll: GiayRoll) -> dict:
         "dinh_luong": int(pm.dinh_luong) if pm and pm.dinh_luong else None,
         "ma_nsx": (pm.nsx.ten_viet_tat if pm.nsx else None) if pm else None,
         "warehouse_id": roll.warehouse_id,
+        "phan_xuong_id": wh.phan_xuong_id if wh else None,
         "ten_kho": wh.ten_kho if wh else None,
         "so_phieu_nhap": roll.so_phieu_nhap,
         "ngay_nhap": roll.ngay_nhap.isoformat() if roll.ngay_nhap else None,
@@ -1367,11 +1370,13 @@ def can_giay_roll(
     # Tìm phiên: ưu tiên session_id từ request, sau đó auto-detect phiên đang chạy
     session_id = body.session_id
     if not session_id and roll.warehouse_id:
-        # Tìm phiên đang chạy của kho (warehouse) tương ứng
-        # Lấy phiên mới nhất đang chạy (không bắt buộc cùng phan_xuong)
-        active = db.query(ProductionSession).filter(
-            ProductionSession.trang_thai == "dang_chay",
-        ).order_by(ProductionSession.ngay_tao.desc(), ProductionSession.id.desc()).first()
+        # Auto-detect: ưu tiên phiên cùng phan_xuong của cuộn giấy
+        wh = db.get(Warehouse, roll.warehouse_id)
+        px_id = wh.phan_xuong_id if wh else None
+        q = db.query(ProductionSession).filter(ProductionSession.trang_thai == "dang_chay")
+        if px_id:
+            q = q.filter(ProductionSession.phan_xuong_id == px_id)
+        active = q.order_by(ProductionSession.id.desc()).first()
         if active:
             session_id = active.id
 
@@ -1399,6 +1404,79 @@ def can_giay_roll(
                 can_by=current_user.id,
             )
             db.add(sr)
+
+    # ── Draft Phiếu Xuất Giấy — tạo/cập nhật mỗi lần cân ───────────────────
+    if session_id and sr and abs(delta_kg) >= 0.01:
+        draft = (
+            db.query(MaterialIssue)
+            .filter(
+                MaterialIssue.production_session_id == session_id,
+                MaterialIssue.trang_thai == "nhap",
+                MaterialIssue.bo_qua_hach_toan == True,
+            )
+            .first()
+        )
+        if not draft:
+            today_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+            prefix = f"XGIAY-{today_str}-"
+            last = (
+                db.query(MaterialIssue)
+                .filter(MaterialIssue.so_phieu.like(f"{prefix}%"))
+                .order_by(MaterialIssue.id.desc())
+                .first()
+            )
+            seq = int(last.so_phieu.split("-")[-1]) + 1 if last else 1
+            draft = MaterialIssue(
+                so_phieu=f"{prefix}{seq:03d}",
+                ngay_xuat=datetime.now(timezone.utc).date(),
+                production_session_id=session_id,
+                warehouse_id=roll.warehouse_id,
+                trang_thai="nhap",
+                bo_qua_hach_toan=True,
+                created_by=current_user.id,
+            )
+            db.add(draft)
+            db.flush()
+
+        avg_price = Decimal("0")
+        if roll.warehouse_id and roll.paper_material_id:
+            bal_rec = (
+                db.query(InventoryBalance)
+                .filter(
+                    InventoryBalance.warehouse_id == roll.warehouse_id,
+                    InventoryBalance.paper_material_id == roll.paper_material_id,
+                )
+                .first()
+            )
+            if bal_rec and bal_rec.don_gia_binh_quan:
+                avg_price = bal_rec.don_gia_binh_quan
+
+        pm = db.get(PaperMaterial, roll.paper_material_id) if roll.paper_material_id else None
+        ten_hang = (roll.barcode or f"Cuộn #{roll_id}") + (f" ({pm.ten})" if pm else "")
+
+        item = (
+            db.query(MaterialIssueItem)
+            .filter(
+                MaterialIssueItem.issue_id == draft.id,
+                MaterialIssueItem.ghi_chu == f"roll:{roll_id}",
+            )
+            .first()
+        )
+        tieu_hao = float(sr.trong_luong_tieu_hao)
+        if item:
+            item.so_luong_thuc_xuat = Decimal(str(max(0, tieu_hao)))
+            item.don_gia = avg_price
+        else:
+            db.add(MaterialIssueItem(
+                issue_id=draft.id,
+                paper_material_id=roll.paper_material_id,
+                ten_hang=ten_hang,
+                so_luong_ke_hoach=Decimal("0"),
+                so_luong_thuc_xuat=Decimal(str(max(0, tieu_hao))),
+                dvt="Kg",
+                don_gia=avg_price,
+                ghi_chu=f"roll:{roll_id}",
+            ))
 
     db.commit()
     result = _giay_roll_to_dict(roll)

@@ -77,10 +77,17 @@ export default function CanCuonGiayPage() {
   })
 
   useEffect(() => {
-    if (Array.isArray(activeSessions) && activeSessions.length === 1 && selectedSessionId === null) {
-      setSelectedSessionId(activeSessions[0].id)
+    if (!Array.isArray(activeSessions) || activeSessions.length === 0) return
+    if (selectedSessionId !== null) return
+
+    // Ưu tiên: phiên cùng phan_xuong của cuộn vừa quét
+    if (roll?.phan_xuong_id) {
+      const match = activeSessions.filter(s => s.phan_xuong_id === roll.phan_xuong_id)
+      if (match.length === 1) { setSelectedSessionId(match[0].id); return }
     }
-  }, [activeSessions, selectedSessionId])
+    // Fallback: nếu toàn hệ thống chỉ có đúng 1 phiên active
+    if (activeSessions.length === 1) setSelectedSessionId(activeSessions[0].id)
+  }, [activeSessions, selectedSessionId, roll?.phan_xuong_id])
 
   const [history, setHistory]       = useState<HistoryEntry[]>(() => {
     try {

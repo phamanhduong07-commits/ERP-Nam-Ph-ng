@@ -1,4 +1,4 @@
-"""Router quản lý Phiên sản xuất (Production Session).
+﻿"""Router quản lý Phiên sản xuất (Production Session).
 
 Cung cấp đầy đủ các API theo kế hoạch:
   POST   /api/warehouse/production-sessions                 — Tạo phiên mới
@@ -27,11 +27,15 @@ from app.models.auth import User
 from app.models.master import OtherMaterial, PhanXuong
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.production import (
+    MayDungLog,
+    ProductionOrder,
     ProductionSession,
     ProductionSessionMaterial,
+    ProductionSessionOverhead,
     ProductionSessionPaperWaste,
     ProductionSessionRoll,
     ProductionOrderItem,
+    ProductionKhauCost,
 )
 from app.models.warehouse_doc import GiayRoll
 from app.models.master import PaperMaterial
@@ -72,6 +76,17 @@ class MaterialItemIn(BaseModel):
 
 class MaterialsUpdateIn(BaseModel):
     materials: list[MaterialItemIn]
+
+
+class OverheadItemIn(BaseModel):
+    loai_chi_phi: str  # dien | thue_xuong | khau_hao_may | luong_gian_tiep | khac
+    ten_chi_phi: str
+    thanh_tien: float
+    ghi_chu: Optional[str] = None
+
+
+class OverheadsUpdateIn(BaseModel):
+    overheads: list[OverheadItemIn]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -245,6 +260,117 @@ def get_active_sessions(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# API: Báo cáo tổng hợp nhiều phiên (PHẢI đặt trước /{session_id})
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/summary-report")
+def get_sessions_summary_report(
+    tu_ngay: Optional[date] = Query(None, description="Từ ngày (YYYY-MM-DD)"),
+    den_ngay: Optional[date] = Query(None, description="Đến ngày (YYYY-MM-DD)"),
+    phan_xuong_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Báo cáo tổng hợp KPI cho nhiều phiên sản xuất theo khoảng thời gian."""
+    q = db.query(ProductionSession).options(
+        joinedload(ProductionSession.phan_xuong),
+        selectinload(ProductionSession.rolls),
+        selectinload(ProductionSession.materials).options(
+            joinedload(ProductionSessionMaterial.other_material)
+        ),
+        selectinload(ProductionSession.paper_wastes),
+        selectinload(ProductionSession.phieu_nhap_phoi_songs).options(
+            selectinload(PhieuNhapPhoiSong.items).options(
+                joinedload(PhieuNhapPhoiSongItem.production_order_item)
+            )
+        ),
+    )
+    if tu_ngay:
+        q = q.filter(ProductionSession.ngay_tao >= tu_ngay)
+    if den_ngay:
+        q = q.filter(ProductionSession.ngay_tao <= den_ngay)
+    if phan_xuong_id:
+        q = q.filter(ProductionSession.phan_xuong_id == phan_xuong_id)
+
+    sessions = q.order_by(ProductionSession.ngay_tao.desc(), ProductionSession.id.desc()).all()
+
+    rows = []
+    for s in sessions:
+        # ── Sản lượng ─────────────────────────────────────────────────────────
+        ke_hoach = 0.0
+        thuc_te = 0.0
+        so_luong_loi = 0.0
+        for phieu in s.phieu_nhap_phoi_songs:
+            for it in phieu.items:
+                ke_hoach += float(it.so_luong_ke_hoach or 0)
+                thuc_te += float(it.so_luong_thuc_te or 0)
+                so_luong_loi += float(it.so_luong_loi or 0)
+
+        ty_le_hoan_thanh = round(thuc_te / ke_hoach * 100, 1) if ke_hoach > 0 else None
+        ty_le_loi = round(so_luong_loi / thuc_te * 100, 2) if thuc_te > 0 else None
+
+        # ── Tiêu hao giấy ────────────────────────────────────────────────────
+        tong_kg_tieu_hao = sum(
+            float(r.trong_luong_tieu_hao or 0) for r in s.rolls
+        )
+        tong_kg_hao_hut = float(s.so_kg_hao_hut_chung or 0) + sum(
+            float(w.so_kg_hao_hut or 0) for w in s.paper_wastes
+        )
+        ty_le_hao_hut = round(tong_kg_hao_hut / tong_kg_tieu_hao * 100, 2) if tong_kg_tieu_hao > 0 else None
+
+        # ── Chi phí (chỉ có khi đã chốt) ─────────────────────────────────────
+        tong_chi_phi = None
+        if s.allocation_detail:
+            import json as _json
+            try:
+                alloc = _json.loads(s.allocation_detail) if isinstance(s.allocation_detail, str) else s.allocation_detail
+                tong_chi_phi = round(sum(float(a.get("chi_phi_tong", 0)) for a in alloc), 0)
+            except Exception:
+                pass
+
+        # ── Thời gian máy dừng ────────────────────────────────────────────────
+        poi_ids = list({
+            it.production_order_item_id
+            for phieu in s.phieu_nhap_phoi_songs
+            for it in phieu.items
+        })
+        tong_phut_dung = 0
+        if poi_ids and s.ngay_tao:
+            po_ids_q = db.query(ProductionOrderItem.production_order_id).filter(
+                ProductionOrderItem.id.in_(poi_ids)
+            ).distinct().all()
+            po_ids = [r[0] for r in po_ids_q]
+            if po_ids:
+                logs = db.query(func.sum(MayDungLog.thoi_gian_dung)).filter(
+                    MayDungLog.production_order_id.in_(po_ids),
+                ).scalar()
+                tong_phut_dung = int(logs or 0)
+
+        rows.append({
+            "id": s.id,
+            "ten_phien": s.ten_phien,
+            "ngay_tao": s.ngay_tao.isoformat() if s.ngay_tao else None,
+            "trang_thai": s.trang_thai,
+            "phan_xuong_ten": s.phan_xuong.ten_xuong if s.phan_xuong else None,
+            "so_cuon": len(s.rolls),
+            "so_phieu": len(s.phieu_nhap_phoi_songs),
+            "ke_hoach": ke_hoach,
+            "thuc_te": thuc_te,
+            "so_luong_loi": so_luong_loi,
+            "ty_le_hoan_thanh": ty_le_hoan_thanh,
+            "ty_le_loi": ty_le_loi,
+            "tong_kg_tieu_hao": round(tong_kg_tieu_hao, 3),
+            "tong_kg_hao_hut": round(tong_kg_hao_hut, 3),
+            "ty_le_hao_hut": ty_le_hao_hut,
+            "tong_chi_phi": tong_chi_phi,
+            "tong_phut_dung": tong_phut_dung,
+            "closed_at": s.closed_at.isoformat() if s.closed_at else None,
+        })
+
+    return {"total": len(rows), "items": rows}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # API: Chi tiết phiên
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -266,6 +392,7 @@ def get_session_detail(
             joinedload(ProductionSessionMaterial.other_material)
         ),
         selectinload(ProductionSession.paper_wastes),
+        selectinload(ProductionSession.overheads),
         selectinload(ProductionSession.phieu_nhap_phoi_songs).options(
             selectinload(PhieuNhapPhoiSong.items).options(
                 joinedload(PhieuNhapPhoiSongItem.production_order_item)
@@ -307,6 +434,16 @@ def get_session_detail(
             for w in session.paper_wastes
         ],
         "phieu_nhap_phoi_songs": [_phieu_detail(p) for p in session.phieu_nhap_phoi_songs],
+        "overheads": [
+            {
+                "id": o.id,
+                "loai_chi_phi": o.loai_chi_phi,
+                "ten_chi_phi": o.ten_chi_phi,
+                "thanh_tien": float(o.thanh_tien),
+                "ghi_chu": o.ghi_chu,
+            }
+            for o in session.overheads
+        ],
         "allocation_detail": allocation_detail,
     }
 
@@ -455,18 +592,52 @@ def update_materials(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# API: Cập nhật chi phí sản xuất chung (overhead)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.patch("/{session_id}/overheads")
+def update_overheads(
+    session_id: int,
+    body: OverheadsUpdateIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cập nhật danh sách chi phí SX chung (điện, thuê xưởng, khấu hao...) cho phiên."""
+    session = db.get(ProductionSession, session_id)
+    if not session:
+        raise HTTPException(404, "Không tìm thấy phiên sản xuất")
+    if session.trang_thai == "da_chot":
+        raise HTTPException(400, "Phiên đã chốt, không thể thay đổi")
+
+    db.query(ProductionSessionOverhead).filter(
+        ProductionSessionOverhead.session_id == session_id
+    ).delete()
+
+    for item in body.overheads:
+        db.add(ProductionSessionOverhead(
+            session_id=session_id,
+            loai_chi_phi=item.loai_chi_phi,
+            ten_chi_phi=item.ten_chi_phi,
+            thanh_tien=Decimal(str(item.thanh_tien)),
+            ghi_chu=item.ghi_chu,
+        ))
+
+    db.commit()
+    return {"ok": True, "session_id": session_id, "overhead_count": len(body.overheads)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Thuật toán Phân bổ (dùng nội bộ cho cả preview và close)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _compute_allocation(session: ProductionSession, db: Session) -> dict:
     """
-    Tính phân bổ chi phí giấy + NVL phụ cho phiên sản xuất.
+    Tính phân bổ chi phí giấy + NVL phụ + overhead cho phiên sản xuất.
 
     Trả về dict chứa:
       - rolls_by_material: tổng tiêu hao giấy theo loại vật liệu
       - allocation_by_lsx: chi phí phân bổ về từng LSX item (production_order_item_id)
-      - total_material_cost: tổng chi phí NVL phụ
-      - nvl_by_lsx: chi phí NVL phụ phân bổ về từng LSX
+      - total_chi_phi_giay, total_chi_phi_nvl_phu, total_chi_phi_overhead, total_chi_phi_phien
       - errors: danh sách cảnh báo
     """
     errors = []
@@ -614,6 +785,7 @@ def _compute_allocation(session: ProductionSession, db: Session) -> dict:
                     "dien_tich_quy_doi": 0.0,
                     "chi_phi_giay": 0.0,
                     "chi_phi_nvl_phu": 0.0,
+                    "chi_phi_overhead": 0.0,
                     "chi_phi_tong": 0.0,
                     "papers": [],  # Chi tiết giấy phân bổ
                 }
@@ -673,12 +845,22 @@ def _compute_allocation(session: ProductionSession, db: Session) -> dict:
     elif lsx_items and total_chi_phi_nvl > 0:
         errors.append("Không có dữ liệu diện tích quy đổi — NVL phụ chưa được phân bổ")
 
+    # ── 8. Phân bổ chi phí sản xuất chung (overhead) theo diện tích quy đổi ─
+    total_chi_phi_overhead = sum(float(o.thanh_tien) for o in (session.overheads or []))
+    if total_dien_tich_qd > 0 and total_chi_phi_overhead > 0:
+        for info in lsx_items.values():
+            ty_le = info["dien_tich_quy_doi"] / total_dien_tich_qd
+            info["chi_phi_overhead"] = total_chi_phi_overhead * ty_le
+
     # Tổng chi phí cho mỗi LSX và làm tròn
     total_chi_phi_giay = 0.0
     for info in lsx_items.values():
-        info["chi_phi_tong"] = info["chi_phi_giay"] + info["chi_phi_nvl_phu"]
+        info["chi_phi_tong"] = (
+            info["chi_phi_giay"] + info["chi_phi_nvl_phu"] + info["chi_phi_overhead"]
+        )
         info["chi_phi_giay"] = round(info["chi_phi_giay"], 2)
         info["chi_phi_nvl_phu"] = round(info["chi_phi_nvl_phu"], 2)
+        info["chi_phi_overhead"] = round(info["chi_phi_overhead"], 2)
         info["chi_phi_tong"] = round(info["chi_phi_tong"], 2)
         info["dien_tich_m2"] = round(info["dien_tich_m2"], 4)
         info["dien_tich_quy_doi"] = round(info["dien_tich_quy_doi"], 4)
@@ -691,7 +873,8 @@ def _compute_allocation(session: ProductionSession, db: Session) -> dict:
         "total_hao_hut_kg": round(total_hao_hut, 3),
         "total_chi_phi_giay": round(total_chi_phi_giay, 2),
         "total_chi_phi_nvl_phu": round(total_chi_phi_nvl, 2),
-        "total_chi_phi_phien": round(total_chi_phi_giay + total_chi_phi_nvl, 2),
+        "total_chi_phi_overhead": round(total_chi_phi_overhead, 2),
+        "total_chi_phi_phien": round(total_chi_phi_giay + total_chi_phi_nvl + total_chi_phi_overhead, 2),
         "errors": errors,
     }
 
@@ -717,6 +900,7 @@ def preview_allocate(
             joinedload(ProductionSessionMaterial.other_material)
         ),
         selectinload(ProductionSession.paper_wastes),
+        selectinload(ProductionSession.overheads),
         selectinload(ProductionSession.phieu_nhap_phoi_songs).options(
             selectinload(PhieuNhapPhoiSong.items).options(
                 joinedload(PhieuNhapPhoiSongItem.production_order_item)
@@ -764,6 +948,7 @@ def close_session(
             joinedload(ProductionSessionMaterial.other_material)
         ),
         selectinload(ProductionSession.paper_wastes),
+        selectinload(ProductionSession.overheads),
         selectinload(ProductionSession.phieu_nhap_phoi_songs).options(
             selectinload(PhieuNhapPhoiSong.items).options(
                 joinedload(PhieuNhapPhoiSongItem.production_order_item)
@@ -778,8 +963,26 @@ def close_session(
 
     # Tính phân bổ
     allocation = _compute_allocation(session, db)
-    if allocation["errors"]:
-        raise HTTPException(400, f"Không thể chốt phiên: {'; '.join(allocation['errors'])}")
+    # BOM errors chỉ block khi session có giay_rolls thực tế (chi phí giấy > 0).
+    # Nếu session không có cuộn giấy nào thì BOM error là informational — vẫn cho phép chốt.
+    hard_errors = [e for e in allocation["errors"] if allocation["total_tieu_hao_giay_kg"] > 0]
+    if hard_errors:
+        raise HTTPException(400, f"Không thể chốt phiên: {'; '.join(hard_errors)}")
+
+    # Gắn chi_phi_khau_tong (converting per m²) vào từng LSX item trong allocation
+    for info in allocation["allocation_by_lsx"]:
+        poi_id = info.get("production_order_item_id")
+        if poi_id:
+            khau_total = db.query(func.coalesce(func.sum(ProductionKhauCost.thanh_tien), 0)).filter(
+                ProductionKhauCost.production_order_item_id == poi_id
+            ).scalar() or 0.0
+            info["chi_phi_khau_tong"] = round(float(khau_total), 2)
+        else:
+            info["chi_phi_khau_tong"] = 0.0
+        info["chi_phi_tong"] = round(
+            info["chi_phi_giay"] + info["chi_phi_nvl_phu"]
+            + info.get("chi_phi_overhead", 0) + info["chi_phi_khau_tong"], 2
+        )
 
     # Cập nhật trạng thái phiên và lưu allocation_detail
     import json
@@ -788,38 +991,152 @@ def close_session(
     session.closed_by = current_user.id
     session.closed_at = datetime.now(timezone.utc)
 
-    # ── Hạch toán Kế toán Hướng 1 ──
+    # ── Hạch toán Kế toán: Nợ 154 / Có 1521 (giấy) + Có 1522 (NVL phụ) ──────
     from app.services.accounting_service import AccountingService
     phap_nhan_id = session.phan_xuong.phap_nhan_id if session.phan_xuong else None
 
     journal_items = []
     for info in allocation["allocation_by_lsx"]:
-        chi_phi_tong = float(info["chi_phi_tong"] or 0)
-        if chi_phi_tong <= 0:
-            continue
-        journal_items.append({
-            "ten_hang": f"K/C chi phí Phiên #{session.id} về LSX #{info['production_order_id']} - {info['ten_hang']}",
-            "so_luong": 1.0,
-            "don_gia": chi_phi_tong,
-            "tk_no": "154",
-            "tk_co": "154",
-            "phan_xuong_id_no": None,
-            "phan_xuong_id_co": session.phan_xuong_id,
-            "phap_nhan_id_no": phap_nhan_id,
-            "phap_nhan_id_co": phap_nhan_id,
-        })
+        lsx_label = f"LSX #{info['production_order_id']} — {info['ten_hang']}"
+        chi_phi_giay = float(info.get("chi_phi_giay") or 0)
+        chi_phi_nvl = float(info.get("chi_phi_nvl_phu") or 0)
+        chi_phi_overhead = float(info.get("chi_phi_overhead") or 0)
+
+        if chi_phi_giay > 0:
+            journal_items.append({
+                "ten_hang": f"Phiên #{session.id} — Xuất giấy SX: {lsx_label}",
+                "so_luong": 1.0,
+                "don_gia": chi_phi_giay,
+                "tk_no": "154",
+                "tk_co": "1521",
+                "phan_xuong_id_no": None,
+                "phan_xuong_id_co": session.phan_xuong_id,
+                "phap_nhan_id_no": phap_nhan_id,
+                "phap_nhan_id_co": phap_nhan_id,
+            })
+        if chi_phi_nvl > 0:
+            journal_items.append({
+                "ten_hang": f"Phiên #{session.id} — Xuất NVL phụ SX: {lsx_label}",
+                "so_luong": 1.0,
+                "don_gia": chi_phi_nvl,
+                "tk_no": "154",
+                "tk_co": "1522",
+                "phan_xuong_id_no": None,
+                "phan_xuong_id_co": session.phan_xuong_id,
+                "phap_nhan_id_no": phap_nhan_id,
+                "phap_nhan_id_co": phap_nhan_id,
+            })
+        if chi_phi_overhead > 0:
+            journal_items.append({
+                "ten_hang": f"Phiên #{session.id} — Chi phí SX chung: {lsx_label}",
+                "so_luong": 1.0,
+                "don_gia": chi_phi_overhead,
+                "tk_no": "154",
+                "tk_co": "627",
+                "phan_xuong_id_no": None,
+                "phan_xuong_id_co": session.phan_xuong_id,
+                "phap_nhan_id_no": phap_nhan_id,
+                "phap_nhan_id_co": phap_nhan_id,
+            })
 
     if journal_items:
         acc_service = AccountingService(db)
         acc_service.post_inventory_journal(
             ngay=session.ngay_tao,
-            loai="XUAT_SX",  # Dùng XUAT_SX để hạch toán sản xuất
+            loai="XUAT_SX",
             chung_tu_loai="production_sessions",
             chung_tu_id=session.id,
             items=journal_items,
             phap_nhan_id=phap_nhan_id,
             phan_xuong_id=session.phan_xuong_id,
         )
+
+    # ── Tự động tạo Phiếu Xuất NVL ──
+    from app.models.warehouse_doc import MaterialIssue, MaterialIssueItem
+    session_materials = (
+        db.query(ProductionSessionMaterial)
+        .filter(ProductionSessionMaterial.session_id == session_id)
+        .all()
+    )
+    if session_materials:
+        closed_date = session.closed_at.date() if session.closed_at else datetime.now(timezone.utc).date()
+        prefix = f"XNVL-{closed_date.strftime('%Y%m%d')}-"
+        last_issue = (
+            db.query(MaterialIssue)
+            .filter(MaterialIssue.so_phieu.like(f"{prefix}%"))
+            .order_by(MaterialIssue.id.desc())
+            .first()
+        )
+        seq = int(last_issue.so_phieu.split("-")[-1]) + 1 if last_issue else 1
+
+        issue = MaterialIssue(
+            so_phieu=f"{prefix}{seq:03d}",
+            ngay_xuat=closed_date,
+            production_session_id=session_id,
+            trang_thai="da_xuat",
+            created_by=current_user.id,
+        )
+        db.add(issue)
+        db.flush()
+
+        for mat in session_materials:
+            nvl = db.get(OtherMaterial, mat.other_material_id)
+            db.add(MaterialIssueItem(
+                issue_id=issue.id,
+                other_material_id=mat.other_material_id,
+                ten_hang=nvl.ten if nvl else f"NVL #{mat.other_material_id}",
+                so_luong_ke_hoach=mat.so_luong,
+                so_luong_thuc_xuat=mat.so_luong,
+                dvt=nvl.dvt if nvl else "kg",
+                don_gia=nvl.gia_mua if nvl else 0,
+            ))
+            # Trừ tồn kho
+            if nvl:
+                nvl.ton_kho = (nvl.ton_kho or Decimal("0")) - mat.so_luong
+
+    # ── Finalize draft Phiếu Xuất Giấy (tạo bởi từng lần cân) ──────────────
+    from app.models.warehouse_doc import MaterialIssue as _MIssue
+    giay_draft = (
+        db.query(_MIssue)
+        .filter(
+            _MIssue.production_session_id == session_id,
+            _MIssue.trang_thai == "nhap",
+            _MIssue.bo_qua_hach_toan == True,
+        )
+        .first()
+    )
+    if giay_draft:
+        giay_draft.trang_thai = "da_xuat"
+        giay_draft.ngay_xuat = session.closed_at.date()
+
+    # ── Link ProductionOutput với phiên và điền don_gia_xuat_xuong ───────────
+    # Gộp chi_phi_tong theo production_order_id từ allocation
+    from app.models.warehouse_doc import ProductionOutput as _POOut
+    cost_by_lsx: dict[int, float] = {}
+    for info in allocation["allocation_by_lsx"]:
+        po_id = info.get("production_order_id")
+        if po_id:
+            cost_by_lsx[po_id] = cost_by_lsx.get(po_id, 0.0) + float(info.get("chi_phi_tong") or 0)
+
+    for po_id, total_cost in cost_by_lsx.items():
+        if total_cost <= 0:
+            continue
+        # Tìm các ProductionOutput chưa link session và don_gia == 0
+        outputs = (
+            db.query(_POOut)
+            .filter(
+                _POOut.production_order_id == po_id,
+                _POOut.production_session_id.is_(None),
+                _POOut.don_gia_xuat_xuong == 0,
+            )
+            .all()
+        )
+        for out in outputs:
+            out.production_session_id = session_id
+            if float(out.so_luong_nhap) > 0:
+                out.don_gia_xuat_xuong = Decimal(str(round(total_cost / float(out.so_luong_nhap), 2)))
+                # TODO S4: reverse + repost journal 155/154 và cập nhật inventory_balance
+                # khi output đã được tạo trước khi phiên chốt (journal đã post với don_gia=0)
 
     db.commit()
 
@@ -911,7 +1228,7 @@ def get_default_materials(
     )
     return {
         "materials": [
-            {"id": m.id, "ten": m.ten, "dvt": m.dvt}
+            {"id": m.id, "ten": m.ten, "dvt": m.dvt, "gia_mua": float(m.gia_mua or 0)}
             for m in materials
         ]
     }
@@ -1111,4 +1428,336 @@ def split_session(
         "message": "Đã tách phiên thành công",
         "new_session_id": new_session.id,
         "new_session": _session_summary(new_session),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API: Chuyển cuộn giấy sang phiên khác
+# ─────────────────────────────────────────────────────────────────────────────
+
+class MoveRollIn(BaseModel):
+    target_session_id: int
+
+
+@router.patch("/{session_id}/rolls/{roll_id}/move")
+def move_roll_to_session(
+    session_id: int,
+    roll_id: int,
+    body: MoveRollIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Chuyển 1 cuộn giấy từ phiên này sang phiên khác (sửa sai khi cân nhầm phiên)."""
+    roll = (
+        db.query(ProductionSessionRoll)
+        .filter(ProductionSessionRoll.id == roll_id, ProductionSessionRoll.session_id == session_id)
+        .first()
+    )
+    if not roll:
+        raise HTTPException(404, "Không tìm thấy cuộn giấy trong phiên này")
+
+    src = db.get(ProductionSession, session_id)
+    if src and src.trang_thai == "da_chot":
+        raise HTTPException(400, "Phiên nguồn đã chốt — không thể di chuyển cuộn giấy")
+
+    target = db.get(ProductionSession, body.target_session_id)
+    if not target:
+        raise HTTPException(404, "Không tìm thấy phiên đích")
+    if target.trang_thai == "da_chot":
+        raise HTTPException(400, "Không thể chuyển vào phiên đã chốt")
+    if body.target_session_id == session_id:
+        raise HTTPException(400, "Phiên đích trùng phiên nguồn")
+
+    roll.session_id = body.target_session_id
+    db.commit()
+    return {"ok": True, "roll_id": roll_id, "from_session_id": session_id, "to_session_id": body.target_session_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API: Variance report — BOM planned vs actual per LSX
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/{session_id}/variance")
+def get_variance(
+    session_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """So sánh chi phí kế hoạch (BOM) vs thực tế (session allocation + khau_costs) per LSX.
+
+    Yêu cầu phiên đã chốt (da_chot).
+    """
+    import json as _json
+    from app.models.bom import ProductionBOM, ProductionBOMItem
+
+    session = db.get(ProductionSession, session_id)
+    if not session:
+        raise HTTPException(404, "Không tìm thấy phiên sản xuất")
+    if session.trang_thai != "da_chot":
+        raise HTTPException(400, "Phiên chưa chốt — chưa có dữ liệu thực tế")
+
+    allocation = session.allocation_detail
+    if not allocation:
+        return {"session_id": session_id, "items": [], "message": "Phiên chưa có allocation_detail"}
+
+    alloc_list = allocation if isinstance(allocation, list) else _json.loads(allocation)
+
+    items = []
+    for info in alloc_list:
+        poi_id = info.get("production_order_item_id")
+        if not poi_id:
+            continue
+
+        # ── Actual từ session ─────────────────────────────────────────────
+        actual_giay = float(info.get("chi_phi_giay") or 0)
+        actual_nvl = float(info.get("chi_phi_nvl_phu") or 0)
+        actual_khau = float(info.get("chi_phi_khau_tong") or 0)
+
+        # ── Kế hoạch từ BOM ──────────────────────────────────────────────
+        bom = db.query(ProductionBOM).filter(
+            ProductionBOM.production_order_item_id == poi_id,
+            ProductionBOM.trang_thai == "confirmed",
+        ).first()
+
+        ke_hoach_giay = 0.0
+        ke_hoach_khau = 0.0
+        if bom:
+            # Chi phí giấy = sum(don_gia_lock × trong_luong_can_tong) per layer
+            for bi in bom.items:
+                lock = float(bi.don_gia_lock or bi.don_gia_kg or 0)
+                wt = float(bi.trong_luong_can_tong or 0)
+                ke_hoach_giay += lock * wt
+            # Chi phí gia công = sum(indirect_items.thanh_tien) + chi_phi_addon
+            ke_hoach_khau = float(bom.chi_phi_addon or 0)
+
+        actual_tong = actual_giay + actual_nvl + actual_khau
+        ke_hoach_tong = ke_hoach_giay + ke_hoach_khau
+
+        def _variance_pct(actual: float, planned: float) -> float | None:
+            if planned > 0:
+                return round((actual - planned) / planned * 100, 2)
+            return None
+
+        items.append({
+            "production_order_id": info.get("production_order_id"),
+            "production_order_item_id": poi_id,
+            "ten_hang": info.get("ten_hang", ""),
+            "so_luong": info.get("so_luong", 0),
+            "dien_tich_m2": info.get("dien_tich_m2", 0),
+            # Kế hoạch (BOM)
+            "chi_phi_giay_ke_hoach": round(ke_hoach_giay, 2),
+            "chi_phi_khau_ke_hoach": round(ke_hoach_khau, 2),
+            "chi_phi_tong_ke_hoach": round(ke_hoach_tong, 2),
+            # Thực tế
+            "chi_phi_giay_thuc_te": round(actual_giay, 2),
+            "chi_phi_nvl_thuc_te": round(actual_nvl, 2),
+            "chi_phi_khau_thuc_te": round(actual_khau, 2),
+            "chi_phi_tong_thuc_te": round(actual_tong, 2),
+            # Variance
+            "variance_giay_pct": _variance_pct(actual_giay, ke_hoach_giay),
+            "variance_khau_pct": _variance_pct(actual_khau, ke_hoach_khau),
+            "variance_tong_pct": _variance_pct(actual_tong, ke_hoach_tong),
+            "has_bom": bom is not None,
+        })
+
+    return {
+        "session_id": session_id,
+        "items": items,
+        "total_ke_hoach": round(sum(i["chi_phi_tong_ke_hoach"] for i in items), 2),
+        "total_thuc_te": round(sum(i["chi_phi_tong_thuc_te"] for i in items), 2),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API: Báo cáo hiệu quả một phiên — sản lượng + lỗi + tiêu hao + chi phí + máy dừng
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/{session_id}/report")
+def get_session_report(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Báo cáo quản trị đầy đủ cho một phiên sản xuất."""
+    import json as _json
+
+    session = db.query(ProductionSession).options(
+        joinedload(ProductionSession.phan_xuong),
+        joinedload(ProductionSession.creator),
+        selectinload(ProductionSession.rolls).options(
+            joinedload(ProductionSessionRoll.giay_roll).options(
+                joinedload(GiayRoll.paper_material)
+            )
+        ),
+        selectinload(ProductionSession.materials).options(
+            joinedload(ProductionSessionMaterial.other_material)
+        ),
+        selectinload(ProductionSession.paper_wastes),
+        selectinload(ProductionSession.phieu_nhap_phoi_songs).options(
+            selectinload(PhieuNhapPhoiSong.items).options(
+                joinedload(PhieuNhapPhoiSongItem.production_order_item).options(
+                    joinedload(ProductionOrderItem.production_order)
+                )
+            )
+        ),
+    ).filter(ProductionSession.id == session_id).first()
+
+    if not session:
+        raise HTTPException(404, "Không tìm thấy phiên sản xuất")
+
+    # ── 1. Sản lượng theo LSX ──────────────────────────────────────────────────
+    lsx_map: dict[int, dict] = {}
+    for phieu in session.phieu_nhap_phoi_songs:
+        for it in phieu.items:
+            poi: ProductionOrderItem = it.production_order_item
+            if not poi:
+                continue
+            po: ProductionOrder = poi.production_order
+            po_id = poi.production_order_id
+            if po_id not in lsx_map:
+                lsx_map[po_id] = {
+                    "production_order_id": po_id,
+                    "so_lenh": po.so_lenh if po else None,
+                    "ten_hang": poi.ten_hang,
+                    "ke_hoach": 0.0,
+                    "thuc_te": 0.0,
+                    "loi": 0.0,
+                }
+            lsx_map[po_id]["ke_hoach"] += float(it.so_luong_ke_hoach or 0)
+            lsx_map[po_id]["thuc_te"] += float(it.so_luong_thuc_te or 0)
+            lsx_map[po_id]["loi"] += float(it.so_luong_loi or 0)
+
+    for row in lsx_map.values():
+        row["ty_le_hoan_thanh"] = round(row["thuc_te"] / row["ke_hoach"] * 100, 1) if row["ke_hoach"] > 0 else None
+        row["ty_le_loi"] = round(row["loi"] / row["thuc_te"] * 100, 2) if row["thuc_te"] > 0 else None
+
+    tong_ke_hoach = sum(r["ke_hoach"] for r in lsx_map.values())
+    tong_thuc_te = sum(r["thuc_te"] for r in lsx_map.values())
+    tong_loi = sum(r["loi"] for r in lsx_map.values())
+
+    # ── 2. Tiêu hao NVL ───────────────────────────────────────────────────────
+    tong_kg_tieu_hao = sum(float(r.trong_luong_tieu_hao or 0) for r in session.rolls)
+    tong_kg_hao_hut_chung = float(session.so_kg_hao_hut_chung or 0)
+    tong_kg_hao_hut_flute = sum(float(w.so_kg_hao_hut or 0) for w in session.paper_wastes)
+    tong_kg_hao_hut = tong_kg_hao_hut_chung + tong_kg_hao_hut_flute
+
+    nvl_phu = [
+        {
+            "ten_nvl": m.other_material.ten if m.other_material else None,
+            "don_vi": m.other_material.don_vi if m.other_material else None,
+            "so_luong": float(m.so_luong),
+            "don_gia": float(m.don_gia),
+            "thanh_tien": float(m.thanh_tien),
+        }
+        for m in session.materials
+    ]
+
+    # ── 3. Chi phí (từ allocation_detail nếu đã chốt) ────────────────────────
+    chi_phi_data = None
+    if session.allocation_detail:
+        try:
+            alloc = _json.loads(session.allocation_detail) if isinstance(session.allocation_detail, str) else session.allocation_detail
+            chi_phi_data = {
+                "tong_chi_phi": round(sum(float(a.get("chi_phi_tong", 0)) for a in alloc), 0),
+                "chi_phi_giay": round(sum(float(a.get("chi_phi_giay", 0)) for a in alloc), 0),
+                "chi_phi_nvl_phu": round(sum(float(a.get("chi_phi_nvl_phu", 0)) for a in alloc), 0),
+                "chi_phi_khau": round(sum(float(a.get("chi_phi_khau_tong", 0)) for a in alloc), 0),
+                "detail_by_lsx": [
+                    {
+                        "production_order_id": a.get("production_order_id"),
+                        "ten_hang": a.get("ten_hang"),
+                        "so_luong": a.get("so_luong", 0),
+                        "chi_phi_giay": round(float(a.get("chi_phi_giay", 0)), 0),
+                        "chi_phi_nvl_phu": round(float(a.get("chi_phi_nvl_phu", 0)), 0),
+                        "chi_phi_khau": round(float(a.get("chi_phi_khau_tong", 0)), 0),
+                        "tong": round(float(a.get("chi_phi_tong", 0)), 0),
+                    }
+                    for a in alloc
+                ],
+            }
+        except Exception:
+            pass
+
+    # ── 4. Thời gian máy dừng ─────────────────────────────────────────────────
+    po_ids_in_session = list({
+        it.production_order_item.production_order_id
+        for phieu in session.phieu_nhap_phoi_songs
+        for it in phieu.items
+        if it.production_order_item and it.production_order_item.production_order_id
+    })
+
+    may_dung_logs = []
+    tong_phut_dung = 0
+    tong_phut_chay = 0
+
+    if po_ids_in_session:
+        logs = db.query(MayDungLog).options(
+            joinedload(MayDungLog.phan_xuong)
+        ).filter(
+            MayDungLog.production_order_id.in_(po_ids_in_session),
+        ).order_by(MayDungLog.ngay, MayDungLog.gio_bat_dau_dung).all()
+
+        tong_phut_dung = sum(int(lg.thoi_gian_dung or 0) for lg in logs)
+        may_dung_logs = [
+            {
+                "ngay": lg.ngay.isoformat() if lg.ngay else None,
+                "gio_bat_dau": str(lg.gio_bat_dau_dung) if lg.gio_bat_dau_dung else None,
+                "gio_tiep_tuc": str(lg.gio_tiep_tuc) if lg.gio_tiep_tuc else None,
+                "phut": int(lg.thoi_gian_dung or 0),
+                "ly_do": lg.ly_do,
+                "ghi_chu": lg.ghi_chu,
+            }
+            for lg in logs
+        ]
+
+    for phieu in session.phieu_nhap_phoi_songs:
+        if phieu.gio_bat_dau and phieu.gio_ket_thuc:
+            try:
+                h1, m1 = map(int, phieu.gio_bat_dau.split(":"))
+                h2, m2 = map(int, phieu.gio_ket_thuc.split(":"))
+                diff = (h2 * 60 + m2) - (h1 * 60 + m1)
+                if diff > 0:
+                    tong_phut_chay += diff
+            except Exception:
+                pass
+
+    hieu_suat_thoi_gian = None
+    if tong_phut_chay > 0:
+        hieu_suat_thoi_gian = round((tong_phut_chay - tong_phut_dung) / tong_phut_chay * 100, 1)
+
+    return {
+        "session": {
+            "id": session.id,
+            "ten_phien": session.ten_phien,
+            "ngay_tao": session.ngay_tao.isoformat() if session.ngay_tao else None,
+            "trang_thai": session.trang_thai,
+            "phan_xuong_ten": session.phan_xuong.ten_xuong if session.phan_xuong else None,
+            "created_at": session.created_at.isoformat() if session.created_at else None,
+            "closed_at": session.closed_at.isoformat() if session.closed_at else None,
+        },
+        "san_luong": {
+            "ke_hoach": tong_ke_hoach,
+            "thuc_te": tong_thuc_te,
+            "so_luong_loi": tong_loi,
+            "ty_le_hoan_thanh": round(tong_thuc_te / tong_ke_hoach * 100, 1) if tong_ke_hoach > 0 else None,
+            "ty_le_loi": round(tong_loi / tong_thuc_te * 100, 2) if tong_thuc_te > 0 else None,
+            "detail_by_lsx": list(lsx_map.values()),
+        },
+        "tieu_hao_nvl": {
+            "tong_kg_giay_tieu_hao": round(tong_kg_tieu_hao, 3),
+            "tong_kg_hao_hut": round(tong_kg_hao_hut, 3),
+            "ty_le_hao_hut_pct": round(tong_kg_hao_hut / tong_kg_tieu_hao * 100, 2) if tong_kg_tieu_hao > 0 else None,
+            "hao_hut_by_flute": [
+                {"flute_type": w.flute_type, "so_kg": float(w.so_kg_hao_hut)}
+                for w in session.paper_wastes
+            ],
+            "nvl_phu": nvl_phu,
+        },
+        "chi_phi": chi_phi_data,
+        "thoi_gian": {
+            "tong_phut_chay": tong_phut_chay,
+            "tong_phut_dung": tong_phut_dung,
+            "hieu_suat_thoi_gian_pct": hieu_suat_thoi_gian,
+            "may_dung_log": may_dung_logs,
+        },
     }
