@@ -9,10 +9,13 @@ import {
 import {
   AppstoreOutlined, CheckCircleOutlined, DeleteOutlined,
   PauseOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined,
-  RollbackOutlined, SettingOutlined,
+  RollbackOutlined, SendOutlined, SettingOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { cd2Api, PhieuIn, MaySauIn } from '../../api/cd2'
+import { warehousesApi } from '../../api/warehouses'
+import { warehouseApi } from '../../api/warehouse'
+import { productionOrdersApi } from '../../api/productionOrders'
 import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { socket } from '../../utils/socket'
@@ -588,6 +591,7 @@ function ChoTPTab({
   deletingId,
   onTamDung,
   onTiepTuc,
+  onChuyenBTP,
 }: {
   items: PhieuIn[]
   onBatDauTP: (p: PhieuIn) => void
@@ -598,6 +602,7 @@ function ChoTPTab({
   deletingId: number | null
   onTamDung: (p: PhieuIn) => void
   onTiepTuc: (p: PhieuIn) => void
+  onChuyenBTP: (p: PhieuIn) => void
 }) {
   const waiting  = items.filter(p => p.trang_thai === 'cho_dinh_hinh')
   const active   = items.filter(p => p.trang_thai === 'dang_sau_in')
@@ -630,6 +635,13 @@ function ChoTPTab({
                       onClick={() => onBatDauTP(p)}
                     >
                       Bắt đầu TP
+                    </Button>
+                    <Button
+                      icon={<SendOutlined />}
+                      size="small"
+                      onClick={() => onChuyenBTP(p)}
+                    >
+                      Chuyển BTP
                     </Button>
                     <Popconfirm
                       title="Xoá phiếu?"
@@ -731,12 +743,137 @@ function ChoTPTab({
   )
 }
 
+// ── Chuyển BTP Modal ─────────────────────────────────────────────────────────
+
+function ChuyenBTPModal({
+  phieu, phanXuongId, open, onClose, onDone,
+}: {
+  phieu: PhieuIn
+  phanXuongId: number | null
+  open: boolean
+  onClose: () => void
+  onDone: (soPhieu: string) => void
+}) {
+  const [form] = Form.useForm()
+  const [saving, setSaving] = useState(false)
+
+  const { data: allWarehouses = [] } = useQuery({
+    queryKey: ['warehouses'],
+    queryFn: () => warehousesApi.list().then(r => r.data),
+    enabled: open,
+  })
+
+  const { data: lsx } = useQuery({
+    queryKey: ['lsx', phieu.production_order_id],
+    queryFn: () => productionOrdersApi.get(phieu.production_order_id!).then(r => r.data),
+    enabled: open && !!phieu.production_order_id,
+  })
+
+  const btpKhos = allWarehouses.filter(w => w.loai_kho === 'BTP' && w.trang_thai)
+  const sourceKho = btpKhos.find(w => w.phan_xuong_id === phanXuongId)
+  const destKhos = btpKhos.filter(w => w.phan_xuong_id !== phanXuongId)
+  const productId = lsx?.items?.[0]?.product_id ?? null
+
+  useEffect(() => {
+    if (open && sourceKho) form.setFieldValue('kho_xuat_id', sourceKho.id)
+  }, [open, sourceKho?.id])
+
+  const handleOk = async () => {
+    const v = await form.validateFields()
+    setSaving(true)
+    try {
+      const res = await warehouseApi.createPhieuChuyen({
+        warehouse_xuat_id: v.kho_xuat_id,
+        warehouse_nhap_id: v.kho_nhap_id,
+        ngay: dayjs().format('YYYY-MM-DD'),
+        ghi_chu: v.ghi_chu || undefined,
+        items: [{
+          paper_material_id: null,
+          other_material_id: null,
+          product_id: productId,
+          ten_hang: phieu.ten_hang || '',
+          don_vi: 'Cái',
+          so_luong: v.so_luong,
+          don_gia: v.don_gia ?? 0,
+        }],
+      })
+      message.success(`Đã tạo phiếu chuyển kho ${res.data.so_phieu}`)
+      form.resetFields()
+      onDone(res.data.so_phieu)
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      title={<Space><SendOutlined />Chuyển BTP sang xưởng khác</Space>}
+      onCancel={onClose}
+      onOk={handleOk}
+      okText="Tạo phiếu chuyển kho"
+      cancelText="Huỷ"
+      okButtonProps={{ loading: saving }}
+      width={480}
+      destroyOnClose
+    >
+      <Card size="small" style={{ background: '#f0f5ff', borderColor: '#adc6ff', marginBottom: 16 }}>
+        <div style={{ fontWeight: 700 }}>{phieu.ten_hang}</div>
+        <Space size={16} style={{ marginTop: 6 }}>
+          {phieu.so_lsx && <Text style={{ fontSize: 12 }}>LSX: <strong>{phieu.so_lsx}</strong></Text>}
+          {phieu.so_luong_in_ok != null && (
+            <Text style={{ fontSize: 12 }}>
+              In OK: <strong style={{ color: '#52c41a' }}>{phieu.so_luong_in_ok.toLocaleString('vi-VN')}</strong>
+            </Text>
+          )}
+        </Space>
+      </Card>
+
+      {!sourceKho && (
+        <div style={{ color: '#ff4d4f', marginBottom: 12, fontSize: 13 }}>
+          ⚠️ Xưởng hiện tại chưa có kho BTP — tạo kho BTP trong Danh mục &gt; Kho.
+        </div>
+      )}
+
+      <Form form={form} layout="vertical" initialValues={{ so_luong: phieu.so_luong_in_ok, don_gia: 0 }}>
+        <Form.Item name="kho_xuat_id" label="Kho xuất" rules={[{ required: true, message: 'Chọn kho xuất' }]}>
+          <Select options={btpKhos.map(w => ({ value: w.id, label: w.ten_kho }))} placeholder="Kho BTP xưởng này" />
+        </Form.Item>
+        <Form.Item name="kho_nhap_id" label="Kho nhập (xưởng nhận)" rules={[{ required: true, message: 'Chọn kho đích' }]}>
+          <Select
+            options={destKhos.map(w => ({ value: w.id, label: w.ten_kho }))}
+            placeholder="Chọn xưởng nhận BTP"
+          />
+        </Form.Item>
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="so_luong" label="Số lượng" rules={[{ required: true, type: 'number', min: 1, message: 'Nhập SL' }]}>
+              <InputNumber style={{ width: '100%' }} min={0} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="don_gia" label="Đơn giá nội bộ (đ/cái)">
+              <InputNumber style={{ width: '100%' }} min={0} formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item name="ghi_chu" label="Ghi chú">
+          <Input.TextArea rows={2} placeholder="Ghi chú thêm..." />
+        </Form.Item>
+      </Form>
+    </Modal>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SauInKanbanPage() {
   const qc = useQueryClient()
   const [completingPhieu, setCompletingPhieu] = useState<PhieuIn | null>(null)
   const [startDinhHinhPhieu, setStartDinhHinhPhieu] = useState<PhieuIn | null>(null)
+  const [chuyenBTPPhieu, setChuyenBTPPhieu] = useState<PhieuIn | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { phanXuongId, setPhanXuongId, phanXuongList } = useCD2Workshop()
@@ -851,6 +988,7 @@ export default function SauInKanbanPage() {
           deletingId={deletingId}
           onTamDung={handleTamDung}
           onTiepTuc={handleTiepTuc}
+          onChuyenBTP={p => setChuyenBTPPhieu(p)}
         />
       ),
     },
@@ -975,6 +1113,16 @@ export default function SauInKanbanPage() {
       )}
 
       <MaySauInSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {chuyenBTPPhieu && (
+        <ChuyenBTPModal
+          phieu={chuyenBTPPhieu}
+          phanXuongId={phanXuongId ?? null}
+          open
+          onClose={() => setChuyenBTPPhieu(null)}
+          onDone={() => { setChuyenBTPPhieu(null); invalidate() }}
+        />
+      )}
 
       <Modal
         open={!!pausingPhieu}
