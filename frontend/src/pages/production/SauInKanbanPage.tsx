@@ -928,8 +928,8 @@ function ChuyenBTPModal({
                 value={addons.in_flexo_mau}
                 onChange={v => set('in_flexo_mau', v ?? 0)}
                 style={{ width: 56 }}
-                addonAfter="màu"
               />
+              <Text style={{ fontSize: 12 }}>màu</Text>
             </Space>
           </Col>
           {/* In flexo phủ nền + In KTS */}
@@ -960,8 +960,8 @@ function ChuyenBTPModal({
                 value={addons.be_so_con}
                 onChange={v => set('be_so_con', v ?? 0)}
                 style={{ width: 56 }}
-                addonAfter="con"
               />
+              <Text style={{ fontSize: 12 }}>con</Text>
             </Space>
           </Col>
           {/* Chấp xà, Bồi, Dán, Ghim */}
