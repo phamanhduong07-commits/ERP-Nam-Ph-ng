@@ -1,3 +1,7 @@
+# Claude Code internals
+.claude/
+Plans/
+
 # Python
 __pycache__/
 *.py[cod]
