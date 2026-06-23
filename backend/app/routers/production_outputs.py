@@ -99,7 +99,7 @@ def create_production_output(
         warehouse_id = wh.id if wh else None
     if not warehouse_id:
         raise HTTPException(400, "Cần truyền warehouse_id hoặc lệnh SX phải có xưởng có kho THANH_PHAM")
-    if not _ensure_active_warehouse(db, warehouse_id, {"THANH_PHAM"}):
+    if not _ensure_active_warehouse(db, warehouse_id, {"THANH_PHAM", "BTP"}):
         raise HTTPException(404, "Không tìm thấy kho")
 
     ten_hang = body.ten_hang

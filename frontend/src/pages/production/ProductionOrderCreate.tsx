@@ -96,6 +96,12 @@ export default function ProductionOrderCreate() {
       productsApi.list({ search: productSearch, page_size: 50 }).then((r) => r.data.items),
   })
 
+  const { data: lsxForParent = [] } = useQuery({
+    queryKey: ['lsx-for-parent'],
+    queryFn: () => productionOrdersApi.list({ page_size: 200 }).then(r => r.data.items),
+    staleTime: 2 * 60 * 1000,
+  })
+
   const importFromSalesOrder = () => {
     if (!selectedSO) return
     const newLines: ProdLine[] = selectedSO.items.map((item, idx) => ({
@@ -181,6 +187,7 @@ export default function ProductionOrderCreate() {
           : undefined,
         ghi_chu: values.ghi_chu,
         don_gia_noi_bo: values.don_gia_noi_bo ?? null,
+        parent_production_order_id: values.parent_production_order_id ?? null,
         items: lines.map((l) => ({
           product_id: l.product_id || undefined,
           sales_order_item_id: l.sales_order_item_id || undefined,
@@ -399,6 +406,14 @@ export default function ProductionOrderCreate() {
                     />
                   </Form.Item>
                 </Col>}
+                <Col span={8}>
+                  <Form.Item name="parent_production_order_id" label="Tiếp nối từ LSX"
+                    tooltip="Chọn LSX cha khi xưởng này tiếp nhận BTP từ xưởng khác để làm tiếp">
+                    <Select allowClear placeholder="Không có (LSX mới)"
+                      showSearch filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
+                      options={lsxForParent.map(o => ({ value: o.id, label: `${o.so_lenh}${o.ten_hang ? ` — ${o.ten_hang}` : ''}` }))} />
+                  </Form.Item>
+                </Col>
                 <Col span={16}>
                   <Form.Item name="ghi_chu" label="Ghi chú">
                     <Input.TextArea rows={2} placeholder="Ghi chú lệnh SX..." />

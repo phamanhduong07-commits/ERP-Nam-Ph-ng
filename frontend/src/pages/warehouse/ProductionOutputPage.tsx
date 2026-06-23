@@ -275,11 +275,11 @@ export default function ProductionOutputPage() {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="warehouse_id" label="Kho TP" rules={[{ required: true, message: 'Chọn kho' }]}>
-                <Select placeholder="Chọn kho TP"
+              <Form.Item name="warehouse_id" label="Kho TP / BTP" rules={[{ required: true, message: 'Chọn kho' }]}>
+                <Select placeholder="Chọn kho TP hoặc BTP"
                   options={warehouses
-                    .filter(w => w.trang_thai && w.loai_kho === 'THANH_PHAM' && (!formPxId || w.phan_xuong_id === formPxId))
-                    .map(w => ({ value: w.id, label: w.ten_kho }))} />
+                    .filter(w => w.trang_thai && (w.loai_kho === 'THANH_PHAM' || w.loai_kho === 'BTP') && (!formPxId || w.phan_xuong_id === formPxId))
+                    .map(w => ({ value: w.id, label: `${w.ten_kho}${w.loai_kho === 'BTP' ? ' (BTP)' : ''}` }))} />
               </Form.Item>
             </Col>
           </Row>

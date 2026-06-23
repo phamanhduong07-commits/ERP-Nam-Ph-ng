@@ -178,6 +178,7 @@ export interface CreateProductionOrderPayload {
   ngay_hoan_thanh_ke_hoach?: string
   ghi_chu?: string
   tan_dung?: boolean
+  parent_production_order_id?: number | null
   items: CreateProductionItemPayload[]
 }
 

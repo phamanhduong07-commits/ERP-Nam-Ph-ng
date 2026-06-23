@@ -204,6 +204,7 @@ class PhieuChuyenItemIn(BaseModel):
     paper_material_id: Optional[int] = None
     other_material_id: Optional[int] = None
     production_order_id: Optional[int] = None
+    product_id: Optional[int] = None  # BTP/TP transfer giữa xưởng
     ten_hang: str = ""
     don_vi: str = "Kg"
     so_luong: Decimal = Field(..., gt=0)

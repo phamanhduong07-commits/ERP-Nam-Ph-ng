@@ -3,7 +3,7 @@ import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, DatePicker, Descriptions, Divider, Drawer, Form, Input, InputNumber,
-  Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Tooltip,
+  Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Tooltip, Segmented,
 } from 'antd'
 import { EyeOutlined, FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined, SwapOutlined, ArrowRightOutlined, MinusCircleOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import { systemApi } from '../../api/system'
@@ -12,6 +12,7 @@ import {
   warehouseApi, PhieuChuyenKho, CreatePhieuChuyenPayload, TonKho, PhieuKhoItem,
 } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
+import { productsApi } from '../../api/products'
 import { buildHtmlTable, exportToExcel, renderTemplateAndPrint, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { usePermission } from '../../hooks/usePermission'
@@ -38,6 +39,8 @@ export default function TransfersPage() {
   const [selectedKhoXuat, setSelectedKhoXuat] = useState<number | undefined>()
   const [selectedKhoNhap, setSelectedKhoNhap] = useState<number | undefined>()
   const [detailPhieu, setDetailPhieu] = useState<PhieuChuyenKho | null>(null)
+  // Per-item type: 'nvl' (giấy/NVL từ tồn kho) | 'btp' (sản phẩm/BTP theo product_id)
+  const [itemTypes, setItemTypes] = useState<Record<number, 'nvl' | 'btp'>>({})
 
   const { data: phanXuongs = [] } = useQuery({
     queryKey: ['phan-xuong'],
@@ -79,6 +82,12 @@ export default function TransfersPage() {
     enabled: !!selectedKhoXuat,
   })
 
+  const { data: productList = [] } = useQuery({
+    queryKey: ['products-for-btp'],
+    queryFn: () => productsApi.list({ page_size: 500 }).then(r => r.data.items),
+    staleTime: 5 * 60 * 1000,
+  })
+
   const createMut = useMutation({
     mutationFn: (data: CreatePhieuChuyenPayload) => warehouseApi.createPhieuChuyen(data),
     onSuccess: () => {
@@ -89,6 +98,7 @@ export default function TransfersPage() {
       form.resetFields()
       setSelectedKhoXuat(undefined)
       setSelectedKhoNhap(undefined)
+      setItemTypes({})
     },
     onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail || 'Lỗi tạo phiếu'),
   })
@@ -185,15 +195,19 @@ export default function TransfersPage() {
         message.error('Kho xuất và kho nhận không được trùng nhau')
         return
       }
-      const items = (v.items || []).map((it: Record<string, unknown>) => ({
-        paper_material_id: it.paper_material_id || null,
-        other_material_id: it.other_material_id || null,
-        ten_hang: it.ten_hang,
-        don_vi: it.don_vi || 'Kg',
-        so_luong: it.so_luong,
-        don_gia: it.don_gia || 0,
-        ghi_chu: it.ghi_chu || null,
-      }))
+      const items = (v.items || []).map((it: Record<string, unknown>, idx: number) => {
+        const isBtp = itemTypes[idx] === 'btp'
+        return {
+          paper_material_id: isBtp ? null : (it.paper_material_id || null),
+          other_material_id: isBtp ? null : (it.other_material_id || null),
+          product_id: isBtp ? (it.product_id || null) : null,
+          ten_hang: it.ten_hang || '',
+          don_vi: it.don_vi || (isBtp ? 'Cái' : 'Kg'),
+          so_luong: it.so_luong,
+          don_gia: it.don_gia || 0,
+          ghi_chu: it.ghi_chu || null,
+        }
+      })
       if (items.length === 0) { message.warning('Thêm ít nhất 1 dòng hàng'); return }
       createMut.mutate({
         warehouse_xuat_id: v.warehouse_xuat_id,
@@ -489,58 +503,123 @@ export default function TransfersPage() {
                   const item = items[name] || {}
                   const tonHienTai: TonKho | undefined = tonKhoXuat.find(t => t.id === item.ton_kho_id)
 
+                  const isBtp = itemTypes[name] === 'btp'
+
                   return (
                     <Card key={key} size="small" style={{ marginBottom: 8, background: '#fafafa' }}>
                       <Row gutter={[8, 4]}>
-                        <Col span={16}>
-                          <Form.Item name={[name, 'ton_kho_id']} label="Chọn hàng chuyển"
-                            rules={[{ required: true, message: 'Chọn mặt hàng' }]} style={{ marginBottom: 4 }}>
-                            <Select size="small" showSearch placeholder="Chọn từ tồn kho xuất..."
-                              filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
-                              options={tonKhoXuat.map(t => ({
-                                value: t.id,
-                                label: `${t.ten_hang} — tồn: ${t.ton_luong.toLocaleString('vi-VN', { maximumFractionDigits: 2 })} ${t.don_vi}`,
-                              }))}
-                              onChange={id => handleTonKhoSelect(name, id)}
-                            />
-                          </Form.Item>
-                          {tonHienTai && (
-                            <div style={{ fontSize: 12, color: '#666', marginTop: -8, marginBottom: 4 }}>
-                              Tồn kho xuất: <Text strong style={{ color: '#722ed1' }}>
-                                {tonHienTai.ton_luong.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} {tonHienTai.don_vi}
-                              </Text>
-                            </div>
-                          )}
+                        <Col span={23}>
+                          <Segmented
+                            size="small"
+                            value={isBtp ? 'btp' : 'nvl'}
+                            options={[
+                              { label: 'Giấy / NVL', value: 'nvl' },
+                              { label: 'BTP / Sản phẩm', value: 'btp' },
+                            ]}
+                            onChange={val => {
+                              setItemTypes(prev => ({ ...prev, [name]: val as 'nvl' | 'btp' }))
+                              const items = form.getFieldValue('items') || []
+                              const updated = [...items]
+                              updated[name] = { don_vi: val === 'btp' ? 'Cái' : 'Kg', don_gia: 0 }
+                              form.setFieldValue('items', updated)
+                            }}
+                            style={{ marginBottom: 8 }}
+                          />
                         </Col>
-                        <Col span={7}>
-                          <Form.Item name={[name, 'don_vi']} label="ĐVT" style={{ marginBottom: 4 }}>
-                            <Input size="small" readOnly style={{ background: '#f5f5f5' }} />
-                          </Form.Item>
+                        <Col span={1} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                          <MinusCircleOutlined style={{ color: '#ff4d4f', fontSize: 16, cursor: 'pointer' }} onClick={() => {
+                            remove(name)
+                            setItemTypes(prev => {
+                              const next: Record<number, 'nvl' | 'btp'> = {}
+                              Object.entries(prev).forEach(([k, v]) => {
+                                const ki = Number(k)
+                                if (ki < name) next[ki] = v
+                                else if (ki > name) next[ki - 1] = v
+                              })
+                              return next
+                            })
+                          }} />
                         </Col>
-                        <Col span={1} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 20 }}>
-                          <MinusCircleOutlined style={{ color: '#ff4d4f', fontSize: 16, cursor: 'pointer' }} onClick={() => remove(name)} />
-                        </Col>
+
+                        {!isBtp ? (
+                          <>
+                            <Col span={16}>
+                              <Form.Item name={[name, 'ton_kho_id']} label="Chọn hàng chuyển"
+                                rules={[{ required: true, message: 'Chọn mặt hàng' }]} style={{ marginBottom: 4 }}>
+                                <Select size="small" showSearch placeholder="Chọn từ tồn kho xuất..."
+                                  filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
+                                  options={tonKhoXuat.map(t => ({
+                                    value: t.id,
+                                    label: `${t.ten_hang} — tồn: ${t.ton_luong.toLocaleString('vi-VN', { maximumFractionDigits: 2 })} ${t.don_vi}`,
+                                  }))}
+                                  onChange={id => handleTonKhoSelect(name, id)}
+                                />
+                              </Form.Item>
+                              {tonHienTai && (
+                                <div style={{ fontSize: 12, color: '#666', marginTop: -8, marginBottom: 4 }}>
+                                  Tồn kho xuất: <Text strong style={{ color: '#722ed1' }}>
+                                    {tonHienTai.ton_luong.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} {tonHienTai.don_vi}
+                                  </Text>
+                                </div>
+                              )}
+                            </Col>
+                            <Col span={8}>
+                              <Form.Item name={[name, 'don_vi']} label="ĐVT" style={{ marginBottom: 4 }}>
+                                <Input size="small" readOnly style={{ background: '#f5f5f5' }} />
+                              </Form.Item>
+                            </Col>
+                          </>
+                        ) : (
+                          <>
+                            <Col span={16}>
+                              <Form.Item name={[name, 'product_id']} label="Sản phẩm / BTP"
+                                rules={[{ required: true, message: 'Chọn sản phẩm' }]} style={{ marginBottom: 4 }}>
+                                <Select size="small" showSearch placeholder="Tìm sản phẩm..."
+                                  filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
+                                  options={productList.map(p => ({
+                                    value: p.id,
+                                    label: `${p.ten_hang}${p.ma_hang ? ` [${p.ma_hang}]` : ''}`,
+                                  }))}
+                                  onChange={(pid) => {
+                                    const prod = productList.find(p => p.id === pid)
+                                    if (prod) {
+                                      const items = form.getFieldValue('items') || []
+                                      const updated = [...items]
+                                      updated[name] = { ...updated[name], ten_hang: prod.ten_hang, don_vi: prod.dvt || 'Cái' }
+                                      form.setFieldValue('items', updated)
+                                    }
+                                  }}
+                                />
+                              </Form.Item>
+                            </Col>
+                            <Col span={8}>
+                              <Form.Item name={[name, 'don_vi']} label="ĐVT" style={{ marginBottom: 4 }}>
+                                <Input size="small" />
+                              </Form.Item>
+                            </Col>
+                          </>
+                        )}
 
                         <Col span={8}>
                           <Form.Item name={[name, 'so_luong']} label="Số lượng chuyển"
                             rules={[
                               { required: true, message: 'Nhập SL' },
-                              {
-                                validator: (_, val) => {
+                              ...(!isBtp ? [{
+                                validator: (_: unknown, val: number) => {
                                   if (!val || !tonHienTai) return Promise.resolve()
                                   if (val > tonHienTai.ton_luong)
                                     return Promise.reject(`Vượt tồn (${tonHienTai.ton_luong.toFixed(3)})`)
                                   return Promise.resolve()
                                 },
-                              },
+                              }] : []),
                             ]}
                             style={{ marginBottom: 4 }}>
                             <InputNumber size="small" min={0.001} style={{ width: '100%' }} />
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name={[name, 'don_gia']} label="Đơn giá (BQ)" style={{ marginBottom: 4 }}>
-                            <InputNumber size="small" min={0} readOnly style={{ width: '100%', background: '#f5f5f5' }}
+                          <Form.Item name={[name, 'don_gia']} label={isBtp ? 'Đơn giá BTP' : 'Đơn giá (BQ)'} style={{ marginBottom: 4 }}>
+                            <InputNumber size="small" min={0} readOnly={!isBtp} style={{ width: '100%', background: isBtp ? undefined : '#f5f5f5' }}
                               formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
                           </Form.Item>
                         </Col>

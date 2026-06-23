@@ -1,20 +1,21 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type { ApiError } from '../../api/types'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  DndContext, DragOverlay, closestCorners, PointerSensor,
-  useSensor, useSensors,
+  DndContext, DragOverlay, PointerSensor,
+  useSensor, useSensors, pointerWithin, rectIntersection, getFirstCollision,
 } from '@dnd-kit/core'
-import type { DragStartEvent, DragEndEvent, DragOverEvent } from '@dnd-kit/core'
+import type { DragStartEvent, DragEndEvent, DragOverEvent, CollisionDetection } from '@dnd-kit/core'
+import { snapCenterToCursor } from '@dnd-kit/modifiers'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import {
   Alert, Badge, Button, Card, Col, DatePicker, Form, Input, InputNumber,
-  message, Modal, Row, Select, Space, Tag, Tooltip, Typography,
+  message, Modal, Popconfirm, Row, Select, Space, Tag, Tooltip, Typography,
 } from 'antd'
 import {
-  PlusOutlined, PrinterOutlined, ReloadOutlined, SettingOutlined,
+  PlusOutlined, PrinterOutlined, ReloadOutlined, RollbackOutlined, SettingOutlined,
   PlayCircleOutlined, PauseOutlined, CheckCircleOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -341,6 +342,7 @@ function KanbanCard({
   onTamDung,
   onTiepTuc,
   onKetThuc,
+  onTraVeKhoPhoi,
 }: {
   phieu: PhieuIn
   onClick?: () => void
@@ -351,6 +353,7 @@ function KanbanCard({
   onTamDung?: (p: PhieuIn) => void
   onTiepTuc?: (p: PhieuIn) => void
   onKetThuc?: (p: PhieuIn) => void
+  onTraVeKhoPhoi?: (p: PhieuIn) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: phieu.id,
@@ -489,6 +492,26 @@ function KanbanCard({
             >
               Bắt đầu in
             </Button>
+            {!phieu.may_in_id && (
+              <Popconfirm
+                title={`Trả phôi về kho và huỷ phiếu in ${phieu.so_phieu}?`}
+                description="Phôi sẽ được hoàn lại kho, phiếu in sẽ bị huỷ."
+                onConfirm={() => onTraVeKhoPhoi?.(phieu)}
+                okText="Xác nhận"
+                cancelText="Thôi"
+                okButtonProps={{ danger: true }}
+              >
+                <Button
+                  size="small"
+                  danger
+                  icon={<RollbackOutlined />}
+                  block
+                  style={{ marginTop: 4, fontSize: 12 }}
+                >
+                  Trả về kho phôi
+                </Button>
+              </Popconfirm>
+            )}
           </div>
         )}
 
@@ -549,7 +572,7 @@ function KanbanCard({
 // ── Column ────────────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  colId, title, cards, color, onCardClick, pauses, onBatDau, onTamDung, onTiepTuc, onKetThuc,
+  colId, title, cards, color, onCardClick, pauses, onBatDau, onTamDung, onTiepTuc, onKetThuc, onTraVeKhoPhoi,
 }: {
   colId: string
   title: string
@@ -561,6 +584,7 @@ function KanbanColumn({
   onTamDung: (p: PhieuIn) => void
   onTiepTuc: (p: PhieuIn) => void
   onKetThuc: (p: PhieuIn) => void
+  onTraVeKhoPhoi: (p: PhieuIn) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: colId })
 
@@ -605,6 +629,7 @@ function KanbanColumn({
                 onTamDung={onTamDung}
                 onTiepTuc={onTiepTuc}
                 onKetThuc={onKetThuc}
+                onTraVeKhoPhoi={onTraVeKhoPhoi}
               />
             )
           })}
@@ -683,6 +708,24 @@ export default function CD2KanbanPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   )
 
+  const lastOverId = useRef<string | null>(null)
+
+  // Dùng pointer position để detect column — closestCorners dùng ghost rect nên kéo trái không nhận
+  const collisionDetection: CollisionDetection = useCallback((args) => {
+    const pointerCollisions = pointerWithin(args)
+    if (pointerCollisions.length > 0) {
+      lastOverId.current = String(pointerCollisions[0].id)
+      return pointerCollisions
+    }
+    const intersections = rectIntersection(args)
+    const overId = getFirstCollision(intersections, 'id')
+    if (overId != null) {
+      lastOverId.current = String(overId)
+      return intersections
+    }
+    return lastOverId.current ? [{ id: lastOverId.current }] : []
+  }, [])
+
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['cd2-kanban'] })
   }, [qc])
@@ -694,6 +737,16 @@ export default function CD2KanbanPage() {
       invalidate()
     } catch (e) {
       message.error((e as ApiError)?.response?.data?.detail || 'Lỗi bắt đầu in')
+    }
+  }, [invalidate])
+
+  const handleTraVeKhoPhoi = useCallback(async (phieu: PhieuIn) => {
+    try {
+      await cd2Api.traVeKhoPhoi(phieu.id)
+      message.success(`Đã trả phôi về kho — huỷ phiếu ${phieu.so_phieu}`)
+      invalidate()
+    } catch (e) {
+      message.error((e as ApiError)?.response?.data?.detail || 'Lỗi trả về kho phôi')
     }
   }, [invalidate])
 
@@ -973,7 +1026,7 @@ export default function CD2KanbanPage() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
@@ -996,11 +1049,12 @@ export default function CD2KanbanPage() {
               onTamDung={handleTamDung}
               onTiepTuc={handleTiepTuc}
               onKetThuc={handleKetThuc}
+              onTraVeKhoPhoi={handleTraVeKhoPhoi}
             />
           ))}
         </div>
 
-        <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
+        <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }} modifiers={[snapCenterToCursor]}>
           {activePhieu ? (
             <div style={{ width: 210 }}>
               <KanbanCard phieu={activePhieu} overlay />

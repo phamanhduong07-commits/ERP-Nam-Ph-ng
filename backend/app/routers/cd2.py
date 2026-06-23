@@ -1499,6 +1499,78 @@ async def tiep_tuc_in(phieu_id: int, db: Session = Depends(get_db), _: Optional[
     return _to_dict(_load(phieu_id, db))
 
 
+@router.post("/phieu-in/{phieu_id}/tra-ve-kho-phoi")
+async def tra_ve_kho_phoi(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Huỷ phiếu in và hoàn trả phôi về kho. Chỉ áp dụng cho trạng thái cho_in/ke_hoach."""
+    p = db.query(PhieuIn).filter(PhieuIn.id == phieu_id).with_for_update().first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu in")
+    if p.trang_thai not in ("cho_in", "ke_hoach"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Chỉ trả về kho từ cho_in/ke_hoach. Hiện: '{p.trang_thai}'"
+        )
+    if p.may_in_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Phiếu đã xếp vào máy, hãy bỏ khỏi máy trước khi trả về kho"
+        )
+
+    prev_state = p.trang_thai
+
+    # Tìm các phiếu xuất phôi gắn với phiếu in này để hoàn kho
+    pxp_items = (
+        db.query(PhieuXuatPhoiItem)
+        .filter(PhieuXuatPhoiItem.ghi_chu == f"→ {p.so_phieu}")
+        .all()
+    )
+
+    if pxp_items and p.production_order_id:
+        order = db.query(ProductionOrder).filter(ProductionOrder.id == p.production_order_id).first()
+        if order:
+            wh_phoi = _get_workshop_warehouse(db, order.phan_xuong_id, "PHOI")
+            if wh_phoi:
+                by_ten_hang: dict[str, Decimal] = {}
+                for item in pxp_items:
+                    by_ten_hang[item.ten_hang] = by_ten_hang.get(item.ten_hang, Decimal("0")) + item.so_luong
+                for ten_hang, sl in by_ten_hang.items():
+                    balance = (
+                        db.query(InventoryBalance)
+                        .filter(
+                            InventoryBalance.warehouse_id == wh_phoi.id,
+                            InventoryBalance.ten_hang == ten_hang,
+                        )
+                        .with_for_update()
+                        .first()
+                    )
+                    if balance:
+                        balance.ton_luong += sl
+                        balance.gia_tri_ton = balance.ton_luong * balance.don_gia_binh_quan
+                        balance.cap_nhat_luc = datetime.now(timezone.utc)
+                        _log_tx(
+                            db, wh_phoi.id, "NHAP_TRA_VE_PHOI",
+                            sl, balance.don_gia_binh_quan, balance.ton_luong,
+                            "phieu_in", phieu_id, current_user.id,
+                            ghi_chu=f"← Trả về từ {p.so_phieu}",
+                        )
+
+    p.trang_thai = "huy"
+    p.may_in_id = None
+    p.may_sau_in_id = None
+    p.gio_bat_dau_in = None
+    p.gio_hoan_thanh = None
+    p.gio_bat_dau_dinh_hinh = None
+    p.gio_hoan_thanh_dinh_hinh = None
+    p.tam_dung_luc = None
+    p.tam_dung_ly_do = None
+    _log_state_change(db, p, prev_state, "huy", "tra_ve_kho_phoi", current_user.id)
+    db.commit()
+    await sio.emit("machine_status_update", {
+        "phieu_in_id": phieu_id, "event": "tra_ve_kho_phoi",
+    })
+    return _to_dict(_load(phieu_id, db))
+
+
 @router.post("/phieu-in/{phieu_id}/huy")
 async def huy_phieu(phieu_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Trả phiếu về máy in: ke_hoach (nếu đang trên máy) hoặc cho_in (nếu chưa gán máy).

@@ -326,6 +326,7 @@ export const cd2Api = {
     client.post(`/cd2/phieu-in/${id}/assign-sau-in`, { may_sau_in_id: maySauInId }),
   batDauSauIn: (id: number) => client.post(`/cd2/phieu-in/${id}/bat-dau-sau-in`),
   traVeSauIn: (id: number) => client.post(`/cd2/phieu-in/${id}/tra-ve-sau-in`),
+  traVeKhoPhoi: (id: number) => client.post(`/cd2/phieu-in/${id}/tra-ve-kho-phoi`),
   createFromLenhSx: (orderId: number, target: 'in' | 'sau_in' | 'auto') =>
     client.post(`/cd2/phieu-in/tu-lenh-sx/${orderId}`, null, { params: { target } }),
 

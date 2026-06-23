@@ -13,7 +13,9 @@ from app.database import get_db
 from app.deps import get_current_user, require_any_permission, require_roles
 from app.models.auth import User
 from app.models.master import Warehouse, PaperMaterial, OtherMaterial, Product, PhanXuong, PhapNhan
-from app.models.production import ProductionOrder
+from app.models.production import ProductionOrder, ProductionOrderItem
+from app.models.sales import SalesOrder, SalesOrderItem, QuoteItem
+from app.models.addon_rate import AddonRate
 from app.models.accounting import JournalEntry
 from app.models.warehouse_doc import (
     PhieuChuyenKho, PhieuChuyenKhoItem,
@@ -22,6 +24,17 @@ from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSong
 from app.models.cd2 import PhieuIn
 from app.services.accounting_service import AccountingService
 from app.utils.log import get_logger
+from app.services.price_calculator import (
+    _calc_chong_tham,
+    _calc_in_flexo,
+    _calc_in_ky_thuat_so,
+    _calc_chap_xa,
+    _calc_boi,
+    _calc_be,
+    _calc_dan,
+    _calc_ghim,
+    _calc_can_mang,
+)
 
 logger = get_logger(__name__)
 
@@ -116,7 +129,8 @@ def create_phieu_chuyen(
         raise HTTPException(404, "Không tìm thấy kho")
 
     for it in body.items:
-        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id and not it.product_id
+        is_product = bool(it.product_id) and not it.production_order_id and not it.paper_material_id and not it.other_material_id
         if is_phoi:
             tong_nhap = db.query(func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te), 0)).join(
                 PhieuNhapPhoiSong, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id
@@ -131,6 +145,16 @@ def create_phieu_chuyen(
             if ton_tai_nguon < it.so_luong:
                 raise HTTPException(400, f"Không đủ phôi tại kho nguồn: LSX #{it.production_order_id} — "
                                     f"cần {float(it.so_luong):g}, còn {float(ton_tai_nguon):g}")
+        elif is_product:
+            bal = _get_or_create_balance(db, body.warehouse_xuat_id,
+                                         product_id=it.product_id,
+                                         ten_hang=it.ten_hang or f"SP #{it.product_id}",
+                                         don_vi=it.don_vi or "Cái")
+            if bal.ton_luong < it.so_luong:
+                prod = db.get(Product, it.product_id)
+                ten = prod.ten_san_pham if prod else f"SP #{it.product_id}"
+                raise HTTPException(400, f"Không đủ tồn BTP/TP tại kho xuất: {ten} — "
+                                    f"cần {float(it.so_luong):g}, còn {float(bal.ton_luong):g}")
         else:
             ten_hang, don_vi = _resolve_nvl_name(db, it.paper_material_id, it.other_material_id, it.ten_hang)
             if not ten_hang:
@@ -155,7 +179,8 @@ def create_phieu_chuyen(
     db.flush()
 
     for it in body.items:
-        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id and not it.product_id
+        is_product = bool(it.product_id) and not it.production_order_id and not it.paper_material_id and not it.other_material_id
         if is_phoi:
             don_gia_phoi = it.don_gia
             if (not don_gia_phoi or don_gia_phoi == Decimal("0")) and it.production_order_id:
@@ -172,6 +197,26 @@ def create_phieu_chuyen(
                 don_vi=it.don_vi,
                 so_luong=it.so_luong,
                 don_gia=don_gia_phoi,
+                ghi_chu=it.ghi_chu,
+            ))
+        elif is_product:
+            prod = db.get(Product, it.product_id)
+            ten_hang = it.ten_hang or (prod.ten_san_pham if prod else f"SP #{it.product_id}")
+            bal_xuat = _get_or_create_balance(db, body.warehouse_xuat_id,
+                                              product_id=it.product_id,
+                                              ten_hang=ten_hang, don_vi=it.don_vi or "Cái")
+            don_gia_xuat = it.don_gia if it.don_gia and it.don_gia > 0 else bal_xuat.don_gia_binh_quan
+
+            db.add(PhieuChuyenKhoItem(
+                phieu_chuyen_kho_id=phieu.id,
+                product_id=it.product_id,
+                production_order_id=None,
+                paper_material_id=None,
+                other_material_id=None,
+                ten_hang=ten_hang,
+                don_vi=it.don_vi or "Cái",
+                so_luong=it.so_luong,
+                don_gia=don_gia_xuat,
                 ghi_chu=it.ghi_chu,
             ))
         else:
@@ -218,7 +263,9 @@ def approve_phieu_chuyen(
 
     # Validate balances first
     for it in phieu.items:
-        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
+        _product_id = getattr(it, "product_id", None)
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id and not _product_id
+        is_product = bool(_product_id) and not it.production_order_id and not it.paper_material_id and not it.other_material_id
         if is_phoi:
             tong_nhap = db.query(func.coalesce(func.sum(PhieuNhapPhoiSongItem.so_luong_thuc_te), 0)).join(
                 PhieuNhapPhoiSong, PhieuNhapPhoiSongItem.phieu_id == PhieuNhapPhoiSong.id
@@ -233,6 +280,13 @@ def approve_phieu_chuyen(
             if ton_tai_nguon < it.so_luong:
                 raise HTTPException(400, f"Không đủ phôi tại kho nguồn: LSX #{it.production_order_id} — "
                                     f"cần {float(it.so_luong):g}, còn {float(ton_tai_nguon):g}")
+        elif is_product:
+            bal_xuat = _get_or_create_balance(db, phieu.warehouse_xuat_id,
+                                              product_id=_product_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi)
+            if bal_xuat.ton_luong < it.so_luong:
+                raise HTTPException(400, f"Không đủ tồn BTP/TP tại kho xuất: {it.ten_hang} — "
+                                    f"cần {float(it.so_luong):g}, còn {float(bal_xuat.ton_luong):g}")
         else:
             bal_xuat = _get_or_create_balance(db, phieu.warehouse_xuat_id,
                                               it.paper_material_id, it.other_material_id,
@@ -243,12 +297,37 @@ def approve_phieu_chuyen(
 
     # Process inventory and transaction logging
     for it in phieu.items:
-        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
+        _product_id = getattr(it, "product_id", None)
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id and not _product_id
+        is_product = bool(_product_id) and not it.production_order_id and not it.paper_material_id and not it.other_material_id
         if is_phoi:
             if (not it.don_gia or it.don_gia == Decimal("0")) and it.production_order_id:
                 lsx = db.get(ProductionOrder, it.production_order_id)
                 if lsx and lsx.don_gia_noi_bo and lsx.don_gia_noi_bo > 0:
                     it.don_gia = lsx.don_gia_noi_bo
+        elif is_product:
+            bal_xuat = _get_or_create_balance(db, phieu.warehouse_xuat_id,
+                                              product_id=_product_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi, lock=True)
+            don_gia_xuat = bal_xuat.don_gia_binh_quan
+            it.don_gia = don_gia_xuat
+
+            _xuat_balance(bal_xuat, it.so_luong, it.ten_hang)
+            _log_tx(db, phieu.warehouse_xuat_id, "CHUYEN_KHO_XUAT",
+                    it.so_luong, don_gia_xuat, bal_xuat.ton_luong,
+                    "phieu_chuyen_kho", phieu.id, current_user.id,
+                    product_id=_product_id,
+                    ghi_chu=it.ghi_chu)
+
+            bal_nhap = _get_or_create_balance(db, phieu.warehouse_nhap_id,
+                                              product_id=_product_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi)
+            _nhap_balance(bal_nhap, it.so_luong, don_gia_xuat)
+            _log_tx(db, phieu.warehouse_nhap_id, "CHUYEN_KHO_NHAP",
+                    it.so_luong, don_gia_xuat, bal_nhap.ton_luong,
+                    "phieu_chuyen_kho", phieu.id, current_user.id,
+                    product_id=_product_id,
+                    ghi_chu=it.ghi_chu)
         else:
             # Lock source balance to prevent race conditions
             bal_xuat = _get_or_create_balance(db, phieu.warehouse_xuat_id,
@@ -384,8 +463,17 @@ def cancel_phieu_chuyen(
 
     # Validate destination balance has enough to deduct
     for it in phieu.items:
-        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
-        if not is_phoi:
+        _product_id = getattr(it, "product_id", None)
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id and not _product_id
+        is_product = bool(_product_id) and not it.production_order_id and not it.paper_material_id and not it.other_material_id
+        if is_product:
+            bal_nhap = _get_or_create_balance(db, phieu.warehouse_nhap_id,
+                                              product_id=_product_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi)
+            if bal_nhap.ton_luong < it.so_luong:
+                raise HTTPException(400, f"Không đủ tồn BTP/TP tại kho nhận để hoàn trả: {it.ten_hang} — "
+                                    f"cần {float(it.so_luong):g}, còn {float(bal_nhap.ton_luong):g}")
+        elif not is_phoi:
             bal_nhap = _get_or_create_balance(db, phieu.warehouse_nhap_id,
                                               it.paper_material_id, it.other_material_id,
                                               ten_hang=it.ten_hang, don_vi=it.don_vi)
@@ -395,8 +483,30 @@ def cancel_phieu_chuyen(
 
     # Reverse inventory
     for it in phieu.items:
-        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id
-        if not is_phoi:
+        _product_id = getattr(it, "product_id", None)
+        is_phoi = bool(it.production_order_id) and not it.paper_material_id and not it.other_material_id and not _product_id
+        is_product = bool(_product_id) and not it.production_order_id and not it.paper_material_id and not it.other_material_id
+        if is_product:
+            bal_xuat = _get_or_create_balance(db, phieu.warehouse_xuat_id,
+                                              product_id=_product_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi)
+            _nhap_balance(bal_xuat, it.so_luong, it.don_gia)
+            _log_tx(db, phieu.warehouse_xuat_id, "HUY_CHUYEN_XUAT",
+                    it.so_luong, it.don_gia, bal_xuat.ton_luong,
+                    "phieu_chuyen_kho", phieu.id, current_user.id,
+                    product_id=_product_id,
+                    ghi_chu=f"Hủy phiếu {phieu.so_phieu}")
+
+            bal_nhap = _get_or_create_balance(db, phieu.warehouse_nhap_id,
+                                              product_id=_product_id,
+                                              ten_hang=it.ten_hang, don_vi=it.don_vi, lock=True)
+            _xuat_balance(bal_nhap, it.so_luong, it.ten_hang)
+            _log_tx(db, phieu.warehouse_nhap_id, "HUY_CHUYEN_NHAP",
+                    it.so_luong, it.don_gia, bal_nhap.ton_luong,
+                    "phieu_chuyen_kho", phieu.id, current_user.id,
+                    product_id=_product_id,
+                    ghi_chu=f"Hủy phiếu {phieu.so_phieu}")
+        elif not is_phoi:
             # Add back to source warehouse
             bal_xuat = _get_or_create_balance(db, phieu.warehouse_xuat_id,
                                               it.paper_material_id, it.other_material_id,
@@ -492,17 +602,24 @@ def _ck_to_dict(p: PhieuChuyenKho, db: Session) -> dict:
 
 
 def _ck_item_dict(it: "PhieuChuyenKhoItem", db: Session) -> dict:
+    _product_id = getattr(it, "product_id", None)
     d: dict = {
         "id": it.id,
         "paper_material_id": it.paper_material_id,
         "other_material_id": it.other_material_id,
         "production_order_id": getattr(it, "production_order_id", None),
+        "product_id": _product_id,
         "ten_hang": it.ten_hang,
         "don_vi": it.don_vi,
         "so_luong": float(it.so_luong),
         "don_gia": float(it.don_gia),
         "ghi_chu": it.ghi_chu,
     }
+    if _product_id and not it.production_order_id:
+        prod = db.get(Product, _product_id)
+        if prod:
+            d["ten_san_pham"] = prod.ten_san_pham
+            d["ma_san_pham"] = prod.ma_san_pham if hasattr(prod, "ma_san_pham") else None
     po_id = getattr(it, "production_order_id", None)
     if po_id:
         lsx = db.get(ProductionOrder, po_id)
@@ -533,3 +650,118 @@ def _ck_item_dict(it: "PhieuChuyenKhoItem", db: Session) -> dict:
                     if prod:
                         d["ma_sp"] = prod.ma_amis or prod.ma_hang or ""
     return d
+
+
+# ── Gợi ý đơn giá BTP ─────────────────────────────────────────────────────────
+
+@router.get("/btp-price")
+def get_btp_price(
+    production_order_id: int = Query(..., description="ID của LSX xưởng A"),
+    chong_tham: int = Query(0, ge=0, le=2, description="Chống thấm: 0=không, 1=1 mặt, 2=2 mặt"),
+    in_flexo_mau: int = Query(0, ge=0, description="In Flexo: số màu (0=không in)"),
+    in_flexo_phu_nen: bool = Query(False),
+    in_ky_thuat_so: bool = Query(False),
+    chap_xa: bool = Query(False),
+    boi: bool = Query(False),
+    be_so_con: int = Query(0, ge=0, description="Bế: số con/khuôn (0=không bế)"),
+    dan: bool = Query(False),
+    ghim: bool = Query(False),
+    can_mang: int = Query(0, ge=0, le=2, description="Cán màng: 0=không, 1=1 mặt, 2=2 mặt"),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Tính gợi ý đơn giá BTP = gia_phoi + addon công đoạn xưởng A đã làm.
+    Nguồn gia_phoi: QuoteItem.gia_phoi qua chain LSX→SO→SOItem→QuoteItem.
+    Addon: AddonRate từ DB × diện_tích.
+    """
+    lsx = db.get(ProductionOrder, production_order_id)
+    if not lsx:
+        raise HTTPException(404, "Không tìm thấy lệnh sản xuất")
+
+    # Trace: LSX → SalesOrder → SalesOrderItem → QuoteItem
+    gia_phoi: float | None = None
+    dien_tich: float | None = None
+    ten_hang: str = ""
+
+    if lsx.sales_order_id:
+        so_item = (
+            db.query(SalesOrderItem)
+            .filter(SalesOrderItem.order_id == lsx.sales_order_id)
+            .first()
+        )
+        if so_item:
+            ten_hang = so_item.ten_hang or ""
+            if so_item.dien_tich:
+                dien_tich = float(so_item.dien_tich)
+            if so_item.quote_item_id:
+                qi = db.get(QuoteItem, so_item.quote_item_id)
+                if qi:
+                    gia_phoi = float(qi.gia_phoi) if qi.gia_phoi else None
+                    if dien_tich is None and qi.dien_tich:
+                        dien_tich = float(qi.dien_tich)
+
+    # Fallback: first item của LSX nếu không có SO
+    if dien_tich is None:
+        first_item = lsx.items[0] if lsx.items else None
+        if first_item and first_item.dien_tich:
+            dien_tich = float(first_item.dien_tich)
+        if not ten_hang and first_item:
+            ten_hang = first_item.ten_hang or ""
+
+    # Load addon rates từ DB
+    rates_rows = db.query(AddonRate).all()
+    rates: dict = {r.ma_chi_phi: float(r.don_gia) for r in rates_rows}
+
+    dt = dien_tich or 0.0
+    addon = 0.0
+    addon_detail: dict = {}
+
+    if chong_tham:
+        v = _calc_chong_tham(chong_tham, dt, rates)
+        addon += v
+        addon_detail["chong_tham"] = round(v, 2)
+    if in_flexo_mau > 0:
+        v = _calc_in_flexo(in_flexo_mau, in_flexo_phu_nen, dt, rates)
+        addon += v
+        addon_detail["in_flexo"] = round(v, 2)
+    if in_ky_thuat_so:
+        v = _calc_in_ky_thuat_so(in_ky_thuat_so, rates)
+        addon += v
+        addon_detail["in_ky_thuat_so"] = round(v, 2)
+    if chap_xa:
+        v = _calc_chap_xa(chap_xa, rates)
+        addon += v
+        addon_detail["chap_xa"] = round(v, 2)
+    if boi:
+        v = _calc_boi(boi, dt, rates)
+        addon += v
+        addon_detail["boi"] = round(v, 2)
+    if be_so_con:
+        v = _calc_be(be_so_con, rates)
+        addon += v
+        addon_detail["be"] = round(v, 2)
+    if dan:
+        v = _calc_dan(dan, rates)
+        addon += v
+        addon_detail["dan"] = round(v, 2)
+    if ghim:
+        v = _calc_ghim(ghim, rates)
+        addon += v
+        addon_detail["ghim"] = round(v, 2)
+    if can_mang:
+        v = _calc_can_mang(can_mang, dt, rates)
+        addon += v
+        addon_detail["can_mang"] = round(v, 2)
+
+    don_gia_btp = round((gia_phoi or 0.0) + addon, 2)
+
+    return {
+        "production_order_id": production_order_id,
+        "ten_hang": ten_hang,
+        "gia_phoi": gia_phoi,
+        "dien_tich": dien_tich,
+        "addon_detail": addon_detail,
+        "addon_tong": round(addon, 2),
+        "don_gia_btp": don_gia_btp,
+        "ghi_chu": "Giá gợi ý — hoạch toán nội bộ" if gia_phoi else "Không tìm thấy gia_phoi từ báo giá — cần nhập tay",
+    }

@@ -115,6 +115,7 @@ class ProductionOrderCreate(BaseModel):
     ghi_chu: str | None = None
     don_gia_noi_bo: Decimal | None = None
     tan_dung: bool = False
+    parent_production_order_id: int | None = None  # LSX cha khi tiếp nối BTP từ xưởng khác
     items: list[ProductionOrderItemCreate]
 
     @field_validator("items")
@@ -167,6 +168,7 @@ class ProductionOrderResponse(BaseModel):
     ghi_chu_don_hang: str | None = None
     don_gia_noi_bo: Decimal | None = None
     tan_dung: bool = False
+    parent_production_order_id: int | None = None
     phoi_phan_xuong_id: int | None = None
     ten_phoi_phan_xuong: str | None = None
     ten_kho_nhap_phoi_du_kien: str | None = None

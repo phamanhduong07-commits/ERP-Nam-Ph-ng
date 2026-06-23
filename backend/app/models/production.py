@@ -31,6 +31,7 @@ class ProductionOrder(Base):
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     nv_theo_doi_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     phieu_goc_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=True)
+    parent_production_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("production_orders.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(
@@ -51,6 +52,9 @@ class ProductionOrder(Base):
         "PhanXuong", foreign_keys=[phan_xuong_id])
     phoi_phan_xuong: Mapped["PhanXuong | None"] = relationship(
         "PhanXuong", foreign_keys=[phoi_phan_xuong_id])  # type: ignore[name-defined]
+    parent_order: Mapped["ProductionOrder | None"] = relationship(
+        "ProductionOrder", foreign_keys=[parent_production_order_id],
+        remote_side="ProductionOrder.id")
     items: Mapped[list["ProductionOrderItem"]] = relationship(
         "ProductionOrderItem", back_populates="production_order",
         cascade="all, delete-orphan"

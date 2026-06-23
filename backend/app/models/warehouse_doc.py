@@ -275,9 +275,12 @@ class PhieuChuyenKhoItem(Base):
     don_gia: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
     ghi_chu: Mapped[str | None] = mapped_column(Text)
 
+    product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+
     phieu: Mapped["PhieuChuyenKho"] = relationship("PhieuChuyenKho", back_populates="items")
     paper_material = relationship("PaperMaterial")
     other_material = relationship("OtherMaterial")
+    product = relationship("Product", foreign_keys=[product_id])
 
 
 class StockAdjustment(Base):

@@ -67,6 +67,7 @@ export interface PhieuKhoItem {
   paper_material_id: number | null
   other_material_id: number | null
   production_order_id?: number | null
+  product_id?: number | null
   ten_hang: string
   don_vi: string
   so_luong: number
@@ -80,6 +81,9 @@ export interface PhieuKhoItem {
   to_hop_song?: string
   quy_cach?: string
   kho_cat?: string
+  // Product-enriched (BTP items)
+  ten_san_pham?: string
+  ma_san_pham?: string
 }
 
 export interface PhieuNhapKho {
@@ -830,6 +834,8 @@ export const warehouseApi = {
   deletePhieuChuyen: (id: number) => client.delete(`/warehouse/phieu-chuyen/${id}`),
   approvePhieuChuyen: (id: number) => client.patch(`/warehouse/phieu-chuyen/${id}/approve`),
   cancelPhieuChuyen: (id: number) => client.post(`/warehouse/phieu-chuyen/${id}/cancel`),
+  getBtpPrice: (params: { production_order_id: number; chong_tham?: number; in_flexo_mau?: number; in_flexo_phu_nen?: boolean; in_ky_thuat_so?: boolean; chap_xa?: boolean; boi?: boolean; be_so_con?: number; dan?: boolean; ghim?: boolean; can_mang?: number }) =>
+    client.get<{ production_order_id: number; ten_hang: string; gia_phoi: number | null; dien_tich: number | null; addon_detail: Record<string, number>; addon_tong: number; don_gia_btp: number; ghi_chu: string }>('/warehouse/btp-price', { params }),
 
   // Kiem ke / dieu chinh ton kho
   listStockAdjustments: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; tu_ngay?: string; den_ngay?: string }) =>
