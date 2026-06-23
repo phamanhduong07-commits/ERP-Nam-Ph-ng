@@ -829,6 +829,28 @@ def create_from_lenh_sx(
     elif first and first.rong and first.dai:
         quy_cach = f"{int(first.rong)}x{int(first.dai)}"
 
+    # Kiểm tra tồn kho phôi trong kho xưởng trước khi tạo phiếu in
+    wh_phoi = _get_workshop_warehouse(db, order.phan_xuong_id, "PHOI")
+    if wh_phoi and item_luong:
+        _poi_map: dict[int, str] = {it.id: it.ten_hang for it in order.items}
+        for poi_id, sl in item_luong.items():
+            ten_hang = _poi_map.get(poi_id) or "Phôi sóng"
+            sl_dec = Decimal(str(round(sl, 3)))
+            bal = db.query(InventoryBalance).filter(
+                InventoryBalance.warehouse_id == wh_phoi.id,
+                InventoryBalance.ten_hang == ten_hang,
+            ).first()
+            ton = bal.ton_luong if bal else Decimal("0")
+            if ton < sl_dec:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Kho phôi xưởng chưa đủ '{ten_hang}': "
+                        f"cần {float(sl_dec):g}, còn {float(ton):g}. "
+                        "Vui lòng chuyển phôi về kho phôi xưởng trước."
+                    ),
+                )
+
     # Tạo PhieuIn
     phieu_in = PhieuIn(
         so_phieu=_gen_so_phieu(db),
@@ -892,7 +914,6 @@ def create_from_lenh_sx(
     db.add(phieu_xuat)
 
     # Trừ InventoryBalance và Hạch toán kế toán
-    wh_phoi = _get_workshop_warehouse(db, order.phan_xuong_id, "PHOI")
     if wh_phoi:
         journal_items = []
         for poi_id, sl in (item_luong.items() if item_luong else [(first.id if first else None, so_luong_phoi)]):
