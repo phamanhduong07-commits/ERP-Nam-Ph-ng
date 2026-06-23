@@ -276,6 +276,14 @@ def get_session_detail(
     if not session:
         raise HTTPException(404, "Không tìm thấy phiên sản xuất")
 
+    import json
+    allocation_detail = None
+    if session.allocation_detail:
+        try:
+            allocation_detail = json.loads(session.allocation_detail)
+        except Exception:
+            allocation_detail = None
+
     return {
         **_session_summary(session),
         "rolls": [_roll_detail(r) for r in session.rolls],
@@ -299,6 +307,7 @@ def get_session_detail(
             for w in session.paper_wastes
         ],
         "phieu_nhap_phoi_songs": [_phieu_detail(p) for p in session.phieu_nhap_phoi_songs],
+        "allocation_detail": allocation_detail,
     }
 
 
@@ -819,4 +828,287 @@ def close_session(
         "session_id": session_id,
         "message": "Phiên đã được chốt thành công",
         "allocation": allocation,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API: Gợi ý loại sóng từ BOM của các phiếu trong phiên (D1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/{session_id}/suggested-flutes")
+def get_suggested_flutes(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Trả về danh sách loại sóng (B/C/E/A) từ BOM của các LSX trong phiên."""
+    from app.models.bom import ProductionBOM, ProductionBOMItem
+    session = db.get(ProductionSession, session_id)
+    if not session:
+        raise HTTPException(404, "Không tìm thấy phiên sản xuất")
+
+    # Lấy tất cả production_order_item_id từ các phiếu trong phiên
+    poi_ids = (
+        db.query(PhieuNhapPhoiSongItem.production_order_item_id)
+        .join(PhieuNhapPhoiSong, PhieuNhapPhoiSong.id == PhieuNhapPhoiSongItem.phieu_id)
+        .filter(PhieuNhapPhoiSong.session_id == session_id)
+        .distinct()
+        .all()
+    )
+    poi_id_list = [r[0] for r in poi_ids if r[0]]
+    if not poi_id_list:
+        return {"flute_types": []}
+
+    # Tìm BOM đã confirm cho các LSX này
+    bom_ids = (
+        db.query(ProductionBOM.id)
+        .filter(
+            ProductionBOM.production_order_item_id.in_(poi_id_list),
+            ProductionBOM.trang_thai == "confirmed",
+        )
+        .all()
+    )
+    bom_id_list = [r[0] for r in bom_ids]
+    if not bom_id_list:
+        return {"flute_types": []}
+
+    # Lấy flute_type duy nhất từ BOM items là lớp sóng
+    rows = (
+        db.query(ProductionBOMItem.flute_type)
+        .filter(
+            ProductionBOMItem.bom_id.in_(bom_id_list),
+            ProductionBOMItem.loai_lop == "song",
+            ProductionBOMItem.flute_type.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    flute_types = sorted({r[0] for r in rows if r[0]})
+    return {"flute_types": flute_types}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API: Vật tư phụ mặc định pha keo (D2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/{session_id}/default-materials")
+def get_default_materials(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Trả về danh sách vật tư phụ được đánh dấu là mặc định pha keo."""
+    from app.models.master import OtherMaterial
+    session = db.get(ProductionSession, session_id)
+    if not session:
+        raise HTTPException(404, "Không tìm thấy phiên sản xuất")
+
+    materials = (
+        db.query(OtherMaterial)
+        .filter(OtherMaterial.la_mac_dinh_pha_keo == True, OtherMaterial.trang_thai == True)
+        .order_by(OtherMaterial.ten)
+        .all()
+    )
+    return {
+        "materials": [
+            {"id": m.id, "ten": m.ten, "dvt": m.dvt}
+            for m in materials
+        ]
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API: Đảm bảo tồn tại phiên cho ca hiện tại (D4)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class EnsureShiftIn(BaseModel):
+    phan_xuong_id: Optional[int] = None
+
+
+@router.post("/ensure-for-shift", status_code=200)
+def ensure_session_for_shift(
+    body: EnsureShiftIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Tạo hoặc trả về phiên sản xuất cho ca hiện tại (VN UTC+7).
+    Ca 1: 06:00–14:00 | Ca 2: 14:00–22:00 | Ca 3: 22:00–06:00.
+    """
+    import datetime as _dt
+    VN_OFFSET = _dt.timezone(_dt.timedelta(hours=7))
+    now_vn = _dt.datetime.now(VN_OFFSET)
+    hour = now_vn.hour
+
+    if 6 <= hour < 14:
+        ca = "Ca 1"
+    elif 14 <= hour < 22:
+        ca = "Ca 2"
+    else:
+        ca = "Ca 3"
+
+    today_vn = now_vn.date()
+
+    # Kiểm tra phiên đang active cùng ca/ngày/phan_xuong
+    q = db.query(ProductionSession).filter(
+        ProductionSession.trang_thai.in_(["dang_chay", "cho_phan_bo"]),
+        ProductionSession.ngay_tao == today_vn,
+        ProductionSession.ten_phien.like(f"{ca} - %"),
+    )
+    if body.phan_xuong_id:
+        q = q.filter(ProductionSession.phan_xuong_id == body.phan_xuong_id)
+
+    existing = q.first()
+    if existing:
+        return {"created": False, "session": _session_summary(existing)}
+
+    # Tạo phiên mới
+    ten_phien = f"{ca} - {today_vn.strftime('%d/%m/%Y')}"
+    new_session = ProductionSession(
+        ten_phien=ten_phien,
+        ngay_tao=today_vn,
+        trang_thai="dang_chay",
+        phan_xuong_id=body.phan_xuong_id,
+        created_by=current_user.id,
+    )
+    db.add(new_session)
+    db.commit()
+    db.refresh(new_session)
+    return {"created": True, "session": _session_summary(new_session)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API: Gộp hai phiên sản xuất (Merge) (D5)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class MergeSessionIn(BaseModel):
+    source_session_id: int
+
+
+@router.post("/{session_id}/merge")
+def merge_sessions(
+    session_id: int,
+    body: MergeSessionIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Gộp source_session vào target session (session_id).
+    Di chuyển toàn bộ rolls, phiếu phôi, cộng gộp wastes cùng flute_type.
+    """
+    target = db.get(ProductionSession, session_id)
+    source = db.get(ProductionSession, body.source_session_id)
+
+    if not target:
+        raise HTTPException(404, "Không tìm thấy phiên đích")
+    if not source:
+        raise HTTPException(404, "Không tìm thấy phiên nguồn")
+    if target.trang_thai == "da_chot":
+        raise HTTPException(400, "Phiên đích đã chốt, không thể gộp")
+    if source.trang_thai == "da_chot":
+        raise HTTPException(400, "Phiên nguồn đã chốt, không thể gộp")
+    if session_id == body.source_session_id:
+        raise HTTPException(400, "Không thể gộp phiên với chính nó")
+
+    # Di chuyển rolls
+    db.query(ProductionSessionRoll).filter(
+        ProductionSessionRoll.session_id == source.id
+    ).update({"session_id": target.id})
+
+    # Di chuyển phiếu phôi sóng
+    db.query(PhieuNhapPhoiSong).filter(
+        PhieuNhapPhoiSong.session_id == source.id
+    ).update({"session_id": target.id})
+
+    # Di chuyển materials (cộng gộp nếu trùng other_material_id)
+    for src_mat in db.query(ProductionSessionMaterial).filter(
+        ProductionSessionMaterial.session_id == source.id
+    ).all():
+        existing = db.query(ProductionSessionMaterial).filter(
+            ProductionSessionMaterial.session_id == target.id,
+            ProductionSessionMaterial.other_material_id == src_mat.other_material_id,
+        ).first()
+        if existing:
+            existing.so_luong = Decimal(str(existing.so_luong)) + Decimal(str(src_mat.so_luong))
+            existing.thanh_tien = Decimal(str(existing.thanh_tien)) + Decimal(str(src_mat.thanh_tien))
+            db.delete(src_mat)
+        else:
+            src_mat.session_id = target.id
+
+    # Cộng gộp wastes cùng flute_type
+    for src_w in db.query(ProductionSessionPaperWaste).filter(
+        ProductionSessionPaperWaste.session_id == source.id
+    ).all():
+        existing_w = db.query(ProductionSessionPaperWaste).filter(
+            ProductionSessionPaperWaste.session_id == target.id,
+            ProductionSessionPaperWaste.flute_type == src_w.flute_type,
+        ).first()
+        if existing_w:
+            existing_w.so_kg_hao_hut = Decimal(str(existing_w.so_kg_hao_hut)) + Decimal(str(src_w.so_kg_hao_hut))
+            db.delete(src_w)
+        else:
+            src_w.session_id = target.id
+
+    db.delete(source)
+    db.commit()
+    db.refresh(target)
+    return {"ok": True, "message": "Đã gộp phiên thành công", "session_id": target.id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API: Tách phiên sản xuất (Split) (D6)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class SplitSessionIn(BaseModel):
+    ten_phien_moi: str
+    phieu_ids: list[int] = []
+    roll_ids: list[int] = []
+
+
+@router.post("/{session_id}/split", status_code=201)
+def split_session(
+    session_id: int,
+    body: SplitSessionIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Tách một phần phiếu/cuộn sang phiên mới. Phiên mới có wastes/materials rỗng."""
+    session = db.get(ProductionSession, session_id)
+    if not session:
+        raise HTTPException(404, "Không tìm thấy phiên sản xuất")
+    if session.trang_thai == "da_chot":
+        raise HTTPException(400, "Phiên đã chốt, không thể tách")
+    if not body.phieu_ids and not body.roll_ids:
+        raise HTTPException(400, "Phải chọn ít nhất 1 phiếu hoặc 1 cuộn để tách")
+
+    import datetime as _dt
+    new_session = ProductionSession(
+        ten_phien=body.ten_phien_moi,
+        ngay_tao=session.ngay_tao,
+        trang_thai="dang_chay",
+        phan_xuong_id=session.phan_xuong_id,
+        created_by=current_user.id,
+    )
+    db.add(new_session)
+    db.flush()  # để có new_session.id
+
+    # Di chuyển phiếu phôi được chọn
+    if body.phieu_ids:
+        db.query(PhieuNhapPhoiSong).filter(
+            PhieuNhapPhoiSong.id.in_(body.phieu_ids),
+            PhieuNhapPhoiSong.session_id == session_id,
+        ).update({"session_id": new_session.id})
+
+    # Di chuyển cuộn giấy được chọn
+    if body.roll_ids:
+        db.query(ProductionSessionRoll).filter(
+            ProductionSessionRoll.id.in_(body.roll_ids),
+            ProductionSessionRoll.session_id == session_id,
+        ).update({"session_id": new_session.id})
+
+    db.commit()
+    db.refresh(new_session)
+    return {
+        "ok": True,
+        "message": "Đã tách phiên thành công",
+        "new_session_id": new_session.id,
+        "new_session": _session_summary(new_session),
     }

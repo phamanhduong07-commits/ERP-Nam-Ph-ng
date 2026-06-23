@@ -904,6 +904,14 @@ export default function MaySongPage() {
     staleTime: 60_000,
   })
 
+  // D4: Đảm bảo tồn tại phiên sản xuất cho ca hiện tại khi mở trang
+  useQuery({
+    queryKey: ['ensure-session-for-shift', filterPxId],
+    queryFn: () => warehouseApi.ensureSessionForShift(filterPxId).then(r => r.data),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  })
+
   const { data: lsxRes, isLoading, refetch } = useQuery({
     queryKey: ['may-song-list', filterPxId],
     queryFn: () =>

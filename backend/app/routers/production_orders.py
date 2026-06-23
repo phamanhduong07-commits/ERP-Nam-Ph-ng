@@ -968,6 +968,22 @@ def create_phieu_nhap_phoi_song(
     db.commit()
     db.refresh(phieu)
 
+    # D3: Auto-link phiếu vào phiên sản xuất đang active cùng phan_xuong
+    if order.phan_xuong_id and phieu.session_id is None:
+        from app.models.production import ProductionSession
+        active_session = (
+            db.query(ProductionSession)
+            .filter(
+                ProductionSession.phan_xuong_id == order.phan_xuong_id,
+                ProductionSession.trang_thai != "da_chot",
+            )
+            .order_by(ProductionSession.id.desc())
+            .first()
+        )
+        if active_session:
+            phieu.session_id = active_session.id
+            db.commit()
+
     # Auto-create DefectRecord cho từng item có phôi lỗi
     for it in phieu.items:
         if it.so_luong_loi and it.so_luong_loi > 0:

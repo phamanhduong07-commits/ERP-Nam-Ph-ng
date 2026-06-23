@@ -246,6 +246,7 @@ class OtherMaterial(Base):
     tieu_chuan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tieu_chuan_ky_thuat.id", ondelete="SET NULL"))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
     trang_thai: Mapped[bool] = mapped_column(Boolean, default=True)
+    la_mac_dinh_pha_keo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(

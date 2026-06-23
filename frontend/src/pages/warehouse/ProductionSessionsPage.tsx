@@ -9,6 +9,7 @@ import {
   PlusOutlined, ReloadOutlined, EyeOutlined, CheckCircleOutlined,
   ExclamationCircleOutlined, FileTextOutlined, BarChartOutlined,
   CloseCircleOutlined, LinkOutlined, DisconnectOutlined,
+  MergeCellsOutlined, ScissorOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
@@ -79,6 +80,17 @@ export default function ProductionSessionsPage() {
   const [wastes, setWastes] = useState<{ flute_type: string; so_kg_hao_hut: number }[]>([])
   const [materials, setMaterials] = useState<{ other_material_id: number; so_luong: number; don_gia: number }[]>([])
 
+  // Merge modal
+  const [mergeModalOpen, setMergeModalOpen] = useState(false)
+  const [mergeTargetId, setMergeTargetId] = useState<number | null>(null)
+  const [mergeSrcId, setMergeSrcId] = useState<number | null>(null)
+
+  // Split modal
+  const [splitModalOpen, setSplitModalOpen] = useState(false)
+  const [splitPhieuIds, setSplitPhieuIds] = useState<number[]>([])
+  const [splitRollIds, setSplitRollIds] = useState<number[]>([])
+  const [splitForm] = Form.useForm()
+
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: sessionsData, isLoading } = useQuery({
     queryKey: ['production-sessions', filterStatus, page],
@@ -111,6 +123,18 @@ export default function ProductionSessionsPage() {
     queryFn: () => otherMaterialsApi.list({ page_size: 200 }).then(r => r.data.items),
   })
 
+  const { data: suggestedFlutes } = useQuery({
+    queryKey: ['suggested-flutes', selectedId],
+    queryFn: () => selectedId ? warehouseApi.getSuggestedFlutes(selectedId).then(r => r.data) : null,
+    enabled: !!selectedId && detailOpen,
+  })
+
+  const { data: defaultMaterials } = useQuery({
+    queryKey: ['default-materials', selectedId],
+    queryFn: () => selectedId ? warehouseApi.getDefaultMaterials(selectedId).then(r => r.data) : null,
+    enabled: !!selectedId && detailOpen,
+  })
+
   // ── Mutations ────────────────────────────────────────────────────────────────
   const createMutation = useMutation({
     mutationFn: (d: { ten_phien: string; ngay_tao?: string; phan_xuong_id?: number }) =>
@@ -121,7 +145,10 @@ export default function ProductionSessionsPage() {
       createForm.resetFields()
       qc.invalidateQueries({ queryKey: ['production-sessions'] })
     },
-    onError: () => message.error('Tạo phiên thất bại'),
+    onError: (e: unknown) => {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(typeof detail === 'string' ? detail : 'Tạo phiên thất bại')
+    },
   })
 
   const assignMutation = useMutation({
@@ -192,6 +219,41 @@ export default function ProductionSessionsPage() {
     },
   })
 
+  const mergeMutation = useMutation({
+    mutationFn: ({ target_id, src_id }: { target_id: number; src_id: number }) =>
+      warehouseApi.mergeSession(target_id, src_id),
+    onSuccess: (r) => {
+      message.success(r.data.message || 'Gộp phiên thành công')
+      setMergeModalOpen(false)
+      setMergeSrcId(null)
+      qc.invalidateQueries({ queryKey: ['production-sessions'] })
+      qc.invalidateQueries({ queryKey: ['production-session-detail'] })
+    },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(msg || 'Gộp phiên thất bại')
+    },
+  })
+
+  const splitMutation = useMutation({
+    mutationFn: ({ session_id, ten_phien_moi, phieu_ids, roll_ids }: {
+      session_id: number; ten_phien_moi: string; phieu_ids: number[]; roll_ids: number[]
+    }) => warehouseApi.splitSession(session_id, { ten_phien_moi, phieu_ids, roll_ids }),
+    onSuccess: (r) => {
+      message.success(r.data.message || 'Tách phiên thành công')
+      setSplitModalOpen(false)
+      setSplitPhieuIds([])
+      setSplitRollIds([])
+      splitForm.resetFields()
+      qc.invalidateQueries({ queryKey: ['production-sessions'] })
+      qc.invalidateQueries({ queryKey: ['production-session-detail'] })
+    },
+    onError: (e: unknown) => {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(msg || 'Tách phiên thất bại')
+    },
+  })
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
   function openDetail(session: ProductionSessionSummary) {
     setSelectedId(session.id)
@@ -199,13 +261,24 @@ export default function ProductionSessionsPage() {
     // Khởi tạo wastes/materials từ detail khi load xong
   }
 
-  // Sync wastes/materials khi detail load
+  // Sync wastes/materials khi detail load; auto-populate từ BOM/defaults khi rỗng
   useMemo(() => {
-    if (detail) {
-      setWastes(detail.paper_wastes.map(w => ({ flute_type: w.flute_type, so_kg_hao_hut: w.so_kg_hao_hut })))
-      setMaterials(detail.materials.map(m => ({ other_material_id: m.other_material_id, so_luong: m.so_luong, don_gia: m.don_gia })))
+    if (!detail) return
+
+    const savedWastes = detail.paper_wastes.map(w => ({ flute_type: w.flute_type, so_kg_hao_hut: w.so_kg_hao_hut }))
+    if (savedWastes.length === 0 && detail.trang_thai !== 'da_chot' && suggestedFlutes?.flute_types?.length) {
+      setWastes(suggestedFlutes.flute_types.map(ft => ({ flute_type: ft, so_kg_hao_hut: 0 })))
+    } else {
+      setWastes(savedWastes)
     }
-  }, [detail?.id, detail?.paper_wastes?.length, detail?.materials?.length])
+
+    const savedMaterials = detail.materials.map(m => ({ other_material_id: m.other_material_id, so_luong: m.so_luong, don_gia: m.don_gia }))
+    if (savedMaterials.length === 0 && detail.trang_thai !== 'da_chot' && defaultMaterials?.materials?.length) {
+      setMaterials(defaultMaterials.materials.map(m => ({ other_material_id: m.id, so_luong: 0, don_gia: 0 })))
+    } else {
+      setMaterials(savedMaterials)
+    }
+  }, [detail?.id, detail?.paper_wastes?.length, detail?.materials?.length, suggestedFlutes?.flute_types?.join(','), defaultMaterials?.materials?.length])
 
   // ── Columns danh sách phiên ──────────────────────────────────────────────────
   const columns = [
@@ -260,12 +333,21 @@ export default function ProductionSessionsPage() {
     },
     {
       title: '',
-      width: 100,
+      width: 130,
       render: (_: unknown, r: ProductionSessionSummary) => (
         <Space>
           <Tooltip title="Xem chi tiết">
             <Button size="small" icon={<EyeOutlined />} onClick={() => openDetail(r)} />
           </Tooltip>
+          {r.trang_thai !== 'da_chot' && (
+            <Tooltip title="Gộp phiên khác vào đây">
+              <Button
+                size="small"
+                icon={<MergeCellsOutlined />}
+                onClick={() => { setMergeTargetId(r.id); setMergeSrcId(null); setMergeModalOpen(true) }}
+              />
+            </Tooltip>
+          )}
         </Space>
       ),
     },
@@ -398,6 +480,12 @@ export default function ProductionSessionsPage() {
         extra={
           detail && detail.trang_thai !== 'da_chot' && (
             <Space>
+              <Button
+                icon={<ScissorOutlined />}
+                onClick={() => { setSplitPhieuIds([]); setSplitRollIds([]); setSplitModalOpen(true) }}
+              >
+                Tách phiên
+              </Button>
               <Button
                 icon={<BarChartOutlined />}
                 onClick={() => previewMutation.mutate(detail.id)}
@@ -741,6 +829,117 @@ export default function ProductionSessionsPage() {
               </Text>
             </TabPane>
 
+            {/* Tab: Kết quả phân bổ (chỉ hiện khi đã chốt) */}
+            {detail.trang_thai === 'da_chot' && (
+              <TabPane
+                tab={<span><BarChartOutlined /> Kết quả phân bổ</span>}
+                key="allocation"
+              >
+                {!detail.allocation_detail || detail.allocation_detail.length === 0
+                  ? <Empty description="Không có dữ liệu phân bổ" />
+                  : (
+                    <>
+                      <Row gutter={16} style={{ marginBottom: 16 }}>
+                        <Col span={8}>
+                          <Statistic
+                            title="Tổng chi phí giấy"
+                            value={detail.allocation_detail.reduce((s, r) => s + r.chi_phi_giay, 0)}
+                            formatter={v => fmt(Number(v))}
+                            suffix="₫"
+                          />
+                        </Col>
+                        <Col span={8}>
+                          <Statistic
+                            title="Chi phí NVL phụ"
+                            value={detail.allocation_detail.reduce((s, r) => s + r.chi_phi_nvl_phu, 0)}
+                            formatter={v => fmt(Number(v))}
+                            suffix="₫"
+                          />
+                        </Col>
+                        <Col span={8}>
+                          <Statistic
+                            title="Tổng chi phí phiên"
+                            value={detail.allocation_detail.reduce((s, r) => s + r.chi_phi_tong, 0)}
+                            formatter={v => fmt(Number(v))}
+                            suffix="₫"
+                            valueStyle={{ color: '#cf1322' }}
+                          />
+                        </Col>
+                      </Row>
+                      <Table
+                        size="small"
+                        rowKey="production_order_item_id"
+                        dataSource={detail.allocation_detail}
+                        pagination={false}
+                        columns={[
+                          { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
+                          { title: 'Lớp', dataIndex: 'so_lop', width: 55 },
+                          {
+                            title: 'SL (cái)',
+                            dataIndex: 'so_luong',
+                            width: 90,
+                            render: (v: number) => v.toLocaleString(),
+                          },
+                          {
+                            title: 'Diện tích (m²)',
+                            dataIndex: 'dien_tich_m2',
+                            width: 115,
+                            render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 2 }),
+                          },
+                          {
+                            title: 'DT quy đổi (m²)',
+                            dataIndex: 'dien_tich_quy_doi',
+                            width: 120,
+                            render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 2 }),
+                          },
+                          {
+                            title: 'CP giấy',
+                            dataIndex: 'chi_phi_giay',
+                            width: 120,
+                            render: (v: number) => `${fmt(v)} ₫`,
+                          },
+                          {
+                            title: 'CP NVL phụ',
+                            dataIndex: 'chi_phi_nvl_phu',
+                            width: 110,
+                            render: (v: number) => `${fmt(v)} ₫`,
+                          },
+                          {
+                            title: 'Tổng chi phí',
+                            dataIndex: 'chi_phi_tong',
+                            width: 130,
+                            render: (v: number) => <Text strong type="danger">{fmt(v)} ₫</Text>,
+                          },
+                        ]}
+                        summary={rows => {
+                          const data = [...rows]
+                          const totGiay = data.reduce((s, r) => s + (r.chi_phi_giay || 0), 0)
+                          const totNvl = data.reduce((s, r) => s + (r.chi_phi_nvl_phu || 0), 0)
+                          const totAll = data.reduce((s, r) => s + (r.chi_phi_tong || 0), 0)
+                          return (
+                            <Table.Summary.Row>
+                              <Table.Summary.Cell index={0} colSpan={5}>
+                                <Text strong>Tổng cộng</Text>
+                              </Table.Summary.Cell>
+                              <Table.Summary.Cell index={5}>
+                                <Text strong>{fmt(totGiay)} ₫</Text>
+                              </Table.Summary.Cell>
+                              <Table.Summary.Cell index={6}>
+                                <Text strong>{fmt(totNvl)} ₫</Text>
+                              </Table.Summary.Cell>
+                              <Table.Summary.Cell index={7}>
+                                <Text strong type="danger">{fmt(totAll)} ₫</Text>
+                              </Table.Summary.Cell>
+                            </Table.Summary.Row>
+                          )
+                        }}
+                      />
+                    </>
+                  )
+                }
+              </TabPane>
+            )}
+
           </Tabs>
         )}
       </Drawer>
@@ -800,6 +999,129 @@ export default function ProductionSessionsPage() {
           ]}
         />
       </Drawer>
+
+      {/* ── Modal Gộp phiên (D5) ─────────────────────────────────────────────────── */}
+      <Modal
+        title={<><MergeCellsOutlined /> Gộp phiên vào #{mergeTargetId}</>}
+        open={mergeModalOpen}
+        onCancel={() => { setMergeModalOpen(false); setMergeSrcId(null) }}
+        onOk={() => {
+          if (!mergeTargetId || !mergeSrcId) {
+            message.warning('Vui lòng chọn phiên nguồn')
+            return
+          }
+          mergeMutation.mutate({ target_id: mergeTargetId, src_id: mergeSrcId })
+        }}
+        okText="Xác nhận gộp"
+        cancelText="Hủy"
+        confirmLoading={mergeMutation.isPending}
+        okButtonProps={{ danger: true }}
+        destroyOnHidden
+      >
+        <Alert
+          type="warning"
+          message="Toàn bộ cuộn giấy và phiếu phôi từ phiên nguồn sẽ chuyển sang phiên đích. Hao hụt cùng loại sóng sẽ được cộng gộp. Phiên nguồn sẽ bị xóa."
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+        <div style={{ marginBottom: 8 }}>
+          <Text strong>Phiên đích: </Text>
+          <Tag color="blue">#{mergeTargetId} — {sessionsData?.items?.find(s => s.id === mergeTargetId)?.ten_phien}</Tag>
+        </div>
+        <div>
+          <Text strong>Chọn phiên nguồn (sẽ bị xóa):</Text>
+          <Select
+            style={{ width: '100%', marginTop: 8 }}
+            placeholder="Chọn phiên cần gộp vào đây..."
+            value={mergeSrcId}
+            onChange={setMergeSrcId}
+            options={
+              (sessionsData?.items || [])
+                .filter(s => s.id !== mergeTargetId && s.trang_thai !== 'da_chot')
+                .map(s => ({ label: `#${s.id} — ${s.ten_phien} (${STATUS_LABEL[s.trang_thai]})`, value: s.id }))
+            }
+          />
+        </div>
+      </Modal>
+
+      {/* ── Modal Tách phiên (D6) ─────────────────────────────────────────────────── */}
+      <Modal
+        title={<><ScissorOutlined /> Tách phiên #{selectedId}</>}
+        open={splitModalOpen}
+        onCancel={() => { setSplitModalOpen(false); setSplitPhieuIds([]); setSplitRollIds([]); splitForm.resetFields() }}
+        onOk={() => splitForm.submit()}
+        okText="Tách phiên"
+        cancelText="Hủy"
+        confirmLoading={splitMutation.isPending}
+        width={700}
+        destroyOnHidden
+      >
+        <Alert
+          type="info"
+          message="Các phiếu và cuộn được chọn sẽ chuyển sang phiên mới. Phiên mới có hao hụt và NVL phụ rỗng — cần nhập lại."
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+        <Form
+          form={splitForm}
+          layout="vertical"
+          onFinish={values => {
+            if (!selectedId) return
+            splitMutation.mutate({
+              session_id: selectedId,
+              ten_phien_moi: values.ten_phien_moi,
+              phieu_ids: splitPhieuIds,
+              roll_ids: splitRollIds,
+            })
+          }}
+        >
+          <Form.Item name="ten_phien_moi" label="Tên phiên mới" rules={[{ required: true }]}>
+            <Input placeholder="VD: Ca 2 - 23/06/2026" />
+          </Form.Item>
+        </Form>
+        {detail && (
+          <>
+            <Divider>Chọn phiếu phôi sóng cần tách</Divider>
+            <Table
+              size="small"
+              rowKey="id"
+              dataSource={detail.phieu_nhap_phoi_songs}
+              pagination={false}
+              rowSelection={{
+                type: 'checkbox',
+                selectedRowKeys: splitPhieuIds,
+                onChange: keys => setSplitPhieuIds(keys as number[]),
+              }}
+              columns={[
+                { title: 'Số phiếu', dataIndex: 'so_phieu' },
+                { title: 'Ngày', dataIndex: 'ngay', render: (v: string | null) => v ? dayjs(v).format('DD/MM') : '—' },
+                { title: 'Ca', dataIndex: 'ca', render: (v: string | null) => v ? <Tag color="purple">{v}</Tag> : '—' },
+              ]}
+            />
+            {detail.rolls.length > 0 && (
+              <>
+                <Divider>Chọn cuộn giấy cần tách</Divider>
+                <Table
+                  size="small"
+                  rowKey="id"
+                  dataSource={detail.rolls}
+                  pagination={false}
+                  rowSelection={{
+                    type: 'checkbox',
+                    selectedRowKeys: splitRollIds,
+                    onChange: keys => setSplitRollIds(keys as number[]),
+                  }}
+                  columns={[
+                    { title: 'Barcode', dataIndex: 'barcode' },
+                    { title: 'Loại giấy', dataIndex: 'ten_nvl' },
+                    { title: 'TL tiêu hao', dataIndex: 'trong_luong_tieu_hao', render: (v: number | null) => v !== null ? fmtKg(v) : '—' },
+                  ]}
+                />
+              </>
+            )}
+          </>
+        )}
+      </Modal>
 
       {/* ── Modal Xem trước phân bổ ───────────────────────────────────────────────── */}
       <Modal

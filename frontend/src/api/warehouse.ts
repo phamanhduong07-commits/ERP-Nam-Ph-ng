@@ -1038,6 +1038,35 @@ export const warehouseApi = {
     client.post<{ ok: boolean; message: string; allocation: ProductionSessionAllocation }>(
       `/warehouse/production-sessions/${session_id}/close`
     ),
+
+  getSuggestedFlutes: (session_id: number) =>
+    client.get<{ flute_types: string[] }>(`/warehouse/production-sessions/${session_id}/suggested-flutes`),
+
+  getDefaultMaterials: (session_id: number) =>
+    client.get<{ materials: { id: number; ten: string; dvt: string | null }[] }>(
+      `/warehouse/production-sessions/${session_id}/default-materials`
+    ),
+
+  ensureSessionForShift: (phan_xuong_id?: number) =>
+    client.post<{ created: boolean; session: ProductionSessionSummary }>(
+      '/warehouse/production-sessions/ensure-for-shift',
+      { phan_xuong_id: phan_xuong_id ?? null }
+    ),
+
+  mergeSession: (session_id: number, source_session_id: number) =>
+    client.post<{ ok: boolean; message: string; session_id: number }>(
+      `/warehouse/production-sessions/${session_id}/merge`,
+      { source_session_id }
+    ),
+
+  splitSession: (
+    session_id: number,
+    body: { ten_phien_moi: string; phieu_ids: number[]; roll_ids: number[] }
+  ) =>
+    client.post<{ ok: boolean; message: string; new_session_id: number; new_session: ProductionSessionSummary }>(
+      `/warehouse/production-sessions/${session_id}/split`,
+      body
+    ),
 }
 
 // ── Production Session Types ──────────────────────────────────────────────────
@@ -1106,6 +1135,7 @@ export interface ProductionSessionDetail extends ProductionSessionSummary {
     so_kg_hao_hut: number
   }[]
   phieu_nhap_phoi_songs: SessionPhieuSong[]
+  allocation_detail: AllocationLSXItem[] | null
 }
 
 export interface AllocationLSXItem {
