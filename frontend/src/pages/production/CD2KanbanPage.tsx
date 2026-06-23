@@ -362,7 +362,7 @@ function KanbanCard({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.35 : 1,
-    cursor: 'grab',
+    cursor: isDragging ? 'grabbing' : 'grab',
   }
 
   const isOverdue = phieu.ngay_giao_hang
@@ -475,7 +475,7 @@ function KanbanCard({
         {/* ── Quick action buttons ── */}
         {!overlay && (phieu.trang_thai === 'cho_in' || phieu.trang_thai === 'ke_hoach') && (
           <div
-            style={{ marginTop: 8, borderTop: '1px solid #f0f0f0', paddingTop: 6 }}
+            style={{ marginTop: 8, borderTop: '1px solid #f0f0f0', paddingTop: 6, cursor: 'default' }}
             onPointerDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
           >
@@ -494,7 +494,7 @@ function KanbanCard({
 
         {!overlay && phieu.trang_thai === 'dang_in' && (
           <div
-            style={{ marginTop: 8, borderTop: '1px solid #f0f0f0', paddingTop: 6 }}
+            style={{ marginTop: 8, borderTop: '1px solid #f0f0f0', paddingTop: 6, cursor: 'default' }}
             onPointerDown={e => e.stopPropagation()}
             onClick={e => e.stopPropagation()}
           >
