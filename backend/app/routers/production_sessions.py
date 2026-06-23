@@ -1644,7 +1644,7 @@ def get_session_report(
     nvl_phu = [
         {
             "ten_nvl": m.other_material.ten if m.other_material else None,
-            "don_vi": m.other_material.don_vi if m.other_material else None,
+            "don_vi": m.other_material.dvt if m.other_material else None,
             "so_luong": float(m.so_luong),
             "don_gia": float(m.don_gia),
             "thanh_tien": float(m.thanh_tien),
