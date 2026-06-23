@@ -13,6 +13,7 @@ import {
 } from '../../api/warehouse'
 import { warehousesApi } from '../../api/warehouses'
 import { productsApi } from '../../api/products'
+import { productionOrdersApi } from '../../api/productionOrders'
 import { buildHtmlTable, exportToExcel, renderTemplateAndPrint, smartExportExcel, smartPrintPdf, resolveSinglePhapNhanId } from '../../utils/exportUtils'
 import { usePhapNhanForPrint } from '../../hooks/usePhapNhan'
 import { usePermission } from '../../hooks/usePermission'
@@ -86,6 +87,12 @@ export default function TransfersPage() {
     queryKey: ['products-for-btp'],
     queryFn: () => productsApi.list({ page_size: 500 }).then(r => r.data.items),
     staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: lsxList = [] } = useQuery({
+    queryKey: ['lsx-for-btp-transfer'],
+    queryFn: () => productionOrdersApi.list({ page_size: 500, trang_thai: 'dang_chay' }).then(r => r.data.items),
+    staleTime: 2 * 60 * 1000,
   })
 
   const createMut = useMutation({
@@ -201,6 +208,7 @@ export default function TransfersPage() {
           paper_material_id: isBtp ? null : (it.paper_material_id || null),
           other_material_id: isBtp ? null : (it.other_material_id || null),
           product_id: isBtp ? (it.product_id || null) : null,
+          production_order_id: isBtp ? (it.production_order_id || null) : null,
           ten_hang: it.ten_hang || '',
           don_vi: it.don_vi || (isBtp ? 'Cái' : 'Kg'),
           so_luong: it.so_luong,
@@ -595,6 +603,17 @@ export default function TransfersPage() {
                             <Col span={8}>
                               <Form.Item name={[name, 'don_vi']} label="ĐVT" style={{ marginBottom: 4 }}>
                                 <Input size="small" />
+                              </Form.Item>
+                            </Col>
+                            <Col span={24}>
+                              <Form.Item name={[name, 'production_order_id']} label="Nguồn LSX (tùy chọn)" style={{ marginBottom: 4 }}>
+                                <Select size="small" allowClear showSearch placeholder="Chọn LSX gốc để tạo liên kết..."
+                                  filterOption={(inp, opt) => (opt?.label as string)?.toLowerCase().includes(inp.toLowerCase())}
+                                  options={lsxList.map(lsx => ({
+                                    value: lsx.id,
+                                    label: `${lsx.so_lenh}${lsx.ten_hang ? ` — ${lsx.ten_hang}` : ''}${lsx.ten_khach_hang ? ` (${lsx.ten_khach_hang})` : ''}`,
+                                  }))}
+                                />
                               </Form.Item>
                             </Col>
                           </>
