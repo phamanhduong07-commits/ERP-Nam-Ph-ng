@@ -837,6 +837,7 @@ function ChuyenBTPModal({
         don_gia: v.don_gia ?? 0,
         ten_hang: phieu.ten_hang || '',
         ghi_chu: v.ghi_chu || undefined,
+        phieu_in_id: phieu.id,
       })
       message.success(`Đã chuyển BTP — phiếu ${res.data.so_phieu_chuyen}`)
       form.resetFields()

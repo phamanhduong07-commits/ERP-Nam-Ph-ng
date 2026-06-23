@@ -953,6 +953,7 @@ class BtpTransferKanbanIn(BaseModel):
     don_gia: Decimal = Field(Decimal("0"), ge=0)
     ten_hang: str = ""
     ghi_chu: Optional[str] = None
+    phieu_in_id: Optional[int] = None  # PhieuIn gốc ở xưởng A → đổi sang 'da_chuyen_btp'
 
 
 @router.post("/btp-transfer-kanban", status_code=201)
@@ -1063,6 +1064,13 @@ def btp_transfer_kanban(
     )
 
     phieu.trang_thai = "da_duyet"
+
+    # Đánh dấu PhieuIn gốc ở xưởng A đã chuyển → ẩn khỏi kanban
+    if body.phieu_in_id:
+        src_phieu_in = db.get(PhieuIn, body.phieu_in_id)
+        if src_phieu_in:
+            src_phieu_in.trang_thai = "da_chuyen_btp"
+
     db.commit()
     db.refresh(phieu)
 
