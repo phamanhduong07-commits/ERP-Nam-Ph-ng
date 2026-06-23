@@ -975,6 +975,8 @@ export async function smartPrintPdf(ma_mau: string, data: Record<string, any>, p
     Object.entries(finalData).forEach(([k, v]) => {
       html = html.replace(new RegExp(`{{${k}}}`, 'g'), v === null || v === undefined ? '' : String(v))
     })
+    // Xóa các biến không có giá trị (tránh hiện {{driver_name}} raw)
+    html = html.replace(/\{\{[^}]+\}\}/g, '')
 
     printToPdf(tpl.ten_mau || ma_mau, html, Boolean(options.landscape)) // Mặc định portrait cho chuyên nghiệp
   } catch (e) {
