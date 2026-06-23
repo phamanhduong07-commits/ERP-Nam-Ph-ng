@@ -68,9 +68,11 @@ export default function TransfersPage() {
   })
 
   const phapNhanIdForPrint = detailPhieu?.phap_nhan_id_for_print ?? undefined
+  const hasBtpItems = (detailPhieu?.items || []).some((it: PhieuKhoItem) => it.production_order_id)
+  const templateMaMau = hasBtpItems ? 'BTP_TRANSFER' : 'WAREHOUSE_TRANSFER'
   const { data: printTemplate } = useQuery({
-    queryKey: ['print-template', 'WAREHOUSE_TRANSFER', phapNhanIdForPrint],
-    queryFn: () => systemApi.getTemplate('WAREHOUSE_TRANSFER', phapNhanIdForPrint, true),
+    queryKey: ['print-template', templateMaMau, phapNhanIdForPrint],
+    queryFn: () => systemApi.getTemplate(templateMaMau, phapNhanIdForPrint, true),
     staleTime: 5 * 60 * 1000,
     enabled: !!detailPhieu,
   })
@@ -273,7 +275,7 @@ export default function TransfersPage() {
       footer_html: detailPhieu.ghi_chu ?? '',
     }
 
-    smartPrintPdf('WAREHOUSE_TRANSFER', printData, detailPhieu.phap_nhan_id_for_print ?? undefined)
+    smartPrintPdf(hasBtp ? 'BTP_TRANSFER' : 'WAREHOUSE_TRANSFER', printData, detailPhieu.phap_nhan_id_for_print ?? undefined)
   }
 
   const handleExportExcel = () => {
