@@ -1,6 +1,8 @@
 # Claude Code internals
 .claude/
 Plans/
+query
+stop
 
 # Python
 __pycache__/
