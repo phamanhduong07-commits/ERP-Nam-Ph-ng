@@ -20,6 +20,7 @@ import CD2WorkshopSelector from '../../components/CD2WorkshopSelector'
 import { useCD2Workshop } from '../../hooks/useCD2Workshop'
 import { socket } from '../../utils/socket'
 import { buildHtmlTable, smartPrintPdf } from '../../utils/exportUtils'
+import { systemApi } from '../../api/system'
 
 const { Title, Text } = Typography
 
@@ -1134,26 +1135,29 @@ export default function SauInKanbanPage() {
     if (!printTransferPhieu) return
     try {
       const detail = await warehouseApi.getPhieuChuyen(printTransferPhieu.id).then(r => r.data)
-      const cols = [
-        { header: 'LSX', key: 'so_lsx', align: 'center' as const },
-        { header: 'Tên hàng', key: 'ten_hang' },
-        { header: 'Quy cách', key: 'quy_cach' },
-        { header: 'SL', key: 'so_luong', align: 'right' as const },
-        { header: 'Đơn giá', key: 'don_gia', align: 'right' as const },
-        { header: 'Ghi chú', key: 'ghi_chu' },
+      const phapNhanId: number | undefined = detail.phap_nhan_id_for_print ?? undefined
+      const tpl = await systemApi.getTemplate('BTP_TRANSFER', phapNhanId, true).catch(() => null)
+      type TplCol = { key: string; label: string }
+      const DEFAULT_COLS: TplCol[] = [
+        { key: 'so_lsx', label: 'LSX' },
+        { key: 'ten_hang', label: 'Tên sản phẩm' },
+        { key: 'quy_cach', label: 'Quy cách' },
+        { key: 'so_luong', label: 'Số lượng' },
+        { key: 'don_gia', label: 'Đơn giá nội bộ' },
+        { key: 'ghi_chu', label: 'Ghi chú' },
       ]
-      type ItemRow = { so_lsx: string; ten_hang: string; quy_cach: string; so_luong: string; don_gia: string; ghi_chu: string }
-      const rows: ItemRow[] = ((detail.items || []) as unknown as Record<string, unknown>[]).map(it => ({
-        so_lsx: (it.so_lsx as string) ?? '—',
-        ten_hang: (it.ten_hang as string) ?? '',
-        quy_cach: ((it.quy_cach || it.kho_cat || '—') as string),
-        so_luong: Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
-        don_gia: Number(it.don_gia) > 0 ? Number(it.don_gia).toLocaleString('vi-VN') + 'đ' : '—',
-        ghi_chu: (it.ghi_chu as string) ?? '',
-      }))
+      const tplCols: TplCol[] = (tpl?.variables_meta?.columns as TplCol[] | undefined) ?? DEFAULT_COLS
+      const itemData = ((detail.items || []) as unknown as Record<string, unknown>[]).map(it => {
+        const row: Record<string, unknown> = { ...it }
+        if (row.so_luong !== undefined)
+          row.so_luong = Number(row.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 })
+        if (row.don_gia !== undefined)
+          row.don_gia = Number(row.don_gia) > 0 ? Number(row.don_gia).toLocaleString('vi-VN') + 'đ' : '—'
+        return row
+      })
       const table = buildHtmlTable(
-        cols.map(c => ({ header: c.header, align: c.align })),
-        rows.map(row => cols.map(c => row[c.key as keyof ItemRow]))
+        tplCols.map(c => ({ header: c.label })),
+        itemData.map(row => tplCols.map(c => (row[c.key] as string | undefined) ?? ''))
       )
       const [yyyy, mm, dd] = (detail.ngay ?? '').split('-')
       await smartPrintPdf('BTP_TRANSFER', {
@@ -1164,7 +1168,7 @@ export default function SauInKanbanPage() {
         delivery_address: `${detail.ten_kho_nhap ?? '—'}${detail.ten_phan_xuong_nhap ? ` (${detail.ten_phan_xuong_nhap})` : ''}`,
         body_html: table,
         footer_html: detail.ghi_chu ?? '',
-      }, detail.phap_nhan_id_for_print ?? undefined)
+      }, phapNhanId)
     } catch (e) {
       message.error('Không thể in phiếu — ' + ((e as Error).message || ''))
     }

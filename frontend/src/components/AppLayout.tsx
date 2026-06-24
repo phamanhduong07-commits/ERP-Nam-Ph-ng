@@ -50,7 +50,7 @@ function buildNavItems(queueCount: number): NavItem[] {
       flyoutSections: [
         {
           items: [
-            { key: '/quotes', to: '/quotes', label: <Link to="/quotes">Báo giá</Link>, permissions: ['sales_order.approve'] },
+            { key: '/quotes', to: '/quotes', label: <Link to="/quotes">Báo giá</Link>, permissions: ['sales_order.view'] },
             { key: '/sales/orders', to: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link> },
             { key: '/sales/returns', to: '/sales/returns', label: <Link to="/sales/returns">Trả hàng bán</Link> },
             { key: '/sales/theo-don-hang', to: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link> },

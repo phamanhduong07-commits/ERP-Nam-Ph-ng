@@ -37,7 +37,7 @@ const DOC_TYPE_SCHEMAS: Record<string, DocTypeSchema> = {
       { key: 'ten_hang', label: 'Tên hàng hóa' },
       { key: 'dvt', label: 'ĐVT' },
       { key: 'so_luong', label: 'Số lượng' },
-      { key: 'gia_ban', label: 'Đơn giá' },
+      { key: 'don_gia', label: 'Đơn giá' },
       { key: 'thanh_tien', label: 'Thành tiền' },
     ],
     signatures: [
@@ -624,17 +624,24 @@ export default function PrintTemplatePage() {
       html = html.replace(new RegExp(`{{${k}}}`, 'g'), v)
     })
     
-    setPreviewHtml(`
-      <html>
-        <head>
-          <style>
-            * { box-sizing: border-box; }
-            body { margin: 0; padding: 10mm; background: #fff; }
-          </style>
-        </head>
-        <body>${html}</body>
-      </html>
-    `)
+    setPreviewHtml(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; }
+    /* Preview: mô phỏng @page margin — không dùng padding cố định để tránh conflict với template */
+    body { margin: 0; padding: 0; background: #fff; }
+    /* Global table fixes cho preview khớp với thực tế in */
+    table { table-layout: fixed; }
+    td, th { word-break: break-word; overflow-wrap: break-word; }
+    tr { page-break-inside: avoid; }
+    /* Preserve màu nền trong preview như khi in */
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  </style>
+</head>
+<body>${html}</body>
+</html>`)
   }
 
   useEffect(() => {
@@ -1027,8 +1034,23 @@ export default function PrintTemplatePage() {
                   const h = isA4 ? (isPortrait ? 297 : 210) : (isPortrait ? 210 : 148);
                   const scale = 1.8;
                   return (
-                    <div style={{ background: '#fff', width: `${w * scale}px`, minHeight: `${h * scale}px`, boxShadow: '0 4px 15px rgba(0,0,0,0.1)', transform: 'translateZ(0)' }}>
-                      <iframe key={previewHtml.length + (selectedPhapNhanId || 0) + easyConfig.pageSize + easyConfig.orientation} title="Live Preview" srcDoc={previewHtml} style={{ width: `${w}mm`, height: `${h}mm`, border: 'none', transform: `scale(${scale / 3.78})`, transformOrigin: '0 0' }} />
+                    <div style={{ position: 'relative', width: `${w * scale}px`, minHeight: `${h * scale}px`, overflow: 'hidden' }}>
+                      {/* Shadow mô phỏng tờ giấy thật */}
+                      <div style={{ position: 'absolute', inset: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.18)', borderRadius: 2, pointerEvents: 'none', zIndex: 1 }} />
+                      <iframe
+                        key={previewHtml.length + (selectedPhapNhanId || 0) + easyConfig.pageSize + easyConfig.orientation}
+                        title="Live Preview"
+                        srcDoc={previewHtml}
+                        style={{
+                          width: `${w}mm`,
+                          height: `${h}mm`,
+                          border: 'none',
+                          transform: `scale(${scale / 3.7795})`,
+                          transformOrigin: '0 0',
+                          display: 'block',
+                        }}
+                        scrolling="no"
+                      />
                     </div>
                   );
                 })()}

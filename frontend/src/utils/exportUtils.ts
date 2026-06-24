@@ -195,11 +195,23 @@ export function printToPdf(title: string, html: string, landscape = false, compa
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; padding: 0; background: #fff; }
-    @media print { body { padding: 0; } }
+    /* Global table print fixes — templates có thể override bằng class riêng */
+    table { table-layout: fixed; }
+    td, th { word-break: break-word; overflow-wrap: break-word; }
+    tr { page-break-inside: avoid; }
+    thead { display: table-header-group; }
+    @media print {
+      body { margin: 0; padding: 0; }
+      .no-print { display: none !important; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      tr { page-break-inside: avoid; }
+      thead { display: table-header-group; }
+    }
   </style>
 </head>
 <body>
@@ -260,7 +272,11 @@ export function printToPdf(title: string, html: string, landscape = false, compa
     .summary-item .s-label { font-size: 9px; color: #888; }
     .summary-item .s-value { font-size: 13px; font-weight: 700; }
     @page { size: ${landscape ? 'A4 landscape' : 'A4 portrait'}; margin: 12mm; }
-    @media print { body { padding: 0; } }
+    @media print {
+      body { margin: 0; padding: 0; }
+      .no-print { display: none !important; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    }
   </style>
 </head>
 <body>

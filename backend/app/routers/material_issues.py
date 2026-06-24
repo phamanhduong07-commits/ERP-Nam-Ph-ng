@@ -6,6 +6,7 @@ Shares the /api/warehouse prefix; mounted alongside warehouse.router.
 import html as _html_mod
 from datetime import date, datetime, timezone
 from app.utils.template import apply_template, standard_vars
+from app.utils.print_utils import get_selected_columns, build_html_table
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -116,34 +117,35 @@ def print_material_issue(mi_id: int, db: Session = Depends(get_db), _: User = De
         else settings.get("logo_url") or ""
     )
 
-    rows = ""
+    _default_mi_cols = [
+        {"key": "stt", "label": "STT"},
+        {"key": "ten_hang", "label": "Tên nguyên vật liệu"},
+        {"key": "dvt", "label": "ĐVT"},
+        {"key": "so_luong", "label": "Số lượng"},
+        {"key": "don_gia", "label": "Đơn giá (đ)"},
+        {"key": "thanh_tien", "label": "Thành tiền (đ)"},
+        {"key": "ghi_chu", "label": "Ghi chú"},
+    ]
+    selected_cols = get_selected_columns(tpl.variables_meta, _default_mi_cols)
+
+    items_data = []
     for i, it in enumerate(mi.items, 1):
-        tien = Decimal(str(it.don_gia or 0)) * Decimal(str(it.so_luong_thuc_xuat or 0))
-        rows += (
-            f"<tr>"
-            f"<td style='text-align:center'>{i}</td>"
-            f"<td>{_html_mod.escape(it.ten_hang or '')}</td>"
-            f"<td style='text-align:center'>{_html_mod.escape(it.dvt or '')}</td>"
-            f"<td style='text-align:right'>{float(it.so_luong_ke_hoach):,.3f}</td>"
-            f"<td style='text-align:right'>{float(it.so_luong_thuc_xuat):,.3f}</td>"
-            f"<td style='text-align:right'>{int(Decimal(str(it.don_gia or 0))):,}</td>"
-            f"<td style='text-align:right'>{int(tien):,}</td>"
-            f"</tr>"
-        )
-    body_html = (
-        "<table style='width:100%;border-collapse:collapse;font-size:10pt'>"
-        "<thead><tr style='background:#1B5E20;color:#fff'>"
-        "<th style='width:4%;padding:4px;border:1px solid #ccc'>STT</th>"
-        "<th style='padding:4px;border:1px solid #ccc'>Tên NVL</th>"
-        "<th style='width:7%;padding:4px;border:1px solid #ccc'>ĐVT</th>"
-        "<th style='width:11%;padding:4px;border:1px solid #ccc'>SL kế hoạch</th>"
-        "<th style='width:11%;padding:4px;border:1px solid #ccc'>SL thực xuất</th>"
-        "<th style='width:10%;padding:4px;border:1px solid #ccc'>Đơn giá</th>"
-        "<th style='width:11%;padding:4px;border:1px solid #ccc'>Thành tiền</th>"
-        "</tr></thead><tbody>"
-        + rows
-        + "</tbody></table>"
-    )
+        don_gia = Decimal(str(it.don_gia or 0))
+        thuc_xuat = Decimal(str(it.so_luong_thuc_xuat or 0))
+        tien = don_gia * thuc_xuat
+        items_data.append({
+            "stt": str(i),
+            "ten_hang": it.ten_hang or "",
+            "dvt": it.dvt or "",
+            "so_luong_ke_hoach": f"{float(it.so_luong_ke_hoach):,.3f}",
+            "so_luong_thuc_xuat": f"{float(it.so_luong_thuc_xuat):,.3f}",
+            "so_luong": f"{float(thuc_xuat):,.3f}",
+            "don_gia": f"{int(don_gia):,}",
+            "gia_ban": f"{int(don_gia):,}",
+            "thanh_tien": f"{int(tien):,}",
+            "ghi_chu": getattr(it, "ghi_chu", "") or "",
+        })
+    body_html = build_html_table(selected_cols, items_data, th_style="background:#1B5E20;color:#fff;padding:4px 6px;border:1px solid #ccc;")
 
     replacements = {
         **standard_vars(subtitle="PHIẾU XUẤT NGUYÊN VẬT LIỆU"),

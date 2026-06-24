@@ -4,6 +4,7 @@ from io import BytesIO
 import html
 import unicodedata
 from app.utils.template import apply_template, standard_vars
+from app.utils.print_utils import get_selected_columns, build_html_table
 from typing import Optional, List
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, UploadFile
@@ -1315,7 +1316,24 @@ def print_quote(
     company_name = (pn.ten_phap_nhan if pn else None) or settings.get("company_name") or "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
     company_details = (pn.dia_chi if pn else None) or settings.get("company_details") or ""
 
-    rows = ""
+    # Đọc selectedColumns từ template (user có thể tùy chỉnh trong UI)
+    _default_sq_cols = [
+        {"key": "stt", "label": "STT"},
+        {"key": "ma_amis", "label": "Mã hàng"},
+        {"key": "ten_hang", "label": "Tên sản phẩm"},
+        {"key": "kich_thuoc", "label": "Quy cách"},
+        {"key": "so_lop", "label": "Lớp"},
+        {"key": "to_hop_song", "label": "Sóng"},
+        {"key": "ma_ky_hieu", "label": "Mã ký hiệu"},
+        {"key": "so_luong", "label": "Số lượng"},
+        {"key": "dvt", "label": "ĐVT"},
+        {"key": "gia_ban", "label": "Đơn giá (đ)"},
+        {"key": "thanh_tien", "label": "Thành tiền (đ)"},
+        {"key": "ghi_chu", "label": "Ghi chú"},
+    ]
+    selected_cols = get_selected_columns(tpl.variables_meta, _default_sq_cols)
+
+    items_data = []
     for i, item in enumerate(quote.items, 1):
         gia_ban = Decimal(str(item.gia_ban or 0))
         so_luong = Decimal(str(item.so_luong or 0))
@@ -1325,22 +1343,24 @@ def print_quote(
             kich_thuoc = f"{item.dai}×{item.rong}"
             if item.cao:
                 kich_thuoc += f"×{item.cao}"
-        rows += (
-            f"<tr>"
-            f"<td style='text-align:center'>{i}</td>"
-            f"<td>{html.escape(item.ma_amis or '')}</td>"
-            f"<td>{html.escape(item.ten_hang or '')}</td>"
-            f"<td style='text-align:center'>{kich_thuoc}</td>"
-            f"<td style='text-align:center'>{item.so_lop or ''}</td>"
-            f"<td style='text-align:center'>{html.escape(item.to_hop_song or '')}</td>"
-            f"<td style='text-align:center'>{html.escape(item.ma_ky_hieu or '')}</td>"
-            f"<td style='text-align:right'>{int(so_luong):,}</td>"
-            f"<td style='text-align:center'>{html.escape(item.dvt or 'Thùng')}</td>"
-            f"<td style='text-align:right'>{int(gia_ban):,}</td>"
-            f"<td style='text-align:right'>{int(thanh_tien):,}</td>"
-            f"<td>{html.escape(item.ghi_chu or '')}</td>"
-            f"</tr>"
-        )
+        items_data.append({
+            "stt": str(i),
+            "ma_amis": item.ma_amis or "",
+            "ma_sp": item.ma_amis or "",
+            "ten_hang": item.ten_hang or "",
+            "kich_thuoc": kich_thuoc,
+            "quy_cach": kich_thuoc,
+            "so_lop": str(item.so_lop or ""),
+            "to_hop_song": item.to_hop_song or "",
+            "ma_ky_hieu": item.ma_ky_hieu or "",
+            "so_luong": f"{int(so_luong):,}",
+            "dvt": item.dvt or "Thùng",
+            "gia_ban": f"{int(gia_ban):,}",
+            "don_gia": f"{int(gia_ban):,}",
+            "thanh_tien": f"{int(thanh_tien):,}",
+            "ghi_chu": item.ghi_chu or "",
+        })
+    rows = build_html_table(selected_cols, items_data)
 
     def _fmt(val) -> str:
         try:

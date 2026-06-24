@@ -189,23 +189,26 @@ TEMPLATES = [
         "html_content": """
 <style>
   @page { size: A5 portrait; margin: 10mm; }
-  .cash-receipt { font-family: Arial, sans-serif; color: #222; font-size: 12px; line-height: 1.45; }
-  .cr-head { display: flex; align-items: flex-start; gap: 14px; border-bottom: 2px solid #2e7d32; padding-bottom: 8px; margin-bottom: 12px; }
-  .cr-logo { width: 76px; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .cash-receipt { font-family: 'Times New Roman', serif; color: #222; font-size: 11pt; line-height: 1.5; }
+  .cr-head { display: flex; align-items: flex-start; gap: 14px; border-bottom: 2px solid #1565C0; padding-bottom: 8px; margin-bottom: 12px; }
+  .cr-logo { width: 76px; flex-shrink: 0; }
   .cr-logo img { max-width: 76px; max-height: 62px; object-fit: contain; }
   .cr-company { flex: 1; }
-  .cr-company-name { font-weight: 700; color: #2e7d32; text-transform: uppercase; font-size: 14px; }
-  .cr-company-details { font-size: 10px; margin-top: 3px; }
-  .cr-title { text-align: center; margin: 14px 0 10px; }
-  .cr-title h1 { margin: 0; color: #1565c0; font-size: 22px; letter-spacing: 0; }
-  .cr-title div { margin-top: 4px; }
-  .cr-row { display: grid; grid-template-columns: 130px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px dotted #bbb; }
-  .cr-label { color: #555; }
-  .cr-value { font-weight: 600; }
-  .cr-amount { font-size: 16px; color: #2e7d32; }
-  .cr-sign { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 24px; text-align: center; }
-  .cr-sign strong { display: block; margin-bottom: 4px; }
-  .cr-sign-space { height: 58px; }
+  .cr-company-name { font-weight: 700; color: #1565C0; text-transform: uppercase; font-size: 13pt; }
+  .cr-company-details { font-size: 9pt; margin-top: 3px; line-height: 1.4; }
+  .cr-title { text-align: center; margin: 12px 0 10px; }
+  .cr-title h1 { margin: 0; color: #1565C0; font-size: 20pt; font-weight: bold; letter-spacing: 2px; }
+  .cr-title div { margin-top: 6px; font-size: 10pt; }
+  .mau-so { text-align: right; font-size: 8.5pt; color: #555; margin-bottom: 4px; }
+  .cr-row { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px dotted #bbb; }
+  .cr-label { min-width: 130px; flex-shrink: 0; font-weight: 600; }
+  .cr-value { flex: 1; }
+  .cr-amount { font-size: 14pt; color: #1565C0; font-weight: bold; }
+  .cr-sign { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 28px; text-align: center; font-size: 9.5pt; }
+  .cr-sign strong { display: block; margin-bottom: 4px; font-size: 10pt; }
+  .cr-sign em { font-style: italic; font-size: 8pt; color: #555; }
+  .cr-sign-space { height: 40px; }
 </style>
 <div class="cash-receipt">
   <div class="cr-head">
@@ -248,23 +251,26 @@ TEMPLATES = [
         "html_content": """
 <style>
   @page { size: A5 portrait; margin: 10mm; }
-  .cash-payment { font-family: Arial, sans-serif; color: #222; font-size: 12px; line-height: 1.45; }
-  .cp-head { display: flex; align-items: flex-start; gap: 14px; border-bottom: 2px solid #1b168e; padding-bottom: 8px; margin-bottom: 12px; }
-  .cp-logo { width: 76px; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .cash-payment { font-family: 'Times New Roman', serif; color: #222; font-size: 11pt; line-height: 1.5; }
+  .cp-head { display: flex; align-items: flex-start; gap: 14px; border-bottom: 2px solid #B71C1C; padding-bottom: 8px; margin-bottom: 12px; }
+  .cp-logo { width: 76px; flex-shrink: 0; }
   .cp-logo img { max-width: 76px; max-height: 62px; object-fit: contain; }
   .cp-company { flex: 1; }
-  .cp-company-name { font-weight: 700; color: #1b168e; text-transform: uppercase; font-size: 14px; }
-  .cp-company-details { font-size: 10px; margin-top: 3px; }
-  .cp-title { text-align: center; margin: 14px 0 10px; }
-  .cp-title h1 { margin: 0; color: #d32f2f; font-size: 22px; letter-spacing: 0; }
-  .cp-title div { margin-top: 4px; }
-  .cp-row { display: grid; grid-template-columns: 130px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px dotted #bbb; }
-  .cp-label { color: #555; }
-  .cp-value { font-weight: 600; }
-  .cp-amount { font-size: 16px; color: #d32f2f; }
-  .cp-sign { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 24px; text-align: center; }
-  .cp-sign strong { display: block; margin-bottom: 4px; }
-  .cp-sign-space { height: 58px; }
+  .cp-company-name { font-weight: 700; color: #B71C1C; text-transform: uppercase; font-size: 13pt; }
+  .cp-company-details { font-size: 9pt; margin-top: 3px; line-height: 1.4; }
+  .cp-title { text-align: center; margin: 12px 0 10px; }
+  .cp-title h1 { margin: 0; color: #B71C1C; font-size: 20pt; font-weight: bold; letter-spacing: 2px; }
+  .cp-title div { margin-top: 6px; font-size: 10pt; }
+  .mau-so { text-align: right; font-size: 8.5pt; color: #555; margin-bottom: 4px; }
+  .cp-row { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px dotted #bbb; }
+  .cp-label { min-width: 130px; flex-shrink: 0; font-weight: 600; }
+  .cp-value { flex: 1; }
+  .cp-amount { font-size: 14pt; color: #B71C1C; font-weight: bold; }
+  .cp-sign { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 28px; text-align: center; font-size: 9.5pt; }
+  .cp-sign strong { display: block; margin-bottom: 4px; font-size: 10pt; }
+  .cp-sign em { font-style: italic; font-size: 8pt; color: #555; }
+  .cp-sign-space { height: 40px; }
 </style>
 <div class="cash-payment">
   <div class="cp-head">
@@ -305,6 +311,7 @@ TEMPLATES = [
         "html_content": """
 <style>
   @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #222; }
   .sq-head { display: flex; align-items: flex-start; gap: 14px; border-bottom: 2px solid #E65100; padding-bottom: 10px; margin-bottom: 14px; }
   .sq-logo img { max-width: 90px; max-height: 70px; object-fit: contain; }
@@ -587,6 +594,7 @@ TEMPLATES = [
         "html_content": """
 <style>
   @page { size: A4 portrait; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #222; }
   .po-wrap { max-width: 210mm; margin: 0 auto; }
 
@@ -1274,8 +1282,9 @@ TEMPLATES = [
         "ten_mau": "Tem Cuộn Giấy (80×100mm, Barcode)",
         "html_content": """
 <style>
-  @media print { @page { size: 80mm 100mm; margin: 0; } }
+  @page { size: 80mm 100mm; margin: 0; }
   body { font-family: Arial, sans-serif; margin: 0; padding: 8px; background: #f5f5f5; }
+  @media print { body { padding: 0; background: #fff; } }
   .label {
     width: 76mm; min-height: 94mm; border: 1px solid #333;
     padding: 4mm 3mm; margin: 4mm auto; background: #fff;

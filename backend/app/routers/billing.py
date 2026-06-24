@@ -5,6 +5,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse
 from app.utils.template import apply_template, standard_vars
+from app.utils.print_utils import get_selected_columns, build_html_table
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -396,26 +397,39 @@ def print_invoice(
 
     mau_so_html = f"Mẫu số: {inv.mau_so}<br>Ký hiệu: {inv.ky_hieu}" if inv.mau_so else "Hóa đơn nội bộ"
 
-    body_html = f"""
-<table class="hang-hoa">
-  <thead>
-    <tr>
-      <th style="width:5%">STT</th><th>Tên hàng hóa, dịch vụ</th>
-      <th style="width:10%">ĐVT</th><th style="width:15%" class="right">Đơn giá</th>
-      <th style="width:18%" class="right">Thành tiền</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr><td class="center">1</td><td>Thùng carton (theo hợp đồng / đơn hàng)</td>
-        <td class="center">Thùng</td><td class="right">—</td>
-        <td class="right">{float(inv.tong_tien_hang):,.0f}</td></tr>
-  </tbody>
-  <tfoot>
-    <tr class="total-row"><td colspan="4" class="right">Cộng tiền hàng:</td><td class="right">{float(inv.tong_tien_hang):,.0f}</td></tr>
-    <tr class="total-row"><td colspan="4" class="right">Thuế VAT ({float(inv.ty_le_vat):.0f}%):</td><td class="right">{float(inv.tien_vat):,.0f}</td></tr>
-    <tr class="total-row"><td colspan="4" class="right">TỔNG CỘNG:</td><td class="right" style="font-size:11pt">{float(inv.tong_cong):,.0f}</td></tr>
-  </tfoot>
-</table>"""
+    _default_inv_cols = [
+        {"key": "stt", "label": "STT"},
+        {"key": "ten_hang", "label": "Tên hàng hóa, dịch vụ"},
+        {"key": "dvt", "label": "ĐVT"},
+        {"key": "so_luong", "label": "Số lượng"},
+        {"key": "gia_ban", "label": "Đơn giá (đ)"},
+        {"key": "thanh_tien", "label": "Thành tiền (đ)"},
+    ]
+    selected_cols = get_selected_columns(tpl.variables_meta, _default_inv_cols)
+
+    items_data = [{
+        "stt": "1",
+        "ten_hang": "Thùng carton (theo hợp đồng / đơn hàng)",
+        "dvt": "Thùng",
+        "so_luong": "",
+        "gia_ban": "—",
+        "don_gia": "—",
+        "thanh_tien": f"{float(inv.tong_tien_hang):,.0f}",
+    }]
+    items_table = build_html_table(selected_cols, items_data)
+
+    _span = max(len(selected_cols) - 1, 1)
+    totals_html = (
+        '<table style="width:100%;border-collapse:collapse;font-size:10.5pt">'
+        f'<tr class="total-row"><td colspan="{_span}" class="right" style="border:1px solid #ddd;padding:4px 6px;text-align:right">Cộng tiền hàng:</td>'
+        f'<td class="right" style="border:1px solid #ddd;padding:4px 6px;text-align:right">{float(inv.tong_tien_hang):,.0f}</td></tr>'
+        f'<tr class="total-row"><td colspan="{_span}" class="right" style="border:1px solid #ddd;padding:4px 6px;text-align:right">Thuế VAT ({float(inv.ty_le_vat):.0f}%):</td>'
+        f'<td class="right" style="border:1px solid #ddd;padding:4px 6px;text-align:right">{float(inv.tien_vat):,.0f}</td></tr>'
+        f'<tr class="total-row"><td colspan="{_span}" class="right" style="border:1px solid #ddd;padding:4px 6px;text-align:right">TỔNG CỘNG:</td>'
+        f'<td class="right" style="border:1px solid #ddd;padding:4px 6px;text-align:right;font-size:11pt">{float(inv.tong_cong):,.0f}</td></tr>'
+        '</table>'
+    )
+    body_html = items_table + totals_html
 
     replacements = {
         **standard_vars(subtitle="HÓA ĐƠN BÁN HÀNG", customer_name=_html_mod.escape(ten_kh), delivery_address=_html_mod.escape(dia_chi_kh)),
@@ -425,7 +439,7 @@ def print_invoice(
         "{{company_details}}": _html_mod.escape(
             f"Địa chỉ: {pn_address} | MST: {pn_mst} | ĐT: {pn_phone}" + (f" | Email: {pn_email}" if pn_email else "")
         ),
-        "{{logo_img}}": f'<img src="{logo_src}" style="max-width:100%;height:auto"/>' if logo_src else "",
+        "{{logo_img}}": f'<img src="{_html_mod.escape(logo_src)}" style="max-width:100%;height:auto"/>' if logo_src else "",
         "{{logo_src}}": logo_src,
         "{{accent}}": accent,
         "{{mau_so}}": mau_so_html,

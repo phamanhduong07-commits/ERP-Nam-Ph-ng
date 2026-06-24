@@ -1,6 +1,7 @@
 import html as _html_mod
 from datetime import date, datetime, timedelta, timezone
 from app.utils.template import apply_template, standard_vars
+from app.utils.print_utils import get_selected_columns, build_html_table
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -547,10 +548,12 @@ def print_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_cu
         if px:
             phap_nhan_id = px.phap_nhan_id
 
-    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "purchase_order")
+    tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "PURCHASE_ORDER")
     tpl = tpl_q.filter(PrintTemplate.phap_nhan_id == phap_nhan_id).first() if phap_nhan_id else None
     if not tpl:
-        raise HTTPException(404, f"Chưa có mẫu in purchase_order cho pháp nhân này — vui lòng tạo trong Hệ thống > Cấu hình biểu mẫu in")
+        tpl = tpl_q.filter(PrintTemplate.phap_nhan_id.is_(None)).first() or tpl_q.first()
+    if not tpl:
+        raise HTTPException(404, "Chưa có mẫu in PURCHASE_ORDER — vui lòng cấu hình trong Hệ thống > Mẫu in")
 
     settings = {s.key: s.value for s in db.query(SystemSetting).all()}
     sup = db.get(Supplier, po.supplier_id) if po.supplier_id else None
@@ -573,7 +576,38 @@ def print_po(po_id: int, db: Session = Depends(get_db), _: User = Depends(get_cu
     except Exception:
         _color = _DEFAULT_COLOR
     has_phoi = any(getattr(it, "phoi_spec", None) for it in po.items)
-    body_html = _build_body_html_phoi(po.items, tong, _color) if has_phoi else _build_body_html_standard(po.items, tong, _color)
+    if has_phoi:
+        body_html = _build_body_html_phoi(po.items, tong, _color)
+    else:
+        _default_po_cols = [
+            {"key": "stt", "label": "STT"},
+            {"key": "ten_hang", "label": "Tên hàng"},
+            {"key": "dvt", "label": "ĐVT"},
+            {"key": "kho_mm", "label": "Khổ (mm)"},
+            {"key": "so_cuon", "label": "Số cuộn"},
+            {"key": "so_luong", "label": "Số lượng"},
+            {"key": "don_gia", "label": "Đơn giá (đ)"},
+            {"key": "thanh_tien", "label": "Thành tiền (đ)"},
+        ]
+        selected_cols = get_selected_columns(tpl.variables_meta, _default_po_cols)
+        items_data = []
+        for i, it in enumerate(po.items, 1):
+            don_gia = Decimal(str(it.don_gia or 0))
+            items_data.append({
+                "stt": str(i),
+                "ten_hang": it.ten_hang or "",
+                "dvt": it.dvt or "",
+                "kho_mm": str(it.kho_mm or ""),
+                "so_cuon": str(it.so_cuon or ""),
+                "so_luong": f"{float(it.so_luong):,.3f}",
+                "don_gia": f"{int(don_gia):,}",
+                "gia_ban": f"{int(don_gia):,}",
+                "thanh_tien": f"{int(Decimal(str(it.thanh_tien or 0))):,}",
+            })
+        body_html = build_html_table(
+            selected_cols, items_data,
+            th_style=f"background:{_color};color:#fff;padding:4px 6px;border:1px solid #ccc;"
+        )
     sup_name = _html_mod.escape(sup.ten_viet_tat if sup else "")
     sup_addr = _html_mod.escape(getattr(sup, "dia_chi", "") or "") if sup else ""
     pn = db.get(PhapNhan, phap_nhan_id) if phap_nhan_id else None

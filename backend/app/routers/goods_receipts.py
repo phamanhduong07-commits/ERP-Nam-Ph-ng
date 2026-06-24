@@ -7,6 +7,7 @@ import html as _html_mod
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from app.utils.template import apply_template, standard_vars
+from app.utils.print_utils import get_selected_columns, build_html_table
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -233,42 +234,40 @@ def print_goods_receipt(gr_id: int, db: Session = Depends(get_db), _: User = Dep
     sup = db.get(Supplier, gr.supplier_id) if gr.supplier_id else None
     wh_obj = db.get(Warehouse, gr.warehouse_id) if gr.warehouse_id else None
 
-    rows = ""
+    _default_gr_cols = [
+        {"key": "stt", "label": "STT"},
+        {"key": "ten_hang", "label": "Tên hàng hóa"},
+        {"key": "dvt", "label": "ĐVT"},
+        {"key": "so_luong", "label": "Số lượng"},
+        {"key": "don_gia", "label": "Đơn giá (đ)"},
+        {"key": "thanh_tien", "label": "Thành tiền (đ)"},
+        {"key": "ghi_chu", "label": "Ghi chú"},
+    ]
+    selected_cols = get_selected_columns(tpl.variables_meta, _default_gr_cols)
+
+    items_data = []
     tong = Decimal("0")
     for i, it in enumerate(gr.items, 1):
         thanh_tien = Decimal(str(it.thanh_tien or 0))
+        don_gia = Decimal(str(it.don_gia or 0))
         tong += thanh_tien
-        rows += (
-            f"<tr>"
-            f"<td style='text-align:center'>{i}</td>"
-            f"<td>{_html_mod.escape(it.ten_hang or '')}</td>"
-            f"<td style='text-align:center'>{_html_mod.escape(it.dvt or '')}</td>"
-            f"<td style='text-align:center'>{it.kho_mm or ''}</td>"
-            f"<td style='text-align:center'>{it.so_lop or ''}</td>"
-            f"<td style='text-align:center'>{_html_mod.escape(it.ky_hieu_cuon or '')}</td>"
-            f"<td style='text-align:center'>{it.so_cuon or ''}</td>"
-            f"<td style='text-align:right'>{float(it.so_luong):,.3f}</td>"
-            f"<td style='text-align:right'>{int(Decimal(str(it.don_gia or 0))):,}</td>"
-            f"<td style='text-align:right'>{int(thanh_tien):,}</td>"
-            f"</tr>"
-        )
-    body_html = (
-        "<table style='width:100%;border-collapse:collapse;font-size:10pt'>"
-        "<thead><tr style='background:#1B5E20;color:#fff'>"
-        "<th style='width:4%;padding:4px;border:1px solid #ccc'>STT</th>"
-        "<th style='padding:4px;border:1px solid #ccc'>Tên hàng</th>"
-        "<th style='width:7%;padding:4px;border:1px solid #ccc'>ĐVT</th>"
-        "<th style='width:7%;padding:4px;border:1px solid #ccc'>Khổ</th>"
-        "<th style='width:5%;padding:4px;border:1px solid #ccc'>ĐL</th>"
-        "<th style='width:9%;padding:4px;border:1px solid #ccc'>Ký hiệu</th>"
-        "<th style='width:7%;padding:4px;border:1px solid #ccc'>Số cuộn</th>"
-        "<th style='width:9%;padding:4px;border:1px solid #ccc'>Số lượng</th>"
-        "<th style='width:10%;padding:4px;border:1px solid #ccc'>Đơn giá</th>"
-        "<th style='width:11%;padding:4px;border:1px solid #ccc'>Thành tiền</th>"
-        "</tr></thead><tbody>"
-        + rows
-        + "</tbody></table>"
-    )
+        items_data.append({
+            "stt": str(i),
+            "ma_hang": getattr(it, "ma_hang", "") or "",
+            "ten_hang": it.ten_hang or "",
+            "quy_cach": getattr(it, "quy_cach", "") or "",
+            "dvt": it.dvt or "",
+            "kho_mm": str(it.kho_mm or ""),
+            "so_lop": str(it.so_lop or ""),
+            "ky_hieu_cuon": it.ky_hieu_cuon or "",
+            "so_cuon": str(it.so_cuon or ""),
+            "so_luong": f"{float(it.so_luong):,.3f}",
+            "don_gia": f"{int(don_gia):,}",
+            "gia_ban": f"{int(don_gia):,}",
+            "thanh_tien": f"{int(thanh_tien):,}",
+            "ghi_chu": getattr(it, "ghi_chu", "") or "",
+        })
+    body_html = build_html_table(selected_cols, items_data, th_style="background:#1B5E20;color:#fff;padding:4px 6px;border:1px solid #ccc;")
 
     replacements = {
         **standard_vars(subtitle="PHIẾU NHẬP KHO", customer_name=_html_mod.escape(sup.ten_viet_tat if sup else "")),

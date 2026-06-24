@@ -235,31 +235,51 @@ export default function TransfersPage() {
     const hasBtp = (detailPhieu.items || []).some((it: PhieuKhoItem) => it.production_order_id)
 
     type ColDef = { header: string; key: string; align?: 'center' | 'right' }
-    const cols: ColDef[] = [
-      { header: 'STT', key: 'stt', align: 'center' },
-      ...(hasBtp ? [{ header: 'LSX', key: 'so_lsx', align: 'center' as const }] : []),
-      { header: 'Tên hàng', key: 'ten_hang' },
-      ...(hasBtp ? [{ header: 'Quy cách', key: 'quy_cach' }] : []),
-      { header: 'ĐVT', key: 'don_vi', align: 'center' as const },
-      { header: 'Số lượng', key: 'so_luong', align: 'right' },
-      { header: 'Đơn giá', key: 'don_gia', align: 'right' },
-      { header: 'Ghi chú', key: 'ghi_chu' },
-    ]
+    let cols: ColDef[]
+    let tableRows: Record<string, unknown>[]
 
-    const itemRows = (detailPhieu.items || []).map((it: PhieuKhoItem, i: number) => ({
-      stt: i + 1,
-      so_lsx: ((it as unknown as Record<string, unknown>).so_lsx as string) ?? '—',
-      ten_hang: it.ten_hang ?? '',
-      quy_cach: (((it as unknown as Record<string, unknown>).quy_cach || (it as unknown as Record<string, unknown>).kho_cat || '—') as string),
-      don_vi: it.don_vi ?? '',
-      so_luong: Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
-      don_gia: Number(it.don_gia) > 0 ? Number(it.don_gia).toLocaleString('vi-VN') + 'đ' : '—',
-      ghi_chu: it.ghi_chu ?? '',
-    }))
+    if (hasBtp) {
+      type TplCol = { key: string; label: string }
+      const DEFAULT_BTP_COLS: TplCol[] = [
+        { key: 'so_lsx', label: 'LSX' },
+        { key: 'ten_hang', label: 'Tên sản phẩm' },
+        { key: 'quy_cach', label: 'Quy cách' },
+        { key: 'so_luong', label: 'Số lượng' },
+        { key: 'don_gia', label: 'Đơn giá nội bộ' },
+        { key: 'ghi_chu', label: 'Ghi chú' },
+      ]
+      const tplCols = (printTemplate?.variables_meta?.columns as TplCol[] | undefined) ?? DEFAULT_BTP_COLS
+      cols = tplCols.map(c => ({ header: c.label, key: c.key }))
+      tableRows = (detailPhieu.items || []).map((it: PhieuKhoItem) => {
+        const row: Record<string, unknown> = { ...(it as unknown as Record<string, unknown>) }
+        if (row.so_luong !== undefined)
+          row.so_luong = Number(row.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 })
+        if (row.don_gia !== undefined)
+          row.don_gia = Number(row.don_gia) > 0 ? Number(row.don_gia).toLocaleString('vi-VN') + 'đ' : '—'
+        return row
+      })
+    } else {
+      cols = [
+        { header: 'STT', key: 'stt', align: 'center' },
+        { header: 'Tên hàng', key: 'ten_hang' },
+        { header: 'ĐVT', key: 'don_vi', align: 'center' },
+        { header: 'Số lượng', key: 'so_luong', align: 'right' },
+        { header: 'Đơn giá', key: 'don_gia', align: 'right' },
+        { header: 'Ghi chú', key: 'ghi_chu' },
+      ]
+      tableRows = (detailPhieu.items || []).map((it: PhieuKhoItem, i: number) => ({
+        stt: i + 1,
+        ten_hang: it.ten_hang ?? '',
+        don_vi: it.don_vi ?? '',
+        so_luong: Number(it.so_luong).toLocaleString('vi-VN', { maximumFractionDigits: 3 }),
+        don_gia: Number(it.don_gia) > 0 ? Number(it.don_gia).toLocaleString('vi-VN') + 'đ' : '—',
+        ghi_chu: it.ghi_chu ?? '',
+      }))
+    }
 
     const table = buildHtmlTable(
       cols.map(c => ({ header: c.header, align: c.align })),
-      itemRows.map(row => cols.map(c => (row as Record<string, unknown>)[c.key] as string | number | null | undefined))
+      tableRows.map(row => cols.map(c => (row[c.key] as string | undefined) ?? ''))
     )
 
     const ngay = detailPhieu.ngay ?? ''

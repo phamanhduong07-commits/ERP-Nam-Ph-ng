@@ -94,8 +94,8 @@ const COLUMNS: Group[][] = [
       links: [
         { label: 'Pháp nhân', to: '/danhmuc/phap-nhan', permissions: ['master.other.manage'] },
         { label: 'Phân xưởng', to: '/master/phan-xuong', permissions: ['master.other.manage'] },
-        { label: 'Phòng ban', to: '/hr/departments' },
-        { label: 'Nhân viên', to: '/hr/employees' },
+        { label: 'Phòng ban', to: '/hr/departments', permissions: ['hr.departments', 'hr.view', 'hr.manage'] },
+        { label: 'Nhân viên', to: '/hr/employees', permissions: ['hr.employees', 'hr.view', 'hr.manage'] },
       ],
     },
     {
