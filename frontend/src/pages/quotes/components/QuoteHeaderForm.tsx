@@ -20,7 +20,7 @@ interface QuoteHeaderFormProps {
   onCustomerCreated?: (rec: Record<string, unknown>) => void
   phapNhanList: PhapNhan[]
   phanXuongList: PhanXuong[]
-  nhanVienList: NhanVien[]
+  nhanVienList: { id: number; ho_ten: string }[]
 }
 
 export default function QuoteHeaderForm({

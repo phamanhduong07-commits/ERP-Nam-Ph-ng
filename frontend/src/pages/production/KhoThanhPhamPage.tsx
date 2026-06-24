@@ -76,7 +76,7 @@ export default function KhoThanhPhamPage() {
 
   const { data: nvList = [] } = useQuery<{ id: number; ho_ten: string }[]>({
     queryKey: ['users-list'],
-    queryFn: () => client.get<{ id: number; ho_ten: string }[]>('/users').then(r => r.data),
+    queryFn: () => client.get<{ id: number; ho_ten: string }[]>('/users/dropdown').then(r => r.data),
     staleTime: 5 * 60 * 1000,
   })
 

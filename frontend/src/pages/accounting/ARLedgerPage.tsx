@@ -531,9 +531,9 @@ function DashboardTab() {
     queryFn: () => phapNhanApi.list().then(r => r.data),
   })
 
-  const { data: users = [] } = useQuery<NhanVien[]>({
+  const { data: users = [] } = useQuery<{ id: number; ho_ten: string; username: string }[]>({
     queryKey: ['users-list'],
-    queryFn: () => usersApi.list().then(r => r.data),
+    queryFn: () => usersApi.dropdown().then(r => r.data),
   })
 
   const { data: dash, isLoading } = useQuery<ARDashboardData>({
@@ -592,7 +592,7 @@ function DashboardTab() {
           style={{ width: 200 }}
           value={nhanVienId}
           onChange={setNhanVienId}
-          options={users.map((u: NhanVien) => ({
+          options={users.map((u) => ({
             value: u.id,
             label: u.ho_ten || u.username,
           }))}

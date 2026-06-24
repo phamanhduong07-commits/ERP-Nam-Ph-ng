@@ -97,7 +97,7 @@ export default function QuoteForm() {
   const { data: phanXuongRaw } = useQuery({ queryKey: ['phan-xuong'], queryFn: () => warehouseApi.listPhanXuong().then(r => r.data) })
   const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
 
-  const { data: nhanVienRaw } = useQuery({ queryKey: ['nhan-vien-list'], queryFn: () => usersApi.list({ trang_thai: true }).then(r => r.data) })
+  const { data: nhanVienRaw } = useQuery<{ id: number; ho_ten: string }[]>({ queryKey: ['nhan-vien-list'], queryFn: () => usersApi.dropdown().then(r => r.data) })
   const nhanVienList = Array.isArray(nhanVienRaw) ? nhanVienRaw : []
 
   const { data: temPaperList = [] } = useQuery({

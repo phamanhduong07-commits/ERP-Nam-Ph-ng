@@ -81,7 +81,7 @@ export default function OrderCreate() {
 
   const { data: nhanVienRaw } = useQuery({
     queryKey: ['nhan-vien-list'],
-    queryFn: () => usersApi.list({ trang_thai: true }).then(r => r.data),
+    queryFn: () => usersApi.dropdown().then(r => r.data),
   })
   const nhanVienList = Array.isArray(nhanVienRaw) ? nhanVienRaw : []
 

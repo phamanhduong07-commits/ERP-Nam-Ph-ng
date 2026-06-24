@@ -46,6 +46,8 @@ export interface UserUpdatePayload {
 export const usersApi = {
   list: (params?: { search?: string; phan_xuong?: string; trang_thai?: boolean }) =>
     client.get<NhanVien[]>('/users', { params }),
+  dropdown: () =>
+    client.get<{ id: number; ho_ten: string; username: string }[]>('/users/dropdown'),
   create: (data: UserCreatePayload) => client.post<NhanVien>('/users', data),
   update: (id: number, data: UserUpdatePayload) => client.put<NhanVien>(`/users/${id}`, data),
   deactivate: (id: number) => client.delete(`/users/${id}`),

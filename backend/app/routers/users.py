@@ -99,6 +99,30 @@ def _to_response(user: User) -> UserResponse:
     )
 
 
+class UserDropdownItem(BaseModel):
+    id: int
+    ho_ten: str
+    username: str
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/dropdown", response_model=list[UserDropdownItem])
+def list_users_dropdown(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Danh sách user tối giản {id, ho_ten, username} — dùng cho filter/dropdown, không cần quyền manager."""
+    rows = (
+        db.query(User.id, User.ho_ten, User.username)
+        .filter(User.trang_thai == True)
+        .order_by(User.ho_ten)
+        .all()
+    )
+    return [{"id": r.id, "ho_ten": r.ho_ten, "username": r.username} for r in rows]
+
+
 @router.get("", response_model=list[UserResponse])
 def list_users(
     search: str = Query(default=""),

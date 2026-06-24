@@ -1121,7 +1121,7 @@ function TabTheoDoi() {
 
   const { data: users = [] } = useQuery<{ id: number; ho_ten: string }[]>({
     queryKey: ['users-list'],
-    queryFn: () => client.get<{ id: number; ho_ten: string }[]>('/users').then(r => r.data),
+    queryFn: () => client.get<{ id: number; ho_ten: string }[]>('/users/dropdown').then(r => r.data),
   })
 
   const { data: rows = [], isLoading, refetch } = useQuery<DonHangTheoDoiRow[]>({
