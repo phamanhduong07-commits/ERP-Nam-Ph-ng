@@ -775,8 +775,8 @@ export default function ProductionOrderDetail({ orderId, embedded = false }: Pro
             <Tooltip title="Xuất Excel (lệnh SX)">
               <Button size="small" icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel} />
             </Tooltip>
-            <Tooltip title="Xuất PDF (lệnh SX)">
-              <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={handleExportPdf} />
+            <Tooltip title="In lệnh sản xuất (A4 ngang)">
+              <Button size="small" icon={<FilePdfOutlined />} style={{ color: '#e53935', borderColor: '#e53935' }} onClick={() => window.open(`/api/production-orders/${order.id}/print`, '_blank')} />
             </Tooltip>
             <Button 
               type="primary" 

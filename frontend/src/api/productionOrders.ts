@@ -353,4 +353,7 @@ export const productionOrdersApi = {
     client.post<{ ok: boolean; data: unknown; payload_sent: unknown }>(
       `/production-orders/${orderId}/push-to-cd2`,
     ),
+
+  printHtml: (orderId: number) =>
+    client.get<string>(`/production-orders/${orderId}/print`, { responseType: 'text' }),
 }

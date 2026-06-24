@@ -4,13 +4,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Table, Space, Button, Typography,
   Divider, Popconfirm, message, Skeleton, Row, Col, Modal, DatePicker, Form, Select,
-  Drawer, Tooltip, Alert,
+  Drawer, Tooltip, Alert, Dropdown,
 } from 'antd'
+import type { MenuProps } from 'antd'
 import {
   ArrowLeftOutlined, CheckOutlined, CloseOutlined,
   PrinterOutlined, ThunderboltOutlined, CalculatorOutlined,
   FileExcelOutlined, PercentageOutlined, EyeOutlined, RollbackOutlined,
+  FilePdfOutlined, DownOutlined,
 } from '@ant-design/icons'
+
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { salesOrdersApi, TRANG_THAI_LABELS, TRANG_THAI_COLORS } from '../../api/salesOrders'
@@ -53,6 +56,13 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
     queryKey: ['sales-order', id],
     queryFn: () => salesOrdersApi.get(Number(id)).then((r) => r.data),
     enabled: !!id,
+  })
+
+  const { data: lsxList } = useQuery({
+    queryKey: ['production-orders-by-so', id],
+    queryFn: () => productionOrdersApi.list({ sales_order_id: Number(id) }).then(r => r.data.items ?? r.data),
+    enabled: !!id,
+    staleTime: 30_000,
   })
 
   const { data: phapNhanList } = useQuery({
@@ -437,6 +447,46 @@ export default function OrderDetail({ orderId, embedded = false }: Props) {
             >
               In đơn
             </Button>
+            {(() => {
+              const lsxItems = Array.isArray(lsxList) ? lsxList : (lsxList as { items?: unknown[] } | undefined)?.items ?? []
+              if (lsxItems.length === 0) return null
+              const openPrint = async (lsxId: number) => {
+                try {
+                  const res = await productionOrdersApi.printHtml(lsxId)
+                  const win = window.open('', '_blank')
+                  if (win) { win.document.open(); win.document.write(res.data); win.document.close() }
+                } catch { message.error('Không thể tải bản in') }
+              }
+              if (lsxItems.length === 1) {
+                const lsx = lsxItems[0] as { id: number; so_lenh: string }
+                return (
+                  <Button
+                    size={embedded ? 'small' : 'middle'}
+                    icon={<FilePdfOutlined />}
+                    style={{ color: '#1B5E20', borderColor: '#1B5E20' }}
+                    onClick={() => openPrint(lsx.id)}
+                  >
+                    In lệnh SX
+                  </Button>
+                )
+              }
+              const menuItems: MenuProps['items'] = (lsxItems as { id: number; so_lenh: string }[]).map(lsx => ({
+                key: lsx.id,
+                label: lsx.so_lenh,
+                onClick: () => openPrint(lsx.id),
+              }))
+              return (
+                <Dropdown menu={{ items: menuItems }}>
+                  <Button
+                    size={embedded ? 'small' : 'middle'}
+                    icon={<FilePdfOutlined />}
+                    style={{ color: '#1B5E20', borderColor: '#1B5E20' }}
+                  >
+                    In lệnh SX <DownOutlined />
+                  </Button>
+                </Dropdown>
+              )
+            })()}
             <Tooltip title="Xuất Excel">
               <Button
                 size={embedded ? 'small' : 'middle'}

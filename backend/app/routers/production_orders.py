@@ -1,13 +1,15 @@
+import html as _html_mod
 from datetime import date
 from decimal import Decimal
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
 from app.deps import get_current_user, require_any_permission
 from app.models.auth import User
-from app.models.master import PhanXuong
+from app.models.master import PhanXuong, Customer, PhapNhan, Product
 from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
 from app.services.inventory_service import (
     get_workshop_warehouse as _get_workshop_warehouse,
@@ -1452,3 +1454,252 @@ def push_to_cd2(
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=502, detail=f"Lỗi kết nối CD2: {exc}")
+
+
+# ─── PRINT ───────────────────────────────────────────────────────────────────
+
+def _fmt_date(d) -> str:
+    if not d:
+        return ""
+    return d.strftime("%d/%m/%Y") if hasattr(d, "strftime") else str(d)
+
+
+def _fmt_num(v, decimals: int = 0) -> str:
+    if v is None:
+        return ""
+    try:
+        f = float(v)
+        if decimals == 0:
+            return f"{int(f):,}"
+        return f"{f:,.{decimals}f}"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _ket_cau(item: ProductionOrderItem) -> str:
+    layers = [
+        item.mat, item.song_1, item.mat_1,
+        item.song_2, item.mat_2, item.song_3, item.mat_3,
+    ]
+    return "/".join(la for la in layers if la)
+
+
+def _cong_doan(item: ProductionOrderItem) -> str:
+    parts = []
+    if item.loai_in == "flexo":
+        label = "Flexo"
+        if item.so_mau:
+            label += f" {item.so_mau} màu"
+        parts.append(label)
+    elif item.loai_in == "ky_thuat_so":
+        parts.append("In KTS")
+    else:
+        parts.append("Không in")
+    if item.loai_lan:
+        parts.append(item.loai_lan)
+    return " / ".join(parts)
+
+
+@router.get("/{order_id}/print", response_class=HTMLResponse)
+def print_production_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    lsx = (
+        db.query(ProductionOrder)
+        .options(selectinload(ProductionOrder.items))
+        .filter(ProductionOrder.id == order_id)
+        .first()
+    )
+    if not lsx:
+        raise HTTPException(404, "Không tìm thấy lệnh sản xuất")
+
+    # ── Resolve related objects ──────────────────────────────────────────────
+    so = db.get(SalesOrder, lsx.sales_order_id) if lsx.sales_order_id else None
+    customer = db.get(Customer, so.customer_id) if so and so.customer_id else None
+    phap_nhan = db.get(PhapNhan, lsx.phap_nhan_id) if lsx.phap_nhan_id else None
+    phan_xuong = db.get(PhanXuong, lsx.phan_xuong_id) if lsx.phan_xuong_id else None
+    nv = db.get(User, lsx.nv_theo_doi_id) if lsx.nv_theo_doi_id else None
+    creator = db.get(User, lsx.created_by) if lsx.created_by else None
+
+    # Build product ma_amis lookup {product_id: ma_amis}
+    product_ids = [it.product_id for it in lsx.items if it.product_id]
+    products_map: dict[int, str] = {}
+    if product_ids:
+        rows = db.query(Product.id, Product.ma_amis).filter(Product.id.in_(product_ids)).all()
+        products_map = {r.id: (r.ma_amis or "") for r in rows}
+
+    # ── Header values ────────────────────────────────────────────────────────
+    ten_phap_nhan = phap_nhan.ten_phap_nhan if phap_nhan else (phan_xuong.ten_phan_xuong if phan_xuong else "")
+    ten_khach = customer.ten_viet_tat if customer else ""
+    so_po = lsx.so_po_kh or (so.so_po_kh if so else "") or ""
+    so_don_hien_thi = so.so_don if so else ""
+    nv_theo_doi = (nv.ho_ten if nv else "") or (creator.ho_ten if creator else "")
+    ngay_giao_dau = _fmt_date(lsx.ngay_hoan_thanh_ke_hoach)
+    tong_sl = sum(float(it.so_luong_ke_hoach or 0) for it in lsx.items)
+    so_dong = len(lsx.items)
+
+    h = _html_mod.escape
+
+    # ── Detail rows ──────────────────────────────────────────────────────────
+    rows_html = ""
+    for i, it in enumerate(lsx.items, 1):
+        ma_np = products_map.get(it.product_id or 0, "")
+        ket_cau = _ket_cau(it)
+        cong_doan = _cong_doan(it)
+        ktu = f"{_fmt_num(it.dai, 1)} × {_fmt_num(it.rong, 1)} × {_fmt_num(it.cao, 1)}" if any([it.dai, it.rong, it.cao]) else ""
+        rows_html += f"""
+        <tr>
+          <td class="center">{i}</td>
+          <td class="center">{h(ma_np)}</td>
+          <td>{h(it.ten_hang or "")}</td>
+          <td class="center">{h(it.loai_thung or "")}</td>
+          <td class="center">{it.so_lop or ""}</td>
+          <td class="center">{h(it.to_hop_song or "")}</td>
+          <td class="center" style="font-size:9pt">{h(ket_cau)}</td>
+          <td class="center">{_fmt_num(it.dai, 1)}</td>
+          <td class="center">{_fmt_num(it.rong, 1)}</td>
+          <td class="center">{_fmt_num(it.cao, 1)}</td>
+          <td style="font-size:9pt">{h(cong_doan)}</td>
+          <td class="right">{_fmt_num(it.so_luong_ke_hoach)}</td>
+          <td class="center">{_fmt_date(it.ngay_giao_hang)}</td>
+          <td style="font-size:9pt">{h(it.ghi_chu or "")}</td>
+        </tr>"""
+
+    so_lenh_escaped = h(lsx.so_lenh or "")
+    page = f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>LSX {so_lenh_escaped}</title>
+<style>
+  @page {{ size: A4 landscape; margin: 10mm 12mm; }}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.5; }}
+  @media print {{ .no-print {{ display: none !important; }} }}
+
+  .hdr {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #1B5E20; padding-bottom: 8px; margin-bottom: 10px; }}
+  .co-name {{ font-size: 13pt; font-weight: bold; color: #1B5E20; text-transform: uppercase; }}
+  .co-info {{ font-size: 9pt; color: #444; margin-top: 3px; line-height: 1.5; }}
+  .ttl {{ text-align: center; }}
+  .ttl h2 {{ font-size: 18pt; font-weight: bold; letter-spacing: 2px; }}
+  .ttl .no {{ font-size: 9.5pt; color: #444; margin-top: 4px; }}
+
+  .section-lbl {{ font-weight: bold; font-size: 10pt; margin: 10px 0 4px; color: #1B5E20; text-transform: uppercase; letter-spacing: 1px; }}
+  .info-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 0 30px; border: 1px solid #ccc; padding: 8px 12px; border-radius: 3px; margin-bottom: 10px; font-size: 10.5pt; }}
+  .r {{ display: flex; align-items: baseline; margin: 2px 0; }}
+  .lbl {{ min-width: 155px; font-weight: bold; flex-shrink: 0; }}
+  .val {{ flex: 1; border-bottom: 1px dotted #aaa; padding-left: 4px; min-height: 1.3em; }}
+  .info-footer {{ display: flex; gap: 30px; font-size: 10.5pt; margin-bottom: 6px; }}
+  .info-footer .r {{ flex: 1; }}
+
+  table {{ width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 4px; }}
+  table th {{ background: #1B5E20; color: #fff; padding: 5px 4px; border: 1px solid #888; text-align: center; font-size: 9.5pt; }}
+  table td {{ border: 1px solid #ccc; padding: 4px 5px; vertical-align: middle; }}
+  .total-row td {{ font-weight: bold; background: #E8F5E9; }}
+  .center {{ text-align: center; }}
+  .right {{ text-align: right; }}
+
+  .sig {{ width: 100%; border-collapse: collapse; margin-top: 28px; }}
+  .sig td {{ border: none; text-align: center; vertical-align: top; width: 25%; }}
+  .s-title {{ font-weight: bold; }}
+  .s-sub {{ font-style: italic; font-size: 8.5pt; color: #555; }}
+  .s-gap {{ height: 45px; }}
+</style>
+</head>
+<body>
+
+<div class="no-print" style="padding:10px;background:#f0f0f0;display:flex;gap:10px;margin-bottom:8px">
+  <button onclick="window.print()" style="padding:7px 18px;background:#1B5E20;color:#fff;border:none;border-radius:4px;cursor:pointer">🖨️ In lệnh SX</button>
+  <button onclick="window.close()" style="padding:7px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer">Đóng</button>
+</div>
+
+<div class="hdr">
+  <div>
+    <div class="co-name">{h(ten_phap_nhan)}</div>
+    <div class="co-info">Bộ phận sản xuất</div>
+  </div>
+  <div class="ttl">
+    <h2>LỆNH SẢN XUẤT</h2>
+    <div class="no">Số: <strong>{so_lenh_escaped}</strong> &nbsp;|&nbsp; Ngày: {_fmt_date(lsx.ngay_lenh)}</div>
+  </div>
+  <div style="text-align:right;font-size:9.5pt;color:#444">
+    <div>Trạng thái: <strong>{h(lsx.trang_thai or "")}</strong></div>
+  </div>
+</div>
+
+<div class="section-lbl">Phần I. Thông tin đơn hàng</div>
+<div class="info-grid">
+  <div class="r"><span class="lbl">Số đơn hàng:</span><span class="val"><strong>{h(so_don_hien_thi)}</strong></span></div>
+  <div class="r"><span class="lbl">Ngày HT kế hoạch:</span><span class="val"><strong>{ngay_giao_dau}</strong></span></div>
+  <div class="r"><span class="lbl">Bên bán (Xưởng):</span><span class="val">{h(ten_phap_nhan)}</span></div>
+  <div class="r"><span class="lbl">Bên mua (Khách hàng):</span><span class="val"><strong>{h(ten_khach)}</strong></span></div>
+  <div class="r"><span class="lbl">Số PO khách hàng:</span><span class="val">{h(so_po)}</span></div>
+  <div class="r"><span class="lbl">Nhân viên theo dõi:</span><span class="val">{h(nv_theo_doi)}</span></div>
+  <div class="r"><span class="lbl">Số mã sản phẩm:</span><span class="val">{so_dong}</span></div>
+  <div class="r"><span class="lbl">Tổng số lượng:</span><span class="val"><strong>{_fmt_num(tong_sl)} thùng</strong></span></div>
+</div>
+{"<div class='r' style='margin-bottom:8px;font-size:10.5pt'><span class='lbl' style='min-width:155px;font-weight:bold'>Ghi chú:</span><span class='val' style='border-bottom:1px dotted #aaa;padding-left:4px'>" + h(lsx.ghi_chu or "") + "</span></div>" if lsx.ghi_chu else ""}
+
+<div class="section-lbl">Phần II. Chi tiết lệnh đặt hàng</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:38px">STT</th>
+      <th style="width:70px">Mã NP</th>
+      <th style="min-width:130px">Tên sản phẩm</th>
+      <th style="width:55px">Kiểu</th>
+      <th style="width:40px">Lớp</th>
+      <th style="width:50px">Sóng</th>
+      <th style="width:100px">Kết cấu</th>
+      <th style="width:42px">D<br><small>(mm)</small></th>
+      <th style="width:42px">R<br><small>(mm)</small></th>
+      <th style="width:42px">C<br><small>(mm)</small></th>
+      <th style="width:110px">Công đoạn</th>
+      <th style="width:75px">Số lượng<br><small>(thùng)</small></th>
+      <th style="width:80px">Ngày giao</th>
+      <th style="min-width:80px">Ghi chú</th>
+    </tr>
+  </thead>
+  <tbody>
+    {rows_html}
+    <tr class="total-row">
+      <td colspan="11" class="right">TỔNG CỘNG</td>
+      <td class="right">{_fmt_num(tong_sl)}</td>
+      <td colspan="2"></td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="sig">
+  <tr>
+    <td>
+      <div class="s-title">Giám đốc</div>
+      <div class="s-sub">(Ký, họ tên, đóng dấu)</div>
+      <div class="s-gap"></div>
+    </td>
+    <td>
+      <div class="s-title">Quản đốc xưởng</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-gap"></div>
+    </td>
+    <td>
+      <div class="s-title">Nhân viên theo dõi</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-gap"></div>
+      <div>{h(nv_theo_doi)}</div>
+    </td>
+    <td>
+      <div class="s-title">Người lập phiếu</div>
+      <div class="s-sub">(Ký, họ tên)</div>
+      <div class="s-gap"></div>
+      <div>{h(creator.ho_ten if creator else "")}</div>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>"""
+
+    return HTMLResponse(content=page)
