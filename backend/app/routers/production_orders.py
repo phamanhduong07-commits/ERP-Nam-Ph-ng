@@ -29,7 +29,7 @@ from app.schemas.production import (
 
 router = APIRouter(
     prefix="/api/production-orders",
-    dependencies=[Depends(require_any_permission("production_order.view"))],
+    dependencies=[Depends(require_any_permission("production_order.view", "inventory.view"))],
     tags=["production-orders"],
 )
 
@@ -1211,7 +1211,7 @@ def list_all_phieu_nhap_phoi_song(
     production_order_id: int | None = None,
     warehouse_id: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_any_permission("production_order.view", "inventory.view")),
+    _: User = Depends(get_current_user),
 ):
     """Danh sách tất cả phiếu nhập phôi sóng (toàn hệ thống)."""
     q = (
