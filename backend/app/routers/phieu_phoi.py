@@ -28,7 +28,7 @@ _log = logging.getLogger("erp")
 
 router = APIRouter(
     prefix="/api/phieu-phoi",
-    dependencies=[Depends(require_any_permission("production_order.view", "inventory.view"))],
+    dependencies=[Depends(require_any_permission("production_order.view", "inventory.view", "inventory.phoi_tp"))],
     tags=["phieu-phoi"],
 )
 

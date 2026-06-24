@@ -318,7 +318,7 @@ function buildNavItems(queueCount: number): NavItem[] {
             { key: '/reports/cashflow-daily', to: '/reports/cashflow-daily', label: <Link to="/reports/cashflow-daily">Dòng tiền Group (Ngày)</Link>, permissions: ['report.export'] },
             { key: '/reports/group-pnl', to: '/reports/group-pnl', label: <Link to="/reports/group-pnl">P&L Group (3 PN)</Link>, permissions: ['report.export'] },
             { key: '/reports/sales-group', to: '/reports/sales-group', label: <Link to="/reports/sales-group">Doanh số Group (Xưởng)</Link>, permissions: ['report.export'] },
-            { key: '/reports/group-debt', to: '/reports/group-debt', label: <Link to="/reports/group-debt">Công nợ Group</Link>, permissions: ['report.cong_no'] },
+            { key: '/reports/group-debt', to: '/reports/group-debt', label: <Link to="/reports/group-debt">Công nợ Group</Link>, permissions: ['report.export'] },
             { key: '/reports/sales-nvkd', to: '/reports/sales-nvkd', label: <Link to="/reports/sales-nvkd">Doanh số NV KD</Link>, permissions: ['report.export'] },
           ],
         },
@@ -453,17 +453,18 @@ function AppLayoutInner() {
     ]
   }
 
+  const role = user?.role ?? 'ADMIN'
+  const userPermissions = user?.permissions || []
+  const hasSxPerm = canSee(['production_order.view', 'production_order.create', 'production_order.edit'], role, userPermissions)
+
   const { data: queueLines = [] } = useQuery({
     queryKey: ['production-queue', 'cho'],
     queryFn: () => productionPlansApi.getQueue('cho').then(r => r.data),
     refetchInterval: 60_000,
     staleTime: 30_000,
+    enabled: hasSxPerm,
   })
   const queueCount = queueLines.length
-
-  const role = user?.role ?? 'ADMIN'
-  const userPermissions = user?.permissions || []
-  const hasSxPerm = canSee(['production_order.view', 'production_order.create', 'production_order.edit'], role, userPermissions)
   const navItems = buildNavItems(queueCount)
     .filter(item => canSee(item.permissions, role, userPermissions))
     .map(item => (item.key === 'san-xuat' && !hasSxPerm) ? { ...item, hubTo: undefined } : item)
