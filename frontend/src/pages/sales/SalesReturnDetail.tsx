@@ -605,7 +605,7 @@ export default function SalesReturnDetail() {
                   try {
                     const res = await salesReturnsApi.createReplacementDo(returnData.id)
                     message.success(`Đã tạo phiếu giao hàng bù ${res.data.so_phieu}`)
-                    navigate(`/delivery-orders/${res.data.id}`)
+                    navigate(`/sales/giao-hang?so_phieu=${res.data.so_phieu}`)
                   } catch (e) {
                     message.error(getErrorMessage(e))
                   }
