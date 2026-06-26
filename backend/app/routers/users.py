@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.deps import get_current_user, get_admin_user, require_roles
 from app.models.auth import Role, User
+from app.models.hr import Employee
 from app.schemas.auth import UserCreate, UserUpdate
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -78,21 +79,31 @@ class ResetPasswordRequest(BaseModel):
     password: str
 
 
-def _to_response(user: User) -> UserResponse:
+def _to_response(user: User, emp: Employee | None = None) -> UserResponse:
+    # Prefer employee directory data over user account data when available
+    ho_ten = emp.ho_ten if emp and emp.ho_ten else user.ho_ten
+    ten_phap_nhan = (
+        user.phap_nhan.ten_phap_nhan if user.phap_nhan
+        else (emp.phap_nhan.ten_phap_nhan if emp and emp.phap_nhan else None)
+    )
+    ten_phan_xuong = (
+        user.phan_xuong_obj.ten_xuong if user.phan_xuong_obj
+        else (emp.phan_xuong.ten_xuong if emp and emp.phan_xuong else None)
+    )
     return UserResponse(
         id=user.id,
         username=user.username,
-        ho_ten=user.ho_ten,
-        email=user.email,
-        so_dien_thoai=user.so_dien_thoai,
+        ho_ten=ho_ten,
+        email=user.email or (emp.email if emp else None),
+        so_dien_thoai=user.so_dien_thoai or (emp.so_dien_thoai if emp else None),
         role_id=user.role_id,
         role_name=user.role.ten_vai_tro if user.role else None,
         role_code=user.role.ma_vai_tro if user.role else None,
         phan_xuong=user.phan_xuong,
-        phan_xuong_id=user.phan_xuong_id,
-        ten_phan_xuong=user.phan_xuong_obj.ten_xuong if user.phan_xuong_obj else None,
-        phap_nhan_id=user.phap_nhan_id,
-        ten_phap_nhan=user.phap_nhan.ten_phap_nhan if user.phap_nhan else None,
+        phan_xuong_id=user.phan_xuong_id or (emp.phan_xuong_id if emp else None),
+        ten_phan_xuong=ten_phan_xuong,
+        phap_nhan_id=user.phap_nhan_id or (emp.phap_nhan_id if emp else None),
+        ten_phap_nhan=ten_phap_nhan,
         machine_id=user.machine_id,
         trang_thai=user.trang_thai,
         created_at=user.created_at,
@@ -145,7 +156,21 @@ def list_users(
         allowed_ids = [r.id for r in db.query(Role.id).filter(Role.ma_vai_tro.in_(team)).all()]
         q = q.filter(User.role_id.in_(allowed_ids))
 
-    return [_to_response(u) for u in q.order_by(User.ho_ten).all()]
+    users = q.order_by(User.ho_ten).all()
+
+    # Batch load employee records to fill missing user fields (email, sdt, phap_nhan, phan_xuong)
+    user_ids = [u.id for u in users]
+    emp_map: dict[int, Employee] = {}
+    if user_ids:
+        emps = (
+            db.query(Employee)
+            .options(selectinload(Employee.phap_nhan), selectinload(Employee.phan_xuong))
+            .filter(Employee.user_id.in_(user_ids))
+            .all()
+        )
+        emp_map = {e.user_id: e for e in emps if e.user_id}
+
+    return [_to_response(u, emp_map.get(u.id)) for u in users]
 
 
 @router.post("", response_model=UserResponse, status_code=201)
