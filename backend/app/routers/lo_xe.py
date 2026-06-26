@@ -84,10 +84,15 @@ def sync_lo_xe_from_employees(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Đồng bộ danh sách lơ xe từ hồ sơ nhân viên có is_lo_xe=True."""
+    """Đồng bộ danh sách lơ xe từ nhân viên có chức vụ 'Lơ xe'."""
+    from app.models.hr import Position
     assistants = (
         db.query(Employee)
-        .filter(Employee.is_lo_xe.is_(True), Employee.trang_thai != "da_nghi")
+        .join(Position, Employee.chuc_vu_id == Position.id)
+        .filter(
+            Position.ten_chuc_vu.ilike("%lơ xe%"),
+            Employee.trang_thai != "da_nghi",
+        )
         .all()
     )
     created = updated = 0

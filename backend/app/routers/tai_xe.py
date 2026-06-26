@@ -125,10 +125,15 @@ def sync_tai_xe_from_employees(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Đồng bộ danh sách tài xế từ hồ sơ nhân viên có is_tai_xe=True."""
+    """Đồng bộ danh sách tài xế từ nhân viên có chức vụ 'Tài xế'."""
+    from app.models.hr import Position
     drivers = (
         db.query(Employee)
-        .filter(Employee.is_tai_xe.is_(True), Employee.trang_thai != "da_nghi")
+        .join(Position, Employee.chuc_vu_id == Position.id)
+        .filter(
+            Position.ten_chuc_vu.ilike("%tài xế%"),
+            Employee.trang_thai != "da_nghi",
+        )
         .all()
     )
     created = updated = 0

@@ -637,7 +637,6 @@ export default function EmployeeProfileModal({ open, employee, onClose, onSaved 
           type="card"
           items={[
             { key: 'resume', label: 'Thông tin sơ yếu', children: resumeTabContent },
-            { key: 'van_chuyen', label: 'Vận chuyển', children: vanChuyenTabContent },
             {
               key: 'family',
               label: 'Quan hệ gia đình',
