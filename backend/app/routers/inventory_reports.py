@@ -33,7 +33,7 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/warehouse", tags=["warehouse"])
 
-_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+_SALE_STAFF_ROLES = {"SALE_ADMIN", "KINH_DOANH_NHAN_VIEN"}
 
 
 @router.get("/giao-dich")

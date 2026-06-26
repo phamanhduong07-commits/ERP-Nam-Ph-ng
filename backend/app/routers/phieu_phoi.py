@@ -27,7 +27,7 @@ from app.services.carton_metrics import dec_or_zero, _to_hop_song, song_take_up,
 
 _log = logging.getLogger("erp")
 
-_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+_SALE_STAFF_ROLES = {"SALE_ADMIN", "KINH_DOANH_NHAN_VIEN"}
 
 router = APIRouter(
     prefix="/api/phieu-phoi",

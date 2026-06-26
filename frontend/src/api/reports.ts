@@ -353,3 +353,46 @@ export const importLogsApi = {
   }): Promise<ImportLogItem> =>
     client.post('/import-logs', null, { params }).then(r => r.data),
 }
+
+// ── Sale Admin Reports ─────────────────────────────────────────────────────────
+
+export interface SaleDashboard {
+  pending_quotes: number
+  approved_quotes_week: number
+  total_revenue_month: number
+  customers_assigned: number
+}
+
+export interface SaleByNvRow {
+  nv_id: number
+  nv_name: string
+  username: string
+  so_bao_gia: number
+  so_don_hang: number
+  tong_doanh_thu: number
+  ty_le_chuyen_doi: number
+}
+
+export interface CustomerByNvRow {
+  customer_id: number
+  ma_kh: string
+  ten_viet_tat: string
+  nv_phu_trach_id: number | null
+  nv_phu_trach_name: string | null
+  so_don_hang: number
+  tong_doanh_thu: number
+}
+
+export const saleReports = {
+  getDashboard: (): Promise<SaleDashboard> =>
+    client.get('/reports/sale-dashboard').then(r => r.data),
+
+  getSaleByNv: (params?: { tu_ngay?: string; den_ngay?: string }): Promise<SaleByNvRow[]> =>
+    client.get('/reports/sale-by-nv', { params }).then(r => r.data),
+
+  getCustomerByNv: (): Promise<CustomerByNvRow[]> =>
+    client.get('/reports/customer-by-nv').then(r => r.data),
+
+  getQuoteFunnel: (params?: { tu_ngay?: string; den_ngay?: string }): Promise<Record<string, number>> =>
+    client.get('/reports/quote-funnel', { params }).then(r => r.data),
+}

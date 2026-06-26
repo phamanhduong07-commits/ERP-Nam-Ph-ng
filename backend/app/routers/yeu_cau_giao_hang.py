@@ -17,7 +17,7 @@ from app.services.carton_metrics import production_item_metrics
 
 router = APIRouter(prefix="/api/yeu-cau-giao-hang", tags=["yeu-cau-giao-hang"])
 
-_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+_SALE_STAFF_ROLES = {"SALE_ADMIN", "KINH_DOANH_NHAN_VIEN"}
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────

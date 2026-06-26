@@ -29,7 +29,7 @@ def list_interactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+    _SALE_STAFF_ROLES = {"SALE_ADMIN", "KINH_DOANH_NHAN_VIEN"}
     role_code = current_user.role.ma_vai_tro if current_user.role else None
 
     q = db.query(CustomerInteraction).order_by(CustomerInteraction.ngay.desc())

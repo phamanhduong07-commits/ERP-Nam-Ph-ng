@@ -4,10 +4,11 @@ import { useHotkey } from '../../hooks/useHotkey'
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Card, Drawer, Input, InputNumber, Select, Space, Table, Typography, message, Row, Col, Tag, Avatar, Statistic, Tooltip, Badge,
+  Alert, Button, Card, Checkbox, Drawer, Input, InputNumber, Modal, Select, Space, Table, Typography, message, Row, Col, Tag, Avatar, Statistic, Tooltip, Badge,
 } from 'antd'
-import { PlusOutlined, EditOutlined, UserOutlined, SearchOutlined, DownloadOutlined, UploadOutlined, WarningOutlined, MobileOutlined, LockOutlined, UnlockOutlined, TeamOutlined, CheckCircleOutlined, StopOutlined, IdcardOutlined, CaretDownOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, UserOutlined, SearchOutlined, DownloadOutlined, UploadOutlined, WarningOutlined, MobileOutlined, LockOutlined, UnlockOutlined, TeamOutlined, CheckCircleOutlined, StopOutlined, IdcardOutlined, CaretDownOutlined, SyncOutlined } from '@ant-design/icons'
 import { hrApi, Employee } from '../../api/hr'
+import { usersApi } from '../../api/usersApi'
 import EmployeeProfileModal from '../../components/hr/EmployeeProfileModal'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { theoDoiApi } from '../../api/theoDoi'
@@ -31,6 +32,12 @@ export default function EmployeeListPage() {
   const [boPhanFilter, setBoPhanFilter] = useState<number | undefined>()
   const [trangThaiFilter, setTrangThaiFilter] = useState<string | undefined>()
   const [accountFilter, setAccountFilter] = useState<'all' | 'has' | 'none'>('all')
+  const [syncModalOpen, setSyncModalOpen] = useState(false)
+  const [syncSelected, setSyncSelected] = useState<number[]>([])
+  const [syncResult, setSyncResult] = useState<{ created: any[]; skipped: any[]; errors: any[] } | null>(null)
+  const [linkModalOpen, setLinkModalOpen] = useState(false)
+  const [linkTarget, setLinkTarget] = useState<Employee | null>(null)
+  const [linkSelectedUserId, setLinkSelectedUserId] = useState<number | undefined>(undefined)
   // Quick filter từ URL — dashboard alert chip click vào sẽ kéo theo
   const [quickFilter, setQuickFilter] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -76,6 +83,12 @@ export default function EmployeeListPage() {
     queryFn: () => hrApi.listExpiringContracts().then(r => r.data),
   })
 
+  const { data: usersDropdown = [] } = useQuery({
+    queryKey: ['users-dropdown'],
+    queryFn: () => usersApi.dropdown().then(r => r.data),
+    staleTime: 60_000,
+  })
+
   // Mutations
   // Note: Sprint A — saveMut removed, EmployeeProfileModal tự xử lý save logic.
   const issueAccMut = useMutation({
@@ -95,6 +108,33 @@ export default function EmployeeListPage() {
       qc.invalidateQueries({ queryKey: ['hr-employees'] })
       message.success('Đã cập nhật trạng thái tài khoản')
     }
+  })
+
+  const linkUserMut = useMutation({
+    mutationFn: ({ id, user_id }: { id: number; user_id: number | null }) =>
+      hrApi.linkUser(id, user_id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hr-employees'] })
+      setLinkModalOpen(false)
+      setLinkTarget(null)
+      setLinkSelectedUserId(undefined)
+      message.success('Đã liên kết tài khoản thành công')
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.detail || 'Liên kết thất bại')
+    },
+  })
+
+  const syncSaleMut = useMutation({
+    mutationFn: (ids: number[]) => hrApi.syncSaleAccounts(ids),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['hr-employees'] })
+      setSyncResult(res.data)
+      setSyncSelected([])
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.detail || 'Đồng bộ thất bại')
+    },
   })
 
   // ─── Inline edit mutation: cập nhật 1 field bất kỳ của NV ───
@@ -376,15 +416,29 @@ export default function EmployeeListPage() {
             </Tooltip>
           </Space>
         ) : (
-          <Button
-            size="small"
-            type="dashed"
-            icon={<MobileOutlined />}
-            onClick={() => issueAccMut.mutate(r.id)}
-            loading={issueAccMut.isPending && issueAccMut.variables === r.id}
-          >
-            Cấp TK
-          </Button>
+          <Space size={4}>
+            <Button
+              size="small"
+              type="dashed"
+              icon={<MobileOutlined />}
+              onClick={() => issueAccMut.mutate(r.id)}
+              loading={issueAccMut.isPending && issueAccMut.variables === r.id}
+            >
+              Cấp TK
+            </Button>
+            <Tooltip title="Link với tài khoản có sẵn">
+              <Button
+                size="small"
+                type="dashed"
+                icon={<UserOutlined />}
+                onClick={() => {
+                  setLinkTarget(r)
+                  setLinkSelectedUserId(undefined)
+                  setLinkModalOpen(true)
+                }}
+              />
+            </Tooltip>
+          </Space>
         )
       ),
     },
@@ -449,6 +503,20 @@ export default function EmployeeListPage() {
             </Button>
             <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
               Import Excel
+            </Button>
+            <Button
+              icon={<SyncOutlined />}
+              onClick={() => {
+                setSyncResult(null)
+                setSyncSelected(
+                  filteredEmployees
+                    .filter((e: any) => !e.has_account && e.trang_thai !== 'da_nghi')
+                    .map((e: any) => e.id)
+                )
+                setSyncModalOpen(true)
+              }}
+            >
+              Đồng bộ Sale Admin
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               Thêm nhân viên
@@ -769,6 +837,167 @@ export default function EmployeeListPage() {
           ]}
         />
       </Drawer>
+
+      {/* ─── Modal đồng bộ tài khoản Sale Admin ─── */}
+      <Modal
+        open={syncModalOpen}
+        title={<Space><SyncOutlined /> Đồng bộ tài khoản Sale Admin</Space>}
+        width={620}
+        onCancel={() => { setSyncModalOpen(false); setSyncResult(null) }}
+        footer={
+          syncResult ? (
+            <Button onClick={() => { setSyncModalOpen(false); setSyncResult(null) }}>Đóng</Button>
+          ) : (
+            <Space>
+              <Button onClick={() => setSyncModalOpen(false)}>Huỷ</Button>
+              <Button
+                type="primary"
+                icon={<SyncOutlined />}
+                loading={syncSaleMut.isPending}
+                disabled={syncSelected.length === 0}
+                onClick={() => syncSaleMut.mutate(syncSelected)}
+              >
+                Tạo {syncSelected.length} tài khoản
+              </Button>
+            </Space>
+          )
+        }
+      >
+        {syncResult ? (
+          <div>
+            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              {syncResult.created.length > 0 && (
+                <div>
+                  <Tag color="green" style={{ marginBottom: 8 }}>✓ Đã tạo {syncResult.created.length} tài khoản</Tag>
+                  {syncResult.created.map((e: any) => (
+                    <div key={e.id} style={{ fontSize: 13, padding: '2px 0' }}>
+                      <Tag style={{ fontFamily: 'monospace' }}>{e.ma_nv}</Tag> {e.ho_ten}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {syncResult.skipped.length > 0 && (
+                <div>
+                  <Tag color="orange" style={{ marginBottom: 8 }}>⚠ Bỏ qua {syncResult.skipped.length} NV (đã có TK)</Tag>
+                  {syncResult.skipped.map((e: any) => (
+                    <div key={e.id} style={{ fontSize: 13, padding: '2px 0', color: '#888' }}>
+                      <Tag style={{ fontFamily: 'monospace' }}>{e.ma_nv}</Tag> {e.ho_ten} — {e.ly_do}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {syncResult.errors.length > 0 && (
+                <div>
+                  <Tag color="red" style={{ marginBottom: 8 }}>✗ Lỗi {syncResult.errors.length} NV</Tag>
+                  {syncResult.errors.map((e: any, i: number) => (
+                    <div key={i} style={{ fontSize: 13, padding: '2px 0', color: '#cf1322' }}>
+                      {e.ma_nv || `ID ${e.id}`} — {e.ly_do}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 13, color: '#555', borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+                Mật khẩu mặc định: <Tag style={{ fontFamily: 'monospace' }}>123456</Tag> · Role: <Tag>SALE_ADMIN</Tag>
+              </div>
+            </Space>
+          </div>
+        ) : (
+          <div>
+            <div style={{ marginBottom: 12, fontSize: 13, color: '#555' }}>
+              Chọn nhân viên chưa có tài khoản để tạo. Mật khẩu mặc định: <Tag style={{ fontFamily: 'monospace' }}>123456</Tag> · Role: <Tag>SALE_ADMIN</Tag>
+            </div>
+            <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
+              {filteredEmployees
+                .filter((e: any) => !e.has_account && e.trang_thai !== 'da_nghi')
+                .map((e: any) => (
+                  <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 4px', borderBottom: '1px solid #fafafa' }}>
+                    <Checkbox
+                      checked={syncSelected.includes(e.id)}
+                      onChange={(ev) => {
+                        setSyncSelected(prev =>
+                          ev.target.checked ? [...prev, e.id] : prev.filter(id => id !== e.id)
+                        )
+                      }}
+                    />
+                    <Tag style={{ fontFamily: 'monospace', margin: 0 }}>{e.ma_nv}</Tag>
+                    <span style={{ fontSize: 13, flex: 1 }}>{e.ho_ten}</span>
+                    <span style={{ fontSize: 12, color: '#aaa' }}>{e.bo_phan?.ten_bo_phan || ''}</span>
+                  </div>
+                ))
+              }
+              {filteredEmployees.filter((e: any) => !e.has_account && e.trang_thai !== 'da_nghi').length === 0 && (
+                <div style={{ textAlign: 'center', color: '#aaa', padding: 24, fontSize: 13 }}>
+                  Tất cả nhân viên trong danh sách đã có tài khoản
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
+              <Button type="link" size="small" style={{ padding: 0 }}
+                onClick={() => setSyncSelected(filteredEmployees.filter((e: any) => !e.has_account && e.trang_thai !== 'da_nghi').map((e: any) => e.id))}>
+                Chọn tất cả
+              </Button>
+              {' · '}
+              <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setSyncSelected([])}>
+                Bỏ chọn
+              </Button>
+              {' · '}
+              Đã chọn {syncSelected.length} NV
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ─── Modal link tài khoản có sẵn ─── */}
+      <Modal
+        open={linkModalOpen}
+        title={<Space><UserOutlined /> Link tài khoản có sẵn</Space>}
+        width={440}
+        onCancel={() => { setLinkModalOpen(false); setLinkTarget(null); setLinkSelectedUserId(undefined) }}
+        footer={
+          <Space>
+            <Button onClick={() => { setLinkModalOpen(false); setLinkTarget(null); setLinkSelectedUserId(undefined) }}>
+              Hủy
+            </Button>
+            <Button
+              type="primary"
+              disabled={!linkSelectedUserId}
+              loading={linkUserMut.isPending}
+              onClick={() => {
+                if (linkTarget && linkSelectedUserId) {
+                  linkUserMut.mutate({ id: linkTarget.id, user_id: linkSelectedUserId })
+                }
+              }}
+            >
+              Xác nhận link
+            </Button>
+          </Space>
+        }
+      >
+        {linkTarget && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ padding: '8px 12px', background: '#f5f5f5', borderRadius: 6, fontSize: 13 }}>
+              <strong>Nhân viên:</strong>{' '}
+              <Tag style={{ fontFamily: 'monospace' }}>{linkTarget.ma_nv}</Tag>
+              {linkTarget.ho_ten}
+            </div>
+            <div>
+              <div style={{ marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Chọn tài khoản:</div>
+              <Select
+                showSearch
+                placeholder="Tìm theo tên hoặc username..."
+                style={{ width: '100%' }}
+                value={linkSelectedUserId}
+                onChange={setLinkSelectedUserId}
+                optionFilterProp="label"
+                options={usersDropdown.map(u => ({
+                  value: u.id,
+                  label: `${u.username} — ${u.ho_ten}`,
+                }))}
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

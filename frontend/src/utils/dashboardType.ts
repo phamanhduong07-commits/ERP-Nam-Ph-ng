@@ -22,7 +22,6 @@ const ROLE_DASHBOARD_MAP: Record<string, DashboardType> = {
 
   // Nhân viên Kinh Doanh / Sale Admin — thấy tác vụ hằng ngày
   KINH_DOANH_NHAN_VIEN: 'sales_staff',
-  SALE_ADMIN_NHAN_VIEN: 'sales_staff',
   SALE_ADMIN: 'sales_staff',
 
   // Kế Toán

@@ -40,7 +40,7 @@ from app.routers.addon_rates import get_addon_rates_from_db
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
 
 # Roles that may only see their own quotes (created_by == current_user.id)
-_QUOTE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+_QUOTE_STAFF_ROLES = {"SALE_ADMIN", "KINH_DOANH_NHAN_VIEN"}
 
 
 def _get_quote_scope(current_user: User) -> int | None:
@@ -983,6 +983,8 @@ def approve_quote(
     if role_code not in ("ADMIN", "BGD_GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN"):
         raise HTTPException(status_code=403, detail="Ban khong co quyen duyet bao gia")
     quote = _load_quote(quote_id, db)
+    if quote.created_by == current_user.id and role_code != "ADMIN":
+        raise HTTPException(status_code=403, detail="Không thể tự duyệt báo giá của mình")
     if quote.trang_thai not in ("moi", "cho_duyet"):
         raise HTTPException(status_code=400, detail="Chỉ duyệt được báo giá ở trạng thái Mới hoặc Chờ duyệt")
     old_status = quote.trang_thai
@@ -1037,13 +1039,13 @@ def cancel_quote(
 
 
 class RejectBody(BaseModel):
-    ly_do: str | None = None
+    ly_do: str
 
 
 @router.patch("/{quote_id}/reject", response_model=QuoteResponse)
 def reject_quote(
     quote_id: int,
-    body: RejectBody = RejectBody(),
+    body: RejectBody,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

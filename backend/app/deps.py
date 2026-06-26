@@ -176,7 +176,6 @@ def require_any_permission(*permissions: str):
 # Override: grant 'sales.view_all_customers' permission (no target_user_id) → full access.
 SALE_STAFF_ROLES: frozenset[str] = frozenset({
     "SALE_ADMIN",
-    "SALE_ADMIN_NHAN_VIEN",
     "KINH_DOANH_NHAN_VIEN",
 })
 

@@ -431,6 +431,9 @@ export const hrApi = {
   listExpiringContracts: (days: number = 30) => client.get<any[]>('/hr/contracts/expiring', { params: { days } }),
   importContractAllowances: (rows: any[]) => client.post('/hr/contracts/import-allowances', rows),
   issueAccount: (id: number) => client.post(`/hr/employees/${id}/issue-account`),
+  linkUser: (id: number, user_id: number | null) => client.patch(`/hr/employees/${id}/link-user`, { user_id }),
+  syncSaleAccounts: (employee_ids: number[]) =>
+    client.post<{ created: any[]; skipped: any[]; errors: any[] }>('/hr/employees/sync-sale-accounts', { employee_ids }),
 
   // Family Relations
   listFamilyRelations: (employeeId: number) =>

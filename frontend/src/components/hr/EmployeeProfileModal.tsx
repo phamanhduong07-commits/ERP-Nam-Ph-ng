@@ -67,6 +67,8 @@ interface PersonalFormValues {
   ma_bhyt?: string
   noi_kham_chua_benh?: string
   muc_dong_bhxh?: number
+  // Bằng lái
+  ngay_het_han_bang?: Dayjs
 }
 
 const HOC_VAN_OPTIONS = ['12/12', 'Trung cấp', 'Cao đẳng', 'Đại học', 'Sau đại học']

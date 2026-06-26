@@ -17,6 +17,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
 import { authApi } from '../api/auth'
 import { productionPlansApi } from '../api/productionPlans'
+import { quotesApi } from '../api/quotes'
 import CustomSidebarNav, { type NavItem, type FlyoutSection, type SubItem } from './CustomSidebarNav'
 import GlobalSearchModal from './GlobalSearchModal'
 import { HotkeyProvider } from '../contexts/HotkeyContext'
@@ -34,7 +35,7 @@ function canSee(permissions: string[] | undefined, role: string, userPerms: stri
   return permissions.some(p => userPerms.includes(p))
 }
 
-function buildNavItems(queueCount: number): NavItem[] {
+function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[] {
   return [
     {
       key: '/dashboard',
@@ -50,7 +51,19 @@ function buildNavItems(queueCount: number): NavItem[] {
       flyoutSections: [
         {
           items: [
-            { key: '/quotes', to: '/quotes', label: <Link to="/quotes">Báo giá</Link>, permissions: ['sales_order.view'] },
+            {
+              key: '/quotes',
+              to: '/quotes',
+              permissions: ['sales_order.view'],
+              label: (
+                <Link to="/quotes">
+                  <Space>
+                    <span>Báo giá</span>
+                    {pendingQuotesCount > 0 && <Badge count={pendingQuotesCount} size="small" style={{ marginLeft: 4 }} />}
+                  </Space>
+                </Link>
+              ),
+            },
             { key: '/sales/orders', to: '/sales/orders', label: <Link to="/sales/orders">Đơn hàng</Link> },
             { key: '/sales/returns', to: '/sales/returns', label: <Link to="/sales/returns">Trả hàng bán</Link> },
             { key: '/sales/theo-don-hang', to: '/sales/theo-don-hang', label: <Link to="/sales/theo-don-hang">Theo dõi đơn hàng</Link> },
@@ -428,8 +441,7 @@ function AppLayoutInner() {
         { key: 'KINH_DOANH_NHAN_VIEN', label: 'Nhân viên - Phòng Kinh Doanh', onClick: () => handleSwitchRole('KINH_DOANH_NHAN_VIEN', '123456') },
         { key: 'TRUONG_PHONG_SALE_ADMIN', label: 'Trưởng phòng Sale Admin', onClick: () => handleSwitchRole('TRUONG_PHONG_SALE_ADMIN', '123456') },
         { key: 'SALE_ADMIN_TO_TRUONG', label: 'Tổ trưởng - Sale Admin', onClick: () => handleSwitchRole('SALE_ADMIN_TO_TRUONG', '123456') },
-        { key: 'SALE_ADMIN_NHAN_VIEN', label: 'Nhân viên - Sale Admin', onClick: () => handleSwitchRole('SALE_ADMIN_NHAN_VIEN', '123456') },
-        { key: 'SALE_ADMIN', label: 'Sale Admin', onClick: () => handleSwitchRole('SALE_ADMIN', '123456') },
+        { key: 'SALE_ADMIN', label: 'Sale Admin (Nhân viên)', onClick: () => handleSwitchRole('SALE_ADMIN', '123456') },
       ]},
       { key: 'ketoan_group', type: 'group' as const, label: 'Kế Toán', children: [
         { key: 'KE_TOAN_TRUONG', label: 'Kế toán trưởng', onClick: () => handleSwitchRole('KE_TOAN_TRUONG', '123456') },
@@ -465,7 +477,18 @@ function AppLayoutInner() {
     enabled: hasSxPerm,
   })
   const queueCount = queueLines.length
-  const navItems = buildNavItems(queueCount)
+
+  const canApprove = role === 'ADMIN' || role === 'TRUONG_PHONG_SALE_ADMIN' || role === 'BGD_GIAM_DOC'
+  const { data: quoteCounts } = useQuery({
+    queryKey: ['quotes-counts'],
+    queryFn: () => quotesApi.counts().then(r => r.data),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    enabled: canApprove,
+  })
+  const pendingQuotesCount = canApprove ? (quoteCounts?.cho_duyet ?? 0) : 0
+
+  const navItems = buildNavItems(queueCount, pendingQuotesCount)
     .filter(item => canSee(item.permissions, role, userPermissions))
     .map(item => (item.key === 'san-xuat' && !hasSxPerm) ? { ...item, hubTo: undefined } : item)
 

@@ -13,7 +13,7 @@ from app.deps import get_current_user, get_sale_visible_nv_ids, require_any_perm
 from app.models.auth import User
 from app.models.billing import SalesInvoice
 from app.models.accounting import PurchaseInvoice, ProductionCostAllocation, DebtLedgerEntry
-from app.models.sales import SalesOrder, SalesOrderItem, SalesTarget
+from app.models.sales import SalesOrder, SalesOrderItem, SalesTarget, Quote
 from app.models.master import Customer, CustomerNhanVien, Warehouse, PhanXuong, Supplier
 from app.models.auth import User as UserModel
 from app.models.inventory import InventoryTransaction, InventoryBalance
@@ -31,6 +31,12 @@ router = APIRouter(
 )
 
 # ── Hằng số ──────────────────────────────────────────────────────────────────
+
+_SALE_REPORT_ROLES = frozenset({
+    "ADMIN", "BGD_GIAM_DOC", "BGD_TO_TRUONG", "BGD_NHAN_VIEN",
+    "SALE_ADMIN", "TRUONG_PHONG_SALE_ADMIN",
+    "KINH_DOANH_TO_TRUONG", "KINH_DOANH_NHAN_VIEN",
+})
 
 _NHAP_LOAI = {
     "NHAP_MUA",            # nhập từ mua hàng (GoodsReceipt approve)
@@ -1399,3 +1405,235 @@ def delete_sales_target(
         raise HTTPException(404, "Không tìm thấy mục tiêu")
     db.delete(t)
     db.commit()
+
+
+# ─── Sale Dashboard ────────────────────────────────────────────────────────────
+
+@router.get("/sale-dashboard")
+def get_sale_dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Dashboard KPI cho sale admin: pending quotes, revenue, customers assigned."""
+    from datetime import timedelta
+    from sqlalchemy import and_
+
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code not in _SALE_REPORT_ROLES:
+        raise HTTPException(status_code=403, detail="Không có quyền truy cập dashboard Sale")
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    month_start = today.replace(day=1)
+
+    # Base quote query scoped to user's visibility
+    q_base = db.query(Quote)
+    if scope_nv_ids is not None:
+        q_base = q_base.filter(
+            or_(
+                Quote.nv_phu_trach_id.in_(scope_nv_ids),
+                Quote.created_by.in_(scope_nv_ids),
+            )
+        )
+
+    pending_quotes = q_base.filter(Quote.trang_thai == "cho_duyet").count()
+
+    approved_quotes_week = q_base.filter(
+        Quote.trang_thai == "da_duyet",
+        func.date(Quote.approved_at) >= week_start,
+    ).count()
+
+    # Revenue from approved sales orders this month
+    so_q = db.query(func.sum(SalesOrder.tong_tien)).filter(
+        SalesOrder.trang_thai.in_(["da_xuat", "hoan_thanh", "da_duyet"]),
+        func.date(SalesOrder.ngay_don) >= month_start,
+    )
+    if scope_nv_ids is not None:
+        from app.models.master import CustomerNhanVien
+        visible_customers = (
+            db.query(Customer.id)
+            .join(CustomerNhanVien, CustomerNhanVien.customer_id == Customer.id)
+            .filter(CustomerNhanVien.user_id.in_(scope_nv_ids))
+        )
+        so_q = so_q.filter(SalesOrder.customer_id.in_(visible_customers))
+    total_revenue_month = float(so_q.scalar() or 0)
+
+    # Customers assigned
+    if scope_nv_ids is None:
+        customers_assigned = db.query(func.count(Customer.id)).filter(Customer.trang_thai.is_(True)).scalar() or 0
+    else:
+        from app.models.master import CustomerNhanVien
+        customers_assigned = (
+            db.query(func.count(func.distinct(CustomerNhanVien.customer_id)))
+            .filter(CustomerNhanVien.user_id.in_(scope_nv_ids))
+            .scalar() or 0
+        )
+
+    return {
+        "pending_quotes": pending_quotes,
+        "approved_quotes_week": approved_quotes_week,
+        "total_revenue_month": total_revenue_month,
+        "customers_assigned": customers_assigned,
+    }
+
+
+@router.get("/quote-funnel")
+def get_quote_funnel(
+    tu_ngay: Optional[str] = Query(default=None),
+    den_ngay: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Phễu báo giá: đếm số lượng theo trạng thái."""
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code not in _SALE_REPORT_ROLES:
+        raise HTTPException(status_code=403, detail="Không có quyền truy cập báo cáo Sale")
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+
+    q = db.query(Quote.trang_thai, func.count(Quote.id).label("count")).group_by(Quote.trang_thai)
+
+    if scope_nv_ids is not None:
+        q = q.filter(
+            or_(
+                Quote.nv_phu_trach_id.in_(scope_nv_ids),
+                Quote.created_by.in_(scope_nv_ids),
+            )
+        )
+    if tu_ngay:
+        q = q.filter(func.date(Quote.ngay_bao_gia) >= tu_ngay)
+    if den_ngay:
+        q = q.filter(func.date(Quote.ngay_bao_gia) <= den_ngay)
+
+    rows = q.all()
+    counts = {r.trang_thai: r.count for r in rows}
+    return {
+        "moi": counts.get("moi", 0),
+        "cho_duyet": counts.get("cho_duyet", 0),
+        "da_duyet": counts.get("da_duyet", 0),
+        "tu_choi": counts.get("tu_choi", 0),
+        "het_han": counts.get("het_han", 0),
+        "huy": counts.get("huy", 0),
+    }
+
+
+@router.get("/sale-by-nv")
+def get_sale_by_nv(
+    tu_ngay: Optional[str] = Query(default=None),
+    den_ngay: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Báo cáo hiệu suất sale theo nhân viên."""
+    from app.models.auth import Role
+    _SALE_ROLES = {"SALE_ADMIN", "TRUONG_PHONG_SALE_ADMIN"}
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code not in _SALE_REPORT_ROLES:
+        raise HTTPException(status_code=403, detail="Không có quyền truy cập báo cáo Sale")
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+
+    nv_query = db.query(User).join(Role, User.role_id == Role.id).filter(
+        Role.ma_vai_tro.in_(_SALE_ROLES),
+        User.trang_thai.is_(True),
+    )
+    if scope_nv_ids is not None:
+        nv_query = nv_query.filter(User.id.in_(scope_nv_ids))
+    nvs = nv_query.order_by(User.ho_ten).all()
+
+    result = []
+    for nv in nvs:
+        q_filter = [Quote.nv_phu_trach_id == nv.id]
+        if tu_ngay:
+            q_filter.append(func.date(Quote.ngay_bao_gia) >= tu_ngay)
+        if den_ngay:
+            q_filter.append(func.date(Quote.ngay_bao_gia) <= den_ngay)
+
+        so_bao_gia = db.query(func.count(Quote.id)).filter(*q_filter).scalar() or 0
+        so_duyet = db.query(func.count(Quote.id)).filter(*q_filter, Quote.trang_thai == "da_duyet").scalar() or 0
+
+        so_filter = [SalesOrder.nv_kinh_doanh_id == nv.id]
+        if tu_ngay:
+            so_filter.append(func.date(SalesOrder.ngay_don) >= tu_ngay)
+        if den_ngay:
+            so_filter.append(func.date(SalesOrder.ngay_don) <= den_ngay)
+
+        so_row = db.query(
+            func.count(SalesOrder.id),
+            func.coalesce(func.sum(SalesOrder.tong_tien), 0),
+        ).filter(*so_filter).first()
+        so_don_hang = so_row[0] or 0
+        tong_doanh_thu = float(so_row[1] or 0)
+
+        ty_le = round(so_duyet / so_bao_gia * 100, 1) if so_bao_gia > 0 else 0.0
+
+        result.append({
+            "nv_id": nv.id,
+            "nv_name": nv.ho_ten,
+            "username": nv.username,
+            "so_bao_gia": so_bao_gia,
+            "so_don_hang": so_don_hang,
+            "tong_doanh_thu": tong_doanh_thu,
+            "ty_le_chuyen_doi": ty_le,
+        })
+    return result
+
+
+@router.get("/customer-by-nv")
+def get_customer_by_nv(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Danh sách khách hàng kèm NV phụ trách và tổng đơn hàng."""
+    from sqlalchemy import exists as sa_exists
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code not in _SALE_REPORT_ROLES:
+        raise HTTPException(status_code=403, detail="Không có quyền truy cập báo cáo Sale")
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+
+    q = (
+        db.query(
+            Customer.id,
+            Customer.ma_kh,
+            Customer.ten_viet_tat,
+            Customer.nv_phu_trach_id,
+            func.count(SalesOrder.id).label("so_don_hang"),
+            func.coalesce(func.sum(SalesOrder.tong_tien), 0).label("tong_doanh_thu"),
+        )
+        .outerjoin(SalesOrder, SalesOrder.customer_id == Customer.id)
+        .filter(Customer.trang_thai.is_(True))
+        .group_by(Customer.id, Customer.ma_kh, Customer.ten_viet_tat, Customer.nv_phu_trach_id)
+    )
+    if scope_nv_ids is not None:
+        q = q.filter(
+            or_(
+                Customer.nv_phu_trach_id.in_(scope_nv_ids),
+                sa_exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id.in_(scope_nv_ids))
+                ),
+            )
+        )
+
+    rows = q.order_by(Customer.ten_viet_tat).all()
+
+    # NV name lookup
+    nv_ids_needed = {r.nv_phu_trach_id for r in rows if r.nv_phu_trach_id}
+    nv_map: dict[int, str] = {}
+    if nv_ids_needed:
+        nv_map = {
+            u.id: u.ho_ten
+            for u in db.query(User).filter(User.id.in_(nv_ids_needed)).all()
+        }
+
+    return [
+        {
+            "customer_id": r.id,
+            "ma_kh": r.ma_kh,
+            "ten_viet_tat": r.ten_viet_tat,
+            "nv_phu_trach_id": r.nv_phu_trach_id,
+            "nv_phu_trach_name": nv_map.get(r.nv_phu_trach_id) if r.nv_phu_trach_id else None,
+            "so_don_hang": r.so_don_hang or 0,
+            "tong_doanh_thu": float(r.tong_doanh_thu or 0),
+        }
+        for r in rows
+    ]

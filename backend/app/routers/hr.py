@@ -4,6 +4,7 @@ from typing import List, Optional
 import re
 import unicodedata
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from app.database import get_db
@@ -1652,15 +1653,23 @@ def issue_employee_account(id: int, db: Session = Depends(get_db), current_user:
     hashed = bcrypt.hashpw(temp_password.encode(), bcrypt.gensalt()).decode()
 
     # Tìm vai trò theo ma trận: Phòng ban + Chức vụ
+    # Ma trận dùng mã role có nghĩa (vd SALE_ADMIN), KHÔNG dùng ma_bo_phan/ma_chuc_vu nội bộ
     role = None
     if emp.bo_phan and emp.chuc_vu:
         role_code = f"{emp.bo_phan.ma_bo_phan}_{emp.chuc_vu.ma_chuc_vu}"
         role = db.query(Role).filter(Role.ma_vai_tro == role_code).first()
 
+    # Fallback an toàn: tìm NHAN_VIEN, rồi dừng — KHÔNG fallback .first() vì sẽ gán role ngẫu nhiên
     if not role:
         role = db.query(Role).filter(Role.ma_vai_tro == "NHAN_VIEN").first()
     if not role:
-        role = db.query(Role).filter(Role.trang_thai == True).first()
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Không tìm thấy role phù hợp cho nhân viên {emp.ma_nv}. "
+                "Kiểm tra ma trận phòng ban/chức vụ hoặc đảm bảo role NHAN_VIEN tồn tại."
+            ),
+        )
 
     new_user = User(
         username=emp.ma_nv,
@@ -1696,6 +1705,90 @@ def toggle_account_status(id: int, db: Session = Depends(get_db), _: User = Depe
     user.trang_thai = not user.trang_thai
     db.commit()
     return {"status": "success", "new_status": user.trang_thai}
+
+
+class LinkUserRequest(BaseModel):
+    user_id: int | None
+
+
+@router.patch("/employees/{id}/link-user")
+def link_user_to_employee(
+    id: int,
+    body: LinkUserRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("ADMIN", "NHAN_SU")),
+):
+    """Gán tài khoản người dùng có sẵn vào hồ sơ nhân viên (hoặc gỡ liên kết khi user_id=null)."""
+    from app.models.auth import User as AuthUser
+    emp = db.get(Employee, id)
+    if not emp:
+        raise HTTPException(404, "Không tìm thấy nhân viên")
+    if body.user_id is not None:
+        user = db.get(AuthUser, body.user_id)
+        if not user:
+            raise HTTPException(404, "Không tìm thấy tài khoản")
+    emp.user_id = body.user_id
+    db.commit()
+    return {"ok": True, "user_id": emp.user_id}
+
+
+class SyncSaleAccountsRequest(BaseModel):
+    employee_ids: list[int]
+
+
+@router.post("/employees/sync-sale-accounts")
+def sync_sale_accounts(
+    data: SyncSaleAccountsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("ADMIN", "NHAN_SU")),
+):
+    """Tạo hàng loạt tài khoản Sale Admin cho danh sách NV chọn. Password cố định 123456."""
+    from app.models.auth import Role, User as AuthUser
+    import bcrypt
+
+    role = db.query(Role).filter(Role.ma_vai_tro == "SALE_ADMIN").first()
+    if not role:
+        raise HTTPException(400, "Không tìm thấy role SALE_ADMIN trong hệ thống")
+
+    hashed_pw = bcrypt.hashpw(b"123456", bcrypt.gensalt()).decode()
+
+    created, skipped, errors = [], [], []
+
+    for emp_id in data.employee_ids:
+        emp = db.get(Employee, emp_id)
+        if not emp:
+            errors.append({"id": emp_id, "ly_do": "Không tìm thấy nhân viên"})
+            continue
+
+        if emp.user_id:
+            skipped.append({"id": emp_id, "ma_nv": emp.ma_nv, "ho_ten": emp.ho_ten, "ly_do": "Đã có tài khoản"})
+            continue
+
+        if db.query(AuthUser).filter(AuthUser.username == emp.ma_nv).first():
+            skipped.append({"id": emp_id, "ma_nv": emp.ma_nv, "ho_ten": emp.ho_ten, "ly_do": "Username đã tồn tại"})
+            continue
+
+        try:
+            new_user = AuthUser(
+                username=emp.ma_nv,
+                ho_ten=emp.ho_ten,
+                password_hash=hashed_pw,
+                role_id=role.id,
+                trang_thai=True,
+                must_change_password=False,
+            )
+            db.add(new_user)
+            db.flush()
+            emp.user_id = new_user.id
+            db.commit()
+            created.append({"id": emp_id, "ma_nv": emp.ma_nv, "ho_ten": emp.ho_ten})
+        except Exception as e:
+            db.rollback()
+            errors.append({"id": emp_id, "ma_nv": getattr(emp, "ma_nv", "?"), "ly_do": str(e)})
+
+    logger.info("sync-sale-accounts created=%d skipped=%d errors=%d by=%s",
+                len(created), len(skipped), len(errors), current_user.id)
+    return {"created": created, "skipped": skipped, "errors": errors}
 
 
 # --- Payroll History Import ---

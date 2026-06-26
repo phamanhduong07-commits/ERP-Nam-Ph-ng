@@ -1,18 +1,21 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
-  Badge, Button, Card, Col, List, Row, Space, Tag, Typography,
+  Badge, Button, Card, Col, List, Progress, Row, Space, Table, Tag, Typography,
 } from 'antd'
 import {
   ArrowRightOutlined, AuditOutlined, BarChartOutlined,
   CheckCircleOutlined, ClockCircleOutlined, DollarOutlined,
-  FileTextOutlined, ShoppingCartOutlined, TeamOutlined, ThunderboltOutlined,
+  FileTextOutlined, RiseOutlined, ShoppingCartOutlined, TeamOutlined, ThunderboltOutlined,
   TruckOutlined, UserOutlined,
 } from '@ant-design/icons'
+import type { ColumnsType } from 'antd/es/table'
 import {
   DashboardHeader, DashboardStats, KPICard, QuickLink,
   dashboardPageStyle, hoverCardCss, sharedCardStyle, usePrefetchPages,
 } from './_shared'
+import { saleReports, type SaleByNvRow } from '../../api/reports'
 
 const { Title, Text } = Typography
 
@@ -25,11 +28,79 @@ export default function DashboardSalesManager({ stats, userName }: Props) {
   usePrefetchPages(['sales', 'accounting'])
   const sales = stats.sales
 
-  const doanhThuThang = sales?.doanh_thu_thang || 0
+  const { data: saleDash } = useQuery({
+    queryKey: ['sale-dashboard'],
+    queryFn: saleReports.getDashboard,
+    staleTime: 60_000,
+  })
+
+  const { data: saleByNv = [] } = useQuery({
+    queryKey: ['sale-by-nv'],
+    queryFn: () => saleReports.getSaleByNv(),
+    staleTime: 5 * 60_000,
+  })
+
+  const maxRevenue = Math.max(...saleByNv.map(r => r.tong_doanh_thu), 1)
+
+  const nvColumns: ColumnsType<SaleByNvRow> = [
+    {
+      title: 'Nhân viên',
+      dataIndex: 'nv_name',
+      ellipsis: true,
+      render: (v: string) => <span style={{ fontWeight: 500 }}>{v}</span>,
+    },
+    {
+      title: 'Báo giá',
+      dataIndex: 'so_bao_gia',
+      width: 72,
+      align: 'center',
+      render: (v: number) => <Tag color="blue">{v}</Tag>,
+    },
+    {
+      title: 'Đơn hàng',
+      dataIndex: 'so_don_hang',
+      width: 80,
+      align: 'center',
+      render: (v: number) => <Tag color="geekblue">{v}</Tag>,
+    },
+    {
+      title: 'Doanh thu tháng',
+      dataIndex: 'tong_doanh_thu',
+      width: 200,
+      render: (v: number) => (
+        <Space direction="vertical" size={2} style={{ width: '100%' }}>
+          <Progress
+            percent={Math.round((v / maxRevenue) * 100)}
+            size="small"
+            showInfo={false}
+            strokeColor="#1b168e"
+          />
+          <span style={{ fontSize: 11, color: '#666' }}>
+            {v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}tr` : v.toLocaleString('vi')}
+          </span>
+        </Space>
+      ),
+    },
+    {
+      title: 'Chuyển đổi',
+      dataIndex: 'ty_le_chuyen_doi',
+      width: 90,
+      align: 'center',
+      render: (v: number) => (
+        <Tag color={v >= 50 ? 'success' : v >= 30 ? 'warning' : 'error'}>
+          {v.toFixed(0)}%
+        </Tag>
+      ),
+    },
+  ]
+
+  const doanhThuThang = saleDash?.total_revenue_month ?? sales?.doanh_thu_thang ?? 0
   const doanhThuHomNay = sales?.doanh_thu_hom_nay || 0
   const baoGiaMoi = sales?.bao_gia_moi || 0
   const donCanGiao = sales?.don_hang_can_giao || 0
   const donChoduyet = sales?.don_hang_cho_duyet || 0
+  const pendingQuotes = saleDash?.pending_quotes ?? 0
+  const customersAssigned = saleDash?.customers_assigned ?? stats.tong_khach_hang
 
   return (
     <div style={dashboardPageStyle}>
@@ -68,23 +139,23 @@ export default function DashboardSalesManager({ stats, userName }: Props) {
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Badge count={donChoduyet} offset={[-4, 4]}>
+          <Badge count={pendingQuotes} offset={[-4, 4]}>
             <KPICard
-              title="Đơn hàng chờ duyệt"
-              value={donChoduyet}
-              suffix="đơn"
+              title="Báo giá chờ duyệt"
+              value={pendingQuotes}
+              suffix="báo giá"
               icon={<ClockCircleOutlined />}
-              color={donChoduyet > 0 ? '#fa8c16' : '#52c41a'}
+              color={pendingQuotes > 0 ? '#fa8c16' : '#52c41a'}
             />
           </Badge>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <KPICard
-            title="Báo giá đang mở"
-            value={baoGiaMoi}
-            suffix="báo giá"
-            icon={<FileTextOutlined />}
-            color="#1890ff"
+            title="Khách hàng phụ trách"
+            value={customersAssigned}
+            suffix="khách"
+            icon={<TeamOutlined />}
+            color="#722ed1"
           />
         </Col>
       </Row>
@@ -131,19 +202,19 @@ export default function DashboardSalesManager({ stats, userName }: Props) {
               <Space>
                 <CheckCircleOutlined style={{ color: '#fa8c16' }} />
                 Cần phê duyệt
-                {donChoduyet > 0 && <Tag color="orange">{donChoduyet}</Tag>}
+                {(pendingQuotes + donChoduyet) > 0 && <Tag color="orange">{pendingQuotes + donChoduyet}</Tag>}
               </Space>
             }
             variant="borderless"
             style={sharedCardStyle}
-            extra={<Link to="/sales/orders?trang_thai=moi"><Button type="link" danger>Duyệt ngay <ArrowRightOutlined /></Button></Link>}
+            extra={<Link to="/quotes?trang_thai=cho_duyet"><Button type="link" danger>Duyệt ngay <ArrowRightOutlined /></Button></Link>}
           >
             <List size="small">
-              <List.Item extra={<Tag color="orange">{donChoduyet}</Tag>}>
-                <Space><ShoppingCartOutlined />Đơn hàng chờ duyệt</Space>
+              <List.Item extra={<Tag color="orange">{pendingQuotes}</Tag>}>
+                <Link to="/quotes?trang_thai=cho_duyet"><Space><FileTextOutlined />Báo giá chờ duyệt</Space></Link>
               </List.Item>
-              <List.Item extra={<Tag color="blue">{baoGiaMoi}</Tag>}>
-                <Space><FileTextOutlined />Báo giá đang mở (chưa chốt)</Space>
+              <List.Item extra={<Tag color="blue">{donChoduyet}</Tag>}>
+                <Space><ShoppingCartOutlined />Đơn hàng chờ duyệt</Space>
               </List.Item>
               <List.Item extra={<Tag color="purple">{donCanGiao}</Tag>}>
                 <Space><TruckOutlined />Đơn cần giao trong 7 ngày</Space>
@@ -175,8 +246,11 @@ export default function DashboardSalesManager({ stats, userName }: Props) {
             extra={<Link to="/customers">Xem hết</Link>}
           >
             <List size="small">
-              <List.Item extra={<Text strong>{stats.tong_khach_hang}</Text>}>
-                <Space><UserOutlined />Tổng khách hàng</Space>
+              <List.Item extra={<Text strong>{customersAssigned}</Text>}>
+                <Space><UserOutlined />Khách hàng phụ trách</Space>
+              </List.Item>
+              <List.Item extra={<Text strong>{saleDash?.approved_quotes_week ?? 0}</Text>}>
+                <Space><FileTextOutlined />Báo giá duyệt tuần này</Space>
               </List.Item>
               <List.Item extra={<Text strong>{stats.don_hang_moi_hom_nay}</Text>}>
                 <Space><ShoppingCartOutlined />Đơn hàng hôm nay</Space>

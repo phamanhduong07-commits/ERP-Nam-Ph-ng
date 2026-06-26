@@ -60,15 +60,28 @@ def get_sale_users(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Trả về danh sách nhân viên có role SALE_ADMIN để chọn NV phụ trách."""
-    users = (
-        db.query(User)
+    """Trả về danh sách nhân viên có role SALE_ADMIN để chọn NV phụ trách.
+    Ưu tiên dùng ho_ten từ Employee (tên đầy đủ) nếu user đã được link với employee record.
+    """
+    from app.models.hr import Employee
+    from sqlalchemy import case
+    _SALE_ROLES = {"SALE_ADMIN", "TRUONG_PHONG_SALE_ADMIN"}
+    rows = (
+        db.query(User, Employee)
         .join(Role, User.role_id == Role.id)
-        .filter(Role.ma_vai_tro == "SALE_ADMIN", User.trang_thai.is_(True))
-        .order_by(User.ho_ten)
+        .outerjoin(Employee, Employee.user_id == User.id)
+        .filter(Role.ma_vai_tro.in_(_SALE_ROLES), User.trang_thai.is_(True))
+        .order_by(Employee.ho_ten.nullslast(), User.ho_ten)
         .all()
     )
-    return [SaleUserOut(id=u.id, ho_ten=u.ho_ten, username=u.username) for u in users]
+    return [
+        SaleUserOut(
+            id=u.id,
+            ho_ten=emp.ho_ten if emp else u.ho_ten,
+            username=u.username,
+        )
+        for u, emp in rows
+    ]
 
 
 @router.get("", response_model=PagedResponse)

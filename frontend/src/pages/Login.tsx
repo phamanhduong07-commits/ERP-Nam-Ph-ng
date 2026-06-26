@@ -215,8 +215,7 @@ export default function Login() {
                   { label: 'Kinh Doanh & Sale Admin', options: [
                     { label: 'Trưởng phòng Sale Admin', value: 'TRUONG_PHONG_SALE_ADMIN' },
                     { label: 'Tổ trưởng - Sale Admin', value: 'SALE_ADMIN_TO_TRUONG' },
-                    { label: 'Sale Admin', value: 'SALE_ADMIN' },
-                    { label: 'Nhân viên - Sale Admin', value: 'SALE_ADMIN_NHAN_VIEN' },
+                    { label: 'Sale Admin (Nhân viên)', value: 'SALE_ADMIN' },
                     { label: 'Tổ trưởng - Phòng Kinh Doanh', value: 'KINH_DOANH_TO_TRUONG' },
                     { label: 'Nhân viên - Phòng Kinh Doanh', value: 'KINH_DOANH_NHAN_VIEN' },
                   ]},

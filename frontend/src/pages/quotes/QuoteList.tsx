@@ -8,7 +8,7 @@ import {
 } from 'antd'
 import {
   PlusOutlined, SearchOutlined, EyeOutlined, EditOutlined,
-  CheckCircleOutlined, StopOutlined, FileAddOutlined,
+  CheckCircleOutlined, CloseCircleOutlined, StopOutlined, FileAddOutlined,
   FileExcelOutlined, FilePdfOutlined, CopyOutlined, SendOutlined, SyncOutlined,
   WarningOutlined,
 } from '@ant-design/icons'
@@ -59,13 +59,15 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
   const [myOnly, setMyOnly] = useState<boolean>(saved.myOnly || false)
   const [isExporting, setIsExporting] = useState(false)
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([])
+  const [rejectTarget, setRejectTarget] = useState<{ id: number; so_bao_gia: string } | null>(null)
+  const [rejectLyDo, setRejectLyDo] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const role = useAuthStore(s => s.user?.role)
   const userId = useAuthStore(s => s.user?.id)
   const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
-  const isSaleAdmin = role === 'SALE_ADMIN' || role === 'SALE_ADMIN_NHAN_VIEN' || role === 'SALE_ADMIN_TO_TRUONG'
-  const hideCostDetails = role === 'SALE_ADMIN' || role === 'SALE_ADMIN_NHAN_VIEN' || role === 'TRUONG_PHONG_SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'
+  const isSaleAdmin = role === 'SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'
+  const hideCostDetails = role === 'SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'
 
   // Debounce: cập nhật search state 400ms sau khi ngừng gõ
   useEffect(() => {
@@ -209,6 +211,18 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
       invalidateCounts()
     },
     onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi duyệt')),
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: ({ id, ly_do }: { id: number; ly_do: string }) => quotesApi.reject(id, ly_do || undefined),
+    onSuccess: () => {
+      message.success('Đã từ chối báo giá')
+      setRejectTarget(null)
+      setRejectLyDo('')
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
+    },
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Lỗi từ chối')),
   })
 
   const cancelMutation = useMutation({
@@ -398,6 +412,16 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
               <Popconfirm title="Duyệt báo giá này?" onConfirm={() => approveMutation.mutate(row.id)}>
                 <Button size="small" icon={<CheckCircleOutlined />} type="primary" ghost />
               </Popconfirm>
+            </Tooltip>
+          )}
+          {row.trang_thai === 'cho_duyet' && canApprove && (
+            <Tooltip title="Từ chối">
+              <Button
+                size="small"
+                icon={<CloseCircleOutlined />}
+                danger
+                onClick={() => { setRejectTarget({ id: row.id, so_bao_gia: row.so_bao_gia }); setRejectLyDo('') }}
+              />
             </Tooltip>
           )}
           {row.trang_thai === 'da_duyet' && (
@@ -622,6 +646,29 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
         size="small"
         scroll={isEmbedded ? undefined : { x: 1300 }}
       />
+
+      <Modal
+        title={`Từ chối báo giá ${rejectTarget?.so_bao_gia}`}
+        open={!!rejectTarget}
+        onCancel={() => { setRejectTarget(null); setRejectLyDo('') }}
+        onOk={() => {
+          if (!rejectTarget) return
+          rejectMutation.mutate({ id: rejectTarget.id, ly_do: rejectLyDo })
+        }}
+        okText="Xác nhận từ chối"
+        okButtonProps={{ danger: true }}
+        confirmLoading={rejectMutation.isPending}
+        destroyOnClose
+      >
+        <p style={{ marginBottom: 8 }}>Lý do từ chối (tùy chọn):</p>
+        <Input.TextArea
+          rows={3}
+          placeholder="Nhập lý do từ chối..."
+          value={rejectLyDo}
+          onChange={e => setRejectLyDo(e.target.value)}
+          autoFocus
+        />
+      </Modal>
 
       <Modal
         title={`Gia hạn báo giá ${giaHanTarget?.so_bao_gia}`}

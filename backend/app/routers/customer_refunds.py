@@ -11,7 +11,7 @@ from app.services.accounting_service import AccountingService
 
 router = APIRouter(prefix="/api/accounting/customer-refunds", tags=["customer-refunds"])
 
-_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+_SALE_STAFF_ROLES = {"SALE_ADMIN", "KINH_DOANH_NHAN_VIEN"}
 
 
 @router.get("")

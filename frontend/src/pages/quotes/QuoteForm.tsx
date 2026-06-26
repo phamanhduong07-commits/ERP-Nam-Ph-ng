@@ -15,7 +15,6 @@ import type { OffsetAddonPrice } from '../../api/offsetAddonPrices'
 import { productsApi, type ProductFull } from '../../api/products'
 import { phapNhanApi } from '../../api/phap_nhan'
 import { warehouseApi } from '../../api/warehouse'
-import { usersApi } from '../../api/usersApi'
 import { useAuthStore } from '../../store/auth'
 import EmptyState from '../../components/EmptyState'
 
@@ -97,7 +96,7 @@ export default function QuoteForm() {
   const { data: phanXuongRaw } = useQuery({ queryKey: ['phan-xuong'], queryFn: () => warehouseApi.listPhanXuong().then(r => r.data) })
   const phanXuongList = Array.isArray(phanXuongRaw) ? phanXuongRaw : []
 
-  const { data: nhanVienRaw } = useQuery<{ id: number; ho_ten: string }[]>({ queryKey: ['nhan-vien-list'], queryFn: () => usersApi.dropdown().then(r => r.data) })
+  const { data: nhanVienRaw } = useQuery({ queryKey: ['sale-users'], queryFn: () => customersApi.saleUsers().then(r => r.data) })
   const nhanVienList = Array.isArray(nhanVienRaw) ? nhanVienRaw : []
 
   const { data: temPaperList = [] } = useQuery({
@@ -776,7 +775,7 @@ export default function QuoteForm() {
           getCustomerId={() => headerForm.getFieldValue('customer_id') as number | undefined}
           onSaveToProduct={currentItem.product_id != null ? handleSaveCurrentItemToProduct : undefined}
           saveToProductLoading={saveToProductLoading}
-          hideCostDetails={role === 'SALE_ADMIN' || role === 'SALE_ADMIN_NHAN_VIEN' || role === 'TRUONG_PHONG_SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'}
+          hideCostDetails={role === 'SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'}
         />
       )}
 
@@ -808,7 +807,7 @@ export default function QuoteForm() {
           onEdit={handleEditItem}
           onDelete={handleDeleteItem}
           onCopy={handleCopyItem}
-          hideCostDetails={role === 'SALE_ADMIN' || role === 'SALE_ADMIN_NHAN_VIEN' || role === 'TRUONG_PHONG_SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'}
+          hideCostDetails={role === 'SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'}
         />
       </Card>
 

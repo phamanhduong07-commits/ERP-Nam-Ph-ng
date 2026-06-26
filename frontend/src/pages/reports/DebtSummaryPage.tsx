@@ -16,7 +16,7 @@ import PageLayout from '../../components/PageLayout'
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import { useAuthStore } from '../../store/auth'
 
-const _SALE_STAFF_ROLES = ['SALE_ADMIN', 'SALE_ADMIN_NHAN_VIEN', 'KINH_DOANH_NHAN_VIEN']
+const _SALE_STAFF_ROLES = ['SALE_ADMIN', 'KINH_DOANH_NHAN_VIEN']
 
 const { Text } = Typography
 

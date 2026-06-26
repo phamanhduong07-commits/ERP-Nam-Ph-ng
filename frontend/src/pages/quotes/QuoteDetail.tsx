@@ -374,7 +374,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   const [rejectLyDo, setRejectLyDo] = useState('')
   const role = useAuthStore(s => s.user?.role)
   const userId = useAuthStore(s => s.user?.id)
-  const hideCostDetails = role === 'SALE_ADMIN' || role === 'SALE_ADMIN_NHAN_VIEN' || role === 'TRUONG_PHONG_SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'
+  const hideCostDetails = role === 'SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'
   const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
 
   const { data: quote, isLoading } = useQuery({

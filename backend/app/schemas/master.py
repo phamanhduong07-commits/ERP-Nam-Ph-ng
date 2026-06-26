@@ -54,12 +54,14 @@ class CustomerUpdate(BaseModel):
     sa_cskh: str | None = None
     trang_thai: bool | None = None
     nv_ids: list[int] | None = None
+    nv_phu_trach_id: int | None = None
 
 
 class CustomerResponse(CustomerBase):
     id: int
     trang_thai: bool
     nv_ids: list[int] = []
+    nv_phu_trach_id: int | None = None
     created_at: datetime
 
     class Config:

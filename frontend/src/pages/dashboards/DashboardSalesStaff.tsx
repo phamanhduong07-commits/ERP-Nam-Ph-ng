@@ -1,15 +1,17 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { Button, Card, Col, Row, Space, Typography } from 'antd'
+import { useQuery } from '@tanstack/react-query'
+import { Button, Card, Col, Row, Space, Tag, Typography } from 'antd'
 import {
   DollarOutlined, FileAddOutlined, FileTextOutlined,
   PhoneOutlined, PlusOutlined, ShoppingCartOutlined,
-  ThunderboltOutlined, TruckOutlined, UnorderedListOutlined,
+  ThunderboltOutlined, TruckOutlined, UnorderedListOutlined, UserOutlined,
 } from '@ant-design/icons'
 import {
   DashboardHeader, DashboardStats, KPICard, QuickLink,
   dashboardPageStyle, hoverCardCss, sharedCardStyle, usePrefetchPages,
 } from './_shared'
+import { saleReports } from '../../api/reports'
 
 const { Text } = Typography
 
@@ -21,6 +23,15 @@ interface Props {
 export default function DashboardSalesStaff({ stats, userName }: Props) {
   usePrefetchPages(['sales'])
   const sales = stats.sales
+
+  const { data: saleDash } = useQuery({
+    queryKey: ['sale-dashboard'],
+    queryFn: saleReports.getDashboard,
+    staleTime: 60_000,
+  })
+
+  const pendingQuotes = saleDash?.pending_quotes ?? 0
+  const customersAssigned = saleDash?.customers_assigned ?? 0
 
   return (
     <div style={dashboardPageStyle}>
@@ -45,8 +56,8 @@ export default function DashboardSalesStaff({ stats, userName }: Props) {
       <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
         <Col xs={24} sm={8}>
           <KPICard
-            title="Báo giá đang mở"
-            value={sales?.bao_gia_moi || 0}
+            title="Báo giá chờ duyệt"
+            value={pendingQuotes}
             suffix="báo giá"
             icon={<FileTextOutlined />}
             gradient="linear-gradient(135deg, #1b168e 0%, #3a32cc 100%)"
@@ -116,8 +127,12 @@ export default function DashboardSalesStaff({ stats, userName }: Props) {
                 <Text strong style={{ color: '#1890ff', fontSize: 18 }}>{stats.don_hang_moi_hom_nay}</Text>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f6ffed', borderRadius: 10 }}>
-                <Space><FileTextOutlined style={{ color: '#52c41a' }} /><Text>Báo giá mở</Text></Space>
-                <Text strong style={{ color: '#52c41a', fontSize: 18 }}>{sales?.bao_gia_moi || 0}</Text>
+                <Space><FileTextOutlined style={{ color: '#52c41a' }} /><Text>Báo giá chờ duyệt</Text></Space>
+                <Text strong style={{ color: pendingQuotes > 0 ? '#fa8c16' : '#52c41a', fontSize: 18 }}>{pendingQuotes}</Text>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f9f0ff', borderRadius: 10 }}>
+                <Space><UserOutlined style={{ color: '#722ed1' }} /><Text>Khách hàng phụ trách</Text></Space>
+                <Text strong style={{ color: '#722ed1', fontSize: 18 }}>{customersAssigned}</Text>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: sales?.don_hang_can_giao ? '#fff7e6' : '#f6ffed', borderRadius: 10 }}>
                 <Space><TruckOutlined style={{ color: sales?.don_hang_can_giao ? '#fa8c16' : '#52c41a' }} /><Text>Cần giao 7 ngày</Text></Space>
