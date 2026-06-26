@@ -263,7 +263,7 @@ def list_returns(
     ) if return_ids else {}
 
     # Bulk-compute phuong_an_can_tru + trang_thai_hoan_tien for current page
-    da_duyet_ids = [r.id for r in returns if r.trang_thai == "da_duyet"]
+    da_duyet_ids = [r.id for r in returns if r.trang_thai in ("da_duyet", "hoan_tat")]
     phuong_an_map: dict[int, str] = {}
     trang_thai_hoan_tien_map: dict[int, str | None] = {}
 
@@ -312,12 +312,12 @@ def list_returns(
             db.query(func.count(SalesReturn.id)).filter(SalesReturn.trang_thai == "moi")
         ).scalar() or 0,
         "so_phieu_da_duyet": _apply_context_filter(
-            db.query(func.count(SalesReturn.id)).filter(SalesReturn.trang_thai == "da_duyet")
+            db.query(func.count(SalesReturn.id)).filter(SalesReturn.trang_thai.in_(["da_duyet", "hoan_tat"]))
         ).scalar() or 0,
         "tong_tien_tra": float(
             _apply_context_filter(
                 db.query(func.coalesce(func.sum(SalesReturn.tong_tien_tra), 0)).filter(
-                    SalesReturn.trang_thai == "da_duyet"
+                    SalesReturn.trang_thai.in_(["da_duyet", "hoan_tat"])
                 )
             ).scalar() or 0
         ),
@@ -817,6 +817,10 @@ def cancel_return(
     if not return_obj:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu trả hàng")
 
+    # Không thể hủy phiếu đã hoàn tất (tiền đã trả cho khách)
+    if return_obj.trang_thai == "hoan_tat":
+        raise HTTPException(status_code=400, detail="Không thể hủy phiếu đã hoàn tất (đã hoàn tiền cho khách)")
+
     # Hủy phiếu đã duyệt yêu cầu quyền approve
     if return_obj.trang_thai == "da_duyet":
         assert_has_permission("sales_order.approve", current_user, db)
@@ -930,7 +934,7 @@ def create_replacement_do(
     ).filter(SalesReturn.id == return_id).first()
     if not return_obj:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu trả")
-    if return_obj.trang_thai != "da_duyet":
+    if return_obj.trang_thai not in ("da_duyet", "hoan_tat"):
         raise HTTPException(status_code=400, detail="Chỉ tạo giao hàng bù từ phiếu trả đã duyệt")
 
     good_items = [it for it in return_obj.items if it.tinh_trang_hang == "tot" and it.so_luong_tra]

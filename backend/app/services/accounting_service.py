@@ -3347,6 +3347,13 @@ class AccountingService:
         v.trang_thai = "da_duyet"
         v.nguoi_duyet_id = user_id
         v.ngay_duyet = datetime.now(timezone.utc)
+
+        if v.sales_return_id:
+            from app.models.sales import SalesReturn as _SalesReturn
+            sr = self.db.get(_SalesReturn, v.sales_return_id)
+            if sr and sr.trang_thai == "da_duyet":
+                sr.trang_thai = "hoan_tat"
+
         self.db.commit()
         return self.get_customer_refund(voucher_id)
 

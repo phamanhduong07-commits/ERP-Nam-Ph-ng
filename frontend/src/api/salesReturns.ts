@@ -126,12 +126,14 @@ export const SALES_RETURN_TRANG_THAI_LABELS: Record<string, string> = {
   moi: 'Mới',
   da_duyet: 'Đã duyệt',
   huy: 'Huỷ',
+  hoan_tat: 'Hoàn tất',
 }
 
 export const SALES_RETURN_TRANG_THAI_COLORS: Record<string, string> = {
   moi: 'blue',
   da_duyet: 'green',
   huy: 'red',
+  hoan_tat: 'purple',
 }
 
 export const TINH_TRANG_HANG_LABELS: Record<string, string> = {

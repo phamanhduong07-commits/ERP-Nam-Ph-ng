@@ -84,13 +84,13 @@ export default function SalesReturnDetail() {
     queryKey: ['customer-refund-for-return', returnId],
     queryFn: () => customerRefundApi.list({ sales_return_id: returnId, page_size: 1 })
       .then((d: { items?: CustomerRefundVoucher[] }) => d.items?.[0] ?? null),
-    enabled: hasValidReturnId && returnData?.trang_thai === 'da_duyet',
+    enabled: hasValidReturnId && (returnData?.trang_thai === 'da_duyet' || returnData?.trang_thai === 'hoan_tat'),
   })
 
   const { data: journalData } = useQuery<JournalListResponse>({
     queryKey: ['journal-for-return', returnId],
     queryFn: () => journalApi.list({ chung_tu_loai: 'sales_returns', chung_tu_id: returnId, page_size: 20 }) as Promise<JournalListResponse>,
-    enabled: hasValidReturnId && returnData?.trang_thai === 'da_duyet',
+    enabled: hasValidReturnId && (returnData?.trang_thai === 'da_duyet' || returnData?.trang_thai === 'hoan_tat'),
   })
 
   const approveMutation = useMutation({
@@ -417,13 +417,14 @@ export default function SalesReturnDetail() {
 
   const canEdit = returnData.trang_thai === 'moi'
   const canApprove = returnData.trang_thai === 'moi' && canApproveRole
-  const canCancel = returnData.trang_thai !== 'huy' && (returnData.trang_thai === 'moi' || canApproveRole)
+  const canCancel = returnData.trang_thai !== 'huy' && returnData.trang_thai !== 'hoan_tat' && (returnData.trang_thai === 'moi' || canApproveRole)
   const salesOrder = returnData.sales_order
   const phuongAn = returnData.phuong_an_can_tru
   const phuongAnInfo = phuongAn ? PHUONG_AN_LABELS[phuongAn] : null
 
   const stepCurrent =
     returnData.trang_thai === 'huy' ? -1 :
+    returnData.trang_thai === 'hoan_tat' ? 3 :
     returnData.trang_thai === 'da_duyet' && refundVoucher?.trang_thai === 'da_duyet' ? 3 :
     returnData.trang_thai === 'da_duyet' ? 2 : 1
 
@@ -735,7 +736,7 @@ export default function SalesReturnDetail() {
             </Tooltip>
           )}
           <Button icon={<PrinterOutlined />} onClick={handlePrint}>In phiếu trả</Button>
-          {returnData.trang_thai === 'da_duyet' && (
+          {(returnData.trang_thai === 'da_duyet' || returnData.trang_thai === 'hoan_tat') && (
             <Button icon={<PrinterOutlined />} onClick={handlePrintNhapKho}>In phiếu nhập kho</Button>
           )}
         </Space>
@@ -762,7 +763,7 @@ export default function SalesReturnDetail() {
               title: 'Xử lý tài chính',
               description: phuongAn && phuongAnInfo
                 ? <Tag color={phuongAnInfo.color}>{phuongAnInfo.label}</Tag>
-                : (returnData.trang_thai === 'da_duyet' ? 'Đang xử lý' : ''),
+                : ((returnData.trang_thai === 'da_duyet' || returnData.trang_thai === 'hoan_tat') ? 'Đang xử lý' : ''),
             },
             {
               title: 'Hoàn tất',
@@ -879,7 +880,7 @@ export default function SalesReturnDetail() {
         {/* Right — Xử lý tài chính */}
         <Col xs={24} xl={8}>
           {/* Panel xử lý tài chính */}
-          {returnData.trang_thai === 'da_duyet' && renderApprovedSidebar()}
+          {(returnData.trang_thai === 'da_duyet' || returnData.trang_thai === 'hoan_tat') && renderApprovedSidebar()}
 
           {/* Tóm tắt khi phiếu chưa duyệt */}
           {returnData.trang_thai === 'moi' && (
@@ -903,7 +904,7 @@ export default function SalesReturnDetail() {
           )}
 
           {/* Bút toán đã ghi */}
-          {returnData.trang_thai === 'da_duyet' && (journalData?.items?.length ?? 0) > 0 && (
+          {(returnData.trang_thai === 'da_duyet' || returnData.trang_thai === 'hoan_tat') && (journalData?.items?.length ?? 0) > 0 && (
             <Card
               title={<Space><BankOutlined style={{ color: '#722ed1' }} /> Bút toán đã ghi</Space>}
               size="small"
