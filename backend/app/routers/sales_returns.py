@@ -900,3 +900,69 @@ def cancel_return(
     return_obj.trang_thai = "huy"
     db.commit()
     return {"message": "Đã hủy phiếu trả hàng"}
+
+
+@router.post("/{return_id}/create-replacement-do", status_code=201)
+def create_replacement_do(
+    return_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Tạo phiếu giao hàng bù (DO standalone) từ các item tốt của phiếu trả."""
+    return_obj = db.query(SalesReturn).options(
+        joinedload(SalesReturn.items).joinedload(SalesReturnItem.sales_order_item)
+    ).filter(SalesReturn.id == return_id).first()
+    if not return_obj:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu trả")
+    if return_obj.trang_thai != "da_duyet":
+        raise HTTPException(status_code=400, detail="Chỉ tạo giao hàng bù từ phiếu trả đã duyệt")
+
+    good_items = [it for it in return_obj.items if it.tinh_trang_hang == "tot" and it.so_luong_tra]
+    if not good_items:
+        raise HTTPException(status_code=400, detail="Không có sản phẩm tốt để giao bù")
+
+    wh = db.query(Warehouse).filter(Warehouse.is_default == True).first()
+    if not wh:
+        wh = db.query(Warehouse).first()
+    if not wh:
+        raise HTTPException(status_code=400, detail="Không tìm thấy kho")
+
+    ym = date.today().strftime("%Y%m")
+    prefix = f"DO-{ym}-"
+    last = db.query(func.max(DeliveryOrder.so_phieu)).filter(DeliveryOrder.so_phieu.like(f"{prefix}%")).scalar()
+    seq = (int(last.split("-")[-1]) + 1) if last else 1
+
+    new_do = DeliveryOrder(
+        so_phieu=f"{prefix}{seq:04d}",
+        ngay_xuat=date.today(),
+        sales_order_id=None,
+        customer_id=return_obj.customer_id,
+        warehouse_id=wh.id,
+        trang_thai="nhap",
+        created_by=current_user.id,
+        ghi_chu=f"Giao bù từ phiếu trả {return_obj.so_phieu_tra}",
+    )
+    db.add(new_do)
+    db.flush()
+
+    tong_tien = Decimal("0")
+    for it in good_items:
+        soi = it.sales_order_item
+        don_gia = it.don_gia_tra or Decimal("0")
+        thanh_tien = it.so_luong_tra * don_gia
+        tong_tien += thanh_tien
+        db.add(DeliveryOrderItem(
+            delivery_id=new_do.id,
+            sales_order_item_id=None,
+            product_id=soi.product_id if soi else None,
+            ten_hang=(soi.ten_hang if soi else None) or "Hàng giao bù",
+            so_luong=it.so_luong_tra,
+            dvt=(soi.dvt if soi else "Thùng"),
+            don_gia=don_gia,
+            thanh_tien=thanh_tien,
+        ))
+
+    new_do.tong_tien_hang = tong_tien
+    new_do.tong_thanh_toan = tong_tien
+    db.commit()
+    return {"id": new_do.id, "so_phieu": new_do.so_phieu}

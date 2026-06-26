@@ -161,4 +161,5 @@ export const salesReturnsApi = {
     client.put<SalesReturn>(`/sales-returns/${id}`, data),
   approve: (id: number) => client.patch<SalesReturn>(`/sales-returns/${id}/approve`),
   cancel: (id: number) => client.patch(`/sales-returns/${id}/cancel`),
+  createReplacementDo: (id: number) => client.post<{ id: number; so_phieu: string }>(`/sales-returns/${id}/create-replacement-do`),
 }

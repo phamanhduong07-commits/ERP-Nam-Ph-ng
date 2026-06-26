@@ -599,7 +599,18 @@ export default function SalesReturnDetail() {
               }
             </Text>
             {goodItems.length > 0 && (
-              <Button size="small" type="primary" ghost icon={<SendOutlined />} onClick={() => navigate(`/sales/orders/${returnData.sales_order_id}`)}>
+              <Button
+                size="small" type="primary" ghost icon={<SendOutlined />}
+                onClick={async () => {
+                  try {
+                    const res = await salesReturnsApi.createReplacementDo(returnData.id)
+                    message.success(`Đã tạo phiếu giao hàng bù ${res.data.so_phieu}`)
+                    navigate(`/delivery-orders/${res.data.id}`)
+                  } catch (e) {
+                    message.error(getErrorMessage(e))
+                  }
+                }}
+              >
                 Tạo giao hàng bù
               </Button>
             )}
