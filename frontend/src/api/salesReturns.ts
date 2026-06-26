@@ -163,6 +163,6 @@ export const salesReturnsApi = {
     client.put<SalesReturn>(`/sales-returns/${id}`, data),
   approve: (id: number) => client.patch<SalesReturn>(`/sales-returns/${id}/approve`),
   cancel: (id: number) => client.patch(`/sales-returns/${id}/cancel`),
-  createReplacementDo: (id: number, items?: { sales_return_item_id: number; so_luong: number }[]) =>
+  createReplacementDo: (id: number, items?: { sales_return_item_id: number; so_luong: number; ly_do_hao_hut?: string | null }[]) =>
     client.post<{ id: number; so_phieu: string }>(`/sales-returns/${id}/create-replacement-do`, { items }),
 }

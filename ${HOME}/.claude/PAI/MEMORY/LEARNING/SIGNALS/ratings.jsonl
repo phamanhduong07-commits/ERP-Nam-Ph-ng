@@ -1558,3 +1558,4 @@
 {"timestamp":"2026-06-26T06:48:03-07:00","rating":5,"session_id":"21ed9623-acfa-4986-89b2-47f848ee95dd","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
 {"timestamp":"2026-06-26T06:52:01-07:00","rating":5,"session_id":"21ed9623-acfa-4986-89b2-47f848ee95dd","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
 {"timestamp":"2026-06-26T06:57:36-07:00","rating":5,"session_id":"21ed9623-acfa-4986-89b2-47f848ee95dd","source":"implicit","sentiment_summary":"Inference failed: Failed to parse JSON response","confidence":0.3}
+{"timestamp":"2026-06-26T07:03:23-07:00","rating":5,"session_id":"21ed9623-acfa-4986-89b2-47f848ee95dd","source":"implicit","sentiment_summary":"Inference failed: Timeout after 15000ms","confidence":0.3}

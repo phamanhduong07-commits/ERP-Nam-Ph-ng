@@ -72,6 +72,7 @@ export default function SalesReturnDetail() {
   const [refundModalOpen, setRefundModalOpen] = useState(false)
   const [replacementModalOpen, setReplacementModalOpen] = useState(false)
   const [replacementQty, setReplacementQty] = useState<Record<number, number>>({})
+  const [haoHutLyDo, setHaoHutLyDo] = useState<Record<number, string>>({})
 
   const { data: returnData, isLoading } = useQuery({
     queryKey: ['sales-return', id],
@@ -607,6 +608,7 @@ export default function SalesReturnDetail() {
                   const init: Record<number, number> = {}
                   goodItems.forEach(it => { init[it.id] = it.so_luong_tra })
                   setReplacementQty(init)
+                  setHaoHutLyDo({})
                   setReplacementModalOpen(true)
                 }}
               >
@@ -621,7 +623,11 @@ export default function SalesReturnDetail() {
                 try {
                   const items = goodItems
                     .filter(it => (replacementQty[it.id] ?? 0) > 0)
-                    .map(it => ({ sales_return_item_id: it.id, so_luong: replacementQty[it.id] }))
+                    .map(it => ({
+                      sales_return_item_id: it.id,
+                      so_luong: replacementQty[it.id],
+                      ly_do_hao_hut: haoHutLyDo[it.id] || null,
+                    }))
                   const res = await salesReturnsApi.createReplacementDo(returnData.id, items)
                   setReplacementModalOpen(false)
                   message.success(`Đã tạo phiếu giao hàng bù ${res.data.so_phieu}`)
@@ -639,17 +645,41 @@ export default function SalesReturnDetail() {
                 rowKey="id"
                 columns={[
                   { title: 'Sản phẩm', dataIndex: ['sales_order_item', 'ten_hang'], ellipsis: true },
-                  { title: 'SL trả', dataIndex: 'so_luong_tra', width: 80, align: 'right' as const },
+                  { title: 'SL trả', dataIndex: 'so_luong_tra', width: 70, align: 'right' as const },
                   {
-                    title: 'SL giao bù', width: 110, align: 'right' as const,
+                    title: 'SL giao bù', width: 100, align: 'right' as const,
                     render: (_: unknown, it: typeof goodItems[0]) => (
                       <InputNumber
                         size="small" min={0} max={it.so_luong_tra}
                         value={replacementQty[it.id] ?? it.so_luong_tra}
                         onChange={v => setReplacementQty(prev => ({ ...prev, [it.id]: v ?? 0 }))}
-                        style={{ width: 90 }}
+                        style={{ width: 80 }}
                       />
                     ),
+                  },
+                  {
+                    title: 'Hao hụt', width: 70, align: 'right' as const,
+                    render: (_: unknown, it: typeof goodItems[0]) => {
+                      const hh = it.so_luong_tra - (replacementQty[it.id] ?? it.so_luong_tra)
+                      return hh > 0
+                        ? <Typography.Text type="danger" strong>{hh}</Typography.Text>
+                        : <Typography.Text type="secondary">0</Typography.Text>
+                    },
+                  },
+                  {
+                    title: 'Lý do hao hụt',
+                    render: (_: unknown, it: typeof goodItems[0]) => {
+                      const hh = it.so_luong_tra - (replacementQty[it.id] ?? it.so_luong_tra)
+                      if (hh <= 0) return null
+                      return (
+                        <Input
+                          size="small"
+                          placeholder="Hư trong sửa chữa..."
+                          value={haoHutLyDo[it.id] ?? ''}
+                          onChange={e => setHaoHutLyDo(prev => ({ ...prev, [it.id]: e.target.value }))}
+                        />
+                      )
+                    },
                   },
                 ]}
               />

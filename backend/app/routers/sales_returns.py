@@ -909,6 +909,7 @@ def cancel_return(
 class ReplacementDoItemIn(BaseModel):
     sales_return_item_id: int
     so_luong: Decimal
+    ly_do_hao_hut: str | None = None
 
 class ReplacementDoIn(BaseModel):
     items: list[ReplacementDoItemIn] | None = None  # None = dùng toàn bộ so_luong_tra
@@ -936,10 +937,12 @@ def create_replacement_do(
     if not good_items:
         raise HTTPException(status_code=400, detail="Không có sản phẩm tốt để giao bù")
 
-    # Số lượng override từ body (nếu có)
+    # Số lượng override + lý do hao hụt từ body
     qty_override: dict[int, Decimal] = {}
+    ly_do_map: dict[int, str | None] = {}
     if body.items:
         qty_override = {i.sales_return_item_id: i.so_luong for i in body.items}
+        ly_do_map = {i.sales_return_item_id: i.ly_do_hao_hut for i in body.items}
 
     # Ưu tiên kho THANH_PHAM (giao khách) — không dùng kho PHOI dù DO gốc là PHOI
     from app.services.inventory_service import get_workshop_warehouse as _get_ww
@@ -995,6 +998,75 @@ def create_replacement_do(
 
     new_do.tong_tien_hang = tong_tien
     new_do.tong_thanh_toan = tong_tien
+
+    # Xử lý hao hụt: items có SL giao bù < SL trả
+    wh = db.get(Warehouse, warehouse_id)
+    phap_nhan_id_acc = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
+    phan_xuong_id_acc = wh.phan_xuong_id if wh else None
+    hao_hut_accounting_items = []
+
+    for it in good_items:
+        so_luong_giao = qty_override.get(it.id, it.so_luong_tra)
+        hao_hut = it.so_luong_tra - so_luong_giao
+        if hao_hut <= Decimal("0"):
+            continue
+
+        soi = it.sales_order_item
+        don_gia = it.don_gia_tra or Decimal("0")
+        ten_hang = (soi.ten_hang if soi else None) or "Hàng hao hụt"
+        dvt = (soi.dvt if soi else "Thùng")
+        product_id = soi.product_id if soi else None
+        ly_do = ly_do_map.get(it.id) or "Hao hụt trong quá trình sửa chữa"
+
+        kh = it.ke_hoach_xu_ly or "nhap_kho"
+
+        # a) Giao dịch kho: chỉ nhap_kho (giao_lai kho đã 0 khi duyệt phiếu trả)
+        if kh == "nhap_kho" and product_id:
+            bal = _get_or_create_balance(db, warehouse_id, product_id=product_id, ten_hang=ten_hang, don_vi=dvt)
+            _xuat_balance(bal, hao_hut, ten_hang)
+            _log_tx(db, warehouse_id, "XUAT_HAO_HUT",
+                    hao_hut, don_gia, bal.ton_luong,
+                    "sales_returns", return_obj.id, current_user.id,
+                    product_id=product_id,
+                    ghi_chu=f"Hao hụt sửa chữa: {return_obj.so_phieu_tra} — {ly_do}")
+
+        # b) DefectRecord vào kho ảo lỗi (cả nhap_kho lẫn giao_lai)
+        existing_defect = db.query(DefectRecord).filter(
+            DefectRecord.ref_type == "sales_return_hao_hut",
+            DefectRecord.ref_id == it.id,
+        ).first()
+        if not existing_defect:
+            db.add(DefectRecord(
+                ref_type="sales_return_hao_hut",
+                ref_id=it.id,
+                khau="hao_hut_sua_chua",
+                so_luong=hao_hut,
+                trang_thai="cho_xu_ly",
+                ghi_chu=f"{return_obj.so_phieu_tra} — {ly_do}",
+                created_by=current_user.id,
+            ))
+
+        # c) Gom item cho bút toán 6421/155
+        if don_gia > 0:
+            hao_hut_accounting_items.append({
+                "ten_hang": ten_hang,
+                "so_luong": float(hao_hut),
+                "don_gia": float(don_gia),
+                "tk_no": "6421",
+                "tk_co": "155",
+            })
+
+    if hao_hut_accounting_items:
+        AccountingService(db).post_inventory_journal(
+            ngay=date.today(),
+            loai="XUAT_HAO_HUT",
+            chung_tu_loai="sales_returns",
+            chung_tu_id=return_obj.id,
+            items=hao_hut_accounting_items,
+            phap_nhan_id=phap_nhan_id_acc,
+            phan_xuong_id=phan_xuong_id_acc,
+        )
+
     # Lưu liên kết ngược để bảng danh sách biết đã giao bù
     return_obj.replacement_do_id = new_do.id
     db.commit()
