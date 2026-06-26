@@ -4,7 +4,7 @@ import { useHotkey } from '../../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Image, Input, InputNumber,
-  Modal, Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, Upload, message, Divider,
+  Modal, Popconfirm, Row, Segmented, Select, Space, Table, Tag, Tooltip, Typography, Upload, message, Divider,
 } from 'antd'
 import {
   FileExcelOutlined, FileImageOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
@@ -30,6 +30,8 @@ import HoanThienGiayModal from '../../components/HoanThienGiayModal'
 
 const { Title, Text } = Typography
 
+const FILTER_KEY = 'WAREHOUSE_NHAP_GIAY_FILTERS'
+
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -50,6 +52,7 @@ export default function NhapGiayPage() {
   const [filterKho, setFilterKho] = useState<number | undefined>()
   const [filterNCC, setFilterNCC] = useState<number | undefined>()
   const [filterXuong, setFilterXuong] = useState<number | undefined>()
+  const [filterTrangThai, setFilterTrangThai] = useState('')
   const [expandedImages, setExpandedImages] = useState<Record<number, string>>({})
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
@@ -71,6 +74,28 @@ export default function NhapGiayPage() {
   const calcTongKg = watchedItems.reduce((s: number, it: Record<string, unknown>) => s + (Number(it?.so_luong) || 0), 0)
   const kgLech = (hdTongKgWatch != null && hdTongKgWatch !== '') ? calcTongKg - Number(hdTongKgWatch) : null
   const isKhop = kgLech !== null && Math.abs(kgLech) < 1
+
+  // Khôi phục bộ lọc từ sessionStorage khi mở trang
+  useEffect(() => {
+    const saved = sessionStorage.getItem(FILTER_KEY)
+    if (!saved) return
+    try {
+      const f = JSON.parse(saved)
+      if (typeof f.filterKho === 'number') setFilterKho(f.filterKho)
+      if (typeof f.filterNCC === 'number') setFilterNCC(f.filterNCC)
+      if (typeof f.filterXuong === 'number') setFilterXuong(f.filterXuong)
+      if (typeof f.filterTrangThai === 'string') setFilterTrangThai(f.filterTrangThai)
+      if (typeof f.tuNgay === 'string') setTuNgay(f.tuNgay)
+      if (typeof f.denNgay === 'string') setDenNgay(f.denNgay)
+    } catch { /* ignore */ }
+  }, [])
+
+  // Lưu bộ lọc vào sessionStorage mỗi khi thay đổi
+  useEffect(() => {
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify({
+      filterKho, filterNCC, filterXuong, filterTrangThai, tuNgay, denNgay,
+    }))
+  }, [filterKho, filterNCC, filterXuong, filterTrangThai, tuNgay, denNgay])
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses-all'],
@@ -112,9 +137,10 @@ export default function NhapGiayPage() {
   })
 
   const { data: receiptList = [], isLoading } = useQuery({
-    queryKey: ['goods-receipts-giay', filterKho, filterNCC, tuNgay, denNgay],
+    queryKey: ['goods-receipts-giay', filterKho, filterNCC, filterTrangThai, tuNgay, denNgay],
     queryFn: () => warehouseApi.listGoodsReceipts({
-      warehouse_id: filterKho, supplier_id: filterNCC, tu_ngay: tuNgay, den_ngay: denNgay,
+      warehouse_id: filterKho, supplier_id: filterNCC, trang_thai: filterTrangThai || undefined,
+      tu_ngay: tuNgay, den_ngay: denNgay,
       loai_hang: 'giay',
     }).then(r => r.data),
   })
@@ -446,6 +472,13 @@ export default function NhapGiayPage() {
       } },
     ...(canViewPrice ? [{ title: 'Tổng tiền', dataIndex: 'tong_gia_tri', width: 140, align: 'right' as const,
       render: (v: number) => <Text strong>{v.toLocaleString('vi-VN', { maximumFractionDigits: 0 })}đ</Text> }] : []),
+    {
+      title: 'Người lập',
+      dataIndex: 'created_by_name',
+      key: 'created_by_name',
+      width: 120,
+      render: (v: string) => v || '—',
+    },
     { title: 'TT', dataIndex: 'trang_thai', width: 105,
       render: (v: string) => {
         if (v === 'nhap_nhanh') return <Tag color="orange">Chờ nhập</Tag>
@@ -526,6 +559,11 @@ export default function NhapGiayPage() {
 
   const expandedRowRender = (r: GoodsReceipt) => (
     <div>
+      {r.created_by_name && (
+        <div style={{ marginBottom: 8, fontSize: 12, color: '#666' }}>
+          Người lập: <strong>{r.created_by_name}</strong>
+        </div>
+      )}
       <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Text type="secondary" style={{ fontSize: 12 }}>Phiếu xuất NCC:</Text>
         {expandedImages[r.id]
@@ -627,11 +665,24 @@ export default function NhapGiayPage() {
           </Col>
           <Col xs={12} sm={4}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={tuNgay ? dayjs(tuNgay) : null}
               onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
           <Col xs={12} sm={4}>
             <DatePicker placeholder="Đến ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={denNgay ? dayjs(denNgay) : null}
               onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
+          </Col>
+          <Col xs={24}>
+            <Segmented
+              options={[
+                { label: 'Tất cả', value: '' },
+                { label: 'Chờ duyệt', value: 'nhap' },
+                { label: 'Đã duyệt', value: 'da_duyet' },
+              ]}
+              value={filterTrangThai}
+              onChange={v => setFilterTrangThai(v as string)}
+            />
           </Col>
         </Row>
       </Card>

@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
@@ -69,7 +69,7 @@ def list_production_outputs(
         q = q.filter(ProductionOutput.ngay_nhap >= tu_ngay)
     if den_ngay:
         q = q.filter(ProductionOutput.ngay_nhap <= den_ngay)
-    rows = q.order_by(ProductionOutput.created_at.desc()).limit(200).all()
+    rows = q.options(joinedload(ProductionOutput.creator)).order_by(ProductionOutput.created_at.desc()).limit(200).all()
     return [_po_out_to_dict(r, db) for r in rows]
 
 
@@ -270,4 +270,5 @@ def _po_out_to_dict(out: ProductionOutput, db: Session) -> dict:
         "production_session_id": out.production_session_id,
         "ghi_chu": out.ghi_chu,
         "created_at": out.created_at.isoformat() if out.created_at else None,
+        "created_by_name": out.creator.ho_ten if out.creator else None,
     }

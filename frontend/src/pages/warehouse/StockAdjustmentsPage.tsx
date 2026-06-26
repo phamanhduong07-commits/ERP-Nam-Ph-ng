@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ApiError } from '../../api/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
-  Popconfirm, Row, Select, Space, Table, Tag, Typography, message, Tooltip,
+  Popconfirm, Row, Segmented, Select, Space, Table, Tag, Typography, message, Tooltip,
 } from 'antd'
 import { CheckCircleOutlined, DeleteOutlined, FileExcelOutlined, MinusCircleOutlined, PlusOutlined, PrinterOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -18,6 +18,8 @@ import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 import PageLayout from '../../components/PageLayout'
 
 const { Text } = Typography
+
+const FILTER_KEY = 'WAREHOUSE_STOCK_ADJUSTMENTS_FILTERS'
 
 function fmtNum(v: number) {
   return Number(v || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 })
@@ -44,10 +46,28 @@ export default function StockAdjustmentsPage() {
   const [filterKho, setFilterKho] = useState<number | undefined>()
   const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
   const [filterXuong, setFilterXuong] = useState<number | undefined>()
-  const [filterStatus, setFilterStatus] = useState<string | undefined>()
+  const [filterStatus, setFilterStatus] = useState('')
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [selectedKho, setSelectedKho] = useState<number | undefined>()
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem(FILTER_KEY)
+    if (!saved) return
+    try {
+      const f = JSON.parse(saved)
+      if (typeof f.filterPhapNhan === 'number') setFilterPhapNhan(f.filterPhapNhan)
+      if (typeof f.filterXuong === 'number') setFilterXuong(f.filterXuong)
+      if (typeof f.filterKho === 'number') setFilterKho(f.filterKho)
+      if (typeof f.filterStatus === 'string') setFilterStatus(f.filterStatus)
+      if (typeof f.tuNgay === 'string') setTuNgay(f.tuNgay)
+      if (typeof f.denNgay === 'string') setDenNgay(f.denNgay)
+    } catch { /* ignore corrupt filter cache */ }
+  }, [])
+
+  useEffect(() => {
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify({ filterPhapNhan, filterXuong, filterKho, filterStatus, tuNgay, denNgay }))
+  }, [filterPhapNhan, filterXuong, filterKho, filterStatus, tuNgay, denNgay])
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses-all'],
@@ -265,6 +285,7 @@ export default function StockAdjustmentsPage() {
     { title: 'Ngày', dataIndex: 'ngay', width: 110 },
     { title: 'Kho', dataIndex: 'ten_kho', width: 180 },
     { title: 'Lý do', dataIndex: 'ly_do', render: (v: string | null) => v || '—' },
+    { title: 'Người lập', dataIndex: 'created_by_name', width: 120, render: (v: string | null) => v || '—' },
     {
       title: 'Số dòng', width: 80, align: 'center' as const,
       render: (_: unknown, r: StockAdjustment) => r.items.length,
@@ -395,19 +416,25 @@ export default function StockAdjustmentsPage() {
               options={activeWarehouses.map(w => ({ value: w.id, label: w.ten_kho }))} />
           </Col>
           <Col xs={12} sm={6}>
-            <Select placeholder="Trạng thái" style={{ width: '100%' }} allowClear value={filterStatus} onChange={setFilterStatus}
-              options={[
-                { value: 'nhap', label: 'Chờ xác nhận' },
-                { value: 'confirmed', label: 'Đã xác nhận' },
-              ]} />
-          </Col>
-          <Col xs={12} sm={6}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={tuNgay ? dayjs(tuNgay) : null}
               onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
           <Col xs={12} sm={6}>
             <DatePicker placeholder="Đến ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={denNgay ? dayjs(denNgay) : null}
               onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
+          </Col>
+          <Col xs={24}>
+            <Segmented
+              options={[
+                { label: 'Tất cả', value: '' },
+                { label: 'Chờ xác nhận', value: 'nhap' },
+                { label: 'Đã xác nhận', value: 'confirmed' },
+              ]}
+              value={filterStatus}
+              onChange={v => setFilterStatus(v as string)}
+            />
           </Col>
         </Row>
       </Card>

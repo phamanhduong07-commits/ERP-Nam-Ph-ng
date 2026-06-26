@@ -133,6 +133,7 @@ def list_goods_receipts(
             joinedload(GoodsReceipt.warehouse),
             joinedload(GoodsReceipt.phan_xuong),
             joinedload(GoodsReceipt.phap_nhan),
+            joinedload(GoodsReceipt.creator),
             selectinload(GoodsReceipt.items),
         )
         .order_by(GoodsReceipt.created_at.desc())
@@ -1161,6 +1162,7 @@ def _gr_to_dict(gr: GoodsReceipt, db: Session, include_image: bool = True, co_ho
         "co_hoa_don": co_hoa_don_override,
         "qc_phieu_id": qc_phieu_id,
         "created_at": gr.created_at.isoformat() if gr.created_at else None,
+        "created_by_name": gr.creator.ho_ten if gr.creator else None,
         "items": [{
             "id": it.id,
             "po_item_id": it.po_item_id,

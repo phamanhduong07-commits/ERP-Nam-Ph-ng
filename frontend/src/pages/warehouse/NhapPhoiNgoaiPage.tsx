@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Form, Image, Input, InputNumber,
-  Modal, Popconfirm, Row, Select, Space, Table, Tag, Typography, Upload, message, Divider,
+  Modal, Popconfirm, Row, Segmented, Select, Space, Table, Tag, Typography, Upload, message, Divider,
 } from 'antd'
 import {
   FileExcelOutlined, FileImageOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
@@ -25,6 +25,8 @@ import { mediaApi } from '../../api/media'
 import { ocrExamplesApi } from '../../api/ocrExamples'
 
 const { Title, Text } = Typography
+
+const FILTER_KEY = 'WAREHOUSE_NHAP_PHOI_NGOAI_FILTERS'
 
 /** Thông số kỹ thuật của một dòng phôi trong PO item (phoi_spec). */
 interface PhoiSpecItem {
@@ -69,7 +71,25 @@ export default function NhapPhoiNgoaiPage() {
   const [filterNCC, setFilterNCC] = useState<number | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
+  const [filterTrangThai, setFilterTrangThai] = useState('')
   const [selectedPO, setSelectedPO] = useState<number | undefined>()
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem(FILTER_KEY)
+    if (!saved) return
+    try {
+      const f = JSON.parse(saved)
+      if (typeof f.filterXuong === 'number') setFilterXuong(f.filterXuong)
+      if (typeof f.filterNCC === 'number') setFilterNCC(f.filterNCC)
+      if (typeof f.filterTrangThai === 'string') setFilterTrangThai(f.filterTrangThai)
+      if (typeof f.tuNgay === 'string') setTuNgay(f.tuNgay)
+      if (typeof f.denNgay === 'string') setDenNgay(f.denNgay)
+    } catch { /* ignore corrupt filter cache */ }
+  }, [])
+
+  useEffect(() => {
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify({ filterXuong, filterNCC, filterTrangThai, tuNgay, denNgay }))
+  }, [filterXuong, filterNCC, filterTrangThai, tuNgay, denNgay])
   const [formPxId, setFormPxId] = useState<number | null>(null)
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null)
   const [invoicePreviewUrl, setInvoicePreviewUrl] = useState<string | null>(null)
@@ -348,6 +368,7 @@ export default function NhapPhoiNgoaiPage() {
         if (v === 'da_duyet') return <Tag color="green">Đã duyệt</Tag>
         return <Tag color="blue">Đã nhập</Tag>
       } },
+    { title: 'Người lập', dataIndex: 'created_by_name', width: 120, render: (v: string | null) => v || '—' },
     {
       title: '', width: 155,
       render: (_: unknown, r: GoodsReceipt) => (
@@ -374,6 +395,11 @@ export default function NhapPhoiNgoaiPage() {
 
   const expandedRowRender = (r: GoodsReceipt) => (
     <div>
+      {r.created_by_name && (
+        <div style={{ marginBottom: 8, fontSize: 12, color: '#666' }}>
+          Người lập: <strong>{r.created_by_name}</strong>
+        </div>
+      )}
       {r.invoice_image && (
         <div style={{ marginBottom: 8 }}>
           <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>Phiếu xuất kho NCC:</Text>
@@ -445,17 +471,30 @@ export default function NhapPhoiNgoaiPage() {
           </Col>
           <Col xs={12} sm={4}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={tuNgay ? dayjs(tuNgay) : null}
               onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
           <Col xs={12} sm={4}>
             <DatePicker placeholder="Đến ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={denNgay ? dayjs(denNgay) : null}
               onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
+          </Col>
+          <Col xs={24}>
+            <Segmented
+              options={[
+                { label: 'Tất cả', value: '' },
+                { label: 'Chờ duyệt', value: 'nhap' },
+                { label: 'Đã duyệt', value: 'da_duyet' },
+              ]}
+              value={filterTrangThai}
+              onChange={v => setFilterTrangThai(v as string)}
+            />
           </Col>
         </Row>
       </Card>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
-        <Table dataSource={receiptList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
+        <Table dataSource={filterTrangThai ? receiptList.filter((r: GoodsReceipt) => r.trang_thai === filterTrangThai) : receiptList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
           locale={{ emptyText: <EmptyState preset="document" size="small" /> }}
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 1000 }} />
       </Card>

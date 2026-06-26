@@ -136,6 +136,7 @@ export interface PhieuChuyenKho {
   ghi_chu: string | null
   trang_thai: string
   created_at: string | null
+  created_by_name?: string | null
   phap_nhan_id_for_print: number | null
   items: PhieuKhoItem[]
 }
@@ -166,6 +167,7 @@ export interface StockAdjustment {
   ghi_chu: string | null
   trang_thai: string
   created_at: string | null
+  created_by_name?: string | null
   items: StockAdjustmentItem[]
 }
 
@@ -245,6 +247,7 @@ export interface GoodsReceipt {
   qc_phieu_id: number | null
   hd_tong_kg: number | null
   created_at: string | null
+  created_by_name?: string | null
   items: GoodsReceiptItem[]
 }
 
@@ -326,6 +329,7 @@ export interface MaterialIssue {
   trang_thai: string
   ghi_chu: string | null
   created_at: string | null
+  created_by_name: string | null
   items: MaterialIssueItem[]
 }
 
@@ -355,6 +359,9 @@ export interface ProductionOutput {
   don_gia_xuat_xuong: number
   ghi_chu: string | null
   created_at: string | null
+  created_by_name: string | null
+  trang_thai_loi: string | null
+  production_session_id: number | null
 }
 
 export interface CreateProductionOutputPayload {

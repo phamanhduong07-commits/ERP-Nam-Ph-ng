@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, selectinload, joinedload
 from app.database import get_db
 from app.deps import get_current_user, require_roles
 from app.models.auth import User
@@ -77,7 +77,7 @@ def list_material_issues(
         q = q.filter(MaterialIssue.ngay_xuat >= tu_ngay)
     if den_ngay:
         q = q.filter(MaterialIssue.ngay_xuat <= den_ngay)
-    rows = q.order_by(MaterialIssue.created_at.desc()).limit(200).all()
+    rows = q.options(joinedload(MaterialIssue.creator)).order_by(MaterialIssue.created_at.desc()).limit(200).all()
     return [_mi_to_dict(r, db) for r in rows]
 
 
@@ -583,6 +583,7 @@ def _mi_to_dict(mi: MaterialIssue, db: Session) -> dict:
         "bo_qua_hach_toan": mi.bo_qua_hach_toan,
         "ghi_chu": mi.ghi_chu,
         "created_at": mi.created_at.isoformat() if mi.created_at else None,
+        "created_by_name": mi.creator.ho_ten if mi.creator else None,
         "items": [{
             "id": it.id,
             "paper_material_id": it.paper_material_id,

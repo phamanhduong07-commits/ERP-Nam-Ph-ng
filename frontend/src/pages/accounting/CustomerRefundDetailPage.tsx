@@ -74,12 +74,13 @@ export default function CustomerRefundDetailPage() {
     }
   }
 
+  const hinh_thuc = Form.useWatch('hinh_thuc', form)
+
   if (isLoading) return <Spin style={{ margin: 40 }} />
   if (!voucher) return <div style={{ padding: 24 }}>Không tìm thấy phiếu</div>
 
   const ts = TRANG_THAI_HOAN_TIEN[voucher.trang_thai] ?? { label: voucher.trang_thai, color: 'default' }
   const isDraft = voucher.trang_thai === 'nhap'
-  const hinh_thuc = Form.useWatch('hinh_thuc', form)
 
   const handlePrint = () => {
     const isBuTru = voucher.hinh_thuc === 'bu_tru'

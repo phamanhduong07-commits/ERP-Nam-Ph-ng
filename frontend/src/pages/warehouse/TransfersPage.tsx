@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -23,6 +23,8 @@ import PageLayout from '../../components/PageLayout'
 
 const { Text } = Typography
 
+const FILTER_KEY = 'WAREHOUSE_TRANSFERS_FILTERS'
+
 export default function TransfersPage() {
   const companyInfo = usePhapNhanForPrint()
   const { hasPermission, canApprove } = usePermission()
@@ -37,11 +39,39 @@ export default function TransfersPage() {
   const [filterKhoNhap, setFilterKhoNhap] = useState<number | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
+  const [filterTrangThai, setFilterTrangThai] = useState('')
   const [selectedKhoXuat, setSelectedKhoXuat] = useState<number | undefined>()
   const [selectedKhoNhap, setSelectedKhoNhap] = useState<number | undefined>()
   const [detailPhieu, setDetailPhieu] = useState<PhieuChuyenKho | null>(null)
   // Per-item type: 'nvl' (giấy/NVL từ tồn kho) | 'btp' (sản phẩm/BTP theo product_id)
   const [itemTypes, setItemTypes] = useState<Record<number, 'nvl' | 'btp'>>({})
+
+  // Restore saved filters once on mount
+  useEffect(() => {
+    const saved = sessionStorage.getItem(FILTER_KEY)
+    if (!saved) return
+    try {
+      const f = JSON.parse(saved)
+      if (typeof f.filterPhapNhanNguon === 'number') setFilterPhapNhanNguon(f.filterPhapNhanNguon)
+      if (typeof f.filterPhapNhanDich === 'number') setFilterPhapNhanDich(f.filterPhapNhanDich)
+      if (typeof f.filterXuongNguon === 'number') setFilterXuongNguon(f.filterXuongNguon)
+      if (typeof f.filterXuongDich === 'number') setFilterXuongDich(f.filterXuongDich)
+      if (typeof f.filterKhoXuat === 'number') setFilterKhoXuat(f.filterKhoXuat)
+      if (typeof f.filterKhoNhap === 'number') setFilterKhoNhap(f.filterKhoNhap)
+      if (typeof f.tuNgay === 'string') setTuNgay(f.tuNgay)
+      if (typeof f.denNgay === 'string') setDenNgay(f.denNgay)
+      if (typeof f.filterTrangThai === 'string') setFilterTrangThai(f.filterTrangThai)
+    } catch { /* ignore corrupt filter cache */ }
+  }, [])
+
+  // Persist filters whenever any of them change
+  useEffect(() => {
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify({
+      filterPhapNhanNguon, filterPhapNhanDich, filterXuongNguon, filterXuongDich,
+      filterKhoXuat, filterKhoNhap, tuNgay, denNgay, filterTrangThai,
+    }))
+  }, [filterPhapNhanNguon, filterPhapNhanDich, filterXuongNguon, filterXuongDich,
+      filterKhoXuat, filterKhoNhap, tuNgay, denNgay, filterTrangThai])
 
   const { data: phanXuongs = [] } = useQuery({
     queryKey: ['phan-xuong'],
@@ -178,6 +208,11 @@ export default function TransfersPage() {
     if (!w?.phan_xuong_id) return null
     return phanXuongs.find(x => x.id === w.phan_xuong_id)?.ten_xuong ?? null
   }
+
+  // Client-side trạng thái shortcut filter (backend không nhận param trang_thai)
+  const filteredPhieuList = filterTrangThai
+    ? phieuList.filter((p: PhieuChuyenKho) => p.trang_thai === filterTrangThai)
+    : phieuList
 
   const handleTonKhoSelect = (itemName: number, tonKhoId: number) => {
     const t = tonKhoXuat.find(x => x.id === tonKhoId)
@@ -340,6 +375,7 @@ export default function TransfersPage() {
     },
     { title: 'TT', dataIndex: 'trang_thai', width: 100, render: (v: string) => <Tag color={v === 'da_duyet' ? 'green' : v === 'huy' ? 'red' : 'default'}>{v === 'da_duyet' ? 'Đã duyệt' : v === 'huy' ? 'Huỷ' : 'Nhập'}</Tag> },
     { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '—' },
+    { title: 'Người lập', dataIndex: 'created_by_name', width: 120, render: (v: string | null) => v || '—' },
     {
       title: '', width: 120,
       render: (_: unknown, r: PhieuChuyenKho) => (
@@ -381,15 +417,22 @@ export default function TransfersPage() {
   const { displayColumns, settingsButton } = useColumnPrefs('warehouse-transfers', columns, { nonHideable: ['so_phieu'] })
 
   const expandedRowRender = (r: PhieuChuyenKho) => (
-    <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}
-      columns={[
-        { title: 'Tên hàng', dataIndex: 'ten_hang' },
-        { title: 'ĐVT', dataIndex: 'don_vi', width: 60 },
-        { title: 'Số lượng', dataIndex: 'so_luong', width: 100, align: 'right' as const, render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) },
-        { title: 'Đơn giá', dataIndex: 'don_gia', width: 120, align: 'right' as const, render: (v: number) => v > 0 ? v.toLocaleString('vi-VN', { maximumFractionDigits: 0 }) + 'đ' : '—' },
-        { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '—' },
-      ]}
-    />
+    <div>
+      {r.created_by_name && (
+        <div style={{ marginBottom: 8, fontSize: 12, color: '#666' }}>
+          Người lập: <strong>{r.created_by_name}</strong>
+        </div>
+      )}
+      <Table dataSource={r.items} rowKey={(_, i) => `${r.id}-${i}`} size="small" pagination={false}
+        columns={[
+          { title: 'Tên hàng', dataIndex: 'ten_hang' },
+          { title: 'ĐVT', dataIndex: 'don_vi', width: 60 },
+          { title: 'Số lượng', dataIndex: 'so_luong', width: 100, align: 'right' as const, render: (v: number) => v.toLocaleString('vi-VN', { maximumFractionDigits: 3 }) },
+          { title: 'Đơn giá', dataIndex: 'don_gia', width: 120, align: 'right' as const, render: (v: number) => v > 0 ? v.toLocaleString('vi-VN', { maximumFractionDigits: 0 }) + 'đ' : '—' },
+          { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '—' },
+        ]}
+      />
+    </div>
   )
 
   return (
@@ -442,17 +485,31 @@ export default function TransfersPage() {
           </Col>
           <Col xs={12} sm={6}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={tuNgay ? dayjs(tuNgay) : null}
               onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
           <Col xs={12} sm={6}>
             <DatePicker placeholder="Đến ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={denNgay ? dayjs(denNgay) : null}
               onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
+          </Col>
+          <Col xs={24}>
+            <Segmented
+              options={[
+                { label: 'Tất cả', value: '' },
+                { label: 'Nháp', value: 'nhap' },
+                { label: 'Đã duyệt', value: 'da_duyet' },
+                { label: 'Đã huỷ', value: 'huy' },
+              ]}
+              value={filterTrangThai}
+              onChange={v => setFilterTrangThai(v as string)}
+            />
           </Col>
         </Row>
       </Card>
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
-        <Table dataSource={phieuList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
+        <Table dataSource={filteredPhieuList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
           locale={{ emptyText: <EmptyState /> }}
           expandable={{ expandedRowRender }} pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 900 }} />
       </Card>

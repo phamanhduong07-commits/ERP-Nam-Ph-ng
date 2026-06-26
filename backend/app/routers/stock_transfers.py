@@ -208,7 +208,7 @@ def list_phieu_chuyen(
         q = q.filter(PhieuChuyenKho.ngay >= tu_ngay)
     if den_ngay:
         q = q.filter(PhieuChuyenKho.ngay <= den_ngay)
-    rows = q.options(joinedload(PhieuChuyenKho.items)).order_by(PhieuChuyenKho.created_at.desc()).all()
+    rows = q.options(joinedload(PhieuChuyenKho.items), joinedload(PhieuChuyenKho.creator)).order_by(PhieuChuyenKho.created_at.desc()).all()
     return [_ck_to_dict(r, db) for r in rows]
 
 
@@ -771,6 +771,7 @@ def _ck_to_dict(p: PhieuChuyenKho, db: Session) -> dict:
         "ghi_chu": p.ghi_chu,
         "trang_thai": p.trang_thai,
         "created_at": p.created_at.isoformat() if p.created_at else None,
+        "created_by_name": p.creator.ho_ten if p.creator else None,
         "phap_nhan_id_for_print": phap_nhan_id_for_print,
         "items": [_ck_item_dict(it, db) for it in p.items],
     }

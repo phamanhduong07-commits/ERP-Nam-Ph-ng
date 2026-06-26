@@ -64,7 +64,7 @@ def list_stock_adjustments(
         q = q.filter(StockAdjustment.ngay >= tu_ngay)
     if den_ngay:
         q = q.filter(StockAdjustment.ngay <= den_ngay)
-    rows = q.options(joinedload(StockAdjustment.items)).order_by(StockAdjustment.created_at.desc()).all()
+    rows = q.options(joinedload(StockAdjustment.items), joinedload(StockAdjustment.creator)).order_by(StockAdjustment.created_at.desc()).all()
     return [_adj_to_dict(r, db) for r in rows]
 
 
@@ -356,6 +356,7 @@ def _adj_to_dict(adj: StockAdjustment, db: Session) -> dict:
         "ghi_chu": adj.ghi_chu,
         "trang_thai": adj.trang_thai,
         "created_at": adj.created_at.isoformat() if adj.created_at else None,
+        "created_by_name": adj.creator.ho_ten if adj.creator else None,
         "items": [{
             "id": it.id,
             "inventory_balance_id": it.inventory_balance_id,

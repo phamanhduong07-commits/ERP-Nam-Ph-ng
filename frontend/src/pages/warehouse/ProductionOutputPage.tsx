@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import type { ApiError } from '../../api/types'
 import { usePermission } from '../../hooks/usePermission'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
-  Popconfirm, Row, Select, Space, Table, Typography, message,
+  Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber,
+  Popconfirm, Row, Select, Space, Table, Tag, Typography, message,
 } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -18,11 +18,14 @@ import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
 const { Title, Text } = Typography
 
+const FILTER_KEY = 'WAREHOUSE_PRODUCTION_OUTPUT_FILTERS'
+
 export default function ProductionOutputPage() {
   const qc = useQueryClient()
   const { hasPermission } = usePermission()
   const canImport = hasPermission('inventory.import')
   const [open, setOpen] = useState(false)
+  const [viewRecord, setViewRecord] = useState<ProductionOutput | null>(null)
   const [form] = Form.useForm()
   const [filterKho, setFilterKho] = useState<number | undefined>()
   const [filterPhapNhan, setFilterPhapNhan] = useState<number | undefined>()
@@ -30,6 +33,23 @@ export default function ProductionOutputPage() {
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
   const [formPxId, setFormPxId] = useState<number | null>(null)
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem(FILTER_KEY)
+    if (!saved) return
+    try {
+      const f = JSON.parse(saved)
+      if (typeof f.filterPhapNhan === 'number') setFilterPhapNhan(f.filterPhapNhan)
+      if (typeof f.filterXuong === 'number') setFilterXuong(f.filterXuong)
+      if (typeof f.filterKho === 'number') setFilterKho(f.filterKho)
+      if (typeof f.tuNgay === 'string') setTuNgay(f.tuNgay)
+      if (typeof f.denNgay === 'string') setDenNgay(f.denNgay)
+    } catch { /* ignore corrupt filter cache */ }
+  }, [])
+
+  useEffect(() => {
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify({ filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay }))
+  }, [filterPhapNhan, filterXuong, filterKho, tuNgay, denNgay])
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses-all'],
@@ -176,13 +196,15 @@ export default function ProductionOutputPage() {
     { title: 'ĐVT', dataIndex: 'dvt', width: 70 },
     { title: 'Đơn giá XX', dataIndex: 'don_gia_xuat_xuong', width: 120, align: 'right' as const,
       render: (v: number) => v > 0 ? v.toLocaleString('vi-VN') + 'đ' : '—' },
+    { title: 'Người lập', dataIndex: 'created_by_name', width: 120, render: (v: string | null) => v || '—' },
     {
-      title: '', width: 90,
+      title: '', width: 115,
       render: (_: unknown, r: ProductionOutput) => (
         <Space size={4}>
+          <Button size="small" onClick={() => setViewRecord(r)}>Xem</Button>
           <Button size="small" icon={<PrinterOutlined />} onClick={() => handlePrintReceipt(r)} />
-          <Popconfirm title="Xoá phiếu nhập TP?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }}>
-            <Button danger size="small" icon={<DeleteOutlined />} />
+          <Popconfirm title="Xoá phiếu nhập TP?" onConfirm={() => deleteMut.mutate(r.id)} okButtonProps={{ danger: true }} disabled={!canImport}>
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={!canImport} />
           </Popconfirm>
         </Space>
       ),
@@ -201,7 +223,7 @@ export default function ProductionOutputPage() {
             <Button icon={<FileExcelOutlined />} style={{ color: '#217346', borderColor: '#217346' }} onClick={handleExportExcel}>
               Xuất Excel
             </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setFormPxId(null); setOpen(true) }}>
+            <Button type="primary" icon={<PlusOutlined />} disabled={!canImport} onClick={() => { form.resetFields(); setFormPxId(null); setOpen(true) }}>
               Tạo phiếu nhập TP
             </Button>
             {settingsButton}
@@ -227,10 +249,12 @@ export default function ProductionOutputPage() {
           </Col>
           <Col xs={12} sm={6}>
             <DatePicker placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={tuNgay ? dayjs(tuNgay) : null}
               onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
           <Col xs={12} sm={6}>
             <DatePicker placeholder="Đến ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+              value={denNgay ? dayjs(denNgay) : null}
               onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)} />
           </Col>
         </Row>
@@ -238,7 +262,29 @@ export default function ProductionOutputPage() {
 
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Table dataSource={outputList} columns={displayColumns} rowKey="id" loading={isLoading} size="small"
-          pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 950 }} />
+          pagination={{ pageSize: 20, showSizeChanger: true }} scroll={{ x: 950 }}
+          expandable={{
+            expandedRowRender: (r: ProductionOutput) => (
+              <div style={{ padding: '4px 0' }}>
+                {r.created_by_name && (
+                  <div style={{ marginBottom: 6, fontSize: 12, color: '#666' }}>
+                    Người lập: <strong>{r.created_by_name}</strong>
+                  </div>
+                )}
+                {r.trang_thai_loi && (
+                  <div style={{ marginBottom: 6, fontSize: 12 }}>
+                    Trạng thái lỗi: <Tag color="orange">{r.trang_thai_loi}</Tag>
+                    {r.so_luong_loi > 0 && <span style={{ color: '#fa8c16', marginLeft: 4 }}>{r.so_luong_loi} {r.dvt}</span>}
+                  </div>
+                )}
+                {r.ghi_chu && (
+                  <div style={{ fontSize: 12, color: '#666' }}>Ghi chú: {r.ghi_chu}</div>
+                )}
+              </div>
+            ),
+            rowExpandable: (r: ProductionOutput) => !!(r.created_by_name || r.trang_thai_loi || r.ghi_chu),
+          }}
+        />
       </Card>
 
       <Drawer open={open} onClose={() => setOpen(false)} title="Nhập thành phẩm từ sản xuất" width={600}
@@ -317,6 +363,38 @@ export default function ProductionOutputPage() {
             </Col>
           </Row>
         </Form>
+      </Drawer>
+
+      <Drawer
+        open={!!viewRecord}
+        onClose={() => setViewRecord(null)}
+        title={viewRecord ? <Text strong style={{ color: '#52c41a' }}>{viewRecord.so_phieu}</Text> : ''}
+        width={480}
+      >
+        {viewRecord && (
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="Ngày nhập">{viewRecord.ngay_nhap}</Descriptions.Item>
+            <Descriptions.Item label="Lệnh SX">{viewRecord.so_lenh}</Descriptions.Item>
+            <Descriptions.Item label="Sản phẩm">{viewRecord.ten_hang || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Kho nhập">{viewRecord.ten_kho}</Descriptions.Item>
+            <Descriptions.Item label="SL nhập"><Text strong>{viewRecord.so_luong_nhap.toLocaleString('vi-VN')} {viewRecord.dvt}</Text></Descriptions.Item>
+            <Descriptions.Item label="SL lỗi">
+              {viewRecord.so_luong_loi > 0
+                ? <Text type="danger">{viewRecord.so_luong_loi.toLocaleString('vi-VN')} {viewRecord.dvt}</Text>
+                : '0'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Đơn giá XX">
+              {viewRecord.don_gia_xuat_xuong > 0 ? viewRecord.don_gia_xuat_xuong.toLocaleString('vi-VN') + 'đ' : '—'}
+            </Descriptions.Item>
+            {viewRecord.trang_thai_loi && (
+              <Descriptions.Item label="Trạng thái lỗi">
+                <Tag color="orange">{viewRecord.trang_thai_loi}</Tag>
+              </Descriptions.Item>
+            )}
+            <Descriptions.Item label="Người lập">{viewRecord.created_by_name || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Ghi chú">{viewRecord.ghi_chu || '—'}</Descriptions.Item>
+          </Descriptions>
+        )}
       </Drawer>
     </div>
   )

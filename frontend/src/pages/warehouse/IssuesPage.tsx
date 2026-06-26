@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ApiError } from '../../api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber,
-  Popconfirm, Radio, Row, Select, Space, Statistic, Table, Tabs, Tag, Tooltip, Typography, message, Divider,
+  Popconfirm, Radio, Row, Segmented, Select, Space, Statistic, Table, Tabs, Tag, Tooltip, Typography, message, Divider,
 } from 'antd'
 import {
   FileExcelOutlined, PrinterOutlined, PlusOutlined, DeleteOutlined,
@@ -32,6 +32,8 @@ const fmtVND = (v: number) =>
 
 const DVT_OPTIONS = ['Kg', 'Tấn', 'Cuộn', 'Tờ', 'Cái', 'Bộ', 'Hộp', 'Lít', 'Lần', 'Gói', 'm', 'm²'].map(v => ({ value: v, label: v }))
 
+const FILTER_KEY = 'WAREHOUSE_ISSUES_FILTERS'
+
 // ── Tab 1: Danh sách phiếu xuất NVL ─────────────────────────────────────────
 
 function TabDanhSachXuatNVL() {
@@ -44,6 +46,25 @@ function TabDanhSachXuatNVL() {
   const [filterXuong, setFilterXuong] = useState<number | undefined>()
   const [tuNgay, setTuNgay] = useState<string | undefined>()
   const [denNgay, setDenNgay] = useState<string | undefined>()
+  const [filterTrangThai, setFilterTrangThai] = useState('')
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem(FILTER_KEY)
+    if (!saved) return
+    try {
+      const f = JSON.parse(saved)
+      if (typeof f.filterPhapNhan === 'number') setFilterPhapNhan(f.filterPhapNhan)
+      if (typeof f.filterXuong === 'number') setFilterXuong(f.filterXuong)
+      if (typeof f.filterKho === 'number') setFilterKho(f.filterKho)
+      if (typeof f.filterTrangThai === 'string') setFilterTrangThai(f.filterTrangThai)
+      if (typeof f.tuNgay === 'string') setTuNgay(f.tuNgay)
+      if (typeof f.denNgay === 'string') setDenNgay(f.denNgay)
+    } catch { /* ignore corrupt filter cache */ }
+  }, [])
+
+  useEffect(() => {
+    sessionStorage.setItem(FILTER_KEY, JSON.stringify({ filterPhapNhan, filterXuong, filterKho, filterTrangThai, tuNgay, denNgay }))
+  }, [filterPhapNhan, filterXuong, filterKho, filterTrangThai, tuNgay, denNgay])
   const [formPxId, setFormPxId] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectMode, setSelectMode] = useState<'lsx' | 'khsx'>('lsx')
@@ -340,6 +361,7 @@ function TabDanhSachXuatNVL() {
         </Tag>
       ),
     },
+    { title: 'Người lập', dataIndex: 'created_by_name', width: 120, render: (v: string | null) => v || '—' },
     {
       title: '', width: 120,
       render: (_: unknown, r: MaterialIssue) => (
@@ -398,8 +420,14 @@ function TabDanhSachXuatNVL() {
   ]
 
   const expandedRowRender = (r: MaterialIssue) => (
-    <Table
-      dataSource={r.items}
+    <div>
+      {r.created_by_name && (
+        <div style={{ marginBottom: 8, fontSize: 12, color: '#666' }}>
+          Người lập: <strong>{r.created_by_name}</strong>
+        </div>
+      )}
+      <Table
+        dataSource={r.items}
       rowKey={(_, i) => `${r.id}-${i}`}
       size="small"
       pagination={false}
@@ -429,6 +457,7 @@ function TabDanhSachXuatNVL() {
         { title: 'Ghi chú', dataIndex: 'ghi_chu', render: (v: string | null) => v || '—' },
       ]}
     />
+    </div>
   )
 
   return (
@@ -457,13 +486,26 @@ function TabDanhSachXuatNVL() {
         <Col xs={12} sm={4}>
           <DatePicker
             placeholder="Từ ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+            value={tuNgay ? dayjs(tuNgay) : null}
             onChange={d => setTuNgay(d ? d.format('YYYY-MM-DD') : undefined)}
           />
         </Col>
         <Col xs={12} sm={4}>
           <DatePicker
             placeholder="Đến ngày" style={{ width: '100%' }} format="DD/MM/YYYY"
+            value={denNgay ? dayjs(denNgay) : null}
             onChange={d => setDenNgay(d ? d.format('YYYY-MM-DD') : undefined)}
+          />
+        </Col>
+        <Col xs={24}>
+          <Segmented
+            options={[
+              { label: 'Tất cả', value: '' },
+              { label: 'Chờ xuất', value: 'nhap' },
+              { label: 'Đã xuất', value: 'da_xuat' },
+            ]}
+            value={filterTrangThai}
+            onChange={v => setFilterTrangThai(v as string)}
           />
         </Col>
       </Row>
@@ -500,7 +542,7 @@ function TabDanhSachXuatNVL() {
 
       <Table
         locale={{ emptyText: <EmptyState size="small" preset="document" /> }}
-        dataSource={issueList} columns={columns} rowKey="id" loading={isLoading} size="small"
+        dataSource={filterTrangThai ? issueList.filter((r: MaterialIssue) => r.trang_thai === filterTrangThai) : issueList} columns={columns} rowKey="id" loading={isLoading} size="small"
         expandable={{ expandedRowRender }}
         pagination={{ pageSize: 20, showSizeChanger: true }}
         scroll={{ x: 900 }}
