@@ -946,7 +946,7 @@ def create_replacement_do(
         ngay_xuat=date.today(),
         sales_order_id=None,
         customer_id=return_obj.customer_id,
-        warehouse_id=wh.id,
+        warehouse_id=warehouse_id,
         trang_thai="nhap",
         created_by=current_user.id,
         ghi_chu=f"Giao bù từ phiếu trả {return_obj.so_phieu_tra}",
