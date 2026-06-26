@@ -265,6 +265,14 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated() ? <>{children}</> : <Navigate to="/login" replace />
 }
 
+function PermissionGuard({ required, children }: { required: string[]; children: React.ReactNode }) {
+  const userPermissions: string[] = useAuthStore((s) => s.user?.permissions ?? [])
+  const role: string = useAuthStore((s) => s.user?.role ?? '')
+  if (role === 'ADMIN' || role === 'admin') return <>{children}</>
+  const ok = required.some(p => userPermissions.includes(p))
+  return ok ? <>{children}</> : <Navigate to="/dashboard" replace />
+}
+
 function WorkerOrPrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
   const hasWorkerSession = !!storage.get('cd2_worker_session')
@@ -533,7 +541,7 @@ export default function App() {
             <Route path="hr/payroll-runs" element={<ErrorBoundary><PayrollRunsPage /></ErrorBoundary>} />
             <Route path="hr/payroll-complaints" element={<ErrorBoundary><PayrollComplaintsPage /></ErrorBoundary>} />
             <Route path="portal/payslip" element={<ErrorBoundary><MyPayslipPage /></ErrorBoundary>} />
-            <Route path="hr/employees" element={<ErrorBoundary><EmployeeListPage /></ErrorBoundary>} />
+            <Route path="hr/employees" element={<PermissionGuard required={['hr.view', 'hr.employees']}><ErrorBoundary><EmployeeListPage /></ErrorBoundary></PermissionGuard>} />
             <Route path="hr/attendance" element={<ErrorBoundary><AttendancePage /></ErrorBoundary>} />
             <Route path="hr/checkin-locations" element={<ErrorBoundary><CheckInLocationsPage /></ErrorBoundary>} />
             <Route path="hr/benefits" element={<ErrorBoundary><BenefitsPage /></ErrorBoundary>} />
