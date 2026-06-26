@@ -921,11 +921,20 @@ def create_replacement_do(
     if not good_items:
         raise HTTPException(status_code=400, detail="Không có sản phẩm tốt để giao bù")
 
-    wh = db.query(Warehouse).filter(Warehouse.is_default == True).first()
-    if not wh:
-        wh = db.query(Warehouse).first()
-    if not wh:
-        raise HTTPException(status_code=400, detail="Không tìm thấy kho")
+    warehouse_id = None
+    if return_obj.delivery_order:
+        warehouse_id = return_obj.delivery_order.warehouse_id
+    else:
+        from app.services.inventory_service import get_workshop_warehouse as _get_ww
+        if return_obj.sales_order and return_obj.sales_order.phan_xuong_id:
+            wh = _get_ww(db, return_obj.sales_order.phan_xuong_id, "THANH_PHAM")
+            warehouse_id = wh.id if wh else None
+    if not warehouse_id:
+        wh = db.query(Warehouse).filter(Warehouse.loai_kho == "THANH_PHAM").first()
+        if wh:
+            warehouse_id = wh.id
+    if not warehouse_id:
+        raise HTTPException(status_code=400, detail="Không thể xác định kho để tạo phiếu giao")
 
     ym = date.today().strftime("%Y%m")
     prefix = f"DO-{ym}-"
