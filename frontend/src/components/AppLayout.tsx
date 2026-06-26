@@ -256,11 +256,18 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
       ],
     },
     {
+      key: '/hr/team-permissions',
+      icon: <FileProtectOutlined />,
+      label: 'Quyền nhân viên',
+      to: '/hr/team-permissions',
+      permissions: ['team.manage_permissions'],
+    },
+    {
       key: 'hrm-group',
       icon: <TeamOutlined />,
       label: 'Nhân sự (HRM)',
       hubTo: '/hr/dashboard',
-      permissions: ['hr.view', 'hr.manage', 'hr.employees', 'hr.attendance', 'hr.payroll', 'hr.payroll_config', 'hr.approvals', 'hr.departments', 'hr.rewards', 'user.view', 'user.create', 'user.edit', 'permission.view', 'permission.manage', 'team.manage_permissions'],
+      permissions: ['hr.view', 'hr.manage', 'hr.employees', 'hr.attendance', 'hr.payroll', 'hr.payroll_config', 'hr.approvals', 'hr.departments', 'hr.rewards', 'user.view', 'user.create', 'user.edit', 'permission.view', 'permission.manage'],
       flyoutSections: [
         {
           items: [
