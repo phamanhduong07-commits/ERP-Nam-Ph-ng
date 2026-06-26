@@ -1,5 +1,6 @@
 ﻿from datetime import date, datetime, timezone
 from decimal import Decimal
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -902,15 +903,26 @@ def cancel_return(
     return {"message": "Đã hủy phiếu trả hàng"}
 
 
+class ReplacementDoItemIn(BaseModel):
+    sales_return_item_id: int
+    so_luong: Decimal
+
+class ReplacementDoIn(BaseModel):
+    items: list[ReplacementDoItemIn] | None = None  # None = dùng toàn bộ so_luong_tra
+
+
 @router.post("/{return_id}/create-replacement-do", status_code=201)
 def create_replacement_do(
     return_id: int,
+    body: ReplacementDoIn = ReplacementDoIn(),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Tạo phiếu giao hàng bù (DO standalone) từ các item tốt của phiếu trả."""
     return_obj = db.query(SalesReturn).options(
-        joinedload(SalesReturn.items).joinedload(SalesReturnItem.sales_order_item)
+        joinedload(SalesReturn.items).joinedload(SalesReturnItem.sales_order_item),
+        joinedload(SalesReturn.delivery_order),
+        joinedload(SalesReturn.sales_order),
     ).filter(SalesReturn.id == return_id).first()
     if not return_obj:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu trả")
@@ -921,20 +933,24 @@ def create_replacement_do(
     if not good_items:
         raise HTTPException(status_code=400, detail="Không có sản phẩm tốt để giao bù")
 
+    # Số lượng override từ body (nếu có)
+    qty_override: dict[int, Decimal] = {}
+    if body.items:
+        qty_override = {i.sales_return_item_id: i.so_luong for i in body.items}
+
+    # Ưu tiên kho THANH_PHAM (giao khách) — không dùng kho PHOI dù DO gốc là PHOI
+    from app.services.inventory_service import get_workshop_warehouse as _get_ww
     warehouse_id = None
-    if return_obj.delivery_order:
+    if return_obj.sales_order and return_obj.sales_order.phan_xuong_id:
+        wh_tp = _get_ww(db, return_obj.sales_order.phan_xuong_id, "THANH_PHAM")
+        warehouse_id = wh_tp.id if wh_tp else None
+    if not warehouse_id:
+        wh_tp = db.query(Warehouse).filter(Warehouse.loai_kho == "THANH_PHAM").first()
+        warehouse_id = wh_tp.id if wh_tp else None
+    if not warehouse_id and return_obj.delivery_order:
         warehouse_id = return_obj.delivery_order.warehouse_id
-    else:
-        from app.services.inventory_service import get_workshop_warehouse as _get_ww
-        if return_obj.sales_order and return_obj.sales_order.phan_xuong_id:
-            wh = _get_ww(db, return_obj.sales_order.phan_xuong_id, "THANH_PHAM")
-            warehouse_id = wh.id if wh else None
     if not warehouse_id:
-        wh = db.query(Warehouse).filter(Warehouse.loai_kho == "THANH_PHAM").first()
-        if wh:
-            warehouse_id = wh.id
-    if not warehouse_id:
-        raise HTTPException(status_code=400, detail="Không thể xác định kho để tạo phiếu giao")
+        raise HTTPException(status_code=400, detail="Không thể xác định kho THANH_PHAM để tạo phiếu giao")
 
     ym = date.today().strftime("%Y%m")
     prefix = f"DO-{ym}-"
@@ -956,16 +972,19 @@ def create_replacement_do(
 
     tong_tien = Decimal("0")
     for it in good_items:
+        so_luong = qty_override.get(it.id, it.so_luong_tra)
+        if so_luong <= 0:
+            continue
         soi = it.sales_order_item
         don_gia = it.don_gia_tra or Decimal("0")
-        thanh_tien = it.so_luong_tra * don_gia
+        thanh_tien = so_luong * don_gia
         tong_tien += thanh_tien
         db.add(DeliveryOrderItem(
             delivery_id=new_do.id,
             sales_order_item_id=None,
             product_id=soi.product_id if soi else None,
             ten_hang=(soi.ten_hang if soi else None) or "Hàng giao bù",
-            so_luong=it.so_luong_tra,
+            so_luong=so_luong,
             dvt=(soi.dvt if soi else "Thùng"),
             don_gia=don_gia,
             thanh_tien=thanh_tien,

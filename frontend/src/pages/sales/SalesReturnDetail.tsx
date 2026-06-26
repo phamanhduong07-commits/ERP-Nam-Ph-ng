@@ -70,6 +70,8 @@ export default function SalesReturnDetail() {
   const [form] = Form.useForm()
   const [refundForm] = Form.useForm()
   const [refundModalOpen, setRefundModalOpen] = useState(false)
+  const [replacementModalOpen, setReplacementModalOpen] = useState(false)
+  const [replacementQty, setReplacementQty] = useState<Record<number, number>>({})
 
   const { data: returnData, isLoading } = useQuery({
     queryKey: ['sales-return', id],
@@ -601,19 +603,57 @@ export default function SalesReturnDetail() {
             {goodItems.length > 0 && (
               <Button
                 size="small" type="primary" ghost icon={<SendOutlined />}
-                onClick={async () => {
-                  try {
-                    const res = await salesReturnsApi.createReplacementDo(returnData.id)
-                    message.success(`Đã tạo phiếu giao hàng bù ${res.data.so_phieu}`)
-                    navigate(`/sales/giao-hang?so_phieu=${res.data.so_phieu}`)
-                  } catch (e) {
-                    message.error(getErrorMessage(e))
-                  }
+                onClick={() => {
+                  const init: Record<number, number> = {}
+                  goodItems.forEach(it => { init[it.id] = it.so_luong_tra })
+                  setReplacementQty(init)
+                  setReplacementModalOpen(true)
                 }}
               >
                 Tạo giao hàng bù
               </Button>
             )}
+            <Modal
+              title="Xác nhận số lượng giao bù"
+              open={replacementModalOpen}
+              onCancel={() => setReplacementModalOpen(false)}
+              onOk={async () => {
+                try {
+                  const items = goodItems
+                    .filter(it => (replacementQty[it.id] ?? 0) > 0)
+                    .map(it => ({ sales_return_item_id: it.id, so_luong: replacementQty[it.id] }))
+                  const res = await salesReturnsApi.createReplacementDo(returnData.id, items)
+                  setReplacementModalOpen(false)
+                  message.success(`Đã tạo phiếu giao hàng bù ${res.data.so_phieu}`)
+                  navigate(`/sales/giao-hang?so_phieu=${res.data.so_phieu}`)
+                } catch (e) {
+                  message.error(getErrorMessage(e))
+                }
+              }}
+              okText="Tạo phiếu"
+              cancelText="Huỷ"
+            >
+              <Table
+                size="small" pagination={false}
+                dataSource={goodItems}
+                rowKey="id"
+                columns={[
+                  { title: 'Sản phẩm', dataIndex: ['sales_order_item', 'ten_hang'], ellipsis: true },
+                  { title: 'SL trả', dataIndex: 'so_luong_tra', width: 80, align: 'right' as const },
+                  {
+                    title: 'SL giao bù', width: 110, align: 'right' as const,
+                    render: (_: unknown, it: typeof goodItems[0]) => (
+                      <InputNumber
+                        size="small" min={0} max={it.so_luong_tra}
+                        value={replacementQty[it.id] ?? it.so_luong_tra}
+                        onChange={v => setReplacementQty(prev => ({ ...prev, [it.id]: v ?? 0 }))}
+                        style={{ width: 90 }}
+                      />
+                    ),
+                  },
+                ]}
+              />
+            </Modal>
             <Divider style={{ margin: '4px 0' }} />
             <Space>
               <Text type="secondary" style={{ fontSize: 12 }}>Tổng tiền trả:</Text>
