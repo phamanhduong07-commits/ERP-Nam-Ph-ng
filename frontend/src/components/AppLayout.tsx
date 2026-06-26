@@ -467,6 +467,12 @@ function AppLayoutInner() {
 
   const role = user?.role ?? 'ADMIN'
   const userPermissions = user?.permissions || []
+  const isSinglePageUser = role === 'SAN_XUAT_THO'
+  useEffect(() => {
+    if (isSinglePageUser && location.pathname !== '/production/may-song') {
+      navigate('/production/may-song', { replace: true })
+    }
+  }, [isSinglePageUser, location.pathname, navigate])
   const hasSxPerm = canSee(['production_order.view', 'production_order.create', 'production_order.edit'], role, userPermissions)
 
   const { data: queueLines = [] } = useQuery({
@@ -628,52 +634,54 @@ function AppLayoutInner() {
     <GlobalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider
-        trigger={null}
-        collapsible
-        collapsed={collapsed}
-        width={248}
-        style={{
-          background: '#1b168e',
-          borderRight: '1px solid #15116f',
-          height: '100vh',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          position: 'sticky',
-          top: 0,
-          left: 0,
-        }}
-      >
-        <div style={{
-          height: collapsed ? 72 : 96,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#ffffff',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.18)',
-          borderTop: '4px solid #ff8200',
-          padding: collapsed ? '10px 8px' : '10px 20px',
-        }}>
-          <img
-            src={namPhuongLogo}
-            alt="Nam Phuong"
-            className="np-brand-logo"
-            style={{
-              maxWidth: collapsed ? 42 : 188,
-              maxHeight: collapsed ? 42 : 74,
-            }}
-          />
-        </div>
-        <CustomSidebarNav
-          items={navItems}
+      {!isSinglePageUser && (
+        <Sider
+          trigger={null}
+          collapsible
           collapsed={collapsed}
-          selectedPath={selectedKeys[0]}
-          userRole={role}
-          userPermissions={userPermissions}
-          siderWidth={collapsed ? 80 : 248}
-          onNavigate={navigate}
-        />
-      </Sider>
+          width={248}
+          style={{
+            background: '#1b168e',
+            borderRight: '1px solid #15116f',
+            height: '100vh',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            position: 'sticky',
+            top: 0,
+            left: 0,
+          }}
+        >
+          <div style={{
+            height: collapsed ? 72 : 96,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#ffffff',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.18)',
+            borderTop: '4px solid #ff8200',
+            padding: collapsed ? '10px 8px' : '10px 20px',
+          }}>
+            <img
+              src={namPhuongLogo}
+              alt="Nam Phuong"
+              className="np-brand-logo"
+              style={{
+                maxWidth: collapsed ? 42 : 188,
+                maxHeight: collapsed ? 42 : 74,
+              }}
+            />
+          </div>
+          <CustomSidebarNav
+            items={navItems}
+            collapsed={collapsed}
+            selectedPath={selectedKeys[0]}
+            userRole={role}
+            userPermissions={userPermissions}
+            siderWidth={collapsed ? 80 : 248}
+            onNavigate={navigate}
+          />
+        </Sider>
+      )}
 
       <Layout style={{ height: '100vh', overflow: 'hidden' }}>
         <Header style={{
@@ -687,10 +695,10 @@ function AppLayoutInner() {
           flexShrink: 0,
         }}>
           <Space>
-            {collapsed
+            {!isSinglePageUser && (collapsed
               ? <MenuUnfoldOutlined onClick={() => setCollapsed(false)} style={{ fontSize: 18, cursor: 'pointer' }} />
               : <MenuFoldOutlined onClick={() => setCollapsed(true)} style={{ fontSize: 18, cursor: 'pointer' }} />
-            }
+            )}
             <Text strong style={{ fontSize: 18, color: '#1b168e', marginLeft: 8 }}>
               Hệ thống Quản trị ERP Nam Phương
             </Text>

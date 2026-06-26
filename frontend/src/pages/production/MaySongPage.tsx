@@ -908,8 +908,8 @@ export default function MaySongPage() {
   const [pauseTarget, setPauseTarget]   = useState<StatusTarget | null>(null)
   const [inTemState, setInTemState]     = useState<InTemState | null>(null)
   const [inTemLoading, setInTemLoading] = useState(false)
-  const [histTuNgay, setHistTuNgay]     = useState(dayjs().subtract(30, 'day').format('YYYY-MM-DD'))
-  const [histDenNgay, setHistDenNgay]   = useState(dayjs().format('YYYY-MM-DD'))
+  const [histTuNgay, setHistTuNgay]     = useState<string | null>(null)
+  const [histDenNgay, setHistDenNgay]   = useState<string | null>(null)
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [newSessionName, setNewSessionName] = useState('')
   const [histFilterCa, setHistFilterCa]   = useState<string | undefined>()
@@ -965,7 +965,7 @@ export default function MaySongPage() {
   // Lọc và hiển thị Tab 1
   const lsxBase = (lsxRes?.items ?? []).filter(o => {
     if (['huy', 'mua_ngoai'].includes(o.trang_thai)) return false
-    if (!khSoLenhSet && o.trang_thai === 'hoan_thanh') return false
+    if (!khSoLenhSet) return false
     if (khSoLenhSet && !khSoLenhSet.has(o.so_lenh)) return false
     if (searchLenh && !o.so_lenh.toLowerCase().includes(searchLenh.toLowerCase())) return false
     if (searchHang && !(o.ten_hang ?? '').toLowerCase().includes(searchHang.toLowerCase())) return false
@@ -1019,8 +1019,8 @@ export default function MaySongPage() {
   const { data: allPhieu = [], isLoading: phieuLoading, refetch: refetchPhieu } = useQuery({
     queryKey: ['all-phieu', histTuNgay, histDenNgay],
     queryFn: () =>
-      productionOrdersApi.listAllPhieu({ tu_ngay: histTuNgay, den_ngay: histDenNgay }).then(r => r.data),
-    enabled: activeTab === 'lich_su',
+      productionOrdersApi.listAllPhieu({ tu_ngay: histTuNgay ?? undefined, den_ngay: histDenNgay ?? undefined }).then(r => r.data),
+    enabled: activeTab === 'lich_su' && !!(histTuNgay || histDenNgay),
     staleTime: 30_000,
   })
 
@@ -1178,6 +1178,7 @@ export default function MaySongPage() {
 
   const columns: ColumnsType<ProductionOrderListItem> = [
     {
+      key: 'so_lenh',
       title: 'Số lệnh',
       width: 145,
       render: (_, r) => (
@@ -1204,6 +1205,7 @@ export default function MaySongPage() {
       ),
     },
     {
+      key: 'ten_hang',
       title: 'Tên hàng',
       render: (_, r) => {
         const dimStr = r.dai && r.rong && r.cao ? `${+r.dai}×${+r.rong}×${+r.cao} cm` : null
@@ -1227,16 +1229,19 @@ export default function MaySongPage() {
       },
     },
     {
+      key: 'khach_hang',
       title: 'Khách hàng',
       width: 130,
       render: (_, r) => <Text style={{ fontSize: 12 }}>{r.ten_khach_hang ?? '—'}</Text>,
     },
     {
+      key: 'kho_sx',
       title: 'Kho SX',
       width: 100,
       render: (_, r) => <Text style={{ fontSize: 12 }}>{r.ten_kho_sx ?? '—'}</Text>,
     },
     {
+      key: 'kho_cat',
       title: 'Khổ × Cắt',
       width: 105,
       align: 'center',
@@ -1249,12 +1254,14 @@ export default function MaySongPage() {
       },
     },
     {
+      key: 'lop_song',
       title: 'Lớp · Sóng',
       width: 85,
       align: 'center',
       render: (_, r) => [r.so_lop ? `${r.so_lop}L` : null, r.to_hop_song].filter(Boolean).join(' · ') || '—',
     },
     {
+      key: 'so_phoi',
       title: 'Số phôi',
       width: 80,
       align: 'right',
@@ -1266,6 +1273,7 @@ export default function MaySongPage() {
       },
     },
     {
+      key: 'so_thung',
       title: 'Số thùng',
       width: 85,
       align: 'right',
@@ -1278,6 +1286,7 @@ export default function MaySongPage() {
       },
     },
     {
+      key: 'kh_nhap_con',
       title: 'KH / Nhập / Còn',
       width: 120,
       render: (_, r) => {
@@ -1306,6 +1315,7 @@ export default function MaySongPage() {
       },
     },
     {
+      key: 'ngay_giao',
       title: 'Ngày giao',
       width: 90,
       align: 'center',
@@ -1329,6 +1339,7 @@ export default function MaySongPage() {
       },
     },
     {
+      key: 'm2_luong',
       title: 'm² lương',
       width: 90,
       align: 'right',
@@ -1344,6 +1355,7 @@ export default function MaySongPage() {
       },
     },
     {
+      key: 'hanh_dong',
       title: 'Hành động',
       width: 220,
       fixed: 'right',
@@ -1412,12 +1424,14 @@ export default function MaySongPage() {
     { title: 'Số phiếu',   dataIndex: 'so_phieu',           width: 155 },
     { title: 'Số lệnh',    dataIndex: 'so_lenh',            width: 130, render: (v: string | null) => v ?? '—' },
     {
+      key: 'ten_hang',
       title: 'Tên hàng',
       width: 160,
       render: (_: unknown, r: PhieuNhapPhoiSongListItem) =>
         <Text style={{ fontSize: 12 }}>{r.items[0]?.ten_hang ?? '—'}</Text>,
     },
     {
+      key: 'chieu_kho',
       title: 'Khổ (cm)',
       width: 80,
       align: 'center' as const,
@@ -1425,6 +1439,7 @@ export default function MaySongPage() {
         r.items[0]?.chieu_kho != null ? <Text strong>{r.items[0].chieu_kho}</Text> : <Text type="secondary">—</Text>,
     },
     {
+      key: 'chieu_cat',
       title: 'Cắt (cm)',
       width: 80,
       align: 'center' as const,
@@ -1432,6 +1447,7 @@ export default function MaySongPage() {
         r.items[0]?.chieu_cat != null ? <Text strong>{r.items[0].chieu_cat}</Text> : <Text type="secondary">—</Text>,
     },
     {
+      key: 'm2_luong',
       title: 'm² lương',
       width: 90,
       align: 'right' as const,
@@ -1448,6 +1464,7 @@ export default function MaySongPage() {
     { title: 'Ngày', dataIndex: 'ngay', width: 100, render: (v: string | null) => v ? dayjs(v).format('DD/MM/YYYY') : '—' },
     { title: 'Ca',         dataIndex: 'ca',                 width: 60  },
     {
+      key: 'gio',
       title: 'Giờ',
       width: 105,
       render: (_: unknown, r: PhieuNhapPhoiSongListItem) =>
@@ -1492,6 +1509,9 @@ export default function MaySongPage() {
     },
     { title: 'Người tạo', dataIndex: 'created_by_name', render: (v: string | null) => v ?? '—' },
   ]
+
+  const { displayColumns: displayPhieuCols, settingsButton: settingsButtonLichSu } =
+    useColumnPrefs('production-may-song-lich-su', allPhieuCols)
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -1588,7 +1608,6 @@ export default function MaySongPage() {
                       }}>Xóa lọc</Button>
                     </Col>
                   )}
-                  <Col>{settingsButton}</Col>
                 </Row>
 
                 {/* Banner phiên sản xuất active */}
@@ -1655,6 +1674,9 @@ export default function MaySongPage() {
                 )}
 
                 {/* Bảng LSX */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                  {settingsButton}
+                </div>
                 <Table
                   dataSource={lsxItems}
                   columns={displayColumns}
@@ -1767,19 +1789,21 @@ export default function MaySongPage() {
                   <Row gutter={8} style={{ marginBottom: 12 }} align="middle">
                     <Col>
                       <DatePicker
-                        value={dayjs(histTuNgay)}
-                        onChange={d => d && setHistTuNgay(d.format('YYYY-MM-DD'))}
+                        value={histTuNgay ? dayjs(histTuNgay) : null}
+                        onChange={d => setHistTuNgay(d ? d.format('YYYY-MM-DD') : null)}
                         placeholder="Từ ngày"
                         format="DD/MM/YYYY"
+                        allowClear
                       />
                     </Col>
                     <Col><Text type="secondary">—</Text></Col>
                     <Col>
                       <DatePicker
-                        value={dayjs(histDenNgay)}
-                        onChange={d => d && setHistDenNgay(d.format('YYYY-MM-DD'))}
+                        value={histDenNgay ? dayjs(histDenNgay) : null}
+                        onChange={d => setHistDenNgay(d ? d.format('YYYY-MM-DD') : null)}
                         placeholder="Đến ngày"
                         format="DD/MM/YYYY"
+                        allowClear
                       />
                     </Col>
                     <Col>
@@ -1864,16 +1888,27 @@ export default function MaySongPage() {
                     </Row>
                   )}
 
-                  <Table
-                    dataSource={filteredPhieu}
-                    columns={allPhieuCols}
-                    rowKey="id"
-                    loading={phieuLoading}
-                    pagination={{ pageSize: 50, showTotal: t => `${t} phiếu` }}
-                    size="small"
-                    scroll={{ x: 950 }}
-                    locale={{ emptyText: <EmptyState size="small" /> }}
-                  />
+                  {!(histTuNgay || histDenNgay) ? (
+                    <div style={{ marginTop: 8, padding: '6px 12px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 6 }}>
+                      <Text style={{ fontSize: 12, color: '#ad6800' }}>Chọn khoảng ngày để xem lịch sử phiếu nhập</Text>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                        {settingsButtonLichSu}
+                      </div>
+                      <Table
+                        dataSource={filteredPhieu}
+                        columns={displayPhieuCols}
+                        rowKey="id"
+                        loading={phieuLoading}
+                        pagination={{ pageSize: 50, showTotal: t => `${t} phiếu` }}
+                        size="small"
+                        scroll={{ x: 950 }}
+                        locale={{ emptyText: <EmptyState size="small" /> }}
+                      />
+                    </>
+                  )}
 
                   {/* Bảng tiêu thụ giấy */}
                   {paperRows.length > 0 && (

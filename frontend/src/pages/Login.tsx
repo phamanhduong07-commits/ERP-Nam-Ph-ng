@@ -26,7 +26,8 @@ export default function Login() {
     try {
       const res = await authApi.login(values.username, values.password)
       setAuth(res.data.access_token, res.data.refresh_token, res.data.user)
-      navigate('/dashboard')
+      const landingPage = res.data.user?.role === 'SAN_XUAT_THO' ? '/production/may-song' : '/dashboard'
+      navigate(landingPage)
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
       let msg: string | undefined
