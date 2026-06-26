@@ -43,6 +43,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
   const currentUser = useAuthStore((s) => s.user)
   const { hasPermission } = usePermission()
   const canViewPrice = hasPermission('production.cost_analysis')
+  const canApproveOrder = hasPermission('sales_order.approve')
 
   // ── Restore filters từ sessionStorage (chỉ primary list) ──
   const savedFilters = persistFilters
@@ -331,7 +332,7 @@ export default function OrderList({ selectedId, onSelect, primaryList }: Props) 
           <Tooltip title="Xem chi tiết">
             <Button size="small" icon={<EyeOutlined />} onClick={() => navigate(`/sales/orders/${r.id}`)} />
           </Tooltip>
-          {r.trang_thai === 'moi' && (
+          {r.trang_thai === 'moi' && canApproveOrder && (
             <Tooltip title="Duyệt đơn">
               <Popconfirm
                 title={`Duyệt đơn hàng ${r.so_don}?`}

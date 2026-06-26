@@ -7,9 +7,10 @@ import {
   Card, Table, Button, Space, Modal, Form, Input, InputNumber,
   Select, Tag, message, Typography, Row, Col, Switch, Tooltip,
 } from 'antd'
-import { PlusOutlined, EditOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, SwapOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { customersApi, type Customer, type SaleUser } from '../../api/customers'
+import { useAuthStore } from '../../store/auth'
 import ImportExcelDialog from '../../components/ImportExcelDialog'
 import MSTLookupButton from '../../components/MSTLookupButton'
 import EmptyState from "../../components/EmptyState"
@@ -27,6 +28,10 @@ export default function CustomerList() {
   const [filterNv, setFilterNv] = useState<number | undefined>(undefined)
   const [page, setPage] = useState(1)
   const [importVisible, setImportVisible] = useState(false)
+  const [reassignTarget, setReassignTarget] = useState<{ id: number; ten: string } | null>(null)
+  const [newNvId, setNewNvId] = useState<number | undefined>(undefined)
+  const role = useAuthStore((s) => s.user?.role ?? '')
+  const canReassign = role === 'ADMIN' || role === 'TRUONG_PHONG_SALE_ADMIN'
 
   const { data, isLoading } = useQuery({
     queryKey: ['customers', search, filterActive, filterNv, page],
@@ -140,9 +145,24 @@ export default function CustomerList() {
     {
       title: '',
       key: 'act',
-      width: 60,
+      width: canReassign ? 88 : 60,
       render: (_: unknown, r: Customer) => (
-        <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+        <Space size={4}>
+          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+          {canReassign && (
+            <Tooltip title="Chuyển phụ trách">
+              <Button
+                size="small"
+                icon={<SwapOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setReassignTarget({ id: r.id, ten: r.ten_viet_tat || r.ten_don_vi || `KH #${r.id}` })
+                  setNewNvId(undefined)
+                }}
+              />
+            </Tooltip>
+          )}
+        </Space>
       ),
     },
   ]
@@ -411,6 +431,40 @@ export default function CustomerList() {
               </Form.Item>
             </Col>
           </Row>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={`Chuyển phụ trách — ${reassignTarget?.ten ?? ''}`}
+        open={!!reassignTarget}
+        onCancel={() => setReassignTarget(null)}
+        onOk={() => {
+          if (!reassignTarget || newNvId == null) return
+          updateMut.mutate(
+            { id: reassignTarget.id, data: { nv_ids: [newNvId] } },
+            { onSuccess: () => setReassignTarget(null) },
+          )
+        }}
+        confirmLoading={updateMut.isPending}
+        okText="Chuyển"
+        cancelText="Huỷ"
+        width={380}
+        destroyOnClose
+      >
+        <Form layout="vertical" size="small" style={{ marginTop: 12 }}>
+          <Form.Item label="NV phụ trách mới" required>
+            <Select
+              placeholder="Chọn nhân viên..."
+              value={newNvId}
+              onChange={(v) => setNewNvId(v)}
+              options={(saleUsers as SaleUser[]).map(u => ({ value: u.id, label: u.ho_ten }))}
+              style={{ width: '100%' }}
+              showSearch
+              filterOption={(input, option) =>
+                String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+            />
+          </Form.Item>
         </Form>
       </Modal>
 

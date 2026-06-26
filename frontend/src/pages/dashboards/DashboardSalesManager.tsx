@@ -260,6 +260,24 @@ export default function DashboardSalesManager({ stats, userName }: Props) {
         </Col>
       </Row>
 
+      {/* Hiệu suất nhân viên */}
+      {saleByNv.length > 0 && (
+        <Card
+          title={<Space><RiseOutlined style={{ color: '#1b168e' }} />Hiệu suất nhân viên tháng này</Space>}
+          variant="borderless"
+          style={{ ...sharedCardStyle, marginTop: 24 }}
+          extra={<Link to="/reports/sale-by-nv"><Button type="link">Chi tiết <ArrowRightOutlined /></Button></Link>}
+        >
+          <Table
+            rowKey="nv_id"
+            dataSource={saleByNv}
+            columns={nvColumns}
+            pagination={false}
+            size="small"
+          />
+        </Card>
+      )}
+
       <style>{hoverCardCss}</style>
     </div>
   )
