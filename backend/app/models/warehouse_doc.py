@@ -210,7 +210,7 @@ class DeliveryOrder(Base):
         "SalesInvoice", back_populates="delivery"
     )
     returns: Mapped[list["SalesReturn"]] = relationship(
-        "SalesReturn", back_populates="delivery_order"
+        "SalesReturn", foreign_keys="[SalesReturn.delivery_order_id]", back_populates="delivery_order"
     )
 
 
