@@ -107,6 +107,21 @@ class SalesOrderCreate(BaseModel):
         return v
 
 
+class SalesOrderItemUpsert(BaseModel):
+    id: int | None = None  # None = insert mới; có id = update item hiện có
+    product_id: int
+    ten_hang: str = ""
+    so_luong: Decimal
+    don_gia: Decimal
+    ty_le_giam_gia: Decimal = Decimal(0)
+    so_tien_giam_gia: Decimal = Decimal(0)
+    dvt: str = "Thùng"
+    ngay_giao_hang: date | None = None
+    ghi_chu_san_pham: str | None = None
+    yeu_cau_in: str | None = None
+    phan_xuong_id: int | None = None
+
+
 class SalesOrderUpdate(BaseModel):
     so_po_kh: str | None = None
     phap_nhan_id: int | None = None
@@ -116,6 +131,7 @@ class SalesOrderUpdate(BaseModel):
     ghi_chu: str | None = None
     ty_le_giam_gia: Decimal | None = None
     so_tien_giam_gia: Decimal | None = None
+    items: list[SalesOrderItemUpsert] | None = None
 
 
 class SalesOrderResponse(BaseModel):
@@ -131,6 +147,7 @@ class SalesOrderResponse(BaseModel):
     ten_phap_nhan_sx: str | None = None
     phan_xuong_id: int | None = None
     ten_phan_xuong: str | None = None
+    nv_kinh_doanh_id: int | None = None
     trang_thai: str
     ngay_giao_hang: date | None
     dia_chi_giao: str | None

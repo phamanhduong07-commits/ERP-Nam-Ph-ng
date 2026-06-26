@@ -169,3 +169,80 @@ def require_any_permission(*permissions: str):
             return current_user
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Không có quyền truy cập")
     return checker
+
+
+# ── Sale-staff customer scoping ───────────────────────────────────────────────
+# Roles that default to seeing only their own customers.
+# Override: grant 'sales.view_all_customers' permission (no target_user_id) → full access.
+SALE_STAFF_ROLES: frozenset[str] = frozenset({
+    "SALE_ADMIN",
+    "SALE_ADMIN_NHAN_VIEN",
+    "KINH_DOANH_NHAN_VIEN",
+})
+
+_BYPASS_PERM = "sales.view_all_customers"
+
+
+def get_sale_visible_nv_ids(current_user: User) -> list[int] | None:
+    """Return None (full access) or list of NV IDs whose customers are visible.
+
+    SALE_STAFF_ROLES are scoped by default.  The list always includes
+    current_user.id plus any NV IDs granted via 'sales.view_all_customers'
+    user-permission with a target_user_id.  If a full-bypass grant exists
+    (target_user_id is None) or the role itself holds the bypass permission,
+    None is returned (unrestricted access).
+    """
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code not in SALE_STAFF_ROLES:
+        return None  # Non-sale role → unrestricted
+
+    # Role-level bypass → full access
+    for rp in (current_user.role.role_permissions if current_user.role else []):
+        if rp.permission and rp.permission.ma_quyen == _BYPASS_PERM:
+            return None
+
+    visible_ids: list[int] = [current_user.id]
+    for up in (current_user.user_permissions or []):
+        if up.permission and up.permission.ma_quyen == _BYPASS_PERM:
+            if up.target_user_id is None:
+                return None  # Full bypass grant
+            if up.target_user_id not in visible_ids:
+                visible_ids.append(up.target_user_id)
+
+    return visible_ids
+
+
+# Backward-compat alias — use get_sale_visible_nv_ids for new code
+def get_sale_scope_user_id(current_user: User) -> int | None:
+    """Deprecated — returns current_user.id or None only (ignores partial grants).
+    Use get_sale_visible_nv_ids() for correct multi-NV scope support.
+    """
+    ids = get_sale_visible_nv_ids(current_user)
+    if ids is None:
+        return None
+    return ids[0]  # own ID only — callers should migrate to get_sale_visible_nv_ids
+
+
+def build_customer_scope_subquery(current_user: User, db: Session):
+    """Subquery of Customer.id values visible to this user, or None for no restriction.
+
+    Supports partial grants: includes customers of all NV IDs in the visible list.
+    Callers apply:  q.filter(SomeModel.customer_id.in_(subquery))
+    Skip the filter entirely when this returns None.
+    """
+    from sqlalchemy import exists, or_
+    from app.models.master import Customer, CustomerNhanVien
+
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if scope_nv_ids is None:
+        return None  # Full access — caller skips the IN filter
+
+    return db.query(Customer.id).filter(
+        or_(
+            Customer.nv_phu_trach_id.in_(scope_nv_ids),
+            exists().where(
+                (CustomerNhanVien.customer_id == Customer.id)
+                & (CustomerNhanVien.user_id.in_(scope_nv_ids))
+            ),
+        )
+    )

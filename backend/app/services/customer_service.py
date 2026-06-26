@@ -6,13 +6,13 @@ from app.schemas.master import CustomerCreate, CustomerUpdate, CustomerResponse,
 from app.schemas.sales import PagedResponse
 
 
-def _scope_filter(scope_user_id: int):
-    """Filter: customer phụ trách bởi user này (nv_phu_trach_id hoặc junction table)."""
+def _scope_filter(scope_nv_ids: list[int]):
+    """Filter: customer phụ trách bởi bất kỳ NV nào trong danh sách."""
     return or_(
-        Customer.nv_phu_trach_id == scope_user_id,
+        Customer.nv_phu_trach_id.in_(scope_nv_ids),
         exists().where(
             (CustomerNhanVien.customer_id == Customer.id)
-            & (CustomerNhanVien.user_id == scope_user_id)
+            & (CustomerNhanVien.user_id.in_(scope_nv_ids))
         ),
     )
 
@@ -52,7 +52,7 @@ class CustomerService:
         page_size: int = 20,
         trang_thai: bool = True,
         nv_id: int | None = None,
-        scope_user_id: int | None = None,
+        scope_user_id: list[int] | None = None,
     ) -> PagedResponse:
         q = self.db.query(Customer).options(self._load_opts()).filter(Customer.trang_thai == trang_thai)
         if scope_user_id is not None:
@@ -82,7 +82,7 @@ class CustomerService:
             total_pages=(total + page_size - 1) // page_size,
         )
 
-    def get_all_active_customers(self, scope_user_id: int | None = None) -> list[CustomerShort]:
+    def get_all_active_customers(self, scope_user_id: list[int] | None = None) -> list[CustomerShort]:
         q = (
             self.db.query(Customer)
             .options(self._load_opts())
@@ -93,7 +93,7 @@ class CustomerService:
         customers = q.order_by(Customer.ten_viet_tat).all()
         return [_to_short(c) for c in customers]
 
-    def get_customer_by_id(self, customer_id: int, scope_user_id: int | None = None) -> CustomerResponse:
+    def get_customer_by_id(self, customer_id: int, scope_user_id: list[int] | None = None) -> CustomerResponse:
         customer = (
             self.db.query(Customer)
             .options(self._load_opts())

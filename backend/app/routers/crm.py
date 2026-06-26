@@ -1,13 +1,13 @@
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.crm import CustomerInteraction
-from app.models.master import Customer
+from app.models.master import Customer, CustomerNhanVien
 from app.models.accounting import DebtLedgerEntry
 from app.schemas.crm import (
     InteractionCreate, InteractionUpdate, InteractionResponse,
@@ -27,8 +27,11 @@ def list_interactions(
     ngay_tu: date | None = Query(None),
     ngay_den: date | None = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    _SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+
     q = db.query(CustomerInteraction).order_by(CustomerInteraction.ngay.desc())
     if customer_id:
         q = q.filter(CustomerInteraction.customer_id == customer_id)
@@ -40,6 +43,21 @@ def list_interactions(
         q = q.filter(CustomerInteraction.ngay >= ngay_tu)
     if ngay_den:
         q = q.filter(CustomerInteraction.ngay <= ngay_den)
+
+    if role_code in _SALE_STAFF_ROLES:
+        scoped_ids = (
+            db.query(Customer.id).filter(
+                or_(
+                    Customer.nv_phu_trach_id == current_user.id,
+                    exists().where(
+                        (CustomerNhanVien.customer_id == Customer.id)
+                        & (CustomerNhanVien.user_id == current_user.id)
+                    ),
+                )
+            )
+        )
+        q = q.filter(CustomerInteraction.customer_id.in_(scoped_ids))
+
     return q.all()
 
 

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, exists
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_sale_visible_nv_ids
 from app.models.auth import User
 from app.models.master import PhanXuong
 from app.models.production import ProductionOrder, ProductionOrderItem
@@ -344,13 +344,30 @@ def theo_doi_don_hang(
     so_lenh: Optional[str] = Query(default=None),
     so_don: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    return _query_rows(
+    result = _query_rows(
         db, phan_xuong_id, nv_theo_doi_id, phap_nhan_id,
         tu_ngay, den_ngay, include_hoan_thanh,
         so_lenh, so_don,
     )
+
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if scope_nv_ids is not None:
+        from sqlalchemy import exists, or_
+        from app.models.master import Customer, CustomerNhanVien
+        visible_cids = {r.id for r in db.query(Customer.id).filter(
+            or_(
+                Customer.nv_phu_trach_id.in_(scope_nv_ids),
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id.in_(scope_nv_ids))
+                ),
+            )
+        ).all()}
+        result = [r for r in result if r.get("customer_id") in visible_cids]
+
+    return result
 
 
 @router.get("/bot-query")

@@ -79,6 +79,29 @@ def _get_val(row: dict, key: str) -> str:
     return ""
 
 
+def build_html_rows(
+    columns: list[dict],
+    rows: list[dict],
+    *,
+    td_style: str = "border:1px solid #ddd;padding:4px 6px;",
+) -> str:
+    """Tạo chỉ các <tr> rows (không có table/thead wrapper).
+    Dùng khi template đã có <table> + <thead> hardcoded và {{body_html}}
+    nằm bên trong <tbody>.
+    """
+    if not columns:
+        return ""
+    body_rows = []
+    for row in rows:
+        tds = "".join(
+            f'<td style="{td_style}text-align:{_col_align(c["key"])}">'
+            f'{html.escape(_get_val(row, c["key"]))}</td>'
+            for c in columns
+        )
+        body_rows.append(f"<tr>{tds}</tr>")
+    return "".join(body_rows)
+
+
 def build_html_table(
     columns: list[dict],
     rows: list[dict],

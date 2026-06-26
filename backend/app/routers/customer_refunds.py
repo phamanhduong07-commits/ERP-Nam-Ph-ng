@@ -1,13 +1,17 @@
 from datetime import date
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import exists, or_
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
+from app.models.master import Customer, CustomerNhanVien
 from app.schemas.accounting import CustomerRefundVoucherUpdate
 from app.services.accounting_service import AccountingService
 
 router = APIRouter(prefix="/api/accounting/customer-refunds", tags=["customer-refunds"])
+
+_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
 
 
 @router.get("")
@@ -20,8 +24,21 @@ def list_refunds(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    scoped_customer_ids = None
+    if role_code in _SALE_STAFF_ROLES:
+        scoped_customer_ids = db.query(Customer.id).filter(
+            or_(
+                Customer.nv_phu_trach_id == current_user.id,
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id == current_user.id)
+                ),
+            )
+        )
+
     svc = AccountingService(db)
     return svc.list_customer_refunds(
         customer_id=customer_id,
@@ -31,6 +48,7 @@ def list_refunds(
         den_ngay=den_ngay,
         page=page,
         page_size=page_size,
+        scoped_customer_ids=scoped_customer_ids,
     )
 
 

@@ -325,10 +325,13 @@ class BillingService:
         page: int = 1,
         page_size: int = 20,
         phap_nhan_id: int | None = None,
+        scope_customer_ids=None,  # subquery or None; set by router for SALE_STAFF_ROLES
     ):
         self._mark_overdue_ar()
 
         q = self.db.query(SalesInvoice).options(joinedload(SalesInvoice.phap_nhan))
+        if scope_customer_ids is not None:
+            q = q.filter(SalesInvoice.customer_id.in_(scope_customer_ids))
         if phap_nhan_id:
             q = q.filter(SalesInvoice.phap_nhan_id == phap_nhan_id)
         if customer_id:

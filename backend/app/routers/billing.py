@@ -9,7 +9,7 @@ from app.utils.print_utils import get_selected_columns, build_html_table
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_roles
+from app.deps import build_customer_scope_subquery, get_current_user, require_roles
 from app.models.auth import User
 from app.models.billing import SalesInvoice, InvoiceAdjustmentLog
 from app.services.billing_service import BillingService
@@ -62,14 +62,16 @@ def list_invoices(
     page_size: int = Query(20, ge=1, le=100),
     phap_nhan_id: int | None = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*READ_ROLES)),
+    current_user: User = Depends(require_roles(*READ_ROLES)),
 ):
+    scope_customer_ids = build_customer_scope_subquery(current_user, db)
     return BillingService(db).list_invoices(
         customer_id=customer_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
         qua_han_only=qua_han_only, search=search,
         page=page, page_size=page_size,
         phap_nhan_id=phap_nhan_id,
+        scope_customer_ids=scope_customer_ids,
     )
 
 

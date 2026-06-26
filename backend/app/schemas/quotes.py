@@ -351,6 +351,7 @@ class QuoteListItem(BaseModel):
     tong_cong: Decimal
     so_dong: int = 0
     created_at: datetime
+    created_by: int | None = None
     created_by_name: str | None = None
     phap_nhan_id: int | None = None
     ten_phap_nhan: str | None = None

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload, joinedload
 from openpyxl import Workbook
 
 from app.database import get_db
-from app.deps import get_current_user, require_any_permission
+from app.deps import get_current_user, get_sale_visible_nv_ids, require_any_permission
 from app.models.auth import User
 from app.models.billing import SalesInvoice
 from app.models.accounting import PurchaseInvoice, ProductionCostAllocation, DebtLedgerEntry
@@ -23,7 +23,10 @@ from app.models.warehouse_doc import DeliveryOrder
 
 router = APIRouter(
     prefix="/api/reports",
-    dependencies=[Depends(require_any_permission("report.view", "report.export"))],
+    dependencies=[Depends(require_any_permission(
+        "report.view", "report.export",
+        "report.cong_no", "report.inventory", "report.phoi_thanh_pham",
+    ))],
     tags=["reports"],
 )
 
@@ -64,19 +67,18 @@ def get_debt_summary(
 ):
     today = date.fromisoformat(as_of_date) if as_of_date else date.today()
 
-    # ── Scope theo nhân viên phụ trách (SALE_ADMIN chỉ thấy KH của mình) ─────
-    _SCOPED_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
-    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    # ── Scope theo nhân viên phụ trách ───────────────────────────────────────
+    _scope_nv_ids = get_sale_visible_nv_ids(current_user)
     scoped_customer_ids = None
-    if role_code in _SCOPED_ROLES:
+    if _scope_nv_ids is not None:
         scoped_customer_ids = (
             db.query(Customer.id)
             .filter(
                 or_(
-                    Customer.nv_phu_trach_id == current_user.id,
+                    Customer.nv_phu_trach_id.in_(_scope_nv_ids),
                     exists().where(
                         (CustomerNhanVien.customer_id == Customer.id)
-                        & (CustomerNhanVien.user_id == current_user.id)
+                        & (CustomerNhanVien.user_id.in_(_scope_nv_ids))
                     ),
                 )
             )
@@ -341,8 +343,31 @@ def get_inventory_movement(
     den_ngay: str = Query(...),
     warehouse_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    # SALE_ADMIN: chỉ thấy thành phẩm của KH mình theo dõi (lọc bỏ giấy + NVL)
+    scoped_product_ids = None
+    _scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if _scope_nv_ids is not None:
+        scoped_cids = db.query(Customer.id).filter(
+            or_(
+                Customer.nv_phu_trach_id.in_(_scope_nv_ids),
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id.in_(_scope_nv_ids))
+                ),
+            )
+        )
+        scoped_product_ids = (
+            db.query(SalesOrderItem.product_id)
+            .join(SalesOrder, SalesOrder.id == SalesOrderItem.order_id)
+            .filter(
+                SalesOrder.customer_id.in_(scoped_cids),
+                SalesOrderItem.product_id.isnot(None),
+            )
+            .distinct()
+        )
+
     d_from = date.fromisoformat(tu_ngay)
     d_to = date.fromisoformat(den_ngay)
 
@@ -350,6 +375,11 @@ def get_inventory_movement(
     bal_q = db.query(InventoryBalance)
     if warehouse_id:
         bal_q = bal_q.filter(InventoryBalance.warehouse_id == warehouse_id)
+    if scoped_product_ids is not None:
+        bal_q = bal_q.filter(
+            InventoryBalance.product_id.isnot(None),
+            InventoryBalance.product_id.in_(scoped_product_ids),
+        )
     balances = bal_q.all()
 
     # Lấy transactions trong kỳ
@@ -362,6 +392,11 @@ def get_inventory_movement(
     )
     if warehouse_id:
         tx_q = tx_q.filter(InventoryTransaction.warehouse_id == warehouse_id)
+    if scoped_product_ids is not None:
+        tx_q = tx_q.filter(
+            InventoryTransaction.product_id.isnot(None),
+            InventoryTransaction.product_id.in_(scoped_product_ids),
+        )
     transactions = tx_q.all()
 
     # Tính tồn đầu kỳ: tổng NHAP - tổng XUAT trước date_from
@@ -388,6 +423,11 @@ def get_inventory_movement(
     )
     if warehouse_id:
         pre_q = pre_q.filter(InventoryTransaction.warehouse_id == warehouse_id)
+    if scoped_product_ids is not None:
+        pre_q = pre_q.filter(
+            InventoryTransaction.product_id.isnot(None),
+            InventoryTransaction.product_id.in_(scoped_product_ids),
+        )
     pre_q = pre_q.group_by(
         InventoryTransaction.warehouse_id,
         InventoryTransaction.paper_material_id,
@@ -751,7 +791,7 @@ def export_inventory_movement_excel(
 
     result = get_inventory_movement(
         tu_ngay=tu_ngay, den_ngay=den_ngay,
-        warehouse_id=warehouse_id, db=db, _=_,
+        warehouse_id=warehouse_id, db=db, current_user=_,
     )
     items_data = [
         {

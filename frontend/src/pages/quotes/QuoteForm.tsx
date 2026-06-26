@@ -776,6 +776,7 @@ export default function QuoteForm() {
           getCustomerId={() => headerForm.getFieldValue('customer_id') as number | undefined}
           onSaveToProduct={currentItem.product_id != null ? handleSaveCurrentItemToProduct : undefined}
           saveToProductLoading={saveToProductLoading}
+          hideCostDetails={role === 'SALE_ADMIN' || role === 'SALE_ADMIN_NHAN_VIEN' || role === 'TRUONG_PHONG_SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'}
         />
       )}
 
@@ -807,6 +808,7 @@ export default function QuoteForm() {
           onEdit={handleEditItem}
           onDelete={handleDeleteItem}
           onCopy={handleCopyItem}
+          hideCostDetails={role === 'SALE_ADMIN' || role === 'SALE_ADMIN_NHAN_VIEN' || role === 'TRUONG_PHONG_SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'}
         />
       </Card>
 

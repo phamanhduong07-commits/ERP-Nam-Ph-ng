@@ -64,7 +64,8 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
   const role = useAuthStore(s => s.user?.role)
   const userId = useAuthStore(s => s.user?.id)
   const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
-  const isSaleAdmin = role === 'SALE_ADMIN'
+  const isSaleAdmin = role === 'SALE_ADMIN' || role === 'SALE_ADMIN_NHAN_VIEN' || role === 'SALE_ADMIN_TO_TRUONG'
+  const hideCostDetails = role === 'SALE_ADMIN' || role === 'SALE_ADMIN_NHAN_VIEN' || role === 'TRUONG_PHONG_SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'
 
   // Debounce: cập nhật search state 400ms sau khi ngừng gõ
   useEffect(() => {
@@ -340,13 +341,13 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
       width: 80,
       align: 'center',
     },
-    {
+    ...(!hideCostDetails ? [{
       title: 'Tổng cộng',
       dataIndex: 'tong_cong',
       width: 140,
-      align: 'right',
-      render: (v) => v ? fmtVND(v) : '—',
-    },
+      align: 'right' as const,
+      render: (v: number) => v ? fmtVND(v) : '—',
+    }] : []),
     {
       title: 'Trạng thái',
       dataIndex: 'trang_thai',
@@ -411,7 +412,7 @@ export default function QuoteList({ selectedId, onSelect, primaryList }: Props) 
               </Popconfirm>
             </Tooltip>
           )}
-          {row.trang_thai !== 'huy' && row.trang_thai !== 'het_han' && (
+          {row.trang_thai !== 'huy' && row.trang_thai !== 'het_han' && (canApprove || row.created_by === userId) && (
             <Tooltip title="Huỷ">
               <Popconfirm title="Huỷ báo giá này?" onConfirm={() => cancelMutation.mutate(row.id)}>
                 <Button size="small" icon={<StopOutlined />} danger />

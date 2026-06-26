@@ -14,6 +14,9 @@ import { exportToExcel, printToPdf, buildHtmlTable, fmtVND, downloadBlob } from 
 import EmptyState from "../../components/EmptyState"
 import PageLayout from '../../components/PageLayout'
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
+import { useAuthStore } from '../../store/auth'
+
+const _SALE_STAFF_ROLES = ['SALE_ADMIN', 'SALE_ADMIN_NHAN_VIEN', 'KINH_DOANH_NHAN_VIEN']
 
 const { Text } = Typography
 
@@ -421,6 +424,8 @@ function ApLedgerTab() {
 }
 
 export default function DebtSummaryPage() {
+  const user = useAuthStore(s => s.user)
+  const isSaleStaff = _SALE_STAFF_ROLES.includes(user?.role ?? '')
   const [asOfDate, setAsOfDate] = useState<string>(dayjs().format('YYYY-MM-DD'))
 
   const { data, isLoading } = useQuery({
@@ -500,21 +505,23 @@ export default function DebtSummaryPage() {
               </>
             ),
           },
-          {
-            key: 'ap',
-            label: `Phải trả (${ap?.rows.length ?? 0} NCC)`,
-            children: (
-              <>
-                {ap && <SummaryCards summary={ap.summary} label="phải trả" />}
-                <DebtTable rows={ap?.rows ?? []} type="ap" loading={isLoading} />
-              </>
-            ),
-          },
-          {
-            key: 'ap-ledger',
-            label: 'Tổng hợp NCC',
-            children: <ApLedgerTab />,
-          },
+          ...(!isSaleStaff ? [
+            {
+              key: 'ap',
+              label: `Phải trả (${ap?.rows.length ?? 0} NCC)`,
+              children: (
+                <>
+                  {ap && <SummaryCards summary={ap.summary} label="phải trả" />}
+                  <DebtTable rows={ap?.rows ?? []} type="ap" loading={isLoading} />
+                </>
+              ),
+            },
+            {
+              key: 'ap-ledger',
+              label: 'Tổng hợp NCC',
+              children: <ApLedgerTab />,
+            },
+          ] : []),
         ]}
       />
     </PageLayout>

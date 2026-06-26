@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_sale_visible_nv_ids
 from app.models.auth import User
 from app.models.defect_records import DefectRecord
 from app.models.warehouse_doc import ProductionOutput
@@ -56,6 +56,7 @@ class UpdateTrangThaiIn(BaseModel):
 def _empty_context() -> dict:
     """Các field ngữ cảnh khi không resolve được nguồn — giữ shape ổn định."""
     return {
+        "customer_id": None,
         "so_lenh": None,
         "ten_hang": None,
         "ngay": None,
@@ -76,6 +77,7 @@ def _empty_context() -> dict:
 
 def _context_production_output(ref_id: int, db: Session) -> dict:
     """Ngữ cảnh cho TP lỗi: ProductionOutput → Order → Item → PhanXuong → PhapNhan."""
+    from app.models.sales import SalesOrder as _SO
     po = db.get(ProductionOutput, ref_id)
     if not po:
         return _empty_context()
@@ -88,12 +90,14 @@ def _context_production_output(ref_id: int, db: Session) -> dict:
     ) if order else None
     px = db.get(PhanXuong, order.phan_xuong_id) if order and order.phan_xuong_id else None
     pn = db.get(PhapNhan, order.phap_nhan_id) if order and order.phap_nhan_id else None
+    so = db.get(_SO, order.sales_order_id) if order and order.sales_order_id else None
 
     quy_cach = None
     if item and item.dai and item.rong and item.cao:
         quy_cach = f"{int(item.dai)}×{int(item.rong)}×{int(item.cao)}"
 
     return {
+        "customer_id": so.customer_id if so else None,
         "so_lenh": order.so_lenh if order else None,
         "ten_hang": po.ten_hang,
         "ngay": str(po.ngay_nhap) if po.ngay_nhap else None,
@@ -114,6 +118,7 @@ def _context_production_output(ref_id: int, db: Session) -> dict:
 
 def _context_phoi_item(ref_id: int, db: Session) -> dict:
     """Ngữ cảnh cho phôi lỗi CD1: Item → Phieu → Order → POI → PhanXuong → Warehouse → PhapNhan."""
+    from app.models.sales import SalesOrder as _SO
     item = db.get(PhieuNhapPhoiSongItem, ref_id)
     if not item:
         return _empty_context()
@@ -123,6 +128,7 @@ def _context_phoi_item(ref_id: int, db: Session) -> dict:
     poi = db.get(ProductionOrderItem, item.production_order_item_id) if item.production_order_item_id else None
     order = db.get(ProductionOrder, phieu.production_order_id) if phieu else None
     px = db.get(PhanXuong, order.phan_xuong_id) if order and order.phan_xuong_id else None
+    so = db.get(_SO, order.sales_order_id) if order and order.sales_order_id else None
 
     wh = db.get(Warehouse, phieu.warehouse_id) if phieu and phieu.warehouse_id else None
     pn_id = None
@@ -133,6 +139,7 @@ def _context_phoi_item(ref_id: int, db: Session) -> dict:
     pn = db.get(PhapNhan, pn_id) if pn_id else None
 
     return {
+        "customer_id": so.customer_id if so else None,
         "so_lenh": order.so_lenh if order else None,
         "ten_hang": poi.ten_hang if poi else None,
         "ngay": str(phieu.ngay) if phieu and phieu.ngay else None,
@@ -171,6 +178,7 @@ def _context_sales_return_item(ref_id: int, db: Session) -> dict:
 
     ctx = _empty_context()
     ctx.update({
+        "customer_id": sr.customer_id if sr else None,
         "so_lenh": sr.so_phieu_tra if sr else None,
         "ten_hang": soi.ten_hang if soi else None,
         "ngay": str(sr.ngay_tra) if sr and sr.ngay_tra else None,
@@ -238,12 +246,12 @@ def list_defect_records(
     tu_ngay: Optional[date] = Query(None),
     den_ngay: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Liệt kê bản ghi lỗi.
 
     khau/trang_thai lọc thẳng trên defect_records (có index).
-    phan_xuong_id/phap_nhan_id/tu_ngay/den_ngay lọc ở Python sau khi resolve
+    phan_xuong_id/phap_nhan_id/tu_ngay/den_ngay/customer scope lọc ở Python sau khi resolve
     ngữ cảnh — vì nguồn polymorphic nên join SQL không thống nhất được.
     """
     q = db.query(DefectRecord)
@@ -254,6 +262,22 @@ def list_defect_records(
     rows = q.order_by(DefectRecord.created_at.desc()).limit(300).all()
 
     results = [_to_response(r, db) for r in rows]
+
+    # SA scope: chỉ thấy hàng lỗi/trả về của KH được phân công
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if scope_nv_ids is not None:
+        from sqlalchemy import exists, or_
+        from app.models.master import Customer, CustomerNhanVien
+        visible_cids = {r.id for r in db.query(Customer.id).filter(
+            or_(
+                Customer.nv_phu_trach_id.in_(scope_nv_ids),
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id.in_(scope_nv_ids))
+                ),
+            )
+        ).all()}
+        results = [r for r in results if r.get("customer_id") in visible_cids]
 
     if phan_xuong_id is not None:
         results = [r for r in results if r["phan_xuong_id"] == phan_xuong_id]

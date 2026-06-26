@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_sale_visible_nv_ids
 from app.models.auth import User
 from app.models.master import PhanXuong, PhapNhan, Warehouse
 from app.models.production import ProductionOrder, ProductionOrderItem
@@ -34,11 +34,13 @@ class UpdateTrangThaiIn(BaseModel):
 
 
 def _to_response(entry: DefectRecord, db: Session) -> dict:
+    from app.models.sales import SalesOrder as _SO
     item = db.get(PhieuNhapPhoiSongItem, entry.ref_id)
     phieu = db.get(PhieuNhapPhoiSong, item.phieu_id) if item else None
     poi = db.get(ProductionOrderItem, item.production_order_item_id) if item else None
     order = db.get(ProductionOrder, phieu.production_order_id) if phieu else None
     px = db.get(PhanXuong, order.phan_xuong_id) if order and order.phan_xuong_id else None
+    so = db.get(_SO, order.sales_order_id) if order and order.sales_order_id else None
 
     wh = db.get(Warehouse, phieu.warehouse_id) if phieu and phieu.warehouse_id else None
     pn_id = None
@@ -52,6 +54,7 @@ def _to_response(entry: DefectRecord, db: Session) -> dict:
 
     return {
         "id": entry.id,
+        "customer_id": so.customer_id if so else None,
         "phieu_nhap_phoi_song_item_id": entry.ref_id,
         "so_phieu": phieu.so_phieu if phieu else None,
         "ngay": str(phieu.ngay) if phieu else None,
@@ -116,7 +119,7 @@ def list_kho_ao_phoi(
     tu_ngay: Optional[date] = Query(None),
     den_ngay: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     q = db.query(DefectRecord).filter(DefectRecord.khau == KHAU)
     if trang_thai:
@@ -124,6 +127,23 @@ def list_kho_ao_phoi(
     rows = q.order_by(DefectRecord.created_at.desc()).limit(300).all()
 
     results = [_to_response(r, db) for r in rows]
+
+    # SA scope: chỉ thấy phôi lỗi của KH được phân công
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if scope_nv_ids is not None:
+        from sqlalchemy import exists, or_
+        from app.models.master import Customer, CustomerNhanVien
+        visible_cids = {r.id for r in db.query(Customer.id).filter(
+            or_(
+                Customer.nv_phu_trach_id.in_(scope_nv_ids),
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id.in_(scope_nv_ids))
+                ),
+            )
+        ).all()}
+        results = [r for r in results if r.get("customer_id") in visible_cids]
+
     if phan_xuong_id is not None:
         results = [r for r in results if r["phan_xuong_id"] == phan_xuong_id]
     if phap_nhan_id is not None:

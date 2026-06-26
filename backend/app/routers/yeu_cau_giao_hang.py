@@ -3,12 +3,12 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_sale_visible_nv_ids
 from app.models.auth import User
-from app.models.master import Customer, Warehouse
+from app.models.master import Customer, CustomerNhanVien, Warehouse
 from app.models.production import ProductionOrder
 from app.models.sales import SalesOrder
 from app.models.yeu_cau_giao_hang import YeuCauGiaoHang, YeuCauGiaoHangItem  # noqa: F401 used in selectinload
@@ -16,6 +16,8 @@ from app.models.production import ProductionOrder as _PO
 from app.services.carton_metrics import production_item_metrics
 
 router = APIRouter(prefix="/api/yeu-cau-giao-hang", tags=["yeu-cau-giao-hang"])
+
+_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -158,8 +160,9 @@ def list_yeu_cau(
     tu_ngay: Optional[date] = Query(None),
     den_ngay: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
     q = db.query(YeuCauGiaoHang).options(*_load_opts())
     if trang_thai:
         q = q.filter(YeuCauGiaoHang.trang_thai == trang_thai)
@@ -189,6 +192,19 @@ def list_yeu_cau(
                 SalesOrder.so_don.ilike(f"%{so_don}%")
             )
         q = q.filter(YeuCauGiaoHang.id.in_(sub))
+
+    _scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if _scope_nv_ids is not None:
+        scoped_ids = db.query(Customer.id).filter(
+            or_(
+                Customer.nv_phu_trach_id.in_(_scope_nv_ids),
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id.in_(_scope_nv_ids))
+                ),
+            )
+        )
+        q = q.filter(YeuCauGiaoHang.customer_id.in_(scoped_ids))
 
     rows = q.order_by(YeuCauGiaoHang.created_at.desc()).limit(200).all()
     return [_yc_to_dict(r, db) for r in rows]

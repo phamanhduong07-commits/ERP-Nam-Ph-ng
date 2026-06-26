@@ -8,7 +8,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user, require_roles
+from app.deps import assert_has_permission, get_current_user, require_roles
 from app.models.auth import User
 from app.models.auth import AuditLog
 from app.models.accounting import BankTransaction, CashReceipt, CashPayment, OpeningBalance, PurchaseInvoice, KheUocVay, KheUocChoVay, LichTraNo, InternalTransfer
@@ -465,8 +465,9 @@ def list_receipts(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("accounting.view", current_user, db)
     return AccountingService(db).list_receipts(
         customer_id=customer_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,
@@ -1164,8 +1165,9 @@ def list_payments(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("accounting.view", current_user, db)
     return AccountingService(db).list_payments(
         supplier_id=supplier_id, trang_thai=trang_thai,
         tu_ngay=tu_ngay, den_ngay=den_ngay,

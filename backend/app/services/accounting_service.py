@@ -3208,9 +3208,12 @@ class AccountingService:
         den_ngay: date | None = None,
         page: int = 1,
         page_size: int = 20,
+        scoped_customer_ids=None,
     ) -> dict:
         from app.models.sales import SalesReturn
         q = self.db.query(CustomerRefundVoucher)
+        if scoped_customer_ids is not None:
+            q = q.filter(CustomerRefundVoucher.customer_id.in_(scoped_customer_ids))
         if customer_id:
             q = q.filter(CustomerRefundVoucher.customer_id == customer_id)
         if sales_return_id:

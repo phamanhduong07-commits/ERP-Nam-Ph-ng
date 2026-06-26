@@ -9,13 +9,13 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, exists, func, or_
 from sqlalchemy.orm import Session, aliased, joinedload
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_sale_visible_nv_ids
 from app.models.auth import User
 from app.models.inventory import InventoryBalance, InventoryTransaction
-from app.models.master import Warehouse, PaperMaterial, OtherMaterial, Product, PhanXuong, PhapNhan, Supplier
+from app.models.master import Warehouse, PaperMaterial, OtherMaterial, Product, PhanXuong, PhapNhan, Supplier, Customer, CustomerNhanVien
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.bom import ProductionBOM, ProductionBOMItem
@@ -32,6 +32,8 @@ from app.utils.log import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/warehouse", tags=["warehouse"])
+
+_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
 
 
 @router.get("/giao-dich")
@@ -134,9 +136,10 @@ def ton_kho_tp_lsx(
     tu_ngay: Optional[str] = Query(default=None),
     den_ngay: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Tổng hợp tồn kho thành phẩm theo từng LSX."""
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
     # 1. Nhập TP: sum(so_luong_nhap) per production_order_id
     # Không dùng MAX(warehouse_id) vì 1 LSX có thể nằm ở 2+ kho sau khi chuyển kho
     nhap_rows = (
@@ -296,6 +299,23 @@ def ton_kho_tp_lsx(
         .all()
     )
 
+    # Scope theo vai trò: SALE_ADMIN/SALE_ADMIN_NHAN_VIEN/KINH_DOANH_NHAN_VIEN chỉ thấy KH được phân công
+    _scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if _scope_nv_ids is not None:
+        scoped_cids = {row.id for row in db.query(Customer.id).filter(
+            or_(
+                Customer.nv_phu_trach_id.in_(_scope_nv_ids),
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id.in_(_scope_nv_ids))
+                ),
+            )
+        ).all()}
+        orders = [
+            o for o in orders
+            if o.sales_order and o.sales_order.customer_id in scoped_cids
+        ]
+
     # 6. Metadata bổ sung (Pháp nhân + Kho hiện tại)
     pn_map = {p.id: p.ten_viet_tat for p in db.query(PhapNhan).all()}
 
@@ -410,11 +430,12 @@ def kho_loi_tra_ve(
     phap_nhan_id: Optional[int] = Query(default=None),
     phan_xuong_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Kho ảo: tổng hợp hàng lỗi + hàng trả về xấu, đầy đủ thông tin như kho thực."""
     from app.models.production import ProductionOrderItem
 
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
     pn_map = {p.id: p.ten_viet_tat for p in db.query(PhapNhan).all()}
 
     def _item_specs(item) -> dict:
@@ -465,6 +486,24 @@ def kho_loi_tra_ve(
         loi_q = loi_q.join(
             ProductionOrder, ProductionOrder.id == ProductionOutput.production_order_id
         ).filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
+
+    _scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if _scope_nv_ids is not None:
+        scoped_cids = db.query(Customer.id).filter(
+            or_(
+                Customer.nv_phu_trach_id.in_(_scope_nv_ids),
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id.in_(_scope_nv_ids))
+                ),
+            )
+        )
+        scoped_po_ids = (
+            db.query(ProductionOrder.id)
+            .join(SalesOrder, SalesOrder.id == ProductionOrder.sales_order_id)
+            .filter(SalesOrder.customer_id.in_(scoped_cids))
+        )
+        loi_q = loi_q.filter(ProductionOutput.production_order_id.in_(scoped_po_ids))
 
     hang_loi = []
     for po in loi_q.all():
@@ -524,6 +563,9 @@ def kho_loi_tra_ve(
             tra_q = tra_q.filter(ProductionOrder.phan_xuong_id == phan_xuong_id)
         if phap_nhan_id:
             tra_q = tra_q.filter(ProductionOrder.phap_nhan_id == phap_nhan_id)
+
+    if _scope_nv_ids is not None:
+        tra_q = tra_q.filter(SalesReturn.customer_id.in_(scoped_cids))
 
     # Lấy ProductionOrderItem qua sales_order_item_id để có specs
     all_tra = tra_q.all()

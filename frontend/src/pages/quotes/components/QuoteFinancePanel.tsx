@@ -8,13 +8,31 @@ interface QuoteFinancePanelProps {
   finance: QuoteFinance
   updateFinance: (patch: Partial<QuoteFinance>) => void
   onGiaBanChange: (v: number) => void
+  hideCostDetails?: boolean
 }
 
 const fmt = (v?: number | string) => `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 
 export default function QuoteFinancePanel({
-  finance, updateFinance, onGiaBanChange,
+  finance, updateFinance, onGiaBanChange, hideCostDetails = false,
 }: QuoteFinancePanelProps) {
+  if (hideCostDetails) {
+    return (
+      <div style={{ background: '#fff7e6', padding: 8, borderRadius: 6, height: '100%' }}>
+        <Text strong style={{ fontSize: 12, color: '#fa8c16' }}>GIÁ BÁN</Text>
+        <Row gutter={4} style={{ marginTop: 8 }} align="middle">
+          <Col span={12}><Text style={{ fontSize: 11 }}>Giá bán / thùng</Text></Col>
+          <Col span={12}>
+            <InputNumber size="small" style={{ width: '100%' }}
+              value={finance.gia_ban}
+              onChange={v => onGiaBanChange(v || 0)}
+              formatter={fmt} />
+          </Col>
+        </Row>
+      </div>
+    )
+  }
+
   return (
     <div style={{ background: '#fff7e6', padding: 8, borderRadius: 6, height: '100%' }}>
       <Text strong style={{ fontSize: 12, color: '#fa8c16' }}>TÀI CHÍNH</Text>

@@ -4,7 +4,7 @@ from io import BytesIO
 import html
 import unicodedata
 from app.utils.template import apply_template, standard_vars
-from app.utils.print_utils import get_selected_columns, build_html_table
+from app.utils.print_utils import get_selected_columns, build_html_table, build_html_rows
 from typing import Optional, List
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, UploadFile
@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import cast, Date
 from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
-from app.deps import get_current_user, require_permissions
+from app.deps import get_current_user, require_permissions, assert_has_permission
 from app.models.auth import User
 from app.models.master import Customer, PhanXuong, PaperMaterial
 from app.models.sales import Quote, QuoteItem, SalesOrder, SalesOrderItem
@@ -38,6 +38,15 @@ from app.routers.indirect_costs import get_indirect_breakdown_from_db
 from app.routers.addon_rates import get_addon_rates_from_db
 
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
+
+# Roles that may only see their own quotes (created_by == current_user.id)
+_QUOTE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
+
+
+def _get_quote_scope(current_user: User) -> int | None:
+    """Return current_user.id when role is restricted to own quotes, else None (full access)."""
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    return current_user.id if role_code in _QUOTE_STAFF_ROLES else None
 
 
 class QuoteItemPriceRequest(BaseModel):
@@ -526,8 +535,10 @@ def list_quotes(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.view", current_user, db)
+    scope_user_id = _get_quote_scope(current_user)
     _auto_expire_quotes(db)
     q = db.query(Quote).options(
         joinedload(Quote.customer),
@@ -535,6 +546,8 @@ def list_quotes(
         joinedload(Quote.phap_nhan),
         selectinload(Quote.items),
     )
+    if scope_user_id is not None:
+        q = q.filter(Quote.created_by == scope_user_id)
     if search:
         like = f"%{search}%"
         q = q.join(Customer).filter(
@@ -568,6 +581,7 @@ def list_quotes(
             tong_cong=qt.tong_cong,
             so_dong=len(qt.items),
             created_at=qt.created_at,
+            created_by=qt.created_by,
             created_by_name=qt.creator.ho_ten if qt.creator else None,
             phap_nhan_id=qt.phap_nhan_id,
             ten_phap_nhan=qt.phap_nhan.ten_phap_nhan if qt.phap_nhan else None,
@@ -585,8 +599,9 @@ def list_quotes(
 def calculate_quote_item_price(
     payload: QuoteItemPriceRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.view", current_user, db)
     try:
         result = _quote_item_price(payload.item, db)
     except ValueError as exc:
@@ -611,19 +626,24 @@ def calculate_quote_item_price(
 @router.get("/counts")
 def get_quote_counts(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.view", current_user, db)
+    scope_user_id = _get_quote_scope(current_user)
     from sqlalchemy import func
-    rows = (
-        db.query(Quote.trang_thai, func.count(Quote.id))
-        .group_by(Quote.trang_thai)
-        .all()
-    )
+    q = db.query(Quote.trang_thai, func.count(Quote.id))
+    if scope_user_id is not None:
+        q = q.filter(Quote.created_by == scope_user_id)
+    rows = q.group_by(Quote.trang_thai).all()
     return {trang_thai: count for trang_thai, count in rows}
 
 
 @router.get("/import-template")
-def download_quote_import_template(_: User = Depends(get_current_user)):
+def download_quote_import_template(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    assert_has_permission("quote.view", current_user, db)
     return build_template_response("mau_import_bao_gia.xlsx", QUOTE_IMPORT_FIELDS)
 
 
@@ -823,8 +843,9 @@ async def import_quotes(
 def get_quote(
     quote_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.view", current_user, db)
     return _build_response(_load_quote(quote_id, db))
 
 
@@ -834,6 +855,7 @@ def create_quote(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.create", current_user, db)
     customer = db.query(Customer).filter(Customer.id == data.customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Không tìm thấy khách hàng")
@@ -900,6 +922,7 @@ def update_quote(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.edit", current_user, db)
     quote = _load_quote(quote_id, db)
     _check_quote_owner_or_manager(quote, current_user)
     if quote.trang_thai not in ("moi", "cho_duyet"):
@@ -937,6 +960,7 @@ def submit_quote(
     current_user: User = Depends(get_current_user),
 ):
     """Gửi báo giá để duyệt — SALE_ADMIN hoặc người tạo BG."""
+    assert_has_permission("quote.edit", current_user, db)
     quote = _load_quote(quote_id, db)
     if quote.trang_thai != "moi":
         raise HTTPException(status_code=400, detail="Chỉ gửi duyệt được báo giá ở trạng thái Mới")
@@ -954,6 +978,7 @@ def approve_quote(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.edit", current_user, db)
     role_code = current_user.role.ma_vai_tro if current_user.role else None
     if role_code not in ("ADMIN", "BGD_GIAM_DOC", "TRUONG_PHONG_SALE_ADMIN"):
         raise HTTPException(status_code=403, detail="Ban khong co quyen duyet bao gia")
@@ -997,6 +1022,7 @@ def cancel_quote(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.edit", current_user, db)
     quote = db.query(Quote).filter(Quote.id == quote_id).first()
     if not quote:
         raise HTTPException(status_code=404, detail="Không tìm thấy báo giá")
@@ -1010,6 +1036,32 @@ def cancel_quote(
     return {"message": f"Đã huỷ báo giá {quote.so_bao_gia}"}
 
 
+class RejectBody(BaseModel):
+    ly_do: str | None = None
+
+
+@router.patch("/{quote_id}/reject", response_model=QuoteResponse)
+def reject_quote(
+    quote_id: int,
+    body: RejectBody = RejectBody(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Từ chối báo giá — chỉ TRUONG_PHONG_SALE_ADMIN / ADMIN / BGD_GIAM_DOC."""
+    assert_has_permission("quote.edit", current_user, db)
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code not in _MANAGER_ROLES:
+        raise HTTPException(status_code=403, detail="Không có quyền từ chối báo giá")
+    quote = _load_quote(quote_id, db)
+    if quote.trang_thai != "cho_duyet":
+        raise HTTPException(status_code=400, detail="Chỉ từ chối được báo giá đang chờ duyệt")
+    old_status = quote.trang_thai
+    quote.trang_thai = "moi"
+    _log_quote_history(quote, "rejected", current_user, db, old_status=old_status, new_status="moi", note=body.ly_do)
+    db.commit()
+    return _build_response(_load_quote(quote_id, db))
+
+
 class BulkCancelBody(BaseModel):
     ids: list[int]
 
@@ -1020,6 +1072,7 @@ def bulk_cancel_quotes(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.edit", current_user, db)
     if not body.ids:
         raise HTTPException(status_code=400, detail="Danh sách ID không được rỗng")
     role_code = current_user.role.ma_vai_tro if current_user.role else None
@@ -1053,6 +1106,7 @@ def gia_han_quote(
     current_user: User = Depends(get_current_user),
 ):
     """Gia hạn báo giá hết hạn — đặt ngày mới và trả về trạng thái 'moi'."""
+    assert_has_permission("quote.edit", current_user, db)
     quote = db.query(Quote).filter(Quote.id == quote_id).first()
     if not quote:
         raise HTTPException(status_code=404, detail="Không tìm thấy báo giá")
@@ -1073,6 +1127,7 @@ def copy_quote(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.create", current_user, db)
     source = _load_quote(quote_id, db)
     if source.trang_thai != "da_duyet":
         raise HTTPException(status_code=400, detail="Chi copy bao gia da duyet")
@@ -1136,6 +1191,7 @@ def tao_don_hang_tu_bao_gia(
     item_overrides=None → lấy tất cả items với SL từ BG.
     item_overrides=[{id, so_luong}] → chỉ lấy items có id trong list, dùng so_luong từ override.
     """
+    assert_has_permission("quote.edit", current_user, db)
     from app.services.sales_order_service import SalesOrderService
     quote = _load_quote(quote_id, db)
     if quote.trang_thai != "da_duyet":
@@ -1226,8 +1282,10 @@ def export_quotes_excel(
     tu_ngay: date | None = Query(default=None),
     den_ngay: date | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.view", current_user, db)
+    scope_user_id = _get_quote_scope(current_user)
     from fastapi.responses import StreamingResponse
     from app.services.excel_export_service import build_xlsx
     from app.models.system import ExcelTemplate
@@ -1244,6 +1302,8 @@ def export_quotes_excel(
         joinedload(Quote.phap_nhan),
         selectinload(Quote.items),
     )
+    if scope_user_id is not None:
+        q = q.filter(Quote.created_by == scope_user_id)
     if search:
         like = f"%{search}%"
         q = q.join(Customer).filter(
@@ -1296,8 +1356,9 @@ def export_quotes_excel(
 def print_quote(
     quote_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.view", current_user, db)
     quote = _load_quote(quote_id, db)
     pn = quote.phap_nhan if quote.phap_nhan_id else None
     tpl_q = db.query(PrintTemplate).filter(PrintTemplate.ma_mau == "SALES_QUOTE")
@@ -1360,7 +1421,7 @@ def print_quote(
             "thanh_tien": f"{int(thanh_tien):,}",
             "ghi_chu": item.ghi_chu or "",
         })
-    rows = build_html_table(selected_cols, items_data)
+    rows = build_html_rows(selected_cols, items_data)
 
     def _fmt(val) -> str:
         try:
@@ -1410,7 +1471,7 @@ def print_quote(
         "{{dieu_khoan}}": quote.dieu_khoan or "",
         "{{nguoi_lap}}": html.escape(nguoi_lap),
     }
-    html = apply_template(tpl.html_content, replacements)
+    rendered = apply_template(tpl.html_content, replacements)
 
     so_bao_gia = quote.so_bao_gia or ""
     page = (
@@ -1431,7 +1492,7 @@ def print_quote(
         "    <button onclick=\"window.close()\" style=\"padding:8px 16px;border:1px solid #ccc;border-radius:4px;cursor:pointer\">Đóng</button>\n"
         '    <span style="font-size:12px;color:#666">Tip: Ctrl+P → Save as PDF</span>\n'
         "  </div>\n"
-        f"  {html}\n"
+        f"  {rendered}\n"
         "</body>\n"
         "</html>"
     )
@@ -1442,8 +1503,9 @@ def print_quote(
 def get_quote_history(
     quote_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("quote.view", current_user, db)
     from app.models.sales import QuoteHistory
     entries = (
         db.query(QuoteHistory)

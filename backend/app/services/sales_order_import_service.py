@@ -98,7 +98,7 @@ async def import_sales_orders_excel(
             existing = db.query(SalesOrder).filter(SalesOrder.so_don == so_don).first()
             if existing:
                 # Neu ton tai, xoa items cu va ghi lai (hoac skip tuy logic, o day la update)
-                db.query(SalesOrderItem).filter(SalesOrderItem.sales_order_id == existing.id).delete()
+                db.query(SalesOrderItem).filter(SalesOrderItem.order_id == existing.id).delete()
                 order = existing
                 updated += 1
             else:

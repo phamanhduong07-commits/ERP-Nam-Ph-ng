@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from app.database import get_db
-from app.deps import get_current_user, require_roles, require_permissions, require_any_permission
+from app.deps import get_current_user, require_roles, require_permissions, require_any_permission, assert_has_permission
 from app.models.auth import User
 from app.models.hr import Department, Position, Employee, AttendanceLog, LeaveRequest, PayrollConfig, PayrollHoliday, EmployeeHistory, EmployeeDocument, LaborContract, PayrollRun, FamilyRelation, CheckInLocation, Team, HealthCheck
 from app.models.master import PhapNhan
@@ -385,6 +385,7 @@ def list_employees(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    assert_has_permission("hr.view", current_user, db)
     q = db.query(Employee)
     if search:
         like = f"%{search}%"
@@ -457,6 +458,7 @@ def get_employee(id: int, db: Session = Depends(get_db), current_user: User = De
     UI EmployeeProfileModal gọi endpoint này để fill toàn bộ form. List endpoint
     chỉ trả basic fields đủ render table để tiết kiệm payload.
     """
+    assert_has_permission("hr.view", current_user, db)
     e = db.query(Employee).filter(Employee.id == id).first()
     if not e:
         raise HTTPException(404, "Không tìm thấy nhân viên")

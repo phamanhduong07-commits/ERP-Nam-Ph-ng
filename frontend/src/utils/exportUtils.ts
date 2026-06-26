@@ -179,8 +179,8 @@ const AUTO_PRINT_SCRIPT = `
   })();
 `
 
-export function printToPdf(title: string, html: string, landscape = false, companyInfo?: PrintCompanyInfo) {
-  const win = window.open('', '_blank', 'width=1050,height=780')
+export function printToPdf(title: string, html: string, landscape = false, companyInfo?: PrintCompanyInfo, existingWin?: Window | null) {
+  const win = existingWin ?? window.open('', '_blank', 'width=1050,height=780')
   if (!win) {
     alert('Vui lòng cho phép popup để xuất PDF')
     return
@@ -484,9 +484,9 @@ export function buildDocumentHtml(opts: PrintDocumentOptions): string {
   `
 }
 
-export function printDocument(opts: PrintDocumentOptions, landscape = false) {
+export function printDocument(opts: PrintDocumentOptions, landscape = false, existingWin?: Window | null) {
   const html = buildDocumentHtml(opts)
-  printToPdf(opts.title, html, landscape, opts.companyInfo)
+  printToPdf(opts.title, html, landscape, opts.companyInfo, existingWin)
 }
 
 /**

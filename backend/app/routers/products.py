@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_sale_visible_nv_ids
 from app.models.auth import User
 from app.models.master import Customer, Product
 from app.services.product_service import ProductService
@@ -19,12 +19,8 @@ from app.schemas.sales import PagedResponse
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
-_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
-
-
-def _get_scope(current_user: User) -> int | None:
-    role_code = current_user.role.ma_vai_tro if current_user.role else None
-    return current_user.id if role_code in _SALE_STAFF_ROLES else None
+def _get_scope(current_user: User) -> list[int] | None:
+    return get_sale_visible_nv_ids(current_user)
 
 
 PRODUCT_IMPORT_FIELDS = [

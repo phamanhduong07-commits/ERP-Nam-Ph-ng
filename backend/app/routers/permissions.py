@@ -207,6 +207,7 @@ def remove_permission_from_role(
 _GRANTABLE_BY_TEAM_LEAD = {
     "report.xnt_all_nv",
     "report.cong_no_all_nv",
+    "sales.view_all_customers",  # SALE_ADMIN xem toàn bộ KH (bypass phân vùng NV)
 }
 
 _team_lead_required = require_roles("ADMIN", "TRUONG_PHONG_SALE_ADMIN")

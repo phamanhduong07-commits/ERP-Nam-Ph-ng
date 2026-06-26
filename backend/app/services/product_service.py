@@ -6,15 +6,15 @@ from app.schemas.master import ProductCreate, ProductUpdate, ProductResponse, Pr
 from app.schemas.sales import PagedResponse
 
 
-def _customer_scope_subquery(db: Session, scope_user_id: int):
+def _customer_scope_subquery(db: Session, scope_nv_ids: list[int]):
     return (
         db.query(Customer.id)
         .filter(
             or_(
-                Customer.nv_phu_trach_id == scope_user_id,
+                Customer.nv_phu_trach_id.in_(scope_nv_ids),
                 exists().where(
                     (CustomerNhanVien.customer_id == Customer.id)
-                    & (CustomerNhanVien.user_id == scope_user_id)
+                    & (CustomerNhanVien.user_id.in_(scope_nv_ids))
                 ),
             )
         )
@@ -33,7 +33,7 @@ class ProductService:
         so_lop: int = None,
         page: int = 1,
         page_size: int = 20,
-        scope_user_id: int | None = None,
+        scope_user_id: list[int] | None = None,
     ) -> PagedResponse:
         q = self.db.query(Product).options(selectinload(Product.khach_hang)).filter(Product.trang_thai.is_(True))
         if scope_user_id is not None:

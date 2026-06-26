@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.deps import get_current_user, require_permissions
+from app.deps import assert_has_permission, get_current_user, get_sale_visible_nv_ids, require_permissions
 from app.models.auth import Role, User
-from app.models.master import Customer
+from app.models.master import Customer, CustomerNhanVien
 from app.services.customer_service import CustomerService
 from app.services.excel_import_service import (
     ImportField,
@@ -20,13 +20,8 @@ from app.schemas.sales import PagedResponse
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
 
-# Roles thấy data của riêng mình (không thấy toàn bộ)
-_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
-
-
-def _get_scope(current_user: User) -> int | None:
-    role_code = current_user.role.ma_vai_tro if current_user.role else None
-    return current_user.id if role_code in _SALE_STAFF_ROLES else None
+def _get_scope(current_user: User) -> list[int] | None:
+    return get_sale_visible_nv_ids(current_user)
 
 
 CUSTOMER_IMPORT_FIELDS = [
@@ -139,10 +134,16 @@ def get_customer(
 def create_customer(
     data: CustomerCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     service = CustomerService(db)
-    return service.create_customer(data)
+    customer = service.create_customer(data)
+    # Bug 2 fix: auto-assign creator as NV phụ trách khi không phải ADMIN
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    if role_code != "ADMIN":
+        db.add(CustomerNhanVien(customer_id=customer.id, user_id=current_user.id))
+        db.commit()
+    return customer
 
 
 @router.put("/{customer_id}", response_model=CustomerResponse)
@@ -150,7 +151,35 @@ def update_customer(
     customer_id: int,
     data: CustomerUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     service = CustomerService(db)
+    # Ownership check: SALE roles chỉ được sửa KH của mình
+    scope_nv_ids = _get_scope(current_user)
+    if scope_nv_ids is not None:
+        from app.models.master import Customer as _Customer
+        from app.services.customer_service import _scope_filter
+        in_scope = db.query(_Customer).filter(
+            _Customer.id == customer_id,
+            _scope_filter(scope_nv_ids),
+        ).first()
+        if not in_scope:
+            raise HTTPException(status_code=403, detail="Bạn không có quyền chỉnh sửa khách hàng này")
     return service.update_customer(customer_id, data)
+
+
+@router.delete("/{customer_id}", status_code=204)
+def delete_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    assert_has_permission("customer.delete", current_user, db)
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Không tìm thấy khách hàng")
+    if customer.sales_orders:
+        raise HTTPException(status_code=400, detail="Không thể xóa khách hàng đã có đơn hàng")
+    db.delete(customer)
+    db.commit()
+    return Response(status_code=204)

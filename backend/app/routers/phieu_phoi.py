@@ -11,13 +11,14 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.deps import get_current_user, require_any_permission
+from app.deps import get_current_user, get_sale_visible_nv_ids, require_any_permission
 import logging
 from app.models.auth import User
-from app.models.master import Warehouse, PhanXuong
+from app.models.master import Warehouse, PhanXuong, Customer, CustomerNhanVien
+from app.models.sales import SalesOrder
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.phieu_xuat_phoi import PhieuXuatPhoi, PhieuXuatPhoiItem
@@ -25,6 +26,8 @@ from app.models.warehouse_doc import PhieuChuyenKho, PhieuChuyenKhoItem
 from app.services.carton_metrics import dec_or_zero, _to_hop_song, song_take_up, standard_thickness_m
 
 _log = logging.getLogger("erp")
+
+_SALE_STAFF_ROLES = {"SALE_ADMIN", "SALE_ADMIN_NHAN_VIEN", "KINH_DOANH_NHAN_VIEN"}
 
 router = APIRouter(
     prefix="/api/phieu-phoi",
@@ -361,13 +364,15 @@ def get_phieu_xuat(
 def ton_kho_lsx(
     nv_theo_doi_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Tổng hợp tồn kho phôi sóng theo LSX và Xưởng.
     Tồn = (Nhập SX + Nhập Chuyển) - (Xuất SX + Xuất Chuyển đi)
     """
     from app.models.cd2 import PhieuIn
+
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
 
     # Lọc theo NV theo dõi nếu có
     allowed_order_ids: list[int] | None = None
@@ -377,6 +382,31 @@ def ton_kho_lsx(
             .filter(ProductionOrder.nv_theo_doi_id == nv_theo_doi_id)
             .all()
         ]
+        if not allowed_order_ids:
+            return []
+
+    # Scope theo vai trò: SALE_ADMIN/SALE_ADMIN_NHAN_VIEN/KINH_DOANH_NHAN_VIEN chỉ thấy KH được phân công
+    _scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if _scope_nv_ids is not None:
+        scoped_cids = {row.id for row in db.query(Customer.id).filter(
+            or_(
+                Customer.nv_phu_trach_id.in_(_scope_nv_ids),
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id.in_(_scope_nv_ids))
+                ),
+            )
+        ).all()}
+        role_order_ids = [
+            r.id for r in db.query(ProductionOrder.id)
+            .join(SalesOrder, SalesOrder.id == ProductionOrder.sales_order_id)
+            .filter(SalesOrder.customer_id.in_(scoped_cids))
+            .all()
+        ]
+        if allowed_order_ids is not None:
+            allowed_order_ids = [oid for oid in allowed_order_ids if oid in set(role_order_ids)]
+        else:
+            allowed_order_ids = role_order_ids
         if not allowed_order_ids:
             return []
 
@@ -473,8 +503,6 @@ def ton_kho_lsx(
         return []
 
     order_ids = list({k[0] for k in stats.keys()})
-
-    from app.models.sales import SalesOrder
 
     # Lấy thông tin Lệnh SX
     orders = (

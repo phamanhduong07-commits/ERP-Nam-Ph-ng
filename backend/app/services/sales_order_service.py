@@ -3,7 +3,8 @@ from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload, subqueryload
 from app.models.sales import QuoteItem, SalesOrder, SalesOrderItem
-from app.models.master import Customer
+from sqlalchemy import exists, or_
+from app.models.master import Customer, CustomerNhanVien
 from app.schemas.sales import (
     SalesOrderCreate, SalesOrderUpdate, SalesOrderResponse,
     SalesOrderListItem, PagedResponse
@@ -43,6 +44,7 @@ class SalesOrderService:
         tu_ngay: str = None,
         den_ngay: str = None,
         created_by: int = None,
+        scope_nv_id: list[int] | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> PagedResponse:
@@ -70,6 +72,18 @@ class SalesOrderService:
             q = q.filter(SalesOrder.ngay_don <= den_ngay)
         if created_by:
             q = q.filter(SalesOrder.created_by == created_by)
+        # Data isolation: chỉ thấy đơn của KH được phân công cho SA
+        if scope_nv_id is not None:
+            scoped_cids = self.db.query(Customer.id).filter(
+                or_(
+                    Customer.nv_phu_trach_id.in_(scope_nv_id),
+                    exists().where(
+                        (CustomerNhanVien.customer_id == Customer.id)
+                        & (CustomerNhanVien.user_id.in_(scope_nv_id))
+                    ),
+                )
+            )
+            q = q.filter(SalesOrder.customer_id.in_(scoped_cids))
 
         total = q.count()
         orders = q.order_by(SalesOrder.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()

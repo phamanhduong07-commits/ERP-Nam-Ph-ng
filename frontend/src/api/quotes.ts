@@ -144,6 +144,7 @@ export interface QuoteListItem {
   tong_cong: number
   so_dong: number
   created_at: string
+  created_by?: number | null
   created_by_name?: string | null
   phap_nhan_id?: number | null
   ten_phap_nhan?: string | null
@@ -720,6 +721,20 @@ export const quotesApi = {
   submit: (id: number) => client.patch<Quote>(`/quotes/${id}/submit`),
 
   approve: (id: number) => client.patch<Quote>(`/quotes/${id}/approve`),
+
+  reject: (id: number, ly_do?: string) =>
+    client.patch<Quote>(`/quotes/${id}/reject`, { ly_do: ly_do || null }),
+
+  history: (id: number) =>
+    client.get<{
+      id: number
+      action: string
+      old_status: string | null
+      new_status: string | null
+      note: string | null
+      changed_at: string | null
+      changed_by_name: string | null
+    }[]>(`/quotes/${id}/history`),
 
   cancel: (id: number) => client.patch(`/quotes/${id}/cancel`),
 

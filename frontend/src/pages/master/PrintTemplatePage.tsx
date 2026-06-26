@@ -541,8 +541,19 @@ export default function PrintTemplatePage() {
 
   ${easyConfig.introText ? `<div style="margin-top: 15px; margin-bottom: 15px; font-size: 14px; line-height: 1.5;">${easyConfig.introText}</div>` : ''}
 
-  ${easyConfig.showTable ? `
-  <div style="margin-top:8px">{{body_html}}</div>` : ''}
+  ${easyConfig.showTable ? (() => {
+    const RIGHT_KEYS = new Set(['so_luong', 'don_gia', 'gia_ban', 'thanh_tien'])
+    const CENTER_KEYS = new Set(['stt', 'dvt', 'so_lop', 'to_hop_song', 'kich_thuoc'])
+    const colAlign = (key: string) => RIGHT_KEYS.has(key) ? 'right' : CENTER_KEYS.has(key) ? 'center' : 'left'
+    const theadCells = (easyConfig.selectedColumns || []).map((c: DocColumn) =>
+      `<th style="text-align:${colAlign(c.key)}">${c.label}</th>`
+    ).join('')
+    return `
+  <table style="margin-top:8px">
+    <thead><tr>${theadCells}</tr></thead>
+    <tbody>{{body_html}}</tbody>
+  </table>`
+  })() : ''}
 
   ${easyConfig.customContent ? `<div style="margin-top: 10px; font-size: 14px; line-height: 1.5;">${easyConfig.customContent}</div>` : ''}
   

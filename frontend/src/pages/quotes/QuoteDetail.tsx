@@ -3,11 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Descriptions, Tag, Table, Button, Space, Typography, Row, Col,
-  Divider, Popconfirm, message, Skeleton, Drawer, Badge, Modal, DatePicker, Alert,
+  Divider, Popconfirm, message, Skeleton, Drawer, Badge, Modal, DatePicker, Alert, Input,
 } from 'antd'
 import {
   ArrowLeftOutlined, EditOutlined, CheckCircleOutlined, StopOutlined, FileAddOutlined,
-  EyeOutlined, PrinterOutlined, CopyOutlined, SendOutlined, SyncOutlined, WarningOutlined, DownloadOutlined,
+  EyeOutlined, PrinterOutlined, CopyOutlined, SendOutlined, SyncOutlined, WarningOutlined, DownloadOutlined, CloseCircleOutlined,
 } from '@ant-design/icons'
 import type { Dayjs } from 'dayjs'
 import type { ColumnsType } from 'antd/es/table'
@@ -370,8 +370,11 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   const [giaHanDate, setGiaHanDate] = useState<Dayjs | null>(null)
   const [isPrintLoading, setIsPrintLoading] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
+  const [rejectModal, setRejectModal] = useState(false)
+  const [rejectLyDo, setRejectLyDo] = useState('')
   const role = useAuthStore(s => s.user?.role)
-  const hideCostDetails = role === 'SALE_ADMIN' || role === 'TRUONG_PHONG_SALE_ADMIN'
+  const userId = useAuthStore(s => s.user?.id)
+  const hideCostDetails = role === 'SALE_ADMIN' || role === 'SALE_ADMIN_NHAN_VIEN' || role === 'TRUONG_PHONG_SALE_ADMIN' || role === 'SALE_ADMIN_TO_TRUONG'
   const canApprove = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG_SALE_ADMIN'
 
   const { data: quote, isLoading } = useQuery({
@@ -379,6 +382,14 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
     queryFn: () => quotesApi.get(Number(id)).then((r) => r.data),
     enabled: !!id,
   })
+
+  const { data: quoteHistory } = useQuery({
+    queryKey: ['quote-history', id],
+    queryFn: () => quotesApi.history(Number(id)).then((r) => r.data),
+    enabled: !!id && quote?.trang_thai === 'moi',
+  })
+
+  const lastRejected = quoteHistory?.find(h => h.action === 'rejected')
 
   const invalidateCounts = () => queryClient.invalidateQueries({ queryKey: ['quotes-counts'] })
 
@@ -413,6 +424,19 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
       invalidateCounts()
     },
     onError: (e: unknown) => message.error(apiErrorMsg(e, 'Huỷ thất bại')),
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: (ly_do: string) => quotesApi.reject(Number(id), ly_do),
+    onSuccess: () => {
+      message.success('Đã từ chối báo giá — trả về Mới để chỉnh sửa lại')
+      setRejectModal(false)
+      setRejectLyDo('')
+      queryClient.invalidateQueries({ queryKey: ['quote', id] })
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      invalidateCounts()
+    },
+    onError: (e: unknown) => message.error(apiErrorMsg(e, 'Từ chối thất bại')),
   })
 
   const copyMutation = useMutation({
@@ -522,11 +546,17 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
   }
 
   const handlePrint = async () => {
+    // Mở popup trước khi await để tránh bị popup blocker chặn (user gesture hết hạn sau await)
+    const printWin = window.open('', '_blank', 'width=1050,height=780')
+    if (!printWin) {
+      message.error('Popup bị chặn. Vui lòng cho phép popup trong trình duyệt.')
+      return
+    }
     setIsPrintLoading(true)
     try {
       const result = await fetchTemplate('in')
-      if (!result) return
-      printDocument(buildQuotePrintOpts(result.templateCols, result.template))
+      if (!result) { printWin.close(); return }
+      printDocument(buildQuotePrintOpts(result.templateCols, result.template), false, printWin)
     } finally {
       setIsPrintLoading(false)
     }
@@ -662,7 +692,7 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
         </Col>
         <Col>
           <Space wrap>
-            {(trangThai === 'moi' || trangThai === 'cho_duyet') && (
+            {((trangThai === 'moi' || (trangThai === 'cho_duyet' && canApprove)) && (canApprove || quote.created_by === userId)) && (
               <Button
                 size={embedded ? 'small' : 'middle'}
                 icon={<EditOutlined />}
@@ -702,6 +732,16 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
                 </Button>
               </Popconfirm>
             )}
+            {trangThai === 'cho_duyet' && canApprove && (
+              <Button
+                size={embedded ? 'small' : 'middle'}
+                danger
+                icon={<CloseCircleOutlined />}
+                onClick={() => { setRejectLyDo(''); setRejectModal(true) }}
+              >
+                Từ chối
+              </Button>
+            )}
             {trangThai === 'da_duyet' && (
               <Popconfirm
                 title="Tạo bản sao để chỉnh sửa?"
@@ -738,10 +778,10 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
                 Gia hạn
               </Button>
             )}
-            {trangThai !== 'huy' && trangThai !== 'het_han' && (
+            {trangThai !== 'huy' && trangThai !== 'het_han' && (canApprove || quote.created_by === userId) && (
               <Divider type="vertical" style={{ height: 24 }} />
             )}
-            {trangThai !== 'huy' && trangThai !== 'het_han' && (
+            {trangThai !== 'huy' && trangThai !== 'het_han' && (canApprove || quote.created_by === userId) && (
               <Popconfirm
                 title="Huỷ báo giá này?"
                 onConfirm={() => cancelMutation.mutate()}
@@ -767,6 +807,16 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
           </Space>
         </Col>
       </Row>
+
+      {trangThai === 'moi' && lastRejected && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={`Báo giá bị từ chối bởi ${lastRejected.changed_by_name || 'trưởng phòng'}`}
+          description={lastRejected.note ? `Lý do: ${lastRejected.note}` : 'Vui lòng chỉnh sửa và gửi duyệt lại.'}
+        />
+      )}
 
       {trangThai === 'da_duyet' && hetHanDaysLeft !== null && hetHanDaysLeft >= 0 && hetHanDaysLeft <= 7 && (
         <Alert
@@ -904,58 +954,80 @@ export default function QuoteDetail({ quoteId, embedded = false }: Props) {
         onOk={(overrides) => taoDonHangMutation.mutate(overrides)}
       />
 
-      <Card title="Tổng hợp chi phí">
-        <Row gutter={[16, 8]} style={{ maxWidth: 500 }}>
-          <Col span={14}><Text>Tiền hàng</Text></Col>
-          <Col span={10} style={{ textAlign: 'right' }}>
-            <Text strong>{vnd(quote.tong_tien_hang)} đ</Text>
-          </Col>
+      <Modal
+        title="Từ chối báo giá"
+        open={rejectModal}
+        onCancel={() => setRejectModal(false)}
+        onOk={() => rejectMutation.mutate(rejectLyDo)}
+        okText="Xác nhận từ chối"
+        okButtonProps={{ danger: true, loading: rejectMutation.isPending }}
+        cancelText="Huỷ"
+      >
+        <p style={{ marginBottom: 8 }}>
+          Báo giá sẽ được trả về trạng thái <strong>Mới</strong> để nhân viên chỉnh sửa lại.
+        </p>
+        <Input.TextArea
+          rows={3}
+          placeholder="Lý do từ chối (tùy chọn)..."
+          value={rejectLyDo}
+          onChange={e => setRejectLyDo(e.target.value)}
+        />
+      </Modal>
 
-          {quote.chi_phi_bang_in > 0 && <>
-            <Col span={14}><Text>CP Bảng in</Text></Col>
-            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_bang_in)} đ</Text></Col>
-          </>}
+      {!hideCostDetails && (
+        <Card title="Tổng hợp chi phí">
+          <Row gutter={[16, 8]} style={{ maxWidth: 500 }}>
+            <Col span={14}><Text>Tiền hàng</Text></Col>
+            <Col span={10} style={{ textAlign: 'right' }}>
+              <Text strong>{vnd(quote.tong_tien_hang)} đ</Text>
+            </Col>
 
-          {quote.chi_phi_khuon > 0 && <>
-            <Col span={14}><Text>CP Khuôn</Text></Col>
-            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_khuon)} đ</Text></Col>
-          </>}
+            {quote.chi_phi_bang_in > 0 && <>
+              <Col span={14}><Text>CP Bảng in</Text></Col>
+              <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_bang_in)} đ</Text></Col>
+            </>}
 
-          {quote.chi_phi_van_chuyen > 0 && <>
-            <Col span={14}><Text>CP Vận chuyển</Text></Col>
-            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_van_chuyen)} đ</Text></Col>
-          </>}
+            {quote.chi_phi_khuon > 0 && <>
+              <Col span={14}><Text>CP Khuôn</Text></Col>
+              <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_khuon)} đ</Text></Col>
+            </>}
 
-          {quote.chi_phi_hang_hoa_dv > 0 && <>
-            <Col span={14}><Text>CP Hàng hóa DV</Text></Col>
-            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_hang_hoa_dv)} đ</Text></Col>
-          </>}
+            {quote.chi_phi_van_chuyen > 0 && <>
+              <Col span={14}><Text>CP Vận chuyển</Text></Col>
+              <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_van_chuyen)} đ</Text></Col>
+            </>}
 
-          {quote.chi_phi_khac_1 > 0 && <>
-            <Col span={14}><Text>{quote.chi_phi_khac_1_ten || 'CP Khác 1'}</Text></Col>
-            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_khac_1)} đ</Text></Col>
-          </>}
+            {quote.chi_phi_hang_hoa_dv > 0 && <>
+              <Col span={14}><Text>CP Hàng hóa DV</Text></Col>
+              <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_hang_hoa_dv)} đ</Text></Col>
+            </>}
 
-          {quote.chi_phi_khac_2 > 0 && <>
-            <Col span={14}><Text>{quote.chi_phi_khac_2_ten || 'CP Khác 2'}</Text></Col>
-            <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_khac_2)} đ</Text></Col>
-          </>}
+            {quote.chi_phi_khac_1 > 0 && <>
+              <Col span={14}><Text>{quote.chi_phi_khac_1_ten || 'CP Khác 1'}</Text></Col>
+              <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_khac_1)} đ</Text></Col>
+            </>}
 
-          {quote.tien_vat > 0 && <>
-            <Col span={14}><Text type="secondary">Thuế VAT ({quote.ty_le_vat}%)</Text></Col>
-            <Col span={10} style={{ textAlign: 'right' }}><Text type="secondary">{vnd(quote.tien_vat)} đ</Text></Col>
-          </>}
+            {quote.chi_phi_khac_2 > 0 && <>
+              <Col span={14}><Text>{quote.chi_phi_khac_2_ten || 'CP Khác 2'}</Text></Col>
+              <Col span={10} style={{ textAlign: 'right' }}><Text>{vnd(quote.chi_phi_khac_2)} đ</Text></Col>
+            </>}
 
-          <Col span={24}><Divider style={{ margin: '8px 0' }} /></Col>
+            {quote.tien_vat > 0 && <>
+              <Col span={14}><Text type="secondary">Thuế VAT ({quote.ty_le_vat}%)</Text></Col>
+              <Col span={10} style={{ textAlign: 'right' }}><Text type="secondary">{vnd(quote.tien_vat)} đ</Text></Col>
+            </>}
 
-          <Col span={14}><Text strong>TỔNG CỘNG</Text></Col>
-          <Col span={10} style={{ textAlign: 'right' }}>
-            <Text strong style={{ fontSize: 18, color: '#f5222d' }}>
-              {vnd(quote.tong_cong)} đ
-            </Text>
-          </Col>
-        </Row>
-      </Card>
+            <Col span={24}><Divider style={{ margin: '8px 0' }} /></Col>
+
+            <Col span={14}><Text strong>TỔNG CỘNG</Text></Col>
+            <Col span={10} style={{ textAlign: 'right' }}>
+              <Text strong style={{ fontSize: 18, color: '#f5222d' }}>
+                {vnd(quote.tong_cong)} đ
+              </Text>
+            </Col>
+          </Row>
+        </Card>
+      )}
     </div>
   )
 }

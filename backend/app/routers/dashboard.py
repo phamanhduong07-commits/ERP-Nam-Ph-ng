@@ -3,12 +3,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.deps import get_current_user
+from sqlalchemy import exists, or_
+from app.deps import get_current_user, get_sale_visible_nv_ids
 from app.models.auth import User
 from app.models.sales import SalesOrder, Quote
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.purchase import PurchaseOrder
-from app.models.master import Customer, Warehouse, PaperMaterial, OtherMaterial, Product
+from app.models.master import Customer, CustomerNhanVien, Warehouse, PaperMaterial, OtherMaterial, Product
 from app.models.inventory import InventoryBalance
 from app.models.warehouse_doc import GoodsReceipt, MaterialIssue, DeliveryOrder
 from app.models.accounting import CashReceipt, CashPayment
@@ -19,22 +20,42 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
 @router.get("/stats")
-def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     today = date.today()
     next_7_days = today + timedelta(days=7)
 
+    # SA scope: chỉ tính theo KH được phân công
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    scoped_cids = None
+    if scope_nv_ids is not None:
+        scoped_cids = db.query(Customer.id).filter(
+            or_(
+                Customer.nv_phu_trach_id.in_(scope_nv_ids),
+                exists().where(
+                    (CustomerNhanVien.customer_id == Customer.id)
+                    & (CustomerNhanVien.user_id.in_(scope_nv_ids))
+                ),
+            )
+        )
+
+    def _so(q):
+        return q.filter(SalesOrder.customer_id.in_(scoped_cids)) if scoped_cids is not None else q
+
+    def _quote(q):
+        return q.filter(Quote.customer_id.in_(scoped_cids)) if scoped_cids is not None else q
+
     don_hang_moi_hom_nay = (
-        db.query(SalesOrder)
+        _so(db.query(SalesOrder))
         .filter(SalesOrder.ngay_don == today)
         .count()
     )
 
     cho_duyet = (
-        db.query(SalesOrder)
+        _so(db.query(SalesOrder))
         .filter(SalesOrder.trang_thai == "moi")
         .count()
     ) + (
-        db.query(Quote)
+        _quote(db.query(Quote))
         .filter(Quote.trang_thai == "moi")
         .count()
     )
@@ -45,12 +66,16 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         .count()
     )
 
-    tong_khach_hang = db.query(Customer).count()
-    bao_gia_moi = db.query(Quote).filter(Quote.trang_thai == "moi").count()
-    don_hang_cho_duyet = db.query(SalesOrder).filter(SalesOrder.trang_thai == "moi").count()
-    don_hang_da_duyet = db.query(SalesOrder).filter(SalesOrder.trang_thai.in_(["da_duyet", "dang_sx"])).count()
+    tong_khach_hang = (
+        db.query(Customer).filter(Customer.id.in_(scoped_cids)).count()
+        if scoped_cids is not None
+        else db.query(Customer).count()
+    )
+    bao_gia_moi = _quote(db.query(Quote)).filter(Quote.trang_thai == "moi").count()
+    don_hang_cho_duyet = _so(db.query(SalesOrder)).filter(SalesOrder.trang_thai == "moi").count()
+    don_hang_da_duyet = _so(db.query(SalesOrder)).filter(SalesOrder.trang_thai.in_(["da_duyet", "dang_sx"])).count()
     don_hang_can_giao = (
-        db.query(SalesOrder)
+        _so(db.query(SalesOrder))
         .filter(
             SalesOrder.ngay_giao_hang.isnot(None),
             SalesOrder.ngay_giao_hang <= next_7_days,
@@ -139,12 +164,12 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)
     ton_thap = sorted(ton_thap, key=lambda x: x["ton_luong"] / max(x["ton_toi_thieu"], 1))[:6]
 
     doanh_thu_hom_nay = (
-        db.query(func.coalesce(func.sum(SalesOrder.tong_tien), 0))
+        _so(db.query(func.coalesce(func.sum(SalesOrder.tong_tien), 0)))
         .filter(SalesOrder.ngay_don == today)
         .scalar()
     )
     doanh_thu_thang = (
-        db.query(func.coalesce(func.sum(SalesOrder.tong_tien), 0))
+        _so(db.query(func.coalesce(func.sum(SalesOrder.tong_tien), 0)))
         .filter(
             func.extract("year", SalesOrder.ngay_don) == today.year,
             func.extract("month", SalesOrder.ngay_don) == today.month,
@@ -159,7 +184,7 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)
     else:
         prev_year, prev_month = today.year, today.month - 1
     doanh_thu_thang_truoc = (
-        db.query(func.coalesce(func.sum(SalesOrder.tong_tien), 0))
+        _so(db.query(func.coalesce(func.sum(SalesOrder.tong_tien), 0)))
         .filter(
             func.extract("year", SalesOrder.ngay_don) == prev_year,
             func.extract("month", SalesOrder.ngay_don) == prev_month,

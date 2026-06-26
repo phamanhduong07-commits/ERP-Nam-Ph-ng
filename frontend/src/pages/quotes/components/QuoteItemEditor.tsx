@@ -52,6 +52,7 @@ export interface QuoteItemEditorProps {
   getCustomerId: () => number | undefined
   onSaveToProduct?: () => Promise<void>
   saveToProductLoading?: boolean
+  hideCostDetails?: boolean
 }
 
 export default function QuoteItemEditor({
@@ -63,6 +64,7 @@ export default function QuoteItemEditor({
   finance, updateFinance, onGiaBanChange,
   phanXuongList, onOpenCauTruc, onAutoName, getCustomerId,
   onSaveToProduct, saveToProductLoading,
+  hideCostDetails = false,
 }: QuoteItemEditorProps) {
   const boxCalc = !ci.khong_ct
     ? calcBoxDimensions(ci.loai_thung, ci.dai, ci.rong, ci.cao, ci.so_lop, ci.be_so_con ?? 1, ci.loai_be, ci.be_hai_manh)
@@ -677,7 +679,7 @@ export default function QuoteItemEditor({
                   </Row>
                 )}
 
-                {(() => {
+                {!hideCostDetails && (() => {
                   const r = calcOffsetCost(ci.so_luong, ci)
                   if (!r || r.detail.tong_chi_phi === 0) return null
                   const f = (v: number) => v.toLocaleString('vi-VN')
@@ -855,6 +857,7 @@ export default function QuoteItemEditor({
             finance={finance}
             updateFinance={updateFinance}
             onGiaBanChange={onGiaBanChange}
+            hideCostDetails={hideCostDetails}
           />
         </Col>
       </Row>

@@ -8,13 +8,13 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, text as _text
+from sqlalchemy import and_, exists, func, or_, text as _text
 from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import get_db
-from app.deps import get_current_user, require_roles
+from app.deps import get_current_user, get_sale_visible_nv_ids, require_roles
 from app.models.auth import User
 from app.models.inventory import InventoryBalance
-from app.models.master import Warehouse, Product, PhanXuong, Customer
+from app.models.master import Warehouse, Product, PhanXuong, Customer, CustomerNhanVien
 from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.sales import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
 from app.models.billing import SalesInvoice, InvoiceAdjustmentLog
@@ -48,6 +48,20 @@ from app.routers.warehouse import (  # shared schemas + helpers
 
 router = APIRouter(prefix="/api/warehouse", tags=["warehouse"])
 
+def _scoped_customer_ids(current_user, db):
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if scope_nv_ids is None:
+        return None  # full access — caller must skip the IN filter
+    return db.query(Customer.id).filter(
+        or_(
+            Customer.nv_phu_trach_id.in_(scope_nv_ids),
+            exists().where(
+                (CustomerNhanVien.customer_id == Customer.id)
+                & (CustomerNhanVien.user_id.in_(scope_nv_ids))
+            ),
+        )
+    )
+
 
 # ── Phiếu xuất giao hàng (DeliveryOrder) ─────────────────────────────────────
 
@@ -65,8 +79,10 @@ def list_deliveries(
     so_phieu: Optional[str] = Query(None),
     phap_nhan_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+
     q = db.query(DeliveryOrder)
     if so_phieu:
         q = q.filter(DeliveryOrder.so_phieu.ilike(f"%{so_phieu}%"))
@@ -111,6 +127,10 @@ def list_deliveries(
                 SalesOrder.so_don.ilike(f"%{so_don}%")
             )
         q = q.filter(DeliveryOrder.id.in_(sub))
+
+    _scope_q = _scoped_customer_ids(current_user, db)
+    if _scope_q is not None:
+        q = q.filter(DeliveryOrder.customer_id.in_(_scope_q))
 
     rows = (
         q.options(
@@ -159,8 +179,9 @@ def list_deliveries_mobile(
 
 
 @router.get("/deliveries/{do_id}")
-def get_delivery(do_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    r = (
+def get_delivery(do_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    role_code = current_user.role.ma_vai_tro if current_user.role else None
+    q = (
         db.query(DeliveryOrder)
         .options(
             joinedload(DeliveryOrder.items)
@@ -176,8 +197,11 @@ def get_delivery(do_id: int, db: Session = Depends(get_db), _: User = Depends(ge
             joinedload(DeliveryOrder.don_gia_vc),
         )
         .filter(DeliveryOrder.id == do_id)
-        .first()
     )
+    _scope_q2 = _scoped_customer_ids(current_user, db)
+    if _scope_q2 is not None:
+        q = q.filter(DeliveryOrder.customer_id.in_(_scope_q2))
+    r = q.first()
     if not r:
         raise HTTPException(404, "Không tìm thấy phiếu giao hàng")
     return _do_to_dict(r, db, include_print_data=True)

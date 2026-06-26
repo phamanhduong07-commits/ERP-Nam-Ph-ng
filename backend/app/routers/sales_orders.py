@@ -45,7 +45,7 @@ _BACKFILL_SPEC_PG = """
     FROM quote_items qi
     WHERE soi.quote_item_id = qi.id
 """
-from app.deps import get_current_user, get_admin_user, require_permissions
+from app.deps import get_current_user, get_admin_user, get_sale_visible_nv_ids, require_permissions
 from app.models.auth import User
 from app.models.master import Customer, Product
 from app.models.sales import SalesOrder, SalesOrderItem, QuoteItem
@@ -54,7 +54,7 @@ from app.models.production_plan import ProductionPlanLine
 from app.services.sales_order_service import SalesOrderService
 from app.schemas.master import CustomerShort, ProductShort
 from app.schemas.sales import (
-    SalesOrderCreate, SalesOrderUpdate,
+    SalesOrderCreate, SalesOrderUpdate, SalesOrderItemUpsert,
     SalesOrderResponse, SalesOrderListItem,
     SalesOrderItemResponse, PagedResponse,
 )
@@ -82,6 +82,10 @@ SALES_ORDER_IMPORT_FIELDS = [
 
 router = APIRouter(prefix="/api/sales-orders", tags=["sales-orders"])
 
+def _get_so_scope(current_user: User) -> list[int] | None:
+    """Return list of visible NV IDs (includes self + granted targets), or None (full access)."""
+    return get_sale_visible_nv_ids(current_user)
+
 
 @router.get("", response_model=PagedResponse)
 def list_orders(
@@ -95,7 +99,7 @@ def list_orders(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=1000),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     service = SalesOrderService(db)
     return service.get_sales_orders_paginated(
@@ -106,6 +110,7 @@ def list_orders(
         tu_ngay=tu_ngay,
         den_ngay=den_ngay,
         created_by=created_by,
+        scope_nv_id=_get_so_scope(current_user),
         page=page,
         page_size=page_size,
     )
@@ -114,22 +119,30 @@ def list_orders(
 @router.get("/counts")
 def get_counts(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     from app.models.sales import SalesOrder as SO
-    moi = db.query(SO).filter(SO.trang_thai == "moi").count()
-    da_duyet = db.query(SO).filter(SO.trang_thai == "da_duyet").count()
-    return {"moi": moi, "da_duyet": da_duyet}
+    scope_nv_ids = _get_so_scope(current_user)
+    q_moi = db.query(SO).filter(SO.trang_thai == "moi")
+    q_da_duyet = db.query(SO).filter(SO.trang_thai == "da_duyet")
+    if scope_nv_ids is not None:
+        q_moi = q_moi.filter(SO.nv_kinh_doanh_id.in_(scope_nv_ids))
+        q_da_duyet = q_da_duyet.filter(SO.nv_kinh_doanh_id.in_(scope_nv_ids))
+    return {"moi": q_moi.count(), "da_duyet": q_da_duyet.count()}
 
 
 @router.get("/{order_id}", response_model=SalesOrderResponse)
 def get_order(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     service = SalesOrderService(db)
-    return service.get_sales_order_by_id(order_id)
+    order = service.get_sales_order_by_id(order_id)
+    scope_nv_ids = _get_so_scope(current_user)
+    if scope_nv_ids is not None and order.nv_kinh_doanh_id not in scope_nv_ids:
+        raise HTTPException(status_code=403, detail="Bạn không có quyền xem đơn hàng này")
+    return order
 
 
 @router.post("", response_model=SalesOrderResponse, status_code=201)
@@ -213,8 +226,68 @@ def update_order(
     if order.trang_thai not in ("moi",):
         raise HTTPException(status_code=400, detail="Chỉ có thể sửa đơn hàng ở trạng thái 'Mới'")
 
-    for field, value in data.model_dump(exclude_none=True).items():
+    # Cập nhật các field header (bỏ qua items — xử lý riêng bên dưới)
+    header_data = data.model_dump(exclude_none=True, exclude={"items"})
+    for field, value in header_data.items():
         setattr(order, field, value)
+
+    # Upsert items nếu payload có gửi lên
+    if data.items is not None:
+        payload_ids = {item.id for item in data.items if item.id is not None}
+
+        # Xóa items không còn trong payload
+        for existing_item in list(order.items):
+            if existing_item.id not in payload_ids:
+                db.delete(existing_item)
+
+        # Update hoặc insert từng item
+        existing_map = {item.id: item for item in order.items}
+        for item_data in data.items:
+            if item_data.id is not None and item_data.id in existing_map:
+                # Update item đã tồn tại
+                db_item = existing_map[item_data.id]
+                db_item.so_luong = item_data.so_luong
+                db_item.don_gia = item_data.don_gia
+                db_item.ty_le_giam_gia = item_data.ty_le_giam_gia
+                db_item.so_tien_giam_gia = item_data.so_tien_giam_gia
+                db_item.dvt = item_data.dvt
+                db_item.ngay_giao_hang = item_data.ngay_giao_hang
+                db_item.ghi_chu_san_pham = item_data.ghi_chu_san_pham
+                db_item.yeu_cau_in = item_data.yeu_cau_in
+                db_item.phan_xuong_id = item_data.phan_xuong_id
+                if item_data.ten_hang:
+                    db_item.ten_hang = item_data.ten_hang
+            else:
+                # Insert item mới
+                product = db.query(Product).filter(Product.id == item_data.product_id, Product.trang_thai == True).first()
+                if not product:
+                    raise HTTPException(status_code=404, detail=f"Sản phẩm ID {item_data.product_id} không tồn tại")
+                new_item = SalesOrderItem(
+                    product_id=item_data.product_id,
+                    ten_hang=item_data.ten_hang or product.ten_hang,
+                    so_luong=item_data.so_luong,
+                    dvt=item_data.dvt or product.dvt,
+                    don_gia=item_data.don_gia,
+                    ty_le_giam_gia=item_data.ty_le_giam_gia,
+                    so_tien_giam_gia=item_data.so_tien_giam_gia,
+                    ngay_giao_hang=item_data.ngay_giao_hang,
+                    ghi_chu_san_pham=item_data.ghi_chu_san_pham,
+                    yeu_cau_in=item_data.yeu_cau_in,
+                    phan_xuong_id=item_data.phan_xuong_id,
+                )
+                order.items.append(new_item)
+
+        # Tính lại tổng tiền
+        db.flush()
+        tong_tien = sum(float(it.thanh_tien) for it in order.items)
+        order.tong_tien = round(tong_tien, 2)
+        if order.ty_le_giam_gia and order.ty_le_giam_gia > 0:
+            order.tong_tien_sau_giam = order.tong_tien * (1 - order.ty_le_giam_gia / 100)
+        elif order.so_tien_giam_gia and order.so_tien_giam_gia > 0:
+            order.tong_tien_sau_giam = max(0, order.tong_tien - float(order.so_tien_giam_gia))
+        else:
+            order.tong_tien_sau_giam = order.tong_tien
+
     db.commit()
     logger.info("updated sales_order id=%s", order_id)
     return get_order(order_id, db, current_user)

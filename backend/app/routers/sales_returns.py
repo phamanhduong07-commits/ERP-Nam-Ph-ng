@@ -1,12 +1,12 @@
 ﻿from datetime import date, datetime, timezone
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.deps import get_current_user, require_permissions, assert_has_permission
+from app.deps import get_current_user, get_sale_visible_nv_ids, require_permissions, assert_has_permission
 from app.models.auth import User
-from app.models.master import Customer, Warehouse
+from app.models.master import Customer, CustomerNhanVien, Warehouse
 from app.models.sales import SalesOrder, SalesOrderItem, SalesReturn, SalesReturnItem
 from app.models.production import ProductionOrderItem
 from app.models.warehouse_doc import DeliveryOrder, DeliveryOrderItem
@@ -203,7 +203,7 @@ def list_returns(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=1000),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     query = db.query(SalesReturn).options(
         joinedload(SalesReturn.customer),
@@ -230,6 +230,21 @@ def list_returns(
 
     if den_ngay:
         query = query.filter(SalesReturn.ngay_tra <= den_ngay)
+
+    scope_nv_ids = get_sale_visible_nv_ids(current_user)
+    if scope_nv_ids is not None:
+        scoped_ids = (
+            db.query(Customer.id).filter(
+                or_(
+                    Customer.nv_phu_trach_id.in_(scope_nv_ids),
+                    exists().where(
+                        (CustomerNhanVien.customer_id == Customer.id)
+                        & (CustomerNhanVien.user_id.in_(scope_nv_ids))
+                    ),
+                )
+            )
+        )
+        query = query.filter(SalesReturn.customer_id.in_(scoped_ids))
 
     total = query.count()
     returns = query.order_by(SalesReturn.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -277,8 +292,10 @@ def list_returns(
             else:
                 phuong_an_map[rid] = "chua_xuat_hd"
 
-    # Summary stats — theo context filter (customer_id, tu_ngay, den_ngay)
+    # Summary stats — theo context filter (customer_id, tu_ngay, den_ngay, SA scope)
     def _apply_context_filter(q):
+        if scope_nv_ids is not None:
+            q = q.filter(SalesReturn.customer_id.in_(scoped_ids))
         if customer_id:
             q = q.filter(SalesReturn.customer_id == customer_id)
         if tu_ngay:

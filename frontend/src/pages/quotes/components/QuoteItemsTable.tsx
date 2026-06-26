@@ -15,10 +15,12 @@ interface QuoteItemsTableProps {
   onEdit: (idx: number) => void
   onDelete: (idx: number) => void
   onCopy: (idx: number) => void
+  hideCostDetails?: boolean
 }
 
 export default function QuoteItemsTable({
   items, editingIdx, isReadonly, paperCodes, onEdit, onDelete, onCopy,
+  hideCostDetails = false,
 }: QuoteItemsTableProps) {
   const columns: ColumnsType<QuoteItem> = [
     { title: 'STT', dataIndex: 'stt', width: 45, align: 'center' },
@@ -88,7 +90,7 @@ export default function QuoteItemsTable({
         return '—'
       },
     },
-    {
+    ...(!hideCostDetails ? [{
       title: 'Giá phôi', dataIndex: 'gia_phoi', width: 100, align: 'right' as const,
       render: (v: number) => v > 0
         ? <Text style={{ color: '#52c41a', fontSize: 12 }}>{v.toLocaleString('vi-VN')}</Text>
@@ -99,7 +101,7 @@ export default function QuoteItemsTable({
       render: (v: number) => v > 0
         ? <Text style={{ color: '#722ed1', fontSize: 12 }}>{v.toLocaleString('vi-VN')}</Text>
         : <Text style={{ color: '#bfbfbf', fontSize: 11 }}>—</Text>,
-    },
+    }] : []),
     {
       title: 'Thành tiền', width: 115, align: 'right',
       render: (_: unknown, r: QuoteItem) => {
