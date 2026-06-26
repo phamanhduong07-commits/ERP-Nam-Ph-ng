@@ -709,7 +709,7 @@ def approve_return(
         new_do = DeliveryOrder(
             so_phieu=f"{prefix_do}{seq_do:04d}",
             ngay_xuat=date.today(),
-            sales_order_id=return_obj.sales_order_id,
+            sales_order_id=None,
             customer_id=return_obj.customer_id,
             warehouse_id=warehouse_id,
             trang_thai="nhap",
@@ -722,7 +722,7 @@ def approve_return(
             soi = item.sales_order_item
             db.add(DeliveryOrderItem(
                 delivery_id=new_do.id,
-                sales_order_item_id=item.sales_order_item_id,
+                sales_order_item_id=None,
                 product_id=soi.product_id if soi else None,
                 ten_hang=(soi.ten_hang if soi else None) or "Hàng giao lại",
                 so_luong=item.so_luong_tra,
