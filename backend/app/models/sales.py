@@ -166,9 +166,14 @@ class SalesReturn(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc))
 
+    replacement_do_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("delivery_orders.id"), nullable=True)
+
     sales_order: Mapped["SalesOrder"] = relationship("SalesOrder", back_populates="returns")
     delivery_order: Mapped["DeliveryOrder | None"] = relationship(
-        "DeliveryOrder", back_populates="returns")  # type: ignore[name-defined]
+        "DeliveryOrder", foreign_keys="[SalesReturn.delivery_order_id]", back_populates="returns")  # type: ignore[name-defined]
+    replacement_do: Mapped["DeliveryOrder | None"] = relationship(  # type: ignore[name-defined]
+        "DeliveryOrder", foreign_keys="[SalesReturn.replacement_do_id]"
+    )
     customer: Mapped["Customer"] = relationship("Customer", back_populates="sales_returns")
     items: Mapped[list["SalesReturnItem"]] = relationship(
         "SalesReturnItem", back_populates="sales_return", cascade="all, delete-orphan"

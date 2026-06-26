@@ -211,7 +211,8 @@ def list_returns(
         joinedload(SalesReturn.customer),
         joinedload(SalesReturn.sales_order),
         joinedload(SalesReturn.creator),
-        joinedload(SalesReturn.approver)
+        joinedload(SalesReturn.approver),
+        joinedload(SalesReturn.replacement_do),
     )
 
     if search:
@@ -347,6 +348,8 @@ def list_returns(
             "created_at": r.created_at,
             "phuong_an_can_tru": phuong_an_map.get(r.id) if r.trang_thai == "da_duyet" else None,
             "trang_thai_hoan_tien": trang_thai_hoan_tien_map.get(r.id),
+            "so_phieu_giao_bu": r.replacement_do.so_phieu if r.replacement_do else None,
+            "trang_thai_giao_bu": r.replacement_do.trang_thai if r.replacement_do else None,
         } for r in returns],
         "total": total,
         "page": page,
@@ -992,5 +995,7 @@ def create_replacement_do(
 
     new_do.tong_tien_hang = tong_tien
     new_do.tong_thanh_toan = tong_tien
+    # Lưu liên kết ngược để bảng danh sách biết đã giao bù
+    return_obj.replacement_do_id = new_do.id
     db.commit()
     return {"id": new_do.id, "so_phieu": new_do.so_phieu}

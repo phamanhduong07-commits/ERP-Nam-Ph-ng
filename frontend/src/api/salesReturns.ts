@@ -75,6 +75,8 @@ export interface SalesReturnListItem {
   created_at: string
   phuong_an_can_tru?: 'chua_xuat_hd' | 'da_xuat_hd' | 'da_thu_tien' | null
   trang_thai_hoan_tien?: string | null
+  so_phieu_giao_bu?: string | null
+  trang_thai_giao_bu?: string | null
 }
 
 export interface SalesReturnSummary {

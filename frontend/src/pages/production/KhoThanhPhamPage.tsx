@@ -189,6 +189,23 @@ export default function KhoThanhPhamPage() {
       render: (v: number) => <Text strong>{fmtN(v)}</Text>,
     },
     {
+      title: 'Giao bù',
+      width: 160,
+      render: (_, r) => {
+        if (!r.so_phieu_giao_bu) return <Tag color="default" style={{ fontSize: 11 }}>Chưa giao bù</Tag>
+        const color = r.trang_thai_giao_bu === 'da_xuat' ? 'green' : r.trang_thai_giao_bu === 'nhap' ? 'blue' : 'orange'
+        const label = r.trang_thai_giao_bu === 'da_xuat' ? 'Đã giao' : r.trang_thai_giao_bu === 'nhap' ? 'Đang lập' : r.trang_thai_giao_bu
+        return (
+          <Button
+            type="link" size="small" style={{ padding: 0, fontSize: 12 }}
+            onClick={() => navigate(`/sales/giao-hang?so_phieu=${r.so_phieu_giao_bu}`)}
+          >
+            <Tag color={color} style={{ fontSize: 11, cursor: 'pointer' }}>{r.so_phieu_giao_bu} · {label}</Tag>
+          </Button>
+        )
+      },
+    },
+    {
       title: '',
       width: 90,
       render: (_, r) => (
