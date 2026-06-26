@@ -6,13 +6,16 @@ thành một bảng defect_records, phân biệt nguồn bằng (ref_type, ref_i
 Mỗi bản ghi trỏ về 1 nguồn lỗi:
     ref_type='production_output'          → ProductionOutput  (khâu 'tp')
     ref_type='phieu_nhap_phoi_song_item' → PhieuNhapPhoiSongItem (khâu 'cd1')
+    ref_type='sales_return_item'         → SalesReturnItem   (khâu 'tra_ve', auto + thủ công)
 
 Response là superset của cả hai phiếu cũ — field nào không áp dụng cho nguồn
 hiện tại thì trả None.
 """
 from datetime import date, datetime, timezone
+from io import BytesIO
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -30,12 +33,19 @@ router = APIRouter(prefix="/api/defect-records", tags=["defect-records"])
 # Nguồn lỗi hợp lệ khi nhập kho ảo qua endpoint thống nhất
 REF_TYPE_PRODUCTION_OUTPUT = "production_output"
 REF_TYPE_PHOI_ITEM = "phieu_nhap_phoi_song_item"
-# Hàng trả về bị hỏng/lỗi — tạo trực tiếp từ approve_return (sales_returns),
-# KHÔNG qua endpoint /nhap nên cố ý không nằm trong KHAU_BY_REF_TYPE.
 REF_TYPE_SALES_RETURN_ITEM = "sales_return_item"
 KHAU_BY_REF_TYPE = {
     REF_TYPE_PRODUCTION_OUTPUT: "tp",
     REF_TYPE_PHOI_ITEM: "cd1",
+    REF_TYPE_SALES_RETURN_ITEM: "tra_ve",
+}
+
+_TRANG_THAI_LABEL = {
+    "cho_xu_ly": "Chờ xử lý",
+    "ban_phe": "Bán phế phẩm",
+    "tan_dung": "Tận dụng",
+    "da_xu_ly": "Đã xử lý",
+    "huy": "Huỷ",
 }
 
 # Trạng thái cho phép chuyển sang qua PATCH /{id}/trang-thai
@@ -330,7 +340,8 @@ def nhap_defect_record(
             raise HTTPException(400, "Hàng lỗi đã được nhập kho ảo hoặc không hợp lệ")
         so_luong_loi = po.so_luong_loi
         source = po
-    else:  # REF_TYPE_PHOI_ITEM
+        source_attr = "trang_thai_loi"
+    elif body.ref_type == REF_TYPE_PHOI_ITEM:
         item = db.get(PhieuNhapPhoiSongItem, body.ref_id)
         if not item:
             raise HTTPException(404, "Không tìm thấy dòng phôi")
@@ -340,6 +351,20 @@ def nhap_defect_record(
             raise HTTPException(400, "Phôi lỗi đã được nhập kho ảo hoặc không hợp lệ")
         so_luong_loi = item.so_luong_loi
         source = item
+        source_attr = "trang_thai_loi"
+    else:  # REF_TYPE_SALES_RETURN_ITEM — nhập thủ công
+        from app.models.sales import SalesReturnItem, SalesReturn
+        sri = db.get(SalesReturnItem, body.ref_id)
+        if not sri:
+            raise HTTPException(404, "Không tìm thấy dòng hàng trả về")
+        if sri.tinh_trang_hang not in ("hong", "loi"):
+            raise HTTPException(400, "Dòng này không phải hàng hỏng/lỗi")
+        sr = db.get(SalesReturn, sri.sales_return_id) if sri.sales_return_id else None
+        if not sr or sr.trang_thai != "da_duyet":
+            raise HTTPException(400, "Phiếu trả chưa được duyệt")
+        so_luong_loi = sri.so_luong_tra
+        source = None
+        source_attr = None
 
     entry = DefectRecord(
         ref_type=body.ref_type,
@@ -350,10 +375,100 @@ def nhap_defect_record(
         created_by=current_user.id,
     )
     db.add(entry)
-    source.trang_thai_loi = "da_nhap_kho_ao"
+    if source and source_attr:
+        setattr(source, source_attr, "da_nhap_kho_ao")
     db.commit()
     db.refresh(entry)
     return _to_response(entry, db)
+
+
+@router.get("/export")
+def export_defect_records(
+    khau: Optional[str] = Query(None),
+    trang_thai: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Xuất danh sách kho ảo hàng lỗi ra Excel."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    q = db.query(DefectRecord)
+    if khau:
+        q = q.filter(DefectRecord.khau == khau)
+    if trang_thai:
+        q = q.filter(DefectRecord.trang_thai == trang_thai)
+    rows = q.order_by(DefectRecord.created_at.desc()).limit(1000).all()
+
+    records = [_to_response(r, db) for r in rows]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    khau_label = {"tp": "Thành phẩm lỗi", "cd1": "Phôi lỗi", "tra_ve": "Hàng trả về"}.get(khau or "", "Tất cả")
+    ws.title = "Kho lỗi"
+
+    # Company header
+    ws.merge_cells("A1:K1")
+    ws["A1"] = "CÔNG TY TNHH NAM PHƯƠNG BAO BÌ"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws.merge_cells("A2:K2")
+    ws["A2"] = f"DANH SÁCH KHO ẢO HÀNG LỖI — {khau_label.upper()}"
+    ws["A2"].font = Font(bold=True, size=11)
+    ws["A2"].alignment = Alignment(horizontal="center")
+
+    headers = ["STT", "Mã phiếu nguồn", "Khâu", "Tên hàng", "Quy cách", "SL", "ĐVT",
+               "Ngày", "Khách hàng / Xưởng", "Trạng thái", "Ghi chú"]
+    col_widths = [6, 20, 14, 30, 16, 8, 8, 12, 26, 16, 30]
+
+    hdr_fill = PatternFill(fill_type="solid", fgColor="B71C1C")
+    thin = Side(border_style="thin", color="CCCCCC")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    for ci, (h, w) in enumerate(zip(headers, col_widths), start=1):
+        cell = ws.cell(row=4, column=ci, value=h)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = hdr_fill
+        cell.alignment = Alignment(horizontal="center", wrap_text=True)
+        cell.border = border
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    for ri, rec in enumerate(records, start=1):
+        row_idx = ri + 4
+        khau_str = {"tp": "Thành phẩm", "cd1": "Phôi (CD1)", "tra_ve": "Trả về"}.get(rec["khau"] or "", rec["khau"] or "")
+        nguon_label = rec.get("ten_phan_xuong") or rec.get("ten_khach_hang") or ""
+        tt_label = _TRANG_THAI_LABEL.get(rec["trang_thai"] or "", rec["trang_thai"] or "")
+        vals = [
+            ri,
+            rec.get("so_phieu") or "",
+            khau_str,
+            rec.get("ten_hang") or "",
+            rec.get("quy_cach") or "",
+            rec.get("so_luong"),
+            rec.get("dvt") or "",
+            rec.get("ngay") or "",
+            nguon_label,
+            tt_label,
+            rec.get("ghi_chu") or "",
+        ]
+        for ci, v in enumerate(vals, start=1):
+            cell = ws.cell(row=row_idx, column=ci, value=v)
+            cell.border = border
+            if ci == 6:
+                cell.alignment = Alignment(horizontal="right")
+
+    ws.row_dimensions[4].height = 28
+    ws.freeze_panes = "A5"
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"kho-loi-{khau or 'tat-ca'}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.patch("/{entry_id}/trang-thai")
@@ -382,3 +497,123 @@ def update_trang_thai(
     db.commit()
     db.refresh(entry)
     return _to_response(entry, db)
+
+
+@router.get("/{entry_id}/print", response_class=HTMLResponse)
+def print_defect_record(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Trả HTML phiếu xử lý hàng lỗi/trả về (A5, đỏ #B71C1C)."""
+    entry = db.get(DefectRecord, entry_id)
+    if not entry:
+        raise HTTPException(404, "Không tìm thấy bản ghi lỗi")
+
+    rec = _to_response(entry, db)
+    so_phieu_xl = f"PXHL-{entry.id:06d}"
+    tt_label = _TRANG_THAI_LABEL.get(rec["trang_thai"] or "", rec["trang_thai"] or "")
+    khau_label = {"tp": "Thành phẩm lỗi", "cd1": "Phôi lỗi (CD1)", "tra_ve": "Hàng trả về"}.get(rec["khau"] or "", rec["khau"] or "")
+
+    ngay_str = ""
+    if rec.get("ngay"):
+        parts = str(rec["ngay"]).split("-")
+        if len(parts) == 3:
+            ngay_str = f"Ngày {parts[2]} tháng {parts[1]} năm {parts[0]}"
+
+    nguon_phieu = rec.get("so_phieu") or rec.get("so_lenh") or "—"
+    ten_hang = rec.get("ten_hang") or "—"
+    so_luong = rec.get("so_luong") or 0
+    dvt = rec.get("dvt") or ""
+    quy_cach = rec.get("quy_cach") or ""
+    ten_xuong = rec.get("ten_phan_xuong") or ""
+    ten_kh = rec.get("ten_khach_hang") or ""
+    ly_do = rec.get("ly_do_tra") or ""
+    ghi_chu = rec.get("ghi_chu") or ""
+    so_lenh_td = rec.get("so_lenh_tan_dung") or ""
+
+    rendered = f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Phiếu xử lý hàng lỗi {so_phieu_xl}</title>
+<style>
+  @page {{ size: A5 portrait; margin: 10mm 10mm; }}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: 'Times New Roman', serif; font-size: 10pt; color: #222; }}
+  .noprint {{ margin-bottom: 6mm; }}
+  @media print {{ .noprint {{ display: none; }} }}
+  button {{ padding: 6px 18px; background: #B71C1C; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 10pt; }}
+  .header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3mm; }}
+  .company-name {{ font-size: 11pt; font-weight: bold; color: #B71C1C; }}
+  .company-info {{ font-size: 8.5pt; line-height: 1.5; margin-top: 1mm; }}
+  .mau {{ font-size: 8pt; color: #555; text-align: right; }}
+  .divider {{ border-top: 2px solid #B71C1C; margin: 2mm 0; }}
+  .title {{ text-align: center; margin: 2mm 0 3mm; }}
+  .title h2 {{ font-size: 14pt; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; }}
+  .title .so {{ font-size: 9pt; margin-top: 1mm; }}
+  .title .date {{ font-size: 9pt; font-style: italic; }}
+  .info-block {{ font-size: 10pt; line-height: 1.9; margin-bottom: 3mm; }}
+  .row {{ display: flex; margin: 1px 0; }}
+  .row .label {{ min-width: 120px; font-weight: bold; flex-shrink: 0; }}
+  .row .dots {{ flex: 1; border-bottom: 1px dotted #888; padding-left: 4px; }}
+  .amount-box {{ border: 1.5px solid #B71C1C; border-radius: 3px; padding: 4px 8px; font-weight: bold; text-align: center; font-size: 11pt; margin: 3mm 0; }}
+  .chu {{ font-size: 9.5pt; margin: 2mm 0; }}
+  .sig-table {{ width: 100%; border-collapse: collapse; margin-top: 5mm; }}
+  .sig-table td {{ border: none; text-align: center; vertical-align: top; width: 33%; padding: 2px; }}
+  .sig-label {{ font-weight: bold; font-size: 9pt; }}
+  .sig-sub {{ font-style: italic; font-size: 8pt; color: #555; }}
+  .sig-name {{ margin-top: 28px; font-weight: bold; }}
+  .badge {{ display: inline-block; padding: 1px 8px; border-radius: 3px; font-size: 9pt; color: #fff; background: #B71C1C; }}
+</style>
+</head>
+<body>
+<div class="noprint"><button onclick="window.print()">🖨️ In phiếu</button></div>
+
+<div class="header">
+  <div>
+    <div class="company-name">CÔNG TY TNHH NAM PHƯƠNG BAO BÌ</div>
+    <div class="company-info">
+      ĐC: TP. Hồ Chí Minh<br>
+      MST: 0315xxxxxx
+    </div>
+  </div>
+  <div class="mau">Nội bộ</div>
+</div>
+
+<div class="divider"></div>
+
+<div class="title">
+  <h2>Phiếu xử lý hàng lỗi/trả về</h2>
+  <div class="so">Số: <strong>{so_phieu_xl}</strong> &nbsp;|&nbsp; Khâu: {khau_label}</div>
+  <div class="date">{ngay_str}</div>
+</div>
+
+<div class="info-block">
+  <div class="row"><span class="label">Phiếu nguồn:</span><span class="dots">{nguon_phieu}</span></div>
+  <div class="row"><span class="label">Tên hàng:</span><span class="dots">{ten_hang}</span></div>
+  {"<div class='row'><span class='label'>Quy cách:</span><span class='dots'>" + quy_cach + "</span></div>" if quy_cach else ""}
+  {"<div class='row'><span class='label'>Xưởng:</span><span class='dots'>" + ten_xuong + "</span></div>" if ten_xuong else ""}
+  {"<div class='row'><span class='label'>Khách hàng:</span><span class='dots'>" + ten_kh + "</span></div>" if ten_kh else ""}
+  {"<div class='row'><span class='label'>Lý do trả:</span><span class='dots'>" + ly_do + "</span></div>" if ly_do else ""}
+</div>
+
+<div class="amount-box">Số lượng: {so_luong:,.0f} {dvt}</div>
+
+<div class="info-block">
+  <div class="row"><span class="label">Trạng thái:</span><span class="dots"><span class="badge">{tt_label}</span></span></div>
+  {"<div class='row'><span class='label'>LSX tận dụng:</span><span class='dots'>" + so_lenh_td + "</span></div>" if so_lenh_td else ""}
+</div>
+
+{"<div class='chu'>Ghi chú: " + ghi_chu + "</div>" if ghi_chu else ""}
+
+<table class="sig-table">
+  <tr>
+    <td><div class="sig-label">Người lập phiếu</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">&nbsp;</div></td>
+    <td><div class="sig-label">Thủ kho</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">&nbsp;</div></td>
+    <td><div class="sig-label">Giám đốc</div><div class="sig-sub">(Ký, họ tên)</div><div class="sig-name">&nbsp;</div></td>
+  </tr>
+</table>
+</body>
+</html>"""
+    return HTMLResponse(content=rendered)

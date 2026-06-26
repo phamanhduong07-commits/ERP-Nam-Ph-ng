@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Button, Col, Descriptions, Drawer, Row, Select, Space, Statistic, Table, Tag, Typography, Tabs, Divider, message, Tooltip, Badge,
+  Modal, Radio, Input,
 } from 'antd'
-import { WarningOutlined, ReloadOutlined, DownloadOutlined } from '@ant-design/icons'
+import { WarningOutlined, ReloadOutlined, DownloadOutlined, PrinterOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import client from '../../api/client'
 import type { PhanXuong } from '../../api/warehouse'
@@ -278,6 +279,10 @@ export default function KhoLoiPage() {
   const [filterPhanXuongId, setFilterPhanXuongId] = useState<number | undefined>()
   const [selectedLoi, setSelectedLoi] = useState<HangLoiRow | null>(null)
   const [selectedTra, setSelectedTra] = useState<HangTraVeRow | null>(null)
+  const [disposalModal, setDisposalModal] = useState<{ record: DefectRecordTraVeRow; queryKey: string } | null>(null)
+  const [disposalTrangThai, setDisposalTrangThai] = useState<string>('ban_phe')
+  const [disposalGhiChu, setDisposalGhiChu] = useState<string>('')
+  const [disposalLoading, setDisposalLoading] = useState(false)
 
   const { data: phanXuongList = [] } = useQuery<PhanXuong[]>({
     queryKey: ['phan-xuong-list'],
@@ -767,25 +772,68 @@ export default function KhoLoiPage() {
           },
           {
             key: 'tra',
-            label: `↩️ Hàng trả về xấu (${hangTraVe.length + khoAoTraVeData.length})`,
-            children: (
+            label: `↩️ Hàng trả về xấu (${hangTraVe.length})`,
+            children: (() => {
+              const khoAoRefIds = new Set(khoAoTraVeData.map(r => r.ref_id))
+              return (
               <>
               <Row justify="end" style={{ marginBottom: 8 }}>
-                <Button
-                  size="small"
-                  icon={<DownloadOutlined />}
-                  disabled={hangTraVe.length === 0}
-                  onClick={handleExportTra}
-                >
-                  Xuất Excel
-                </Button>
+                <Space>
+                  <Button
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    disabled={hangTraVe.length === 0}
+                    onClick={handleExportTra}
+                  >
+                    Xuất Excel (danh sách)
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    disabled={khoAoTraVeData.length === 0}
+                    onClick={() => {
+                      const url = `${client.defaults.baseURL ?? '/api'}/defect-records/export?khau=tra_ve`
+                      window.open(url, '_blank')
+                    }}
+                  >
+                    Xuất Excel (kho ảo)
+                  </Button>
+                </Space>
               </Row>
               <Table<HangTraVeRow>
                 rowKey="id"
                 size="small"
                 loading={isLoading}
                 dataSource={hangTraVe}
-                columns={colsTra}
+                columns={[
+                  ...colsTra,
+                  {
+                    title: 'Thao tác',
+                    width: 120,
+                    render: (_: unknown, r: HangTraVeRow) => {
+                      if (khoAoRefIds.has(r.id)) return <Tag color="green" style={{ fontSize: 11 }}>Đã vào kho ảo</Tag>
+                      if (r.tinh_trang_hang !== 'hong' && r.tinh_trang_hang !== 'loi') return null
+                      return (
+                        <Button
+                          size="small"
+                          type="primary"
+                          ghost
+                          disabled={!canTransfer}
+                          onClick={e => {
+                            e.stopPropagation()
+                            client.post('/defect-records/nhap', { ref_type: 'sales_return_item', ref_id: r.id })
+                              .then(() => {
+                                message.success('Đã nhập kho ảo')
+                                queryClient.invalidateQueries({ queryKey: ['defect-records-tra-ve'] })
+                                queryClient.invalidateQueries({ queryKey: ['kho-loi-tra-ve'] })
+                              })
+                              .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi nhập kho ảo')))
+                          }}
+                        >Nhập kho ảo</Button>
+                      )
+                    },
+                  } as ColumnsType<HangTraVeRow>[number],
+                ]}
                 onRow={r => ({ onClick: () => setSelectedTra(r), style: { cursor: 'pointer' } })}
                 rowClassName={() => 'hoverable-row'}
                 pagination={{ pageSize: 50, showSizeChanger: false, showTotal: t => `${t} dòng` }}
@@ -802,7 +850,7 @@ export default function KhoLoiPage() {
                 ) : null}
               />
 
-              {/* Hàng trả về lỗi/hỏng đang trong kho ảo chờ xử lý */}
+              {/* Hàng trả về lỗi/hỏng trong kho ảo */}
               {(khoAoTraVeData.length > 0 || khoAoTraVeLoading) && (
                 <>
                 <Divider style={{ margin: '16px 0 8px' }} />
@@ -878,46 +926,42 @@ export default function KhoLoiPage() {
                     },
                     {
                       title: 'Thao tác',
-                      width: 160,
-                      render: (_: unknown, r: DefectRecordTraVeRow) => {
-                        if (r.trang_thai !== 'cho_xu_ly') return null
-                        return (
-                          <Space size={4}>
-                            <Tooltip title="Đánh dấu bán phế phẩm">
-                              <Button
-                                size="small"
-                                danger
-                                disabled={!canTransfer}
-                                onClick={e => {
-                                  e.stopPropagation()
-                                  client.patch(`/defect-records/${r.id}/trang-thai`, { trang_thai: 'ban_phe' })
-                                    .then(() => { message.success('Đã cập nhật'); queryClient.invalidateQueries({ queryKey: ['defect-records-tra-ve'] }) })
-                                    .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi cập nhật')))
-                                }}
-                              >Bán phế</Button>
-                            </Tooltip>
-                            <Tooltip title="Tận dụng vào sản phẩm khác">
-                              <Button
-                                size="small"
-                                disabled={!canTransfer}
-                                onClick={e => {
-                                  e.stopPropagation()
-                                  client.patch(`/defect-records/${r.id}/trang-thai`, { trang_thai: 'tan_dung' })
-                                    .then(() => { message.success('Đã cập nhật'); queryClient.invalidateQueries({ queryKey: ['defect-records-tra-ve'] }) })
-                                    .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi cập nhật')))
-                                }}
-                              >Tận dụng</Button>
-                            </Tooltip>
-                          </Space>
-                        )
-                      },
+                      width: 150,
+                      render: (_: unknown, r: DefectRecordTraVeRow) => (
+                        <Space size={4}>
+                          {r.trang_thai === 'cho_xu_ly' && (
+                            <Button
+                              size="small"
+                              type="primary"
+                              disabled={!canTransfer}
+                              onClick={e => {
+                                e.stopPropagation()
+                                setDisposalTrangThai('ban_phe')
+                                setDisposalGhiChu(r.ghi_chu ?? '')
+                                setDisposalModal({ record: r, queryKey: 'defect-records-tra-ve' })
+                              }}
+                            >Xử lý</Button>
+                          )}
+                          <Tooltip title="In phiếu xử lý">
+                            <Button
+                              size="small"
+                              icon={<PrinterOutlined />}
+                              onClick={e => {
+                                e.stopPropagation()
+                                window.open(`/api/defect-records/${r.id}/print`, '_blank')
+                              }}
+                            />
+                          </Tooltip>
+                        </Space>
+                      ),
                     },
                   ] as ColumnsType<DefectRecordTraVeRow>}
                 />
                 </>
               )}
               </>
-            ),
+              )
+            })(),
           },
           {
             key: 'phoi-loi',
@@ -1034,6 +1078,65 @@ export default function KhoLoiPage() {
 
       <DrawerLoi row={selectedLoi} onClose={() => setSelectedLoi(null)} />
       <DrawerTra row={selectedTra} onClose={() => setSelectedTra(null)} />
+
+      <Modal
+        open={!!disposalModal}
+        title="Xử lý hàng trả về lỗi/hỏng"
+        okText="Xác nhận"
+        cancelText="Huỷ"
+        confirmLoading={disposalLoading}
+        onCancel={() => setDisposalModal(null)}
+        onOk={() => {
+          if (!disposalModal) return
+          setDisposalLoading(true)
+          client.patch(`/defect-records/${disposalModal.record.id}/trang-thai`, {
+            trang_thai: disposalTrangThai,
+            ghi_chu: disposalGhiChu || undefined,
+          })
+            .then(() => {
+              message.success('Đã cập nhật trạng thái')
+              queryClient.invalidateQueries({ queryKey: [disposalModal.queryKey] })
+              setDisposalModal(null)
+            })
+            .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi cập nhật')))
+            .finally(() => setDisposalLoading(false))
+        }}
+      >
+        {disposalModal && (
+          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <div>
+              <Text strong>{disposalModal.record.ten_hang || '—'}</Text>
+              {disposalModal.record.ten_khach_hang && (
+                <Text type="secondary" style={{ marginLeft: 8 }}>({disposalModal.record.ten_khach_hang})</Text>
+              )}
+              <br />
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                SL: {fmtN(disposalModal.record.so_luong)} {disposalModal.record.dvt ?? 'Thùng'}
+              </Text>
+            </div>
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>Hướng xử lý:</Text>
+              <Radio.Group value={disposalTrangThai} onChange={e => setDisposalTrangThai(e.target.value)}>
+                <Space direction="vertical">
+                  <Radio value="ban_phe">Bán phế phẩm</Radio>
+                  <Radio value="tan_dung">Tận dụng (sản phẩm khác)</Radio>
+                  <Radio value="huy">Huỷ</Radio>
+                  <Radio value="da_xu_ly">Đã xử lý (khác)</Radio>
+                </Space>
+              </Radio.Group>
+            </div>
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 4 }}>Ghi chú:</Text>
+              <Input.TextArea
+                rows={2}
+                value={disposalGhiChu}
+                onChange={e => setDisposalGhiChu(e.target.value)}
+                placeholder="Mô tả thêm (tuỳ chọn)"
+              />
+            </div>
+          </Space>
+        )}
+      </Modal>
     </div>
   )
 }
