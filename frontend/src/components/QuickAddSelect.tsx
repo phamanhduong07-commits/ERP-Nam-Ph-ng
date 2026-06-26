@@ -4,6 +4,7 @@ import type { SelectProps } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import type { QuickAddConfig } from '../config/quickAddConfigs'
 import client from '../api/client'
+import QuickAddCustomerModal from './QuickAddCustomerModal'
 
 interface QuickAddSelectProps extends Omit<SelectProps, 'onChange'> {
   config: QuickAddConfig
@@ -61,6 +62,13 @@ export default function QuickAddSelect({
     }
   }
 
+  const handleCreated = (record: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newValue = record[config.valueField ?? 'id'] as any
+    onChange?.(newValue)
+    onCreated?.(record)
+  }
+
   return (
     <>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -82,49 +90,57 @@ export default function QuickAddSelect({
         )}
       </div>
 
-      <Modal
-        title={config.title}
-        open={open}
-        onCancel={handleCancel}
-        onOk={handleSubmit}
-        okText="Lưu"
-        cancelText="Hủy"
-        confirmLoading={loading}
-        destroyOnClose
-        width={420}
-      >
-        {error && (
-          <Alert
-            type="error"
-            message={error}
-            showIcon
-            style={{ marginBottom: 16 }}
-          />
-        )}
-        <Form form={form} layout="vertical">
-          {config.fields.map((field) => (
-            <Form.Item
-              key={field.name}
-              name={field.name}
-              label={field.label}
-              rules={field.required ? [{ required: true, message: `${field.label} là bắt buộc` }] : undefined}
-            >
-              {field.type === 'number' ? (
-                <InputNumber style={{ width: '100%' }} placeholder={field.placeholder} />
-              ) : field.type === 'textarea' ? (
-                <Input.TextArea rows={3} placeholder={field.placeholder} />
-              ) : (
-                <Input placeholder={field.placeholder} />
-              )}
-            </Form.Item>
-          ))}
-        </Form>
-        {loading && (
-          <div style={{ textAlign: 'center', marginTop: 8 }}>
-            <Spin size="small" />
-          </div>
-        )}
-      </Modal>
+      {config.endpoint === '/customers' ? (
+        <QuickAddCustomerModal
+          open={open}
+          onClose={() => setOpen(false)}
+          onCreated={handleCreated}
+        />
+      ) : (
+        <Modal
+          title={config.title}
+          open={open}
+          onCancel={handleCancel}
+          onOk={handleSubmit}
+          okText="Lưu"
+          cancelText="Hủy"
+          confirmLoading={loading}
+          destroyOnClose
+          width={420}
+        >
+          {error && (
+            <Alert
+              type="error"
+              message={error}
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          )}
+          <Form form={form} layout="vertical">
+            {config.fields.map((field) => (
+              <Form.Item
+                key={field.name}
+                name={field.name}
+                label={field.label}
+                rules={field.required ? [{ required: true, message: `${field.label} là bắt buộc` }] : undefined}
+              >
+                {field.type === 'number' ? (
+                  <InputNumber style={{ width: '100%' }} placeholder={field.placeholder} />
+                ) : field.type === 'textarea' ? (
+                  <Input.TextArea rows={3} placeholder={field.placeholder} />
+                ) : (
+                  <Input placeholder={field.placeholder} />
+                )}
+              </Form.Item>
+            ))}
+          </Form>
+          {loading && (
+            <div style={{ textAlign: 'center', marginTop: 8 }}>
+              <Spin size="small" />
+            </div>
+          )}
+        </Modal>
+      )}
     </>
   )
 }
