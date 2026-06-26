@@ -20,6 +20,12 @@ import EmptyState from "../../components/EmptyState"
 
 const { Title, Text } = Typography
 
+const KE_HOACH_XU_LY_LABELS: Record<string, string> = {
+  nhap_kho: 'Nhập kho',
+  giao_lai: 'Giao lại',
+  xu_ly_loi: 'Xử lý lỗi',
+}
+
 interface ReturnLine {
   key: string
   delivery_order: DeliveryOrder
@@ -29,6 +35,7 @@ interface ReturnLine {
   don_gia_tra: number
   ly_do_tra: string
   tinh_trang_hang: string
+  ke_hoach_xu_ly: string
   ghi_chu: string
 }
 
@@ -151,6 +158,7 @@ const handleSelectSalesOrder = (salesOrderId: number) => {
       don_gia_tra: item.don_gia,
       ly_do_tra: '',
       tinh_trang_hang: 'tot',
+      ke_hoach_xu_ly: 'nhap_kho',
       ghi_chu: '',
     }])
   }
@@ -173,6 +181,7 @@ const handleSelectSalesOrder = (salesOrderId: number) => {
         don_gia_tra: item.don_gia,
         ly_do_tra: '',
         tinh_trang_hang: 'tot',
+        ke_hoach_xu_ly: 'nhap_kho',
         ghi_chu: '',
       })
     })
@@ -235,6 +244,7 @@ const handleSelectSalesOrder = (salesOrderId: number) => {
           don_gia_tra: l.don_gia_tra,
           ly_do_tra: l.ly_do_tra || undefined,
           tinh_trang_hang: l.tinh_trang_hang,
+          ke_hoach_xu_ly: l.ke_hoach_xu_ly,
           ghi_chu: l.ghi_chu || undefined,
         })),
       }
@@ -320,14 +330,34 @@ const handleSelectSalesOrder = (salesOrderId: number) => {
     },
     {
       title: 'Tình trạng',
-      width: 120,
+      width: 115,
       render: (_, r) => (
         <Select
           value={r.tinh_trang_hang}
-          onChange={(v) => updateLine(r.key, 'tinh_trang_hang', v)}
-          style={{ width: 100 }}
+          onChange={(v) => {
+            const defaultKH = v === 'tot' ? 'nhap_kho' : 'xu_ly_loi'
+            setLines((prev) => prev.map((l) =>
+              l.key === r.key ? { ...l, tinh_trang_hang: v, ke_hoach_xu_ly: defaultKH } : l
+            ))
+          }}
+          style={{ width: 95 }}
         >
           {Object.entries(TINH_TRANG_HANG_LABELS).map(([k, v]) => (
+            <Select.Option key={k} value={k}>{v}</Select.Option>
+          ))}
+        </Select>
+      ),
+    },
+    {
+      title: 'Kế hoạch xử lý',
+      width: 130,
+      render: (_, r) => (
+        <Select
+          value={r.ke_hoach_xu_ly}
+          onChange={(v) => updateLine(r.key, 'ke_hoach_xu_ly', v)}
+          style={{ width: 115 }}
+        >
+          {Object.entries(KE_HOACH_XU_LY_LABELS).map(([k, v]) => (
             <Select.Option key={k} value={k}>{v}</Select.Option>
           ))}
         </Select>

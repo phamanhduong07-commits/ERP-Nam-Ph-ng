@@ -23,6 +23,7 @@ export interface SalesReturnItem {
   thanh_tien_tra: number
   ly_do_tra: string | null
   tinh_trang_hang: string
+  ke_hoach_xu_ly: string
   ghi_chu: string | null
 }
 

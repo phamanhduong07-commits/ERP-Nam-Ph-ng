@@ -192,6 +192,7 @@ export default function SalesReturnDetail() {
           don_gia_tra: values[`don_gia_tra_${item.id}`],
           ly_do_tra: values[`ly_do_tra_${item.id}`],
           tinh_trang_hang: values[`tinh_trang_hang_${item.id}`],
+          ke_hoach_xu_ly: values[`ke_hoach_xu_ly_${item.id}`] ?? item.ke_hoach_xu_ly ?? 'nhap_kho',
           ghi_chu: values[`ghi_chu_item_${item.id}`],
         })),
       })
@@ -351,10 +352,10 @@ export default function SalesReturnDetail() {
     },
     {
       title: 'Tình trạng hàng',
-      width: 130,
+      width: 120,
       render: (_, r) => editing ? (
         <Form.Item name={`tinh_trang_hang_${r.id}`} initialValue={r.tinh_trang_hang}>
-          <Select style={{ width: 110 }}>
+          <Select style={{ width: 100 }}>
             {Object.entries(TINH_TRANG_HANG_LABELS).map(([k, v]) => (
               <Select.Option key={k} value={k}>{v}</Select.Option>
             ))}
@@ -363,6 +364,23 @@ export default function SalesReturnDetail() {
       ) : (
         <Tag color={r.tinh_trang_hang === 'tot' ? 'green' : r.tinh_trang_hang === 'loi' ? 'orange' : 'red'}>
           {TINH_TRANG_HANG_LABELS[r.tinh_trang_hang] || r.tinh_trang_hang}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Kế hoạch xử lý',
+      width: 130,
+      render: (_, r) => editing ? (
+        <Form.Item name={`ke_hoach_xu_ly_${r.id}`} initialValue={r.ke_hoach_xu_ly ?? 'nhap_kho'}>
+          <Select style={{ width: 110 }}>
+            <Select.Option value="nhap_kho">Nhập kho</Select.Option>
+            <Select.Option value="giao_lai">Giao lại</Select.Option>
+            <Select.Option value="xu_ly_loi">Xử lý lỗi</Select.Option>
+          </Select>
+        </Form.Item>
+      ) : (
+        <Tag color={r.ke_hoach_xu_ly === 'giao_lai' ? 'blue' : r.ke_hoach_xu_ly === 'xu_ly_loi' ? 'orange' : 'default'}>
+          {r.ke_hoach_xu_ly === 'giao_lai' ? 'Giao lại' : r.ke_hoach_xu_ly === 'xu_ly_loi' ? 'Xử lý lỗi' : 'Nhập kho'}
         </Tag>
       ),
     },

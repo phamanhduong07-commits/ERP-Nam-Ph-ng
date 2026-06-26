@@ -17,6 +17,7 @@ from app.services.accounting_service import AccountingService
 from app.services.inventory_service import (
     get_or_create_balance as _get_or_create_balance,
     nhap_balance as _nhap_balance,
+    xuat_balance as _xuat_balance,
     log_tx as _log_tx,
 )
 from app.schemas.sales import (
@@ -545,34 +546,56 @@ def approve_return(
     if not warehouse_id:
         raise HTTPException(status_code=400, detail="Không thể xác định kho để nhập hàng trả lại")
 
-    # Xử lý từng item trả lại theo tình trạng hàng:
-    #   - 'tot'        → nhập lại kho thành phẩm (tồn kho + log + bút toán 155/632)
-    #   - 'hong'/'loi' → KHÔNG nhập kho; đưa vào kho ảo hàng lỗi (defect_records, khâu 'tra_ve')
+    # Xử lý từng item theo ke_hoach_xu_ly:
+    #   'giao_lai'  → nhập kho + xuất kho đồng thời (net 0), tạo DeliveryOrder draft
+    #   'xu_ly_loi' → kho ảo hàng lỗi (DefectRecord, khâu 'tra_ve')
+    #   'nhap_kho'  → nhập lại kho thành phẩm (default, giữ tồn kho thật)
+    # Backward-compat: nếu ke_hoach_xu_ly=NULL mà tinh_trang_hang hong/loi → xu_ly_loi
     for item in return_obj.items:
         sales_order_item = item.sales_order_item
-        if not sales_order_item:
+        kh = item.ke_hoach_xu_ly or "nhap_kho"
+
+        if kh == "giao_lai":
+            # Nhập kho rồi xuất kho ngay — net inventory = 0
+            ten_hang = (sales_order_item.ten_hang if sales_order_item else "") or "Hàng giao lại"
+            dvt = (sales_order_item.dvt if sales_order_item else "Thùng")
+            product_id = sales_order_item.product_id if sales_order_item else None
+
+            bal = _get_or_create_balance(db, warehouse_id, product_id=product_id, ten_hang=ten_hang, don_vi=dvt)
+            _nhap_balance(bal, item.so_luong_tra, item.don_gia_tra)
+            _log_tx(db, warehouse_id, "NHAP_TRA_HANG",
+                    item.so_luong_tra, item.don_gia_tra, bal.ton_luong,
+                    "sales_returns", return_obj.id, current_user.id,
+                    product_id=product_id,
+                    ghi_chu=f"Nhập kho (giao lại): {return_obj.so_phieu_tra}")
+            _xuat_balance(bal, item.so_luong_tra, ten_hang)
+            _log_tx(db, warehouse_id, "XUAT_GIAO_LAI",
+                    item.so_luong_tra, item.don_gia_tra, bal.ton_luong,
+                    "sales_returns", return_obj.id, current_user.id,
+                    product_id=product_id,
+                    ghi_chu=f"Xuất kho giao lại: {return_obj.so_phieu_tra}")
             continue
 
-        if item.tinh_trang_hang in ("hong", "loi"):
-            # Hàng hỏng/lỗi: không vào tồn kho — ghi nhận vào kho ảo hàng lỗi để xử lý sau
-            entry = DefectRecord(
+        if kh == "xu_ly_loi" or (kh == "nhap_kho" and item.tinh_trang_hang in ("hong", "loi")):
+            # Hàng lỗi/hỏng: kho ảo để xử lý sau
+            db.add(DefectRecord(
                 ref_type="sales_return_item",
                 ref_id=item.id,
                 khau="tra_ve",
                 so_luong=item.so_luong_tra,
                 trang_thai="cho_xu_ly",
                 created_by=current_user.id,
-            )
-            db.add(entry)
+            ))
             continue
 
-        # Hàng tốt: nhập lại kho thành phẩm
-        # Lấy thông tin sản phẩm
+        if not sales_order_item:
+            continue
+
+        # nhap_kho + tot: nhập lại kho thành phẩm
         ten_hang = sales_order_item.ten_hang or "Không xác định"
         dvt = sales_order_item.dvt or "Thùng"
         product_id = sales_order_item.product_id
 
-        # Tạo/cập nhật balance
         bal = _get_or_create_balance(
             db, warehouse_id,
             product_id=product_id,
@@ -580,10 +603,8 @@ def approve_return(
             don_vi=dvt
         )
 
-        # Nhập kho với giá trả
         _nhap_balance(bal, item.so_luong_tra, item.don_gia_tra)
 
-        # Ghi log transaction
         _log_tx(
             db, warehouse_id, "NHAP_TRA_HANG",
             item.so_luong_tra, item.don_gia_tra, bal.ton_luong,
@@ -596,8 +617,14 @@ def approve_return(
     wh = db.get(Warehouse, warehouse_id)
     phap_nhan_id_acc = wh.phan_xuong_obj.phap_nhan_id if wh and wh.phan_xuong_obj else None
     phan_xuong_id_acc = wh.phan_xuong_id if wh else None
-    # Chỉ hàng tốt mới nhập kho nên chỉ hàng tốt mới có bút toán giá vốn 155/632.
-    # Hàng hỏng/lỗi không vào tồn kho → không ghi 155/632 (đã vào kho ảo hàng lỗi).
+
+    # Danh sách item giao lại — dùng cho cả bút toán và tạo DeliveryOrder
+    giao_lai_items = [
+        item for item in return_obj.items
+        if item.so_luong_tra and item.don_gia_tra and (item.ke_hoach_xu_ly or "nhap_kho") == "giao_lai"
+    ]
+
+    # Hàng nhập kho thật (không giao lại): bút toán Nợ 155 / Có 632
     acc_items = [
         {
             "ten_hang": (item.sales_order_item.ten_hang if item.sales_order_item else "") or "Hàng trả về",
@@ -607,7 +634,9 @@ def approve_return(
             "tk_co": "632",
         }
         for item in return_obj.items
-        if item.so_luong_tra and item.don_gia_tra and item.tinh_trang_hang == "tot"
+        if item.so_luong_tra and item.don_gia_tra
+        and item.tinh_trang_hang == "tot"
+        and (item.ke_hoach_xu_ly or "nhap_kho") == "nhap_kho"
     ]
     if acc_items:
         AccountingService(db).post_inventory_journal(
@@ -616,6 +645,35 @@ def approve_return(
             chung_tu_loai="sales_returns",
             chung_tu_id=return_obj.id,
             items=acc_items,
+            phap_nhan_id=phap_nhan_id_acc,
+            phan_xuong_id=phan_xuong_id_acc,
+        )
+
+    # Hàng giao lại: bút toán nhập kho (Nợ 155/Có 632) + xuất kho ngay (Nợ 632/Có 155)
+    if giao_lai_items:
+        gl_entries = [
+            {
+                "ten_hang": (item.sales_order_item.ten_hang if item.sales_order_item else "") or "Hàng giao lại",
+                "so_luong": float(item.so_luong_tra),
+                "don_gia": float(item.don_gia_tra or 0),
+            }
+            for item in giao_lai_items
+        ]
+        AccountingService(db).post_inventory_journal(
+            ngay=return_obj.ngay_tra,
+            loai="NHAP_TRA_HANG",
+            chung_tu_loai="sales_returns",
+            chung_tu_id=return_obj.id,
+            items=[{**e, "tk_no": "155", "tk_co": "632"} for e in gl_entries],
+            phap_nhan_id=phap_nhan_id_acc,
+            phan_xuong_id=phan_xuong_id_acc,
+        )
+        AccountingService(db).post_inventory_journal(
+            ngay=return_obj.ngay_tra,
+            loai="XUAT_GIAO_LAI",
+            chung_tu_loai="sales_returns",
+            chung_tu_id=return_obj.id,
+            items=[{**e, "tk_no": "632", "tk_co": "155"} for e in gl_entries],
             phap_nhan_id=phap_nhan_id_acc,
             phan_xuong_id=phan_xuong_id_acc,
         )
@@ -637,6 +695,41 @@ def approve_return(
             phap_nhan_id=phap_nhan_id_acc,
             phan_xuong_id=phan_xuong_id_acc,
         )
+
+    # Auto-tạo phiếu xuất hàng draft cho các item giao lại
+    if giao_lai_items:
+        ym = date.today().strftime("%Y%m")
+        prefix_do = f"DO-{ym}-"
+        last_do = (
+            db.query(func.max(DeliveryOrder.so_phieu))
+            .filter(DeliveryOrder.so_phieu.like(f"{prefix_do}%"))
+            .scalar()
+        )
+        seq_do = (int(last_do.split("-")[-1]) + 1) if last_do else 1
+        new_do = DeliveryOrder(
+            so_phieu=f"{prefix_do}{seq_do:04d}",
+            ngay_xuat=date.today(),
+            sales_order_id=return_obj.sales_order_id,
+            customer_id=return_obj.customer_id,
+            warehouse_id=warehouse_id,
+            trang_thai="nhap",
+            created_by=current_user.id,
+            ghi_chu=f"Giao lại từ phiếu trả {return_obj.so_phieu_tra}",
+        )
+        db.add(new_do)
+        db.flush()
+        for item in giao_lai_items:
+            soi = item.sales_order_item
+            db.add(DeliveryOrderItem(
+                delivery_id=new_do.id,
+                sales_order_item_id=item.sales_order_item_id,
+                product_id=soi.product_id if soi else None,
+                ten_hang=(soi.ten_hang if soi else None) or "Hàng giao lại",
+                so_luong=item.so_luong_tra,
+                dvt=(soi.dvt if soi else "Thùng"),
+                don_gia=item.don_gia_tra,
+                thanh_tien=item.so_luong_tra * (item.don_gia_tra or Decimal("0")),
+            ))
 
     return_obj.trang_thai = "da_duyet"
     return_obj.approved_by = current_user.id

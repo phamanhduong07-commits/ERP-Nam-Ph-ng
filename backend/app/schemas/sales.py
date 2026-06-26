@@ -213,6 +213,7 @@ class SalesReturnItemCreate(BaseModel):
     don_gia_tra: Decimal | None = None
     ly_do_tra: str | None = None
     tinh_trang_hang: str = "tot"  # tot | hong | loi
+    ke_hoach_xu_ly: str = "nhap_kho"  # nhap_kho | giao_lai | xu_ly_loi
     ghi_chu: str | None = None
 
     @field_validator("so_luong_tra")
@@ -228,6 +229,7 @@ class SalesReturnItemUpdate(BaseModel):
     don_gia_tra: Decimal | None = None
     ly_do_tra: str | None = None
     tinh_trang_hang: str | None = None
+    ke_hoach_xu_ly: str | None = None
     ghi_chu: str | None = None
 
 
@@ -252,6 +254,7 @@ class SalesReturnItemResponse(BaseModel):
     thanh_tien_tra: Decimal
     ly_do_tra: str | None
     tinh_trang_hang: str
+    ke_hoach_xu_ly: str = "nhap_kho"
     ghi_chu: str | None
 
     class Config:

@@ -190,6 +190,7 @@ class SalesReturnItem(Base):
     don_gia_tra: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0)
     ly_do_tra: Mapped[str | None] = mapped_column(Text)
     tinh_trang_hang: Mapped[str] = mapped_column(String(50), default="tot")  # tot | hong | loi
+    ke_hoach_xu_ly: Mapped[str | None] = mapped_column(String(20), default="nhap_kho")  # nhap_kho | giao_lai | xu_ly_loi
     ghi_chu: Mapped[str | None] = mapped_column(Text)
 
     sales_return: Mapped["SalesReturn"] = relationship("SalesReturn", back_populates="items")
