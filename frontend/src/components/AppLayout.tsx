@@ -328,8 +328,8 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
         {
           sectionLabel: 'Tổng hợp Group',
           items: [
-            { key: '/reports/cashflow-daily', to: '/reports/cashflow-daily', label: <Link to="/reports/cashflow-daily">Dòng tiền Group (Ngày)</Link>, permissions: ['report.export'] },
-            { key: '/reports/group-pnl', to: '/reports/group-pnl', label: <Link to="/reports/group-pnl">P&L Group (3 PN)</Link>, permissions: ['report.export'] },
+            { key: '/reports/cashflow-daily', to: '/reports/cashflow-daily', label: <Link to="/reports/cashflow-daily">Dòng tiền Group (Ngày)</Link>, permissions: ['accounting.view', 'accounting.manage'] },
+            { key: '/reports/group-pnl', to: '/reports/group-pnl', label: <Link to="/reports/group-pnl">P&L Group (3 PN)</Link>, permissions: ['accounting.view', 'accounting.manage'] },
             { key: '/reports/sales-group', to: '/reports/sales-group', label: <Link to="/reports/sales-group">Doanh số Group (Xưởng)</Link>, permissions: ['report.export'] },
             { key: '/reports/group-debt', to: '/reports/group-debt', label: <Link to="/reports/group-debt">Công nợ Group</Link>, permissions: ['report.export'] },
             { key: '/reports/sales-nvkd', to: '/reports/sales-nvkd', label: <Link to="/reports/sales-nvkd">Doanh số NV KD</Link>, permissions: ['report.export'] },
@@ -338,8 +338,8 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
         {
           sectionLabel: 'Báo cáo Quản trị',
           items: [
-            { key: '/accounting/reports/workshop-pnl', to: '/accounting/reports/workshop-pnl', label: <Link to="/accounting/reports/workshop-pnl">Lãi lỗ Phân xưởng</Link>, permissions: ['report.export'] },
-            { key: '/accounting/reports/production-costing', to: '/accounting/reports/production-costing', label: <Link to="/accounting/reports/production-costing">Giá thành sản phẩm</Link>, permissions: ['report.export'] },
+            { key: '/accounting/reports/workshop-pnl', to: '/accounting/reports/workshop-pnl', label: <Link to="/accounting/reports/workshop-pnl">Lãi lỗ Phân xưởng</Link>, permissions: ['accounting.view', 'accounting.manage'] },
+            { key: '/accounting/reports/production-costing', to: '/accounting/reports/production-costing', label: <Link to="/accounting/reports/production-costing">Giá thành sản phẩm</Link>, permissions: ['accounting.view', 'accounting.manage'] },
             { key: '/reports/revenue', to: '/reports/revenue', label: <Link to="/reports/revenue">Doanh thu</Link>, permissions: ['report.export'] },
             { key: '/reports/production-performance', to: '/reports/production-performance', label: <Link to="/reports/production-performance">Hiệu suất SX</Link>, permissions: ['report.view'] },
           ],
