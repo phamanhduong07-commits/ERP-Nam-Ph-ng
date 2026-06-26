@@ -104,6 +104,11 @@ export interface Employee {
   ngay_vao_lam?: string
   ngay_nghi_viec?: string
   trang_thai: string
+  // Vận chuyển
+  is_tai_xe?: boolean
+  is_lo_xe?: boolean
+  hang_bang_lai?: string
+  ngay_het_han_bang?: string
   ten_bo_phan?: string
   ten_chuc_vu?: string
   ten_phan_xuong?: string

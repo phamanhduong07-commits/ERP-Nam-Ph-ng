@@ -5,6 +5,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.master import TaiXe
+from app.models.hr import Employee
 from decimal import Decimal
 from app.services.excel_import_service import (
     ImportField, build_template_response, import_excel, parse_bool, parse_decimal, parse_int, parse_text,
@@ -117,3 +118,36 @@ def delete_tai_xe(
     db.delete(obj)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/sync-from-employees")
+def sync_tai_xe_from_employees(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Đồng bộ danh sách tài xế từ hồ sơ nhân viên có is_tai_xe=True."""
+    drivers = (
+        db.query(Employee)
+        .filter(Employee.is_tai_xe.is_(True), Employee.trang_thai != "da_nghi")
+        .all()
+    )
+    created = updated = 0
+    for emp in drivers:
+        existing = db.query(TaiXe).filter(TaiXe.employee_id == emp.id).first()
+        if existing:
+            existing.ho_ten = emp.ho_ten
+            existing.so_dien_thoai = emp.so_dien_thoai
+            existing.trang_thai = emp.trang_thai == "dang_lam"
+            updated += 1
+        else:
+            obj = TaiXe(
+                ho_ten=emp.ho_ten,
+                so_dien_thoai=emp.so_dien_thoai,
+                employee_id=emp.id,
+                he_so_chuyen=Decimal("1"),
+                trang_thai=emp.trang_thai == "dang_lam",
+            )
+            db.add(obj)
+            created += 1
+    db.commit()
+    return {"created": created, "updated": updated, "total": len(drivers)}

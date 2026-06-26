@@ -252,6 +252,11 @@ class _EmployeeExtendedFields(BaseModel):
     muc_dong_bhxh: Optional[Decimal] = Field(default=None, ge=0)
     # Tổ chức (cấp tổ - dưới bộ phận)
     to_id: Optional[int] = None
+    # Tài xế / lơ xe
+    is_tai_xe: bool = False
+    is_lo_xe: bool = False
+    hang_bang_lai: Optional[str] = Field(default=None, max_length=20)
+    ngay_het_han_bang: Optional[date] = None
 
     @field_validator("avatar_url")
     @classmethod
@@ -327,6 +332,10 @@ class EmployeeUpdate(_EmployeeExtendedFields):
     ngay_nghi_viec: Optional[date] = None
     he_so_ca_nhan: Optional[Decimal] = Field(default=None, ge=0, le=10)
     trang_thai: Optional[str] = Field(default=None, max_length=20)
+    is_tai_xe: Optional[bool] = None
+    is_lo_xe: Optional[bool] = None
+    hang_bang_lai: Optional[str] = Field(default=None, max_length=20)
+    ngay_het_han_bang: Optional[date] = None
 
 
 class Employee(EmployeeBase, _EmployeeExtendedFields):

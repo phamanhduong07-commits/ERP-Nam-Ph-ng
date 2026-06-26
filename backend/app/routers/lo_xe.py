@@ -6,6 +6,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models.auth import User
 from app.models.master import LoXe
+from app.models.hr import Employee
 
 router = APIRouter(prefix="/api/lo-xe", tags=["lo-xe"])
 
@@ -76,3 +77,36 @@ def delete_lo_xe(
     db.delete(obj)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/sync-from-employees")
+def sync_lo_xe_from_employees(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Đồng bộ danh sách lơ xe từ hồ sơ nhân viên có is_lo_xe=True."""
+    assistants = (
+        db.query(Employee)
+        .filter(Employee.is_lo_xe.is_(True), Employee.trang_thai != "da_nghi")
+        .all()
+    )
+    created = updated = 0
+    for emp in assistants:
+        existing = db.query(LoXe).filter(LoXe.employee_id == emp.id).first()
+        if existing:
+            existing.ho_ten = emp.ho_ten
+            existing.so_dien_thoai = emp.so_dien_thoai
+            existing.trang_thai = emp.trang_thai == "dang_lam"
+            updated += 1
+        else:
+            obj = LoXe(
+                ho_ten=emp.ho_ten,
+                so_dien_thoai=emp.so_dien_thoai,
+                employee_id=emp.id,
+                he_so_chuyen=Decimal("0.3"),
+                trang_thai=emp.trang_thai == "dang_lam",
+            )
+            db.add(obj)
+            created += 1
+    db.commit()
+    return {"created": created, "updated": updated, "total": len(assistants)}

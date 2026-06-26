@@ -42,6 +42,7 @@ export const taiXeApi = {
   create: (d: Omit<TaiXe,'id'>) => client.post<TaiXe>('/tai-xe', d),
   update: (id: number, d: Partial<Omit<TaiXe,'id'>>) => client.put<TaiXe>(`/tai-xe/${id}`, d),
   delete: (id: number) => client.delete(`/tai-xe/${id}`),
+  syncFromEmployees: () => client.post<{ created: number; updated: number; total: number }>('/tai-xe/sync-from-employees'),
 }
 
 // ── Tỉnh thành ─────────────────────────────────────────────────
@@ -75,6 +76,7 @@ export const loXeApi = {
   create: (d: Omit<LoXe,'id'>) => client.post<LoXe>('/lo-xe', d),
   update: (id: number, d: Partial<Omit<LoXe,'id'>>) => client.put<LoXe>(`/lo-xe/${id}`, d),
   delete: (id: number) => client.delete(`/lo-xe/${id}`),
+  syncFromEmployees: () => client.post<{ created: number; updated: number; total: number }>('/lo-xe/sync-from-employees'),
 }
 
 // ── Đơn giá vận chuyển ─────────────────────────────────────────

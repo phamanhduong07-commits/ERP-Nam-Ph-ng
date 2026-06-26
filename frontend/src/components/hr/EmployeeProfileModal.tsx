@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Modal, Form, Input, InputNumber, Select, DatePicker, Button, Tabs, Table, Space, Tag,
-  Row, Col, message, Popconfirm, Empty,
+  Row, Col, message, Popconfirm, Empty, Switch,
 } from 'antd'
 import {
   PrinterOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
@@ -120,6 +120,7 @@ export default function EmployeeProfileModal({ open, employee, onClose, onSaved 
           ngay_sinh: full.ngay_sinh ? dayjs(full.ngay_sinh) : undefined,
           ngay_cap: full.ngay_cap ? dayjs(full.ngay_cap) : undefined,
           ngay_tham_gia_bhxh: full.ngay_tham_gia_bhxh ? dayjs(full.ngay_tham_gia_bhxh) : undefined,
+          ngay_het_han_bang: full.ngay_het_han_bang ? dayjs(full.ngay_het_han_bang) : undefined,
         } as PersonalFormValues)
       }).catch(() => {/* giữ data list nếu detail fail */})
       // 3) Load all related data in parallel
@@ -170,6 +171,7 @@ export default function EmployeeProfileModal({ open, employee, onClose, onSaved 
         ngay_sinh: vals.ngay_sinh?.format('YYYY-MM-DD'),
         ngay_cap: vals.ngay_cap?.format('YYYY-MM-DD'),
         ngay_tham_gia_bhxh: vals.ngay_tham_gia_bhxh?.format('YYYY-MM-DD'),
+        ngay_het_han_bang: vals.ngay_het_han_bang?.format('YYYY-MM-DD'),
       }
       const res = employee
         ? await hrApi.updateEmployee(employee.id, payload as Partial<Employee>)
@@ -295,6 +297,32 @@ export default function EmployeeProfileModal({ open, employee, onClose, onSaved 
       </Col>
       <Col span={24}>
         <Form.Item label="Nơi khám chữa bệnh ban đầu" name="noi_kham_chua_benh"><Input /></Form.Item>
+      </Col>
+    </Row>
+  )
+
+  // ─── Tab content: Vận chuyển (tài xế / lơ xe) ───
+  const vanChuyenTabContent = (
+    <Row gutter={8}>
+      <Col span={6}>
+        <Form.Item label="Là tài xế" name="is_tai_xe" valuePropName="checked" tooltip="Đánh dấu để đồng bộ sang danh mục Tài xế">
+          <Switch checkedChildren="Có" unCheckedChildren="Không" />
+        </Form.Item>
+      </Col>
+      <Col span={6}>
+        <Form.Item label="Là lơ xe" name="is_lo_xe" valuePropName="checked" tooltip="Đánh dấu để đồng bộ sang danh mục Lơ xe">
+          <Switch checkedChildren="Có" unCheckedChildren="Không" />
+        </Form.Item>
+      </Col>
+      <Col span={6}>
+        <Form.Item label="Hạng bằng lái" name="hang_bang_lai" tooltip="VD: B1, B2, C, D, E">
+          <Input placeholder="B2, C, D..." />
+        </Form.Item>
+      </Col>
+      <Col span={6}>
+        <Form.Item label="Ngày hết hạn bằng" name="ngay_het_han_bang">
+          <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+        </Form.Item>
       </Col>
     </Row>
   )
@@ -609,6 +637,7 @@ export default function EmployeeProfileModal({ open, employee, onClose, onSaved 
           type="card"
           items={[
             { key: 'resume', label: 'Thông tin sơ yếu', children: resumeTabContent },
+            { key: 'van_chuyen', label: 'Vận chuyển', children: vanChuyenTabContent },
             {
               key: 'family',
               label: 'Quan hệ gia đình',

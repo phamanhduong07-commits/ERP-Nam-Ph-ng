@@ -184,8 +184,9 @@ class Employee(Base):
     ngay_vao_lam: Mapped[date | None] = mapped_column(Date, default=date.today)
     ngay_nghi_viec: Mapped[date | None] = mapped_column(Date)
 
-    # Thông tin tài xế (Mở rộng theo báo cáo Logistics)
+    # Thông tin tài xế / lơ xe (Mở rộng theo báo cáo Logistics)
     is_tai_xe: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_lo_xe: Mapped[bool] = mapped_column(Boolean, default=False)
     hang_bang_lai: Mapped[str | None] = mapped_column(String(20))
     ngay_het_han_bang: Mapped[date | None] = mapped_column(Date)
     vehicle_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("hr_vehicles.id"))
