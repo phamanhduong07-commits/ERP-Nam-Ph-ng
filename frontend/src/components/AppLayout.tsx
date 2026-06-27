@@ -133,6 +133,7 @@ function buildNavItems(queueCount: number, pendingQuotesCount: number): NavItem[
           items: [
             { key: '/warehouse/theo-xuong', to: '/warehouse/theo-xuong', label: <Link to="/warehouse/theo-xuong">Kho theo xưởng</Link>, permissions: ['inventory.import'] },
             { key: '/production/kho-phoi', to: '/production/kho-phoi', label: <Link to="/production/kho-phoi">Kho phôi sóng</Link>, permissions: ['inventory.view', 'inventory.phoi_tp'] },
+            { key: '/production/phieu-tra-hang', to: '/production/phieu-tra-hang', label: <Link to="/production/phieu-tra-hang">Khách trả hàng</Link>, permissions: ['inventory.view', 'inventory.phoi_tp'] },
             { key: '/production/kho-thanh-pham', to: '/production/kho-thanh-pham', label: <Link to="/production/kho-thanh-pham">Kho thành phẩm</Link>, permissions: ['inventory.view', 'inventory.phoi_tp'] },
             { key: '/production/kho-loi', to: '/production/kho-loi', label: <Link to="/production/kho-loi">⚠️ Kho hàng lỗi/trả về</Link>, permissions: ['inventory.view', 'inventory.phoi_tp'] },
             { key: '/production/phieu-nhap-phoi', to: '/production/phieu-nhap-phoi', label: <Link to="/production/phieu-nhap-phoi">DS nhập phôi sóng</Link>, permissions: ['inventory.import'] },

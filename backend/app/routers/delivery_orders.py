@@ -947,6 +947,8 @@ def _do_to_dict(do: DeliveryOrder, db: Session, include_print_data: bool = False
             "don_gia": float(it.don_gia or 0) if hasattr(it, "don_gia") else 0.0,
             "thanh_tien": float(it.thanh_tien or 0) if hasattr(it, "thanh_tien") else 0.0,
             "ghi_chu": it.ghi_chu,
+            "tinh_trang_dieu_chinh": it.tinh_trang_dieu_chinh if hasattr(it, "tinh_trang_dieu_chinh") else None,
+            "huong_xu_ly_dieu_chinh": it.huong_xu_ly_dieu_chinh if hasattr(it, "huong_xu_ly_dieu_chinh") else None,
         }
         if include_print_data and hasattr(it, "production_order") and it.production_order:
             po = it.production_order

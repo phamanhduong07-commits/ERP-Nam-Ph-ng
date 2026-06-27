@@ -58,6 +58,8 @@ const OffsetAddonPriceList = lazy(() => import('./pages/danhmuc/OffsetAddonPrice
 const BomListPage = lazy(() => import('./pages/production/BomListPage'))
 const CostAnalysisPage = lazy(() => import('./pages/production/CostAnalysisPage'))
 const PhieuPhoiPage = lazy(() => import('./pages/production/PhieuPhoiPage'))
+const PhieuTraHangPage = lazy(() => import('./pages/production/PhieuTraHangPage'))
+const HauGiaoHangPage = lazy(() => import('./pages/production/HauGiaoHang'))
 const KhoPhoiPage = lazy(() => import('./pages/production/KhoPhoiPage'))
 const KhoThanhPhamPage = lazy(() => import('./pages/production/KhoThanhPhamPage'))
 const KhoLoiPage = lazy(() => import('./pages/production/KhoLoiPage'))
@@ -399,6 +401,8 @@ export default function App() {
             <Route path="production/bom" element={<BomListPage />} />
             <Route path="production/cost-analysis" element={<CostAnalysisPage />} />
             <Route path="production/phieu-phoi" element={<PhieuPhoiPage />} />
+            <Route path="production/phieu-tra-hang" element={<PhieuTraHangPage />} />
+            <Route path="production/hau-giao-hang" element={<HauGiaoHangPage />} />
             <Route path="sales/theo-don-hang" element={<TheoDonHangPage />} />
             <Route path="sales/giao-hang" element={<GiaoHangPage />} />
             <Route path="production/phieu-nhap-phoi" element={<PhieuNhapPhoiSongPage />} />

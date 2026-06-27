@@ -231,6 +231,8 @@ class DeliveryOrderItem(Base):
     don_gia: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     thanh_tien: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     ghi_chu: Mapped[str | None] = mapped_column(Text)
+    tinh_trang_dieu_chinh: Mapped[str | None] = mapped_column(String(50))
+    huong_xu_ly_dieu_chinh: Mapped[str | None] = mapped_column(String(50))
 
     delivery: Mapped["DeliveryOrder"] = relationship("DeliveryOrder", back_populates="items")
     production_order = relationship("ProductionOrder")
@@ -377,6 +379,39 @@ class HangLoiKhoAo(Base):
     production_output: Mapped["ProductionOutput"] = relationship("ProductionOutput", back_populates="hang_loi_kho_ao")
     nguoi_xu_ly = relationship("User", foreign_keys=[nguoi_xu_ly_id])
     creator = relationship("User", foreign_keys=[created_by])
+
+
+class DeliveryPostTask(Base):
+    """Task hậu giao hàng — SA tạo, TP SA duyệt, Kho xác nhận (trường hợp thu hồi)."""
+    __tablename__ = "delivery_post_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    delivery_id: Mapped[int] = mapped_column(Integer, ForeignKey("delivery_orders.id"), nullable=False, index=True)
+    item_id: Mapped[int] = mapped_column(Integer, ForeignKey("delivery_order_items.id"), nullable=False)
+    trang_thai: Mapped[str] = mapped_column(String(30), default="cho_duyet", index=True)
+    # cho_duyet | hoan_thanh | cho_kho_nhan | tu_choi
+    tinh_trang: Mapped[str] = mapped_column(String(30), nullable=False)
+    huong_xu_ly: Mapped[str] = mapped_column(String(30), nullable=False)
+    so_luong_cu: Mapped[Decimal] = mapped_column(Numeric(18, 3), nullable=False)
+    so_luong_moi: Mapped[Decimal] = mapped_column(Numeric(18, 3), nullable=False)
+    so_luong_bu_hao: Mapped[Decimal] = mapped_column(Numeric(18, 3), default=Decimal("0"))
+    ghi_chu_sa: Mapped[str | None] = mapped_column(Text)
+    ghi_chu_tp: Mapped[str | None] = mapped_column(Text)
+    ghi_chu_kho: Mapped[str | None] = mapped_column(Text)
+    created_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    approved_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    kho_confirmed_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
+    phap_nhan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("phap_nhan.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    kho_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    delivery = relationship("DeliveryOrder")
+    item = relationship("DeliveryOrderItem")
+    created_by = relationship("User", foreign_keys=[created_by_id])
+    approved_by = relationship("User", foreign_keys=[approved_by_id])
+    kho_confirmed_by = relationship("User", foreign_keys=[kho_confirmed_by_id])
+    phap_nhan = relationship("PhapNhan")
 
 
 class OcrSupplierExample(Base):

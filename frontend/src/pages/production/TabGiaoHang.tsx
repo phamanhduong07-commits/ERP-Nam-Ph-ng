@@ -12,6 +12,8 @@ import dayjs from 'dayjs'
 
 import { yeuCauApi, deliveriesApi, YEU_CAU_TRANG_THAI_LABELS, YEU_CAU_TRANG_THAI_COLORS, CONG_NO_LABELS, CONG_NO_COLORS } from '../../api/deliveries'
 import type { YeuCauGiaoHang, DeliveryOrder, CreateYeuCauPayload, CreateDeliveryPayload, CreateYeuCauItemPayload } from '../../api/deliveries'
+import { createTask } from '../../api/delivery-post-tasks'
+import { HauGiaoHangContent } from './HauGiaoHang'
 import { xeApi, loXeApi, taiXeApi } from '../../api/simpleApis'
 import client from '../../api/client'
 import { warehouseApi } from '../../api/warehouse'
@@ -73,13 +75,46 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
 
   // ── Adjust modal ──────────────────────────────────────────────────────────
   type AdjItem = { item_id: number; so_lenh: string | null; ten_hang: string; dvt: string; don_gia: number; so_luong: number; thanh_tien: number }
+
+  const TINH_TRANG_OPTIONS = [
+    { value: 'giao_thieu', label: 'Giao thiếu (kho đếm sai)' },
+    { value: 'giao_du', label: 'Giao dư (kho đếm sai)' },
+    { value: 'bu_hao', label: 'Bù hao (cho khách miễn phí)' },
+    { value: 'loi_phat_hien', label: 'Lỗi phát hiện khi kiểm hàng' },
+  ]
+  const HUONG_XU_LY_MAP: Record<string, { value: string; label: string }[]> = {
+    giao_thieu: [
+      { value: 'giao_bu_sau', label: 'Giao bù đợt sau' },
+      { value: 'giam_don_hang', label: 'Giảm số lượng đơn' },
+    ],
+    giao_du: [
+      { value: 'thu_hoi_ve', label: 'Thu hồi hàng về' },
+      { value: 'tinh_tien_them', label: 'Tính thêm tiền' },
+      { value: 'khach_giu_mien_phi', label: 'Khách giữ miễn phí' },
+    ],
+    bu_hao: [
+      { value: 'xuat_bu_hao', label: 'Xuất kho bù hao' },
+    ],
+    loi_phat_hien: [
+      { value: 'doi_hang', label: 'Đổi hàng mới' },
+      { value: 'nhap_kho_hong', label: 'Nhập kho hàng hỏng' },
+      { value: 'hoan_tien', label: 'Hoàn tiền' },
+    ],
+  }
+
   const [showAdjust, setShowAdjust] = useState(false)
   const [adjItems, setAdjItems] = useState<AdjItem[]>([])
+  const [adjSelectedItemId, setAdjSelectedItemId] = useState<number | null>(null)
+  const [adjTinhTrang, setAdjTinhTrang] = useState<string>('giao_thieu')
+  const [adjHuongXuLy, setAdjHuongXuLy] = useState<string>('giao_bu_sau')
+  const [adjSoLuongMoi, setAdjSoLuongMoi] = useState<number>(0)
+  const [adjSoLuongBuHao, setAdjSoLuongBuHao] = useState<number>(0)
   const [adjGhiChu, setAdjGhiChu] = useState('')
-  const adjTotal = adjItems.reduce((s, it) => s + it.thanh_tien, 0)
+
+  const adjSelectedItem = adjItems.find(it => it.item_id === adjSelectedItemId) ?? null
 
   const openAdjust = (order: DeliveryOrder) => {
-    setAdjItems(order.items.map(it => ({
+    const items = order.items.map(it => ({
       item_id: it.id,
       so_lenh: it.so_lenh,
       ten_hang: it.ten_hang,
@@ -87,21 +122,38 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
       don_gia: it.don_gia,
       so_luong: it.so_luong,
       thanh_tien: it.thanh_tien,
-    })))
+    }))
+    setAdjItems(items)
+    const first = items[0]
+    setAdjSelectedItemId(first?.item_id ?? null)
+    setAdjTinhTrang('giao_thieu')
+    setAdjHuongXuLy('giao_bu_sau')
+    setAdjSoLuongMoi(first?.so_luong ?? 0)
+    setAdjSoLuongBuHao(0)
     setAdjGhiChu('')
     setShowAdjust(true)
   }
 
   const adjustMut = useMutation({
-    mutationFn: ({ id, items, ghi_chu }: { id: number; items: AdjItem[]; ghi_chu: string }) =>
-      deliveriesApi.adjustItems(id, items.map(it => ({ item_id: it.item_id, so_luong_moi: it.so_luong })), ghi_chu),
-    onSuccess: (res: unknown) => {
-      message.success((res as { data?: { message?: string } })?.data?.message ?? 'Đã điều chỉnh phiếu bán hàng')
+    mutationFn: () => {
+      if (!detailId || !adjSelectedItemId) throw new Error('Thiếu thông tin')
+      return createTask({
+        delivery_id: detailId,
+        item_id: adjSelectedItemId,
+        tinh_trang: adjTinhTrang,
+        huong_xu_ly: adjHuongXuLy,
+        so_luong_moi: adjTinhTrang === 'bu_hao' ? (adjSelectedItem?.so_luong ?? 0) : adjSoLuongMoi,
+        so_luong_bu_hao: adjTinhTrang === 'bu_hao' ? adjSoLuongBuHao : 0,
+        ghi_chu_sa: adjGhiChu || undefined,
+      })
+    },
+    onSuccess: () => {
+      message.success('Yêu cầu điều chỉnh đã gửi — chờ Trưởng Phòng duyệt')
       setShowAdjust(false)
       qc.invalidateQueries({ queryKey: ['delivery-detail', detailId] })
       qc.invalidateQueries({ queryKey: ['deliveries'] })
     },
-    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi điều chỉnh'),
+    onError: (e: unknown) => message.error((e as ApiError)?.response?.data?.detail ?? 'Lỗi gửi yêu cầu điều chỉnh'),
   })
   const { data: detailOrder, isLoading: loadingDetail } = useQuery({
     queryKey: ['delivery-detail', detailId],
@@ -1613,6 +1665,15 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
                 />
               </Card>
             )
+          },
+          {
+            key: 'hau-giao-hang',
+            label: <span>📋 5. Hậu Giao Hàng</span>,
+            children: (
+              <Card size="small">
+                <HauGiaoHangContent />
+              </Card>
+            ),
           }
         ]}
       />
@@ -2077,77 +2138,122 @@ export default function TabGiaoHang(_props?: { initialSelectedPOKeys?: number[] 
         </Space>
       </Modal>
 
-      {/* ── Modal điều chỉnh số lượng PBH ── */}
+      {/* ── Modal hậu giao hàng (tạo task chờ TP SA duyệt) ── */}
       <Modal
-        title="Điều chỉnh số lượng phiếu bán hàng"
+        title="Yêu cầu điều chỉnh hậu giao hàng"
         open={showAdjust}
         onCancel={() => setShowAdjust(false)}
-        onOk={() => detailId && adjustMut.mutate({ id: detailId, items: adjItems, ghi_chu: adjGhiChu })}
-        okText="Gửi điều chỉnh"
+        onOk={() => adjustMut.mutate()}
+        okText="Gửi yêu cầu"
         confirmLoading={adjustMut.isPending}
-        width={780}
+        width={600}
         destroyOnHidden
       >
-        <Table
-          size="small"
-          dataSource={adjItems}
-          rowKey="item_id"
-          pagination={false}
-          style={{ marginBottom: 12 }}
-          summary={() => (
-            <Table.Summary.Row style={{ background: '#fffbe6', fontWeight: 700 }}>
-              <Table.Summary.Cell index={0} colSpan={3}>Tổng tiền hàng mới</Table.Summary.Cell>
-              <Table.Summary.Cell index={3} />
-              <Table.Summary.Cell index={4} />
-              <Table.Summary.Cell index={5} align="right">
-                <Typography.Text strong style={{ color: '#fa8c16' }}>
-                  {adjTotal.toLocaleString('vi-VN')} đ
-                </Typography.Text>
-              </Table.Summary.Cell>
-            </Table.Summary.Row>
-          )}
-          columns={[
-            {
-              title: 'LSX', dataIndex: 'so_lenh', width: 120,
-              render: (v: string | null) => v ? <Typography.Text code style={{ fontSize: 11 }}>{v}</Typography.Text> : '—',
-            },
-            { title: 'Tên hàng', dataIndex: 'ten_hang', ellipsis: true },
-            { title: 'ĐVT', dataIndex: 'dvt', width: 55 },
-            {
-              title: 'Số lượng', width: 120, align: 'right' as const,
-              render: (_: unknown, _row: AdjItem, idx: number) => (
-                <InputNumber
-                  size="small" style={{ width: '100%' }} min={0}
-                  value={adjItems[idx].so_luong}
-                  onChange={v => setAdjItems(prev => prev.map((it, i) => i === idx
-                    ? { ...it, so_luong: v ?? 0, thanh_tien: (v ?? 0) * it.don_gia }
-                    : it))}
+        <Alert
+          type="info"
+          message="Yêu cầu sẽ gửi đến Trưởng Phòng SA để duyệt trước khi thực hiện."
+          style={{ marginBottom: 16 }}
+          showIcon
+        />
+
+        <Form layout="vertical" size="small">
+          <Form.Item label="Dòng hàng cần điều chỉnh" required>
+            <Select
+              value={adjSelectedItemId}
+              onChange={v => {
+                setAdjSelectedItemId(v)
+                const it = adjItems.find(i => i.item_id === v)
+                setAdjSoLuongMoi(it?.so_luong ?? 0)
+              }}
+              style={{ width: '100%' }}
+            >
+              {adjItems.map(it => (
+                <Select.Option key={it.item_id} value={it.item_id}>
+                  {it.ten_hang} — SL: {it.so_luong} {it.dvt}
+                  {it.so_lenh ? ` (${it.so_lenh})` : ''}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item label="Tình trạng" required>
+                <Select
+                  value={adjTinhTrang}
+                  onChange={v => {
+                    setAdjTinhTrang(v)
+                    setAdjHuongXuLy(HUONG_XU_LY_MAP[v]?.[0]?.value ?? '')
+                  }}
+                  options={TINH_TRANG_OPTIONS}
+                  style={{ width: '100%' }}
                 />
-              ),
-            },
-            {
-              title: 'Đơn giá', dataIndex: 'don_gia', width: 130, align: 'right' as const,
-              render: (v: number) => <Typography.Text type="secondary">{v.toLocaleString('vi-VN')}</Typography.Text>,
-            },
-            {
-              title: 'Thành tiền', width: 130, align: 'right' as const,
-              render: (_: unknown, _row: AdjItem, idx: number) => (
-                <Typography.Text strong style={{ color: '#52c41a' }}>
-                  {adjItems[idx].thanh_tien.toLocaleString('vi-VN')}
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Hướng xử lý" required>
+                <Select
+                  value={adjHuongXuLy}
+                  onChange={setAdjHuongXuLy}
+                  options={HUONG_XU_LY_MAP[adjTinhTrang] ?? []}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {adjTinhTrang === 'bu_hao' ? (
+            <>
+              <Form.Item label={`Số lượng bù hao (${adjSelectedItem?.dvt ?? ''})`} required>
+                <InputNumber
+                  min={0}
+                  value={adjSoLuongBuHao}
+                  onChange={v => setAdjSoLuongBuHao(v ?? 0)}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              <Alert
+                type="warning"
+                message="Bù hao: hóa đơn không đổi. Hệ thống sẽ xuất kho thêm và tạo dòng 0đ trên phiếu. Kế toán tự động Nợ 641 / Có 155 theo giá vốn bình quân."
+                showIcon
+                style={{ marginBottom: 12 }}
+              />
+            </>
+          ) : (
+            <Form.Item label={`Số lượng mới (${adjSelectedItem?.dvt ?? ''})`} required>
+              <InputNumber
+                min={0}
+                value={adjSoLuongMoi}
+                onChange={v => setAdjSoLuongMoi(v ?? 0)}
+                style={{ width: '100%' }}
+              />
+              {adjSelectedItem && (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  Số lượng hiện tại: {adjSelectedItem.so_luong}
                 </Typography.Text>
-              ),
-            },
-          ]}
-        />
-        <Input.TextArea
-          rows={2}
-          placeholder="Lý do điều chỉnh (bắt buộc nếu có hóa đơn đã phát hành)..."
-          value={adjGhiChu}
-          onChange={e => setAdjGhiChu(e.target.value)}
-        />
-        <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 6, display: 'block' }}>
-          Nếu hóa đơn đã phát hành, yêu cầu điều chỉnh sẽ được gửi chờ KT Trưởng duyệt.
-        </Typography.Text>
+              )}
+            </Form.Item>
+          )}
+
+          {(adjHuongXuLy === 'thu_hoi_ve' || adjHuongXuLy === 'nhap_kho_hong' ||
+            adjHuongXuLy === 'doi_hang' || adjHuongXuLy === 'hoan_tien') && (
+            <Alert
+              type="info"
+              message="Hàng về kho cần xác nhận thêm — sau khi TP duyệt, Kho sẽ xác nhận nhận hàng trong tab Hậu Giao Hàng."
+              showIcon
+              style={{ marginBottom: 12 }}
+            />
+          )}
+
+          <Form.Item label="Ghi chú">
+            <Input.TextArea
+              rows={2}
+              placeholder="Mô tả tình huống, lý do điều chỉnh..."
+              value={adjGhiChu}
+              onChange={e => setAdjGhiChu(e.target.value)}
+            />
+          </Form.Item>
+        </Form>
       </Modal>
 
       {/* Modal xác nhận giao hàng */}
