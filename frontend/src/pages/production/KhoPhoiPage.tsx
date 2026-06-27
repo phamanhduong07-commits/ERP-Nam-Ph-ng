@@ -46,6 +46,8 @@ export default function KhoPhoiPage() {
   const [chuyenLoading, setChuyenLoading] = useState(false)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [activeXuong, setActiveXuong] = useState<string>('all')
+  const [mainTab, setMainTab] = useState<'phoi_sx' | 'tan_dung'>('phoi_sx')
+  const [tdPhanXuong, setTdPhanXuong] = useState<number | undefined>()
 
   // Filters
   const [filterSearch, setFilterSearch] = useState('')
@@ -81,6 +83,14 @@ export default function KhoPhoiPage() {
     queryKey: ['phan-xuong-list'],
     queryFn: () => warehouseApi.listPhanXuong().then(r => r.data),
     staleTime: 5 * 60 * 1000,
+  })
+
+  // Tận Dụng kho query
+  const { data: tanDungRows = [], isLoading: tdLoading, refetch: tdRefetch } = useQuery<TonKho[]>({
+    queryKey: ['ton-kho-tan-dung', tdPhanXuong],
+    queryFn: () => warehouseApi.getTonKho({ loai_kho: 'TAN_DUNG', phan_xuong_id: tdPhanXuong }).then(r => r.data),
+    enabled: mainTab === 'tan_dung',
+    staleTime: 0,
   })
 
   const findPhoiKho = (phanXuongId: number | null) =>
@@ -472,6 +482,126 @@ export default function KhoPhoiPage() {
 
   return (
     <PageLayout title="Kho Phôi Sóng">
+      <Tabs
+        activeKey={mainTab}
+        onChange={k => setMainTab(k as 'phoi_sx' | 'tan_dung')}
+        style={{ marginBottom: 0 }}
+        items={[
+          {
+            key: 'phoi_sx',
+            label: `Phôi SX${data ? ` (${data.length})` : ''}`,
+            children: null,
+          },
+          {
+            key: 'tan_dung',
+            label: `Kho Tận Dụng${tanDungRows.length > 0 ? ` (${tanDungRows.length})` : ''}`,
+            children: null,
+          },
+        ]}
+      />
+
+      {mainTab === 'tan_dung' ? (
+        <Card>
+          <Row align="middle" justify="space-between" style={{ marginBottom: 12 }}>
+            <Col>
+              <Space>
+                <InboxOutlined style={{ fontSize: 20, color: '#52c41a' }} />
+                <Text strong>Tồn kho phôi tận dụng</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  (phôi dư + phôi lỗi đã thu về kho tận dụng)
+                </Text>
+              </Space>
+            </Col>
+            <Col>
+              <Space>
+                <Select
+                  style={{ width: 180 }}
+                  allowClear
+                  placeholder="Lọc theo xưởng"
+                  value={tdPhanXuong}
+                  onChange={setTdPhanXuong}
+                  options={phanXuongList.map((x: PhanXuong) => ({ value: x.id, label: x.ten_xuong }))}
+                />
+                <Button size="small" onClick={() => tdRefetch()}>Làm mới</Button>
+              </Space>
+            </Col>
+          </Row>
+          {tdLoading ? (
+            <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+          ) : tanDungRows.length === 0 ? (
+            <EmptyState
+              preset="default"
+              title="Chưa có phôi tận dụng"
+              description="Phôi dư và phôi lỗi được đánh dấu 'Nhập kho tận dụng' sẽ xuất hiện ở đây"
+            />
+          ) : (
+            <Table<TonKho>
+              rowKey="id"
+              size="small"
+              dataSource={tanDungRows}
+              pagination={false}
+              scroll={{ x: 600 }}
+              columns={[
+                {
+                  title: 'Xưởng',
+                  dataIndex: 'ten_phan_xuong',
+                  width: 140,
+                  render: (v: string | null) => v ?? <Text type="secondary">—</Text>,
+                },
+                {
+                  title: 'Kho',
+                  dataIndex: 'ten_kho',
+                  width: 200,
+                  render: (v: string) => <Text style={{ fontSize: 12 }}>{v}</Text>,
+                },
+                {
+                  title: 'Kích thước (Khổ × Cắt)',
+                  dataIndex: 'ten_hang',
+                  render: (v: string) => (
+                    <Text strong style={{ fontFamily: 'monospace', fontSize: 13 }}>{v}</Text>
+                  ),
+                },
+                {
+                  title: 'Tồn kho',
+                  dataIndex: 'ton_luong',
+                  width: 110,
+                  align: 'right' as const,
+                  sorter: (a: TonKho, b: TonKho) => a.ton_luong - b.ton_luong,
+                  render: (v: number, r: TonKho) => (
+                    <Space direction="vertical" size={0} style={{ lineHeight: 1.3 }}>
+                      <Text strong style={{ color: v > 0 ? '#389e0d' : '#cf1322', fontSize: 13 }}>
+                        {fmtN(v)}
+                      </Text>
+                      <Text type="secondary" style={{ fontSize: 10 }}>{r.don_vi}</Text>
+                    </Space>
+                  ),
+                },
+                {
+                  title: 'Cập nhật',
+                  dataIndex: 'cap_nhat_luc',
+                  width: 120,
+                  render: (v: string | null) => v
+                    ? <Text style={{ fontSize: 12 }}>{dayjs(v).format('DD/MM/YY HH:mm')}</Text>
+                    : <Text type="secondary">—</Text>,
+                },
+              ]}
+              summary={() => tanDungRows.length > 0 ? (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={3}>
+                    <Text strong style={{ fontSize: 12 }}>Tổng ({tanDungRows.length} loại phôi)</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={3} align="right">
+                    <Text strong style={{ color: '#389e0d', fontSize: 12 }}>
+                      {fmtN(tanDungRows.reduce((s, r) => s + r.ton_luong, 0))} tấm
+                    </Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={4} />
+                </Table.Summary.Row>
+              ) : null}
+            />
+          )}
+        </Card>
+      ) : (
       <Card>
         <div style={{ paddingTop: 16 }}>
                   {/* Header */}
@@ -619,6 +749,7 @@ export default function KhoPhoiPage() {
                   </Space>
         </div>
       </Card>
+      )}
 
       {/* Modal chuyển kho phôi sang xưởng CD2 */}
       <Modal

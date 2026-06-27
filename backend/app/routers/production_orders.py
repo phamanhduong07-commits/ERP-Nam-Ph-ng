@@ -13,6 +13,7 @@ from app.models.master import PhanXuong, Customer, PhapNhan, Product
 from app.models.sales import SalesOrder, SalesOrderItem, Quote, QuoteItem
 from app.services.inventory_service import (
     get_workshop_warehouse as _get_workshop_warehouse,
+    get_or_create_workshop_warehouse as _get_or_create_workshop_warehouse,
     get_phoi_source_warehouse as _get_phoi_source_warehouse,
 )
 from app.services.production_order_service import ProductionOrderService
@@ -1307,12 +1308,9 @@ def xu_ly_phoi_du(
     if data.loai_xu_ly == "da_nhap_kho_tan_dung" and so_luong > 0:
         order = phieu.production_order
         phan_xuong_id = order.phan_xuong_id if order else None
-        kho_td = _get_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG") if phan_xuong_id else None
-        if not kho_td:
-            raise HTTPException(
-                status_code=400,
-                detail="Xưởng chưa có kho Tận dụng (loại TAN_DUNG). Vui lòng tạo kho trước.",
-            )
+        if not phan_xuong_id:
+            raise HTTPException(status_code=400, detail="Lệnh SX chưa gắn xưởng.")
+        kho_td = _get_or_create_workshop_warehouse(db, phan_xuong_id, "TAN_DUNG")
         from app.services.inventory_service import get_or_create_balance, nhap_balance, log_tx
         item0 = phieu.items[0] if phieu.items else None
         if item0 and item0.chieu_kho and item0.chieu_cat:

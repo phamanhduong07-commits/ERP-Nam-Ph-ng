@@ -18,7 +18,8 @@ from app.models.production import ProductionOrder, ProductionOrderItem
 from app.models.phieu_nhap_phoi_song import PhieuNhapPhoiSong, PhieuNhapPhoiSongItem
 from app.models.defect_records import DefectRecord
 from app.services.inventory_service import (
-    get_workshop_warehouse, get_or_create_balance, nhap_balance, xuat_balance, log_tx
+    get_or_create_workshop_warehouse,
+    get_or_create_balance, nhap_balance, xuat_balance, log_tx,
 )
 
 router = APIRouter(prefix="/api/kho-ao-phoi", tags=["kho-ao-phoi"])
@@ -112,21 +113,20 @@ def nhap_kho_ao_phoi(
     item.trang_thai_loi = 'da_nhap_kho_ao'
     db.flush()  # lấy entry.id trước khi commit
 
-    # Nhập vào kho TAN_DUNG thực tế
+    # Nhập vào kho TAN_DUNG thực tế (auto-create nếu xưởng chưa có kho)
     phieu = db.get(PhieuNhapPhoiSong, item.phieu_id)
     order = db.get(ProductionOrder, phieu.production_order_id) if phieu else None
     if order and order.phan_xuong_id:
-        kho = get_workshop_warehouse(db, order.phan_xuong_id, 'TAN_DUNG')
-        if kho:
-            ten_hang = (f"{int(item.chieu_kho)}x{int(item.chieu_cat)}"
-                        if item.chieu_kho and item.chieu_cat else "Phôi lỗi")
-            so_luong_d = Decimal(str(item.so_luong_loi))
-            balance = get_or_create_balance(db, kho.id, ten_hang=ten_hang, don_vi="Tấm")
-            nhap_balance(balance, so_luong_d, Decimal("0"))
-            log_tx(db, kho.id, "NHAP_PHOI_LOI", so_luong_d, Decimal("0"),
-                   balance.ton_luong, "defect_record", entry.id,
-                   created_by=current_user.id)
-            entry.warehouse_id = kho.id
+        kho = get_or_create_workshop_warehouse(db, order.phan_xuong_id, 'TAN_DUNG')
+        ten_hang = (f"{int(item.chieu_kho)}x{int(item.chieu_cat)}"
+                    if item.chieu_kho and item.chieu_cat else "Phôi lỗi")
+        so_luong_d = Decimal(str(item.so_luong_loi))
+        balance = get_or_create_balance(db, kho.id, ten_hang=ten_hang, don_vi="Tấm")
+        nhap_balance(balance, so_luong_d, Decimal("0"))
+        log_tx(db, kho.id, "NHAP_PHOI_LOI", so_luong_d, Decimal("0"),
+               balance.ton_luong, "defect_record", entry.id,
+               created_by=current_user.id)
+        entry.warehouse_id = kho.id
 
     db.commit()
     db.refresh(entry)

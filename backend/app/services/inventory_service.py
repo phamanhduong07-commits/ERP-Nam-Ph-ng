@@ -152,6 +152,54 @@ def get_workshop_warehouse(
     return wh
 
 
+_LOAI_KHO_SUFFIX: dict[str, str] = {
+    "TAN_DUNG": "TD",
+    "PHOI": "PH",
+    "THANH_PHAM": "TP",
+    "GIAY_CUON": "GC",
+    "NVL_PHU": "NVL",
+}
+
+_LOAI_KHO_TEN: dict[str, str] = {
+    "TAN_DUNG": "Kho Tận Dụng",
+    "PHOI": "Kho Phôi",
+    "THANH_PHAM": "Kho Thành Phẩm",
+}
+
+
+def get_or_create_workshop_warehouse(
+    db: Session,
+    phan_xuong_id: int,
+    loai_kho: str,
+) -> Warehouse:
+    """Trả về (hoặc tự tạo) kho của xưởng theo loại. Dùng cho TAN_DUNG và các kho tự động."""
+    wh = get_workshop_warehouse(db, phan_xuong_id, loai_kho)
+    if wh:
+        return wh
+
+    px = db.get(PhanXuong, phan_xuong_id)
+    px_code = px.ma_xuong if px else str(phan_xuong_id)
+    px_name = px.ten_xuong if px else f"Xưởng {phan_xuong_id}"
+
+    suffix = _LOAI_KHO_SUFFIX.get(loai_kho, loai_kho)
+    ten_prefix = _LOAI_KHO_TEN.get(loai_kho, f"Kho {loai_kho}")
+
+    ma_kho = f"{px_code}-{suffix}"
+    if db.query(Warehouse).filter(Warehouse.ma_kho == ma_kho).first():
+        ma_kho = f"{px_code}-{suffix}-{phan_xuong_id}"
+
+    wh = Warehouse(
+        ma_kho=ma_kho,
+        ten_kho=f"{ten_prefix} — {px_name}",
+        loai_kho=loai_kho,
+        phan_xuong_id=phan_xuong_id,
+        trang_thai=True,
+    )
+    db.add(wh)
+    db.flush()
+    return wh
+
+
 def get_phoi_source_warehouse(
     db: Session,
     phan_xuong_id: Optional[int],

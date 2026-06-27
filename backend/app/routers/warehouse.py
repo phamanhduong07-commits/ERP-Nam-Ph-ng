@@ -629,13 +629,16 @@ def get_ton_kho(
     phan_xuong_id: Optional[int] = Query(None),
     phap_nhan_id: Optional[int] = Query(None),
     loai: Optional[str] = Query(None),  # "nvl" | "tp" | "giay" | "khac"
+    loai_kho: Optional[str] = Query(None),  # filter by Warehouse.loai_kho e.g. "TAN_DUNG"
     search: Optional[str] = Query(None),
+    show_zero: bool = Query(False),  # include rows with ton_luong = 0
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     q = (db.query(InventoryBalance)
-         .join(Warehouse, Warehouse.id == InventoryBalance.warehouse_id)
-         .filter(InventoryBalance.ton_luong > 0))
+         .join(Warehouse, Warehouse.id == InventoryBalance.warehouse_id))
+    if not show_zero:
+        q = q.filter(InventoryBalance.ton_luong > 0)
 
     if warehouse_id:
         q = q.filter(InventoryBalance.warehouse_id == warehouse_id)
@@ -643,6 +646,8 @@ def get_ton_kho(
         q = q.filter(Warehouse.phan_xuong_id == phan_xuong_id)
     if phap_nhan_id:
         q = q.join(PhanXuong, Warehouse.phan_xuong_id == PhanXuong.id).filter(PhanXuong.phap_nhan_id == phap_nhan_id)
+    if loai_kho:
+        q = q.filter(Warehouse.loai_kho == loai_kho)
     if loai == "tp":
         q = q.filter(InventoryBalance.product_id.isnot(None))
     elif loai in ("nvl", "giay"):

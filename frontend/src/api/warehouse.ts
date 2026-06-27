@@ -816,7 +816,7 @@ export const warehouseApi = {
   deletePhanXuong: (id: number) => client.delete(`/warehouse/phan-xuong/${id}`),
 
   // Tồn kho
-  getTonKho: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; loai?: string; search?: string }) =>
+  getTonKho: (params?: { warehouse_id?: number; phan_xuong_id?: number; phap_nhan_id?: number; loai?: string; loai_kho?: string; search?: string; show_zero?: boolean }) =>
     client.get<TonKho[]>('/warehouse/ton-kho', { params }),
   getTonKhoSummary: () => client.get<TonKhoSummary>('/warehouse/ton-kho/summary'),
   snapshotTonKho: () => client.post<{ snapped: number }>('/warehouse/ton-kho/snapshot'),
