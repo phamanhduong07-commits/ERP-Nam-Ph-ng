@@ -914,6 +914,8 @@ export default function MaySongPage() {
   const [newSessionName, setNewSessionName] = useState('')
   const [histFilterCa, setHistFilterCa]   = useState<string | undefined>()
   const [histSearchLenh, setHistSearchLenh] = useState('')
+  const [inTemTabSearch, setInTemTabSearch] = useState('')
+  const [inTemTabLoading, setInTemTabLoading] = useState(false)
   const qc = useQueryClient()
 
   // ─── Queries ───────────────────────────────────────────────────────────────
@@ -1023,6 +1025,15 @@ export default function MaySongPage() {
     enabled: activeTab === 'lich_su' && !!(histTuNgay || histDenNgay),
     staleTime: 30_000,
   })
+
+  const { data: inTemSearchRes, isFetching: inTemSearching } = useQuery({
+    queryKey: ['in-tem-search', inTemTabSearch],
+    queryFn: () =>
+      productionOrdersApi.list({ search: inTemTabSearch.trim(), page_size: 50 }).then(r => r.data),
+    enabled: activeTab === 'in_tem' && inTemTabSearch.trim().length >= 2,
+    staleTime: 30_000,
+  })
+  const inTemSearchItems = inTemSearchRes?.items ?? []
 
   // ─── Mutations ─────────────────────────────────────────────────────────────
 
@@ -1171,6 +1182,28 @@ export default function MaySongPage() {
       message.error('Lỗi khi tải dữ liệu')
     } finally {
       setInTemLoading(false)
+    }
+  }
+
+  const handleInTemReprint = async (lsx: ProductionOrderListItem) => {
+    setInTemTabLoading(true)
+    try {
+      const [orderRes, phieuListRes] = await Promise.all([
+        productionOrdersApi.get(lsx.id),
+        productionOrdersApi.listPhieu(lsx.id),
+      ])
+      const latest = phieuListRes.data.length > 0
+        ? phieuListRes.data[phieuListRes.data.length - 1]
+        : null
+      const oi0 = orderRes.data.items[0]
+      openInTem(
+        orderRes.data, latest,
+        oi0?.qccl ?? '', oi0?.ghi_chu ?? '', oi0?.cong_doan ?? '', null, null,
+      )
+    } catch {
+      message.error('Lỗi khi tải dữ liệu')
+    } finally {
+      setInTemTabLoading(false)
     }
   }
 
@@ -1991,6 +2024,125 @@ export default function MaySongPage() {
                 </>
               )
             })(),
+          },
+
+          // ══════════════════════════════════════════════════════════════
+          //  TAB 3 — In tem theo LSX
+          // ══════════════════════════════════════════════════════════════
+          {
+            key: 'in_tem',
+            label: 'In tem theo LSX',
+            children: (
+              <>
+                <div style={{ maxWidth: 600, marginBottom: 16 }}>
+                  <Input
+                    size="large"
+                    placeholder="Nhập số lệnh hoặc tên hàng để tìm..."
+                    allowClear
+                    value={inTemTabSearch}
+                    onChange={e => setInTemTabSearch(e.target.value)}
+                    suffix={inTemSearching ? <Spin size="small" /> : <span />}
+                  />
+                  {inTemTabSearch.trim().length > 0 && inTemTabSearch.trim().length < 2 && (
+                    <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
+                      Nhập ít nhất 2 ký tự để tìm kiếm
+                    </Text>
+                  )}
+                </div>
+
+                {inTemTabSearch.trim().length < 2 ? (
+                  <EmptyState
+                    preset="default"
+                    title="In tem theo số lệnh"
+                    description="Tìm lệnh SX cần in lại tem — dùng khi tem thất lạc hoặc hàng dư cần tem lưu kho"
+                  />
+                ) : !inTemSearching && inTemSearchItems.length === 0 ? (
+                  <EmptyState
+                    preset="search"
+                    description={`Không tìm thấy LSX nào khớp với "${inTemTabSearch}"`}
+                  />
+                ) : (
+                  <Table<ProductionOrderListItem>
+                    dataSource={inTemSearchItems}
+                    rowKey="id"
+                    loading={inTemSearching}
+                    pagination={false}
+                    size="small"
+                    columns={[
+                      {
+                        key: 'so_lenh',
+                        title: 'Số lệnh',
+                        width: 160,
+                        render: (_, r) => (
+                          <Text strong style={{ fontFamily: 'monospace' }}>{r.so_lenh}</Text>
+                        ),
+                      },
+                      {
+                        key: 'khach_hang',
+                        title: 'Khách hàng',
+                        ellipsis: true,
+                        render: (_, r) => r.ten_khach_hang ?? <Text type="secondary">—</Text>,
+                      },
+                      {
+                        key: 'ten_hang',
+                        title: 'Tên hàng',
+                        ellipsis: true,
+                        render: (_, r) => r.ten_hang ?? <Text type="secondary">—</Text>,
+                      },
+                      {
+                        key: 'kho_cat',
+                        title: 'Khổ × Cắt',
+                        width: 105,
+                        align: 'center',
+                        render: (_, r) => {
+                          if (!r.kho_tt && !r.dai_tt) return <Text type="secondary">—</Text>
+                          const kho = r.kho_tt != null ? Number(r.kho_tt) : '?'
+                          const soLanCat = r.so_lan_cat ?? 1
+                          const cat = r.dai_tt != null ? Number(r.dai_tt) * soLanCat : '?'
+                          return <Text style={{ fontWeight: 600 }}>{kho} × {cat} cm</Text>
+                        },
+                      },
+                      {
+                        key: 'lop_song',
+                        title: 'Lớp · Sóng',
+                        width: 80,
+                        align: 'center',
+                        render: (_, r) => r.to_hop_song
+                          ? <>{r.so_lop}L · <Text strong>{r.to_hop_song}</Text></>
+                          : <Text type="secondary">—</Text>,
+                      },
+                      {
+                        key: 'trang_thai',
+                        title: 'Trạng thái',
+                        width: 100,
+                        render: (_, r) => (
+                          <Tag color={TRANG_THAI_COLORS[r.trang_thai] ?? 'default'}>
+                            {TRANG_THAI_LABELS[r.trang_thai] ?? r.trang_thai}
+                          </Tag>
+                        ),
+                      },
+                      {
+                        key: 'action',
+                        title: '',
+                        width: 100,
+                        align: 'center',
+                        render: (_, r) => (
+                          <Button
+                            type="primary"
+                            size="small"
+                            icon={<PrinterOutlined />}
+                            loading={inTemTabLoading}
+                            onClick={() => handleInTemReprint(r)}
+                          >
+                            In tem
+                          </Button>
+                        ),
+                      },
+                    ]}
+                  />
+                )}
+              </>
+            ),
           },
         ]}
       />
