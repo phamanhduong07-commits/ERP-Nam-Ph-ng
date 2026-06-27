@@ -483,7 +483,7 @@ export default function KhoLoiPage() {
       render: (v: string | null) => {
         if (!v) return <Text type="secondary" style={{ fontSize: 11 }}>—</Text>
         if (v === 'cho_xu_ly') return <Tag color="red" style={{ fontSize: 11 }}>Chưa xử lý</Tag>
-        if (v === 'da_nhap_kho_ao') return <Tag color="green" style={{ fontSize: 11 }}>Đã vào kho ảo</Tag>
+        if (v === 'da_nhap_kho_ao') return <Tag color="green" style={{ fontSize: 11 }}>Đã vào kho tận dụng</Tag>
         return <Tag style={{ fontSize: 11 }}>{v}</Tag>
       },
     },
@@ -563,7 +563,7 @@ export default function KhoLoiPage() {
         <Col>
           <Space>
             <WarningOutlined style={{ fontSize: 20, color: '#cf1322' }} />
-            <Title level={4} style={{ margin: 0 }}>Kho ảo — Hàng lỗi & Trả về</Title>
+            <Title level={4} style={{ margin: 0 }}>Kho tận dụng — Hàng lỗi & Trả về</Title>
           </Space>
         </Col>
         <Col>
@@ -668,7 +668,7 @@ export default function KhoLoiPage() {
                 <Row align="middle" style={{ marginBottom: 8 }}>
                   <Col flex="auto">
                     <Text strong style={{ color: '#cf1322' }}>
-                      Kho ảo — TP lỗi chờ xử lý ({khoAoTpData.length})
+                      Kho tận dụng — TP lỗi chờ xử lý ({khoAoTpData.length})
                     </Text>
                   </Col>
                 </Row>
@@ -796,7 +796,7 @@ export default function KhoLoiPage() {
                       window.open(url, '_blank')
                     }}
                   >
-                    Xuất Excel (kho ảo)
+                    Xuất Excel (kho tận dụng)
                   </Button>
                 </Space>
               </Row>
@@ -811,7 +811,7 @@ export default function KhoLoiPage() {
                     title: 'Thao tác',
                     width: 120,
                     render: (_: unknown, r: HangTraVeRow) => {
-                      if (khoAoRefIds.has(r.id)) return <Tag color="green" style={{ fontSize: 11 }}>Đã vào kho ảo</Tag>
+                      if (khoAoRefIds.has(r.id)) return <Tag color="green" style={{ fontSize: 11 }}>Đã vào kho tận dụng</Tag>
                       if (r.tinh_trang_hang !== 'hong' && r.tinh_trang_hang !== 'loi') return null
                       return (
                         <Button
@@ -823,13 +823,13 @@ export default function KhoLoiPage() {
                             e.stopPropagation()
                             client.post('/defect-records/nhap', { ref_type: 'sales_return_item', ref_id: r.id })
                               .then(() => {
-                                message.success('Đã nhập kho ảo')
+                                message.success('Đã nhập kho tận dụng')
                                 queryClient.invalidateQueries({ queryKey: ['defect-records-tra-ve'] })
                                 queryClient.invalidateQueries({ queryKey: ['kho-loi-tra-ve'] })
                               })
-                              .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi nhập kho ảo')))
+                              .catch((err: unknown) => message.error(getErrorMessage(err, 'Lỗi nhập kho tận dụng')))
                           }}
-                        >Nhập kho ảo</Button>
+                        >Nhập kho tận dụng</Button>
                       )
                     },
                   } as ColumnsType<HangTraVeRow>[number],
@@ -857,7 +857,7 @@ export default function KhoLoiPage() {
                 <Row align="middle" style={{ marginBottom: 8 }}>
                   <Col flex="auto">
                     <Text strong style={{ color: '#cf1322' }}>
-                      Kho ảo — Hàng trả lỗi/hỏng chờ xử lý ({khoAoTraVeData.length})
+                      Kho tận dụng — Hàng trả lỗi/hỏng chờ xử lý ({khoAoTraVeData.length})
                     </Text>
                   </Col>
                 </Row>
