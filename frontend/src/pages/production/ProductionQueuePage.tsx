@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card, Table, Tag, Button, Space, Typography, Row, Col,
   Statistic, Popconfirm, message, Tooltip, Badge, Divider, Alert, Drawer,
-  Input, InputNumber, Popover, Select,
+  Input, InputNumber, Popover, Select, AutoComplete, Segmented,
 } from 'antd'
 import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import {
@@ -33,7 +33,7 @@ import type { QueueLine } from '../../api/productionPlans'
 import { productionOrdersApi } from '../../api/productionOrders'
 import { warehouseApi } from '../../api/warehouse'
 import type { GiayRoll } from '../../api/warehouse'
-import { LOAI_LAN_LABELS } from '../../api/quotes'
+import { LOAI_LAN_LABELS, paperMaterialsApi } from '../../api/quotes'
 import { fmtN } from '../../utils/exportUtils'
 import EmptyState from "../../components/EmptyState"
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
@@ -112,14 +112,20 @@ const LAYER_FIELDS: Record<number, { maField: string; dlField: string }> = {
   6: { maField: 'mat_3',  dlField: 'mat_3_dl' },
 }
 
+interface PaperOpts {
+  ma_ky_hieu: string[]
+  by_mk: Record<string, number[]>
+}
+
 interface LayerEditBlockProps {
   layer: LayerDef
   orderId: number | null
   itemId: number
+  paperOpts: PaperOpts | undefined
   onSaved: () => void
 }
 
-function LayerEditBlock({ layer, orderId, itemId, onSaved }: LayerEditBlockProps) {
+function LayerEditBlock({ layer, orderId, itemId, paperOpts, onSaved }: LayerEditBlockProps) {
   const [open, setOpen] = useState(false)
   const [maVal, setMaVal] = useState(layer.ma ?? '')
   const [dlVal, setDlVal] = useState<number | null>(layer.dl)
@@ -143,17 +149,58 @@ function LayerEditBlock({ layer, orderId, itemId, onSaved }: LayerEditBlockProps
     setOpen(true)
   }
 
+  const maOptions = useMemo(() => {
+    if (!paperOpts) return []
+    const q = maVal.trim().toUpperCase()
+    const filtered = q
+      ? paperOpts.ma_ky_hieu.filter(m => m.toUpperCase().includes(q))
+      : paperOpts.ma_ky_hieu
+    return filtered.map(m => ({ value: m, label: m }))
+  }, [paperOpts, maVal])
+
+  const dlOptions = useMemo(() => {
+    if (!paperOpts || !maVal.trim()) return []
+    const dls = paperOpts.by_mk[maVal.trim().toUpperCase()] ?? []
+    return dls.map(d => ({ value: d, label: `${d} g/m²` }))
+  }, [paperOpts, maVal])
+
+  const handleMaSelect = (val: string) => {
+    setMaVal(val)
+    const dls = paperOpts?.by_mk[val.toUpperCase()] ?? []
+    if (dls.length === 1) setDlVal(dls[0])
+  }
+
   const popContent = (
-    <Space direction="vertical" size={6} style={{ width: 150 }}>
-      <Input
-        size="small" value={maVal} placeholder="Mã ký hiệu (LB, 87...)"
-        onChange={e => setMaVal(e.target.value)}
-        onPressEnter={() => saveMut.mutate()}
+    <Space direction="vertical" size={6} style={{ width: 160 }}>
+      <AutoComplete
+        size="small" style={{ width: '100%' }}
+        value={maVal} placeholder="Mã ký hiệu (LB, 87...)"
+        options={maOptions}
+        onChange={setMaVal}
+        onSelect={handleMaSelect}
+        filterOption={false}
+        popupMatchSelectWidth={false}
       />
+      {dlOptions.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          {dlOptions.map(o => (
+            <Tag
+              key={o.value}
+              style={{ cursor: 'pointer', margin: 0, fontSize: 11,
+                background: dlVal === o.value ? '#1677ff' : undefined,
+                color: dlVal === o.value ? '#fff' : undefined,
+                borderColor: dlVal === o.value ? '#1677ff' : undefined,
+              }}
+              onClick={() => setDlVal(o.value)}
+            >{o.value}g</Tag>
+          ))}
+        </div>
+      )}
       <InputNumber
         size="small" style={{ width: '100%' }} value={dlVal}
         placeholder="ĐL (g/m²)" min={0} max={600}
         onChange={v => setDlVal(v as number | null)}
+        onPressEnter={() => saveMut.mutate()}
       />
       <Space size={4}>
         <Button size="small" type="primary" loading={saveMut.isPending} onClick={() => saveMut.mutate()}>Lưu</Button>
@@ -329,6 +376,10 @@ export default function ProductionQueuePage() {
   const [panelFilterDl, setPanelFilterDl] = useState<number | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
   const [tonDetailOpen, setTonDetailOpen] = useState(false)
+  const [drawerMode, setDrawerMode] = useState<'queue' | 'all'>('queue')
+  const [drawerFilterKho, setDrawerFilterKho] = useState<number | null>(null)
+  const [drawerFilterDl, setDrawerFilterDl] = useState<number | null>(null)
+  const [drawerFilterNcc, setDrawerFilterNcc] = useState<string | null>(null)
   const [isBatchLoading, setIsBatchLoading] = useState(false)
   const [expandedRollRows, setExpandedRollRows] = useState<Set<string>>(new Set())
 
@@ -346,6 +397,12 @@ export default function ProductionQueuePage() {
     queryKey: ['production-queue'],
     queryFn: () => productionPlansApi.getQueue().then(r => r.data),
     refetchInterval: 30_000,
+  })
+
+  const { data: paperOpts } = useQuery({
+    queryKey: ['paper-material-options'],
+    queryFn: () => paperMaterialsApi.options().then(r => r.data),
+    staleTime: 5 * 60 * 1000,
   })
 
   // Sync ordered list when query refreshes
@@ -547,6 +604,8 @@ export default function ProductionQueuePage() {
     dl: number | null
     khoMm: number | null
     tenKho: string | null
+    tenNcc: string | null
+    maNcc: string | null
     canKg: number
     tonKg: number
     soCuon: number
@@ -554,39 +613,136 @@ export default function ProductionQueuePage() {
     children?: TonDetailRow[]
   }
 
-  const tonDetailRows = useMemo((): TonDetailRow[] => {
-    return Array.from(maInPlan).sort().map(ma => {
-      const rolls = (rollsByKyHieu.get(ma) ?? [])
-        .sort((a, b) =>
-          ((a.kho ?? 0) - (b.kho ?? 0)) ||
-          ((a.dinh_luong ?? 0) - (b.dinh_luong ?? 0)) ||
-          a.barcode.localeCompare(b.barcode)
-        )
-      const childRows: TonDetailRow[] = rolls.map(r => ({
+  // NCC name mapped by ky_hieu (from aggregated ton-kho-giay which has ten_nsx)
+  const nccByKyHieu = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of tonKhoGiay) {
+      const ky = r.ma_ky_hieu || r.ma_chinh
+      if (ky && r.ten_nsx) m.set(ky, r.ten_nsx)
+    }
+    return m
+  }, [tonKhoGiay])
+
+  // NCC code mapped by ky_hieu (from rolls ma_nsx)
+  const maNccByKyHieu = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of activeRolls) {
+      const ky = r.ky_hieu ?? ''
+      if (ky && r.ma_nsx && !m.has(ky)) m.set(ky, r.ma_nsx)
+    }
+    return m
+  }, [activeRolls])
+
+  function buildRollChildRows(ma: string, rolls: GiayRoll[], ncc: string | null, maNcc: string | null): TonDetailRow[] {
+    return rolls
+      .sort((a, b) =>
+        ((a.kho ?? 0) - (b.kho ?? 0)) ||
+        ((a.dinh_luong ?? 0) - (b.dinh_luong ?? 0)) ||
+        a.barcode.localeCompare(b.barcode)
+      )
+      .map(r => ({
         key: `roll-${r.id}`,
         ma: r.barcode,
         dl: r.dinh_luong,
-        khoMm: r.kho,
+        khoMm: r.kho != null ? Math.round(r.kho) : null,
         tenKho: r.ten_kho,
+        tenNcc: ncc,
+        maNcc: r.ma_nsx ?? maNcc,
         canKg: 0,
         tonKg: r.trong_luong_con_lai,
         soCuon: 1,
         trangThai: r.trang_thai,
       }))
+  }
+
+  const tonDetailRows = useMemo((): TonDetailRow[] => {
+    return Array.from(maInPlan).sort().map(ma => {
+      const ncc = nccByKyHieu.get(ma) ?? null
+      const maNcc = maNccByKyHieu.get(ma) ?? null
+      const childRows = buildRollChildRows(ma, rollsByKyHieu.get(ma) ?? [], ncc, maNcc)
       const totalTon = childRows.reduce((s, c) => s + c.tonKg, 0)
       return {
         key: `hdr-${ma}`,
         ma,
-        dl:     null,
-        khoMm:  null,
+        dl: null,
+        khoMm: null,
         tenKho: null,
-        canKg:  canKgByMa.get(ma) ?? 0,
-        tonKg:  totalTon,
+        tenNcc: ncc,
+        maNcc,
+        canKg: canKgByMa.get(ma) ?? 0,
+        tonKg: totalTon,
         soCuon: childRows.length,
         children: childRows.length > 0 ? childRows : undefined,
       }
     })
-  }, [rollsByKyHieu, maInPlan, canKgByMa])
+  }, [rollsByKyHieu, maInPlan, canKgByMa, nccByKyHieu, maNccByKyHieu])
+
+  // All inventory rows (không lọc theo maInPlan)
+  const tonAllRows = useMemo((): TonDetailRow[] => {
+    return Array.from(rollsByKyHieu.keys()).sort().map(ma => {
+      const ncc = nccByKyHieu.get(ma) ?? null
+      const maNcc = maNccByKyHieu.get(ma) ?? null
+      const childRows = buildRollChildRows(ma, rollsByKyHieu.get(ma) ?? [], ncc, maNcc)
+      const totalTon = childRows.reduce((s, c) => s + c.tonKg, 0)
+      return {
+        key: `hdr-all-${ma}`,
+        ma,
+        dl: null,
+        khoMm: null,
+        tenKho: null,
+        tenNcc: ncc,
+        maNcc,
+        canKg: canKgByMa.get(ma) ?? 0,
+        tonKg: totalTon,
+        soCuon: childRows.length,
+        children: childRows.length > 0 ? childRows : undefined,
+      }
+    })
+  }, [rollsByKyHieu, canKgByMa, nccByKyHieu, maNccByKyHieu])
+
+  // Filter options từ activeRolls
+  const drawerKhoOptions = useMemo(() => {
+    const vals = new Set<number>()
+    for (const r of activeRolls) if (r.kho != null) vals.add(Math.round(r.kho))
+    return Array.from(vals).sort((a, b) => a - b).map(v => ({ label: `${v} cm`, value: v }))
+  }, [activeRolls])
+
+  const drawerDlOptions = useMemo(() => {
+    const vals = new Set<number>()
+    for (const r of activeRolls) if (r.dinh_luong != null) vals.add(r.dinh_luong)
+    return Array.from(vals).sort((a, b) => a - b).map(v => ({ label: `${v} g/m²`, value: v }))
+  }, [activeRolls])
+
+  const drawerNccOptions = useMemo(() => {
+    const vals = new Set<string>()
+    for (const r of tonKhoGiay) if (r.ten_nsx) vals.add(r.ten_nsx)
+    return Array.from(vals).sort().map(v => ({ label: v, value: v }))
+  }, [tonKhoGiay])
+
+  // Apply filters cho drawer
+  const filteredDrawerRows = useMemo((): TonDetailRow[] => {
+    const base = drawerMode === 'queue' ? tonDetailRows : tonAllRows
+    return base
+      .filter(r => !drawerFilterNcc || r.tenNcc === drawerFilterNcc)
+      .map(r => {
+        if (drawerFilterKho == null && drawerFilterDl == null) return r
+        const filteredChildren = (r.children ?? []).filter(c =>
+          (drawerFilterKho == null || c.khoMm === drawerFilterKho) &&
+          (drawerFilterDl == null || c.dl === drawerFilterDl)
+        )
+        const filteredTon = filteredChildren.reduce((s, c) => s + c.tonKg, 0)
+        return {
+          ...r,
+          tonKg: filteredTon,
+          soCuon: filteredChildren.length,
+          children: filteredChildren.length > 0 ? filteredChildren : undefined,
+        }
+      })
+      .filter(r => {
+        if (drawerFilterKho == null && drawerFilterDl == null) return true
+        return (r.children?.length ?? 0) > 0
+      })
+  }, [drawerMode, tonDetailRows, tonAllRows, drawerFilterKho, drawerFilterDl, drawerFilterNcc])
 
   // ── mutations ─────────────────────────────────────────────────────────────
 
@@ -856,6 +1012,7 @@ export default function ProductionQueuePage() {
                 key={i} layer={l}
                 orderId={r.production_order_id}
                 itemId={r.production_order_item_id}
+                paperOpts={paperOpts}
                 onSaved={() => qc.invalidateQueries({ queryKey: ['production-queue'] })}
               />
             ))}
@@ -1366,6 +1523,7 @@ export default function ProductionQueuePage() {
                             <th style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'center' }}>ĐL</th>
                             <th style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'right' }}>Cần (kg)</th>
                             <th style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'right' }}>Tồn (kg)</th>
+                            <th style={{ padding: '5px 7px', border: '1px solid #b7eb8f' }}>NCC</th>
                             <th style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'center' }}>Cuộn</th>
                           </tr>
                         </thead>
@@ -1408,6 +1566,9 @@ export default function ProductionQueuePage() {
                                     color: thieu ? '#cf1322' : du ? '#389e0d' : '#8c8c8c' }}>
                                     {tonKg !== null ? tonKg.toLocaleString('vi-VN') : <span style={{ color: '#bfbfbf' }}>—</span>}
                                   </td>
+                                  <td style={{ padding: '5px 7px', border: '1px solid #b7eb8f', fontSize: 11, color: '#531dab' }}>
+                                    {maNccByKyHieu.get(p.ma) ?? <span style={{ color: '#bfbfbf' }}>—</span>}
+                                  </td>
                                   <td style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'center', color: '#595959' }}>
                                     {inv ? (
                                       <span style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -1431,6 +1592,9 @@ export default function ProductionQueuePage() {
                                     <td style={{ padding: '3px 7px', border: '1px solid #d6e4ff', textAlign: 'right', fontWeight: 600, color: '#1677ff', fontSize: 12 }}>
                                       {Math.round(roll.trong_luong_con_lai).toLocaleString('vi-VN')}
                                     </td>
+                                    <td style={{ padding: '3px 7px', border: '1px solid #d6e4ff', fontSize: 11, color: '#531dab' }}>
+                                      {roll.ma_nsx ?? <span style={{ color: '#bfbfbf' }}>—</span>}
+                                    </td>
                                     <td style={{ padding: '3px 7px', border: '1px solid #d6e4ff' }} />
                                   </tr>
                                 ))}
@@ -1444,7 +1608,7 @@ export default function ProductionQueuePage() {
                             <td style={{ padding: '5px 7px', border: '1px solid #b7eb8f', textAlign: 'right', fontWeight: 800, color: '#fa8c16', fontSize: 13 }}>
                               {group.totalKgGroup.toLocaleString('vi-VN')} kg
                             </td>
-                            <td colSpan={2} style={{ border: '1px solid #b7eb8f' }} />
+                            <td colSpan={3} style={{ border: '1px solid #b7eb8f' }} />
                           </tr>
                         </tfoot>
                       </table>
@@ -1520,22 +1684,72 @@ export default function ProductionQueuePage() {
     <Drawer
       title="Tồn kho chi tiết theo mã ký hiệu"
       open={tonDetailOpen}
-      onClose={() => setTonDetailOpen(false)}
-      width={720}
+      onClose={() => { setTonDetailOpen(false); setDrawerMode('queue'); setDrawerFilterKho(null); setDrawerFilterDl(null); setDrawerFilterNcc(null) }}
+      width={780}
       styles={{ body: { padding: '12px 16px' } }}
     >
-      <p style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 12 }}>
-        Hiển thị tồn kho cho{' '}
-        <strong style={{ color: '#389e0d' }}>{tonDetailRows.length} mã giấy</strong>{' '}
-        đang cần trong hàng chờ.
-        Mở rộng từng mã để xem chi tiết theo ký hiệu.
+      {/* Toggle mode */}
+      <div style={{ marginBottom: 10 }}>
+        <Segmented
+          value={drawerMode}
+          onChange={v => { setDrawerMode(v as 'queue' | 'all'); setDrawerFilterKho(null); setDrawerFilterDl(null); setDrawerFilterNcc(null) }}
+          options={[
+            { label: `Hàng chờ (${tonDetailRows.length} mã)`, value: 'queue' },
+            { label: `Toàn bộ kho (${tonAllRows.length} mã)`, value: 'all' },
+          ]}
+          block
+        />
+      </div>
+
+      {/* Filter row */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <Select
+          allowClear
+          placeholder="Khổ (cm)"
+          style={{ width: 120 }}
+          options={drawerKhoOptions}
+          value={drawerFilterKho}
+          onChange={v => setDrawerFilterKho(v ?? null)}
+        />
+        <Select
+          allowClear
+          placeholder="ĐL (g/m²)"
+          style={{ width: 120 }}
+          options={drawerDlOptions}
+          value={drawerFilterDl}
+          onChange={v => setDrawerFilterDl(v ?? null)}
+        />
+        <Select
+          allowClear
+          showSearch
+          placeholder="NCC"
+          style={{ minWidth: 180, flex: 1 }}
+          options={drawerNccOptions}
+          value={drawerFilterNcc}
+          onChange={v => setDrawerFilterNcc(v ?? null)}
+          filterOption={(inp, opt) => (opt?.label as string ?? '').toLowerCase().includes(inp.toLowerCase())}
+        />
+        {(drawerFilterKho != null || drawerFilterDl != null || drawerFilterNcc != null) && (
+          <Button size="small" onClick={() => { setDrawerFilterKho(null); setDrawerFilterDl(null); setDrawerFilterNcc(null) }}>
+            Xóa lọc
+          </Button>
+        )}
+      </div>
+
+      <p style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 8 }}>
+        {drawerMode === 'queue'
+          ? <>Tồn kho cho <strong style={{ color: '#389e0d' }}>{filteredDrawerRows.length} mã giấy</strong> đang cần trong hàng chờ.</>
+          : <>Toàn bộ <strong style={{ color: '#1677ff' }}>{filteredDrawerRows.length} mã giấy</strong> đang có trong kho.</>
+        }{' '}
+        Mở rộng từng mã để xem chi tiết từng cuộn.
       </p>
+
       <Table<TonDetailRow>
-        dataSource={tonDetailRows}
+        dataSource={filteredDrawerRows}
         size="small"
         pagination={false}
         rowClassName={r => r.children !== undefined ? 'ton-detail-parent' : ''}
-        expandable={{ defaultExpandAllRows: true }}
+        expandable={{ defaultExpandAllRows: drawerMode === 'queue' }}
         columns={[
           {
             title: 'Mã / Barcode',
@@ -1553,6 +1767,20 @@ export default function ProductionQueuePage() {
                     )}
                   </span>
                 ),
+          },
+          {
+            title: 'NCC',
+            dataIndex: 'maNcc',
+            key: 'maNcc',
+            width: 90,
+            render: (val: string | null, row) =>
+              row.children !== undefined
+                ? val
+                  ? <Tag color="purple" style={{ fontSize: 10, padding: '0 4px', margin: 0 }}>{val}</Tag>
+                  : <span style={{ color: '#bfbfbf' }}>—</span>
+                : val
+                  ? <span style={{ fontSize: 11, color: '#531dab' }}>{val}</span>
+                  : <span style={{ color: '#bfbfbf' }}>—</span>,
           },
           {
             title: 'ĐL (g/m²)',
@@ -1584,9 +1812,11 @@ export default function ProductionQueuePage() {
             align: 'right',
             width: 85,
             render: (val: number, row) =>
-              row.children !== undefined
+              row.children !== undefined && val > 0
                 ? <span style={{ fontWeight: 700, color: '#389e0d' }}>{Math.round(val).toLocaleString('vi-VN')}</span>
-                : null,
+                : row.children !== undefined
+                  ? <span style={{ color: '#bfbfbf' }}>—</span>
+                  : null,
           },
           {
             title: 'Tồn (kg)',
@@ -1596,11 +1826,10 @@ export default function ProductionQueuePage() {
             width: 90,
             render: (val: number, row) => {
               if (row.children !== undefined) {
-                const isLow = val < row.canKg
+                const isLow = row.canKg > 0 && val < row.canKg
                 const color = val === 0 ? '#bfbfbf' : isLow ? '#cf1322' : '#389e0d'
                 return <span style={{ fontWeight: 700, color }}>{Math.round(val).toLocaleString('vi-VN')}</span>
               }
-              // leaf = 1 cuộn
               return (
                 <span style={{ fontWeight: 600, color: val > 0 ? '#1677ff' : '#bfbfbf' }}>
                   {val > 0 ? Math.round(val).toLocaleString('vi-VN') : '—'}
@@ -1626,18 +1855,20 @@ export default function ProductionQueuePage() {
               <span style={{ fontWeight: 700 }}>Tổng cộng</span>
             </Table.Summary.Cell>
             <Table.Summary.Cell index={4} align="right">
-              <span style={{ fontWeight: 800, color: '#fa8c16', fontSize: 13 }}>
-                {Math.round(totalKg).toLocaleString('vi-VN')} kg
-              </span>
+              {drawerMode === 'queue' && (
+                <span style={{ fontWeight: 800, color: '#fa8c16', fontSize: 13 }}>
+                  {Math.round(filteredDrawerRows.reduce((s, r) => s + r.canKg, 0)).toLocaleString('vi-VN')} kg
+                </span>
+              )}
             </Table.Summary.Cell>
             <Table.Summary.Cell index={5} align="right">
               <span style={{ fontWeight: 800, color: '#389e0d', fontSize: 13 }}>
-                {Math.round(tonDetailRows.reduce((s, r) => s + r.tonKg, 0)).toLocaleString('vi-VN')} kg
+                {Math.round(filteredDrawerRows.reduce((s, r) => s + r.tonKg, 0)).toLocaleString('vi-VN')} kg
               </span>
             </Table.Summary.Cell>
             <Table.Summary.Cell index={6} align="center">
               <span style={{ fontWeight: 700 }}>
-                {tonDetailRows.reduce((s, r) => s + r.soCuon, 0)}
+                {filteredDrawerRows.reduce((s, r) => s + r.soCuon, 0)}
               </span>
             </Table.Summary.Cell>
           </Table.Summary.Row>
