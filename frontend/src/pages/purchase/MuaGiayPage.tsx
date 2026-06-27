@@ -1119,9 +1119,7 @@ function TabPhoiSongNgoai() {
       render: (_: unknown, r: KHSXCanPhoiNgoaiRow) => <Text code style={{ fontSize: 11 }}>{cauTrucGiaySummary(r)}</Text> },
     { title: 'QCCL', width: 140,
       render: (_: unknown, r: KHSXCanPhoiNgoaiRow) => (
-        <Tooltip title={r.qccl || undefined}>
-          <Text style={{ fontSize: 11 }}>{qcclSummary(r)}</Text>
-        </Tooltip>
+        <Text style={{ fontSize: 11, fontFamily: 'monospace' }}>{r.qccl || '—'}</Text>
       ) },
     { title: 'SL tấm cần', width: 100, align: 'right' as const,
       render: (_: unknown, r: KHSXCanPhoiNgoaiRow) => soTamCan(r).toLocaleString('vi-VN') },
@@ -1237,9 +1235,7 @@ function TabPhoiSongNgoai() {
                 <Text code style={{ fontSize: 11 }}>{cauTrucGiaySummary(r)}</Text> },
             { title: 'QCCL', width: 160,
               render: (_: unknown, r: KHSXCanPhoiNgoaiRow) => (
-                <Tooltip title={r.qccl || undefined}>
-                  <Text style={{ fontSize: 11 }}>{qcclSummary(r)}</Text>
-                </Tooltip>
+                <Text style={{ fontSize: 11, fontFamily: 'monospace' }}>{r.qccl || '—'}</Text>
               ) },
             { title: 'Số lượng (tấm)', width: 140,
               render: (_: unknown, r: KHSXCanPhoiNgoaiRow) => (

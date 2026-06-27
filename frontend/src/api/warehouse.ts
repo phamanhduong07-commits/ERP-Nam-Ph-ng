@@ -562,6 +562,7 @@ export interface TonKhoPhoiLsxRow {
   order_ten_phan_xuong: string | null
   phap_nhan_sx_id: number | null
   ten_phap_nhan_sx: string | null
+  ngay_nhap_kho?: string | null
 }
 
 export interface PhanXuongWithWarehouses {

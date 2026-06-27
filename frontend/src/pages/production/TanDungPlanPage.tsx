@@ -240,6 +240,8 @@ export default function TanDungPlanPage() {
     { title: 'Công Đoạn', dataIndex: 'cong_doan', key: 'cong_doan', width: 130 },
     { title: 'Kho', dataIndex: 'ten_phan_xuong', key: 'ten_phan_xuong', width: 100 },
     { title: 'Cắt', dataIndex: 'cat', key: 'cat', width: 90, align: 'center' },
+    { title: 'QCCL', dataIndex: 'qccl', key: 'qccl', width: 130,
+      render: (v: string | null) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v || '—'}</span> },
     { title: 'SL Tấm', dataIndex: 'so_luong_tam', key: 'so_luong_tam', width: 65, align: 'right',
       render: (v: number | null) => v != null ? Number(v).toLocaleString('vi-VN') : '' },
     { title: 'Ghi chú', dataIndex: 'ghi_chu', key: 'ghi_chu' },
